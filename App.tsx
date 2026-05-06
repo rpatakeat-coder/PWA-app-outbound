@@ -135,6 +135,28 @@ function MainApp() {
   const { clients, statuses: dynamicStatuses, isLoading, error, deleteClient, addClient, updateClient } = useClients();
   const isSaving = addClient.isPending || updateClient.isPending;
 
+  // Lista de status pra UI: dinâmica (banco) ou fallback hardcoded enquanto carrega.
+  const statusOptions = useMemo(() => {
+    if (dynamicStatuses.length > 0) {
+      return dynamicStatuses.map((s: any) => ({
+        value: s.slug as ClientStatus,
+        label: s.label as string,
+        color: (s.color as string) ?? '#3b82f6',
+      }));
+    }
+    return STATUS_OPTIONS;
+  }, [dynamicStatuses]);
+
+  // Garante que o status selecionado no form pertença aos status atuais.
+  // Se mudou (ex.: removeu o slug 'lead' antigo), reaponta pro primeiro disponível.
+  useEffect(() => {
+    if (statusOptions.length === 0) return;
+    const slugs = statusOptions.map(o => o.value);
+    if (!slugs.includes(form.status)) {
+      setForm(s => ({ ...s, status: statusOptions[0].value }));
+    }
+  }, [statusOptions, form.status]);
+
   // Build status config from dynamic data, fallback to hardcoded
   const statusConfig = useMemo(() => {
     const config: Record<string, { label: string; color: string }> = {};
@@ -329,10 +351,11 @@ function MainApp() {
   }, [deleteClient]);
 
   const statusCounts = useMemo(() => {
-    const counts = { all: clients.length, lead: 0, ativo: 0, em_integracao: 0, ex_cliente: 0 } as Record<string, number>;
+    const counts: Record<string, number> = { all: clients.length };
+    for (const opt of statusOptions) counts[opt.value] = 0;
     for (const c of clients) counts[c.status] = (counts[c.status] ?? 0) + 1;
-    return counts as { all: number; lead: number; ativo: number; em_integracao: number; ex_cliente: number };
-  }, [clients]);
+    return counts;
+  }, [clients, statusOptions]);
 
   const renderClientItem = useCallback(({ item }: { item: Client }) => {
     const color = statusConfig[item.status]?.color || '#3b82f6';
@@ -412,7 +435,7 @@ function MainApp() {
               Todos ({statusCounts.all})
             </Text>
           </TouchableOpacity>
-          {STATUS_OPTIONS.map(opt => (
+          {statusOptions.map(opt => (
             <TouchableOpacity
               key={opt.value}
               style={[
@@ -583,7 +606,7 @@ function MainApp() {
               {/* Status Selector */}
               <Text style={styles.fieldLabel}>Status</Text>
               <View style={styles.statusSelector}>
-                {STATUS_OPTIONS.map(opt => (
+                {statusOptions.map(opt => (
                   <TouchableOpacity
                     key={opt.value}
                     style={[
