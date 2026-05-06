@@ -1,6 +1,6 @@
 // Supabase Edge Function: hubspot-lead-webhook
-// Recebe payload do HubSpot, normaliza e faz upsert na tabela `clients`
-// usando `id_hubspot` como chave de conflito.
+// Recebe payload do HubSpot (objeto único ou array), normaliza e faz upsert
+// na tabela `clients` usando `id_hubspot` como chave de conflito.
 //
 // Deploy:
 //   supabase functions deploy hubspot-lead-webhook --no-verify-jwt
@@ -31,6 +31,8 @@ type HubspotPayload = {
   url?: string | null;
 };
 
+const MAX_BATCH = 500;
+
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {
     status,
@@ -56,6 +58,31 @@ const extractEmpresa = (dealname: string | null): string | null => {
   return idx >= 0 ? dealname.slice(idx + 3).trim() : dealname.trim();
 };
 
+const buildBaseFields = (p: HubspotPayload) => {
+  const latitude = toFloat(p.latitude);
+  const longitude = toFloat(p.longitude);
+  const dealname = trimOrNull(p.dealname);
+  return {
+    nome: trimOrNull(p.nome) ?? extractEmpresa(dealname) ?? 'Lead HubSpot',
+    email: trimOrNull(p.email),
+    telefone: trimOrNull(p.celular),
+    empresa: extractEmpresa(dealname),
+    observacoes: trimOrNull(p.observacoes),
+    endereco: trimOrNull(p.logradouro),
+    numero: trimOrNull(p.numero_do_local),
+    bairro: trimOrNull(p.bairro),
+    cidade: trimOrNull(p.cidade),
+    estado: trimOrNull(p.estado_uf),
+    cep: trimOrNull(p.cep),
+    latitude,
+    longitude,
+    url_hubspot: trimOrNull(p.url),
+    geo_source: latitude !== null && longitude !== null ? 'hubspot' : null,
+    geo_approximate: false,
+    updated_at: new Date().toISOString(),
+  };
+};
+
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {
     return json(405, { error: 'Method Not Allowed' });
@@ -69,40 +96,32 @@ Deno.serve(async (req: Request) => {
     return json(401, { error: 'Unauthorized' });
   }
 
-  let payload: HubspotPayload;
+  let raw: unknown;
   try {
-    payload = await req.json();
+    raw = await req.json();
   } catch {
     return json(400, { error: 'Invalid JSON' });
   }
 
-  const idHubspot = trimOrNull(payload.id_hubspot);
-  if (!idHubspot) {
-    return json(400, { error: 'id_hubspot is required' });
+  const isBatch = Array.isArray(raw);
+  const items: HubspotPayload[] = isBatch ? (raw as HubspotPayload[]) : [raw as HubspotPayload];
+
+  if (items.length === 0) {
+    return json(400, { error: 'Empty payload' });
+  }
+  if (items.length > MAX_BATCH) {
+    return json(413, { error: `Batch too large (max ${MAX_BATCH})` });
   }
 
-  const latitude = toFloat(payload.latitude);
-  const longitude = toFloat(payload.longitude);
-
-  const baseFields = {
-    nome: trimOrNull(payload.nome) ?? extractEmpresa(trimOrNull(payload.dealname)) ?? 'Lead HubSpot',
-    email: trimOrNull(payload.email),
-    telefone: trimOrNull(payload.celular),
-    empresa: extractEmpresa(trimOrNull(payload.dealname)),
-    observacoes: trimOrNull(payload.observacoes),
-    endereco: trimOrNull(payload.logradouro),
-    numero: trimOrNull(payload.numero_do_local),
-    bairro: trimOrNull(payload.bairro),
-    cidade: trimOrNull(payload.cidade),
-    estado: trimOrNull(payload.estado_uf),
-    cep: trimOrNull(payload.cep),
-    latitude,
-    longitude,
-    url_hubspot: trimOrNull(payload.url),
-    geo_source: latitude !== null && longitude !== null ? 'hubspot' : null,
-    geo_approximate: false,
-    updated_at: new Date().toISOString(),
-  };
+  // Valida e normaliza id_hubspot de cada item
+  const normalized: { idHubspot: string; payload: HubspotPayload }[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const idHubspot = trimOrNull(items[i]?.id_hubspot);
+    if (!idHubspot) {
+      return json(400, { error: `id_hubspot is required (item index ${i})` });
+    }
+    normalized.push({ idHubspot, payload: items[i] });
+  }
 
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -110,25 +129,25 @@ Deno.serve(async (req: Request) => {
     { auth: { persistSession: false } },
   );
 
-  // Verifica se o lead já existe — se sim, NÃO sobrescreve o status
-  // (preserva o que o time alterou no app, ex.: 'lead_visitado').
-  const { data: existing, error: selectError } = await supabase
+  const ids = normalized.map((n) => n.idHubspot);
+
+  // Busca todos os existentes em uma query só
+  const { data: existingRows, error: selectError } = await supabase
     .from('clients')
-    .select('id, status')
-    .eq('id_hubspot', idHubspot)
-    .maybeSingle();
+    .select('id_hubspot')
+    .in('id_hubspot', ids);
 
   if (selectError) {
     console.error('[hubspot-lead-webhook] select failed', selectError);
     return json(500, { error: selectError.message });
   }
 
-  let row: Record<string, unknown>;
-  if (existing) {
-    row = { ...baseFields, id_hubspot: idHubspot };
-  } else {
-    // Status default vem do banco — admin escolhe pela UI marcando
-    // is_default_for_new_leads na tabela client_statuses.
+  const existingSet = new Set((existingRows ?? []).map((r) => r.id_hubspot as string));
+  const hasNewLeads = normalized.some((n) => !existingSet.has(n.idHubspot));
+
+  // Resolve status default uma única vez (só se houver leads novos no batch)
+  let defaultStatusSlug: string | null = null;
+  if (hasNewLeads) {
     const { data: defaultStatus, error: statusError } = await supabase
       .from('client_statuses')
       .select('slug')
@@ -145,20 +164,30 @@ Deno.serve(async (req: Request) => {
         error: 'Nenhum status marcado como is_default_for_new_leads em client_statuses',
       });
     }
-
-    row = { ...baseFields, id_hubspot: idHubspot, status: defaultStatus.slug };
+    defaultStatusSlug = defaultStatus.slug;
   }
+
+  // Monta as rows: leads existentes preservam status; leads novos recebem o default
+  const rows = normalized.map(({ idHubspot, payload }) => {
+    const base = buildBaseFields(payload);
+    if (existingSet.has(idHubspot)) {
+      return { ...base, id_hubspot: idHubspot };
+    }
+    return { ...base, id_hubspot: idHubspot, status: defaultStatusSlug };
+  });
 
   const { data, error } = await supabase
     .from('clients')
-    .upsert(row, { onConflict: 'id_hubspot' })
-    .select()
-    .single();
+    .upsert(rows, { onConflict: 'id_hubspot' })
+    .select();
 
   if (error) {
     console.error('[hubspot-lead-webhook] upsert failed', error);
     return json(500, { error: error.message });
   }
 
-  return json(200, { ok: true, client: data });
+  if (isBatch) {
+    return json(200, { ok: true, count: data?.length ?? 0, clients: data });
+  }
+  return json(200, { ok: true, client: data?.[0] ?? null });
 });
