@@ -31,7 +31,10 @@ type HubspotPayload = {
   url?: string | null;
 };
 
-const MAX_BATCH = 500;
+const MAX_BATCH = 50;
+const NOMINATIM_THROTTLE_MS = 1100;
+const NOMINATIM_TIMEOUT_MS = 8000;
+const NOMINATIM_UA = 'TakeatRPA-HubSpotWebhook (contact: brittes@takeat.app)';
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -58,9 +61,65 @@ const extractEmpresa = (dealname: string | null): string | null => {
   return idx >= 0 ? dealname.slice(idx + 3).trim() : dealname.trim();
 };
 
-const buildBaseFields = (p: HubspotPayload) => {
-  const latitude = toFloat(p.latitude);
-  const longitude = toFloat(p.longitude);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const buildAddressQuery = (p: HubspotPayload): string | null => {
+  const logradouro = trimOrNull(p.logradouro);
+  const numero = trimOrNull(p.numero_do_local);
+  const bairro = trimOrNull(p.bairro);
+  const cidade = trimOrNull(p.cidade);
+  const estado = trimOrNull(p.estado_uf);
+  const cep = trimOrNull(p.cep);
+
+  // Precisa de pelo menos cidade+estado pra ter chance razoável de match
+  if (!cidade || !estado) return null;
+
+  const linha1 = [logradouro, numero].filter(Boolean).join(', ');
+  const parts = [linha1, bairro, cidade, estado, cep, 'Brasil'].filter(
+    (x) => x && x.length > 0,
+  );
+  return parts.join(', ');
+};
+
+async function geocodeNominatim(
+  query: string,
+): Promise<{ latitude: number; longitude: number } | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), NOMINATIM_TIMEOUT_MS);
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+      query,
+    )}&format=json&limit=1&countrycodes=br`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': NOMINATIM_UA, Accept: 'application/json' },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      console.warn('[hubspot-lead-webhook] nominatim non-ok', res.status, query);
+      return null;
+    }
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+    const lat = parseFloat(data[0].lat);
+    const lon = parseFloat(data[0].lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    return { latitude: lat, longitude: lon };
+  } catch (err) {
+    console.warn('[hubspot-lead-webhook] nominatim error', err, query);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+type ResolvedGeo = {
+  latitude: number | null;
+  longitude: number | null;
+  source: 'nominatim' | 'hubspot' | null;
+  approximate: boolean;
+};
+
+const buildBaseFields = (p: HubspotPayload, geo: ResolvedGeo) => {
   const dealname = trimOrNull(p.dealname);
   return {
     nome: trimOrNull(p.nome) ?? extractEmpresa(dealname) ?? 'Lead HubSpot',
@@ -74,14 +133,35 @@ const buildBaseFields = (p: HubspotPayload) => {
     cidade: trimOrNull(p.cidade),
     estado: trimOrNull(p.estado_uf),
     cep: trimOrNull(p.cep),
-    latitude,
-    longitude,
+    latitude: geo.latitude,
+    longitude: geo.longitude,
     url_hubspot: trimOrNull(p.url),
-    geo_source: latitude !== null && longitude !== null ? 'hubspot' : null,
-    geo_approximate: false,
+    geo_source: geo.source,
+    geo_approximate: geo.approximate,
     updated_at: new Date().toISOString(),
   };
 };
+
+async function resolveGeo(p: HubspotPayload): Promise<ResolvedGeo> {
+  const query = buildAddressQuery(p);
+  if (query) {
+    const found = await geocodeNominatim(query);
+    if (found) {
+      return { ...found, source: 'nominatim', approximate: false };
+    }
+  }
+  const fallbackLat = toFloat(p.latitude);
+  const fallbackLon = toFloat(p.longitude);
+  if (fallbackLat !== null && fallbackLon !== null) {
+    return {
+      latitude: fallbackLat,
+      longitude: fallbackLon,
+      source: 'hubspot',
+      approximate: true,
+    };
+  }
+  return { latitude: null, longitude: null, source: null, approximate: false };
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {
@@ -192,6 +272,18 @@ Deno.serve(async (req: Request) => {
     defaultStatusSlug = defaultStatus.slug;
   }
 
+  // Geocodifica cada item sequencialmente respeitando o limite do Nominatim
+  // (~1 req/s). Cai pra lat/lon do HubSpot se Nominatim não achar.
+  const geoByIdHubspot = new Map<string, ResolvedGeo>();
+  for (let i = 0; i < normalized.length; i++) {
+    const { idHubspot, payload } = normalized[i];
+    const geo = await resolveGeo(payload);
+    geoByIdHubspot.set(idHubspot, geo);
+    if (i < normalized.length - 1) {
+      await sleep(NOMINATIM_THROTTLE_MS);
+    }
+  }
+
   // O índice unique em id_hubspot é parcial (WHERE id_hubspot IS NOT NULL),
   // então não dá pra usar upsert via PostgREST. Faz INSERT em batch para
   // os novos e UPDATE individual (por id_hubspot) para os existentes.
@@ -199,7 +291,7 @@ Deno.serve(async (req: Request) => {
 
   if (newLeads.length > 0) {
     const insertRows = newLeads.map(({ idHubspot, payload }) => ({
-      ...buildBaseFields(payload),
+      ...buildBaseFields(payload, geoByIdHubspot.get(idHubspot)!),
       id_hubspot: idHubspot,
       status: defaultStatusSlug,
       created_by: webhookUserId,
@@ -217,7 +309,7 @@ Deno.serve(async (req: Request) => {
     const updateResults = await Promise.all(
       updates.map(async ({ idHubspot, payload }) => {
         const fields = {
-          ...buildBaseFields(payload),
+          ...buildBaseFields(payload, geoByIdHubspot.get(idHubspot)!),
           id_hubspot: idHubspot,
           updated_by: webhookUserId,
         };
