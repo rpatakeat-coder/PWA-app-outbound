@@ -143,11 +143,12 @@ Deno.serve(async (req: Request) => {
   }
 
   const existingSet = new Set((existingRows ?? []).map((r) => r.id_hubspot as string));
-  const hasNewLeads = normalized.some((n) => !existingSet.has(n.idHubspot));
+  const newLeads = normalized.filter((n) => !existingSet.has(n.idHubspot));
+  const updates = normalized.filter((n) => existingSet.has(n.idHubspot));
 
   // Resolve status default uma única vez (só se houver leads novos no batch)
   let defaultStatusSlug: string | null = null;
-  if (hasNewLeads) {
+  if (newLeads.length > 0) {
     const { data: defaultStatus, error: statusError } = await supabase
       .from('client_statuses')
       .select('slug')
@@ -167,27 +168,50 @@ Deno.serve(async (req: Request) => {
     defaultStatusSlug = defaultStatus.slug;
   }
 
-  // Monta as rows: leads existentes preservam status; leads novos recebem o default
-  const rows = normalized.map(({ idHubspot, payload }) => {
-    const base = buildBaseFields(payload);
-    if (existingSet.has(idHubspot)) {
-      return { ...base, id_hubspot: idHubspot };
+  // O índice unique em id_hubspot é parcial (WHERE id_hubspot IS NOT NULL),
+  // então não dá pra usar upsert via PostgREST. Faz INSERT em batch para
+  // os novos e UPDATE individual (por id_hubspot) para os existentes.
+  const results: unknown[] = [];
+
+  if (newLeads.length > 0) {
+    const insertRows = newLeads.map(({ idHubspot, payload }) => ({
+      ...buildBaseFields(payload),
+      id_hubspot: idHubspot,
+      status: defaultStatusSlug,
+    }));
+    const { data, error } = await supabase.from('clients').insert(insertRows).select();
+    if (error) {
+      console.error('[hubspot-lead-webhook] insert failed', error);
+      return json(500, { error: error.message });
     }
-    return { ...base, id_hubspot: idHubspot, status: defaultStatusSlug };
-  });
+    if (data) results.push(...data);
+  }
 
-  const { data, error } = await supabase
-    .from('clients')
-    .upsert(rows, { onConflict: 'id_hubspot' })
-    .select();
-
-  if (error) {
-    console.error('[hubspot-lead-webhook] upsert failed', error);
-    return json(500, { error: error.message });
+  if (updates.length > 0) {
+    const updateResults = await Promise.all(
+      updates.map(async ({ idHubspot, payload }) => {
+        const fields = { ...buildBaseFields(payload), id_hubspot: idHubspot };
+        const { data, error } = await supabase
+          .from('clients')
+          .update(fields)
+          .eq('id_hubspot', idHubspot)
+          .select()
+          .maybeSingle();
+        return { idHubspot, data, error };
+      }),
+    );
+    const failed = updateResults.find((r) => r.error);
+    if (failed?.error) {
+      console.error('[hubspot-lead-webhook] update failed', failed.idHubspot, failed.error);
+      return json(500, { error: failed.error.message, id_hubspot: failed.idHubspot });
+    }
+    for (const r of updateResults) {
+      if (r.data) results.push(r.data);
+    }
   }
 
   if (isBatch) {
-    return json(200, { ok: true, count: data?.length ?? 0, clients: data });
+    return json(200, { ok: true, count: results.length, clients: results });
   }
-  return json(200, { ok: true, client: data?.[0] ?? null });
+  return json(200, { ok: true, client: results[0] ?? null });
 });
