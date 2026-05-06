@@ -129,6 +129,30 @@ Deno.serve(async (req: Request) => {
     { auth: { persistSession: false } },
   );
 
+  // Resolve quem será gravado em created_by (NOT NULL na tabela).
+  // Preferência: secret HUBSPOT_WEBHOOK_USER_ID. Fallback: primeiro user em auth.users.
+  let webhookUserId = Deno.env.get('HUBSPOT_WEBHOOK_USER_ID') ?? null;
+  if (!webhookUserId) {
+    const { data: firstUser, error: userError } = await supabase
+      .schema('auth')
+      .from('users')
+      .select('id')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (userError) {
+      console.error('[hubspot-lead-webhook] auth.users lookup failed', userError);
+      return json(500, { error: userError.message });
+    }
+    webhookUserId = firstUser?.id ?? null;
+  }
+  if (!webhookUserId) {
+    return json(500, {
+      error:
+        'Não foi possível determinar created_by: configure o secret HUBSPOT_WEBHOOK_USER_ID com um auth.users.id válido',
+    });
+  }
+
   const ids = normalized.map((n) => n.idHubspot);
 
   // Busca todos os existentes em uma query só
@@ -178,6 +202,8 @@ Deno.serve(async (req: Request) => {
       ...buildBaseFields(payload),
       id_hubspot: idHubspot,
       status: defaultStatusSlug,
+      created_by: webhookUserId,
+      updated_by: webhookUserId,
     }));
     const { data, error } = await supabase.from('clients').insert(insertRows).select();
     if (error) {
@@ -190,7 +216,11 @@ Deno.serve(async (req: Request) => {
   if (updates.length > 0) {
     const updateResults = await Promise.all(
       updates.map(async ({ idHubspot, payload }) => {
-        const fields = { ...buildBaseFields(payload), id_hubspot: idHubspot };
+        const fields = {
+          ...buildBaseFields(payload),
+          id_hubspot: idHubspot,
+          updated_by: webhookUserId,
+        };
         const { data, error } = await supabase
           .from('clients')
           .update(fields)
