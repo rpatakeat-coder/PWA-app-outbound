@@ -22,7 +22,6 @@ import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useClients } from './src/hooks/useClients';
-import { STATUS_CONFIG } from './src/types/client';
 import type { Client, ClientStatus } from './src/types/client';
 import { openNavigation } from './src/utils/navigation';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -157,13 +156,15 @@ function MainApp() {
     }
   }, [statusOptions, form.status]);
 
-  // Build status config from dynamic data, fallback to hardcoded
+  // Build status config from dynamic data, fallback to hardcoded options.
   const statusConfig = useMemo(() => {
     const config: Record<string, { label: string; color: string }> = {};
     if (dynamicStatuses.length > 0) {
       dynamicStatuses.forEach((s: any) => { config[s.slug] = { label: s.label, color: s.color }; });
     } else {
-      Object.assign(config, STATUS_CONFIG);
+      for (const opt of STATUS_OPTIONS) {
+        config[opt.value] = { label: opt.label, color: opt.color };
+      }
     }
     return config;
   }, [dynamicStatuses]);
@@ -500,6 +501,7 @@ function MainApp() {
             <ClientBottomSheet
               client={selectedClient}
               insets={insets}
+              statusConfig={statusConfig}
               onClose={() => setSelectedClient(null)}
               onDelete={() => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
               onEdit={() => openEditClient(selectedClient)}
@@ -538,6 +540,7 @@ function MainApp() {
             <ClientBottomSheet
               client={selectedClient}
               insets={insets}
+              statusConfig={statusConfig}
               onClose={() => setSelectedClient(null)}
               onDelete={() => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
               onEdit={() => openEditClient(selectedClient)}
@@ -722,19 +725,29 @@ function MainApp() {
 function ClientBottomSheet({
   client,
   insets,
+  statusConfig,
   onClose,
   onDelete,
   onEdit,
 }: {
   client: Client;
   insets: { bottom: number };
+  statusConfig: Record<string, { label: string; color: string }>;
   onClose: () => void;
   onDelete: () => void;
   onEdit: () => void;
 }) {
-  const statusColor = STATUS_CONFIG[client.status]?.color || '#3b82f6';
+  const statusColor = statusConfig[client.status]?.color || '#3b82f6';
+  const statusLabel = statusConfig[client.status]?.label || client.status;
   const isApprox = client.geo_approximate || (!client.numero && !client.geo_source);
-  const geoLabel = client.geo_source === 'coords' ? 'Baseado em lat/lng' : 'Baseado em CEP/endereço';
+  const geoLabel =
+    client.geo_source === 'nominatim'
+      ? 'Geocodificado por endereço'
+      : client.geo_source === 'hubspot'
+      ? 'Coordenadas vindas do HubSpot'
+      : client.geo_source === 'coords'
+      ? 'Baseado em lat/lng'
+      : 'Baseado em CEP/endereço';
 
   return (
     <Modal visible={true} animationType="fade" transparent onRequestClose={onClose}>
@@ -760,7 +773,7 @@ function ClientBottomSheet({
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <View style={[styles.statusBadgeLarge, { backgroundColor: statusColor }]}>
                     <Text style={styles.statusBadgeText}>
-                      {STATUS_CONFIG[client.status]?.label || client.status}
+                      {statusLabel}
                     </Text>
                   </View>
                   {isApprox && (
