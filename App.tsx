@@ -17,6 +17,7 @@ import {
   KeyboardAvoidingView,
   Alert,
   Linking,
+  Pressable,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
@@ -834,18 +835,16 @@ function ClientBottomSheet({
 
   return (
     <Modal visible={true} animationType="fade" transparent onRequestClose={onClose}>
-      <TouchableOpacity
-        style={styles.bottomSheetOverlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <TouchableOpacity
-          style={[styles.bottomSheet, { paddingBottom: insets.bottom + 16 }]}
-          activeOpacity={1}
-          onPress={e => e.stopPropagation()}
-        >
+      <View style={styles.bottomSheetOverlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={styles.bottomSheet}>
           <View style={styles.bottomSheetHandle} />
-          <ScrollView style={styles.bottomSheetContent}>
+          <ScrollView
+            style={styles.bottomSheetContent}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+            showsVerticalScrollIndicator={true}
+            keyboardShouldPersistTaps="handled"
+          >
             {/* Header */}
             <View style={styles.bsHeader}>
               <View style={[styles.bsLogoWrap, { backgroundColor: statusColor }]}>
@@ -1076,8 +1075,8 @@ function ClientBottomSheet({
               </TouchableOpacity>
             </View>
           </ScrollView>
-        </TouchableOpacity>
-      </TouchableOpacity>
+        </View>
+      </View>
     </Modal>
   );
 }
