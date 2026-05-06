@@ -29,6 +29,7 @@ import { openNavigation } from './src/utils/navigation';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { CEPStep } from './src/screens/CEPStep';
+import { reverseGeocode } from './src/utils/geocoding';
 
 const queryClient = new QueryClient();
 
@@ -268,7 +269,11 @@ function MainApp() {
   const [creationMode, setCreationMode] = useState(false);
   const [creationCenter, setCreationCenter] = useState<{ latitude: number; longitude: number } | null>(null);
 
+  const [resolvingPin, setResolvingPin] = useState(false);
+
   const startMapCreation = useCallback(() => {
+    setShowCepStep(false);
+    setTab('map');
     setCreationCenter({ latitude: mapCenter.latitude, longitude: mapCenter.longitude });
     setCreationMode(true);
   }, [mapCenter]);
@@ -278,14 +283,28 @@ function MainApp() {
     setCreationCenter(null);
   }, []);
 
-  const confirmMapCreation = useCallback(() => {
+  const confirmMapCreation = useCallback(async () => {
     if (!creationCenter) return;
+    setResolvingPin(true);
+    let addr: { endereco: string; bairro: string; cidade: string; estado: string; cep: string } | null = null;
+    try {
+      addr = await reverseGeocode(creationCenter.latitude, creationCenter.longitude);
+    } catch (err: any) {
+      console.warn('[reverseGeocode] falhou:', err?.message ?? err);
+    } finally {
+      setResolvingPin(false);
+    }
+
     setCreationMode(false);
     setForm({
       ...initialFormState,
       status: statusOptions[0]?.value ?? initialFormState.status,
       latitude: creationCenter.latitude.toString(),
       longitude: creationCenter.longitude.toString(),
+      cep: addr?.cep ? `${addr.cep.slice(0, 5)}-${addr.cep.slice(5)}` : '',
+      endereco: addr?.endereco ?? '',
+      cidade: addr?.cidade ?? '',
+      estado: addr?.estado ?? '',
     });
     setIsFormOpen(true);
     setCreationCenter(null);
@@ -624,7 +643,7 @@ function MainApp() {
           {!creationMode && (
             <TouchableOpacity
               style={[styles.fab, { bottom: 90 + insets.bottom }]}
-              onPress={startMapCreation}
+              onPress={() => setShowCepStep(true)}
             >
               <Text style={styles.fabText}>+</Text>
             </TouchableOpacity>
@@ -634,17 +653,29 @@ function MainApp() {
             <View style={[styles.creationBar, { bottom: 90 + insets.bottom }]}>
               <Text style={styles.creationBarTitle}>Selecione o local do cliente</Text>
               <Text style={styles.creationBarHint}>
-                Arraste o mapa para posicionar o pin no local exato.
+                Arraste o mapa para posicionar o pin no local exato. Endereço, CEP e bairro serão preenchidos automaticamente.
               </Text>
               <Text style={styles.creationBarCoords}>
                 {creationCenter.latitude.toFixed(6)}, {creationCenter.longitude.toFixed(6)}
               </Text>
               <View style={styles.creationBarRow}>
-                <TouchableOpacity style={styles.creationBarCancel} onPress={cancelMapCreation}>
+                <TouchableOpacity
+                  style={styles.creationBarCancel}
+                  onPress={cancelMapCreation}
+                  disabled={resolvingPin}
+                >
                   <Text style={styles.creationBarCancelText}>Cancelar</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.creationBarConfirm} onPress={confirmMapCreation}>
-                  <Text style={styles.creationBarConfirmText}>Confirmar local</Text>
+                <TouchableOpacity
+                  style={[styles.creationBarConfirm, resolvingPin && { opacity: 0.7 }]}
+                  onPress={confirmMapCreation}
+                  disabled={resolvingPin}
+                >
+                  {resolvingPin ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.creationBarConfirmText}>Confirmar local</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -741,6 +772,7 @@ function MainApp() {
             setIsFormOpen(true);
           }}
           onCancel={() => setShowCepStep(false)}
+          onPickOnMap={startMapCreation}
         />
       )}
 

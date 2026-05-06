@@ -32,11 +32,12 @@ function geocodingErrorMessage(err: unknown): string {
 interface CEPStepProps {
   onNext: (data: Partial<ClientFormData> & { latitude?: number | null; longitude?: number | null; bairro?: string }) => void;
   onCancel: () => void;
+  onPickOnMap?: () => void;
 }
 
 type Mode = 'choose' | 'cep' | 'coords';
 
-export function CEPStep({ onNext, onCancel }: CEPStepProps) {
+export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
   const [mode, setMode] = useState<Mode>('choose');
   const [loading, setLoading] = useState(false);
 
@@ -184,6 +185,19 @@ export function CEPStep({ onNext, onCancel }: CEPStepProps) {
             </View>
             <Text style={styles.optionArrow}>›</Text>
           </TouchableOpacity>
+
+          {onPickOnMap && (
+            <TouchableOpacity style={styles.optionCard} onPress={onPickOnMap}>
+              <Text style={styles.optionIcon}>📌</Text>
+              <View style={styles.optionInfo}>
+                <Text style={styles.optionTitle}>Colocar pelo pin no mapa</Text>
+                <Text style={styles.optionDesc}>
+                  Arraste o mapa até o local exato. Endereço/CEP/bairro são preenchidos automaticamente.
+                </Text>
+              </View>
+              <Text style={styles.optionArrow}>›</Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
             <Text style={styles.cancelBtnText}>Cancelar</Text>
