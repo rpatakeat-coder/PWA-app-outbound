@@ -938,10 +938,10 @@ function ClientBottomSheet({
             )}
 
             {/* Navigation */}
-            {client.latitude && client.longitude && (
-              <View style={styles.navigationSection}>
-                <Text style={[styles.fieldLabel, { marginBottom: 8 }]}>Traçar Rota</Text>
-                <View style={styles.navigationRow}>
+            <View style={styles.navigationSection}>
+              <Text style={[styles.fieldLabel, { marginBottom: 8 }]}>Traçar Rota</Text>
+              {client.latitude && client.longitude && (
+                <View style={[styles.navigationRow, { marginBottom: 8 }]}>
                   <TouchableOpacity
                     style={[styles.navRouteButton, styles.navButtonDriving]}
                     onPress={() => {
@@ -961,8 +961,21 @@ function ClientBottomSheet({
                     <Text style={styles.navRouteButtonText}>🚶 A pé</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
-            )}
+              )}
+              <TouchableOpacity
+                style={{ backgroundColor: '#4285f4', borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
+                onPress={() => {
+                  const addressParts = [client.endereco, client.numero, client.bairro, client.cidade, client.estado, client.cep]
+                    .filter(Boolean)
+                    .join(', ');
+                  const query = addressParts ? `${addressParts}, Brasil` : client.nome;
+                  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+                  Linking.openURL(url).catch(() => Alert.alert('Erro', 'Não foi possível abrir o Google Maps.'));
+                }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>🗺️ Abrir no Google Maps</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* Actions */}
             <View style={styles.actionRow}>
