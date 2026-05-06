@@ -61,44 +61,68 @@ export function useClients() {
 
   const addClient = useMutation({
     mutationFn: async (form: ClientFormData) => {
+      const isVisited = form.status === 'lead_visitado';
+      const insertPayload: Record<string, unknown> = {
+        nome: form.nome,
+        endereco: form.endereco ?? null,
+        numero: form.numero ?? null,
+        cep: form.cep ?? null,
+        cidade: form.cidade ?? null,
+        estado: form.estado ?? null,
+        telefone: form.telefone ?? null,
+        email: form.email ?? null,
+        status: form.status,
+        latitude: form.latitude,
+        longitude: form.longitude,
+        observacoes: form.observacoes ?? null,
+        created_by: user?.id,
+        // Cadastros via app têm origem manual e geolocalização escolhida no mapa.
+        geo_source: 'coords',
+        geo_approximate: !form.numero,
+      };
+      // Cadastro manual já marcado como visitado registra normalmente, sem
+      // checagem de proximidade (isso só vale pra transição via mark_client_as_visited).
+      if (isVisited) {
+        insertPayload.visited_at = new Date().toISOString();
+        insertPayload.visited_at_lat = form.latitude;
+        insertPayload.visited_at_lon = form.longitude;
+        insertPayload.visited_by = user?.id ?? null;
+      }
+
       const { data, error } = await supabase
         .from('clients')
-        .insert({
-          nome: form.nome,
-          endereco: form.endereco ?? null,
-          cep: form.cep ?? null,
-          cidade: form.cidade ?? null,
-          estado: form.estado ?? null,
-          telefone: form.telefone ?? null,
-          email: form.email ?? null,
-          status: form.status,
-          latitude: form.latitude,
-          longitude: form.longitude,
-          observacoes: form.observacoes ?? null,
-          created_by: user?.id,
-        })
+        .insert(insertPayload)
         .select()
         .single();
       if (error) throw error;
       const client = mapRow(data);
 
+      // Webhook outbound no MESMO formato dos leads do HubSpot, pra padronizar
+      // com o fluxo já existente de integração externa.
+      const dealname = client.empresa
+        ? `Manual - ${client.empresa}`
+        : `Manual - ${client.nome}`;
       fetch('https://webhook.takeat.cloud/webhook/0975e1c9-2d09-42f7-b236-78c7818c0c0d', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          event: 'pin.created',
-          created_at: new Date().toISOString(),
-          client,
-          created_by: user
-            ? {
-                id: user.id,
-                email: user.email ?? null,
-                full_name: profile?.full_name ?? null,
-                sector: profile?.sector ?? null,
-              }
-            : null,
+          bairro: client.bairro,
+          celular: client.telefone,
+          cep: client.cep,
+          cidade: client.cidade,
+          dealname,
+          email: client.email,
+          estado_uf: client.estado,
+          id_hubspot: client.id_hubspot,
+          latitude: client.latitude !== null ? String(client.latitude) : null,
+          logradouro: client.endereco,
+          longitude: client.longitude !== null ? String(client.longitude) : null,
+          nome: client.nome,
+          numero_do_local: client.numero,
+          observacoes: client.observacoes,
+          url: client.url_hubspot,
         }),
-      }).catch((err) => console.warn('[WEBHOOK] pin.created falhou:', err));
+      }).catch((err) => console.warn('[WEBHOOK] cadastro manual falhou:', err));
 
       return client;
     },

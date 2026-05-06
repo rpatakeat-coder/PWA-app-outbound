@@ -53,14 +53,16 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
   { value: 'ex_cliente', label: 'Ex-cliente', color: '#ef4444' },
 ];
 
-function CustomMarker({ color, onReady }: { color: string; onReady?: () => void }) {
+function CustomMarker({ color }: { color: string }) {
   return (
     <View style={markerStyles.container}>
       <View style={[markerStyles.pin, { backgroundColor: color }]}>
         <Image
           source={require('./assets/icon.png')}
           style={markerStyles.logo}
-          onLoad={onReady}
+          // Asset embarcado: pinta sincronamente. defaultSource garante fallback.
+          defaultSource={require('./assets/icon.png')}
+          fadeDuration={0}
         />
       </View>
       <View style={[markerStyles.arrow, { borderTopColor: color }]} />
@@ -68,21 +70,42 @@ function CustomMarker({ color, onReady }: { color: string; onReady?: () => void 
   );
 }
 
-function MarkerWithReady({ client, onPress, color }: { client: Client; onPress: () => void; color: string }) {
-  const [ready, setReady] = useState(false);
-  return (
-    <Marker
-      coordinate={{
-        latitude: client.latitude as number,
-        longitude: client.longitude as number,
-      }}
-      onPress={onPress}
-      tracksViewChanges={!ready}
-    >
-      <CustomMarker color={color} onReady={() => setReady(true)} />
-    </Marker>
-  );
-}
+const MarkerWithReady = React.memo(
+  function MarkerWithReady({
+    client,
+    onPress,
+    color,
+  }: { client: Client; onPress: (client: Client) => void; color: string }) {
+    // Pinta o marker num primeiro frame com tracksViewChanges=true
+    // e desliga em seguida pra evitar re-renderizações contínuas.
+    const [tracking, setTracking] = useState(true);
+    useEffect(() => {
+      const t = setTimeout(() => setTracking(false), 250);
+      return () => clearTimeout(t);
+    }, []);
+
+    const handlePress = useCallback(() => onPress(client), [onPress, client]);
+
+    return (
+      <Marker
+        coordinate={{
+          latitude: client.latitude as number,
+          longitude: client.longitude as number,
+        }}
+        onPress={handlePress}
+        tracksViewChanges={tracking}
+      >
+        <CustomMarker color={color} />
+      </Marker>
+    );
+  },
+  (prev, next) =>
+    prev.color === next.color &&
+    prev.client.id === next.client.id &&
+    prev.client.latitude === next.client.latitude &&
+    prev.client.longitude === next.client.longitude &&
+    prev.onPress === next.onPress,
+);
 
 const markerStyles = StyleSheet.create({
   container: { alignItems: 'center' },
@@ -238,6 +261,35 @@ function MainApp() {
   const handleMapInteraction = () => {
     setIsFollowingUser(false);
   };
+
+  const handleMarkerPress = useCallback((c: Client) => setSelectedClient(c), []);
+
+  // Modo de criação manual via mapa: pin fixo no centro da tela
+  const [creationMode, setCreationMode] = useState(false);
+  const [creationCenter, setCreationCenter] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  const startMapCreation = useCallback(() => {
+    setCreationCenter({ latitude: mapCenter.latitude, longitude: mapCenter.longitude });
+    setCreationMode(true);
+  }, [mapCenter]);
+
+  const cancelMapCreation = useCallback(() => {
+    setCreationMode(false);
+    setCreationCenter(null);
+  }, []);
+
+  const confirmMapCreation = useCallback(() => {
+    if (!creationCenter) return;
+    setCreationMode(false);
+    setForm({
+      ...initialFormState,
+      status: statusOptions[0]?.value ?? initialFormState.status,
+      latitude: creationCenter.latitude.toString(),
+      longitude: creationCenter.longitude.toString(),
+    });
+    setIsFormOpen(true);
+    setCreationCenter(null);
+  }, [creationCenter, statusOptions]);
 
   const resetForm = () => setForm(initialFormState);
 
@@ -524,8 +576,13 @@ function MainApp() {
             style={styles.map}
             initialRegion={mapCenter}
             showsUserLocation={true}
-            followsUserLocation={isFollowingUser}
+            followsUserLocation={isFollowingUser && !creationMode}
             onPanDrag={handleMapInteraction}
+            onRegionChange={(region) => {
+              if (creationMode) {
+                setCreationCenter({ latitude: region.latitude, longitude: region.longitude });
+              }
+            }}
             showsBuildings={true}
           >
             {filteredWithCoords.map(client => (
@@ -533,13 +590,27 @@ function MainApp() {
                 key={client.id}
                 client={client}
                 color={statusConfig[client.status]?.color || '#3b82f6'}
-                onPress={() => setSelectedClient(client)}
+                onPress={handleMarkerPress}
               />
             ))}
           </MapView>
 
+          {/* Pin overlay fixo no centro da tela durante creationMode */}
+          {creationMode && (
+            <View pointerEvents="none" style={styles.creationPinOverlay}>
+              <View style={[markerStyles.pin, { backgroundColor: '#dc2626' }]}>
+                <Image
+                  source={require('./assets/icon.png')}
+                  style={markerStyles.logo}
+                  fadeDuration={0}
+                />
+              </View>
+              <View style={[markerStyles.arrow, { borderTopColor: '#dc2626' }]} />
+            </View>
+          )}
+
           {/* Map buttons */}
-          {userLocation && (
+          {userLocation && !creationMode && (
             <TouchableOpacity
               style={[styles.mapButton, { bottom: 90 + insets.bottom, left: 16 }]}
               onPress={centerOnUser}
@@ -550,12 +621,34 @@ function MainApp() {
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity
-            style={[styles.fab, { bottom: 90 + insets.bottom }]}
-            onPress={() => setShowCepStep(true)}
-          >
-            <Text style={styles.fabText}>+</Text>
-          </TouchableOpacity>
+          {!creationMode && (
+            <TouchableOpacity
+              style={[styles.fab, { bottom: 90 + insets.bottom }]}
+              onPress={startMapCreation}
+            >
+              <Text style={styles.fabText}>+</Text>
+            </TouchableOpacity>
+          )}
+
+          {creationMode && creationCenter && (
+            <View style={[styles.creationBar, { bottom: 90 + insets.bottom }]}>
+              <Text style={styles.creationBarTitle}>Selecione o local do cliente</Text>
+              <Text style={styles.creationBarHint}>
+                Arraste o mapa para posicionar o pin no local exato.
+              </Text>
+              <Text style={styles.creationBarCoords}>
+                {creationCenter.latitude.toFixed(6)}, {creationCenter.longitude.toFixed(6)}
+              </Text>
+              <View style={styles.creationBarRow}>
+                <TouchableOpacity style={styles.creationBarCancel} onPress={cancelMapCreation}>
+                  <Text style={styles.creationBarCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.creationBarConfirm} onPress={confirmMapCreation}>
+                  <Text style={styles.creationBarConfirmText}>Confirmar local</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {selectedClient && (
             <ClientBottomSheet
@@ -1163,6 +1256,38 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   fabText: { color: '#fff', fontSize: 28, fontWeight: '300', marginTop: -2 },
+  creationPinOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Compensa o "rabicho" do pin pra ponta tocar exatamente o centro
+    transform: [{ translateY: -22 }],
+  },
+  creationBar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  creationBarTitle: { fontSize: 15, fontWeight: '700', color: '#0f172a', marginBottom: 2 },
+  creationBarHint: { fontSize: 12, color: '#64748b' },
+  creationBarCoords: { fontSize: 12, color: '#0f172a', marginTop: 6, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  creationBarRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  creationBarCancel: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#f1f5f9' },
+  creationBarCancelText: { color: '#0f172a', fontWeight: '700' },
+  creationBarConfirm: { flex: 2, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#16a34a' },
+  creationBarConfirmText: { color: '#fff', fontWeight: '700' },
   // Bottom Nav
   bottomNav: {
     flexDirection: 'row',
