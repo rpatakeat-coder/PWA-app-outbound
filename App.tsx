@@ -16,6 +16,7 @@ import {
   TouchableWithoutFeedback,
   KeyboardAvoidingView,
   Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
@@ -739,15 +740,31 @@ function ClientBottomSheet({
 }) {
   const statusColor = statusConfig[client.status]?.color || '#3b82f6';
   const statusLabel = statusConfig[client.status]?.label || client.status;
-  const isApprox = client.geo_approximate || (!client.numero && !client.geo_source);
-  const geoLabel =
+
+  const approxReasons: string[] = [];
+  if (!client.numero) approxReasons.push('Endereço sem número');
+  if (client.geo_source === 'hubspot' || client.geo_source === 'coords') {
+    approxReasons.push('Posicionado pela latitude/longitude (sem geocodificação por endereço)');
+  }
+  const isApprox = approxReasons.length > 0;
+
+  const sourceLabel =
     client.geo_source === 'nominatim'
-      ? 'Geocodificado por endereço'
+      ? 'Geocodificado pelo endereço'
       : client.geo_source === 'hubspot'
-      ? 'Coordenadas vindas do HubSpot'
+      ? 'Latitude/longitude vindas do HubSpot'
       : client.geo_source === 'coords'
-      ? 'Baseado em lat/lng'
-      : 'Baseado em CEP/endereço';
+      ? 'Latitude/longitude informadas manualmente'
+      : 'Origem da localização não identificada';
+
+  const formatDate = (iso: string | null) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleString('pt-BR');
+  };
+  const createdAt = formatDate(client.created_at);
+  const updatedAt = formatDate(client.updated_at);
 
   return (
     <Modal visible={true} animationType="fade" transparent onRequestClose={onClose}>
@@ -786,22 +803,38 @@ function ClientBottomSheet({
             </View>
 
             {/* Geo quality indicator */}
-            <View style={{ backgroundColor: isApprox ? '#fefce8' : '#f0fdf4', borderRadius: 8, padding: 8, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={{ fontSize: 12 }}>{isApprox ? '⚠️' : '✅'}</Text>
-              <View>
-                <Text style={{ fontSize: 11, color: isApprox ? '#92400e' : '#166534', fontWeight: '600' }}>
+            <View style={{ backgroundColor: isApprox ? '#fefce8' : '#f0fdf4', borderRadius: 8, padding: 10, marginBottom: 12, flexDirection: 'row', gap: 8 }}>
+              <Text style={{ fontSize: 14 }}>{isApprox ? '⚠️' : '✅'}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 12, color: isApprox ? '#92400e' : '#166534', fontWeight: '700' }}>
                   {isApprox ? 'Localização aproximada' : 'Localização precisa'}
                 </Text>
-                <Text style={{ fontSize: 10, color: '#64748b' }}>{geoLabel}</Text>
+                <Text style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{sourceLabel}</Text>
+                {isApprox && approxReasons.length > 0 && (
+                  <View style={{ marginTop: 4 }}>
+                    {approxReasons.map((reason, idx) => (
+                      <Text key={idx} style={{ fontSize: 11, color: '#92400e' }}>• {reason}</Text>
+                    ))}
+                  </View>
+                )}
               </View>
             </View>
 
             {/* Info Grid */}
             <View style={styles.infoGrid}>
+              {client.empresa && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoIcon}>🏢</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailLabel}>Empresa</Text>
+                    <Text style={styles.detailValue}>{client.empresa}</Text>
+                  </View>
+                </View>
+              )}
               {client.telefone && (
                 <View style={styles.infoItem}>
                   <Text style={styles.infoIcon}>📞</Text>
-                  <View>
+                  <View style={{ flex: 1 }}>
                     <Text style={styles.detailLabel}>Telefone</Text>
                     <Text style={styles.detailValue}>{client.telefone}</Text>
                   </View>
@@ -810,34 +843,92 @@ function ClientBottomSheet({
               {client.email && (
                 <View style={styles.infoItem}>
                   <Text style={styles.infoIcon}>✉️</Text>
-                  <View>
+                  <View style={{ flex: 1 }}>
                     <Text style={styles.detailLabel}>Email</Text>
                     <Text style={styles.detailValue}>{client.email}</Text>
+                  </View>
+                </View>
+              )}
+              <View style={styles.infoItem}>
+                <Text style={styles.infoIcon}>🏠</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailLabel}>Endereço</Text>
+                  <Text style={styles.detailValue}>
+                    {client.endereco || 'Não informado'}
+                    {client.numero ? `, ${client.numero}` : (client.endereco ? ' (sem número)' : '')}
+                  </Text>
+                </View>
+              </View>
+              {client.bairro && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoIcon}>🏘️</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailLabel}>Bairro</Text>
+                    <Text style={styles.detailValue}>{client.bairro}</Text>
                   </View>
                 </View>
               )}
               {(client.cidade || client.estado) && (
                 <View style={styles.infoItem}>
                   <Text style={styles.infoIcon}>📍</Text>
-                  <View>
-                    <Text style={styles.detailLabel}>Localização</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailLabel}>Cidade / UF</Text>
                     <Text style={styles.detailValue}>
                       {client.cidade || ''}{client.estado ? ` • ${client.estado}` : ''}
                     </Text>
                   </View>
                 </View>
               )}
-              <View style={styles.infoItem}>
-                <Text style={styles.infoIcon}>🏠</Text>
-                <View>
-                  <Text style={styles.detailLabel}>Endereço</Text>
-                  <Text style={styles.detailValue}>
-                    {client.endereco || 'Não informado'}
-                    {!client.numero && client.endereco ? ' (sem número)' : ''}
-                  </Text>
+              {client.cep && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoIcon}>📮</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailLabel}>CEP</Text>
+                    <Text style={styles.detailValue}>{client.cep}</Text>
+                  </View>
                 </View>
-              </View>
+              )}
+              {client.latitude !== null && client.longitude !== null && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoIcon}>🧭</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailLabel}>Coordenadas</Text>
+                    <Text style={styles.detailValue}>
+                      {Number(client.latitude).toFixed(6)}, {Number(client.longitude).toFixed(6)}
+                    </Text>
+                  </View>
+                </View>
+              )}
+              {client.id_hubspot && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoIcon}>🆔</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailLabel}>ID HubSpot</Text>
+                    <Text style={styles.detailValue}>{client.id_hubspot}</Text>
+                  </View>
+                </View>
+              )}
+              {(createdAt || updatedAt) && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoIcon}>🕒</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailLabel}>Criado / atualizado</Text>
+                    <Text style={styles.detailValue}>
+                      {createdAt ?? '—'}{updatedAt && updatedAt !== createdAt ? ` → ${updatedAt}` : ''}
+                    </Text>
+                  </View>
+                </View>
+              )}
             </View>
+
+            {client.url_hubspot && (
+              <TouchableOpacity
+                style={{ backgroundColor: '#ff7a59', borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginBottom: 12 }}
+                onPress={() => Linking.openURL(client.url_hubspot!).catch(() => Alert.alert('Erro', 'Não foi possível abrir o link.'))}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Abrir no HubSpot ↗</Text>
+              </TouchableOpacity>
+            )}
 
             {client.observacoes && (
               <View style={styles.observationsSection}>
