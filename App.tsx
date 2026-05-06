@@ -132,7 +132,7 @@ function MainApp() {
   const mapRef = useRef<MapView>(null);
   const submittingRef = useRef(false);
 
-  const { clients, statuses: dynamicStatuses, isLoading, error, deleteClient, addClient, updateClient } = useClients();
+  const { clients, statuses: dynamicStatuses, isLoading, error, deleteClient, addClient, updateClient, markAsVisited } = useClients();
   const isSaving = addClient.isPending || updateClient.isPending;
 
   // Lista de status pra UI: dinâmica (banco) ou fallback hardcoded enquanto carrega.
@@ -352,6 +352,64 @@ function MainApp() {
     );
   }, [deleteClient]);
 
+  // Distância Haversine em metros (mesma fórmula da RPC, só pra UX antes do round-trip).
+  const haversineMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const R = 6371000;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  };
+
+  const handleMarkAsVisited = useCallback(async (client: Client, onDone?: () => void) => {
+    if (client.latitude == null || client.longitude == null) {
+      Alert.alert('Sem coordenadas', 'Este lead não tem latitude/longitude — não é possível validar proximidade.');
+      return;
+    }
+
+    const { status: permStatus } = await Location.requestForegroundPermissionsAsync();
+    if (permStatus !== 'granted') {
+      Alert.alert('Permissão negada', 'É necessário permitir acesso à localização para marcar como visitado.');
+      return;
+    }
+
+    let position: Location.LocationObject;
+    try {
+      position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+    } catch (err: any) {
+      Alert.alert('Erro de GPS', err?.message ?? 'Não foi possível obter sua localização.');
+      return;
+    }
+
+    const userLat = position.coords.latitude;
+    const userLon = position.coords.longitude;
+    const distance = haversineMeters(userLat, userLon, client.latitude as number, client.longitude as number);
+
+    if (distance > 20) {
+      Alert.alert(
+        'Você está muito longe',
+        `Distância atual: ${Math.round(distance)} m (limite: 20 m).\nAproxime-se do local para marcar como visitado.`,
+      );
+      return;
+    }
+
+    markAsVisited.mutate(
+      { clientId: client.id, latitude: userLat, longitude: userLon },
+      {
+        onSuccess: () => {
+          Alert.alert('Pronto', 'Lead marcado como visitado.');
+          onDone?.();
+        },
+        onError: (err: any) => {
+          Alert.alert('Não foi possível marcar como visitado', err?.message ?? 'Erro desconhecido');
+        },
+      },
+    );
+  }, [markAsVisited]);
+
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { all: clients.length };
     for (const opt of statusOptions) counts[opt.value] = 0;
@@ -506,6 +564,8 @@ function MainApp() {
               onClose={() => setSelectedClient(null)}
               onDelete={() => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
               onEdit={() => openEditClient(selectedClient)}
+              onMarkVisited={() => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
+              isMarkingVisited={markAsVisited.isPending}
             />
           )}
         </>
@@ -545,6 +605,8 @@ function MainApp() {
               onClose={() => setSelectedClient(null)}
               onDelete={() => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
               onEdit={() => openEditClient(selectedClient)}
+              onMarkVisited={() => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
+              isMarkingVisited={markAsVisited.isPending}
             />
           )}
         </>
@@ -730,6 +792,8 @@ function ClientBottomSheet({
   onClose,
   onDelete,
   onEdit,
+  onMarkVisited,
+  isMarkingVisited,
 }: {
   client: Client;
   insets: { bottom: number };
@@ -737,6 +801,8 @@ function ClientBottomSheet({
   onClose: () => void;
   onDelete: () => void;
   onEdit: () => void;
+  onMarkVisited: () => void;
+  isMarkingVisited: boolean;
 }) {
   const statusColor = statusConfig[client.status]?.color || '#3b82f6';
   const statusLabel = statusConfig[client.status]?.label || client.status;
@@ -976,6 +1042,29 @@ function ClientBottomSheet({
                 <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>🗺️ Abrir no Google Maps</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Marcar como visitado: só quando ainda não foi visitado */}
+            {client.status !== 'lead_visitado' && (
+              <TouchableOpacity
+                disabled={isMarkingVisited}
+                style={{
+                  backgroundColor: isMarkingVisited ? '#94d4a8' : '#16a34a',
+                  borderRadius: 10,
+                  paddingVertical: 14,
+                  alignItems: 'center',
+                  marginBottom: 12,
+                }}
+                onPress={onMarkVisited}
+              >
+                {isMarkingVisited ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                    ✅ Marcar como visitado
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
 
             {/* Actions */}
             <View style={styles.actionRow}>

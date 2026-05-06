@@ -140,6 +140,23 @@ export function useClients() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
   });
 
+  const markAsVisited = useMutation({
+    mutationFn: async ({
+      clientId,
+      latitude,
+      longitude,
+    }: { clientId: string; latitude: number; longitude: number }) => {
+      const { data, error } = await supabase.rpc('mark_client_as_visited', {
+        p_client_id: clientId,
+        p_user_lat: latitude,
+        p_user_lon: longitude,
+      });
+      if (error) throw error;
+      return mapRow(data);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
+  });
+
   return {
     clients: query.data ?? [],
     statuses: statusesQuery.data ?? [],
@@ -148,5 +165,6 @@ export function useClients() {
     addClient,
     updateClient,
     deleteClient,
+    markAsVisited,
   };
 }
