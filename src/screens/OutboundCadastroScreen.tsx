@@ -53,50 +53,59 @@ export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScr
       return;
     }
 
-    if (!profile?.id_hubspot || !profile?.instancia_token) {
+    Keyboard.dismiss();
+
+    const sendPayload = async () => {
+      setSubmitting(true);
+
+      const payload = {
+        nome_cliente: nomeCliente.trim(),
+        nome_empresa: nomeEmpresa.trim(),
+        celular,
+        celular_numerico: celularNumerico,
+        vendedor_id: profile?.id_hubspot ?? '',
+        vendedor_nome: profile?.full_name ?? '',
+        vendedor_token: profile?.instancia_token ?? '',
+        observacoes: observacoes.trim(),
+        origem: 'Captacao Outbound - Formulario Web',
+        enviado_em: new Date().toISOString(),
+      };
+
+      try {
+        const res = await fetch(WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new Error(`HTTP ${res.status}${text ? ` - ${text.slice(0, 200)}` : ''}`);
+        }
+
+        Alert.alert('Sucesso', 'Cadastro enviado com sucesso!', [
+          { text: 'OK', onPress: onClose },
+        ]);
+      } catch (err: any) {
+        Alert.alert('Erro ao enviar', err?.message || 'Não foi possível enviar o cadastro. Tente novamente.');
+      } finally {
+        setSubmitting(false);
+      }
+    };
+
+    if (!profile?.id_hubspot) {
       Alert.alert(
-        'Vendedor não configurado',
-        'Seu usuário não possui id_hubspot e/ou instancia_token configurados. Peça ao administrador para preencher esses campos no seu perfil.',
+        'Vendedor sem ID HubSpot',
+        'Seu usuário não tem id_hubspot configurado. O negócio será criado, mas não ficará associado a você no HubSpot. Deseja continuar?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Enviar mesmo assim', onPress: sendPayload },
+        ],
       );
       return;
     }
 
-    Keyboard.dismiss();
-    setSubmitting(true);
-
-    const payload = {
-      nome_cliente: nomeCliente.trim(),
-      nome_empresa: nomeEmpresa.trim(),
-      celular,
-      celular_numerico: celularNumerico,
-      vendedor_id: profile.id_hubspot,
-      vendedor_nome: profile.full_name ?? '',
-      vendedor_token: profile.instancia_token,
-      observacoes: observacoes.trim(),
-      origem: 'Captacao Outbound - Formulario Web',
-      enviado_em: new Date().toISOString(),
-    };
-
-    try {
-      const res = await fetch(WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status}${text ? ` - ${text.slice(0, 200)}` : ''}`);
-      }
-
-      Alert.alert('Sucesso', 'Cadastro enviado com sucesso!', [
-        { text: 'OK', onPress: onClose },
-      ]);
-    } catch (err: any) {
-      Alert.alert('Erro ao enviar', err?.message || 'Não foi possível enviar o cadastro. Tente novamente.');
-    } finally {
-      setSubmitting(false);
-    }
+    await sendPayload();
   };
 
   return (
@@ -172,11 +181,11 @@ export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScr
                   <Text style={styles.vendedorBoxLine}>
                     {profile.full_name || profile.email}
                   </Text>
-                  <Text style={styles.vendedorBoxHint}>
-                    {profile.id_hubspot && profile.instancia_token
-                      ? 'Configuração de vendedor OK'
-                      : '⚠ Falta id_hubspot/instancia_token no perfil — peça ao admin para configurar.'}
-                  </Text>
+                  {!profile.id_hubspot && (
+                    <Text style={styles.vendedorBoxHint}>
+                      ⚠ Sem id_hubspot — o negócio será criado, mas não ficará associado ao seu usuário no HubSpot.
+                    </Text>
+                  )}
                 </View>
               )}
 
