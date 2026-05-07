@@ -29,6 +29,7 @@ import { openNavigation } from './src/utils/navigation';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { CEPStep } from './src/screens/CEPStep';
+import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { reverseGeocode } from './src/utils/geocoding';
 
 const queryClient = new QueryClient();
@@ -148,6 +149,7 @@ function MainApp() {
   const [tab, setTab] = useState<'map' | 'list'>('map');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [showCepStep, setShowCepStep] = useState(false);
+  const [showOutboundForm, setShowOutboundForm] = useState(false);
   const [form, setForm] = useState(initialFormState);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -641,12 +643,20 @@ function MainApp() {
           )}
 
           {!creationMode && (
-            <TouchableOpacity
-              style={[styles.fab, { bottom: 90 + insets.bottom }]}
-              onPress={() => setShowCepStep(true)}
-            >
-              <Text style={styles.fabText}>+</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={[styles.fabSecondary, { bottom: 90 + insets.bottom + 68 }]}
+                onPress={() => setShowOutboundForm(true)}
+              >
+                <Text style={styles.fabSecondaryIcon}>📤</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.fab, { bottom: 90 + insets.bottom }]}
+                onPress={() => setShowCepStep(true)}
+              >
+                <Text style={styles.fabText}>+</Text>
+              </TouchableOpacity>
+            </>
           )}
 
           {creationMode && creationCenter && (
@@ -716,6 +726,12 @@ function MainApp() {
           />
 
           <TouchableOpacity
+            style={[styles.fabSecondary, { bottom: 90 + insets.bottom + 68 }]}
+            onPress={() => setShowOutboundForm(true)}
+          >
+            <Text style={styles.fabSecondaryIcon}>📤</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[styles.fab, { bottom: 90 + insets.bottom }]}
             onPress={() => setShowCepStep(true)}
           >
@@ -754,6 +770,14 @@ function MainApp() {
           <Text style={[styles.navItemText, tab === 'list' && styles.navItemTextActive]}>Lista</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Outbound (sem localização) Modal */}
+      {showOutboundForm && (
+        <OutboundCadastroScreen
+          profile={profile}
+          onClose={() => setShowOutboundForm(false)}
+        />
+      )}
 
       {/* CEP Step Modal */}
       {showCepStep && (
@@ -1288,6 +1312,22 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   fabText: { color: '#fff', fontSize: 28, fontWeight: '300', marginTop: -2 },
+  fabSecondary: {
+    position: 'absolute',
+    right: 16,
+    backgroundColor: '#0ea5e9',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  fabSecondaryIcon: { fontSize: 22 },
   creationPinOverlay: {
     position: 'absolute',
     left: 0,
