@@ -13,16 +13,50 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.takeat.rpa",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
+      },
+      "package": "com.takeat.rpa",
+      "versionCode": 1,
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "REPLACE_WITH_GOOGLE_MAPS_ANDROID_KEY"
+        }
       }
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Usamos sua localização para mostrar sua posição no mapa de leads e clientes e para calcular rotas até eles."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "622d3aef-f019-4487-bdac-a675df42ebeb"
+      }
+    },
+    "owner": "takeat",
+    "runtimeVersion": "exposdk:54.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/622d3aef-f019-4487-bdac-a675df42ebeb"
     }
   }
 }

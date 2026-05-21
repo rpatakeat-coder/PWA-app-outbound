@@ -44,8 +44,7 @@ export function useClients() {
     queryFn: async () => {
       let q = supabase
         .from('clients')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('*');
 
       // Apply sector visibility filter
       if (allowedStatuses && allowedStatuses.length > 0) {
@@ -64,6 +63,7 @@ export function useClients() {
       const isVisited = form.status === 'lead_visitado';
       const insertPayload: Record<string, unknown> = {
         nome: form.nome,
+        empresa: form.empresa ?? null,
         endereco: form.endereco ?? null,
         numero: form.numero ?? null,
         cep: form.cep ?? null,
@@ -99,9 +99,8 @@ export function useClients() {
 
       // Webhook outbound no MESMO formato dos leads do HubSpot, pra padronizar
       // com o fluxo já existente de integração externa.
-      const dealname = client.empresa
-        ? `Manual - ${client.empresa}`
-        : `Manual - ${client.nome}`;
+      // dealname = nome da empresa (fallback pro nome do contato se não tiver empresa).
+      const dealname = client.empresa ?? client.nome;
       fetch('https://webhook.takeat.cloud/webhook/0975e1c9-2d09-42f7-b236-78c7818c0c0d', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -135,7 +134,9 @@ export function useClients() {
         .from('clients')
         .update({
           nome: form.nome,
+          empresa: form.empresa ?? null,
           endereco: form.endereco ?? null,
+          numero: form.numero ?? null,
           cep: form.cep ?? null,
           cidade: form.cidade ?? null,
           estado: form.estado ?? null,

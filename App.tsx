@@ -18,25 +18,31 @@ import {
   Alert,
   Linking,
   Pressable,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useClients } from './src/hooks/useClients';
-import type { Client, ClientStatus } from './src/types/client';
+import { useMeetings } from './src/hooks/useMeetings';
+import type { Client, ClientMeeting, ClientStatus } from './src/types/client';
 import { openNavigation } from './src/utils/navigation';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { CEPStep } from './src/screens/CEPStep';
 import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
+import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { reverseGeocode } from './src/utils/geocoding';
 
 const queryClient = new QueryClient();
 
 const initialFormState = {
   nome: '',
+  empresa: '',
   endereco: '',
+  numero: '',
   cep: '',
   cidade: '',
   estado: '',
@@ -55,7 +61,7 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
   { value: 'ex_cliente', label: 'Ex-cliente', color: '#ef4444' },
 ];
 
-function CustomMarker({ color }: { color: string }) {
+function CustomMarker({ color, meetingCount }: { color: string; meetingCount: number }) {
   return (
     <View style={markerStyles.container}>
       <View style={[markerStyles.pin, { backgroundColor: color }]}>
@@ -66,6 +72,11 @@ function CustomMarker({ color }: { color: string }) {
           defaultSource={require('./assets/icon.png')}
           fadeDuration={0}
         />
+        {meetingCount > 0 && (
+          <View style={markerStyles.meetingBadge}>
+            <Text style={markerStyles.meetingBadgeText}>📅</Text>
+          </View>
+        )}
       </View>
       <View style={[markerStyles.arrow, { borderTopColor: color }]} />
     </View>
@@ -77,14 +88,17 @@ const MarkerWithReady = React.memo(
     client,
     onPress,
     color,
-  }: { client: Client; onPress: (client: Client) => void; color: string }) {
+    meetingCount,
+  }: { client: Client; onPress: (client: Client) => void; color: string; meetingCount: number }) {
     // Pinta o marker num primeiro frame com tracksViewChanges=true
     // e desliga em seguida pra evitar re-renderizações contínuas.
+    // Quando muda meetingCount, religa o tracking pra refletir o badge novo.
     const [tracking, setTracking] = useState(true);
     useEffect(() => {
+      setTracking(true);
       const t = setTimeout(() => setTracking(false), 250);
       return () => clearTimeout(t);
-    }, []);
+    }, [meetingCount]);
 
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
 
@@ -97,7 +111,7 @@ const MarkerWithReady = React.memo(
         onPress={handlePress}
         tracksViewChanges={tracking}
       >
-        <CustomMarker color={color} />
+        <CustomMarker color={color} meetingCount={meetingCount} />
       </Marker>
     );
   },
@@ -106,6 +120,7 @@ const MarkerWithReady = React.memo(
     prev.client.id === next.client.id &&
     prev.client.latitude === next.client.latitude &&
     prev.client.longitude === next.client.longitude &&
+    prev.meetingCount === next.meetingCount &&
     prev.onPress === next.onPress,
 );
 
@@ -119,11 +134,6 @@ const markerStyles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 5,
   },
   logo: {
     width: 20,
@@ -141,6 +151,21 @@ const markerStyles = StyleSheet.create({
     borderRightColor: 'transparent',
     marginTop: -1,
   },
+  meetingBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -8,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#7c3aed',
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    minWidth: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  meetingBadgeText: { fontSize: 9 },
 });
 
 function MainApp() {
@@ -160,6 +185,8 @@ function MainApp() {
   const submittingRef = useRef(false);
 
   const { clients, statuses: dynamicStatuses, isLoading, error, deleteClient, addClient, updateClient, markAsVisited } = useClients();
+  const { upcomingByClient, meetingsByClient } = useMeetings();
+  const [schedulingFor, setSchedulingFor] = useState<Client | null>(null);
   const isSaving = addClient.isPending || updateClient.isPending;
 
   // Lista de status pra UI: dinâmica (banco) ou fallback hardcoded enquanto carrega.
@@ -288,7 +315,7 @@ function MainApp() {
   const confirmMapCreation = useCallback(async () => {
     if (!creationCenter) return;
     setResolvingPin(true);
-    let addr: { endereco: string; bairro: string; cidade: string; estado: string; cep: string } | null = null;
+    let addr: { endereco: string; numero: string; bairro: string; cidade: string; estado: string; cep: string } | null = null;
     try {
       addr = await reverseGeocode(creationCenter.latitude, creationCenter.longitude);
     } catch (err: any) {
@@ -305,6 +332,7 @@ function MainApp() {
       longitude: creationCenter.longitude.toString(),
       cep: addr?.cep ? `${addr.cep.slice(0, 5)}-${addr.cep.slice(5)}` : '',
       endereco: addr?.endereco ?? '',
+      numero: addr?.numero ?? '',
       cidade: addr?.cidade ?? '',
       estado: addr?.estado ?? '',
     });
@@ -333,7 +361,9 @@ function MainApp() {
       ...form,
       latitude: lat,
       longitude: lng,
+      empresa: form.empresa || null,
       endereco: form.endereco || null,
+      numero: form.numero || null,
       cep: form.cep || null,
       cidade: form.cidade || null,
       estado: form.estado || null,
@@ -344,10 +374,17 @@ function MainApp() {
 
     submittingRef.current = true;
     try {
-      await addClient.mutateAsync(newClient);
+      const created = await addClient.mutateAsync(newClient);
       resetForm();
       setIsFormOpen(false);
-      Alert.alert('Sucesso', 'Cliente cadastrado com sucesso!');
+      Alert.alert(
+        'Cliente cadastrado',
+        'Deseja agendar uma reunião com este lead agora?',
+        [
+          { text: 'Agora não', style: 'cancel' },
+          { text: '📅 Agendar reunião', onPress: () => setSchedulingFor(created) },
+        ],
+      );
     } catch (err: any) {
       const isDuplicate = err?.code === '23505' || /duplicate|unique/i.test(err?.message || '');
       Alert.alert(
@@ -365,7 +402,9 @@ function MainApp() {
     setEditingClient(client);
     setForm({
       nome: client.nome || '',
+      empresa: client.empresa || '',
       endereco: client.endereco || '',
+      numero: client.numero || '',
       cep: client.cep || '',
       cidade: client.cidade || '',
       estado: client.estado || '',
@@ -438,50 +477,55 @@ function MainApp() {
     return 2 * R * Math.asin(Math.sqrt(a));
   };
 
+  const visitingRef = useRef(false);
+  const [isVisiting, setIsVisiting] = useState(false);
+
   const handleMarkAsVisited = useCallback(async (client: Client, onDone?: () => void) => {
-    if (client.latitude == null || client.longitude == null) {
-      Alert.alert('Sem coordenadas', 'Este lead não tem latitude/longitude — não é possível validar proximidade.');
-      return;
-    }
+    if (visitingRef.current) return;
+    visitingRef.current = true;
+    setIsVisiting(true);
 
-    const { status: permStatus } = await Location.requestForegroundPermissionsAsync();
-    if (permStatus !== 'granted') {
-      Alert.alert('Permissão negada', 'É necessário permitir acesso à localização para marcar como visitado.');
-      return;
-    }
-
-    let position: Location.LocationObject;
     try {
-      position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+      if (client.latitude == null || client.longitude == null) {
+        Alert.alert('Sem coordenadas', 'Este lead não tem latitude/longitude — não é possível validar proximidade.');
+        return;
+      }
+
+      const { status: permStatus } = await Location.requestForegroundPermissionsAsync();
+      if (permStatus !== 'granted') {
+        Alert.alert('Permissão negada', 'É necessário permitir acesso à localização para marcar como visitado.');
+        return;
+      }
+
+      let position: Location.LocationObject;
+      try {
+        position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+      } catch (err: any) {
+        Alert.alert('Erro de GPS', err?.message ?? 'Não foi possível obter sua localização.');
+        return;
+      }
+
+      const userLat = position.coords.latitude;
+      const userLon = position.coords.longitude;
+      const distance = haversineMeters(userLat, userLon, client.latitude as number, client.longitude as number);
+
+      if (distance > 50) {
+        Alert.alert(
+          'Você está muito longe',
+          `Distância atual: ${Math.round(distance)} m (limite: 50 m).\nAproxime-se do local para marcar como visitado.`,
+        );
+        return;
+      }
+
+      await markAsVisited.mutateAsync({ clientId: client.id, latitude: userLat, longitude: userLon });
+      Alert.alert('Pronto', 'Lead marcado como visitado.');
+      onDone?.();
     } catch (err: any) {
-      Alert.alert('Erro de GPS', err?.message ?? 'Não foi possível obter sua localização.');
-      return;
+      Alert.alert('Não foi possível marcar como visitado', err?.message ?? 'Erro desconhecido');
+    } finally {
+      visitingRef.current = false;
+      setIsVisiting(false);
     }
-
-    const userLat = position.coords.latitude;
-    const userLon = position.coords.longitude;
-    const distance = haversineMeters(userLat, userLon, client.latitude as number, client.longitude as number);
-
-    if (distance > 20) {
-      Alert.alert(
-        'Você está muito longe',
-        `Distância atual: ${Math.round(distance)} m (limite: 20 m).\nAproxime-se do local para marcar como visitado.`,
-      );
-      return;
-    }
-
-    markAsVisited.mutate(
-      { clientId: client.id, latitude: userLat, longitude: userLon },
-      {
-        onSuccess: () => {
-          Alert.alert('Pronto', 'Lead marcado como visitado.');
-          onDone?.();
-        },
-        onError: (err: any) => {
-          Alert.alert('Não foi possível marcar como visitado', err?.message ?? 'Erro desconhecido');
-        },
-      },
-    );
   }, [markAsVisited]);
 
   const statusCounts = useMemo(() => {
@@ -494,6 +538,7 @@ function MainApp() {
   const renderClientItem = useCallback(({ item }: { item: Client }) => {
     const color = statusConfig[item.status]?.color || '#3b82f6';
     const label = statusConfig[item.status]?.label || item.status;
+    const meetingCount = upcomingByClient[item.id] ?? 0;
     return (
       <TouchableOpacity
         style={[styles.clientCard, { borderLeftColor: color }]}
@@ -504,8 +549,15 @@ function MainApp() {
             <Image source={require('./assets/icon.png')} style={[styles.cardLogo, { tintColor: color }]} />
             <Text style={styles.clientName} numberOfLines={1}>{item.nome}</Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: color }]}>
-            <Text style={styles.statusBadgeText}>{label}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {meetingCount > 0 && (
+              <View style={styles.cardMeetingBadge}>
+                <Text style={styles.cardMeetingBadgeText}>📅 {meetingCount}</Text>
+              </View>
+            )}
+            <View style={[styles.statusBadge, { backgroundColor: color }]}>
+              <Text style={styles.statusBadgeText}>{label}</Text>
+            </View>
           </View>
         </View>
         <Text style={styles.clientCity}>
@@ -514,7 +566,7 @@ function MainApp() {
         {item.telefone && <Text style={styles.clientPhone}>{item.telefone}</Text>}
       </TouchableOpacity>
     );
-  }, [statusConfig]);
+  }, [statusConfig, upcomingByClient]);
 
   if (!isAuthenticated && !loading) {
     return <LoginScreen />;
@@ -523,7 +575,7 @@ function MainApp() {
   if (loading || isLoading) {
     return (
       <View style={styles.centered}>
-        <Image source={require('./assets/icon.png')} style={{ width: 60, height: 60, marginBottom: 16, tintColor: '#dc2626' }} />
+        <Image source={require('./assets/icon.png')} style={{ width: 72, height: 72, marginBottom: 16, tintColor: '#dc2626', resizeMode: 'contain' }} />
         <ActivityIndicator size="large" color="#dc2626" />
         <Text style={styles.loadingText}>Carregando...</Text>
       </View>
@@ -546,12 +598,9 @@ function MainApp() {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Image source={require('./assets/icon.png')} style={styles.headerLogo} />
-          <View>
-            <Text style={styles.headerTitle}>Takeat RPA</Text>
-            {profile && (
-              <Text style={styles.headerSubtitle}>{profile.full_name || profile.email}</Text>
-            )}
-          </View>
+          {profile && (
+            <Text style={styles.headerSubtitle}>{profile.full_name || profile.email}</Text>
+          )}
         </View>
         <TouchableOpacity style={styles.logoutButton} onPress={logout}>
           <Text style={styles.logoutButtonText}>Sair</Text>
@@ -611,6 +660,7 @@ function MainApp() {
                 key={client.id}
                 client={client}
                 color={statusConfig[client.status]?.color || '#3b82f6'}
+                meetingCount={upcomingByClient[client.id] ?? 0}
                 onPress={handleMarkerPress}
               />
             ))}
@@ -696,11 +746,13 @@ function MainApp() {
               client={selectedClient}
               insets={insets}
               statusConfig={statusConfig}
+              meetings={meetingsByClient[selectedClient.id] ?? []}
               onClose={() => setSelectedClient(null)}
               onDelete={() => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
               onEdit={() => openEditClient(selectedClient)}
               onMarkVisited={() => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
-              isMarkingVisited={markAsVisited.isPending}
+              onScheduleMeeting={() => { setSchedulingFor(selectedClient); setSelectedClient(null); }}
+              isMarkingVisited={isVisiting || markAsVisited.isPending}
             />
           )}
         </>
@@ -743,11 +795,13 @@ function MainApp() {
               client={selectedClient}
               insets={insets}
               statusConfig={statusConfig}
+              meetings={meetingsByClient[selectedClient.id] ?? []}
               onClose={() => setSelectedClient(null)}
               onDelete={() => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
               onEdit={() => openEditClient(selectedClient)}
               onMarkVisited={() => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
-              isMarkingVisited={markAsVisited.isPending}
+              onScheduleMeeting={() => { setSchedulingFor(selectedClient); setSelectedClient(null); }}
+              isMarkingVisited={isVisiting || markAsVisited.isPending}
             />
           )}
         </>
@@ -769,6 +823,12 @@ function MainApp() {
           <Text style={[styles.navIcon, tab === 'list' && styles.navIconActive]}>📋</Text>
           <Text style={[styles.navItemText, tab === 'list' && styles.navItemTextActive]}>Lista</Text>
         </TouchableOpacity>
+        <Text
+          style={[styles.brandMark, { bottom: Math.max(insets.bottom - 4, 2) }]}
+          pointerEvents="none"
+        >
+          developed by RPA
+        </Text>
       </View>
 
       {/* Outbound (sem localização) Modal */}
@@ -776,6 +836,14 @@ function MainApp() {
         <OutboundCadastroScreen
           profile={profile}
           onClose={() => setShowOutboundForm(false)}
+        />
+      )}
+
+      {/* Schedule Meeting Modal */}
+      {schedulingFor && (
+        <ScheduleMeetingModal
+          client={schedulingFor}
+          onClose={() => setSchedulingFor(null)}
         />
       )}
 
@@ -851,6 +919,13 @@ function MainApp() {
               />
               <TextInput
                 style={styles.input}
+                placeholder="Nome da empresa"
+                placeholderTextColor="#94a3b8"
+                value={form.empresa}
+                onChangeText={v => setForm(s => ({ ...s, empresa: v }))}
+              />
+              <TextInput
+                style={styles.input}
                 placeholder="Telefone"
                 placeholderTextColor="#94a3b8"
                 keyboardType="phone-pad"
@@ -886,13 +961,26 @@ function MainApp() {
                   onChangeText={v => setForm(s => ({ ...s, estado: v }))}
                 />
               </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Endereço"
-                placeholderTextColor="#94a3b8"
-                value={form.endereco}
-                onChangeText={v => setForm(s => ({ ...s, endereco: v }))}
-              />
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  placeholder="Endereço (rua)"
+                  placeholderTextColor="#94a3b8"
+                  value={form.endereco}
+                  onChangeText={v => setForm(s => ({ ...s, endereco: v }))}
+                />
+                <TextInput
+                  style={[styles.input, { width: 90, marginLeft: 8 }]}
+                  placeholder="Número"
+                  placeholderTextColor="#94a3b8"
+                  keyboardType="default"
+                  value={form.numero}
+                  onChangeText={v => setForm(s => ({ ...s, numero: v }))}
+                />
+              </View>
+              <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: -4, marginBottom: 8 }}>
+                ⚠️ Confira o número — pode ter sido auto-preenchido pelo mapa e estar impreciso.
+              </Text>
 
               <Text style={styles.fieldLabel}>Observações</Text>
               <TextInput
@@ -939,19 +1027,23 @@ function ClientBottomSheet({
   client,
   insets,
   statusConfig,
+  meetings,
   onClose,
   onDelete,
   onEdit,
   onMarkVisited,
+  onScheduleMeeting,
   isMarkingVisited,
 }: {
   client: Client;
   insets: { bottom: number };
   statusConfig: Record<string, { label: string; color: string }>;
+  meetings: ClientMeeting[];
   onClose: () => void;
   onDelete: () => void;
   onEdit: () => void;
   onMarkVisited: () => void;
+  onScheduleMeeting: () => void;
   isMarkingVisited: boolean;
 }) {
   const statusColor = statusConfig[client.status]?.color || '#3b82f6';
@@ -982,12 +1074,49 @@ function ClientBottomSheet({
   const createdAt = formatDate(client.created_at);
   const updatedAt = formatDate(client.updated_at);
 
+  // Gesture pra arrastar a aba pra baixo e fechar.
+  // Threshold: 100px de drag aciona o fechamento.
+  const translateY = useRef(new Animated.Value(0)).current;
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) =>
+        Math.abs(g.dy) > 2 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderGrant: () => {
+        translateY.setValue(0);
+      },
+      onPanResponderMove: (_, g) => {
+        if (g.dy > 0) translateY.setValue(g.dy);
+      },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 80 || g.vy > 0.4) {
+          Animated.timing(translateY, {
+            toValue: 800,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => onCloseRef.current());
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 0,
+          }).start();
+        }
+      },
+    }),
+  ).current;
+
   return (
     <Modal visible={true} animationType="fade" transparent onRequestClose={onClose}>
       <View style={styles.bottomSheetOverlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={styles.bottomSheet}>
-          <View style={styles.bottomSheetHandle} />
+        <Animated.View style={[styles.bottomSheet, { transform: [{ translateY }] }]}>
+          <View style={styles.dragHandleArea} {...panResponder.panHandlers}>
+            <View style={styles.bottomSheetHandle} />
+          </View>
           <ScrollView
             style={styles.bottomSheetContent}
             contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
@@ -1191,6 +1320,51 @@ function ClientBottomSheet({
               </TouchableOpacity>
             </View>
 
+            {/* Reuniões agendadas */}
+            <View style={styles.meetingsSection}>
+              <View style={styles.meetingsHeader}>
+                <Text style={styles.fieldLabel}>
+                  Reuniões{meetings.length > 0 ? ` (${meetings.length})` : ''}
+                </Text>
+              </View>
+              {meetings.length === 0 ? (
+                <Text style={styles.meetingsEmpty}>Nenhuma reunião agendada.</Text>
+              ) : (
+                meetings
+                  .slice()
+                  .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
+                  .map((m) => {
+                    const d = new Date(m.scheduled_at);
+                    const isPast = d.getTime() < Date.now();
+                    const label = d.toLocaleString('pt-BR', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    });
+                    const durationLabel =
+                      m.duration_minutes >= 60
+                        ? `${Math.floor(m.duration_minutes / 60)}h${m.duration_minutes % 60 ? ` ${m.duration_minutes % 60}min` : ''}`
+                        : `${m.duration_minutes} min`;
+                    return (
+                      <View key={m.id} style={[styles.meetingChip, isPast && { opacity: 0.55 }]}>
+                        <Text style={styles.meetingChipDate}>📅 {label} • {durationLabel}{isPast ? ' (passada)' : ''}</Text>
+                        {m.observacoes ? (
+                          <Text style={styles.meetingChipObs} numberOfLines={2}>{m.observacoes}</Text>
+                        ) : null}
+                      </View>
+                    );
+                  })
+              )}
+              <TouchableOpacity
+                style={styles.scheduleButton}
+                onPress={onScheduleMeeting}
+              >
+                <Text style={styles.scheduleButtonText}>📅 Agendar reunião</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Marcar como visitado: só quando ainda não foi visitado */}
             {client.status !== 'lead_visitado' && (
               <TouchableOpacity
@@ -1224,7 +1398,7 @@ function ClientBottomSheet({
               </TouchableOpacity>
             </View>
           </ScrollView>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -1372,6 +1546,17 @@ const styles = StyleSheet.create({
   navIcon: { fontSize: 18, marginBottom: 2 },
   navIconActive: {},
   navItemText: { fontSize: 11, fontWeight: '600', color: '#94a3b8' },
+  brandMark: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 10,
+    fontWeight: '500',
+    fontStyle: 'italic',
+    letterSpacing: 0.5,
+    color: '#cbd5e1',
+  },
   navItemTextActive: { color: '#dc2626' },
   // List
   listContent: { padding: 12 },
@@ -1393,6 +1578,15 @@ const styles = StyleSheet.create({
   clientName: { fontSize: 15, fontWeight: '700', color: '#0f172a', flex: 1 },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   statusBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  cardMeetingBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#f5f3ff',
+    borderWidth: 1,
+    borderColor: '#c4b5fd',
+  },
+  cardMeetingBadgeText: { color: '#6d28d9', fontSize: 10, fontWeight: '700' },
   clientCity: { fontSize: 13, color: '#64748b', marginBottom: 2 },
   clientPhone: { fontSize: 13, color: '#334155' },
   emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 60 },
@@ -1438,7 +1632,8 @@ const styles = StyleSheet.create({
   // Bottom Sheet
   bottomSheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' },
-  bottomSheetHandle: { alignSelf: 'center', width: 40, height: 4, backgroundColor: '#e2e8f0', borderRadius: 2, marginTop: 12, marginBottom: 8 },
+  bottomSheetHandle: { alignSelf: 'center', width: 40, height: 4, backgroundColor: '#e2e8f0', borderRadius: 2 },
+  dragHandleArea: { width: '100%', paddingTop: 14, paddingBottom: 14, alignItems: 'center' },
   bottomSheetContent: { paddingHorizontal: 20 },
   bsHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   bsLogoWrap: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
@@ -1458,6 +1653,27 @@ const styles = StyleSheet.create({
   navButtonDriving: { backgroundColor: '#eff6ff', borderColor: '#3b82f6' },
   navButtonWalking: { backgroundColor: '#fefce8', borderColor: '#eab308' },
   navRouteButtonText: { fontSize: 14, fontWeight: '600', color: '#0f172a' },
+  meetingsSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9', marginBottom: 16 },
+  meetingsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  meetingsEmpty: { fontSize: 12, color: '#94a3b8', marginBottom: 8 },
+  meetingChip: {
+    backgroundColor: '#f5f3ff',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#ddd6fe',
+  },
+  meetingChipDate: { fontSize: 13, fontWeight: '700', color: '#5b21b6' },
+  meetingChipObs: { fontSize: 12, color: '#475569', marginTop: 2 },
+  scheduleButton: {
+    backgroundColor: '#7c3aed',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  scheduleButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 8 },
   deleteButton: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca' },
   deleteButtonText: { fontSize: 14, fontWeight: '700', color: '#dc2626' },

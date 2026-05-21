@@ -37,8 +37,28 @@ export interface Client {
   updated_at: string | null;
 }
 
+export interface ClientMeeting {
+  id: string;
+  client_id: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  observacoes: string | null;
+  status: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClientMeetingFormData {
+  client_id: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  observacoes?: string | null;
+}
+
 export interface ClientFormData {
   nome: string;
+  empresa?: string;
   endereco?: string;
   numero?: string;
   cep?: string;

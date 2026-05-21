@@ -80,6 +80,7 @@ export async function geocodeAddress(address: string): Promise<{ latitude: numbe
  */
 export async function reverseGeocode(lat: number, lng: number): Promise<{
   endereco: string;
+  numero: string;
   bairro: string;
   cidade: string;
   estado: string;
@@ -95,7 +96,8 @@ export async function reverseGeocode(lat: number, lng: number): Promise<{
 
     const addr = data.address || {};
     return {
-      endereco: [addr.road, addr.house_number].filter(Boolean).join(', '),
+      endereco: addr.road || '',
+      numero: addr.house_number || '',
       bairro: addr.suburb || addr.neighbourhood || '',
       cidade: addr.city || addr.town || addr.village || '',
       estado: addr.state || '',
