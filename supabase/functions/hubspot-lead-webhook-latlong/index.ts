@@ -6,6 +6,14 @@
 // a lat/lon do payload só é usada como fallback quando Nominatim nao bate
 // no endereço.
 //
+// Quando o RPA manda o lead sem logradouro (caso "Aleixo Restaurante" /
+// "Zan Canto do Vinho"), o Nominatim costuma cair no centroide do CEP/
+// bairro, empilhando 9+ clientes no mesmo pino. Por isso este webhook
+// faz lookup do logradouro via ViaCEP/BrasilAPI quando o payload vier
+// sem ele, e marca geo_approximate=true quando o hit do Nominatim parece
+// ser centroide (postcode/suburb/road/etc.) — assim o cron de reparo
+// pega esses casos no proximo ciclo.
+//
 // Deploy:
 //   supabase functions deploy hubspot-lead-webhook-latlong --no-verify-jwt
 //
@@ -36,9 +44,16 @@ type HubspotPayload = {
   url?: string | null;
 };
 
+type CepInfo = {
+  logradouro: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  estado: string | null;
+};
+
 const MAX_BATCH = 50;
 const NOMINATIM_THROTTLE_MS = 1100;
-const NOMINATIM_TIMEOUT_MS = 8000;
+const FETCH_TIMEOUT_MS = 9000;
 const NOMINATIM_UA = 'TakeatRPA-HubSpotWebhook (contact: brittes@takeat.app)';
 
 const json = (status: number, body: unknown) =>
@@ -68,52 +83,148 @@ const extractEmpresa = (dealname: string | null): string | null => {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const buildAddressQuery = (p: HubspotPayload): string | null => {
-  const logradouro = trimOrNull(p.logradouro);
-  const numero = trimOrNull(p.numero_do_local);
-  const bairro = trimOrNull(p.bairro);
-  const cidade = trimOrNull(p.cidade);
-  const estado = trimOrNull(p.estado_uf);
-  const cep = trimOrNull(p.cep);
+const digits = (value: unknown): string => String(value ?? '').replace(/\D/g, '');
+const cepIsGeneric = (cep: unknown): boolean => digits(cep).endsWith('000');
 
-  if (!cidade || !estado) return null;
-
-  const linha1 = [logradouro, numero].filter(Boolean).join(', ');
-  const parts = [linha1, bairro, cidade, estado, cep, 'Brasil'].filter(
-    (x) => x && x.length > 0,
-  );
-  return parts.join(', ');
-};
-
-async function geocodeNominatim(
-  query: string,
-): Promise<{ latitude: number; longitude: number } | null> {
+async function fetchJson(url: string): Promise<any | null> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), NOMINATIM_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
-      query,
-    )}&format=json&limit=1&countrycodes=br`;
     const res = await fetch(url, {
       headers: { 'User-Agent': NOMINATIM_UA, Accept: 'application/json' },
       signal: ctrl.signal,
     });
     if (!res.ok) {
-      console.warn('[hubspot-lead-webhook-latlong] nominatim non-ok', res.status, query);
+      console.warn('[hubspot-lead-webhook-latlong] fetch non-ok', res.status, url);
       return null;
     }
-    const data = await res.json();
-    if (!Array.isArray(data) || data.length === 0) return null;
-    const lat = parseFloat(data[0].lat);
-    const lon = parseFloat(data[0].lon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-    return { latitude: lat, longitude: lon };
+    return await res.json();
   } catch (err) {
-    console.warn('[hubspot-lead-webhook-latlong] nominatim error', err, query);
+    console.warn('[hubspot-lead-webhook-latlong] fetch failed', url, err);
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function lookupCep(cep: string | null): Promise<CepInfo | null> {
+  const code = digits(cep);
+  if (code.length !== 8 || cepIsGeneric(code)) return null;
+
+  const viaCep = await fetchJson(`https://viacep.com.br/ws/${code}/json/`);
+  if (viaCep && !viaCep.erro) {
+    return {
+      logradouro: trimOrNull(viaCep.logradouro),
+      bairro: trimOrNull(viaCep.bairro),
+      cidade: trimOrNull(viaCep.localidade),
+      estado: trimOrNull(viaCep.uf),
+    };
+  }
+
+  const brasilApi = await fetchJson(`https://brasilapi.com.br/api/cep/v2/${code}`);
+  if (brasilApi) {
+    return {
+      logradouro: trimOrNull(brasilApi.street),
+      bairro: trimOrNull(brasilApi.neighborhood),
+      cidade: trimOrNull(brasilApi.city),
+      estado: trimOrNull(brasilApi.state),
+    };
+  }
+
+  return null;
+}
+
+function normalizeHouseNumber(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^s\/?n$/i.test(trimmed)) return null;
+  const numeric = trimmed.match(/\d+/)?.[0] ?? null;
+  return numeric ? String(Number(numeric)) : trimmed;
+}
+
+// Recusa hits do Nominatim que aparentam ser centroides (postcode/suburb/
+// road/cidade/etc.) — sao a causa de empilhamento de varios leads no mesmo
+// pino quando o logradouro nao chega no payload.
+function isPreciseNominatimHit(hit: any): boolean {
+  const addresstype = String(hit?.addresstype ?? '').toLowerCase();
+  const category = String(hit?.class ?? '').toLowerCase();
+  const type = String(hit?.type ?? '').toLowerCase();
+  const imprecise = new Set([
+    'city',
+    'town',
+    'village',
+    'municipality',
+    'county',
+    'state',
+    'region',
+    'country',
+    'postcode',
+    'suburb',
+    'neighbourhood',
+  ]);
+  if (imprecise.has(addresstype) || imprecise.has(type)) return false;
+  if (category === 'boundary' || category === 'place') return false;
+  return true;
+}
+
+type GeocodeHit = { latitude: number; longitude: number; precise: boolean };
+
+function parseHit(hit: any): GeocodeHit | null {
+  const lat = parseFloat(hit?.lat);
+  const lon = parseFloat(hit?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { latitude: lat, longitude: lon, precise: isPreciseNominatimHit(hit) };
+}
+
+async function geocodeStructured(
+  logradouro: string | null,
+  numero: string | null,
+  cidade: string | null,
+  estado: string | null,
+  cep: string | null,
+): Promise<GeocodeHit | null> {
+  if (!logradouro || !cidade || !estado) return null;
+  const params = new URLSearchParams({
+    street: [numero, logradouro].filter(Boolean).join(' '),
+    city: cidade,
+    state: estado,
+    country: 'Brasil',
+    format: 'jsonv2',
+    addressdetails: '1',
+    limit: '3',
+    countrycodes: 'br',
+  });
+  if (cep) params.set('postalcode', cep);
+  const data = await fetchJson(`https://nominatim.openstreetmap.org/search?${params.toString()}`);
+  if (!Array.isArray(data) || data.length === 0) return null;
+  const hit = data.find(isPreciseNominatimHit) ?? data[0];
+  return parseHit(hit);
+}
+
+async function geocodeFree(query: string): Promise<GeocodeHit | null> {
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+    query,
+  )}&format=jsonv2&addressdetails=1&limit=3&countrycodes=br`;
+  const data = await fetchJson(url);
+  if (!Array.isArray(data) || data.length === 0) return null;
+  const hit = data.find(isPreciseNominatimHit) ?? data[0];
+  return parseHit(hit);
+}
+
+function buildAddressQuery(
+  logradouro: string | null,
+  numero: string | null,
+  bairro: string | null,
+  cidade: string | null,
+  estado: string | null,
+  cep: string | null,
+): string | null {
+  if (!cidade || !estado) return null;
+  const linha1 = [logradouro, numero].filter(Boolean).join(', ');
+  const parts = [linha1 || null, bairro, cidade, estado, cep, 'Brasil'].filter(
+    (x): x is string => !!x && x.length > 0,
+  );
+  return parts.length > 0 ? parts.join(', ') : null;
 }
 
 type ResolvedGeo = {
@@ -121,7 +232,70 @@ type ResolvedGeo = {
   longitude: number | null;
   source: 'nominatim' | 'hubspot' | null;
   approximate: boolean;
+  logradouroResolved: string | null;
+  bairroResolved: string | null;
 };
+
+// Lat/lon do HubSpot/RPA na pratica vem como centroide da cidade — varios
+// leads acabam empilhados no mesmo pin. Por isso geocoda primeiro pelo
+// endereço via Nominatim e so cai pra lat/lon do payload quando o endereço
+// nao bate em nada. Quando o payload nao traz logradouro, recorre ao
+// ViaCEP/BrasilAPI pra descobrir a rua a partir do CEP antes de chamar o
+// Nominatim — sem o logradouro o Nominatim devolve o centroide do CEP e
+// varios clientes acabam no mesmo pino.
+async function resolveGeo(
+  p: HubspotPayload,
+): Promise<ResolvedGeo> {
+  const cepInfo = await lookupCep(trimOrNull(p.cep));
+
+  const logradouro = trimOrNull(p.logradouro) ?? cepInfo?.logradouro ?? null;
+  const numero = normalizeHouseNumber(trimOrNull(p.numero_do_local));
+  const bairro = trimOrNull(p.bairro) ?? cepInfo?.bairro ?? null;
+  const cidade = trimOrNull(p.cidade) ?? cepInfo?.cidade ?? null;
+  const estado = trimOrNull(p.estado_uf) ?? cepInfo?.estado ?? null;
+  const cep = trimOrNull(p.cep);
+
+  const logradouroResolved = trimOrNull(p.logradouro) ?? cepInfo?.logradouro ?? null;
+  const bairroResolved = trimOrNull(p.bairro) ?? cepInfo?.bairro ?? null;
+
+  let hit = await geocodeStructured(logradouro, numero, cidade, estado, cep);
+  if (!hit) {
+    const query = buildAddressQuery(logradouro, numero, bairro, cidade, estado, cep);
+    if (query) hit = await geocodeFree(query);
+  }
+
+  if (hit) {
+    return {
+      latitude: hit.latitude,
+      longitude: hit.longitude,
+      source: 'nominatim',
+      approximate: !hit.precise,
+      logradouroResolved,
+      bairroResolved,
+    };
+  }
+
+  const fallbackLat = toFloat(p.latitude);
+  const fallbackLon = toFloat(p.longitude);
+  if (fallbackLat !== null && fallbackLon !== null) {
+    return {
+      latitude: fallbackLat,
+      longitude: fallbackLon,
+      source: 'hubspot',
+      approximate: true,
+      logradouroResolved,
+      bairroResolved,
+    };
+  }
+  return {
+    latitude: null,
+    longitude: null,
+    source: null,
+    approximate: false,
+    logradouroResolved,
+    bairroResolved,
+  };
+}
 
 const buildBaseFields = (p: HubspotPayload, geo: ResolvedGeo) => {
   const dealname = trimOrNull(p.dealname);
@@ -131,9 +305,9 @@ const buildBaseFields = (p: HubspotPayload, geo: ResolvedGeo) => {
     telefone: trimOrNull(p.celular),
     empresa: extractEmpresa(dealname),
     observacoes: trimOrNull(p.observacoes),
-    endereco: trimOrNull(p.logradouro),
+    endereco: trimOrNull(p.logradouro) ?? geo.logradouroResolved,
     numero: trimOrNull(p.numero_do_local),
-    bairro: trimOrNull(p.bairro),
+    bairro: trimOrNull(p.bairro) ?? geo.bairroResolved,
     cidade: trimOrNull(p.cidade),
     estado: trimOrNull(p.estado_uf),
     cep: trimOrNull(p.cep),
@@ -145,31 +319,6 @@ const buildBaseFields = (p: HubspotPayload, geo: ResolvedGeo) => {
     updated_at: new Date().toISOString(),
   };
 };
-
-// Lat/lon do HubSpot/RPA na pratica vem como centroide da cidade — varios
-// leads acabam empilhados no mesmo pin. Por isso geocoda primeiro pelo
-// endereço via Nominatim e so cai pra lat/lon do payload quando o endereço
-// nao bate em nada.
-async function resolveGeo(p: HubspotPayload): Promise<ResolvedGeo> {
-  const query = buildAddressQuery(p);
-  if (query) {
-    const found = await geocodeNominatim(query);
-    if (found) {
-      return { ...found, source: 'nominatim', approximate: false };
-    }
-  }
-  const fallbackLat = toFloat(p.latitude);
-  const fallbackLon = toFloat(p.longitude);
-  if (fallbackLat !== null && fallbackLon !== null) {
-    return {
-      latitude: fallbackLat,
-      longitude: fallbackLon,
-      source: 'hubspot',
-      approximate: true,
-    };
-  }
-  return { latitude: null, longitude: null, source: null, approximate: false };
-}
 
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {
