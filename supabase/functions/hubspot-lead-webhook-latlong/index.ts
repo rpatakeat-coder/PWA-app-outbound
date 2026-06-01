@@ -201,20 +201,36 @@ Deno.serve(async (req: Request) => {
     return json(413, { error: `Batch too large (max ${MAX_BATCH})` });
   }
 
+  // Detecta id_hubspot repetido no mesmo batch (o RPA as vezes manda o
+  // mesmo id mais de uma vez). Retorna 400 com a lista dos repetidos pra
+  // o caller saber exatamente quais ids precisam ser corrigidos.
   const normalized: {
     idHubspot: string;
     payload: HubspotPayload;
     statusSlug: string | null;
   }[] = [];
+  const seenIds = new Set<string>();
+  const duplicateIds = new Set<string>();
   for (let i = 0; i < items.length; i++) {
     const idHubspot = trimOrNull(items[i]?.id_hubspot);
     if (!idHubspot) {
       return json(400, { error: `id_hubspot is required (item index ${i})` });
     }
+    if (seenIds.has(idHubspot)) {
+      duplicateIds.add(idHubspot);
+    } else {
+      seenIds.add(idHubspot);
+    }
     normalized.push({
       idHubspot,
       payload: items[i],
       statusSlug: trimOrNull(items[i]?.status),
+    });
+  }
+  if (duplicateIds.size > 0) {
+    return json(400, {
+      error: 'id_hubspot duplicado dentro do batch',
+      duplicated_ids: Array.from(duplicateIds),
     });
   }
 
@@ -331,7 +347,17 @@ Deno.serve(async (req: Request) => {
     const { data, error } = await supabase.from('clients').insert(insertRows).select();
     if (error) {
       console.error('[hubspot-lead-webhook-latlong] insert failed', error);
-      return json(500, { error: error.message });
+      // 23505 = unique_violation. O details do Postgres traz tipo:
+      // "Key (id_hubspot)=(12345) already exists."
+      const conflictId =
+        error.code === '23505' && typeof error.details === 'string'
+          ? error.details.match(/\((\d+)\)/)?.[1] ?? null
+          : null;
+      return json(error.code === '23505' ? 409 : 500, {
+        error: error.message,
+        ...(conflictId ? { conflict_id_hubspot: conflictId } : {}),
+        ...(error.details ? { details: error.details } : {}),
+      });
     }
     if (data) results.push(...data);
   }
