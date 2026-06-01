@@ -1,8 +1,10 @@
 // Supabase Edge Function: hubspot-lead-webhook-latlong
-// Mesma lógica de `hubspot-lead-webhook`, porém PRIORIZA latitude/longitude
-// vindas no payload. Só cai pro Nominatim (geocoding por endereço) quando
-// não vier lat/lon no payload. Útil quando o RPA já manda coordenadas
-// confiáveis e queremos evitar o reverse/geocode aproximado por endereço.
+// Variante da hubspot-lead-webhook que aceita o campo opcional `status` no
+// payload (validado contra client_statuses). A lat/lon do RPA mostrou-se na
+// pratica como centroide da cidade (vários leads acabavam empilhados no
+// mesmo pin), então o geocoding por endereço via Nominatim tem prioridade —
+// a lat/lon do payload só é usada como fallback quando Nominatim nao bate
+// no endereço.
 //
 // Deploy:
 //   supabase functions deploy hubspot-lead-webhook-latlong --no-verify-jwt
@@ -144,26 +146,27 @@ const buildBaseFields = (p: HubspotPayload, geo: ResolvedGeo) => {
   };
 };
 
-// Diferente da função original: lat/lon do payload vence. Nominatim só
-// entra em cena se o RPA não conseguiu coordenadas — nesse caso marca como
-// approximate=true porque foi geocoding por endereço.
+// Lat/lon do HubSpot/RPA na pratica vem como centroide da cidade — varios
+// leads acabam empilhados no mesmo pin. Por isso geocoda primeiro pelo
+// endereço via Nominatim e so cai pra lat/lon do payload quando o endereço
+// nao bate em nada.
 async function resolveGeo(p: HubspotPayload): Promise<ResolvedGeo> {
-  const payloadLat = toFloat(p.latitude);
-  const payloadLon = toFloat(p.longitude);
-  if (payloadLat !== null && payloadLon !== null) {
-    return {
-      latitude: payloadLat,
-      longitude: payloadLon,
-      source: 'hubspot',
-      approximate: false,
-    };
-  }
   const query = buildAddressQuery(p);
   if (query) {
     const found = await geocodeNominatim(query);
     if (found) {
-      return { ...found, source: 'nominatim', approximate: true };
+      return { ...found, source: 'nominatim', approximate: false };
     }
+  }
+  const fallbackLat = toFloat(p.latitude);
+  const fallbackLon = toFloat(p.longitude);
+  if (fallbackLat !== null && fallbackLon !== null) {
+    return {
+      latitude: fallbackLat,
+      longitude: fallbackLon,
+      source: 'hubspot',
+      approximate: true,
+    };
   }
   return { latitude: null, longitude: null, source: null, approximate: false };
 }
@@ -304,19 +307,15 @@ Deno.serve(async (req: Request) => {
     defaultStatusSlug = defaultStatus.slug;
   }
 
-  // Só faz throttle entre chamadas que de fato batem no Nominatim.
+  // Geocoda sequencialmente respeitando ~1 req/s do Nominatim.
   const geoByIdHubspot = new Map<string, ResolvedGeo>();
-  let lastHitNominatim = false;
   for (let i = 0; i < normalized.length; i++) {
     const { idHubspot, payload } = normalized[i];
-    const hasPayloadCoords =
-      toFloat(payload.latitude) !== null && toFloat(payload.longitude) !== null;
-    if (!hasPayloadCoords && lastHitNominatim) {
-      await sleep(NOMINATIM_THROTTLE_MS);
-    }
     const geo = await resolveGeo(payload);
     geoByIdHubspot.set(idHubspot, geo);
-    lastHitNominatim = geo.source === 'nominatim';
+    if (i < normalized.length - 1) {
+      await sleep(NOMINATIM_THROTTLE_MS);
+    }
   }
 
   const results: unknown[] = [];
