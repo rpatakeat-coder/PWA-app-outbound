@@ -251,6 +251,29 @@ function MainApp() {
     [filteredClients]
   );
 
+  // Detecta lat/lon que aparecem em mais de um cliente — é sinal claro de
+  // geocodificação ruim (Nominatim caiu no centroide da rua/CEP em vez do
+  // imóvel). Usamos pra rebaixar esses pinos pra "Localização aproximada"
+  // mesmo quando o registro diz que veio do Nominatim com número.
+  // Arredonda em 6 casas (~10cm) só pra absorver ruído de float.
+  const duplicateCoordKeys = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of clients) {
+      if (c.latitude == null || c.longitude == null) continue;
+      const key = `${Number(c.latitude).toFixed(6)},${Number(c.longitude).toFixed(6)}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const dupes = new Set<string>();
+    counts.forEach((count, key) => { if (count > 1) dupes.add(key); });
+    return dupes;
+  }, [clients]);
+
+  const hasCoordCollision = (c: Client | null) => {
+    if (!c || c.latitude == null || c.longitude == null) return false;
+    const key = `${Number(c.latitude).toFixed(6)},${Number(c.longitude).toFixed(6)}`;
+    return duplicateCoordKeys.has(key);
+  };
+
   const mapCenter = useMemo(() => {
     if (userLocation) {
       return {
@@ -747,6 +770,7 @@ function MainApp() {
               insets={insets}
               statusConfig={statusConfig}
               meetings={meetingsByClient[selectedClient.id] ?? []}
+              coordCollision={hasCoordCollision(selectedClient)}
               onClose={() => setSelectedClient(null)}
               onDelete={() => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
               onEdit={() => openEditClient(selectedClient)}
@@ -796,6 +820,7 @@ function MainApp() {
               insets={insets}
               statusConfig={statusConfig}
               meetings={meetingsByClient[selectedClient.id] ?? []}
+              coordCollision={hasCoordCollision(selectedClient)}
               onClose={() => setSelectedClient(null)}
               onDelete={() => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
               onEdit={() => openEditClient(selectedClient)}
@@ -1028,6 +1053,7 @@ function ClientBottomSheet({
   insets,
   statusConfig,
   meetings,
+  coordCollision,
   onClose,
   onDelete,
   onEdit,
@@ -1039,6 +1065,7 @@ function ClientBottomSheet({
   insets: { bottom: number };
   statusConfig: Record<string, { label: string; color: string }>;
   meetings: ClientMeeting[];
+  coordCollision: boolean;
   onClose: () => void;
   onDelete: () => void;
   onEdit: () => void;
@@ -1053,6 +1080,17 @@ function ClientBottomSheet({
   if (!client.numero) approxReasons.push('Endereço sem número');
   if (client.geo_source === 'hubspot' || client.geo_source === 'coords') {
     approxReasons.push('Posicionado pela latitude/longitude (sem geocodificação por endereço)');
+  }
+  // Coordenadas idênticas a outro cliente são, na prática, garantia de erro de
+  // geocodificação (provável centroide de rua/CEP). Rebaixamos pra aproximada
+  // mesmo se o registro diz nominatim+numero.
+  if (coordCollision) {
+    approxReasons.push('Outro(s) cliente(s) no mesmo ponto — provável falha de geocodificação');
+  }
+  // Respeita o flag de aproximado vindo do banco (webhook/repair), caso ele
+  // tenha sido marcado por motivo que a UI não consegue inferir sozinha.
+  if (client.geo_approximate === true && approxReasons.length === 0) {
+    approxReasons.push('Marcado como aproximado pela origem do dado');
   }
   const isApprox = approxReasons.length > 0;
 
