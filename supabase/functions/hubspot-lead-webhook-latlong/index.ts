@@ -30,6 +30,7 @@ type HubspotPayload = {
   nome?: string | null;
   numero_do_local?: string | null;
   observacoes?: string | null;
+  status?: string | null;
   url?: string | null;
 };
 
@@ -197,13 +198,21 @@ Deno.serve(async (req: Request) => {
     return json(413, { error: `Batch too large (max ${MAX_BATCH})` });
   }
 
-  const normalized: { idHubspot: string; payload: HubspotPayload }[] = [];
+  const normalized: {
+    idHubspot: string;
+    payload: HubspotPayload;
+    statusSlug: string | null;
+  }[] = [];
   for (let i = 0; i < items.length; i++) {
     const idHubspot = trimOrNull(items[i]?.id_hubspot);
     if (!idHubspot) {
       return json(400, { error: `id_hubspot is required (item index ${i})` });
     }
-    normalized.push({ idHubspot, payload: items[i] });
+    normalized.push({
+      idHubspot,
+      payload: items[i],
+      statusSlug: trimOrNull(items[i]?.status),
+    });
   }
 
   const supabase = createClient(
@@ -232,6 +241,30 @@ Deno.serve(async (req: Request) => {
       error:
         'Não foi possível determinar created_by: configure o secret HUBSPOT_WEBHOOK_USER_ID com um auth.users.id válido',
     });
+  }
+
+  // Valida status (opcional) contra client_statuses. Aceita slugs ativos.
+  const requestedStatusSlugs = Array.from(
+    new Set(normalized.map((n) => n.statusSlug).filter((s): s is string => !!s)),
+  );
+  if (requestedStatusSlugs.length > 0) {
+    const { data: validStatuses, error: vErr } = await supabase
+      .from('client_statuses')
+      .select('slug')
+      .in('slug', requestedStatusSlugs)
+      .eq('is_active', true);
+    if (vErr) {
+      console.error('[hubspot-lead-webhook-latlong] status validation failed', vErr);
+      return json(500, { error: vErr.message });
+    }
+    const validSet = new Set((validStatuses ?? []).map((r) => r.slug as string));
+    const invalid = requestedStatusSlugs.filter((s) => !validSet.has(s));
+    if (invalid.length > 0) {
+      return json(400, {
+        error: `status inválido(s): ${invalid.join(', ')}`,
+        valid_hint: 'consulte client_statuses (is_active=true)',
+      });
+    }
   }
 
   const ids = normalized.map((n) => n.idHubspot);
@@ -289,10 +322,10 @@ Deno.serve(async (req: Request) => {
   const results: unknown[] = [];
 
   if (newLeads.length > 0) {
-    const insertRows = newLeads.map(({ idHubspot, payload }) => ({
+    const insertRows = newLeads.map(({ idHubspot, payload, statusSlug }) => ({
       ...buildBaseFields(payload, geoByIdHubspot.get(idHubspot)!),
       id_hubspot: idHubspot,
-      status: defaultStatusSlug,
+      status: statusSlug ?? defaultStatusSlug,
       created_by: webhookUserId,
       updated_by: webhookUserId,
     }));
@@ -306,12 +339,13 @@ Deno.serve(async (req: Request) => {
 
   if (updates.length > 0) {
     const updateResults = await Promise.all(
-      updates.map(async ({ idHubspot, payload }) => {
-        const fields = {
+      updates.map(async ({ idHubspot, payload, statusSlug }) => {
+        const fields: Record<string, unknown> = {
           ...buildBaseFields(payload, geoByIdHubspot.get(idHubspot)!),
           id_hubspot: idHubspot,
           updated_by: webhookUserId,
         };
+        if (statusSlug) fields.status = statusSlug;
         const { data, error } = await supabase
           .from('clients')
           .update(fields)
