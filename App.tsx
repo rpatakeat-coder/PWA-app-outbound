@@ -682,7 +682,7 @@ function MainApp() {
             // todos os pinos individuais (ajuste fino: 15=bairro, 17=quarteirão).
             radius={50}
             minPoints={3}
-            maxZoom={15}
+            maxZoom={12}
             clusterColor="#3b82f6"
             clusterTextColor="#ffffff"
             spiralEnabled={false}
