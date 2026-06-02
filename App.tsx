@@ -678,8 +678,11 @@ function MainApp() {
             showsBuildings={true}
             // Clustering: agrupa pinos próximos numa bolha com contador.
             // Com 2300+ clientes, sem isso o pan/zoom no zoom-out fica inviável.
+            // maxZoom: acima desse nível, lib desliga o clustering e mostra
+            // todos os pinos individuais (ajuste fino: 15=bairro, 17=quarteirão).
             radius={50}
             minPoints={3}
+            maxZoom={15}
             clusterColor="#3b82f6"
             clusterTextColor="#ffffff"
             spiralEnabled={false}
