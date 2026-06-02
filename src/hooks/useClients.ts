@@ -188,7 +188,51 @@ export function useClients() {
         p_user_lon: longitude,
       });
       if (error) throw error;
-      return mapRow(data);
+      const client = mapRow(data);
+
+      // Webhook outbound: notifica a mesma URL do cadastro manual com type=visited
+      // pra que o consumidor (n8n / HubSpot) saiba diferenciar criacao de visita.
+      // Manda todos os campos do cliente + metadata da visita (coords/quando/quem).
+      const raw = (data ?? {}) as Record<string, unknown>;
+      const dealname = client.empresa ?? client.nome;
+      fetch('https://webhook.takeat.cloud/webhook/0975e1c9-2d09-42f7-b236-78c7818c0c0d', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'visited',
+          id: client.id,
+          bairro: client.bairro,
+          celular: client.telefone,
+          cep: client.cep,
+          cidade: client.cidade,
+          dealname,
+          email: client.email,
+          empresa: client.empresa,
+          endereco_completo: [client.endereco, client.numero, client.bairro, client.cidade, client.estado, client.cep]
+            .filter(Boolean)
+            .join(', '),
+          estado_uf: client.estado,
+          id_hubspot: client.id_hubspot,
+          latitude: client.latitude !== null ? String(client.latitude) : null,
+          logradouro: client.endereco,
+          longitude: client.longitude !== null ? String(client.longitude) : null,
+          nome: client.nome,
+          numero_do_local: client.numero,
+          observacoes: client.observacoes,
+          status: client.status,
+          status_anterior: raw.status_anterior ?? null,
+          url: client.url_hubspot,
+          visited_at: raw.visited_at ?? new Date().toISOString(),
+          visited_at_lat: raw.visited_at_lat ?? latitude,
+          visited_at_lon: raw.visited_at_lon ?? longitude,
+          visited_by: raw.visited_by ?? user?.id ?? null,
+          visited_by_email: user?.email ?? null,
+          visited_by_name: profile?.full_name ?? null,
+          visited_by_sector: profile?.sector ?? null,
+        }),
+      }).catch((err) => console.warn('[WEBHOOK] marcar como visitado falhou:', err));
+
+      return client;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
   });

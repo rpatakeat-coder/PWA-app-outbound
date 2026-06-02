@@ -1419,8 +1419,13 @@ function ClientBottomSheet({
               </TouchableOpacity>
             </View>
 
-            {/* Marcar como visitado: só quando ainda não foi visitado */}
-            {client.status !== 'lead_visitado' && (
+            {/* Marcar como visitado: só pra leads.
+                Cliente Ativo, Em Integração e Ex-cliente nao sao alvo
+                de visita outbound, e lead_visitado ja foi visitado. */}
+            {client.status !== 'lead_visitado'
+              && client.status !== 'ativo'
+              && client.status !== 'ex_cliente'
+              && client.status !== 'em_integracao' && (
               <TouchableOpacity
                 disabled={isMarkingVisited}
                 style={{
