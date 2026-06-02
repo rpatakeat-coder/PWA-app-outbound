@@ -42,18 +42,29 @@ export function useClients() {
   const query = useQuery<Client[]>({
     queryKey: ['clients', allowedStatuses],
     queryFn: async () => {
-      let q = supabase
-        .from('clients')
-        .select('*');
+      // PostgREST capa em 1000 linhas por padrão. Pagina em blocos pra trazer
+      // todos os clientes do setor sem precisar mexer no max-rows do servidor.
+      const PAGE_SIZE = 1000;
+      const all: any[] = [];
+      let from = 0;
+      while (true) {
+        let q = supabase
+          .from('clients')
+          .select('*')
+          .range(from, from + PAGE_SIZE - 1);
 
-      // Apply sector visibility filter
-      if (allowedStatuses && allowedStatuses.length > 0) {
-        q = q.in('status', allowedStatuses);
+        if (allowedStatuses && allowedStatuses.length > 0) {
+          q = q.in('status', allowedStatuses);
+        }
+
+        const { data, error } = await q;
+        if (error) throw error;
+        const batch = data ?? [];
+        all.push(...batch);
+        if (batch.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
       }
-
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data ?? []).map(mapRow);
+      return all.map(mapRow);
     },
     enabled: isAuthenticated && visibilityQuery.isFetched,
   });
