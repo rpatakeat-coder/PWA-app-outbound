@@ -22,7 +22,8 @@ import {
   PanResponder,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, { Marker } from 'react-native-maps';
+import MapView from 'react-native-map-clustering';
+import { Marker, default as RNMapView } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useClients } from './src/hooks/useClients';
@@ -89,7 +90,8 @@ const MarkerWithReady = React.memo(
     onPress,
     color,
     meetingCount,
-  }: { client: Client; onPress: (client: Client) => void; color: string; meetingCount: number }) {
+    coordinate,
+  }: { client: Client; onPress: (client: Client) => void; color: string; meetingCount: number; coordinate: { latitude: number; longitude: number } }) {
     // Pinta o marker num primeiro frame com tracksViewChanges=true
     // e desliga em seguida pra evitar re-renderizações contínuas.
     // Quando muda meetingCount, religa o tracking pra refletir o badge novo.
@@ -104,10 +106,7 @@ const MarkerWithReady = React.memo(
 
     return (
       <Marker
-        coordinate={{
-          latitude: client.latitude as number,
-          longitude: client.longitude as number,
-        }}
+        coordinate={coordinate}
         onPress={handlePress}
         tracksViewChanges={tracking}
       >
@@ -181,7 +180,7 @@ function MainApp() {
   const [isFollowingUser, setIsFollowingUser] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ClientStatus | 'all'>('all');
   const [editingClient, setEditingClient] = useState<Client | null>(null);
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<RNMapView | null>(null);
   const submittingRef = useRef(false);
 
   const { clients, statuses: dynamicStatuses, isLoading, error, deleteClient, addClient, updateClient, markAsVisited } = useClients();
@@ -665,7 +664,7 @@ function MainApp() {
       {tab === 'map' ? (
         <>
           <MapView
-            ref={mapRef}
+            mapRef={(ref) => { mapRef.current = ref as unknown as RNMapView; }}
             style={styles.map}
             initialRegion={mapCenter}
             showsUserLocation={true}
@@ -677,11 +676,22 @@ function MainApp() {
               }
             }}
             showsBuildings={true}
+            // Clustering: agrupa pinos próximos numa bolha com contador.
+            // Com 2300+ clientes, sem isso o pan/zoom no zoom-out fica inviável.
+            radius={50}
+            minPoints={3}
+            clusterColor="#3b82f6"
+            clusterTextColor="#ffffff"
+            spiralEnabled={false}
           >
             {filteredWithCoords.map(client => (
               <MarkerWithReady
                 key={client.id}
                 client={client}
+                coordinate={{
+                  latitude: client.latitude as number,
+                  longitude: client.longitude as number,
+                }}
                 color={statusConfig[client.status]?.color || '#3b82f6'}
                 meetingCount={upcomingByClient[client.id] ?? 0}
                 onPress={handleMarkerPress}
