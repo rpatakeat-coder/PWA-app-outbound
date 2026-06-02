@@ -95,10 +95,13 @@ const MarkerWithReady = React.memo(
     // Pinta o marker num primeiro frame com tracksViewChanges=true
     // e desliga em seguida pra evitar re-renderizações contínuas.
     // Quando muda meetingCount, religa o tracking pra refletir o badge novo.
+    // Timer alto (2000ms) porque quando o clustering desliga em zoom alto,
+    // 2300+ markers montam de uma vez e o bridge nativo precisa de tempo
+    // pra completar o primeiro paint de todos antes de congelar.
     const [tracking, setTracking] = useState(true);
     useEffect(() => {
       setTracking(true);
-      const t = setTimeout(() => setTracking(false), 250);
+      const t = setTimeout(() => setTracking(false), 2000);
       return () => clearTimeout(t);
     }, [meetingCount]);
 
