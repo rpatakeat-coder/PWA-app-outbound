@@ -41,6 +41,7 @@ import { LoginScreen } from './src/screens/LoginScreen';
 import { CEPStep } from './src/screens/CEPStep';
 import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
+import { ChangeStageModal } from './src/screens/ChangeStageModal';
 import { reverseGeocode } from './src/utils/geocoding';
 
 const queryClient = new QueryClient();
@@ -269,6 +270,7 @@ function MainApp() {
     }
   }, [userLocation]);
   const [schedulingFor, setSchedulingFor] = useState<Client | null>(null);
+  const [changingStageFor, setChangingStageFor] = useState<Client | null>(null);
   const isSaving = addClient.isPending || updateClient.isPending;
 
   // Lista de status pra UI: dinâmica (banco) ou fallback hardcoded enquanto carrega.
@@ -938,6 +940,7 @@ function MainApp() {
               onEdit={() => openEditClient(selectedClient)}
               onMarkVisited={() => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
               onScheduleMeeting={() => { setSchedulingFor(selectedClient); setSelectedClient(null); }}
+              onChangeStage={() => { setChangingStageFor(selectedClient); setSelectedClient(null); }}
               isMarkingVisited={isVisiting || markAsVisited.isPending}
             />
           )}
@@ -988,6 +991,7 @@ function MainApp() {
               onEdit={() => openEditClient(selectedClient)}
               onMarkVisited={() => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
               onScheduleMeeting={() => { setSchedulingFor(selectedClient); setSelectedClient(null); }}
+              onChangeStage={() => { setChangingStageFor(selectedClient); setSelectedClient(null); }}
               isMarkingVisited={isVisiting || markAsVisited.isPending}
             />
           )}
@@ -1169,6 +1173,13 @@ function MainApp() {
       )}
 
       {/* Schedule Meeting Modal */}
+      {changingStageFor && (
+        <ChangeStageModal
+          client={changingStageFor}
+          onClose={() => setChangingStageFor(null)}
+        />
+      )}
+
       {schedulingFor && (
         <ScheduleMeetingModal
           client={schedulingFor}
@@ -1363,6 +1374,7 @@ function ClientBottomSheet({
   onEdit,
   onMarkVisited,
   onScheduleMeeting,
+  onChangeStage,
   isMarkingVisited,
 }: {
   client: Client;
@@ -1375,6 +1387,7 @@ function ClientBottomSheet({
   onEdit: () => void;
   onMarkVisited: () => void;
   onScheduleMeeting: () => void;
+  onChangeStage: () => void;
   isMarkingVisited: boolean;
 }) {
   const statusColor = statusConfig[client.status]?.color || '#3b82f6';
@@ -1706,6 +1719,16 @@ function ClientBottomSheet({
                 <Text style={styles.scheduleButtonText}>📅 Agendar reunião</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Mover para etapa: dispara webhook change_stage. Aparece sempre,
+                independente do status — o usuário decide qual stage do funil
+                quer mandar. Se o cliente não tiver id_hubspot, o modal alerta. */}
+            <TouchableOpacity
+              style={styles.changeStageButton}
+              onPress={onChangeStage}
+            >
+              <Text style={styles.changeStageButtonText}>🔄 Mover para etapa</Text>
+            </TouchableOpacity>
 
             {/* Marcar como visitado: só pra leads.
                 Cliente Ativo, Em Integração e Ex-cliente nao sao alvo
@@ -2076,6 +2099,14 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   scheduleButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  changeStageButton: {
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  changeStageButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 8 },
   deleteButton: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca' },
   deleteButtonText: { fontSize: 14, fontWeight: '700', color: '#dc2626' },
