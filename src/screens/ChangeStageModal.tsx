@@ -9,11 +9,17 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import type { Client } from '../types/client';
-import { STAGES, CHANGE_STAGE_WEBHOOK } from '../constants/stages';
+import {
+  STAGES,
+  CHANGE_STAGE_WEBHOOK,
+  type Stage,
+  type StageSubField,
+} from '../constants/stages';
 import { useStagePropertyOptions } from '../hooks/useStagePropertyOptions';
 
 interface Props {
@@ -21,19 +27,134 @@ interface Props {
   onClose: () => void;
 }
 
+// Normaliza "1.500,50" / "1500,50" / "1500.50" / "1500" pra "1500.50".
+// Mantém só dígitos e o último separador como ponto decimal. Vazio → null.
+function normalizeCurrency(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  // Remove R$, espaços e qualquer outro símbolo
+  const cleaned = trimmed.replace(/[^\d.,]/g, '');
+  if (!cleaned) return null;
+  // Se tem vírgula e ponto, ponto é separador de milhar; tira ele e usa vírgula como decimal
+  let withDecimal = cleaned;
+  const lastComma = cleaned.lastIndexOf(',');
+  const lastDot = cleaned.lastIndexOf('.');
+  if (lastComma > -1 && lastDot > -1) {
+    // o último separador é o decimal
+    if (lastComma > lastDot) {
+      withDecimal = cleaned.replace(/\./g, '').replace(',', '.');
+    } else {
+      withDecimal = cleaned.replace(/,/g, '');
+    }
+  } else if (lastComma > -1) {
+    withDecimal = cleaned.replace(',', '.');
+  }
+  const n = Number(withDecimal);
+  if (!Number.isFinite(n)) return null;
+  return String(n);
+}
+
+function SelectField({
+  subField,
+  value,
+  onChange,
+  color,
+  disabled,
+  dbOptions,
+  dbLabel,
+}: {
+  subField: Extract<StageSubField, { kind: 'select' }>;
+  value: string;
+  onChange: (v: string) => void;
+  color: string;
+  disabled: boolean;
+  dbOptions?: string[];
+  dbLabel?: string;
+}) {
+  const opts = dbOptions ?? subField.options;
+  const label = dbLabel ?? subField.fieldLabel;
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Text style={styles.subOptionsLabel}>{label}</Text>
+      <View style={styles.subOptionsGrid}>
+        {opts.map((opt) => {
+          const selected = value === opt;
+          return (
+            <TouchableOpacity
+              key={opt}
+              style={[
+                styles.subOptionChip,
+                selected && { backgroundColor: color, borderColor: color },
+              ]}
+              onPress={() => onChange(opt)}
+              disabled={disabled}
+            >
+              <Text style={[styles.subOptionChipText, selected && { color: '#fff' }]}>
+                {opt}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function CurrencyField({
+  subField,
+  value,
+  onChange,
+  disabled,
+}: {
+  subField: Extract<StageSubField, { kind: 'currency' }>;
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Text style={styles.subOptionsLabel}>{subField.fieldLabel}</Text>
+      <View style={styles.currencyRow}>
+        <Text style={styles.currencyPrefix}>R$</Text>
+        <TextInput
+          style={styles.currencyInput}
+          placeholder={subField.placeholder ?? '0,00'}
+          placeholderTextColor="#94a3b8"
+          keyboardType="decimal-pad"
+          value={value}
+          onChangeText={onChange}
+          editable={!disabled}
+        />
+      </View>
+    </View>
+  );
+}
+
 export function ChangeStageModal({ client, onClose }: Props) {
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
-  const [selectedSubOption, setSelectedSubOption] = useState<string | null>(null);
+  const [subValues, setSubValues] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
   // Source of truth das opções: tabela stage_property_options no Supabase.
   // O hardcoded em STAGES é fallback enquanto a query carrega ou se falhar.
   const { data: groupedOptions } = useStagePropertyOptions();
 
-  const selectedStage = STAGES.find((s) => s.id === selectedStageId) ?? null;
-  const needsSubOption = !!selectedStage?.subOption;
-  const ready =
-    !!selectedStage && (!needsSubOption || !!selectedSubOption) && !submitting;
+  const selectedStage: Stage | null =
+    STAGES.find((s) => s.id === selectedStageId) ?? null;
+  const subFields = selectedStage?.subFields ?? [];
+
+  // Todos os sub-fields são obrigatórios — só libera o submit quando todos
+  // tiverem valor não-vazio (e currency tiver número válido).
+  const allFilled = subFields.every((sf) => {
+    const raw = subValues[sf.field];
+    if (!raw || !raw.trim()) return false;
+    if (sf.kind === 'currency') return normalizeCurrency(raw) !== null;
+    return true;
+  });
+  const ready = !!selectedStage && allFilled && !submitting;
+
+  const setSubValue = (field: string, value: string) =>
+    setSubValues((prev) => ({ ...prev, [field]: value }));
 
   const submit = async () => {
     if (!selectedStage) return;
@@ -44,12 +165,28 @@ export function ChangeStageModal({ client, onClose }: Props) {
       );
       return;
     }
-    if (needsSubOption && !selectedSubOption) {
-      Alert.alert(
-        'Falta selecionar',
-        `Escolha um valor para "${selectedStage.subOption!.fieldLabel}".`,
-      );
-      return;
+
+    // Valida cada sub-field individualmente e monta sub_values normalizado.
+    const subValuesPayload: Record<string, string> = {};
+    for (const sf of subFields) {
+      const raw = subValues[sf.field]?.trim() ?? '';
+      if (!raw) {
+        Alert.alert('Falta preencher', `Preencha "${sf.fieldLabel}".`);
+        return;
+      }
+      if (sf.kind === 'currency') {
+        const normalized = normalizeCurrency(raw);
+        if (normalized === null) {
+          Alert.alert(
+            'Valor inválido',
+            `"${sf.fieldLabel}" precisa ser um número (ex.: 1500 ou 1500,50).`,
+          );
+          return;
+        }
+        subValuesPayload[sf.field] = normalized;
+      } else {
+        subValuesPayload[sf.field] = raw;
+      }
     }
 
     try {
@@ -61,9 +198,8 @@ export function ChangeStageModal({ client, onClose }: Props) {
         stage_id: selectedStage.id,
         stage_label: selectedStage.label,
       };
-      if (selectedStage.subOption && selectedSubOption) {
-        payload.sub_field = selectedStage.subOption.field;
-        payload.sub_value = selectedSubOption;
+      if (subFields.length > 0) {
+        payload.sub_values = subValuesPayload;
       }
 
       const res = await fetch(CHANGE_STAGE_WEBHOOK, {
@@ -137,71 +273,57 @@ export function ChangeStageModal({ client, onClose }: Props) {
                     ]}
                     onPress={() => {
                       setSelectedStageId(stage.id);
-                      setSelectedSubOption(null);
+                      setSubValues({});
                     }}
                     disabled={submitting}
                   >
                     <View style={[styles.stageDot, { backgroundColor: stage.color }]} />
                     <Text
-                      style={[
-                        styles.stageLabel,
-                        isSelected && { color: stage.color },
-                      ]}
+                      style={[styles.stageLabel, isSelected && { color: stage.color }]}
                     >
                       {stage.label}
                     </Text>
-                    {stage.subOption && (
+                    {stage.subFields && stage.subFields.length > 0 && (
                       <Text style={styles.stageHint}>
-                        + {stage.subOption.fieldLabel}
+                        + {stage.subFields.length} obrig.
                       </Text>
                     )}
                   </TouchableOpacity>
 
-                  {/* Sub-opção inline quando essa stage exige propriedade
-                      obrigatória no HubSpot. Some quando troca de stage.
-                      Opções vêm do banco (stage_property_options), com
-                      fallback pro hardcoded em STAGES se a query não
-                      terminou ainda ou falhou. */}
-                  {isSelected && stage.subOption && (() => {
-                    const dbGroup = groupedOptions?.[stage.subOption.field];
-                    const opts = dbGroup?.options ?? stage.subOption.options;
-                    const fieldLabel = dbGroup?.label ?? stage.subOption.fieldLabel;
-                    return (
-                    <View style={[styles.subOptionsWrap, { borderLeftColor: stage.color }]}>
-                      <Text style={styles.subOptionsLabel}>
-                        {fieldLabel}
-                      </Text>
-                      <View style={styles.subOptionsGrid}>
-                        {opts.map((opt) => {
-                          const subSelected = selectedSubOption === opt;
+                  {/* Sub-fields inline. Cada etapa pode ter múltiplos
+                      (NEGOCIAÇÃO precisa de plano_apresentado + mrr). */}
+                  {isSelected && stage.subFields && stage.subFields.length > 0 && (
+                    <View
+                      style={[styles.subOptionsWrap, { borderLeftColor: stage.color }]}
+                    >
+                      {stage.subFields.map((sf) => {
+                        if (sf.kind === 'select') {
+                          const dbGroup = groupedOptions?.[sf.field];
                           return (
-                            <TouchableOpacity
-                              key={opt}
-                              style={[
-                                styles.subOptionChip,
-                                subSelected && {
-                                  backgroundColor: stage.color,
-                                  borderColor: stage.color,
-                                },
-                              ]}
-                              onPress={() => setSelectedSubOption(opt)}
+                            <SelectField
+                              key={sf.field}
+                              subField={sf}
+                              value={subValues[sf.field] ?? ''}
+                              onChange={(v) => setSubValue(sf.field, v)}
+                              color={stage.color}
                               disabled={submitting}
-                            >
-                              <Text
-                                style={[
-                                  styles.subOptionChipText,
-                                  subSelected && { color: '#fff' },
-                                ]}
-                              >
-                                {opt}
-                              </Text>
-                            </TouchableOpacity>
+                              dbOptions={dbGroup?.options}
+                              dbLabel={dbGroup?.label}
+                            />
                           );
-                        })}
-                      </View>
+                        }
+                        return (
+                          <CurrencyField
+                            key={sf.field}
+                            subField={sf}
+                            value={subValues[sf.field] ?? ''}
+                            onChange={(v) => setSubValue(sf.field, v)}
+                            disabled={submitting}
+                          />
+                        );
+                      })}
                     </View>
-                    );
-                  })()}
+                  )}
                 </View>
               );
             })}
@@ -303,6 +425,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   subOptionChipText: { fontSize: 12, fontWeight: '600', color: '#475569' },
+  currencyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#cbd5e1',
+    paddingHorizontal: 12,
+  },
+  currencyPrefix: { fontSize: 14, fontWeight: '700', color: '#475569', marginRight: 6 },
+  currencyInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#0f172a' },
   submit: {
     backgroundColor: '#0f172a',
     borderRadius: 12,
