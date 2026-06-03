@@ -50,9 +50,16 @@ export const STAGES: Stage[] = [
   // NEGOCIAÇÃO: requer plano_apresentado e mrr (R$) — preenchidos no
   // handler do webhook, não no app.
   { id: '209405289', label: 'NEGOCIAÇÃO', color: '#f97316' },
-  // NEGÓCIO PERDIDO: requer motivo da perda — preenchido no handler do
-  // webhook, não no app.
-  { id: '209405293', label: 'NEGÓCIO PERDIDO', color: '#ef4444' },
+  {
+    id: '209405293',
+    label: 'NEGÓCIO PERDIDO',
+    color: '#ef4444',
+    subOption: {
+      field: 'motivo_do_perdido',
+      fieldLabel: 'Motivo - Perda (Comercial)',
+      options: ['Preço', 'Funcionalidade', 'Sem retorno', 'Reembolso', 'Não quer mudar de sistema', 'Outros'],
+    },
+  },
 ];
 
 // Mesma URL usada nos webhooks de cadastro manual e marcar como visitado.
