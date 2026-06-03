@@ -172,7 +172,7 @@ const markerStyles = StyleSheet.create({
 
 function MainApp() {
   const insets = useSafeAreaInsets();
-  const { isAuthenticated, loading, logout, profile } = useAuth();
+  const { isAuthenticated, loading, logout, profile, updatePassword } = useAuth();
   const [tab, setTab] = useState<'map' | 'list'>('map');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [showCepStep, setShowCepStep] = useState(false);
@@ -183,6 +183,10 @@ function MainApp() {
   const [isFollowingUser, setIsFollowingUser] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ClientStatus>('lead' as ClientStatus);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
   const mapRef = useRef<RNMapView | null>(null);
   const submittingRef = useRef(false);
 
@@ -639,9 +643,21 @@ function MainApp() {
             <Text style={styles.headerSubtitle}>{profile.full_name || profile.email}</Text>
           )}
         </View>
-        <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-          <Text style={styles.logoutButtonText}>Sair</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.headerIconButton}
+            onPress={() => {
+              setNewPassword('');
+              setConfirmPassword('');
+              setIsPasswordModalOpen(true);
+            }}
+          >
+            <Text style={styles.headerIconText}>⚙️</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+            <Text style={styles.logoutButtonText}>Sair</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Status Filter */}
@@ -878,6 +894,85 @@ function MainApp() {
           developed by RPA
         </Text>
       </View>
+
+      {/* Modal: Redefinir senha (usuário logado) */}
+      <Modal
+        visible={isPasswordModalOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setIsPasswordModalOpen(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.passwordModalCard}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Redefinir senha</Text>
+                  <TouchableOpacity onPress={() => setIsPasswordModalOpen(false)}>
+                    <Text style={styles.closeButton}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.passwordModalHint}>
+                  Digite uma nova senha. Mínimo de 6 caracteres.
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nova senha"
+                  placeholderTextColor="#94a3b8"
+                  secureTextEntry
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  editable={!isSavingPassword}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Confirmar nova senha"
+                  placeholderTextColor="#94a3b8"
+                  secureTextEntry
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  editable={!isSavingPassword}
+                />
+                <TouchableOpacity
+                  style={[styles.submitButton, isSavingPassword && { opacity: 0.6 }]}
+                  disabled={isSavingPassword}
+                  onPress={async () => {
+                    if (newPassword.length < 6) {
+                      Alert.alert('Senha curta', 'A senha precisa ter pelo menos 6 caracteres.');
+                      return;
+                    }
+                    if (newPassword !== confirmPassword) {
+                      Alert.alert('Confirmação não confere', 'As duas senhas digitadas precisam ser iguais.');
+                      return;
+                    }
+                    try {
+                      setIsSavingPassword(true);
+                      await updatePassword(newPassword);
+                      setIsPasswordModalOpen(false);
+                      setNewPassword('');
+                      setConfirmPassword('');
+                      Alert.alert('Pronto', 'Senha redefinida com sucesso.');
+                    } catch (err: any) {
+                      Alert.alert('Erro ao redefinir senha', err?.message ?? 'Erro desconhecido');
+                    } finally {
+                      setIsSavingPassword(false);
+                    }
+                  }}
+                >
+                  {isSavingPassword ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.submitButtonText}>Salvar nova senha</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Outbound (sem localização) Modal */}
       {showOutboundForm && (
@@ -1499,6 +1594,25 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: 11, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
   logoutButton: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 6 },
   logoutButtonText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerIconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerIconText: { fontSize: 16 },
+  passwordModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    margin: 20,
+    marginBottom: 40,
+    alignSelf: 'stretch',
+  },
+  passwordModalHint: { fontSize: 13, color: '#64748b', marginBottom: 12 },
   // Filter Bar
   filterBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   filterScroll: { paddingHorizontal: 12, paddingVertical: 8, gap: 6 },

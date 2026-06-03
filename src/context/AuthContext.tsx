@@ -9,6 +9,7 @@ interface AuthContextType {
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -114,6 +115,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Redefinição direta: usa a sessão ativa como prova de identidade
+  // (Supabase exige usuário autenticado pra updateUser). Não pede senha antiga
+  // nem envia email de verificação — fluxo "esqueci a senha" continua sendo
+  // por email/reset link na tela de login, isso aqui é só pra trocar logado.
+  const updatePassword = async (newPassword: string) => {
+    setError(null);
+    const { error: err } = await supabase.auth.updateUser({ password: newPassword });
+    if (err) {
+      const message = err.message || 'Erro ao redefinir senha';
+      setError(message);
+      throw err;
+    }
+  };
+
   const logout = async () => {
     try {
       setLoading(true);
@@ -137,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       error,
       login,
       logout,
+      updatePassword,
       isAuthenticated: !!user,
     }}>
       {children}
