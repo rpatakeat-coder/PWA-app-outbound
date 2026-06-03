@@ -2,10 +2,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import type { Client, ClientFormData } from '../types/client';
+import { bboxAround, roundCoordsForKey } from '../utils/area';
 
 const mapRow = (row: any): Client => row as Client;
 
-export function useClients() {
+export type AreaFilter = { lat: number; lon: number; radiusKm: number };
+
+export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boolean } = {}) {
+  const { areaFilter = null, enabled: callerEnabled = true } = opts;
   const queryClient = useQueryClient();
   const { isAuthenticated, user, profile } = useAuth();
 
@@ -39,8 +43,14 @@ export function useClients() {
 
   const allowedStatuses = visibilityQuery.data;
 
+  // Chave de cache: usa coords arredondadas pra não invalidar a cada
+  // metro de jitter de GPS. A query em si usa lat/lon raw pra precisão.
+  const areaCacheKey = areaFilter
+    ? { ...roundCoordsForKey(areaFilter.lat, areaFilter.lon), r: areaFilter.radiusKm }
+    : null;
+
   const query = useQuery<Client[]>({
-    queryKey: ['clients', allowedStatuses],
+    queryKey: ['clients', allowedStatuses, areaCacheKey],
     queryFn: async () => {
       // PostgREST capa em 1000 linhas por padrão. Pagina em blocos pra trazer
       // todos os clientes do setor sem precisar mexer no max-rows do servidor.
@@ -57,6 +67,18 @@ export function useClients() {
           q = q.in('status', allowedStatuses);
         }
 
+        // Filtro espacial via bounding box. Clientes sem lat/lon ficam de
+        // fora porque .gte/.lte em NULL nunca casa — desejável: cliente
+        // sem geo não tem como entrar no raio mesmo.
+        if (areaFilter) {
+          const bbox = bboxAround(areaFilter.lat, areaFilter.lon, areaFilter.radiusKm);
+          q = q
+            .gte('latitude', bbox.latMin)
+            .lte('latitude', bbox.latMax)
+            .gte('longitude', bbox.lonMin)
+            .lte('longitude', bbox.lonMax);
+        }
+
         const { data, error } = await q;
         if (error) throw error;
         const batch = data ?? [];
@@ -66,7 +88,7 @@ export function useClients() {
       }
       return all.map(mapRow);
     },
-    enabled: isAuthenticated && visibilityQuery.isFetched,
+    enabled: callerEnabled && isAuthenticated && visibilityQuery.isFetched,
   });
 
   const addClient = useMutation({

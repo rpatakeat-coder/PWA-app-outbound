@@ -20,6 +20,8 @@ import {
   Pressable,
   Animated,
   PanResponder,
+  Switch,
+  AppState,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView from 'react-native-map-clustering';
@@ -30,6 +32,8 @@ import { useClients } from './src/hooks/useClients';
 import { useMeetings } from './src/hooks/useMeetings';
 import { useForceReload } from './src/hooks/useForceReload';
 import { supabase } from './src/integrations/supabase/client';
+import { AREA_RADIUS_KM } from './src/utils/area';
+import { getShowOnlyMyAreaPref, setShowOnlyMyAreaPref } from './src/utils/userPrefs';
 import type { Client, ClientMeeting, ClientStatus } from './src/types/client';
 import { openNavigation } from './src/utils/navigation';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -189,13 +193,81 @@ function MainApp() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [showOnlyMyArea, setShowOnlyMyArea] = useState(false);
+  const [locationPermission, setLocationPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
   const mapRef = useRef<RNMapView | null>(null);
   const submittingRef = useRef(false);
 
-  const { clients, statuses: dynamicStatuses, isLoading, error, deleteClient, addClient, updateClient, markAsVisited } = useClients();
+  // Filtro espacial — quando o toggle "minha área" tá ligado e já temos
+  // GPS, monta o objeto que vira bounding box na query do Supabase.
+  // Sem GPS ou toggle off → null (sem filtro espacial, comportamento antigo).
+  const areaFilter = useMemo(() => {
+    if (!showOnlyMyArea || !userLocation) return null;
+    return {
+      lat: userLocation.latitude,
+      lon: userLocation.longitude,
+      radiusKm: AREA_RADIUS_KM,
+    };
+  }, [showOnlyMyArea, userLocation]);
+
+  // Bloqueia a query enquanto esperamos o GPS lockar com filtro ligado.
+  // Sem isso o app dispararia uma query "todos os clientes" e depois outra
+  // já filtrada — dobra de banda à toa.
+  const waitingForLocation = showOnlyMyArea && !userLocation && locationPermission === 'pending';
+  const areaPermissionDenied = showOnlyMyArea && locationPermission === 'denied';
+
+  const { clients, statuses: dynamicStatuses, isLoading, error, deleteClient, addClient, updateClient, markAsVisited } = useClients({
+    areaFilter,
+    enabled: !waitingForLocation && !areaPermissionDenied,
+  });
   const { upcomingByClient, meetingsByClient } = useMeetings();
   useForceReload(isAuthenticated);
   const isAdmin = profile?.email === 'arthurgothe.takeat@gmail.com';
+
+  // Carrega o toggle da preferência local na inicialização.
+  useEffect(() => {
+    getShowOnlyMyAreaPref().then(setShowOnlyMyArea);
+  }, []);
+
+  // Quando o app volta do background e a permissão estava negada, re-checa
+  // — usuário pode ter ido nas configurações do sistema e habilitado.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (state) => {
+      if (state !== 'active') return;
+      if (locationPermission !== 'denied') return;
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status === 'granted') {
+          setLocationPermission('granted');
+          const loc = await Location.getCurrentPositionAsync({});
+          setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+        }
+      } catch (err) {
+        console.warn('[LOC] re-check pós-foreground falhou:', err);
+      }
+    });
+    return () => sub.remove();
+  }, [locationPermission]);
+
+  const handleToggleArea = useCallback(async (value: boolean) => {
+    setShowOnlyMyArea(value);
+    await setShowOnlyMyAreaPref(value);
+    // Se ligou e ainda não temos GPS, dispara o pedido (caso ainda não tenha
+    // sido feito ou usuário tenha negado antes — request é no-op se já decidido).
+    if (value && !userLocation) {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        setLocationPermission(status === 'granted' ? 'granted' : 'denied');
+        if (status === 'granted') {
+          const loc = await Location.getCurrentPositionAsync({});
+          setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+        }
+      } catch (err) {
+        console.warn('[LOC] request pós-toggle falhou:', err);
+        setLocationPermission('denied');
+      }
+    }
+  }, [userLocation]);
   const [schedulingFor, setSchedulingFor] = useState<Client | null>(null);
   const isSaving = addClient.isPending || updateClient.isPending;
 
@@ -250,6 +322,7 @@ function MainApp() {
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
+        setLocationPermission(status === 'granted' ? 'granted' : 'denied');
         if (status === 'granted') {
           const loc = await Location.getCurrentPositionAsync({});
           setUserLocation({
@@ -259,6 +332,7 @@ function MainApp() {
         }
       } catch (err) {
         console.warn('Erro ao obter localização:', err);
+        setLocationPermission('denied');
       }
     })();
   }, []);
@@ -538,7 +612,18 @@ function MainApp() {
 
       const { status: permStatus } = await Location.requestForegroundPermissionsAsync();
       if (permStatus !== 'granted') {
-        Alert.alert('Permissão negada', 'É necessário permitir acesso à localização para marcar como visitado.');
+        // requestForegroundPermissionsAsync só abre o prompt do sistema na
+        // primeira vez. Se o usuário já negou antes, ele só retorna 'denied'
+        // sem abrir nada — por isso a gente direciona pro app de configurações
+        // do sistema, que é o único caminho de reverter um "deny" prévio.
+        Alert.alert(
+          'Localização desativada',
+          'Pra marcar como visitado a gente precisa do GPS do celular pra confirmar que você tá no local. Abrir as configurações do sistema pra habilitar?',
+          [
+            { text: 'Agora não', style: 'cancel' },
+            { text: 'Abrir configurações', onPress: () => Linking.openSettings() },
+          ],
+        );
         return;
       }
 
@@ -617,12 +702,46 @@ function MainApp() {
     return <LoginScreen />;
   }
 
-  if (loading || isLoading) {
+  if (loading || isLoading || waitingForLocation) {
     return (
       <View style={styles.centered}>
         <Image source={require('./assets/icon.png')} style={{ width: 72, height: 72, marginBottom: 16, tintColor: '#dc2626', resizeMode: 'contain' }} />
         <ActivityIndicator size="large" color="#dc2626" />
-        <Text style={styles.loadingText}>Carregando...</Text>
+        <Text style={styles.loadingText}>{waitingForLocation ? 'Localizando você...' : 'Carregando...'}</Text>
+        {waitingForLocation && (
+          <TouchableOpacity
+            style={styles.skipLocationButton}
+            onPress={() => handleToggleArea(false)}
+          >
+            <Text style={styles.skipLocationButtonText}>Continuar sem o filtro</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+
+  if (areaPermissionDenied) {
+    return (
+      <View style={[styles.centered, { paddingHorizontal: 32 }]}>
+        <Text style={{ fontSize: 56, marginBottom: 16 }}>📍</Text>
+        <Text style={styles.permissionTitle}>Localização desativada</Text>
+        <Text style={styles.permissionBody}>
+          Pra mostrar só os clientes da sua área a gente precisa da localização do
+          celular. Habilite nas configurações do sistema ou desative o filtro pra
+          ver todos os clientes.
+        </Text>
+        <TouchableOpacity
+          style={styles.permissionPrimaryButton}
+          onPress={() => Linking.openSettings()}
+        >
+          <Text style={styles.permissionPrimaryButtonText}>Abrir configurações do sistema</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.permissionSecondaryButton}
+          onPress={() => handleToggleArea(false)}
+        >
+          <Text style={styles.permissionSecondaryButtonText}>Desativar filtro e ver todos</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -899,7 +1018,7 @@ function MainApp() {
         </Text>
       </View>
 
-      {/* Modal: Redefinir senha (usuário logado) */}
+      {/* Modal: Configurações (filtro de área + redefinir senha + admin) */}
       <Modal
         visible={isPasswordModalOpen}
         animationType="fade"
@@ -914,11 +1033,29 @@ function MainApp() {
             <View style={styles.modalOverlay}>
               <View style={styles.passwordModalCard}>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Redefinir senha</Text>
+                  <Text style={styles.modalTitle}>Configurações</Text>
                   <TouchableOpacity onPress={() => setIsPasswordModalOpen(false)}>
                     <Text style={styles.closeButton}>✕</Text>
                   </TouchableOpacity>
                 </View>
+
+                {/* Filtro de área */}
+                <View style={styles.settingsRow}>
+                  <View style={{ flex: 1, paddingRight: 12 }}>
+                    <Text style={styles.settingsLabel}>Mostrar só clientes da minha área</Text>
+                    <Text style={styles.settingsHint}>
+                      Filtra os pinos num raio de {AREA_RADIUS_KM} km do seu GPS.
+                      Atualiza quando você abrir o app de novo.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={showOnlyMyArea}
+                    onValueChange={handleToggleArea}
+                  />
+                </View>
+
+                <View style={styles.adminDivider} />
+                <Text style={styles.adminSectionTitle}>Trocar senha</Text>
                 <Text style={styles.passwordModalHint}>
                   Digite uma nova senha. Mínimo de 6 caracteres.
                 </Text>
@@ -1671,6 +1808,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   adminButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  settingsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
+  settingsLabel: { fontSize: 15, fontWeight: '600', color: '#0f172a', marginBottom: 2 },
+  settingsHint: { fontSize: 12, color: '#64748b' },
+  skipLocationButton: { marginTop: 18, paddingHorizontal: 16, paddingVertical: 10 },
+  skipLocationButtonText: { color: '#64748b', fontSize: 14, fontWeight: '600', textDecorationLine: 'underline' },
+  permissionTitle: { fontSize: 20, fontWeight: '700', color: '#0f172a', marginBottom: 8, textAlign: 'center' },
+  permissionBody: { fontSize: 14, color: '#475569', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  permissionPrimaryButton: {
+    backgroundColor: '#dc2626',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  permissionPrimaryButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  permissionSecondaryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  permissionSecondaryButtonText: { color: '#64748b', fontSize: 14, fontWeight: '600' },
   // Filter Bar
   filterBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   filterScroll: { paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
