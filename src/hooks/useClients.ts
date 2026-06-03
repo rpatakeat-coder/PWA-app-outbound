@@ -110,8 +110,11 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
         observacoes: form.observacoes ?? null,
         created_by: user?.id,
         // Cadastros via app têm origem manual e geolocalização escolhida no mapa.
+        // O usuário literalmente aponta o pin no lugar — lat/lon é sempre
+        // preciso, mesmo sem número de rua. Antes ficava aproximado quando
+        // faltava número, o que era enganoso (a coord existia certa).
         geo_source: 'coords',
-        geo_approximate: !form.numero,
+        geo_approximate: false,
       };
       // Cadastro manual já marcado como visitado registra normalmente, sem
       // checagem de proximidade (isso só vale pra transição via mark_client_as_visited).
