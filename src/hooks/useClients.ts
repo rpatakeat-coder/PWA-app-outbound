@@ -134,27 +134,82 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
       // com o fluxo já existente de integração externa.
       // dealname = nome da empresa (fallback pro nome do contato se não tiver empresa).
       const dealname = client.empresa ?? client.nome;
-      fetch('https://webhook.takeat.cloud/webhook/0975e1c9-2d09-42f7-b236-78c7818c0c0d', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bairro: client.bairro,
-          celular: client.telefone,
-          cep: client.cep,
-          cidade: client.cidade,
-          dealname,
-          email: client.email,
-          estado_uf: client.estado,
-          id_hubspot: client.id_hubspot,
-          latitude: client.latitude !== null ? String(client.latitude) : null,
-          logradouro: client.endereco,
-          longitude: client.longitude !== null ? String(client.longitude) : null,
-          nome: client.nome,
-          numero_do_local: client.numero,
-          observacoes: client.observacoes,
-          url: client.url_hubspot,
-        }),
-      }).catch((err) => console.warn('[WEBHOOK] cadastro manual falhou:', err));
+
+      // Roda em background: espera o n8n responder com o id do deal criado
+      // no HubSpot e dá UPDATE em clients.id_hubspot. Isso destrava o botão
+      // "Mover para etapa" pro pin recém-criado sem precisar fechar/abrir o app.
+      //
+      // A mutation principal retorna assim que o INSERT no Supabase termina —
+      // o usuário vê o pin na hora. A enriquecimento com id_hubspot/url_hubspot
+      // chega em ~2-5s e o queryClient.invalidateQueries refresca a UI.
+      (async () => {
+        try {
+          const res = await fetch('https://webhook.takeat.cloud/webhook/0975e1c9-2d09-42f7-b236-78c7818c0c0d', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              bairro: client.bairro,
+              celular: client.telefone,
+              cep: client.cep,
+              cidade: client.cidade,
+              dealname,
+              email: client.email,
+              estado_uf: client.estado,
+              id_hubspot: client.id_hubspot,
+              latitude: client.latitude !== null ? String(client.latitude) : null,
+              logradouro: client.endereco,
+              longitude: client.longitude !== null ? String(client.longitude) : null,
+              nome: client.nome,
+              numero_do_local: client.numero,
+              observacoes: client.observacoes,
+              url: client.url_hubspot,
+            }),
+          });
+
+          if (!res.ok) {
+            console.warn('[WEBHOOK] cadastro manual respondeu', res.status);
+            return;
+          }
+
+          // Tenta parsear JSON. Aceita formatos comuns que o n8n pode mandar:
+          //   { id_hubspot: "123" }, { deal_id: "123" }, { id: "123" }, ou só "123".
+          let body: unknown = null;
+          try {
+            body = await res.json();
+          } catch {
+            console.warn('[WEBHOOK] cadastro manual respondeu sem JSON');
+            return;
+          }
+          const asObj = body as Record<string, unknown> | null;
+          const idHubspot =
+            typeof body === 'string' ? body :
+            (asObj?.id_hubspot ?? asObj?.deal_id ?? asObj?.id ?? null);
+          const urlHubspot = (asObj?.url_hubspot ?? asObj?.url ?? null) as string | null;
+
+          if (!idHubspot) {
+            console.warn('[WEBHOOK] cadastro manual sem id_hubspot na resposta:', body);
+            return;
+          }
+
+          const updatePayload: Record<string, unknown> = { id_hubspot: String(idHubspot) };
+          if (urlHubspot) updatePayload.url_hubspot = urlHubspot;
+
+          const { error: updErr } = await supabase
+            .from('clients')
+            .update(updatePayload)
+            .eq('id', client.id);
+          if (updErr) {
+            console.warn('[WEBHOOK] update id_hubspot falhou:', updErr.message);
+            return;
+          }
+
+          // Refresca a lista pra UI pegar o id_hubspot novo — o botão
+          // "Mover para etapa" passa a aparecer ativo nesse pin.
+          queryClient.invalidateQueries({ queryKey: ['clients'] });
+        } catch (err) {
+          console.warn('[WEBHOOK] cadastro manual falhou:', err);
+        }
+      })();
 
       return client;
     },
