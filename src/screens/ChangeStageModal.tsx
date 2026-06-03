@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import type { Client } from '../types/client';
 import { STAGES, CHANGE_STAGE_WEBHOOK } from '../constants/stages';
+import { useStagePropertyOptions } from '../hooks/useStagePropertyOptions';
 
 interface Props {
   client: Client;
@@ -24,6 +25,10 @@ export function ChangeStageModal({ client, onClose }: Props) {
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
   const [selectedSubOption, setSelectedSubOption] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Source of truth das opções: tabela stage_property_options no Supabase.
+  // O hardcoded em STAGES é fallback enquanto a query carrega ou se falhar.
+  const { data: groupedOptions } = useStagePropertyOptions();
 
   const selectedStage = STAGES.find((s) => s.id === selectedStageId) ?? null;
   const needsSubOption = !!selectedStage?.subOption;
@@ -153,14 +158,21 @@ export function ChangeStageModal({ client, onClose }: Props) {
                   </TouchableOpacity>
 
                   {/* Sub-opção inline quando essa stage exige propriedade
-                      obrigatória no HubSpot. Some quando troca de stage. */}
-                  {isSelected && stage.subOption && (
+                      obrigatória no HubSpot. Some quando troca de stage.
+                      Opções vêm do banco (stage_property_options), com
+                      fallback pro hardcoded em STAGES se a query não
+                      terminou ainda ou falhou. */}
+                  {isSelected && stage.subOption && (() => {
+                    const dbGroup = groupedOptions?.[stage.subOption.field];
+                    const opts = dbGroup?.options ?? stage.subOption.options;
+                    const fieldLabel = dbGroup?.label ?? stage.subOption.fieldLabel;
+                    return (
                     <View style={[styles.subOptionsWrap, { borderLeftColor: stage.color }]}>
                       <Text style={styles.subOptionsLabel}>
-                        {stage.subOption.fieldLabel}
+                        {fieldLabel}
                       </Text>
                       <View style={styles.subOptionsGrid}>
-                        {stage.subOption.options.map((opt) => {
+                        {opts.map((opt) => {
                           const subSelected = selectedSubOption === opt;
                           return (
                             <TouchableOpacity
@@ -188,7 +200,8 @@ export function ChangeStageModal({ client, onClose }: Props) {
                         })}
                       </View>
                     </View>
-                  )}
+                    );
+                  })()}
                 </View>
               );
             })}
