@@ -181,7 +181,7 @@ function MainApp() {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isFollowingUser, setIsFollowingUser] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<ClientStatus | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<ClientStatus>('lead' as ClientStatus);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const mapRef = useRef<RNMapView | null>(null);
   const submittingRef = useRef(false);
@@ -213,6 +213,18 @@ function MainApp() {
     }
   }, [statusOptions, form.status]);
 
+  // Mesma proteção pro filtro de status: se o slug atual sumiu da lista
+  // de status disponíveis (visibilidade do setor, slug renomeado, etc.),
+  // recai pro primeiro status disponível pra não deixar o usuário com
+  // a tela vazia sem chip ativo.
+  useEffect(() => {
+    if (statusOptions.length === 0) return;
+    const slugs = statusOptions.map(o => o.value);
+    if (!slugs.includes(statusFilter)) {
+      setStatusFilter(statusOptions[0].value);
+    }
+  }, [statusOptions, statusFilter]);
+
   // Build status config from dynamic data, fallback to hardcoded options.
   const statusConfig = useMemo(() => {
     const config: Record<string, { label: string; color: string }> = {};
@@ -243,10 +255,10 @@ function MainApp() {
     })();
   }, []);
 
-  const filteredClients = useMemo(() => {
-    if (statusFilter === 'all') return clients;
-    return clients.filter(c => c.status === statusFilter);
-  }, [clients, statusFilter]);
+  const filteredClients = useMemo(
+    () => clients.filter(c => c.status === statusFilter),
+    [clients, statusFilter]
+  );
 
   const filteredWithCoords = useMemo(
     () => filteredClients.filter(c => c.latitude !== null && c.longitude !== null),
@@ -554,7 +566,7 @@ function MainApp() {
   }, [markAsVisited]);
 
   const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: clients.length };
+    const counts: Record<string, number> = {};
     for (const opt of statusOptions) counts[opt.value] = 0;
     for (const c of clients) counts[c.status] = (counts[c.status] ?? 0) + 1;
     return counts;
@@ -633,16 +645,11 @@ function MainApp() {
       </View>
 
       {/* Status Filter */}
+      {/* Removido o chip "Todos" propositalmente: trazia todos os ~2k+ pinos
+          de uma vez no mapa, travando o app. Agora sempre há exatamente um
+          status ativo (default: 'lead'). */}
       <View style={styles.filterBar}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-          <TouchableOpacity
-            style={[styles.filterChip, statusFilter === 'all' && styles.filterChipActive]}
-            onPress={() => setStatusFilter('all')}
-          >
-            <Text style={[styles.filterChipText, statusFilter === 'all' && styles.filterChipTextActive]}>
-              Todos ({statusCounts.all})
-            </Text>
-          </TouchableOpacity>
           {statusOptions.map(opt => (
             <TouchableOpacity
               key={opt.value}
@@ -650,7 +657,7 @@ function MainApp() {
                 styles.filterChip,
                 statusFilter === opt.value && { backgroundColor: opt.color },
               ]}
-              onPress={() => setStatusFilter(statusFilter === opt.value ? 'all' : opt.value)}
+              onPress={() => setStatusFilter(opt.value)}
             >
               <View style={[styles.filterDot, { backgroundColor: opt.color }]} />
               <Text style={[
@@ -811,7 +818,7 @@ function MainApp() {
               <View style={styles.emptyState}>
                 <Text style={{ fontSize: 40, marginBottom: 12 }}>📋</Text>
                 <Text style={styles.emptyStateText}>
-                  {statusFilter === 'all' ? 'Nenhum cliente cadastrado' : `Nenhum ${statusConfig[statusFilter]?.label?.toLowerCase() ?? statusFilter} encontrado`}
+                  {`Nenhum ${statusConfig[statusFilter]?.label?.toLowerCase() ?? statusFilter} encontrado`}
                 </Text>
               </View>
             }
