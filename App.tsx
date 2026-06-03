@@ -28,6 +28,8 @@ import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useClients } from './src/hooks/useClients';
 import { useMeetings } from './src/hooks/useMeetings';
+import { useForceReload } from './src/hooks/useForceReload';
+import { supabase } from './src/integrations/supabase/client';
 import type { Client, ClientMeeting, ClientStatus } from './src/types/client';
 import { openNavigation } from './src/utils/navigation';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -192,6 +194,8 @@ function MainApp() {
 
   const { clients, statuses: dynamicStatuses, isLoading, error, deleteClient, addClient, updateClient, markAsVisited } = useClients();
   const { upcomingByClient, meetingsByClient } = useMeetings();
+  useForceReload(isAuthenticated);
+  const isAdmin = profile?.email === 'arthurgothe.takeat@gmail.com';
   const [schedulingFor, setSchedulingFor] = useState<Client | null>(null);
   const isSaving = addClient.isPending || updateClient.isPending;
 
@@ -968,6 +972,51 @@ function MainApp() {
                     <Text style={styles.submitButtonText}>Salvar nova senha</Text>
                   )}
                 </TouchableOpacity>
+
+                {isAdmin && (
+                  <>
+                    <View style={styles.adminDivider} />
+                    <Text style={styles.adminSectionTitle}>Admin</Text>
+                    <Text style={styles.passwordModalHint}>
+                      Dispara um reload imediato em todos os apps abertos
+                      (puxa OTA novo do EAS antes). Use com cuidado — usuários
+                      no meio de um cadastro perdem o que não foi salvo.
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.adminButton}
+                      onPress={() => {
+                        Alert.alert(
+                          'Forçar reload de todos',
+                          'Todos os apps abertos vão recarregar agora. Confirmar?',
+                          [
+                            { text: 'Cancelar', style: 'cancel' },
+                            {
+                              text: 'Sim, reload',
+                              style: 'destructive',
+                              onPress: async () => {
+                                const { error: err } = await supabase
+                                  .from('app_force_reload')
+                                  .update({
+                                    triggered_at: new Date().toISOString(),
+                                    triggered_by: profile?.id ?? null,
+                                    triggered_reason: 'manual-by-admin',
+                                  })
+                                  .eq('id', 1);
+                                if (err) {
+                                  Alert.alert('Erro', err.message);
+                                  return;
+                                }
+                                Alert.alert('Pronto', 'Sinal enviado. Seu próprio app vai recarregar em alguns segundos.');
+                              },
+                            },
+                          ]
+                        );
+                      }}
+                    >
+                      <Text style={styles.adminButtonText}>🔄 Forçar reload de todos</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             </View>
           </TouchableWithoutFeedback>
@@ -1613,6 +1662,15 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   passwordModalHint: { fontSize: 13, color: '#64748b', marginBottom: 12 },
+  adminDivider: { height: 1, backgroundColor: '#e2e8f0', marginVertical: 18 },
+  adminSectionTitle: { fontSize: 12, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  adminButton: {
+    backgroundColor: '#0f172a',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  adminButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   // Filter Bar
   filterBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   filterScroll: { paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
