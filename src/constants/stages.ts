@@ -47,10 +47,11 @@ export const STAGES: Stage[] = [
     },
   },
   { id: '209405288', label: 'DEMO/PROPOSTA', color: '#f59e0b' },
+  // NEGOCIAÇÃO: requer plano_apresentado e mrr (R$) — preenchidos no
+  // handler do webhook, não no app.
   { id: '209405289', label: 'NEGOCIAÇÃO', color: '#f97316' },
-  { id: '1090779811', label: 'AGUARDANDO PAGAMENTO', color: '#06b6d4' },
-  { id: '209405292', label: 'NEGÓCIO FECHADO', color: '#22c55e' },
-  { id: '1090779812', label: 'ENVIADO ONBOARDING', color: '#10b981' },
+  // NEGÓCIO PERDIDO: requer motivo da perda — preenchido no handler do
+  // webhook, não no app.
   { id: '209405293', label: 'NEGÓCIO PERDIDO', color: '#ef4444' },
 ];
 
