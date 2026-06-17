@@ -47,6 +47,28 @@ import { reverseGeocode } from './src/utils/geocoding';
 
 const queryClient = new QueryClient();
 
+// Normalizacao de UF — no banco existem clientes salvos como "ES" e outros
+// como "ESPIRITO SANTO" / "Espírito Santo". O filtro precisa colapsar todos
+// pro mesmo bucket de 2 letras, senao aparece "ES" e "ESPIRITO SANTO" como
+// chips separados (mesmo estado, listas duplicadas).
+const BR_UF_BY_NAME: Record<string, string> = {
+  'ACRE': 'AC', 'ALAGOAS': 'AL', 'AMAPA': 'AP', 'AMAZONAS': 'AM',
+  'BAHIA': 'BA', 'CEARA': 'CE', 'DISTRITO FEDERAL': 'DF', 'ESPIRITO SANTO': 'ES',
+  'GOIAS': 'GO', 'MARANHAO': 'MA', 'MATO GROSSO': 'MT', 'MATO GROSSO DO SUL': 'MS',
+  'MINAS GERAIS': 'MG', 'PARA': 'PA', 'PARAIBA': 'PB', 'PARANA': 'PR',
+  'PERNAMBUCO': 'PE', 'PIAUI': 'PI', 'RIO DE JANEIRO': 'RJ', 'RIO GRANDE DO NORTE': 'RN',
+  'RIO GRANDE DO SUL': 'RS', 'RONDONIA': 'RO', 'RORAIMA': 'RR', 'SANTA CATARINA': 'SC',
+  'SAO PAULO': 'SP', 'SERGIPE': 'SE', 'TOCANTINS': 'TO',
+};
+
+const normalizeUf = (raw: string | null | undefined): string | null => {
+  if (!raw) return null;
+  const cleaned = raw.normalize('NFD').replace(/[\u0300-\u036F]/g, '').toUpperCase().trim();
+  if (!cleaned) return null;
+  if (cleaned.length === 2) return cleaned;
+  return BR_UF_BY_NAME[cleaned] ?? cleaned;
+};
+
 const initialFormState = {
   nome: '',
   empresa: '',
@@ -194,6 +216,7 @@ function MainApp() {
   const [statusFilter, setStatusFilter] = useState<ClientStatus>('lead' as ClientStatus);
   const [searchQuery, setSearchQuery] = useState('');
   const [stateFilter, setStateFilter] = useState<string | null>(null);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -371,7 +394,7 @@ function MainApp() {
   const availableStates = useMemo(() => {
     const set = new Set<string>();
     for (const c of clients) {
-      const uf = c.estado?.trim().toUpperCase();
+      const uf = normalizeUf(c.estado);
       if (uf) set.add(uf);
     }
     return Array.from(set).sort();
@@ -384,10 +407,11 @@ function MainApp() {
     }
   }, [availableStates, stateFilter]);
 
-  const filteredClients = useMemo(
+  // Aplica search + UF (mas NAO status) — usado pra recalcular contadores dos
+  // chips de status em tempo real conforme o usuario digita no search.
+  const clientsForCount = useMemo(
     () => clients.filter(c => {
-      if (c.status !== statusFilter) return false;
-      if (stateFilter && (c.estado ?? '').trim().toUpperCase() !== stateFilter) return false;
+      if (stateFilter && normalizeUf(c.estado) !== stateFilter) return false;
       if (searchTerm) {
         const haystack = `${c.nome ?? ''} ${c.empresa ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''}`
           .normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase();
@@ -395,8 +419,15 @@ function MainApp() {
       }
       return true;
     }),
-    [clients, statusFilter, stateFilter, searchTerm]
+    [clients, stateFilter, searchTerm],
   );
+
+  const filteredClients = useMemo(
+    () => clientsForCount.filter(c => c.status === statusFilter),
+    [clientsForCount, statusFilter],
+  );
+
+  const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0);
 
   const filteredWithCoords = useMemo(
     () => filteredClients.filter(c => c.latitude !== null && c.longitude !== null),
@@ -599,6 +630,7 @@ function MainApp() {
 
   const handleMapInteraction = () => {
     setIsFollowingUser(false);
+    Keyboard.dismiss();
   };
 
   const handleMarkerPress = useCallback((c: Client) => setSelectedClient(c), []);
@@ -848,12 +880,14 @@ function MainApp() {
     }
   }, [markAsVisited]);
 
+  // Conta por status respeitando search + UF — assim o usuario ve em tempo
+  // real qual aba traz resultados conforme digita ("Lead (316)" -> "Lead (200)").
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const opt of statusOptions) counts[opt.value] = 0;
-    for (const c of clients) counts[c.status] = (counts[c.status] ?? 0) + 1;
+    for (const c of clientsForCount) counts[c.status] = (counts[c.status] ?? 0) + 1;
     return counts;
-  }, [clients, statusOptions]);
+  }, [clientsForCount, statusOptions]);
 
   const renderClientItem = useCallback(({ item }: { item: Client }) => {
     const color = statusConfig[item.status]?.color || '#3b82f6';
@@ -1277,7 +1311,7 @@ function MainApp() {
       </View>
 
       {/* Search bar: busca por nome, empresa, cidade ou bairro.
-          Aplica em cima do filtro de status atual (não cruza status). */}
+          Reflete em mapa, lista e contadores dos chips de status em tempo real. */}
       <View style={styles.searchBar}>
         <Text style={styles.searchIcon}>🔍</Text>
         <TextInput
@@ -1289,6 +1323,7 @@ function MainApp() {
           returnKeyType="search"
           autoCorrect={false}
           autoCapitalize="none"
+          onSubmitEditing={Keyboard.dismiss}
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -1297,55 +1332,51 @@ function MainApp() {
         )}
       </View>
 
-      {/* Status Filter */}
-      {/* Removido o chip "Todos" propositalmente: trazia todos os ~2k+ pinos
-          de uma vez no mapa, travando o app. Agora sempre há exatamente um
-          status ativo (default: 'lead'). */}
+      {/* Linha de chips de status com botão de filtros (UF) ancorado à esquerda.
+          Removido o chip "Todos" propositalmente: trazia todos os ~2k+ pinos
+          de uma vez no mapa, travando o app. */}
       <View style={styles.filterBar}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-          {statusOptions.map(opt => (
+        <View style={styles.filterBarRow}>
+          {availableStates.length > 0 && (
             <TouchableOpacity
-              key={opt.value}
-              style={[
-                styles.filterChip,
-                statusFilter === opt.value && { backgroundColor: opt.color },
-              ]}
-              onPress={() => setStatusFilter(opt.value)}
+              style={styles.filterIconButton}
+              onPress={() => { Keyboard.dismiss(); setIsFiltersOpen(true); }}
             >
-              <View style={[styles.filterDot, { backgroundColor: opt.color }]} />
-              <Text style={[
-                styles.filterChipText,
-                statusFilter === opt.value && styles.filterChipTextActive,
-              ]}>
-                {opt.label} ({statusCounts[opt.value]})
-              </Text>
+              <Text style={styles.filterIconText}>🎚️</Text>
+              {activeFilterCount > 0 && (
+                <View style={styles.filterIconBadge}>
+                  <Text style={styles.filterIconBadgeText}>{activeFilterCount}</Text>
+                </View>
+              )}
             </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Filtro por UF — chips só com estados presentes no recorte atual. */}
-      {availableStates.length > 1 && (
-        <View style={styles.stateBar}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-            <TouchableOpacity
-              style={[styles.stateChip, !stateFilter && styles.stateChipActive]}
-              onPress={() => setStateFilter(null)}
-            >
-              <Text style={[styles.stateChipText, !stateFilter && styles.stateChipTextActive]}>Todos UF</Text>
-            </TouchableOpacity>
-            {availableStates.map(uf => (
+          )}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScroll}
+            keyboardShouldPersistTaps="handled"
+          >
+            {statusOptions.map(opt => (
               <TouchableOpacity
-                key={uf}
-                style={[styles.stateChip, stateFilter === uf && styles.stateChipActive]}
-                onPress={() => setStateFilter(uf)}
+                key={opt.value}
+                style={[
+                  styles.filterChip,
+                  statusFilter === opt.value && { backgroundColor: opt.color },
+                ]}
+                onPress={() => setStatusFilter(opt.value)}
               >
-                <Text style={[styles.stateChipText, stateFilter === uf && styles.stateChipTextActive]}>{uf}</Text>
+                <View style={[styles.filterDot, { backgroundColor: opt.color }]} />
+                <Text style={[
+                  styles.filterChipText,
+                  statusFilter === opt.value && styles.filterChipTextActive,
+                ]}>
+                  {opt.label} ({statusCounts[opt.value]})
+                </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
-      )}
+      </View>
 
       {tab === 'map' ? (
         <>
@@ -1492,6 +1523,8 @@ function MainApp() {
             maxToRenderPerBatch={10}
             windowSize={7}
             removeClippedSubviews
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <Text style={{ fontSize: 40, marginBottom: 12 }}>📋</Text>
@@ -1741,6 +1774,65 @@ function MainApp() {
             </View>
           </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Modal de filtros: hoje so UF, mas eh o ponto natural pra crescer
+          (raio personalizado, presenca de telefone, faixa de criacao, etc.). */}
+      <Modal
+        visible={isFiltersOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsFiltersOpen(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setIsFiltersOpen(false)}>
+          <Pressable style={styles.filtersSheet} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filtros</Text>
+              <TouchableOpacity onPress={() => setIsFiltersOpen(false)}>
+                <Text style={styles.closeButton}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.adminSectionTitle}>Estado</Text>
+            <Text style={styles.passwordModalHint}>
+              Filtra os pinos pelo UF do endereco do cliente.
+            </Text>
+            {availableStates.length === 0 ? (
+              <Text style={styles.emptyStateText}>Nenhum estado disponivel no recorte atual.</Text>
+            ) : (
+              <View style={styles.ufGrid}>
+                <TouchableOpacity
+                  style={[styles.ufGridChip, !stateFilter && styles.ufGridChipActive]}
+                  onPress={() => setStateFilter(null)}
+                >
+                  <Text style={[styles.ufGridChipText, !stateFilter && styles.ufGridChipTextActive]}>Todos</Text>
+                </TouchableOpacity>
+                {availableStates.map(uf => (
+                  <TouchableOpacity
+                    key={uf}
+                    style={[styles.ufGridChip, stateFilter === uf && styles.ufGridChipActive]}
+                    onPress={() => setStateFilter(uf)}
+                  >
+                    <Text style={[styles.ufGridChipText, stateFilter === uf && styles.ufGridChipTextActive]}>{uf}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            <View style={styles.filtersFooter}>
+              <TouchableOpacity
+                style={styles.filtersSecondaryButton}
+                onPress={() => { setSearchQuery(''); setStateFilter(null); }}
+                disabled={activeFilterCount === 0}
+              >
+                <Text style={[styles.filtersSecondaryButtonText, activeFilterCount === 0 && { opacity: 0.4 }]}>Limpar tudo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.submitButton, { flex: 1, marginTop: 0 }]} onPress={() => setIsFiltersOpen(false)}>
+                <Text style={styles.submitButtonText}>Aplicar</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       {/* Outbound (sem localização) Modal */}
@@ -2479,18 +2571,57 @@ const styles = StyleSheet.create({
   searchIcon: { fontSize: 14, color: '#64748b' },
   searchInput: { flex: 1, color: '#0f172a', fontSize: 14, padding: 0 },
   searchClear: { color: '#64748b', fontSize: 14, paddingHorizontal: 4 },
-  // Filtro por UF — chips compactos abaixo dos chips de status.
-  stateBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  stateChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 14,
-    backgroundColor: '#f1f5f9',
-    marginRight: 6,
+  // Linha horizontal com o icone de filtros ancorado a esquerda + chips de status rolando.
+  filterBarRow: { flexDirection: 'row', alignItems: 'center' },
+  filterIconButton: {
+    width: 40,
+    height: 36,
+    marginLeft: 8,
+    borderRadius: 10,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  stateChipActive: { backgroundColor: '#0f172a' },
-  stateChipText: { fontSize: 12, fontWeight: '700', color: '#64748b', letterSpacing: 0.5 },
-  stateChipTextActive: { color: '#fff' },
+  filterIconText: { fontSize: 18 },
+  filterIconBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#dc2626',
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  filterIconBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
+  // Modal de filtros (UF e futuras opcoes)
+  filtersSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    marginTop: 'auto',
+    maxHeight: '80%',
+  },
+  ufGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  ufGridChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    minWidth: 56,
+    alignItems: 'center',
+  },
+  ufGridChipActive: { backgroundColor: '#0f172a' },
+  ufGridChipText: { color: '#64748b', fontWeight: '700', fontSize: 13, letterSpacing: 0.5 },
+  ufGridChipTextActive: { color: '#fff' },
+  filtersFooter: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  filtersSecondaryButton: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', backgroundColor: '#f1f5f9' },
+  filtersSecondaryButtonText: { color: '#0f172a', fontSize: 15, fontWeight: '700' },
   // Loading
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   loadingText: { marginTop: 12, color: '#64748b', fontSize: 15 },
