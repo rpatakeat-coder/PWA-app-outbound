@@ -217,6 +217,7 @@ function MainApp() {
   const [searchQuery, setSearchQuery] = useState('');
   const [stateFilter, setStateFilter] = useState<string | null>(null);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [isPickingUf, setIsPickingUf] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -1784,53 +1785,78 @@ function MainApp() {
         transparent
         onRequestClose={() => setIsFiltersOpen(false)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setIsFiltersOpen(false)}>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => { setIsPickingUf(false); setIsFiltersOpen(false); }}
+        >
           <Pressable style={styles.filtersSheet} onPress={() => {}}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filtros</Text>
-              <TouchableOpacity onPress={() => setIsFiltersOpen(false)}>
-                <Text style={styles.closeButton}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.adminSectionTitle}>Estado</Text>
-            <Text style={styles.passwordModalHint}>
-              Filtra os pinos pelo UF do endereco do cliente.
-            </Text>
-            {availableStates.length === 0 ? (
-              <Text style={styles.emptyStateText}>Nenhum estado disponivel no recorte atual.</Text>
-            ) : (
-              <View style={styles.ufGrid}>
-                <TouchableOpacity
-                  style={[styles.ufGridChip, !stateFilter && styles.ufGridChipActive]}
-                  onPress={() => setStateFilter(null)}
-                >
-                  <Text style={[styles.ufGridChipText, !stateFilter && styles.ufGridChipTextActive]}>Todos</Text>
-                </TouchableOpacity>
-                {availableStates.map(uf => (
-                  <TouchableOpacity
-                    key={uf}
-                    style={[styles.ufGridChip, stateFilter === uf && styles.ufGridChipActive]}
-                    onPress={() => setStateFilter(uf)}
-                  >
-                    <Text style={[styles.ufGridChipText, stateFilter === uf && styles.ufGridChipTextActive]}>{uf}</Text>
+            {isPickingUf ? (
+              <>
+                <View style={styles.modalHeader}>
+                  <TouchableOpacity onPress={() => setIsPickingUf(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.backButton}>‹ Voltar</Text>
                   </TouchableOpacity>
-                ))}
-              </View>
-            )}
+                  <Text style={styles.modalTitle}>Selecione o estado</Text>
+                  <View style={{ width: 60 }} />
+                </View>
+                <ScrollView style={styles.ufPickerList} contentContainerStyle={{ paddingBottom: 12 }}>
+                  <TouchableOpacity
+                    style={styles.ufPickerRow}
+                    onPress={() => { setStateFilter(null); setIsPickingUf(false); }}
+                  >
+                    <Text style={[styles.ufPickerRowText, !stateFilter && styles.ufPickerRowTextActive]}>Todos os estados</Text>
+                    {!stateFilter && <Text style={styles.ufPickerCheck}>✓</Text>}
+                  </TouchableOpacity>
+                  {availableStates.map(uf => (
+                    <TouchableOpacity
+                      key={uf}
+                      style={styles.ufPickerRow}
+                      onPress={() => { setStateFilter(uf); setIsPickingUf(false); }}
+                    >
+                      <Text style={[styles.ufPickerRowText, stateFilter === uf && styles.ufPickerRowTextActive]}>{uf}</Text>
+                      {stateFilter === uf && <Text style={styles.ufPickerCheck}>✓</Text>}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            ) : (
+              <>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Filtros</Text>
+                  <TouchableOpacity onPress={() => setIsFiltersOpen(false)}>
+                    <Text style={styles.closeButton}>✕</Text>
+                  </TouchableOpacity>
+                </View>
 
-            <View style={styles.filtersFooter}>
-              <TouchableOpacity
-                style={styles.filtersSecondaryButton}
-                onPress={() => { setSearchQuery(''); setStateFilter(null); }}
-                disabled={activeFilterCount === 0}
-              >
-                <Text style={[styles.filtersSecondaryButtonText, activeFilterCount === 0 && { opacity: 0.4 }]}>Limpar tudo</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.submitButton, { flex: 1, marginTop: 0 }]} onPress={() => setIsFiltersOpen(false)}>
-                <Text style={styles.submitButtonText}>Aplicar</Text>
-              </TouchableOpacity>
-            </View>
+                <Text style={styles.adminSectionTitle}>Estado</Text>
+                <Text style={styles.passwordModalHint}>
+                  Filtra os pinos pelo UF do endereco do cliente.
+                </Text>
+                <TouchableOpacity
+                  style={styles.dropdownButton}
+                  onPress={() => setIsPickingUf(true)}
+                  disabled={availableStates.length === 0}
+                >
+                  <Text style={[styles.dropdownButtonText, !stateFilter && { color: '#64748b' }]}>
+                    {stateFilter ?? (availableStates.length === 0 ? 'Sem estados disponiveis' : 'Todos os estados')}
+                  </Text>
+                  <Text style={styles.dropdownChevron}>▾</Text>
+                </TouchableOpacity>
+
+                <View style={styles.filtersFooter}>
+                  <TouchableOpacity
+                    style={styles.filtersSecondaryButton}
+                    onPress={() => { setSearchQuery(''); setStateFilter(null); }}
+                    disabled={activeFilterCount === 0}
+                  >
+                    <Text style={[styles.filtersSecondaryButtonText, activeFilterCount === 0 && { opacity: 0.4 }]}>Limpar tudo</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.submitButton, { flex: 1, marginTop: 0 }]} onPress={() => setIsFiltersOpen(false)}>
+                    <Text style={styles.submitButtonText}>Aplicar</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </Pressable>
         </Pressable>
       </Modal>
@@ -2607,18 +2633,36 @@ const styles = StyleSheet.create({
     marginTop: 'auto',
     maxHeight: '80%',
   },
-  ufGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
-  ufGridChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: '#f1f5f9',
-    minWidth: 56,
+  // Botao de dropdown (estilo "menu suspenso") que abre a lista de UFs.
+  dropdownButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginTop: 8,
   },
-  ufGridChipActive: { backgroundColor: '#0f172a' },
-  ufGridChipText: { color: '#64748b', fontWeight: '700', fontSize: 13, letterSpacing: 0.5 },
-  ufGridChipTextActive: { color: '#fff' },
+  dropdownButtonText: { fontSize: 15, fontWeight: '600', color: '#0f172a' },
+  dropdownChevron: { fontSize: 16, color: '#64748b' },
+  // Lista vertical do seletor de UF (modo "picker" dentro do mesmo sheet).
+  ufPickerList: { maxHeight: 380, marginTop: 4 },
+  ufPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  ufPickerRowText: { fontSize: 15, color: '#0f172a' },
+  ufPickerRowTextActive: { fontWeight: '800', color: '#dc2626' },
+  ufPickerCheck: { fontSize: 16, fontWeight: '800', color: '#dc2626' },
+  backButton: { color: '#64748b', fontSize: 15, fontWeight: '600', width: 60 },
   filtersFooter: { flexDirection: 'row', gap: 10, marginTop: 20 },
   filtersSecondaryButton: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', backgroundColor: '#f1f5f9' },
   filtersSecondaryButtonText: { color: '#0f172a', fontSize: 15, fontWeight: '700' },
