@@ -30,6 +30,7 @@ import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useClients } from './src/hooks/useClients';
 import { useMeetings } from './src/hooks/useMeetings';
+import { distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
 import { useForceReload } from './src/hooks/useForceReload';
 import { supabase } from './src/integrations/supabase/client';
 import { AREA_RADIUS_KM } from './src/utils/area';
@@ -68,6 +69,8 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
   { value: 'em_integracao', label: 'Em Integração', color: '#f97316' },
   { value: 'ex_cliente', label: 'Ex-cliente', color: '#ef4444' },
 ];
+
+type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'performance' | 'manager';
 
 function CustomMarker({ color, meetingCount }: { color: string; meetingCount: number }) {
   return (
@@ -180,7 +183,7 @@ const markerStyles = StyleSheet.create({
 function MainApp() {
   const insets = useSafeAreaInsets();
   const { isAuthenticated, loading, logout, profile, updatePassword } = useAuth();
-  const [tab, setTab] = useState<'map' | 'list'>('map');
+  const [tab, setTab] = useState<AppTab>('map');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [showCepStep, setShowCepStep] = useState(false);
   const [showOutboundForm, setShowOutboundForm] = useState(false);
@@ -189,6 +192,8 @@ function MainApp() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isFollowingUser, setIsFollowingUser] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ClientStatus>('lead' as ClientStatus);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [stateFilter, setStateFilter] = useState<string | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -196,6 +201,16 @@ function MainApp() {
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [showOnlyMyArea, setShowOnlyMyArea] = useState(false);
   const [locationPermission, setLocationPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
+  const [routeDate] = useState(todayKey());
+  const [routeDraft, setRouteDraft] = useState<Client[]>([]);
+  const [routeLeadCount, setRouteLeadCount] = useState('8');
+  const [routePriority, setRoutePriority] = useState<'proximity' | 'status' | 'potential'>('proximity');
+  const [routeStatusScope, setRouteStatusScope] = useState<'current' | 'all'>('current');
+  const [goalSellerId, setGoalSellerId] = useState<string | null>(null);
+  const [goalVisits, setGoalVisits] = useState('30');
+  const [goalClients, setGoalClients] = useState('10');
+  const [goalDemos, setGoalDemos] = useState('20');
+  const [goalMrr, setGoalMrr] = useState('4000');
   const mapRef = useRef<RNMapView | null>(null);
   const submittingRef = useRef(false);
 
@@ -221,9 +236,10 @@ function MainApp() {
     areaFilter,
     enabled: !waitingForLocation && !areaPermissionDenied,
   });
-  const { upcomingByClient, meetingsByClient } = useMeetings();
+  const { meetings, upcomingByClient, meetingsByClient } = useMeetings();
   useForceReload(isAuthenticated);
   const isAdmin = profile?.email === 'arthurgothe.takeat@gmail.com';
+  const fieldOps = useFieldOps(routeDate, isAdmin);
 
   // Carrega o toggle da preferência local na inicialização.
   useEffect(() => {
@@ -285,6 +301,12 @@ function MainApp() {
     return STATUS_OPTIONS;
   }, [dynamicStatuses]);
 
+  useEffect(() => {
+    if (!isAdmin && tab !== 'map' && tab !== 'list') {
+      setTab('map');
+    }
+  }, [isAdmin, tab]);
+
   // Garante que o status selecionado no form pertença aos status atuais.
   // Se mudou (ex.: removeu o slug 'lead' antigo), reaponta pro primeiro disponível.
   useEffect(() => {
@@ -339,15 +361,181 @@ function MainApp() {
     })();
   }, []);
 
+  // Normaliza pra busca case/diacritic-insensitive — "ipê" casa com "ipe".
+  const searchTerm = useMemo(
+    () => searchQuery.normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase().trim(),
+    [searchQuery],
+  );
+
+  // UFs presentes no conjunto carregado — chips só mostram opção que existe.
+  const availableStates = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of clients) {
+      const uf = c.estado?.trim().toUpperCase();
+      if (uf) set.add(uf);
+    }
+    return Array.from(set).sort();
+  }, [clients]);
+
+  // Se o UF selecionado some (mudou setor, filtro, etc.), volta pra "todos".
+  useEffect(() => {
+    if (stateFilter && !availableStates.includes(stateFilter)) {
+      setStateFilter(null);
+    }
+  }, [availableStates, stateFilter]);
+
   const filteredClients = useMemo(
-    () => clients.filter(c => c.status === statusFilter),
-    [clients, statusFilter]
+    () => clients.filter(c => {
+      if (c.status !== statusFilter) return false;
+      if (stateFilter && (c.estado ?? '').trim().toUpperCase() !== stateFilter) return false;
+      if (searchTerm) {
+        const haystack = `${c.nome ?? ''} ${c.empresa ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''}`
+          .normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase();
+        if (!haystack.includes(searchTerm)) return false;
+      }
+      return true;
+    }),
+    [clients, statusFilter, stateFilter, searchTerm]
   );
 
   const filteredWithCoords = useMemo(
     () => filteredClients.filter(c => c.latitude !== null && c.longitude !== null),
     [filteredClients]
   );
+
+  const routeStops = fieldOps.stops;
+  const routeStopClientIds = useMemo(
+    () => new Set(routeStops.map(stop => stop.client_id).concat(routeDraft.map(c => c.id))),
+    [routeStops, routeDraft],
+  );
+
+  const routeClients = useMemo(
+    () => routeStops.map(stop => stop.client).filter(Boolean) as Client[],
+    [routeStops],
+  );
+
+  const routeDisplayClients = routeClients.length > 0 ? routeClients : routeDraft;
+
+  const currentGoal = fieldOps.goals.find(g => g.seller_id === profile?.id) ?? fieldOps.goals[0] ?? null;
+
+  const monthStart = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  }, []);
+
+  const performance = useMemo(() => {
+    const visits = clients.filter(c => {
+      const raw = (c as any).visited_at ?? c.updated_at;
+      if (!raw) return false;
+      return new Date(raw).getTime() >= monthStart.getTime() && c.status === 'lead_visitado';
+    }).length;
+    const closed = clients.filter(c => c.status === 'ativo').length;
+    const demos = meetings.filter(m => new Date(m.scheduled_at).getTime() >= monthStart.getTime()).length;
+    const proposals = clients.filter(c => /proposta/i.test(c.status)).length;
+    const completedStops = routeStops.filter(s => s.status === 'done').length;
+    return { visits, closed, demos, proposals, completedStops };
+  }, [clients, meetings, monthStart, routeStops]);
+
+  const teamRanking = useMemo(() => {
+    const base = [
+      {
+        id: profile?.id ?? 'me',
+        name: profile?.full_name || profile?.email || 'Voce',
+        visits: performance.visits,
+        demos: performance.demos,
+        closed: performance.closed,
+        score: performance.visits + performance.demos * 3 + performance.closed * 8,
+      },
+    ];
+    return base.sort((a, b) => b.score - a.score);
+  }, [performance, profile]);
+
+  const suggestRoute = useCallback(() => {
+    const desired = Math.max(1, Math.min(30, Number(routeLeadCount) || 8));
+    const base = userLocation ?? (
+      filteredWithCoords[0]?.latitude != null && filteredWithCoords[0]?.longitude != null
+        ? { latitude: filteredWithCoords[0].latitude, longitude: filteredWithCoords[0].longitude }
+        : null
+    );
+    if (!base) {
+      Alert.alert('Sem base de rota', 'Ative a localizacao ou mantenha leads com coordenadas carregados para sugerir a rota.');
+      return;
+    }
+
+    const source = (routeStatusScope === 'current' ? filteredClients : clients)
+      .filter(c => c.latitude != null && c.longitude != null)
+      .filter(c => !routeStopClientIds.has(c.id));
+
+    const statusWeight = (status: string) => {
+      const normalized = status.toLowerCase();
+      if (normalized.includes('demo')) return 0;
+      if (normalized.includes('follow')) return 1;
+      if (normalized.includes('proposta')) return 2;
+      if (normalized.includes('lead')) return 3;
+      if (normalized.includes('ativo')) return 6;
+      return 4;
+    };
+
+    const scored = source
+      .map(client => {
+        const meters = distanceMeters(base.latitude, base.longitude, client.latitude as number, client.longitude as number);
+        const score =
+          routePriority === 'proximity' ? meters :
+          routePriority === 'status' ? statusWeight(client.status) * 100000 + meters :
+          (client.id_hubspot ? 0 : 50000) + statusWeight(client.status) * 50000 + meters;
+        return { client, meters, score };
+      })
+      .sort((a, b) => a.score - b.score)
+      .slice(0, desired);
+
+    setRouteDraft(scored.map(item => item.client));
+    fieldOps.saveRoute.mutate({
+      routeDate,
+      title: 'Rota sugerida',
+      source: 'suggested',
+      priorityMode: routePriority,
+      base,
+      stops: scored.map(item => ({ client: item.client, distance_meters: item.meters })),
+    }, {
+      onSuccess: () => Alert.alert('Rota sugerida', `${scored.length} leads adicionados a agenda de hoje.`),
+      onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
+    });
+  }, [clients, fieldOps.saveRoute, filteredClients, filteredWithCoords, routeDate, routeLeadCount, routePriority, routeStatusScope, routeStopClientIds, userLocation]);
+
+  const saveManualRoute = useCallback((draft = routeDraft) => {
+    if (draft.length === 0) {
+      Alert.alert('Rota vazia', 'Adicione leads antes de salvar.');
+      return;
+    }
+    const base = userLocation ?? null;
+    fieldOps.saveRoute.mutate({
+      routeDate,
+      title: 'Rota manual',
+      source: 'manual',
+      priorityMode: 'manual',
+      base,
+      stops: draft.map(client => ({
+        client,
+        distance_meters: base && client.latitude != null && client.longitude != null
+          ? distanceMeters(base.latitude, base.longitude, client.latitude, client.longitude)
+          : null,
+      })),
+    }, {
+      onSuccess: () => Alert.alert('Rota salva', 'Planejamento atualizado.'),
+      onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
+    });
+  }, [fieldOps.saveRoute, routeDate, routeDraft, userLocation]);
+
+  const addClientToRoute = useCallback((client: Client) => {
+    if (routeStopClientIds.has(client.id)) {
+      Alert.alert('Ja esta na rota', 'Este lead ja faz parte do planejamento.');
+      return;
+    }
+    const next = [...routeDisplayClients, client];
+    setRouteDraft(next);
+    setSelectedClient(null);
+    saveManualRoute(next);
+  }, [routeDisplayClients, routeStopClientIds, saveManualRoute]);
 
   // Detecta lat/lon que aparecem em mais de um cliente — é sinal claro de
   // geocodificação ruim (Nominatim caiu no centroide da rua/CEP em vez do
@@ -700,6 +888,309 @@ function MainApp() {
     );
   }, [statusConfig, upcomingByClient]);
 
+  const renderCompactClient = (client: Client, index: number, actions?: React.ReactNode) => {
+    const color = statusConfig[client.status]?.color || '#3b82f6';
+    return (
+      <View key={client.id} style={[styles.clientCard, { borderLeftColor: color }]}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardNameRow}>
+            <Text style={styles.routePosition}>{index + 1}</Text>
+            <Text style={styles.clientName} numberOfLines={1}>{client.nome}</Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: color }]}>
+            <Text style={styles.statusBadgeText}>{statusConfig[client.status]?.label || client.status}</Text>
+          </View>
+        </View>
+        <Text style={styles.clientCity}>
+          {[client.bairro, client.cidade, client.estado].filter(Boolean).join(' - ') || 'Localizacao nao informada'}
+        </Text>
+        {actions}
+      </View>
+    );
+  };
+
+  const renderRouteScreen = () => (
+    <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
+      <View style={styles.panelCard}>
+        <Text style={styles.panelTitle}>Sugestao de rota</Text>
+        <Text style={styles.panelHint}>Algoritmo por proximidade, status e potencial comercial, sem IA.</Text>
+        <View style={styles.inputRow}>
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            value={routeLeadCount}
+            onChangeText={setRouteLeadCount}
+            keyboardType="number-pad"
+            placeholder="Qtd. leads"
+            placeholderTextColor="#94a3b8"
+          />
+          <TouchableOpacity
+            style={[styles.submitButton, { flex: 1, marginTop: 0, marginLeft: 8 }]}
+            onPress={suggestRoute}
+            disabled={fieldOps.saveRoute.isPending}
+          >
+            {fieldOps.saveRoute.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Sugerir</Text>}
+          </TouchableOpacity>
+        </View>
+        <View style={styles.segmentRow}>
+          {(['proximity', 'status', 'potential'] as const).map(mode => (
+            <TouchableOpacity
+              key={mode}
+              style={[styles.segmentButton, routePriority === mode && styles.segmentButtonActive]}
+              onPress={() => setRoutePriority(mode)}
+            >
+              <Text style={[styles.segmentButtonText, routePriority === mode && styles.segmentButtonTextActive]}>
+                {mode === 'proximity' ? 'Proximidade' : mode === 'status' ? 'Status' : 'Potencial'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.segmentRow}>
+          <TouchableOpacity
+            style={[styles.segmentButton, routeStatusScope === 'current' && styles.segmentButtonActive]}
+            onPress={() => setRouteStatusScope('current')}
+          >
+            <Text style={[styles.segmentButtonText, routeStatusScope === 'current' && styles.segmentButtonTextActive]}>Filtro atual</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.segmentButton, routeStatusScope === 'all' && styles.segmentButtonActive]}
+            onPress={() => setRouteStatusScope('all')}
+          >
+            <Text style={[styles.segmentButtonText, routeStatusScope === 'all' && styles.segmentButtonTextActive]}>Todos visiveis</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.panelCard}>
+        <View style={styles.panelHeaderRow}>
+          <View>
+            <Text style={styles.panelTitle}>Rota de hoje</Text>
+            <Text style={styles.panelHint}>{routeDisplayClients.length} leads planejados</Text>
+          </View>
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => setTab('map')}>
+            <Text style={styles.secondaryButtonText}>Adicionar no mapa</Text>
+          </TouchableOpacity>
+        </View>
+        {routeDisplayClients.length === 0 ? (
+          <Text style={styles.emptyStateText}>Nenhum lead na rota. Use a sugestao ou abra um pin no mapa.</Text>
+        ) : (
+          routeDisplayClients.map((client, index) => {
+            const stop = routeStops.find(s => s.client_id === client.id);
+            return renderCompactClient(client, index, (
+              <View style={styles.routeActionsRow}>
+                {index > 0 && (
+                  <TouchableOpacity
+                    style={styles.smallActionButton}
+                    onPress={() => {
+                      const nextStops = routeStops.slice();
+                      [nextStops[index - 1], nextStops[index]] = [nextStops[index], nextStops[index - 1]];
+                      if (nextStops.length) fieldOps.updateStops.mutate(nextStops);
+                    }}
+                  >
+                    <Text style={styles.smallActionButtonText}>Subir</Text>
+                  </TouchableOpacity>
+                )}
+                {stop && (
+                  <TouchableOpacity style={styles.smallActionButton} onPress={() => fieldOps.removeStop.mutate(stop)}>
+                    <Text style={styles.smallActionButtonText}>Remover</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={styles.smallActionButton}
+                  onPress={() => {
+                    setSelectedClient(client);
+                    setTab('map');
+                  }}
+                >
+                  <Text style={styles.smallActionButtonText}>Abrir</Text>
+                </TouchableOpacity>
+              </View>
+            ));
+          })
+        )}
+      </View>
+    </ScrollView>
+  );
+
+  const renderAgendaScreen = () => {
+    const agendaItems = [
+      ...routeStops.map(stop => ({ kind: 'route' as const, at: stop.planned_at, stop, client: stop.client })),
+      ...meetings.map(meeting => ({
+        kind: 'meeting' as const,
+        at: meeting.scheduled_at,
+        meeting,
+        client: clients.find(c => c.id === meeting.client_id) ?? null,
+      })),
+    ].sort((a, b) => new Date(a.at ?? 0).getTime() - new Date(b.at ?? 0).getTime());
+
+    return (
+      <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
+        <View style={styles.panelCard}>
+          <Text style={styles.panelTitle}>Agenda do vendedor</Text>
+          <Text style={styles.panelHint}>Rota planejada, demos e follow-ups em ordem cronologica.</Text>
+        </View>
+        {agendaItems.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>Agenda vazia para hoje.</Text>
+          </View>
+        ) : agendaItems.map((item, index) => {
+          const date = item.at ? new Date(item.at) : null;
+          const time = date ? date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+          const client = item.client;
+          return (
+            <View key={`${item.kind}-${index}`} style={styles.agendaItem}>
+              <Text style={styles.agendaTime}>{time}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.agendaTitle}>{client?.nome ?? 'Lead nao encontrado'}</Text>
+                <Text style={styles.agendaMeta}>{item.kind === 'meeting' ? 'Reuniao/demo agendada' : 'Visita planejada da rota'}</Text>
+                {client && (
+                  <View style={styles.routeActionsRow}>
+                    <TouchableOpacity style={styles.smallActionButton} onPress={() => setSelectedClient(client)}>
+                      <Text style={styles.smallActionButtonText}>Abrir lead</Text>
+                    </TouchableOpacity>
+                    {client.latitude != null && client.longitude != null && (
+                      <TouchableOpacity
+                        style={styles.smallActionButton}
+                        onPress={() => openNavigation({ latitude: client.latitude as number, longitude: client.longitude as number, clientName: client.nome, travelMode: 'driving' })}
+                      >
+                        <Text style={styles.smallActionButtonText}>Rota</Text>
+                      </TouchableOpacity>
+                    )}
+                    {item.kind === 'route' && (
+                      <TouchableOpacity style={styles.smallActionButton} onPress={() => fieldOps.markStopDone.mutate(item.stop)}>
+                        <Text style={styles.smallActionButtonText}>Realizada</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
+    );
+  };
+
+  const metricProgress = (value: number, goal: number) => goal > 0 ? Math.min(100, Math.round((value / goal) * 100)) : 0;
+
+  const renderPerformanceScreen = () => (
+    <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
+      <View style={styles.panelCard}>
+        <Text style={styles.panelTitle}>Painel do vendedor</Text>
+        <Text style={styles.panelHint}>Indicadores do mes com as metas definidas pelo gestor.</Text>
+      </View>
+      {[
+        ['Clientes fechados', performance.closed, currentGoal?.closed_clients_goal ?? 0],
+        ['Visitas realizadas', performance.visits + performance.completedStops, currentGoal?.visits_goal ?? 0],
+        ['Demos marcadas', performance.demos, currentGoal?.demos_goal ?? 0],
+        ['Propostas enviadas', performance.proposals, currentGoal?.proposals_goal ?? 0],
+      ].map(([label, value, goal]) => (
+        <View key={String(label)} style={styles.metricCard}>
+          <View style={styles.panelHeaderRow}>
+            <Text style={styles.metricLabel}>{label}</Text>
+            <Text style={styles.metricValue}>{value as number}/{goal as number}</Text>
+          </View>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${metricProgress(value as number, goal as number)}%` }]} />
+          </View>
+        </View>
+      ))}
+      <View style={styles.metricCard}>
+        <View style={styles.panelHeaderRow}>
+          <Text style={styles.metricLabel}>MRR gerado</Text>
+          <Text style={styles.metricValue}>R$ 0/R$ {Number(currentGoal?.mrr_goal ?? 0).toLocaleString('pt-BR')}</Text>
+        </View>
+        <Text style={styles.panelHint}>A leitura de MRR depende do campo financeiro sincronizado do HubSpot.</Text>
+      </View>
+      <View style={styles.panelCard}>
+        <Text style={styles.panelTitle}>Ranking do time</Text>
+        {teamRanking.map((row, index) => (
+          <View key={row.id} style={styles.rankingRow}>
+            <Text style={styles.routePosition}>{index + 1}</Text>
+            <Text style={[styles.clientName, { flex: 1 }]}>{row.name}</Text>
+            <Text style={styles.metricValue}>{row.score} pts</Text>
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+
+  const renderManagerScreen = () => (
+    <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
+      <View style={styles.panelCard}>
+        <Text style={styles.panelTitle}>Area do gestor</Text>
+        <Text style={styles.panelHint}>Metas, painel master e auditoria das ultimas 24 horas.</Text>
+        {!isAdmin && <Text style={styles.warningText}>A edicao de metas esta restrita ao gestor configurado.</Text>}
+      </View>
+      <View style={styles.panelCard}>
+        <Text style={styles.panelTitle}>Configurar metas</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 10 }}>
+          {fieldOps.profiles.map(p => (
+            <TouchableOpacity
+              key={p.id}
+              style={[styles.filterChip, goalSellerId === p.id && { backgroundColor: '#dc2626' }]}
+              onPress={() => setGoalSellerId(p.id)}
+            >
+              <Text style={[styles.filterChipText, goalSellerId === p.id && styles.filterChipTextActive]}>{p.full_name || p.email}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <View style={styles.inputRow}>
+          <TextInput style={[styles.input, { flex: 1 }]} value={goalClients} onChangeText={setGoalClients} keyboardType="number-pad" placeholder="Clientes" />
+          <TextInput style={[styles.input, { flex: 1, marginLeft: 8 }]} value={goalVisits} onChangeText={setGoalVisits} keyboardType="number-pad" placeholder="Visitas" />
+        </View>
+        <View style={styles.inputRow}>
+          <TextInput style={[styles.input, { flex: 1 }]} value={goalDemos} onChangeText={setGoalDemos} keyboardType="number-pad" placeholder="Demos" />
+          <TextInput style={[styles.input, { flex: 1, marginLeft: 8 }]} value={goalMrr} onChangeText={setGoalMrr} keyboardType="decimal-pad" placeholder="MRR" />
+        </View>
+        <TouchableOpacity
+          style={[styles.submitButton, (!goalSellerId || !isAdmin) && { opacity: 0.5 }]}
+          disabled={!goalSellerId || !isAdmin || fieldOps.saveGoal.isPending}
+          onPress={() => {
+            if (!goalSellerId) return;
+            const now = new Date();
+            const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+            const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+            fieldOps.saveGoal.mutate({
+              seller_id: goalSellerId,
+              period_start: start,
+              period_end: end,
+              closed_clients_goal: Number(goalClients) || 0,
+              visits_goal: Number(goalVisits) || 0,
+              demos_goal: Number(goalDemos) || 0,
+              proposals_goal: 0,
+              mrr_goal: Number(goalMrr) || 0,
+            }, {
+              onSuccess: () => Alert.alert('Metas salvas', 'O vendedor ja consegue acompanhar o progresso.'),
+              onError: (err: any) => Alert.alert('Erro ao salvar metas', err?.message ?? 'Tente novamente'),
+            });
+          }}
+        >
+          <Text style={styles.submitButtonText}>Salvar metas</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.panelCard}>
+        <Text style={styles.panelTitle}>Painel master</Text>
+        <View style={styles.masterGrid}>
+          <Text style={styles.masterMetric}>Leads visiveis: {clients.length}</Text>
+          <Text style={styles.masterMetric}>Rotas planejadas: {fieldOps.route ? 1 : 0}</Text>
+          <Text style={styles.masterMetric}>Visitas na rota: {routeStops.filter(s => s.status === 'done').length}</Text>
+          <Text style={styles.masterMetric}>Reunioes: {meetings.length}</Text>
+        </View>
+      </View>
+      <View style={styles.panelCard}>
+        <Text style={styles.panelTitle}>Auditoria de rotas</Text>
+        {fieldOps.auditLogs.length === 0 ? (
+          <Text style={styles.emptyStateText}>Nenhuma alteracao nas ultimas 24 horas.</Text>
+        ) : fieldOps.auditLogs.map(log => (
+          <View key={log.id} style={styles.auditRow}>
+            <Text style={styles.auditAction}>{log.action}</Text>
+            <Text style={styles.panelHint}>{new Date(log.created_at).toLocaleString('pt-BR')}</Text>
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+
   if (!isAuthenticated && !loading) {
     return <LoginScreen />;
   }
@@ -785,6 +1276,27 @@ function MainApp() {
         </View>
       </View>
 
+      {/* Search bar: busca por nome, empresa, cidade ou bairro.
+          Aplica em cima do filtro de status atual (não cruza status). */}
+      <View style={styles.searchBar}>
+        <Text style={styles.searchIcon}>🔍</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Buscar por nome, empresa ou cidade"
+          placeholderTextColor="#94a3b8"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.searchClear}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Status Filter */}
       {/* Removido o chip "Todos" propositalmente: trazia todos os ~2k+ pinos
           de uma vez no mapa, travando o app. Agora sempre há exatamente um
@@ -811,6 +1323,29 @@ function MainApp() {
           ))}
         </ScrollView>
       </View>
+
+      {/* Filtro por UF — chips só com estados presentes no recorte atual. */}
+      {availableStates.length > 1 && (
+        <View style={styles.stateBar}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+            <TouchableOpacity
+              style={[styles.stateChip, !stateFilter && styles.stateChipActive]}
+              onPress={() => setStateFilter(null)}
+            >
+              <Text style={[styles.stateChipText, !stateFilter && styles.stateChipTextActive]}>Todos UF</Text>
+            </TouchableOpacity>
+            {availableStates.map(uf => (
+              <TouchableOpacity
+                key={uf}
+                style={[styles.stateChip, stateFilter === uf && styles.stateChipActive]}
+                onPress={() => setStateFilter(uf)}
+              >
+                <Text style={[styles.stateChipText, stateFilter === uf && styles.stateChipTextActive]}>{uf}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {tab === 'map' ? (
         <>
@@ -942,10 +1477,11 @@ function MainApp() {
               onScheduleMeeting={() => { setSchedulingFor(selectedClient); setSelectedClient(null); }}
               onChangeStage={() => { setChangingStageFor(selectedClient); setSelectedClient(null); }}
               isMarkingVisited={isVisiting || markAsVisited.isPending}
+              onAddToRoute={isAdmin ? () => addClientToRoute(selectedClient) : undefined}
             />
           )}
         </>
-      ) : (
+      ) : tab === 'list' ? (
         <>
           <FlatList
             data={filteredClients}
@@ -960,7 +1496,9 @@ function MainApp() {
               <View style={styles.emptyState}>
                 <Text style={{ fontSize: 40, marginBottom: 12 }}>📋</Text>
                 <Text style={styles.emptyStateText}>
-                  {`Nenhum ${statusConfig[statusFilter]?.label?.toLowerCase() ?? statusFilter} encontrado`}
+                  {searchTerm || stateFilter
+                    ? 'Nenhum cliente encontrado com esses filtros.'
+                    : `Nenhum ${statusConfig[statusFilter]?.label?.toLowerCase() ?? statusFilter} encontrado`}
                 </Text>
               </View>
             }
@@ -993,9 +1531,18 @@ function MainApp() {
               onScheduleMeeting={() => { setSchedulingFor(selectedClient); setSelectedClient(null); }}
               onChangeStage={() => { setChangingStageFor(selectedClient); setSelectedClient(null); }}
               isMarkingVisited={isVisiting || markAsVisited.isPending}
+              onAddToRoute={isAdmin ? () => addClientToRoute(selectedClient) : undefined}
             />
           )}
         </>
+      ) : tab === 'route' ? (
+        renderRouteScreen()
+      ) : tab === 'agenda' ? (
+        renderAgendaScreen()
+      ) : tab === 'performance' ? (
+        renderPerformanceScreen()
+      ) : (
+        renderManagerScreen()
       )}
 
       {/* Bottom Navigation */}
@@ -1014,6 +1561,38 @@ function MainApp() {
           <Text style={[styles.navIcon, tab === 'list' && styles.navIconActive]}>📋</Text>
           <Text style={[styles.navItemText, tab === 'list' && styles.navItemTextActive]}>Lista</Text>
         </TouchableOpacity>
+        {isAdmin && (
+          <>
+            <TouchableOpacity
+              style={[styles.navItem, tab === 'route' && styles.navItemActive]}
+              onPress={() => setTab('route')}
+            >
+              <Text style={[styles.navIcon, tab === 'route' && styles.navIconActive]}>🧭</Text>
+              <Text style={[styles.navItemText, tab === 'route' && styles.navItemTextActive]}>Rota</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.navItem, tab === 'agenda' && styles.navItemActive]}
+              onPress={() => setTab('agenda')}
+            >
+              <Text style={[styles.navIcon, tab === 'agenda' && styles.navIconActive]}>🗓️</Text>
+              <Text style={[styles.navItemText, tab === 'agenda' && styles.navItemTextActive]}>Agenda</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.navItem, tab === 'performance' && styles.navItemActive]}
+              onPress={() => setTab('performance')}
+            >
+              <Text style={[styles.navIcon, tab === 'performance' && styles.navIconActive]}>📊</Text>
+              <Text style={[styles.navItemText, tab === 'performance' && styles.navItemTextActive]}>Painel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.navItem, tab === 'manager' && styles.navItemActive]}
+              onPress={() => setTab('manager')}
+            >
+              <Text style={[styles.navIcon, tab === 'manager' && styles.navIconActive]}>👤</Text>
+              <Text style={[styles.navItemText, tab === 'manager' && styles.navItemTextActive]}>Gestor</Text>
+            </TouchableOpacity>
+          </>
+        )}
         <Text
           style={[styles.brandMark, { bottom: Math.max(insets.bottom - 4, 2) }]}
           pointerEvents="none"
@@ -1376,6 +1955,7 @@ function ClientBottomSheet({
   onScheduleMeeting,
   onChangeStage,
   isMarkingVisited,
+  onAddToRoute,
 }: {
   client: Client;
   insets: { bottom: number };
@@ -1389,6 +1969,7 @@ function ClientBottomSheet({
   onScheduleMeeting: () => void;
   onChangeStage: () => void;
   isMarkingVisited: boolean;
+  onAddToRoute?: () => void;
 }) {
   const statusColor = statusConfig[client.status]?.color || '#3b82f6';
   const statusLabel = statusConfig[client.status]?.label || client.status;
@@ -1635,6 +2216,15 @@ function ClientBottomSheet({
               </View>
             )}
 
+            {onAddToRoute && (
+              <TouchableOpacity
+                style={styles.addRouteButton}
+                onPress={onAddToRoute}
+              >
+                <Text style={styles.addRouteButtonText}>Adicionar a rota de hoje</Text>
+              </TouchableOpacity>
+            )}
+
             {/* Navigation */}
             <View style={styles.navigationSection}>
               <Text style={[styles.fieldLabel, { marginBottom: 8 }]}>Traçar Rota</Text>
@@ -1874,6 +2464,33 @@ const styles = StyleSheet.create({
   filterChipText: { fontSize: 12, fontWeight: '600', color: '#64748b' },
   filterChipTextActive: { color: '#fff' },
   filterDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+  // Search bar (busca por nome) — fica acima dos chips de status.
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+    marginHorizontal: 12,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 8,
+  },
+  searchIcon: { fontSize: 14, color: '#64748b' },
+  searchInput: { flex: 1, color: '#0f172a', fontSize: 14, padding: 0 },
+  searchClear: { color: '#64748b', fontSize: 14, paddingHorizontal: 4 },
+  // Filtro por UF — chips compactos abaixo dos chips de status.
+  stateBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  stateChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: '#f1f5f9',
+    marginRight: 6,
+  },
+  stateChipActive: { backgroundColor: '#0f172a' },
+  stateChipText: { fontSize: 12, fontWeight: '700', color: '#64748b', letterSpacing: 0.5 },
+  stateChipTextActive: { color: '#fff' },
   // Loading
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   loadingText: { marginTop: 12, color: '#64748b', fontSize: 15 },
@@ -2016,6 +2633,91 @@ const styles = StyleSheet.create({
   clientPhone: { fontSize: 13, color: '#334155' },
   emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 60 },
   emptyStateText: { fontSize: 15, color: '#94a3b8' },
+  panelCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  panelHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  panelTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 4 },
+  panelHint: { fontSize: 12, color: '#64748b', lineHeight: 17 },
+  segmentRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  segmentButton: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  segmentButtonActive: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
+  segmentButtonText: { fontSize: 12, fontWeight: '700', color: '#475569', textAlign: 'center' },
+  segmentButtonTextActive: { color: '#fff' },
+  routePosition: {
+    minWidth: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#0f172a',
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 26,
+    marginRight: 8,
+  },
+  routeActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  smallActionButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  smallActionButtonText: { fontSize: 12, fontWeight: '700', color: '#334155' },
+  secondaryButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+  },
+  secondaryButtonText: { fontSize: 12, fontWeight: '800', color: '#334155' },
+  agendaItem: {
+    flexDirection: 'row',
+    gap: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  agendaTime: { width: 52, fontSize: 14, fontWeight: '800', color: '#dc2626' },
+  agendaTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
+  agendaMeta: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  metricCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  metricLabel: { fontSize: 13, fontWeight: '800', color: '#334155' },
+  metricValue: { fontSize: 15, fontWeight: '900', color: '#0f172a' },
+  progressTrack: { height: 8, borderRadius: 4, backgroundColor: '#e2e8f0', overflow: 'hidden', marginTop: 10 },
+  progressFill: { height: 8, borderRadius: 4, backgroundColor: '#16a34a' },
+  rankingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  warningText: { fontSize: 12, color: '#92400e', backgroundColor: '#fef3c7', padding: 10, borderRadius: 8, marginTop: 10 },
+  masterGrid: { gap: 8, marginTop: 8 },
+  masterMetric: { fontSize: 13, fontWeight: '700', color: '#334155', backgroundColor: '#f8fafc', padding: 10, borderRadius: 8 },
+  auditRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  auditAction: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
   // Modal Form
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '92%' },
@@ -2078,6 +2780,14 @@ const styles = StyleSheet.create({
   navButtonDriving: { backgroundColor: '#eff6ff', borderColor: '#3b82f6' },
   navButtonWalking: { backgroundColor: '#fefce8', borderColor: '#eab308' },
   navRouteButtonText: { fontSize: 14, fontWeight: '600', color: '#0f172a' },
+  addRouteButton: {
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  addRouteButtonText: { color: '#fff', fontSize: 14, fontWeight: '800' },
   meetingsSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9', marginBottom: 16 },
   meetingsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   meetingsEmpty: { fontSize: 12, color: '#94a3b8', marginBottom: 8 },

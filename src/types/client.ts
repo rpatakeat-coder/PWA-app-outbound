@@ -71,3 +71,64 @@ export interface ClientFormData {
   longitude: number | null;
   observacoes?: string;
 }
+
+export interface FieldRoute {
+  id: string;
+  seller_id: string;
+  route_date: string;
+  title: string;
+  status: 'draft' | 'planned' | 'in_progress' | 'completed' | 'cancelled';
+  source: 'manual' | 'suggested';
+  priority_mode: string;
+  base_lat: number | null;
+  base_lon: number | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FieldRouteStop {
+  id: string;
+  route_id: string;
+  client_id: string;
+  position: number;
+  planned_at: string | null;
+  status: 'planned' | 'done' | 'skipped' | 'removed';
+  notes: string | null;
+  distance_meters: number | null;
+  estimated_drive_minutes: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FieldRouteStopWithClient extends FieldRouteStop {
+  client: Client | null;
+}
+
+export interface SellerGoal {
+  id: string;
+  seller_id: string;
+  period_start: string;
+  period_end: string;
+  closed_clients_goal: number;
+  visits_goal: number;
+  demos_goal: number;
+  proposals_goal: number;
+  mrr_goal: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FieldRouteAuditLog {
+  id: string;
+  route_id: string | null;
+  stop_id: string | null;
+  seller_id: string | null;
+  client_id: string | null;
+  action: string;
+  details: Record<string, any>;
+  created_by: string | null;
+  created_at: string;
+}

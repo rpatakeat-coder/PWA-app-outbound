@@ -1,0 +1,426 @@
+# Documento Revisado — Evoluções do Aplicativo de Campo Outbound
+
+## 1. Contexto
+
+O aplicativo de campo já existe e já possui funcionalidades importantes implementadas, como mapa comercial, visualização de leads, filtros, check-in, histórico de visitas e atualização de informações no lead.
+
+Este documento tem como objetivo organizar apenas as sugestões de evolução que ainda fazem sentido para o produto, removendo os módulos que já estão prontos ou que não fazem parte do escopo atual.
+
+## 2. Premissas do Escopo
+
+As seguintes funcionalidades já existem e não entram neste documento como novo desenvolvimento:
+
+* Mapa comercial.
+* Pins de leads no mapa.
+* Filtros principais.
+* Check-in ou marcação de visita.
+* Registro de histórico no lead.
+* Estrutura base de acompanhamento do vendedor em campo.
+
+O foco agora deve ser evoluir o aplicativo em cima do que já existe, principalmente em:
+
+* Sugestão de rotas.
+* Agenda do vendedor.
+* Montagem manual de rota.
+* Painel de performance.
+* Área do gestor.
+* Auditoria de rotas.
+* Integração com HubSpot sem obrigar o vendedor a acessar o CRM.
+
+---
+
+# 3. Sugestão de Rotas e Priorização de Leads
+
+## Objetivo
+
+Criar uma funcionalidade que ajude o vendedor a decidir quais leads visitar no dia, com base em proximidade, quantidade desejada e critérios comerciais.
+
+Nesta primeira etapa, não é necessário utilizar IA. A sugestão pode ser feita por algoritmo, considerando regras objetivas de localização e prioridade.
+
+## Funcionamento sugerido
+
+O vendedor poderá acessar uma função como:
+
+**“Sugerir rota para hoje”**
+
+A partir disso, ele poderá informar:
+
+* Quantos leads deseja visitar no dia.
+* Qual base deseja considerar.
+* Qual tipo de lead deseja priorizar.
+* Se quer priorizar proximidade, status comercial ou potencial.
+
+## Critérios possíveis para sugestão
+
+O algoritmo pode considerar:
+
+* Leads próximos entre si.
+* Leads próximos da localização atual do vendedor.
+* Leads dentro da região do vendedor.
+* Leads com status mais importante.
+* Leads ainda não visitados.
+* Leads em follow-up.
+* Leads com demo marcada.
+* Leads com proposta enviada.
+* Clientes ativos para visita de relacionamento.
+* Oportunidades com pendência comercial.
+
+## Exemplo de uso
+
+O vendedor abre o aplicativo e seleciona:
+
+* “Quero visitar 8 leads hoje.”
+* “Priorizar leads próximos.”
+* “Considerar apenas leads em prospecção ou follow-up.”
+
+O app retorna uma sugestão de rota com os leads mais próximos e organizados em uma ordem lógica de visita.
+
+## Resultado esperado
+
+O vendedor ganha uma rota prática para o dia sem precisar montar tudo manualmente ou consultar o HubSpot.
+
+---
+
+# 4. Agenda do Vendedor
+
+## Objetivo
+
+Criar uma aba onde o vendedor consiga visualizar de forma cronológica suas visitas, compromissos e atividades comerciais do dia.
+
+## Funcionalidades
+
+A agenda deve permitir que o vendedor visualize:
+
+* Visitas planejadas.
+* Horários sugeridos.
+* Leads incluídos na rota.
+* Demos agendadas.
+* Follow-ups presenciais.
+* Visitas de relacionamento.
+* Pendências comerciais.
+
+## Exemplo de visualização
+
+* 10h00 — Restaurante A.
+* 11h30 — Hamburgueria B.
+* 14h00 — Demo com Pizzaria C.
+* 16h00 — Retorno presencial no Restaurante D.
+
+## Ações dentro da agenda
+
+O vendedor deve conseguir:
+
+* Abrir o lead no mapa.
+* Iniciar rota até o local.
+* Marcar visita como realizada.
+* Registrar observação.
+* Atualizar status.
+* Reorganizar a ordem das visitas.
+* Remover uma visita do planejamento.
+* Adicionar uma nova visita ao dia.
+
+## Resultado esperado
+
+A agenda vira o guia diário do vendedor, mostrando o que ele precisa fazer sem depender do computador ou do HubSpot.
+
+---
+
+# 5. Montagem Manual de Rota
+
+## Objetivo
+
+Permitir que o vendedor monte sua própria rota diretamente no aplicativo.
+
+Mesmo com sugestão automática por algoritmo, o vendedor precisa ter liberdade para ajustar o planejamento conforme sua realidade na rua.
+
+## Funcionalidades
+
+O vendedor deve conseguir:
+
+* Clicar em pins existentes no mapa.
+* Adicionar leads à rota do dia.
+* Pesquisar novos locais.
+* Remover leads da rota.
+* Reordenar a sequência de visitas.
+* Salvar a rota.
+* Editar a rota depois de salva.
+* Montar uma rota para o dia seguinte.
+
+## Informações úteis na rota
+
+A tela de montagem pode exibir:
+
+* Quantidade de leads selecionados.
+* Distância estimada.
+* Tempo estimado de deslocamento.
+* Status de cada lead.
+* Região dos leads.
+* Observações importantes.
+* Indicação de prioridade.
+
+## Resultado esperado
+
+O vendedor consegue planejar o próprio dia com autonomia, usando o mapa como base principal da operação.
+
+---
+
+# 6. Painel do Vendedor
+
+## Objetivo
+
+Criar uma aba de performance para o vendedor acompanhar seus próprios resultados em tempo real.
+
+A ideia é que ele saiba como está em relação às metas sem precisar perguntar ao gestor ou abrir outra ferramenta.
+
+## Indicadores sugeridos
+
+### 6.1 Clientes fechados
+
+Mostrar quantos clientes o vendedor fechou no período.
+
+Pode ser exibido por:
+
+* Semana.
+* Mês.
+* Período personalizado.
+
+### 6.2 MRR gerado
+
+Mostrar o valor de receita recorrente mensal gerada pelo vendedor.
+
+Indicadores possíveis:
+
+* MRR fechado no mês.
+* Meta de MRR.
+* Percentual atingido.
+* Ticket médio.
+
+### 6.3 Atividades comerciais
+
+Mostrar volume de atividade em campo.
+
+Exemplos:
+
+* Visitas realizadas.
+* Check-ins feitos.
+* Leads abordados.
+* Demos marcadas.
+* Propostas enviadas.
+* Follow-ups concluídos.
+
+### 6.4 Ranking do time
+
+Exibir a posição do vendedor em relação aos demais vendedores.
+
+O ranking pode considerar:
+
+* Clientes fechados.
+* MRR gerado.
+* Demos marcadas.
+* Visitas realizadas.
+* Taxa de conversão.
+
+## Ponto importante
+
+O ranking não deve considerar apenas volume de visitas, porque isso pode incentivar atividade sem qualidade.
+
+O ideal é combinar atividade com resultado.
+
+Exemplo:
+
+* Visitas realizadas.
+* Demos geradas.
+* Propostas enviadas.
+* Fechamentos.
+* MRR.
+
+---
+
+# 7. Área do Gestor
+
+## Objetivo
+
+Criar uma área específica para o gestor configurar metas, acompanhar vendedores e analisar a operação de campo.
+
+Essa área é necessária principalmente porque o Painel do Vendedor depende de metas definidas previamente pelo gestor.
+
+## Funcionalidades da área do gestor
+
+O gestor deve conseguir:
+
+* Definir metas por vendedor.
+* Definir metas por período.
+* Definir meta de clientes fechados.
+* Definir meta de MRR.
+* Acompanhar ranking do time.
+* Ver performance individual.
+* Ver performance consolidada.
+* Filtrar por vendedor.
+* Filtrar por região.
+* Filtrar por período.
+
+## Configuração de metas
+
+O gestor poderá definir, por exemplo:
+
+* Meta mensal de clientes fechados.
+* Meta semanal de visitas.
+* Meta mensal de MRR.
+* Meta de demos marcadas.
+* Meta de propostas enviadas.
+
+## Exemplo
+
+Vendedor A:
+
+* Meta mensal: 10 clientes.
+* Meta de MRR: R$ 4.000.
+* Meta semanal: 30 visitas.
+* Meta mensal: 20 demos.
+
+O vendedor visualiza seu progresso no próprio painel, enquanto o gestor acompanha o time inteiro.
+
+---
+
+# 8. Painel Master e Auditoria de Campo
+
+## Objetivo
+
+Permitir que o gestor visualize a operação de campo de forma ampla, usando o mapa e os dados dos vendedores para acompanhamento diário.
+
+## Painel master
+
+O gestor deve conseguir visualizar:
+
+* Leads por região.
+* Leads por status.
+* Vendedores em campo.
+* Rotas planejadas.
+* Visitas realizadas.
+* Check-ins feitos.
+* Leads movimentados.
+* Oportunidades quentes.
+* Pendências comerciais.
+* Clientes ativos visitados.
+* Leads aguardando pagamento, se aplicável.
+
+## Espelhamento para daily
+
+O painel master deve ser útil para reuniões diárias.
+
+A ideia é que o gestor consiga abrir em uma TV ou notebook e revisar com o time:
+
+* O que foi feito ontem.
+* Quais leads mudaram de status.
+* Quais vendedores performaram melhor.
+* Quais regiões estão sendo trabalhadas.
+* Quais oportunidades precisam de atenção.
+* Qual é a rota planejada do dia.
+
+## Auditoria de rotas
+
+O gestor deve conseguir selecionar um vendedor específico e visualizar:
+
+* Rota planejada.
+* Rota realizada.
+* Leads visitados.
+* Horários de check-in.
+* Observações registradas.
+* Pins que mudaram de status.
+* Alterações feitas nas últimas 24 horas.
+
+## Resultado esperado
+
+O gestor deixa de depender de relatos soltos e passa a acompanhar a operação com dados visuais e rastreáveis.
+
+---
+
+# 9. Integração com HubSpot
+
+## Objetivo
+
+Manter o HubSpot integrado ao aplicativo, mas sem exigir que o vendedor use o HubSpot no dia a dia.
+
+O aplicativo deve ser a interface principal de operação para o time de campo.
+
+## Direção do produto
+
+O vendedor deve conseguir fazer pelo aplicativo tudo que hoje exigiria abrir o HubSpot, como:
+
+* Consultar lead.
+* Atualizar etapa.
+* Registrar visita.
+* Criar observação.
+* Ver próxima ação.
+* Consultar dados comerciais.
+* Movimentar oportunidade.
+* Ver informações de proposta ou demo.
+
+## Integrações necessárias
+
+O aplicativo deve conseguir sincronizar com o HubSpot:
+
+* Dados do lead.
+* Responsável comercial.
+* Status comercial.
+* Etapa do negócio.
+* Observações.
+* Atividades.
+* Histórico de visitas.
+* Informações de demo.
+* Informações de proposta.
+* Informações de fechamento.
+
+## Recomendação
+
+Manter o HubSpot como base integrada no primeiro momento, mas fazer com que o vendedor opere apenas pelo aplicativo.
+
+Assim, o app vira a camada prática da operação, e o HubSpot continua como estrutura de dados, automação e histórico.
+
+## Resultado esperado
+
+O vendedor não precisa abrir o HubSpot durante o dia, mas as informações continuam sincronizadas e disponíveis para gestão.
+
+---
+
+# 10. Escopo Atual Prioritário
+
+Com base na revisão, o escopo que faz sentido priorizar agora é:
+
+1. Sugestão de rotas por algoritmo.
+2. Agenda do vendedor.
+3. Montagem manual de rota.
+4. Painel do vendedor.
+5. Área do gestor para definição de metas.
+6. Painel master.
+7. Auditoria de rotas.
+8. Integração operacional com HubSpot.
+
+---
+
+# 11. Fora do Escopo Atual
+
+Os itens abaixo ficam fora deste documento porque já existem, foram removidos ou não foram priorizados nesta revisão:
+
+* Criação do mapa comercial.
+* Criação inicial dos pins.
+* Filtros já existentes.
+* Check-in já implementado.
+* Histórico básico do lead já implementado.
+* Roteirização por IA.
+* Integrações externas avançadas.
+* Enriquecimento automático com APIs externas.
+* Documentação de módulos não comentados.
+* Funcionalidades que não impactam diretamente a operação atual do vendedor.
+
+---
+
+# 12. Resumo Executivo
+
+O aplicativo já possui a base operacional de campo. A próxima evolução deve focar em transformar o app em uma ferramenta completa de rotina comercial para vendedores e gestores.
+
+A principal prioridade é permitir que o vendedor planeje o dia, receba sugestões de rota, acompanhe sua agenda, registre atividades e veja sua performance sem abrir o HubSpot.
+
+Para o gestor, o foco deve ser acompanhar rotas, definir metas, visualizar desempenho e auditar a operação de campo com clareza.
+
+A recomendação é começar com uma sugestão de rota por algoritmo, sem IA, usando critérios simples como proximidade, quantidade de leads, status comercial e região. Isso reduz custo, simplifica o desenvolvimento e já entrega valor prático para o time.
