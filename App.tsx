@@ -31,6 +31,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useClients } from './src/hooks/useClients';
 import { useMeetings } from './src/hooks/useMeetings';
 import { distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
+import { useClientNotes } from './src/hooks/useClientNotes';
 import { useForceReload } from './src/hooks/useForceReload';
 import { supabase } from './src/integrations/supabase/client';
 import { AREA_RADIUS_KM } from './src/utils/area';
@@ -1343,7 +1344,11 @@ function MainApp() {
               style={styles.filterIconButton}
               onPress={() => { Keyboard.dismiss(); setIsFiltersOpen(true); }}
             >
-              <Text style={styles.filterIconText}>🎚️</Text>
+              <View style={styles.filterFunnel}>
+                <View style={[styles.filterFunnelBar, { width: 18 }]} />
+                <View style={[styles.filterFunnelBar, { width: 11 }]} />
+                <View style={[styles.filterFunnelBar, { width: 5 }]} />
+              </View>
               {activeFilterCount > 0 && (
                 <View style={styles.filterIconBadge}>
                   <Text style={styles.filterIconBadgeText}>{activeFilterCount}</Text>
@@ -2091,6 +2096,9 @@ function ClientBottomSheet({
 }) {
   const statusColor = statusConfig[client.status]?.color || '#3b82f6';
   const statusLabel = statusConfig[client.status]?.label || client.status;
+  const { user } = useAuth();
+  const { notes, addNote, deleteNote } = useClientNotes(client.id);
+  const [newNote, setNewNote] = useState('');
 
   const approxReasons: string[] = [];
   if (!client.numero) approxReasons.push('Endereço sem número');
@@ -2329,10 +2337,89 @@ function ClientBottomSheet({
 
             {client.observacoes && (
               <View style={styles.observationsSection}>
-                <Text style={styles.detailLabel}>Observações</Text>
+                <Text style={styles.detailLabel}>Observação principal</Text>
                 <Text style={styles.detailValue}>{client.observacoes}</Text>
               </View>
             )}
+
+            {/* Historico de notas de campo — cada submit cria entrada nova
+                em client_notes, mantendo timeline em vez de sobrescrever. */}
+            <View style={styles.notesSection}>
+              <Text style={styles.fieldLabel}>
+                Histórico de notas{notes.length > 0 ? ` (${notes.length})` : ''}
+              </Text>
+              {notes.length === 0 ? (
+                <Text style={styles.meetingsEmpty}>Nenhuma nota registrada ainda.</Text>
+              ) : (
+                notes.map(note => {
+                  const when = new Date(note.created_at).toLocaleString('pt-BR', {
+                    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+                  });
+                  const isMine = !!user?.id && note.created_by === user.id;
+                  return (
+                    <View key={note.id} style={styles.noteItem}>
+                      <View style={styles.noteHeaderRow}>
+                        <Text style={styles.noteDate}>📝 {when}</Text>
+                        {isMine && (
+                          <TouchableOpacity
+                            onPress={() => {
+                              Alert.alert(
+                                'Remover nota',
+                                'Apagar essa nota? Nao pode ser desfeito.',
+                                [
+                                  { text: 'Cancelar', style: 'cancel' },
+                                  {
+                                    text: 'Apagar',
+                                    style: 'destructive',
+                                    onPress: () => deleteNote.mutate(note.id, {
+                                      onError: (err: any) => Alert.alert('Erro', err?.message ?? 'Falhou'),
+                                    }),
+                                  },
+                                ],
+                              );
+                            }}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                          >
+                            <Text style={styles.noteDelete}>✕</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      <Text style={styles.noteBody}>{note.body}</Text>
+                    </View>
+                  );
+                })
+              )}
+              <TextInput
+                style={[styles.input, { marginTop: 8, minHeight: 64 }]}
+                placeholder="Adicionar nova nota..."
+                placeholderTextColor="#94a3b8"
+                value={newNote}
+                onChangeText={setNewNote}
+                multiline
+                editable={!addNote.isPending}
+              />
+              <TouchableOpacity
+                style={[styles.submitButton, (!newNote.trim() || addNote.isPending) && { opacity: 0.5 }]}
+                disabled={!newNote.trim() || addNote.isPending}
+                onPress={() => {
+                  addNote.mutate(newNote, {
+                    onSuccess: () => setNewNote(''),
+                    onError: (err: any) => {
+                      const msg = /relation .* does not exist/i.test(err?.message ?? '')
+                        ? 'A tabela client_notes ainda nao foi criada no Supabase. Aplique a migration 20260617_client_notes.sql.'
+                        : (err?.message ?? 'Falhou ao salvar nota');
+                      Alert.alert('Erro', msg);
+                    },
+                  });
+                }}
+              >
+                {addNote.isPending ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Adicionar nota</Text>
+                )}
+              </TouchableOpacity>
+            </View>
 
             {onAddToRoute && (
               <TouchableOpacity
@@ -2609,6 +2696,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   filterIconText: { fontSize: 18 },
+  // Funil minimalista feito com 3 barrinhas afinando — sem dep nova.
+  filterFunnel: { alignItems: 'center', gap: 3 },
+  filterFunnelBar: { height: 2, borderRadius: 1, backgroundColor: '#fff' },
   filterIconBadge: {
     position: 'absolute',
     top: -4,
@@ -2949,6 +3039,20 @@ const styles = StyleSheet.create({
   detailLabel: { fontSize: 11, fontWeight: '600', color: '#94a3b8', marginBottom: 2, textTransform: 'uppercase' },
   detailValue: { fontSize: 14, color: '#0f172a' },
   observationsSection: { marginBottom: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  // Historico de notas: cada entrada vira card cronologico no bottom sheet.
+  notesSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9', marginBottom: 16 },
+  noteItem: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#3b82f6',
+  },
+  noteHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  noteDate: { fontSize: 12, fontWeight: '600', color: '#64748b' },
+  noteDelete: { fontSize: 14, color: '#94a3b8', paddingHorizontal: 4 },
+  noteBody: { fontSize: 14, color: '#0f172a', lineHeight: 20 },
   navigationSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9', marginBottom: 16 },
   navigationRow: { flexDirection: 'row', gap: 10 },
   navRouteButton: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1 },
