@@ -8,10 +8,11 @@
 // daqui.
 
 const ORS_KEY = process.env.EXPO_PUBLIC_ORS_API_KEY?.trim() || '';
-const PROVIDER: 'ors' | 'osrm' = ORS_KEY ? 'ors' : 'osrm';
 
 const OSRM_BASE = 'https://router.project-osrm.org';
 const ORS_BASE = 'https://api.openrouteservice.org';
+
+export type RoutingProvider = 'ors' | 'osrm';
 
 export type RoutePoint = { latitude: number; longitude: number };
 
@@ -19,6 +20,7 @@ export type RouteGeometry = {
   coordinates: RoutePoint[];
   distanceMeters: number;
   durationSeconds: number;
+  provider: RoutingProvider;
 };
 
 export type OptimizedTrip = {
@@ -28,10 +30,13 @@ export type OptimizedTrip = {
   coordinates: RoutePoint[];
   distanceMeters: number;
   durationSeconds: number;
+  provider: RoutingProvider;
 };
 
-export function getRoutingProvider(): 'ors' | 'osrm' {
-  return PROVIDER;
+// Provider preferencial (tentado primeiro). Quem decide o fallback eh o
+// proprio fetch* — se ORS falhar, tenta OSRM antes de propagar o erro.
+export function getPreferredProvider(): RoutingProvider {
+  return ORS_KEY ? 'ors' : 'osrm';
 }
 
 // ============================================================
@@ -40,9 +45,17 @@ export function getRoutingProvider(): 'ors' | 'osrm' {
 // ============================================================
 export async function fetchRouteGeometry(points: RoutePoint[]): Promise<RouteGeometry> {
   if (points.length < 2) {
-    return { coordinates: [], distanceMeters: 0, durationSeconds: 0 };
+    return { coordinates: [], distanceMeters: 0, durationSeconds: 0, provider: 'osrm' };
   }
-  return PROVIDER === 'ors' ? orsRoute(points) : osrmRoute(points);
+  // Tenta ORS primeiro se a key existe; cai pra OSRM publico se falhar.
+  if (ORS_KEY) {
+    try {
+      return await orsRoute(points);
+    } catch (err: any) {
+      console.warn('[ROTA] ORS Directions falhou, fallback pra OSRM:', err?.message ?? err);
+    }
+  }
+  return osrmRoute(points);
 }
 
 async function osrmRoute(points: RoutePoint[]): Promise<RouteGeometry> {
@@ -60,6 +73,7 @@ async function osrmRoute(points: RoutePoint[]): Promise<RouteGeometry> {
     coordinates: coords.map((c: [number, number]) => ({ longitude: c[0], latitude: c[1] })),
     distanceMeters: Math.round(route.distance ?? 0),
     durationSeconds: Math.round(route.duration ?? 0),
+    provider: 'osrm',
   };
 }
 
@@ -93,6 +107,7 @@ async function orsRoute(points: RoutePoint[]): Promise<RouteGeometry> {
     coordinates: coords.map((c: [number, number]) => ({ longitude: c[0], latitude: c[1] })),
     distanceMeters: Math.round(summary.distance ?? 0),
     durationSeconds: Math.round(summary.duration ?? 0),
+    provider: 'ors',
   };
 }
 
@@ -102,9 +117,19 @@ async function orsRoute(points: RoutePoint[]): Promise<RouteGeometry> {
 // ============================================================
 export async function fetchOptimizedTrip(points: RoutePoint[]): Promise<OptimizedTrip> {
   if (points.length < 2) {
-    return { inputOrderToVisit: [], coordinates: [], distanceMeters: 0, durationSeconds: 0 };
+    return { inputOrderToVisit: [], coordinates: [], distanceMeters: 0, durationSeconds: 0, provider: 'osrm' };
   }
-  return PROVIDER === 'ors' ? orsOptimization(points) : osrmTrip(points);
+  // Tenta ORS Optimization primeiro (TSP real com VROOM, sem limite de 12).
+  // Se a chave nao existe ou ORS responde erro, tenta OSRM /trip antes de
+  // propagar — o caller (App.tsx) so cai pra nearest-neighbor se ambos falharem.
+  if (ORS_KEY) {
+    try {
+      return await orsOptimization(points);
+    } catch (err: any) {
+      console.warn('[ROTA] ORS Optimization falhou, fallback pra OSRM Trip:', err?.message ?? err);
+    }
+  }
+  return osrmTrip(points);
 }
 
 async function osrmTrip(points: RoutePoint[]): Promise<OptimizedTrip> {
@@ -131,6 +156,7 @@ async function osrmTrip(points: RoutePoint[]): Promise<OptimizedTrip> {
     coordinates: coords.map((c: [number, number]) => ({ longitude: c[0], latitude: c[1] })),
     distanceMeters: Math.round(trip.distance ?? 0),
     durationSeconds: Math.round(trip.duration ?? 0),
+    provider: 'osrm',
   };
 }
 
@@ -189,12 +215,17 @@ async function orsOptimization(points: RoutePoint[]): Promise<OptimizedTrip> {
   try {
     geom = await orsRoute(orderedPoints);
   } catch {
-    // Se Directions falhar (raro), devolve linha reta entre os pontos
-    geom = {
-      coordinates: orderedPoints,
-      distanceMeters: route.distance ?? 0,
-      durationSeconds: route.duration ?? 0,
-    };
+    // Se Directions ORS falhar (raro), tenta OSRM pra desenhar.
+    try {
+      geom = await osrmRoute(orderedPoints);
+    } catch {
+      geom = {
+        coordinates: orderedPoints,
+        distanceMeters: route.distance ?? 0,
+        durationSeconds: route.duration ?? 0,
+        provider: 'ors',
+      };
+    }
   }
 
   return {
@@ -202,5 +233,6 @@ async function orsOptimization(points: RoutePoint[]): Promise<OptimizedTrip> {
     coordinates: geom.coordinates,
     distanceMeters: geom.distanceMeters || route.distance || 0,
     durationSeconds: geom.durationSeconds || route.duration || 0,
+    provider: 'ors',
   };
 }

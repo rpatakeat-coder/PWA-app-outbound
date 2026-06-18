@@ -45,7 +45,7 @@ import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { ChangeStageModal } from './src/screens/ChangeStageModal';
 import { reverseGeocode } from './src/utils/geocoding';
-import { fetchOptimizedTrip, fetchRouteGeometry, getRoutingProvider, type RoutePoint } from './src/utils/routing';
+import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingProvider } from './src/utils/routing';
 
 const queryClient = new QueryClient();
 
@@ -680,7 +680,8 @@ function MainApp() {
     let ordered: Array<{ client: Client; meters: number }> = [];
     let tripDistanceMeters: number | null = null;
     let tripDurationSeconds: number | null = null;
-    let usedOptimization: 'osrm-trip' | 'nearest-neighbor' = 'nearest-neighbor';
+    let usedOptimization: 'real-tsp' | 'nearest-neighbor' = 'nearest-neighbor';
+    let optimizationProvider: RoutingProvider | null = null;
 
     if (topCandidates.length > 0) {
       setIsOptimizing(true);
@@ -712,7 +713,8 @@ function MainApp() {
         }
         tripDistanceMeters = trip.distanceMeters;
         tripDurationSeconds = trip.durationSeconds;
-        usedOptimization = 'osrm-trip';
+        usedOptimization = 'real-tsp';
+        optimizationProvider = trip.provider;
       } catch (err: any) {
         console.warn('[ROTA] OSRM Trip falhou, caindo pra nearest-neighbor:', err?.message ?? err);
         // Fallback: nearest-neighbor por haversine
@@ -764,10 +766,12 @@ function MainApp() {
     }, {
       onSuccess: () => {
         const got = ordered.length;
-        const providerLabel = getRoutingProvider() === 'ors' ? 'OpenRouteService' : 'OSRM publico';
+        const providerLabel = optimizationProvider === 'ors'
+          ? 'OpenRouteService'
+          : optimizationProvider === 'osrm' ? 'OSRM (fallback)' : '';
         const tripInfo = tripDistanceMeters != null && tripDurationSeconds != null
           ? `\n\n🛣️ ${(tripDistanceMeters / 1000).toFixed(1)} km • ~${Math.round(tripDurationSeconds / 60)} min de carro`
-            + (usedOptimization === 'osrm-trip' ? `\n(Ordem otimizada via ${providerLabel})` : '')
+            + (usedOptimization === 'real-tsp' && providerLabel ? `\n(Otimizado via ${providerLabel})` : '')
           : '';
         const lines = [
           got === desired
