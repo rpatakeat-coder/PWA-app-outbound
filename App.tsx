@@ -45,7 +45,7 @@ import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { ChangeStageModal } from './src/screens/ChangeStageModal';
 import { reverseGeocode } from './src/utils/geocoding';
-import { fetchRouteGeometry, type RoutePoint } from './src/utils/routing';
+import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint } from './src/utils/routing';
 
 const queryClient = new QueryClient();
 
@@ -574,7 +574,9 @@ function MainApp() {
     return base.sort((a, b) => b.score - a.score);
   }, [performance, profile]);
 
-  const suggestRoute = useCallback(() => {
+  const [isOptimizing, setIsOptimizing] = useState(false);
+
+  const suggestRoute = useCallback(async () => {
     // Validacao explicita da qtd pedida: invalido -> avisa, nao cai pra 8.
     const requestedRaw = Number(routeLeadCount);
     if (!Number.isFinite(requestedRaw) || requestedRaw < 1) {
@@ -670,25 +672,69 @@ function MainApp() {
 
     const topCandidates = scored.slice(0, desired);
 
-    // Nearest-neighbor: a partir da base, escolhe o mais perto entre os
-    // selecionados; do escolhido, o mais perto dos restantes; repete. Evita
-    // zigue-zague que apareceria se ordenasse so por distancia da base.
-    const ordered: Array<{ client: Client; meters: number }> = [];
-    const remaining = topCandidates.map(item => ({ ...item }));
-    let cursorLat = base.latitude;
-    let cursorLon = base.longitude;
-    while (remaining.length > 0) {
-      let bestIdx = 0;
-      let bestDist = Infinity;
-      for (let i = 0; i < remaining.length; i++) {
-        const cand = remaining[i];
-        const d = distanceMeters(cursorLat, cursorLon, cand.client.latitude as number, cand.client.longitude as number);
-        if (d < bestDist) { bestDist = d; bestIdx = i; }
+    // Ordenacao: tenta otimizacao TSP por rede viaria real (OSRM /trip).
+    // Isso resolve o "menor distancia E menor tempo" considerando ruas,
+    // sentido unico, rios sem ponte, etc. — coisas que haversine ignora.
+    // Se a API falhar, cai pra nearest-neighbor por linha reta (fallback
+    // pratico, pior que Trip mas melhor que ordenar so por score).
+    let ordered: Array<{ client: Client; meters: number }> = [];
+    let tripDistanceMeters: number | null = null;
+    let tripDurationSeconds: number | null = null;
+    let usedOptimization: 'osrm-trip' | 'nearest-neighbor' = 'nearest-neighbor';
+
+    if (topCandidates.length > 0) {
+      setIsOptimizing(true);
+      try {
+        const tripPoints: RoutePoint[] = [
+          { latitude: base.latitude, longitude: base.longitude },
+          ...topCandidates.map(item => ({
+            latitude: item.client.latitude as number,
+            longitude: item.client.longitude as number,
+          })),
+        ];
+        const trip = await fetchOptimizedTrip(tripPoints);
+        // inputOrderToVisit[0] = sempre 0 (base/source fixo). A partir do
+        // index 1 vem a ordem otima dos candidatos pelos seus indices no
+        // array de entrada (1..N → topCandidates[index-1]).
+        const visitOrder = trip.inputOrderToVisit.slice(1);
+        let prevLat = base.latitude;
+        let prevLon = base.longitude;
+        for (const inputIdx of visitOrder) {
+          const cand = topCandidates[inputIdx - 1];
+          if (!cand) continue;
+          const segMeters = distanceMeters(
+            prevLat, prevLon,
+            cand.client.latitude as number, cand.client.longitude as number,
+          );
+          ordered.push({ client: cand.client, meters: segMeters });
+          prevLat = cand.client.latitude as number;
+          prevLon = cand.client.longitude as number;
+        }
+        tripDistanceMeters = trip.distanceMeters;
+        tripDurationSeconds = trip.durationSeconds;
+        usedOptimization = 'osrm-trip';
+      } catch (err: any) {
+        console.warn('[ROTA] OSRM Trip falhou, caindo pra nearest-neighbor:', err?.message ?? err);
+        // Fallback: nearest-neighbor por haversine
+        const remaining = topCandidates.map(item => ({ ...item }));
+        let cursorLat = base.latitude;
+        let cursorLon = base.longitude;
+        while (remaining.length > 0) {
+          let bestIdx = 0;
+          let bestDist = Infinity;
+          for (let i = 0; i < remaining.length; i++) {
+            const cand = remaining[i];
+            const d = distanceMeters(cursorLat, cursorLon, cand.client.latitude as number, cand.client.longitude as number);
+            if (d < bestDist) { bestDist = d; bestIdx = i; }
+          }
+          const picked = remaining.splice(bestIdx, 1)[0];
+          ordered.push({ client: picked.client, meters: bestDist });
+          cursorLat = picked.client.latitude as number;
+          cursorLon = picked.client.longitude as number;
+        }
+      } finally {
+        setIsOptimizing(false);
       }
-      const picked = remaining.splice(bestIdx, 1)[0];
-      ordered.push({ client: picked.client, meters: bestDist });
-      cursorLat = picked.client.latitude as number;
-      cursorLon = picked.client.longitude as number;
     }
 
     if (ordered.length === 0) {
@@ -718,10 +764,15 @@ function MainApp() {
     }, {
       onSuccess: () => {
         const got = ordered.length;
+        const tripInfo = tripDistanceMeters != null && tripDurationSeconds != null
+          ? `\n\n🛣️ ${(tripDistanceMeters / 1000).toFixed(1)} km • ~${Math.round(tripDurationSeconds / 60)} min de carro`
+            + (usedOptimization === 'osrm-trip' ? '\n(Ordem otimizada por rede viaria real)' : '')
+          : '';
         const lines = [
           got === desired
             ? `Rota sugerida com ${got} leads.`
             : `Encontramos apenas ${got} leads compativeis (pediu ${desired}).`,
+          tripInfo,
           '',
           'Descartados:',
           `• ${withoutCoord} sem coordenadas`,
@@ -729,6 +780,9 @@ function MainApp() {
           `• ${alreadyVisited} ja visitados`,
           `• ${inactive} nao visitaveis (clientes/churn)`,
           capped ? '\nObs.: limite maximo por rota = 30.' : null,
+          usedOptimization === 'nearest-neighbor' && got > 1
+            ? '\n⚠️ Otimizacao real indisponivel; ordem por linha reta (fallback).'
+            : null,
         ].filter(Boolean);
         Alert.alert('Rota sugerida', lines.join('\n'));
       },
@@ -1214,9 +1268,9 @@ function MainApp() {
           <TouchableOpacity
             style={[styles.submitButton, { flex: 1, marginTop: 0, marginLeft: 8 }]}
             onPress={suggestRoute}
-            disabled={fieldOps.saveRoute.isPending}
+            disabled={fieldOps.saveRoute.isPending || isOptimizing}
           >
-            {fieldOps.saveRoute.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Sugerir</Text>}
+            {(fieldOps.saveRoute.isPending || isOptimizing) ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Sugerir</Text>}
           </TouchableOpacity>
         </View>
         <Text style={[styles.fieldLabel, { marginTop: 8, marginBottom: 4 }]}>Criterio</Text>
