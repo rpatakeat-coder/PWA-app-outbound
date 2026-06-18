@@ -484,7 +484,15 @@ function MainApp() {
   }, [performance, profile]);
 
   const suggestRoute = useCallback(() => {
-    const desired = Math.max(1, Math.min(30, Number(routeLeadCount) || 8));
+    // Validacao explicita da qtd pedida: invalido -> avisa, nao cai pra 8.
+    const requestedRaw = Number(routeLeadCount);
+    if (!Number.isFinite(requestedRaw) || requestedRaw < 1) {
+      Alert.alert('Quantidade invalida', 'Informe um numero de leads entre 1 e 30.');
+      return;
+    }
+    const desired = Math.max(1, Math.min(30, Math.floor(requestedRaw)));
+    const capped = Math.floor(requestedRaw) > 30;
+
     const base = userLocation ?? (
       filteredWithCoords[0]?.latitude != null && filteredWithCoords[0]?.longitude != null
         ? { latitude: filteredWithCoords[0].latitude, longitude: filteredWithCoords[0].longitude }
@@ -495,45 +503,122 @@ function MainApp() {
       return;
     }
 
-    const source = (routeStatusScope === 'current' ? filteredClients : clients)
-      .filter(c => c.latitude != null && c.longitude != null)
-      .filter(c => !routeStopClientIds.has(c.id));
+    // Pool base: scope 'current' usa todos os clientes que casam com search +
+    // UF (sem restringir a UM status). 'all' ignora ate search/UF. Isso evita
+    // a armadilha antiga onde "Filtro atual" era exatamente UM chip de status
+    // e sobravam poucos candidatos.
+    const poolBase = routeStatusScope === 'current' ? clientsForCount : clients;
+    const totalLoaded = poolBase.length;
 
+    // Contadores de descarte pra o aviso final dizer ao vendedor exatamente
+    // por que sobraram menos leads do que pedido.
+    let withoutCoord = 0;
+    let alreadyInRoute = 0;
+    let alreadyVisited = 0;
+    let inactive = 0;
+
+    // Status que NAO entram em rota outbound por default. Vendedor visita
+    // quem ainda nao foi visitado. Cliente/churn nao sao alvo.
+    const NON_VISITABLE = new Set<string>(['lead_visitado', 'cliente', 'churn']);
+
+    const eligible: Client[] = [];
+    for (const c of poolBase) {
+      if (c.latitude == null || c.longitude == null) { withoutCoord++; continue; }
+      if (routeStopClientIds.has(c.id)) { alreadyInRoute++; continue; }
+      if (c.status === 'lead_visitado') { alreadyVisited++; continue; }
+      if (NON_VISITABLE.has(c.status)) { inactive++; continue; }
+      eligible.push(c);
+    }
+
+    // Pesos por slug REAL do banco. lead_nao_visitado > lead_visitado > resto.
+    // Valor menor = melhor prioridade (mesma convencao da distancia).
     const statusWeight = (status: string) => {
-      const normalized = status.toLowerCase();
-      if (normalized.includes('demo')) return 0;
-      if (normalized.includes('follow')) return 1;
-      if (normalized.includes('proposta')) return 2;
-      if (normalized.includes('lead')) return 3;
-      if (normalized.includes('ativo')) return 6;
+      if (status === 'lead_nao_visitado') return 0;
+      if (status === 'lead_visitado') return 3;
+      if (status === 'cliente') return 6;
+      if (status === 'churn') return 9;
       return 4;
     };
 
-    const scored = source
+    // Score inicial: ordena candidatos por criterio escolhido.
+    const scored = eligible
       .map(client => {
         const meters = distanceMeters(base.latitude, base.longitude, client.latitude as number, client.longitude as number);
         const score =
           routePriority === 'proximity' ? meters :
-          routePriority === 'status' ? statusWeight(client.status) * 100000 + meters :
-          (client.id_hubspot ? 0 : 50000) + statusWeight(client.status) * 50000 + meters;
+          routePriority === 'status' ? statusWeight(client.status) * 100_000 + meters :
+          (client.id_hubspot ? 0 : 50_000) + statusWeight(client.status) * 50_000 + meters;
         return { client, meters, score };
       })
-      .sort((a, b) => a.score - b.score)
-      .slice(0, desired);
+      .sort((a, b) => a.score - b.score);
 
-    setRouteDraft(scored.map(item => item.client));
+    const topCandidates = scored.slice(0, desired);
+
+    // Nearest-neighbor: a partir da base, escolhe o mais perto entre os
+    // selecionados; do escolhido, o mais perto dos restantes; repete. Evita
+    // zigue-zague que apareceria se ordenasse so por distancia da base.
+    const ordered: Array<{ client: Client; meters: number }> = [];
+    const remaining = topCandidates.map(item => ({ ...item }));
+    let cursorLat = base.latitude;
+    let cursorLon = base.longitude;
+    while (remaining.length > 0) {
+      let bestIdx = 0;
+      let bestDist = Infinity;
+      for (let i = 0; i < remaining.length; i++) {
+        const cand = remaining[i];
+        const d = distanceMeters(cursorLat, cursorLon, cand.client.latitude as number, cand.client.longitude as number);
+        if (d < bestDist) { bestDist = d; bestIdx = i; }
+      }
+      const picked = remaining.splice(bestIdx, 1)[0];
+      ordered.push({ client: picked.client, meters: bestDist });
+      cursorLat = picked.client.latitude as number;
+      cursorLon = picked.client.longitude as number;
+    }
+
+    if (ordered.length === 0) {
+      Alert.alert(
+        'Nenhum lead disponivel',
+        [
+          `Total carregado no escopo: ${totalLoaded}`,
+          withoutCoord > 0 ? `• ${withoutCoord} sem coordenadas` : null,
+          alreadyInRoute > 0 ? `• ${alreadyInRoute} ja estavam na rota` : null,
+          alreadyVisited > 0 ? `• ${alreadyVisited} ja visitados` : null,
+          inactive > 0 ? `• ${inactive} clientes/churn (nao visitaveis)` : null,
+          '',
+          'Tente trocar pra "Todos visiveis" ou ajustar os filtros.',
+        ].filter(Boolean).join('\n'),
+      );
+      return;
+    }
+
+    setRouteDraft(ordered.map(item => item.client));
     fieldOps.saveRoute.mutate({
       routeDate,
       title: 'Rota sugerida',
       source: 'suggested',
       priorityMode: routePriority,
       base,
-      stops: scored.map(item => ({ client: item.client, distance_meters: item.meters })),
+      stops: ordered.map(item => ({ client: item.client, distance_meters: item.meters })),
     }, {
-      onSuccess: () => Alert.alert('Rota sugerida', `${scored.length} leads adicionados a agenda de hoje.`),
+      onSuccess: () => {
+        const got = ordered.length;
+        const lines = [
+          got === desired
+            ? `Rota sugerida com ${got} leads.`
+            : `Encontramos apenas ${got} leads compativeis (pediu ${desired}).`,
+          '',
+          'Descartados:',
+          `• ${withoutCoord} sem coordenadas`,
+          `• ${alreadyInRoute} ja estavam na rota`,
+          `• ${alreadyVisited} ja visitados`,
+          `• ${inactive} nao visitaveis (clientes/churn)`,
+          capped ? '\nObs.: limite maximo por rota = 30.' : null,
+        ].filter(Boolean);
+        Alert.alert('Rota sugerida', lines.join('\n'));
+      },
       onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
     });
-  }, [clients, fieldOps.saveRoute, filteredClients, filteredWithCoords, routeDate, routeLeadCount, routePriority, routeStatusScope, routeStopClientIds, userLocation]);
+  }, [clients, clientsForCount, fieldOps.saveRoute, filteredWithCoords, routeDate, routeLeadCount, routePriority, routeStatusScope, routeStopClientIds, userLocation]);
 
   const saveManualRoute = useCallback((draft = routeDraft) => {
     if (draft.length === 0) {
@@ -1018,15 +1103,43 @@ function MainApp() {
             <Text style={styles.panelTitle}>Rota de hoje</Text>
             <Text style={styles.panelHint}>{routeDisplayClients.length} leads planejados</Text>
           </View>
-          <TouchableOpacity style={styles.secondaryButton} onPress={() => setTab('map')}>
-            <Text style={styles.secondaryButtonText}>Adicionar no mapa</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            <TouchableOpacity style={styles.secondaryButton} onPress={() => setTab('map')}>
+              <Text style={styles.secondaryButtonText}>Adicionar no mapa</Text>
+            </TouchableOpacity>
+            {routeDisplayClients.length > 0 && (
+              <TouchableOpacity
+                style={[styles.secondaryButton, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}
+                onPress={() => {
+                  Alert.alert(
+                    'Limpar rota',
+                    `Remover todos os ${routeDisplayClients.length} leads da rota de hoje?`,
+                    [
+                      { text: 'Cancelar', style: 'cancel' },
+                      {
+                        text: 'Limpar',
+                        style: 'destructive',
+                        onPress: () => {
+                          // Limpa tanto o draft local quanto as stops persistidas.
+                          setRouteDraft([]);
+                          routeStops.forEach(stop => fieldOps.removeStop.mutate(stop));
+                        },
+                      },
+                    ],
+                  );
+                }}
+              >
+                <Text style={[styles.secondaryButtonText, { color: '#dc2626' }]}>Limpar</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
         {routeDisplayClients.length === 0 ? (
           <Text style={styles.emptyStateText}>Nenhum lead na rota. Use a sugestao ou abra um pin no mapa.</Text>
         ) : (
           routeDisplayClients.map((client, index) => {
             const stop = routeStops.find(s => s.client_id === client.id);
+            const isLast = index === routeDisplayClients.length - 1;
             return renderCompactClient(client, index, (
               <View style={styles.routeActionsRow}>
                 {index > 0 && (
@@ -1038,7 +1151,19 @@ function MainApp() {
                       if (nextStops.length) fieldOps.updateStops.mutate(nextStops);
                     }}
                   >
-                    <Text style={styles.smallActionButtonText}>Subir</Text>
+                    <Text style={styles.smallActionButtonText}>↑ Subir</Text>
+                  </TouchableOpacity>
+                )}
+                {!isLast && (
+                  <TouchableOpacity
+                    style={styles.smallActionButton}
+                    onPress={() => {
+                      const nextStops = routeStops.slice();
+                      [nextStops[index], nextStops[index + 1]] = [nextStops[index + 1], nextStops[index]];
+                      if (nextStops.length) fieldOps.updateStops.mutate(nextStops);
+                    }}
+                  >
+                    <Text style={styles.smallActionButtonText}>↓ Descer</Text>
                   </TouchableOpacity>
                 )}
                 {stop && (
