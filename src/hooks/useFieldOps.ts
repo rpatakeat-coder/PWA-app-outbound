@@ -230,6 +230,26 @@ export function useFieldOps(routeDate = todayKey(), enabled = true) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }),
   });
 
+  // Alterna status entre 'done' e 'planned' — usado pelo checkbox da lista
+  // de stops, pra permitir desfazer um marcado por engano.
+  const toggleStopDone = useMutation({
+    mutationFn: async (stop: FieldRouteStopWithClient) => {
+      const nextStatus = stop.status === 'done' ? 'planned' : 'done';
+      const { error } = await supabase
+        .from('field_route_stops')
+        .update({ status: nextStatus })
+        .eq('id', stop.id);
+      if (error) throw error;
+      await logAudit({
+        route_id: stop.route_id,
+        stop_id: stop.id,
+        client_id: stop.client_id,
+        action: nextStatus === 'done' ? 'stop_done' : 'stop_unplanned',
+      });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }),
+  });
+
   const saveGoal = useMutation({
     mutationFn: async (goal: Omit<SellerGoal, 'id' | 'created_at' | 'updated_at' | 'created_by'>) => {
       const { data, error } = await supabase
@@ -254,6 +274,7 @@ export function useFieldOps(routeDate = todayKey(), enabled = true) {
     updateStops,
     removeStop,
     markStopDone,
+    toggleStopDone,
     saveGoal,
   };
 }

@@ -37,7 +37,7 @@ import { supabase } from './src/integrations/supabase/client';
 import { AREA_RADIUS_KM } from './src/utils/area';
 import { getShowOnlyMyAreaPref, setShowOnlyMyAreaPref } from './src/utils/userPrefs';
 import type { Client, ClientMeeting, ClientStatus } from './src/types/client';
-import { openNavigation } from './src/utils/navigation';
+import { openMultiStopNavigation, openNavigation } from './src/utils/navigation';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { CEPStep } from './src/screens/CEPStep';
@@ -233,10 +233,12 @@ const markerStyles = StyleSheet.create({
 function RouteMarker({
   client,
   position,
+  done = false,
   onPress,
 }: {
   client: Client;
   position: number;
+  done?: boolean;
   onPress: (client: Client) => void;
 }) {
   return (
@@ -245,12 +247,20 @@ function RouteMarker({
       onPress={() => onPress(client)}
       zIndex={1000}
       anchor={{ x: 0.5, y: 1 }}
+      tracksViewChanges={false}
+      // cluster={false}: react-native-map-clustering respeita esse flag
+      // (lib/helpers.js linha 10). Sem isso, route markers proximos viravam
+      // cluster azul com contagem e sumiam visualmente — o bug que o usuario
+      // viu ao adicionar pin via mapa.
+      // @ts-ignore — prop nao tipada na assinatura padrao do react-native-maps,
+      // mas reconhecida pelo wrapper de clustering.
+      cluster={false}
     >
       <View style={markerStyles.container}>
-        <View style={markerStyles.routePin}>
-          <Text style={markerStyles.routePinNumber}>{position}</Text>
+        <View style={[markerStyles.routePin, done && { backgroundColor: '#16a34a' }]}>
+          <Text style={markerStyles.routePinNumber}>{done ? '✓' : position}</Text>
         </View>
-        <View style={markerStyles.routeArrow} />
+        <View style={[markerStyles.routeArrow, done && { borderTopColor: '#16a34a' }]} />
       </View>
     </Marker>
   );
@@ -508,7 +518,9 @@ function MainApp() {
   );
 
   // Pontos da rota pra OSRM: comeca em userLocation (arredondado pra cache
-  // estavel) seguindo a ordem das stops persistidas.
+  // estavel) seguindo a ordem das stops PENDENTES (status !== 'done').
+  // Stops ja visitados saem do polyline pra refletir o checklist em tempo
+  // real — a linha mostra so o que falta percorrer.
   const routeWaypoints = useMemo<RoutePoint[]>(() => {
     const points: RoutePoint[] = [];
     if (userLocation) {
@@ -517,11 +529,19 @@ function MainApp() {
         longitude: Math.round(userLocation.longitude * 10_000) / 10_000,
       });
     }
-    for (const c of routeStops.length > 0
-      ? routeStops.map(s => s.client).filter(Boolean) as Client[]
-      : routeDraft) {
-      if (c.latitude != null && c.longitude != null) {
-        points.push({ latitude: c.latitude, longitude: c.longitude });
+    if (routeStops.length > 0) {
+      for (const s of routeStops) {
+        if (s.status === 'done') continue;
+        const c = s.client;
+        if (c?.latitude != null && c?.longitude != null) {
+          points.push({ latitude: c.latitude, longitude: c.longitude });
+        }
+      }
+    } else {
+      for (const c of routeDraft) {
+        if (c.latitude != null && c.longitude != null) {
+          points.push({ latitude: c.latitude, longitude: c.longitude });
+        }
       }
     }
     return points;
@@ -851,6 +871,33 @@ function MainApp() {
   }, []);
 
   const navigationCurrentStop = isNavigating ? routeDisplayClients[currentStopIndex] : null;
+
+  // Geometria do trecho de navegacao = GPS -> stop atual em diante.
+  // Re-fetch quando muda o stop alvo ou o GPS muda significativamente
+  // (chave usa userLocation arredondado pra evitar refetch a cada metro).
+  const navWaypoints = useMemo<RoutePoint[]>(() => {
+    if (!isNavigating || !userLocation) return [];
+    const remaining = routeDisplayClients
+      .slice(currentStopIndex)
+      .filter(c => c.latitude != null && c.longitude != null)
+      .map(c => ({ latitude: c.latitude as number, longitude: c.longitude as number }));
+    if (remaining.length === 0) return [];
+    return [
+      {
+        latitude: Math.round(userLocation.latitude * 10_000) / 10_000,
+        longitude: Math.round(userLocation.longitude * 10_000) / 10_000,
+      },
+      ...remaining,
+    ];
+  }, [isNavigating, userLocation, routeDisplayClients, currentStopIndex]);
+
+  const navRouteGeometry = useQuery({
+    queryKey: ['nav-route-geometry', navWaypoints],
+    queryFn: () => fetchRouteGeometry(navWaypoints),
+    enabled: isNavigating && navWaypoints.length >= 2,
+    staleTime: 60 * 1000, // 1 min — durante navegacao GPS muda mais
+    retry: 1,
+  });
 
   // Mete dist em metros do user ate o destino atual (linha reta — so pra
   // mostrar "X.X km" no card, nao eh usado em ordenacao).
@@ -1496,48 +1543,91 @@ function MainApp() {
           routeDisplayClients.map((client, index) => {
             const stop = routeStops.find(s => s.client_id === client.id);
             const isLast = index === routeDisplayClients.length - 1;
-            return renderCompactClient(client, index, (
-              <View style={styles.routeActionsRow}>
-                {index > 0 && (
+            const isDone = stop?.status === 'done';
+            const color = statusConfig[client.status]?.color || '#3b82f6';
+            const title = client.empresa?.trim() || client.nome;
+            const subtitle = [client.bairro, client.cidade, client.estado].filter(Boolean).join(' - ') || 'Localizacao nao informada';
+            return (
+              <View
+                key={client.id}
+                style={[
+                  styles.routeStopCard,
+                  { borderLeftColor: isDone ? '#16a34a' : color },
+                  isDone && { backgroundColor: '#f0fdf4' },
+                ]}
+              >
+                <View style={styles.routeStopHeader}>
+                  {/* Checkbox: toggle done/planned. Persiste via toggleStopDone */}
+                  <TouchableOpacity
+                    style={[styles.checkbox, isDone && styles.checkboxChecked]}
+                    onPress={() => {
+                      if (stop) fieldOps.toggleStopDone.mutate(stop);
+                    }}
+                    disabled={!stop}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    {isDone && <Text style={styles.checkboxCheckmark}>✓</Text>}
+                  </TouchableOpacity>
+                  <Text style={styles.routePosition}>{index + 1}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[styles.clientName, isDone && { textDecorationLine: 'line-through', color: '#64748b' }]}
+                      numberOfLines={1}
+                    >
+                      {title}
+                    </Text>
+                    <Text style={[styles.routeStopSubtitle, isDone && { textDecorationLine: 'line-through' }]} numberOfLines={1}>
+                      {subtitle}
+                    </Text>
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: isDone ? '#16a34a' : color }]}>
+                    <Text style={styles.statusBadgeText}>
+                      {isDone ? 'Visitado' : (statusConfig[client.status]?.label || client.status)}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.routeActionsRow}>
+                  {index > 0 && (
+                    <TouchableOpacity
+                      style={styles.smallActionButton}
+                      onPress={() => {
+                        const nextStops = routeStops.slice();
+                        [nextStops[index - 1], nextStops[index]] = [nextStops[index], nextStops[index - 1]];
+                        if (nextStops.length) fieldOps.updateStops.mutate(nextStops);
+                      }}
+                    >
+                      <Text style={styles.smallActionButtonText}>↑ Subir</Text>
+                    </TouchableOpacity>
+                  )}
+                  {!isLast && (
+                    <TouchableOpacity
+                      style={styles.smallActionButton}
+                      onPress={() => {
+                        const nextStops = routeStops.slice();
+                        [nextStops[index], nextStops[index + 1]] = [nextStops[index + 1], nextStops[index]];
+                        if (nextStops.length) fieldOps.updateStops.mutate(nextStops);
+                      }}
+                    >
+                      <Text style={styles.smallActionButtonText}>↓ Descer</Text>
+                    </TouchableOpacity>
+                  )}
+                  {stop && (
+                    <TouchableOpacity style={styles.smallActionButton} onPress={() => fieldOps.removeStop.mutate(stop)}>
+                      <Text style={styles.smallActionButtonText}>Remover</Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
                     style={styles.smallActionButton}
                     onPress={() => {
-                      const nextStops = routeStops.slice();
-                      [nextStops[index - 1], nextStops[index]] = [nextStops[index], nextStops[index - 1]];
-                      if (nextStops.length) fieldOps.updateStops.mutate(nextStops);
+                      setSelectedClient(client);
+                      setTab('map');
                     }}
                   >
-                    <Text style={styles.smallActionButtonText}>↑ Subir</Text>
+                    <Text style={styles.smallActionButtonText}>Abrir</Text>
                   </TouchableOpacity>
-                )}
-                {!isLast && (
-                  <TouchableOpacity
-                    style={styles.smallActionButton}
-                    onPress={() => {
-                      const nextStops = routeStops.slice();
-                      [nextStops[index], nextStops[index + 1]] = [nextStops[index + 1], nextStops[index]];
-                      if (nextStops.length) fieldOps.updateStops.mutate(nextStops);
-                    }}
-                  >
-                    <Text style={styles.smallActionButtonText}>↓ Descer</Text>
-                  </TouchableOpacity>
-                )}
-                {stop && (
-                  <TouchableOpacity style={styles.smallActionButton} onPress={() => fieldOps.removeStop.mutate(stop)}>
-                    <Text style={styles.smallActionButtonText}>Remover</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  style={styles.smallActionButton}
-                  onPress={() => {
-                    setSelectedClient(client);
-                    setTab('map');
-                  }}
-                >
-                  <Text style={styles.smallActionButtonText}>Abrir</Text>
-                </TouchableOpacity>
+                </View>
               </View>
-            ));
+            );
           })
         )}
       </View>
@@ -1831,18 +1921,14 @@ function MainApp() {
               onPress={() => {}}
             />
           ))}
-          {(remainingWithCoords.length >= 1 && userLocation) && (
+          {/* Polyline real seguindo as ruas. Carrega via OSRM/ORS; enquanto
+              calcula ou se ambos falharem, NAO desenha reta — fica sem linha
+              ao inves de mostrar algo errado em modo navegacao. */}
+          {navRouteGeometry.data && navRouteGeometry.data.coordinates.length > 1 && (
             <Polyline
-              coordinates={[
-                userLocation,
-                ...remainingWithCoords.map(c => ({
-                  latitude: c.latitude as number,
-                  longitude: c.longitude as number,
-                })),
-              ]}
+              coordinates={navRouteGeometry.data.coordinates}
               strokeColor="#dc2626"
-              strokeWidth={4}
-              lineDashPattern={[8, 4]}
+              strokeWidth={5}
             />
           )}
         </MapView>
@@ -1859,14 +1945,16 @@ function MainApp() {
         <View style={[styles.navBottom, { paddingBottom: insets.bottom + 12 }]}>
           <TouchableOpacity
             style={[styles.navActionButton, { backgroundColor: '#3b82f6' }]}
-            onPress={() => openNavigation({
-              latitude: navigationCurrentStop.latitude as number,
-              longitude: navigationCurrentStop.longitude as number,
-              clientName: navTitle,
+            onPress={() => openMultiStopNavigation({
+              origin: userLocation,
+              stops: remainingWithCoords.map(c => ({
+                latitude: c.latitude as number,
+                longitude: c.longitude as number,
+              })),
               travelMode: 'driving',
             })}
           >
-            <Text style={styles.navActionButtonText}>🚗 Abrir no Maps</Text>
+            <Text style={styles.navActionButtonText}>🚗 Abrir rota inteira no Maps</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.navActionButton, { backgroundColor: '#16a34a' }]}
@@ -2040,14 +2128,18 @@ function MainApp() {
                 normais e ficam visiveis independente do filtro de status. */}
             {routeDisplayClients
               .filter(c => c.latitude != null && c.longitude != null)
-              .map((client, index) => (
+              .map((client, index) => {
+                const stop = routeStops.find(s => s.client_id === client.id);
+                return (
                 <RouteMarker
                   key={`route-${client.id}`}
                   client={client}
                   position={index + 1}
+                  done={stop?.status === 'done'}
                   onPress={handleMarkerPress}
                 />
-              ))}
+              );
+              })}
             {/* Polyline da rota: usa geometria real (OSRM, segue ruas) quando
                 disponivel; cai pra linha reta tracejada enquanto carrega ou
                 se a API falhou. */}
@@ -3398,6 +3490,28 @@ const styles = StyleSheet.create({
     borderColor: '#bbf7d0',
   },
   providerBadgeText: { fontSize: 10, fontWeight: '700', color: '#166534' },
+  // Card de stop da rota (com checkbox + linha de acoes)
+  routeStopCard: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 8,
+    borderLeftWidth: 4,
+  },
+  routeStopHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
+  routeStopSubtitle: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  checkboxCheckmark: { color: '#fff', fontSize: 14, fontWeight: '800' },
   // ===== Modo Navegacao =====
   navHeader: {
     flexDirection: 'row',
