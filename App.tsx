@@ -71,6 +71,11 @@ const normalizeUf = (raw: string | null | undefined): string | null => {
   return BR_UF_BY_NAME[cleaned] ?? cleaned;
 };
 
+const normalizeStage = (raw: string | null | undefined): string | null => {
+  const cleaned = raw?.trim();
+  return cleaned ? cleaned : null;
+};
+
 const initialFormState = {
   nome: '',
   empresa: '',
@@ -94,7 +99,9 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
   { value: 'ex_cliente', label: 'Ex-cliente', color: '#ef4444' },
 ];
 
-type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'performance' | 'manager';
+type AppTab = 'map' | 'list' | 'route' | 'agenda';
+
+const getClientPrimaryName = (client: Client) => client.empresa?.trim() || client.nome;
 
 function CustomMarker({ color, meetingCount }: { color: string; meetingCount: number }) {
   return (
@@ -280,8 +287,11 @@ function MainApp() {
   const [statusFilter, setStatusFilter] = useState<ClientStatus>('lead' as ClientStatus);
   const [searchQuery, setSearchQuery] = useState('');
   const [stateFilter, setStateFilter] = useState<string | null>(null);
+  const [stageFilter, setStageFilter] = useState<string | null>(null);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isPickingUf, setIsPickingUf] = useState(false);
+  const [isPickingStage, setIsPickingStage] = useState(false);
+  const [expandedStages, setExpandedStages] = useState<Set<string>>(() => new Set());
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -299,11 +309,6 @@ function MainApp() {
     () => new Set(['lead_nao_visitado']),
   );
   const [routeManualSearch, setRouteManualSearch] = useState('');
-  const [goalSellerId, setGoalSellerId] = useState<string | null>(null);
-  const [goalVisits, setGoalVisits] = useState('30');
-  const [goalClients, setGoalClients] = useState('10');
-  const [goalDemos, setGoalDemos] = useState('20');
-  const [goalMrr, setGoalMrr] = useState('4000');
   const mapRef = useRef<RNMapView | null>(null);
   const submittingRef = useRef(false);
 
@@ -332,7 +337,7 @@ function MainApp() {
   const { meetings, upcomingByClient, meetingsByClient } = useMeetings();
   useForceReload(isAuthenticated);
   const isAdmin = profile?.email === 'arthurgothe.takeat@gmail.com';
-  const fieldOps = useFieldOps(routeDate, isAdmin);
+  const fieldOps = useFieldOps(routeDate, isAuthenticated);
 
   // Carrega o toggle da preferência local na inicialização.
   useEffect(() => {
@@ -393,12 +398,6 @@ function MainApp() {
     }
     return STATUS_OPTIONS;
   }, [dynamicStatuses]);
-
-  useEffect(() => {
-    if (!isAdmin && tab !== 'map' && tab !== 'list') {
-      setTab('map');
-    }
-  }, [isAdmin, tab]);
 
   // Garante que o status selecionado no form pertença aos status atuais.
   // Se mudou (ex.: removeu o slug 'lead' antigo), reaponta pro primeiro disponível.
@@ -470,6 +469,15 @@ function MainApp() {
     return Array.from(set).sort();
   }, [clients]);
 
+  const availableStages = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of clients) {
+      const stage = normalizeStage(c.etapa);
+      if (stage) set.add(stage);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [clients]);
+
   // Se o UF selecionado some (mudou setor, filtro, etc.), volta pra "todos".
   useEffect(() => {
     if (stateFilter && !availableStates.includes(stateFilter)) {
@@ -477,19 +485,26 @@ function MainApp() {
     }
   }, [availableStates, stateFilter]);
 
+  useEffect(() => {
+    if (stageFilter && !availableStages.includes(stageFilter)) {
+      setStageFilter(null);
+    }
+  }, [availableStages, stageFilter]);
+
   // Aplica search + UF (mas NAO status) — usado pra recalcular contadores dos
   // chips de status em tempo real conforme o usuario digita no search.
   const clientsForCount = useMemo(
     () => clients.filter(c => {
       if (stateFilter && normalizeUf(c.estado) !== stateFilter) return false;
+      if (stageFilter && normalizeStage(c.etapa) !== stageFilter) return false;
       if (searchTerm) {
-        const haystack = `${c.nome ?? ''} ${c.empresa ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''}`
+        const haystack = `${c.nome ?? ''} ${c.empresa ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''} ${c.etapa ?? ''}`
           .normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase();
         if (!haystack.includes(searchTerm)) return false;
       }
       return true;
     }),
-    [clients, stateFilter, searchTerm],
+    [clients, stateFilter, stageFilter, searchTerm],
   );
 
   const filteredClients = useMemo(
@@ -497,7 +512,66 @@ function MainApp() {
     [clientsForCount, statusFilter],
   );
 
-  const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0);
+  const listStageSections = useMemo(() => {
+    const groups = new Map<string, { title: string; clients: Client[] }>();
+    for (const client of filteredClients) {
+      const stage = normalizeStage(client.etapa);
+      const key = stage ?? '__sem_etapa__';
+      const title = stage ?? 'Sem etapa';
+      const existing = groups.get(key);
+      if (existing) {
+        existing.clients.push(client);
+      } else {
+        groups.set(key, { title, clients: [client] });
+      }
+    }
+    return Array.from(groups.entries())
+      .map(([key, value]) => ({ key, ...value }))
+      .sort((a, b) => {
+        if (a.key === '__sem_etapa__') return 1;
+        if (b.key === '__sem_etapa__') return -1;
+        return a.title.localeCompare(b.title, 'pt-BR');
+      });
+  }, [filteredClients]);
+
+  const shouldGroupListByStage =
+    listStageSections.length > 0
+    && (statusFilter === 'lead_nao_visitado' || statusFilter === 'lead_visitado');
+
+  useEffect(() => {
+    if (!stageFilter) return;
+    setExpandedStages(prev => {
+      const next = new Set(prev);
+      next.add(stageFilter);
+      return next;
+    });
+  }, [stageFilter]);
+
+  const listRows = useMemo(() => {
+    const rows: Array<
+      | { type: 'stage'; key: string; stageKey: string; title: string; count: number; expanded: boolean }
+      | { type: 'client'; key: string; item: Client }
+    > = [];
+    for (const section of listStageSections) {
+      const expanded = expandedStages.has(section.key);
+      rows.push({
+        type: 'stage',
+        key: `stage-${section.key}`,
+        stageKey: section.key,
+        title: section.title,
+        count: section.clients.length,
+        expanded,
+      });
+      if (expanded) {
+        for (const client of section.clients) {
+          rows.push({ type: 'client', key: client.id, item: client });
+        }
+      }
+    }
+    return rows;
+  }, [expandedStages, listStageSections]);
+
+  const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0);
 
   const filteredWithCoords = useMemo(
     () => filteredClients.filter(c => c.latitude !== null && c.longitude !== null),
@@ -565,40 +639,6 @@ function MainApp() {
   );
 
   const routeDisplayClients = routeClients.length > 0 ? routeClients : routeDraft;
-
-  const currentGoal = fieldOps.goals.find(g => g.seller_id === profile?.id) ?? fieldOps.goals[0] ?? null;
-
-  const monthStart = useMemo(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  }, []);
-
-  const performance = useMemo(() => {
-    const visits = clients.filter(c => {
-      const raw = (c as any).visited_at ?? c.updated_at;
-      if (!raw) return false;
-      return new Date(raw).getTime() >= monthStart.getTime() && c.status === 'lead_visitado';
-    }).length;
-    const closed = clients.filter(c => c.status === 'ativo').length;
-    const demos = meetings.filter(m => new Date(m.scheduled_at).getTime() >= monthStart.getTime()).length;
-    const proposals = clients.filter(c => /proposta/i.test(c.status)).length;
-    const completedStops = routeStops.filter(s => s.status === 'done').length;
-    return { visits, closed, demos, proposals, completedStops };
-  }, [clients, meetings, monthStart, routeStops]);
-
-  const teamRanking = useMemo(() => {
-    const base = [
-      {
-        id: profile?.id ?? 'me',
-        name: profile?.full_name || profile?.email || 'Voce',
-        visits: performance.visits,
-        demos: performance.demos,
-        closed: performance.closed,
-        score: performance.visits + performance.demos * 3 + performance.closed * 8,
-      },
-    ];
-    return base.sort((a, b) => b.score - a.score);
-  }, [performance, profile]);
 
   const [isOptimizing, setIsOptimizing] = useState(false);
   // Provider usado na ultima sugestao bem-sucedida. Persistido em memoria
@@ -1190,7 +1230,11 @@ function MainApp() {
     Keyboard.dismiss();
   };
 
-  const handleMarkerPress = useCallback((c: Client) => setSelectedClient(c), []);
+  const openClientDetails = useCallback((client: Client) => {
+    setSelectedClient(client);
+  }, []);
+
+  const handleMarkerPress = useCallback((c: Client) => openClientDetails(c), [openClientDetails]);
 
   // Modo de criação manual via mapa: pin fixo no centro da tela
   const [creationMode, setCreationMode] = useState(false);
@@ -1331,6 +1375,18 @@ function MainApp() {
       Alert.alert('Restaurante obrigatorio', 'Informe o nome do restaurante (empresa).');
       return;
     }
+    // Defesa em profundidade: trigger no banco tambem bloqueia, mas avisar
+    // aqui evita ter que mostrar erro feio do Postgres se o usuario tentou.
+    if (
+      (editingClient.status === 'cliente' || editingClient.status === 'churn')
+      && (form.status === 'lead_nao_visitado' || form.status === 'lead_visitado')
+    ) {
+      Alert.alert(
+        'Transicao nao permitida',
+        'Cliente atual ou ex-cliente nao pode voltar pra status de lead.',
+      );
+      return;
+    }
 
     const lat = form.latitude ? parseFloat(form.latitude) : null;
     const lng = form.longitude ? parseFloat(form.longitude) : null;
@@ -1463,12 +1519,12 @@ function MainApp() {
     const meetingCount = upcomingByClient[item.id] ?? 0;
     // Restaurante (empresa) eh o titulo principal. Fallback pro nome do
     // contato em leads antigos que ainda nao tem empresa preenchida.
-    const primary = item.empresa?.trim() || item.nome;
+    const primary = getClientPrimaryName(item);
     const secondary = item.empresa?.trim() ? item.nome : null;
     return (
       <TouchableOpacity
         style={[styles.clientCard, { borderLeftColor: color }]}
-        onPress={() => setSelectedClient(item)}
+        onPress={() => openClientDetails(item)}
       >
         <View style={styles.cardHeader}>
           <View style={styles.cardNameRow}>
@@ -1487,13 +1543,42 @@ function MainApp() {
           </View>
         </View>
         {secondary && <Text style={styles.clientContact} numberOfLines={1}>Contato: {secondary}</Text>}
+        {item.etapa && <Text style={styles.clientStage} numberOfLines={1}>Etapa: {item.etapa}</Text>}
         <Text style={styles.clientCity}>
           {item.cidade ?? 'Cidade não informada'}{item.estado ? ` • ${item.estado}` : ''}
         </Text>
         {item.telefone && <Text style={styles.clientPhone}>{item.telefone}</Text>}
       </TouchableOpacity>
     );
-  }, [statusConfig, upcomingByClient]);
+  }, [openClientDetails, statusConfig, upcomingByClient]);
+
+  const renderListRow = useCallback(({ item }: { item: typeof listRows[number] }) => {
+    if (item.type === 'client') {
+      return renderClientItem({ item: item.item });
+    }
+    return (
+      <TouchableOpacity
+        style={styles.stageAccordionHeader}
+        onPress={() => {
+          setExpandedStages(prev => {
+            const next = new Set(prev);
+            if (next.has(item.stageKey)) {
+              next.delete(item.stageKey);
+            } else {
+              next.add(item.stageKey);
+            }
+            return next;
+          });
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={styles.stageAccordionTitle}>{item.title}</Text>
+          <Text style={styles.stageAccordionMeta}>{item.count} leads</Text>
+        </View>
+        <Text style={styles.stageAccordionChevron}>{item.expanded ? '▲' : '▼'}</Text>
+      </TouchableOpacity>
+    );
+  }, [renderClientItem]);
 
   const renderCompactClient = (client: Client, index: number, actions?: React.ReactNode) => {
     const color = statusConfig[client.status]?.color || '#3b82f6';
@@ -1502,7 +1587,7 @@ function MainApp() {
         <View style={styles.cardHeader}>
           <View style={styles.cardNameRow}>
             <Text style={styles.routePosition}>{index + 1}</Text>
-            <Text style={styles.clientName} numberOfLines={1}>{client.nome}</Text>
+            <Text style={styles.clientName} numberOfLines={1}>{getClientPrimaryName(client)}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: color }]}>
             <Text style={styles.statusBadgeText}>{statusConfig[client.status]?.label || client.status}</Text>
@@ -1615,7 +1700,7 @@ function MainApp() {
             return <Text style={[styles.emptyStateText, { marginTop: 10 }]}>Nenhum lead encontrado.</Text>;
           }
           return matches.map(c => {
-            const title = c.empresa?.trim() || c.nome;
+            const title = getClientPrimaryName(c);
             const subtitle = [c.cidade, c.estado].filter(Boolean).join(' • ');
             const noCoords = c.latitude == null || c.longitude == null;
             return (
@@ -1721,7 +1806,7 @@ function MainApp() {
             const isLast = index === routeDisplayClients.length - 1;
             const isDone = stop?.status === 'done';
             const color = statusConfig[client.status]?.color || '#3b82f6';
-            const title = client.empresa?.trim() || client.nome;
+            const title = getClientPrimaryName(client);
             const subtitle = [client.bairro, client.cidade, client.estado].filter(Boolean).join(' - ') || 'Localizacao nao informada';
             return (
               <View
@@ -1794,10 +1879,7 @@ function MainApp() {
                   )}
                   <TouchableOpacity
                     style={styles.smallActionButton}
-                    onPress={() => {
-                      setSelectedClient(client);
-                      setTab('map');
-                    }}
+                    onPress={() => openClientDetails(client)}
                   >
                     <Text style={styles.smallActionButtonText}>Abrir</Text>
                   </TouchableOpacity>
@@ -1835,29 +1917,27 @@ function MainApp() {
           const date = item.at ? new Date(item.at) : null;
           const time = date ? date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
           const client = item.client;
+          const title = client ? getClientPrimaryName(client) : 'Lead nao encontrado';
+          const contact = client?.empresa?.trim() && client.nome && client.nome !== client.empresa ? client.nome : null;
           return (
             <View key={`${item.kind}-${index}`} style={styles.agendaItem}>
               <Text style={styles.agendaTime}>{time}</Text>
               <View style={{ flex: 1 }}>
-                <Text style={styles.agendaTitle}>{client?.nome ?? 'Lead nao encontrado'}</Text>
+                <Text style={styles.agendaTitle}>{title}</Text>
+                {contact ? <Text style={styles.agendaMeta}>Contato: {contact}</Text> : null}
                 <Text style={styles.agendaMeta}>{item.kind === 'meeting' ? 'Reuniao/demo agendada' : 'Visita planejada da rota'}</Text>
                 {client && (
                   <View style={styles.routeActionsRow}>
                     <TouchableOpacity
                       style={styles.smallActionButton}
-                      onPress={() => {
-                        // ClientBottomSheet so renderiza nas abas map/list.
-                        // Troca pra map antes de setar o cliente.
-                        setTab('map');
-                        setSelectedClient(client);
-                      }}
+                      onPress={() => openClientDetails(client)}
                     >
                       <Text style={styles.smallActionButtonText}>Abrir lead</Text>
                     </TouchableOpacity>
                     {client.latitude != null && client.longitude != null && (
                       <TouchableOpacity
                         style={styles.smallActionButton}
-                        onPress={() => openNavigation({ latitude: client.latitude as number, longitude: client.longitude as number, clientName: client.nome, travelMode: 'driving' })}
+                        onPress={() => openNavigation({ latitude: client.latitude as number, longitude: client.longitude as number, clientName: title, travelMode: 'driving' })}
                       >
                         <Text style={styles.smallActionButtonText}>Rota</Text>
                       </TouchableOpacity>
@@ -1876,127 +1956,6 @@ function MainApp() {
       </ScrollView>
     );
   };
-
-  const metricProgress = (value: number, goal: number) => goal > 0 ? Math.min(100, Math.round((value / goal) * 100)) : 0;
-
-  const renderPerformanceScreen = () => (
-    <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
-      <View style={styles.panelCard}>
-        <Text style={styles.panelTitle}>Painel do vendedor</Text>
-        <Text style={styles.panelHint}>Indicadores do mes com as metas definidas pelo gestor.</Text>
-      </View>
-      {[
-        ['Clientes fechados', performance.closed, currentGoal?.closed_clients_goal ?? 0],
-        ['Visitas realizadas', performance.visits + performance.completedStops, currentGoal?.visits_goal ?? 0],
-        ['Demos marcadas', performance.demos, currentGoal?.demos_goal ?? 0],
-        ['Propostas enviadas', performance.proposals, currentGoal?.proposals_goal ?? 0],
-      ].map(([label, value, goal]) => (
-        <View key={String(label)} style={styles.metricCard}>
-          <View style={styles.panelHeaderRow}>
-            <Text style={styles.metricLabel}>{label}</Text>
-            <Text style={styles.metricValue}>{value as number}/{goal as number}</Text>
-          </View>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${metricProgress(value as number, goal as number)}%` }]} />
-          </View>
-        </View>
-      ))}
-      <View style={styles.metricCard}>
-        <View style={styles.panelHeaderRow}>
-          <Text style={styles.metricLabel}>MRR gerado</Text>
-          <Text style={styles.metricValue}>R$ 0/R$ {Number(currentGoal?.mrr_goal ?? 0).toLocaleString('pt-BR')}</Text>
-        </View>
-        <Text style={styles.panelHint}>A leitura de MRR depende do campo financeiro sincronizado do HubSpot.</Text>
-      </View>
-      <View style={styles.panelCard}>
-        <Text style={styles.panelTitle}>Ranking do time</Text>
-        {teamRanking.map((row, index) => (
-          <View key={row.id} style={styles.rankingRow}>
-            <Text style={styles.routePosition}>{index + 1}</Text>
-            <Text style={[styles.clientName, { flex: 1 }]}>{row.name}</Text>
-            <Text style={styles.metricValue}>{row.score} pts</Text>
-          </View>
-        ))}
-      </View>
-    </ScrollView>
-  );
-
-  const renderManagerScreen = () => (
-    <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
-      <View style={styles.panelCard}>
-        <Text style={styles.panelTitle}>Area do gestor</Text>
-        <Text style={styles.panelHint}>Metas, painel master e auditoria das ultimas 24 horas.</Text>
-        {!isAdmin && <Text style={styles.warningText}>A edicao de metas esta restrita ao gestor configurado.</Text>}
-      </View>
-      <View style={styles.panelCard}>
-        <Text style={styles.panelTitle}>Configurar metas</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginBottom: 10 }}>
-          {fieldOps.profiles.map(p => (
-            <TouchableOpacity
-              key={p.id}
-              style={[styles.filterChip, goalSellerId === p.id && { backgroundColor: '#dc2626' }]}
-              onPress={() => setGoalSellerId(p.id)}
-            >
-              <Text style={[styles.filterChipText, goalSellerId === p.id && styles.filterChipTextActive]}>{p.full_name || p.email}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-        <View style={styles.inputRow}>
-          <TextInput style={[styles.input, { flex: 1 }]} value={goalClients} onChangeText={setGoalClients} keyboardType="number-pad" placeholder="Clientes" />
-          <TextInput style={[styles.input, { flex: 1, marginLeft: 8 }]} value={goalVisits} onChangeText={setGoalVisits} keyboardType="number-pad" placeholder="Visitas" />
-        </View>
-        <View style={styles.inputRow}>
-          <TextInput style={[styles.input, { flex: 1 }]} value={goalDemos} onChangeText={setGoalDemos} keyboardType="number-pad" placeholder="Demos" />
-          <TextInput style={[styles.input, { flex: 1, marginLeft: 8 }]} value={goalMrr} onChangeText={setGoalMrr} keyboardType="decimal-pad" placeholder="MRR" />
-        </View>
-        <TouchableOpacity
-          style={[styles.submitButton, (!goalSellerId || !isAdmin) && { opacity: 0.5 }]}
-          disabled={!goalSellerId || !isAdmin || fieldOps.saveGoal.isPending}
-          onPress={() => {
-            if (!goalSellerId) return;
-            const now = new Date();
-            const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-            const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
-            fieldOps.saveGoal.mutate({
-              seller_id: goalSellerId,
-              period_start: start,
-              period_end: end,
-              closed_clients_goal: Number(goalClients) || 0,
-              visits_goal: Number(goalVisits) || 0,
-              demos_goal: Number(goalDemos) || 0,
-              proposals_goal: 0,
-              mrr_goal: Number(goalMrr) || 0,
-            }, {
-              onSuccess: () => Alert.alert('Metas salvas', 'O vendedor ja consegue acompanhar o progresso.'),
-              onError: (err: any) => Alert.alert('Erro ao salvar metas', err?.message ?? 'Tente novamente'),
-            });
-          }}
-        >
-          <Text style={styles.submitButtonText}>Salvar metas</Text>
-        </TouchableOpacity>
-      </View>
-      <View style={styles.panelCard}>
-        <Text style={styles.panelTitle}>Painel master</Text>
-        <View style={styles.masterGrid}>
-          <Text style={styles.masterMetric}>Leads visiveis: {clients.length}</Text>
-          <Text style={styles.masterMetric}>Rotas planejadas: {fieldOps.route ? 1 : 0}</Text>
-          <Text style={styles.masterMetric}>Visitas na rota: {routeStops.filter(s => s.status === 'done').length}</Text>
-          <Text style={styles.masterMetric}>Reunioes: {meetings.length}</Text>
-        </View>
-      </View>
-      <View style={styles.panelCard}>
-        <Text style={styles.panelTitle}>Auditoria de rotas</Text>
-        {fieldOps.auditLogs.length === 0 ? (
-          <Text style={styles.emptyStateText}>Nenhuma alteracao nas ultimas 24 horas.</Text>
-        ) : fieldOps.auditLogs.map(log => (
-          <View key={log.id} style={styles.auditRow}>
-            <Text style={styles.auditAction}>{log.action}</Text>
-            <Text style={styles.panelHint}>{new Date(log.created_at).toLocaleString('pt-BR')}</Text>
-          </View>
-        ))}
-      </View>
-    </ScrollView>
-  );
 
   if (!isAuthenticated && !loading) {
     return <LoginScreen />;
@@ -2061,7 +2020,7 @@ function MainApp() {
   if (isNavigating && navigationCurrentStop) {
     const remaining = routeDisplayClients.slice(currentStopIndex);
     const remainingWithCoords = remaining.filter(c => c.latitude != null && c.longitude != null);
-    const navTitle = navigationCurrentStop.empresa?.trim() || navigationCurrentStop.nome;
+    const navTitle = getClientPrimaryName(navigationCurrentStop);
     const navSubtitle = [navigationCurrentStop.cidade, navigationCurrentStop.estado].filter(Boolean).join(' • ');
     const distKm = navigationDistanceMeters != null ? (navigationDistanceMeters / 1000).toFixed(1) : null;
     const isLast = currentStopIndex === routeDisplayClients.length - 1;
@@ -2262,6 +2221,27 @@ function MainApp() {
     );
   }
 
+  const selectedClientSheet = selectedClient ? (
+    <ClientBottomSheet
+      client={selectedClient}
+      insets={insets}
+      statusConfig={statusConfig}
+      meetings={meetingsByClient[selectedClient.id] ?? []}
+      coordCollision={hasCoordCollision(selectedClient)}
+      onClose={() => setSelectedClient(null)}
+      onDelete={() => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
+      onEdit={() => openEditClient(selectedClient)}
+      onMarkVisited={() => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
+      onScheduleMeeting={() => { setSchedulingFor(selectedClient); setSelectedClient(null); }}
+      onChangeStage={
+        isAdmin && ['lead_nao_visitado', 'lead_visitado'].includes(selectedClient.status)
+          ? () => { setChangingStageFor(selectedClient); setSelectedClient(null); }
+          : undefined
+      }
+      isMarkingVisited={isVisiting || markAsVisited.isPending}
+      onAddToRoute={isAdmin ? () => addClientToRoute(selectedClient) : undefined}
+    />
+  ) : null;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -2319,7 +2299,7 @@ function MainApp() {
           de uma vez no mapa, travando o app. */}
       <View style={styles.filterBar}>
         <View style={styles.filterBarRow}>
-          {availableStates.length > 0 && (
+          {(availableStates.length > 0 || availableStages.length > 0) && (
             <TouchableOpacity
               style={styles.filterIconButton}
               onPress={() => { Keyboard.dismiss(); setIsFiltersOpen(true); }}
@@ -2515,31 +2495,14 @@ function MainApp() {
             </View>
           )}
 
-          {selectedClient && (
-            <ClientBottomSheet
-              client={selectedClient}
-              insets={insets}
-              statusConfig={statusConfig}
-              meetings={meetingsByClient[selectedClient.id] ?? []}
-              coordCollision={hasCoordCollision(selectedClient)}
-              onClose={() => setSelectedClient(null)}
-              onDelete={() => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
-              onEdit={() => openEditClient(selectedClient)}
-              onMarkVisited={() => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
-              onScheduleMeeting={() => { setSchedulingFor(selectedClient); setSelectedClient(null); }}
-              onChangeStage={() => { setChangingStageFor(selectedClient); setSelectedClient(null); }}
-              isMarkingVisited={isVisiting || markAsVisited.isPending}
-              onAddToRoute={isAdmin ? () => addClientToRoute(selectedClient) : undefined}
-            />
-          )}
         </>
       ) : tab === 'list' ? (
         <>
           <FlatList
-            data={filteredClients}
-            keyExtractor={item => item.id}
+            data={shouldGroupListByStage ? listRows : filteredClients}
+            keyExtractor={(item: any) => item.key ?? item.id}
             contentContainerStyle={[styles.listContent, { paddingBottom: 80 + insets.bottom }]}
-            renderItem={renderClientItem}
+            renderItem={shouldGroupListByStage ? (renderListRow as any) : (renderClientItem as any)}
             initialNumToRender={12}
             maxToRenderPerBatch={10}
             windowSize={7}
@@ -2550,7 +2513,7 @@ function MainApp() {
               <View style={styles.emptyState}>
                 <Text style={{ fontSize: 40, marginBottom: 12 }}>📋</Text>
                 <Text style={styles.emptyStateText}>
-                  {searchTerm || stateFilter
+                  {searchTerm || stateFilter || stageFilter
                     ? 'Nenhum cliente encontrado com esses filtros.'
                     : `Nenhum ${statusConfig[statusFilter]?.label?.toLowerCase() ?? statusFilter} encontrado`}
                 </Text>
@@ -2571,33 +2534,14 @@ function MainApp() {
             <Text style={styles.fabText}>+</Text>
           </TouchableOpacity>
 
-          {selectedClient && (
-            <ClientBottomSheet
-              client={selectedClient}
-              insets={insets}
-              statusConfig={statusConfig}
-              meetings={meetingsByClient[selectedClient.id] ?? []}
-              coordCollision={hasCoordCollision(selectedClient)}
-              onClose={() => setSelectedClient(null)}
-              onDelete={() => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
-              onEdit={() => openEditClient(selectedClient)}
-              onMarkVisited={() => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
-              onScheduleMeeting={() => { setSchedulingFor(selectedClient); setSelectedClient(null); }}
-              onChangeStage={() => { setChangingStageFor(selectedClient); setSelectedClient(null); }}
-              isMarkingVisited={isVisiting || markAsVisited.isPending}
-              onAddToRoute={isAdmin ? () => addClientToRoute(selectedClient) : undefined}
-            />
-          )}
         </>
       ) : tab === 'route' ? (
         renderRouteScreen()
-      ) : tab === 'agenda' ? (
-        renderAgendaScreen()
-      ) : tab === 'performance' ? (
-        renderPerformanceScreen()
       ) : (
-        renderManagerScreen()
+        renderAgendaScreen()
       )}
+
+      {selectedClientSheet}
 
       {/* Bottom Navigation */}
       <View style={[styles.bottomNav, { paddingBottom: insets.bottom }]}>
@@ -2615,38 +2559,20 @@ function MainApp() {
           <Text style={[styles.navIcon, tab === 'list' && styles.navIconActive]}>📋</Text>
           <Text style={[styles.navItemText, tab === 'list' && styles.navItemTextActive]}>Lista</Text>
         </TouchableOpacity>
-        {isAdmin && (
-          <>
-            <TouchableOpacity
-              style={[styles.navItem, tab === 'route' && styles.navItemActive]}
-              onPress={() => setTab('route')}
-            >
-              <Text style={[styles.navIcon, tab === 'route' && styles.navIconActive]}>🧭</Text>
-              <Text style={[styles.navItemText, tab === 'route' && styles.navItemTextActive]}>Rota</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.navItem, tab === 'agenda' && styles.navItemActive]}
-              onPress={() => setTab('agenda')}
-            >
-              <Text style={[styles.navIcon, tab === 'agenda' && styles.navIconActive]}>🗓️</Text>
-              <Text style={[styles.navItemText, tab === 'agenda' && styles.navItemTextActive]}>Agenda</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.navItem, tab === 'performance' && styles.navItemActive]}
-              onPress={() => setTab('performance')}
-            >
-              <Text style={[styles.navIcon, tab === 'performance' && styles.navIconActive]}>📊</Text>
-              <Text style={[styles.navItemText, tab === 'performance' && styles.navItemTextActive]}>Painel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.navItem, tab === 'manager' && styles.navItemActive]}
-              onPress={() => setTab('manager')}
-            >
-              <Text style={[styles.navIcon, tab === 'manager' && styles.navIconActive]}>👤</Text>
-              <Text style={[styles.navItemText, tab === 'manager' && styles.navItemTextActive]}>Gestor</Text>
-            </TouchableOpacity>
-          </>
-        )}
+        <TouchableOpacity
+          style={[styles.navItem, tab === 'route' && styles.navItemActive]}
+          onPress={() => setTab('route')}
+        >
+          <Text style={[styles.navIcon, tab === 'route' && styles.navIconActive]}>🧭</Text>
+          <Text style={[styles.navItemText, tab === 'route' && styles.navItemTextActive]}>Rota</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.navItem, tab === 'agenda' && styles.navItemActive]}
+          onPress={() => setTab('agenda')}
+        >
+          <Text style={[styles.navIcon, tab === 'agenda' && styles.navIconActive]}>🗓️</Text>
+          <Text style={[styles.navItemText, tab === 'agenda' && styles.navItemTextActive]}>Agenda</Text>
+        </TouchableOpacity>
         <Text
           style={[styles.brandMark, { bottom: Math.max(insets.bottom - 4, 2) }]}
           pointerEvents="none"
@@ -2797,8 +2723,7 @@ function MainApp() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Modal de filtros: hoje so UF, mas eh o ponto natural pra crescer
-          (raio personalizado, presenca de telefone, faixa de criacao, etc.). */}
+      {/* Modal de filtros: UF + etapa comercial. */}
       <Modal
         visible={isFiltersOpen}
         animationType="slide"
@@ -2807,7 +2732,7 @@ function MainApp() {
       >
         <Pressable
           style={styles.modalOverlay}
-          onPress={() => { setIsPickingUf(false); setIsFiltersOpen(false); }}
+          onPress={() => { setIsPickingUf(false); setIsPickingStage(false); setIsFiltersOpen(false); }}
         >
           <Pressable style={styles.filtersSheet} onPress={() => {}}>
             {isPickingUf ? (
@@ -2839,6 +2764,35 @@ function MainApp() {
                   ))}
                 </ScrollView>
               </>
+            ) : isPickingStage ? (
+              <>
+                <View style={styles.modalHeader}>
+                  <TouchableOpacity onPress={() => setIsPickingStage(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.backButton}>‹ Voltar</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.modalTitle}>Selecione a etapa</Text>
+                  <View style={{ width: 60 }} />
+                </View>
+                <ScrollView style={styles.ufPickerList} contentContainerStyle={{ paddingBottom: 12 }}>
+                  <TouchableOpacity
+                    style={styles.ufPickerRow}
+                    onPress={() => { setStageFilter(null); setIsPickingStage(false); }}
+                  >
+                    <Text style={[styles.ufPickerRowText, !stageFilter && styles.ufPickerRowTextActive]}>Todas as etapas</Text>
+                    {!stageFilter && <Text style={styles.ufPickerCheck}>✓</Text>}
+                  </TouchableOpacity>
+                  {availableStages.map(stage => (
+                    <TouchableOpacity
+                      key={stage}
+                      style={styles.ufPickerRow}
+                      onPress={() => { setStageFilter(stage); setIsPickingStage(false); }}
+                    >
+                      <Text style={[styles.ufPickerRowText, stageFilter === stage && styles.ufPickerRowTextActive]}>{stage}</Text>
+                      {stageFilter === stage && <Text style={styles.ufPickerCheck}>✓</Text>}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
             ) : (
               <>
                 <View style={styles.modalHeader}>
@@ -2863,10 +2817,25 @@ function MainApp() {
                   <Text style={styles.dropdownChevron}>▾</Text>
                 </TouchableOpacity>
 
+                <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Etapa</Text>
+                <Text style={styles.passwordModalHint}>
+                  Filtra os leads pela etapa comercial sincronizada.
+                </Text>
+                <TouchableOpacity
+                  style={styles.dropdownButton}
+                  onPress={() => setIsPickingStage(true)}
+                  disabled={availableStages.length === 0}
+                >
+                  <Text style={[styles.dropdownButtonText, !stageFilter && { color: '#64748b' }]}>
+                    {stageFilter ?? (availableStages.length === 0 ? 'Sem etapas disponiveis' : 'Todas as etapas')}
+                  </Text>
+                  <Text style={styles.dropdownChevron}>▾</Text>
+                </TouchableOpacity>
+
                 <View style={styles.filtersFooter}>
                   <TouchableOpacity
                     style={styles.filtersSecondaryButton}
-                    onPress={() => { setSearchQuery(''); setStateFilter(null); }}
+                    onPress={() => { setSearchQuery(''); setStateFilter(null); setStageFilter(null); }}
                     disabled={activeFilterCount === 0}
                   >
                     <Text style={[styles.filtersSecondaryButtonText, activeFilterCount === 0 && { opacity: 0.4 }]}>Limpar tudo</Text>
@@ -2944,27 +2913,41 @@ function MainApp() {
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
                 >
-              {/* Status Selector */}
+              {/* Status Selector — bloqueia transitar de cliente/churn pra
+                  lead_*. Esta protecao tem mirror no banco (trigger
+                  guard_client_status_transition). */}
               <Text style={styles.fieldLabel}>Status</Text>
               <View style={styles.statusSelector}>
-                {statusOptions.map(opt => (
-                  <TouchableOpacity
-                    key={opt.value}
-                    style={[
-                      styles.statusOption,
-                      form.status === opt.value && { backgroundColor: opt.color, borderColor: opt.color },
-                    ]}
-                    onPress={() => setForm(s => ({ ...s, status: opt.value }))}
-                  >
-                    <Text style={[
-                      styles.statusOptionText,
-                      form.status === opt.value && { color: '#fff' },
-                    ]}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {statusOptions.map(opt => {
+                  const lockedFromClient = !!editingClient
+                    && (editingClient.status === 'cliente' || editingClient.status === 'churn')
+                    && (opt.value === 'lead_nao_visitado' || opt.value === 'lead_visitado');
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
+                      disabled={lockedFromClient}
+                      style={[
+                        styles.statusOption,
+                        form.status === opt.value && { backgroundColor: opt.color, borderColor: opt.color },
+                        lockedFromClient && { opacity: 0.35 },
+                      ]}
+                      onPress={() => setForm(s => ({ ...s, status: opt.value }))}
+                    >
+                      <Text style={[
+                        styles.statusOptionText,
+                        form.status === opt.value && { color: '#fff' },
+                      ]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
+              {editingClient && (editingClient.status === 'cliente' || editingClient.status === 'churn') && (
+                <Text style={{ fontSize: 12, color: '#dc2626', marginTop: -4, marginBottom: 6 }}>
+                  Cliente atual / ex-cliente nao pode voltar pra "lead".
+                </Text>
+              )}
 
               <Text style={styles.fieldLabel}>Informações</Text>
               <TextInput
@@ -3105,12 +3088,13 @@ function ClientBottomSheet({
   onEdit: () => void;
   onMarkVisited: () => void;
   onScheduleMeeting: () => void;
-  onChangeStage: () => void;
+  onChangeStage?: () => void;
   isMarkingVisited: boolean;
   onAddToRoute?: () => void;
 }) {
   const statusColor = statusConfig[client.status]?.color || '#3b82f6';
   const statusLabel = statusConfig[client.status]?.label || client.status;
+  const primaryName = getClientPrimaryName(client);
   const { user } = useAuth();
   const { notes, addNote, updateNote, deleteNote } = useClientNotes(client.id);
   const [newNote, setNewNote] = useState('');
@@ -3208,7 +3192,7 @@ function ClientBottomSheet({
                 <Image source={require('./assets/icon.png')} style={styles.bsLogo} />
               </View>
               <View style={styles.bsHeaderInfo}>
-                <Text style={styles.clientDetailsName}>{client.empresa?.trim() || client.nome}</Text>
+                <Text style={styles.clientDetailsName}>{primaryName}</Text>
                 {client.empresa?.trim() && client.nome && client.nome !== client.empresa && (
                   <Text style={styles.bsContactSubtitle} numberOfLines={1}>Contato: {client.nome}</Text>
                 )}
@@ -3321,6 +3305,15 @@ function ClientBottomSheet({
                     <Text style={styles.detailValue}>
                       {Number(client.latitude).toFixed(6)}, {Number(client.longitude).toFixed(6)}
                     </Text>
+                  </View>
+                </View>
+              )}
+              {client.etapa && (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoIcon}>↪</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailLabel}>Etapa</Text>
+                    <Text style={styles.detailValue}>{client.etapa}</Text>
                   </View>
                 </View>
               )}
@@ -3512,7 +3505,7 @@ function ClientBottomSheet({
                   <TouchableOpacity
                     style={[styles.navRouteButton, styles.navButtonDriving]}
                     onPress={() => {
-                      openNavigation({ latitude: client.latitude as number, longitude: client.longitude as number, clientName: client.nome, travelMode: 'driving' });
+                      openNavigation({ latitude: client.latitude as number, longitude: client.longitude as number, clientName: primaryName, travelMode: 'driving' });
                       onClose();
                     }}
                   >
@@ -3521,7 +3514,7 @@ function ClientBottomSheet({
                   <TouchableOpacity
                     style={[styles.navRouteButton, styles.navButtonWalking]}
                     onPress={() => {
-                      openNavigation({ latitude: client.latitude as number, longitude: client.longitude as number, clientName: client.nome, travelMode: 'walking' });
+                      openNavigation({ latitude: client.latitude as number, longitude: client.longitude as number, clientName: primaryName, travelMode: 'walking' });
                       onClose();
                     }}
                   >
@@ -3535,7 +3528,7 @@ function ClientBottomSheet({
                   const addressParts = [client.endereco, client.numero, client.bairro, client.cidade, client.estado, client.cep]
                     .filter(Boolean)
                     .join(', ');
-                  const query = addressParts ? `${addressParts}, Brasil` : client.nome;
+                  const query = addressParts ? `${addressParts}, Brasil` : primaryName;
                   const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
                   Linking.openURL(url).catch(() => Alert.alert('Erro', 'Não foi possível abrir o Google Maps.'));
                 }}
@@ -3589,23 +3582,22 @@ function ClientBottomSheet({
               </TouchableOpacity>
             </View>
 
-            {/* Mover para etapa: dispara webhook change_stage. Aparece sempre,
-                independente do status — o usuário decide qual stage do funil
-                quer mandar. Se o cliente não tiver id_hubspot, o modal alerta. */}
-            <TouchableOpacity
-              style={styles.changeStageButton}
-              onPress={onChangeStage}
-            >
-              <Text style={styles.changeStageButtonText}>🔄 Mover para etapa</Text>
-            </TouchableOpacity>
+            {/* Mover para etapa: admin-only durante testes. Dispara webhook change_stage.
+                Se o cliente não tiver id_hubspot, o modal alerta. */}
+            {onChangeStage && (
+              <TouchableOpacity
+                style={styles.changeStageButton}
+                onPress={onChangeStage}
+              >
+                <Text style={styles.changeStageButtonText}>🔄 Mover para etapa</Text>
+              </TouchableOpacity>
+            )}
 
-            {/* Marcar como visitado: só pra leads.
-                Cliente Ativo, Em Integração e Ex-cliente nao sao alvo
-                de visita outbound, e lead_visitado ja foi visitado. */}
-            {client.status !== 'lead_visitado'
-              && client.status !== 'ativo'
-              && client.status !== 'ex_cliente'
-              && client.status !== 'em_integracao' && (
+            {/* Marcar como visitado: só pra leads pendentes (lead_nao_visitado).
+                lead_visitado ja foi visitado; cliente/churn nao sao alvo de
+                visita outbound (status protegido tambem por trigger no banco
+                + RPC mark_client_as_visited recusa). */}
+            {client.status === 'lead_nao_visitado' && (
               <TouchableOpacity
                 disabled={isMarkingVisited}
                 style={{
@@ -3990,7 +3982,7 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   filterIconBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
-  // Modal de filtros (UF e futuras opcoes)
+  // Modal de filtros (UF e etapa comercial)
   filtersSheet: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 20,
@@ -4160,6 +4152,21 @@ const styles = StyleSheet.create({
   cardLogo: { width: 18, height: 18, resizeMode: 'contain', marginRight: 8 },
   clientName: { fontSize: 15, fontWeight: '700', color: '#0f172a', flex: 1 },
   clientContact: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  clientStage: { fontSize: 12, color: '#7c3aed', fontWeight: '700', marginTop: 2 },
+  stageAccordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  stageAccordionTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
+  stageAccordionMeta: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  stageAccordionChevron: { fontSize: 13, color: '#64748b', fontWeight: '800', marginLeft: 10 },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   statusBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   cardMeetingBadge: {

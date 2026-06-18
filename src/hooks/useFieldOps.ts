@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
-import type { Client, FieldRoute, FieldRouteAuditLog, FieldRouteStopWithClient, SellerGoal } from '../types/client';
+import type { Client, FieldRoute, FieldRouteStopWithClient } from '../types/client';
 
 export const todayKey = () => new Date().toISOString().slice(0, 10);
 
@@ -44,7 +44,7 @@ type RoutePayload = {
 
 export function useFieldOps(routeDate = todayKey(), enabled = true) {
   const queryClient = useQueryClient();
-  const { user, profile, isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
 
   const routesQuery = useQuery<FieldRoute[]>({
     queryKey: ['field_routes', routeDate],
@@ -77,62 +77,6 @@ export function useFieldOps(routeDate = todayKey(), enabled = true) {
     },
     enabled: isAuthenticated && enabled && !!route?.id,
   });
-
-  const goalsQuery = useQuery<SellerGoal[]>({
-    queryKey: ['seller_goals', profile?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('seller_goals')
-        .select('*')
-        .lte('period_start', routeDate)
-        .gte('period_end', routeDate)
-        .order('period_end', { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as SellerGoal[];
-    },
-    enabled: isAuthenticated && enabled && !!profile,
-  });
-
-  const auditQuery = useQuery<FieldRouteAuditLog[]>({
-    queryKey: ['field_route_audit_logs', routeDate],
-    queryFn: async () => {
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { data, error } = await supabase
-        .from('field_route_audit_logs')
-        .select('*')
-        .gte('created_at', since)
-        .order('created_at', { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      return (data ?? []) as FieldRouteAuditLog[];
-    },
-    enabled: isAuthenticated && enabled,
-  });
-
-  const profilesQuery = useQuery<any[]>({
-    queryKey: ['field_profiles'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id,email,full_name,sector')
-        .order('full_name', { ascending: true });
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: isAuthenticated && enabled,
-  });
-
-  const logAudit = async (payload: Partial<FieldRouteAuditLog> & { action: string }) => {
-    await supabase.from('field_route_audit_logs').insert({
-      route_id: payload.route_id ?? null,
-      stop_id: payload.stop_id ?? null,
-      seller_id: payload.seller_id ?? user?.id ?? null,
-      client_id: payload.client_id ?? null,
-      action: payload.action,
-      details: payload.details ?? {},
-      created_by: user?.id ?? null,
-    });
-  };
 
   const saveRoute = useMutation({
     mutationFn: async (payload: RoutePayload) => {
@@ -180,18 +124,11 @@ export function useFieldOps(routeDate = todayKey(), enabled = true) {
         if (insertError) throw insertError;
       }
 
-      await logAudit({
-        route_id: savedRoute.id,
-        action: payload.source === 'suggested' ? 'suggested_route_saved' : 'manual_route_saved',
-        details: { stops: payload.stops.length, priorityMode: payload.priorityMode },
-      });
-
       return savedRoute;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['field_routes'] });
       queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
-      queryClient.invalidateQueries({ queryKey: ['field_route_audit_logs'] });
     },
   });
 
@@ -205,7 +142,6 @@ export function useFieldOps(routeDate = todayKey(), enabled = true) {
           .eq('id', stop.id);
         if (error) throw error;
       }
-      await logAudit({ route_id: route.id, action: 'route_reordered', details: { stops: stops.length } });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }),
   });
@@ -217,12 +153,6 @@ export function useFieldOps(routeDate = todayKey(), enabled = true) {
         .update({ status: 'removed' })
         .eq('id', stop.id);
       if (error) throw error;
-      await logAudit({
-        route_id: stop.route_id,
-        stop_id: stop.id,
-        client_id: stop.client_id,
-        action: 'stop_removed',
-      });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }),
   });
@@ -234,12 +164,6 @@ export function useFieldOps(routeDate = todayKey(), enabled = true) {
         .update({ status: 'done' })
         .eq('id', stop.id);
       if (error) throw error;
-      await logAudit({
-        route_id: stop.route_id,
-        stop_id: stop.id,
-        client_id: stop.client_id,
-        action: 'stop_done',
-      });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }),
   });
@@ -254,41 +178,18 @@ export function useFieldOps(routeDate = todayKey(), enabled = true) {
         .update({ status: nextStatus })
         .eq('id', stop.id);
       if (error) throw error;
-      await logAudit({
-        route_id: stop.route_id,
-        stop_id: stop.id,
-        client_id: stop.client_id,
-        action: nextStatus === 'done' ? 'stop_done' : 'stop_unplanned',
-      });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }),
-  });
-
-  const saveGoal = useMutation({
-    mutationFn: async (goal: Omit<SellerGoal, 'id' | 'created_at' | 'updated_at' | 'created_by'>) => {
-      const { data, error } = await supabase
-        .from('seller_goals')
-        .upsert({ ...goal, created_by: user?.id ?? null }, { onConflict: 'seller_id,period_start,period_end' })
-        .select()
-        .single();
-      if (error) throw error;
-      return data as SellerGoal;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['seller_goals'] }),
   });
 
   return {
     route,
     stops: stopsQuery.data ?? [],
-    goals: goalsQuery.data ?? [],
-    auditLogs: auditQuery.data ?? [],
-    profiles: profilesQuery.data ?? [],
     isLoading: routesQuery.isLoading || stopsQuery.isLoading,
     saveRoute,
     updateStops,
     removeStop,
     markStopDone,
     toggleStopDone,
-    saveGoal,
   };
 }

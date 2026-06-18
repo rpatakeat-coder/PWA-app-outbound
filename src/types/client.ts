@@ -29,6 +29,8 @@ export interface Client {
   latitude: number | null;
   longitude: number | null;
   observacoes: string | null;
+  etapa: string | null;
+  atualizacao_diaria: boolean | null;
   geo_source: string | null;
   geo_approximate: boolean | null;
   id_hubspot: string | null;
@@ -106,21 +108,6 @@ export interface FieldRouteStopWithClient extends FieldRouteStop {
   client: Client | null;
 }
 
-export interface SellerGoal {
-  id: string;
-  seller_id: string;
-  period_start: string;
-  period_end: string;
-  closed_clients_goal: number;
-  visits_goal: number;
-  demos_goal: number;
-  proposals_goal: number;
-  mrr_goal: number;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface ClientNote {
   id: string;
   client_id: string;
@@ -130,16 +117,4 @@ export interface ClientNote {
   created_by_email: string | null;
   created_at: string;
   updated_at: string;
-}
-
-export interface FieldRouteAuditLog {
-  id: string;
-  route_id: string | null;
-  stop_id: string | null;
-  seller_id: string | null;
-  client_id: string | null;
-  action: string;
-  details: Record<string, any>;
-  created_by: string | null;
-  created_at: string;
 }
