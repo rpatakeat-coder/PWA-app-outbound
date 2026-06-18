@@ -912,11 +912,12 @@ function MainApp() {
               const trail = [...prev, next];
               return trail.length > 500 ? trail.slice(-500) : trail;
             });
-            // heading derivado do GPS so eh confiavel quando esta em movimento
-            // (>1m/s ~3.6km/h). Se parado, o valor vem -1 ou ruido — ignora.
+            // heading derivado do GPS: confiavel a partir de ~0.5 m/s (1.8 km/h).
+            // Abaixo disso o valor eh ruido e o compass via watchHeadingAsync
+            // cobre o caso "parado".
             if (
               loc.coords.heading != null && loc.coords.heading >= 0
-              && (loc.coords.speed ?? 0) > 1
+              && (loc.coords.speed ?? 0) > 0.5
             ) {
               setNavUserHeading(loc.coords.heading);
             }
@@ -964,18 +965,17 @@ function MainApp() {
     if (!isNavigating || navCameraMode !== 'follow') return;
     if (!userLocation || !navMapRef.current) return;
     try {
-      navMapRef.current.animateCamera(
-        {
-          center: { latitude: userLocation.latitude, longitude: userLocation.longitude },
-          heading: navUserHeading ?? 0,
-          // pitch + zoom ajustados pra visao "no banco do motorista" — proximo
-          // o suficiente pra enxergar a proxima curva, anglado pra dar
-          // sensacao 3D igual Google Maps em navegacao.
-          pitch: 60,
-          zoom: 18,
-        },
-        { duration: 600 },
-      );
+      // animateCamera faz update PARCIAL: propriedades omitidas mantem o
+      // valor atual. Quando navUserHeading eh null (compass falhou ou usuario
+      // ainda nao se moveu), NAO seta heading — assim o mapa nao vira pro
+      // norte; preserva a rotacao atual ate o GPS reportar uma direcao real.
+      const camera: any = {
+        center: { latitude: userLocation.latitude, longitude: userLocation.longitude },
+        pitch: 60,
+        zoom: 18,
+      };
+      if (navUserHeading != null) camera.heading = navUserHeading;
+      navMapRef.current.animateCamera(camera, { duration: 600 });
     } catch (err) {
       console.warn('[NAV] animateCamera falhou:', err);
     }
@@ -2161,8 +2161,14 @@ function MainApp() {
           pointerEvents="box-none"
         >
           {navCameraMode !== 'follow' && (
-            <TouchableOpacity style={navStyles.fab} onPress={recenterNavigation}>
-              <Text style={navStyles.fabText}>📍</Text>
+            <TouchableOpacity
+              style={[navStyles.fab, { backgroundColor: '#1d4ed8' }]}
+              onPress={recenterNavigation}
+            >
+              {/* Chevron branco apontando pra cima: indica "modo motorista,
+                  segue minha direcao". Mais claro que o pin (📍) que sugeria
+                  "centralizar / voltar pro norte". */}
+              <View style={navStyles.fabChevron} />
             </TouchableOpacity>
           )}
           <TouchableOpacity style={navStyles.fab} onPress={showFullRouteInNav}>
@@ -3728,6 +3734,17 @@ const navStyles = StyleSheet.create({
     elevation: 5,
   },
   fabText: { fontSize: 20 },
+  // Chevron branco dentro do FAB azul — sinal de "modo motorista".
+  fabChevron: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 10,
+    borderRightWidth: 10,
+    borderBottomWidth: 16,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#fff',
+  },
   // Card inferior com info + acoes
   bottomCard: {
     position: 'absolute',
