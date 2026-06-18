@@ -4,15 +4,22 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // dispositivos (se trocar de celular, volta pro default) — é só uma
 // preferência de UI, não dado que precisa sobreviver à reinstalação.
 
-const KEY_SHOW_ONLY_MY_AREA = '@takeat:show_only_my_area';
+// Bumpado pra v2 em 2026-06-18 quando o produto pediu que o filtro "minha
+// area" viesse ligado por padrao pra TODOS os usuarios. Quem tinha '0' na
+// chave v1 antes desse marco e' resetado pro novo default (true). Pra
+// desligar de novo, basta abrir Configuracoes.
+const KEY_SHOW_ONLY_MY_AREA = '@takeat:show_only_my_area_v2';
+const KEY_SHOW_ONLY_MY_AREA_LEGACY = '@takeat:show_only_my_area';
 
-// Default = true: novo usuario ja chega filtrando pra propria area. Quem
-// explicitamente desativou tem '0' salvo e continua respeitado. Pra
-// forcar OFF de novo, basta abrir Configuracoes e desligar o switch.
 export async function getShowOnlyMyAreaPref(): Promise<boolean> {
   try {
     const v = await AsyncStorage.getItem(KEY_SHOW_ONLY_MY_AREA);
-    if (v === null) return true;
+    if (v === null) {
+      // Limpa a chave antiga pra nao deixar lixo. Se o usuario alterar
+      // o switch depois, vai persistir na v2.
+      AsyncStorage.removeItem(KEY_SHOW_ONLY_MY_AREA_LEGACY).catch(() => {});
+      return true;
+    }
     return v === '1';
   } catch {
     return true;
