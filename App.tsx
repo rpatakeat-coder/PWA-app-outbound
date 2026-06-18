@@ -555,6 +555,7 @@ function MainApp() {
     queryFn: () => fetchRouteGeometry(routeWaypoints),
     enabled: routeWaypoints.length >= 2,
     staleTime: 5 * 60 * 1000,
+    placeholderData: (prev: any) => prev,
     retry: 1,
   });
 
@@ -1018,30 +1019,29 @@ function MainApp() {
 
   const navigationCurrentStop = isNavigating ? routeDisplayClients[currentStopIndex] : null;
 
-  // Geometria do trecho de navegacao = GPS -> stop atual em diante.
-  // Re-fetch quando muda o stop alvo ou o GPS muda significativamente
-  // (chave usa userLocation arredondado pra evitar refetch a cada metro).
+  // Geometria do trecho de navegacao. NAO inclui userLocation: o polyline
+  // eh a rota entre os stops planejados (estavel), e a seta do usuario
+  // mostra a posicao real em cima. Antes incluíamos o GPS arredondado a
+  // ~10m e o refetch a cada movimento causava flicker visivel.
+  //
+  // Refetch acontece so quando muda o stop alvo (Finalizar/Pular) ou a
+  // composicao da rota — eventos discretos, sem flicker continuo.
   const navWaypoints = useMemo<RoutePoint[]>(() => {
-    if (!isNavigating || !userLocation) return [];
-    const remaining = routeDisplayClients
+    if (!isNavigating) return [];
+    return routeDisplayClients
       .slice(currentStopIndex)
       .filter(c => c.latitude != null && c.longitude != null)
       .map(c => ({ latitude: c.latitude as number, longitude: c.longitude as number }));
-    if (remaining.length === 0) return [];
-    return [
-      {
-        latitude: Math.round(userLocation.latitude * 10_000) / 10_000,
-        longitude: Math.round(userLocation.longitude * 10_000) / 10_000,
-      },
-      ...remaining,
-    ];
-  }, [isNavigating, userLocation, routeDisplayClients, currentStopIndex]);
+  }, [isNavigating, routeDisplayClients, currentStopIndex]);
 
   const navRouteGeometry = useQuery({
     queryKey: ['nav-route-geometry', navWaypoints],
     queryFn: () => fetchRouteGeometry(navWaypoints),
     enabled: isNavigating && navWaypoints.length >= 2,
-    staleTime: 60 * 1000, // 1 min — durante navegacao GPS muda mais
+    staleTime: 5 * 60 * 1000,
+    // placeholderData = previousData mantem o polyline anterior na tela
+    // enquanto um eventual refetch acontece — sem flash de "sem linha".
+    placeholderData: (prev: any) => prev,
     retry: 1,
   });
 
@@ -2078,7 +2078,12 @@ function MainApp() {
               cluster={false}
             >
               <View style={navStyles.userArrowOuter}>
-                <View style={navStyles.userArrowChevron} />
+                {/* Triângulo branco (outline) atrás */}
+                <View style={navStyles.userArrowOutline} />
+                {/* Triângulo azul (preenchimento) na frente */}
+                <View style={navStyles.userArrowFill} />
+                {/* Bolinha base mostrando a posição real do GPS */}
+                <View style={navStyles.userArrowDot} />
               </View>
             </Marker>
           )}
@@ -3597,32 +3602,59 @@ export default function App() {
 // ===== Estilos do modo Navegacao =====
 // Separados dos styles globais pra ficar facil ajustar sem mexer no resto.
 const navStyles = StyleSheet.create({
-  // Seta do GPS: circulo branco + chevron azul apontando pra cima.
-  // A rotacao real eh feita pelo Marker (prop rotation), entao a seta
-  // visualmente sempre aponta no eixo X+ (norte do marker).
+  // Seta do GPS estilo Google Maps: triangulo grande azul forte com
+  // contorno branco, alem de uma bolinha base no GPS exato.
+  // - userArrowOutline: triangulo branco maior (atras) — funciona como
+  //   contorno destacando contra qualquer fundo do mapa
+  // - userArrowFill: triangulo azul forte (na frente) — a "seta" em si
+  // - userArrowDot: bolinha azul + borda branca na base — indica o ponto
+  //   GPS exato (a ponta do triangulo eh a "direcao", a bolinha eh o "onde")
+  // O Marker tem rotation prop que gira o container inteiro pelo eixo
+  // do anchor (centro), entao o conjunto rota como uma peca so.
   userArrowOuter: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#fff',
+    width: 52,
+    height: 52,
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 4,
+    justifyContent: 'flex-start',
   },
-  userArrowChevron: {
+  userArrowOutline: {
+    position: 'absolute',
+    top: 0,
     width: 0,
     height: 0,
-    borderLeftWidth: 9,
-    borderRightWidth: 9,
-    borderBottomWidth: 14,
+    borderLeftWidth: 18,
+    borderRightWidth: 18,
+    borderBottomWidth: 36,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderBottomColor: '#3b82f6',
-    marginTop: -2,
+    borderBottomColor: '#fff',
+  },
+  userArrowFill: {
+    position: 'absolute',
+    top: 4,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 14,
+    borderRightWidth: 14,
+    borderBottomWidth: 28,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#1d4ed8',
+  },
+  userArrowDot: {
+    position: 'absolute',
+    bottom: 6,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#1d4ed8',
+    borderWidth: 2.5,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 2,
+    elevation: 3,
   },
   // Header pill semi-transparente — flutua sobre o mapa
   headerOverlay: {
