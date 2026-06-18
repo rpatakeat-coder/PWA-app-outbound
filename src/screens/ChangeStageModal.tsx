@@ -130,6 +130,83 @@ function CurrencyField({
   );
 }
 
+// Mascara CEP: 00000-000 (5 digitos + hifen + 3 digitos)
+function maskCep(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
+// Mascara dual CPF/CNPJ: aplica formato de CPF (000.000.000-00) ate 11 digitos
+// ou CNPJ (00.000.000/0000-00) acima disso. A property cnpj_cpf no HubSpot
+// aceita os dois.
+function maskCnpj(raw: string): string {
+  const d = raw.replace(/\D/g, '').slice(0, 14);
+  if (d.length <= 11) {
+    // CPF
+    let out = d;
+    if (d.length > 3) out = `${d.slice(0, 3)}.${d.slice(3)}`;
+    if (d.length > 6) out = `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+    if (d.length > 9) out = `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+    return out;
+  }
+  // CNPJ
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+}
+
+// Validacao simples de email (formato basico — RFC completo seria overkill)
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const isValidEmail = (v: string) => EMAIL_RE.test(v.trim());
+const isValidCep = (v: string) => v.replace(/\D/g, '').length === 8;
+// Aceita 11 (CPF) ou 14 (CNPJ) digitos
+const isValidCnpj = (v: string) => {
+  const len = v.replace(/\D/g, '').length;
+  return len === 11 || len === 14;
+};
+
+function PlainTextField({
+  subField,
+  value,
+  onChange,
+  disabled,
+  kind,
+}: {
+  subField: Extract<StageSubField, { kind: 'text' | 'email' | 'cep' | 'cnpj' | 'textarea' }>;
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+  kind: 'text' | 'email' | 'cep' | 'cnpj' | 'textarea';
+}) {
+  const keyboardType =
+    kind === 'email' ? 'email-address' :
+    kind === 'cep' || kind === 'cnpj' ? 'number-pad' : 'default';
+  const multiline = kind === 'textarea';
+  const autoCapitalize = kind === 'email' ? 'none' : 'sentences';
+  const handleChange = (raw: string) => {
+    if (kind === 'cep') onChange(maskCep(raw));
+    else if (kind === 'cnpj') onChange(maskCnpj(raw));
+    else onChange(raw);
+  };
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Text style={styles.subOptionsLabel}>{subField.fieldLabel}</Text>
+      <TextInput
+        style={[styles.plainInput, multiline && styles.plainInputMultiline]}
+        placeholder={subField.placeholder ?? ''}
+        placeholderTextColor="#94a3b8"
+        keyboardType={keyboardType as any}
+        autoCapitalize={autoCapitalize as any}
+        autoCorrect={kind !== 'email'}
+        multiline={multiline}
+        numberOfLines={multiline ? 4 : 1}
+        value={value}
+        onChangeText={handleChange}
+        editable={!disabled}
+      />
+    </View>
+  );
+}
+
 export function ChangeStageModal({ client, onClose }: Props) {
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
   const [subValues, setSubValues] = useState<Record<string, string>>({});
@@ -144,11 +221,15 @@ export function ChangeStageModal({ client, onClose }: Props) {
   const subFields = selectedStage?.subFields ?? [];
 
   // Todos os sub-fields são obrigatórios — só libera o submit quando todos
-  // tiverem valor não-vazio (e currency tiver número válido).
+  // tiverem valor não-vazio e válido pelo tipo (currency numerico, email
+  // formato, cep 8 digitos, cnpj 14 digitos).
   const allFilled = subFields.every((sf) => {
     const raw = subValues[sf.field];
     if (!raw || !raw.trim()) return false;
     if (sf.kind === 'currency') return normalizeCurrency(raw) !== null;
+    if (sf.kind === 'email') return isValidEmail(raw);
+    if (sf.kind === 'cep') return isValidCep(raw);
+    if (sf.kind === 'cnpj') return isValidCnpj(raw);
     return true;
   });
   const ready = !!selectedStage && allFilled && !submitting;
@@ -184,6 +265,25 @@ export function ChangeStageModal({ client, onClose }: Props) {
           return;
         }
         subValuesPayload[sf.field] = normalized;
+      } else if (sf.kind === 'email') {
+        if (!isValidEmail(raw)) {
+          Alert.alert('E-mail inválido', `"${sf.fieldLabel}" precisa ser um e-mail válido.`);
+          return;
+        }
+        subValuesPayload[sf.field] = raw.toLowerCase();
+      } else if (sf.kind === 'cep') {
+        if (!isValidCep(raw)) {
+          Alert.alert('CEP inválido', `"${sf.fieldLabel}" precisa ter 8 dígitos.`);
+          return;
+        }
+        // Envia so digitos pro webhook — quem consome decide se aplica mascara
+        subValuesPayload[sf.field] = raw.replace(/\D/g, '');
+      } else if (sf.kind === 'cnpj') {
+        if (!isValidCnpj(raw)) {
+          Alert.alert('CNPJ / CPF inválido', `"${sf.fieldLabel}" precisa ter 11 dígitos (CPF) ou 14 dígitos (CNPJ).`);
+          return;
+        }
+        subValuesPayload[sf.field] = raw.replace(/\D/g, '');
       } else {
         subValuesPayload[sf.field] = raw;
       }
@@ -312,10 +412,22 @@ export function ChangeStageModal({ client, onClose }: Props) {
                             />
                           );
                         }
+                        if (sf.kind === 'currency') {
+                          return (
+                            <CurrencyField
+                              key={sf.field}
+                              subField={sf}
+                              value={subValues[sf.field] ?? ''}
+                              onChange={(v) => setSubValue(sf.field, v)}
+                              disabled={submitting}
+                            />
+                          );
+                        }
                         return (
-                          <CurrencyField
+                          <PlainTextField
                             key={sf.field}
                             subField={sf}
+                            kind={sf.kind}
                             value={subValues[sf.field] ?? ''}
                             onChange={(v) => setSubValue(sf.field, v)}
                             disabled={submitting}
@@ -436,6 +548,17 @@ const styles = StyleSheet.create({
   },
   currencyPrefix: { fontSize: 14, fontWeight: '700', color: '#475569', marginRight: 6 },
   currencyInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#0f172a' },
+  plainInput: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  plainInputMultiline: { minHeight: 90, textAlignVertical: 'top' },
   submit: {
     backgroundColor: '#0f172a',
     borderRadius: 12,

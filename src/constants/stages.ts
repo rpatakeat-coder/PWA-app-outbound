@@ -22,6 +22,38 @@ export type StageSubField =
       fieldLabel: string;
       kind: 'currency';
       placeholder?: string;
+    }
+  | {
+      field: string;
+      fieldLabel: string;
+      kind: 'text';
+      placeholder?: string;
+    }
+  | {
+      field: string;
+      fieldLabel: string;
+      kind: 'textarea';
+      placeholder?: string;
+    }
+  | {
+      field: string;
+      fieldLabel: string;
+      kind: 'email';
+      placeholder?: string;
+    }
+  | {
+      // CEP brasileiro: aplica mascara 00000-000 + valida 8 digitos
+      field: string;
+      fieldLabel: string;
+      kind: 'cep';
+      placeholder?: string;
+    }
+  | {
+      // CNPJ: aplica mascara 00.000.000/0000-00 + valida 14 digitos
+      field: string;
+      fieldLabel: string;
+      kind: 'cnpj';
+      placeholder?: string;
     };
 
 export type Stage = {
@@ -88,6 +120,94 @@ export const STAGES: Stage[] = [
         fieldLabel: 'Motivo - Perda (Comercial)',
         kind: 'select',
         options: ['Preço', 'Funcionalidade', 'Sem retorno', 'Reembolso', 'Não quer mudar de sistema', 'Outros'],
+      },
+    ],
+  },
+  {
+    id: '1090779811',
+    label: 'AGUARDANDO PAGAMENTO',
+    color: '#0ea5e9',
+    subFields: [
+      {
+        // Aceita CNPJ (14 digitos) ou CPF (11 digitos) — mesma property no HubSpot
+        field: 'cnpj_cpf',
+        fieldLabel: 'CNPJ / CPF',
+        kind: 'cnpj',
+        placeholder: 'CNPJ ou CPF (so digitos)',
+      },
+      {
+        field: 'email',
+        fieldLabel: 'E-mail',
+        kind: 'email',
+        placeholder: 'contato@restaurante.com.br',
+      },
+      {
+        field: 'cep',
+        fieldLabel: 'CEP',
+        kind: 'cep',
+        placeholder: '00000-000',
+      },
+      {
+        field: 'numero',
+        fieldLabel: 'Número do endereço',
+        kind: 'text',
+        placeholder: 'Ex.: 123',
+      },
+      {
+        field: 'pacote_contratado',
+        fieldLabel: 'Pacote contratado',
+        kind: 'select',
+        options: [],
+      },
+      {
+        field: 'adicional',
+        fieldLabel: 'Adicional',
+        kind: 'select',
+        options: [],
+      },
+      {
+        field: 'tipo_de_pagamento',
+        fieldLabel: 'Tipo de pagamento',
+        kind: 'select',
+        options: [],
+      },
+      {
+        field: 'periodo_contratado',
+        fieldLabel: 'Período contratado (Assinatura)',
+        kind: 'select',
+        options: [],
+      },
+      {
+        // Property "amount" no HubSpot (campo padrao de valor de deal)
+        field: 'amount',
+        fieldLabel: 'Valor (R$)',
+        kind: 'currency',
+        placeholder: 'Ex.: 1.500,00',
+      },
+      {
+        field: 'mrr',
+        fieldLabel: 'MRR (R$)',
+        kind: 'currency',
+        placeholder: 'Ex.: 350,00',
+      },
+      {
+        field: 'deseja_criar_perfil_no_asaas_',
+        fieldLabel: 'Deseja criar perfil no Asaas',
+        kind: 'select',
+        options: ['Sim', 'Não'],
+      },
+      {
+        // TODO: virar 'select' quando voce me passar as opcoes fixas, ou deixar text livre
+        field: 'qual_maior_desafio_',
+        fieldLabel: 'Qual o maior desafio',
+        kind: 'text',
+        placeholder: 'Ex.: gestão de fluxo, controle de estoque...',
+      },
+      {
+        field: 'informacoes_sobre_o_maior_desafio',
+        fieldLabel: 'Informações sobre o maior desafio',
+        kind: 'textarea',
+        placeholder: 'Descreva o contexto, tentativas anteriores, etc.',
       },
     ],
   },
