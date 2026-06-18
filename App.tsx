@@ -30,7 +30,7 @@ import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { useClients } from './src/hooks/useClients';
 import { useMeetings } from './src/hooks/useMeetings';
-import { distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
+import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
 import { useClientNotes } from './src/hooks/useClientNotes';
 import { useForceReload } from './src/hooks/useForceReload';
 import { supabase } from './src/integrations/supabase/client';
@@ -622,9 +622,12 @@ function MainApp() {
   // como Polyline cinza atras (efeito "rastro" tipo Google Maps).
   const [navTrail, setNavTrail] = useState<Array<{ latitude: number; longitude: number }>>([]);
   const navMapRef = useRef<RNMapView | null>(null);
-  // Throttle pra evitar que GPS + bussola disparem multiplas animacoes
-  // simultaneas — o sintoma era zoom "derivando" pra fora durante caminhada.
+  // Throttle pra evitar que GPS dispare multiplas animacoes simultaneas —
+  // o sintoma era zoom "derivando" pra fora durante caminhada.
   const lastCameraAnimateAt = useRef(0);
+  // Posicao GPS anterior — usada pra calcular bearing entre dois pontos
+  // quando o GPS nao reporta heading proprio (parado curto, sinal fraco).
+  const lastNavPosition = useRef<{ latitude: number; longitude: number } | null>(null);
 
   const suggestRoute = useCallback(async () => {
     // Validacao explicita da qtd pedida: invalido -> avisa, nao cai pra 8.
@@ -871,17 +874,22 @@ function MainApp() {
     }, 350);
   }, [routeDisplayClients, userLocation]);
 
-  // ===== Modo Navegacao: watchers GPS + bussola =====
-  // Inicia subscriptions de posicao + heading ao entrar em nav; remove na
-  // saida. Usa BestForNavigation com distanceInterval=5m e timeInterval=2s
-  // pra balancear preciso vs bateria. A bussola roda em paralelo pra
-  // suavizar a rotacao da seta quando o usuario esta parado/devagar.
+  // ===== Modo Navegacao: watcher GPS =====
+  // SO usamos GPS — bussola foi removida porque a rotacao acompanhava como
+  // o usuario segurava o celular (vira o aparelho 30deg pra esquerda, mapa
+  // gira 30deg). Realista pra direcao do movimento, NAO pra posicao do
+  // dispositivo.
+  //
+  // Fonte do heading, em ordem de prioridade:
+  // 1. loc.coords.heading + speed > 0.5 m/s — o proprio chip GPS ja calcula
+  // 2. bearing(prev -> next) quando deslocamento > 5m — fallback manual
+  // 3. ultimo valor conhecido — quando parado, mapa nao gira
   useEffect(() => {
     if (!isNavigating) return;
     let posSub: Location.LocationSubscription | null = null;
-    let headingSub: Location.LocationSubscription | null = null;
     let cancelled = false;
-    let lastAccuracy: number | null = null;
+
+    lastNavPosition.current = null;
 
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -909,55 +917,42 @@ function MainApp() {
           (loc) => {
             const next = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
             setUserLocation(next);
-            // Trilha do percurso — capa em 500 pontos pra nao explodir memoria
-            // em sessoes longas (a 5m/ponto sao ~2.5km de historico).
+
+            // Trilha do percurso
             setNavTrail(prev => {
               const trail = [...prev, next];
               return trail.length > 500 ? trail.slice(-500) : trail;
             });
-            // heading derivado do GPS: confiavel a partir de ~0.5 m/s (1.8 km/h).
-            // Abaixo disso o valor eh ruido e o compass via watchHeadingAsync
-            // cobre o caso "parado".
-            if (
-              loc.coords.heading != null && loc.coords.heading >= 0
-              && (loc.coords.speed ?? 0) > 0.5
-            ) {
-              setNavUserHeading(loc.coords.heading);
+
+            // Heading: GPS proprio se confiavel
+            const speed = loc.coords.speed ?? 0;
+            const gpsHeading = loc.coords.heading;
+            const prev = lastNavPosition.current;
+
+            if (gpsHeading != null && gpsHeading >= 0 && speed > 0.5) {
+              setNavUserHeading(gpsHeading);
+            } else if (prev) {
+              // Fallback: calcula bearing prev -> next, se moveu >= 5m
+              const meters = distanceMeters(prev.latitude, prev.longitude, next.latitude, next.longitude);
+              if (meters >= 5) {
+                setNavUserHeading(bearingDegrees(prev.latitude, prev.longitude, next.latitude, next.longitude));
+              }
+              // se moveu < 5m, mantem o heading anterior (parado/jitter)
             }
-            // Sinaliza GPS instavel quando a precisao piora (>30m)
-            const acc = loc.coords.accuracy ?? null;
-            lastAccuracy = acc;
-            setGpsUnstable(acc != null && acc > 30);
+            lastNavPosition.current = next;
+
+            setGpsUnstable((loc.coords.accuracy ?? 0) > 30);
           }
         );
       } catch (err) {
         console.warn('[NAV] watchPositionAsync falhou:', err);
-      }
-
-      if (cancelled) { posSub?.remove?.(); return; }
-
-      try {
-        headingSub = await Location.watchHeadingAsync((h) => {
-          const head = h.trueHeading >= 0 ? h.trueHeading : h.magHeading;
-          if (head >= 0) {
-            setNavUserHeading(prev => {
-              // Suavizacao: descarta saltos > 60deg num unico tick (ruido
-              // de bussola). Se prev era null, aceita direto.
-              if (prev == null) return head;
-              const diff = Math.abs(((head - prev + 540) % 360) - 180);
-              return diff > 60 ? prev : head;
-            });
-          }
-        });
-      } catch (err) {
-        console.warn('[NAV] watchHeadingAsync falhou:', err);
       }
     })();
 
     return () => {
       cancelled = true;
       try { posSub?.remove?.(); } catch {}
-      try { headingSub?.remove?.(); } catch {}
+      lastNavPosition.current = null;
     };
   }, [isNavigating]);
 
@@ -985,8 +980,9 @@ function MainApp() {
         // horizontalmente, da sensacao de "zoom out". 45 mantem o 3D feel
         // sem mostrar tanto da paisagem distante.
         pitch: 45,
-        // zoom 19 = nivel "nome de rua". Era 18 (1 nivel mais distante).
-        zoom: 19,
+        // zoom 20 = maximo da maioria dos provedores; nivel "carros e
+        // calcadas visiveis". Necessario pra enxergar a proxima virada.
+        zoom: 20,
       };
       if (navUserHeading != null) camera.heading = navUserHeading;
       navMapRef.current.animateCamera(camera, { duration: 350 });

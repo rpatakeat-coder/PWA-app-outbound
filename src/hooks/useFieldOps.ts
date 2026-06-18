@@ -17,6 +17,20 @@ export const distanceMeters = (aLat: number, aLon: number, bLat: number, bLon: n
   return Math.round(2 * r * Math.asin(Math.sqrt(a)));
 };
 
+// Bearing (azimute) entre dois pontos em graus (0..360, 0=norte).
+// Usado pra calcular pra onde o usuario esta indo a partir do movimento
+// — independente de como ele esta segurando o celular.
+export const bearingDegrees = (aLat: number, aLon: number, bLat: number, bLon: number) => {
+  const φ1 = toRad(aLat);
+  const φ2 = toRad(bLat);
+  const λ1 = toRad(aLon);
+  const λ2 = toRad(bLon);
+  const y = Math.sin(λ2 - λ1) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(λ2 - λ1);
+  const θ = Math.atan2(y, x);
+  return ((θ * 180) / Math.PI + 360) % 360;
+};
+
 export const routeEtaMinutes = (meters: number) => Math.max(4, Math.round((meters / 1000 / 22) * 60));
 
 type RoutePayload = {
