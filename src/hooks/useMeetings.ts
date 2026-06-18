@@ -10,19 +10,22 @@ export function useMeetings() {
   const queryClient = useQueryClient();
   const { isAuthenticated, user, profile } = useAuth();
 
-  // Carrega TODAS as reuniões (agendadas + futuras + passadas) numa query só.
-  // Volume esperado é baixo (umas reuniões por cliente) — agrupar em memória
-  // é mais simples que rodar uma RPC de count por client_id.
+  // Carrega reuniões agendadas pelo proprio usuario (a policy do banco ja
+  // filtra; o .eq aqui eh defensivo + ajuda performance). Admin (email
+  // arthurgothe.takeat@gmail.com) bypass: pega tudo, igual o RLS permite.
+  const isAdmin = profile?.email === 'arthurgothe.takeat@gmail.com';
   const query = useQuery<ClientMeeting[]>({
-    queryKey: ['client_meetings'],
+    queryKey: ['client_meetings', isAdmin ? 'all' : user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('client_meetings')
-        .select('*');
+      let q = supabase.from('client_meetings').select('*');
+      if (!isAdmin && user?.id) {
+        q = q.eq('created_by', user.id);
+      }
+      const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as ClientMeeting[];
     },
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && !!user?.id,
   });
 
   const meetings = query.data ?? [];

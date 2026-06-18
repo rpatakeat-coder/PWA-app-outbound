@@ -1843,7 +1843,15 @@ function MainApp() {
                 <Text style={styles.agendaMeta}>{item.kind === 'meeting' ? 'Reuniao/demo agendada' : 'Visita planejada da rota'}</Text>
                 {client && (
                   <View style={styles.routeActionsRow}>
-                    <TouchableOpacity style={styles.smallActionButton} onPress={() => setSelectedClient(client)}>
+                    <TouchableOpacity
+                      style={styles.smallActionButton}
+                      onPress={() => {
+                        // ClientBottomSheet so renderiza nas abas map/list.
+                        // Troca pra map antes de setar o cliente.
+                        setTab('map');
+                        setSelectedClient(client);
+                      }}
+                    >
                       <Text style={styles.smallActionButtonText}>Abrir lead</Text>
                     </TouchableOpacity>
                     {client.latitude != null && client.longitude != null && (
