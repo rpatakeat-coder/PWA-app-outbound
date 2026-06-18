@@ -605,9 +605,19 @@ function MainApp() {
   const [lastProviderUsed, setLastProviderUsed] = useState<RoutingProvider | null>(null);
 
   // Modo navegacao: ocupa a tela toda com mapa focado no GPS + card do
-  // proximo destino. Avanca por toque em "Cheguei" (marca visitado).
+  // proximo destino. Avanca por toque em "Finalizar visita".
   const [isNavigating, setIsNavigating] = useState(false);
   const [currentStopIndex, setCurrentStopIndex] = useState(0);
+  // Heading do dispositivo em graus (0=norte). Vem da bussola (preferido)
+  // ou do heading derivado pelo GPS quando em movimento.
+  const [navUserHeading, setNavUserHeading] = useState<number | null>(null);
+  // Modo da camera:
+  //  - follow: mapa segue o GPS + rotaciona pra direcao do movimento
+  //  - free: usuario arrastou; aparece botao "centralizar em mim"
+  //  - overview: zoom out mostrando rota inteira
+  const [navCameraMode, setNavCameraMode] = useState<'follow' | 'free' | 'overview'>('follow');
+  const [gpsUnstable, setGpsUnstable] = useState(false);
+  const navMapRef = useRef<RNMapView | null>(null);
 
   const suggestRoute = useCallback(async () => {
     // Validacao explicita da qtd pedida: invalido -> avisa, nao cai pra 8.
@@ -854,6 +864,109 @@ function MainApp() {
     }, 350);
   }, [routeDisplayClients, userLocation]);
 
+  // ===== Modo Navegacao: watchers GPS + bussola =====
+  // Inicia subscriptions de posicao + heading ao entrar em nav; remove na
+  // saida. Usa BestForNavigation com distanceInterval=5m e timeInterval=2s
+  // pra balancear preciso vs bateria. A bussola roda em paralelo pra
+  // suavizar a rotacao da seta quando o usuario esta parado/devagar.
+  useEffect(() => {
+    if (!isNavigating) return;
+    let posSub: Location.LocationSubscription | null = null;
+    let headingSub: Location.LocationSubscription | null = null;
+    let cancelled = false;
+    let lastAccuracy: number | null = null;
+
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (cancelled) return;
+      if (status !== 'granted') {
+        Alert.alert(
+          'Sem permissao de localizacao',
+          'Nao conseguimos acessar sua localizacao. Ative a permissao nas configuracoes do sistema para usar a navegacao.',
+          [
+            { text: 'Abrir configuracoes', onPress: () => Linking.openSettings() },
+            { text: 'Cancelar', style: 'cancel', onPress: () => setIsNavigating(false) },
+          ],
+        );
+        setIsNavigating(false);
+        return;
+      }
+
+      try {
+        posSub = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.BestForNavigation,
+            distanceInterval: 5,
+            timeInterval: 2000,
+          },
+          (loc) => {
+            setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+            // heading derivado do GPS so eh confiavel quando esta em movimento
+            // (>1m/s ~3.6km/h). Se parado, o valor vem -1 ou ruido — ignora.
+            if (
+              loc.coords.heading != null && loc.coords.heading >= 0
+              && (loc.coords.speed ?? 0) > 1
+            ) {
+              setNavUserHeading(loc.coords.heading);
+            }
+            // Sinaliza GPS instavel quando a precisao piora (>30m)
+            const acc = loc.coords.accuracy ?? null;
+            lastAccuracy = acc;
+            setGpsUnstable(acc != null && acc > 30);
+          }
+        );
+      } catch (err) {
+        console.warn('[NAV] watchPositionAsync falhou:', err);
+      }
+
+      if (cancelled) { posSub?.remove?.(); return; }
+
+      try {
+        headingSub = await Location.watchHeadingAsync((h) => {
+          const head = h.trueHeading >= 0 ? h.trueHeading : h.magHeading;
+          if (head >= 0) {
+            setNavUserHeading(prev => {
+              // Suavizacao: descarta saltos > 60deg num unico tick (ruido
+              // de bussola). Se prev era null, aceita direto.
+              if (prev == null) return head;
+              const diff = Math.abs(((head - prev + 540) % 360) - 180);
+              return diff > 60 ? prev : head;
+            });
+          }
+        });
+      } catch (err) {
+        console.warn('[NAV] watchHeadingAsync falhou:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      try { posSub?.remove?.(); } catch {}
+      try { headingSub?.remove?.(); } catch {}
+    };
+  }, [isNavigating]);
+
+  // Camera follow: anima sempre que o usuario muda de posicao ou direcao
+  // E o modo da camera eh 'follow'. animateCamera ja interpola — visual fica
+  // suave sem precisar Animated.Value adicional.
+  useEffect(() => {
+    if (!isNavigating || navCameraMode !== 'follow') return;
+    if (!userLocation || !navMapRef.current) return;
+    try {
+      navMapRef.current.animateCamera(
+        {
+          center: { latitude: userLocation.latitude, longitude: userLocation.longitude },
+          heading: navUserHeading ?? 0,
+          pitch: 50,
+          zoom: 17,
+        },
+        { duration: 600 },
+      );
+    } catch (err) {
+      console.warn('[NAV] animateCamera falhou:', err);
+    }
+  }, [isNavigating, navCameraMode, userLocation, navUserHeading]);
+
   // ===== Modo Navegacao =====
   const startNavigation = useCallback(() => {
     if (routeDisplayClients.length === 0) {
@@ -868,7 +981,40 @@ function MainApp() {
 
   const exitNavigation = useCallback(() => {
     setIsNavigating(false);
+    setNavCameraMode('follow');
+    setNavUserHeading(null);
   }, []);
+
+  // Volta pro modo follow (acompanha GPS). O effect de camera vai pegar
+  // automaticamente o userLocation atual e animar.
+  const recenterNavigation = useCallback(() => {
+    setNavCameraMode('follow');
+  }, []);
+
+  // Zoom out mostrando a rota inteira + GPS. Pausa o acompanhamento ate
+  // o usuario tocar em "Centralizar em mim".
+  const showFullRouteInNav = useCallback(() => {
+    setNavCameraMode('overview');
+    setTimeout(() => {
+      if (!navMapRef.current) return;
+      const coords: Array<{ latitude: number; longitude: number }> = [];
+      if (userLocation) coords.push(userLocation);
+      for (const c of routeDisplayClients) {
+        if (c.latitude != null && c.longitude != null) {
+          coords.push({ latitude: c.latitude, longitude: c.longitude });
+        }
+      }
+      if (coords.length < 1) return;
+      try {
+        navMapRef.current.fitToCoordinates(coords, {
+          edgePadding: { top: 160, right: 60, bottom: 220, left: 60 },
+          animated: true,
+        });
+      } catch (err) {
+        console.warn('[NAV] fitToCoordinates falhou:', err);
+      }
+    }, 100);
+  }, [userLocation, routeDisplayClients]);
 
   const navigationCurrentStop = isNavigating ? routeDisplayClients[currentStopIndex] : null;
 
@@ -1882,48 +2028,73 @@ function MainApp() {
     const distKm = navigationDistanceMeters != null ? (navigationDistanceMeters / 1000).toFixed(1) : null;
     const isLast = currentStopIndex === routeDisplayClients.length - 1;
 
-    return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar style="light" />
-        {/* Header compacto da navegacao */}
-        <View style={styles.navHeader}>
-          <TouchableOpacity onPress={exitNavigation} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Text style={styles.navHeaderClose}>✕</Text>
-          </TouchableOpacity>
-          <View style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={styles.navHeaderTitle}>Modo navegacao</Text>
-            <Text style={styles.navHeaderSubtitle}>
-              Parada {currentStopIndex + 1} de {routeDisplayClients.length}
-            </Text>
-          </View>
-          <View style={{ width: 24 }} />
-        </View>
+    const navigationStop = routeStops.find(s => s.client_id === navigationCurrentStop.id);
+    const navStatusLabel = statusConfig[navigationCurrentStop.status]?.label || navigationCurrentStop.status;
+    const navStatusColor = statusConfig[navigationCurrentStop.status]?.color || '#3b82f6';
+    const distLabel = navigationDistanceMeters != null
+      ? (navigationDistanceMeters >= 1000
+          ? `${(navigationDistanceMeters / 1000).toFixed(1)} km`
+          : `${Math.round(navigationDistanceMeters)} m`)
+      : null;
+    const noCoords = navigationCurrentStop.latitude == null || navigationCurrentStop.longitude == null;
 
-        {/* Mapa focado: segue GPS + mostra resto da rota */}
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, backgroundColor: '#0f172a' }]}>
+        <StatusBar style="light" />
+
+        {/* Mapa cheio. zIndex baixo: cards e botoes flutuam sobre. */}
         <MapView
+          mapRef={(ref) => { navMapRef.current = ref as unknown as RNMapView; }}
           style={{ flex: 1 }}
           initialRegion={{
-            latitude: navigationCurrentStop.latitude as number,
-            longitude: navigationCurrentStop.longitude as number,
-            latitudeDelta: 0.02,
-            longitudeDelta: 0.02,
+            latitude: (userLocation?.latitude ?? navigationCurrentStop.latitude) as number,
+            longitude: (userLocation?.longitude ?? navigationCurrentStop.longitude) as number,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
           }}
-          showsUserLocation
-          followsUserLocation
+          showsUserLocation={false}      /* renderizamos nossa propria seta */
+          followsUserLocation={false}    /* camera controlada pelo useEffect */
+          rotateEnabled
+          pitchEnabled
           radius={50}
-          minPoints={50}  /* desliga clustering em modo nav — sao poucos pinos */
+          minPoints={50}
+          onPanDrag={() => {
+            // Toque pra arrastar pausa o follow automaticamente.
+            if (navCameraMode === 'follow') setNavCameraMode('free');
+          }}
         >
+          {/* Seta da posicao atual do usuario. Marker.flat=true mantem a
+              orientacao mesmo com pitch do mapa. tracksViewChanges=false
+              evita rerender excessivo; a rotacao eh propriedade nativa. */}
+          {userLocation && (
+            <Marker
+              coordinate={userLocation}
+              anchor={{ x: 0.5, y: 0.5 }}
+              flat
+              tracksViewChanges={false}
+              rotation={navCameraMode === 'follow' ? 0 : (navUserHeading ?? 0)}
+              zIndex={2000}
+              // @ts-ignore
+              cluster={false}
+            >
+              <View style={navStyles.userArrowOuter}>
+                <View style={navStyles.userArrowChevron} />
+              </View>
+            </Marker>
+          )}
+
+          {/* Markers da rota: stops nao concluidos + concluidos */}
           {remainingWithCoords.map((client, idx) => (
             <RouteMarker
               key={`nav-${client.id}`}
               client={client}
               position={currentStopIndex + idx + 1}
+              done={routeStops.find(s => s.client_id === client.id)?.status === 'done'}
               onPress={() => {}}
             />
           ))}
-          {/* Polyline real seguindo as ruas. Carrega via OSRM/ORS; enquanto
-              calcula ou se ambos falharem, NAO desenha reta — fica sem linha
-              ao inves de mostrar algo errado em modo navegacao. */}
+
+          {/* Polyline real OSRM/ORS. Sem fallback de reta em nav. */}
           {navRouteGeometry.data && navRouteGeometry.data.coordinates.length > 1 && (
             <Polyline
               coordinates={navRouteGeometry.data.coordinates}
@@ -1933,51 +2104,98 @@ function MainApp() {
           )}
         </MapView>
 
-        {/* Card flutuante do proximo destino */}
-        <View style={[styles.navTopCard, { top: insets.top + 60 }]}>
-          <Text style={styles.navTopCardLabel}>Proximo destino</Text>
-          <Text style={styles.navTopCardTitle} numberOfLines={1}>{navTitle}</Text>
-          {navSubtitle ? <Text style={styles.navTopCardSubtitle}>{navSubtitle}</Text> : null}
-          {distKm && <Text style={styles.navTopCardDistance}>{distKm} km em linha reta</Text>}
+        {/* Header overlay translucido (nao consome MapView clicks) */}
+        <View style={[navStyles.headerOverlay, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
+          <View style={navStyles.headerPill} pointerEvents="auto">
+            <TouchableOpacity onPress={exitNavigation} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Text style={navStyles.headerPillClose}>✕</Text>
+            </TouchableOpacity>
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <Text style={navStyles.headerPillTitle}>Parada {currentStopIndex + 1} de {routeDisplayClients.length}</Text>
+              {gpsUnstable && <Text style={navStyles.headerPillWarning}>⚠ Sinal de GPS instavel</Text>}
+            </View>
+            <View style={{ width: 24 }} />
+          </View>
         </View>
 
-        {/* Barra de acoes inferior */}
-        <View style={[styles.navBottom, { paddingBottom: insets.bottom + 12 }]}>
-          <TouchableOpacity
-            style={[styles.navActionButton, { backgroundColor: '#3b82f6' }]}
-            onPress={() => openMultiStopNavigation({
-              origin: userLocation,
-              stops: remainingWithCoords.map(c => ({
-                latitude: c.latitude as number,
-                longitude: c.longitude as number,
-              })),
-              travelMode: 'driving',
-            })}
-          >
-            <Text style={styles.navActionButtonText}>🚗 Abrir rota inteira no Maps</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.navActionButton, { backgroundColor: '#16a34a' }]}
-            onPress={() => {
-              Alert.alert(
-                isLast ? 'Concluir rota' : 'Cheguei!',
-                isLast
-                  ? 'Marcar essa visita como feita e encerrar a rota?'
-                  : `Marcar visita em ${navTitle} como feita e ir pro proximo?`,
-                [
-                  { text: 'Cancelar', style: 'cancel' },
-                  { text: 'Sim', onPress: advanceNavigationStop },
-                ],
-              );
-            }}
-          >
-            <Text style={styles.navActionButtonText}>✅ Cheguei</Text>
-          </TouchableOpacity>
-          {!isLast && (
-            <TouchableOpacity style={styles.navSkipButton} onPress={skipNavigationStop}>
-              <Text style={styles.navSkipButtonText}>Pular esse</Text>
+        {/* Botoes flutuantes a direita */}
+        <View
+          style={[navStyles.floatingButtons, { top: insets.top + 70 }]}
+          pointerEvents="box-none"
+        >
+          {navCameraMode !== 'follow' && (
+            <TouchableOpacity style={navStyles.fab} onPress={recenterNavigation}>
+              <Text style={navStyles.fabText}>📍</Text>
             </TouchableOpacity>
           )}
+          <TouchableOpacity style={navStyles.fab} onPress={showFullRouteInNav}>
+            <Text style={navStyles.fabText}>🔍</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Card inferior fixo com info do proximo + acoes */}
+        <View style={[navStyles.bottomCard, { paddingBottom: insets.bottom + 14 }]}>
+          <View style={navStyles.bottomCardHeader}>
+            <View style={[navStyles.bottomCardBadge, { backgroundColor: navStatusColor }]}>
+              <Text style={navStyles.bottomCardBadgeText}>{currentStopIndex + 1}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={navStyles.bottomCardLabel}>Proximo destino</Text>
+              <Text style={navStyles.bottomCardTitle} numberOfLines={1}>{navTitle}</Text>
+              {navSubtitle ? <Text style={navStyles.bottomCardSubtitle} numberOfLines={1}>{navSubtitle}</Text> : null}
+              <View style={navStyles.bottomCardMetaRow}>
+                {distLabel && <Text style={navStyles.bottomCardMeta}>📍 {distLabel}</Text>}
+                <Text style={[navStyles.bottomCardMeta, { color: navStatusColor }]}>● {navStatusLabel}</Text>
+              </View>
+              {noCoords && (
+                <Text style={navStyles.bottomCardWarning}>Este destino nao possui localizacao cadastrada.</Text>
+              )}
+            </View>
+          </View>
+
+          <View style={navStyles.bottomCardActions}>
+            <TouchableOpacity
+              style={[navStyles.bottomCardButton, { backgroundColor: '#16a34a' }]}
+              onPress={() => {
+                Alert.alert(
+                  isLast ? 'Concluir rota' : 'Finalizar visita',
+                  isLast
+                    ? `Marcar ${navTitle} como visitado e encerrar a rota?`
+                    : `Marcar ${navTitle} como visitado e ir pro proximo?`,
+                  [
+                    { text: 'Cancelar', style: 'cancel' },
+                    { text: 'Sim', onPress: advanceNavigationStop },
+                  ],
+                );
+              }}
+            >
+              <Text style={navStyles.bottomCardButtonText}>✓ Finalizar visita</Text>
+            </TouchableOpacity>
+            <View style={navStyles.bottomCardSecondaryRow}>
+              {!isLast && (
+                <TouchableOpacity
+                  style={[navStyles.bottomCardSecondaryButton, { flex: 1 }]}
+                  onPress={skipNavigationStop}
+                >
+                  <Text style={navStyles.bottomCardSecondaryText}>↪ Pular</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[navStyles.bottomCardSecondaryButton, { flex: 1.5 }]}
+                disabled={noCoords}
+                onPress={() => openMultiStopNavigation({
+                  origin: userLocation,
+                  stops: remainingWithCoords.map(c => ({
+                    latitude: c.latitude as number,
+                    longitude: c.longitude as number,
+                  })),
+                  travelMode: 'driving',
+                })}
+              >
+                <Text style={[navStyles.bottomCardSecondaryText, noCoords && { opacity: 0.4 }]}>🚗 Maps</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </View>
     );
@@ -3376,6 +3594,122 @@ export default function App() {
   );
 }
 
+// ===== Estilos do modo Navegacao =====
+// Separados dos styles globais pra ficar facil ajustar sem mexer no resto.
+const navStyles = StyleSheet.create({
+  // Seta do GPS: circulo branco + chevron azul apontando pra cima.
+  // A rotacao real eh feita pelo Marker (prop rotation), entao a seta
+  // visualmente sempre aponta no eixo X+ (norte do marker).
+  userArrowOuter: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  userArrowChevron: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 9,
+    borderRightWidth: 9,
+    borderBottomWidth: 14,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#3b82f6',
+    marginTop: -2,
+  },
+  // Header pill semi-transparente — flutua sobre o mapa
+  headerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 12,
+  },
+  headerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  headerPillClose: { color: '#fff', fontSize: 20, fontWeight: '700', width: 24, textAlign: 'left' },
+  headerPillTitle: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  headerPillWarning: { color: '#fde68a', fontSize: 11, marginTop: 2, fontWeight: '600' },
+  // FABs do canto: centralizar + ver rota completa
+  floatingButtons: {
+    position: 'absolute',
+    right: 14,
+    gap: 10,
+  },
+  fab: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  fabText: { fontSize: 20 },
+  // Card inferior com info + acoes
+  bottomCard: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: -4 },
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  bottomCardHeader: { flexDirection: 'row', gap: 12 },
+  bottomCardBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomCardBadgeText: { color: '#fff', fontSize: 17, fontWeight: '800' },
+  bottomCardLabel: { color: '#64748b', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  bottomCardTitle: { color: '#0f172a', fontSize: 19, fontWeight: '800', marginTop: 2 },
+  bottomCardSubtitle: { color: '#64748b', fontSize: 13, marginTop: 1 },
+  bottomCardMetaRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
+  bottomCardMeta: { fontSize: 12, fontWeight: '600', color: '#475569' },
+  bottomCardWarning: { fontSize: 12, color: '#dc2626', fontWeight: '700', marginTop: 6 },
+  bottomCardActions: { gap: 8 },
+  bottomCardButton: { paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  bottomCardButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  bottomCardSecondaryRow: { flexDirection: 'row', gap: 8 },
+  bottomCardSecondaryButton: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+  },
+  bottomCardSecondaryText: { color: '#0f172a', fontSize: 14, fontWeight: '700' },
+});
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   // Header
@@ -3512,57 +3846,6 @@ const styles = StyleSheet.create({
   },
   checkboxChecked: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
   checkboxCheckmark: { color: '#fff', fontSize: 14, fontWeight: '800' },
-  // ===== Modo Navegacao =====
-  navHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#0f172a',
-    gap: 12,
-  },
-  navHeaderClose: { color: '#fff', fontSize: 22, fontWeight: '600', width: 24, textAlign: 'left' },
-  navHeaderTitle: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  navHeaderSubtitle: { color: '#94a3b8', fontSize: 11, marginTop: 2 },
-  navTopCard: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 10,
-    elevation: 6,
-    borderLeftWidth: 4,
-    borderLeftColor: '#dc2626',
-  },
-  navTopCardLabel: { fontSize: 11, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 },
-  navTopCardTitle: { fontSize: 18, fontWeight: '800', color: '#0f172a', marginTop: 2 },
-  navTopCardSubtitle: { fontSize: 13, color: '#64748b', marginTop: 1 },
-  navTopCardDistance: { fontSize: 13, fontWeight: '600', color: '#dc2626', marginTop: 4 },
-  navBottom: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 12,
-    gap: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: -4 },
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  navActionButton: { paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  navActionButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  navSkipButton: { paddingVertical: 10, alignItems: 'center' },
-  navSkipButtonText: { color: '#64748b', fontSize: 13, fontWeight: '600' },
   // Search bar (busca por nome) — fica acima dos chips de status.
   searchBar: {
     flexDirection: 'row',
