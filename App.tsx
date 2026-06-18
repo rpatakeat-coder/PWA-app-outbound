@@ -224,7 +224,7 @@ function MainApp() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSavingPassword, setIsSavingPassword] = useState(false);
-  const [showOnlyMyArea, setShowOnlyMyArea] = useState(false);
+  const [showOnlyMyArea, setShowOnlyMyArea] = useState(true);
   const [locationPermission, setLocationPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
   const [routeDate] = useState(todayKey());
   const [routeDraft, setRouteDraft] = useState<Client[]>([]);

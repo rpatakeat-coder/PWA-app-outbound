@@ -6,12 +6,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const KEY_SHOW_ONLY_MY_AREA = '@takeat:show_only_my_area';
 
+// Default = true: novo usuario ja chega filtrando pra propria area. Quem
+// explicitamente desativou tem '0' salvo e continua respeitado. Pra
+// forcar OFF de novo, basta abrir Configuracoes e desligar o switch.
 export async function getShowOnlyMyAreaPref(): Promise<boolean> {
   try {
     const v = await AsyncStorage.getItem(KEY_SHOW_ONLY_MY_AREA);
+    if (v === null) return true;
     return v === '1';
   } catch {
-    return false;
+    return true;
   }
 }
 
