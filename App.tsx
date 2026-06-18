@@ -25,7 +25,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView from 'react-native-map-clustering';
-import { Marker, default as RNMapView } from 'react-native-maps';
+import { Marker, Polyline, default as RNMapView } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useClients } from './src/hooks/useClients';
@@ -201,7 +201,59 @@ const markerStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   meetingBadgeText: { fontSize: 9 },
+  // Marker da rota: maior, vermelho forte, com numero da ordem dentro.
+  routePin: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#dc2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#fff',
+  },
+  routePinNumber: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  routeArrow: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 7,
+    borderRightWidth: 7,
+    borderTopWidth: 10,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#dc2626',
+    marginTop: -1,
+  },
 });
+
+// Marker numerado que destaca leads pertencentes a rota do dia.
+// Render direto (sem React.memo elaborado): a quantidade eh pequena
+// (max ~30) e a posicao na rota pode mudar com reorder.
+function RouteMarker({
+  client,
+  position,
+  onPress,
+}: {
+  client: Client;
+  position: number;
+  onPress: (client: Client) => void;
+}) {
+  return (
+    <Marker
+      coordinate={{ latitude: client.latitude as number, longitude: client.longitude as number }}
+      onPress={() => onPress(client)}
+      zIndex={1000}
+      anchor={{ x: 0.5, y: 1 }}
+    >
+      <View style={markerStyles.container}>
+        <View style={markerStyles.routePin}>
+          <Text style={markerStyles.routePinNumber}>{position}</Text>
+        </View>
+        <View style={markerStyles.routeArrow} />
+      </View>
+    </Marker>
+  );
+}
 
 function MainApp() {
   const insets = useSafeAreaInsets();
@@ -229,7 +281,7 @@ function MainApp() {
   const [routeDate] = useState(todayKey());
   const [routeDraft, setRouteDraft] = useState<Client[]>([]);
   const [routeLeadCount, setRouteLeadCount] = useState('8');
-  const [routePriority, setRoutePriority] = useState<'proximity' | 'status' | 'potential'>('proximity');
+  const [routePriority, setRoutePriority] = useState<'proximity' | 'status' | 'potential' | 'smart'>('smart');
   const [routeStatusScope, setRouteStatusScope] = useState<'current' | 'all'>('current');
   const [goalSellerId, setGoalSellerId] = useState<string | null>(null);
   const [goalVisits, setGoalVisits] = useState('30');
@@ -442,6 +494,13 @@ function MainApp() {
     [routeStops, routeDraft],
   );
 
+  // Markers normais do mapa = filtrados MENOS os da rota (evita dupe — rota
+  // sempre renderiza com numero, mesmo que o status nao bata o chip ativo).
+  const filteredMapMarkers = useMemo(
+    () => filteredWithCoords.filter(c => !routeStopClientIds.has(c.id)),
+    [filteredWithCoords, routeStopClientIds],
+  );
+
   const routeClients = useMemo(
     () => routeStops.map(stop => stop.client).filter(Boolean) as Client[],
     [routeStops],
@@ -540,14 +599,39 @@ function MainApp() {
       return 4;
     };
 
-    // Score inicial: ordena candidatos por criterio escolhido.
-    const scored = eligible
-      .map(client => {
-        const meters = distanceMeters(base.latitude, base.longitude, client.latitude as number, client.longitude as number);
+    // Pre-computa distancias e potenciais pra evitar varrer 2x e pra
+    // permitir normalizacao do modo smart.
+    const withMeters = eligible.map(client => ({
+      client,
+      meters: distanceMeters(base.latitude, base.longitude, client.latitude as number, client.longitude as number),
+    }));
+    const maxMeters = Math.max(1, ...withMeters.map(item => item.meters));
+
+    // Modo smart: combina proximidade, status e potencial em escala normalizada
+    // (0..1 cada componente). Pesos calibrados pra priorizar proximidade
+    // (mais pratico no campo) sem ignorar leads quentes com bom status.
+    const SMART_WEIGHTS = { proximity: 0.5, status: 0.3, potential: 0.2 };
+    const MAX_STATUS_WEIGHT = 9; // valor max de statusWeight
+    const potentialScore = (c: Client) => {
+      // Heuristica simples — sem campo de potencial estruturado por enquanto.
+      // id_hubspot indica lead processado por SDR; empresa nomeada eh sinal
+      // de validacao; ambos juntos = mais quente.
+      let p = 0;
+      if (c.id_hubspot) p += 0.6;
+      if (c.empresa?.trim()) p += 0.4;
+      return Math.min(1, p);
+    };
+
+    const scored = withMeters
+      .map(({ client, meters }) => {
         const score =
           routePriority === 'proximity' ? meters :
           routePriority === 'status' ? statusWeight(client.status) * 100_000 + meters :
-          (client.id_hubspot ? 0 : 50_000) + statusWeight(client.status) * 50_000 + meters;
+          routePriority === 'potential' ? (client.id_hubspot ? 0 : 50_000) + statusWeight(client.status) * 50_000 + meters :
+          /* smart */
+          SMART_WEIGHTS.proximity * (meters / maxMeters) +
+          SMART_WEIGHTS.status * (statusWeight(client.status) / MAX_STATUS_WEIGHT) +
+          SMART_WEIGHTS.potential * (1 - potentialScore(client));
         return { client, meters, score };
       })
       .sort((a, b) => a.score - b.score);
@@ -643,6 +727,33 @@ function MainApp() {
       onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
     });
   }, [fieldOps.saveRoute, routeDate, routeDraft, userLocation]);
+
+  // Troca pra aba mapa e da fit-bounds nos pontos da rota + localizacao
+  // do usuario, se disponivel. Timeout pequeno espera a tab montar antes
+  // de chamar fitToCoordinates (precisa do MapView no DOM).
+  const viewRouteOnMap = useCallback(() => {
+    const coords = routeDisplayClients
+      .filter(c => c.latitude != null && c.longitude != null)
+      .map(c => ({ latitude: c.latitude as number, longitude: c.longitude as number }));
+    if (userLocation) coords.unshift(userLocation);
+    if (coords.length === 0) {
+      Alert.alert('Rota vazia', 'Adicione leads na rota primeiro.');
+      return;
+    }
+    setTab('map');
+    setTimeout(() => {
+      if (mapRef.current && coords.length > 0) {
+        try {
+          mapRef.current.fitToCoordinates(coords, {
+            edgePadding: { top: 120, right: 60, bottom: 220, left: 60 },
+            animated: true,
+          });
+        } catch (err) {
+          console.warn('[ROTA] fitToCoordinates falhou:', err);
+        }
+      }
+    }, 350);
+  }, [routeDisplayClients, userLocation]);
 
   const addClientToRoute = useCallback((client: Client) => {
     if (routeStopClientIds.has(client.id)) {
@@ -1050,7 +1161,15 @@ function MainApp() {
     <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
       <View style={styles.panelCard}>
         <Text style={styles.panelTitle}>Sugestao de rota</Text>
-        <Text style={styles.panelHint}>Algoritmo por proximidade, status e potencial comercial, sem IA.</Text>
+        <Text style={styles.panelHint}>
+          {routePriority === 'smart'
+            ? 'Smart combina proximidade + status + potencial (recomendado).'
+            : routePriority === 'proximity'
+            ? 'Apenas os leads mais perto da sua posicao atual.'
+            : routePriority === 'status'
+            ? 'Prioriza por status (lead nao visitado primeiro).'
+            : 'Prioriza leads ja qualificados no HubSpot.'}
+        </Text>
         <View style={styles.inputRow}>
           <TextInput
             style={[styles.input, { flex: 1 }]}
@@ -1068,19 +1187,34 @@ function MainApp() {
             {fieldOps.saveRoute.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Sugerir</Text>}
           </TouchableOpacity>
         </View>
+        <Text style={[styles.fieldLabel, { marginTop: 8, marginBottom: 4 }]}>Criterio</Text>
         <View style={styles.segmentRow}>
-          {(['proximity', 'status', 'potential'] as const).map(mode => (
+          {(['smart', 'proximity'] as const).map(mode => (
             <TouchableOpacity
               key={mode}
               style={[styles.segmentButton, routePriority === mode && styles.segmentButtonActive]}
               onPress={() => setRoutePriority(mode)}
             >
               <Text style={[styles.segmentButtonText, routePriority === mode && styles.segmentButtonTextActive]}>
-                {mode === 'proximity' ? 'Proximidade' : mode === 'status' ? 'Status' : 'Potencial'}
+                {mode === 'smart' ? '✨ Smart' : 'Proximidade'}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
+        <View style={styles.segmentRow}>
+          {(['status', 'potential'] as const).map(mode => (
+            <TouchableOpacity
+              key={mode}
+              style={[styles.segmentButton, routePriority === mode && styles.segmentButtonActive]}
+              onPress={() => setRoutePriority(mode)}
+            >
+              <Text style={[styles.segmentButtonText, routePriority === mode && styles.segmentButtonTextActive]}>
+                {mode === 'status' ? 'Status' : 'Potencial'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Text style={[styles.fieldLabel, { marginTop: 8, marginBottom: 4 }]}>Escopo</Text>
         <View style={styles.segmentRow}>
           <TouchableOpacity
             style={[styles.segmentButton, routeStatusScope === 'current' && styles.segmentButtonActive]}
@@ -1103,10 +1237,19 @@ function MainApp() {
             <Text style={styles.panelTitle}>Rota de hoje</Text>
             <Text style={styles.panelHint}>{routeDisplayClients.length} leads planejados</Text>
           </View>
-          <View style={{ flexDirection: 'row', gap: 6 }}>
-            <TouchableOpacity style={styles.secondaryButton} onPress={() => setTab('map')}>
-              <Text style={styles.secondaryButtonText}>Adicionar no mapa</Text>
-            </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {routeDisplayClients.length > 0 ? (
+              <TouchableOpacity
+                style={[styles.secondaryButton, { backgroundColor: '#dc2626' }]}
+                onPress={viewRouteOnMap}
+              >
+                <Text style={[styles.secondaryButtonText, { color: '#fff' }]}>Ver no mapa</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => setTab('map')}>
+                <Text style={styles.secondaryButtonText}>Abrir mapa</Text>
+              </TouchableOpacity>
+            )}
             {routeDisplayClients.length > 0 && (
               <TouchableOpacity
                 style={[styles.secondaryButton, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}
@@ -1551,7 +1694,7 @@ function MainApp() {
             clusterTextColor="#ffffff"
             spiralEnabled={false}
           >
-            {filteredWithCoords.map(client => (
+            {filteredMapMarkers.map(client => (
               <MarkerWithReady
                 key={client.id}
                 client={client}
@@ -1564,6 +1707,33 @@ function MainApp() {
                 onPress={handleMarkerPress}
               />
             ))}
+            {/* Markers da rota com numero da ordem — renderizam acima dos
+                normais e ficam visiveis independente do filtro de status. */}
+            {routeDisplayClients
+              .filter(c => c.latitude != null && c.longitude != null)
+              .map((client, index) => (
+                <RouteMarker
+                  key={`route-${client.id}`}
+                  client={client}
+                  position={index + 1}
+                  onPress={handleMarkerPress}
+                />
+              ))}
+            {/* Polyline conectando os pontos da rota na ordem. Comeca do
+                userLocation se disponivel pra mostrar de onde partir. */}
+            {routeDisplayClients.length > 1 && (
+              <Polyline
+                coordinates={[
+                  ...(userLocation ? [userLocation] : []),
+                  ...routeDisplayClients
+                    .filter(c => c.latitude != null && c.longitude != null)
+                    .map(c => ({ latitude: c.latitude as number, longitude: c.longitude as number })),
+                ]}
+                strokeColor="#dc2626"
+                strokeWidth={3}
+                lineDashPattern={[8, 4]}
+              />
+            )}
           </MapView>
 
           {/* Pin overlay fixo no centro da tela durante creationMode */}
