@@ -622,6 +622,9 @@ function MainApp() {
   // como Polyline cinza atras (efeito "rastro" tipo Google Maps).
   const [navTrail, setNavTrail] = useState<Array<{ latitude: number; longitude: number }>>([]);
   const navMapRef = useRef<RNMapView | null>(null);
+  // Throttle pra evitar que GPS + bussola disparem multiplas animacoes
+  // simultaneas — o sintoma era zoom "derivando" pra fora durante caminhada.
+  const lastCameraAnimateAt = useRef(0);
 
   const suggestRoute = useCallback(async () => {
     // Validacao explicita da qtd pedida: invalido -> avisa, nao cai pra 8.
@@ -964,6 +967,13 @@ function MainApp() {
   useEffect(() => {
     if (!isNavigating || navCameraMode !== 'follow') return;
     if (!userLocation || !navMapRef.current) return;
+    // Throttle: minimo 800ms entre animateCamera. Sem isso, GPS + bussola
+    // disparavam animacoes simultaneas (cada uma com 600ms de easing), o
+    // zoom acabava "derivando" porque as interpolacoes se cancelavam mid-flight.
+    const now = Date.now();
+    if (now - lastCameraAnimateAt.current < 800) return;
+    lastCameraAnimateAt.current = now;
+
     try {
       // animateCamera faz update PARCIAL: propriedades omitidas mantem o
       // valor atual. Quando navUserHeading eh null (compass falhou ou usuario
@@ -971,11 +981,15 @@ function MainApp() {
       // norte; preserva a rotacao atual ate o GPS reportar uma direcao real.
       const camera: any = {
         center: { latitude: userLocation.latitude, longitude: userLocation.longitude },
-        pitch: 60,
-        zoom: 18,
+        // pitch menor (era 60): tilt agressivo demais expande a area visivel
+        // horizontalmente, da sensacao de "zoom out". 45 mantem o 3D feel
+        // sem mostrar tanto da paisagem distante.
+        pitch: 45,
+        // zoom 19 = nivel "nome de rua". Era 18 (1 nivel mais distante).
+        zoom: 19,
       };
       if (navUserHeading != null) camera.heading = navUserHeading;
-      navMapRef.current.animateCamera(camera, { duration: 600 });
+      navMapRef.current.animateCamera(camera, { duration: 350 });
     } catch (err) {
       console.warn('[NAV] animateCamera falhou:', err);
     }
