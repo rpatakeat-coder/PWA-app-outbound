@@ -1033,20 +1033,26 @@ function MainApp() {
 
   const navigationCurrentStop = isNavigating ? routeDisplayClients[currentStopIndex] : null;
 
-  // Geometria do trecho de navegacao. NAO inclui userLocation: o polyline
-  // eh a rota entre os stops planejados (estavel), e a seta do usuario
-  // mostra a posicao real em cima. Antes incluíamos o GPS arredondado a
-  // ~10m e o refetch a cada movimento causava flicker visivel.
-  //
-  // Refetch acontece so quando muda o stop alvo (Finalizar/Pular) ou a
-  // composicao da rota — eventos discretos, sem flicker continuo.
+  // Geometria do trecho de navegacao: parte do GPS atual (mesmo padrao do
+  // routeWaypoints da view geral). userLocation arredondado a ~10m pra
+  // estabilizar a chave de cache; placeholderData na useQuery garante que,
+  // durante eventuais refetches, o polyline anterior continue visivel
+  // (sem flash de "sem linha").
   const navWaypoints = useMemo<RoutePoint[]>(() => {
     if (!isNavigating) return [];
-    return routeDisplayClients
+    const remaining = routeDisplayClients
       .slice(currentStopIndex)
       .filter(c => c.latitude != null && c.longitude != null)
       .map(c => ({ latitude: c.latitude as number, longitude: c.longitude as number }));
-  }, [isNavigating, routeDisplayClients, currentStopIndex]);
+    if (remaining.length === 0 || !userLocation) return remaining;
+    return [
+      {
+        latitude: Math.round(userLocation.latitude * 10_000) / 10_000,
+        longitude: Math.round(userLocation.longitude * 10_000) / 10_000,
+      },
+      ...remaining,
+    ];
+  }, [isNavigating, userLocation, routeDisplayClients, currentStopIndex]);
 
   const navRouteGeometry = useQuery({
     queryKey: ['nav-route-geometry', navWaypoints],
