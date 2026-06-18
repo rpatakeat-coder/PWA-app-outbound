@@ -64,33 +64,37 @@ function SelectField({
   dbLabel,
 }: {
   subField: Extract<StageSubField, { kind: 'select' }>;
-  value: string;
+  value: string; // sempre o internal value (vai pro payload do HubSpot)
   onChange: (v: string) => void;
   color: string;
   disabled: boolean;
-  dbOptions?: string[];
+  // Quando vem do banco: cada option tem { value: internal, label: display }.
+  // Fallback hardcoded (subField.options) eh array de strings — o mesmo
+  // valor serve como internal E display.
+  dbOptions?: { value: string; label: string }[];
   dbLabel?: string;
 }) {
-  const opts = dbOptions ?? subField.options;
+  const opts: { value: string; label: string }[] =
+    dbOptions ?? subField.options.map((o) => ({ value: o, label: o }));
   const label = dbLabel ?? subField.fieldLabel;
   return (
     <View style={{ marginBottom: 12 }}>
       <Text style={styles.subOptionsLabel}>{label}</Text>
       <View style={styles.subOptionsGrid}>
         {opts.map((opt) => {
-          const selected = value === opt;
+          const selected = value === opt.value;
           return (
             <TouchableOpacity
-              key={opt}
+              key={opt.value}
               style={[
                 styles.subOptionChip,
                 selected && { backgroundColor: color, borderColor: color },
               ]}
-              onPress={() => onChange(opt)}
+              onPress={() => onChange(opt.value)}
               disabled={disabled}
             >
               <Text style={[styles.subOptionChipText, selected && { color: '#fff' }]}>
-                {opt}
+                {opt.label}
               </Text>
             </TouchableOpacity>
           );
