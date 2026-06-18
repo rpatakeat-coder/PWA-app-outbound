@@ -580,6 +580,14 @@ function MainApp() {
   }, [performance, profile]);
 
   const [isOptimizing, setIsOptimizing] = useState(false);
+  // Provider usado na ultima sugestao bem-sucedida. Persistido em memoria
+  // pra mostrar um indicador admin no card "Rota de hoje".
+  const [lastProviderUsed, setLastProviderUsed] = useState<RoutingProvider | null>(null);
+
+  // Modo navegacao: ocupa a tela toda com mapa focado no GPS + card do
+  // proximo destino. Avanca por toque em "Cheguei" (marca visitado).
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [currentStopIndex, setCurrentStopIndex] = useState(0);
 
   const suggestRoute = useCallback(async () => {
     // Validacao explicita da qtd pedida: invalido -> avisa, nao cai pra 8.
@@ -672,15 +680,12 @@ function MainApp() {
 
     const topCandidates = scored.slice(0, desired);
 
-    // Ordenacao: tenta otimizacao TSP por rede viaria real (OSRM /trip).
-    // Isso resolve o "menor distancia E menor tempo" considerando ruas,
-    // sentido unico, rios sem ponte, etc. — coisas que haversine ignora.
-    // Se a API falhar, cai pra nearest-neighbor por linha reta (fallback
-    // pratico, pior que Trip mas melhor que ordenar so por score).
+    // Ordenacao via TSP real (ORS Optimization -> OSRM /trip). Se AMBOS
+    // provedores falharem, NAO cai pra linha reta — avisa o usuario com
+    // mensagem clara e contato pro time RPA, conforme decisao do produto.
     let ordered: Array<{ client: Client; meters: number }> = [];
     let tripDistanceMeters: number | null = null;
     let tripDurationSeconds: number | null = null;
-    let usedOptimization: 'real-tsp' | 'nearest-neighbor' = 'nearest-neighbor';
     let optimizationProvider: RoutingProvider | null = null;
 
     if (topCandidates.length > 0) {
@@ -694,9 +699,6 @@ function MainApp() {
           })),
         ];
         const trip = await fetchOptimizedTrip(tripPoints);
-        // inputOrderToVisit[0] = sempre 0 (base/source fixo). A partir do
-        // index 1 vem a ordem otima dos candidatos pelos seus indices no
-        // array de entrada (1..N → topCandidates[index-1]).
         const visitOrder = trip.inputOrderToVisit.slice(1);
         let prevLat = base.latitude;
         let prevLon = base.longitude;
@@ -713,27 +715,18 @@ function MainApp() {
         }
         tripDistanceMeters = trip.distanceMeters;
         tripDurationSeconds = trip.durationSeconds;
-        usedOptimization = 'real-tsp';
         optimizationProvider = trip.provider;
+        setLastProviderUsed(trip.provider);
       } catch (err: any) {
-        console.warn('[ROTA] OSRM Trip falhou, caindo pra nearest-neighbor:', err?.message ?? err);
-        // Fallback: nearest-neighbor por haversine
-        const remaining = topCandidates.map(item => ({ ...item }));
-        let cursorLat = base.latitude;
-        let cursorLon = base.longitude;
-        while (remaining.length > 0) {
-          let bestIdx = 0;
-          let bestDist = Infinity;
-          for (let i = 0; i < remaining.length; i++) {
-            const cand = remaining[i];
-            const d = distanceMeters(cursorLat, cursorLon, cand.client.latitude as number, cand.client.longitude as number);
-            if (d < bestDist) { bestDist = d; bestIdx = i; }
-          }
-          const picked = remaining.splice(bestIdx, 1)[0];
-          ordered.push({ client: picked.client, meters: bestDist });
-          cursorLat = picked.client.latitude as number;
-          cursorLon = picked.client.longitude as number;
-        }
+        console.warn('[ROTA] Ambos provedores (ORS e OSRM) falharam:', err?.message ?? err);
+        setIsOptimizing(false);
+        Alert.alert(
+          'Erro ao gerar rota',
+          'Nao conseguimos calcular a ordem otimizada (OpenRouteService e OSRM '
+          + 'estao fora). Tente novamente em alguns minutos.\n\n'
+          + 'Se o problema persistir, contate o time de RPA.',
+        );
+        return;
       } finally {
         setIsOptimizing(false);
       }
@@ -767,10 +760,10 @@ function MainApp() {
         const got = ordered.length;
         const providerLabel = optimizationProvider === 'ors'
           ? 'OpenRouteService'
-          : optimizationProvider === 'osrm' ? 'OSRM (fallback)' : '';
+          : optimizationProvider === 'osrm' ? 'OSRM (ORS fora)' : '';
         const tripInfo = tripDistanceMeters != null && tripDurationSeconds != null
           ? `\n\n🛣️ ${(tripDistanceMeters / 1000).toFixed(1)} km • ~${Math.round(tripDurationSeconds / 60)} min de carro`
-            + (usedOptimization === 'real-tsp' && providerLabel ? `\n(Otimizado via ${providerLabel})` : '')
+            + (providerLabel ? `\n(Otimizado via ${providerLabel})` : '')
           : '';
         const lines = [
           got === desired
@@ -783,9 +776,6 @@ function MainApp() {
           withoutCoord > 0 ? `• ${withoutCoord} sem coordenadas` : null,
           alreadyInRoute > 0 ? `• ${alreadyInRoute} ja estavam na rota` : null,
           capped ? '\nObs.: limite maximo por rota = 30.' : null,
-          usedOptimization === 'nearest-neighbor' && got > 1
-            ? '\n⚠️ Otimizacao real indisponivel; ordem por linha reta (fallback).'
-            : null,
         ].filter(Boolean);
         Alert.alert('Rota sugerida', lines.join('\n'));
       },
@@ -843,6 +833,63 @@ function MainApp() {
       }
     }, 350);
   }, [routeDisplayClients, userLocation]);
+
+  // ===== Modo Navegacao =====
+  const startNavigation = useCallback(() => {
+    if (routeDisplayClients.length === 0) {
+      Alert.alert('Rota vazia', 'Gere ou monte uma rota antes de iniciar a navegacao.');
+      return;
+    }
+    // Comeca pelo primeiro stop ainda nao marcado como done.
+    const firstPendingIdx = routeStops.findIndex(s => s.status !== 'done');
+    setCurrentStopIndex(firstPendingIdx >= 0 ? firstPendingIdx : 0);
+    setIsNavigating(true);
+  }, [routeDisplayClients.length, routeStops]);
+
+  const exitNavigation = useCallback(() => {
+    setIsNavigating(false);
+  }, []);
+
+  const navigationCurrentStop = isNavigating ? routeDisplayClients[currentStopIndex] : null;
+
+  // Mete dist em metros do user ate o destino atual (linha reta — so pra
+  // mostrar "X.X km" no card, nao eh usado em ordenacao).
+  const navigationDistanceMeters = useMemo(() => {
+    if (!isNavigating || !userLocation || !navigationCurrentStop) return null;
+    if (navigationCurrentStop.latitude == null || navigationCurrentStop.longitude == null) return null;
+    return distanceMeters(
+      userLocation.latitude, userLocation.longitude,
+      navigationCurrentStop.latitude, navigationCurrentStop.longitude,
+    );
+  }, [isNavigating, userLocation, navigationCurrentStop]);
+
+  const advanceNavigationStop = useCallback(async () => {
+    const stop = navigationCurrentStop
+      ? routeStops.find(s => s.client_id === navigationCurrentStop.id)
+      : null;
+    if (stop) {
+      try { await fieldOps.markStopDone.mutateAsync(stop); } catch (err) {
+        console.warn('[NAV] markStopDone falhou:', err);
+      }
+    }
+    if (currentStopIndex + 1 >= routeDisplayClients.length) {
+      Alert.alert(
+        '🎉 Rota concluida',
+        `Voce visitou os ${routeDisplayClients.length} leads da rota de hoje.`,
+        [{ text: 'OK', onPress: () => setIsNavigating(false) }],
+      );
+      return;
+    }
+    setCurrentStopIndex(idx => idx + 1);
+  }, [navigationCurrentStop, routeStops, currentStopIndex, routeDisplayClients.length, fieldOps.markStopDone]);
+
+  const skipNavigationStop = useCallback(() => {
+    if (currentStopIndex + 1 >= routeDisplayClients.length) {
+      Alert.alert('Ultimo lead', 'Esse eh o ultimo destino da rota — sem mais leads pra pular.');
+      return;
+    }
+    setCurrentStopIndex(idx => idx + 1);
+  }, [currentStopIndex, routeDisplayClients.length]);
 
   const addClientToRoute = useCallback((client: Client) => {
     if (routeStopClientIds.has(client.id)) {
@@ -1383,8 +1430,27 @@ function MainApp() {
               )}
               {routeGeometry.isFetching && ' • calculando rota...'}
             </Text>
+            {/* Badge admin: mostra qual provedor foi usado na ultima sugestao.
+                ORS = caminho feliz; OSRM = ORS caiu e o fallback rolou. */}
+            {isAdmin && lastProviderUsed && (
+              <View style={[styles.providerBadge, lastProviderUsed === 'osrm' && { backgroundColor: '#fef3c7', borderColor: '#fde68a' }]}>
+                <Text style={[styles.providerBadgeText, lastProviderUsed === 'osrm' && { color: '#92400e' }]}>
+                  {lastProviderUsed === 'ors'
+                    ? '✓ Via OpenRouteService'
+                    : '⚠ Via OSRM (ORS estava fora)'}
+                </Text>
+              </View>
+            )}
           </View>
           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {routeDisplayClients.length > 0 && (
+              <TouchableOpacity
+                style={[styles.secondaryButton, { backgroundColor: '#16a34a' }]}
+                onPress={startNavigation}
+              >
+                <Text style={[styles.secondaryButtonText, { color: '#fff' }]}>🧭 Navegar</Text>
+              </TouchableOpacity>
+            )}
             {routeDisplayClients.length > 0 ? (
               <TouchableOpacity
                 style={[styles.secondaryButton, { backgroundColor: '#dc2626' }]}
@@ -1713,6 +1779,122 @@ function MainApp() {
       </View>
     );
   }
+
+  // ===== Tela de navegacao (full-screen) =====
+  // Renderiza acima de tudo quando isNavigating === true. Mapa focado no
+  // GPS, polyline da rota restante, card do proximo destino, botoes pra
+  // abrir Google Maps no trecho e marcar "Cheguei".
+  if (isNavigating && navigationCurrentStop) {
+    const remaining = routeDisplayClients.slice(currentStopIndex);
+    const remainingWithCoords = remaining.filter(c => c.latitude != null && c.longitude != null);
+    const navTitle = navigationCurrentStop.empresa?.trim() || navigationCurrentStop.nome;
+    const navSubtitle = [navigationCurrentStop.cidade, navigationCurrentStop.estado].filter(Boolean).join(' • ');
+    const distKm = navigationDistanceMeters != null ? (navigationDistanceMeters / 1000).toFixed(1) : null;
+    const isLast = currentStopIndex === routeDisplayClients.length - 1;
+
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar style="light" />
+        {/* Header compacto da navegacao */}
+        <View style={styles.navHeader}>
+          <TouchableOpacity onPress={exitNavigation} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Text style={styles.navHeaderClose}>✕</Text>
+          </TouchableOpacity>
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={styles.navHeaderTitle}>Modo navegacao</Text>
+            <Text style={styles.navHeaderSubtitle}>
+              Parada {currentStopIndex + 1} de {routeDisplayClients.length}
+            </Text>
+          </View>
+          <View style={{ width: 24 }} />
+        </View>
+
+        {/* Mapa focado: segue GPS + mostra resto da rota */}
+        <MapView
+          style={{ flex: 1 }}
+          initialRegion={{
+            latitude: navigationCurrentStop.latitude as number,
+            longitude: navigationCurrentStop.longitude as number,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          }}
+          showsUserLocation
+          followsUserLocation
+          radius={50}
+          minPoints={50}  /* desliga clustering em modo nav — sao poucos pinos */
+        >
+          {remainingWithCoords.map((client, idx) => (
+            <RouteMarker
+              key={`nav-${client.id}`}
+              client={client}
+              position={currentStopIndex + idx + 1}
+              onPress={() => {}}
+            />
+          ))}
+          {(remainingWithCoords.length >= 1 && userLocation) && (
+            <Polyline
+              coordinates={[
+                userLocation,
+                ...remainingWithCoords.map(c => ({
+                  latitude: c.latitude as number,
+                  longitude: c.longitude as number,
+                })),
+              ]}
+              strokeColor="#dc2626"
+              strokeWidth={4}
+              lineDashPattern={[8, 4]}
+            />
+          )}
+        </MapView>
+
+        {/* Card flutuante do proximo destino */}
+        <View style={[styles.navTopCard, { top: insets.top + 60 }]}>
+          <Text style={styles.navTopCardLabel}>Proximo destino</Text>
+          <Text style={styles.navTopCardTitle} numberOfLines={1}>{navTitle}</Text>
+          {navSubtitle ? <Text style={styles.navTopCardSubtitle}>{navSubtitle}</Text> : null}
+          {distKm && <Text style={styles.navTopCardDistance}>{distKm} km em linha reta</Text>}
+        </View>
+
+        {/* Barra de acoes inferior */}
+        <View style={[styles.navBottom, { paddingBottom: insets.bottom + 12 }]}>
+          <TouchableOpacity
+            style={[styles.navActionButton, { backgroundColor: '#3b82f6' }]}
+            onPress={() => openNavigation({
+              latitude: navigationCurrentStop.latitude as number,
+              longitude: navigationCurrentStop.longitude as number,
+              clientName: navTitle,
+              travelMode: 'driving',
+            })}
+          >
+            <Text style={styles.navActionButtonText}>🚗 Abrir no Maps</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.navActionButton, { backgroundColor: '#16a34a' }]}
+            onPress={() => {
+              Alert.alert(
+                isLast ? 'Concluir rota' : 'Cheguei!',
+                isLast
+                  ? 'Marcar essa visita como feita e encerrar a rota?'
+                  : `Marcar visita em ${navTitle} como feita e ir pro proximo?`,
+                [
+                  { text: 'Cancelar', style: 'cancel' },
+                  { text: 'Sim', onPress: advanceNavigationStop },
+                ],
+              );
+            }}
+          >
+            <Text style={styles.navActionButtonText}>✅ Cheguei</Text>
+          </TouchableOpacity>
+          {!isLast && (
+            <TouchableOpacity style={styles.navSkipButton} onPress={skipNavigationStop}>
+              <Text style={styles.navSkipButtonText}>Pular esse</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  }
+
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -3204,6 +3386,69 @@ const styles = StyleSheet.create({
   manualRowTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
   manualRowSubtitle: { fontSize: 12, color: '#64748b', marginTop: 1 },
   manualRowWarning: { fontSize: 11, color: '#dc2626', fontWeight: '600', marginTop: 2 },
+  // Badge admin: indica qual roteador foi usado pra otimizar a ultima rota.
+  providerBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#dcfce7',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  providerBadgeText: { fontSize: 10, fontWeight: '700', color: '#166534' },
+  // ===== Modo Navegacao =====
+  navHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#0f172a',
+    gap: 12,
+  },
+  navHeaderClose: { color: '#fff', fontSize: 22, fontWeight: '600', width: 24, textAlign: 'left' },
+  navHeaderTitle: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  navHeaderSubtitle: { color: '#94a3b8', fontSize: 11, marginTop: 2 },
+  navTopCard: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 6,
+    borderLeftWidth: 4,
+    borderLeftColor: '#dc2626',
+  },
+  navTopCardLabel: { fontSize: 11, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 },
+  navTopCardTitle: { fontSize: 18, fontWeight: '800', color: '#0f172a', marginTop: 2 },
+  navTopCardSubtitle: { fontSize: 13, color: '#64748b', marginTop: 1 },
+  navTopCardDistance: { fontSize: 13, fontWeight: '600', color: '#dc2626', marginTop: 4 },
+  navBottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 12,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: -4 },
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  navActionButton: { paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  navActionButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  navSkipButton: { paddingVertical: 10, alignItems: 'center' },
+  navSkipButtonText: { color: '#64748b', fontSize: 13, fontWeight: '600' },
   // Search bar (busca por nome) — fica acima dos chips de status.
   searchBar: {
     flexDirection: 'row',
