@@ -126,6 +126,8 @@ export interface ClientNote {
   client_id: string;
   body: string;
   created_by: string | null;
+  created_by_name: string | null;
+  created_by_email: string | null;
   created_at: string;
   updated_at: string;
 }

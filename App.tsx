@@ -687,7 +687,14 @@ function MainApp() {
 
   const submitClient = async () => {
     if (submittingRef.current) return;
-    if (!form.nome.trim()) return;
+    if (!form.nome.trim()) {
+      Alert.alert('Nome do contato', 'Informe o nome do contato responsavel.');
+      return;
+    }
+    if (!form.empresa.trim()) {
+      Alert.alert('Restaurante obrigatorio', 'Informe o nome do restaurante (empresa).');
+      return;
+    }
 
     const lat = form.latitude ? parseFloat(form.latitude) : null;
     const lng = form.longitude ? parseFloat(form.longitude) : null;
@@ -765,6 +772,10 @@ function MainApp() {
   const saveEditClient = async () => {
     if (submittingRef.current) return;
     if (!editingClient || !form.nome.trim()) return;
+    if (!form.empresa.trim()) {
+      Alert.alert('Restaurante obrigatorio', 'Informe o nome do restaurante (empresa).');
+      return;
+    }
 
     const lat = form.latitude ? parseFloat(form.latitude) : null;
     const lng = form.longitude ? parseFloat(form.longitude) : null;
@@ -895,6 +906,10 @@ function MainApp() {
     const color = statusConfig[item.status]?.color || '#3b82f6';
     const label = statusConfig[item.status]?.label || item.status;
     const meetingCount = upcomingByClient[item.id] ?? 0;
+    // Restaurante (empresa) eh o titulo principal. Fallback pro nome do
+    // contato em leads antigos que ainda nao tem empresa preenchida.
+    const primary = item.empresa?.trim() || item.nome;
+    const secondary = item.empresa?.trim() ? item.nome : null;
     return (
       <TouchableOpacity
         style={[styles.clientCard, { borderLeftColor: color }]}
@@ -903,7 +918,7 @@ function MainApp() {
         <View style={styles.cardHeader}>
           <View style={styles.cardNameRow}>
             <Image source={require('./assets/icon.png')} style={[styles.cardLogo, { tintColor: color }]} />
-            <Text style={styles.clientName} numberOfLines={1}>{item.nome}</Text>
+            <Text style={styles.clientName} numberOfLines={1}>{primary}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             {meetingCount > 0 && (
@@ -916,6 +931,7 @@ function MainApp() {
             </View>
           </View>
         </View>
+        {secondary && <Text style={styles.clientContact} numberOfLines={1}>Contato: {secondary}</Text>}
         <Text style={styles.clientCity}>
           {item.cidade ?? 'Cidade não informada'}{item.estado ? ` • ${item.estado}` : ''}
         </Text>
@@ -1954,17 +1970,17 @@ function MainApp() {
               <Text style={styles.fieldLabel}>Informações</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Nome *"
-                placeholderTextColor="#94a3b8"
-                value={form.nome}
-                onChangeText={v => setForm(s => ({ ...s, nome: v }))}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Nome da empresa"
+                placeholder="Nome do restaurante *"
                 placeholderTextColor="#94a3b8"
                 value={form.empresa}
                 onChangeText={v => setForm(s => ({ ...s, empresa: v }))}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Nome do contato *"
+                placeholderTextColor="#94a3b8"
+                value={form.nome}
+                onChangeText={v => setForm(s => ({ ...s, nome: v }))}
               />
               <TextInput
                 style={styles.input}
@@ -2097,8 +2113,10 @@ function ClientBottomSheet({
   const statusColor = statusConfig[client.status]?.color || '#3b82f6';
   const statusLabel = statusConfig[client.status]?.label || client.status;
   const { user } = useAuth();
-  const { notes, addNote, deleteNote } = useClientNotes(client.id);
+  const { notes, addNote, updateNote, deleteNote } = useClientNotes(client.id);
   const [newNote, setNewNote] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingBody, setEditingBody] = useState('');
 
   const approxReasons: string[] = [];
   if (!client.numero) approxReasons.push('Endereço sem número');
@@ -2191,7 +2209,10 @@ function ClientBottomSheet({
                 <Image source={require('./assets/icon.png')} style={styles.bsLogo} />
               </View>
               <View style={styles.bsHeaderInfo}>
-                <Text style={styles.clientDetailsName}>{client.nome}</Text>
+                <Text style={styles.clientDetailsName}>{client.empresa?.trim() || client.nome}</Text>
+                {client.empresa?.trim() && client.nome && client.nome !== client.empresa && (
+                  <Text style={styles.bsContactSubtitle} numberOfLines={1}>Contato: {client.nome}</Text>
+                )}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <View style={[styles.statusBadgeLarge, { backgroundColor: statusColor }]}>
                     <Text style={styles.statusBadgeText}>
@@ -2356,35 +2377,89 @@ function ClientBottomSheet({
                     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
                   });
                   const isMine = !!user?.id && note.created_by === user.id;
+                  const isEditing = editingNoteId === note.id;
+                  const wasEdited = new Date(note.updated_at).getTime() - new Date(note.created_at).getTime() > 2000;
+                  const authorLabel = note.created_by_name || note.created_by_email || 'Autor desconhecido';
                   return (
                     <View key={note.id} style={styles.noteItem}>
                       <View style={styles.noteHeaderRow}>
-                        <Text style={styles.noteDate}>📝 {when}</Text>
-                        {isMine && (
-                          <TouchableOpacity
-                            onPress={() => {
-                              Alert.alert(
-                                'Remover nota',
-                                'Apagar essa nota? Nao pode ser desfeito.',
-                                [
-                                  { text: 'Cancelar', style: 'cancel' },
-                                  {
-                                    text: 'Apagar',
-                                    style: 'destructive',
-                                    onPress: () => deleteNote.mutate(note.id, {
-                                      onError: (err: any) => Alert.alert('Erro', err?.message ?? 'Falhou'),
-                                    }),
-                                  },
-                                ],
-                              );
-                            }}
-                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                          >
-                            <Text style={styles.noteDelete}>✕</Text>
-                          </TouchableOpacity>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.noteAuthor} numberOfLines={1}>👤 {authorLabel}</Text>
+                          <Text style={styles.noteDate}>
+                            {when}{wasEdited ? ' • editado' : ''}
+                          </Text>
+                        </View>
+                        {isMine && !isEditing && (
+                          <View style={styles.noteActions}>
+                            <TouchableOpacity
+                              onPress={() => { setEditingNoteId(note.id); setEditingBody(note.body); }}
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Text style={styles.noteAction}>Editar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => {
+                                Alert.alert(
+                                  'Remover nota',
+                                  'Apagar essa nota? Nao pode ser desfeito.',
+                                  [
+                                    { text: 'Cancelar', style: 'cancel' },
+                                    {
+                                      text: 'Apagar',
+                                      style: 'destructive',
+                                      onPress: () => deleteNote.mutate(note.id, {
+                                        onError: (err: any) => Alert.alert('Erro', err?.message ?? 'Falhou'),
+                                      }),
+                                    },
+                                  ],
+                                );
+                              }}
+                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                            >
+                              <Text style={[styles.noteAction, { color: '#dc2626' }]}>Apagar</Text>
+                            </TouchableOpacity>
+                          </View>
                         )}
                       </View>
-                      <Text style={styles.noteBody}>{note.body}</Text>
+                      {isEditing ? (
+                        <>
+                          <TextInput
+                            style={[styles.input, { marginTop: 8, marginBottom: 0, minHeight: 60 }]}
+                            value={editingBody}
+                            onChangeText={setEditingBody}
+                            multiline
+                            autoFocus
+                            editable={!updateNote.isPending}
+                          />
+                          <View style={styles.noteEditActions}>
+                            <TouchableOpacity
+                              style={styles.noteEditCancel}
+                              onPress={() => { setEditingNoteId(null); setEditingBody(''); }}
+                              disabled={updateNote.isPending}
+                            >
+                              <Text style={styles.noteEditCancelText}>Cancelar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.noteEditSave, (!editingBody.trim() || updateNote.isPending) && { opacity: 0.5 }]}
+                              disabled={!editingBody.trim() || updateNote.isPending}
+                              onPress={() => {
+                                updateNote.mutate({ id: note.id, body: editingBody }, {
+                                  onSuccess: () => { setEditingNoteId(null); setEditingBody(''); },
+                                  onError: (err: any) => Alert.alert('Erro', err?.message ?? 'Falhou'),
+                                });
+                              }}
+                            >
+                              {updateNote.isPending ? (
+                                <ActivityIndicator color="#fff" />
+                              ) : (
+                                <Text style={styles.noteEditSaveText}>Salvar</Text>
+                              )}
+                            </TouchableOpacity>
+                          </View>
+                        </>
+                      ) : (
+                        <Text style={styles.noteBody}>{note.body}</Text>
+                      )}
                     </View>
                   );
                 })
@@ -2883,6 +2958,7 @@ const styles = StyleSheet.create({
   cardNameRow: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
   cardLogo: { width: 18, height: 18, resizeMode: 'contain', marginRight: 8 },
   clientName: { fontSize: 15, fontWeight: '700', color: '#0f172a', flex: 1 },
+  clientContact: { fontSize: 12, color: '#64748b', marginTop: 2 },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   statusBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   cardMeetingBadge: {
@@ -3031,7 +3107,8 @@ const styles = StyleSheet.create({
   bsLogoWrap: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   bsLogo: { width: 28, height: 28, tintColor: '#fff', resizeMode: 'contain' },
   bsHeaderInfo: { flex: 1 },
-  clientDetailsName: { fontSize: 20, fontWeight: '700', color: '#0f172a', marginBottom: 6 },
+  clientDetailsName: { fontSize: 20, fontWeight: '700', color: '#0f172a', marginBottom: 2 },
+  bsContactSubtitle: { fontSize: 12, color: '#64748b', marginBottom: 6 },
   statusBadgeLarge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start' },
   infoGrid: { gap: 12, marginBottom: 16 },
   infoItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
@@ -3049,10 +3126,19 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: '#3b82f6',
   },
-  noteHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
-  noteDate: { fontSize: 12, fontWeight: '600', color: '#64748b' },
+  noteHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6, gap: 8 },
+  noteAuthor: { fontSize: 12, fontWeight: '700', color: '#0f172a', marginBottom: 1 },
+  noteDate: { fontSize: 11, color: '#64748b' },
+  noteActions: { flexDirection: 'row', gap: 12 },
+  noteAction: { fontSize: 12, fontWeight: '700', color: '#3b82f6' },
   noteDelete: { fontSize: 14, color: '#94a3b8', paddingHorizontal: 4 },
   noteBody: { fontSize: 14, color: '#0f172a', lineHeight: 20 },
+  // Modo edicao inline: botoes Cancelar/Salvar abaixo do textarea.
+  noteEditActions: { flexDirection: 'row', gap: 8, marginTop: 8, justifyContent: 'flex-end' },
+  noteEditCancel: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: '#f1f5f9' },
+  noteEditCancelText: { color: '#64748b', fontWeight: '700', fontSize: 13 },
+  noteEditSave: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: '#dc2626' },
+  noteEditSaveText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   navigationSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9', marginBottom: 16 },
   navigationRow: { flexDirection: 'row', gap: 10 },
   navRouteButton: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1 },

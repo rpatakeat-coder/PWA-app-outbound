@@ -12,7 +12,7 @@ const isMissingTableError = (err: any) =>
 
 export function useClientNotes(clientId: string | null | undefined) {
   const queryClient = useQueryClient();
-  const { user, isAuthenticated } = useAuth();
+  const { user, profile, isAuthenticated } = useAuth();
 
   const notesQuery = useQuery<ClientNote[]>({
     queryKey: ['client_notes', clientId],
@@ -41,7 +41,32 @@ export function useClientNotes(clientId: string | null | undefined) {
 
       const { data, error } = await supabase
         .from('client_notes')
-        .insert({ client_id: clientId, body: trimmed, created_by: user.id })
+        .insert({
+          client_id: clientId,
+          body: trimmed,
+          created_by: user.id,
+          // Snapshot do autor: nome/email do profile no momento da criacao.
+          // Imutavel — se a pessoa trocar de nome depois, a nota antiga
+          // mantem o nome de quando foi escrita.
+          created_by_name: profile?.full_name ?? null,
+          created_by_email: user.email ?? profile?.email ?? null,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as ClientNote;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_notes', clientId] }),
+  });
+
+  const updateNote = useMutation({
+    mutationFn: async ({ id, body }: { id: string; body: string }) => {
+      const trimmed = body.trim();
+      if (!trimmed) throw new Error('Nota vazia');
+      const { data, error } = await supabase
+        .from('client_notes')
+        .update({ body: trimmed })
+        .eq('id', id)
         .select()
         .single();
       if (error) throw error;
@@ -62,6 +87,7 @@ export function useClientNotes(clientId: string | null | undefined) {
     notes: notesQuery.data ?? [],
     isLoading: notesQuery.isLoading,
     addNote,
+    updateNote,
     deleteNote,
   };
 }
