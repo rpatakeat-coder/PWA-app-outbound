@@ -618,6 +618,9 @@ function MainApp() {
   //  - overview: zoom out mostrando rota inteira
   const [navCameraMode, setNavCameraMode] = useState<'follow' | 'free' | 'overview'>('follow');
   const [gpsUnstable, setGpsUnstable] = useState(false);
+  // Trilha de pontos percorridos durante a sessao de navegacao — renderizada
+  // como Polyline cinza atras (efeito "rastro" tipo Google Maps).
+  const [navTrail, setNavTrail] = useState<Array<{ latitude: number; longitude: number }>>([]);
   const navMapRef = useRef<RNMapView | null>(null);
 
   const suggestRoute = useCallback(async () => {
@@ -901,7 +904,14 @@ function MainApp() {
             timeInterval: 2000,
           },
           (loc) => {
-            setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+            const next = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+            setUserLocation(next);
+            // Trilha do percurso — capa em 500 pontos pra nao explodir memoria
+            // em sessoes longas (a 5m/ponto sao ~2.5km de historico).
+            setNavTrail(prev => {
+              const trail = [...prev, next];
+              return trail.length > 500 ? trail.slice(-500) : trail;
+            });
             // heading derivado do GPS so eh confiavel quando esta em movimento
             // (>1m/s ~3.6km/h). Se parado, o valor vem -1 ou ruido — ignora.
             if (
@@ -958,8 +968,11 @@ function MainApp() {
         {
           center: { latitude: userLocation.latitude, longitude: userLocation.longitude },
           heading: navUserHeading ?? 0,
-          pitch: 50,
-          zoom: 17,
+          // pitch + zoom ajustados pra visao "no banco do motorista" — proximo
+          // o suficiente pra enxergar a proxima curva, anglado pra dar
+          // sensacao 3D igual Google Maps em navegacao.
+          pitch: 60,
+          zoom: 18,
         },
         { duration: 600 },
       );
@@ -984,6 +997,7 @@ function MainApp() {
     setIsNavigating(false);
     setNavCameraMode('follow');
     setNavUserHeading(null);
+    setNavTrail([]);
   }, []);
 
   // Volta pro modo follow (acompanha GPS). O effect de camera vai pegar
@@ -2049,8 +2063,10 @@ function MainApp() {
           initialRegion={{
             latitude: (userLocation?.latitude ?? navigationCurrentStop.latitude) as number,
             longitude: (userLocation?.longitude ?? navigationCurrentStop.longitude) as number,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
+            // Delta menor = mais perto. animateCamera vai ajustar mais ainda
+            // (zoom=18) assim que o GPS reportar a primeira posicao.
+            latitudeDelta: 0.004,
+            longitudeDelta: 0.004,
           }}
           showsUserLocation={false}      /* renderizamos nossa propria seta */
           followsUserLocation={false}    /* camera controlada pelo useEffect */
@@ -2088,6 +2104,16 @@ function MainApp() {
             </Marker>
           )}
 
+          {/* Trail cinza: rastro percorrido durante a sessao (Google Maps style).
+              Renderizado ANTES do polyline azul pra ficar visualmente embaixo. */}
+          {navTrail.length > 1 && (
+            <Polyline
+              coordinates={navTrail}
+              strokeColor="#94a3b8"
+              strokeWidth={5}
+            />
+          )}
+
           {/* Markers da rota: stops nao concluidos + concluidos */}
           {remainingWithCoords.map((client, idx) => (
             <RouteMarker
@@ -2099,12 +2125,12 @@ function MainApp() {
             />
           ))}
 
-          {/* Polyline real OSRM/ORS. Sem fallback de reta em nav. */}
+          {/* Polyline AZUL: caminho que falta percorrer (OSRM/ORS). */}
           {navRouteGeometry.data && navRouteGeometry.data.coordinates.length > 1 && (
             <Polyline
               coordinates={navRouteGeometry.data.coordinates}
-              strokeColor="#dc2626"
-              strokeWidth={5}
+              strokeColor="#1d4ed8"
+              strokeWidth={6}
             />
           )}
         </MapView>
