@@ -27,7 +27,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import MapView from 'react-native-map-clustering';
 import { Marker, Polyline, default as RNMapView } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { useClients } from './src/hooks/useClients';
 import { useMeetings } from './src/hooks/useMeetings';
 import { distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
@@ -45,6 +45,7 @@ import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { ChangeStageModal } from './src/screens/ChangeStageModal';
 import { reverseGeocode } from './src/utils/geocoding';
+import { fetchRouteGeometry, type RoutePoint } from './src/utils/routing';
 
 const queryClient = new QueryClient();
 
@@ -500,6 +501,37 @@ function MainApp() {
     () => filteredWithCoords.filter(c => !routeStopClientIds.has(c.id)),
     [filteredWithCoords, routeStopClientIds],
   );
+
+  // Pontos da rota pra OSRM: comeca em userLocation (arredondado pra cache
+  // estavel) seguindo a ordem das stops persistidas.
+  const routeWaypoints = useMemo<RoutePoint[]>(() => {
+    const points: RoutePoint[] = [];
+    if (userLocation) {
+      points.push({
+        latitude: Math.round(userLocation.latitude * 10_000) / 10_000,
+        longitude: Math.round(userLocation.longitude * 10_000) / 10_000,
+      });
+    }
+    for (const c of routeStops.length > 0
+      ? routeStops.map(s => s.client).filter(Boolean) as Client[]
+      : routeDraft) {
+      if (c.latitude != null && c.longitude != null) {
+        points.push({ latitude: c.latitude, longitude: c.longitude });
+      }
+    }
+    return points;
+  }, [userLocation, routeStops, routeDraft]);
+
+  // Cache do polyline real (segue ruas via OSRM). Key = waypoints, garante
+  // re-fetch ao reordenar/adicionar/remover stops. staleTime alto pra nao
+  // bater a API publica gratuita repetidamente.
+  const routeGeometry = useQuery({
+    queryKey: ['route-geometry', routeWaypoints],
+    queryFn: () => fetchRouteGeometry(routeWaypoints),
+    enabled: routeWaypoints.length >= 2,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
 
   const routeClients = useMemo(
     () => routeStops.map(stop => stop.client).filter(Boolean) as Client[],
@@ -1233,9 +1265,16 @@ function MainApp() {
 
       <View style={styles.panelCard}>
         <View style={styles.panelHeaderRow}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.panelTitle}>Rota de hoje</Text>
-            <Text style={styles.panelHint}>{routeDisplayClients.length} leads planejados</Text>
+            <Text style={styles.panelHint}>
+              {routeDisplayClients.length} leads planejados
+              {routeGeometry.data && routeGeometry.data.coordinates.length > 1 && (
+                ` • ${(routeGeometry.data.distanceMeters / 1000).toFixed(1)} km`
+                + ` • ~${Math.round(routeGeometry.data.durationSeconds / 60)} min`
+              )}
+              {routeGeometry.isFetching && ' • calculando rota...'}
+            </Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {routeDisplayClients.length > 0 ? (
@@ -1719,19 +1758,23 @@ function MainApp() {
                   onPress={handleMarkerPress}
                 />
               ))}
-            {/* Polyline conectando os pontos da rota na ordem. Comeca do
-                userLocation se disponivel pra mostrar de onde partir. */}
-            {routeDisplayClients.length > 1 && (
+            {/* Polyline da rota: usa geometria real (OSRM, segue ruas) quando
+                disponivel; cai pra linha reta tracejada enquanto carrega ou
+                se a API falhou. */}
+            {routeWaypoints.length >= 2 && (
               <Polyline
-                coordinates={[
-                  ...(userLocation ? [userLocation] : []),
-                  ...routeDisplayClients
-                    .filter(c => c.latitude != null && c.longitude != null)
-                    .map(c => ({ latitude: c.latitude as number, longitude: c.longitude as number })),
-                ]}
+                coordinates={
+                  routeGeometry.data && routeGeometry.data.coordinates.length > 1
+                    ? routeGeometry.data.coordinates
+                    : routeWaypoints
+                }
                 strokeColor="#dc2626"
-                strokeWidth={3}
-                lineDashPattern={[8, 4]}
+                strokeWidth={4}
+                lineDashPattern={
+                  routeGeometry.data && routeGeometry.data.coordinates.length > 1
+                    ? undefined
+                    : [8, 4]
+                }
               />
             )}
           </MapView>
