@@ -45,7 +45,7 @@ import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { ChangeStageModal } from './src/screens/ChangeStageModal';
 import { reverseGeocode } from './src/utils/geocoding';
-import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint } from './src/utils/routing';
+import { fetchOptimizedTrip, fetchRouteGeometry, getRoutingProvider, type RoutePoint } from './src/utils/routing';
 
 const queryClient = new QueryClient();
 
@@ -764,9 +764,10 @@ function MainApp() {
     }, {
       onSuccess: () => {
         const got = ordered.length;
+        const providerLabel = getRoutingProvider() === 'ors' ? 'OpenRouteService' : 'OSRM publico';
         const tripInfo = tripDistanceMeters != null && tripDurationSeconds != null
           ? `\n\n🛣️ ${(tripDistanceMeters / 1000).toFixed(1)} km • ~${Math.round(tripDurationSeconds / 60)} min de carro`
-            + (usedOptimization === 'osrm-trip' ? '\n(Ordem otimizada por rede viaria real)' : '')
+            + (usedOptimization === 'osrm-trip' ? `\n(Ordem otimizada via ${providerLabel})` : '')
           : '';
         const lines = [
           got === desired
