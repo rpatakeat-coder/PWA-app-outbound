@@ -282,8 +282,13 @@ function MainApp() {
   const [routeDate] = useState(todayKey());
   const [routeDraft, setRouteDraft] = useState<Client[]>([]);
   const [routeLeadCount, setRouteLeadCount] = useState('8');
-  const [routePriority, setRoutePriority] = useState<'proximity' | 'status' | 'potential' | 'smart'>('smart');
-  const [routeStatusScope, setRouteStatusScope] = useState<'current' | 'all'>('current');
+  // Status que entram no pool de sugestao. Default: leads que ainda precisam
+  // ser visitados (caso de uso principal outbound). Multi-select substitui
+  // o antigo "Filtro atual vs Todos visiveis".
+  const [routeStatusSelection, setRouteStatusSelection] = useState<Set<string>>(
+    () => new Set(['lead_nao_visitado']),
+  );
+  const [routeManualSearch, setRouteManualSearch] = useState('');
   const [goalSellerId, setGoalSellerId] = useState<string | null>(null);
   const [goalVisits, setGoalVisits] = useState('30');
   const [goalClients, setGoalClients] = useState('10');
@@ -596,30 +601,25 @@ function MainApp() {
       return;
     }
 
-    // Pool base: scope 'current' usa todos os clientes que casam com search +
-    // UF (sem restringir a UM status). 'all' ignora ate search/UF. Isso evita
-    // a armadilha antiga onde "Filtro atual" era exatamente UM chip de status
-    // e sobravam poucos candidatos.
-    const poolBase = routeStatusScope === 'current' ? clientsForCount : clients;
+    // Pool base: TODOS os clientes carregados. O recorte vem do multi-select
+    // de status (routeStatusSelection) que o vendedor escolhe explicitamente
+    // — sem ambiguidade de "qual filtro tava ativo".
+    if (routeStatusSelection.size === 0) {
+      Alert.alert('Sem status selecionado', 'Selecione pelo menos um status pra incluir na rota.');
+      return;
+    }
+    const poolBase = clients;
     const totalLoaded = poolBase.length;
 
-    // Contadores de descarte pra o aviso final dizer ao vendedor exatamente
-    // por que sobraram menos leads do que pedido.
     let withoutCoord = 0;
     let alreadyInRoute = 0;
-    let alreadyVisited = 0;
-    let inactive = 0;
-
-    // Status que NAO entram em rota outbound por default. Vendedor visita
-    // quem ainda nao foi visitado. Cliente/churn nao sao alvo.
-    const NON_VISITABLE = new Set<string>(['lead_visitado', 'cliente', 'churn']);
+    let outOfSelection = 0;
 
     const eligible: Client[] = [];
     for (const c of poolBase) {
+      if (!routeStatusSelection.has(c.status)) { outOfSelection++; continue; }
       if (c.latitude == null || c.longitude == null) { withoutCoord++; continue; }
       if (routeStopClientIds.has(c.id)) { alreadyInRoute++; continue; }
-      if (c.status === 'lead_visitado') { alreadyVisited++; continue; }
-      if (NON_VISITABLE.has(c.status)) { inactive++; continue; }
       eligible.push(c);
     }
 
@@ -656,13 +656,13 @@ function MainApp() {
       return Math.min(1, p);
     };
 
+    // Score smart fixo: combina proximidade + status + potencial em escala
+    // normalizada. Nao expomos mais escolha de criterio na UI; smart cobre
+    // os 3 casos de uso (priorizar perto, lead frio vs quente, etc.) com
+    // pesos calibrados pro caso de campo.
     const scored = withMeters
       .map(({ client, meters }) => {
         const score =
-          routePriority === 'proximity' ? meters :
-          routePriority === 'status' ? statusWeight(client.status) * 100_000 + meters :
-          routePriority === 'potential' ? (client.id_hubspot ? 0 : 50_000) + statusWeight(client.status) * 50_000 + meters :
-          /* smart */
           SMART_WEIGHTS.proximity * (meters / maxMeters) +
           SMART_WEIGHTS.status * (statusWeight(client.status) / MAX_STATUS_WEIGHT) +
           SMART_WEIGHTS.potential * (1 - potentialScore(client));
@@ -743,13 +743,12 @@ function MainApp() {
       Alert.alert(
         'Nenhum lead disponivel',
         [
-          `Total carregado no escopo: ${totalLoaded}`,
+          `Total carregado: ${totalLoaded}`,
+          outOfSelection > 0 ? `• ${outOfSelection} fora dos status escolhidos` : null,
           withoutCoord > 0 ? `• ${withoutCoord} sem coordenadas` : null,
           alreadyInRoute > 0 ? `• ${alreadyInRoute} ja estavam na rota` : null,
-          alreadyVisited > 0 ? `• ${alreadyVisited} ja visitados` : null,
-          inactive > 0 ? `• ${inactive} clientes/churn (nao visitaveis)` : null,
           '',
-          'Tente trocar pra "Todos visiveis" ou ajustar os filtros.',
+          'Tente incluir mais status no recorte.',
         ].filter(Boolean).join('\n'),
       );
       return;
@@ -760,7 +759,7 @@ function MainApp() {
       routeDate,
       title: 'Rota sugerida',
       source: 'suggested',
-      priorityMode: routePriority,
+      priorityMode: 'smart',
       base,
       stops: ordered.map(item => ({ client: item.client, distance_meters: item.meters })),
     }, {
@@ -780,10 +779,9 @@ function MainApp() {
           tripInfo,
           '',
           'Descartados:',
-          `• ${withoutCoord} sem coordenadas`,
-          `• ${alreadyInRoute} ja estavam na rota`,
-          `• ${alreadyVisited} ja visitados`,
-          `• ${inactive} nao visitaveis (clientes/churn)`,
+          outOfSelection > 0 ? `• ${outOfSelection} fora dos status escolhidos` : null,
+          withoutCoord > 0 ? `• ${withoutCoord} sem coordenadas` : null,
+          alreadyInRoute > 0 ? `• ${alreadyInRoute} ja estavam na rota` : null,
           capped ? '\nObs.: limite maximo por rota = 30.' : null,
           usedOptimization === 'nearest-neighbor' && got > 1
             ? '\n⚠️ Otimizacao real indisponivel; ordem por linha reta (fallback).'
@@ -793,7 +791,7 @@ function MainApp() {
       },
       onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
     });
-  }, [clients, clientsForCount, fieldOps.saveRoute, filteredWithCoords, routeDate, routeLeadCount, routePriority, routeStatusScope, routeStopClientIds, userLocation]);
+  }, [clients, fieldOps.saveRoute, filteredWithCoords, routeDate, routeLeadCount, routeStatusSelection, routeStopClientIds, userLocation]);
 
   const saveManualRoute = useCallback((draft = routeDraft) => {
     if (draft.length === 0) {
@@ -1251,75 +1249,126 @@ function MainApp() {
   const renderRouteScreen = () => (
     <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
       <View style={styles.panelCard}>
-        <Text style={styles.panelTitle}>Sugestao de rota</Text>
+        <Text style={styles.panelTitle}>Sugerir rota do dia</Text>
         <Text style={styles.panelHint}>
-          {routePriority === 'smart'
-            ? 'Smart combina proximidade + status + potencial (recomendado).'
-            : routePriority === 'proximity'
-            ? 'Apenas os leads mais perto da sua posicao atual.'
-            : routePriority === 'status'
-            ? 'Prioriza por status (lead nao visitado primeiro).'
-            : 'Prioriza leads ja qualificados no HubSpot.'}
+          Informe quantos leads quer visitar e quais status entram no recorte.
+          A ordem eh otimizada por estradas reais.
         </Text>
-        <View style={styles.inputRow}>
+
+        <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Quantos leads visitar</Text>
+        <TextInput
+          style={[styles.input, { marginBottom: 0 }]}
+          value={routeLeadCount}
+          onChangeText={setRouteLeadCount}
+          keyboardType="number-pad"
+          placeholder="Ex.: 8"
+          placeholderTextColor="#94a3b8"
+        />
+
+        <Text style={[styles.fieldLabel, { marginTop: 12 }]}>
+          Status incluidos ({routeStatusSelection.size} selecionado{routeStatusSelection.size === 1 ? '' : 's'})
+        </Text>
+        <View style={styles.statusMultiRow}>
+          {statusOptions.map(opt => {
+            const selected = routeStatusSelection.has(opt.value);
+            return (
+              <TouchableOpacity
+                key={opt.value}
+                style={[
+                  styles.filterChip,
+                  selected && { backgroundColor: opt.color, borderColor: opt.color },
+                  !selected && { borderWidth: 1, borderColor: '#e2e8f0' },
+                ]}
+                onPress={() => {
+                  setRouteStatusSelection(prev => {
+                    const next = new Set(prev);
+                    if (next.has(opt.value)) next.delete(opt.value);
+                    else next.add(opt.value);
+                    return next;
+                  });
+                }}
+              >
+                <View style={[styles.filterDot, { backgroundColor: opt.color }]} />
+                <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <TouchableOpacity
+          style={[styles.submitButton, { marginTop: 16 }]}
+          onPress={suggestRoute}
+          disabled={fieldOps.saveRoute.isPending || isOptimizing}
+        >
+          {(fieldOps.saveRoute.isPending || isOptimizing)
+            ? <ActivityIndicator color="#fff" />
+            : <Text style={styles.submitButtonText}>Gerar rota</Text>}
+        </TouchableOpacity>
+      </View>
+
+      {/* Adicionar manualmente: busca em tempo real entre todos os leads.
+          Resultado mostra os 10 primeiros matches com botao "Adicionar". */}
+      <View style={styles.panelCard}>
+        <Text style={styles.panelTitle}>Adicionar lead manualmente</Text>
+        <Text style={styles.panelHint}>
+          Busque pelo nome do restaurante ou contato pra incluir na rota.
+        </Text>
+        <View style={[styles.searchBar, { marginHorizontal: 0, marginTop: 8 }]}>
+          <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
-            style={[styles.input, { flex: 1 }]}
-            value={routeLeadCount}
-            onChangeText={setRouteLeadCount}
-            keyboardType="number-pad"
-            placeholder="Qtd. leads"
+            style={styles.searchInput}
+            placeholder="Buscar restaurante, contato, cidade..."
             placeholderTextColor="#94a3b8"
+            value={routeManualSearch}
+            onChangeText={setRouteManualSearch}
+            autoCorrect={false}
+            autoCapitalize="none"
           />
-          <TouchableOpacity
-            style={[styles.submitButton, { flex: 1, marginTop: 0, marginLeft: 8 }]}
-            onPress={suggestRoute}
-            disabled={fieldOps.saveRoute.isPending || isOptimizing}
-          >
-            {(fieldOps.saveRoute.isPending || isOptimizing) ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Sugerir</Text>}
-          </TouchableOpacity>
-        </View>
-        <Text style={[styles.fieldLabel, { marginTop: 8, marginBottom: 4 }]}>Criterio</Text>
-        <View style={styles.segmentRow}>
-          {(['smart', 'proximity'] as const).map(mode => (
-            <TouchableOpacity
-              key={mode}
-              style={[styles.segmentButton, routePriority === mode && styles.segmentButtonActive]}
-              onPress={() => setRoutePriority(mode)}
-            >
-              <Text style={[styles.segmentButtonText, routePriority === mode && styles.segmentButtonTextActive]}>
-                {mode === 'smart' ? '✨ Smart' : 'Proximidade'}
-              </Text>
+          {routeManualSearch.length > 0 && (
+            <TouchableOpacity onPress={() => setRouteManualSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.searchClear}>✕</Text>
             </TouchableOpacity>
-          ))}
+          )}
         </View>
-        <View style={styles.segmentRow}>
-          {(['status', 'potential'] as const).map(mode => (
-            <TouchableOpacity
-              key={mode}
-              style={[styles.segmentButton, routePriority === mode && styles.segmentButtonActive]}
-              onPress={() => setRoutePriority(mode)}
-            >
-              <Text style={[styles.segmentButtonText, routePriority === mode && styles.segmentButtonTextActive]}>
-                {mode === 'status' ? 'Status' : 'Potencial'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <Text style={[styles.fieldLabel, { marginTop: 8, marginBottom: 4 }]}>Escopo</Text>
-        <View style={styles.segmentRow}>
-          <TouchableOpacity
-            style={[styles.segmentButton, routeStatusScope === 'current' && styles.segmentButtonActive]}
-            onPress={() => setRouteStatusScope('current')}
-          >
-            <Text style={[styles.segmentButtonText, routeStatusScope === 'current' && styles.segmentButtonTextActive]}>Filtro atual</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.segmentButton, routeStatusScope === 'all' && styles.segmentButtonActive]}
-            onPress={() => setRouteStatusScope('all')}
-          >
-            <Text style={[styles.segmentButtonText, routeStatusScope === 'all' && styles.segmentButtonTextActive]}>Todos visiveis</Text>
-          </TouchableOpacity>
-        </View>
+        {routeManualSearch.trim().length >= 2 && (() => {
+          const term = routeManualSearch
+            .normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase().trim();
+          const matches = clients.filter(c => {
+            if (routeStopClientIds.has(c.id)) return false;
+            const hay = `${c.empresa ?? ''} ${c.nome ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''}`
+              .normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase();
+            return hay.includes(term);
+          }).slice(0, 10);
+          if (matches.length === 0) {
+            return <Text style={[styles.emptyStateText, { marginTop: 10 }]}>Nenhum lead encontrado.</Text>;
+          }
+          return matches.map(c => {
+            const title = c.empresa?.trim() || c.nome;
+            const subtitle = [c.cidade, c.estado].filter(Boolean).join(' • ');
+            const noCoords = c.latitude == null || c.longitude == null;
+            return (
+              <View key={c.id} style={styles.manualRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.manualRowTitle} numberOfLines={1}>{title}</Text>
+                  {subtitle ? <Text style={styles.manualRowSubtitle}>{subtitle}</Text> : null}
+                  {noCoords && <Text style={styles.manualRowWarning}>Sem coordenadas</Text>}
+                </View>
+                <TouchableOpacity
+                  style={[styles.smallActionButton, noCoords && { opacity: 0.5 }]}
+                  disabled={noCoords}
+                  onPress={() => addClientToRoute(c)}
+                >
+                  <Text style={styles.smallActionButtonText}>+ Adicionar</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          });
+        })()}
+        {routeManualSearch.trim().length > 0 && routeManualSearch.trim().length < 2 && (
+          <Text style={[styles.panelHint, { marginTop: 10 }]}>Digite pelo menos 2 caracteres.</Text>
+        )}
       </View>
 
       <View style={styles.panelCard}>
@@ -3141,6 +3190,20 @@ const styles = StyleSheet.create({
   filterChipText: { fontSize: 12, fontWeight: '600', color: '#64748b' },
   filterChipTextActive: { color: '#fff' },
   filterDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+  // Multi-select dos status na aba Rota (wrap, varios chips em ordem livre)
+  statusMultiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  // Resultado da busca manual: titulo + cidade + botao adicionar
+  manualRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    gap: 10,
+  },
+  manualRowTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  manualRowSubtitle: { fontSize: 12, color: '#64748b', marginTop: 1 },
+  manualRowWarning: { fontSize: 11, color: '#dc2626', fontWeight: '600', marginTop: 2 },
   // Search bar (busca por nome) — fica acima dos chips de status.
   searchBar: {
     flexDirection: 'row',
