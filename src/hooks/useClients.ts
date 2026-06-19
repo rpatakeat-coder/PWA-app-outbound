@@ -166,6 +166,8 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
               numero_do_local: client.numero,
               observacoes: client.observacoes,
               url: client.url_hubspot,
+              vendedor_id: profile?.id_hubspot ?? '',
+              vendedor_nome: profile?.full_name ?? '',
             }),
           });
 
