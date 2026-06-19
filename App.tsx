@@ -3075,35 +3075,60 @@ function MainApp() {
                 <Text style={styles.passwordModalHint}>
                   Filtra pelo timestamp da ultima visita (visited_at). Vale pra qualquer status.
                 </Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-                  {([
-                    { v: null,             label: 'Sem filtro' },
-                    { v: 'never',          label: 'Nunca visitado' },
-                    { v: 'visited',        label: 'Visitado' },
-                    { v: 'visited:7',      label: 'Visitado < 7d' },
-                    { v: 'visited:30',     label: 'Visitado < 30d' },
-                    { v: 'not_visited:30', label: 'Nao visto > 30d' },
-                    { v: 'not_visited:60', label: 'Nao visto > 60d' },
-                    { v: 'not_visited:90', label: 'Nao visto > 90d' },
-                  ] as Array<{ v: string | null; label: string }>).map(opt => {
-                    const selected = visitFilter === opt.v;
+                {(() => {
+                  const renderChip = (v: string | null, label: string) => {
+                    const selected = visitFilter === v;
                     return (
                       <TouchableOpacity
-                        key={opt.label}
+                        key={label}
                         style={[
                           styles.filterChip,
                           selected && { backgroundColor: '#dc2626', borderColor: '#dc2626' },
                           !selected && { borderWidth: 1, borderColor: '#e2e8f0' },
+                          { alignSelf: 'flex-start' },
                         ]}
-                        onPress={() => setVisitFilter(opt.v)}
+                        onPress={() => setVisitFilter(v)}
                       >
                         <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>
-                          {opt.label}
+                          {label}
                         </Text>
                       </TouchableOpacity>
                     );
-                  })}
-                </View>
+                  };
+                  return (
+                    <View style={{ marginTop: 4 }}>
+                      {/* Primeira linha: opcoes "globais" — sem filtro e nunca visitado. */}
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                        {renderChip(null, 'Sem filtro')}
+                        {renderChip('never', 'Nunca visitado')}
+                      </View>
+
+                      {/* Colunas: Visitados | Nao visitados */}
+                      <View style={{ flexDirection: 'row', gap: 12 }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#16a34a', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                            Visitados
+                          </Text>
+                          <View style={{ gap: 6 }}>
+                            {renderChip('visited', 'Visitado')}
+                            {renderChip('visited:7', '< 7 dias')}
+                            {renderChip('visited:30', '< 30 dias')}
+                          </View>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#dc2626', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                            Nao visitados
+                          </Text>
+                          <View style={{ gap: 6 }}>
+                            {renderChip('not_visited:30', '> 30 dias')}
+                            {renderChip('not_visited:60', '> 60 dias')}
+                            {renderChip('not_visited:90', '> 90 dias')}
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })()}
 
                 <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Estado</Text>
                 <Text style={styles.passwordModalHint}>
