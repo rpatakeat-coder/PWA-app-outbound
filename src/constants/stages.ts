@@ -22,6 +22,10 @@ export type StageSubField =
       // Fallback enquanto a query do banco não termina ou se falhar.
       // Source of truth real é a tabela stage_property_options.
       options: string[];
+      // Quando true, aceita varias opcoes ao mesmo tempo. Vai no payload
+      // como array (ex.: "adicional": ["Fiscal SN", "Tablet"]) — HubSpot
+      // multi-select property aceita array nativamente.
+      multi?: boolean;
     })
   | (SubFieldBase & {
       kind: 'currency';
@@ -173,6 +177,7 @@ export const STAGES: Stage[] = [
         fieldLabel: 'Adicional',
         kind: 'select',
         options: [],
+        multi: true,
       },
       {
         field: 'tipo_de_pagamento',

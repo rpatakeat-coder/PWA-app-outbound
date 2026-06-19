@@ -106,6 +106,56 @@ function SelectField({
   );
 }
 
+function MultiSelectField({
+  subField,
+  values,
+  onToggle,
+  color,
+  disabled,
+  dbOptions,
+  dbLabel,
+}: {
+  subField: Extract<StageSubField, { kind: 'select' }>;
+  values: string[];
+  onToggle: (v: string) => void;
+  color: string;
+  disabled: boolean;
+  dbOptions?: { value: string; label: string }[];
+  dbLabel?: string;
+}) {
+  const opts: { value: string; label: string }[] =
+    dbOptions ?? subField.options.map((o) => ({ value: o, label: o }));
+  const label = dbLabel ?? subField.fieldLabel;
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Text style={styles.subOptionsLabel}>
+        {label}{subField.optional ? ' (opcional)' : ''}
+        {' '}<Text style={{ color: '#94a3b8', fontWeight: '500' }}>(pode escolher varios)</Text>
+      </Text>
+      <View style={styles.subOptionsGrid}>
+        {opts.map((opt) => {
+          const selected = values.includes(opt.value);
+          return (
+            <TouchableOpacity
+              key={opt.value}
+              style={[
+                styles.subOptionChip,
+                selected && { backgroundColor: color, borderColor: color },
+              ]}
+              onPress={() => onToggle(opt.value)}
+              disabled={disabled}
+            >
+              <Text style={[styles.subOptionChipText, selected && { color: '#fff' }]}>
+                {selected ? '✓ ' : ''}{opt.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 function CurrencyField({
   subField,
   value,
@@ -326,6 +376,9 @@ function PlainTextField({
 export function ChangeStageModal({ client, onClose }: Props) {
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
   const [subValues, setSubValues] = useState<Record<string, string>>({});
+  // State paralelo so pra multi-selects. Mantemos separado pra nao precisar
+  // serializar arrays como string no Record<string, string> compartilhado.
+  const [subValuesMulti, setSubValuesMulti] = useState<Record<string, string[]>>({});
   const [submitting, setSubmitting] = useState(false);
 
   // Source of truth das opções: tabela stage_property_options no Supabase.
@@ -346,6 +399,11 @@ export function ChangeStageModal({ client, onClose }: Props) {
   // Libera submit quando todos os obrigatorios estao preenchidos e validos.
   // Optionals podem estar vazios; se preenchidos tambem precisam ser validos.
   const allFilled = subFields.every((sf) => {
+    if (sf.kind === 'select' && sf.multi) {
+      const arr = subValuesMulti[sf.field] ?? [];
+      if (arr.length === 0) return !!sf.optional;
+      return true;
+    }
     const raw = subValues[sf.field];
     const empty = !raw || !raw.trim();
     if (empty) return !!sf.optional;
@@ -362,6 +420,15 @@ export function ChangeStageModal({ client, onClose }: Props) {
   const setSubValue = (field: string, value: string) =>
     setSubValues((prev) => ({ ...prev, [field]: value }));
 
+  const toggleSubValueMulti = (field: string, value: string) =>
+    setSubValuesMulti((prev) => {
+      const current = prev[field] ?? [];
+      const next = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+      return { ...prev, [field]: next };
+    });
+
   const submit = async () => {
     if (!selectedStage) return;
     if (!client.id_hubspot) {
@@ -373,10 +440,22 @@ export function ChangeStageModal({ client, onClose }: Props) {
     }
 
     // Valida cada sub-field individualmente e monta sub_values normalizado.
-    // Booleans entram como true/false nativos, datas como ISO yyyy-mm-dd.
-    // Opcionais vazios sao omitidos do payload (n8n decide o default).
+    // Booleans entram como true/false nativos, datas como ISO yyyy-mm-dd,
+    // multi-selects como array. Opcionais vazios sao omitidos do payload
+    // (n8n decide o default).
     const subValuesPayload: Record<string, unknown> = {};
     for (const sf of subFields) {
+      // Multi-select: paga state separado, envia como array.
+      if (sf.kind === 'select' && sf.multi) {
+        const arr = subValuesMulti[sf.field] ?? [];
+        if (arr.length === 0) {
+          if (sf.optional) continue;
+          Alert.alert('Falta preencher', `Selecione pelo menos uma opcao em "${sf.fieldLabel}".`);
+          return;
+        }
+        subValuesPayload[sf.field] = arr;
+        continue;
+      }
       const raw = subValues[sf.field]?.trim() ?? '';
       if (!raw) {
         if (sf.optional) continue;
@@ -516,6 +595,7 @@ export function ChangeStageModal({ client, onClose }: Props) {
                     onPress={() => {
                       setSelectedStageId(stage.id);
                       setSubValues({});
+                      setSubValuesMulti({});
                     }}
                     disabled={submitting}
                   >
@@ -545,6 +625,20 @@ export function ChangeStageModal({ client, onClose }: Props) {
                       {stage.subFields.map((sf) => {
                         if (sf.kind === 'select') {
                           const dbGroup = groupedOptions?.[sf.field];
+                          if (sf.multi) {
+                            return (
+                              <MultiSelectField
+                                key={sf.field}
+                                subField={sf}
+                                values={subValuesMulti[sf.field] ?? []}
+                                onToggle={(v) => toggleSubValueMulti(sf.field, v)}
+                                color={stage.color}
+                                disabled={submitting}
+                                dbOptions={dbGroup?.options}
+                                dbLabel={dbGroup?.label}
+                              />
+                            );
+                          }
                           return (
                             <SelectField
                               key={sf.field}
