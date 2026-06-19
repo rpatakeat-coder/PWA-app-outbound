@@ -79,7 +79,9 @@ function SelectField({
   const label = dbLabel ?? subField.fieldLabel;
   return (
     <View style={{ marginBottom: 12 }}>
-      <Text style={styles.subOptionsLabel}>{label}</Text>
+      <Text style={styles.subOptionsLabel}>
+        {label}{subField.optional ? ' (opcional)' : ''}
+      </Text>
       <View style={styles.subOptionsGrid}>
         {opts.map((opt) => {
           const selected = value === opt.value;
@@ -117,7 +119,9 @@ function CurrencyField({
 }) {
   return (
     <View style={{ marginBottom: 12 }}>
-      <Text style={styles.subOptionsLabel}>{subField.fieldLabel}</Text>
+      <Text style={styles.subOptionsLabel}>
+        {subField.fieldLabel}{subField.optional ? ' (opcional)' : ''}
+      </Text>
       <View style={styles.currencyRow}>
         <Text style={styles.currencyPrefix}>R$</Text>
         <TextInput
@@ -139,6 +143,36 @@ function maskCep(raw: string): string {
   const digits = raw.replace(/\D/g, '').slice(0, 8);
   if (digits.length <= 5) return digits;
   return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
+// Mascara data dd/mm/aaaa (8 digitos brutos -> 10 chars formatados).
+function maskDate(raw: string): string {
+  const d = raw.replace(/\D/g, '').slice(0, 8);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
+  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+}
+
+// Valida data dd/mm/aaaa (formato + dia/mes/ano coerentes).
+function isValidDate(v: string): boolean {
+  const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!m) return false;
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  const year = Number(m[3]);
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+  if (year < 1900 || year > 2100) return false;
+  // Valida data real (ex.: 31/02 invalido)
+  const dt = new Date(year, month - 1, day);
+  return dt.getFullYear() === year && dt.getMonth() === month - 1 && dt.getDate() === day;
+}
+
+// Converte dd/mm/aaaa pra ISO yyyy-mm-dd (formato esperado pelo HubSpot).
+function dateToIso(v: string): string {
+  const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!m) return v;
+  return `${m[3]}-${m[2]}-${m[1]}`;
 }
 
 // Mascara dual CPF/CNPJ: aplica formato de CPF (000.000.000-00) ate 11 digitos
@@ -168,6 +202,82 @@ const isValidCnpj = (v: string) => {
   return len === 11 || len === 14;
 };
 
+function DateField({
+  subField,
+  value,
+  onChange,
+  disabled,
+}: {
+  subField: Extract<StageSubField, { kind: 'date' }>;
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Text style={styles.subOptionsLabel}>
+        {subField.fieldLabel}{subField.optional ? ' (opcional)' : ''}
+      </Text>
+      <TextInput
+        style={styles.plainInput}
+        placeholder={subField.placeholder ?? 'dd/mm/aaaa'}
+        placeholderTextColor="#94a3b8"
+        keyboardType="number-pad"
+        value={value}
+        onChangeText={(raw) => onChange(maskDate(raw))}
+        editable={!disabled}
+        maxLength={10}
+      />
+    </View>
+  );
+}
+
+function BooleanField({
+  subField,
+  value,
+  onChange,
+  color,
+  disabled,
+}: {
+  subField: Extract<StageSubField, { kind: 'boolean' }>;
+  value: string; // 'true' | 'false' | ''
+  onChange: (v: string) => void;
+  color: string;
+  disabled: boolean;
+}) {
+  const opts: Array<{ value: 'true' | 'false'; label: string }> = [
+    { value: 'true', label: 'Sim' },
+    { value: 'false', label: 'Não' },
+  ];
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Text style={styles.subOptionsLabel}>
+        {subField.fieldLabel}{subField.optional ? ' (opcional)' : ''}
+      </Text>
+      <View style={styles.subOptionsGrid}>
+        {opts.map((opt) => {
+          const selected = value === opt.value;
+          return (
+            <TouchableOpacity
+              key={opt.value}
+              style={[
+                styles.subOptionChip,
+                selected && { backgroundColor: color, borderColor: color },
+              ]}
+              onPress={() => onChange(opt.value)}
+              disabled={disabled}
+            >
+              <Text style={[styles.subOptionChipText, selected && { color: '#fff' }]}>
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 function PlainTextField({
   subField,
   value,
@@ -193,7 +303,9 @@ function PlainTextField({
   };
   return (
     <View style={{ marginBottom: 12 }}>
-      <Text style={styles.subOptionsLabel}>{subField.fieldLabel}</Text>
+      <Text style={styles.subOptionsLabel}>
+        {subField.fieldLabel}{subField.optional ? ' (opcional)' : ''}
+      </Text>
       <TextInput
         style={[styles.plainInput, multiline && styles.plainInputMultiline]}
         placeholder={subField.placeholder ?? ''}
@@ -220,20 +332,29 @@ export function ChangeStageModal({ client, onClose }: Props) {
   // O hardcoded em STAGES é fallback enquanto a query carrega ou se falhar.
   const { data: groupedOptions } = useStagePropertyOptions();
 
+  // Filtra etapas pelo gate. Se a etapa tem gateEtapa definido, so aparece
+  // quando client.etapa esta na lista. Sem gateEtapa = aparece pra todos.
+  const visibleStages = STAGES.filter((s) => {
+    if (!s.gateEtapa || s.gateEtapa.length === 0) return true;
+    return s.gateEtapa.includes(client.etapa ?? '');
+  });
+
   const selectedStage: Stage | null =
-    STAGES.find((s) => s.id === selectedStageId) ?? null;
+    visibleStages.find((s) => s.id === selectedStageId) ?? null;
   const subFields = selectedStage?.subFields ?? [];
 
-  // Todos os sub-fields são obrigatórios — só libera o submit quando todos
-  // tiverem valor não-vazio e válido pelo tipo (currency numerico, email
-  // formato, cep 8 digitos, cnpj 14 digitos).
+  // Libera submit quando todos os obrigatorios estao preenchidos e validos.
+  // Optionals podem estar vazios; se preenchidos tambem precisam ser validos.
   const allFilled = subFields.every((sf) => {
     const raw = subValues[sf.field];
-    if (!raw || !raw.trim()) return false;
+    const empty = !raw || !raw.trim();
+    if (empty) return !!sf.optional;
     if (sf.kind === 'currency') return normalizeCurrency(raw) !== null;
     if (sf.kind === 'email') return isValidEmail(raw);
     if (sf.kind === 'cep') return isValidCep(raw);
     if (sf.kind === 'cnpj') return isValidCnpj(raw);
+    if (sf.kind === 'date') return isValidDate(raw);
+    if (sf.kind === 'boolean') return raw === 'true' || raw === 'false';
     return true;
   });
   const ready = !!selectedStage && allFilled && !submitting;
@@ -252,10 +373,13 @@ export function ChangeStageModal({ client, onClose }: Props) {
     }
 
     // Valida cada sub-field individualmente e monta sub_values normalizado.
-    const subValuesPayload: Record<string, string> = {};
+    // Booleans entram como true/false nativos, datas como ISO yyyy-mm-dd.
+    // Opcionais vazios sao omitidos do payload (n8n decide o default).
+    const subValuesPayload: Record<string, unknown> = {};
     for (const sf of subFields) {
       const raw = subValues[sf.field]?.trim() ?? '';
       if (!raw) {
+        if (sf.optional) continue;
         Alert.alert('Falta preencher', `Preencha "${sf.fieldLabel}".`);
         return;
       }
@@ -288,6 +412,20 @@ export function ChangeStageModal({ client, onClose }: Props) {
           return;
         }
         subValuesPayload[sf.field] = raw.replace(/\D/g, '');
+      } else if (sf.kind === 'date') {
+        if (!isValidDate(raw)) {
+          Alert.alert('Data inválida', `"${sf.fieldLabel}" precisa estar no formato dd/mm/aaaa.`);
+          return;
+        }
+        // ISO yyyy-mm-dd — formato esperado pelo HubSpot.
+        subValuesPayload[sf.field] = dateToIso(raw);
+      } else if (sf.kind === 'boolean') {
+        if (raw !== 'true' && raw !== 'false') {
+          Alert.alert('Selecione', `Escolha Sim ou Não em "${sf.fieldLabel}".`);
+          return;
+        }
+        // Boolean nativo no payload (n8n / HubSpot esperam true/false reais).
+        subValuesPayload[sf.field] = raw === 'true';
       } else {
         subValuesPayload[sf.field] = raw;
       }
@@ -363,7 +501,7 @@ export function ChangeStageModal({ client, onClose }: Props) {
 
             <Text style={styles.sectionLabel}>Escolha a etapa nova</Text>
 
-            {STAGES.map((stage) => {
+            {visibleStages.map((stage) => {
               const isSelected = selectedStageId === stage.id;
               return (
                 <View key={stage.id}>
@@ -387,11 +525,15 @@ export function ChangeStageModal({ client, onClose }: Props) {
                     >
                       {stage.label}
                     </Text>
-                    {stage.subFields && stage.subFields.length > 0 && (
-                      <Text style={styles.stageHint}>
-                        + {stage.subFields.length} obrig.
-                      </Text>
-                    )}
+                    {stage.subFields && stage.subFields.length > 0 && (() => {
+                      const required = stage.subFields.filter((s) => !s.optional).length;
+                      const optional = stage.subFields.length - required;
+                      return (
+                        <Text style={styles.stageHint}>
+                          + {required} obrig.{optional > 0 ? ` (${optional} opc.)` : ''}
+                        </Text>
+                      );
+                    })()}
                   </TouchableOpacity>
 
                   {/* Sub-fields inline. Cada etapa pode ter múltiplos
@@ -423,6 +565,29 @@ export function ChangeStageModal({ client, onClose }: Props) {
                               subField={sf}
                               value={subValues[sf.field] ?? ''}
                               onChange={(v) => setSubValue(sf.field, v)}
+                              disabled={submitting}
+                            />
+                          );
+                        }
+                        if (sf.kind === 'date') {
+                          return (
+                            <DateField
+                              key={sf.field}
+                              subField={sf}
+                              value={subValues[sf.field] ?? ''}
+                              onChange={(v) => setSubValue(sf.field, v)}
+                              disabled={submitting}
+                            />
+                          );
+                        }
+                        if (sf.kind === 'boolean') {
+                          return (
+                            <BooleanField
+                              key={sf.field}
+                              subField={sf}
+                              value={subValues[sf.field] ?? ''}
+                              onChange={(v) => setSubValue(sf.field, v)}
+                              color={stage.color}
                               disabled={submitting}
                             />
                           );
