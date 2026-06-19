@@ -2909,11 +2909,15 @@ function MainApp() {
         transparent
         onRequestClose={() => setIsFiltersOpen(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => { setIsPickingUf(false); setIsPickingStage(false); setIsPickingVendor(false); setIsFiltersOpen(false); }}
-        >
-          <Pressable style={styles.filtersSheet} onPress={() => {}}>
+        <View style={styles.modalOverlay}>
+          {/* Backdrop separado pra fechar ao tocar fora — assim o sheet
+              em cima fica num View puro, sem Pressable competindo com o
+              gesto de scroll do ScrollView dentro. */}
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => { setIsPickingUf(false); setIsPickingStage(false); setIsPickingVendor(false); setIsFiltersOpen(false); }}
+          />
+          <View style={styles.filtersSheet}>
             {isPickingVendor ? (
               <>
                 <View style={styles.modalHeader}>
@@ -3181,8 +3185,8 @@ function MainApp() {
                 </View>
               </>
             )}
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* Picker de vendedor pra geracao de rota (so admin) */}
