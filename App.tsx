@@ -570,11 +570,13 @@ function MainApp() {
   // Avalia o filtro temporal de visita pra um cliente.
   // - null: sem filtro
   // - 'never': visited_at IS NULL
+  // - 'visited': visited_at IS NOT NULL (qualquer momento)
   // - 'visited:<N>': visitado nos ultimos N dias
   // - 'not_visited:<N>': nunca visitado OU visitado ha mais de N dias
   const matchesVisitFilter = (visitedAt: string | null): boolean => {
     if (visitFilter === null) return true;
     if (visitFilter === 'never') return visitedAt === null;
+    if (visitFilter === 'visited') return visitedAt !== null;
     const days = Number(visitFilter.split(':')[1]);
     if (!Number.isFinite(days)) return true;
     const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
@@ -3077,6 +3079,7 @@ function MainApp() {
                   {([
                     { v: null,             label: 'Sem filtro' },
                     { v: 'never',          label: 'Nunca visitado' },
+                    { v: 'visited',        label: 'Visitado' },
                     { v: 'visited:7',      label: 'Visitado < 7d' },
                     { v: 'visited:30',     label: 'Visitado < 30d' },
                     { v: 'not_visited:30', label: 'Nao visto > 30d' },
