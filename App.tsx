@@ -3019,6 +3019,12 @@ function MainApp() {
                   </TouchableOpacity>
                 </View>
 
+                <ScrollView
+                  style={{ flexGrow: 0, flexShrink: 1 }}
+                  contentContainerStyle={{ paddingBottom: 8 }}
+                  showsVerticalScrollIndicator={true}
+                  keyboardShouldPersistTaps="handled"
+                >
                 <Text style={styles.adminSectionTitle}>Responsavel</Text>
                 <Text style={styles.passwordModalHint}>
                   {isAdmin
@@ -3159,6 +3165,7 @@ function MainApp() {
                   </Text>
                   <Text style={styles.dropdownChevron}>▾</Text>
                 </TouchableOpacity>
+                </ScrollView>
 
                 <View style={styles.filtersFooter}>
                   <TouchableOpacity
