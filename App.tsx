@@ -1319,9 +1319,11 @@ function MainApp() {
     }
 
     setCreationMode(false);
+    // Cadastro novo sempre comeca como "lead a visitar" — cliente/churn
+    // nao sao opcoes na criacao manual (so via fluxo de pos-venda).
     setForm({
       ...initialFormState,
-      status: statusOptions[0]?.value ?? initialFormState.status,
+      status: 'lead_nao_visitado' as ClientStatus,
       latitude: creationCenter.latitude.toString(),
       longitude: creationCenter.longitude.toString(),
       cep: addr?.cep ? `${addr.cep.slice(0, 5)}-${addr.cep.slice(5)}` : '',
@@ -3127,6 +3129,8 @@ function MainApp() {
           onNext={(cepData) => {
             setForm(prev => ({
               ...prev,
+              // Cadastro novo via CEP sempre comeca como "lead a visitar".
+              status: 'lead_nao_visitado' as ClientStatus,
               cep: cepData.cep || '',
               endereco: cepData.endereco || '',
               cidade: cepData.cidade || '',
@@ -3161,35 +3165,41 @@ function MainApp() {
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
                 >
-              {/* Status Selector — bloqueia transitar de cliente/churn pra
-                  lead_*. Esta protecao tem mirror no banco (trigger
-                  guard_client_status_transition). */}
+              {/* Status Selector — na criacao so libera lead_nao_visitado /
+                  lead_visitado (cliente/churn so existem via upgrade no
+                  fluxo de pos-venda). Na edicao, bloqueia transitar de
+                  cliente/churn pra lead_* — espelho do trigger
+                  guard_client_status_transition no banco. */}
               <Text style={styles.fieldLabel}>Status</Text>
               <View style={styles.statusSelector}>
-                {statusOptions.map(opt => {
-                  const lockedFromClient = !!editingClient
-                    && (editingClient.status === 'cliente' || editingClient.status === 'churn')
-                    && (opt.value === 'lead_nao_visitado' || opt.value === 'lead_visitado');
-                  return (
-                    <TouchableOpacity
-                      key={opt.value}
-                      disabled={lockedFromClient}
-                      style={[
-                        styles.statusOption,
-                        form.status === opt.value && { backgroundColor: opt.color, borderColor: opt.color },
-                        lockedFromClient && { opacity: 0.35 },
-                      ]}
-                      onPress={() => setForm(s => ({ ...s, status: opt.value }))}
-                    >
-                      <Text style={[
-                        styles.statusOptionText,
-                        form.status === opt.value && { color: '#fff' },
-                      ]}>
-                        {opt.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                {statusOptions
+                  .filter(opt => editingClient
+                    ? true
+                    : opt.value === 'lead_nao_visitado' || opt.value === 'lead_visitado')
+                  .map(opt => {
+                    const lockedFromClient = !!editingClient
+                      && (editingClient.status === 'cliente' || editingClient.status === 'churn')
+                      && (opt.value === 'lead_nao_visitado' || opt.value === 'lead_visitado');
+                    return (
+                      <TouchableOpacity
+                        key={opt.value}
+                        disabled={lockedFromClient}
+                        style={[
+                          styles.statusOption,
+                          form.status === opt.value && { backgroundColor: opt.color, borderColor: opt.color },
+                          lockedFromClient && { opacity: 0.35 },
+                        ]}
+                        onPress={() => setForm(s => ({ ...s, status: opt.value }))}
+                      >
+                        <Text style={[
+                          styles.statusOptionText,
+                          form.status === opt.value && { color: '#fff' },
+                        ]}>
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
               </View>
               {editingClient && (editingClient.status === 'cliente' || editingClient.status === 'churn') && (
                 <Text style={{ fontSize: 12, color: '#dc2626', marginTop: -4, marginBottom: 6 }}>
