@@ -109,6 +109,11 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
         longitude: form.longitude,
         observacoes: form.observacoes ?? null,
         created_by: user?.id,
+        // O criador eh o responsavel inicial do lead. Salva o id_hubspot
+        // dele em vendedor_id_hubspot pra alimentar o filtro "meus leads"
+        // e a opcao "somente meus leads" na rota. Se o perfil nao tiver
+        // id_hubspot, fica NULL ("sem responsavel").
+        vendedor_id_hubspot: profile?.id_hubspot ?? null,
         // Cadastros via app têm origem manual e geolocalização escolhida no mapa.
         // O usuário literalmente aponta o pin no lugar — lat/lon é sempre
         // preciso, mesmo sem número de rua. Antes ficava aproximado quando

@@ -288,6 +288,7 @@ function MainApp() {
   const [searchQuery, setSearchQuery] = useState('');
   const [stateFilter, setStateFilter] = useState<string | null>(null);
   const [stageFilter, setStageFilter] = useState<string | null>(null);
+  const [showOnlyMyLeads, setShowOnlyMyLeads] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isPickingUf, setIsPickingUf] = useState(false);
   const [isPickingStage, setIsPickingStage] = useState(false);
@@ -308,6 +309,10 @@ function MainApp() {
   const [routeStatusSelection, setRouteStatusSelection] = useState<Set<string>>(
     () => new Set(['lead_nao_visitado']),
   );
+  // Quando ligado, suggestRoute filtra o pool de candidatos por
+  // vendedor_id_hubspot == profile.id_hubspot — gera rota so com leads do
+  // vendedor logado.
+  const [routeOnlyMyLeads, setRouteOnlyMyLeads] = useState(false);
   const [routeManualSearch, setRouteManualSearch] = useState('');
   const mapRef = useRef<RNMapView | null>(null);
   const submittingRef = useRef(false);
@@ -493,10 +498,17 @@ function MainApp() {
 
   // Aplica search + UF (mas NAO status) — usado pra recalcular contadores dos
   // chips de status em tempo real conforme o usuario digita no search.
+  // id_hubspot do usuario logado, usado pra filtrar "meus leads" (clients.vendedor_id_hubspot == eu).
+  const myHubspotId = profile?.id_hubspot ?? null;
+
   const clientsForCount = useMemo(
     () => clients.filter(c => {
       if (stateFilter && normalizeUf(c.estado) !== stateFilter) return false;
       if (stageFilter && normalizeStage(c.etapa) !== stageFilter) return false;
+      if (showOnlyMyLeads) {
+        if (!myHubspotId) return false;
+        if (c.vendedor_id_hubspot !== myHubspotId) return false;
+      }
       if (searchTerm) {
         const haystack = `${c.nome ?? ''} ${c.empresa ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''} ${c.etapa ?? ''}`
           .normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase();
@@ -504,7 +516,7 @@ function MainApp() {
       }
       return true;
     }),
-    [clients, stateFilter, stageFilter, searchTerm],
+    [clients, stateFilter, stageFilter, searchTerm, showOnlyMyLeads, myHubspotId],
   );
 
   const filteredClients = useMemo(
@@ -571,7 +583,7 @@ function MainApp() {
     return rows;
   }, [expandedStages, listStageSections]);
 
-  const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0);
+  const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0) + (showOnlyMyLeads ? 1 : 0);
 
   const filteredWithCoords = useMemo(
     () => filteredClients.filter(c => c.latitude !== null && c.longitude !== null),
@@ -699,13 +711,26 @@ function MainApp() {
     const poolBase = clients;
     const totalLoaded = poolBase.length;
 
+    // Guarda contra "somente meus leads" sem id_hubspot: avisa e aborta —
+    // se rodasse, o filtro descartaria todo mundo e a mensagem final ficaria
+    // confusa ("nenhum lead disponivel" sem explicar o porque).
+    if (routeOnlyMyLeads && !myHubspotId) {
+      Alert.alert(
+        'Sem id HubSpot',
+        'Voce ativou "somente meus leads" mas seu usuario nao tem id_hubspot configurado. Desligue a opcao ou peca pro admin associar seu id.',
+      );
+      return;
+    }
+
     let withoutCoord = 0;
     let alreadyInRoute = 0;
     let outOfSelection = 0;
+    let notMine = 0;
 
     const eligible: Client[] = [];
     for (const c of poolBase) {
       if (!routeStatusSelection.has(c.status)) { outOfSelection++; continue; }
+      if (routeOnlyMyLeads && c.vendedor_id_hubspot !== myHubspotId) { notMine++; continue; }
       if (c.latitude == null || c.longitude == null) { withoutCoord++; continue; }
       if (routeStopClientIds.has(c.id)) { alreadyInRoute++; continue; }
       eligible.push(c);
@@ -818,10 +843,13 @@ function MainApp() {
         [
           `Total carregado: ${totalLoaded}`,
           outOfSelection > 0 ? `• ${outOfSelection} fora dos status escolhidos` : null,
+          notMine > 0 ? `• ${notMine} nao sao seus (filtro "somente meus leads")` : null,
           withoutCoord > 0 ? `• ${withoutCoord} sem coordenadas` : null,
           alreadyInRoute > 0 ? `• ${alreadyInRoute} ja estavam na rota` : null,
           '',
-          'Tente incluir mais status no recorte.',
+          routeOnlyMyLeads
+            ? 'Desligue "somente meus leads" ou inclua mais status no recorte.'
+            : 'Tente incluir mais status no recorte.',
         ].filter(Boolean).join('\n'),
       );
       return;
@@ -853,6 +881,7 @@ function MainApp() {
           '',
           'Descartados:',
           outOfSelection > 0 ? `• ${outOfSelection} fora dos status escolhidos` : null,
+          notMine > 0 ? `• ${notMine} nao sao seus (filtro "somente meus leads")` : null,
           withoutCoord > 0 ? `• ${withoutCoord} sem coordenadas` : null,
           alreadyInRoute > 0 ? `• ${alreadyInRoute} ja estavam na rota` : null,
           capped ? '\nObs.: limite maximo por rota = 30.' : null,
@@ -861,7 +890,7 @@ function MainApp() {
       },
       onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
     });
-  }, [clients, fieldOps.saveRoute, filteredWithCoords, routeDate, routeLeadCount, routeStatusSelection, routeStopClientIds, userLocation]);
+  }, [clients, fieldOps.saveRoute, filteredWithCoords, routeDate, routeLeadCount, routeOnlyMyLeads, routeStatusSelection, routeStopClientIds, userLocation, myHubspotId]);
 
   const saveManualRoute = useCallback((draft = routeDraft) => {
     if (draft.length === 0) {
@@ -1651,6 +1680,35 @@ function MainApp() {
             );
           })}
         </View>
+
+        <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Responsavel</Text>
+        <TouchableOpacity
+          style={[
+            styles.dropdownButton,
+            routeOnlyMyLeads && { borderColor: '#dc2626', backgroundColor: '#fef2f2' },
+          ]}
+          onPress={() => {
+            if (!myHubspotId) {
+              Alert.alert(
+                'Sem id HubSpot',
+                'Seu usuario nao tem id_hubspot configurado, entao nao da pra identificar quais leads sao seus.',
+              );
+              return;
+            }
+            setRouteOnlyMyLeads(v => !v);
+          }}
+        >
+          <Text style={[
+            styles.dropdownButtonText,
+            !routeOnlyMyLeads && { color: '#64748b' },
+          ]}>
+            {routeOnlyMyLeads ? 'Somente meus leads' : 'Todos os leads do recorte'}
+          </Text>
+          <Text style={[
+            styles.dropdownChevron,
+            routeOnlyMyLeads && { color: '#dc2626' },
+          ]}>{routeOnlyMyLeads ? '✓' : '○'}</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.submitButton, { marginTop: 16 }]}
@@ -2802,7 +2860,39 @@ function MainApp() {
                   </TouchableOpacity>
                 </View>
 
-                <Text style={styles.adminSectionTitle}>Estado</Text>
+                <Text style={styles.adminSectionTitle}>Responsavel</Text>
+                <Text style={styles.passwordModalHint}>
+                  Mostra somente os leads em que voce eh o responsavel (vendedor_id_hubspot = seu id HubSpot).
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.dropdownButton,
+                    showOnlyMyLeads && { borderColor: '#dc2626', backgroundColor: '#fef2f2' },
+                  ]}
+                  onPress={() => {
+                    if (!myHubspotId) {
+                      Alert.alert(
+                        'Sem id HubSpot',
+                        'Seu usuario nao tem id_hubspot configurado. Sem ele nao da pra identificar quais leads sao seus.',
+                      );
+                      return;
+                    }
+                    setShowOnlyMyLeads(v => !v);
+                  }}
+                >
+                  <Text style={[
+                    styles.dropdownButtonText,
+                    !showOnlyMyLeads && { color: '#64748b' },
+                  ]}>
+                    {showOnlyMyLeads ? 'Somente meus leads' : 'Todos os leads visiveis'}
+                  </Text>
+                  <Text style={[
+                    styles.dropdownChevron,
+                    showOnlyMyLeads && { color: '#dc2626' },
+                  ]}>{showOnlyMyLeads ? '✓' : '○'}</Text>
+                </TouchableOpacity>
+
+                <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Estado</Text>
                 <Text style={styles.passwordModalHint}>
                   Filtra os pinos pelo UF do endereco do cliente.
                 </Text>
@@ -2835,7 +2925,7 @@ function MainApp() {
                 <View style={styles.filtersFooter}>
                   <TouchableOpacity
                     style={styles.filtersSecondaryButton}
-                    onPress={() => { setSearchQuery(''); setStateFilter(null); setStageFilter(null); }}
+                    onPress={() => { setSearchQuery(''); setStateFilter(null); setStageFilter(null); setShowOnlyMyLeads(false); }}
                     disabled={activeFilterCount === 0}
                   >
                     <Text style={[styles.filtersSecondaryButtonText, activeFilterCount === 0 && { opacity: 0.4 }]}>Limpar tudo</Text>

@@ -35,6 +35,7 @@ export interface Client {
   geo_approximate: boolean | null;
   id_hubspot: string | null;
   url_hubspot: string | null;
+  vendedor_id_hubspot: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
