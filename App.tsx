@@ -288,10 +288,14 @@ function MainApp() {
   const [searchQuery, setSearchQuery] = useState('');
   const [stateFilter, setStateFilter] = useState<string | null>(null);
   const [stageFilter, setStageFilter] = useState<string | null>(null);
-  const [showOnlyMyLeads, setShowOnlyMyLeads] = useState(false);
+  // Filtro de vendedor responsavel. null = sem filtro.
+  // Non-admin so consegue setar pro proprio id_hubspot (toggle "meus leads").
+  // Admin pode escolher qualquer vendedor via picker.
+  const [vendorFilterHubspotId, setVendorFilterHubspotId] = useState<string | null>(null);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isPickingUf, setIsPickingUf] = useState(false);
   const [isPickingStage, setIsPickingStage] = useState(false);
+  const [isPickingVendor, setIsPickingVendor] = useState(false);
   const [expandedStages, setExpandedStages] = useState<Set<string>>(() => new Set());
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -309,10 +313,10 @@ function MainApp() {
   const [routeStatusSelection, setRouteStatusSelection] = useState<Set<string>>(
     () => new Set(['lead_nao_visitado']),
   );
-  // Quando ligado, suggestRoute filtra o pool de candidatos por
-  // vendedor_id_hubspot == profile.id_hubspot — gera rota so com leads do
-  // vendedor logado.
-  const [routeOnlyMyLeads, setRouteOnlyMyLeads] = useState(false);
+  // Filtro de vendedor na geracao de rota. null = sem filtro.
+  // Non-admin: toggle pro proprio id_hubspot. Admin: picker com todos.
+  const [routeVendorFilterHubspotId, setRouteVendorFilterHubspotId] = useState<string | null>(null);
+  const [isPickingRouteVendor, setIsPickingRouteVendor] = useState(false);
   const [routeManualSearch, setRouteManualSearch] = useState('');
   const mapRef = useRef<RNMapView | null>(null);
   const submittingRef = useRef(false);
@@ -343,6 +347,36 @@ function MainApp() {
   useForceReload(isAuthenticated);
   const isAdmin = profile?.email === 'arthurgothe.takeat@gmail.com';
   const fieldOps = useFieldOps(routeDate, isAuthenticated);
+
+  // Lista de vendedores com id_hubspot configurado — alimenta o picker do admin
+  // no filtro do mapa/lista/rota. So roda pra admin (non-admin so filtra por si).
+  const vendorsQuery = useQuery({
+    queryKey: ['profiles_with_hubspot'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, id_hubspot')
+        .not('id_hubspot', 'is', null)
+        .order('full_name', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as Array<{ id: string; full_name: string | null; email: string | null; id_hubspot: string }>;
+    },
+    enabled: isAuthenticated && isAdmin,
+    staleTime: 5 * 60 * 1000,
+  });
+  const vendors = vendorsQuery.data ?? [];
+  const vendorById = useMemo(() => {
+    const m = new Map<string, { full_name: string | null; email: string | null }>();
+    for (const v of vendors) m.set(v.id_hubspot, { full_name: v.full_name, email: v.email });
+    return m;
+  }, [vendors]);
+  // Helper pra renderizar label do vendedor (full_name > email > id cru).
+  const vendorLabel = (idHubspot: string | null): string => {
+    if (idHubspot === null) return 'Todos os vendedores';
+    const v = vendorById.get(idHubspot);
+    if (!v) return `id ${idHubspot}`;
+    return v.full_name?.trim() || v.email || `id ${idHubspot}`;
+  };
 
   // Carrega o toggle da preferência local na inicialização.
   useEffect(() => {
@@ -498,17 +532,14 @@ function MainApp() {
 
   // Aplica search + UF (mas NAO status) — usado pra recalcular contadores dos
   // chips de status em tempo real conforme o usuario digita no search.
-  // id_hubspot do usuario logado, usado pra filtrar "meus leads" (clients.vendedor_id_hubspot == eu).
+  // id_hubspot do usuario logado, usado pelo toggle "meus leads" (non-admin).
   const myHubspotId = profile?.id_hubspot ?? null;
 
   const clientsForCount = useMemo(
     () => clients.filter(c => {
       if (stateFilter && normalizeUf(c.estado) !== stateFilter) return false;
       if (stageFilter && normalizeStage(c.etapa) !== stageFilter) return false;
-      if (showOnlyMyLeads) {
-        if (!myHubspotId) return false;
-        if (c.vendedor_id_hubspot !== myHubspotId) return false;
-      }
+      if (vendorFilterHubspotId !== null && c.vendedor_id_hubspot !== vendorFilterHubspotId) return false;
       if (searchTerm) {
         const haystack = `${c.nome ?? ''} ${c.empresa ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''} ${c.etapa ?? ''}`
           .normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase();
@@ -516,7 +547,7 @@ function MainApp() {
       }
       return true;
     }),
-    [clients, stateFilter, stageFilter, searchTerm, showOnlyMyLeads, myHubspotId],
+    [clients, stateFilter, stageFilter, searchTerm, vendorFilterHubspotId],
   );
 
   const filteredClients = useMemo(
@@ -583,7 +614,7 @@ function MainApp() {
     return rows;
   }, [expandedStages, listStageSections]);
 
-  const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0) + (showOnlyMyLeads ? 1 : 0);
+  const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0) + (vendorFilterHubspotId !== null ? 1 : 0);
 
   const filteredWithCoords = useMemo(
     () => filteredClients.filter(c => c.latitude !== null && c.longitude !== null),
@@ -711,26 +742,15 @@ function MainApp() {
     const poolBase = clients;
     const totalLoaded = poolBase.length;
 
-    // Guarda contra "somente meus leads" sem id_hubspot: avisa e aborta —
-    // se rodasse, o filtro descartaria todo mundo e a mensagem final ficaria
-    // confusa ("nenhum lead disponivel" sem explicar o porque).
-    if (routeOnlyMyLeads && !myHubspotId) {
-      Alert.alert(
-        'Sem id HubSpot',
-        'Voce ativou "somente meus leads" mas seu usuario nao tem id_hubspot configurado. Desligue a opcao ou peca pro admin associar seu id.',
-      );
-      return;
-    }
-
     let withoutCoord = 0;
     let alreadyInRoute = 0;
     let outOfSelection = 0;
-    let notMine = 0;
+    let outOfVendor = 0;
 
     const eligible: Client[] = [];
     for (const c of poolBase) {
       if (!routeStatusSelection.has(c.status)) { outOfSelection++; continue; }
-      if (routeOnlyMyLeads && c.vendedor_id_hubspot !== myHubspotId) { notMine++; continue; }
+      if (routeVendorFilterHubspotId !== null && c.vendedor_id_hubspot !== routeVendorFilterHubspotId) { outOfVendor++; continue; }
       if (c.latitude == null || c.longitude == null) { withoutCoord++; continue; }
       if (routeStopClientIds.has(c.id)) { alreadyInRoute++; continue; }
       eligible.push(c);
@@ -838,17 +858,20 @@ function MainApp() {
     }
 
     if (ordered.length === 0) {
+      const vendorLine = routeVendorFilterHubspotId !== null
+        ? `• ${outOfVendor} fora do vendedor "${vendorLabel(routeVendorFilterHubspotId)}"`
+        : null;
       Alert.alert(
         'Nenhum lead disponivel',
         [
           `Total carregado: ${totalLoaded}`,
           outOfSelection > 0 ? `• ${outOfSelection} fora dos status escolhidos` : null,
-          notMine > 0 ? `• ${notMine} nao sao seus (filtro "somente meus leads")` : null,
+          outOfVendor > 0 ? vendorLine : null,
           withoutCoord > 0 ? `• ${withoutCoord} sem coordenadas` : null,
           alreadyInRoute > 0 ? `• ${alreadyInRoute} ja estavam na rota` : null,
           '',
-          routeOnlyMyLeads
-            ? 'Desligue "somente meus leads" ou inclua mais status no recorte.'
+          routeVendorFilterHubspotId !== null
+            ? 'Tire o filtro de vendedor ou inclua mais status no recorte.'
             : 'Tente incluir mais status no recorte.',
         ].filter(Boolean).join('\n'),
       );
@@ -881,7 +904,7 @@ function MainApp() {
           '',
           'Descartados:',
           outOfSelection > 0 ? `• ${outOfSelection} fora dos status escolhidos` : null,
-          notMine > 0 ? `• ${notMine} nao sao seus (filtro "somente meus leads")` : null,
+          outOfVendor > 0 ? `• ${outOfVendor} fora do vendedor "${vendorLabel(routeVendorFilterHubspotId)}"` : null,
           withoutCoord > 0 ? `• ${withoutCoord} sem coordenadas` : null,
           alreadyInRoute > 0 ? `• ${alreadyInRoute} ja estavam na rota` : null,
           capped ? '\nObs.: limite maximo por rota = 30.' : null,
@@ -890,7 +913,7 @@ function MainApp() {
       },
       onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
     });
-  }, [clients, fieldOps.saveRoute, filteredWithCoords, routeDate, routeLeadCount, routeOnlyMyLeads, routeStatusSelection, routeStopClientIds, userLocation, myHubspotId]);
+  }, [clients, fieldOps.saveRoute, filteredWithCoords, routeDate, routeLeadCount, routeVendorFilterHubspotId, routeStatusSelection, routeStopClientIds, userLocation, vendorById]);
 
   const saveManualRoute = useCallback((draft = routeDraft) => {
     if (draft.length === 0) {
@@ -1682,33 +1705,51 @@ function MainApp() {
         </View>
 
         <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Responsavel</Text>
-        <TouchableOpacity
-          style={[
-            styles.dropdownButton,
-            routeOnlyMyLeads && { borderColor: '#dc2626', backgroundColor: '#fef2f2' },
-          ]}
-          onPress={() => {
-            if (!myHubspotId) {
-              Alert.alert(
-                'Sem id HubSpot',
-                'Seu usuario nao tem id_hubspot configurado, entao nao da pra identificar quais leads sao seus.',
-              );
-              return;
-            }
-            setRouteOnlyMyLeads(v => !v);
-          }}
-        >
-          <Text style={[
-            styles.dropdownButtonText,
-            !routeOnlyMyLeads && { color: '#64748b' },
-          ]}>
-            {routeOnlyMyLeads ? 'Somente meus leads' : 'Todos os leads do recorte'}
-          </Text>
-          <Text style={[
-            styles.dropdownChevron,
-            routeOnlyMyLeads && { color: '#dc2626' },
-          ]}>{routeOnlyMyLeads ? '✓' : '○'}</Text>
-        </TouchableOpacity>
+        {isAdmin ? (
+          <TouchableOpacity
+            style={[
+              styles.dropdownButton,
+              routeVendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: '#fef2f2' },
+            ]}
+            onPress={() => setIsPickingRouteVendor(true)}
+          >
+            <Text style={[
+              styles.dropdownButtonText,
+              routeVendorFilterHubspotId === null && { color: '#64748b' },
+            ]}>
+              {routeVendorFilterHubspotId === null ? 'Todos os vendedores' : vendorLabel(routeVendorFilterHubspotId)}
+            </Text>
+            <Text style={styles.dropdownChevron}>▾</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[
+              styles.dropdownButton,
+              routeVendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: '#fef2f2' },
+            ]}
+            onPress={() => {
+              if (!myHubspotId) {
+                Alert.alert(
+                  'Sem id HubSpot',
+                  'Seu usuario nao tem id_hubspot configurado, entao nao da pra identificar quais leads sao seus.',
+                );
+                return;
+              }
+              setRouteVendorFilterHubspotId(prev => (prev === myHubspotId ? null : myHubspotId));
+            }}
+          >
+            <Text style={[
+              styles.dropdownButtonText,
+              routeVendorFilterHubspotId === null && { color: '#64748b' },
+            ]}>
+              {routeVendorFilterHubspotId === myHubspotId ? 'Somente meus leads' : 'Todos os leads do recorte'}
+            </Text>
+            <Text style={[
+              styles.dropdownChevron,
+              routeVendorFilterHubspotId === myHubspotId && { color: '#dc2626' },
+            ]}>{routeVendorFilterHubspotId === myHubspotId ? '✓' : '○'}</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={[styles.submitButton, { marginTop: 16 }]}
@@ -1951,7 +1992,7 @@ function MainApp() {
   );
 
   const renderAgendaScreen = () => {
-    const agendaItems = [
+    const allAgendaItems = [
       ...routeStops.map(stop => ({ kind: 'route' as const, at: stop.planned_at, stop, client: stop.client })),
       ...meetings.map(meeting => ({
         kind: 'meeting' as const,
@@ -1961,11 +2002,23 @@ function MainApp() {
       })),
     ].sort((a, b) => new Date(a.at ?? 0).getTime() - new Date(b.at ?? 0).getTime());
 
+    // Aplica o mesmo filtro de vendedor que o mapa/lista usam — se o admin
+    // escolheu um vendedor, agenda mostra so itens cujo cliente eh dele.
+    // Itens sem client carregado (raro) ficam fora quando ha filtro ativo.
+    const agendaItems = vendorFilterHubspotId === null
+      ? allAgendaItems
+      : allAgendaItems.filter(item => item.client?.vendedor_id_hubspot === vendorFilterHubspotId);
+
     return (
       <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
         <View style={styles.panelCard}>
           <Text style={styles.panelTitle}>Agenda do vendedor</Text>
-          <Text style={styles.panelHint}>Rota planejada, demos e follow-ups em ordem cronologica.</Text>
+          <Text style={styles.panelHint}>
+            Rota planejada, demos e follow-ups em ordem cronologica.
+            {vendorFilterHubspotId !== null
+              ? `\n\nFiltro ativo: ${vendorLabel(vendorFilterHubspotId)} (tire no modal de filtros).`
+              : ''}
+          </Text>
         </View>
         {agendaItems.length === 0 ? (
           <View style={styles.emptyState}>
@@ -2790,10 +2843,48 @@ function MainApp() {
       >
         <Pressable
           style={styles.modalOverlay}
-          onPress={() => { setIsPickingUf(false); setIsPickingStage(false); setIsFiltersOpen(false); }}
+          onPress={() => { setIsPickingUf(false); setIsPickingStage(false); setIsPickingVendor(false); setIsFiltersOpen(false); }}
         >
           <Pressable style={styles.filtersSheet} onPress={() => {}}>
-            {isPickingUf ? (
+            {isPickingVendor ? (
+              <>
+                <View style={styles.modalHeader}>
+                  <TouchableOpacity onPress={() => setIsPickingVendor(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.backButton}>‹ Voltar</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.modalTitle}>Selecione o vendedor</Text>
+                  <View style={{ width: 60 }} />
+                </View>
+                <ScrollView style={styles.ufPickerList} contentContainerStyle={{ paddingBottom: 12 }}>
+                  <TouchableOpacity
+                    style={styles.ufPickerRow}
+                    onPress={() => { setVendorFilterHubspotId(null); setIsPickingVendor(false); }}
+                  >
+                    <Text style={[styles.ufPickerRowText, vendorFilterHubspotId === null && styles.ufPickerRowTextActive]}>Todos os vendedores</Text>
+                    {vendorFilterHubspotId === null && <Text style={styles.ufPickerCheck}>✓</Text>}
+                  </TouchableOpacity>
+                  {vendors.length === 0 && (
+                    <Text style={[styles.passwordModalHint, { padding: 16 }]}>
+                      Nenhum vendedor com id_hubspot cadastrado.
+                    </Text>
+                  )}
+                  {vendors.map(v => {
+                    const selected = vendorFilterHubspotId === v.id_hubspot;
+                    const label = v.full_name?.trim() || v.email || `id ${v.id_hubspot}`;
+                    return (
+                      <TouchableOpacity
+                        key={v.id_hubspot}
+                        style={styles.ufPickerRow}
+                        onPress={() => { setVendorFilterHubspotId(v.id_hubspot); setIsPickingVendor(false); }}
+                      >
+                        <Text style={[styles.ufPickerRowText, selected && styles.ufPickerRowTextActive]}>{label}</Text>
+                        {selected && <Text style={styles.ufPickerCheck}>✓</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            ) : isPickingUf ? (
               <>
                 <View style={styles.modalHeader}>
                   <TouchableOpacity onPress={() => setIsPickingUf(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -2862,35 +2953,55 @@ function MainApp() {
 
                 <Text style={styles.adminSectionTitle}>Responsavel</Text>
                 <Text style={styles.passwordModalHint}>
-                  Mostra somente os leads em que voce eh o responsavel (vendedor_id_hubspot = seu id HubSpot).
+                  {isAdmin
+                    ? 'Filtra por qualquer vendedor do time (admin).'
+                    : 'Mostra somente os leads em que voce eh o responsavel.'}
                 </Text>
-                <TouchableOpacity
-                  style={[
-                    styles.dropdownButton,
-                    showOnlyMyLeads && { borderColor: '#dc2626', backgroundColor: '#fef2f2' },
-                  ]}
-                  onPress={() => {
-                    if (!myHubspotId) {
-                      Alert.alert(
-                        'Sem id HubSpot',
-                        'Seu usuario nao tem id_hubspot configurado. Sem ele nao da pra identificar quais leads sao seus.',
-                      );
-                      return;
-                    }
-                    setShowOnlyMyLeads(v => !v);
-                  }}
-                >
-                  <Text style={[
-                    styles.dropdownButtonText,
-                    !showOnlyMyLeads && { color: '#64748b' },
-                  ]}>
-                    {showOnlyMyLeads ? 'Somente meus leads' : 'Todos os leads visiveis'}
-                  </Text>
-                  <Text style={[
-                    styles.dropdownChevron,
-                    showOnlyMyLeads && { color: '#dc2626' },
-                  ]}>{showOnlyMyLeads ? '✓' : '○'}</Text>
-                </TouchableOpacity>
+                {isAdmin ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.dropdownButton,
+                      vendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: '#fef2f2' },
+                    ]}
+                    onPress={() => setIsPickingVendor(true)}
+                  >
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      vendorFilterHubspotId === null && { color: '#64748b' },
+                    ]}>
+                      {vendorFilterHubspotId === null ? 'Todos os vendedores' : vendorLabel(vendorFilterHubspotId)}
+                    </Text>
+                    <Text style={styles.dropdownChevron}>▾</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[
+                      styles.dropdownButton,
+                      vendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: '#fef2f2' },
+                    ]}
+                    onPress={() => {
+                      if (!myHubspotId) {
+                        Alert.alert(
+                          'Sem id HubSpot',
+                          'Seu usuario nao tem id_hubspot configurado. Sem ele nao da pra identificar quais leads sao seus.',
+                        );
+                        return;
+                      }
+                      setVendorFilterHubspotId(prev => (prev === myHubspotId ? null : myHubspotId));
+                    }}
+                  >
+                    <Text style={[
+                      styles.dropdownButtonText,
+                      vendorFilterHubspotId === null && { color: '#64748b' },
+                    ]}>
+                      {vendorFilterHubspotId === myHubspotId ? 'Somente meus leads' : 'Todos os leads visiveis'}
+                    </Text>
+                    <Text style={[
+                      styles.dropdownChevron,
+                      vendorFilterHubspotId === myHubspotId && { color: '#dc2626' },
+                    ]}>{vendorFilterHubspotId === myHubspotId ? '✓' : '○'}</Text>
+                  </TouchableOpacity>
+                )}
 
                 <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Estado</Text>
                 <Text style={styles.passwordModalHint}>
@@ -2925,7 +3036,7 @@ function MainApp() {
                 <View style={styles.filtersFooter}>
                   <TouchableOpacity
                     style={styles.filtersSecondaryButton}
-                    onPress={() => { setSearchQuery(''); setStateFilter(null); setStageFilter(null); setShowOnlyMyLeads(false); }}
+                    onPress={() => { setSearchQuery(''); setStateFilter(null); setStageFilter(null); setVendorFilterHubspotId(null); }}
                     disabled={activeFilterCount === 0}
                   >
                     <Text style={[styles.filtersSecondaryButtonText, activeFilterCount === 0 && { opacity: 0.4 }]}>Limpar tudo</Text>
@@ -2936,6 +3047,53 @@ function MainApp() {
                 </View>
               </>
             )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Picker de vendedor pra geracao de rota (so admin) */}
+      <Modal
+        visible={isPickingRouteVendor}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsPickingRouteVendor(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setIsPickingRouteVendor(false)}>
+          <Pressable style={styles.filtersSheet} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Selecione o vendedor</Text>
+              <TouchableOpacity onPress={() => setIsPickingRouteVendor(false)}>
+                <Text style={styles.closeButton}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.ufPickerList} contentContainerStyle={{ paddingBottom: 12 }}>
+              <TouchableOpacity
+                style={styles.ufPickerRow}
+                onPress={() => { setRouteVendorFilterHubspotId(null); setIsPickingRouteVendor(false); }}
+              >
+                <Text style={[styles.ufPickerRowText, routeVendorFilterHubspotId === null && styles.ufPickerRowTextActive]}>Todos os vendedores</Text>
+                {routeVendorFilterHubspotId === null && <Text style={styles.ufPickerCheck}>✓</Text>}
+              </TouchableOpacity>
+              {vendors.length === 0 && (
+                <Text style={[styles.passwordModalHint, { padding: 16 }]}>
+                  Nenhum vendedor com id_hubspot cadastrado.
+                </Text>
+              )}
+              {vendors.map(v => {
+                const selected = routeVendorFilterHubspotId === v.id_hubspot;
+                const label = v.full_name?.trim() || v.email || `id ${v.id_hubspot}`;
+                return (
+                  <TouchableOpacity
+                    key={v.id_hubspot}
+                    style={styles.ufPickerRow}
+                    onPress={() => { setRouteVendorFilterHubspotId(v.id_hubspot); setIsPickingRouteVendor(false); }}
+                  >
+                    <Text style={[styles.ufPickerRowText, selected && styles.ufPickerRowTextActive]}>{label}</Text>
+                    {selected && <Text style={styles.ufPickerCheck}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
