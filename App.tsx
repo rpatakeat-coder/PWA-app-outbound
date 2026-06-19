@@ -101,6 +101,33 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
 
 type AppTab = 'map' | 'list' | 'route' | 'agenda';
 
+// Limpa e normaliza telefone pra wa.me. Aceita "(27) 99618-3875" / "27996183875"
+// / "5527996183875" e devolve "5527996183875" (com DDI 55 default Brasil).
+// Retorna null se tiver < 10 digitos (DDD + numero base) — telefone invalido.
+function toWhatsappNumber(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const d = raw.replace(/\D/g, '');
+  if (d.length < 10) return null;
+  // Se ja tem DDI 55 (13 digitos) ou outro DDI longo, mantem; senao adiciona 55.
+  if (d.length >= 12 && d.startsWith('55')) return d;
+  return `55${d}`;
+}
+
+// Abre o WhatsApp no telefone do cliente. Em mobile, o link wa.me redireciona
+// pro app nativo via universal link (whatsapp://send). Em web cai no whatsapp web.
+function openWhatsapp(rawPhone: string | null | undefined): boolean {
+  const num = toWhatsappNumber(rawPhone);
+  if (!num) {
+    Alert.alert('Telefone invalido', 'O telefone do cliente nao tem formato valido pra abrir o WhatsApp.');
+    return false;
+  }
+  const url = `https://wa.me/${num}`;
+  Linking.openURL(url).catch(() =>
+    Alert.alert('Erro', 'Nao foi possivel abrir o WhatsApp. Verifique se o aplicativo esta instalado.'),
+  );
+  return true;
+}
+
 const getClientPrimaryName = (client: Client) => client.empresa?.trim() || client.nome;
 
 function CustomMarker({ color, meetingCount }: { color: string; meetingCount: number }) {
@@ -292,6 +319,11 @@ function MainApp() {
   // Non-admin so consegue setar pro proprio id_hubspot (toggle "meus leads").
   // Admin pode escolher qualquer vendedor via picker.
   const [vendorFilterHubspotId, setVendorFilterHubspotId] = useState<string | null>(null);
+  // Filtro temporal de visita. null = sem filtro.
+  // - 'never': visited_at IS NULL
+  // - 'visited:<N>': visitado nos ultimos N dias
+  // - 'not_visited:<N>': nao visitado nos ultimos N dias (inclui never + visited > N dias)
+  const [visitFilter, setVisitFilter] = useState<string | null>(null);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isPickingUf, setIsPickingUf] = useState(false);
   const [isPickingStage, setIsPickingStage] = useState(false);
@@ -311,7 +343,7 @@ function MainApp() {
   // ser visitados (caso de uso principal outbound). Multi-select substitui
   // o antigo "Filtro atual vs Todos visiveis".
   const [routeStatusSelection, setRouteStatusSelection] = useState<Set<string>>(
-    () => new Set(['lead_nao_visitado']),
+    () => new Set(['lead']),
   );
   // Filtro de vendedor na geracao de rota. null = sem filtro.
   // Non-admin: toggle pro proprio id_hubspot. Admin: picker com todos.
@@ -535,11 +567,34 @@ function MainApp() {
   // id_hubspot do usuario logado, usado pelo toggle "meus leads" (non-admin).
   const myHubspotId = profile?.id_hubspot ?? null;
 
+  // Avalia o filtro temporal de visita pra um cliente.
+  // - null: sem filtro
+  // - 'never': visited_at IS NULL
+  // - 'visited:<N>': visitado nos ultimos N dias
+  // - 'not_visited:<N>': nunca visitado OU visitado ha mais de N dias
+  const matchesVisitFilter = (visitedAt: string | null): boolean => {
+    if (visitFilter === null) return true;
+    if (visitFilter === 'never') return visitedAt === null;
+    const days = Number(visitFilter.split(':')[1]);
+    if (!Number.isFinite(days)) return true;
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    if (visitFilter.startsWith('visited:')) {
+      if (!visitedAt) return false;
+      return new Date(visitedAt).getTime() >= cutoff;
+    }
+    if (visitFilter.startsWith('not_visited:')) {
+      if (!visitedAt) return true;
+      return new Date(visitedAt).getTime() < cutoff;
+    }
+    return true;
+  };
+
   const clientsForCount = useMemo(
     () => clients.filter(c => {
       if (stateFilter && normalizeUf(c.estado) !== stateFilter) return false;
       if (stageFilter && normalizeStage(c.etapa) !== stageFilter) return false;
       if (vendorFilterHubspotId !== null && c.vendedor_id_hubspot !== vendorFilterHubspotId) return false;
+      if (!matchesVisitFilter(c.visited_at)) return false;
       if (searchTerm) {
         const haystack = `${c.nome ?? ''} ${c.empresa ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''} ${c.etapa ?? ''}`
           .normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase();
@@ -547,7 +602,7 @@ function MainApp() {
       }
       return true;
     }),
-    [clients, stateFilter, stageFilter, searchTerm, vendorFilterHubspotId],
+    [clients, stateFilter, stageFilter, searchTerm, vendorFilterHubspotId, visitFilter],
   );
 
   const filteredClients = useMemo(
@@ -579,7 +634,7 @@ function MainApp() {
 
   const shouldGroupListByStage =
     listStageSections.length > 0
-    && (statusFilter === 'lead_nao_visitado' || statusFilter === 'lead_visitado');
+    && statusFilter === 'lead';
 
   useEffect(() => {
     if (!stageFilter) return;
@@ -614,7 +669,7 @@ function MainApp() {
     return rows;
   }, [expandedStages, listStageSections]);
 
-  const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0) + (vendorFilterHubspotId !== null ? 1 : 0);
+  const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0) + (vendorFilterHubspotId !== null ? 1 : 0) + (visitFilter !== null ? 1 : 0);
 
   const filteredWithCoords = useMemo(
     () => filteredClients.filter(c => c.latitude !== null && c.longitude !== null),
@@ -756,11 +811,12 @@ function MainApp() {
       eligible.push(c);
     }
 
-    // Pesos por slug REAL do banco. lead_nao_visitado > lead_visitado > resto.
+    // Pesos por slug REAL do banco: lead > cliente > churn.
     // Valor menor = melhor prioridade (mesma convencao da distancia).
+    // Dentro de 'lead', a refinacao "visitado/nao visitado" entra via
+    // potentialScore que penaliza visited_at recente.
     const statusWeight = (status: string) => {
-      if (status === 'lead_nao_visitado') return 0;
-      if (status === 'lead_visitado') return 3;
+      if (status === 'lead') return 0;
       if (status === 'cliente') return 6;
       if (status === 'churn') return 9;
       return 4;
@@ -1323,7 +1379,7 @@ function MainApp() {
     // nao sao opcoes na criacao manual (so via fluxo de pos-venda).
     setForm({
       ...initialFormState,
-      status: 'lead_nao_visitado' as ClientStatus,
+      status: 'lead' as ClientStatus,
       latitude: creationCenter.latitude.toString(),
       longitude: creationCenter.longitude.toString(),
       cep: addr?.cep ? `${addr.cep.slice(0, 5)}-${addr.cep.slice(5)}` : '',
@@ -1433,7 +1489,7 @@ function MainApp() {
     // aqui evita ter que mostrar erro feio do Postgres se o usuario tentou.
     if (
       (editingClient.status === 'cliente' || editingClient.status === 'churn')
-      && (form.status === 'lead_nao_visitado' || form.status === 'lead_visitado')
+      && form.status === 'lead'
     ) {
       Alert.alert(
         'Transicao nao permitida',
@@ -2055,6 +2111,14 @@ function MainApp() {
                         <Text style={styles.smallActionButtonText}>Rota</Text>
                       </TouchableOpacity>
                     )}
+                    {toWhatsappNumber(client.telefone) && (
+                      <TouchableOpacity
+                        style={[styles.smallActionButton, { backgroundColor: '#25d366' }]}
+                        onPress={() => openWhatsapp(client.telefone)}
+                      >
+                        <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>WhatsApp</Text>
+                      </TouchableOpacity>
+                    )}
                     {item.kind === 'route' && (
                       <TouchableOpacity style={styles.smallActionButton} onPress={() => fieldOps.markStopDone.mutate(item.stop)}>
                         <Text style={styles.smallActionButtonText}>Realizada</Text>
@@ -2347,7 +2411,7 @@ function MainApp() {
       onMarkVisited={() => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
       onScheduleMeeting={() => { setSchedulingFor(selectedClient); setSelectedClient(null); }}
       onChangeStage={
-        isAdmin && ['lead_nao_visitado', 'lead_visitado'].includes(selectedClient.status)
+        isAdmin && selectedClient.status === 'lead'
           ? () => { setChangingStageFor(selectedClient); setSelectedClient(null); }
           : undefined
       }
@@ -3005,6 +3069,39 @@ function MainApp() {
                   </TouchableOpacity>
                 )}
 
+                <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Visita</Text>
+                <Text style={styles.passwordModalHint}>
+                  Filtra pelo timestamp da ultima visita (visited_at). Vale pra qualquer status.
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                  {([
+                    { v: null,             label: 'Sem filtro' },
+                    { v: 'never',          label: 'Nunca visitado' },
+                    { v: 'visited:7',      label: 'Visitado < 7d' },
+                    { v: 'visited:30',     label: 'Visitado < 30d' },
+                    { v: 'not_visited:30', label: 'Nao visto > 30d' },
+                    { v: 'not_visited:60', label: 'Nao visto > 60d' },
+                    { v: 'not_visited:90', label: 'Nao visto > 90d' },
+                  ] as Array<{ v: string | null; label: string }>).map(opt => {
+                    const selected = visitFilter === opt.v;
+                    return (
+                      <TouchableOpacity
+                        key={opt.label}
+                        style={[
+                          styles.filterChip,
+                          selected && { backgroundColor: '#dc2626', borderColor: '#dc2626' },
+                          !selected && { borderWidth: 1, borderColor: '#e2e8f0' },
+                        ]}
+                        onPress={() => setVisitFilter(opt.v)}
+                      >
+                        <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
                 <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Estado</Text>
                 <Text style={styles.passwordModalHint}>
                   Filtra os pinos pelo UF do endereco do cliente.
@@ -3038,7 +3135,7 @@ function MainApp() {
                 <View style={styles.filtersFooter}>
                   <TouchableOpacity
                     style={styles.filtersSecondaryButton}
-                    onPress={() => { setSearchQuery(''); setStateFilter(null); setStageFilter(null); setVendorFilterHubspotId(null); }}
+                    onPress={() => { setSearchQuery(''); setStateFilter(null); setStageFilter(null); setVendorFilterHubspotId(null); setVisitFilter(null); }}
                     disabled={activeFilterCount === 0}
                   >
                     <Text style={[styles.filtersSecondaryButtonText, activeFilterCount === 0 && { opacity: 0.4 }]}>Limpar tudo</Text>
@@ -3129,8 +3226,8 @@ function MainApp() {
           onNext={(cepData) => {
             setForm(prev => ({
               ...prev,
-              // Cadastro novo via CEP sempre comeca como "lead a visitar".
-              status: 'lead_nao_visitado' as ClientStatus,
+              // Cadastro novo via CEP sempre comeca como "lead".
+              status: 'lead' as ClientStatus,
               cep: cepData.cep || '',
               endereco: cepData.endereco || '',
               cidade: cepData.cidade || '',
@@ -3165,21 +3262,18 @@ function MainApp() {
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
                 >
-              {/* Status Selector — na criacao so libera lead_nao_visitado /
-                  lead_visitado (cliente/churn so existem via upgrade no
-                  fluxo de pos-venda). Na edicao, bloqueia transitar de
-                  cliente/churn pra lead_* — espelho do trigger
-                  guard_client_status_transition no banco. */}
+              {/* Status Selector — na criacao so libera 'lead' (cliente/churn
+                  so existem via upgrade no fluxo de pos-venda). Na edicao,
+                  bloqueia transitar de cliente/churn de volta pra lead —
+                  espelho do trigger guard_client_status_transition no banco. */}
               <Text style={styles.fieldLabel}>Status</Text>
               <View style={styles.statusSelector}>
                 {statusOptions
-                  .filter(opt => editingClient
-                    ? true
-                    : opt.value === 'lead_nao_visitado' || opt.value === 'lead_visitado')
+                  .filter(opt => editingClient ? true : opt.value === 'lead')
                   .map(opt => {
                     const lockedFromClient = !!editingClient
                       && (editingClient.status === 'cliente' || editingClient.status === 'churn')
-                      && (opt.value === 'lead_nao_visitado' || opt.value === 'lead_visitado');
+                      && opt.value === 'lead';
                     return (
                       <TouchableOpacity
                         key={opt.value}
@@ -3793,6 +3887,26 @@ function ClientBottomSheet({
               >
                 <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>🗺️ Abrir no Google Maps</Text>
               </TouchableOpacity>
+              {(() => {
+                const waNum = toWhatsappNumber(client.telefone);
+                return (
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: waNum ? '#25d366' : '#cbd5e1',
+                      borderRadius: 10,
+                      paddingVertical: 12,
+                      alignItems: 'center',
+                      marginTop: 8,
+                    }}
+                    disabled={!waNum}
+                    onPress={() => openWhatsapp(client.telefone)}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                      {waNum ? '💬 Abrir WhatsApp' : '💬 WhatsApp (sem telefone)'}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })()}
             </View>
 
             {/* Reuniões agendadas */}
@@ -3851,31 +3965,28 @@ function ClientBottomSheet({
               </TouchableOpacity>
             )}
 
-            {/* Marcar como visitado: só pra leads pendentes (lead_nao_visitado).
-                lead_visitado ja foi visitado; cliente/churn nao sao alvo de
-                visita outbound (status protegido tambem por trigger no banco
-                + RPC mark_client_as_visited recusa). */}
-            {client.status === 'lead_nao_visitado' && (
-              <TouchableOpacity
-                disabled={isMarkingVisited}
-                style={{
-                  backgroundColor: isMarkingVisited ? '#94d4a8' : '#16a34a',
-                  borderRadius: 10,
-                  paddingVertical: 14,
-                  alignItems: 'center',
-                  marginBottom: 12,
-                }}
-                onPress={onMarkVisited}
-              >
-                {isMarkingVisited ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
-                    ✅ Marcar como visitado
-                  </Text>
-                )}
-              </TouchableOpacity>
-            )}
+            {/* Marcar como visitado: liberado pra QUALQUER status. Status nao
+                muda mais com a visita — RPC mark_client_as_visited so preenche
+                visited_at + coords + visited_by. Re-marcar atualiza o timestamp. */}
+            <TouchableOpacity
+              disabled={isMarkingVisited}
+              style={{
+                backgroundColor: isMarkingVisited ? '#94d4a8' : '#16a34a',
+                borderRadius: 10,
+                paddingVertical: 14,
+                alignItems: 'center',
+                marginBottom: 12,
+              }}
+              onPress={onMarkVisited}
+            >
+              {isMarkingVisited ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                  {client.visited_at ? '🔁 Re-marcar visita' : '✅ Marcar como visitado'}
+                </Text>
+              )}
+            </TouchableOpacity>
 
             {/* Actions */}
             <View style={styles.actionRow}>

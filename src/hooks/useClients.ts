@@ -93,7 +93,6 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
 
   const addClient = useMutation({
     mutationFn: async (form: ClientFormData) => {
-      const isVisited = form.status === 'lead_visitado';
       const insertPayload: Record<string, unknown> = {
         nome: form.nome,
         empresa: form.empresa ?? null,
@@ -121,14 +120,6 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
         geo_source: 'coords',
         geo_approximate: false,
       };
-      // Cadastro manual já marcado como visitado registra normalmente, sem
-      // checagem de proximidade (isso só vale pra transição via mark_client_as_visited).
-      if (isVisited) {
-        insertPayload.visited_at = new Date().toISOString();
-        insertPayload.visited_at_lat = form.latitude;
-        insertPayload.visited_at_lon = form.longitude;
-        insertPayload.visited_by = user?.id ?? null;
-      }
 
       const { data, error } = await supabase
         .from('clients')

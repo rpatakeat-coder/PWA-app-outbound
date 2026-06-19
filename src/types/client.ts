@@ -36,6 +36,7 @@ export interface Client {
   id_hubspot: string | null;
   url_hubspot: string | null;
   vendedor_id_hubspot: string | null;
+  visited_at: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
