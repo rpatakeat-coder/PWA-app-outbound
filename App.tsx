@@ -32,6 +32,7 @@ import { useClients } from './src/hooks/useClients';
 import { useMeetings } from './src/hooks/useMeetings';
 import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
 import { useClientNotes } from './src/hooks/useClientNotes';
+import { useClientStageChanges } from './src/hooks/useClientStageChanges';
 import { useForceReload } from './src/hooks/useForceReload';
 import { supabase } from './src/integrations/supabase/client';
 import { AREA_RADIUS_KM } from './src/utils/area';
@@ -3488,9 +3489,26 @@ function ClientBottomSheet({
   const primaryName = getClientPrimaryName(client);
   const { user } = useAuth();
   const { notes, addNote, updateNote, deleteNote } = useClientNotes(client.id);
+  const { changes: stageChanges } = useClientStageChanges(client.id);
   const [newNote, setNewNote] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingBody, setEditingBody] = useState('');
+
+  // Timeline unificada: notas + mudancas de etapa, mais recentes primeiro.
+  // Cada entrada carrega kind pra UI decidir como renderizar (com botoes de
+  // editar/apagar nas notas; somente leitura nas mudancas de etapa).
+  type TimelineEntry =
+    | { kind: 'note'; createdAt: string; note: typeof notes[number] }
+    | { kind: 'stage'; createdAt: string; change: typeof stageChanges[number] };
+  const timeline: TimelineEntry[] = useMemo(() => {
+    const entries: TimelineEntry[] = [
+      ...notes.map((n) => ({ kind: 'note' as const, createdAt: n.created_at, note: n })),
+      ...stageChanges.map((c) => ({ kind: 'stage' as const, createdAt: c.created_at, change: c })),
+    ];
+    return entries.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }, [notes, stageChanges]);
 
   const approxReasons: string[] = [];
   if (!client.numero) approxReasons.push('Endereço sem número');
@@ -3746,25 +3764,50 @@ function ClientBottomSheet({
               </View>
             )}
 
-            {/* Historico de notas de campo — cada submit cria entrada nova
-                em client_notes, mantendo timeline em vez de sobrescrever. */}
+            {/* Timeline unificada: notas de campo + mudancas de etapa, em
+                ordem cronologica (mais recentes em cima). Mudancas de etapa
+                sao imutaveis; notas mantem editar/apagar pro autor. */}
             <View style={styles.notesSection}>
               <Text style={styles.fieldLabel}>
-                Histórico de notas{notes.length > 0 ? ` (${notes.length})` : ''}
+                Histórico{timeline.length > 0 ? ` (${timeline.length})` : ''}
               </Text>
-              {notes.length === 0 ? (
-                <Text style={styles.meetingsEmpty}>Nenhuma nota registrada ainda.</Text>
+              {timeline.length === 0 ? (
+                <Text style={styles.meetingsEmpty}>Nenhum registro ainda.</Text>
               ) : (
-                notes.map(note => {
-                  const when = new Date(note.created_at).toLocaleString('pt-BR', {
+                timeline.map((entry) => {
+                  const when = new Date(entry.createdAt).toLocaleString('pt-BR', {
                     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
                   });
+                  if (entry.kind === 'stage') {
+                    const change = entry.change;
+                    const authorLabel =
+                      change.created_by_name || change.created_by_email || 'Autor desconhecido';
+                    const arrow = change.from_stage
+                      ? `${change.from_stage} → ${change.to_stage}`
+                      : `→ ${change.to_stage}`;
+                    return (
+                      <View key={`stage-${change.id}`} style={styles.noteItem}>
+                        <View style={styles.noteHeaderRow}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.noteAuthor} numberOfLines={1}>
+                              🔄 {authorLabel}
+                            </Text>
+                            <Text style={styles.noteDate}>{when}</Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.noteBody, { fontWeight: '600' }]}>
+                          Moveu etapa: {arrow}
+                        </Text>
+                      </View>
+                    );
+                  }
+                  const note = entry.note;
                   const isMine = !!user?.id && note.created_by === user.id;
                   const isEditing = editingNoteId === note.id;
                   const wasEdited = new Date(note.updated_at).getTime() - new Date(note.created_at).getTime() > 2000;
                   const authorLabel = note.created_by_name || note.created_by_email || 'Autor desconhecido';
                   return (
-                    <View key={note.id} style={styles.noteItem}>
+                    <View key={`note-${note.id}`} style={styles.noteItem}>
                       <View style={styles.noteHeaderRow}>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.noteAuthor} numberOfLines={1}>👤 {authorLabel}</Text>

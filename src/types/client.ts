@@ -120,3 +120,16 @@ export interface ClientNote {
   created_at: string;
   updated_at: string;
 }
+
+export interface ClientStageChange {
+  id: string;
+  client_id: string;
+  from_stage: string | null;
+  to_stage: string;
+  to_stage_id: string | null;
+  sub_values: Record<string, unknown> | null;
+  created_by: string | null;
+  created_by_name: string | null;
+  created_by_email: string | null;
+  created_at: string;
+}

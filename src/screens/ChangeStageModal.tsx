@@ -21,6 +21,7 @@ import {
   type StageSubField,
 } from '../constants/stages';
 import { useStagePropertyOptions } from '../hooks/useStagePropertyOptions';
+import { useClientStageChanges } from '../hooks/useClientStageChanges';
 
 interface Props {
   client: Client;
@@ -385,6 +386,11 @@ export function ChangeStageModal({ client, onClose }: Props) {
   // O hardcoded em STAGES é fallback enquanto a query carrega ou se falhar.
   const { data: groupedOptions } = useStagePropertyOptions();
 
+  // Historico local de mudancas — gravado APOS o webhook responder OK pra
+  // timeline so refletir o que efetivamente saiu pro HubSpot. Se o INSERT
+  // falhar (RLS, tabela ausente etc.) so logamos: a sincronia ja passou.
+  const { recordChange } = useClientStageChanges(client.id);
+
   // Filtra etapas pelo gate. Se a etapa tem gateEtapa definido, so aparece
   // quando client.etapa esta na lista. Sem gateEtapa = aparece pra todos.
   const visibleStages = STAGES.filter((s) => {
@@ -531,6 +537,23 @@ export function ChangeStageModal({ client, onClose }: Props) {
       if (!res.ok) {
         throw new Error(`Webhook respondeu ${res.status}`);
       }
+
+      // Webhook ok — grava a entrada na timeline. Falha aqui nao bloqueia
+      // o sucesso: o HubSpot ja recebeu, so o historico local ficou de fora.
+      try {
+        await recordChange.mutateAsync({
+          fromStage: client.etapa,
+          toStage: selectedStage.label,
+          toStageId: selectedStage.id,
+          subValues:
+            subFields.length > 0
+              ? (subValuesPayload as Record<string, unknown>)
+              : null,
+        });
+      } catch (err) {
+        console.warn('Falhou ao registrar mudanca de etapa no historico', err);
+      }
+
       Alert.alert(
         'Etapa enviada',
         `${client.nome} foi enviado para ${selectedStage.label}.`,
