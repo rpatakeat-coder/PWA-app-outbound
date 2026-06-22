@@ -404,8 +404,10 @@ function MainApp() {
     return m;
   }, [vendors]);
   // Helper pra renderizar label do vendedor (full_name > email > id cru).
+  // Sentinel '__none__' = leads sem vendedor associado.
   const vendorLabel = (idHubspot: string | null): string => {
     if (idHubspot === null) return 'Todos os vendedores';
+    if (idHubspot === '__none__') return 'Sem vendedor associado';
     const v = vendorById.get(idHubspot);
     if (!v) return `id ${idHubspot}`;
     return v.full_name?.trim() || v.email || `id ${idHubspot}`;
@@ -596,7 +598,11 @@ function MainApp() {
     () => clients.filter(c => {
       if (stateFilter && normalizeUf(c.estado) !== stateFilter) return false;
       if (stageFilter && normalizeStage(c.etapa) !== stageFilter) return false;
-      if (vendorFilterHubspotId !== null && c.vendedor_id_hubspot !== vendorFilterHubspotId) return false;
+      if (vendorFilterHubspotId === '__none__') {
+        if (c.vendedor_id_hubspot) return false;
+      } else if (vendorFilterHubspotId !== null && c.vendedor_id_hubspot !== vendorFilterHubspotId) {
+        return false;
+      }
       if (!matchesVisitFilter(c.visited_at)) return false;
       if (searchTerm) {
         const haystack = `${c.nome ?? ''} ${c.empresa ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''} ${c.etapa ?? ''}`
@@ -808,7 +814,11 @@ function MainApp() {
     const eligible: Client[] = [];
     for (const c of poolBase) {
       if (!routeStatusSelection.has(c.status)) { outOfSelection++; continue; }
-      if (routeVendorFilterHubspotId !== null && c.vendedor_id_hubspot !== routeVendorFilterHubspotId) { outOfVendor++; continue; }
+      if (routeVendorFilterHubspotId === '__none__') {
+        if (c.vendedor_id_hubspot) { outOfVendor++; continue; }
+      } else if (routeVendorFilterHubspotId !== null && c.vendedor_id_hubspot !== routeVendorFilterHubspotId) {
+        outOfVendor++; continue;
+      }
       if (c.latitude == null || c.longitude == null) { withoutCoord++; continue; }
       if (routeStopClientIds.has(c.id)) { alreadyInRoute++; continue; }
       eligible.push(c);
@@ -1778,7 +1788,7 @@ function MainApp() {
               styles.dropdownButtonText,
               routeVendorFilterHubspotId === null && { color: '#64748b' },
             ]}>
-              {routeVendorFilterHubspotId === null ? 'Todos os vendedores' : vendorLabel(routeVendorFilterHubspotId)}
+              {vendorLabel(routeVendorFilterHubspotId)}
             </Text>
             <Text style={styles.dropdownChevron}>▾</Text>
           </TouchableOpacity>
@@ -2068,7 +2078,9 @@ function MainApp() {
     // Itens sem client carregado (raro) ficam fora quando ha filtro ativo.
     const agendaItems = vendorFilterHubspotId === null
       ? allAgendaItems
-      : allAgendaItems.filter(item => item.client?.vendedor_id_hubspot === vendorFilterHubspotId);
+      : vendorFilterHubspotId === '__none__'
+        ? allAgendaItems.filter(item => !item.client?.vendedor_id_hubspot)
+        : allAgendaItems.filter(item => item.client?.vendedor_id_hubspot === vendorFilterHubspotId);
 
     return (
       <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
@@ -2936,6 +2948,13 @@ function MainApp() {
                     <Text style={[styles.ufPickerRowText, vendorFilterHubspotId === null && styles.ufPickerRowTextActive]}>Todos os vendedores</Text>
                     {vendorFilterHubspotId === null && <Text style={styles.ufPickerCheck}>✓</Text>}
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.ufPickerRow}
+                    onPress={() => { setVendorFilterHubspotId('__none__'); setIsPickingVendor(false); }}
+                  >
+                    <Text style={[styles.ufPickerRowText, vendorFilterHubspotId === '__none__' && styles.ufPickerRowTextActive]}>Sem vendedor associado</Text>
+                    {vendorFilterHubspotId === '__none__' && <Text style={styles.ufPickerCheck}>✓</Text>}
+                  </TouchableOpacity>
                   {vendors.length === 0 && (
                     <Text style={[styles.passwordModalHint, { padding: 16 }]}>
                       Nenhum vendedor com id_hubspot cadastrado.
@@ -3048,7 +3067,7 @@ function MainApp() {
                       styles.dropdownButtonText,
                       vendorFilterHubspotId === null && { color: '#64748b' },
                     ]}>
-                      {vendorFilterHubspotId === null ? 'Todos os vendedores' : vendorLabel(vendorFilterHubspotId)}
+                      {vendorLabel(vendorFilterHubspotId)}
                     </Text>
                     <Text style={styles.dropdownChevron}>▾</Text>
                   </TouchableOpacity>
@@ -3212,6 +3231,13 @@ function MainApp() {
               >
                 <Text style={[styles.ufPickerRowText, routeVendorFilterHubspotId === null && styles.ufPickerRowTextActive]}>Todos os vendedores</Text>
                 {routeVendorFilterHubspotId === null && <Text style={styles.ufPickerCheck}>✓</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.ufPickerRow}
+                onPress={() => { setRouteVendorFilterHubspotId('__none__'); setIsPickingRouteVendor(false); }}
+              >
+                <Text style={[styles.ufPickerRowText, routeVendorFilterHubspotId === '__none__' && styles.ufPickerRowTextActive]}>Sem vendedor associado</Text>
+                {routeVendorFilterHubspotId === '__none__' && <Text style={styles.ufPickerCheck}>✓</Text>}
               </TouchableOpacity>
               {vendors.length === 0 && (
                 <Text style={[styles.passwordModalHint, { padding: 16 }]}>
