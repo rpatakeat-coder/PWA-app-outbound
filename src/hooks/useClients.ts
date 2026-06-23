@@ -219,6 +219,17 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
 
   const updateClient = useMutation({
     mutationFn: async ({ id, ...form }: ClientFormData & { id: string }) => {
+      // Snapshot do estado anterior pra decidir, depois do UPDATE, se algum
+      // campo "monitorado" pelo consumidor externo mudou — sem isso o
+      // webhook de update dispararia mesmo em edicoes que so mexem em
+      // status/etapa, gerando ruido no n8n.
+      const { data: prevRow } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('id', id)
+        .single();
+      const prev = prevRow ? mapRow(prevRow) : null;
+
       const { data, error } = await supabase
         .from('clients')
         .update({
@@ -241,7 +252,58 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
         .select()
         .single();
       if (error) throw error;
-      return mapRow(data);
+      const client = mapRow(data);
+
+      // Webhook outbound type=update — mesmo formato do cadastro manual,
+      // disparado so quando um dos campos replicados no HubSpot muda.
+      if (prev) {
+        const changed =
+          prev.nome !== client.nome ||
+          prev.empresa !== client.empresa ||
+          prev.email !== client.email ||
+          prev.telefone !== client.telefone ||
+          prev.cep !== client.cep ||
+          prev.bairro !== client.bairro ||
+          prev.cidade !== client.cidade ||
+          prev.estado !== client.estado ||
+          prev.endereco !== client.endereco ||
+          prev.numero !== client.numero ||
+          prev.latitude !== client.latitude ||
+          prev.longitude !== client.longitude ||
+          prev.observacoes !== client.observacoes ||
+          prev.id_hubspot !== client.id_hubspot;
+
+        if (changed) {
+          const dealname = client.empresa ?? client.nome;
+          fetch('https://webhook.takeat.cloud/webhook/0975e1c9-2d09-42f7-b236-78c7818c0c0d', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'update',
+              id: client.id,
+              bairro: client.bairro,
+              celular: client.telefone,
+              cep: client.cep,
+              cidade: client.cidade,
+              dealname,
+              email: client.email,
+              estado_uf: client.estado,
+              id_hubspot: client.id_hubspot,
+              latitude: client.latitude !== null ? String(client.latitude) : null,
+              logradouro: client.endereco,
+              longitude: client.longitude !== null ? String(client.longitude) : null,
+              nome: client.nome,
+              numero_do_local: client.numero,
+              observacoes: client.observacoes,
+              url: client.url_hubspot,
+              vendedor_id: profile?.id_hubspot ?? '',
+              vendedor_nome: profile?.full_name ?? '',
+            }),
+          }).catch((err) => console.warn('[WEBHOOK] update falhou:', err));
+        }
+      }
+
+      return client;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
   });
