@@ -3,6 +3,7 @@ export interface Profile {
   email: string;
   full_name: string | null;
   sector: string | null;
+  role: 'user' | 'view' | null;
   timezone: string | null;
   language: string | null;
   preferences: Record<string, any> | null;

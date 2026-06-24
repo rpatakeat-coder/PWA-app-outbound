@@ -379,7 +379,18 @@ function MainApp() {
   const { meetings, upcomingByClient, meetingsByClient } = useMeetings();
   useForceReload(isAuthenticated);
   const isAdmin = profile?.email === 'arthurgothe.takeat@gmail.com';
+  // Usuario 'view' = somente leitura. Esconde criar/editar/excluir/rotas/agenda/notas.
+  // Aplicacao real do bloqueio esta nas RLS policies do Supabase (is_view_only_user()).
+  const isViewer = profile?.role === 'view';
   const fieldOps = useFieldOps(routeDate, isAuthenticated);
+
+  // Se o usuario viewer entrou em uma aba que nao existe pra ele (rota/agenda)
+  // via state preservado entre sessoes, joga de volta pro mapa.
+  useEffect(() => {
+    if (isViewer && (tab === 'route' || tab === 'agenda')) {
+      setTab('map');
+    }
+  }, [isViewer, tab]);
 
   // Lista de vendedores com id_hubspot configurado — alimenta o picker do admin
   // no filtro do mapa/lista/rota. So roda pra admin (non-admin so filtra por si).
@@ -2421,17 +2432,18 @@ function MainApp() {
       meetings={meetingsByClient[selectedClient.id] ?? []}
       coordCollision={hasCoordCollision(selectedClient)}
       onClose={() => setSelectedClient(null)}
-      onDelete={() => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
-      onEdit={() => openEditClient(selectedClient)}
-      onMarkVisited={() => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
-      onScheduleMeeting={() => { setSchedulingFor(selectedClient); setSelectedClient(null); }}
+      onDelete={isViewer ? undefined : () => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
+      onEdit={isViewer ? undefined : () => openEditClient(selectedClient)}
+      onMarkVisited={isViewer ? undefined : () => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
+      onScheduleMeeting={isViewer ? undefined : () => { setSchedulingFor(selectedClient); setSelectedClient(null); }}
       onChangeStage={
-        isAdmin && selectedClient.status === 'lead'
+        !isViewer && isAdmin && selectedClient.status === 'lead'
           ? () => { setChangingStageFor(selectedClient); setSelectedClient(null); }
           : undefined
       }
       isMarkingVisited={isVisiting || markAsVisited.isPending}
-      onAddToRoute={isAdmin ? () => addClientToRoute(selectedClient) : undefined}
+      onAddToRoute={!isViewer && isAdmin ? () => addClientToRoute(selectedClient) : undefined}
+      canWriteNotes={!isViewer}
     />
   ) : null;
 
@@ -2638,7 +2650,7 @@ function MainApp() {
             </TouchableOpacity>
           )}
 
-          {!creationMode && (
+          {!creationMode && !isViewer && (
             <>
               <TouchableOpacity
                 style={[styles.fabSecondary, { bottom: 90 + insets.bottom + 68 }]}
@@ -2713,18 +2725,22 @@ function MainApp() {
             }
           />
 
-          <TouchableOpacity
-            style={[styles.fabSecondary, { bottom: 90 + insets.bottom + 68 }]}
-            onPress={() => setShowOutboundForm(true)}
-          >
-            <Text style={styles.fabSecondaryIcon}>📤</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.fab, { bottom: 90 + insets.bottom }]}
-            onPress={() => setShowCepStep(true)}
-          >
-            <Text style={styles.fabText}>+</Text>
-          </TouchableOpacity>
+          {!isViewer && (
+            <>
+              <TouchableOpacity
+                style={[styles.fabSecondary, { bottom: 90 + insets.bottom + 68 }]}
+                onPress={() => setShowOutboundForm(true)}
+              >
+                <Text style={styles.fabSecondaryIcon}>📤</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.fab, { bottom: 90 + insets.bottom }]}
+                onPress={() => setShowCepStep(true)}
+              >
+                <Text style={styles.fabText}>+</Text>
+              </TouchableOpacity>
+            </>
+          )}
 
         </>
       ) : tab === 'route' ? (
@@ -2751,20 +2767,24 @@ function MainApp() {
           <Text style={[styles.navIcon, tab === 'list' && styles.navIconActive]}>📋</Text>
           <Text style={[styles.navItemText, tab === 'list' && styles.navItemTextActive]}>Lista</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.navItem, tab === 'route' && styles.navItemActive]}
-          onPress={() => setTab('route')}
-        >
-          <Text style={[styles.navIcon, tab === 'route' && styles.navIconActive]}>🧭</Text>
-          <Text style={[styles.navItemText, tab === 'route' && styles.navItemTextActive]}>Rota</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.navItem, tab === 'agenda' && styles.navItemActive]}
-          onPress={() => setTab('agenda')}
-        >
-          <Text style={[styles.navIcon, tab === 'agenda' && styles.navIconActive]}>🗓️</Text>
-          <Text style={[styles.navItemText, tab === 'agenda' && styles.navItemTextActive]}>Agenda</Text>
-        </TouchableOpacity>
+        {!isViewer && (
+          <>
+            <TouchableOpacity
+              style={[styles.navItem, tab === 'route' && styles.navItemActive]}
+              onPress={() => setTab('route')}
+            >
+              <Text style={[styles.navIcon, tab === 'route' && styles.navIconActive]}>🧭</Text>
+              <Text style={[styles.navItemText, tab === 'route' && styles.navItemTextActive]}>Rota</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.navItem, tab === 'agenda' && styles.navItemActive]}
+              onPress={() => setTab('agenda')}
+            >
+              <Text style={[styles.navIcon, tab === 'agenda' && styles.navIconActive]}>🗓️</Text>
+              <Text style={[styles.navItemText, tab === 'agenda' && styles.navItemTextActive]}>Agenda</Text>
+            </TouchableOpacity>
+          </>
+        )}
         <Text
           style={[styles.brandMark, { bottom: Math.max(insets.bottom - 4, 2) }]}
           pointerEvents="none"
@@ -3495,6 +3515,7 @@ function ClientBottomSheet({
   onChangeStage,
   isMarkingVisited,
   onAddToRoute,
+  canWriteNotes = true,
 }: {
   client: Client;
   insets: { bottom: number };
@@ -3502,13 +3523,14 @@ function ClientBottomSheet({
   meetings: ClientMeeting[];
   coordCollision: boolean;
   onClose: () => void;
-  onDelete: () => void;
-  onEdit: () => void;
-  onMarkVisited: () => void;
-  onScheduleMeeting: () => void;
+  onDelete?: () => void;
+  onEdit?: () => void;
+  onMarkVisited?: () => void;
+  onScheduleMeeting?: () => void;
   onChangeStage?: () => void;
   isMarkingVisited: boolean;
   onAddToRoute?: () => void;
+  canWriteNotes?: boolean;
 }) {
   const statusColor = statusConfig[client.status]?.color || '#3b82f6';
   const statusLabel = statusConfig[client.status]?.label || client.status;
@@ -3841,7 +3863,7 @@ function ClientBottomSheet({
                             {when}{wasEdited ? ' • editado' : ''}
                           </Text>
                         </View>
-                        {isMine && !isEditing && (
+                        {canWriteNotes && isMine && !isEditing && (
                           <View style={styles.noteActions}>
                             <TouchableOpacity
                               onPress={() => { setEditingNoteId(note.id); setEditingBody(note.body); }}
@@ -3916,36 +3938,40 @@ function ClientBottomSheet({
                   );
                 })
               )}
-              <TextInput
-                style={[styles.input, { marginTop: 8, minHeight: 64 }]}
-                placeholder="Adicionar nova nota..."
-                placeholderTextColor="#94a3b8"
-                value={newNote}
-                onChangeText={setNewNote}
-                multiline
-                editable={!addNote.isPending}
-              />
-              <TouchableOpacity
-                style={[styles.submitButton, (!newNote.trim() || addNote.isPending) && { opacity: 0.5 }]}
-                disabled={!newNote.trim() || addNote.isPending}
-                onPress={() => {
-                  addNote.mutate(newNote, {
-                    onSuccess: () => setNewNote(''),
-                    onError: (err: any) => {
-                      const msg = /relation .* does not exist/i.test(err?.message ?? '')
-                        ? 'A tabela client_notes ainda nao foi criada no Supabase. Aplique a migration 20260617_client_notes.sql.'
-                        : (err?.message ?? 'Falhou ao salvar nota');
-                      Alert.alert('Erro', msg);
-                    },
-                  });
-                }}
-              >
-                {addNote.isPending ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.submitButtonText}>Adicionar nota</Text>
-                )}
-              </TouchableOpacity>
+              {canWriteNotes && (
+                <>
+                  <TextInput
+                    style={[styles.input, { marginTop: 8, minHeight: 64 }]}
+                    placeholder="Adicionar nova nota..."
+                    placeholderTextColor="#94a3b8"
+                    value={newNote}
+                    onChangeText={setNewNote}
+                    multiline
+                    editable={!addNote.isPending}
+                  />
+                  <TouchableOpacity
+                    style={[styles.submitButton, (!newNote.trim() || addNote.isPending) && { opacity: 0.5 }]}
+                    disabled={!newNote.trim() || addNote.isPending}
+                    onPress={() => {
+                      addNote.mutate(newNote, {
+                        onSuccess: () => setNewNote(''),
+                        onError: (err: any) => {
+                          const msg = /relation .* does not exist/i.test(err?.message ?? '')
+                            ? 'A tabela client_notes ainda nao foi criada no Supabase. Aplique a migration 20260617_client_notes.sql.'
+                            : (err?.message ?? 'Falhou ao salvar nota');
+                          Alert.alert('Erro', msg);
+                        },
+                      });
+                    }}
+                  >
+                    {addNote.isPending ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.submitButtonText}>Adicionar nota</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
 
             {onAddToRoute && (
@@ -4054,12 +4080,14 @@ function ClientBottomSheet({
                     );
                   })
               )}
-              <TouchableOpacity
-                style={styles.scheduleButton}
-                onPress={onScheduleMeeting}
-              >
-                <Text style={styles.scheduleButtonText}>📅 Agendar reunião</Text>
-              </TouchableOpacity>
+              {onScheduleMeeting && (
+                <TouchableOpacity
+                  style={styles.scheduleButton}
+                  onPress={onScheduleMeeting}
+                >
+                  <Text style={styles.scheduleButtonText}>📅 Agendar reunião</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Mover para etapa: admin-only durante testes. Dispara webhook change_stage.
@@ -4076,35 +4104,43 @@ function ClientBottomSheet({
             {/* Marcar como visitado: liberado pra QUALQUER status. Status nao
                 muda mais com a visita — RPC mark_client_as_visited so preenche
                 visited_at + coords + visited_by. Re-marcar atualiza o timestamp. */}
-            <TouchableOpacity
-              disabled={isMarkingVisited}
-              style={{
-                backgroundColor: isMarkingVisited ? '#94d4a8' : '#16a34a',
-                borderRadius: 10,
-                paddingVertical: 14,
-                alignItems: 'center',
-                marginBottom: 12,
-              }}
-              onPress={onMarkVisited}
-            >
-              {isMarkingVisited ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
-                  {client.visited_at ? '🔁 Re-marcar visita' : '✅ Marcar como visitado'}
-                </Text>
-              )}
-            </TouchableOpacity>
+            {onMarkVisited && (
+              <TouchableOpacity
+                disabled={isMarkingVisited}
+                style={{
+                  backgroundColor: isMarkingVisited ? '#94d4a8' : '#16a34a',
+                  borderRadius: 10,
+                  paddingVertical: 14,
+                  alignItems: 'center',
+                  marginBottom: 12,
+                }}
+                onPress={onMarkVisited}
+              >
+                {isMarkingVisited ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                    {client.visited_at ? '🔁 Re-marcar visita' : '✅ Marcar como visitado'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
 
             {/* Actions */}
-            <View style={styles.actionRow}>
-              <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
-                <Text style={styles.deleteButtonText}>Remover</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#2563eb' }} onPress={onEdit}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>Editar</Text>
-              </TouchableOpacity>
-            </View>
+            {(onDelete || onEdit) && (
+              <View style={styles.actionRow}>
+                {onDelete && (
+                  <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
+                    <Text style={styles.deleteButtonText}>Remover</Text>
+                  </TouchableOpacity>
+                )}
+                {onEdit && (
+                  <TouchableOpacity style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#2563eb' }} onPress={onEdit}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>Editar</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
           </ScrollView>
         </Animated.View>
       </View>
