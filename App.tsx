@@ -704,9 +704,16 @@ function MainApp() {
 
   // Markers normais do mapa = filtrados MENOS os da rota (evita dupe — rota
   // sempre renderiza com numero, mesmo que o status nao bata o chip ativo).
+  // Viewer (somente leitura) so enxerga pins de clientes (status 'cliente'),
+  // ignorando o statusFilter da UI que ele nem ve.
   const filteredMapMarkers = useMemo(
-    () => filteredWithCoords.filter(c => !routeStopClientIds.has(c.id)),
-    [filteredWithCoords, routeStopClientIds],
+    () => {
+      const base = isViewer
+        ? clients.filter(c => c.status === 'cliente' && c.latitude !== null && c.longitude !== null)
+        : filteredWithCoords;
+      return base.filter(c => !routeStopClientIds.has(c.id));
+    },
+    [isViewer, clients, filteredWithCoords, routeStopClientIds],
   );
 
   // Pontos da rota pra OSRM: comeca em userLocation (arredondado pra cache
@@ -2476,77 +2483,83 @@ function MainApp() {
         </View>
       </View>
 
-      {/* Search bar: busca por nome, empresa, cidade ou bairro.
-          Reflete em mapa, lista e contadores dos chips de status em tempo real. */}
-      <View style={styles.searchBar}>
-        <Text style={styles.searchIcon}>🔍</Text>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar por nome, empresa ou cidade"
-          placeholderTextColor="#94a3b8"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          returnKeyType="search"
-          autoCorrect={false}
-          autoCapitalize="none"
-          onSubmitEditing={Keyboard.dismiss}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.searchClear}>✕</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Linha de chips de status com botão de filtros (UF) ancorado à esquerda.
-          Removido o chip "Todos" propositalmente: trazia todos os ~2k+ pinos
-          de uma vez no mapa, travando o app. */}
-      <View style={styles.filterBar}>
-        <View style={styles.filterBarRow}>
-          {(availableStates.length > 0 || availableStages.length > 0) && (
-            <TouchableOpacity
-              style={styles.filterIconButton}
-              onPress={() => { Keyboard.dismiss(); setIsFiltersOpen(true); }}
-            >
-              <View style={styles.filterFunnel}>
-                <View style={[styles.filterFunnelBar, { width: 18 }]} />
-                <View style={[styles.filterFunnelBar, { width: 11 }]} />
-                <View style={[styles.filterFunnelBar, { width: 5 }]} />
-              </View>
-              {activeFilterCount > 0 && (
-                <View style={styles.filterIconBadge}>
-                  <Text style={styles.filterIconBadgeText}>{activeFilterCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          )}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterScroll}
-            keyboardShouldPersistTaps="handled"
-          >
-            {statusOptions.map(opt => (
-              <TouchableOpacity
-                key={opt.value}
-                style={[
-                  styles.filterChip,
-                  statusFilter === opt.value && { backgroundColor: opt.color },
-                ]}
-                onPress={() => setStatusFilter(opt.value)}
-              >
-                <View style={[styles.filterDot, { backgroundColor: opt.color }]} />
-                <Text style={[
-                  styles.filterChipText,
-                  statusFilter === opt.value && styles.filterChipTextActive,
-                ]}>
-                  {opt.label} ({statusCounts[opt.value]})
-                </Text>
+      {/* Viewer (somente leitura) ve apenas pins de clientes no mapa — sem
+          busca, sem chips de status, sem botao de filtros. */}
+      {!isViewer && (
+        <>
+          {/* Search bar: busca por nome, empresa, cidade ou bairro.
+              Reflete em mapa, lista e contadores dos chips de status em tempo real. */}
+          <View style={styles.searchBar}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar por nome, empresa ou cidade"
+              placeholderTextColor="#94a3b8"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              returnKeyType="search"
+              autoCorrect={false}
+              autoCapitalize="none"
+              onSubmitEditing={Keyboard.dismiss}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.searchClear}>✕</Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      </View>
+            )}
+          </View>
+
+          {/* Linha de chips de status com botão de filtros (UF) ancorado à esquerda.
+              Removido o chip "Todos" propositalmente: trazia todos os ~2k+ pinos
+              de uma vez no mapa, travando o app. */}
+          <View style={styles.filterBar}>
+            <View style={styles.filterBarRow}>
+              {(availableStates.length > 0 || availableStages.length > 0) && (
+                <TouchableOpacity
+                  style={styles.filterIconButton}
+                  onPress={() => { Keyboard.dismiss(); setIsFiltersOpen(true); }}
+                >
+                  <View style={styles.filterFunnel}>
+                    <View style={[styles.filterFunnelBar, { width: 18 }]} />
+                    <View style={[styles.filterFunnelBar, { width: 11 }]} />
+                    <View style={[styles.filterFunnelBar, { width: 5 }]} />
+                  </View>
+                  {activeFilterCount > 0 && (
+                    <View style={styles.filterIconBadge}>
+                      <Text style={styles.filterIconBadgeText}>{activeFilterCount}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              )}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterScroll}
+                keyboardShouldPersistTaps="handled"
+              >
+                {statusOptions.map(opt => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[
+                      styles.filterChip,
+                      statusFilter === opt.value && { backgroundColor: opt.color },
+                    ]}
+                    onPress={() => setStatusFilter(opt.value)}
+                  >
+                    <View style={[styles.filterDot, { backgroundColor: opt.color }]} />
+                    <Text style={[
+                      styles.filterChipText,
+                      statusFilter === opt.value && styles.filterChipTextActive,
+                    ]}>
+                      {opt.label} ({statusCounts[opt.value]})
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        </>
+      )}
 
       {tab === 'map' ? (
         <>
@@ -2582,7 +2595,7 @@ function MainApp() {
                   latitude: client.latitude as number,
                   longitude: client.longitude as number,
                 }}
-                color={statusConfig[client.status]?.color || '#3b82f6'}
+                color={isViewer ? '#ef4444' : (statusConfig[client.status]?.color || '#3b82f6')}
                 meetingCount={upcomingByClient[client.id] ?? 0}
                 onPress={handleMarkerPress}
               />
