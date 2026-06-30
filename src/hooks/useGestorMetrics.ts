@@ -20,6 +20,7 @@ export interface SellerMetrics {
   visited: number;              // clients.visited_by = seller_id e visited_at no periodo
   meetings_scheduled: number;   // client_meetings.created_by = seller_id e created_at no periodo
   stage_changes: number;        // client_stage_changes.created_by = seller_id e created_at no periodo
+  notes_created: number;        // client_notes.created_by = seller_id e created_at no periodo
 }
 
 export interface GlobalMetrics {
@@ -32,6 +33,7 @@ export interface GlobalMetrics {
   visited_in_period: number;
   meetings_in_period: number;
   stage_changes_in_period: number;
+  notes_in_period: number;
 }
 
 export interface GestorMetricsResult {
@@ -122,6 +124,15 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
         () => stageQuery,
       );
 
+      // Notas no periodo.
+      let notesQuery = supabase
+        .from('client_notes')
+        .select('id, created_by, created_at');
+      if (cutoff) notesQuery = notesQuery.gte('created_at', cutoff);
+      const notes = await fetchAll<{ created_by: string | null; created_at: string }>(
+        () => notesQuery,
+      );
+
       // Indexa profiles por id_hubspot pra resolver leads_assigned.
       // Cada vendedor com id_hubspot vira uma linha; vendedores SEM id_hubspot
       // ainda aparecem se tiverem feito alguma atividade (created/visited/etc).
@@ -150,6 +161,7 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
         visited: 0,
         meetings_scheduled: 0,
         stage_changes: 0,
+        notes_created: 0,
       });
 
       const sellersMap = new Map<string, SellerMetrics>();
@@ -166,6 +178,7 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
         visited_in_period: 0,
         meetings_in_period: 0,
         stage_changes_in_period: 0,
+        notes_in_period: 0,
       };
 
       const cutoffMs = cutoff ? new Date(cutoff).getTime() : null;
@@ -249,10 +262,24 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
         if (s) s.stage_changes++;
       }
 
+      for (const n of notes) {
+        if (!n.created_by) continue;
+        global.notes_in_period++;
+        let s = sellersMap.get(n.created_by);
+        if (!s) {
+          const p = profileById.get(n.created_by);
+          if (p) {
+            s = initMetrics(p);
+            sellersMap.set(n.created_by, s);
+          }
+        }
+        if (s) s.notes_created++;
+      }
+
       // Ordena: mais ativos primeiro (visited + created como proxy de campo).
       const sellers = Array.from(sellersMap.values()).sort((a, b) => {
-        const aScore = a.visited * 3 + a.created * 2 + a.meetings_scheduled + a.stage_changes;
-        const bScore = b.visited * 3 + b.created * 2 + b.meetings_scheduled + b.stage_changes;
+        const aScore = a.visited * 3 + a.created * 2 + a.meetings_scheduled + a.stage_changes + a.notes_created;
+        const bScore = b.visited * 3 + b.created * 2 + b.meetings_scheduled + b.stage_changes + b.notes_created;
         if (bScore !== aScore) return bScore - aScore;
         const an = a.full_name ?? a.email ?? '';
         const bn = b.full_name ?? b.email ?? '';

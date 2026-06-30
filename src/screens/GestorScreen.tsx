@@ -62,7 +62,8 @@ function SellerCard({ seller, rank }: { seller: SellerMetrics; rank: number }) {
     .join('')
     .toUpperCase();
 
-  const totalActivity = seller.visited + seller.created + seller.meetings_scheduled + seller.stage_changes;
+  const totalActivity =
+    seller.visited + seller.created + seller.meetings_scheduled + seller.stage_changes + seller.notes_created;
 
   // Distribuicao de status apenas dos leads sob responsabilidade.
   const statusEntries = Object.entries(seller.status_breakdown).sort((a, b) => b[1] - a[1]);
@@ -97,10 +98,17 @@ function SellerCard({ seller, rank }: { seller: SellerMetrics; rank: number }) {
           <Text style={[styles.metricValue, { color: '#f97316' }]}>{seller.meetings_scheduled}</Text>
           <Text style={styles.metricLabel}>Reuniões</Text>
         </View>
+      </View>
+      <View style={styles.metricsRow}>
         <View style={styles.metricBox}>
           <Text style={[styles.metricValue, { color: '#0ea5e9' }]}>{seller.stage_changes}</Text>
           <Text style={styles.metricLabel}>Mudanças</Text>
         </View>
+        <View style={styles.metricBox}>
+          <Text style={[styles.metricValue, { color: '#facc15' }]}>{seller.notes_created}</Text>
+          <Text style={styles.metricLabel}>Notas</Text>
+        </View>
+        <View style={styles.metricBox} />
       </View>
 
       <View style={styles.assignedRow}>
@@ -141,6 +149,7 @@ export function GestorScreen({ enabled }: Props) {
           s.created > 0 ||
           s.meetings_scheduled > 0 ||
           s.stage_changes > 0 ||
+          s.notes_created > 0 ||
           s.leads_assigned > 0,
     );
   }, [query.data, period]);
@@ -201,6 +210,7 @@ export function GestorScreen({ enabled }: Props) {
             <StatCard label="Criados" value={query.data.global.created_in_period} color="#3b82f6" />
             <StatCard label="Reuniões" value={query.data.global.meetings_in_period} color="#f97316" />
             <StatCard label="Mudanças etapa" value={query.data.global.stage_changes_in_period} color="#0ea5e9" />
+            <StatCard label="Notas" value={query.data.global.notes_in_period} color="#facc15" />
           </View>
 
           {/* Ranking de vendedores. */}
