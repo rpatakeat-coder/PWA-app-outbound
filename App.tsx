@@ -45,6 +45,7 @@ import { CEPStep } from './src/screens/CEPStep';
 import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { ChangeStageModal } from './src/screens/ChangeStageModal';
+import { GestorScreen } from './src/screens/GestorScreen';
 import { reverseGeocode } from './src/utils/geocoding';
 import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingProvider } from './src/utils/routing';
 
@@ -100,7 +101,7 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
   { value: 'ex_cliente', label: 'Ex-cliente', color: '#ef4444' },
 ];
 
-type AppTab = 'map' | 'list' | 'route' | 'agenda';
+type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'gestor';
 
 // Limpa e normaliza telefone pra wa.me. Aceita "(27) 99618-3875" / "27996183875"
 // / "5527996183875" e devolve "5527996183875" (com DDI 55 default Brasil).
@@ -386,11 +387,16 @@ function MainApp() {
 
   // Se o usuario viewer entrou em uma aba que nao existe pra ele (rota/agenda)
   // via state preservado entre sessoes, joga de volta pro mapa.
+  // Mesma protecao pra aba gestor: so admin pode ver, qualquer outro perfil
+  // que caia ali (state preservado) volta pro mapa.
   useEffect(() => {
     if (isViewer && (tab === 'route' || tab === 'agenda')) {
       setTab('map');
     }
-  }, [isViewer, tab]);
+    if (!isAdmin && tab === 'gestor') {
+      setTab('map');
+    }
+  }, [isViewer, isAdmin, tab]);
 
   // Lista de vendedores com id_hubspot configurado — alimenta o picker do admin
   // no filtro do mapa/lista/rota. So roda pra admin (non-admin so filtra por si).
@@ -2758,6 +2764,8 @@ function MainApp() {
         </>
       ) : tab === 'route' ? (
         renderRouteScreen()
+      ) : tab === 'gestor' ? (
+        <GestorScreen enabled={isAdmin && tab === 'gestor'} />
       ) : (
         renderAgendaScreen()
       )}
@@ -2797,6 +2805,15 @@ function MainApp() {
               <Text style={[styles.navItemText, tab === 'agenda' && styles.navItemTextActive]}>Agenda</Text>
             </TouchableOpacity>
           </>
+        )}
+        {isAdmin && (
+          <TouchableOpacity
+            style={[styles.navItem, tab === 'gestor' && styles.navItemActive]}
+            onPress={() => setTab('gestor')}
+          >
+            <Text style={[styles.navIcon, tab === 'gestor' && styles.navIconActive]}>📊</Text>
+            <Text style={[styles.navItemText, tab === 'gestor' && styles.navItemTextActive]}>Gestor</Text>
+          </TouchableOpacity>
         )}
         <Text
           style={[styles.brandMark, { bottom: Math.max(insets.bottom - 4, 2) }]}
