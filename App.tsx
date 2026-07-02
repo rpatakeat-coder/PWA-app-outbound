@@ -164,16 +164,21 @@ const MarkerWithReady = React.memo(
   }: { client: Client; onPress: (client: Client) => void; color: string; meetingCount: number; coordinate: { latitude: number; longitude: number } }) {
     // Pinta o marker num primeiro frame com tracksViewChanges=true
     // e desliga em seguida pra evitar re-renderizações contínuas.
-    // Quando muda meetingCount, religa o tracking pra refletir o badge novo.
-    // Timer alto (2000ms) porque quando o clustering desliga em zoom alto,
-    // 2300+ markers montam de uma vez e o bridge nativo precisa de tempo
-    // pra completar o primeiro paint de todos antes de congelar.
+    // Religa o tracking sempre que algo que afeta o snapshot muda
+    // (badge de reunião, cor, OU a coordenada). A coordenada é crítica:
+    // ao dar zoom, a lib de clustering divide os clusters e reposiciona
+    // markers reaproveitando o mesmo native view. Se não re-snapshotarmos
+    // nesse momento, o view nativo fica com um snapshot vazio/velho e o
+    // pin some do mapa. Religando o tracking por um instante forçamos o
+    // native a recapturar a imagem do marker na nova posição.
     const [tracking, setTracking] = useState(true);
     useEffect(() => {
       setTracking(true);
-      const t = setTimeout(() => setTracking(false), 2000);
+      // 800ms basta pra o native completar o snapshot; timer curto evita
+      // manter dezenas de markers em tracking contínuo (custo de perf).
+      const t = setTimeout(() => setTracking(false), 800);
       return () => clearTimeout(t);
-    }, [meetingCount]);
+    }, [meetingCount, color, coordinate.latitude, coordinate.longitude]);
 
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
 
@@ -182,6 +187,9 @@ const MarkerWithReady = React.memo(
         coordinate={coordinate}
         onPress={handlePress}
         tracksViewChanges={tracking}
+        // Redesenha o snapshot assim que o custom view termina o layout —
+        // garante que markers recém-montados no zoom capturem a imagem.
+        onLayout={() => setTracking(true)}
       >
         <CustomMarker color={color} meetingCount={meetingCount} />
       </Marker>
@@ -193,6 +201,8 @@ const MarkerWithReady = React.memo(
     prev.client.latitude === next.client.latitude &&
     prev.client.longitude === next.client.longitude &&
     prev.meetingCount === next.meetingCount &&
+    prev.coordinate.latitude === next.coordinate.latitude &&
+    prev.coordinate.longitude === next.coordinate.longitude &&
     prev.onPress === next.onPress,
 );
 
