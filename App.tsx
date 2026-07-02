@@ -2450,7 +2450,7 @@ function MainApp() {
       onMarkVisited={isViewer ? undefined : () => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
       onScheduleMeeting={isViewer ? undefined : () => { setSchedulingFor(selectedClient); setSelectedClient(null); }}
       onChangeStage={
-        !isViewer && isAdmin && selectedClient.status === 'lead'
+        !isViewer && selectedClient.status === 'lead'
           ? () => { setChangingStageFor(selectedClient); setSelectedClient(null); }
           : undefined
       }
