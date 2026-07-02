@@ -14,13 +14,48 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import type { Client, ClientMeeting } from '../types/client';
+import type { Client, ClientMeeting, MeetingType } from '../types/client';
 import { useMeetings } from '../hooks/useMeetings';
 
 interface ScheduleMeetingModalProps {
   client: Client;
   onClose: () => void;
+  // Reunião (default) ou follow up. Mesmo fluxo; muda rótulos e o tipo salvo.
+  meetingType?: MeetingType;
 }
+
+// Textos que variam entre reunião e follow up.
+const COPY: Record<MeetingType, {
+  emoji: string;
+  noun: string;      // "reunião" / "follow up"
+  title: string;     // título do modal
+  scheduledAlert: string;
+  buttonLabel: string;
+  listTitle: string;
+  emptyList: string;
+  cancelTitle: string;
+}> = {
+  reuniao: {
+    emoji: '📅',
+    noun: 'reunião',
+    title: '📅 Agendar reunião',
+    scheduledAlert: 'Reunião agendada',
+    buttonLabel: 'Confirmar agendamento',
+    listTitle: 'Reuniões deste lead',
+    emptyList: 'Nenhuma reunião agendada.',
+    cancelTitle: 'Cancelar reunião',
+  },
+  follow_up: {
+    emoji: '🔁',
+    noun: 'follow up',
+    title: '🔁 Marcar Follow Up',
+    scheduledAlert: 'Follow up marcado',
+    buttonLabel: 'Confirmar follow up',
+    listTitle: 'Follow ups deste lead',
+    emptyList: 'Nenhum follow up marcado.',
+    cancelTitle: 'Cancelar follow up',
+  },
+};
 
 const DIAS_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 const MESES = [
@@ -194,7 +229,8 @@ function HourMinutePicker({
   );
 }
 
-export function ScheduleMeetingModal({ client, onClose }: ScheduleMeetingModalProps) {
+export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao' }: ScheduleMeetingModalProps) {
+  const copy = COPY[meetingType];
   const { addMeeting, meetingsByClient, deleteMeeting } = useMeetings();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [hour, setHour] = useState<number | null>(null);
@@ -205,12 +241,15 @@ export function ScheduleMeetingModal({ client, onClose }: ScheduleMeetingModalPr
   const [enviarConvite, setEnviarConvite] = useState<boolean>(!!client.email);
   const [inviteEmail, setInviteEmail] = useState<string>(client.email ?? '');
 
+  // Só lista agendamentos do MESMO tipo (reunião mostra reuniões, follow up
+  // mostra follow ups). Linhas antigas sem type caem em 'reuniao'.
   const clientMeetings = useMemo<ClientMeeting[]>(
     () =>
       (meetingsByClient[client.id] ?? [])
+        .filter(m => (m.type ?? 'reuniao') === meetingType)
         .slice()
         .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()),
-    [meetingsByClient, client.id],
+    [meetingsByClient, client.id, meetingType],
   );
 
   const dateLabel = selectedDate
@@ -253,6 +292,7 @@ export function ScheduleMeetingModal({ client, onClose }: ScheduleMeetingModalPr
           scheduled_at: dt.toISOString(),
           duration_minutes: duration,
           observacoes: observacoes.trim() || null,
+          type: meetingType,
         },
         client,
         invite: { enviar: enviarConvite, email: enviarConvite ? inviteEmailTrim : null },
@@ -265,7 +305,7 @@ export function ScheduleMeetingModal({ client, onClose }: ScheduleMeetingModalPr
       setEnviarConvite(!!client.email);
       setInviteEmail(client.email ?? '');
       Alert.alert(
-        'Reunião agendada',
+        copy.scheduledAlert,
         'Agendamento salvo com sucesso.',
         [{ text: 'OK', onPress: onClose }],
       );
@@ -276,8 +316,8 @@ export function ScheduleMeetingModal({ client, onClose }: ScheduleMeetingModalPr
 
   const confirmDelete = (meeting: ClientMeeting) => {
     Alert.alert(
-      'Cancelar reunião',
-      `Remover reunião de ${formatMeetingDateLabel(meeting.scheduled_at)}?`,
+      copy.cancelTitle,
+      `Remover ${copy.noun} de ${formatMeetingDateLabel(meeting.scheduled_at)}?`,
       [
         { text: 'Voltar', style: 'cancel' },
         {
@@ -306,7 +346,7 @@ export function ScheduleMeetingModal({ client, onClose }: ScheduleMeetingModalPr
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.headerRow}>
-              <Text style={styles.title}>📅 Agendar reunião</Text>
+              <Text style={styles.title}>{copy.title}</Text>
               <TouchableOpacity onPress={onClose} disabled={addMeeting.isPending}>
                 <Text style={styles.closeBtn}>✕</Text>
               </TouchableOpacity>
@@ -349,7 +389,7 @@ export function ScheduleMeetingModal({ client, onClose }: ScheduleMeetingModalPr
             <Text style={styles.label}>Observações</Text>
             <TextInput
               style={[styles.input, styles.textarea]}
-              placeholder="Anotações sobre a reunião..."
+              placeholder={`Anotações sobre o ${copy.noun}...`}
               placeholderTextColor="#94a3b8"
               value={observacoes}
               onChangeText={setObservacoes}
@@ -399,13 +439,13 @@ export function ScheduleMeetingModal({ client, onClose }: ScheduleMeetingModalPr
               {addMeeting.isPending ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.submitText}>Confirmar agendamento</Text>
+                <Text style={styles.submitText}>{copy.buttonLabel}</Text>
               )}
             </TouchableOpacity>
 
             {clientMeetings.length > 0 && (
               <View style={styles.listSection}>
-                <Text style={styles.listTitle}>Reuniões deste lead</Text>
+                <Text style={styles.listTitle}>{copy.listTitle}</Text>
                 {clientMeetings.map((m) => {
                   const isPast = new Date(m.scheduled_at).getTime() < Date.now();
                   return (

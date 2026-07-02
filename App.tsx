@@ -37,7 +37,7 @@ import { useForceReload } from './src/hooks/useForceReload';
 import { supabase } from './src/integrations/supabase/client';
 import { AREA_RADIUS_KM } from './src/utils/area';
 import { getShowOnlyMyAreaPref, setShowOnlyMyAreaPref } from './src/utils/userPrefs';
-import type { Client, ClientMeeting, ClientStatus } from './src/types/client';
+import type { Client, ClientMeeting, ClientStatus, MeetingType } from './src/types/client';
 import { openMultiStopNavigation, openNavigation } from './src/utils/navigation';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
@@ -390,6 +390,11 @@ function MainApp() {
   const { meetings, upcomingByClient, meetingsByClient } = useMeetings();
   useForceReload(isAuthenticated);
   const isAdmin = profile?.email === 'arthurgothe.takeat@gmail.com';
+  // Acesso a aba Gestor (metricas) SEM ser admin pleno. Julyan ve so as
+  // metricas; nao ganha picker de vendedor, mover etapa, force-reload etc.
+  // No banco, a RLS correspondente e can_view_metrics() (mesma lista de emails).
+  const GESTOR_VIEWER_EMAILS = ['outbound@takeat.app'];
+  const canViewGestor = isAdmin || GESTOR_VIEWER_EMAILS.includes(profile?.email ?? '');
   // Usuario 'view' = somente leitura. Esconde criar/editar/excluir/rotas/agenda/notas.
   // Aplicacao real do bloqueio esta nas RLS policies do Supabase (is_view_only_user()).
   const isViewer = profile?.role === 'view';
@@ -403,10 +408,10 @@ function MainApp() {
     if (isViewer && (tab === 'route' || tab === 'agenda')) {
       setTab('map');
     }
-    if (!isAdmin && tab === 'gestor') {
+    if (!canViewGestor && tab === 'gestor') {
       setTab('map');
     }
-  }, [isViewer, isAdmin, tab]);
+  }, [isViewer, canViewGestor, tab]);
 
   // Lista de vendedores com id_hubspot configurado — alimenta o picker do admin
   // no filtro do mapa/lista/rota. So roda pra admin (non-admin so filtra por si).
@@ -484,7 +489,9 @@ function MainApp() {
       }
     }
   }, [userLocation]);
-  const [schedulingFor, setSchedulingFor] = useState<Client | null>(null);
+  // Agendamento aberto: guarda o cliente + o tipo (reunião ou follow up).
+  // Mesmo modal serve os dois; só muda o `type` salvo e os rótulos.
+  const [schedulingFor, setSchedulingFor] = useState<{ client: Client; type: MeetingType } | null>(null);
   const [changingStageFor, setChangingStageFor] = useState<Client | null>(null);
   const isSaving = addClient.isPending || updateClient.isPending;
 
@@ -1488,7 +1495,7 @@ function MainApp() {
         'Deseja agendar uma reunião com este lead agora?',
         [
           { text: 'Agora não', style: 'cancel' },
-          { text: '📅 Agendar reunião', onPress: () => setSchedulingFor(created) },
+          { text: '📅 Agendar reunião', onPress: () => setSchedulingFor({ client: created, type: 'reuniao' }) },
         ],
       );
     } catch (err: any) {
@@ -2458,7 +2465,8 @@ function MainApp() {
       onDelete={isViewer ? undefined : () => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
       onEdit={isViewer ? undefined : () => openEditClient(selectedClient)}
       onMarkVisited={isViewer ? undefined : () => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
-      onScheduleMeeting={isViewer ? undefined : () => { setSchedulingFor(selectedClient); setSelectedClient(null); }}
+      onScheduleMeeting={isViewer ? undefined : () => { setSchedulingFor({ client: selectedClient, type: 'reuniao' }); setSelectedClient(null); }}
+      onFollowUp={isViewer ? undefined : () => { setSchedulingFor({ client: selectedClient, type: 'follow_up' }); setSelectedClient(null); }}
       onChangeStage={
         !isViewer && selectedClient.status === 'lead'
           ? () => { setChangingStageFor(selectedClient); setSelectedClient(null); }
@@ -2775,7 +2783,7 @@ function MainApp() {
       ) : tab === 'route' ? (
         renderRouteScreen()
       ) : tab === 'gestor' ? (
-        <GestorScreen enabled={isAdmin && tab === 'gestor'} />
+        <GestorScreen enabled={canViewGestor && tab === 'gestor'} />
       ) : (
         renderAgendaScreen()
       )}
@@ -2816,7 +2824,7 @@ function MainApp() {
             </TouchableOpacity>
           </>
         )}
-        {isAdmin && (
+        {canViewGestor && (
           <TouchableOpacity
             style={[styles.navItem, tab === 'gestor' && styles.navItemActive]}
             onPress={() => setTab('gestor')}
@@ -3341,7 +3349,8 @@ function MainApp() {
 
       {schedulingFor && (
         <ScheduleMeetingModal
-          client={schedulingFor}
+          client={schedulingFor.client}
+          meetingType={schedulingFor.type}
           onClose={() => setSchedulingFor(null)}
         />
       )}
@@ -3552,6 +3561,7 @@ function ClientBottomSheet({
   onEdit,
   onMarkVisited,
   onScheduleMeeting,
+  onFollowUp,
   onChangeStage,
   isMarkingVisited,
   onAddToRoute,
@@ -3567,6 +3577,7 @@ function ClientBottomSheet({
   onEdit?: () => void;
   onMarkVisited?: () => void;
   onScheduleMeeting?: () => void;
+  onFollowUp?: () => void;
   onChangeStage?: () => void;
   isMarkingVisited: boolean;
   onAddToRoute?: () => void;
@@ -3576,6 +3587,34 @@ function ClientBottomSheet({
   const statusLabel = statusConfig[client.status]?.label || client.status;
   const primaryName = getClientPrimaryName(client);
   const { user } = useAuth();
+
+  // Separa reuniões de follow ups (linhas antigas sem type = 'reuniao').
+  const sortByDate = (a: ClientMeeting, b: ClientMeeting) =>
+    new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+  const reunioes = meetings.filter(m => (m.type ?? 'reuniao') === 'reuniao').slice().sort(sortByDate);
+  const followUps = meetings.filter(m => m.type === 'follow_up').slice().sort(sortByDate);
+
+  // Chip visual de um agendamento (reunião ou follow up). O emoji distingue.
+  const renderMeetingChip = (m: ClientMeeting, emoji: string) => {
+    const d = new Date(m.scheduled_at);
+    const isPast = d.getTime() < Date.now();
+    const label = d.toLocaleString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+    const durationLabel =
+      m.duration_minutes >= 60
+        ? `${Math.floor(m.duration_minutes / 60)}h${m.duration_minutes % 60 ? ` ${m.duration_minutes % 60}min` : ''}`
+        : `${m.duration_minutes} min`;
+    return (
+      <View key={m.id} style={[styles.meetingChip, isPast && { opacity: 0.55 }]}>
+        <Text style={styles.meetingChipDate}>{emoji} {label} • {durationLabel}{isPast ? ' (passada)' : ''}</Text>
+        {m.observacoes ? (
+          <Text style={styles.meetingChipObs} numberOfLines={2}>{m.observacoes}</Text>
+        ) : null}
+      </View>
+    );
+  };
   const { notes, addNote, updateNote, deleteNote } = useClientNotes(client.id);
   const { changes: stageChanges } = useClientStageChanges(client.id);
   const [newNote, setNewNote] = useState('');
@@ -4087,38 +4126,13 @@ function ClientBottomSheet({
             <View style={styles.meetingsSection}>
               <View style={styles.meetingsHeader}>
                 <Text style={styles.fieldLabel}>
-                  Reuniões{meetings.length > 0 ? ` (${meetings.length})` : ''}
+                  Reuniões{reunioes.length > 0 ? ` (${reunioes.length})` : ''}
                 </Text>
               </View>
-              {meetings.length === 0 ? (
+              {reunioes.length === 0 ? (
                 <Text style={styles.meetingsEmpty}>Nenhuma reunião agendada.</Text>
               ) : (
-                meetings
-                  .slice()
-                  .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
-                  .map((m) => {
-                    const d = new Date(m.scheduled_at);
-                    const isPast = d.getTime() < Date.now();
-                    const label = d.toLocaleString('pt-BR', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    });
-                    const durationLabel =
-                      m.duration_minutes >= 60
-                        ? `${Math.floor(m.duration_minutes / 60)}h${m.duration_minutes % 60 ? ` ${m.duration_minutes % 60}min` : ''}`
-                        : `${m.duration_minutes} min`;
-                    return (
-                      <View key={m.id} style={[styles.meetingChip, isPast && { opacity: 0.55 }]}>
-                        <Text style={styles.meetingChipDate}>📅 {label} • {durationLabel}{isPast ? ' (passada)' : ''}</Text>
-                        {m.observacoes ? (
-                          <Text style={styles.meetingChipObs} numberOfLines={2}>{m.observacoes}</Text>
-                        ) : null}
-                      </View>
-                    );
-                  })
+                reunioes.map((m) => renderMeetingChip(m, '📅'))
               )}
               {onScheduleMeeting && (
                 <TouchableOpacity
@@ -4126,6 +4140,28 @@ function ClientBottomSheet({
                   onPress={onScheduleMeeting}
                 >
                   <Text style={styles.scheduleButtonText}>📅 Agendar reunião</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Follow ups — mesma mecânica de reunião, organização separada */}
+            <View style={styles.meetingsSection}>
+              <View style={styles.meetingsHeader}>
+                <Text style={styles.fieldLabel}>
+                  Follow ups{followUps.length > 0 ? ` (${followUps.length})` : ''}
+                </Text>
+              </View>
+              {followUps.length === 0 ? (
+                <Text style={styles.meetingsEmpty}>Nenhum follow up marcado.</Text>
+              ) : (
+                followUps.map((m) => renderMeetingChip(m, '🔁'))
+              )}
+              {onFollowUp && (
+                <TouchableOpacity
+                  style={styles.followUpButton}
+                  onPress={onFollowUp}
+                >
+                  <Text style={styles.followUpButtonText}>🔁 Marcar Follow Up</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -4935,6 +4971,14 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   scheduleButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  followUpButton: {
+    backgroundColor: '#0891b2',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  followUpButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   changeStageButton: {
     backgroundColor: '#0f172a',
     borderRadius: 10,

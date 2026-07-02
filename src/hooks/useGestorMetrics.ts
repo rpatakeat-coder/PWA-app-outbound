@@ -18,7 +18,8 @@ export interface SellerMetrics {
   // Atividade no periodo
   created: number;              // clients.created_by = seller_id e created_at no periodo
   visited: number;              // clients.visited_by = seller_id e visited_at no periodo
-  meetings_scheduled: number;   // client_meetings.created_by = seller_id e created_at no periodo
+  meetings_scheduled: number;   // client_meetings.type='reuniao', created_by = seller_id, no periodo
+  follow_ups_scheduled: number; // client_meetings.type='follow_up', created_by = seller_id, no periodo
   stage_changes: number;        // client_stage_changes.created_by = seller_id e created_at no periodo
   notes_created: number;        // client_notes.created_by = seller_id e created_at no periodo
 }
@@ -32,6 +33,7 @@ export interface GlobalMetrics {
   created_in_period: number;
   visited_in_period: number;
   meetings_in_period: number;
+  follow_ups_in_period: number;
   stage_changes_in_period: number;
   notes_in_period: number;
 }
@@ -106,12 +108,13 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
           .select('id, status, vendedor_id_hubspot, created_by, created_at, visited_by, visited_at'),
       );
 
-      // Reunioes no periodo: created_by + created_at.
+      // Reunioes + follow ups no periodo: created_by + created_at + type.
+      // Ambos vivem em client_meetings; separamos pelo `type`.
       let meetingsQuery = supabase
         .from('client_meetings')
-        .select('id, created_by, created_at');
+        .select('id, created_by, created_at, type');
       if (cutoff) meetingsQuery = meetingsQuery.gte('created_at', cutoff);
-      const meetings = await fetchAll<{ created_by: string | null; created_at: string }>(
+      const meetings = await fetchAll<{ created_by: string | null; created_at: string; type: string | null }>(
         () => meetingsQuery,
       );
 
@@ -160,6 +163,7 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
         created: 0,
         visited: 0,
         meetings_scheduled: 0,
+        follow_ups_scheduled: 0,
         stage_changes: 0,
         notes_created: 0,
       });
@@ -177,6 +181,7 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
         created_in_period: 0,
         visited_in_period: 0,
         meetings_in_period: 0,
+        follow_ups_in_period: 0,
         stage_changes_in_period: 0,
         notes_in_period: 0,
       };
@@ -236,7 +241,9 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
 
       for (const m of meetings) {
         if (!m.created_by) continue;
-        global.meetings_in_period++;
+        const isFollowUp = m.type === 'follow_up';
+        if (isFollowUp) global.follow_ups_in_period++;
+        else global.meetings_in_period++;
         let s = sellersMap.get(m.created_by);
         if (!s) {
           const p = profileById.get(m.created_by);
@@ -245,7 +252,10 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
             sellersMap.set(m.created_by, s);
           }
         }
-        if (s) s.meetings_scheduled++;
+        if (s) {
+          if (isFollowUp) s.follow_ups_scheduled++;
+          else s.meetings_scheduled++;
+        }
       }
 
       for (const sc of stageChanges) {
@@ -278,8 +288,8 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
 
       // Ordena: mais ativos primeiro (visited + created como proxy de campo).
       const sellers = Array.from(sellersMap.values()).sort((a, b) => {
-        const aScore = a.visited * 3 + a.created * 2 + a.meetings_scheduled + a.stage_changes + a.notes_created;
-        const bScore = b.visited * 3 + b.created * 2 + b.meetings_scheduled + b.stage_changes + b.notes_created;
+        const aScore = a.visited * 3 + a.created * 2 + a.meetings_scheduled + a.follow_ups_scheduled + a.stage_changes + a.notes_created;
+        const bScore = b.visited * 3 + b.created * 2 + b.meetings_scheduled + b.follow_ups_scheduled + b.stage_changes + b.notes_created;
         if (bScore !== aScore) return bScore - aScore;
         const an = a.full_name ?? a.email ?? '';
         const bn = b.full_name ?? b.email ?? '';

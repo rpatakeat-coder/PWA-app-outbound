@@ -41,6 +41,10 @@ export interface Client {
   updated_at: string | null;
 }
 
+// Tipo do agendamento: reunião ou follow up. Mesmo fluxo/tabela, muda só o
+// rótulo e o título gerado no Google Agenda (organização).
+export type MeetingType = 'reuniao' | 'follow_up';
+
 export interface ClientMeeting {
   id: string;
   client_id: string;
@@ -48,6 +52,7 @@ export interface ClientMeeting {
   duration_minutes: number;
   observacoes: string | null;
   status: string;
+  type: MeetingType;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -58,6 +63,7 @@ export interface ClientMeetingFormData {
   scheduled_at: string;
   duration_minutes: number;
   observacoes?: string | null;
+  type: MeetingType;
 }
 
 export interface ClientFormData {

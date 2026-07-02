@@ -58,6 +58,7 @@ export function useMeetings() {
         scheduled_at: form.scheduled_at,
         duration_minutes: form.duration_minutes,
         observacoes: form.observacoes ?? null,
+        type: form.type,
         created_by: user?.id ?? null,
       };
 
@@ -76,11 +77,20 @@ export function useMeetings() {
       const horario = `${pad(scheduled.getHours())}:${pad(scheduled.getMinutes())}`;
       const horario_fim = `${pad(ends.getHours())}:${pad(ends.getMinutes())}`;
 
+      // Título sugerido pro Google Agenda — n8n usa pra diferenciar
+      // reunião de follow up na organização da agenda.
+      const isFollowUp = meeting.type === 'follow_up';
+      const titulo_evento = isFollowUp
+        ? `Follow Up - ${client.nome}`
+        : `Reunião - ${client.nome}`;
+
       fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: 'reuniao',
+          // 'reuniao' | 'follow_up' — n8n troca o título do evento com base nisso.
+          type: meeting.type,
+          titulo_evento,
           meeting_id: meeting.id,
           lead_id: client.id,
           lead_nome: client.nome,
