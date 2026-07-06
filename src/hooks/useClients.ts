@@ -13,6 +13,12 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
   const queryClient = useQueryClient();
   const { isAuthenticated, user, profile } = useAuth();
 
+  // Viewer (somente leitura) enxerga TODOS os status, de qualquer setor e de
+  // qualquer vendedor — ignora o recorte de sector_visibility. A UI dele filtra
+  // por multi-selecao de chips; o corte por setor nao faz sentido pra um perfil
+  // de visao ampla (marketing/onboarding acompanhando o mapa inteiro).
+  const isViewer = profile?.role === 'view';
+
   // Load visibility rules for user's sector
   const visibilityQuery = useQuery<string[]>({
     queryKey: ['visibility', profile?.sector],
@@ -24,7 +30,8 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
         .eq('sector', sector);
       return (data || []).map((r: any) => r.status_slug);
     },
-    enabled: isAuthenticated && !!profile,
+    // Viewer ignora sector_visibility, entao nem busca as regras.
+    enabled: isAuthenticated && !!profile && !isViewer,
   });
 
   // Load dynamic statuses
@@ -63,7 +70,9 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
           .select('*')
           .range(from, from + PAGE_SIZE - 1);
 
-        if (allowedStatuses && allowedStatuses.length > 0) {
+        // Viewer nao filtra por status aqui (ve tudo); os demais respeitam o
+        // recorte de sector_visibility.
+        if (!isViewer && allowedStatuses && allowedStatuses.length > 0) {
           q = q.in('status', allowedStatuses);
         }
 
@@ -88,7 +97,9 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
       }
       return all.map(mapRow);
     },
-    enabled: callerEnabled && isAuthenticated && visibilityQuery.isFetched,
+    // Viewer nao espera o sector_visibility (desabilitado pra ele); os demais
+    // so disparam depois que as regras de visibilidade chegaram.
+    enabled: callerEnabled && isAuthenticated && (isViewer || visibilityQuery.isFetched),
   });
 
   const addClient = useMutation({
@@ -380,7 +391,9 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
   return {
     clients: query.data ?? [],
     statuses: statusesQuery.data ?? [],
-    isLoading: (query.isLoading && query.fetchStatus !== 'idle') || visibilityQuery.isLoading,
+    // Viewer nao depende do visibilityQuery (fica desabilitado, logo "pending"
+    // pra sempre); so o loading da query principal conta pra ele.
+    isLoading: (query.isLoading && query.fetchStatus !== 'idle') || (!isViewer && visibilityQuery.isLoading),
     error: query.error,
     addClient,
     updateClient,
