@@ -324,6 +324,13 @@ function MainApp() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isFollowingUser, setIsFollowingUser] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ClientStatus>('lead' as ClientStatus);
+  // Multi-selecao de status exclusiva do viewer (role='view'). Diferente do
+  // statusFilter (um status por vez) usado por vendedor/admin, aqui o viewer
+  // marca varios status pra ver leads E clientes no mesmo mapa. Default: os
+  // dois principais ligados.
+  const [viewerStatuses, setViewerStatuses] = useState<Set<ClientStatus>>(
+    () => new Set<ClientStatus>(['cliente', 'lead']),
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [stateFilter, setStateFilter] = useState<string | null>(null);
   const [stageFilter, setStageFilter] = useState<string | null>(null);
@@ -650,9 +657,13 @@ function MainApp() {
     [clients, stateFilter, stageFilter, searchTerm, vendorFilterHubspotId, visitFilter],
   );
 
+  // Viewer filtra pela multi-selecao (leads + clientes etc.); vendedor/admin
+  // pelo status unico do chip ativo. Mantem a aba Lista consistente com o mapa.
   const filteredClients = useMemo(
-    () => clientsForCount.filter(c => c.status === statusFilter),
-    [clientsForCount, statusFilter],
+    () => clientsForCount.filter(c =>
+      isViewer ? viewerStatuses.has(c.status as ClientStatus) : c.status === statusFilter,
+    ),
+    [clientsForCount, statusFilter, isViewer, viewerStatuses],
   );
 
   const listStageSections = useMemo(() => {
@@ -677,8 +688,11 @@ function MainApp() {
       });
   }, [filteredClients]);
 
+  // Agrupamento por etapa so faz sentido na visao de leads do vendedor/admin.
+  // Viewer ve lista plana (mistura leads + clientes, sem agrupar por etapa).
   const shouldGroupListByStage =
-    listStageSections.length > 0
+    !isViewer
+    && listStageSections.length > 0
     && statusFilter === 'lead';
 
   useEffect(() => {
@@ -729,16 +743,17 @@ function MainApp() {
 
   // Markers normais do mapa = filtrados MENOS os da rota (evita dupe — rota
   // sempre renderiza com numero, mesmo que o status nao bata o chip ativo).
-  // Viewer (somente leitura) so enxerga pins de clientes (status 'cliente'),
-  // ignorando o statusFilter da UI que ele nem ve.
+  // Viewer (somente leitura) enxerga os pins dos status que ele marcou nos
+  // chips (multi-selecao — leads E clientes juntos, por ex.), ignorando o
+  // statusFilter de status unico usado por vendedor/admin.
   const filteredMapMarkers = useMemo(
     () => {
       const base = isViewer
-        ? clients.filter(c => c.status === 'cliente' && c.latitude !== null && c.longitude !== null)
+        ? clients.filter(c => viewerStatuses.has(c.status as ClientStatus) && c.latitude !== null && c.longitude !== null)
         : filteredWithCoords;
       return base.filter(c => !routeStopClientIds.has(c.id));
     },
-    [isViewer, clients, filteredWithCoords, routeStopClientIds],
+    [isViewer, clients, viewerStatuses, filteredWithCoords, routeStopClientIds],
   );
 
   // Pontos da rota pra OSRM: comeca em userLocation (arredondado pra cache
@@ -1679,6 +1694,34 @@ function MainApp() {
     return counts;
   }, [clientsForCount, statusOptions]);
 
+  // Contagem por status pro viewer: sobre TODOS os clientes (viewer nao tem
+  // search/UF/vendedor pra estreitar o pool), so os que tem coordenada — que
+  // sao os que efetivamente entram como pin no mapa.
+  const viewerStatusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const opt of statusOptions) counts[opt.value] = 0;
+    for (const c of clients) {
+      if (c.latitude === null || c.longitude === null) continue;
+      counts[c.status] = (counts[c.status] ?? 0) + 1;
+    }
+    return counts;
+  }, [clients, statusOptions]);
+
+  // Liga/desliga um status na multi-selecao do viewer. Impede desmarcar o
+  // ultimo status ligado — sem nenhum, o mapa ficaria vazio sem motivo.
+  const toggleViewerStatus = useCallback((status: ClientStatus) => {
+    setViewerStatuses(prev => {
+      const next = new Set(prev);
+      if (next.has(status)) {
+        if (next.size === 1) return prev;
+        next.delete(status);
+      } else {
+        next.add(status);
+      }
+      return next;
+    });
+  }, []);
+
   const renderClientItem = useCallback(({ item }: { item: Client }) => {
     const color = statusConfig[item.status]?.color || '#3b82f6';
     const label = statusConfig[item.status]?.label || item.status;
@@ -2523,8 +2566,43 @@ function MainApp() {
         </View>
       </View>
 
-      {/* Viewer (somente leitura) ve apenas pins de clientes no mapa — sem
-          busca, sem chips de status, sem botao de filtros. */}
+      {/* Viewer (somente leitura): sem busca nem filtros avancados, mas com
+          chips de status em MULTI-selecao pra escolher ver leads, clientes ou
+          ambos no mesmo mapa. Toque alterna cada status; nao da pra desmarcar
+          todos (o mapa ficaria vazio). */}
+      {isViewer && (
+        <View style={styles.filterBar}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScroll}
+          >
+            {statusOptions.map(opt => {
+              const active = viewerStatuses.has(opt.value);
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[
+                    styles.filterChip,
+                    active && { backgroundColor: opt.color },
+                  ]}
+                  onPress={() => toggleViewerStatus(opt.value)}
+                >
+                  <View style={[styles.filterDot, { backgroundColor: opt.color }]} />
+                  <Text style={[
+                    styles.filterChipText,
+                    active && styles.filterChipTextActive,
+                  ]}>
+                    {opt.label} ({viewerStatusCounts[opt.value] ?? 0})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Vendedor/admin: search + chips de status (um por vez) + filtros. */}
       {!isViewer && (
         <>
           {/* Search bar: busca por nome, empresa, cidade ou bairro.
@@ -2635,7 +2713,7 @@ function MainApp() {
                   latitude: client.latitude as number,
                   longitude: client.longitude as number,
                 }}
-                color={isViewer ? '#ef4444' : (statusConfig[client.status]?.color || '#3b82f6')}
+                color={statusConfig[client.status]?.color || '#3b82f6'}
                 meetingCount={upcomingByClient[client.id] ?? 0}
                 onPress={handleMarkerPress}
               />
