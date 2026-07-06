@@ -414,7 +414,9 @@ function MainApp() {
   }, [isViewer, canViewGestor, tab]);
 
   // Lista de vendedores com id_hubspot configurado — alimenta o picker do admin
-  // no filtro do mapa/lista/rota. So roda pra admin (non-admin so filtra por si).
+  // no filtro do mapa/lista/rota e o "Responsável" nos itens da agenda.
+  // Roda pra todo autenticado; o RLS de profiles decide quem enxerga quem
+  // (non-admin pode voltar so o proprio perfil — a agenda degrada pro id cru).
   const vendorsQuery = useQuery({
     queryKey: ['profiles_with_hubspot'],
     queryFn: async () => {
@@ -426,7 +428,7 @@ function MainApp() {
       if (error) throw error;
       return (data ?? []) as Array<{ id: string; full_name: string | null; email: string | null; id_hubspot: string }>;
     },
-    enabled: isAuthenticated && isAdmin,
+    enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000,
   });
   const vendors = vendorsQuery.data ?? [];
@@ -2141,15 +2143,29 @@ function MainApp() {
         ) : agendaItems.map((item, index) => {
           const date = item.at ? new Date(item.at) : null;
           const time = date ? date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+          const dayLabel = date
+            ? date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+            : '--/--';
+          const weekdayLabel = date
+            ? date.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')
+            : '';
           const client = item.client;
           const title = client ? getClientPrimaryName(client) : 'Lead nao encontrado';
           const contact = client?.empresa?.trim() && client.nome && client.nome !== client.empresa ? client.nome : null;
+          const responsavel = client?.vendedor_id_hubspot
+            ? vendorLabel(client.vendedor_id_hubspot)
+            : null;
           return (
             <View key={`${item.kind}-${index}`} style={styles.agendaItem}>
-              <Text style={styles.agendaTime}>{time}</Text>
+              <View style={styles.agendaWhen}>
+                <Text style={styles.agendaDate}>{dayLabel}</Text>
+                {weekdayLabel ? <Text style={styles.agendaWeekday}>{weekdayLabel}</Text> : null}
+                <Text style={styles.agendaTime}>{time}</Text>
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.agendaTitle}>{title}</Text>
                 {contact ? <Text style={styles.agendaMeta}>Contato: {contact}</Text> : null}
+                {responsavel ? <Text style={styles.agendaMeta}>Responsável: {responsavel}</Text> : null}
                 <Text style={styles.agendaMeta}>{item.kind === 'meeting' ? 'Reuniao/demo agendada' : 'Visita planejada da rota'}</Text>
                 {client && (
                   <View style={styles.routeActionsRow}>
@@ -4835,7 +4851,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
-  agendaTime: { width: 52, fontSize: 14, fontWeight: '800', color: '#dc2626' },
+  agendaWhen: { width: 56, alignItems: 'center' },
+  agendaDate: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
+  agendaWeekday: { fontSize: 10, color: '#94a3b8', fontWeight: '600', textTransform: 'capitalize' },
+  agendaTime: { fontSize: 14, fontWeight: '800', color: '#dc2626', marginTop: 2 },
   agendaTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
   agendaMeta: { fontSize: 12, color: '#64748b', marginTop: 2 },
   metricCard: {
