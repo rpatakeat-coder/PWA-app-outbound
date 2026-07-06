@@ -10,6 +10,7 @@ export interface MetricLead {
   name: string;          // empresa || nome
   status: string | null;
   at: string | null;     // data relevante da ação (criação, visita, reunião...)
+  note?: string | null;  // texto da nota, quando o item vem da métrica "Notas"
 }
 
 export type SellerMetricKey =
@@ -176,12 +177,12 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
         () => stageQuery,
       );
 
-      // Notas no periodo.
+      // Notas no periodo. `body` entra pra exibir o texto escrito no modal.
       let notesQuery = supabase
         .from('client_notes')
-        .select('id, client_id, created_by, created_at');
+        .select('id, client_id, created_by, created_at, body');
       if (cutoff) notesQuery = notesQuery.gte('created_at', cutoff);
-      const notes = await fetchAll<{ client_id: string; created_by: string | null; created_at: string }>(
+      const notes = await fetchAll<{ client_id: string; created_by: string | null; created_at: string; body: string | null }>(
         () => notesQuery,
       );
 
@@ -386,7 +387,7 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
       for (const n of notes) {
         if (!n.created_by) continue;
         global.notes_in_period++;
-        const lead = toMetricLead(n.client_id, n.created_at);
+        const lead: MetricLead = { ...toMetricLead(n.client_id, n.created_at), note: n.body ?? null };
         globalDetails.notes.push(lead);
         let s = sellersMap.get(n.created_by);
         if (!s) {

@@ -103,6 +103,9 @@ function LeadListModal({ state, onClose }: { state: LeadModalState | null; onClo
                       {(item.status && (STATUS_LABEL[item.status] ?? item.status)) || 'Sem status'}
                       {when ? ` • ${when}` : ''}
                     </Text>
+                    {item.note?.trim() ? (
+                      <Text style={styles.modalLeadNote}>{item.note.trim()}</Text>
+                    ) : null}
                   </View>
                 </View>
               );
@@ -630,13 +633,25 @@ const styles = StyleSheet.create({
   modalEmpty: { textAlign: 'center', color: '#64748b', fontSize: 13, paddingVertical: 24 },
   modalLeadRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 10,
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#f8fafc',
   },
-  modalLeadDot: { width: 10, height: 10, borderRadius: 5 },
+  modalLeadDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
   modalLeadName: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
   modalLeadMeta: { fontSize: 11, color: '#64748b', marginTop: 1 },
+  modalLeadNote: {
+    fontSize: 13,
+    color: '#334155',
+    marginTop: 6,
+    lineHeight: 18,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#facc15',
+  },
 });
