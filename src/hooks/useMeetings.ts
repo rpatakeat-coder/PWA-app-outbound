@@ -88,15 +88,10 @@ export function useMeetings() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // O Switch do n8n não tem rota pra type='follow_up' — payload
-          // desconhecido cai na rota default de CRIAR DEAL no HubSpot (testado
-          // em 07/07/2026: follow_up respondia {id_hubspot} de deal novo e
-          // nenhum evento era criado na agenda). Por isso follow up vai como
-          // 'reuniao' (mesma rota que cria o evento no Google Agenda) e
-          // `meeting_kind` carrega o tipo real pro n8n diferenciar quando
-          // ganhar uma rota própria.
-          type: 'reuniao',
-          meeting_kind: meeting.type,
+          // O Switch do n8n espera 'reuniao' | 'followup' (SEM underscore —
+          // validado em 07/07/2026: 'follow_up' não casa com a rota e cai na
+          // default de criar deal no HubSpot). No banco o tipo segue 'follow_up'.
+          type: isFollowUp ? 'followup' : meeting.type,
           titulo_evento,
           meeting_id: meeting.id,
           lead_id: client.id,
