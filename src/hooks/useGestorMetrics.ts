@@ -1,7 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 
-export type GestorPeriod = '7d' | '30d' | 'all';
+export type GestorPeriodPreset = 'today' | '7d' | '30d' | 'all' | 'custom';
+
+export interface GestorPeriod {
+  preset: GestorPeriodPreset;
+  // Range absoluto (ISO) — usado apenas quando preset === 'custom'.
+  startISO?: string | null;
+  endISO?: string | null;
+}
 
 // Lead individual por trás de um número do painel — alimenta o modal
 // "quais leads compõem esse dado" quando o gestor toca numa métrica.
@@ -86,11 +93,23 @@ function isHiddenSeller(s: { full_name: string | null; email: string | null }): 
   return HIDDEN_SELLER_PATTERN.test(s.full_name ?? '') || HIDDEN_SELLER_PATTERN.test(s.email ?? '');
 }
 
-function periodCutoff(period: GestorPeriod): string | null {
-  if (period === 'all') return null;
-  const days = period === '7d' ? 7 : 30;
-  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  return cutoff.toISOString();
+// Resolve o período em [start, end] ISO. end=null significa "até agora".
+function periodRange(period: GestorPeriod): { start: string | null; end: string | null } {
+  switch (period.preset) {
+    case 'all':
+      return { start: null, end: null };
+    case 'today': {
+      const now = new Date();
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return { start: midnight.toISOString(), end: null };
+    }
+    case 'custom':
+      return { start: period.startISO ?? null, end: period.endISO ?? null };
+    default: {
+      const days = period.preset === '7d' ? 7 : 30;
+      return { start: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(), end: null };
+    }
+  }
 }
 
 // Pagina .select() para escapar do cap default de 1000 do PostgREST.
@@ -112,12 +131,12 @@ async function fetchAll<T = any>(
 }
 
 export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
+  const { start, end } = periodRange(period);
   return useQuery<GestorMetricsResult>({
-    queryKey: ['gestor-metrics', period],
+    queryKey: ['gestor-metrics', period.preset, start, end],
     enabled,
     staleTime: 60 * 1000,
     queryFn: async () => {
-      const cutoff = periodCutoff(period);
 
       // Vendedores conhecidos: profiles. Admin tem RLS pra ler todos.
       const profiles = await fetchAll<{
@@ -159,7 +178,8 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
       let meetingsQuery = supabase
         .from('client_meetings')
         .select('id, client_id, created_by, created_at, scheduled_at, type');
-      if (cutoff) meetingsQuery = meetingsQuery.gte('created_at', cutoff);
+      if (start) meetingsQuery = meetingsQuery.gte('created_at', start);
+      if (end) meetingsQuery = meetingsQuery.lte('created_at', end);
       const meetings = await fetchAll<{
         client_id: string;
         created_by: string | null;
@@ -172,7 +192,8 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
       let stageQuery = supabase
         .from('client_stage_changes')
         .select('id, client_id, created_by, created_at');
-      if (cutoff) stageQuery = stageQuery.gte('created_at', cutoff);
+      if (start) stageQuery = stageQuery.gte('created_at', start);
+      if (end) stageQuery = stageQuery.lte('created_at', end);
       const stageChanges = await fetchAll<{ client_id: string; created_by: string | null; created_at: string }>(
         () => stageQuery,
       );
@@ -181,7 +202,8 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
       let notesQuery = supabase
         .from('client_notes')
         .select('id, client_id, created_by, created_at, body');
-      if (cutoff) notesQuery = notesQuery.gte('created_at', cutoff);
+      if (start) notesQuery = notesQuery.gte('created_at', start);
+      if (end) notesQuery = notesQuery.lte('created_at', end);
       const notes = await fetchAll<{ client_id: string; created_by: string | null; created_at: string; body: string | null }>(
         () => notesQuery,
       );
@@ -264,11 +286,14 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
         all: [],
       };
 
-      const cutoffMs = cutoff ? new Date(cutoff).getTime() : null;
+      const startMs = start ? new Date(start).getTime() : null;
+      const endMs = end ? new Date(end).getTime() : null;
       const inPeriod = (iso: string | null) => {
         if (!iso) return false;
-        if (cutoffMs === null) return true;
-        return new Date(iso).getTime() >= cutoffMs;
+        const t = new Date(iso).getTime();
+        if (startMs !== null && t < startMs) return false;
+        if (endMs !== null && t > endMs) return false;
+        return true;
       };
 
       for (const c of clients) {

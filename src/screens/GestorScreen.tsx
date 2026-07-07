@@ -13,6 +13,7 @@ import {
 import {
   useGestorMetrics,
   type GestorPeriod,
+  type GestorPeriodPreset,
   type MetricLead,
   type SellerMetrics,
 } from '../hooks/useGestorMetrics';
@@ -21,7 +22,8 @@ interface Props {
   enabled: boolean;
 }
 
-const PERIOD_OPTIONS: { value: GestorPeriod; label: string }[] = [
+const PERIOD_OPTIONS: { value: GestorPeriodPreset; label: string }[] = [
+  { value: 'today', label: 'Hoje' },
   { value: '7d', label: '7 dias' },
   { value: '30d', label: '30 dias' },
   { value: 'all', label: 'Tudo' },
@@ -49,6 +51,153 @@ const STATUS_LABEL: Record<string, string> = {
 interface LeadModalState {
   title: string;
   leads: MetricLead[];
+}
+
+const DIAS_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+const MESES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const sameDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+const fmtShort = (d: Date) =>
+  `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+// Calendário de intervalo pro período personalizado: 1º toque marca o início,
+// 2º toque o fim (toque antes do início reinicia a seleção). Dias futuros
+// ficam desabilitados — métrica é sempre retroativa.
+function RangeCalendarModal({
+  initialStart,
+  initialEnd,
+  onApply,
+  onClose,
+}: {
+  initialStart: Date | null;
+  initialEnd: Date | null;
+  onApply: (start: Date, end: Date) => void;
+  onClose: () => void;
+}) {
+  const today = useMemo(() => startOfDay(new Date()), []);
+  const [start, setStart] = useState<Date | null>(initialStart);
+  const [end, setEnd] = useState<Date | null>(initialEnd);
+  const [view, setView] = useState(() => {
+    const base = initialStart ?? new Date();
+    return new Date(base.getFullYear(), base.getMonth(), 1);
+  });
+
+  const year = view.getFullYear();
+  const month = view.getMonth();
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const pick = (day: Date) => {
+    if (!start || (start && end)) {
+      setStart(day);
+      setEnd(null);
+      return;
+    }
+    if (day.getTime() < start.getTime()) {
+      setStart(day);
+      return;
+    }
+    setEnd(day);
+  };
+
+  const inRange = (day: Date) => {
+    if (!start) return false;
+    const to = end ?? start;
+    return day.getTime() >= start.getTime() && day.getTime() <= to.getTime();
+  };
+
+  const summary = start
+    ? end
+      ? `${fmtShort(start)} até ${fmtShort(end)}`
+      : `${fmtShort(start)} — toque no dia final`
+    : 'Toque no dia inicial';
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={rangeStyles.backdrop}>
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
+        <View style={rangeStyles.panel}>
+          <Text style={rangeStyles.title}>Período personalizado</Text>
+          <Text style={rangeStyles.summary}>{summary}</Text>
+
+          <View style={rangeStyles.calHeader}>
+            <TouchableOpacity style={rangeStyles.navBtn} onPress={() => setView(new Date(year, month - 1, 1))}>
+              <Text style={rangeStyles.navTxt}>‹</Text>
+            </TouchableOpacity>
+            <Text style={rangeStyles.calTitle}>{MESES[month]} {year}</Text>
+            <TouchableOpacity style={rangeStyles.navBtn} onPress={() => setView(new Date(year, month + 1, 1))}>
+              <Text style={rangeStyles.navTxt}>›</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={rangeStyles.weekRow}>
+            {DIAS_SEMANA.map((d, i) => (
+              <Text key={i} style={rangeStyles.weekDay}>{d}</Text>
+            ))}
+          </View>
+          <View style={rangeStyles.grid}>
+            {cells.map((day, idx) => {
+              if (day == null) return <View key={idx} style={rangeStyles.cellEmpty} />;
+              const cellDate = new Date(year, month, day);
+              const isFuture = cellDate.getTime() > today.getTime();
+              const isEdge = (start && sameDay(cellDate, start)) || (end && sameDay(cellDate, end));
+              const isBetween = !isEdge && inRange(cellDate);
+              return (
+                <TouchableOpacity
+                  key={idx}
+                  style={[
+                    rangeStyles.cell,
+                    isBetween && rangeStyles.cellBetween,
+                    isEdge && rangeStyles.cellEdge,
+                    isFuture && rangeStyles.cellFuture,
+                  ]}
+                  disabled={isFuture}
+                  onPress={() => pick(cellDate)}
+                >
+                  <Text
+                    style={[
+                      rangeStyles.cellTxt,
+                      isFuture && rangeStyles.cellTxtFuture,
+                      isBetween && rangeStyles.cellTxtActive,
+                      isEdge && rangeStyles.cellTxtEdge,
+                    ]}
+                  >
+                    {day}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={rangeStyles.actionsRow}>
+            <TouchableOpacity style={rangeStyles.cancelBtn} onPress={onClose}>
+              <Text style={rangeStyles.cancelTxt}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[rangeStyles.applyBtn, !start && rangeStyles.applyBtnDisabled]}
+              disabled={!start}
+              onPress={() => {
+                if (!start) return;
+                onApply(start, end ?? start);
+              }}
+            >
+              <Text style={rangeStyles.applyTxt}>Aplicar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
 }
 
 function formatLeadDate(iso: string | null): string | null {
@@ -268,18 +417,43 @@ function SellerCard({
 }
 
 export function GestorScreen({ enabled }: Props) {
-  const [period, setPeriod] = useState<GestorPeriod>('30d');
+  const [preset, setPreset] = useState<GestorPeriodPreset>('30d');
+  // Intervalo do período personalizado (dias locais, início/fim inclusivos).
+  const [customStart, setCustomStart] = useState<Date | null>(null);
+  const [customEnd, setCustomEnd] = useState<Date | null>(null);
+  const [rangePickerOpen, setRangePickerOpen] = useState(false);
   const [leadModal, setLeadModal] = useState<LeadModalState | null>(null);
+
+  const period = useMemo<GestorPeriod>(() => {
+    if (preset === 'custom' && customStart && customEnd) {
+      const endOfDay = new Date(
+        customEnd.getFullYear(), customEnd.getMonth(), customEnd.getDate(),
+        23, 59, 59, 999,
+      );
+      return { preset, startISO: customStart.toISOString(), endISO: endOfDay.toISOString() };
+    }
+    // 'custom' sem intervalo definido não acontece (o preset só vira custom
+    // no Aplicar do calendário), mas o fallback evita query aberta por engano.
+    return { preset: preset === 'custom' ? '30d' : preset };
+  }, [preset, customStart, customEnd]);
+
   const query = useGestorMetrics(period, enabled);
 
   const openLeads = (title: string, leads: MetricLead[]) => setLeadModal({ title, leads });
+
+  const periodLabel =
+    preset === 'all' ? 'total'
+    : preset === 'today' ? 'de hoje'
+    : preset === 'custom' && customStart && customEnd
+      ? `de ${fmtShort(customStart)} até ${fmtShort(customEnd)}`
+    : `nos últimos ${preset === '7d' ? '7' : '30'} dias`;
 
   // Filtra vendedores totalmente inativos quando periodo != 'all' pra reduzir ruido.
   // Em 'all' mostra todos.
   const visibleSellers = useMemo(() => {
     if (!query.data) return [];
     return query.data.sellers.filter(s =>
-      period === 'all'
+      preset === 'all'
         ? true
         : s.visited > 0 ||
           s.created > 0 ||
@@ -289,7 +463,7 @@ export function GestorScreen({ enabled }: Props) {
           s.notes_created > 0 ||
           s.leads_assigned > 0,
     );
-  }, [query.data, period]);
+  }, [query.data, preset]);
 
   return (
     <ScrollView
@@ -303,15 +477,25 @@ export function GestorScreen({ enabled }: Props) {
         {PERIOD_OPTIONS.map(opt => (
           <TouchableOpacity
             key={opt.value}
-            style={[styles.periodChip, period === opt.value && styles.periodChipActive]}
-            onPress={() => setPeriod(opt.value)}
+            style={[styles.periodChip, preset === opt.value && styles.periodChipActive]}
+            onPress={() => setPreset(opt.value)}
           >
-            <Text style={[styles.periodChipText, period === opt.value && styles.periodChipTextActive]}>
+            <Text style={[styles.periodChipText, preset === opt.value && styles.periodChipTextActive]}>
               {opt.label}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
+      <TouchableOpacity
+        style={[styles.customChip, preset === 'custom' && styles.periodChipActive]}
+        onPress={() => setRangePickerOpen(true)}
+      >
+        <Text style={[styles.periodChipText, preset === 'custom' && styles.periodChipTextActive]}>
+          📅 {preset === 'custom' && customStart && customEnd
+            ? `${fmtShort(customStart)} até ${fmtShort(customEnd)} — toque pra alterar`
+            : 'Período personalizado'}
+        </Text>
+      </TouchableOpacity>
 
       {query.isLoading ? (
         <View style={styles.loadingBlock}>
@@ -365,7 +549,7 @@ export function GestorScreen({ enabled }: Props) {
 
           {/* Atividade no periodo selecionado. */}
           <Text style={styles.sectionTitle}>
-            Atividade {period === 'all' ? 'total' : `nos últimos ${period === '7d' ? '7' : '30'} dias`}
+            Atividade {periodLabel}
           </Text>
           <View style={styles.statsGrid}>
             <StatCard
@@ -408,7 +592,7 @@ export function GestorScreen({ enabled }: Props) {
 
           {/* Ranking de vendedores. */}
           <Text style={styles.sectionTitle}>
-            Vendedores ({visibleSellers.length}) {period !== 'all' ? '— ativos no período' : ''}
+            Vendedores ({visibleSellers.length}) {preset !== 'all' ? '— ativos no período' : ''}
           </Text>
           {visibleSellers.length === 0 ? (
             <View style={styles.emptyBlock}>
@@ -427,6 +611,20 @@ export function GestorScreen({ enabled }: Props) {
       ) : null}
 
       <LeadListModal state={leadModal} onClose={() => setLeadModal(null)} />
+
+      {rangePickerOpen && (
+        <RangeCalendarModal
+          initialStart={customStart}
+          initialEnd={customEnd}
+          onClose={() => setRangePickerOpen(false)}
+          onApply={(s, e) => {
+            setCustomStart(startOfDay(s));
+            setCustomEnd(startOfDay(e));
+            setPreset('custom');
+            setRangePickerOpen(false);
+          }}
+        />
+      )}
     </ScrollView>
   );
 }
@@ -437,6 +635,15 @@ const styles = StyleSheet.create({
   periodRow: {
     flexDirection: 'row',
     gap: 8,
+    marginBottom: 8,
+  },
+  customChip: {
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     marginBottom: 16,
   },
   periodChip: {
@@ -654,4 +861,75 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: '#facc15',
   },
+});
+
+// ===== Modal do período personalizado =====
+const rangeStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  panel: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 16,
+    paddingBottom: 28,
+  },
+  title: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
+  summary: { fontSize: 13, color: '#64748b', marginTop: 4, marginBottom: 12 },
+  calHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  navBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0',
+  },
+  navTxt: { fontSize: 22, color: '#0f172a', marginTop: -2, fontWeight: '700' },
+  calTitle: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
+  weekRow: { flexDirection: 'row' },
+  weekDay: {
+    flex: 1, textAlign: 'center',
+    fontSize: 11, fontWeight: '700', color: '#64748b',
+    paddingVertical: 6,
+  },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  cell: {
+    width: `${100 / 7}%`,
+    aspectRatio: 1.15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  cellEmpty: { width: `${100 / 7}%`, aspectRatio: 1.15 },
+  cellEdge: { backgroundColor: '#dc2626' },
+  cellBetween: { backgroundColor: '#fee2e2' },
+  cellFuture: { opacity: 0.35 },
+  cellTxt: { fontSize: 14, color: '#0f172a', fontWeight: '600' },
+  cellTxtFuture: { color: '#94a3b8' },
+  cellTxtActive: { fontWeight: '800', color: '#991b1b' },
+  cellTxtEdge: { fontWeight: '800', color: '#fff' },
+  actionsRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+  },
+  cancelTxt: { fontSize: 14, fontWeight: '700', color: '#475569' },
+  applyBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: '#dc2626',
+  },
+  applyBtnDisabled: { opacity: 0.5 },
+  applyTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
 });

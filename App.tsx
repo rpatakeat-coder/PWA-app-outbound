@@ -2781,21 +2781,15 @@ function MainApp() {
             </TouchableOpacity>
           )}
 
+          {/* Cadastro outbound (📤) escondido: mandava só pro HubSpot sem
+              registrar no app. Fica apenas o FAB vermelho (+). */}
           {!creationMode && !isViewer && (
-            <>
-              <TouchableOpacity
-                style={[styles.fabSecondary, { bottom: 90 + insets.bottom + 68 }]}
-                onPress={() => setShowOutboundForm(true)}
-              >
-                <Text style={styles.fabSecondaryIcon}>📤</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.fab, { bottom: 90 + insets.bottom }]}
-                onPress={() => setShowCepStep(true)}
-              >
-                <Text style={styles.fabText}>+</Text>
-              </TouchableOpacity>
-            </>
+            <TouchableOpacity
+              style={[styles.fab, { bottom: 90 + insets.bottom }]}
+              onPress={() => setShowCepStep(true)}
+            >
+              <Text style={styles.fabText}>+</Text>
+            </TouchableOpacity>
           )}
 
           {creationMode && creationCenter && (
@@ -2856,21 +2850,14 @@ function MainApp() {
             }
           />
 
+          {/* Cadastro outbound (📤) escondido — só o FAB vermelho (+). */}
           {!isViewer && (
-            <>
-              <TouchableOpacity
-                style={[styles.fabSecondary, { bottom: 90 + insets.bottom + 68 }]}
-                onPress={() => setShowOutboundForm(true)}
-              >
-                <Text style={styles.fabSecondaryIcon}>📤</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.fab, { bottom: 90 + insets.bottom }]}
-                onPress={() => setShowCepStep(true)}
-              >
-                <Text style={styles.fabText}>+</Text>
-              </TouchableOpacity>
-            </>
+            <TouchableOpacity
+              style={[styles.fab, { bottom: 90 + insets.bottom }]}
+              onPress={() => setShowCepStep(true)}
+            >
+              <Text style={styles.fabText}>+</Text>
+            </TouchableOpacity>
           )}
 
         </>
