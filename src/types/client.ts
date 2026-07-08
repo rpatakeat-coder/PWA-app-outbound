@@ -127,6 +127,25 @@ export interface ClientNote {
   updated_at: string;
 }
 
+// Tarefa gerada automaticamente pelo motor de regras (generate_client_tasks
+// no Supabase). O app so le e conclui/dispensa; a criacao vem do banco.
+export type ClientTaskStatus = 'pendente' | 'concluida' | 'dispensada' | 'resolvida_auto';
+
+export interface ClientTask {
+  id: string;
+  client_id: string;
+  task_type: string;
+  severity: string | null;
+  title: string;
+  status: ClientTaskStatus;
+  vendedor_id_hubspot: string | null;
+  meta: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+}
+
 export interface ClientStageChange {
   id: string;
   client_id: string;

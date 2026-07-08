@@ -33,6 +33,7 @@ import { useMeetings } from './src/hooks/useMeetings';
 import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
 import { useClientNotes } from './src/hooks/useClientNotes';
 import { useClientStageChanges } from './src/hooks/useClientStageChanges';
+import { useClientTasks } from './src/hooks/useClientTasks';
 import { useForceReload } from './src/hooks/useForceReload';
 import { supabase } from './src/integrations/supabase/client';
 import { AREA_RADIUS_KM } from './src/utils/area';
@@ -101,7 +102,7 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
   { value: 'ex_cliente', label: 'Ex-cliente', color: '#ef4444' },
 ];
 
-type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'gestor';
+type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'tasks' | 'gestor';
 
 // Limpa e normaliza telefone pra wa.me. Aceita "(27) 99618-3875" / "27996183875"
 // / "5527996183875" e devolve "5527996183875" (com DDI 55 default Brasil).
@@ -395,6 +396,10 @@ function MainApp() {
     enabled: !waitingForLocation && !areaPermissionDenied,
   });
   const { meetings, upcomingByClient, meetingsByClient } = useMeetings();
+  // Tarefas geradas automaticamente (motor de regras no banco). O hook dispara
+  // a geracao ao autenticar e le as pendentes. pendingCount alimenta o badge
+  // de notificacao na aba Tarefas.
+  const { tasks, pendingCount: tasksPendingCount, resolveTask } = useClientTasks();
   useForceReload(isAuthenticated);
   const isAdmin = profile?.email === 'arthurgothe.takeat@gmail.com';
   // Acesso a aba Gestor (metricas) SEM ser admin pleno. Julyan ve so as
@@ -412,7 +417,7 @@ function MainApp() {
   // Mesma protecao pra aba gestor: so admin pode ver, qualquer outro perfil
   // que caia ali (state preservado) volta pro mapa.
   useEffect(() => {
-    if (isViewer && (tab === 'route' || tab === 'agenda')) {
+    if (isViewer && (tab === 'route' || tab === 'agenda' || tab === 'tasks')) {
       setTab('map');
     }
     if (!canViewGestor && tab === 'gestor') {
@@ -2148,6 +2153,111 @@ function MainApp() {
     </ScrollView>
   );
 
+  const renderTasksScreen = () => {
+    // "Minhas tarefas": non-admin ve so as tarefas dos leads dele (match por
+    // vendedor_id_hubspot). Admin ve todas. Se o admin escolheu um vendedor no
+    // filtro do mapa, respeita esse recorte tambem.
+    const myId = myHubspotId;
+    const activeVendor = vendorFilterHubspotId ?? (isAdmin ? null : myId);
+    const visibleTasks = tasks.filter((t) => {
+      if (activeVendor === null) return true;
+      if (activeVendor === '__none__') return !t.vendedor_id_hubspot;
+      return t.vendedor_id_hubspot === activeVendor;
+    });
+
+    // Ordena D5 antes de D2, e dentro da severidade os mais antigos primeiro.
+    const sorted = [...visibleTasks].sort((a, b) => {
+      const sev = (s: string | null) => (s === 'D5' ? 2 : s === 'D2' ? 1 : 0);
+      if (sev(b.severity) !== sev(a.severity)) return sev(b.severity) - sev(a.severity);
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+
+    const sevColor = (s: string | null) => (s === 'D5' ? '#dc2626' : s === 'D2' ? '#f59e0b' : '#64748b');
+
+    return (
+      <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
+        <View style={styles.panelCard}>
+          <Text style={styles.panelTitle}>Tarefas</Text>
+          <Text style={styles.panelHint}>
+            Geradas automaticamente a partir dos seus leads. Ex.: lead em
+            Qualificação sem demo agendada vira "Agendar Demo" (D2 após 2 dias,
+            D5 após 5). Conclua ou dispense conforme resolver.
+            {activeVendor !== null && activeVendor !== myId
+              ? `\n\nFiltro ativo: ${vendorLabel(activeVendor)} (tire no modal de filtros).`
+              : ''}
+          </Text>
+        </View>
+
+        {sorted.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>Nenhuma tarefa pendente. 🎉</Text>
+          </View>
+        ) : sorted.map((task) => {
+          const client = clients.find((c) => c.id === task.client_id) ?? null;
+          const title = client ? getClientPrimaryName(client) : 'Lead não encontrado';
+          const days = (task.meta as any)?.days_in_stage;
+          const responsavel = task.vendedor_id_hubspot ? vendorLabel(task.vendedor_id_hubspot) : null;
+          return (
+            <View key={task.id} style={styles.taskItem}>
+              <View style={[styles.taskSeverity, { backgroundColor: sevColor(task.severity) }]}>
+                <Text style={styles.taskSeverityText}>{task.severity ?? '•'}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.taskTitle}>{task.title}</Text>
+                <Text style={styles.taskClient}>{title}</Text>
+                {typeof days === 'number' ? (
+                  <Text style={styles.taskMeta}>{days} dia(s) em Qualificação</Text>
+                ) : null}
+                {responsavel ? <Text style={styles.taskMeta}>Responsável: {responsavel}</Text> : null}
+
+                <View style={styles.routeActionsRow}>
+                  {client && (
+                    <TouchableOpacity
+                      style={styles.smallActionButton}
+                      onPress={() => { setTab('map'); openClientDetails(client); }}
+                    >
+                      <Text style={styles.smallActionButtonText}>Abrir lead</Text>
+                    </TouchableOpacity>
+                  )}
+                  {client && task.task_type === 'agendar_demo' && (
+                    <TouchableOpacity
+                      style={[styles.smallActionButton, { backgroundColor: '#7c3aed' }]}
+                      onPress={() => setSchedulingFor({ client, type: 'reuniao' })}
+                    >
+                      <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Agendar demo</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.smallActionButton, { backgroundColor: '#16a34a' }]}
+                    onPress={() =>
+                      Alert.alert('Concluir tarefa', `Marcar "${task.title}" de ${title} como concluída?`, [
+                        { text: 'Cancelar', style: 'cancel' },
+                        { text: 'Concluir', onPress: () => resolveTask.mutate({ id: task.id, status: 'concluida' }) },
+                      ])
+                    }
+                  >
+                    <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Concluir</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.smallActionButton}
+                    onPress={() =>
+                      Alert.alert('Dispensar tarefa', `Dispensar "${task.title}" de ${title}? Ela sai da lista.`, [
+                        { text: 'Cancelar', style: 'cancel' },
+                        { text: 'Dispensar', style: 'destructive', onPress: () => resolveTask.mutate({ id: task.id, status: 'dispensada' }) },
+                      ])
+                    }
+                  >
+                    <Text style={styles.smallActionButtonText}>Dispensar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
+    );
+  };
+
   const renderAgendaScreen = () => {
     const allAgendaItems = [
       ...routeStops.map(stop => ({ kind: 'route' as const, at: stop.planned_at, stop, client: stop.client })),
@@ -2863,6 +2973,8 @@ function MainApp() {
         </>
       ) : tab === 'route' ? (
         renderRouteScreen()
+      ) : tab === 'tasks' ? (
+        renderTasksScreen()
       ) : tab === 'gestor' ? (
         <GestorScreen enabled={canViewGestor && tab === 'gestor'} />
       ) : (
@@ -2902,6 +3014,22 @@ function MainApp() {
             >
               <Text style={[styles.navIcon, tab === 'agenda' && styles.navIconActive]}>🗓️</Text>
               <Text style={[styles.navItemText, tab === 'agenda' && styles.navItemTextActive]}>Agenda</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.navItem, tab === 'tasks' && styles.navItemActive]}
+              onPress={() => setTab('tasks')}
+            >
+              <View>
+                <Text style={[styles.navIcon, tab === 'tasks' && styles.navIconActive]}>✅</Text>
+                {tasksPendingCount > 0 && (
+                  <View style={styles.navBadge}>
+                    <Text style={styles.navBadgeText}>
+                      {tasksPendingCount > 99 ? '99+' : tasksPendingCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.navItemText, tab === 'tasks' && styles.navItemTextActive]}>Tarefas</Text>
             </TouchableOpacity>
           </>
         )}
@@ -4790,6 +4918,22 @@ const styles = StyleSheet.create({
   navItemActive: { borderTopWidth: 2, borderTopColor: '#dc2626' },
   navIcon: { fontSize: 18, marginBottom: 2 },
   navIconActive: {},
+  // Badge de notificacao de tarefas pendentes, sobreposto no icone da aba.
+  navBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -12,
+    backgroundColor: '#dc2626',
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  navBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   navItemText: { fontSize: 11, fontWeight: '600', color: '#94a3b8' },
   brandMark: {
     position: 'absolute',
@@ -4922,6 +5066,28 @@ const styles = StyleSheet.create({
   agendaTime: { fontSize: 14, fontWeight: '800', color: '#dc2626', marginTop: 2 },
   agendaTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
   agendaMeta: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  // Tarefas
+  taskItem: {
+    flexDirection: 'row',
+    gap: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  taskSeverity: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  taskSeverityText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  taskTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
+  taskClient: { fontSize: 13, fontWeight: '600', color: '#334155', marginTop: 1 },
+  taskMeta: { fontSize: 12, color: '#64748b', marginTop: 2 },
   metricCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
