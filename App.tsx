@@ -104,6 +104,39 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
 
 type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'tasks' | 'gestor';
 
+// Documentacao das regras de geracao automatica de tarefas (motor
+// generate_client_tasks no Supabase). Isto e' so a explicacao mostrada no
+// modal "ⓘ" da aba Tarefas — a fonte da verdade da logica esta na funcao SQL.
+// Estruturado como array pra ficar facil adicionar novas regras conforme o
+// motor cresce (cada objeto vira um card no modal).
+type TaskRuleDoc = {
+  code: string;               // identificador da regra (task_type)
+  title: string;              // titulo legivel
+  trigger: string;            // quando dispara
+  levels: { badge: string; color: string; when: string }[]; // severidades
+  suppress: string;           // o que impede a tarefa de existir
+  autoResolve: string;        // quando a tarefa some sozinha
+  timing: string;             // como o tempo e' contado
+};
+
+const TASK_RULES: TaskRuleDoc[] = [
+  {
+    code: 'agendar_demo',
+    title: 'Agendar Demo',
+    trigger: 'Lead na etapa QUALIFICAÇÃO sem uma reunião (demo) futura agendada.',
+    levels: [
+      { badge: 'D2', color: '#f59e0b', when: 'a partir de 2 dias na etapa' },
+      { badge: 'D5', color: '#dc2626', when: 'a partir de 5 dias na etapa (a mesma tarefa escala de D2 para D5)' },
+    ],
+    suppress:
+      'Se o lead tiver uma reunião do tipo "reunião" (não follow-up) com data futura e status "agendada", a tarefa não é criada.',
+    autoResolve:
+      'A tarefa some sozinha (resolvida automaticamente) quando o lead ganha uma reunião futura, sai da etapa de Qualificação, ou deixa de ser lead. Tarefas que você concluiu ou dispensou manualmente não voltam.',
+    timing:
+      'O tempo é contado a partir da entrada na etapa (histórico de mudança de etapa). Sem histórico, conta a partir de quando a funcionalidade foi ativada (08/07/2026) — não de datas antigas — pra não gerar tarefas retroativas.',
+  },
+];
+
 // Limpa e normaliza telefone pra wa.me. Aceita "(27) 99618-3875" / "27996183875"
 // / "5527996183875" e devolve "5527996183875" (com DDI 55 default Brasil).
 // Retorna null se tiver < 10 digitos (DDD + numero base) — telefone invalido.
@@ -351,6 +384,9 @@ function MainApp() {
   const [expandedStages, setExpandedStages] = useState<Set<string>>(() => new Set());
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  // Modal que explica as regras de geracao automatica de tarefas (botao "ⓘ"
+  // no cabecalho da aba Tarefas).
+  const [isTaskRulesOpen, setIsTaskRulesOpen] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSavingPassword, setIsSavingPassword] = useState(false);
@@ -2177,11 +2213,21 @@ function MainApp() {
     return (
       <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
         <View style={styles.panelCard}>
-          <Text style={styles.panelTitle}>Tarefas</Text>
+          <View style={styles.taskHeaderRow}>
+            <Text style={styles.panelTitle}>Tarefas</Text>
+            <TouchableOpacity
+              style={styles.taskInfoButton}
+              onPress={() => setIsTaskRulesOpen(true)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.taskInfoButtonText}>ⓘ</Text>
+            </TouchableOpacity>
+          </View>
           <Text style={styles.panelHint}>
             Geradas automaticamente a partir dos seus leads. Ex.: lead em
             Qualificação sem demo agendada vira "Agendar Demo" (D2 após 2 dias,
             D5 após 5). Conclua ou dispense conforme resolver.
+            {'\n\n'}Toque em ⓘ para ver as regras de geração.
             {activeVendor !== null && activeVendor !== myId
               ? `\n\nFiltro ativo: ${vendorLabel(activeVendor)} (tire no modal de filtros).`
               : ''}
@@ -3049,6 +3095,69 @@ function MainApp() {
           developed by RPA
         </Text>
       </View>
+
+      {/* Modal: Regras de geração automática de tarefas */}
+      <Modal
+        visible={isTaskRulesOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsTaskRulesOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.taskRulesCard}>
+            <View style={styles.taskRulesHeader}>
+              <Text style={styles.taskRulesTitle}>Como as tarefas são geradas</Text>
+              <TouchableOpacity
+                style={styles.taskRulesClose}
+                onPress={() => setIsTaskRulesOpen(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.taskRulesCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.taskRulesIntro}>
+              As tarefas são criadas automaticamente pelo sistema a partir do
+              estado dos seus leads. Você não cria manualmente — só conclui ou
+              dispensa. Regras ativas:
+            </Text>
+            <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator>
+              {TASK_RULES.map((rule) => (
+                <View key={rule.code} style={styles.ruleCard}>
+                  <Text style={styles.ruleTitle}>{rule.title}</Text>
+
+                  <Text style={styles.ruleSectionLabel}>Quando é gerada</Text>
+                  <Text style={styles.ruleText}>{rule.trigger}</Text>
+
+                  <Text style={styles.ruleSectionLabel}>Níveis de urgência</Text>
+                  {rule.levels.map((lvl) => (
+                    <View key={lvl.badge} style={styles.ruleLevelRow}>
+                      <View style={[styles.ruleLevelBadge, { backgroundColor: lvl.color }]}>
+                        <Text style={styles.ruleLevelBadgeText}>{lvl.badge}</Text>
+                      </View>
+                      <Text style={styles.ruleLevelText}>{lvl.when}</Text>
+                    </View>
+                  ))}
+
+                  <Text style={styles.ruleSectionLabel}>Como o tempo é contado</Text>
+                  <Text style={styles.ruleText}>{rule.timing}</Text>
+
+                  <Text style={styles.ruleSectionLabel}>O que impede a tarefa</Text>
+                  <Text style={styles.ruleText}>{rule.suppress}</Text>
+
+                  <Text style={styles.ruleSectionLabel}>Quando some sozinha</Text>
+                  <Text style={styles.ruleText}>{rule.autoResolve}</Text>
+                </View>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.taskRulesDoneButton}
+              onPress={() => setIsTaskRulesOpen(false)}
+            >
+              <Text style={styles.taskRulesDoneButtonText}>Entendi</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal: Configurações (filtro de área + redefinir senha + admin) */}
       <Modal
@@ -5088,6 +5197,63 @@ const styles = StyleSheet.create({
   taskTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
   taskClient: { fontSize: 13, fontWeight: '600', color: '#334155', marginTop: 1 },
   taskMeta: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  // Cabecalho da aba Tarefas com botao de info
+  taskHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  taskInfoButton: {
+    width: 30, height: 30, borderRadius: 15,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#eff6ff',
+  },
+  taskInfoButtonText: { fontSize: 18, color: '#2563eb', fontWeight: '700' },
+  // Modal de regras
+  taskRulesCard: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 18,
+    paddingBottom: 24,
+    width: '100%',
+  },
+  taskRulesHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  taskRulesTitle: { fontSize: 17, fontWeight: '800', color: '#0f172a', flex: 1 },
+  taskRulesClose: {
+    width: 30, height: 30, borderRadius: 15,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1f5f9',
+  },
+  taskRulesCloseText: { fontSize: 15, color: '#475569', fontWeight: '700' },
+  taskRulesIntro: { fontSize: 13, color: '#64748b', lineHeight: 19, marginBottom: 12 },
+  ruleCard: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  ruleTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a', marginBottom: 8 },
+  ruleSectionLabel: {
+    fontSize: 11, fontWeight: '800', color: '#94a3b8',
+    textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 10, marginBottom: 3,
+  },
+  ruleText: { fontSize: 13, color: '#334155', lineHeight: 19 },
+  ruleLevelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  ruleLevelBadge: {
+    minWidth: 34, height: 24, borderRadius: 12, paddingHorizontal: 6,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  ruleLevelBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  ruleLevelText: { fontSize: 13, color: '#334155', flex: 1, lineHeight: 18 },
+  taskRulesDoneButton: {
+    marginTop: 14,
+    backgroundColor: '#dc2626',
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  taskRulesDoneButtonText: { color: '#fff', fontSize: 15, fontWeight: '800' },
   metricCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
