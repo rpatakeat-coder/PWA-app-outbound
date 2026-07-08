@@ -172,24 +172,102 @@ async function geocodeNominatim(input: GeoInput): Promise<GeoResult | null> {
   };
 }
 
+// ---- Modo BATCH: re-geocodifica em massa os leads aproximados ----
+// Protegido pelo secret REPAIR_GEOCODE_SECRET (header x-repair-secret) — nao e'
+// acessivel pelo app comum. Usa a service role pra ler/atualizar clients.
+// So atualiza quando o Google retorna ponto preciso (approximate=false), pra
+// nao piorar pins que ja estao ok. Body: { batch:true, limit?, offset?, dry_run? }
+async function runBatch(body: any, apiKey: string) {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const limit = Math.min(Math.max(Number(body.limit ?? 100), 1), 500);
+  const offset = Math.max(Number(body.offset ?? 0), 0);
+  const dryRun = body.dry_run === true;
+
+  // Busca candidatos: aproximados, com numero e endereco.
+  const sel = new URLSearchParams({
+    select: 'id,endereco,numero,bairro,cidade,estado,cep,latitude,longitude',
+    geo_approximate: 'eq.true',
+    numero: 'not.is.null',
+    endereco: 'not.is.null',
+    order: 'created_at.desc',
+    limit: String(limit),
+    offset: String(offset),
+  });
+  const rows: any[] = await fetchJson(`${supabaseUrl}/rest/v1/clients?${sel.toString()}`, {
+    headers: { apikey: serviceRole, Authorization: `Bearer ${serviceRole}` },
+  }) ?? [];
+
+  let updated = 0, precise = 0, imprecise = 0, notFound = 0;
+  const samples: any[] = [];
+
+  for (const row of rows) {
+    if (!clean(row.endereco) || !clean(row.cidade) || !clean(row.estado)) continue;
+    const input: GeoInput = {
+      logradouro: row.endereco, numero: row.numero, bairro: row.bairro,
+      cidade: row.cidade, estado: row.estado, cep: row.cep,
+    };
+    let r = apiKey ? await geocodeGoogle(input, apiKey) : null;
+    if (!r) { notFound++; continue; }
+    if (r.approximate) { imprecise++; continue; } // so aplica ponto preciso
+    precise++;
+
+    if (samples.length < 5) {
+      samples.push({ id: row.id, from: [row.latitude, row.longitude], to: [r.latitude, r.longitude] });
+    }
+
+    if (!dryRun) {
+      const upd = await fetch(`${supabaseUrl}/rest/v1/clients?id=eq.${row.id}`, {
+        method: 'PATCH',
+        headers: {
+          apikey: serviceRole, Authorization: `Bearer ${serviceRole}`,
+          'Content-Type': 'application/json', Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({
+          latitude: r.latitude, longitude: r.longitude,
+          geo_source: 'google', geo_approximate: false,
+          updated_at: new Date().toISOString(),
+        }),
+      });
+      if (upd.ok) updated++;
+    }
+  }
+
+  return json(200, {
+    ok: true, dry_run: dryRun, selected: rows.length,
+    precise, imprecise, not_found: notFound, updated, samples,
+  });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return json(405, { error: 'Use POST' });
 
-  let body: GeoInput | null = null;
+  let body: any = null;
   try {
     body = await req.json();
   } catch {
     return json(400, { error: 'Body precisa ser JSON' });
   }
-  if (!body || !clean(body.logradouro) || !clean(body.cidade) || !clean(body.estado)) {
-    return json(400, { error: 'logradouro, cidade e estado sao obrigatorios' });
-  }
 
   const apiKey = Deno.env.get('GOOGLE_GEOCODING_API_KEY') ?? '';
 
+  // Modo batch (repair em massa) — exige o secret compartilhado.
+  if (body?.batch === true) {
+    const secret = Deno.env.get('REPAIR_GEOCODE_SECRET') ?? Deno.env.get('HUBSPOT_WEBHOOK_SECRET');
+    if (!secret || req.headers.get('x-repair-secret') !== secret) {
+      return json(401, { error: 'Unauthorized (batch requer x-repair-secret)' });
+    }
+    return runBatch(body, apiKey);
+  }
+
+  // Modo normal: geocodifica um endereco (chamado pelo app).
+  if (!clean(body?.logradouro) || !clean(body?.cidade) || !clean(body?.estado)) {
+    return json(400, { error: 'logradouro, cidade e estado sao obrigatorios' });
+  }
+
   // 1) Google (se configurado). 2) Nominatim como fallback.
-  let result = apiKey ? await geocodeGoogle(body, apiKey) : null;
-  if (!result) result = await geocodeNominatim(body);
+  let result = apiKey ? await geocodeGoogle(body as GeoInput, apiKey) : null;
+  if (!result) result = await geocodeNominatim(body as GeoInput);
 
   if (!result) return json(404, { error: 'Endereco nao localizado' });
   return json(200, result);
