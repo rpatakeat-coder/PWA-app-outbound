@@ -124,12 +124,12 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
         // e a opcao "somente meus leads" na rota. Se o perfil nao tiver
         // id_hubspot, fica NULL ("sem responsavel").
         vendedor_id_hubspot: profile?.id_hubspot ?? null,
-        // Cadastros via app têm origem manual e geolocalização escolhida no mapa.
-        // O usuário literalmente aponta o pin no lugar — lat/lon é sempre
-        // preciso, mesmo sem número de rua. Antes ficava aproximado quando
-        // faltava número, o que era enganoso (a coord existia certa).
+        // Cadastros via pin no mapa/coords têm lat/lon preciso (o usuário aponta
+        // o lugar). Via CEP, porém, o geocoding pode cair no centroide da rua
+        // quando o OSM não tem o número — nesse caso o CEPStep manda
+        // geo_approximate=true e a gente respeita (raio de check-in maior).
         geo_source: 'coords',
-        geo_approximate: false,
+        geo_approximate: form.geo_approximate ?? false,
       };
 
       const { data, error } = await supabase

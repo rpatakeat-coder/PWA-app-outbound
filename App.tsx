@@ -352,6 +352,9 @@ function MainApp() {
   const [tab, setTab] = useState<AppTab>('map');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [showCepStep, setShowCepStep] = useState(false);
+  // Guarda o flag de geocoding aproximado vindo do CEPStep ate o submit do
+  // formulario, pra persistir em clients.geo_approximate.
+  const [pendingGeoApproximate, setPendingGeoApproximate] = useState(false);
   const [showOutboundForm, setShowOutboundForm] = useState(false);
   const [form, setForm] = useState(initialFormState);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -1500,11 +1503,13 @@ function MainApp() {
       cidade: addr?.cidade ?? '',
       estado: addr?.estado ?? '',
     });
+    // Pin no mapa é sempre preciso (o usuário aponta o local exato).
+    setPendingGeoApproximate(false);
     setIsFormOpen(true);
     setCreationCenter(null);
   }, [creationCenter, statusOptions]);
 
-  const resetForm = () => setForm(initialFormState);
+  const resetForm = () => { setForm(initialFormState); setPendingGeoApproximate(false); };
 
   const submitClient = async () => {
     if (submittingRef.current) return;
@@ -1541,6 +1546,9 @@ function MainApp() {
       telefone: form.telefone || null,
       email: form.email || null,
       observacoes: form.observacoes || null,
+      // Aproximado só quando veio do CEP sem número exato. Pin no mapa/coords
+      // e edição resetam pra false (setPendingGeoApproximate(false) nesses fluxos).
+      geo_approximate: pendingGeoApproximate,
     };
 
     submittingRef.current = true;
@@ -3683,11 +3691,16 @@ function MainApp() {
               status: 'lead' as ClientStatus,
               cep: cepData.cep || '',
               endereco: cepData.endereco || '',
+              // Numero agora vem em campo proprio (nao concatenado no endereco).
+              numero: cepData.numero || '',
               cidade: cepData.cidade || '',
               estado: cepData.estado || '',
               latitude: cepData.latitude?.toString() || '',
               longitude: cepData.longitude?.toString() || '',
             }));
+            // Guarda se o geocoding ficou aproximado (centroide da rua) pra
+            // persistir em geo_approximate no submit.
+            setPendingGeoApproximate(cepData.geoApproximate ?? false);
             setShowCepStep(false);
             setIsFormOpen(true);
           }}

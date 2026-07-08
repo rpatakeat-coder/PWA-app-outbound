@@ -56,23 +56,116 @@ export async function fetchCepData(cep: string) {
   }
 }
 
+// Tipos de resultado que NÃO são o ponto exato do endereço — quando o
+// Nominatim cai num desses, o pin fica no centroide da rua/bairro/cidade, não
+// na casa. Usado pra marcar geo_approximate. Mesma lista da edge function
+// repair-client-geocodes (manter em sincronia).
+const IMPRECISE_TYPES = new Set([
+  'city', 'town', 'village', 'municipality', 'county', 'state',
+  'region', 'country', 'postcode', 'suburb', 'neighbourhood', 'road',
+]);
+
+function isPreciseHit(hit: any): boolean {
+  const addresstype = String(hit?.addresstype ?? '').toLowerCase();
+  const category = String(hit?.class ?? '').toLowerCase();
+  const type = String(hit?.type ?? '').toLowerCase();
+  if (IMPRECISE_TYPES.has(addresstype) || IMPRECISE_TYPES.has(type)) return false;
+  if (category === 'boundary' || category === 'place') return false;
+  return true;
+}
+
+export type GeocodeResult = {
+  latitude: number;
+  longitude: number;
+  // false quando o Nominatim retornou o número exato da casa; true quando caiu
+  // no centroide da rua/bairro (limite do OSM no Brasil). Alimenta
+  // clients.geo_approximate pra sinalizar "pin pode estar impreciso".
+  approximate: boolean;
+};
+
 /**
- * Geocodifica endereço -> lat/lng via Nominatim. Retorna null se não encontrou; lança GeocodingError em falhas.
+ * Geocodifica endereço livre -> lat/lng via Nominatim (busca por texto `q`).
+ * Retorna null se não encontrou; lança GeocodingError em falhas.
+ * Marca approximate=true quando o hit não é um ponto de endereço exato.
  */
-export async function geocodeAddress(address: string): Promise<{ latitude: number; longitude: number } | null> {
+export async function geocodeAddress(address: string): Promise<GeocodeResult | null> {
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&countrycodes=br`;
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=jsonv2&addressdetails=1&limit=3&countrycodes=br`;
     const res = await fetchWithTimeout(url, { headers: { 'User-Agent': NOMINATIM_UA } });
     if (res.status === 429) throw new GeocodingError('Nominatim rate limit', 'rate_limit');
     if (!res.ok) throw new GeocodingError(`Nominatim ${res.status}`, 'unknown');
     const data = await res.json();
-    if (data.length > 0) {
-      return { latitude: parseFloat(data[0].lat), longitude: parseFloat(data[0].lon) };
-    }
-    return null;
+    if (!Array.isArray(data) || data.length === 0) return null;
+    // Prefere o primeiro hit preciso (número de casa); senão usa o primeiro.
+    const hit = data.find(isPreciseHit) ?? data[0];
+    return {
+      latitude: parseFloat(hit.lat),
+      longitude: parseFloat(hit.lon),
+      approximate: !isPreciseHit(hit),
+    };
   } catch (err) {
     throw toGeocodingError(err);
   }
+}
+
+/**
+ * Geocodificação ESTRUTURADA via Nominatim (street/city/state separados). É a
+ * forma que dá mais chance de casar o número exato da casa no Brasil. Faz
+ * fallback pra busca livre quando a estruturada não acha nada.
+ * `numero` vai junto do logradouro no campo `street` (formato esperado: "1086 Rua X").
+ */
+export async function geocodeStructured(params: {
+  logradouro: string;
+  numero?: string | null;
+  cidade: string;
+  estado: string;
+  cep?: string | null;
+  bairro?: string | null;
+}): Promise<GeocodeResult | null> {
+  const { logradouro, numero, cidade, estado, cep } = params;
+  if (!logradouro || !cidade || !estado) return null;
+
+  // Normaliza o número: "s/n" -> vazio; extrai só os dígitos ("1086-A" -> "1086").
+  const numTrim = (numero ?? '').trim();
+  const numClean = /^s\/?n$/i.test(numTrim) ? '' : (numTrim.match(/\d+/)?.[0] ?? '');
+
+  try {
+    const qs = new URLSearchParams({
+      street: [numClean, logradouro].filter(Boolean).join(' '),
+      city: cidade,
+      state: estado,
+      country: 'Brasil',
+      format: 'jsonv2',
+      addressdetails: '1',
+      limit: '3',
+      countrycodes: 'br',
+    });
+    if (cep) qs.set('postalcode', cep.replace(/\D/g, ''));
+
+    const res = await fetchWithTimeout(
+      `https://nominatim.openstreetmap.org/search?${qs.toString()}`,
+      { headers: { 'User-Agent': NOMINATIM_UA } },
+    );
+    if (res.status === 429) throw new GeocodingError('Nominatim rate limit', 'rate_limit');
+    if (!res.ok) throw new GeocodingError(`Nominatim ${res.status}`, 'unknown');
+    const data = await res.json();
+    if (Array.isArray(data) && data.length > 0) {
+      const hit = data.find(isPreciseHit) ?? data[0];
+      return {
+        latitude: parseFloat(hit.lat),
+        longitude: parseFloat(hit.lon),
+        approximate: !isPreciseHit(hit),
+      };
+    }
+  } catch (err) {
+    // Estruturada falhou tecnicamente — tenta o fallback livre antes de desistir.
+    if (err instanceof GeocodingError && err.kind === 'rate_limit') throw err;
+  }
+
+  // Fallback: busca livre com endereço montado.
+  const line1 = [logradouro, numClean].filter(Boolean).join(', ');
+  const freeQuery = [line1, params.bairro, cidade, estado, cep, 'Brasil'].filter(Boolean).join(', ');
+  return geocodeAddress(freeQuery);
 }
 
 /**

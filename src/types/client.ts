@@ -70,7 +70,8 @@ export interface ClientFormData {
   nome: string;
   empresa?: string;
   endereco?: string;
-  numero?: string;
+  numero?: string | null;
+  bairro?: string | null;
   cep?: string;
   cidade?: string;
   estado?: string;
@@ -80,6 +81,10 @@ export interface ClientFormData {
   latitude: number | null;
   longitude: number | null;
   observacoes?: string;
+  // Quando true, o pin veio de geocoding impreciso (centroide da rua). O
+  // check-in usa um raio maior nesses casos. Default false (pin do mapa/coords
+  // é sempre preciso; só o CEP sem número exato marca true).
+  geo_approximate?: boolean;
 }
 
 export interface FieldRoute {

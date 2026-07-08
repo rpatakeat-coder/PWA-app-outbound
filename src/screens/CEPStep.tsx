@@ -13,7 +13,7 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
-import { fetchCepData, geocodeAddress, reverseGeocode, GeocodingError } from '../utils/geocoding';
+import { fetchCepData, geocodeStructured, reverseGeocode, GeocodingError } from '../utils/geocoding';
 import type { ClientFormData } from '../types/client';
 
 function geocodingErrorMessage(err: unknown): string {
@@ -30,7 +30,15 @@ function geocodingErrorMessage(err: unknown): string {
 }
 
 interface CEPStepProps {
-  onNext: (data: Partial<ClientFormData> & { latitude?: number | null; longitude?: number | null; bairro?: string }) => void;
+  onNext: (data: Partial<ClientFormData> & {
+    latitude?: number | null;
+    longitude?: number | null;
+    bairro?: string;
+    numero?: string;
+    // true quando o geocoding caiu no centroide da rua (não achou o número
+    // exato). O app usa pra marcar geo_approximate e alargar o raio de check-in.
+    geoApproximate?: boolean;
+  }) => void;
   onCancel: () => void;
   onPickOnMap?: () => void;
 }
@@ -99,11 +107,18 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
     setLoading(true);
     try {
       const logradouro = cepData.isGeneric ? enderecoManual.trim() : cepData.logradouro;
-      const enderecoCompleto = numero
-        ? `${logradouro}, ${numero}, ${cepData.cidade}, ${cepData.estado}, Brasil`
-        : `${logradouro}, ${cepData.cidade}, ${cepData.estado}, Brasil`;
 
-      const coords = await geocodeAddress(enderecoCompleto);
+      // Geocodificação estruturada (número + rua separados) — melhor chance de
+      // acertar o número exato da casa. Retorna approximate=true quando cai no
+      // centroide da rua (limite do OSM).
+      const coords = await geocodeStructured({
+        logradouro,
+        numero,
+        cidade: cepData.cidade,
+        estado: cepData.estado,
+        cep,
+        bairro: cepData.bairro,
+      });
 
       if (!coords) {
         Alert.alert(
@@ -115,12 +130,17 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
 
       onNext({
         cep,
-        endereco: numero ? `${logradouro}, ${numero}` : logradouro,
+        // IMPORTANTE: endereço SÓ o logradouro; o número vai no campo próprio
+        // `numero` (antes ia concatenado aqui, o que deixava o lead como "sem
+        // número" e atrapalhava a geocodificação).
+        endereco: logradouro,
+        numero: numero.trim() || undefined,
         cidade: cepData.cidade,
         estado: cepData.estado,
         latitude: coords.latitude,
         longitude: coords.longitude,
         bairro: cepData.bairro,
+        geoApproximate: coords.approximate,
       });
     } catch (err) {
       Alert.alert('Erro ao obter coordenadas', geocodingErrorMessage(err));
