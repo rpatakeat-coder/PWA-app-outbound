@@ -116,6 +116,12 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_pending integer;
+  -- Ancora de ativacao da feature. Leads SEM historico de mudanca de etapa
+  -- contam a partir desta data (nao do created_at antigo) — evita gerar
+  -- tarefas retroativas pra leads que ja estavam parados ha dias quando a
+  -- feature subiu. Assim que o lead passar pelo modal de etapa, o registro
+  -- real em client_stage_changes (entered_at, prioritario) assume.
+  v_activation constant timestamptz := timestamptz '2026-07-08 00:00:00+00';
 BEGIN
   -- ----------------------------------------------------------------------
   -- REGRA: agendar_demo
@@ -136,12 +142,12 @@ BEGIN
       c.id AS client_id,
       c.vendedor_id_hubspot,
       -- Dias inteiros desde a entrada na etapa. Sem historico de mudanca de
-      -- etapa, cai pra created_at (estavel). NAO usamos updated_at no fallback
-      -- porque qualquer edicao no lead resetaria a contagem. Assim que o lead
-      -- passar pelo modal de etapa, client_stage_changes registra a entrada e
-      -- entered_at (prioritario) vira a data correta.
+      -- etapa, conta a partir de max(created_at, ancora de ativacao) — ou seja,
+      -- nunca antes da data em que a feature subiu. NAO usamos updated_at
+      -- (ruidoso). Assim que o lead passar pelo modal de etapa, entered_at
+      -- (prioritario) vira a data real de entrada.
       floor(
-        extract(epoch FROM (now() - COALESCE(se.entered_at, c.created_at)))
+        extract(epoch FROM (now() - COALESCE(se.entered_at, greatest(c.created_at, v_activation))))
         / 86400.0
       )::int AS days_in_stage
     FROM public.clients c
@@ -223,7 +229,7 @@ BEGIN
       LEFT JOIN stage_entry se ON se.client_id = c.id
       WHERE c.etapa = 'QUALIFICAÇÃO'
         AND c.status = 'lead'
-        AND floor(extract(epoch FROM (now() - COALESCE(se.entered_at, c.created_at))) / 86400.0)::int >= 2
+        AND floor(extract(epoch FROM (now() - COALESCE(se.entered_at, greatest(c.created_at, v_activation)))) / 86400.0)::int >= 2
         AND NOT EXISTS (
           SELECT 1 FROM public.client_meetings m
           WHERE m.client_id = c.id
