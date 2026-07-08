@@ -110,12 +110,24 @@ export function periodRange(period: GestorPeriod): { start: string | null; end: 
 // Postgres devolve um JSON pequeno em ~20ms.
 // ============================================================================
 export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
-  const { start, end } = periodRange(period);
   return useQuery<GestorMetricsResult>({
-    queryKey: ['gestor-metrics', period.preset, start, end],
+    // IMPORTANTE: a queryKey NAO pode conter o range calculado com Date.now()
+    // dos presets relativos ('today'/'7d'/'30d'), senao ele muda a cada render
+    // (novo timestamp) e o React Query entra em refetch infinito — era esse o
+    // bug de "os botoes de periodo nao carregam, mas o intervalo personalizado
+    // sim" (custom usa datas fixas do calendario, presets recalculavam sempre).
+    // Chave estavel: preset + (apenas pro custom) as datas fixas. O range e
+    // resolvido dentro do queryFn, no momento da execucao.
+    queryKey: [
+      'gestor-metrics',
+      period.preset,
+      period.preset === 'custom' ? period.startISO ?? null : null,
+      period.preset === 'custom' ? period.endISO ?? null : null,
+    ],
     enabled,
     staleTime: 60 * 1000,
     queryFn: async () => {
+      const { start, end } = periodRange(period);
       const { data, error } = await supabase.rpc('gestor_metrics', {
         p_start: start,
         p_end: end,
@@ -184,13 +196,16 @@ export type MetricLeadsParams = {
 };
 
 export function useMetricLeads(params: MetricLeadsParams | null, enabled: boolean) {
-  const range = params ? periodRange(params.period) : { start: null, end: null };
   return useQuery<MetricLead[]>({
+    // Mesma regra do useGestorMetrics: a key usa o preset (+ datas fixas do
+    // custom), NUNCA o range calculado com Date.now(), pra nao refetchar em
+    // loop. O range e resolvido no queryFn.
     queryKey: [
       'gestor-metric-leads',
       params?.metric,
-      range.start,
-      range.end,
+      params?.period.preset ?? null,
+      params?.period.preset === 'custom' ? params.period.startISO ?? null : null,
+      params?.period.preset === 'custom' ? params.period.endISO ?? null : null,
       params?.sellerId ?? null,
       params?.hubspotId ?? null,
       params?.status ?? null,
@@ -199,6 +214,7 @@ export function useMetricLeads(params: MetricLeadsParams | null, enabled: boolea
     staleTime: 60 * 1000,
     queryFn: async () => {
       if (!params) return [];
+      const range = periodRange(params.period);
       const { data, error } = await supabase.rpc('gestor_metric_leads', {
         p_metric: params.metric,
         p_start: range.start,
