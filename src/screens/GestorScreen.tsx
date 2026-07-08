@@ -12,9 +12,11 @@ import {
 } from 'react-native';
 import {
   useGestorMetrics,
+  useMetricLeads,
   type GestorPeriod,
   type GestorPeriodPreset,
   type MetricLead,
+  type MetricLeadsParams,
   type SellerMetrics,
 } from '../hooks/useGestorMetrics';
 
@@ -47,10 +49,12 @@ const STATUS_LABEL: Record<string, string> = {
   ex_cliente: 'Ex-cliente',
 };
 
-// Conteúdo do modal "quais leads compõem esse número".
+// Conteúdo do modal "quais leads compõem esse número". Em vez de carregar a
+// lista junto com as métricas, guardamos só os parâmetros da consulta e o
+// modal busca os leads sob demanda (useMetricLeads) ao abrir.
 interface LeadModalState {
   title: string;
-  leads: MetricLead[];
+  params: MetricLeadsParams;
 }
 
 const DIAS_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
@@ -208,15 +212,10 @@ function formatLeadDate(iso: string | null): string | null {
 }
 
 function LeadListModal({ state, onClose }: { state: LeadModalState | null; onClose: () => void }) {
-  // Mais recente primeiro; sem data vai pro fim.
-  const sorted = useMemo(() => {
-    if (!state) return [];
-    return [...state.leads].sort((a, b) => {
-      const ta = a.at ? new Date(a.at).getTime() : -Infinity;
-      const tb = b.at ? new Date(b.at).getTime() : -Infinity;
-      return tb - ta;
-    });
-  }, [state]);
+  // Busca a lista sob demanda a partir dos parâmetros do card tocado. A RPC
+  // já devolve ordenado por data desc; enabled só quando o modal está aberto.
+  const leadsQuery = useMetricLeads(state?.params ?? null, state !== null);
+  const leads = leadsQuery.data ?? [];
 
   return (
     <Modal visible={state !== null} transparent animationType="slide" onRequestClose={onClose}>
@@ -227,7 +226,9 @@ function LeadListModal({ state, onClose }: { state: LeadModalState | null; onClo
             <View style={{ flex: 1 }}>
               <Text style={styles.modalTitle} numberOfLines={2}>{state?.title}</Text>
               <Text style={styles.modalSubtitle}>
-                {sorted.length} {sorted.length === 1 ? 'lead' : 'leads'}
+                {leadsQuery.isLoading
+                  ? 'Carregando...'
+                  : `${leads.length} ${leads.length === 1 ? 'lead' : 'leads'}`}
               </Text>
             </View>
             <TouchableOpacity style={styles.modalCloseButton} onPress={onClose}>
@@ -235,11 +236,17 @@ function LeadListModal({ state, onClose }: { state: LeadModalState | null; onClo
             </TouchableOpacity>
           </View>
           <FlatList
-            data={sorted}
+            data={leads}
             keyExtractor={(item, idx) => `${item.client_id}-${idx}`}
             contentContainerStyle={{ paddingBottom: 24 }}
             ListEmptyComponent={
-              <Text style={styles.modalEmpty}>Nenhum lead nesse recorte.</Text>
+              leadsQuery.isLoading ? (
+                <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+                  <ActivityIndicator color="#dc2626" />
+                </View>
+              ) : (
+                <Text style={styles.modalEmpty}>Nenhum lead nesse recorte.</Text>
+              )
             }
             renderItem={({ item }) => {
               const when = formatLeadDate(item.at);
@@ -327,11 +334,13 @@ function MetricBox({
 function SellerCard({
   seller,
   rank,
+  period,
   onOpenLeads,
 }: {
   seller: SellerMetrics;
   rank: number;
-  onOpenLeads: (title: string, leads: MetricLead[]) => void;
+  period: GestorPeriod;
+  onOpenLeads: (title: string, params: MetricLeadsParams) => void;
 }) {
   const displayName = seller.full_name?.trim() || seller.email || 'Sem nome';
   const initials = (seller.full_name?.trim() || seller.email || '?')
@@ -348,8 +357,13 @@ function SellerCard({
   // Distribuicao de status apenas dos leads sob responsabilidade.
   const statusEntries = Object.entries(seller.status_breakdown).sort((a, b) => b[1] - a[1]);
 
-  const open = (metricLabel: string, leads: MetricLead[]) =>
-    onOpenLeads(`${metricLabel} — ${displayName}`, leads);
+  // Abre o modal pedindo os leads da métrica desse vendedor (filtra por seller_id).
+  const open = (metricLabel: string, params: Partial<MetricLeadsParams> & { metric: MetricLeadsParams['metric'] }) =>
+    onOpenLeads(`${metricLabel} — ${displayName}`, {
+      period,
+      sellerId: seller.seller_id,
+      ...params,
+    });
 
   return (
     <View style={styles.sellerCard}>
@@ -369,20 +383,20 @@ function SellerCard({
       </View>
 
       <View style={styles.metricsRow}>
-        <MetricBox value={seller.visited} label="Visitados" color="#a855f7" onPress={() => open('Visitados', seller.details.visited)} />
-        <MetricBox value={seller.created} label="Criados" color="#3b82f6" onPress={() => open('Criados', seller.details.created)} />
-        <MetricBox value={seller.meetings_scheduled} label="Reuniões" color="#f97316" onPress={() => open('Reuniões', seller.details.meetings)} />
+        <MetricBox value={seller.visited} label="Visitados" color="#a855f7" onPress={() => open('Visitados', { metric: 'visited' })} />
+        <MetricBox value={seller.created} label="Criados" color="#3b82f6" onPress={() => open('Criados', { metric: 'created' })} />
+        <MetricBox value={seller.meetings_scheduled} label="Reuniões" color="#f97316" onPress={() => open('Reuniões', { metric: 'meetings' })} />
       </View>
       <View style={styles.metricsRow}>
-        <MetricBox value={seller.follow_ups_scheduled} label="Follow ups" color="#0891b2" onPress={() => open('Follow ups', seller.details.follow_ups)} />
-        <MetricBox value={seller.stage_changes} label="Mudanças" color="#0ea5e9" onPress={() => open('Mudanças de etapa', seller.details.stage_changes)} />
-        <MetricBox value={seller.notes_created} label="Notas" color="#facc15" onPress={() => open('Notas', seller.details.notes)} />
+        <MetricBox value={seller.follow_ups_scheduled} label="Follow ups" color="#0891b2" onPress={() => open('Follow ups', { metric: 'follow_ups' })} />
+        <MetricBox value={seller.stage_changes} label="Mudanças" color="#0ea5e9" onPress={() => open('Mudanças de etapa', { metric: 'stage_changes' })} />
+        <MetricBox value={seller.notes_created} label="Notas" color="#facc15" onPress={() => open('Notas', { metric: 'notes' })} />
       </View>
 
       <View style={styles.assignedRow}>
         <TouchableOpacity
           disabled={seller.leads_assigned === 0}
-          onPress={() => open('Leads atribuídos', seller.details.assigned)}
+          onPress={() => open('Leads atribuídos', { metric: 'assigned', hubspotId: seller.id_hubspot, sellerId: null })}
         >
           <Text style={[styles.assignedLabel, seller.leads_assigned > 0 && styles.assignedLabelLink]}>
             {seller.leads_assigned} {seller.leads_assigned === 1 ? 'lead atribuído' : 'leads atribuídos'}
@@ -398,10 +412,12 @@ function SellerCard({
               key={status}
               style={styles.statusChip}
               onPress={() =>
-                open(
-                  STATUS_LABEL[status] ?? status,
-                  seller.details.assigned.filter(l => l.status === status),
-                )
+                open(STATUS_LABEL[status] ?? status, {
+                  metric: 'assigned',
+                  hubspotId: seller.id_hubspot,
+                  status,
+                  sellerId: null,
+                })
               }
             >
               <View style={[styles.statusDot, { backgroundColor: STATUS_COLOR[status] ?? '#94a3b8' }]} />
@@ -439,7 +455,7 @@ export function GestorScreen({ enabled }: Props) {
 
   const query = useGestorMetrics(period, enabled);
 
-  const openLeads = (title: string, leads: MetricLead[]) => setLeadModal({ title, leads });
+  const openLeads = (title: string, params: MetricLeadsParams) => setLeadModal({ title, params });
 
   const periodLabel =
     preset === 'all' ? 'total'
@@ -519,31 +535,31 @@ export function GestorScreen({ enabled }: Props) {
               label="Total de leads"
               value={query.data.global.total_clients}
               color="#0f172a"
-              onPress={() => openLeads('Todos os leads', query.data!.globalDetails.all)}
+              onPress={() => openLeads('Todos os leads', { metric: 'all', period })}
             />
             <StatCard
               label="Leads"
               value={query.data.global.total_leads}
               color={STATUS_COLOR.lead}
-              onPress={() => openLeads('Leads', query.data!.globalDetails.by_status['lead'] ?? [])}
+              onPress={() => openLeads('Leads', { metric: 'status', period, status: 'lead' })}
             />
             <StatCard
               label="Visitados"
               value={query.data.global.total_visited}
               color={STATUS_COLOR.lead_visitado}
-              onPress={() => openLeads('Visitados', query.data!.globalDetails.by_status['lead_visitado'] ?? [])}
+              onPress={() => openLeads('Visitados', { metric: 'status', period, status: 'lead_visitado' })}
             />
             <StatCard
               label="Clientes"
               value={query.data.global.total_active_clients}
               color={STATUS_COLOR.cliente}
-              onPress={() => openLeads('Clientes', query.data!.globalDetails.by_status['cliente'] ?? [])}
+              onPress={() => openLeads('Clientes', { metric: 'status', period, status: 'cliente' })}
             />
             <StatCard
               label="Churn"
               value={query.data.global.total_churn}
               color={STATUS_COLOR.churn}
-              onPress={() => openLeads('Churn', query.data!.globalDetails.by_status['churn'] ?? [])}
+              onPress={() => openLeads('Churn', { metric: 'status', period, status: 'churn' })}
             />
           </View>
 
@@ -556,37 +572,37 @@ export function GestorScreen({ enabled }: Props) {
               label="Visitados"
               value={query.data.global.visited_in_period}
               color="#a855f7"
-              onPress={() => openLeads('Visitados no período', query.data!.globalDetails.visited)}
+              onPress={() => openLeads('Visitados no período', { metric: 'visited', period })}
             />
             <StatCard
               label="Criados"
               value={query.data.global.created_in_period}
               color="#3b82f6"
-              onPress={() => openLeads('Criados no período', query.data!.globalDetails.created)}
+              onPress={() => openLeads('Criados no período', { metric: 'created', period })}
             />
             <StatCard
               label="Reuniões"
               value={query.data.global.meetings_in_period}
               color="#f97316"
-              onPress={() => openLeads('Reuniões no período', query.data!.globalDetails.meetings)}
+              onPress={() => openLeads('Reuniões no período', { metric: 'meetings', period })}
             />
             <StatCard
               label="Follow ups"
               value={query.data.global.follow_ups_in_period}
               color="#0891b2"
-              onPress={() => openLeads('Follow ups no período', query.data!.globalDetails.follow_ups)}
+              onPress={() => openLeads('Follow ups no período', { metric: 'follow_ups', period })}
             />
             <StatCard
               label="Mudanças etapa"
               value={query.data.global.stage_changes_in_period}
               color="#0ea5e9"
-              onPress={() => openLeads('Mudanças de etapa no período', query.data!.globalDetails.stage_changes)}
+              onPress={() => openLeads('Mudanças de etapa no período', { metric: 'stage_changes', period })}
             />
             <StatCard
               label="Notas"
               value={query.data.global.notes_in_period}
               color="#facc15"
-              onPress={() => openLeads('Notas no período', query.data!.globalDetails.notes)}
+              onPress={() => openLeads('Notas no período', { metric: 'notes', period })}
             />
           </View>
 
@@ -600,7 +616,7 @@ export function GestorScreen({ enabled }: Props) {
             </View>
           ) : (
             visibleSellers.map((seller, idx) => (
-              <SellerCard key={seller.seller_id} seller={seller} rank={idx + 1} onOpenLeads={openLeads} />
+              <SellerCard key={seller.seller_id} seller={seller} rank={idx + 1} period={period} onOpenLeads={openLeads} />
             ))
           )}
 
