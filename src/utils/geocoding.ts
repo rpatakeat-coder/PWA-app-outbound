@@ -1,3 +1,5 @@
+import { supabase } from '../integrations/supabase/client';
+
 const DEFAULT_TIMEOUT_MS = 8000;
 const NOMINATIM_UA = 'TakeatRPA-App (contact: brittes@takeat.app)';
 
@@ -125,10 +127,36 @@ export async function geocodeStructured(params: {
   const { logradouro, numero, cidade, estado, cep } = params;
   if (!logradouro || !cidade || !estado) return null;
 
-  // Normaliza o número: "s/n" -> vazio; extrai só os dígitos ("1086-A" -> "1086").
+  // Fonte primária: Edge Function `geocode` (Google Geocoding no servidor, com
+  // a API key protegida; cai no Nominatim do lado servidor se o Google falhar).
+  // O app nunca vê a key. Se a própria function estiver fora (rede/deploy),
+  // cai no fallback local do Nominatim mais abaixo.
+  try {
+    const { data, error } = await supabase.functions.invoke('geocode', {
+      body: {
+        logradouro,
+        numero: numero ?? null,
+        bairro: params.bairro ?? null,
+        cidade,
+        estado,
+        cep: cep ?? null,
+      },
+    });
+    if (!error && data && typeof data.latitude === 'number' && typeof data.longitude === 'number') {
+      return {
+        latitude: data.latitude,
+        longitude: data.longitude,
+        approximate: data.approximate === true,
+      };
+    }
+  } catch (err) {
+    console.warn('[geocode] edge function indisponível, usando Nominatim local:', err);
+  }
+
+  // Fallback local (Nominatim direto do app) — só quando a Edge Function não
+  // respondeu. Normaliza o número e tenta busca estruturada, depois livre.
   const numTrim = (numero ?? '').trim();
   const numClean = /^s\/?n$/i.test(numTrim) ? '' : (numTrim.match(/\d+/)?.[0] ?? '');
-
   try {
     const qs = new URLSearchParams({
       street: [numClean, logradouro].filter(Boolean).join(' '),
@@ -158,11 +186,9 @@ export async function geocodeStructured(params: {
       };
     }
   } catch (err) {
-    // Estruturada falhou tecnicamente — tenta o fallback livre antes de desistir.
     if (err instanceof GeocodingError && err.kind === 'rate_limit') throw err;
   }
 
-  // Fallback: busca livre com endereço montado.
   const line1 = [logradouro, numClean].filter(Boolean).join(', ');
   const freeQuery = [line1, params.bairro, cidade, estado, cep, 'Brasil'].filter(Boolean).join(', ');
   return geocodeAddress(freeQuery);
