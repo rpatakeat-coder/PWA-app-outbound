@@ -136,6 +136,20 @@ const TASK_RULES: TaskRuleDoc[] = [
     timing:
       'O tempo é contado a partir da entrada na etapa (histórico de mudança de etapa). Sem histórico, conta a partir de quando a funcionalidade foi ativada (08/07/2026) — não de datas antigas — pra não gerar tarefas retroativas.',
   },
+  {
+    code: 'sla_etapa',
+    title: 'SLA por etapa (prazo no funil)',
+    trigger: 'Lead parado numa etapa do funil por mais dias que o SLA daquela etapa, sem avançar.',
+    levels: [
+      { badge: 'Xd', color: '#2563eb', when: 'o número no badge = dias que o lead está parado na etapa' },
+    ],
+    suppress:
+      'Cada etapa tem um prazo (SLA) próprio configurável. Prazos iniciais: Prospecção 3d (Qualificar), Demo/Proposta 3d (Enviar proposta), Negociação 5d (Fechar), Aguardando Pagamento 3d (Confirmar pagamento).',
+    autoResolve:
+      'A tarefa some sozinha quando o lead avança de etapa (ou deixa de ser lead). O objetivo é medir cumprimento de prazo por etapa.',
+    timing:
+      'Contado a partir da entrada na etapa (histórico). A geração roda automaticamente a cada 30 minutos no servidor — não depende de abrir o app.',
+  },
 ];
 
 // Limpa e normaliza telefone pra wa.me. Aceita "(27) 99618-3875" / "27996183875"
@@ -2252,7 +2266,7 @@ function MainApp() {
       return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
 
-    const sevColor = (s: string | null) => (s === 'D5' ? '#dc2626' : s === 'D2' ? '#f59e0b' : '#64748b');
+    const sevColor = (s: string | null) => (s === 'D5' ? '#dc2626' : s === 'D2' ? '#f59e0b' : s === 'SLA' ? '#2563eb' : '#64748b');
 
     return (
       <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
@@ -2286,17 +2300,22 @@ function MainApp() {
           const client = clients.find((c) => c.id === task.client_id) ?? null;
           const title = client ? getClientPrimaryName(client) : 'Lead não encontrado';
           const days = (task.meta as any)?.days_in_stage;
+          const etapaMeta = (task.meta as any)?.etapa as string | undefined;
           const responsavel = task.vendedor_id_hubspot ? vendorLabel(task.vendedor_id_hubspot) : null;
+          // Badge: D2/D5 mostram como estao; SLA mostra os dias na etapa (ex "3d").
+          const badgeText = task.severity === 'SLA'
+            ? (typeof days === 'number' ? `${days}d` : 'SLA')
+            : (task.severity ?? '•');
           return (
             <View key={task.id} style={styles.taskItem}>
               <View style={[styles.taskSeverity, { backgroundColor: sevColor(task.severity) }]}>
-                <Text style={styles.taskSeverityText}>{task.severity ?? '•'}</Text>
+                <Text style={styles.taskSeverityText}>{badgeText}</Text>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.taskTitle}>{task.title}</Text>
                 <Text style={styles.taskClient}>{title}</Text>
                 {typeof days === 'number' ? (
-                  <Text style={styles.taskMeta}>{days} dia(s) em Qualificação</Text>
+                  <Text style={styles.taskMeta}>{days} dia(s) em {etapaMeta ?? 'etapa'}</Text>
                 ) : null}
                 {responsavel ? <Text style={styles.taskMeta}>Responsável: {responsavel}</Text> : null}
 

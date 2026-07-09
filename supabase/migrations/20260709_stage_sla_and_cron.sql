@@ -1,0 +1,23 @@
+-- ============================================================================
+-- Tarefas por SLA de etapa + cron de geracao.
+--
+-- 1) Tabela stage_sla: prazo (dias) por etapa do funil. Editavel por admin.
+-- 2) generate_client_tasks() generalizado: alem do agendar_demo especial
+--    (Qualificacao + sem reuniao, D2/D5), gera tarefa por SLA pra cada etapa
+--    com prazo — quando o lead esta na etapa ha >= sla_days. Auto-resolve
+--    quando o lead avanca de etapa ou deixa de ser lead.
+-- 3) pg_cron: roda generate_client_tasks() a cada 30 min (nao depende do app).
+--
+-- O SQL completo (tabela, seeds e corpo da funcao) foi aplicado via
+-- apply_migration 'stage_sla_config' e 'generate_client_tasks_sla', e o cron
+-- via cron.schedule('generate_client_tasks_30min', '*/30 * * * *', ...), em
+-- 2026-07-09. Este arquivo documenta a versao; recriar a partir do banco com
+-- pg_get_functiondef se necessario.
+--
+-- SLAs iniciais (ajustaveis em stage_sla):
+--   Prospeccao (PAP)      3d  -> Qualificar lead
+--   Qualificacao          2d  -> Agendar Demo (regra especial agendar_demo)
+--   Demo/Proposta         3d  -> Enviar proposta
+--   Negociacao            5d  -> Fechar negociacao
+--   Aguardando Pagamento  3d  -> Confirmar pagamento
+-- ============================================================================
