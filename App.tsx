@@ -2887,7 +2887,17 @@ function MainApp() {
             showsUserLocation={true}
             followsUserLocation={isFollowingUser && !creationMode}
             onPanDrag={handleMapInteraction}
+            // Atualiza o preview de coords continuamente enquanto arrasta...
             onRegionChange={(region) => {
+              if (creationMode) {
+                setCreationCenter({ latitude: region.latitude, longitude: region.longitude });
+              }
+            }}
+            // ...mas o valor DEFINITIVO e' o do assentamento final (Complete).
+            // onRegionChange sozinho pode deixar um valor intermediario se o
+            // usuario confirmar logo apos soltar — Complete garante a posicao
+            // exata onde o mapa parou (a que o pin fixo esta apontando).
+            onRegionChangeComplete={(region) => {
               if (creationMode) {
                 setCreationCenter({ latitude: region.latitude, longitude: region.longitude });
               }
@@ -2954,18 +2964,28 @@ function MainApp() {
             )}
           </MapView>
 
-          {/* Pin overlay fixo no centro da tela durante creationMode */}
+          {/* Pin overlay fixo no centro da tela durante creationMode. O pin
+              (com translateY) fica com a PONTA no centro geometrico; o dot
+              marca exatamente esse centro pra nao restar duvida de onde a
+              coordenada sera salva (era a causa do "pin ficou noutro lugar":
+              o usuario mirava pelo corpo do pin, mas a coord e' a da ponta). */}
           {creationMode && (
-            <View pointerEvents="none" style={styles.creationPinOverlay}>
-              <View style={[markerStyles.pin, { backgroundColor: '#dc2626' }]}>
-                <Image
-                  source={require('./assets/icon.png')}
-                  style={markerStyles.logo}
-                  fadeDuration={0}
-                />
+            <>
+              <View pointerEvents="none" style={styles.creationPinOverlay}>
+                <View style={[markerStyles.pin, { backgroundColor: '#dc2626' }]}>
+                  <Image
+                    source={require('./assets/icon.png')}
+                    style={markerStyles.logo}
+                    fadeDuration={0}
+                  />
+                </View>
+                <View style={[markerStyles.arrow, { borderTopColor: '#dc2626' }]} />
               </View>
-              <View style={[markerStyles.arrow, { borderTopColor: '#dc2626' }]} />
-            </View>
+              {/* Dot no centro EXATO (onde a coordenada e' capturada). */}
+              <View pointerEvents="none" style={styles.creationCenterDot}>
+                <View style={styles.creationCenterDotInner} />
+              </View>
+            </>
           )}
 
           {/* Map buttons */}
@@ -5158,6 +5178,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     // Compensa o "rabicho" do pin pra ponta tocar exatamente o centro
     transform: [{ translateY: -22 }],
+  },
+  // Marca o centro geometrico exato do mapa — o ponto que vira a coordenada.
+  creationCenterDot: {
+    position: 'absolute',
+    left: 0, right: 0, top: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  creationCenterDotInner: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: '#dc2626',
+    borderWidth: 2, borderColor: '#fff',
   },
   creationBar: {
     position: 'absolute',

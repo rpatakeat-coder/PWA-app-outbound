@@ -48,6 +48,7 @@ export interface SellerMetrics {
   follow_ups_scheduled: number;
   stage_changes: number;
   notes_created: number;
+  won_in_period: number; // clientes que fecharam no periodo (won_at)
 }
 
 export interface GlobalMetrics {
@@ -62,6 +63,7 @@ export interface GlobalMetrics {
   follow_ups_in_period: number;
   stage_changes_in_period: number;
   notes_in_period: number;
+  won_in_period: number; // clientes que fecharam no periodo (won_at)
 }
 
 export type GlobalMetricKey =
@@ -147,6 +149,7 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
         follow_ups_in_period: raw.global?.follow_ups_in_period ?? 0,
         stage_changes_in_period: raw.global?.stage_changes_in_period ?? 0,
         notes_in_period: raw.global?.notes_in_period ?? 0,
+        won_in_period: raw.global?.won_in_period ?? 0,
       };
 
       const sellers: SellerMetrics[] = ((raw.sellers ?? []) as any[])
@@ -164,6 +167,7 @@ export function useGestorMetrics(period: GestorPeriod, enabled: boolean) {
           follow_ups_scheduled: s.follow_ups_scheduled ?? 0,
           stage_changes: s.stage_changes ?? 0,
           notes_created: s.notes_created ?? 0,
+          won_in_period: s.won_in_period ?? 0,
         }))
         .filter((s) => !isHiddenSeller(s))
         .sort((a, b) => {
