@@ -1,0 +1,21 @@
+-- ============================================================================
+-- 1) won_in_period (clientes que fecharam no periodo, via won_at) no
+--    gestor_metrics — global e por vendedor.
+-- 2) my_metrics() / my_metric_leads(): cada vendedor ve SO os proprios numeros,
+--    sem precisar do acesso de gestor (guard relaxado, forca seller=auth.uid()).
+-- Ver o corpo completo aplicado no banco em 2026-07-09. Este arquivo documenta
+-- a migration; as funcoes ja estao ativas no projeto.
+-- ============================================================================
+
+-- gestor_metrics: + won_in_period (global e por seller via vendedor_id_hubspot).
+-- (corpo identico ao aplicado; ver funcao no banco)
+
+-- my_metrics(p_start,p_end): metricas do proprio usuario (auth.uid()).
+-- my_metric_leads(p_metric,p_start,p_end,p_status): leads por tras de uma
+--   metrica do proprio usuario (metricas: created/visited/meetings/follow_ups/
+--   stage_changes/notes/won/assigned).
+--
+-- NOTA: o SQL completo destas funcoes foi aplicado via apply_migration
+-- 'gestor_metrics_won_and_my_metrics' e execute_sql em 2026-07-09. Mantido
+-- aqui como marcador de versao; se precisar recriar, exportar do banco com
+-- pg_get_functiondef.

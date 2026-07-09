@@ -232,3 +232,76 @@ export function useMetricLeads(params: MetricLeadsParams | null, enabled: boolea
     },
   });
 }
+
+// ============================================================================
+// "Meu desempenho" — metricas do PROPRIO usuario, acessivel a qualquer
+// vendedor (nao precisa ser gestor). Reusa o shape de SellerMetrics.
+// ============================================================================
+export function useMyMetrics(period: GestorPeriod, enabled: boolean) {
+  return useQuery<SellerMetrics>({
+    queryKey: [
+      'my-metrics',
+      period.preset,
+      period.preset === 'custom' ? period.startISO ?? null : null,
+      period.preset === 'custom' ? period.endISO ?? null : null,
+    ],
+    enabled,
+    staleTime: 60 * 1000,
+    queryFn: async () => {
+      const { start, end } = periodRange(period);
+      const { data, error } = await supabase.rpc('my_metrics', { p_start: start, p_end: end });
+      if (error) throw error;
+      const s = (data ?? {}) as any;
+      return {
+        seller_id: s.seller_id,
+        full_name: null,
+        email: null,
+        id_hubspot: null,
+        sector: null,
+        leads_assigned: s.leads_assigned ?? 0,
+        status_breakdown: (s.status_breakdown ?? {}) as Record<string, number>,
+        created: s.created ?? 0,
+        visited: s.visited ?? 0,
+        meetings_scheduled: s.meetings_scheduled ?? 0,
+        follow_ups_scheduled: s.follow_ups_scheduled ?? 0,
+        stage_changes: s.stage_changes ?? 0,
+        notes_created: s.notes_created ?? 0,
+        won_in_period: s.won_in_period ?? 0,
+      };
+    },
+  });
+}
+
+// Leads por tras de uma metrica do proprio usuario (modais do Meu desempenho).
+export type MyMetricLeadsParams = {
+  metric: 'created' | 'visited' | 'meetings' | 'follow_ups' | 'stage_changes' | 'notes' | 'won' | 'assigned';
+  period: GestorPeriod;
+  status?: string | null;
+};
+
+export function useMyMetricLeads(params: MyMetricLeadsParams | null, enabled: boolean) {
+  return useQuery<MetricLead[]>({
+    queryKey: [
+      'my-metric-leads',
+      params?.metric,
+      params?.period.preset ?? null,
+      params?.period.preset === 'custom' ? params.period.startISO ?? null : null,
+      params?.period.preset === 'custom' ? params.period.endISO ?? null : null,
+      params?.status ?? null,
+    ],
+    enabled: enabled && !!params,
+    staleTime: 60 * 1000,
+    queryFn: async () => {
+      if (!params) return [];
+      const range = periodRange(params.period);
+      const { data, error } = await supabase.rpc('my_metric_leads', {
+        p_metric: params.metric,
+        p_start: range.start,
+        p_end: range.end,
+        p_status: params.status ?? null,
+      });
+      if (error) throw error;
+      return (data ?? []) as MetricLead[];
+    },
+  });
+}

@@ -47,6 +47,7 @@ import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { ChangeStageModal } from './src/screens/ChangeStageModal';
 import { GestorScreen } from './src/screens/GestorScreen';
+import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
 import { reverseGeocode } from './src/utils/geocoding';
 import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingProvider } from './src/utils/routing';
 
@@ -102,7 +103,7 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
   { value: 'ex_cliente', label: 'Ex-cliente', color: '#ef4444' },
 ];
 
-type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'tasks' | 'gestor';
+type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'tasks' | 'gestor' | 'meu';
 
 // Documentacao das regras de geracao automatica de tarefas (motor
 // generate_client_tasks no Supabase). Isto e' so a explicacao mostrada no
@@ -465,7 +466,7 @@ function MainApp() {
   // Mesma protecao pra aba gestor: so admin pode ver, qualquer outro perfil
   // que caia ali (state preservado) volta pro mapa.
   useEffect(() => {
-    if (isViewer && (tab === 'route' || tab === 'agenda' || tab === 'tasks')) {
+    if (isViewer && (tab === 'route' || tab === 'agenda' || tab === 'tasks' || tab === 'meu')) {
       setTab('map');
     }
     if (!canViewGestor && tab === 'gestor') {
@@ -3086,6 +3087,8 @@ function MainApp() {
         renderTasksScreen()
       ) : tab === 'gestor' ? (
         <GestorScreen enabled={canViewGestor && tab === 'gestor'} />
+      ) : tab === 'meu' ? (
+        <MeuDesempenhoScreen enabled={tab === 'meu'} />
       ) : (
         renderAgendaScreen()
       )}
@@ -3142,13 +3145,22 @@ function MainApp() {
             </TouchableOpacity>
           </>
         )}
-        {canViewGestor && (
+        {canViewGestor ? (
           <TouchableOpacity
             style={[styles.navItem, tab === 'gestor' && styles.navItemActive]}
             onPress={() => setTab('gestor')}
           >
             <Text style={[styles.navIcon, tab === 'gestor' && styles.navIconActive]}>📊</Text>
             <Text style={[styles.navItemText, tab === 'gestor' && styles.navItemTextActive]}>Gestor</Text>
+          </TouchableOpacity>
+        ) : !isViewer && (
+          // Vendedor comum (nao-gestor, nao-viewer): ve so o proprio desempenho.
+          <TouchableOpacity
+            style={[styles.navItem, tab === 'meu' && styles.navItemActive]}
+            onPress={() => setTab('meu')}
+          >
+            <Text style={[styles.navIcon, tab === 'meu' && styles.navIconActive]}>📊</Text>
+            <Text style={[styles.navItemText, tab === 'meu' && styles.navItemTextActive]}>Meu</Text>
           </TouchableOpacity>
         )}
         <Text
