@@ -15,13 +15,18 @@ import {
 } from 'react-native';
 import type { Client } from '../types/client';
 import {
-  STAGES,
   CHANGE_STAGE_WEBHOOK,
+  WON_STAGE_IDS,
+  FUNNEL_STAGE_IDS,
+  LOST_STAGE_ID,
+  APP_STAGE_IDS,
   type Stage,
   type StageSubField,
 } from '../constants/stages';
+import { useStages } from '../hooks/useStages';
 import { useStagePropertyOptions } from '../hooks/useStagePropertyOptions';
 import { useClientStageChanges } from '../hooks/useClientStageChanges';
+import { supabase } from '../integrations/supabase/client';
 
 interface Props {
   client: Client;
@@ -382,6 +387,9 @@ export function ChangeStageModal({ client, onClose }: Props) {
   const [subValuesMulti, setSubValuesMulti] = useState<Record<string, string[]>>({});
   const [submitting, setSubmitting] = useState(false);
 
+  // Etapas do HubSpot (get_stages), com fallback pro cache/STAGES hardcoded.
+  const { stages: allStages } = useStages(true);
+
   // Source of truth das opções: tabela stage_property_options no Supabase.
   // O hardcoded em STAGES é fallback enquanto a query carrega ou se falhar.
   const { data: groupedOptions } = useStagePropertyOptions();
@@ -391,12 +399,39 @@ export function ChangeStageModal({ client, onClose }: Props) {
   // falhar (RLS, tabela ausente etc.) so logamos: a sincronia ja passou.
   const { recordChange } = useClientStageChanges(client.id);
 
-  // Filtra etapas pelo gate. Se a etapa tem gateEtapa definido, so aparece
-  // quando client.etapa esta na lista. Sem gateEtapa = aparece pra todos.
-  const visibleStages = STAGES.filter((s) => {
-    if (!s.gateEtapa || s.gateEtapa.length === 0) return true;
-    return s.gateEtapa.includes(client.etapa ?? '');
-  });
+  // ===== Regra de progressao: avancar 1 etapa por vez (so no funil do app) =====
+  // O HubSpot tem muitas etapas (funil + laterais/origem). Pelo app o vendedor
+  // SO move dentro do funil comercial (FUNNEL_STAGE_IDS) + Negocio Perdido. As
+  // laterais nao aparecem como destino. Se o lead JA estiver numa lateral (foi
+  // movido pelo HubSpot), o app reconhece a etapa atual e libera a reentrada
+  // pela 1a etapa do funil.
+  //
+  // Indexa as etapas carregadas por id/label pra resolver a etapa atual do lead
+  // (client.etapa e' LABEL) e montar os cards a partir do funil.
+  const stageById = new Map(allStages.map((s) => [s.id, s]));
+  const idByLabel = new Map(allStages.map((s) => [s.label, s.id]));
+  const currentStageId = client.etapa ? idByLabel.get(client.etapa) ?? null : null;
+
+  // Posicao da etapa atual DENTRO do funil (-1 se lead sem etapa ou em lateral).
+  const currentFunnelIdx = currentStageId ? FUNNEL_STAGE_IDS.indexOf(currentStageId) : -1;
+
+  // Proximo avanco no funil:
+  //  - lead no funil na posicao i  -> proxima e' i+1
+  //  - lead sem etapa OU em etapa lateral -> reentra pela 1a etapa do funil (0)
+  const nextFunnelId =
+    currentFunnelIdx >= 0
+      ? FUNNEL_STAGE_IDS[currentFunnelIdx + 1] ?? null
+      : FUNNEL_STAGE_IDS[0];
+
+  // Monta a lista de destinos: a proxima do funil + Negocio Perdido (sempre).
+  // So inclui ids que o app aceita (APP_STAGE_IDS) e que existem no get_stages.
+  // Usa o Stage vindo do HubSpot (label/cor/ordem atuais) com os campos do app.
+  const destinationIds = [nextFunnelId, LOST_STAGE_ID].filter(
+    (id): id is string => !!id && APP_STAGE_IDS.includes(id) && id !== currentStageId,
+  );
+  const visibleStages: Stage[] = destinationIds
+    .map((id) => stageById.get(id))
+    .filter((s): s is Stage => !!s);
 
   const selectedStage: Stage | null =
     visibleStages.find((s) => s.id === selectedStageId) ?? null;
@@ -552,6 +587,19 @@ export function ChangeStageModal({ client, onClose }: Props) {
         });
       } catch (err) {
         console.warn('Falhou ao registrar mudanca de etapa no historico', err);
+      }
+
+      // Carimbo de fechamento: se a etapa nova e' uma das WON (Negocio Fechado
+      // OU Enviado Onboarding), marca won_at UMA UNICA VEZ. O update so aplica
+      // quando won_at ainda e' NULL, entao o lead passar pelas duas etapas nao
+      // recarimba (conta como 1 fechamento). Falha aqui nao bloqueia — a
+      // mudanca de etapa ja foi.
+      if (WON_STAGE_IDS.includes(selectedStage.id)) {
+        try {
+          await supabase.rpc('stamp_won_at', { p_client_id: client.id });
+        } catch (err) {
+          console.warn('Falhou ao carimbar won_at', err);
+        }
       }
 
       Alert.alert(

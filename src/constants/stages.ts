@@ -74,7 +74,70 @@ export type Stage = {
   // estiver nesta lista. Ex.: ENVIADO PARA ONBOARDING so libera quando
   // o lead esta em NEGOCIO FECHADO.
   gateEtapa?: string[];
+  // Ordem canonica de progressao no funil, vinda do displayOrder do HubSpot.
+  // Quando as etapas vem do get_stages, este campo define "1 etapa por vez".
+  displayOrder?: number;
+  // true quando a etapa e' de fechamento/saida (probability 0.0 ou 1.0 no
+  // HubSpot). Etapas com probability 0.0 (perdido) ficam sempre disponiveis.
+  isClosed?: boolean;
+  // Probabilidade do HubSpot (0.0 = perdido, 1.0 = ganho). String como vem
+  // no metadata; usada pra distinguir "perdido" (sempre visivel) de "ganho".
+  probability?: string | null;
 };
+
+// ===== Etapas dinamicas do HubSpot (get_stages) =====
+// Formato cru retornado pelo endpoint /crm/v3/pipelines/deals/{id}/stages,
+// repassado pelo webhook do app com type=get_stages.
+export type HubSpotStageRaw = {
+  id: string;
+  label: string;
+  displayOrder: number;
+  archived?: boolean;
+  metadata?: {
+    // Deals trazem probability ("0.0".."1.0"); "0.0" = perdido, "1.0" = ganho.
+    probability?: string;
+    isClosed?: string | boolean;
+    [k: string]: unknown;
+  };
+};
+
+// IDs das etapas que contam como "fechou/pagou" (o lead passou de lead pra
+// cliente). O lead passa pelas DUAS, mas so' conta 1 vez (carimba won_at uma
+// unica vez). Fornecidos pelo usuario a partir do pipeline 118032977.
+export const WON_STAGE_IDS = ['209405292', '1090779812'];
+
+// ===== Funil que o APP controla =====
+// O pipeline do HubSpot tem MUITAS etapas (funil + laterais/origem como ADS,
+// CASA DOS DADOS, PROSPECT, VISITADOS, RECICLAGEM etc.). Pelo app o vendedor
+// SO pode mover o lead dentro do funil comercial abaixo — as laterais nao sao
+// destino de mudanca de etapa (essas so' mudam pelo HubSpot).
+//
+// FUNNEL_STAGE_IDS: sequencia de progressao (avancar 1 por vez). A ordem aqui
+// e' a ordem canonica do funil, independente do displayOrder do HubSpot (que
+// mistura laterais no meio). Enviado Onboarding e' o fim do funil ganho.
+export const FUNNEL_STAGE_IDS = [
+  '1319906944', // PROSPECÇÃO (PAP)
+  '209405287',  // QUALIFICAÇÃO
+  '209405288',  // DEMO/PROPOSTA
+  '209405289',  // NEGOCIAÇÃO
+  '1090779811', // AGUARDANDO PAGAMENTO
+  '209405292',  // NEGÓCIO FECHADO
+  '1090779812', // ENVIADO ONBOARDING
+];
+
+// Saida sempre disponivel como destino no app (a qualquer momento do funil).
+export const LOST_STAGE_ID = '209405293'; // NEGÓCIO PERDIDO
+
+// Todos os IDs que o app aceita como DESTINO de mudanca (funil + perdido).
+// Qualquer etapa fora disso (laterais/origem) nao aparece como opcao no modal.
+export const APP_STAGE_IDS = [...FUNNEL_STAGE_IDS, LOST_STAGE_ID];
+
+// Paleta ciclica pra colorir etapas novas do HubSpot que nao tem cor propria
+// no mapa hardcoded. Mantem o visual consistente sem precisar cor por etapa.
+export const STAGE_PALETTE = [
+  '#3b82f6', '#8b5cf6', '#f59e0b', '#f97316', '#ef4444',
+  '#0ea5e9', '#10b981', '#a855f7', '#14b8a6', '#eab308',
+];
 
 export const STAGES: Stage[] = [
   {
@@ -224,14 +287,15 @@ export const STAGES: Stage[] = [
       },
     ],
   },
+  // NEGÓCIO FECHADO (id real do HubSpot). Etapa de fechamento-ganho; sem
+  // sub-campos proprios. Existe no fallback pra o funil ficar completo mesmo
+  // sem o get_stages ter carregado.
+  { id: '209405292', label: 'NEGÓCIO FECHADO', color: '#16a34a' },
   {
-    // Stage HubSpot id pendente — substituir pelo id real quando configurar
-    // no pipeline. Usa placeholder enquanto isso pra nao quebrar o tipo.
-    id: 'enviado_para_onboarding',
-    label: 'ENVIADO PARA ONBOARDING',
+    // ENVIADO ONBOARDING — id real do HubSpot (era placeholder antes).
+    id: '1090779812',
+    label: 'ENVIADO ONBOARDING',
     color: '#10b981',
-    // So aparece como opcao quando o lead esta em NEGOCIO FECHADO.
-    gateEtapa: ['NEGÓCIO FECHADO'],
     subFields: [
       {
         field: 'estrutura_do_cliente',
@@ -325,5 +389,42 @@ export const STAGES: Stage[] = [
 ];
 
 // Mesma URL usada nos webhooks de cadastro manual e marcar como visitado.
-// O type distingue o caso. Aqui: type=change_stage.
+// O type distingue o caso. Aqui: type=change_stage; tambem get_stages.
 export const CHANGE_STAGE_WEBHOOK = 'https://webhook.takeat.cloud/webhook/0975e1c9-2d09-42f7-b236-78c7818c0c0d';
+
+// ===== Mapas derivados por ID (fonte: STAGES hardcoded acima) =====
+// Quando as etapas passam a vir do get_stages, o HubSpot devolve so id/label/
+// ordem — NAO os campos obrigatorios (gargalo, mrr, etc.). Esses continuam no
+// app, indexados pelo ID do stage. Etapa nova sem entrada aqui aparece sem
+// sub-campos. Cor idem: se o HubSpot trouxer etapa sem cor conhecida, o
+// consumidor usa STAGE_PALETTE ciclica.
+export const STAGE_FIELDS_BY_ID: Record<string, StageSubField[]> = Object.fromEntries(
+  STAGES.filter((s) => s.subFields && s.subFields.length > 0).map((s) => [s.id, s.subFields!]),
+);
+
+export const STAGE_COLOR_BY_ID: Record<string, string> = Object.fromEntries(
+  STAGES.map((s) => [s.id, s.color]),
+);
+
+// Combina uma etapa crua do HubSpot (get_stages) com os campos/cor do app,
+// produzindo um Stage completo pronto pro modal. cycleIndex escolhe uma cor
+// da paleta quando a etapa nao tem cor conhecida por ID.
+export function hubspotStageToStage(raw: HubSpotStageRaw, cycleIndex: number): Stage {
+  const probability = raw.metadata?.probability ?? null;
+  // isClosed: probability 0.0 (perdido) ou 1.0 (ganho) — ambos "fecham" o deal.
+  const prob = probability != null ? Number(probability) : null;
+  const isClosed =
+    raw.metadata?.isClosed === true ||
+    raw.metadata?.isClosed === 'true' ||
+    prob === 0 ||
+    prob === 1;
+  return {
+    id: raw.id,
+    label: raw.label,
+    color: STAGE_COLOR_BY_ID[raw.id] ?? STAGE_PALETTE[cycleIndex % STAGE_PALETTE.length],
+    subFields: STAGE_FIELDS_BY_ID[raw.id],
+    displayOrder: raw.displayOrder,
+    isClosed,
+    probability,
+  };
+}

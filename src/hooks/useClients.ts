@@ -158,6 +158,9 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              // Antes o cadastro nao mandava type (o n8n tratava "sem type"
+              // como criar deal). Agora identifica explicitamente com create_pin.
+              type: 'create_pin',
               bairro: client.bairro,
               celular: client.telefone,
               cep: client.cep,
