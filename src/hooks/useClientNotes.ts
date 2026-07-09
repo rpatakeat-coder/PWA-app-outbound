@@ -3,6 +3,10 @@ import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import type { ClientNote } from '../types/client';
 
+// Mesma URL dos demais webhooks outbound. type=create_note leva a nota do app
+// pra timeline/engagements do lead no HubSpot (via n8n).
+const WEBHOOK_URL = 'https://webhook.takeat.cloud/webhook/0975e1c9-2d09-42f7-b236-78c7818c0c0d';
+
 // Postgres code 42P01 = relation does not exist. Antes da migration 20260617
 // rodar, a tabela client_notes nao existe — tratamos como "sem notas" pra
 // nao quebrar o bottom sheet em prod nesse intervalo.
@@ -54,7 +58,42 @@ export function useClientNotes(clientId: string | null | undefined) {
         .select()
         .single();
       if (error) throw error;
-      return data as ClientNote;
+      const note = data as ClientNote;
+
+      // Sincroniza a nota com o HubSpot (timeline/engagements do lead). Roda em
+      // background — o insert local ja sucedeu; se o webhook falhar, so loga.
+      // Precisa do id_hubspot do cliente pra o n8n achar o deld la.
+      (async () => {
+        try {
+          const { data: c } = await supabase
+            .from('clients')
+            .select('id_hubspot, nome, empresa')
+            .eq('id', clientId)
+            .single();
+          if (!c?.id_hubspot) return; // sem id_hubspot, nao ha como casar no HubSpot
+          fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'create_note',
+              note_id: note.id,
+              lead_id: clientId,
+              id_hubspot: c.id_hubspot,
+              lead_nome: c.nome,
+              lead_empresa: c.empresa,
+              body: note.body,
+              autor_nome: note.created_by_name,
+              autor_email: note.created_by_email,
+              autor_uid: user.id,
+              criado_em: note.created_at,
+            }),
+          }).catch((err) => console.warn('[WEBHOOK] create_note falhou:', err));
+        } catch (err) {
+          console.warn('[WEBHOOK] create_note lookup falhou:', err);
+        }
+      })();
+
+      return note;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_notes', clientId] }),
   });

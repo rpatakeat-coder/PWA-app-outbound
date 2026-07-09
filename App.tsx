@@ -397,6 +397,15 @@ function MainApp() {
   const [locationPermission, setLocationPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
   const [routeDate] = useState(todayKey());
   const [routeDraft, setRouteDraft] = useState<Client[]>([]);
+  // Ponto de partida customizado da rota. null = usa o GPS (comportamento
+  // padrao). Quando definido (o vendedor escolheu um cliente/local como base),
+  // a rota parte dele em vez da localizacao atual. Guarda coords + um rotulo
+  // pra UI mostrar de onde a rota vai partir.
+  const [routeStartOverride, setRouteStartOverride] = useState<
+    { latitude: number; longitude: number; label: string } | null
+  >(null);
+  // Controla o modal de escolha do ponto de partida (lista de clientes).
+  const [isPickingRouteStart, setIsPickingRouteStart] = useState(false);
   const [routeLeadCount, setRouteLeadCount] = useState('8');
   // Status que entram no pool de sugestao. Default: leads que ainda precisam
   // ser visitados (caso de uso principal outbound). Multi-select substitui
@@ -888,11 +897,14 @@ function MainApp() {
     const desired = Math.max(1, Math.min(30, Math.floor(requestedRaw)));
     const capped = Math.floor(requestedRaw) > 30;
 
-    const base = userLocation ?? (
-      filteredWithCoords[0]?.latitude != null && filteredWithCoords[0]?.longitude != null
-        ? { latitude: filteredWithCoords[0].latitude, longitude: filteredWithCoords[0].longitude }
-        : null
-    );
+    // Prioridade da base: override escolhido pelo vendedor > GPS > 1o lead.
+    const base = routeStartOverride
+      ? { latitude: routeStartOverride.latitude, longitude: routeStartOverride.longitude }
+      : userLocation ?? (
+          filteredWithCoords[0]?.latitude != null && filteredWithCoords[0]?.longitude != null
+            ? { latitude: filteredWithCoords[0].latitude, longitude: filteredWithCoords[0].longitude }
+            : null
+        );
     if (!base) {
       Alert.alert('Sem base de rota', 'Ative a localizacao ou mantenha leads com coordenadas carregados para sugerir a rota.');
       return;
@@ -1084,7 +1096,7 @@ function MainApp() {
       },
       onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
     });
-  }, [clients, fieldOps.saveRoute, filteredWithCoords, routeDate, routeLeadCount, routeVendorFilterHubspotId, routeStatusSelection, routeStopClientIds, userLocation, vendorById]);
+  }, [clients, fieldOps.saveRoute, filteredWithCoords, routeDate, routeLeadCount, routeVendorFilterHubspotId, routeStatusSelection, routeStopClientIds, userLocation, routeStartOverride, vendorById]);
 
   const saveManualRoute = useCallback((draft = routeDraft) => {
     if (draft.length === 0) {
@@ -1877,6 +1889,29 @@ function MainApp() {
           placeholder="Ex.: 8"
           placeholderTextColor="#94a3b8"
         />
+
+        {/* Ponto de partida da rota. Default: minha localizacao (GPS). O
+            vendedor pode escolher partir de um cliente especifico (ex.: comeca
+            o dia de um ponto que nao e' onde ele esta agora). */}
+        <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Ponto de partida</Text>
+        <View style={styles.routeStartRow}>
+          <TouchableOpacity
+            style={[styles.routeStartOption, !routeStartOverride && styles.routeStartOptionActive]}
+            onPress={() => setRouteStartOverride(null)}
+          >
+            <Text style={[styles.routeStartText, !routeStartOverride && styles.routeStartTextActive]}>
+              📍 Minha localização
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.routeStartOption, !!routeStartOverride && styles.routeStartOptionActive]}
+            onPress={() => setIsPickingRouteStart(true)}
+          >
+            <Text style={[styles.routeStartText, !!routeStartOverride && styles.routeStartTextActive]} numberOfLines={1}>
+              {routeStartOverride ? `🎯 ${routeStartOverride.label}` : '🎯 Escolher local'}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         <Text style={[styles.fieldLabel, { marginTop: 12 }]}>
           Status incluidos ({routeStatusSelection.size} selecionado{routeStatusSelection.size === 1 ? '' : 's'})
@@ -3104,6 +3139,78 @@ function MainApp() {
         </Text>
       </View>
 
+      {/* Modal: escolher ponto de partida da rota (um cliente como base) */}
+      <Modal
+        visible={isPickingRouteStart}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsPickingRouteStart(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.taskRulesCard, { maxHeight: '80%' }]}>
+            <View style={styles.taskRulesHeader}>
+              <Text style={styles.taskRulesTitle}>Partir de qual local?</Text>
+              <TouchableOpacity
+                style={styles.taskRulesClose}
+                onPress={() => setIsPickingRouteStart(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.taskRulesCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.taskRulesIntro}>
+              A rota vai começar deste ponto em vez da sua localização atual.
+              Escolha um cliente/lead como ponto de partida.
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={routeManualSearch}
+              onChangeText={setRouteManualSearch}
+              placeholder="Buscar por nome ou empresa..."
+              placeholderTextColor="#94a3b8"
+            />
+            <ScrollView style={{ maxHeight: 380 }} keyboardShouldPersistTaps="handled">
+              {(() => {
+                const term = routeManualSearch
+                  .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+                const candidates = clients
+                  .filter((c) => c.latitude != null && c.longitude != null)
+                  .filter((c) => {
+                    if (!term) return true;
+                    const hay = `${c.nome ?? ''} ${c.empresa ?? ''} ${c.cidade ?? ''}`
+                      .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+                    return hay.includes(term);
+                  })
+                  .slice(0, 40);
+                if (candidates.length === 0) {
+                  return <Text style={styles.meetingsEmpty}>Nenhum cliente com localização encontrado.</Text>;
+                }
+                return candidates.map((c) => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={styles.routeStartPick}
+                    onPress={() => {
+                      setRouteStartOverride({
+                        latitude: c.latitude as number,
+                        longitude: c.longitude as number,
+                        label: getClientPrimaryName(c),
+                      });
+                      setIsPickingRouteStart(false);
+                      setRouteManualSearch('');
+                    }}
+                  >
+                    <Text style={styles.routeStartPickName} numberOfLines={1}>{getClientPrimaryName(c)}</Text>
+                    <Text style={styles.routeStartPickMeta} numberOfLines={1}>
+                      {[c.cidade, c.estado].filter(Boolean).join(' • ') || 'Sem cidade'}
+                    </Text>
+                  </TouchableOpacity>
+                ));
+              })()}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Modal: Regras de geração automática de tarefas */}
       <Modal
         visible={isTaskRulesOpen}
@@ -3952,21 +4059,29 @@ function ClientBottomSheet({
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingBody, setEditingBody] = useState('');
 
-  // Timeline unificada: notas + mudancas de etapa, mais recentes primeiro.
-  // Cada entrada carrega kind pra UI decidir como renderizar (com botoes de
-  // editar/apagar nas notas; somente leitura nas mudancas de etapa).
+  // Timeline unificada: notas + mudancas de etapa + reunioes/follow-ups +
+  // visita (check-in), mais recentes primeiro. Cada entrada carrega kind pra
+  // UI decidir como renderizar (notas tem editar/apagar; o resto e' read-only).
   type TimelineEntry =
     | { kind: 'note'; createdAt: string; note: typeof notes[number] }
-    | { kind: 'stage'; createdAt: string; change: typeof stageChanges[number] };
+    | { kind: 'stage'; createdAt: string; change: typeof stageChanges[number] }
+    | { kind: 'meeting'; createdAt: string; meeting: ClientMeeting }
+    | { kind: 'visit'; createdAt: string };
   const timeline: TimelineEntry[] = useMemo(() => {
     const entries: TimelineEntry[] = [
       ...notes.map((n) => ({ kind: 'note' as const, createdAt: n.created_at, note: n })),
       ...stageChanges.map((c) => ({ kind: 'stage' as const, createdAt: c.created_at, change: c })),
+      // Reunioes e follow-ups entram pela data agendada (scheduled_at).
+      ...meetings.map((m) => ({ kind: 'meeting' as const, createdAt: m.scheduled_at, meeting: m })),
     ];
+    // Visita (check-in) — uma entrada quando o lead foi visitado.
+    if (client.visited_at) {
+      entries.push({ kind: 'visit' as const, createdAt: client.visited_at });
+    }
     return entries.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [notes, stageChanges]);
+  }, [notes, stageChanges, meetings, client.visited_at]);
 
   const approxReasons: string[] = [];
   if (!client.numero) approxReasons.push('Endereço sem número');
@@ -4255,6 +4370,42 @@ function ClientBottomSheet({
                         </View>
                         <Text style={[styles.noteBody, { fontWeight: '600' }]}>
                           Moveu etapa: {arrow}
+                        </Text>
+                      </View>
+                    );
+                  }
+                  if (entry.kind === 'meeting') {
+                    const m = entry.meeting;
+                    const isFollowUp = m.type === 'follow_up';
+                    const isPast = new Date(m.scheduled_at).getTime() < Date.now();
+                    return (
+                      <View key={`meeting-${m.id}`} style={styles.noteItem}>
+                        <View style={styles.noteHeaderRow}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.noteAuthor} numberOfLines={1}>
+                              {isFollowUp ? '🔁 Follow up' : '📅 Reunião/demo'}
+                              {isPast ? ' (realizada/passada)' : ' (agendada)'}
+                            </Text>
+                            <Text style={styles.noteDate}>{when}</Text>
+                          </View>
+                        </View>
+                        {m.observacoes ? (
+                          <Text style={styles.noteBody}>{m.observacoes}</Text>
+                        ) : null}
+                      </View>
+                    );
+                  }
+                  if (entry.kind === 'visit') {
+                    return (
+                      <View key={`visit-${entry.createdAt}`} style={styles.noteItem}>
+                        <View style={styles.noteHeaderRow}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.noteAuthor} numberOfLines={1}>📍 Check-in de visita</Text>
+                            <Text style={styles.noteDate}>{when}</Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.noteBody, { fontWeight: '600' }]}>
+                          Cliente visitado no local
                         </Text>
                       </View>
                     );
@@ -5267,6 +5418,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   taskRulesDoneButtonText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  // Ponto de partida da rota
+  routeStartRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
+  routeStartOption: {
+    flex: 1, paddingVertical: 10, paddingHorizontal: 10, borderRadius: 10,
+    backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center',
+  },
+  routeStartOptionActive: { backgroundColor: '#eff6ff', borderColor: '#3b82f6' },
+  routeStartText: { fontSize: 13, fontWeight: '600', color: '#64748b' },
+  routeStartTextActive: { color: '#2563eb' },
+  routeStartPick: {
+    paddingVertical: 11, paddingHorizontal: 4,
+    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+  },
+  routeStartPickName: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  routeStartPickMeta: { fontSize: 12, color: '#64748b', marginTop: 1 },
   metricCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
