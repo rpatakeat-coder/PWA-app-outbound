@@ -1489,6 +1489,11 @@ function MainApp() {
   // Modo de criação manual via mapa: pin fixo no centro da tela
   const [creationMode, setCreationMode] = useState(false);
   const [creationCenter, setCreationCenter] = useState<{ latitude: number; longitude: number } | null>(null);
+  // Dimensoes/posicao do MapView na tela (via onLayout). O pin fixo de criacao
+  // precisa ficar no centro do MAPA, nao da tela — como ha searchBar/filterBar
+  // acima e bottomNav abaixo, o centro do mapa fica deslocado do centro da tela.
+  // Sem isso, o pin visual aponta um lugar mas a coordenada salva e' outra.
+  const [mapLayout, setMapLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
 
   const [resolvingPin, setResolvingPin] = useState(false);
 
@@ -2903,6 +2908,12 @@ function MainApp() {
           <MapView
             mapRef={(ref) => { mapRef.current = ref as unknown as RNMapView; }}
             style={styles.map}
+            // Mede a area real do mapa na tela pra ancorar o pin de criacao no
+            // centro do MAPA (nao da tela). Guarda x/y/width/height absolutos.
+            onLayout={(e) => {
+              const { x, y, width, height } = e.nativeEvent.layout;
+              setMapLayout({ x, y, width, height });
+            }}
             initialRegion={mapCenter}
             showsUserLocation={true}
             followsUserLocation={isFollowingUser && !creationMode}
@@ -2984,29 +2995,39 @@ function MainApp() {
             )}
           </MapView>
 
-          {/* Pin overlay fixo no centro da tela durante creationMode. O pin
-              (com translateY) fica com a PONTA no centro geometrico; o dot
-              marca exatamente esse centro pra nao restar duvida de onde a
-              coordenada sera salva (era a causa do "pin ficou noutro lugar":
-              o usuario mirava pelo corpo do pin, mas a coord e' a da ponta). */}
-          {creationMode && (
-            <>
-              <View pointerEvents="none" style={styles.creationPinOverlay}>
-                <View style={[markerStyles.pin, { backgroundColor: '#dc2626' }]}>
-                  <Image
-                    source={require('./assets/icon.png')}
-                    style={markerStyles.logo}
-                    fadeDuration={0}
-                  />
+          {/* Pin de criacao ancorado no CENTRO DO MAPA (nao da tela). O
+              region.latitude/longitude que salvamos e' o centro do MapView;
+              como ha searchBar/filterBar acima e bottomNav abaixo, esse centro
+              fica deslocado do centro da tela. Usamos mapLayout pra desenhar o
+              pin exatamente sobre o centro do mapa — assim o que voce ve e' o
+              que salva. A ponta do pin e o dot ficam nesse ponto exato. */}
+          {creationMode && mapLayout && (() => {
+            const centerY = mapLayout.y + mapLayout.height / 2;
+            const centerX = mapLayout.x + mapLayout.width / 2;
+            return (
+              <>
+                {/* Pin: base (ponta) no centro. Sobe a altura total (44) pra a
+                    ponta encostar no centro; centraliza em X pela metade da
+                    largura do pin (36/2=18). */}
+                <View
+                  pointerEvents="none"
+                  style={{ position: 'absolute', left: centerX - 18, top: centerY - 44 }}
+                >
+                  <View style={[markerStyles.pin, { backgroundColor: '#dc2626' }]}>
+                    <Image source={require('./assets/icon.png')} style={markerStyles.logo} fadeDuration={0} />
+                  </View>
+                  <View style={[markerStyles.arrow, { borderTopColor: '#dc2626' }]} />
                 </View>
-                <View style={[markerStyles.arrow, { borderTopColor: '#dc2626' }]} />
-              </View>
-              {/* Dot no centro EXATO (onde a coordenada e' capturada). */}
-              <View pointerEvents="none" style={styles.creationCenterDot}>
-                <View style={styles.creationCenterDotInner} />
-              </View>
-            </>
-          )}
+                {/* Dot no centro EXATO do mapa = onde a coordenada e' capturada. */}
+                <View
+                  pointerEvents="none"
+                  style={{ position: 'absolute', left: centerX - 6, top: centerY - 6 }}
+                >
+                  <View style={styles.creationCenterDotInner} />
+                </View>
+              </>
+            );
+          })()}
 
           {/* Map buttons */}
           {userLocation && !creationMode && (
@@ -5199,24 +5220,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   fabSecondaryIcon: { fontSize: 22 },
-  creationPinOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // Compensa o "rabicho" do pin pra ponta tocar exatamente o centro
-    transform: [{ translateY: -22 }],
-  },
-  // Marca o centro geometrico exato do mapa — o ponto que vira a coordenada.
-  creationCenterDot: {
-    position: 'absolute',
-    left: 0, right: 0, top: 0, bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  // Ponto vermelho no centro exato do mapa — marca onde a coordenada e' capturada.
   creationCenterDotInner: {
     width: 8, height: 8, borderRadius: 4,
     backgroundColor: '#dc2626',
