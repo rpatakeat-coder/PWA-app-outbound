@@ -32,10 +32,45 @@ function toGeocodingError(err: unknown): GeocodingError {
   return new GeocodingError(message, 'unknown');
 }
 
+type CepResult = {
+  cep: string;
+  logradouro: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  isGeneric: boolean;
+};
+
+// Fallback: BrasilAPI (agrega varias bases de CEP). Cobre CEPs que o ViaCEP
+// nao conhece (ex.: 90560-004 existe mas o ViaCEP retorna erro). Retorna null
+// se nem a BrasilAPI achar; lanca so em falha tecnica de rede.
+async function fetchCepBrasilApi(cleanCep: string): Promise<CepResult | null> {
+  try {
+    const res = await fetchWithTimeout(`https://brasilapi.com.br/api/cep/v2/${cleanCep}`);
+    if (res.status === 404) return null; // CEP realmente nao existe em nenhuma base
+    if (!res.ok) return null;            // outra falha: nao trava o cadastro
+    const data = await res.json();
+    if (!data?.city) return null;
+    const logradouro = data.street || '';
+    return {
+      cep: `${cleanCep.slice(0, 5)}-${cleanCep.slice(5)}`,
+      logradouro,
+      bairro: data.neighborhood || '',
+      cidade: data.city,
+      estado: data.state,
+      isGeneric: !logradouro,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Busca CEP no ViaCEP. Retorna null se o CEP não existe; lança GeocodingError em falhas técnicas.
+ * Busca CEP: ViaCEP primeiro, BrasilAPI como fallback (o ViaCEP tem buracos —
+ * ha CEPs validos que ele nao conhece). Retorna null so quando NENHUMA das
+ * bases acha; lanca GeocodingError apenas em falha tecnica (rede/timeout).
  */
-export async function fetchCepData(cep: string) {
+export async function fetchCepData(cep: string): Promise<CepResult | null> {
   const cleanCep = cep.replace(/\D/g, '');
   if (cleanCep.length !== 8) return null;
 
@@ -43,7 +78,8 @@ export async function fetchCepData(cep: string) {
     const res = await fetchWithTimeout(`https://viacep.com.br/ws/${cleanCep}/json/`);
     if (!res.ok) throw new GeocodingError(`ViaCEP ${res.status}`, 'unknown');
     const data = await res.json();
-    if (data.erro) return null;
+    // ViaCEP nao achou -> tenta a BrasilAPI antes de dizer "nao encontrado".
+    if (data.erro) return await fetchCepBrasilApi(cleanCep);
 
     return {
       cep: `${cleanCep.slice(0, 5)}-${cleanCep.slice(5)}`,
@@ -54,6 +90,9 @@ export async function fetchCepData(cep: string) {
       isGeneric: !data.logradouro,
     };
   } catch (err) {
+    // ViaCEP fora do ar / timeout: ainda tenta a BrasilAPI antes de falhar.
+    const fromFallback = await fetchCepBrasilApi(cleanCep);
+    if (fromFallback) return fromFallback;
     throw toGeocodingError(err);
   }
 }
