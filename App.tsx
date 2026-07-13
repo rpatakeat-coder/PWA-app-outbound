@@ -75,9 +75,25 @@ const normalizeUf = (raw: string | null | undefined): string | null => {
   return BR_UF_BY_NAME[cleaned] ?? cleaned;
 };
 
+// Labels do pipeline NOVO (2026-07). Etapa que nao esteja aqui e' de pipeline
+// antigo (CASA DOS DADOS, RECICLAGEM 90 DIAS, Clientes Mapa Outbound etc.) e
+// e' colapsada num unico bucket "Pipe Antigo" pra exibicao/agrupamento — sem
+// mexer no clients.etapa. Conforme o RPA sincroniza o lead pro label novo, ele
+// sai do bucket sozinho. Comparacao case/acento-insensitive por robustez.
+const PIPE_ANTIGO_LABEL = 'Pipe Antigo';
+const NEW_PIPELINE_STAGE_LABELS = [
+  'Backlog', 'Reciclagem', 'Prospecção', 'Visita', 'Diagnóstico',
+  'Demo/Proposta', 'Negociação', 'Ag. Pagamento', 'Negócio Fechado',
+  'Enviado Onboarding', 'Perdido',
+];
+const foldLabel = (s: string) =>
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+const NEW_PIPELINE_LABELS_FOLDED = new Set(NEW_PIPELINE_STAGE_LABELS.map(foldLabel));
+
 const normalizeStage = (raw: string | null | undefined): string | null => {
   const cleaned = raw?.trim();
-  return cleaned ? cleaned : null;
+  if (!cleaned) return null;
+  return NEW_PIPELINE_LABELS_FOLDED.has(foldLabel(cleaned)) ? cleaned : PIPE_ANTIGO_LABEL;
 };
 
 const initialFormState = {
