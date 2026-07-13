@@ -107,14 +107,13 @@ export type HubSpotStageRaw = {
 export const WON_STAGE_IDS = ['1396006162', '1396006163'];
 
 // ===== Funil que o APP controla =====
-// Pipeline novo (2026-07). Diferente do antigo, nao tem etapas laterais —
-// mas o Backlog e' etapa de ENTRADA, nao de destino: leads novos nascem la
-// pelo HubSpot e o vendedor nao move ninguem PARA o Backlog pelo app. Lead
-// em Backlog (ou sem etapa) reentra pela 1a etapa do funil (Prospecção).
+// Pipeline novo (2026-07). Backlog e Reciclagem sao etapas de ENTRADA/lateral,
+// nao de destino: o vendedor nao move ninguem PARA elas pelo app. Lead em
+// Backlog/Reciclagem (ou sem etapa) reentra pela 1a etapa do funil (Prospecção).
 //
 // FUNNEL_STAGE_IDS: sequencia de progressao (avancar 1 por vez). A ordem aqui
-// e' a ordem canonica do funil (displayOrder 1..8 do HubSpot). Enviado
-// Onboarding e' o fim do funil ganho.
+// e' a ordem canonica do funil comercial. Enviado Onboarding e' o fim do
+// funil ganho.
 export const FUNNEL_STAGE_IDS = [
   '1395880469', // Prospecção
   '1396005401', // Visita
@@ -141,10 +140,12 @@ export const STAGE_PALETTE = [
 ];
 
 export const STAGES: Stage[] = [
-  // Backlog: etapa de ENTRADA do pipeline novo — nunca e' destino no app
-  // (fora de FUNNEL_STAGE_IDS/APP_STAGE_IDS). Fica aqui pro fallback ter
-  // label/cor quando o lead atual estiver nela.
+  // Backlog e Reciclagem: etapas de ENTRADA/lateral do pipeline novo — nunca
+  // sao destino no app (fora de FUNNEL_STAGE_IDS/APP_STAGE_IDS). Ficam aqui pro
+  // fallback ter label/cor quando o lead atual estiver numa delas. Reciclagem
+  // nao tem propriedade obrigatoria.
   { id: '1396007427', label: 'Backlog', color: '#94a3b8' },
+  { id: '1398311191', label: 'Reciclagem', color: '#a855f7' },
   {
     id: '1395880469',
     label: 'Prospecção',
