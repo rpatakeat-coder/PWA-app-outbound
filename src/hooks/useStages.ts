@@ -9,10 +9,11 @@ import {
 } from '../constants/stages';
 
 // ===== Etapas dinamicas do HubSpot =====
-// As etapas do funil passam a vir do HubSpot (pipeline 118032977) via webhook
-// do app com type=get_stages, em vez da lista hardcoded. Isso garante que a
-// nomenclatura e a ORDEM (displayOrder) batem com o HubSpot, que e' o que
-// sustenta a regra de "avancar 1 etapa por vez".
+// As etapas do funil vem do HubSpot via webhook do app com type=get_stages,
+// em vez da lista hardcoded. O ID do pipeline consultado vive no workflow do
+// n8n (trocado pro pipeline novo em 2026-07). Isso garante que a nomenclatura
+// e a ORDEM (displayOrder) batem com o HubSpot, que e' o que sustenta a regra
+// de "avancar 1 etapa por vez".
 //
 // Estrategia de atualizacao (decidida com o usuario):
 //  - Busca no maximo 1x por dia, ancorada nas 12h. Se o cache foi salvo antes
@@ -21,7 +22,9 @@ import {
 //  - Fallback em cascata se o webhook falhar: cache do device -> STAGES
 //    hardcoded. O app NUNCA fica sem etapas.
 
-const CACHE_KEY = '@takeat:hubspot_stages_v1';
+// v2: bump na troca de pipeline (2026-07) — invalida o cache com as etapas
+// do pipeline antigo em todos os devices na primeira abertura pos-update.
+const CACHE_KEY = '@takeat:hubspot_stages_v2';
 
 type CachePayload = {
   fetchedAt: string;      // ISO de quando buscou

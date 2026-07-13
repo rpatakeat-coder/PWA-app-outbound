@@ -103,30 +103,31 @@ export type HubSpotStageRaw = {
 
 // IDs das etapas que contam como "fechou/pagou" (o lead passou de lead pra
 // cliente). O lead passa pelas DUAS, mas so' conta 1 vez (carimba won_at uma
-// unica vez). Fornecidos pelo usuario a partir do pipeline 118032977.
-export const WON_STAGE_IDS = ['209405292', '1090779812'];
+// unica vez). IDs do pipeline novo (configurado no n8n em 2026-07).
+export const WON_STAGE_IDS = ['1396006162', '1396006163'];
 
 // ===== Funil que o APP controla =====
-// O pipeline do HubSpot tem MUITAS etapas (funil + laterais/origem como ADS,
-// CASA DOS DADOS, PROSPECT, VISITADOS, RECICLAGEM etc.). Pelo app o vendedor
-// SO pode mover o lead dentro do funil comercial abaixo — as laterais nao sao
-// destino de mudanca de etapa (essas so' mudam pelo HubSpot).
+// Pipeline novo (2026-07). Diferente do antigo, nao tem etapas laterais —
+// mas o Backlog e' etapa de ENTRADA, nao de destino: leads novos nascem la
+// pelo HubSpot e o vendedor nao move ninguem PARA o Backlog pelo app. Lead
+// em Backlog (ou sem etapa) reentra pela 1a etapa do funil (Prospecção).
 //
 // FUNNEL_STAGE_IDS: sequencia de progressao (avancar 1 por vez). A ordem aqui
-// e' a ordem canonica do funil, independente do displayOrder do HubSpot (que
-// mistura laterais no meio). Enviado Onboarding e' o fim do funil ganho.
+// e' a ordem canonica do funil (displayOrder 1..8 do HubSpot). Enviado
+// Onboarding e' o fim do funil ganho.
 export const FUNNEL_STAGE_IDS = [
-  '1319906944', // PROSPECÇÃO (PAP)
-  '209405287',  // QUALIFICAÇÃO
-  '209405288',  // DEMO/PROPOSTA
-  '209405289',  // NEGOCIAÇÃO
-  '1090779811', // AGUARDANDO PAGAMENTO
-  '209405292',  // NEGÓCIO FECHADO
-  '1090779812', // ENVIADO ONBOARDING
+  '1395880469', // Prospecção
+  '1396005401', // Visita
+  '1395880470', // Diagnóstico
+  '1395880471', // Demo/Proposta
+  '1395880472', // Negociação
+  '1395880473', // Ag. Pagamento
+  '1396006162', // Negócio Fechado
+  '1396006163', // Enviado Onboarding
 ];
 
 // Saida sempre disponivel como destino no app (a qualquer momento do funil).
-export const LOST_STAGE_ID = '209405293'; // NEGÓCIO PERDIDO
+export const LOST_STAGE_ID = '1396006164'; // Perdido
 
 // Todos os IDs que o app aceita como DESTINO de mudanca (funil + perdido).
 // Qualquer etapa fora disso (laterais/origem) nao aparece como opcao no modal.
@@ -140,9 +141,13 @@ export const STAGE_PALETTE = [
 ];
 
 export const STAGES: Stage[] = [
+  // Backlog: etapa de ENTRADA do pipeline novo — nunca e' destino no app
+  // (fora de FUNNEL_STAGE_IDS/APP_STAGE_IDS). Fica aqui pro fallback ter
+  // label/cor quando o lead atual estiver nela.
+  { id: '1396007427', label: 'Backlog', color: '#94a3b8' },
   {
-    id: '1319906944',
-    label: 'PROSPECÇÃO (PAP)',
+    id: '1395880469',
+    label: 'Prospecção',
     color: '#3b82f6',
     subFields: [
       {
@@ -153,9 +158,12 @@ export const STAGES: Stage[] = [
       },
     ],
   },
+  // Visita: etapa nova (a antiga QUALIFICAÇÃO virou Visita + Diagnóstico).
+  // Sem propriedades obrigatorias — o gargalo_operacional foi pro Diagnóstico.
+  { id: '1396005401', label: 'Visita', color: '#14b8a6' },
   {
-    id: '209405287',
-    label: 'QUALIFICAÇÃO',
+    id: '1395880470',
+    label: 'Diagnóstico',
     color: '#8b5cf6',
     subFields: [
       {
@@ -166,10 +174,10 @@ export const STAGES: Stage[] = [
       },
     ],
   },
-  { id: '209405288', label: 'DEMO/PROPOSTA', color: '#f59e0b' },
+  { id: '1395880471', label: 'Demo/Proposta', color: '#f59e0b' },
   {
-    id: '209405289',
-    label: 'NEGOCIAÇÃO',
+    id: '1395880472',
+    label: 'Negociação',
     color: '#f97316',
     subFields: [
       {
@@ -187,8 +195,8 @@ export const STAGES: Stage[] = [
     ],
   },
   {
-    id: '209405293',
-    label: 'NEGÓCIO PERDIDO',
+    id: '1396006164',
+    label: 'Perdido',
     color: '#ef4444',
     subFields: [
       {
@@ -200,8 +208,8 @@ export const STAGES: Stage[] = [
     ],
   },
   {
-    id: '1090779811',
-    label: 'AGUARDANDO PAGAMENTO',
+    id: '1395880473',
+    label: 'Ag. Pagamento',
     color: '#0ea5e9',
     subFields: [
       {
@@ -287,14 +295,13 @@ export const STAGES: Stage[] = [
       },
     ],
   },
-  // NEGÓCIO FECHADO (id real do HubSpot). Etapa de fechamento-ganho; sem
-  // sub-campos proprios. Existe no fallback pra o funil ficar completo mesmo
-  // sem o get_stages ter carregado.
-  { id: '209405292', label: 'NEGÓCIO FECHADO', color: '#16a34a' },
+  // Negócio Fechado. Etapa de fechamento-ganho; sem sub-campos proprios.
+  // Existe no fallback pra o funil ficar completo mesmo sem o get_stages
+  // ter carregado.
+  { id: '1396006162', label: 'Negócio Fechado', color: '#16a34a' },
   {
-    // ENVIADO ONBOARDING — id real do HubSpot (era placeholder antes).
-    id: '1090779812',
-    label: 'ENVIADO ONBOARDING',
+    id: '1396006163',
+    label: 'Enviado Onboarding',
     color: '#10b981',
     subFields: [
       {
