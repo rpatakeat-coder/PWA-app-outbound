@@ -387,6 +387,58 @@ export function ChangeStageModal({ client, onClose }: Props) {
   const [subValuesMulti, setSubValuesMulti] = useState<Record<string, string[]>>({});
   const [submitting, setSubmitting] = useState(false);
 
+  // Pin recem-criado: o id_hubspot chega ~10-60s depois do INSERT (webhook do
+  // n8n responde e o app grava). Se o vendedor tenta mover de etapa nessa
+  // janela, em vez de bloquear seco, a gente ESPERA o id aparecer — ate 3
+  // tentativas de 10 em 10s, re-buscando do Supabase. resolvedHubspotId comeca
+  // com o que veio na prop e e' atualizado quando o polling acha.
+  const RESOLVE_MAX_ATTEMPTS = 3;
+  const RESOLVE_INTERVAL_MS = 10_000;
+  const [resolvedHubspotId, setResolvedHubspotId] = useState<string | null>(
+    client.id_hubspot ?? null,
+  );
+  const [waitingId, setWaitingId] = useState(false);
+  const [waitAttempt, setWaitAttempt] = useState(0);
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  // Busca o id_hubspot atual do lead no Supabase (o webhook pode ter gravado
+  // depois que o modal abriu). Retorna o id ou null.
+  const fetchHubspotId = async (): Promise<string | null> => {
+    const { data, error } = await supabase
+      .from('clients')
+      .select('id_hubspot')
+      .eq('id', client.id)
+      .maybeSingle();
+    if (error) {
+      console.warn('[change_stage] re-fetch id_hubspot falhou', error.message);
+      return null;
+    }
+    return (data?.id_hubspot as string | null) ?? null;
+  };
+
+  // Garante um id_hubspot antes de enviar. Se ja temos, retorna na hora. Senao
+  // faz ate RESOLVE_MAX_ATTEMPTS buscas espacadas, atualizando a UI (timer).
+  const ensureHubspotId = async (): Promise<string | null> => {
+    if (resolvedHubspotId) return resolvedHubspotId;
+    setWaitingId(true);
+    try {
+      for (let attempt = 1; attempt <= RESOLVE_MAX_ATTEMPTS; attempt++) {
+        setWaitAttempt(attempt);
+        const id = await fetchHubspotId();
+        if (id) {
+          setResolvedHubspotId(id);
+          return id;
+        }
+        if (attempt < RESOLVE_MAX_ATTEMPTS) await sleep(RESOLVE_INTERVAL_MS);
+      }
+      return null;
+    } finally {
+      setWaitingId(false);
+      setWaitAttempt(0);
+    }
+  };
+
   // Etapas do HubSpot (get_stages), com fallback pro cache/STAGES hardcoded.
   const { stages: allStages } = useStages(true);
 
@@ -456,7 +508,7 @@ export function ChangeStageModal({ client, onClose }: Props) {
     if (sf.kind === 'boolean') return raw === 'true' || raw === 'false';
     return true;
   });
-  const ready = !!selectedStage && allFilled && !submitting;
+  const ready = !!selectedStage && allFilled && !submitting && !waitingId;
 
   const setSubValue = (field: string, value: string) =>
     setSubValues((prev) => ({ ...prev, [field]: value }));
@@ -472,10 +524,13 @@ export function ChangeStageModal({ client, onClose }: Props) {
 
   const submit = async () => {
     if (!selectedStage) return;
-    if (!client.id_hubspot) {
+    // Pin recem-criado pode ainda nao ter id_hubspot (webhook do n8n em voo).
+    // Espera ele aparecer (ate 3x de 10s) em vez de recusar de cara.
+    const hubspotId = await ensureHubspotId();
+    if (!hubspotId) {
       Alert.alert(
-        'Cliente sem ID HubSpot',
-        'Esse pin não tem ID do HubSpot cadastrado — sem isso o webhook não consegue identificar o registro lá. Cadastre o ID antes ou peça pra integração rodar.',
+        'ID HubSpot ainda não chegou',
+        'Esse pin foi criado há pouco e o ID do HubSpot ainda não sincronizou (tentei por ~30s). Aguarde alguns segundos e toque em enviar de novo. Se persistir, avise o suporte.',
       );
       return;
     }
@@ -556,7 +611,7 @@ export function ChangeStageModal({ client, onClose }: Props) {
       const payload: Record<string, unknown> = {
         type: 'change_stage',
         id: client.id,
-        id_hubspot: client.id_hubspot,
+        id_hubspot: hubspotId,
         stage_id: selectedStage.id,
         stage_label: selectedStage.label,
       };
@@ -640,11 +695,13 @@ export function ChangeStageModal({ client, onClose }: Props) {
               {client.empresa ? ` • ${client.empresa}` : ''}
             </Text>
 
-            {!client.id_hubspot && (
+            {!resolvedHubspotId && (
               <View style={styles.warningBox}>
                 <Text style={styles.warningText}>
-                  ⚠️ Esse cliente ainda não tem ID HubSpot. Você consegue escolher
-                  a etapa mas o webhook vai recusar até o ID ser cadastrado.
+                  ⏳ Esse pin foi criado há pouco e o ID do HubSpot ainda pode
+                  estar sincronizando. Pode escolher a etapa normalmente — ao
+                  enviar, o app aguarda o ID chegar (alguns segundos) antes de
+                  concluir.
                 </Text>
               </View>
             )}
@@ -779,7 +836,14 @@ export function ChangeStageModal({ client, onClose }: Props) {
               onPress={submit}
               disabled={!ready}
             >
-              {submitting ? (
+              {waitingId ? (
+                <View style={styles.submitWaitRow}>
+                  <ActivityIndicator color="#fff" />
+                  <Text style={styles.submitText}>
+                    Sincronizando ID… ({waitAttempt}/{RESOLVE_MAX_ATTEMPTS})
+                  </Text>
+                </View>
+              ) : submitting ? (
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text style={styles.submitText}>
@@ -893,6 +957,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
   },
   plainInputMultiline: { minHeight: 90, textAlignVertical: 'top' },
+  submitWaitRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   submit: {
     backgroundColor: '#0f172a',
     borderRadius: 12,
