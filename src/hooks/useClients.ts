@@ -65,9 +65,14 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
       const all: any[] = [];
       let from = 0;
       while (true) {
+        // ORDER BY estavel e OBRIGATORIO com paginacao por .range(): sem ele o
+        // PostgREST/Postgres nao garante a mesma ordem entre as paginas, entao
+        // linhas na fronteira (ex.: registro ~2815 de ~5k, 5 paginas) podem ser
+        // PULADAS ou duplicadas — o lead "some" da lista de forma intermitente.
         let q = supabase
           .from('clients')
           .select('*')
+          .order('id', { ascending: true })
           .range(from, from + PAGE_SIZE - 1);
 
         // Viewer nao filtra por status aqui (ve tudo); os demais respeitam o
