@@ -476,9 +476,9 @@ function MainApp() {
   });
   const { meetings, upcomingByClient, meetingsByClient } = useMeetings();
   // Tarefas geradas automaticamente (motor de regras no banco). O hook dispara
-  // a geracao ao autenticar e le as pendentes. pendingCount alimenta o badge
-  // de notificacao na aba Tarefas.
-  const { tasks, pendingCount: tasksPendingCount, resolveTask } = useClientTasks();
+  // a geracao ao autenticar e le as pendentes. O badge do rodape usa a contagem
+  // JA filtrada por vendedor (visibleTasksCount), nao o total global.
+  const { tasks, resolveTask } = useClientTasks();
   useForceReload(isAuthenticated);
   const isAdmin = profile?.email === 'arthurgothe.takeat@gmail.com';
   // Acesso a aba Gestor (metricas) SEM ser admin pleno. Julyan ve so as
@@ -696,6 +696,23 @@ function MainApp() {
   // chips de status em tempo real conforme o usuario digita no search.
   // id_hubspot do usuario logado, usado pelo toggle "meus leads" (non-admin).
   const myHubspotId = profile?.id_hubspot ?? null;
+
+  // Recorte de tarefas por vendedor. Gestor (canViewGestor: admin ou Julyan) ve
+  // TODAS; vendedor comum ve so as dos leads dele (match por vendedor_id_hubspot).
+  // Se um gestor escolheu um vendedor no filtro do mapa, respeita esse recorte.
+  // Compartilhado entre a tela de Tarefas e o badge do rodape — antes o badge
+  // usava a contagem GLOBAL (tasks.length) e mostrava 99+ pra todo mundo.
+  const tasksActiveVendor = vendorFilterHubspotId ?? (canViewGestor ? null : myHubspotId);
+  const visibleTasks = useMemo(
+    () =>
+      tasks.filter((t) => {
+        if (tasksActiveVendor === null) return true;
+        if (tasksActiveVendor === '__none__') return !t.vendedor_id_hubspot;
+        return t.vendedor_id_hubspot === tasksActiveVendor;
+      }),
+    [tasks, tasksActiveVendor],
+  );
+  const visibleTasksCount = visibleTasks.length;
 
   // Avalia o filtro temporal de visita pra um cliente.
   // - null: sem filtro
@@ -2269,16 +2286,9 @@ function MainApp() {
   );
 
   const renderTasksScreen = () => {
-    // "Minhas tarefas": non-admin ve so as tarefas dos leads dele (match por
-    // vendedor_id_hubspot). Admin ve todas. Se o admin escolheu um vendedor no
-    // filtro do mapa, respeita esse recorte tambem.
-    const myId = myHubspotId;
-    const activeVendor = vendorFilterHubspotId ?? (isAdmin ? null : myId);
-    const visibleTasks = tasks.filter((t) => {
-      if (activeVendor === null) return true;
-      if (activeVendor === '__none__') return !t.vendedor_id_hubspot;
-      return t.vendedor_id_hubspot === activeVendor;
-    });
+    // Recorte (gestor ve todas, vendedor ve so as suas) calculado uma vez em
+    // visibleTasks/tasksActiveVendor — compartilhado com o badge do rodape.
+    const activeVendor = tasksActiveVendor;
 
     // Ordena D5 antes de D2, e dentro da severidade os mais antigos primeiro.
     const sorted = [...visibleTasks].sort((a, b) => {
@@ -2307,7 +2317,7 @@ function MainApp() {
             Qualificação sem demo agendada vira "Agendar Demo" (D2 após 2 dias,
             D5 após 5). Conclua ou dispense conforme resolver.
             {'\n\n'}Toque em ⓘ para ver as regras de geração.
-            {activeVendor !== null && activeVendor !== myId
+            {activeVendor !== null && activeVendor !== myHubspotId
               ? `\n\nFiltro ativo: ${vendorLabel(activeVendor)} (tire no modal de filtros).`
               : ''}
           </Text>
@@ -3189,10 +3199,10 @@ function MainApp() {
             >
               <View>
                 <Text style={[styles.navIcon, tab === 'tasks' && styles.navIconActive]}>✅</Text>
-                {tasksPendingCount > 0 && (
+                {visibleTasksCount > 0 && (
                   <View style={styles.navBadge}>
                     <Text style={styles.navBadgeText}>
-                      {tasksPendingCount > 99 ? '99+' : tasksPendingCount}
+                      {visibleTasksCount > 99 ? '99+' : visibleTasksCount}
                     </Text>
                   </View>
                 )}
