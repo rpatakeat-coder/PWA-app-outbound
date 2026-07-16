@@ -46,6 +46,7 @@ import { CEPStep } from './src/screens/CEPStep';
 import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { ChangeStageModal } from './src/screens/ChangeStageModal';
+import { EditLocationModal } from './src/screens/EditLocationModal';
 import { GestorScreen } from './src/screens/GestorScreen';
 import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
 import { reverseGeocode } from './src/utils/geocoding';
@@ -586,6 +587,7 @@ function MainApp() {
   // Mesmo modal serve os dois; só muda o `type` salvo e os rótulos.
   const [schedulingFor, setSchedulingFor] = useState<{ client: Client; type: MeetingType } | null>(null);
   const [changingStageFor, setChangingStageFor] = useState<Client | null>(null);
+  const [editingLocationFor, setEditingLocationFor] = useState<Client | null>(null);
   const isSaving = addClient.isPending || updateClient.isPending;
 
   // Lista de status pra UI: dinâmica (banco) ou fallback hardcoded enquanto carrega.
@@ -1705,6 +1707,42 @@ function MainApp() {
     }
   };
 
+  // Salva a nova localizacao vinda do EditLocationModal (pin arrastavel). Reusa
+  // updateClient passando as coords + endereco resolvido; marca geo_source
+  // 'coords' e geo_approximate false (o usuario apontou o local exato).
+  const saveEditedLocation = useCallback(
+    async (client: Client, payload: {
+      latitude: number; longitude: number;
+      endereco?: string; numero?: string | null; bairro?: string | null;
+      cep?: string; cidade?: string; estado?: string;
+    }) => {
+      await updateClient.mutateAsync({
+        id: client.id,
+        // Mantem os campos NAO-geo do cliente (o update sobrescreve a linha toda
+        // pros campos que passamos; os de texto vao com o valor atual).
+        nome: client.nome,
+        empresa: client.empresa ?? undefined,
+        telefone: client.telefone ?? undefined,
+        email: client.email ?? undefined,
+        observacoes: client.observacoes ?? undefined,
+        status: client.status as ClientStatus,
+        // Campos de localizacao — os novos. Endereco/cidade/etc do reverse-geocode
+        // quando vierem; senao mantem o atual do cliente.
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        endereco: payload.endereco ?? client.endereco ?? undefined,
+        numero: payload.numero ?? client.numero ?? undefined,
+        bairro: payload.bairro ?? client.bairro ?? undefined,
+        cep: payload.cep ?? client.cep ?? undefined,
+        cidade: payload.cidade ?? client.cidade ?? undefined,
+        estado: payload.estado ?? client.estado ?? undefined,
+        geo_source: 'coords',
+        geo_approximate: false,
+      });
+    },
+    [updateClient],
+  );
+
   const confirmDeleteClient = useCallback((client: Client, onDone?: () => void) => {
     Alert.alert(
       'Remover cliente',
@@ -2773,6 +2811,7 @@ function MainApp() {
       onClose={() => setSelectedClient(null)}
       onDelete={isViewer ? undefined : () => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
       onEdit={isViewer ? undefined : () => openEditClient(selectedClient)}
+      onEditLocation={isViewer ? undefined : () => { setEditingLocationFor(selectedClient); setSelectedClient(null); }}
       onMarkVisited={isViewer ? undefined : () => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
       onScheduleMeeting={isViewer ? undefined : () => { setSchedulingFor({ client: selectedClient, type: 'reuniao' }); setSelectedClient(null); }}
       onFollowUp={isViewer ? undefined : () => { setSchedulingFor({ client: selectedClient, type: 'follow_up' }); setSelectedClient(null); }}
@@ -3878,6 +3917,14 @@ function MainApp() {
         />
       )}
 
+      {editingLocationFor && (
+        <EditLocationModal
+          client={editingLocationFor}
+          onSave={(payload) => saveEditedLocation(editingLocationFor, payload)}
+          onClose={() => setEditingLocationFor(null)}
+        />
+      )}
+
       {schedulingFor && (
         <ScheduleMeetingModal
           client={schedulingFor.client}
@@ -4095,6 +4142,7 @@ function ClientBottomSheet({
   onClose,
   onDelete,
   onEdit,
+  onEditLocation,
   onMarkVisited,
   onScheduleMeeting,
   onFollowUp,
@@ -4111,6 +4159,7 @@ function ClientBottomSheet({
   onClose: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
+  onEditLocation?: () => void;
   onMarkVisited?: () => void;
   onScheduleMeeting?: () => void;
   onFollowUp?: () => void;
@@ -4783,6 +4832,14 @@ function ClientBottomSheet({
             )}
 
             {/* Actions */}
+            {onEditLocation && (
+              <TouchableOpacity
+                style={{ paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#0f172a', marginBottom: 8, flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                onPress={onEditLocation}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>📍 Editar localização (mover pin)</Text>
+              </TouchableOpacity>
+            )}
             {(onDelete || onEdit) && (
               <View style={styles.actionRow}>
                 {onDelete && (

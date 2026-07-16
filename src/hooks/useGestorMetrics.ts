@@ -29,6 +29,33 @@ export type SellerMetricKey =
   | 'notes'
   | 'assigned';
 
+// Contagem de tarefas por vendedor no painel do gestor. pending = snapshot
+// atual (status='pendente'); done = concluidas (status='concluida') com
+// resolved_at no periodo. Chaveado por id_hubspot (= client_tasks.vendedor_id_hubspot).
+export interface SellerTaskCounts {
+  id_hubspot: string | null;
+  pending: number;
+  done: number;
+}
+
+// Tarefa individual no drill-down do painel de tarefas do gestor.
+export interface GestorTaskItem {
+  task_id: string;
+  client_id: string;
+  client_name: string;
+  client_status: string | null;
+  title: string;
+  task_type: string;
+  severity: string | null;
+  days_in_stage: string | null;
+  etapa: string | null;
+  created_at: string | null;
+  resolved_at: string | null;
+  at: string | null;
+}
+
+export type GestorTaskStatus = 'pendente' | 'concluida';
+
 export interface SellerMetrics {
   // Identificacao
   seller_id: string;            // auth.users.id (mesmo de profiles.id)
@@ -229,6 +256,69 @@ export function useMetricLeads(params: MetricLeadsParams | null, enabled: boolea
       });
       if (error) throw error;
       return (data ?? []) as MetricLead[];
+    },
+  });
+}
+
+// ============================================================================
+// Tarefas por vendedor (painel do gestor). Pendentes = snapshot atual;
+// concluidas = status='concluida' com resolved_at no periodo (RPC
+// gestor_task_metrics). Uma query so; o SellerCard cruza por id_hubspot.
+// ============================================================================
+export function useGestorTaskMetrics(period: GestorPeriod, enabled: boolean) {
+  return useQuery<SellerTaskCounts[]>({
+    // Mesma regra de key estavel do useGestorMetrics (preset + datas do custom).
+    queryKey: [
+      'gestor-task-metrics',
+      period.preset,
+      period.preset === 'custom' ? period.startISO ?? null : null,
+      period.preset === 'custom' ? period.endISO ?? null : null,
+    ],
+    enabled,
+    staleTime: 60 * 1000,
+    queryFn: async () => {
+      const { start, end } = periodRange(period);
+      const { data, error } = await supabase.rpc('gestor_task_metrics', {
+        p_start: start,
+        p_end: end,
+      });
+      if (error) throw error;
+      return (data ?? []) as SellerTaskCounts[];
+    },
+  });
+}
+
+// Drill-down: tarefas de UM vendedor num status (pendente|concluida). Carrega
+// sob demanda quando o gestor toca no card de tarefas (RPC gestor_tasks_list).
+export type GestorTasksListParams = {
+  hubspotId: string | null;
+  status: GestorTaskStatus;
+  period: GestorPeriod;
+};
+
+export function useGestorTasksList(params: GestorTasksListParams | null, enabled: boolean) {
+  return useQuery<GestorTaskItem[]>({
+    queryKey: [
+      'gestor-tasks-list',
+      params?.hubspotId ?? null,
+      params?.status ?? null,
+      params?.period.preset ?? null,
+      params?.period.preset === 'custom' ? params.period.startISO ?? null : null,
+      params?.period.preset === 'custom' ? params.period.endISO ?? null : null,
+    ],
+    enabled: enabled && !!params,
+    staleTime: 60 * 1000,
+    queryFn: async () => {
+      if (!params) return [];
+      const range = periodRange(params.period);
+      const { data, error } = await supabase.rpc('gestor_tasks_list', {
+        p_hubspot_id: params.hubspotId,
+        p_status: params.status,
+        p_start: range.start,
+        p_end: range.end,
+      });
+      if (error) throw error;
+      return (data ?? []) as GestorTaskItem[];
     },
   });
 }

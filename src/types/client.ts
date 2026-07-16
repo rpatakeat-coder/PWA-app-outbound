@@ -86,6 +86,9 @@ export interface ClientFormData {
   // check-in usa um raio maior nesses casos. Default false (pin do mapa/coords
   // é sempre preciso; só o CEP sem número exato marca true).
   geo_approximate?: boolean;
+  // Origem da coordenada ('coords' pin no mapa, 'cep', 'google', etc.). Só
+  // enviado quando a edição mexe na localização; edições de texto omitem.
+  geo_source?: string;
 }
 
 export interface FieldRoute {

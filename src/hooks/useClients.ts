@@ -265,6 +265,14 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
           latitude: form.latitude,
           longitude: form.longitude,
           observacoes: form.observacoes ?? null,
+          // bairro/geo_source/geo_approximate so vao no update quando vierem
+          // definidos (fluxo "editar localizacao" preenche esses). Edicao de
+          // texto os deixa undefined -> nao sobrescreve o valor atual no banco
+          // (o form de edicao de texto nem popula bairro, entao gravar ?? null
+          //  aqui zeraria o bairro existente — por isso condicional).
+          ...(form.bairro !== undefined ? { bairro: form.bairro } : {}),
+          ...(form.geo_source !== undefined ? { geo_source: form.geo_source } : {}),
+          ...(form.geo_approximate !== undefined ? { geo_approximate: form.geo_approximate } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)

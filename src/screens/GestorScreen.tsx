@@ -13,11 +13,16 @@ import {
 import {
   useGestorMetrics,
   useMetricLeads,
+  useGestorTaskMetrics,
+  useGestorTasksList,
   type GestorPeriod,
   type GestorPeriodPreset,
   type MetricLead,
   type MetricLeadsParams,
   type SellerMetrics,
+  type SellerTaskCounts,
+  type GestorTaskItem,
+  type GestorTaskStatus,
 } from '../hooks/useGestorMetrics';
 
 interface Props {
@@ -55,6 +60,13 @@ const STATUS_LABEL: Record<string, string> = {
 interface LeadModalState {
   title: string;
   params: MetricLeadsParams;
+}
+
+// Drill-down de tarefas de um vendedor (pendentes ou concluidas).
+interface TaskModalState {
+  title: string;
+  hubspotId: string | null;
+  status: GestorTaskStatus;
 }
 
 const DIAS_SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
@@ -273,6 +285,81 @@ function LeadListModal({ state, onClose }: { state: LeadModalState | null; onClo
   );
 }
 
+// Cor do badge de severidade da tarefa (mesma convencao da aba Tarefas).
+const taskSevColor = (s: string | null) =>
+  s === 'D5' ? '#dc2626' : s === 'D2' ? '#f59e0b' : s === 'SLA' ? '#2563eb' : '#64748b';
+
+function TasksModal({ state, period, onClose }: {
+  state: TaskModalState | null;
+  period: GestorPeriod;
+  onClose: () => void;
+}) {
+  const q = useGestorTasksList(
+    state ? { hubspotId: state.hubspotId, status: state.status, period } : null,
+    state !== null,
+  );
+  const tasks = q.data ?? [];
+  return (
+    <Modal visible={state !== null} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalBackdrop}>
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
+        <View style={styles.modalPanel}>
+          <View style={styles.modalHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.modalTitle} numberOfLines={2}>{state?.title}</Text>
+              <Text style={styles.modalSubtitle}>
+                {q.isLoading
+                  ? 'Carregando...'
+                  : `${tasks.length} ${tasks.length === 1 ? 'tarefa' : 'tarefas'}`}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.modalCloseButton} onPress={onClose}>
+              <Text style={styles.modalCloseText}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={tasks}
+            keyExtractor={(item, idx) => `${item.task_id}-${idx}`}
+            contentContainerStyle={{ paddingBottom: 24 }}
+            ListEmptyComponent={
+              q.isLoading ? (
+                <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+                  <ActivityIndicator color="#dc2626" />
+                </View>
+              ) : (
+                <Text style={styles.modalEmpty}>Nenhuma tarefa nesse recorte.</Text>
+              )
+            }
+            renderItem={({ item }) => {
+              const when = formatLeadDate(item.at);
+              const dias = item.days_in_stage != null ? Number(item.days_in_stage) : null;
+              const badge = item.severity === 'SLA'
+                ? (Number.isFinite(dias) ? `${dias}d` : 'SLA')
+                : (item.severity ?? '•');
+              return (
+                <View style={styles.modalLeadRow}>
+                  <View style={[styles.taskBadge, { backgroundColor: taskSevColor(item.severity) }]}>
+                    <Text style={styles.taskBadgeText}>{badge}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modalLeadName} numberOfLines={1}>{item.title}</Text>
+                    <Text style={styles.modalLeadMeta} numberOfLines={1}>{item.client_name}</Text>
+                    <Text style={styles.modalLeadMeta}>
+                      {item.etapa ? `${item.etapa}` : ''}
+                      {Number.isFinite(dias) ? `${item.etapa ? ' • ' : ''}${dias} dia(s) na etapa` : ''}
+                      {when ? ` • ${when}` : ''}
+                    </Text>
+                  </View>
+                </View>
+              );
+            }}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function StatCard({
   label,
   value,
@@ -336,11 +423,15 @@ function SellerCard({
   rank,
   period,
   onOpenLeads,
+  taskCounts,
+  onOpenTasks,
 }: {
   seller: SellerMetrics;
   rank: number;
   period: GestorPeriod;
   onOpenLeads: (title: string, params: MetricLeadsParams) => void;
+  taskCounts: { pending: number; done: number };
+  onOpenTasks: (title: string, hubspotId: string | null, status: GestorTaskStatus) => void;
 }) {
   const displayName = seller.full_name?.trim() || seller.email || 'Sem nome';
   const initials = (seller.full_name?.trim() || seller.email || '?')
@@ -405,6 +496,23 @@ function SellerCard({
         <Text style={styles.totalActivityText}>{totalActivity} ações no período</Text>
       </View>
 
+      {/* Tarefas: pendentes = agora; concluidas = no periodo. */}
+      <Text style={styles.taskSectionLabel}>Tarefas</Text>
+      <View style={styles.metricsRow}>
+        <MetricBox
+          value={taskCounts.pending}
+          label="Pendentes"
+          color="#dc2626"
+          onPress={() => onOpenTasks(`Tarefas pendentes — ${displayName}`, seller.id_hubspot, 'pendente')}
+        />
+        <MetricBox
+          value={taskCounts.done}
+          label="Concluídas"
+          color="#16a34a"
+          onPress={() => onOpenTasks(`Tarefas concluídas — ${displayName}`, seller.id_hubspot, 'concluida')}
+        />
+      </View>
+
       {statusEntries.length > 0 ? (
         <View style={styles.statusBreakdown}>
           {statusEntries.map(([status, count]) => (
@@ -439,6 +547,7 @@ export function GestorScreen({ enabled }: Props) {
   const [customEnd, setCustomEnd] = useState<Date | null>(null);
   const [rangePickerOpen, setRangePickerOpen] = useState(false);
   const [leadModal, setLeadModal] = useState<LeadModalState | null>(null);
+  const [taskModal, setTaskModal] = useState<TaskModalState | null>(null);
 
   const period = useMemo<GestorPeriod>(() => {
     if (preset === 'custom' && customStart && customEnd) {
@@ -454,8 +563,20 @@ export function GestorScreen({ enabled }: Props) {
   }, [preset, customStart, customEnd]);
 
   const query = useGestorMetrics(period, enabled);
+  const taskQuery = useGestorTaskMetrics(period, enabled);
+
+  // Mapa id_hubspot -> { pending, done } pra cada SellerCard cruzar direto.
+  const taskCountsByHubspot = useMemo(() => {
+    const m = new Map<string, { pending: number; done: number }>();
+    for (const t of taskQuery.data ?? []) {
+      if (t.id_hubspot != null) m.set(t.id_hubspot, { pending: t.pending, done: t.done });
+    }
+    return m;
+  }, [taskQuery.data]);
 
   const openLeads = (title: string, params: MetricLeadsParams) => setLeadModal({ title, params });
+  const openTasks = (title: string, hubspotId: string | null, status: GestorTaskStatus) =>
+    setTaskModal({ title, hubspotId, status });
 
   const periodLabel =
     preset === 'all' ? 'total'
@@ -616,7 +737,17 @@ export function GestorScreen({ enabled }: Props) {
             </View>
           ) : (
             visibleSellers.map((seller, idx) => (
-              <SellerCard key={seller.seller_id} seller={seller} rank={idx + 1} period={period} onOpenLeads={openLeads} />
+              <SellerCard
+                key={seller.seller_id}
+                seller={seller}
+                rank={idx + 1}
+                period={period}
+                onOpenLeads={openLeads}
+                taskCounts={
+                  (seller.id_hubspot && taskCountsByHubspot.get(seller.id_hubspot)) || { pending: 0, done: 0 }
+                }
+                onOpenTasks={openTasks}
+              />
             ))
           )}
 
@@ -627,6 +758,7 @@ export function GestorScreen({ enabled }: Props) {
       ) : null}
 
       <LeadListModal state={leadModal} onClose={() => setLeadModal(null)} />
+      <TasksModal state={taskModal} period={period} onClose={() => setTaskModal(null)} />
 
       {rangePickerOpen && (
         <RangeCalendarModal
@@ -758,6 +890,16 @@ const styles = StyleSheet.create({
   },
   metricValue: { fontSize: 18, fontWeight: '800' },
   metricLabel: { fontSize: 10, color: '#64748b', marginTop: 2, fontWeight: '600' },
+
+  taskSectionLabel: {
+    fontSize: 11, fontWeight: '700', color: '#94a3b8',
+    textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 10, marginBottom: 6,
+  },
+  taskBadge: {
+    minWidth: 34, height: 24, paddingHorizontal: 6, borderRadius: 6,
+    alignItems: 'center', justifyContent: 'center', marginTop: 2,
+  },
+  taskBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
   assignedRow: {
     flexDirection: 'row',
