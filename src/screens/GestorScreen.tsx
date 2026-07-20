@@ -636,9 +636,13 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
         range = { start: r.start ?? new Date(0).toISOString(), end: r.end ?? new Date().toISOString() };
       }
       const res = await exportReport(range);
+      const c = res.rows;
+      const resumo = c
+        ? `${c.leads} leads · ${c.tarefas} tarefas · ${c.visitas} visitas · ${c.reunioes} reuniões · ${c.follow_ups} follow-ups · ${c.mudancas_etapa} etapas · ${c.notas} notas`
+        : '';
       Alert.alert(
-        'Relatório pronto 📊',
-        `${res.rows} linha(s) — período ${res.period.label.replace(/_/g, ' ')}.\n\nToque em Abrir para baixar o CSV (abre no navegador; dá pra abrir no Google Sheets/Excel).`,
+        'Exportação pronta 📊',
+        `Período ${res.period.label.replace(/_/g, ' ')}.\n${resumo}\n\nToque em Abrir para baixar o .json (abre no navegador). Depois é só jogar na IA.`,
         [
           { text: 'Fechar', style: 'cancel' },
           { text: 'Abrir', onPress: () => Linking.openURL(res.url) },
@@ -709,10 +713,11 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
 
       {/* Exportacao de dados (CSV com atividade por vendedor). */}
       <View style={styles.exportCard}>
-        <Text style={styles.exportTitle}>📊 Exportar dados (CSV)</Text>
+        <Text style={styles.exportTitle}>📊 Exportar TUDO (JSON p/ IA)</Text>
         <Text style={styles.exportHint}>
-          Uma linha por atividade (lead, visita, reunião, follow-up, etapa, nota) com o vendedor
-          — pra analisar gargalos. Abre no Google Sheets/Excel.
+          Exporta tudo do período — leads (dados completos), tarefas, visitas, reuniões,
+          follow-ups, mudanças de etapa (com motivos) e notas, cada um com o vendedor.
+          Um único arquivo .json pra jogar numa IA analisar.
         </Text>
         <View style={styles.exportRow}>
           <TouchableOpacity

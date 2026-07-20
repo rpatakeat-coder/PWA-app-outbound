@@ -267,9 +267,14 @@ export function useMetricLeads(params: MetricLeadsParams | null, enabled: boolea
 // devolve uma signed URL. Passa o access_token do usuario logado (a function
 // valida que e' gestor). Sem periodo -> semana anterior (seg-dom).
 // ============================================================================
+export interface ExportCounts {
+  leads: number; tarefas: number; visitas: number; reunioes: number;
+  follow_ups: number; mudancas_etapa: number; notas: number; vendedores: number;
+}
+
 export async function exportReport(
   range?: { start: string; end: string } | null,
-): Promise<{ url: string; rows: number; period: { start: string; end: string; label: string } }> {
+): Promise<{ url: string; rows: ExportCounts | null; period: { start: string; end: string; label: string } }> {
   const { data: sess } = await supabase.auth.getSession();
   const token = sess.session?.access_token;
   if (!token) throw new Error('Sessão expirada. Faça login de novo.');
@@ -286,7 +291,7 @@ export async function exportReport(
     throw new Error(msg);
   }
   if (!data?.url) throw new Error(data?.error ?? 'Falha ao gerar o relatório.');
-  return { url: data.url, rows: data.rows ?? 0, period: data.period };
+  return { url: data.url, rows: data.rows ?? null, period: data.period };
 }
 
 // ============================================================================
