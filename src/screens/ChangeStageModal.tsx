@@ -20,17 +20,24 @@ import {
   FUNNEL_STAGE_IDS,
   LOST_STAGE_ID,
   APP_STAGE_IDS,
+  STAGES,
   type Stage,
   type StageSubField,
 } from '../constants/stages';
 import { useStages } from '../hooks/useStages';
 import { useStagePropertyOptions } from '../hooks/useStagePropertyOptions';
 import { useClientStageChanges } from '../hooks/useClientStageChanges';
+import { useClientNotes } from '../hooks/useClientNotes';
 import { supabase } from '../integrations/supabase/client';
 
 interface Props {
   client: Client;
   onClose: () => void;
+  // Quando setado, o modal ja abre com essa etapa pre-selecionada e NAO mostra
+  // o seletor de etapas (ex.: "Mover para perdido" a partir de uma tarefa).
+  initialStageId?: string;
+  // Chamado apos o envio bem-sucedido (ex.: resolver a tarefa que originou).
+  onDone?: () => void;
 }
 
 // Normaliza "1.500,50" / "1500,50" / "1500.50" / "1500" pra "1500.50".
@@ -379,8 +386,11 @@ function PlainTextField({
   );
 }
 
-export function ChangeStageModal({ client, onClose }: Props) {
-  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
+export function ChangeStageModal({ client, onClose, initialStageId, onDone }: Props) {
+  const [selectedStageId, setSelectedStageId] = useState<string | null>(initialStageId ?? null);
+  // Modo "etapa fixa" (ex.: mover pra Perdido a partir da tarefa): oculta o
+  // seletor de etapas e mostra so os sub-campos da etapa alvo.
+  const lockedStage = !!initialStageId;
   const [subValues, setSubValues] = useState<Record<string, string>>({});
   // State paralelo so pra multi-selects. Mantemos separado pra nao precisar
   // serializar arrays como string no Record<string, string> compartilhado.
@@ -450,6 +460,8 @@ export function ChangeStageModal({ client, onClose }: Props) {
   // timeline so refletir o que efetivamente saiu pro HubSpot. Se o INSERT
   // falhar (RLS, tabela ausente etc.) so logamos: a sincronia ja passou.
   const { recordChange } = useClientStageChanges(client.id);
+  // Pra registrar o motivo do "Perdido" como nota (que tambem vai pro HubSpot).
+  const { addNote } = useClientNotes(client.id);
 
   // ===== Regra de progressao: avancar 1 etapa por vez (so no funil do app) =====
   // O HubSpot tem muitas etapas (funil + laterais/origem). Pelo app o vendedor
@@ -481,9 +493,17 @@ export function ChangeStageModal({ client, onClose }: Props) {
   const destinationIds = [nextFunnelId, LOST_STAGE_ID].filter(
     (id): id is string => !!id && APP_STAGE_IDS.includes(id) && id !== currentStageId,
   );
-  const visibleStages: Stage[] = destinationIds
-    .map((id) => stageById.get(id))
-    .filter((s): s is Stage => !!s);
+  // Modo travado (initialStageId): so a etapa alvo e' destino. Fallback pro
+  // hardcoded STAGES se o get_stages ainda nao trouxe essa etapa (garante que
+  // "Mover pra Perdido" funcione mesmo com cache de etapas frio).
+  const lockedStageObj: Stage | null = lockedStage
+    ? (stageById.get(initialStageId!) ?? STAGES.find((s) => s.id === initialStageId) ?? null)
+    : null;
+  const visibleStages: Stage[] = lockedStage
+    ? (lockedStageObj ? [lockedStageObj] : [])
+    : destinationIds
+        .map((id) => stageById.get(id))
+        .filter((s): s is Stage => !!s);
 
   const selectedStage: Stage | null =
     visibleStages.find((s) => s.id === selectedStageId) ?? null;
@@ -657,6 +677,22 @@ export function ChangeStageModal({ client, onClose }: Props) {
         }
       }
 
+      // Ao mover pra Perdido, registra o motivo como NOTA (que tambem sincroniza
+      // pro HubSpot via webhook create_note). Assim o gestor ve o motivo no
+      // historico do lead, nao so no sub_values da timeline. Nao bloqueia.
+      if (selectedStage.id === LOST_STAGE_ID) {
+        const motivo = subValuesPayload['motivo_do_perdido'];
+        const motivoTxt = Array.isArray(motivo) ? motivo.join(', ') : (motivo ? String(motivo) : null);
+        if (motivoTxt) {
+          try {
+            await addNote.mutateAsync(`Negócio perdido — motivo: ${motivoTxt}`);
+          } catch (err) {
+            console.warn('Falhou ao registrar nota do motivo perdido', err);
+          }
+        }
+      }
+
+      onDone?.();
       Alert.alert(
         'Etapa enviada',
         `${client.nome} foi enviado para ${selectedStage.label}.`,
@@ -685,7 +721,9 @@ export function ChangeStageModal({ client, onClose }: Props) {
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.headerRow}>
-              <Text style={styles.title}>🔄 Mover para etapa</Text>
+              <Text style={styles.title}>
+                {lockedStage ? '🚫 Mover para perdido' : '🔄 Mover para etapa'}
+              </Text>
               <TouchableOpacity onPress={onClose} disabled={submitting}>
                 <Text style={styles.closeBtn}>✕</Text>
               </TouchableOpacity>
@@ -706,7 +744,9 @@ export function ChangeStageModal({ client, onClose }: Props) {
               </View>
             )}
 
-            <Text style={styles.sectionLabel}>Escolha a etapa nova</Text>
+            <Text style={styles.sectionLabel}>
+              {lockedStage ? 'Informe o motivo da perda' : 'Escolha a etapa nova'}
+            </Text>
 
             {visibleStages.map((stage) => {
               const isSelected = selectedStageId === stage.id;
@@ -721,11 +761,13 @@ export function ChangeStageModal({ client, onClose }: Props) {
                       },
                     ]}
                     onPress={() => {
+                      if (lockedStage) return; // etapa fixa: nao permite trocar
                       setSelectedStageId(stage.id);
                       setSubValues({});
                       setSubValuesMulti({});
                     }}
-                    disabled={submitting}
+                    disabled={submitting || lockedStage}
+                    activeOpacity={lockedStage ? 1 : 0.2}
                   >
                     <View style={[styles.stageDot, { backgroundColor: stage.color }]} />
                     <Text

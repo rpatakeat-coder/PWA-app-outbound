@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Linking,
   Modal,
   RefreshControl,
   ScrollView,
@@ -15,6 +17,8 @@ import {
   useMetricLeads,
   useGestorTaskMetrics,
   useGestorTasksList,
+  exportReport,
+  periodRange,
   type GestorPeriod,
   type GestorPeriodPreset,
   type MetricLead,
@@ -27,6 +31,9 @@ import {
 
 interface Props {
   enabled: boolean;
+  // Abre o detalhe (ClientBottomSheet) de um lead ao toca-lo no drill-down.
+  // O App resolve o clientId -> Client (com fallback de fetch sob demanda).
+  onOpenClient?: (clientId: string) => void;
 }
 
 const PERIOD_OPTIONS: { value: GestorPeriodPreset; label: string }[] = [
@@ -223,7 +230,11 @@ function formatLeadDate(iso: string | null): string | null {
   return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-function LeadListModal({ state, onClose }: { state: LeadModalState | null; onClose: () => void }) {
+function LeadListModal({ state, onClose, onOpenClient }: {
+  state: LeadModalState | null;
+  onClose: () => void;
+  onOpenClient?: (clientId: string) => void;
+}) {
   // Busca a lista sob demanda a partir dos parâmetros do card tocado. A RPC
   // já devolve ordenado por data desc; enabled só quando o modal está aberto.
   const leadsQuery = useMetricLeads(state?.params ?? null, state !== null);
@@ -262,8 +273,11 @@ function LeadListModal({ state, onClose }: { state: LeadModalState | null; onClo
             }
             renderItem={({ item }) => {
               const when = formatLeadDate(item.at);
-              return (
-                <View style={styles.modalLeadRow}>
+              // Executivo a mostrar: quem FEZ a acao (actor) tem prioridade;
+              // senao o responsavel pelo lead. Evita repetir se forem iguais.
+              const exec = item.actor_name?.trim() || item.responsavel_nome?.trim() || null;
+              const body = (
+                <>
                   <View style={[styles.modalLeadDot, { backgroundColor: (item.status && STATUS_COLOR[item.status]) || '#94a3b8' }]} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.modalLeadName} numberOfLines={1}>{item.name}</Text>
@@ -271,12 +285,28 @@ function LeadListModal({ state, onClose }: { state: LeadModalState | null; onClo
                       {(item.status && (STATUS_LABEL[item.status] ?? item.status)) || 'Sem status'}
                       {when ? ` • ${when}` : ''}
                     </Text>
+                    {exec ? (
+                      <Text style={styles.modalLeadExec} numberOfLines={1}>👤 {exec}</Text>
+                    ) : null}
                     {item.note?.trim() ? (
                       <Text style={styles.modalLeadNote}>{item.note.trim()}</Text>
                     ) : null}
                   </View>
-                </View>
+                  {onOpenClient ? <Text style={styles.modalLeadChevron}>›</Text> : null}
+                </>
               );
+              if (onOpenClient) {
+                return (
+                  <TouchableOpacity
+                    style={styles.modalLeadRow}
+                    activeOpacity={0.6}
+                    onPress={() => { onOpenClient(item.client_id); onClose(); }}
+                  >
+                    {body}
+                  </TouchableOpacity>
+                );
+              }
+              return <View style={styles.modalLeadRow}>{body}</View>;
             }}
           />
         </View>
@@ -289,10 +319,11 @@ function LeadListModal({ state, onClose }: { state: LeadModalState | null; onClo
 const taskSevColor = (s: string | null) =>
   s === 'D5' ? '#dc2626' : s === 'D2' ? '#f59e0b' : s === 'SLA' ? '#2563eb' : '#64748b';
 
-function TasksModal({ state, period, onClose }: {
+function TasksModal({ state, period, onClose, onOpenClient }: {
   state: TaskModalState | null;
   period: GestorPeriod;
   onClose: () => void;
+  onOpenClient?: (clientId: string) => void;
 }) {
   const q = useGestorTasksList(
     state ? { hubspotId: state.hubspotId, status: state.status, period } : null,
@@ -336,8 +367,8 @@ function TasksModal({ state, period, onClose }: {
               const badge = item.severity === 'SLA'
                 ? (Number.isFinite(dias) ? `${dias}d` : 'SLA')
                 : (item.severity ?? '•');
-              return (
-                <View style={styles.modalLeadRow}>
+              const body = (
+                <>
                   <View style={[styles.taskBadge, { backgroundColor: taskSevColor(item.severity) }]}>
                     <Text style={styles.taskBadgeText}>{badge}</Text>
                   </View>
@@ -350,8 +381,21 @@ function TasksModal({ state, period, onClose }: {
                       {when ? ` • ${when}` : ''}
                     </Text>
                   </View>
-                </View>
+                  {onOpenClient ? <Text style={styles.modalLeadChevron}>›</Text> : null}
+                </>
               );
+              if (onOpenClient) {
+                return (
+                  <TouchableOpacity
+                    style={styles.modalLeadRow}
+                    activeOpacity={0.6}
+                    onPress={() => { onOpenClient(item.client_id); onClose(); }}
+                  >
+                    {body}
+                  </TouchableOpacity>
+                );
+              }
+              return <View style={styles.modalLeadRow}>{body}</View>;
             }}
           />
         </View>
@@ -540,7 +584,7 @@ function SellerCard({
   );
 }
 
-export function GestorScreen({ enabled }: Props) {
+export function GestorScreen({ enabled, onOpenClient }: Props) {
   const [preset, setPreset] = useState<GestorPeriodPreset>('30d');
   // Intervalo do período personalizado (dias locais, início/fim inclusivos).
   const [customStart, setCustomStart] = useState<Date | null>(null);
@@ -548,6 +592,7 @@ export function GestorScreen({ enabled }: Props) {
   const [rangePickerOpen, setRangePickerOpen] = useState(false);
   const [leadModal, setLeadModal] = useState<LeadModalState | null>(null);
   const [taskModal, setTaskModal] = useState<TaskModalState | null>(null);
+  const [exporting, setExporting] = useState<null | 'last_week' | 'period'>(null);
 
   const period = useMemo<GestorPeriod>(() => {
     if (preset === 'custom' && customStart && customEnd) {
@@ -577,6 +622,34 @@ export function GestorScreen({ enabled }: Props) {
   const openLeads = (title: string, params: MetricLeadsParams) => setLeadModal({ title, params });
   const openTasks = (title: string, hubspotId: string | null, status: GestorTaskStatus) =>
     setTaskModal({ title, hubspotId, status });
+
+  // Gera o CSV (semana anterior ou o periodo atual da tela) e abre o link.
+  const runExport = async (which: 'last_week' | 'period') => {
+    if (exporting) return;
+    setExporting(which);
+    try {
+      // 'period' usa o range atual da tela; 'last_week' manda vazio (a function
+      // resolve a semana anterior seg-dom). Presets relativos viram range aqui.
+      let range: { start: string; end: string } | null = null;
+      if (which === 'period') {
+        const r = periodRange(period);
+        range = { start: r.start ?? new Date(0).toISOString(), end: r.end ?? new Date().toISOString() };
+      }
+      const res = await exportReport(range);
+      Alert.alert(
+        'Relatório pronto 📊',
+        `${res.rows} linha(s) — período ${res.period.label.replace(/_/g, ' ')}.\n\nToque em Abrir para baixar o CSV (abre no navegador; dá pra abrir no Google Sheets/Excel).`,
+        [
+          { text: 'Fechar', style: 'cancel' },
+          { text: 'Abrir', onPress: () => Linking.openURL(res.url) },
+        ],
+      );
+    } catch (err: any) {
+      Alert.alert('Erro ao exportar', err?.message ?? 'Tente novamente.');
+    } finally {
+      setExporting(null);
+    }
+  };
 
   const periodLabel =
     preset === 'all' ? 'total'
@@ -633,6 +706,35 @@ export function GestorScreen({ enabled }: Props) {
             : 'Período personalizado'}
         </Text>
       </TouchableOpacity>
+
+      {/* Exportacao de dados (CSV com atividade por vendedor). */}
+      <View style={styles.exportCard}>
+        <Text style={styles.exportTitle}>📊 Exportar dados (CSV)</Text>
+        <Text style={styles.exportHint}>
+          Uma linha por atividade (lead, visita, reunião, follow-up, etapa, nota) com o vendedor
+          — pra analisar gargalos. Abre no Google Sheets/Excel.
+        </Text>
+        <View style={styles.exportRow}>
+          <TouchableOpacity
+            style={[styles.exportBtn, styles.exportBtnPrimary, exporting && styles.exportBtnDisabled]}
+            onPress={() => runExport('last_week')}
+            disabled={!!exporting}
+          >
+            {exporting === 'last_week'
+              ? <ActivityIndicator color="#fff" />
+              : <Text style={styles.exportBtnPrimaryText}>Semana anterior</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.exportBtn, styles.exportBtnGhost, exporting && styles.exportBtnDisabled]}
+            onPress={() => runExport('period')}
+            disabled={!!exporting}
+          >
+            {exporting === 'period'
+              ? <ActivityIndicator color="#0f172a" />
+              : <Text style={styles.exportBtnGhostText}>Período selecionado</Text>}
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {query.isLoading ? (
         <View style={styles.loadingBlock}>
@@ -757,8 +859,8 @@ export function GestorScreen({ enabled }: Props) {
         </>
       ) : null}
 
-      <LeadListModal state={leadModal} onClose={() => setLeadModal(null)} />
-      <TasksModal state={taskModal} period={period} onClose={() => setTaskModal(null)} />
+      <LeadListModal state={leadModal} onClose={() => setLeadModal(null)} onOpenClient={onOpenClient} />
+      <TasksModal state={taskModal} period={period} onClose={() => setTaskModal(null)} onOpenClient={onOpenClient} />
 
       {rangePickerOpen && (
         <RangeCalendarModal
@@ -794,6 +896,19 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     marginBottom: 16,
   },
+  exportCard: {
+    backgroundColor: '#fff', borderRadius: 12, padding: 14,
+    borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 16,
+  },
+  exportTitle: { fontSize: 14, fontWeight: '800', color: '#0f172a' },
+  exportHint: { fontSize: 11, color: '#64748b', marginTop: 4, marginBottom: 10, lineHeight: 15 },
+  exportRow: { flexDirection: 'row', gap: 8 },
+  exportBtn: { flex: 1, paddingVertical: 11, borderRadius: 10, alignItems: 'center' },
+  exportBtnPrimary: { backgroundColor: '#0f172a' },
+  exportBtnPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  exportBtnGhost: { backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
+  exportBtnGhostText: { color: '#0f172a', fontSize: 13, fontWeight: '700' },
+  exportBtnDisabled: { opacity: 0.6 },
   periodChip: {
     flex: 1,
     paddingVertical: 10,
@@ -1007,6 +1122,8 @@ const styles = StyleSheet.create({
   modalLeadDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
   modalLeadName: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
   modalLeadMeta: { fontSize: 11, color: '#64748b', marginTop: 1 },
+  modalLeadExec: { fontSize: 11, color: '#2563eb', fontWeight: '700', marginTop: 2 },
+  modalLeadChevron: { fontSize: 22, color: '#cbd5e1', fontWeight: '700', marginLeft: 4, alignSelf: 'center' },
   modalLeadNote: {
     fontSize: 13,
     color: '#334155',

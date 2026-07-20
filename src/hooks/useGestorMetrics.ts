@@ -18,6 +18,8 @@ export interface MetricLead {
   status: string | null;
   at: string | null;     // data relevante da ação (criação, visita, reunião...)
   note?: string | null;  // texto da nota, quando o item vem da métrica "Notas"
+  responsavel_nome?: string | null; // vendedor dono do lead (vendedor_id_hubspot)
+  actor_name?: string | null;       // quem executou esta ação especifica
 }
 
 export type SellerMetricKey =
@@ -258,6 +260,33 @@ export function useMetricLeads(params: MetricLeadsParams | null, enabled: boolea
       return (data ?? []) as MetricLead[];
     },
   });
+}
+
+// ============================================================================
+// Exportacao: chama a Edge Function export-report que gera o CSV no Storage e
+// devolve uma signed URL. Passa o access_token do usuario logado (a function
+// valida que e' gestor). Sem periodo -> semana anterior (seg-dom).
+// ============================================================================
+export async function exportReport(
+  range?: { start: string; end: string } | null,
+): Promise<{ url: string; rows: number; period: { start: string; end: string; label: string } }> {
+  const { data: sess } = await supabase.auth.getSession();
+  const token = sess.session?.access_token;
+  if (!token) throw new Error('Sessão expirada. Faça login de novo.');
+
+  const { data, error } = await supabase.functions.invoke('export-report', {
+    body: range ? { start: range.start, end: range.end } : {},
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (error) {
+    // A function retorna JSON de erro no corpo; tenta extrair a mensagem.
+    const ctx = (error as any)?.context;
+    let msg = error.message;
+    try { const body = await ctx?.json?.(); if (body?.error) msg = body.error; } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  if (!data?.url) throw new Error(data?.error ?? 'Falha ao gerar o relatório.');
+  return { url: data.url, rows: data.rows ?? 0, period: data.period };
 }
 
 // ============================================================================

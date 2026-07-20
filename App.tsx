@@ -47,6 +47,7 @@ import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { ChangeStageModal } from './src/screens/ChangeStageModal';
 import { EditLocationModal } from './src/screens/EditLocationModal';
+import { LOST_STAGE_ID } from './src/constants/stages';
 import { GestorScreen } from './src/screens/GestorScreen';
 import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
 import { reverseGeocode } from './src/utils/geocoding';
@@ -586,7 +587,12 @@ function MainApp() {
   // Agendamento aberto: guarda o cliente + o tipo (reunião ou follow up).
   // Mesmo modal serve os dois; só muda o `type` salvo e os rótulos.
   const [schedulingFor, setSchedulingFor] = useState<{ client: Client; type: MeetingType } | null>(null);
-  const [changingStageFor, setChangingStageFor] = useState<Client | null>(null);
+  // Mudanca de etapa. initialStageId trava o modal numa etapa (ex.: "Mover pra
+  // perdido" a partir de uma tarefa); taskId, quando presente, e' a tarefa a
+  // resolver depois que o envio concluir.
+  const [changingStageFor, setChangingStageFor] = useState<
+    { client: Client; initialStageId?: string; taskId?: string } | null
+  >(null);
   const [editingLocationFor, setEditingLocationFor] = useState<Client | null>(null);
   const isSaving = addClient.isPending || updateClient.isPending;
 
@@ -1519,6 +1525,20 @@ function MainApp() {
     setSelectedClient(client);
   }, []);
 
+  // Abre o detalhe de um lead a partir do painel do Gestor (so tem o clientId).
+  // Tenta achar na lista local; se nao estiver (recorte de setor/area do
+  // useClients nao cobre o painel), busca a linha sob demanda no Supabase.
+  const openClientById = useCallback(async (clientId: string) => {
+    const local = clients.find((c) => c.id === clientId);
+    if (local) { setSelectedClient(local); return; }
+    const { data, error } = await supabase.from('clients').select('*').eq('id', clientId).single();
+    if (error || !data) {
+      Alert.alert('Lead não encontrado', 'Não foi possível abrir esse lead. Ele pode ter sido removido.');
+      return;
+    }
+    setSelectedClient(data as Client);
+  }, [clients]);
+
   const handleMarkerPress = useCallback((c: Client) => openClientDetails(c), [openClientDetails]);
 
   // Modo de criação manual via mapa: pin fixo no centro da tela
@@ -2416,17 +2436,19 @@ function MainApp() {
                   >
                     <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Concluir</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.smallActionButton}
-                    onPress={() =>
-                      Alert.alert('Dispensar tarefa', `Dispensar "${task.title}" de ${title}? Ela sai da lista.`, [
-                        { text: 'Cancelar', style: 'cancel' },
-                        { text: 'Dispensar', style: 'destructive', onPress: () => resolveTask.mutate({ id: task.id, status: 'dispensada' }) },
-                      ])
-                    }
-                  >
-                    <Text style={styles.smallActionButtonText}>Dispensar</Text>
-                  </TouchableOpacity>
+                  {client && (
+                    <TouchableOpacity
+                      style={[styles.smallActionButton, { backgroundColor: '#ef4444' }]}
+                      onPress={() => {
+                        // Abre o fluxo de "Perdido" (pede o motivo comercial,
+                        // registra nota + sincroniza HubSpot). Ao concluir,
+                        // resolve esta tarefa (taskId no estado).
+                        setChangingStageFor({ client, initialStageId: LOST_STAGE_ID, taskId: task.id });
+                      }}
+                    >
+                      <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Mover p/ perdido</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             </View>
@@ -2817,7 +2839,7 @@ function MainApp() {
       onFollowUp={isViewer ? undefined : () => { setSchedulingFor({ client: selectedClient, type: 'follow_up' }); setSelectedClient(null); }}
       onChangeStage={
         !isViewer && selectedClient.status === 'lead'
-          ? () => { setChangingStageFor(selectedClient); setSelectedClient(null); }
+          ? () => { setChangingStageFor({ client: selectedClient }); setSelectedClient(null); }
           : undefined
       }
       isMarkingVisited={isVisiting || markAsVisited.isPending}
@@ -3191,7 +3213,7 @@ function MainApp() {
       ) : tab === 'tasks' ? (
         renderTasksScreen()
       ) : tab === 'gestor' ? (
-        <GestorScreen enabled={canViewGestor && tab === 'gestor'} />
+        <GestorScreen enabled={canViewGestor && tab === 'gestor'} onOpenClient={openClientById} />
       ) : tab === 'meu' ? (
         <MeuDesempenhoScreen enabled={tab === 'meu'} />
       ) : (
@@ -3912,7 +3934,13 @@ function MainApp() {
       {/* Schedule Meeting Modal */}
       {changingStageFor && (
         <ChangeStageModal
-          client={changingStageFor}
+          client={changingStageFor.client}
+          initialStageId={changingStageFor.initialStageId}
+          onDone={
+            changingStageFor.taskId
+              ? () => resolveTask.mutate({ id: changingStageFor.taskId!, status: 'concluida' })
+              : undefined
+          }
           onClose={() => setChangingStageFor(null)}
         />
       )}
