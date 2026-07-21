@@ -88,8 +88,12 @@ Deno.serve(async (req) => {
 
   const db = createClient(supabaseUrl, serviceRole);
 
+  // Marcador de etapa: se algo falhar, o catch loga/devolve ONDE parou.
+  let step = 'inicio';
+
   try {
     // 3) Vendedores (referencia de nome por id_hubspot e por auth.uid).
+    step = 'profiles';
     const { data: profs } = await db.from('profiles').select('id, full_name, email, id_hubspot, sector, role');
     const nameByHubspot = new Map<string, string>();
     const nameByUid = new Map<string, string>();
@@ -104,37 +108,33 @@ Deno.serve(async (req) => {
     const inPeriod = (q: any, col: string) => q.gte(col, start).lte(col, end);
 
     // 4) Atividades do periodo (cada uma com o vendedor executor + responsavel).
-    const meetings = await fetchAll(
-      db, 'client_meetings',
-      'id, client_id, type, scheduled_at, observacoes, status, duration_minutes, created_by, created_at',
-      (q) => inPeriod(q, 'created_at'),
-    );
-    const stageChanges = await fetchAll(
-      db, 'client_stage_changes',
-      'id, client_id, from_stage, to_stage, to_stage_id, sub_values, created_by, created_by_name, created_at',
-      (q) => inPeriod(q, 'created_at'),
-    );
-    const notes = await fetchAll(
-      db, 'client_notes',
-      'id, client_id, body, created_by, created_by_name, created_by_email, created_at',
-      (q) => inPeriod(q, 'created_at'),
-    );
-    const tasks = await fetchAll(
-      db, 'client_tasks',
-      'id, client_id, task_type, severity, title, status, vendedor_id_hubspot, meta, created_at, updated_at, resolved_at, resolved_by',
-      // Tarefas: inclui as criadas OU resolvidas no periodo (pra ver o que fechou).
-      (q) => q.or(`and(created_at.gte.${start},created_at.lte.${end}),and(resolved_at.gte.${start},resolved_at.lte.${end})`),
-    );
-    const createdLeads = await fetchAll(
-      db, 'clients',
-      'id',
-      (q) => inPeriod(q, 'created_at'),
-    );
-    const visitedLeads = await fetchAll(
-      db, 'clients',
-      'id',
-      (q) => inPeriod(q, 'visited_at'),
-    );
+    //    Em paralelo: sequencial estourava 14s+ em periodos longos (30d).
+    const [meetings, stageChanges, notes, tasks, createdLeads, visitedLeads] = await Promise.all([
+      fetchAll(
+        db, 'client_meetings',
+        'id, client_id, type, scheduled_at, observacoes, status, duration_minutes, created_by, created_at',
+        (q) => inPeriod(q, 'created_at'),
+      ),
+      fetchAll(
+        db, 'client_stage_changes',
+        'id, client_id, from_stage, to_stage, to_stage_id, sub_values, created_by, created_by_name, created_at',
+        (q) => inPeriod(q, 'created_at'),
+      ),
+      fetchAll(
+        db, 'client_notes',
+        'id, client_id, body, created_by, created_by_name, created_by_email, created_at',
+        (q) => inPeriod(q, 'created_at'),
+      ),
+      fetchAll(
+        db, 'client_tasks',
+        'id, client_id, task_type, severity, title, status, vendedor_id_hubspot, meta, created_at, updated_at, resolved_at, resolved_by',
+        // Tarefas: inclui as criadas OU resolvidas no periodo (pra ver o que fechou).
+        (q) => q.or(`and(created_at.gte.${start},created_at.lte.${end}),and(resolved_at.gte.${start},resolved_at.lte.${end})`),
+      ),
+      fetchAll(db, 'clients', 'id', (q) => inPeriod(q, 'created_at')),
+      fetchAll(db, 'clients', 'id', (q) => inPeriod(q, 'visited_at')),
+    ]);
+    step = 'atividades-ok';
 
     // 5) Conjunto de leads relevantes = criados/visitados no periodo + os
     //    referenciados por qualquer atividade do periodo. Assim a IA tem o
@@ -148,15 +148,21 @@ Deno.serve(async (req) => {
     for (const t of tasks) if (t.client_id) leadIds.add(t.client_id);
 
     // 6) Snapshot completo dos leads relevantes (em lotes de ids).
+    //    Lotes de 100: o filtro .in() vira query string na URL (~37 bytes por
+    //    uuid); lotes grandes chegam perto do limite de URI do proxy.
+    step = 'snapshot-leads';
     const idList = [...leadIds];
     const leads: any[] = [];
     const LEAD_COLS = 'id, nome, empresa, email, telefone, endereco, numero, bairro, cep, cidade, estado, latitude, longitude, status, etapa, origem, observacoes, id_hubspot, url_hubspot, vendedor_id_hubspot, created_by, visited_by, visited_at, won_at, geo_source, geo_approximate, created_at, updated_at';
-    for (let i = 0; i < idList.length; i += 500) {
-      const chunk = idList.slice(i, i + 500);
+    const CHUNK = 100;
+    const chunks: string[][] = [];
+    for (let i = 0; i < idList.length; i += CHUNK) chunks.push(idList.slice(i, i + CHUNK));
+    const snapshots = await Promise.all(chunks.map(async (chunk, ci) => {
       const { data, error } = await db.from('clients').select(LEAD_COLS).in('id', chunk);
-      if (error) throw new Error(`clients: ${error.message}`);
-      for (const c of data ?? []) leads.push(c);
-    }
+      if (error) throw new Error(`clients-snapshot[lote ${ci}]: ${error.message}`);
+      return data ?? [];
+    }));
+    for (const batch of snapshots) for (const c of batch) leads.push(c);
     // Enriquecer lead com nome do vendedor responsavel.
     for (const c of leads) {
       c.vendedor_nome = vendedorByHid(c.vendedor_id_hubspot);
@@ -173,6 +179,7 @@ Deno.serve(async (req) => {
     const clientHid = (id: string | null) => (id ? (leadById.get(id)?.vendedor_id_hubspot ?? null) : null);
 
     // 7) Monta os arrays de atividade enriquecidos.
+    step = 'montagem';
     const reunioes = meetings.filter((m) => m.type !== 'follow_up').map((m) => ({
       ...m, cliente: clientName(m.client_id),
       vendedor: vendedorByUid(m.created_by) ?? vendedorByHid(clientHid(m.client_id)),
@@ -233,6 +240,7 @@ Deno.serve(async (req) => {
     };
 
     // 9) Sobe o JSON e gera signed URL (7 dias).
+    step = 'upload';
     const jsonStr = JSON.stringify(payload, null, 2);
     const path = `export_tudo_${label}_${Date.now()}.json`;
     const { error: upErr } = await db.storage
@@ -242,6 +250,7 @@ Deno.serve(async (req) => {
       });
     if (upErr) return json(500, { error: 'Falha ao subir o arquivo', detail: upErr.message });
 
+    step = 'signed-url';
     const { data: signed, error: signErr } = await db.storage.from('exports').createSignedUrl(path, 7 * 24 * 3600);
     if (signErr || !signed) return json(500, { error: 'Falha ao gerar link', detail: signErr?.message });
 
@@ -253,6 +262,9 @@ Deno.serve(async (req) => {
       period: { start, end, label },
     });
   } catch (err) {
-    return json(500, { error: 'Falha ao montar a exportacao', detail: (err as Error).message });
+    const e = err as Error;
+    // Loga no dashboard (Functions > Logs) com a etapa em que quebrou.
+    console.error(`export-report FALHOU na etapa "${step}" (periodo ${label}):`, e.message, e.stack);
+    return json(500, { error: 'Falha ao montar a exportacao', detail: `[etapa: ${step}] ${e.message}` });
   }
 });

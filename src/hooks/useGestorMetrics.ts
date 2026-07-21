@@ -284,10 +284,14 @@ export async function exportReport(
     headers: { Authorization: `Bearer ${token}` },
   });
   if (error) {
-    // A function retorna JSON de erro no corpo; tenta extrair a mensagem.
+    // A function retorna JSON de erro no corpo; tenta extrair a mensagem e o
+    // detalhe tecnico (etapa em que quebrou) pra facilitar o diagnostico.
     const ctx = (error as any)?.context;
     let msg = error.message;
-    try { const body = await ctx?.json?.(); if (body?.error) msg = body.error; } catch { /* ignore */ }
+    try {
+      const body = await ctx?.json?.();
+      if (body?.error) msg = body.detail ? `${body.error}\n\n${body.detail}` : body.error;
+    } catch { /* ignore */ }
     throw new Error(msg);
   }
   if (!data?.url) throw new Error(data?.error ?? 'Falha ao gerar o relatório.');
