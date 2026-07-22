@@ -117,7 +117,7 @@ export const WON_STAGE_IDS = ['1396006162', '1396006163'];
 export const FUNNEL_STAGE_IDS = [
   '1395880469', // Prospecção
   '1396005401', // Visita
-  '1395880470', // Diagnóstico
+  '1395880470', // Conversa com decisor (ex-Diagnóstico)
   '1395880471', // Demo/Proposta
   '1395880472', // Negociação
   '1395880473', // Ag. Pagamento
@@ -127,6 +127,10 @@ export const FUNNEL_STAGE_IDS = [
 
 // Saida sempre disponivel como destino no app (a qualquer momento do funil).
 export const LOST_STAGE_ID = '1396006164'; // Perdido
+
+// Conversa com decisor (ex-Diagnóstico). Gate de features que so fazem
+// sentido depois de falar com o decisor (ex.: botao "Agendar reuniao").
+export const DECISOR_STAGE_ID = '1395880470';
 
 // Todos os IDs que o app aceita como DESTINO de mudanca (funil + perdido).
 // Qualquer etapa fora disso (laterais/origem) nao aparece como opcao no modal.
@@ -164,7 +168,8 @@ export const STAGES: Stage[] = [
   { id: '1396005401', label: 'Visita', color: '#14b8a6' },
   {
     id: '1395880470',
-    label: 'Diagnóstico',
+    // Renomeada no HubSpot em 2026-07 (era "Diagnóstico"; mesmo id).
+    label: 'Conversa com decisor',
     color: '#8b5cf6',
     subFields: [
       {

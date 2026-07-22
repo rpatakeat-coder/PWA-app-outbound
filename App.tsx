@@ -47,7 +47,8 @@ import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { ChangeStageModal } from './src/screens/ChangeStageModal';
 import { EditLocationModal } from './src/screens/EditLocationModal';
-import { LOST_STAGE_ID } from './src/constants/stages';
+import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES } from './src/constants/stages';
+import { useStages } from './src/hooks/useStages';
 import { GestorScreen } from './src/screens/GestorScreen';
 import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
 import { reverseGeocode } from './src/utils/geocoding';
@@ -84,7 +85,9 @@ const normalizeUf = (raw: string | null | undefined): string | null => {
 // sai do bucket sozinho. Comparacao case/acento-insensitive por robustez.
 const PIPE_ANTIGO_LABEL = 'Pipe Antigo';
 const NEW_PIPELINE_STAGE_LABELS = [
-  'Backlog', 'Reciclagem', 'Prospecção', 'Visita', 'Diagnóstico',
+  'Backlog', 'Reciclagem', 'Prospecção', 'Visita', 'Conversa com decisor',
+  // 'Diagnóstico' = label antigo de Conversa com decisor (registros residuais).
+  'Diagnóstico',
   'Demo/Proposta', 'Negociação', 'Ag. Pagamento', 'Negócio Fechado',
   'Enviado Onboarding', 'Perdido',
 ];
@@ -142,17 +145,17 @@ const TASK_RULES: TaskRuleDoc[] = [
   {
     code: 'agendar_demo',
     title: 'Agendar Demo',
-    trigger: 'Lead na etapa QUALIFICAÇÃO sem uma reunião (demo) futura agendada.',
+    trigger: 'Lead na etapa Conversa com decisor sem uma reunião (demo) futura agendada.',
     levels: [
-      { badge: 'D2', color: '#f59e0b', when: 'a partir de 2 dias na etapa' },
-      { badge: 'D5', color: '#dc2626', when: 'a partir de 5 dias na etapa (a mesma tarefa escala de D2 para D5)' },
+      { badge: 'D2', color: '#f59e0b', when: 'a partir de 2 dias úteis na etapa' },
+      { badge: 'D5', color: '#dc2626', when: 'a partir de 5 dias úteis na etapa (a mesma tarefa escala de D2 para D5)' },
     ],
     suppress:
       'Se o lead tiver uma reunião do tipo "reunião" (não follow-up) com data futura e status "agendada", a tarefa não é criada.',
     autoResolve:
-      'A tarefa some sozinha (resolvida automaticamente) quando o lead ganha uma reunião futura, sai da etapa de Qualificação, ou deixa de ser lead. Tarefas que você concluiu ou dispensou manualmente não voltam.',
+      'A tarefa some sozinha (resolvida automaticamente) quando o lead ganha uma reunião futura, sai da etapa Conversa com decisor, ou deixa de ser lead. Tarefas que você concluiu ou dispensou manualmente não voltam.',
     timing:
-      'O tempo é contado a partir da entrada na etapa (histórico de mudança de etapa). Sem histórico, conta a partir de quando a funcionalidade foi ativada (08/07/2026) — não de datas antigas — pra não gerar tarefas retroativas.',
+      'O tempo é contado em DIAS ÚTEIS (fim de semana não conta) a partir da entrada na etapa (histórico de mudança de etapa). Sem histórico, conta a partir de quando a funcionalidade foi ativada (08/07/2026) — não de datas antigas — pra não gerar tarefas retroativas.',
   },
   {
     code: 'sla_etapa',
@@ -166,7 +169,7 @@ const TASK_RULES: TaskRuleDoc[] = [
     autoResolve:
       'A tarefa some sozinha quando o lead avança de etapa (ou deixa de ser lead). O objetivo é medir cumprimento de prazo por etapa.',
     timing:
-      'Contado a partir da entrada na etapa (histórico). A geração roda automaticamente a cada 30 minutos no servidor — não depende de abrir o app.',
+      'Contado em DIAS ÚTEIS (fim de semana não conta) a partir da entrada na etapa (histórico). A geração roda automaticamente a cada 30 minutos no servidor — não depende de abrir o app.',
   },
 ];
 
@@ -2836,6 +2839,30 @@ function MainApp() {
       onClose={() => setSelectedClient(null)}
       onDelete={isViewer ? undefined : () => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
       onEdit={isViewer ? undefined : () => openEditClient(selectedClient)}
+      onSavePhone={isViewer ? undefined : async (tel) => {
+        // Reusa o updateClient (mesmo caminho do form completo) pra manter o
+        // webhook type=update — telefone novo sincroniza pro HubSpot. Os
+        // demais campos vao com o valor atual (nada e' sobrescrito).
+        const c = selectedClient;
+        await updateClient.mutateAsync({
+          id: c.id,
+          nome: c.nome,
+          empresa: c.empresa ?? undefined,
+          endereco: c.endereco ?? undefined,
+          numero: c.numero,
+          cep: c.cep ?? undefined,
+          cidade: c.cidade ?? undefined,
+          estado: c.estado ?? undefined,
+          telefone: tel || undefined,
+          email: c.email ?? undefined,
+          status: c.status,
+          latitude: c.latitude,
+          longitude: c.longitude,
+          observacoes: c.observacoes ?? undefined,
+        });
+        // Atualiza o snapshot aberto no sheet pra UI refletir na hora.
+        setSelectedClient({ ...c, telefone: tel || null });
+      }}
       onEditLocation={isViewer ? undefined : () => { setEditingLocationFor(selectedClient); setSelectedClient(null); }}
       onMarkVisited={isViewer ? undefined : () => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
       onScheduleMeeting={isViewer ? undefined : () => { setSchedulingFor({ client: selectedClient, type: 'reuniao' }); setSelectedClient(null); }}
@@ -4189,6 +4216,7 @@ function ClientBottomSheet({
   isMarkingVisited,
   onAddToRoute,
   canWriteNotes = true,
+  onSavePhone,
 }: {
   client: Client;
   insets: { bottom: number };
@@ -4206,6 +4234,7 @@ function ClientBottomSheet({
   isMarkingVisited: boolean;
   onAddToRoute?: () => void;
   canWriteNotes?: boolean;
+  onSavePhone?: (telefone: string) => Promise<void>;
 }) {
   const statusColor = statusConfig[client.status]?.color || '#3b82f6';
   const statusLabel = statusConfig[client.status]?.label || client.status;
@@ -4244,6 +4273,37 @@ function ClientBottomSheet({
   const [newNote, setNewNote] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingBody, setEditingBody] = useState('');
+
+  // Telefone editavel inline (sem abrir o form completo). Draft local; o
+  // botao Salvar so aparece quando o valor difere do salvo.
+  const [phoneDraft, setPhoneDraft] = useState(client.telefone ?? '');
+  const [savingPhone, setSavingPhone] = useState(false);
+  const phoneDirty = phoneDraft.trim() !== (client.telefone ?? '');
+  const handleSavePhone = async () => {
+    if (!onSavePhone || savingPhone) return;
+    setSavingPhone(true);
+    try {
+      await onSavePhone(phoneDraft.trim());
+      Keyboard.dismiss();
+    } catch (err: any) {
+      Alert.alert('Erro ao salvar telefone', err?.message ?? 'Tente novamente.');
+    } finally {
+      setSavingPhone(false);
+    }
+  };
+
+  // "Agendar reuniao" so aparece de Conversa com decisor (ex-Diagnóstico) em
+  // diante no funil — antes disso a cadencia ainda nao chegou na demo. O id e'
+  // fixo; o label vem do get_stages (com fallback no STAGES hardcoded pra
+  // labels antigos tipo 'Diagnóstico' em registros ainda nao sincronizados).
+  const { stages: pipelineStages } = useStages(true);
+  const currentStageId = client.etapa
+    ? (pipelineStages.find((s) => s.label === client.etapa)?.id
+        ?? STAGES.find((s) => s.label === client.etapa)?.id
+        ?? null)
+    : null;
+  const stageIdx = currentStageId ? FUNNEL_STAGE_IDS.indexOf(currentStageId) : -1;
+  const canScheduleMeeting = stageIdx >= FUNNEL_STAGE_IDS.indexOf(DECISOR_STAGE_ID);
 
   // Timeline unificada: notas + mudancas de etapa + reunioes/follow-ups +
   // visita (check-in), mais recentes primeiro. Cada entrada carrega kind pra
@@ -4379,6 +4439,50 @@ function ClientBottomSheet({
               </View>
             </View>
 
+            {/* Acoes rapidas no topo: visita (acao mais usada em campo) e
+                editar — antes ficavam no fim do sheet, exigindo rolar tudo. */}
+            {(onMarkVisited || onEdit) && (
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                {onMarkVisited && (
+                  <TouchableOpacity
+                    disabled={isMarkingVisited}
+                    style={{
+                      flex: 1,
+                      backgroundColor: isMarkingVisited ? '#94d4a8' : '#16a34a',
+                      borderRadius: 10,
+                      paddingVertical: 13,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    onPress={onMarkVisited}
+                  >
+                    {isMarkingVisited ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
+                        {client.visited_at ? '🔁 Re-marcar visita' : '✅ Marcar como visitado'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+                {onEdit && (
+                  <TouchableOpacity
+                    style={{
+                      paddingHorizontal: 18,
+                      backgroundColor: '#2563eb',
+                      borderRadius: 10,
+                      paddingVertical: 13,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    onPress={onEdit}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>✏️ Editar</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
             {/* Geo quality indicator */}
             <View style={{ backgroundColor: isApprox ? '#fefce8' : '#f0fdf4', borderRadius: 8, padding: 10, marginBottom: 12, flexDirection: 'row', gap: 8 }}>
               <Text style={{ fontSize: 14 }}>{isApprox ? '⚠️' : '✅'}</Text>
@@ -4408,7 +4512,56 @@ function ClientBottomSheet({
                   </View>
                 </View>
               )}
-              {client.telefone && (
+              {/* Telefone: editavel direto aqui (sem abrir o form completo).
+                  O Salvar so aparece quando o valor muda; grava via
+                  updateClient (mesmo fluxo do form — sincroniza HubSpot). */}
+              {onSavePhone ? (
+                <View style={styles.infoItem}>
+                  <Text style={styles.infoIcon}>📞</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailLabel}>Telefone</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                      <TextInput
+                        style={{
+                          flex: 1,
+                          borderWidth: 1,
+                          borderColor: phoneDirty ? '#2563eb' : '#e2e8f0',
+                          borderRadius: 8,
+                          paddingHorizontal: 10,
+                          paddingVertical: 7,
+                          fontSize: 14,
+                          color: '#0f172a',
+                          backgroundColor: '#f8fafc',
+                        }}
+                        value={phoneDraft}
+                        onChangeText={setPhoneDraft}
+                        placeholder="(00) 00000-0000"
+                        placeholderTextColor="#94a3b8"
+                        keyboardType="phone-pad"
+                        editable={!savingPhone}
+                      />
+                      {phoneDirty && (
+                        <TouchableOpacity
+                          onPress={handleSavePhone}
+                          disabled={savingPhone}
+                          style={{
+                            backgroundColor: '#16a34a',
+                            borderRadius: 8,
+                            paddingHorizontal: 14,
+                            paddingVertical: 9,
+                          }}
+                        >
+                          {savingPhone ? (
+                            <ActivityIndicator color="#fff" size="small" />
+                          ) : (
+                            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Salvar</Text>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                </View>
+              ) : client.telefone ? (
                 <View style={styles.infoItem}>
                   <Text style={styles.infoIcon}>📞</Text>
                   <View style={{ flex: 1 }}>
@@ -4416,7 +4569,7 @@ function ClientBottomSheet({
                     <Text style={styles.detailValue}>{client.telefone}</Text>
                   </View>
                 </View>
-              )}
+              ) : null}
               {client.email && (
                 <View style={styles.infoItem}>
                   <Text style={styles.infoIcon}>✉️</Text>
@@ -4802,13 +4955,20 @@ function ClientBottomSheet({
               ) : (
                 reunioes.map((m) => renderMeetingChip(m, '📅'))
               )}
-              {onScheduleMeeting && (
+              {/* Agendar reuniao: so de "Conversa com decisor" em diante no
+                  funil — antes disso a cadencia ainda nao pede demo. */}
+              {onScheduleMeeting && canScheduleMeeting && (
                 <TouchableOpacity
                   style={styles.scheduleButton}
                   onPress={onScheduleMeeting}
                 >
                   <Text style={styles.scheduleButtonText}>📅 Agendar reunião</Text>
                 </TouchableOpacity>
+              )}
+              {onScheduleMeeting && !canScheduleMeeting && (
+                <Text style={[styles.meetingsEmpty, { fontStyle: 'italic' }]}>
+                  Agendamento libera na etapa "Conversa com decisor".
+                </Text>
               )}
             </View>
 
@@ -4845,30 +5005,8 @@ function ClientBottomSheet({
               </TouchableOpacity>
             )}
 
-            {/* Marcar como visitado: liberado pra QUALQUER status. Status nao
-                muda mais com a visita — RPC mark_client_as_visited so preenche
-                visited_at + coords + visited_by. Re-marcar atualiza o timestamp. */}
-            {onMarkVisited && (
-              <TouchableOpacity
-                disabled={isMarkingVisited}
-                style={{
-                  backgroundColor: isMarkingVisited ? '#94d4a8' : '#16a34a',
-                  borderRadius: 10,
-                  paddingVertical: 14,
-                  alignItems: 'center',
-                  marginBottom: 12,
-                }}
-                onPress={onMarkVisited}
-              >
-                {isMarkingVisited ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
-                    {client.visited_at ? '🔁 Re-marcar visita' : '✅ Marcar como visitado'}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            )}
+            {/* Marcar como visitado + Editar migraram pro TOPO do sheet
+                (acoes mais usadas em campo — sem precisar rolar ate aqui). */}
 
             {/* Actions */}
             {onEditLocation && (
@@ -4879,18 +5017,11 @@ function ClientBottomSheet({
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>📍 Editar localização (mover pin)</Text>
               </TouchableOpacity>
             )}
-            {(onDelete || onEdit) && (
+            {onDelete && (
               <View style={styles.actionRow}>
-                {onDelete && (
-                  <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
-                    <Text style={styles.deleteButtonText}>Remover</Text>
-                  </TouchableOpacity>
-                )}
-                {onEdit && (
-                  <TouchableOpacity style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#2563eb' }} onPress={onEdit}>
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>Editar</Text>
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
+                  <Text style={styles.deleteButtonText}>Remover</Text>
+                </TouchableOpacity>
               </View>
             )}
           </ScrollView>
