@@ -2659,6 +2659,9 @@ function MainApp() {
           pitchEnabled
           radius={50}
           minPoints={50}
+          // Mesmo motivo do mapa principal: LayoutAnimation do clustering no
+          // iOS deixa markers com snapshot vazio (pin invisivel) ao dar zoom.
+          animationEnabled={false}
           onPanDrag={() => {
             // Toque pra arrastar pausa o follow automaticamente.
             if (navCameraMode === 'follow') setNavCameraMode('free');
@@ -3031,6 +3034,12 @@ function MainApp() {
             clusterColor="#3b82f6"
             clusterTextColor="#ffffff"
             spiralEnabled={false}
+            // Bug conhecido da lib no iOS: o LayoutAnimation disparado a cada
+            // zoom anima os markers enquanto o native captura o snapshot do
+            // custom view — o snapshot sai vazio e o pin fica invisivel
+            // (sumindo "aleatoriamente" conforme o zoom). Desligar a animacao
+            // resolve; os pins apenas reposicionam sem transicao.
+            animationEnabled={false}
           >
             {filteredMapMarkers.map(client => (
               <MarkerWithReady
