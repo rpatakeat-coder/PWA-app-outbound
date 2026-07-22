@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ActivityIndicator,
   Alert,
@@ -456,6 +457,8 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone }: Pr
   // O hardcoded em STAGES é fallback enquanto a query carrega ou se falhar.
   const { data: groupedOptions } = useStagePropertyOptions();
 
+  const queryClient = useQueryClient();
+
   // Historico local de mudancas — gravado APOS o webhook responder OK pra
   // timeline so refletir o que efetivamente saiu pro HubSpot. Se o INSERT
   // falhar (RLS, tabela ausente etc.) so logamos: a sincronia ja passou.
@@ -647,6 +650,26 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone }: Pr
       if (!res.ok) {
         throw new Error(`Webhook respondeu ${res.status}`);
       }
+
+      // Webhook ok — reflete a etapa nova em clients.etapa NA HORA. A volta
+      // oficial (HubSpot -> n8n -> Supabase) grava o mesmo label minutos
+      // depois; sem este update otimista o app segue mostrando a etapa velha
+      // e o vendedor nao consegue avancar a proxima etapa na mesma visita
+      // (conversa -> demonstracao -> negociacao em sequencia). Falha aqui nao
+      // bloqueia: o HubSpot ja recebeu, so a UI fica defasada como antes.
+      try {
+        const { error: etapaErr } = await supabase
+          .from('clients')
+          .update({ etapa: selectedStage.label, updated_at: new Date().toISOString() })
+          .eq('id', client.id);
+        if (etapaErr) console.warn('[change_stage] update otimista de etapa falhou', etapaErr.message);
+      } catch (err) {
+        console.warn('[change_stage] update otimista de etapa falhou', err);
+      }
+      // Refresca a lista de clientes (mapa/lista/detalhe) e as tarefas de
+      // cadencia, que derivam da etapa.
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['client_tasks'] });
 
       // Webhook ok — grava a entrada na timeline. Falha aqui nao bloqueia
       // o sucesso: o HubSpot ja recebeu, so o historico local ficou de fora.
