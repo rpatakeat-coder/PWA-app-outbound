@@ -84,21 +84,39 @@ const normalizeUf = (raw: string | null | undefined): string | null => {
 // mexer no clients.etapa. Conforme o RPA sincroniza o lead pro label novo, ele
 // sai do bucket sozinho. Comparacao case/acento-insensitive por robustez.
 const PIPE_ANTIGO_LABEL = 'Pipe Antigo';
+// Ordem CANONICA do pipeline novo = displayOrder do HubSpot. Alem de definir
+// "o que e' pipeline novo", esta lista define a ORDEM das secoes da aba Lista
+// e dos chips de filtro (igual ao HubSpot).
 const NEW_PIPELINE_STAGE_LABELS = [
   'Backlog', 'Reciclagem', 'Prospecção', 'Visita', 'Conversa com decisor',
-  // 'Diagnóstico' = label antigo de Conversa com decisor (registros residuais).
-  'Diagnóstico',
   'Demo/Proposta', 'Negociação', 'Ag. Pagamento', 'Negócio Fechado',
   'Enviado Onboarding', 'Perdido',
 ];
 const foldLabel = (s: string) =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-const NEW_PIPELINE_LABELS_FOLDED = new Set(NEW_PIPELINE_STAGE_LABELS.map(foldLabel));
+
+// fold -> label CANONICO. Antes o normalizeStage devolvia o label cru quando
+// o fold batia, entao "DEMO/PROPOSTA" (deal do pipe antigo, caixa alta) virava
+// uma secao SEPARADA de "Demo/Proposta" — a mesma etapa aparecia duas vezes.
+// Agora qualquer variacao de caixa/acentos colapsa no label canonico. Aliases
+// cobrem renomeacoes ('Diagnóstico' virou 'Conversa com decisor' no HubSpot).
+const CANONICAL_STAGE_BY_FOLDED = new Map<string, string>([
+  ...NEW_PIPELINE_STAGE_LABELS.map((l): [string, string] => [foldLabel(l), l]),
+  [foldLabel('Diagnóstico'), 'Conversa com decisor'],
+]);
 
 const normalizeStage = (raw: string | null | undefined): string | null => {
   const cleaned = raw?.trim();
   if (!cleaned) return null;
-  return NEW_PIPELINE_LABELS_FOLDED.has(foldLabel(cleaned)) ? cleaned : PIPE_ANTIGO_LABEL;
+  return CANONICAL_STAGE_BY_FOLDED.get(foldLabel(cleaned)) ?? PIPE_ANTIGO_LABEL;
+};
+
+// Indice de ordenacao de etapa: funil na ordem do HubSpot, Pipe Antigo (e
+// qualquer label desconhecido) depois de tudo. "Sem etapa" e' tratado a parte
+// pelos consumidores — vai mais pro fim ainda.
+const stageOrderIndex = (label: string): number => {
+  const idx = NEW_PIPELINE_STAGE_LABELS.indexOf(label);
+  return idx >= 0 ? idx : NEW_PIPELINE_STAGE_LABELS.length;
 };
 
 const initialFormState = {
@@ -687,7 +705,8 @@ function MainApp() {
       const stage = normalizeStage(c.etapa);
       if (stage) set.add(stage);
     }
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    // Chips na ordem do funil (HubSpot); Pipe Antigo por ultimo.
+    return Array.from(set).sort((a, b) => stageOrderIndex(a) - stageOrderIndex(b));
   }, [clients]);
 
   // Se o UF selecionado some (mudou setor, filtro, etc.), volta pra "todos".
@@ -793,10 +812,11 @@ function MainApp() {
     }
     return Array.from(groups.entries())
       .map(([key, value]) => ({ key, ...value }))
+      // Ordem do funil (HubSpot); Pipe Antigo penultimo, Sem etapa por ultimo.
       .sort((a, b) => {
         if (a.key === '__sem_etapa__') return 1;
         if (b.key === '__sem_etapa__') return -1;
-        return a.title.localeCompare(b.title, 'pt-BR');
+        return stageOrderIndex(a.title) - stageOrderIndex(b.title);
       });
   }, [filteredClients]);
 
