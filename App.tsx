@@ -3102,22 +3102,24 @@ function MainApp() {
             const centerX = mapLayout.x + mapLayout.width / 2;
             return (
               <>
-                {/* Pin: base (ponta) no centro. Sobe a altura total (44) pra a
-                    ponta encostar no centro; centraliza em X pela metade da
-                    largura do pin (36/2=18). */}
+                {/* Pin: base (ponta) no centro. Altura total = 36 (corpo) - 1
+                    (margin da seta) + 8 (seta) = 43; alignItems centraliza a
+                    seta sob o corpo — sem isso ela encosta na borda esquerda
+                    e a ponta aponta ~12px fora do ponto capturado. */}
                 <View
                   pointerEvents="none"
-                  style={{ position: 'absolute', left: centerX - 18, top: centerY - 44 }}
+                  style={{ position: 'absolute', left: centerX - 18, top: centerY - 43, alignItems: 'center' }}
                 >
                   <View style={[markerStyles.pin, { backgroundColor: '#dc2626' }]}>
                     <Image source={require('./assets/icon.png')} style={markerStyles.logo} fadeDuration={0} />
                   </View>
                   <View style={[markerStyles.arrow, { borderTopColor: '#dc2626' }]} />
                 </View>
-                {/* Dot no centro EXATO do mapa = onde a coordenada e' capturada. */}
+                {/* Dot no centro EXATO do mapa = onde a coordenada e' capturada.
+                    Dot tem 8px — offset de metade (4) centraliza no ponto. */}
                 <View
                   pointerEvents="none"
-                  style={{ position: 'absolute', left: centerX - 6, top: centerY - 6 }}
+                  style={{ position: 'absolute', left: centerX - 4, top: centerY - 4 }}
                 >
                   <View style={styles.creationCenterDotInner} />
                 </View>
