@@ -1838,10 +1838,10 @@ function MainApp() {
       const userLon = position.coords.longitude;
       const distance = haversineMeters(userLat, userLon, client.latitude as number, client.longitude as number);
 
-      if (distance > 50) {
+      if (distance > 200) {
         Alert.alert(
           'Você está muito longe',
-          `Distância atual: ${Math.round(distance)} m (limite: 50 m).\nAproxime-se do local para marcar como visitado.`,
+          `Distância atual: ${Math.round(distance)} m (limite: 200 m).\nAproxime-se do local para marcar como visitado.`,
         );
         return;
       }
