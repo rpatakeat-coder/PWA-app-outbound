@@ -501,7 +501,7 @@ function MainApp() {
   // Tarefas geradas automaticamente (motor de regras no banco). O hook dispara
   // a geracao ao autenticar e le as pendentes. O badge do rodape usa a contagem
   // JA filtrada por vendedor (visibleTasksCount), nao o total global.
-  const { tasks, resolveTask, completeAndNext } = useClientTasks();
+  const { tasks, resolveTask } = useClientTasks();
   useForceReload(isAuthenticated);
   const isAdmin = profile?.email === 'arthurgothe.takeat@gmail.com';
   // Acesso a aba Gestor (metricas) SEM ser admin pleno. Julyan ve so as
@@ -2400,7 +2400,7 @@ function MainApp() {
             Geradas automaticamente a partir dos seus leads. Ex.: lead em
             Qualificação sem demo agendada vira "Agendar Demo" (D2 após 2 dias,
             D5 após 5). Ao concluir, escolha o destino do lead: avançar etapa,
-            mover p/ Perdido, ou manter e gerar a próxima tarefa (2., 3., …).
+            mover p/ Perdido, ou manter na etapa.
             {'\n\n'}Toque em ⓘ para ver as regras de geração.
             {activeVendor !== null && activeVendor !== myHubspotId
               ? `\n\nFiltro ativo: ${vendorLabel(activeVendor)} (tire no modal de filtros).`
@@ -2470,19 +2470,6 @@ function MainApp() {
                   >
                     <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Concluir</Text>
                   </TouchableOpacity>
-                  {client && (
-                    <TouchableOpacity
-                      style={[styles.smallActionButton, { backgroundColor: '#ef4444' }]}
-                      onPress={() => {
-                        // Abre o fluxo de "Perdido" (pede o motivo comercial,
-                        // registra nota + sincroniza HubSpot). Ao concluir,
-                        // resolve esta tarefa (taskId no estado).
-                        setChangingStageFor({ client, initialStageId: LOST_STAGE_ID, taskId: task.id });
-                      }}
-                    >
-                      <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Mover p/ perdido</Text>
-                    </TouchableOpacity>
-                  )}
                 </View>
               </View>
             </View>
@@ -3513,10 +3500,6 @@ function MainApp() {
           <View style={styles.taskRulesCard}>
             {completingTask && (() => {
               const { task, client } = completingTask;
-              // Próximo número e título-base pro hint (mesma regra da RPC:
-              // tira numeração "N. " e o D2/D5 do agendar_demo).
-              const nextSeq = (Number((task.meta as any)?.seq) || 1) + 1;
-              const baseTitle = task.title.replace(/^\d+\.\s*/, '').replace(/^D[25]\s+/, '');
               return (
                 <>
                   <View style={styles.taskRulesHeader}>
@@ -3560,15 +3543,12 @@ function MainApp() {
                     style={[styles.taskDoneOption, { backgroundColor: '#2563eb' }]}
                     onPress={() => {
                       setCompletingTask(null);
-                      completeAndNext.mutate(task.id, {
-                        onError: (e: any) =>
-                          Alert.alert('Erro', e?.message ?? 'Não foi possível gerar a próxima tarefa.'),
-                      });
+                      resolveTask.mutate({ id: task.id, status: 'concluida' });
                     }}
                   >
-                    <Text style={styles.taskDoneOptionText}>🔁 Manter etapa e gerar próxima</Text>
+                    <Text style={styles.taskDoneOptionText}>✔️ Manter na etapa</Text>
                     <Text style={styles.taskDoneOptionHint}>
-                      Lead segue na mesma etapa; cria "{nextSeq}. {baseTitle}" pra próxima rodada.
+                      Só conclui a tarefa; o lead segue na etapa e no fluxo automático.
                     </Text>
                   </TouchableOpacity>
                 </>
