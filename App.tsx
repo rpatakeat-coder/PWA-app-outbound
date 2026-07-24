@@ -38,7 +38,7 @@ import { useForceReload } from './src/hooks/useForceReload';
 import { supabase } from './src/integrations/supabase/client';
 import { AREA_RADIUS_KM } from './src/utils/area';
 import { getShowOnlyMyAreaPref, setShowOnlyMyAreaPref } from './src/utils/userPrefs';
-import type { Client, ClientMeeting, ClientStatus, MeetingType } from './src/types/client';
+import type { Client, ClientMeeting, ClientStatus, ClientTask, MeetingType } from './src/types/client';
 import { openMultiStopNavigation, openNavigation } from './src/utils/navigation';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
@@ -501,7 +501,7 @@ function MainApp() {
   // Tarefas geradas automaticamente (motor de regras no banco). O hook dispara
   // a geracao ao autenticar e le as pendentes. O badge do rodape usa a contagem
   // JA filtrada por vendedor (visibleTasksCount), nao o total global.
-  const { tasks, resolveTask } = useClientTasks();
+  const { tasks, resolveTask, completeAndNext } = useClientTasks();
   useForceReload(isAuthenticated);
   const isAdmin = profile?.email === 'arthurgothe.takeat@gmail.com';
   // Acesso a aba Gestor (metricas) SEM ser admin pleno. Julyan ve so as
@@ -614,6 +614,9 @@ function MainApp() {
   const [changingStageFor, setChangingStageFor] = useState<
     { client: Client; initialStageId?: string; taskId?: string } | null
   >(null);
+  // "Concluir tarefa" abre um menu de destino do lead: avançar etapa, mover
+  // p/ Perdido, ou manter a etapa e gerar a próxima tarefa numerada.
+  const [completingTask, setCompletingTask] = useState<{ task: ClientTask; client: Client } | null>(null);
   const [editingLocationFor, setEditingLocationFor] = useState<Client | null>(null);
   const isSaving = addClient.isPending || updateClient.isPending;
 
@@ -2396,7 +2399,8 @@ function MainApp() {
           <Text style={styles.panelHint}>
             Geradas automaticamente a partir dos seus leads. Ex.: lead em
             Qualificação sem demo agendada vira "Agendar Demo" (D2 após 2 dias,
-            D5 após 5). Conclua ou dispense conforme resolver.
+            D5 após 5). Ao concluir, escolha o destino do lead: avançar etapa,
+            mover p/ Perdido, ou manter e gerar a próxima tarefa (2., 3., …).
             {'\n\n'}Toque em ⓘ para ver as regras de geração.
             {activeVendor !== null && activeVendor !== myHubspotId
               ? `\n\nFiltro ativo: ${vendorLabel(activeVendor)} (tire no modal de filtros).`
@@ -2450,12 +2454,19 @@ function MainApp() {
                   )}
                   <TouchableOpacity
                     style={[styles.smallActionButton, { backgroundColor: '#16a34a' }]}
-                    onPress={() =>
-                      Alert.alert('Concluir tarefa', `Marcar "${task.title}" de ${title} como concluída?`, [
-                        { text: 'Cancelar', style: 'cancel' },
-                        { text: 'Concluir', onPress: () => resolveTask.mutate({ id: task.id, status: 'concluida' }) },
-                      ])
-                    }
+                    onPress={() => {
+                      // Com o lead carregado, concluir abre o menu de destino
+                      // (avançar / perdido / manter + próxima). Sem lead
+                      // (raro: cliente deletado), cai na conclusão simples.
+                      if (client) {
+                        setCompletingTask({ task, client });
+                      } else {
+                        Alert.alert('Concluir tarefa', `Marcar "${task.title}" como concluída?`, [
+                          { text: 'Cancelar', style: 'cancel' },
+                          { text: 'Concluir', onPress: () => resolveTask.mutate({ id: task.id, status: 'concluida' }) },
+                        ]);
+                      }
+                    }}
                   >
                     <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Concluir</Text>
                   </TouchableOpacity>
@@ -3487,6 +3498,82 @@ function MainApp() {
             >
               <Text style={styles.taskRulesDoneButtonText}>Entendi</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: destino do lead ao concluir uma tarefa */}
+      <Modal
+        visible={completingTask !== null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setCompletingTask(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.taskRulesCard}>
+            {completingTask && (() => {
+              const { task, client } = completingTask;
+              // Próximo número e título-base pro hint (mesma regra da RPC:
+              // tira numeração "N. " e o D2/D5 do agendar_demo).
+              const nextSeq = (Number((task.meta as any)?.seq) || 1) + 1;
+              const baseTitle = task.title.replace(/^\d+\.\s*/, '').replace(/^D[25]\s+/, '');
+              return (
+                <>
+                  <View style={styles.taskRulesHeader}>
+                    <Text style={styles.taskRulesTitle}>Concluir "{task.title}"</Text>
+                    <TouchableOpacity
+                      style={styles.taskRulesClose}
+                      onPress={() => setCompletingTask(null)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Text style={styles.taskRulesCloseText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.taskRulesIntro}>
+                    {getClientPrimaryName(client)} — o que acontece com o lead depois de concluir?
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.taskDoneOption, { backgroundColor: '#16a34a' }]}
+                    onPress={() => {
+                      setCompletingTask(null);
+                      setChangingStageFor({ client, taskId: task.id });
+                    }}
+                  >
+                    <Text style={styles.taskDoneOptionText}>➡️ Avançar etapa</Text>
+                    <Text style={styles.taskDoneOptionHint}>
+                      Move o lead pra próxima etapa do funil e conclui a tarefa.
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.taskDoneOption, { backgroundColor: '#ef4444' }]}
+                    onPress={() => {
+                      setCompletingTask(null);
+                      setChangingStageFor({ client, initialStageId: LOST_STAGE_ID, taskId: task.id });
+                    }}
+                  >
+                    <Text style={styles.taskDoneOptionText}>❌ Mover p/ Perdido</Text>
+                    <Text style={styles.taskDoneOptionHint}>
+                      Registra o motivo do perdido e conclui a tarefa.
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.taskDoneOption, { backgroundColor: '#2563eb' }]}
+                    onPress={() => {
+                      setCompletingTask(null);
+                      completeAndNext.mutate(task.id, {
+                        onError: (e: any) =>
+                          Alert.alert('Erro', e?.message ?? 'Não foi possível gerar a próxima tarefa.'),
+                      });
+                    }}
+                  >
+                    <Text style={styles.taskDoneOptionText}>🔁 Manter etapa e gerar próxima</Text>
+                    <Text style={styles.taskDoneOptionHint}>
+                      Lead segue na mesma etapa; cria "{nextSeq}. {baseTitle}" pra próxima rodada.
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              );
+            })()}
           </View>
         </View>
       </Modal>
@@ -5758,6 +5845,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   taskRulesDoneButtonText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  // Opções do modal "destino do lead" ao concluir tarefa
+  taskDoneOption: { borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, marginTop: 10 },
+  taskDoneOptionText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  taskDoneOptionHint: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 3, lineHeight: 16 },
   // Ponto de partida da rota
   routeStartRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
   routeStartOption: {

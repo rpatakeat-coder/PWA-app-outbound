@@ -73,11 +73,24 @@ export function useClientTasks() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_tasks'] }),
   });
 
+  // "Manter etapa e gerar próxima": conclui a tarefa e cria a seguinte igual,
+  // numerada ("2. Título"). Precisa ser RPC (SECURITY DEFINER) — não há policy
+  // de INSERT em client_tasks pro app; a numeração e o meta.followup (que
+  // protege a nova tarefa da auto-resolução do gerador) vivem no banco.
+  const completeAndNext = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.rpc('complete_task_and_create_next', { p_task_id: id });
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_tasks'] }),
+  });
+
   return {
     tasks,
     pendingCount: tasks.length,
     isLoading: query.isLoading,
     error: query.error,
     resolveTask,
+    completeAndNext,
   };
 }
