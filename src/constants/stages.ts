@@ -136,6 +136,31 @@ export const DECISOR_STAGE_ID = '1395880470';
 // Qualquer etapa fora disso (laterais/origem) nao aparece como opcao no modal.
 export const APP_STAGE_IDS = [...FUNNEL_STAGE_IDS, LOST_STAGE_ID];
 
+// ---------------------------------------------------------------------------
+// Temperatura do lead por etapa — bandeirinha (emoji) nos pins do mapa pra
+// leitura rapida de quem esta quente/morno/frio. Comparacao por label
+// NORMALIZADO (caixa alta) porque clients.etapa guarda o LABEL e ja circulou
+// com variacoes de caixa e labels legados (Diagnóstico, NEGÓCIO PERDIDO).
+// ---------------------------------------------------------------------------
+export type StageTemperature = { emoji: string; label: string };
+
+const TEMP_COLD = new Set(['PROSPECÇÃO', 'VISITA', 'BACKLOG', 'RECICLAGEM']);
+const TEMP_WARM = new Set(['CONVERSA COM DECISOR', 'DIAGNÓSTICO', 'DEMO/PROPOSTA']);
+const TEMP_HOT = new Set(['NEGOCIAÇÃO', 'AG. PAGAMENTO']);
+const TEMP_WON = new Set(['NEGÓCIO FECHADO', 'ENVIADO ONBOARDING']);
+const TEMP_LOST = new Set(['PERDIDO', 'NEGÓCIO PERDIDO']);
+
+export function stageTemperature(etapa: string | null | undefined): StageTemperature | null {
+  const key = (etapa ?? '').trim().toUpperCase();
+  if (!key) return null;
+  if (TEMP_HOT.has(key)) return { emoji: '🔥', label: 'Quente' };
+  if (TEMP_WARM.has(key)) return { emoji: '🟡', label: 'Morno' };
+  if (TEMP_COLD.has(key)) return { emoji: '❄️', label: 'Frio' };
+  if (TEMP_WON.has(key)) return { emoji: '✅', label: 'Fechado' };
+  if (TEMP_LOST.has(key)) return { emoji: '⚫', label: 'Perdido' };
+  return null; // etapa desconhecida: pin fica sem bandeirinha
+}
+
 // Paleta ciclica pra colorir etapas novas do HubSpot que nao tem cor propria
 // no mapa hardcoded. Mantem o visual consistente sem precisar cor por etapa.
 export const STAGE_PALETTE = [
