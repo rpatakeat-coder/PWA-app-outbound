@@ -2608,7 +2608,11 @@ function MainApp() {
     return <LoginScreen />;
   }
 
-  if (loading || isLoading || waitingForLocation) {
+  // Spinner full-screen SO quando nao ha nada pra mostrar (boot). Depois que
+  // existe lista (mesmo placeholder da area anterior), refetch roda por baixo
+  // sem esconder o app — antes qualquer troca de areaCacheKey (vendedor andou
+  // ~1km) trocava o mapa inteiro por "Carregando..." no meio do uso.
+  if (loading || (isLoading && clients.length === 0) || waitingForLocation) {
     return (
       <View style={styles.centered}>
         <Image source={require('./assets/icon.png')} style={{ width: 72, height: 72, marginBottom: 16, tintColor: '#dc2626', resizeMode: 'contain' }} />

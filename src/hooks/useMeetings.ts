@@ -2,9 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import type { Client, ClientMeeting, ClientMeetingFormData } from '../types/client';
-
-// Mesmo webhook usado no cadastro manual de lead — diferenciado por `type` no body.
-const WEBHOOK_URL = 'https://webhook.takeat.cloud/webhook/0975e1c9-2d09-42f7-b236-78c7818c0c0d';
+import { sendHubspotEvent } from '../utils/hubspotSync';
 
 export function useMeetings() {
   const queryClient = useQueryClient();
@@ -84,10 +82,9 @@ export function useMeetings() {
         ? `Follow Up - ${client.nome}`
         : `Reunião - ${client.nome}`;
 
-      fetch(WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // reuniao/followup criam evento no Google Calendar — isso CONTINUA no
+      // n8n (credencial OAuth do Google vive la); o helper roteia direto.
+      sendHubspotEvent({
           // O Switch do n8n espera 'reuniao' | 'followup' (SEM underscore —
           // validado em 07/07/2026: 'follow_up' não casa com a rota e cai na
           // default de criar deal no HubSpot). No banco o tipo segue 'follow_up'.
@@ -115,7 +112,6 @@ export function useMeetings() {
           vendedor_email: profile?.email ?? null,
           vendedor_uid: user?.id ?? null,
           enviado_em: new Date().toISOString(),
-        }),
       }).catch((err) => console.warn('[WEBHOOK] reuniao falhou:', err));
 
       return meeting;

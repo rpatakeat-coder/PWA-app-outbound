@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  CHANGE_STAGE_WEBHOOK,
   STAGES,
   hubspotStageToStage,
   type HubSpotStageRaw,
   type Stage,
 } from '../constants/stages';
+import { sendHubspotEvent } from '../utils/hubspotSync';
 
 // ===== Etapas dinamicas do HubSpot =====
 // As etapas do funil vem do HubSpot via webhook do app com type=get_stages,
@@ -67,18 +67,10 @@ function mapRawToStages(raw: HubSpotStageRaw[]): Stage[] {
 
 async function fetchStagesFromWebhook(): Promise<HubSpotStageRaw[] | null> {
   try {
-    const res = await fetch(CHANGE_STAGE_WEBHOOK, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'get_stages' }),
-    });
-    if (!res.ok) {
-      console.warn('[STAGES] get_stages respondeu', res.status);
-      return null;
-    }
-    const body = await res.json();
+    // Edge function hubspot-sync (fallback automatico pro n8n dentro do helper).
+    const body = (await sendHubspotEvent({ type: 'get_stages' })) as any;
     // Aceita tanto { results: [...] } (formato cru HubSpot) quanto um array
-    // direto, por robustez ao que o n8n devolver.
+    // direto, por robustez ao que a edge/n8n devolver.
     const results: unknown = Array.isArray(body) ? body : body?.results;
     if (!Array.isArray(results) || results.length === 0) {
       console.warn('[STAGES] get_stages sem results utilizaveis');

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ActivityIndicator,
@@ -16,7 +16,6 @@ import {
 } from 'react-native';
 import type { Client } from '../types/client';
 import {
-  CHANGE_STAGE_WEBHOOK,
   WON_STAGE_IDS,
   FUNNEL_STAGE_IDS,
   LOST_STAGE_ID,
@@ -30,6 +29,7 @@ import { useStagePropertyOptions } from '../hooks/useStagePropertyOptions';
 import { useClientStageChanges } from '../hooks/useClientStageChanges';
 import { useClientNotes } from '../hooks/useClientNotes';
 import { supabase } from '../integrations/supabase/client';
+import { sendHubspotEvent } from '../utils/hubspotSync';
 
 interface Props {
   client: Client;
@@ -397,14 +397,19 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone }: Pr
   // serializar arrays como string no Record<string, string> compartilhado.
   const [subValuesMulti, setSubValuesMulti] = useState<Record<string, string[]>>({});
   const [submitting, setSubmitting] = useState(false);
+  // Trava sincrona anti-double-tap (o submitting via state so' vira true depois
+  // de um await, tarde demais pra barrar o 2o toque).
+  const submitLockRef = useRef(false);
 
-  // Pin recem-criado: o id_hubspot chega ~10-60s depois do INSERT (webhook do
-  // n8n responde e o app grava). Se o vendedor tenta mover de etapa nessa
-  // janela, em vez de bloquear seco, a gente ESPERA o id aparecer — ate 3
-  // tentativas de 10 em 10s, re-buscando do Supabase. resolvedHubspotId comeca
-  // com o que veio na prop e e' atualizado quando o polling acha.
-  const RESOLVE_MAX_ATTEMPTS = 3;
-  const RESOLVE_INTERVAL_MS = 10_000;
+  // Pin recem-criado: o id_hubspot chega ~1-3s depois do INSERT (a edge
+  // function hubspot-sync cria o deal e grava o id direto no Supabase; no
+  // fallback n8n pode levar mais). Se o vendedor tenta mover de etapa nessa
+  // janela, em vez de bloquear seco, a gente ESPERA o id aparecer — polling
+  // curto de 2,5s em 2,5s por ate ~30s, re-buscando do Supabase.
+  // resolvedHubspotId comeca com o que veio na prop e e' atualizado quando o
+  // polling acha.
+  const RESOLVE_MAX_ATTEMPTS = 12;
+  const RESOLVE_INTERVAL_MS = 2_500;
   const [resolvedHubspotId, setResolvedHubspotId] = useState<string | null>(
     client.id_hubspot ?? null,
   );
@@ -547,8 +552,22 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone }: Pr
 
   const submit = async () => {
     if (!selectedStage) return;
+    // Guard sincrono contra double-tap: setSubmitting(true) so acontece depois
+    // do await ensureHubspotId(), entao dois toques rapidos na janela do
+    // polling passariam pelo disabled do botao. A ref barra o segundo na hora.
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
+    try {
+      await submitInner();
+    } finally {
+      submitLockRef.current = false;
+    }
+  };
+
+  const submitInner = async () => {
+    if (!selectedStage) return;
     // Pin recem-criado pode ainda nao ter id_hubspot (webhook do n8n em voo).
-    // Espera ele aparecer (ate 3x de 10s) em vez de recusar de cara.
+    // Espera ele aparecer (polling curto) em vez de recusar de cara.
     const hubspotId = await ensureHubspotId();
     if (!hubspotId) {
       Alert.alert(
@@ -629,59 +648,105 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone }: Pr
       }
     }
 
-    try {
-      setSubmitting(true);
-      const payload: Record<string, unknown> = {
-        type: 'change_stage',
-        id: client.id,
-        id_hubspot: hubspotId,
-        stage_id: selectedStage.id,
-        stage_label: selectedStage.label,
-      };
-      if (subFields.length > 0) {
-        payload.sub_values = subValuesPayload;
-      }
+    // Payload identico ao que o n8n recebia — a edge function hubspot-sync
+    // trata o mesmo formato, e o fallback pro n8n reusa o payload como sempre.
+    const payload: Record<string, unknown> = {
+      type: 'change_stage',
+      id: client.id,
+      id_hubspot: hubspotId,
+      stage_id: selectedStage.id,
+      stage_label: selectedStage.label,
+    };
+    if (subFields.length > 0) {
+      payload.sub_values = subValuesPayload;
+    }
 
-      const res = await fetch(CHANGE_STAGE_WEBHOOK, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        throw new Error(`Webhook respondeu ${res.status}`);
-      }
+    // ===== UI instantanea =====
+    // Nada de segurar o vendedor esperando rede: reflete a etapa nova no cache
+    // do react-query e fecha o modal JA. A sincronizacao (Supabase + HubSpot)
+    // roda em background; a tarefa que originou (onDone) so e' resolvida quando
+    // o sync CONFIRMA — se falhar de vez, reverte a etapa e reabre a tarefa.
+    setSubmitting(true);
+    const previousEtapa = client.etapa ?? null;
+    const newEtapa = selectedStage.label;
+    const stage = selectedStage;
+    const subPayload = subFields.length > 0 ? (subValuesPayload as Record<string, unknown>) : null;
 
-      // Webhook ok — reflete a etapa nova em clients.etapa NA HORA. A volta
-      // oficial (HubSpot -> n8n -> Supabase) grava o mesmo label minutos
-      // depois; sem este update otimista o app segue mostrando a etapa velha
-      // e o vendedor nao consegue avancar a proxima etapa na mesma visita
-      // (conversa -> demonstracao -> negociacao em sequencia). Falha aqui nao
-      // bloqueia: o HubSpot ja recebeu, so a UI fica defasada como antes.
+    // Patch cirurgico no cache: o pin/lista/detalhe mostram a etapa nova sem
+    // rebaixar a lista inteira de clientes.
+    queryClient.setQueriesData<Client[] | undefined>({ queryKey: ['clients'] }, (old) =>
+      old?.map((c) => (c.id === client.id ? { ...c, etapa: newEtapa } : c)),
+    );
+
+    (async () => {
+      // 1) Persiste a etapa nova em clients.etapa. A reconciliacao oficial
+      //    (edge function le o estado canonico do HubSpot ~10s depois) grava o
+      //    mesmo label + owner em seguida.
       try {
         const { error: etapaErr } = await supabase
           .from('clients')
-          .update({ etapa: selectedStage.label, updated_at: new Date().toISOString() })
+          .update({ etapa: newEtapa, updated_at: new Date().toISOString() })
           .eq('id', client.id);
-        if (etapaErr) console.warn('[change_stage] update otimista de etapa falhou', etapaErr.message);
+        if (etapaErr) console.warn('[change_stage] update de etapa falhou', etapaErr.message);
       } catch (err) {
-        console.warn('[change_stage] update otimista de etapa falhou', err);
+        console.warn('[change_stage] update de etapa falhou', err);
       }
-      // Refresca a lista de clientes (mapa/lista/detalhe) e as tarefas de
-      // cadencia, que derivam da etapa.
-      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      // Tarefas de cadencia derivam da etapa — refresca.
       queryClient.invalidateQueries({ queryKey: ['client_tasks'] });
 
-      // Webhook ok — grava a entrada na timeline. Falha aqui nao bloqueia
-      // o sucesso: o HubSpot ja recebeu, so o historico local ficou de fora.
+      // 2) Sincroniza com o HubSpot (change_stage e' PATCH idempotente, entao
+      //    reexecutar e' seguro): edge function hubspot-sync, com fallback pro
+      //    n8n dentro do sendHubspotEvent. 1 retry por cima.
+      let synced = false;
+      let lastErr: unknown = null;
+      for (let attempt = 1; attempt <= 2 && !synced; attempt++) {
+        try {
+          await sendHubspotEvent(payload);
+          synced = true;
+        } catch (err) {
+          lastErr = err;
+          if (attempt < 2) await sleep(2000);
+        }
+      }
+
+      if (!synced) {
+        // Nem edge nem n8n aceitaram. Reverte pra etapa anterior — MAS so' se
+        // ninguem gravou o estado canonico no meio-tempo (a reconciliacao
+        // server-side da edge pode ter aplicado a etapa NOVA mesmo com a
+        // resposta se perdendo). O .eq('etapa', newEtapa) garante que o revert
+        // nao atropela um write mais recente e correto.
+        console.warn('[change_stage] sync HubSpot falhou', lastErr);
+        try {
+          await supabase
+            .from('clients')
+            .update({ etapa: previousEtapa, updated_at: new Date().toISOString() })
+            .eq('id', client.id)
+            .eq('etapa', newEtapa);
+        } catch (err) {
+          console.warn('[change_stage] revert de etapa falhou', err);
+        }
+        queryClient.invalidateQueries({ queryKey: ['clients'] });
+        queryClient.invalidateQueries({ queryKey: ['client_tasks'] });
+        // Nao chama onDone: a tarefa que originou continua pendente pro
+        // vendedor tentar de novo.
+        Alert.alert(
+          'Falha ao sincronizar etapa',
+          `Não consegui enviar ${client.nome} para ${newEtapa} (sem conexão?). A etapa foi revertida — tente novamente.`,
+        );
+        return;
+      }
+
+      // 3) Sync OK — agora sim resolve a tarefa que originou a mudanca.
+      onDone?.();
+
+      // Pos-processamento. Timeline local — gravada APOS a sincronia passar,
+      // pra refletir so o que efetivamente saiu pro HubSpot.
       try {
         await recordChange.mutateAsync({
-          fromStage: client.etapa,
-          toStage: selectedStage.label,
-          toStageId: selectedStage.id,
-          subValues:
-            subFields.length > 0
-              ? (subValuesPayload as Record<string, unknown>)
-              : null,
+          fromStage: previousEtapa,
+          toStage: stage.label,
+          toStageId: stage.id,
+          subValues: subPayload,
         });
       } catch (err) {
         console.warn('Falhou ao registrar mudanca de etapa no historico', err);
@@ -690,9 +755,8 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone }: Pr
       // Carimbo de fechamento: se a etapa nova e' uma das WON (Negocio Fechado
       // OU Enviado Onboarding), marca won_at UMA UNICA VEZ. O update so aplica
       // quando won_at ainda e' NULL, entao o lead passar pelas duas etapas nao
-      // recarimba (conta como 1 fechamento). Falha aqui nao bloqueia — a
-      // mudanca de etapa ja foi.
-      if (WON_STAGE_IDS.includes(selectedStage.id)) {
+      // recarimba (conta como 1 fechamento).
+      if (WON_STAGE_IDS.includes(stage.id)) {
         try {
           await supabase.rpc('stamp_won_at', { p_client_id: client.id });
         } catch (err) {
@@ -701,10 +765,10 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone }: Pr
       }
 
       // Ao mover pra Perdido, registra o motivo como NOTA (que tambem sincroniza
-      // pro HubSpot via webhook create_note). Assim o gestor ve o motivo no
-      // historico do lead, nao so no sub_values da timeline. Nao bloqueia.
-      if (selectedStage.id === LOST_STAGE_ID) {
-        const motivo = subValuesPayload['motivo_do_perdido'];
+      // pro HubSpot via create_note). Assim o gestor ve o motivo no historico
+      // do lead, nao so no sub_values da timeline.
+      if (stage.id === LOST_STAGE_ID) {
+        const motivo = subPayload?.['motivo_do_perdido'];
         const motivoTxt = Array.isArray(motivo) ? motivo.join(', ') : (motivo ? String(motivo) : null);
         if (motivoTxt) {
           try {
@@ -714,18 +778,11 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone }: Pr
           }
         }
       }
+    })();
 
-      onDone?.();
-      Alert.alert(
-        'Etapa enviada',
-        `${client.nome} foi enviado para ${selectedStage.label}.`,
-        [{ text: 'OK', onPress: onClose }],
-      );
-    } catch (err: any) {
-      Alert.alert('Erro ao enviar', err?.message ?? 'Tente novamente.');
-    } finally {
-      setSubmitting(false);
-    }
+    // Modal fecha JA — o vendedor segue pro proximo passo sem esperar rede.
+    // (onDone/onClose: onClose fecha a UI; onDone so' roda no sucesso, acima.)
+    onClose();
   };
 
   return (

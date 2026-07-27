@@ -3,6 +3,7 @@ import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import type { Client, ClientFormData } from '../types/client';
 import { bboxAround, roundCoordsForKey } from '../utils/area';
+import { sendHubspotEvent } from '../utils/hubspotSync';
 
 const mapRow = (row: any): Client => row as Client;
 
@@ -102,6 +103,11 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
       }
       return all.map(mapRow);
     },
+    // Quando a queryKey muda (ex.: vendedor andou ~1km e o areaCacheKey
+    // rotacionou), mantem a lista ANTERIOR na tela enquanto a nova area
+    // carrega — sem isso o app inteiro vira "Carregando..." no meio do uso
+    // (isLoading fica true por nao haver cache pra key nova).
+    placeholderData: (prev: Client[] | undefined) => prev,
     // Viewer nao espera o sector_visibility (desabilitado pra ele); os demais
     // so disparam depois que as regras de visibilidade chegaram.
     enabled: callerEnabled && isAuthenticated && (isViewer || visibilityQuery.isFetched),
@@ -150,84 +156,92 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
       // dealname = nome da empresa (fallback pro nome do contato se não tiver empresa).
       const dealname = client.empresa ?? client.nome;
 
-      // Roda em background: espera o n8n responder com o id do deal criado
-      // no HubSpot e dá UPDATE em clients.id_hubspot. Isso destrava o botão
-      // "Mover para etapa" pro pin recém-criado sem precisar fechar/abrir o app.
+      // Roda em background: a edge function hubspot-sync cria contato+deal no
+      // HubSpot e ja grava clients.id_hubspot/url_hubspot server-side (deduped
+      // por id do pin, entao um retry nao cria deal duplicado). Isso destrava o
+      // botão "Mover para etapa" pro pin recém-criado sem fechar/abrir o app.
       //
       // A mutation principal retorna assim que o INSERT no Supabase termina —
-      // o usuário vê o pin na hora. A enriquecimento com id_hubspot/url_hubspot
-      // chega em ~2-5s e o queryClient.invalidateQueries refresca a UI.
+      // o usuário vê o pin na hora. O enriquecimento chega em ~1-3s.
+      //
+      // Se o sendHubspotEvent LANCAR (erro ambiguo de rede num create_pin — que
+      // NAO cai pro n8n justamente pra nao duplicar), a edge pode ter criado o
+      // deal e gravado o id server-side mesmo assim. Por isso, em erro, a gente
+      // re-consulta o Supabase algumas vezes: se o id apareceu, foi sucesso.
       (async () => {
-        try {
-          const res = await fetch('https://webhook.takeat.cloud/webhook/0975e1c9-2d09-42f7-b236-78c7818c0c0d', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              // Antes o cadastro nao mandava type (o n8n tratava "sem type"
-              // como criar deal). Agora identifica explicitamente com create_pin.
-              type: 'create_pin',
-              bairro: client.bairro,
-              celular: client.telefone,
-              cep: client.cep,
-              cidade: client.cidade,
-              dealname,
-              email: client.email,
-              estado_uf: client.estado,
-              id_hubspot: client.id_hubspot,
-              latitude: client.latitude !== null ? String(client.latitude) : null,
-              logradouro: client.endereco,
-              longitude: client.longitude !== null ? String(client.longitude) : null,
-              nome: client.nome,
-              numero_do_local: client.numero,
-              observacoes: client.observacoes,
-              url: client.url_hubspot,
-              vendedor_id: profile?.id_hubspot ?? '',
-              vendedor_nome: profile?.full_name ?? '',
-            }),
-          });
-
-          if (!res.ok) {
-            console.warn('[WEBHOOK] cadastro manual respondeu', res.status);
-            return;
-          }
-
-          // Tenta parsear JSON. Aceita formatos comuns que o n8n pode mandar:
-          //   { id_hubspot: "123" }, { deal_id: "123" }, { id: "123" }, ou só "123".
-          let body: unknown = null;
-          try {
-            body = await res.json();
-          } catch {
-            console.warn('[WEBHOOK] cadastro manual respondeu sem JSON');
-            return;
-          }
-          const asObj = body as Record<string, unknown> | null;
+        const applyIdFromResponse = async (body: unknown): Promise<boolean> => {
+          // Aceita { id_hubspot } (edge/n8n), { deal_id }, { id }, ou "123" cru.
+          const asObj = (typeof body === 'object' && body ? body : null) as Record<string, unknown> | null;
           const idHubspot =
             typeof body === 'string' ? body :
             (asObj?.id_hubspot ?? asObj?.deal_id ?? asObj?.id ?? null);
+          if (!idHubspot) return false;
           const urlHubspot = (asObj?.url_hubspot ?? asObj?.url ?? null) as string | null;
-
-          if (!idHubspot) {
-            console.warn('[WEBHOOK] cadastro manual sem id_hubspot na resposta:', body);
-            return;
-          }
-
           const updatePayload: Record<string, unknown> = { id_hubspot: String(idHubspot) };
           if (urlHubspot) updatePayload.url_hubspot = urlHubspot;
-
           const { error: updErr } = await supabase
             .from('clients')
             .update(updatePayload)
             .eq('id', client.id);
           if (updErr) {
             console.warn('[WEBHOOK] update id_hubspot falhou:', updErr.message);
-            return;
+            return false;
           }
+          return true;
+        };
 
-          // Refresca a lista pra UI pegar o id_hubspot novo — o botão
-          // "Mover para etapa" passa a aparecer ativo nesse pin.
+        // Re-le clients.id_hubspot do banco (a edge grava server-side). Usado
+        // como confirmacao quando a resposta HTTP se perdeu.
+        const pollIdFromDb = async (): Promise<boolean> => {
+          for (let attempt = 1; attempt <= 5; attempt++) {
+            const { data: row } = await supabase
+              .from('clients')
+              .select('id_hubspot')
+              .eq('id', client.id)
+              .maybeSingle();
+            if (row?.id_hubspot) return true;
+            await new Promise((r) => setTimeout(r, 2000));
+          }
+          return false;
+        };
+
+        try {
+          const body = await sendHubspotEvent({
+            type: 'create_pin',
+            // uuid do pin no app — a edge function usa pra gravar o
+            // id_pin_app_outbound no deal, o id_hubspot em clients e dedupe.
+            id: client.id,
+            bairro: client.bairro,
+            celular: client.telefone,
+            cep: client.cep,
+            cidade: client.cidade,
+            dealname,
+            email: client.email,
+            estado_uf: client.estado,
+            id_hubspot: client.id_hubspot,
+            latitude: client.latitude !== null ? String(client.latitude) : null,
+            logradouro: client.endereco,
+            longitude: client.longitude !== null ? String(client.longitude) : null,
+            nome: client.nome,
+            numero_do_local: client.numero,
+            observacoes: client.observacoes,
+            url: client.url_hubspot,
+            vendedor_id: profile?.id_hubspot ?? '',
+            vendedor_nome: profile?.full_name ?? '',
+          });
+
+          const applied = await applyIdFromResponse(body);
+          if (!applied) {
+            // Resposta sem id (ex.: fallback n8n sem corpo) — confirma pelo banco.
+            await pollIdFromDb();
+          }
           queryClient.invalidateQueries({ queryKey: ['clients'] });
         } catch (err) {
-          console.warn('[WEBHOOK] cadastro manual falhou:', err);
+          // Erro ambiguo: a edge pode ter criado o deal e gravado o id. Confirma
+          // pelo banco antes de dar por perdido (nao reenvia — evita duplicar).
+          console.warn('[WEBHOOK] cadastro manual: erro no sync, confirmando pelo banco:', err);
+          await pollIdFromDb();
+          queryClient.invalidateQueries({ queryKey: ['clients'] });
         }
       })();
 
@@ -239,9 +253,12 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
   const updateClient = useMutation({
     mutationFn: async ({ id, ...form }: ClientFormData & { id: string }) => {
       // Snapshot do estado anterior pra decidir, depois do UPDATE, se algum
-      // campo "monitorado" pelo consumidor externo mudou — sem isso o
-      // webhook de update dispararia mesmo em edicoes que so mexem em
-      // status/etapa, gerando ruido no n8n.
+      // campo "monitorado" pelo consumidor externo mudou — sem isso o sync
+      // de update dispararia mesmo em edicoes que so mexem em status/etapa,
+      // gerando ruido no HubSpot. Le do BANCO (nao do cache): edicao de lead e'
+      // rara e nao e' o gargalo de que o usuario reclama, e um snapshot
+      // defasado do cache poderia concluir "nada mudou" por cima de uma edicao
+      // feita em outro device, silenciando o sync e deixando HubSpot divergir.
       const { data: prevRow } = await supabase
         .from('clients')
         .select('*')
@@ -302,10 +319,8 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
 
         if (changed) {
           const dealname = client.empresa ?? client.nome;
-          fetch('https://webhook.takeat.cloud/webhook/0975e1c9-2d09-42f7-b236-78c7818c0c0d', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+          // Fire-and-forget: edge function hubspot-sync (fallback n8n).
+          sendHubspotEvent({
               type: 'update',
               id: client.id,
               bairro: client.bairro,
@@ -325,7 +340,6 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
               url: client.url_hubspot,
               vendedor_id: profile?.id_hubspot ?? '',
               vendedor_nome: profile?.full_name ?? '',
-            }),
           }).catch((err) => console.warn('[WEBHOOK] update falhou:', err));
         }
       }
@@ -357,15 +371,13 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
       if (error) throw error;
       const client = mapRow(data);
 
-      // Webhook outbound: notifica a mesma URL do cadastro manual com type=visited
-      // pra que o consumidor (n8n / HubSpot) saiba diferenciar criacao de visita.
+      // Webhook outbound: notifica com type=visited pra que o consumidor
+      // (n8n / HubSpot) saiba diferenciar criacao de visita. type=visited nao
+      // tem rota na edge function — o helper manda direto pro n8n.
       // Manda todos os campos do cliente + metadata da visita (coords/quando/quem).
       const raw = (data ?? {}) as Record<string, unknown>;
       const dealname = client.empresa ?? client.nome;
-      fetch('https://webhook.takeat.cloud/webhook/0975e1c9-2d09-42f7-b236-78c7818c0c0d', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      sendHubspotEvent({
           type: 'visited',
           id: client.id,
           bairro: client.bairro,
@@ -396,7 +408,6 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
           visited_by_email: user?.email ?? null,
           visited_by_name: profile?.full_name ?? null,
           visited_by_sector: profile?.sector ?? null,
-        }),
       }).catch((err) => console.warn('[WEBHOOK] marcar como visitado falhou:', err));
 
       return client;
