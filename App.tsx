@@ -631,7 +631,11 @@ function MainApp() {
   }, [userLocation]);
   // Agendamento aberto: guarda o cliente + o tipo (reunião ou follow up).
   // Mesmo modal serve os dois; só muda o `type` salvo e os rótulos.
-  const [schedulingFor, setSchedulingFor] = useState<{ client: Client; type: MeetingType } | null>(null);
+  // reschedule preenchido => o modal abre em modo "reagendar" daquela reunião.
+  const [schedulingFor, setSchedulingFor] = useState<{ client: Client; type: MeetingType; reschedule?: ClientMeeting } | null>(null);
+  // Sub-menus da agenda (passado/futuro) — passado começa fechado, igual lista.
+  const [agendaPastOpen, setAgendaPastOpen] = useState(false);
+  const [agendaFutureOpen, setAgendaFutureOpen] = useState(false);
   // Mudanca de etapa. initialStageId trava o modal numa etapa (ex.: "Mover pra
   // perdido" a partir de uma tarefa); taskId, quando presente, e' a tarefa a
   // resolver depois que o envio concluir.
@@ -2523,22 +2527,31 @@ function MainApp() {
         ? allAgendaItems.filter(item => !item.client?.vendedor_id_hubspot)
         : allAgendaItems.filter(item => item.client?.vendedor_id_hubspot === vendorFilterHubspotId);
 
-    return (
-      <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
-        <View style={styles.panelCard}>
-          <Text style={styles.panelTitle}>Agenda do vendedor</Text>
-          <Text style={styles.panelHint}>
-            Rota planejada, demos e follow-ups em ordem cronologica.
-            {vendorFilterHubspotId !== null
-              ? `\n\nFiltro ativo: ${vendorLabel(vendorFilterHubspotId)} (tire no modal de filtros).`
-              : ''}
-          </Text>
-        </View>
-        {agendaItems.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>Agenda vazia para hoje.</Text>
-          </View>
-        ) : agendaItems.map((item, index) => {
+    // Divide em passado / hoje / futuro. "Hoje" fica sempre aberto no topo;
+    // passado e futuro viram acordeão fechado (mesmo padrão da aba Lista).
+    const now = Date.now();
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(todayStart);
+    todayEnd.setDate(todayEnd.getDate() + 1);
+
+    const pastItems: typeof agendaItems = [];
+    const todayItems: typeof agendaItems = [];
+    const futureItems: typeof agendaItems = [];
+    for (const item of agendaItems) {
+      const t = item.at ? new Date(item.at).getTime() : 0;
+      if (t >= todayStart.getTime() && t < todayEnd.getTime()) {
+        todayItems.push(item);
+      } else if (t < now) {
+        pastItems.push(item);
+      } else {
+        futureItems.push(item);
+      }
+    }
+    // Passado mais recente primeiro — o que acabou de passar é o mais relevante.
+    pastItems.reverse();
+
+    const renderAgendaItem = (item: typeof agendaItems[number], index: number) => {
           const date = item.at ? new Date(item.at) : null;
           const time = date ? date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
           const dayLabel = date
@@ -2554,7 +2567,10 @@ function MainApp() {
             ? vendorLabel(client.vendedor_id_hubspot)
             : null;
           return (
-            <View key={`${item.kind}-${index}`} style={styles.agendaItem}>
+            <View
+              key={item.kind === 'meeting' ? `meeting-${item.meeting.id}` : `route-${item.stop.id ?? index}`}
+              style={styles.agendaItem}
+            >
               <View style={styles.agendaWhen}>
                 <Text style={styles.agendaDate}>{dayLabel}</Text>
                 {weekdayLabel ? <Text style={styles.agendaWeekday}>{weekdayLabel}</Text> : null}
@@ -2589,6 +2605,20 @@ function MainApp() {
                         <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>WhatsApp</Text>
                       </TouchableOpacity>
                     )}
+                    {/* Reagendar: so pra reuniao/follow up (rota nao tem evento
+                        no Google Agenda pra mover). Abre o modal ja preenchido. */}
+                    {item.kind === 'meeting' && !isViewer && (
+                      <TouchableOpacity
+                        style={[styles.smallActionButton, { backgroundColor: '#f97316' }]}
+                        onPress={() => setSchedulingFor({
+                          client,
+                          type: item.meeting.type ?? 'reuniao',
+                          reschedule: item.meeting,
+                        })}
+                      >
+                        <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Reagendar</Text>
+                      </TouchableOpacity>
+                    )}
                     {item.kind === 'route' && (
                       <TouchableOpacity style={styles.smallActionButton} onPress={() => fieldOps.markStopDone.mutate(item.stop)}>
                         <Text style={styles.smallActionButtonText}>Realizada</Text>
@@ -2599,7 +2629,80 @@ function MainApp() {
               </View>
             </View>
           );
-        })}
+    };
+
+    return (
+      <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
+        <View style={styles.panelCard}>
+          <Text style={styles.panelTitle}>Agenda do vendedor</Text>
+          <Text style={styles.panelHint}>
+            Rota planejada, demos e follow-ups em ordem cronologica.
+            {vendorFilterHubspotId !== null
+              ? `\n\nFiltro ativo: ${vendorLabel(vendorFilterHubspotId)} (tire no modal de filtros).`
+              : ''}
+          </Text>
+        </View>
+
+        {agendaItems.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>Agenda vazia.</Text>
+          </View>
+        ) : (
+          <>
+            {/* PASSADO — acordeão fechado por padrão */}
+            {pastItems.length > 0 && (
+              <>
+                <TouchableOpacity
+                  style={styles.stageAccordionHeader}
+                  onPress={() => setAgendaPastOpen(v => !v)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.stageAccordionTitle}>Passado</Text>
+                    <Text style={styles.stageAccordionMeta}>{pastItems.length} {pastItems.length === 1 ? 'item' : 'itens'}</Text>
+                  </View>
+                  <Text style={styles.stageAccordionChevron}>{agendaPastOpen ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+                {agendaPastOpen && (
+                  <View style={{ opacity: 0.75 }}>
+                    {pastItems.map((item, i) => renderAgendaItem(item, i))}
+                  </View>
+                )}
+              </>
+            )}
+
+            {/* HOJE — sempre visível, é o foco da tela */}
+            <View style={styles.agendaSectionHeader}>
+              <Text style={styles.agendaSectionTitle}>Hoje</Text>
+              <Text style={styles.agendaSectionMeta}>
+                {todayItems.length} {todayItems.length === 1 ? 'item' : 'itens'}
+              </Text>
+            </View>
+            {todayItems.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>Nada agendado para hoje.</Text>
+              </View>
+            ) : (
+              todayItems.map((item, i) => renderAgendaItem(item, i))
+            )}
+
+            {/* FUTURO — acordeão fechado por padrão */}
+            {futureItems.length > 0 && (
+              <>
+                <TouchableOpacity
+                  style={styles.stageAccordionHeader}
+                  onPress={() => setAgendaFutureOpen(v => !v)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.stageAccordionTitle}>Futuro</Text>
+                    <Text style={styles.stageAccordionMeta}>{futureItems.length} {futureItems.length === 1 ? 'item' : 'itens'}</Text>
+                  </View>
+                  <Text style={styles.stageAccordionChevron}>{agendaFutureOpen ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+                {agendaFutureOpen && futureItems.map((item, i) => renderAgendaItem(item, i))}
+              </>
+            )}
+          </>
+        )}
       </ScrollView>
     );
   };
@@ -4111,6 +4214,7 @@ function MainApp() {
         <ScheduleMeetingModal
           client={schedulingFor.client}
           meetingType={schedulingFor.type}
+          rescheduleOf={schedulingFor.reschedule}
           onClose={() => setSchedulingFor(null)}
         />
       )}
@@ -5769,6 +5873,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
+  agendaSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    marginTop: 14,
+    marginBottom: 6,
+  },
+  agendaSectionTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#0f172a',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  agendaSectionMeta: { fontSize: 12, color: '#64748b', fontWeight: '600' },
   agendaWhen: { width: 56, alignItems: 'center' },
   agendaDate: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
   agendaWeekday: { fontSize: 10, color: '#94a3b8', fontWeight: '600', textTransform: 'capitalize' },

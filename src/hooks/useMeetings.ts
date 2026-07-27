@@ -119,6 +119,99 @@ export function useMeetings() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_meetings'] }),
   });
 
+  // Reagenda uma reunião existente: muda data/hora (e opcionalmente duração e
+  // observações) na MESMA linha, e dispara o webhook de novo pro n8n atualizar
+  // o evento no Google Agenda. Mantém o id — o n8n casa pelo meeting_id.
+  const rescheduleMeeting = useMutation({
+    mutationFn: async ({
+      meeting,
+      client,
+      scheduled_at,
+      duration_minutes,
+      observacoes,
+      invite,
+      motivo,
+    }: {
+      meeting: ClientMeeting;
+      client: Client;
+      scheduled_at: string;
+      duration_minutes: number;
+      observacoes?: string | null;
+      invite?: { enviar: boolean; email: string | null };
+      motivo?: string | null;
+    }) => {
+      // Guarda o horário anterior nas observações pra ficar o rastro de que
+      // houve remarcação (o card não tem campo próprio pra histórico).
+      const prev = new Date(meeting.scheduled_at);
+      const padN = (n: number) => String(n).padStart(2, '0');
+      const prevLabel = `${padN(prev.getDate())}/${padN(prev.getMonth() + 1)}/${prev.getFullYear()} ${padN(prev.getHours())}:${padN(prev.getMinutes())}`;
+      const trilha = `[Reagendada — antes: ${prevLabel}${motivo ? ` • motivo: ${motivo}` : ''}]`;
+      const baseObs = (observacoes ?? meeting.observacoes ?? '').trim();
+      const novaObs = baseObs ? `${trilha}\n${baseObs}` : trilha;
+
+      const { data, error } = await supabase
+        .from('client_meetings')
+        .update({
+          scheduled_at,
+          duration_minutes,
+          observacoes: novaObs,
+          status: 'agendada',
+        })
+        .eq('id', meeting.id)
+        .select()
+        .single();
+      if (error) throw error;
+      const updated = data as ClientMeeting;
+
+      const scheduled = new Date(updated.scheduled_at);
+      const ends = new Date(scheduled.getTime() + updated.duration_minutes * 60_000);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const data_reuniao = `${pad(scheduled.getDate())}/${pad(scheduled.getMonth() + 1)}/${scheduled.getFullYear()}`;
+      const horario = `${pad(scheduled.getHours())}:${pad(scheduled.getMinutes())}`;
+      const horario_fim = `${pad(ends.getHours())}:${pad(ends.getMinutes())}`;
+
+      const isFollowUp = updated.type === 'follow_up';
+      const titulo_evento = isFollowUp
+        ? `Follow Up - ${client.nome}`
+        : `Reunião - ${client.nome}`;
+
+      // Mesmo webhook do agendamento (n8n roteia por 'type'), mas com
+      // reagendamento=true + o horário antigo pra ele achar/mover o evento.
+      sendHubspotEvent({
+        type: isFollowUp ? 'followup' : updated.type,
+        reagendamento: true,
+        scheduled_at_anterior: meeting.scheduled_at,
+        motivo_reagendamento: motivo ?? null,
+        titulo_evento,
+        meeting_id: updated.id,
+        lead_id: client.id,
+        lead_nome: client.nome,
+        lead_empresa: client.empresa,
+        lead_status: client.status,
+        lead_email: client.email,
+        latitude: client.latitude !== null ? String(client.latitude) : null,
+        longitude: client.longitude !== null ? String(client.longitude) : null,
+        data_reuniao,
+        horario,
+        horario_fim,
+        duracao_minutos: updated.duration_minutes,
+        scheduled_at: updated.scheduled_at,
+        ends_at: ends.toISOString(),
+        observacoes: updated.observacoes,
+        enviar_convite_email: invite?.enviar ?? false,
+        email_convite: invite?.enviar ? (invite.email ?? null) : null,
+        vendedor_id: profile?.id_hubspot ?? null,
+        vendedor_nome: profile?.full_name ?? null,
+        vendedor_email: profile?.email ?? null,
+        vendedor_uid: user?.id ?? null,
+        enviado_em: new Date().toISOString(),
+      }).catch((err) => console.warn('[WEBHOOK] reagendamento falhou:', err));
+
+      return updated;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_meetings'] }),
+  });
+
   const deleteMeeting = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('client_meetings').delete().eq('id', id);
@@ -134,6 +227,7 @@ export function useMeetings() {
     isLoading: query.isLoading,
     error: query.error,
     addMeeting,
+    rescheduleMeeting,
     deleteMeeting,
   };
 }

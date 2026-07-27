@@ -22,6 +22,9 @@ interface ScheduleMeetingModalProps {
   onClose: () => void;
   // Reunião (default) ou follow up. Mesmo fluxo; muda rótulos e o tipo salvo.
   meetingType?: MeetingType;
+  // Quando presente, o modal entra em modo REAGENDAR: pré-preenche com os
+  // dados da reunião e salva por cima dela em vez de criar uma nova.
+  rescheduleOf?: ClientMeeting;
 }
 
 // Textos que variam entre reunião e follow up.
@@ -34,6 +37,9 @@ const COPY: Record<MeetingType, {
   listTitle: string;
   emptyList: string;
   cancelTitle: string;
+  rescheduleTitle: string;   // título do modal em modo reagendar
+  rescheduledAlert: string;
+  rescheduleButton: string;
 }> = {
   reuniao: {
     emoji: '📅',
@@ -44,6 +50,9 @@ const COPY: Record<MeetingType, {
     listTitle: 'Reuniões deste lead',
     emptyList: 'Nenhuma reunião agendada.',
     cancelTitle: 'Cancelar reunião',
+    rescheduleTitle: '🔄 Reagendar reunião',
+    rescheduledAlert: 'Reunião reagendada',
+    rescheduleButton: 'Confirmar novo horário',
   },
   follow_up: {
     emoji: '🔁',
@@ -54,6 +63,9 @@ const COPY: Record<MeetingType, {
     listTitle: 'Follow ups deste lead',
     emptyList: 'Nenhum follow up marcado.',
     cancelTitle: 'Cancelar follow up',
+    rescheduleTitle: '🔄 Reagendar follow up',
+    rescheduledAlert: 'Follow up reagendado',
+    rescheduleButton: 'Confirmar novo horário',
   },
 };
 
@@ -229,14 +241,31 @@ function HourMinutePicker({
   );
 }
 
-export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao' }: ScheduleMeetingModalProps) {
-  const copy = COPY[meetingType];
-  const { addMeeting, meetingsByClient, deleteMeeting } = useMeetings();
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [hour, setHour] = useState<number | null>(null);
-  const [minute, setMinute] = useState<number | null>(null);
-  const [duration, setDuration] = useState<number>(DEFAULT_DURATION);
+export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao', rescheduleOf }: ScheduleMeetingModalProps) {
+  // Em modo reagendar o tipo vem da própria reunião (não do prop).
+  const effectiveType: MeetingType = rescheduleOf ? (rescheduleOf.type ?? 'reuniao') : meetingType;
+  const copy = COPY[effectiveType];
+  const isReschedule = !!rescheduleOf;
+  const { addMeeting, rescheduleMeeting, meetingsByClient, deleteMeeting } = useMeetings();
+  const original = useMemo(
+    () => (rescheduleOf ? new Date(rescheduleOf.scheduled_at) : null),
+    [rescheduleOf],
+  );
+  // Pré-preenche com a data/hora atual da reunião pra o vendedor só ajustar.
+  const [selectedDate, setSelectedDate] = useState<Date | null>(
+    () => (original ? startOfDay(original) : null),
+  );
+  const [hour, setHour] = useState<number | null>(() => original?.getHours() ?? null);
+  const [minute, setMinute] = useState<number | null>(() => {
+    if (!original) return null;
+    // Snap pro slot de 5 min mais próximo — o picker só tem múltiplos de 5.
+    return Math.round(original.getMinutes() / 5) * 5 % 60;
+  });
+  const [duration, setDuration] = useState<number>(
+    () => rescheduleOf?.duration_minutes ?? DEFAULT_DURATION,
+  );
   const [observacoes, setObservacoes] = useState('');
+  const [motivo, setMotivo] = useState('');
   // Convite por email: default ligado se o cliente já tem email cadastrado.
   const [enviarConvite, setEnviarConvite] = useState<boolean>(!!client.email);
   const [inviteEmail, setInviteEmail] = useState<string>(client.email ?? '');
@@ -246,10 +275,10 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao' 
   const clientMeetings = useMemo<ClientMeeting[]>(
     () =>
       (meetingsByClient[client.id] ?? [])
-        .filter(m => (m.type ?? 'reuniao') === meetingType)
+        .filter(m => (m.type ?? 'reuniao') === effectiveType)
         .slice()
         .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()),
-    [meetingsByClient, client.id, meetingType],
+    [meetingsByClient, client.id, effectiveType],
   );
 
   const dateLabel = selectedDate
@@ -257,8 +286,10 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao' 
     : 'Nenhuma data selecionada';
   const timeLabel = hour != null && minute != null ? `${pad(hour)}:${pad(minute)}` : '--:--';
 
+  const isPending = addMeeting.isPending || rescheduleMeeting.isPending;
+
   const submit = async () => {
-    if (addMeeting.isPending) return;
+    if (isPending) return;
     if (!selectedDate) {
       Alert.alert('Data ausente', 'Escolha uma data no calendário.');
       return;
@@ -286,13 +317,31 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao' 
     }
 
     try {
+      if (rescheduleOf) {
+        await rescheduleMeeting.mutateAsync({
+          meeting: rescheduleOf,
+          client,
+          scheduled_at: dt.toISOString(),
+          duration_minutes: duration,
+          observacoes: observacoes.trim() || null,
+          invite: { enviar: enviarConvite, email: enviarConvite ? inviteEmailTrim : null },
+          motivo: motivo.trim() || null,
+        });
+        Alert.alert(
+          copy.rescheduledAlert,
+          'Novo horário salvo com sucesso.',
+          [{ text: 'OK', onPress: onClose }],
+        );
+        return;
+      }
+
       await addMeeting.mutateAsync({
         form: {
           client_id: client.id,
           scheduled_at: dt.toISOString(),
           duration_minutes: duration,
           observacoes: observacoes.trim() || null,
-          type: meetingType,
+          type: effectiveType,
         },
         client,
         invite: { enviar: enviarConvite, email: enviarConvite ? inviteEmailTrim : null },
@@ -310,7 +359,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao' 
         [{ text: 'OK', onPress: onClose }],
       );
     } catch (err: any) {
-      Alert.alert('Erro ao agendar', err?.message || 'Tente novamente.');
+      Alert.alert(isReschedule ? 'Erro ao reagendar' : 'Erro ao agendar', err?.message || 'Tente novamente.');
     }
   };
 
@@ -346,14 +395,26 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao' 
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.headerRow}>
-              <Text style={styles.title}>{copy.title}</Text>
-              <TouchableOpacity onPress={onClose} disabled={addMeeting.isPending}>
+              <Text style={styles.title}>{isReschedule ? copy.rescheduleTitle : copy.title}</Text>
+              <TouchableOpacity onPress={onClose} disabled={isPending}>
                 <Text style={styles.closeBtn}>✕</Text>
               </TouchableOpacity>
             </View>
             <Text style={styles.subtitle} numberOfLines={2}>
               {client.nome}{client.empresa ? ` • ${client.empresa}` : ''}
             </Text>
+
+            {isReschedule && original && (
+              <View style={styles.rescheduleBanner}>
+                <Text style={styles.rescheduleBannerTitle}>Horário atual</Text>
+                <Text style={styles.rescheduleBannerValue}>
+                  {formatMeetingDateLabel(rescheduleOf!.scheduled_at)}
+                </Text>
+                <Text style={styles.rescheduleBannerHint}>
+                  Escolha abaixo a nova data e horário. O evento existente é atualizado.
+                </Text>
+              </View>
+            )}
 
             <Text style={styles.label}>Data</Text>
             <Calendar selected={selectedDate} onSelect={setSelectedDate} />
@@ -376,7 +437,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao' 
                     key={opt.value}
                     style={[styles.durationChip, active && styles.durationChipActive]}
                     onPress={() => setDuration(opt.value)}
-                    disabled={addMeeting.isPending}
+                    disabled={isPending}
                   >
                     <Text style={[styles.durationChipTxt, active && styles.durationChipTxtActive]}>
                       {opt.label}
@@ -385,6 +446,20 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao' 
                 );
               })}
             </View>
+
+            {isReschedule && (
+              <>
+                <Text style={styles.label}>Motivo do reagendamento</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ex: cliente não pôde comparecer"
+                  placeholderTextColor="#94a3b8"
+                  value={motivo}
+                  onChangeText={setMotivo}
+                  editable={!isPending}
+                />
+              </>
+            )}
 
             <Text style={styles.label}>Observações</Text>
             <TextInput
@@ -395,7 +470,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao' 
               onChangeText={setObservacoes}
               multiline
               textAlignVertical="top"
-              editable={!addMeeting.isPending}
+              editable={!isPending}
             />
 
             <View style={styles.inviteBox}>
@@ -413,7 +488,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao' 
                   onValueChange={setEnviarConvite}
                   trackColor={{ false: '#cbd5e1', true: '#a78bfa' }}
                   thumbColor={enviarConvite ? '#7c3aed' : '#f8fafc'}
-                  disabled={addMeeting.isPending}
+                  disabled={isPending}
                 />
               </View>
               {enviarConvite && (
@@ -426,24 +501,26 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao' 
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
-                  editable={!addMeeting.isPending}
+                  editable={!isPending}
                 />
               )}
             </View>
 
             <TouchableOpacity
-              style={[styles.submit, addMeeting.isPending && styles.disabled]}
+              style={[styles.submit, isPending && styles.disabled]}
               onPress={submit}
-              disabled={addMeeting.isPending}
+              disabled={isPending}
             >
-              {addMeeting.isPending ? (
+              {isPending ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.submitText}>{copy.buttonLabel}</Text>
+                <Text style={styles.submitText}>
+                  {isReschedule ? copy.rescheduleButton : copy.buttonLabel}
+                </Text>
               )}
             </TouchableOpacity>
 
-            {clientMeetings.length > 0 && (
+            {!isReschedule && clientMeetings.length > 0 && (
               <View style={styles.listSection}>
                 <Text style={styles.listTitle}>{copy.listTitle}</Text>
                 {clientMeetings.map((m) => {
@@ -543,6 +620,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ddd6fe',
   },
+  rescheduleBanner: {
+    backgroundColor: '#fff7ed',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+    marginTop: 8,
+  },
+  rescheduleBannerTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#9a3412',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  rescheduleBannerValue: { fontSize: 15, fontWeight: '700', color: '#7c2d12', marginTop: 3 },
+  rescheduleBannerHint: { fontSize: 12, color: '#9a3412', marginTop: 4 },
   inviteHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   inviteTitle: { fontSize: 14, fontWeight: '700', color: '#5b21b6' },
   inviteSubtitle: { fontSize: 12, color: '#6d28d9', marginTop: 2 },
