@@ -48,7 +48,7 @@ import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { ChangeStageModal } from './src/screens/ChangeStageModal';
 import { EditLocationModal } from './src/screens/EditLocationModal';
-import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, stageTemperature } from './src/constants/stages';
+import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
 import { useStages } from './src/hooks/useStages';
 import { GestorScreen } from './src/screens/GestorScreen';
 import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
@@ -221,7 +221,10 @@ function openWhatsapp(rawPhone: string | null | undefined): boolean {
 
 const getClientPrimaryName = (client: Client) => client.empresa?.trim() || client.nome;
 
-function CustomMarker({ color, meetingCount, tempEmoji }: { color: string; meetingCount: number; tempEmoji: string | null }) {
+// A COR do pin comunica a temperatura da etapa (quente/morno/frio/fechado/
+// perdido) — antes era uma bandeirinha de emoji no canto, pequena demais pra
+// ler em zoom baixo. Leads sem etapa conhecida caem na cor do status.
+function CustomMarker({ color, meetingCount }: { color: string; meetingCount: number }) {
   return (
     <View style={markerStyles.container}>
       <View style={[markerStyles.pin, { backgroundColor: color }]}>
@@ -237,12 +240,6 @@ function CustomMarker({ color, meetingCount, tempEmoji }: { color: string; meeti
             <Text style={markerStyles.meetingBadgeText}>📅</Text>
           </View>
         )}
-        {/* Bandeirinha de temperatura da etapa (🔥 quente / 🟡 morno / ❄️ frio) */}
-        {tempEmoji && (
-          <View style={markerStyles.tempBadge}>
-            <Text style={markerStyles.tempBadgeText}>{tempEmoji}</Text>
-          </View>
-        )}
       </View>
       <View style={[markerStyles.arrow, { borderTopColor: color }]} />
     </View>
@@ -255,9 +252,8 @@ const MarkerWithReady = React.memo(
     onPress,
     color,
     meetingCount,
-    tempEmoji,
     coordinate,
-  }: { client: Client; onPress: (client: Client) => void; color: string; meetingCount: number; tempEmoji: string | null; coordinate: { latitude: number; longitude: number } }) {
+  }: { client: Client; onPress: (client: Client) => void; color: string; meetingCount: number; coordinate: { latitude: number; longitude: number } }) {
     // Pinta o marker num primeiro frame com tracksViewChanges=true
     // e desliga em seguida pra evitar re-renderizações contínuas.
     // Religa o tracking sempre que algo que afeta o snapshot muda
@@ -274,7 +270,7 @@ const MarkerWithReady = React.memo(
       // manter dezenas de markers em tracking contínuo (custo de perf).
       const t = setTimeout(() => setTracking(false), 800);
       return () => clearTimeout(t);
-    }, [meetingCount, color, tempEmoji, coordinate.latitude, coordinate.longitude]);
+    }, [meetingCount, color, coordinate.latitude, coordinate.longitude]);
 
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
 
@@ -287,7 +283,7 @@ const MarkerWithReady = React.memo(
         // garante que markers recém-montados no zoom capturem a imagem.
         onLayout={() => setTracking(true)}
       >
-        <CustomMarker color={color} meetingCount={meetingCount} tempEmoji={tempEmoji} />
+        <CustomMarker color={color} meetingCount={meetingCount} />
       </Marker>
     );
   },
@@ -297,7 +293,6 @@ const MarkerWithReady = React.memo(
     prev.client.latitude === next.client.latitude &&
     prev.client.longitude === next.client.longitude &&
     prev.meetingCount === next.meetingCount &&
-    prev.tempEmoji === next.tempEmoji &&
     prev.coordinate.latitude === next.coordinate.latitude &&
     prev.coordinate.longitude === next.coordinate.longitude &&
     prev.onPress === next.onPress,
@@ -345,22 +340,6 @@ const markerStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   meetingBadgeText: { fontSize: 9 },
-  // Bandeirinha de temperatura (etapa) — espelha o meetingBadge do outro lado.
-  tempBadge: {
-    position: 'absolute',
-    top: -6,
-    left: -8,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#e2e8f0',
-    paddingHorizontal: 3,
-    paddingVertical: 1,
-    minWidth: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tempBadgeText: { fontSize: 9 },
   // Marker da rota: maior, vermelho forte, com numero da ordem dentro.
   routePin: {
     width: 40,
@@ -3233,9 +3212,14 @@ function MainApp() {
                   latitude: client.latitude as number,
                   longitude: client.longitude as number,
                 }}
-                color={statusConfig[client.status]?.color || '#3b82f6'}
+                // Cor = temperatura da etapa. Lead sem etapa conhecida
+                // (Backlog, sem etapa) cai na cor do status.
+                color={
+                  stageTemperature(client.etapa)?.color ??
+                  statusConfig[client.status]?.color ??
+                  '#3b82f6'
+                }
                 meetingCount={upcomingByClient[client.id] ?? 0}
-                tempEmoji={stageTemperature(client.etapa)?.emoji ?? null}
                 onPress={handleMarkerPress}
               />
             ))}
@@ -3311,6 +3295,26 @@ function MainApp() {
               </>
             );
           })()}
+
+          {/* Legenda das cores dos pins. Como a temperatura virou COR (nao ha
+              mais a bandeirinha de emoji explicando), a legenda passa a ser
+              necessaria pra decifrar o mapa. Fica fora do modo de criacao. */}
+          {!creationMode && (
+            <View style={[styles.tempLegend, { bottom: 90 + insets.bottom }]} pointerEvents="none">
+              {[
+                { c: TEMP_COLORS.hot, l: 'Quente' },
+                { c: TEMP_COLORS.warm, l: 'Morno' },
+                { c: TEMP_COLORS.cold, l: 'Frio' },
+                { c: TEMP_COLORS.won, l: 'Fechado' },
+                { c: TEMP_COLORS.lost, l: 'Perdido' },
+              ].map(item => (
+                <View key={item.l} style={styles.tempLegendRow}>
+                  <View style={[styles.tempLegendDot, { backgroundColor: item.c }]} />
+                  <Text style={styles.tempLegendLabel}>{item.l}</Text>
+                </View>
+              ))}
+            </View>
+          )}
 
           {/* Map buttons */}
           {userLocation && !creationMode && (
@@ -5696,6 +5700,26 @@ const styles = StyleSheet.create({
   errorText: { color: '#ef4444', fontSize: 16 },
   // Map
   map: { flex: 1 },
+  // Legenda de temperatura: fica ACIMA do botao de localizacao (que ocupa
+  // left:16 / bottom:90+insets), por isso o offset extra de 56px.
+  tempLegend: {
+    position: 'absolute',
+    left: 16,
+    marginBottom: 56,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderRadius: 10,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    gap: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  tempLegendRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tempLegendDot: { width: 10, height: 10, borderRadius: 5 },
+  tempLegendLabel: { fontSize: 11, fontWeight: '700', color: '#334155' },
   mapButton: {
     position: 'absolute',
     left: 16,

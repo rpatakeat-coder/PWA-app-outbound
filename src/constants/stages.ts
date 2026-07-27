@@ -148,7 +148,22 @@ export const APP_STAGE_IDS = [...FUNNEL_STAGE_IDS, LOST_STAGE_ID];
 // NORMALIZADO (caixa alta) porque clients.etapa guarda o LABEL e ja circulou
 // com variacoes de caixa e labels legados (Diagnóstico, NEGÓCIO PERDIDO).
 // ---------------------------------------------------------------------------
-export type StageTemperature = { emoji: string; label: string };
+// color: cor do PIN no mapa. A temperatura passou a ser comunicada pela cor
+// do proprio pin (mais legivel de longe que a bandeirinha de emoji, que era
+// pequena demais em zoom baixo). O emoji continua aqui porque a legenda e o
+// sheet do lead ainda usam.
+export type StageTemperature = { emoji: string; label: string; color: string };
+
+// Escala termica: vermelho (quente) -> ambar (morno) -> azul (frio), com
+// verde pra ganho e cinza-escuro pra perdido. Tons saturados o suficiente
+// pra distinguir sobre o mapa cinza do Google.
+export const TEMP_COLORS = {
+  hot:  '#dc2626', // vermelho
+  warm: '#f59e0b', // ambar
+  cold: '#0ea5e9', // azul
+  won:  '#16a34a', // verde
+  lost: '#475569', // cinza-ardosia
+} as const;
 
 const TEMP_COLD = new Set(['PROSPECÇÃO', 'VISITA', 'BACKLOG', 'RECICLAGEM']);
 const TEMP_WARM = new Set(['CONVERSA COM DECISOR', 'DIAGNÓSTICO', 'DEMO/PROPOSTA']);
@@ -159,12 +174,12 @@ const TEMP_LOST = new Set(['PERDIDO', 'NEGÓCIO PERDIDO']);
 export function stageTemperature(etapa: string | null | undefined): StageTemperature | null {
   const key = (etapa ?? '').trim().toUpperCase();
   if (!key) return null;
-  if (TEMP_HOT.has(key)) return { emoji: '🔥', label: 'Quente' };
-  if (TEMP_WARM.has(key)) return { emoji: '🟡', label: 'Morno' };
-  if (TEMP_COLD.has(key)) return { emoji: '❄️', label: 'Frio' };
-  if (TEMP_WON.has(key)) return { emoji: '✅', label: 'Fechado' };
-  if (TEMP_LOST.has(key)) return { emoji: '⚫', label: 'Perdido' };
-  return null; // etapa desconhecida: pin fica sem bandeirinha
+  if (TEMP_HOT.has(key)) return { emoji: '🔥', label: 'Quente', color: TEMP_COLORS.hot };
+  if (TEMP_WARM.has(key)) return { emoji: '🟡', label: 'Morno', color: TEMP_COLORS.warm };
+  if (TEMP_COLD.has(key)) return { emoji: '❄️', label: 'Frio', color: TEMP_COLORS.cold };
+  if (TEMP_WON.has(key)) return { emoji: '✅', label: 'Fechado', color: TEMP_COLORS.won };
+  if (TEMP_LOST.has(key)) return { emoji: '⚫', label: 'Perdido', color: TEMP_COLORS.lost };
+  return null; // etapa desconhecida: pin cai na cor do status
 }
 
 // Paleta ciclica pra colorir etapas novas do HubSpot que nao tem cor propria
