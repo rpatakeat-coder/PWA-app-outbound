@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import type { Client, ClientFormData } from '../types/client';
 import { bboxAround, roundCoordsForKey } from '../utils/area';
 import { sendHubspotEvent } from '../utils/hubspotSync';
+import { FUNNEL_STAGE_IDS, STAGES, VISITA_STAGE_ID, VISITA_STAGE_LABEL } from '../constants/stages';
 
 const mapRow = (row: any): Client => row as Client;
 
@@ -408,11 +409,69 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
           visited_by_email: user?.email ?? null,
           visited_by_name: profile?.full_name ?? null,
           visited_by_sector: profile?.sector ?? null,
+          // Numero da visita (1 = primeira). Vem do contador que a RPC
+          // incrementa; permite o HubSpot/relatorio ver revisitas.
+          visita_numero: client.visit_count ?? null,
       }).catch((err) => console.warn('[WEBHOOK] marcar como visitado falhou:', err));
+
+      // Check-in move o lead pra etapa "Visita" automaticamente — mas SO se
+      // ele ainda nao passou desse ponto do funil. Um lead em Negociacao que
+      // recebe uma revisita nao pode regredir pra Visita.
+      const etapaAtual = (client.etapa ?? '').trim().toUpperCase();
+      const idxAtual = FUNNEL_STAGE_IDS.indexOf(
+        STAGES.find(s => s.label.toUpperCase() === etapaAtual)?.id ?? '',
+      );
+      const idxVisita = FUNNEL_STAGE_IDS.indexOf(VISITA_STAGE_ID);
+      // idxAtual === -1: etapa desconhecida/vazia (Backlog, Reciclagem, lead
+      // sem etapa) — esses entram no funil pela Visita normalmente.
+      const podeMover = idxAtual < idxVisita;
+
+      if (podeMover && client.id_hubspot) {
+        // Registra no historico local (mesma tabela do modal de etapa) e
+        // dispara o change_stage. Fire-and-forget: o check-in ja sucedeu.
+        (async () => {
+          try {
+            await supabase.from('client_stage_changes').insert({
+              client_id: client.id,
+              from_stage: client.etapa,
+              to_stage: VISITA_STAGE_LABEL,
+              to_stage_id: VISITA_STAGE_ID,
+              // Marca que foi automatico (nao veio do modal do vendedor).
+              sub_values: { origem: 'check_in_visita', visita_numero: client.visit_count ?? null },
+              created_by: user?.id ?? null,
+              created_by_name: profile?.full_name ?? null,
+              created_by_email: user?.email ?? profile?.email ?? null,
+            });
+          } catch (err) {
+            console.warn('[VISITA] historico de etapa falhou:', err);
+          }
+
+          try {
+            await sendHubspotEvent({
+              type: 'change_stage',
+              id: client.id,
+              id_hubspot: client.id_hubspot,
+              stage_id: VISITA_STAGE_ID,
+              stage_label: VISITA_STAGE_LABEL,
+              sub_values: {},
+              vendedor_id: profile?.id_hubspot ?? null,
+              vendedor_nome: profile?.full_name ?? null,
+            });
+            // A etapa canonica volta do HubSpot via reconcileStageChange
+            // (edge function) direto no banco; refetch pra UI acompanhar.
+            queryClient.invalidateQueries({ queryKey: ['clients'] });
+          } catch (err) {
+            console.warn('[VISITA] change_stage automatico falhou:', err);
+          }
+        })();
+      }
 
       return client;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['client_visits'] });
+    },
   });
 
   return {

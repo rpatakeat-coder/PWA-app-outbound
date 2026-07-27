@@ -128,6 +128,12 @@ export const FUNNEL_STAGE_IDS = [
 // Saida sempre disponivel como destino no app (a qualquer momento do funil).
 export const LOST_STAGE_ID = '1396006164'; // Perdido
 
+// Visita. Marcar um lead como visitado (check-in com GPS) move ele pra ca
+// automaticamente — desde que a etapa atual seja ANTERIOR a Visita no funil
+// (nao regride quem ja esta em Negociacao, Fechado, etc.).
+export const VISITA_STAGE_ID = '1396005401';
+export const VISITA_STAGE_LABEL = 'Visita';
+
 // Conversa com decisor (ex-Diagnóstico). Gate de features que so fazem
 // sentido depois de falar com o decisor (ex.: botao "Agendar reuniao").
 export const DECISOR_STAGE_ID = '1395880470';

@@ -37,9 +37,27 @@ export interface Client {
   url_hubspot: string | null;
   vendedor_id_hubspot: string | null;
   visited_at: string | null;
+  // Quantas vezes o lead ja foi visitado (contador mantido pela RPC
+  // mark_client_as_visited; o historico completo vive em client_visits).
+  visit_count: number;
   won_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+}
+
+// Uma visita (check-in com GPS). O mesmo lead pode ter varias.
+export interface ClientVisit {
+  id: string;
+  client_id: string;
+  visited_at: string;
+  visited_at_lat: number | null;
+  visited_at_lon: number | null;
+  distance_m: number | null;
+  visited_by: string | null;
+  visited_by_name: string | null;
+  visited_by_email: string | null;
+  etapa_anterior: string | null;
+  created_at: string;
 }
 
 // Tipo do agendamento: reunião ou follow up. Mesmo fluxo/tabela, muda só o

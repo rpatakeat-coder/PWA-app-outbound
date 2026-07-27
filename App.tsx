@@ -33,6 +33,7 @@ import { useMeetings } from './src/hooks/useMeetings';
 import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
 import { useClientNotes } from './src/hooks/useClientNotes';
 import { useClientStageChanges } from './src/hooks/useClientStageChanges';
+import { useClientVisits } from './src/hooks/useClientVisits';
 import { useClientTasks } from './src/hooks/useClientTasks';
 import { useForceReload } from './src/hooks/useForceReload';
 import { supabase } from './src/integrations/supabase/client';
@@ -1967,6 +1968,13 @@ function MainApp() {
             <Text style={styles.clientName} numberOfLines={1}>{primary}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {/* Visitas: so mostra a partir da 2a (revisita) — na 1a o proprio
+                status "lead visitado" ja comunica. */}
+            {(item.visit_count ?? 0) > 1 && (
+              <View style={styles.cardVisitBadge}>
+                <Text style={styles.cardVisitBadgeText}>📍 {item.visit_count}</Text>
+              </View>
+            )}
             {meetingCount > 0 && (
               <View style={styles.cardMeetingBadge}>
                 <Text style={styles.cardMeetingBadgeText}>📅 {meetingCount}</Text>
@@ -4490,6 +4498,10 @@ function ClientBottomSheet({
   };
   const { notes, addNote, updateNote, deleteNote } = useClientNotes(client.id);
   const { changes: stageChanges } = useClientStageChanges(client.id);
+  const { visits } = useClientVisits(client.id);
+  // Historico e' a fonte preferida; visit_count cobre o intervalo em que a
+  // tabela ainda nao existe, e visited_at cobre leads visitados antes dela.
+  const visitCount = visits.length || client.visit_count || (client.visited_at ? 1 : 0);
   const [newNote, setNewNote] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingBody, setEditingBody] = useState('');
@@ -4532,7 +4544,7 @@ function ClientBottomSheet({
     | { kind: 'note'; createdAt: string; note: typeof notes[number] }
     | { kind: 'stage'; createdAt: string; change: typeof stageChanges[number] }
     | { kind: 'meeting'; createdAt: string; meeting: ClientMeeting }
-    | { kind: 'visit'; createdAt: string };
+    | { kind: 'visit'; createdAt: string; visitNumber?: number; visitedByName?: string | null };
   const timeline: TimelineEntry[] = useMemo(() => {
     const entries: TimelineEntry[] = [
       ...notes.map((n) => ({ kind: 'note' as const, createdAt: n.created_at, note: n })),
@@ -4540,14 +4552,28 @@ function ClientBottomSheet({
       // Reunioes e follow-ups entram pela data agendada (scheduled_at).
       ...meetings.map((m) => ({ kind: 'meeting' as const, createdAt: m.scheduled_at, meeting: m })),
     ];
-    // Visita (check-in) — uma entrada quando o lead foi visitado.
-    if (client.visited_at) {
+    // Visitas (check-ins) — uma entrada por visita do historico, numeradas na
+    // ordem cronologica (1a visita, 2a visita...). Fallback pro visited_at do
+    // lead enquanto a tabela client_visits nao existir/carregar.
+    if (visits.length > 0) {
+      const asc = [...visits].sort(
+        (a, b) => new Date(a.visited_at).getTime() - new Date(b.visited_at).getTime(),
+      );
+      asc.forEach((v, i) => {
+        entries.push({
+          kind: 'visit' as const,
+          createdAt: v.visited_at,
+          visitNumber: i + 1,
+          visitedByName: v.visited_by_name,
+        });
+      });
+    } else if (client.visited_at) {
       entries.push({ kind: 'visit' as const, createdAt: client.visited_at });
     }
     return entries.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [notes, stageChanges, meetings, client.visited_at]);
+  }, [notes, stageChanges, meetings, client.visited_at, visits]);
 
   const approxReasons: string[] = [];
   if (!client.numero) approxReasons.push('Endereço sem número');
@@ -4658,6 +4684,25 @@ function ClientBottomSheet({
                 </View>
               </View>
             </View>
+
+            {/* Contador de visitas: o lead pode ser visitado varias vezes; o
+                numero vem do historico (client_visits) com fallback pro
+                visit_count do proprio lead. */}
+            {visitCount > 0 && (
+              <View style={styles.visitCountBox}>
+                <Text style={styles.visitCountText}>
+                  📍 {visitCount} {visitCount === 1 ? 'visita realizada' : 'visitas realizadas'}
+                </Text>
+                {client.visited_at ? (
+                  <Text style={styles.visitCountHint}>
+                    Última: {new Date(client.visited_at).toLocaleString('pt-BR', {
+                      day: '2-digit', month: '2-digit', year: 'numeric',
+                      hour: '2-digit', minute: '2-digit',
+                    })}
+                  </Text>
+                ) : null}
+              </View>
+            )}
 
             {/* Acoes rapidas no topo: visita (acao mais usada em campo) e
                 editar — antes ficavam no fim do sheet, exigindo rolar tudo. */}
@@ -4959,8 +5004,13 @@ function ClientBottomSheet({
                       <View key={`visit-${entry.createdAt}`} style={styles.noteItem}>
                         <View style={styles.noteHeaderRow}>
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.noteAuthor} numberOfLines={1}>📍 Check-in de visita</Text>
-                            <Text style={styles.noteDate}>{when}</Text>
+                            <Text style={styles.noteAuthor} numberOfLines={1}>
+                              📍 Check-in de visita
+                              {entry.visitNumber ? ` — ${entry.visitNumber}ª` : ''}
+                            </Text>
+                            <Text style={styles.noteDate}>
+                              {when}{entry.visitedByName ? ` • ${entry.visitedByName}` : ''}
+                            </Text>
                           </View>
                         </View>
                         <Text style={[styles.noteBody, { fontWeight: '600' }]}>
@@ -5805,6 +5855,15 @@ const styles = StyleSheet.create({
     borderColor: '#c4b5fd',
   },
   cardMeetingBadgeText: { color: '#6d28d9', fontSize: 10, fontWeight: '700' },
+  cardVisitBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  cardVisitBadgeText: { color: '#15803d', fontSize: 10, fontWeight: '700' },
   clientCity: { fontSize: 13, color: '#64748b', marginBottom: 2 },
   clientPhone: { fontSize: 13, color: '#334155' },
   emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 60 },
@@ -5873,6 +5932,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
+  visitCountBox: {
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginBottom: 10,
+  },
+  visitCountText: { fontSize: 14, fontWeight: '800', color: '#15803d' },
+  visitCountHint: { fontSize: 12, color: '#16a34a', marginTop: 2 },
   agendaSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
