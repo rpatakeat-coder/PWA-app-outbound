@@ -613,9 +613,9 @@ function MainApp() {
   // Mesmo modal serve os dois; só muda o `type` salvo e os rótulos.
   // reschedule preenchido => o modal abre em modo "reagendar" daquela reunião.
   const [schedulingFor, setSchedulingFor] = useState<{ client: Client; type: MeetingType; reschedule?: ClientMeeting } | null>(null);
-  // Sub-menus da agenda (passado/futuro) — passado começa fechado, igual lista.
+  // Passado da agenda começa fechado (igual lista). Hoje/futuro viram uma
+  // timeline contínua agrupada por dia — não precisam de acordeão.
   const [agendaPastOpen, setAgendaPastOpen] = useState(false);
-  const [agendaFutureOpen, setAgendaFutureOpen] = useState(false);
   // Mudanca de etapa. initialStageId trava o modal numa etapa (ex.: "Mover pra
   // perdido" a partir de uma tarefa); taskId, quando presente, e' a tarefa a
   // resolver depois que o envio concluir.
@@ -2541,33 +2541,45 @@ function MainApp() {
     const renderAgendaItem = (item: typeof agendaItems[number], index: number) => {
           const date = item.at ? new Date(item.at) : null;
           const time = date ? date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-          const dayLabel = date
-            ? date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-            : '--/--';
-          const weekdayLabel = date
-            ? date.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')
-            : '';
           const client = item.client;
           const title = client ? getClientPrimaryName(client) : 'Lead nao encontrado';
           const contact = client?.empresa?.trim() && client.nome && client.nome !== client.empresa ? client.nome : null;
           const responsavel = client?.vendedor_id_hubspot
             ? vendorLabel(client.vendedor_id_hubspot)
             : null;
+
+          // Linha de contexto (como no card do mockup): "1ª visita · Bairro" ou
+          // "Revisita · Bairro". Reuniao/follow up dizem o tipo no lugar da
+          // contagem de visita — o que importa ali e' o compromisso, nao o pin.
+          const visitas = client ? (client.visit_count || (client.visited_at ? 1 : 0)) : 0;
+          const ocasiao = item.kind === 'meeting'
+            ? (item.meeting.type === 'follow_up' ? 'Follow up' : 'Reunião/demo')
+            : visitas > 0 ? 'Revisita' : '1ª visita';
+          const lugar = client?.bairro?.trim() || client?.cidade?.trim() || null;
+          const subtitle = [ocasiao, lugar].filter(Boolean).join(' · ');
+
+          // Pill de temperatura da etapa — mesma escala de cor dos pins do mapa.
+          const temp = stageTemperature(client?.etapa);
+
           return (
             <View
               key={item.kind === 'meeting' ? `meeting-${item.meeting.id}` : `route-${item.stop.id ?? index}`}
               style={styles.agendaItem}
             >
-              <View style={styles.agendaWhen}>
-                <Text style={styles.agendaDate}>{dayLabel}</Text>
-                {weekdayLabel ? <Text style={styles.agendaWeekday}>{weekdayLabel}</Text> : null}
-                <Text style={styles.agendaTime}>{time}</Text>
-              </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.agendaTitle}>{title}</Text>
+                <Text style={styles.agendaTitle}>
+                  {title} <Text style={styles.agendaTitleTime}>— {time}</Text>
+                </Text>
+                <Text style={styles.agendaSubtitle}>{subtitle}</Text>
                 {contact ? <Text style={styles.agendaMeta}>Contato: {contact}</Text> : null}
                 {responsavel ? <Text style={styles.agendaMeta}>Responsável: {responsavel}</Text> : null}
-                <Text style={styles.agendaMeta}>{item.kind === 'meeting' ? 'Reuniao/demo agendada' : 'Visita planejada da rota'}</Text>
+                {temp && (
+                  <View style={[styles.agendaTempPill, { backgroundColor: `${temp.color}1a`, borderColor: `${temp.color}59` }]}>
+                    <Text style={[styles.agendaTempPillText, { color: temp.color }]}>
+                      {temp.label} · {client?.etapa}
+                    </Text>
+                  </View>
+                )}
                 {client && (
                   <View style={styles.routeActionsRow}>
                     <TouchableOpacity
@@ -2618,6 +2630,59 @@ function MainApp() {
           );
     };
 
+    // Agrupa por DIA. O cabecalho vermelho de cada grupo ("HOJE · TER, 11 AGO")
+    // e' o que da a leitura de calendario — em vez de uma lista corrida onde o
+    // vendedor tinha que ler a data item a item.
+    const groupByDay = (items: typeof agendaItems) => {
+      const groups: { key: string; date: Date | null; items: typeof agendaItems }[] = [];
+      for (const item of items) {
+        const d = item.at ? new Date(item.at) : null;
+        const key = d ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : 'sem-data';
+        const last = groups[groups.length - 1];
+        if (last && last.key === key) last.items.push(item);
+        else groups.push({ key, date: d, items: [item] });
+      }
+      return groups;
+    };
+
+    // "HOJE · TER, 11 AGO" / "AMANHÃ · QUA, 12 AGO" / "QUI, 13 AGO".
+    const dayHeaderLabel = (d: Date | null) => {
+      if (!d) return 'SEM DATA';
+      const dia = new Date(d);
+      dia.setHours(0, 0, 0, 0);
+      const diff = Math.round((dia.getTime() - todayStart.getTime()) / 86_400_000);
+      const weekday = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').toUpperCase();
+      const dayMonth = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+        .replace('.', '')
+        .toUpperCase();
+      const base = `${weekday}, ${dayMonth}`;
+      if (diff === 0) return `HOJE · ${base}`;
+      if (diff === 1) return `AMANHÃ · ${base}`;
+      if (diff === -1) return `ONTEM · ${base}`;
+      return base;
+    };
+
+    // Um dia inteiro de compromissos: cabecalho + cards.
+    const renderDayGroup = (
+      group: { key: string; date: Date | null; items: typeof agendaItems },
+      opts?: { dimmed?: boolean },
+    ) => (
+      <View key={group.key} style={opts?.dimmed ? { opacity: 0.7 } : undefined}>
+        <View style={styles.agendaDayHeader}>
+          <Text style={styles.agendaDayHeaderText}>{dayHeaderLabel(group.date)}</Text>
+          <Text style={styles.agendaDayHeaderCount}>
+            {group.items.length} {group.items.length === 1 ? 'item' : 'itens'}
+          </Text>
+        </View>
+        {group.items.map((item, i) => renderAgendaItem(item, i))}
+      </View>
+    );
+
+    // Hoje + futuro entram na MESMA timeline continua (é o fluxo natural de
+    // "o que vem pela frente"); passado fica no acordeão fechado acima.
+    const proximosGroups = groupByDay([...todayItems, ...futureItems]);
+    const pastGroups = groupByDay(pastItems);
+
     return (
       <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
         <View style={styles.panelCard}>
@@ -2649,45 +2714,22 @@ function MainApp() {
                   </View>
                   <Text style={styles.stageAccordionChevron}>{agendaPastOpen ? '▲' : '▼'}</Text>
                 </TouchableOpacity>
-                {agendaPastOpen && (
-                  <View style={{ opacity: 0.75 }}>
-                    {pastItems.map((item, i) => renderAgendaItem(item, i))}
-                  </View>
-                )}
+                {agendaPastOpen && pastGroups.map(g => renderDayGroup(g, { dimmed: true }))}
               </>
             )}
 
-            {/* HOJE — sempre visível, é o foco da tela */}
-            <View style={styles.agendaSectionHeader}>
-              <Text style={styles.agendaSectionTitle}>Hoje</Text>
-              <Text style={styles.agendaSectionMeta}>
-                {todayItems.length} {todayItems.length === 1 ? 'item' : 'itens'}
-              </Text>
-            </View>
-            {todayItems.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>Nada agendado para hoje.</Text>
-              </View>
-            ) : (
-              todayItems.map((item, i) => renderAgendaItem(item, i))
-            )}
-
-            {/* FUTURO — acordeão fechado por padrão */}
-            {futureItems.length > 0 && (
+            {/* HOJE + PRÓXIMOS DIAS — timeline contínua agrupada por data */}
+            {todayItems.length === 0 && (
               <>
-                <TouchableOpacity
-                  style={styles.stageAccordionHeader}
-                  onPress={() => setAgendaFutureOpen(v => !v)}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.stageAccordionTitle}>Futuro</Text>
-                    <Text style={styles.stageAccordionMeta}>{futureItems.length} {futureItems.length === 1 ? 'item' : 'itens'}</Text>
-                  </View>
-                  <Text style={styles.stageAccordionChevron}>{agendaFutureOpen ? '▲' : '▼'}</Text>
-                </TouchableOpacity>
-                {agendaFutureOpen && futureItems.map((item, i) => renderAgendaItem(item, i))}
+                <View style={styles.agendaDayHeader}>
+                  <Text style={styles.agendaDayHeaderText}>{dayHeaderLabel(todayStart)}</Text>
+                </View>
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>Nada agendado para hoje.</Text>
+                </View>
               </>
             )}
+            {proximosGroups.map(g => renderDayGroup(g))}
           </>
         )}
       </ScrollView>
@@ -5988,7 +6030,37 @@ const styles = StyleSheet.create({
   agendaWeekday: { fontSize: 10, color: '#94a3b8', fontWeight: '600', textTransform: 'capitalize' },
   agendaTime: { fontSize: 14, fontWeight: '800', color: '#dc2626', marginTop: 2 },
   agendaTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
+  agendaTitleTime: { fontSize: 15, fontWeight: '800', color: '#334155' },
+  agendaSubtitle: { fontSize: 13, color: '#64748b', marginTop: 3 },
   agendaMeta: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  // Cabecalho de dia da timeline — vermelho, caixa alta, o marcador visual
+  // que separa "HOJE" de "AMANHÃ" sem o vendedor ter que ler data por item.
+  agendaDayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  agendaDayHeaderText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#dc2626',
+    letterSpacing: 0.6,
+  },
+  agendaDayHeaderCount: { fontSize: 11, color: '#94a3b8', fontWeight: '700' },
+  // Pill de temperatura da etapa (Quente/Morno/Frio) — cor vem de TEMP_COLORS
+  // com alpha em hex (1a = ~10% fundo, 59 = ~35% borda).
+  agendaTempPill: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginTop: 8,
+  },
+  agendaTempPillText: { fontSize: 11, fontWeight: '800' },
   // Tarefas
   taskItem: {
     flexDirection: 'row',
