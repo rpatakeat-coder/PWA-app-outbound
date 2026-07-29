@@ -9,14 +9,14 @@ export function useMeetings() {
   const { isAuthenticated, user, profile } = useAuth();
 
   // Carrega reuniões agendadas pelo proprio usuario (a policy do banco ja
-  // filtra; o .eq aqui eh defensivo + ajuda performance). Admin (email
-  // arthurgothe.takeat@gmail.com) bypass: pega tudo, igual o RLS permite.
-  const isAdmin = profile?.email === 'arthurgothe.takeat@gmail.com';
+  // filtra; o .eq aqui eh defensivo + ajuda performance). Gestor (role no
+  // banco) faz bypass: pega tudo, igual o RLS permite.
+  const isGestor = profile?.role === 'gestor';
   const query = useQuery<ClientMeeting[]>({
-    queryKey: ['client_meetings', isAdmin ? 'all' : user?.id],
+    queryKey: ['client_meetings', isGestor ? 'all' : user?.id],
     queryFn: async () => {
       let q = supabase.from('client_meetings').select('*');
-      if (!isAdmin && user?.id) {
+      if (!isGestor && user?.id) {
         q = q.eq('created_by', user.id);
       }
       const { data, error } = await q;

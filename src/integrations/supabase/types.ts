@@ -3,7 +3,8 @@ export interface Profile {
   email: string;
   full_name: string | null;
   sector: string | null;
-  role: 'user' | 'view' | null;
+  // gestor = acesso total (substituiu o antigo admin por e-mail hardcoded).
+  role: 'user' | 'view' | 'gestor' | null;
   timezone: string | null;
   language: string | null;
   preferences: Record<string, any> | null;

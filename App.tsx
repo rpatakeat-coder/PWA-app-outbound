@@ -507,12 +507,16 @@ function MainApp() {
   // JA filtrada por vendedor (visibleTasksCount), nao o total global.
   const { tasks, resolveTask } = useClientTasks();
   useForceReload(isAuthenticated);
-  const isAdmin = profile?.email === 'arthurgothe.takeat@gmail.com';
-  // Acesso a aba Gestor (metricas) SEM ser admin pleno. Julyan ve so as
-  // metricas; nao ganha picker de vendedor, mover etapa, force-reload etc.
-  // No banco, a RLS correspondente e can_view_metrics() (mesma lista de emails).
-  const GESTOR_VIEWER_EMAILS = ['outbound@takeat.app'];
-  const canViewGestor = isAdmin || GESTOR_VIEWER_EMAILS.includes(profile?.email ?? '');
+  // Gestor = acesso total. Antes existiam dois tiers separados (admin por
+  // e-mail hardcoded + uma lista de "so metricas"); agora e' um so, vindo do
+  // role no banco. Adicionar gestor = UPDATE em profiles.role, sem deploy.
+  // No banco as RLS correspondentes sao is_field_admin() / can_view_metrics(),
+  // ambas checando role='gestor'.
+  const isGestor = profile?.role === 'gestor';
+  // Aliases mantidos porque o resto do arquivo referencia os dois nomes; hoje
+  // apontam pro mesmo tier.
+  const isAdmin = isGestor;
+  const canViewGestor = isGestor;
   // Usuario 'view' = somente leitura. Esconde criar/editar/excluir/rotas/agenda/notas.
   // Aplicacao real do bloqueio esta nas RLS policies do Supabase (is_view_only_user()).
   const isViewer = profile?.role === 'view';
