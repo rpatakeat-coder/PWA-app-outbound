@@ -83,7 +83,7 @@ export interface SellerMetrics {
 export interface GlobalMetrics {
   total_clients: number;
   total_leads: number;          // status = 'lead'
-  total_visited: number;        // status = 'lead_visitado'
+  total_visited: number;        // visited_at IS NOT NULL (visita nao muda status)
   total_active_clients: number; // status = 'cliente'
   total_churn: number;          // status = 'churn'
   created_in_period: number;

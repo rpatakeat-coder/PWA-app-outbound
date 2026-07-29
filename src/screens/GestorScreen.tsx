@@ -775,7 +775,11 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
               label="Visitados"
               value={query.data.global.total_visited}
               color={STATUS_COLOR.lead_visitado}
-              onPress={() => openLeads('Visitados', { metric: 'status', period, status: 'lead_visitado' })}
+              // Visita e' desacoplada do status desde 20260619: o card conta
+              // clients.visited_at IS NOT NULL (all time), entao o drill-down
+              // usa a metrica 'visited' sem recorte de periodo — filtrar por
+              // status='lead_visitado' (slug legado inativo) voltaria vazio.
+              onPress={() => openLeads('Visitados', { metric: 'visited', period: { preset: 'all' } })}
             />
             <StatCard
               label="Clientes"

@@ -224,7 +224,7 @@ const getClientPrimaryName = (client: Client) => client.empresa?.trim() || clien
 // A COR do pin comunica a temperatura da etapa (quente/morno/frio/fechado/
 // perdido) — antes era uma bandeirinha de emoji no canto, pequena demais pra
 // ler em zoom baixo. Leads sem etapa conhecida caem na cor do status.
-function CustomMarker({ color, meetingCount }: { color: string; meetingCount: number }) {
+function CustomMarker({ color, meetingCount, onLogoLoad }: { color: string; meetingCount: number; onLogoLoad?: () => void }) {
   return (
     <View style={markerStyles.container}>
       <View style={[markerStyles.pin, { backgroundColor: color }]}>
@@ -234,6 +234,9 @@ function CustomMarker({ color, meetingCount }: { color: string; meetingCount: nu
           // Asset embarcado: pinta sincronamente. defaultSource garante fallback.
           defaultSource={require('./assets/icon.png')}
           fadeDuration={0}
+          // Avisa o MarkerWithReady que o PNG terminou de decodificar — só a
+          // partir daí o snapshot do marker pode ser congelado com segurança.
+          onLoadEnd={onLogoLoad}
         />
         {meetingCount > 0 && (
           <View style={markerStyles.meetingBadge}>
@@ -264,26 +267,42 @@ const MarkerWithReady = React.memo(
     // pin some do mapa. Religando o tracking por um instante forçamos o
     // native a recapturar a imagem do marker na nova posição.
     const [tracking, setTracking] = useState(true);
+    // O snapshot só pode ser congelado DEPOIS que o PNG do logo decodificou.
+    // onLayout dispara quando o layout termina, mas o decode da imagem é
+    // assíncrono — quando um cluster se divide no zoom, dezenas de markers
+    // montam juntos e o decode enfileira; nos que passavam de 800ms o
+    // snapshot congelava vazio e o pin ficava INVISÍVEL até o próximo
+    // re-track (o "some ao aproximar, uns sim outros não" do campo).
+    const [logoLoaded, setLogoLoaded] = useState(false);
+    // Contador que força a janela de re-snapshot a reabrir (onLayout). O
+    // onLayout antigo fazia setTracking(true) sem timer — além de não
+    // resolver o decode tardio, deixava o marker em tracking pra sempre.
+    const [pokeKey, setPokeKey] = useState(0);
     useEffect(() => {
       setTracking(true);
       // 800ms basta pra o native completar o snapshot; timer curto evita
       // manter dezenas de markers em tracking contínuo (custo de perf).
       const t = setTimeout(() => setTracking(false), 800);
       return () => clearTimeout(t);
-    }, [meetingCount, color, coordinate.latitude, coordinate.longitude]);
+    }, [meetingCount, color, coordinate.latitude, coordinate.longitude, logoLoaded, pokeKey]);
 
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
+    const handleLogoLoad = useCallback(() => setLogoLoaded(true), []);
+    const handleLayout = useCallback(() => setPokeKey((k) => k + 1), []);
 
     return (
       <Marker
         coordinate={coordinate}
         onPress={handlePress}
-        tracksViewChanges={tracking}
+        // Enquanto o logo não carregou, mantém tracking ligado (snapshot
+        // congelado sem a imagem = pin invisível). Depois disso, o tracking
+        // vira janelas curtas de 800ms a cada mudança relevante.
+        tracksViewChanges={tracking || !logoLoaded}
         // Redesenha o snapshot assim que o custom view termina o layout —
         // garante que markers recém-montados no zoom capturem a imagem.
-        onLayout={() => setTracking(true)}
+        onLayout={handleLayout}
       >
-        <CustomMarker color={color} meetingCount={meetingCount} />
+        <CustomMarker color={color} meetingCount={meetingCount} onLogoLoad={handleLogoLoad} />
       </Marker>
     );
   },
