@@ -140,8 +140,17 @@ function normalizeProperties(sub: Record<string, unknown>): Record<string, unkno
 // Campos do deal replicados do app — mesmo corpo dos nodes "HTTP Request4"/
 // "Atualizar deal" do n8n. cep vai so com alfanumericos (o n8n fazia o mesmo
 // replace). id_pin_app_outbound = uuid do client no app (body.id).
-function dealPropertiesFromBody(body: Record<string, unknown>): Record<string, unknown> {
-  return {
+//
+// withOwner: SO' o create_pin manda hubspot_owner_id. No update, mandar o owner
+// significava "quem editou o cadastro vira dono do negocio" — editar telefone/
+// endereco de um lead alheio roubava o lead no HubSpot (caso "Acaraje da Pri",
+// 2026-07-29: uma edicao de cadastro reatribuiu o deal pro editor). Quem muda
+// dono e' o HubSpot, nao uma edicao de pin.
+function dealPropertiesFromBody(
+  body: Record<string, unknown>,
+  opts: { withOwner: boolean },
+): Record<string, unknown> {
+  const props: Record<string, unknown> = {
     dealname: str(body.dealname),
     bairro: str(body.bairro),
     celular: str(body.celular),
@@ -154,9 +163,10 @@ function dealPropertiesFromBody(body: Record<string, unknown>): Record<string, u
     longitude: str(body.longitude),
     numero_do_local: str(body.numero_do_local),
     observacoes: str(body.observacoes),
-    hubspot_owner_id: str(body.vendedor_id),
     id_pin_app_outbound: str(body.id ?? body.id_pin),
   };
+  if (opts.withOwner) props.hubspot_owner_id = str(body.vendedor_id);
+  return props;
 }
 
 const dealUrl = (dealId: string) =>
@@ -245,6 +255,8 @@ async function handleUpdate(token: string, body: Record<string, unknown>) {
   const assoc = await hsFetch(token, 'GET', `/crm/v4/objects/deals/${idHubspot}/associations/contacts`);
   const contactId = trimOrNull(assoc.body?.results?.[0]?.toObjectId);
 
+  // Sem hubspot_owner_id aqui tambem: o contato acompanha o deal — reatribuir o
+  // contato por causa de uma edicao de cadastro tem o mesmo efeito indesejado.
   if (contactId) {
     await hsFetch(token, 'PATCH', `/crm/objects/2026-03/contacts/${contactId}`, {
       properties: {
@@ -252,13 +264,12 @@ async function handleUpdate(token: string, body: Record<string, unknown>) {
         firstname: str(body.nome),
         state: str(body.estado_uf),
         city: str(body.cidade),
-        hubspot_owner_id: str(body.vendedor_id),
       },
     });
   }
 
   const deal = await hsFetch(token, 'PATCH', `/crm/objects/2026-03/deals/${idHubspot}`, {
-    properties: dealPropertiesFromBody(body),
+    properties: dealPropertiesFromBody(body, { withOwner: false }),
   });
   if (!deal.ok) {
     return json(502, {
@@ -316,9 +327,11 @@ async function handleCreatePin(token: string, body: Record<string, unknown>) {
     contactId = contact.body?.message?.match(/Existing ID:\s*(\d+)/)?.[1] ?? null;
   }
 
+  // withOwner: true — na CRIACAO o vendedor que cadastrou o pin e' o dono
+  // legitimo do lead novo. E' o unico ponto que define hubspot_owner_id.
   const deal = await hsFetch(token, 'POST', '/crm/v3/objects/deals', {
     properties: {
-      ...dealPropertiesFromBody(body),
+      ...dealPropertiesFromBody(body, { withOwner: true }),
       dealstage: CREATE_PIN_STAGE_ID,
       pipeline: CREATE_PIN_PIPELINE_ID,
     },
