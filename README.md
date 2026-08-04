@@ -1,0 +1,197 @@
+# Takeat RPA — App de Campo Outbound
+
+Aplicativo mobile (Expo / React Native) para o time de vendas **outbound** da Takeat.
+Concentra a operação de campo do vendedor: mapa de leads, planejamento de rota,
+agenda de compromissos, tarefas, check-in de visitas e o painel do gestor — tudo
+sincronizado com o **HubSpot** (CRM) e o **Supabase** (banco + backend).
+
+> ⚠️ **Repositório privado** — código proprietário da Takeat.
+
+---
+
+## 📱 Funcionalidades
+
+- **Mapa comercial** — leads/clientes georreferenciados, clusterização, filtros por
+  etapa, estado, vendedor e status; temperatura da etapa por cor.
+- **Lista** — mesma base do mapa em formato de lista com busca e filtros.
+- **Rota** — planejamento de rota do dia (otimização de paradas) e navegação.
+- **Agenda** — rotas planejadas + reuniões (demos) + follow-ups em ordem
+  cronológica (passado / hoje / futuro), com filtro por vendedor.
+  - **Exportação JSON** (gestor) — botão que exporta a agenda em JSON para análise.
+- **Tarefas** — cobranças automáticas (ex.: *Agendar Demo* com escalonamento D2 → D5).
+- **Cadastro / edição de leads** — com geocoding e sincronização no HubSpot.
+- **Check-in de visita** — registro de visita com validação de distância.
+- **Painel do Gestor** — métricas por vendedor, drill-down e exportação completa (JSON).
+- **Meu desempenho** — métricas do próprio vendedor.
+
+---
+
+## 🧱 Stack
+
+| Camada | Tecnologia |
+|---|---|
+| App | Expo SDK 54, React Native 0.81, React 19, TypeScript |
+| Estado/dados | @tanstack/react-query |
+| Mapa | react-native-maps + react-native-map-clustering |
+| Backend | Supabase (Postgres, Auth, Storage, Edge Functions/Deno) |
+| CRM | HubSpot (deals, contatos, engagements) |
+| Automações | n8n (Google Calendar, fallback de sync) |
+| Build/OTA | EAS Build + EAS Update |
+
+---
+
+## 🏗️ Arquitetura (visão geral)
+
+```
+                 ┌─────────────────────────┐
+                 │   App (Expo/React Native)│
+                 └───────────┬─────────────┘
+                             │ supabase-js (auth + dados)
+                 ┌───────────▼─────────────┐
+                 │        Supabase          │
+                 │  Postgres · Auth · Storage│
+                 │      Edge Functions       │
+                 └─────┬───────────────┬────┘
+        hubspot-sync   │               │  hubspot-lead-webhook(-latlong)
+   (deals/contatos/    │               │  (leads vindos do HubSpot/RPA)
+    engagements)       ▼               ▲
+                 ┌───────────┐    ┌────┴───────┐
+                 │  HubSpot  │    │    n8n     │
+                 │   (CRM)   │◄──►│  Calendar  │
+                 └───────────┘    │  + fallback│
+                                  └────────────┘
+```
+
+- **Saída app → HubSpot**: a maior parte das escritas (mudança de etapa, cadastro,
+  edição, notas, e agora **tasks/meetings de agenda**) vai pela Edge Function
+  `hubspot-sync`, que fala **direto com a API do HubSpot**. Se a edge estiver
+  indisponível, cai automaticamente para o **n8n** (mesmo payload).
+- **Reunião/follow-up no Google Calendar**: continua no **n8n** (credencial OAuth
+  do Google vive lá).
+- **Entrada HubSpot → app**: leads chegam pelas Edge Functions
+  `hubspot-lead-webhook` / `hubspot-lead-webhook-latlong` (upsert em `clients`).
+
+---
+
+## 📂 Estrutura
+
+```
+App.tsx                      # App principal (navegação por abas, telas core)
+index.js                     # Entry point
+src/
+  screens/                   # Telas (Gestor, MeuDesempenho, modais de agendamento…)
+  hooks/                     # Hooks de dados (useClients, useMeetings, useFieldOps…)
+  utils/                     # Helpers (hubspotSync, routing, geocoding, exportAgenda…)
+  context/AuthContext.tsx    # Autenticação (Supabase)
+  constants/stages.ts        # Etapas do funil + webhook n8n
+  integrations/supabase/     # Client + tipos
+  types/client.ts            # Tipos de domínio
+supabase/
+  functions/                 # Edge Functions (Deno)
+  migrations/                # Migrations SQL
+assets/                      # Ícones/splash
+eas.json / app.json          # Config EAS + Expo
+```
+
+---
+
+## 🚀 Rodando localmente
+
+Pré-requisitos: Node 18+ e um **dev build**/Expo Go (SDK 54) no dispositivo.
+
+```bash
+npm install
+npm start            # inicia o Metro (expo start)
+```
+
+Conectar o celular (mesma rede Wi‑Fi) via QR/URL do Metro.
+Se a LAN falhar (isolamento de rede/AP), use o túnel:
+
+```bash
+npx expo start --tunnel
+```
+
+> Este app usa módulos nativos (mapas, localização). Em geral roda no **Expo Go**
+> (SDK 54); para recursos Android específicos use um **dev build** (`eas build`).
+
+---
+
+## 📦 EAS (build & OTA update)
+
+Login (uma vez, conta da org `takeat`):
+
+```bash
+npm run login        # npx eas-cli login
+npm run whoami
+```
+
+Publicar atualização **OTA** (JS, sem passar pela loja) — só chega em builds com o
+mesmo `runtimeVersion` (`exposdk:54.0.0`):
+
+```bash
+npm run update:prod "mensagem"     # canal production
+npm run update:preview "mensagem"  # canal preview
+npm run update:dev "mensagem"      # canal development
+```
+
+Gerar build nativo (quando muda dependência nativa):
+
+```bash
+npx eas-cli build --profile production --platform android   # ou ios
+```
+
+---
+
+## 🔌 Supabase Edge Functions
+
+| Função | Papel |
+|---|---|
+| `hubspot-sync` | Saída app → HubSpot: `change_stage`, `update`, `create_pin`, `create_note`, `get_stages`, **`create_task`/`update_task`** (follow up → Task), **`create_meeting`/`update_meeting`** (demo → Meeting). |
+| `hubspot-lead-webhook` / `-latlong` | Entrada: leads do HubSpot/RPA → upsert em `clients` (com geocoding). |
+| `export-report` | Exporta TUDO do período em JSON (painel do gestor) → Storage → signed URL. |
+| `export-agenda` | Exporta a agenda (montada no app) em JSON → Storage → signed URL. |
+| `geocode` | Geocoding/reparo de coordenadas. |
+| `delete-lead`, `open-app` | Utilitários. |
+
+Deploy (via Supabase CLI ou MCP):
+
+```bash
+supabase functions deploy hubspot-sync
+```
+
+Secrets usados pelas functions: `HUBSPOT_TOKEN`, `HUBSPOT_WEBHOOK_SECRET`,
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`.
+
+---
+
+## 🔗 Integração Agenda → HubSpot
+
+Ao **agendar** na agenda do app:
+
+- **Follow up** → cria uma **Task** no HubSpot (assunto `Follow Up - {lead}`,
+  vencimento = data, dono = vendedor), associada ao deal.
+- **Demo (reunião)** → cria uma **Meeting** no HubSpot (início/fim pela duração),
+  associada ao deal.
+- **Reagendar** atualiza o mesmo engagement; **cancelar** conclui a Task / cancela a
+  Meeting. O id do engagement fica em `client_meetings.hs_engagement_id`.
+- O evento no **Google Calendar** (via n8n) continua funcionando em paralelo.
+
+> Só vale para leads que já têm `id_hubspot` (deal). Sem isso, o app ignora sem erro.
+
+---
+
+## 🔐 Segurança
+
+- A **anon key** do Supabase em `src/integrations/supabase/client.ts` é publishable
+  (protegida por RLS) — não é segredo, mas o repositório é privado por ser código
+  proprietário.
+- Segredos reais (tokens do HubSpot, service role) vivem apenas como **secrets das
+  Edge Functions**, nunca no código do app.
+
+---
+
+## 🤝 Convenções
+
+- Papéis de usuário via `profiles.role` (`gestor` = acesso total).
+- Etapas do funil e IDs do HubSpot em `src/constants/stages.ts` e nas Edge Functions
+  — manter sincronizados com o HubSpot.
