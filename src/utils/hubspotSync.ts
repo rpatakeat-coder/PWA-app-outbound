@@ -1,5 +1,6 @@
 import { supabase } from '../integrations/supabase/client';
 import { CHANGE_STAGE_WEBHOOK } from '../constants/stages';
+import type { MeetingType } from '../types/client';
 
 // Ponto unico de saida dos eventos que antes iam TODOS pro webhook do n8n.
 // Tipos com integracao HubSpot pura vao pra edge function hubspot-sync (rapida,
@@ -72,4 +73,97 @@ export async function sendHubspotEvent(payload: Record<string, unknown>): Promis
     console.warn(`[hubspot-sync] edge indisponivel (${type}), caindo pro n8n:`, err);
     return postToN8n(payload);
   }
+}
+
+// ============================================================================
+// Agenda -> HubSpot (Task pra follow up, Meeting pra demo).
+//
+// Chamam a edge hubspot-sync DIRETO (sem passar pelo sendHubspotEvent). O
+// fallback pro n8n desses tipos seria PERIGOSO: a rota default do Switch do n8n
+// cria um deal. Entao aqui, se a edge falhar, o erro sobe e quem chama so' loga
+// (o agendamento em si nao quebra) — nunca reenvia pro n8n.
+// ============================================================================
+async function invokeHubspotSync(body: Record<string, unknown>): Promise<any> {
+  const { data, error } = await supabase.functions.invoke('hubspot-sync', { body });
+  if (error) {
+    const ctx = (error as any)?.context;
+    let detail = error.message;
+    try {
+      const b = await ctx?.json?.();
+      if (b?.error) detail = b.detail ? `${b.error}: ${b.detail}` : b.error;
+    } catch { /* ignore */ }
+    throw new Error(detail);
+  }
+  if (data?.error) throw new Error(data.detail ? `${data.error}: ${data.detail}` : data.error);
+  return data;
+}
+
+// Duracao (min) -> fim ISO a partir do inicio.
+const endFromStart = (startIso: string, durationMin: number) =>
+  new Date(new Date(startIso).getTime() + durationMin * 60_000).toISOString();
+
+export type AgendaEngagementInput = {
+  meetingType: MeetingType;    // 'reuniao' (demo) | 'follow_up'
+  id_hubspot: string;          // id do deal
+  titulo: string;
+  descricao: string | null;
+  scheduled_at: string;        // ISO
+  duration_minutes: number;
+  owner_id: string | null;     // hubspot_owner_id do vendedor
+};
+
+// Cria a Task (follow up) ou Meeting (demo) no HubSpot. Retorna o engagement_id
+// (pra guardar em client_meetings.hs_engagement_id) ou null.
+export async function createAgendaEngagement(input: AgendaEngagementInput): Promise<string | null> {
+  const isFollowUp = input.meetingType === 'follow_up';
+  const body = isFollowUp
+    ? {
+        type: 'create_task', id_hubspot: input.id_hubspot,
+        titulo: input.titulo, descricao: input.descricao,
+        due_at: input.scheduled_at, owner_id: input.owner_id,
+      }
+    : {
+        type: 'create_meeting', id_hubspot: input.id_hubspot,
+        titulo: input.titulo, descricao: input.descricao,
+        start_at: input.scheduled_at,
+        end_at: endFromStart(input.scheduled_at, input.duration_minutes),
+        owner_id: input.owner_id,
+      };
+  const data = await invokeHubspotSync(body);
+  return (data?.engagement_id as string | undefined) ?? null;
+}
+
+// Reagenda (novo horario) o engagement ja criado.
+export async function rescheduleAgendaEngagement(input: {
+  meetingType: MeetingType;
+  engagement_id: string;
+  titulo: string;
+  descricao: string | null;
+  scheduled_at: string;
+  duration_minutes: number;
+}): Promise<void> {
+  const isFollowUp = input.meetingType === 'follow_up';
+  const body = isFollowUp
+    ? {
+        type: 'update_task', engagement_id: input.engagement_id,
+        titulo: input.titulo, descricao: input.descricao, due_at: input.scheduled_at,
+      }
+    : {
+        type: 'update_meeting', engagement_id: input.engagement_id,
+        titulo: input.titulo, descricao: input.descricao,
+        start_at: input.scheduled_at,
+        end_at: endFromStart(input.scheduled_at, input.duration_minutes),
+      };
+  await invokeHubspotSync(body);
+}
+
+// Conclui (Task) / cancela (Meeting) o engagement — usado ao remover no app.
+export async function cancelAgendaEngagement(input: {
+  meetingType: MeetingType;
+  engagement_id: string;
+}): Promise<void> {
+  const body = input.meetingType === 'follow_up'
+    ? { type: 'update_task', engagement_id: input.engagement_id, concluir: true }
+    : { type: 'update_meeting', engagement_id: input.engagement_id, cancelar: true };
+  await invokeHubspotSync(body);
 }

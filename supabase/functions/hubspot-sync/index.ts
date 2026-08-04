@@ -17,10 +17,18 @@
 //                  que o n8n respondia).
 //   get_stages   — GET das etapas do pipeline; responde { results: [...] }.
 //   create_note  — cria engagement de nota no deal (timeline do HubSpot).
+//   create_task / update_task       — Task no deal (follow up agendado).
+//                                      update: reagendar (due) ou concluir.
+//   create_meeting / update_meeting  — Meeting no deal (demo agendada).
+//                                      update: reagendar (start/end) ou cancelar.
+//   -> devolvem { engagement_id }; o app guarda em
+//      client_meetings.hs_engagement_id pra reagendar/concluir/cancelar depois.
 //
 // reuniao/followup (Google Calendar) CONTINUAM no n8n — dependem da credencial
 // OAuth do Google que vive la. type=visited tambem segue pro n8n (sem rota de
 // HubSpot). O helper src/utils/hubspotSync.ts no app faz esse roteamento.
+// IMPORTANTE: create_task/create_meeting NAO tem fallback pro n8n (o Switch de
+// la criaria um deal na rota default). O app chama a edge direto p/ esses.
 //
 // Deploy (verify_jwt LIGADO — so o app logado chama):
 //   supabase functions deploy hubspot-sync
@@ -43,9 +51,12 @@ const CREATE_PIN_PIPELINE_ID = '118032977';
 const CREATE_PIN_STAGE_ID = '1319906944';
 const GET_STAGES_PIPELINE_ID = '916011864';
 const HUBSPOT_PORTAL_ID = '24373118';
-// Associacoes HUBSPOT_DEFINED: 3 = deal -> contact, 214 = note -> deal.
+// Associacoes HUBSPOT_DEFINED: 3 = deal -> contact, 214 = note -> deal,
+// 212 = meeting -> deal, 216 = task -> deal (ids default do HubSpot).
 const ASSOC_DEAL_TO_CONTACT = 3;
 const ASSOC_NOTE_TO_DEAL = 214;
+const ASSOC_MEETING_TO_DEAL = 212;
+const ASSOC_TASK_TO_DEAL = 216;
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -417,6 +428,123 @@ async function handleCreateNote(token: string, body: Record<string, unknown>) {
   return json(200, { ok: true, note_id: note.body?.id ?? null });
 }
 
+// ===== Agenda -> HubSpot (Task pra follow up, Meeting pra demo) =====
+// Reflete o compromisso na timeline do deal. O evento no Google Calendar
+// continua no n8n; aqui criamos/atualizamos o engagement no CRM e devolvemos
+// o engagement_id (o app guarda em client_meetings.hs_engagement_id pra depois
+// reagendar/concluir/cancelar o MESMO engagement em vez de duplicar).
+
+// Normaliza pra ISO 8601; null se ausente/invalido.
+function toIso(v: unknown): string | null {
+  const s = trimOrNull(v);
+  if (!s) return null;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+// observacoes viram rich text no HubSpot — escapa e troca \n por <br>.
+function richBody(v: unknown): string {
+  const s = trimOrNull(v);
+  return s ? escapeHtml(s).replace(/\n/g, '<br>') : '';
+}
+
+// ---- Follow up -> Task ----
+async function handleCreateTask(token: string, body: Record<string, unknown>) {
+  const idHubspot = trimOrNull(body.id_hubspot);
+  const due = toIso(body.due_at);
+  if (!idHubspot || !due) return json(400, { error: 'id_hubspot e due_at sao obrigatorios' });
+
+  const props: Record<string, unknown> = {
+    hs_timestamp: due,
+    hs_task_subject: trimOrNull(body.titulo) ?? 'Follow Up',
+    hs_task_body: richBody(body.descricao),
+    hs_task_status: 'NOT_STARTED',
+    hs_task_type: 'TODO',
+    hs_task_priority: 'MEDIUM',
+  };
+  const owner = trimOrNull(body.owner_id);
+  if (owner) props.hubspot_owner_id = owner;
+
+  const res = await hsFetch(token, 'POST', '/crm/v3/objects/tasks', {
+    properties: props,
+    associations: [{
+      to: { id: idHubspot },
+      types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: ASSOC_TASK_TO_DEAL }],
+    }],
+  });
+  if (!res.ok) return json(502, { error: 'HubSpot recusou a task', detail: res.body?.message ?? `status ${res.status}` });
+  return json(200, { ok: true, engagement_id: res.body?.id ?? null });
+}
+
+// Reagendar (novo due) ou concluir (concluir:true -> status COMPLETED).
+async function handleUpdateTask(token: string, body: Record<string, unknown>) {
+  const id = trimOrNull(body.engagement_id);
+  if (!id) return json(400, { error: 'engagement_id e obrigatorio' });
+
+  const props: Record<string, unknown> = {};
+  if (body.concluir === true) props.hs_task_status = 'COMPLETED';
+  const due = toIso(body.due_at);
+  if (due) props.hs_timestamp = due;
+  const titulo = trimOrNull(body.titulo);
+  if (titulo) props.hs_task_subject = titulo;
+  if (body.descricao !== undefined) props.hs_task_body = richBody(body.descricao);
+  if (Object.keys(props).length === 0) return json(200, { ok: true, noop: true });
+
+  const res = await hsFetch(token, 'PATCH', `/crm/v3/objects/tasks/${id}`, { properties: props });
+  if (!res.ok) return json(502, { error: 'HubSpot recusou o update da task', detail: res.body?.message ?? `status ${res.status}` });
+  return json(200, { ok: true, engagement_id: id });
+}
+
+// ---- Demo/reuniao -> Meeting ----
+async function handleCreateMeeting(token: string, body: Record<string, unknown>) {
+  const idHubspot = trimOrNull(body.id_hubspot);
+  const start = toIso(body.start_at);
+  if (!idHubspot || !start) return json(400, { error: 'id_hubspot e start_at sao obrigatorios' });
+  const end = toIso(body.end_at) ?? start;
+
+  const props: Record<string, unknown> = {
+    hs_timestamp: start,
+    hs_meeting_title: trimOrNull(body.titulo) ?? 'Reunião',
+    hs_meeting_body: richBody(body.descricao),
+    hs_meeting_start_time: start,
+    hs_meeting_end_time: end,
+    hs_meeting_outcome: 'SCHEDULED',
+  };
+  const owner = trimOrNull(body.owner_id);
+  if (owner) props.hubspot_owner_id = owner;
+
+  const res = await hsFetch(token, 'POST', '/crm/v3/objects/meetings', {
+    properties: props,
+    associations: [{
+      to: { id: idHubspot },
+      types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: ASSOC_MEETING_TO_DEAL }],
+    }],
+  });
+  if (!res.ok) return json(502, { error: 'HubSpot recusou a meeting', detail: res.body?.message ?? `status ${res.status}` });
+  return json(200, { ok: true, engagement_id: res.body?.id ?? null });
+}
+
+// Reagendar (novo start/end) ou cancelar (cancelar:true -> outcome CANCELED).
+async function handleUpdateMeeting(token: string, body: Record<string, unknown>) {
+  const id = trimOrNull(body.engagement_id);
+  if (!id) return json(400, { error: 'engagement_id e obrigatorio' });
+
+  const props: Record<string, unknown> = {};
+  if (body.cancelar === true) props.hs_meeting_outcome = 'CANCELED';
+  const start = toIso(body.start_at);
+  if (start) { props.hs_timestamp = start; props.hs_meeting_start_time = start; }
+  const end = toIso(body.end_at);
+  if (end) props.hs_meeting_end_time = end;
+  const titulo = trimOrNull(body.titulo);
+  if (titulo) props.hs_meeting_title = titulo;
+  if (body.descricao !== undefined) props.hs_meeting_body = richBody(body.descricao);
+  if (Object.keys(props).length === 0) return json(200, { ok: true, noop: true });
+
+  const res = await hsFetch(token, 'PATCH', `/crm/v3/objects/meetings/${id}`, { properties: props });
+  if (!res.ok) return json(502, { error: 'HubSpot recusou o update da meeting', detail: res.body?.message ?? `status ${res.status}` });
+  return json(200, { ok: true, engagement_id: id });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {
     return json(405, { error: 'Method Not Allowed' });
@@ -449,6 +577,14 @@ Deno.serve(async (req: Request) => {
         return await handleGetStages(token);
       case 'create_note':
         return await handleCreateNote(token, body);
+      case 'create_task':
+        return await handleCreateTask(token, body);
+      case 'update_task':
+        return await handleUpdateTask(token, body);
+      case 'create_meeting':
+        return await handleCreateMeeting(token, body);
+      case 'update_meeting':
+        return await handleUpdateMeeting(token, body);
       default:
         return json(400, { error: `type nao suportado: ${type ?? '(vazio)'}` });
     }

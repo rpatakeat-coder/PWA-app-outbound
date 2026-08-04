@@ -2,7 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import type { Client, ClientMeeting, ClientMeetingFormData } from '../types/client';
-import { sendHubspotEvent } from '../utils/hubspotSync';
+import {
+  sendHubspotEvent,
+  createAgendaEngagement,
+  rescheduleAgendaEngagement,
+  cancelAgendaEngagement,
+} from '../utils/hubspotSync';
 
 export function useMeetings() {
   const queryClient = useQueryClient();
@@ -114,6 +119,35 @@ export function useMeetings() {
           enviado_em: new Date().toISOString(),
       }).catch((err) => console.warn('[WEBHOOK] reuniao falhou:', err));
 
+      // Follow up -> Task no HubSpot; demo/reuniao -> Meeting no HubSpot.
+      // Direto na edge hubspot-sync (NAO passa pelo n8n). Nao bloqueia o
+      // agendamento: roda em background e guarda o engagement_id na linha pra
+      // depois reagendar/concluir/cancelar o MESMO engagement.
+      if (client.id_hubspot) {
+        void (async () => {
+          try {
+            const engagementId = await createAgendaEngagement({
+              meetingType: meeting.type ?? 'reuniao',
+              id_hubspot: client.id_hubspot as string,
+              titulo: titulo_evento,
+              descricao: meeting.observacoes,
+              scheduled_at: meeting.scheduled_at,
+              duration_minutes: meeting.duration_minutes,
+              owner_id: profile?.id_hubspot ?? null,
+            });
+            if (engagementId) {
+              await supabase
+                .from('client_meetings')
+                .update({ hs_engagement_id: engagementId })
+                .eq('id', meeting.id);
+              queryClient.invalidateQueries({ queryKey: ['client_meetings'] });
+            }
+          } catch (err) {
+            console.warn('[HUBSPOT] criar engagement da agenda falhou:', err);
+          }
+        })();
+      }
+
       return meeting;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_meetings'] }),
@@ -207,14 +241,64 @@ export function useMeetings() {
         enviado_em: new Date().toISOString(),
       }).catch((err) => console.warn('[WEBHOOK] reagendamento falhou:', err));
 
+      // Atualiza o MESMO engagement no HubSpot (novo horário). Se a reunião foi
+      // criada antes desta feature (sem hs_engagement_id), cria agora e guarda.
+      if (client.id_hubspot) {
+        void (async () => {
+          try {
+            if (updated.hs_engagement_id) {
+              await rescheduleAgendaEngagement({
+                meetingType: updated.type ?? 'reuniao',
+                engagement_id: updated.hs_engagement_id,
+                titulo: titulo_evento,
+                descricao: updated.observacoes,
+                scheduled_at: updated.scheduled_at,
+                duration_minutes: updated.duration_minutes,
+              });
+            } else {
+              const engagementId = await createAgendaEngagement({
+                meetingType: updated.type ?? 'reuniao',
+                id_hubspot: client.id_hubspot as string,
+                titulo: titulo_evento,
+                descricao: updated.observacoes,
+                scheduled_at: updated.scheduled_at,
+                duration_minutes: updated.duration_minutes,
+                owner_id: profile?.id_hubspot ?? null,
+              });
+              if (engagementId) {
+                await supabase
+                  .from('client_meetings')
+                  .update({ hs_engagement_id: engagementId })
+                  .eq('id', updated.id);
+                queryClient.invalidateQueries({ queryKey: ['client_meetings'] });
+              }
+            }
+          } catch (err) {
+            console.warn('[HUBSPOT] atualizar engagement da agenda falhou:', err);
+          }
+        })();
+      }
+
       return updated;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_meetings'] }),
   });
 
+  // Recebe a reunião inteira (não só o id): precisa do type + hs_engagement_id
+  // pra concluir a Task / cancelar a Meeting no HubSpot antes de apagar a linha.
   const deleteMeeting = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('client_meetings').delete().eq('id', id);
+    mutationFn: async (meeting: ClientMeeting) => {
+      if (meeting.hs_engagement_id) {
+        try {
+          await cancelAgendaEngagement({
+            meetingType: meeting.type ?? 'reuniao',
+            engagement_id: meeting.hs_engagement_id,
+          });
+        } catch (err) {
+          console.warn('[HUBSPOT] concluir/cancelar engagement falhou:', err);
+        }
+      }
+      const { error } = await supabase.from('client_meetings').delete().eq('id', meeting.id);
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_meetings'] }),

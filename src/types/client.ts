@@ -75,6 +75,9 @@ export interface ClientMeeting {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  // ID do engagement no HubSpot (Task pra follow up, Meeting pra demo) criado
+  // ao agendar. Usado pra atualizar/concluir/cancelar o mesmo engagement.
+  hs_engagement_id: string | null;
 }
 
 export interface ClientMeetingFormData {

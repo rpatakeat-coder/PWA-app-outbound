@@ -373,7 +373,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao',
           text: 'Remover',
           style: 'destructive',
           onPress: () => {
-            deleteMeeting.mutate(meeting.id, {
+            deleteMeeting.mutate(meeting, {
               onError: (err: any) => Alert.alert('Erro', err?.message || 'Não foi possível remover.'),
             });
           },
