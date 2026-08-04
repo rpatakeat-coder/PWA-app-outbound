@@ -3,11 +3,26 @@ import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import type { Client, ClientMeeting, ClientMeetingFormData } from '../types/client';
 import {
-  sendHubspotEvent,
   createAgendaEngagement,
   rescheduleAgendaEngagement,
   cancelAgendaEngagement,
 } from '../utils/hubspotSync';
+import {
+  createGoogleEvent,
+  updateGoogleEvent,
+  deleteGoogleEvent,
+} from '../utils/googleCalendar';
+
+// ============================================================================
+// Agenda (reuniao/follow up). Arquitetura pos-n8n:
+//   DEMO (type=reuniao)  -> evento no Google Calendar (edge google-calendar).
+//                           O Meeting no HubSpot vem da sync HubSpot<->Google.
+//   FOLLOW UP            -> Task no HubSpot (edge hubspot-sync). SEM Google,
+//                           SEM Meeting.
+// As chamadas externas sao AWAITADAS (nao fire-and-forget): no mobile a Promise
+// solta se perdia ao fechar o modal. Erro externo NAO quebra o agendamento (a
+// linha ja esta salva no banco).
+// ============================================================================
 
 export function useMeetings() {
   const queryClient = useQueryClient();
@@ -46,6 +61,22 @@ export function useMeetings() {
     return acc;
   }, {});
 
+  // Convidados do evento no Google: e-mail do convite (se marcado; cai pro
+  // e-mail do lead) + o e-mail do vendedor. Igual o n8n montava.
+  const attendeesFor = (
+    invite: { enviar: boolean; email: string | null } | undefined,
+    client: Client,
+  ): string[] => {
+    const list: string[] = [];
+    const inviteEmail = invite?.enviar ? (invite.email ?? client.email ?? null) : null;
+    if (inviteEmail && inviteEmail.includes('@')) list.push(inviteEmail.trim());
+    if (profile?.email && profile.email.includes('@')) list.push(profile.email.trim());
+    return [...new Set(list)];
+  };
+
+  const tituloFor = (isFollowUp: boolean, client: Client) =>
+    isFollowUp ? `Follow Up - ${client.nome}` : `Reunião - ${client.nome}`;
+
   const addMeeting = useMutation({
     mutationFn: async ({
       form,
@@ -73,63 +104,17 @@ export function useMeetings() {
       if (error) throw error;
       const meeting = data as ClientMeeting;
 
-      const scheduled = new Date(meeting.scheduled_at);
-      const ends = new Date(scheduled.getTime() + meeting.duration_minutes * 60_000);
-      const pad = (n: number) => String(n).padStart(2, '0');
-      const data_reuniao = `${pad(scheduled.getDate())}/${pad(scheduled.getMonth() + 1)}/${scheduled.getFullYear()}`;
-      const horario = `${pad(scheduled.getHours())}:${pad(scheduled.getMinutes())}`;
-      const horario_fim = `${pad(ends.getHours())}:${pad(ends.getMinutes())}`;
-
-      // Título sugerido pro Google Agenda — n8n usa pra diferenciar
-      // reunião de follow up na organização da agenda.
       const isFollowUp = meeting.type === 'follow_up';
-      const titulo_evento = isFollowUp
-        ? `Follow Up - ${client.nome}`
-        : `Reunião - ${client.nome}`;
+      const titulo = tituloFor(isFollowUp, client);
 
-      // reuniao/followup criam evento no Google Calendar — isso CONTINUA no
-      // n8n (credencial OAuth do Google vive la); o helper roteia direto.
-      sendHubspotEvent({
-          // O Switch do n8n espera 'reuniao' | 'followup' (SEM underscore —
-          // validado em 07/07/2026: 'follow_up' não casa com a rota e cai na
-          // default de criar deal no HubSpot). No banco o tipo segue 'follow_up'.
-          type: isFollowUp ? 'followup' : meeting.type,
-          titulo_evento,
-          meeting_id: meeting.id,
-          lead_id: client.id,
-          lead_nome: client.nome,
-          lead_empresa: client.empresa,
-          lead_status: client.status,
-          lead_email: client.email,
-          latitude: client.latitude !== null ? String(client.latitude) : null,
-          longitude: client.longitude !== null ? String(client.longitude) : null,
-          data_reuniao,
-          horario,
-          horario_fim,
-          duracao_minutos: meeting.duration_minutes,
-          scheduled_at: meeting.scheduled_at,
-          ends_at: ends.toISOString(),
-          observacoes: meeting.observacoes,
-          enviar_convite_email: invite?.enviar ?? false,
-          email_convite: invite?.enviar ? (invite.email ?? null) : null,
-          vendedor_id: profile?.id_hubspot ?? null,
-          vendedor_nome: profile?.full_name ?? null,
-          vendedor_email: profile?.email ?? null,
-          vendedor_uid: user?.id ?? null,
-          enviado_em: new Date().toISOString(),
-      }).catch((err) => console.warn('[WEBHOOK] reuniao falhou:', err));
-
-      // Follow up -> Task no HubSpot; demo/reuniao -> Meeting no HubSpot.
-      // Direto na edge hubspot-sync (NAO passa pelo n8n). Nao bloqueia o
-      // agendamento: roda em background e guarda o engagement_id na linha pra
-      // depois reagendar/concluir/cancelar o MESMO engagement.
-      if (client.id_hubspot) {
-        void (async () => {
+      if (isFollowUp) {
+        // Follow up -> Task no HubSpot (sem Google, sem Meeting).
+        if (client.id_hubspot) {
           try {
             const engagementId = await createAgendaEngagement({
-              meetingType: meeting.type ?? 'reuniao',
+              meetingType: 'follow_up',
               id_hubspot: client.id_hubspot as string,
-              titulo: titulo_evento,
+              titulo,
               descricao: meeting.observacoes,
               scheduled_at: meeting.scheduled_at,
               duration_minutes: meeting.duration_minutes,
@@ -140,12 +125,31 @@ export function useMeetings() {
                 .from('client_meetings')
                 .update({ hs_engagement_id: engagementId })
                 .eq('id', meeting.id);
-              queryClient.invalidateQueries({ queryKey: ['client_meetings'] });
             }
           } catch (err) {
-            console.warn('[HUBSPOT] criar engagement da agenda falhou:', err);
+            console.warn('[HUBSPOT] criar Task de follow up falhou:', err);
           }
-        })();
+        }
+      } else {
+        // Demo -> evento no Google Calendar. O Meeting no HubSpot vem da sync
+        // nativa HubSpot<->Google (nao criamos Meeting via API pra nao duplicar).
+        try {
+          const eventId = await createGoogleEvent({
+            titulo,
+            descricao: meeting.observacoes,
+            scheduled_at: meeting.scheduled_at,
+            duration_minutes: meeting.duration_minutes,
+            attendees: attendeesFor(invite, client),
+          });
+          if (eventId) {
+            await supabase
+              .from('client_meetings')
+              .update({ google_event_id: eventId })
+              .eq('id', meeting.id);
+          }
+        } catch (err) {
+          console.warn('[GOOGLE] criar evento da demo falhou:', err);
+        }
       }
 
       return meeting;
@@ -153,9 +157,9 @@ export function useMeetings() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_meetings'] }),
   });
 
-  // Reagenda uma reunião existente: muda data/hora (e opcionalmente duração e
-  // observações) na MESMA linha, e dispara o webhook de novo pro n8n atualizar
-  // o evento no Google Agenda. Mantém o id — o n8n casa pelo meeting_id.
+  // Reagenda: muda data/hora (e opcionalmente duração/observações) na MESMA
+  // linha. Demo -> atualiza o evento no Google (a sync move o Meeting no
+  // HubSpot). Follow up -> atualiza a Task no HubSpot.
   const rescheduleMeeting = useMutation({
     mutationFn: async ({
       meeting,
@@ -197,69 +201,27 @@ export function useMeetings() {
       if (error) throw error;
       const updated = data as ClientMeeting;
 
-      const scheduled = new Date(updated.scheduled_at);
-      const ends = new Date(scheduled.getTime() + updated.duration_minutes * 60_000);
-      const pad = (n: number) => String(n).padStart(2, '0');
-      const data_reuniao = `${pad(scheduled.getDate())}/${pad(scheduled.getMonth() + 1)}/${scheduled.getFullYear()}`;
-      const horario = `${pad(scheduled.getHours())}:${pad(scheduled.getMinutes())}`;
-      const horario_fim = `${pad(ends.getHours())}:${pad(ends.getMinutes())}`;
-
       const isFollowUp = updated.type === 'follow_up';
-      const titulo_evento = isFollowUp
-        ? `Follow Up - ${client.nome}`
-        : `Reunião - ${client.nome}`;
+      const titulo = tituloFor(isFollowUp, client);
 
-      // Mesmo webhook do agendamento (n8n roteia por 'type'), mas com
-      // reagendamento=true + o horário antigo pra ele achar/mover o evento.
-      sendHubspotEvent({
-        type: isFollowUp ? 'followup' : updated.type,
-        reagendamento: true,
-        scheduled_at_anterior: meeting.scheduled_at,
-        motivo_reagendamento: motivo ?? null,
-        titulo_evento,
-        meeting_id: updated.id,
-        lead_id: client.id,
-        lead_nome: client.nome,
-        lead_empresa: client.empresa,
-        lead_status: client.status,
-        lead_email: client.email,
-        latitude: client.latitude !== null ? String(client.latitude) : null,
-        longitude: client.longitude !== null ? String(client.longitude) : null,
-        data_reuniao,
-        horario,
-        horario_fim,
-        duracao_minutos: updated.duration_minutes,
-        scheduled_at: updated.scheduled_at,
-        ends_at: ends.toISOString(),
-        observacoes: updated.observacoes,
-        enviar_convite_email: invite?.enviar ?? false,
-        email_convite: invite?.enviar ? (invite.email ?? null) : null,
-        vendedor_id: profile?.id_hubspot ?? null,
-        vendedor_nome: profile?.full_name ?? null,
-        vendedor_email: profile?.email ?? null,
-        vendedor_uid: user?.id ?? null,
-        enviado_em: new Date().toISOString(),
-      }).catch((err) => console.warn('[WEBHOOK] reagendamento falhou:', err));
-
-      // Atualiza o MESMO engagement no HubSpot (novo horário). Se a reunião foi
-      // criada antes desta feature (sem hs_engagement_id), cria agora e guarda.
-      if (client.id_hubspot) {
-        void (async () => {
+      if (isFollowUp) {
+        // Follow up -> atualiza (ou cria, se antiga sem id) a Task no HubSpot.
+        if (client.id_hubspot) {
           try {
             if (updated.hs_engagement_id) {
               await rescheduleAgendaEngagement({
-                meetingType: updated.type ?? 'reuniao',
+                meetingType: 'follow_up',
                 engagement_id: updated.hs_engagement_id,
-                titulo: titulo_evento,
+                titulo,
                 descricao: updated.observacoes,
                 scheduled_at: updated.scheduled_at,
                 duration_minutes: updated.duration_minutes,
               });
             } else {
               const engagementId = await createAgendaEngagement({
-                meetingType: updated.type ?? 'reuniao',
+                meetingType: 'follow_up',
                 id_hubspot: client.id_hubspot as string,
-                titulo: titulo_evento,
+                titulo,
                 descricao: updated.observacoes,
                 scheduled_at: updated.scheduled_at,
                 duration_minutes: updated.duration_minutes,
@@ -270,13 +232,42 @@ export function useMeetings() {
                   .from('client_meetings')
                   .update({ hs_engagement_id: engagementId })
                   .eq('id', updated.id);
-                queryClient.invalidateQueries({ queryKey: ['client_meetings'] });
               }
             }
           } catch (err) {
-            console.warn('[HUBSPOT] atualizar engagement da agenda falhou:', err);
+            console.warn('[HUBSPOT] reagendar Task de follow up falhou:', err);
           }
-        })();
+        }
+      } else {
+        // Demo -> atualiza (ou cria, se antiga sem id) o evento no Google.
+        try {
+          if (updated.google_event_id) {
+            await updateGoogleEvent({
+              event_id: updated.google_event_id,
+              titulo,
+              descricao: updated.observacoes,
+              scheduled_at: updated.scheduled_at,
+              duration_minutes: updated.duration_minutes,
+              attendees: attendeesFor(invite, client),
+            });
+          } else {
+            const eventId = await createGoogleEvent({
+              titulo,
+              descricao: updated.observacoes,
+              scheduled_at: updated.scheduled_at,
+              duration_minutes: updated.duration_minutes,
+              attendees: attendeesFor(invite, client),
+            });
+            if (eventId) {
+              await supabase
+                .from('client_meetings')
+                .update({ google_event_id: eventId })
+                .eq('id', updated.id);
+            }
+          }
+        } catch (err) {
+          console.warn('[GOOGLE] reagendar evento da demo falhou:', err);
+        }
       }
 
       return updated;
@@ -284,18 +275,28 @@ export function useMeetings() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_meetings'] }),
   });
 
-  // Recebe a reunião inteira (não só o id): precisa do type + hs_engagement_id
-  // pra concluir a Task / cancelar a Meeting no HubSpot antes de apagar a linha.
+  // Remove a reunião: cancela o compromisso externo antes de apagar a linha.
+  // Demo -> deleta o evento no Google (a sync remove o Meeting no HubSpot).
+  // Follow up -> conclui a Task no HubSpot.
   const deleteMeeting = useMutation({
     mutationFn: async (meeting: ClientMeeting) => {
-      if (meeting.hs_engagement_id) {
+      const isFollowUp = meeting.type === 'follow_up';
+      if (isFollowUp) {
+        if (meeting.hs_engagement_id) {
+          try {
+            await cancelAgendaEngagement({
+              meetingType: 'follow_up',
+              engagement_id: meeting.hs_engagement_id,
+            });
+          } catch (err) {
+            console.warn('[HUBSPOT] concluir Task de follow up falhou:', err);
+          }
+        }
+      } else if (meeting.google_event_id) {
         try {
-          await cancelAgendaEngagement({
-            meetingType: meeting.type ?? 'reuniao',
-            engagement_id: meeting.hs_engagement_id,
-          });
+          await deleteGoogleEvent(meeting.google_event_id);
         } catch (err) {
-          console.warn('[HUBSPOT] concluir/cancelar engagement falhou:', err);
+          console.warn('[GOOGLE] deletar evento da demo falhou:', err);
         }
       }
       const { error } = await supabase.from('client_meetings').delete().eq('id', meeting.id);

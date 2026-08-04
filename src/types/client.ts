@@ -75,9 +75,12 @@ export interface ClientMeeting {
   created_by: string | null;
   created_at: string;
   updated_at: string;
-  // ID do engagement no HubSpot (Task pra follow up, Meeting pra demo) criado
-  // ao agendar. Usado pra atualizar/concluir/cancelar o mesmo engagement.
+  // ID do engagement no HubSpot (Task pra follow up) criado ao agendar. Usado
+  // pra atualizar/concluir o mesmo engagement.
   hs_engagement_id: string | null;
+  // ID do evento no Google Calendar (demos). O app cria/reagenda/cancela o
+  // evento; o Meeting no HubSpot acompanha via sync HubSpot<->Google.
+  google_event_id: string | null;
 }
 
 export interface ClientMeetingFormData {
