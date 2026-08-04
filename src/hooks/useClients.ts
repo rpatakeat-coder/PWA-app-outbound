@@ -372,13 +372,21 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
       if (error) throw error;
       const client = mapRow(data);
 
+      // CLIENTE/CHURN nao vao pro HubSpot em NENHUMA hipotese no check-in.
+      // Visitar um cliente e' pos-venda (relacionamento/suporte), nao evento
+      // de funil: o deal dele nao pode ser tocado — nem etapa, nem propriedade.
+      // A visita fica registrada 100% do lado do app (client_visits +
+      // visited_at + visit_count), que e' o que alimenta o mapa e as metricas.
+      const isLead = client.status === 'lead';
+
       // Webhook outbound: notifica com type=visited pra que o consumidor
       // (n8n / HubSpot) saiba diferenciar criacao de visita. type=visited nao
       // tem rota na edge function — o helper manda direto pro n8n.
       // Manda todos os campos do cliente + metadata da visita (coords/quando/quem).
       const raw = (data ?? {}) as Record<string, unknown>;
       const dealname = client.empresa ?? client.nome;
-      sendHubspotEvent({
+      if (isLead) {
+        sendHubspotEvent({
           type: 'visited',
           id: client.id,
           bairro: client.bairro,
@@ -412,7 +420,8 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
           // Numero da visita (1 = primeira). Vem do contador que a RPC
           // incrementa; permite o HubSpot/relatorio ver revisitas.
           visita_numero: client.visit_count ?? null,
-      }).catch((err) => console.warn('[WEBHOOK] marcar como visitado falhou:', err));
+        }).catch((err) => console.warn('[WEBHOOK] marcar como visitado falhou:', err));
+      }
 
       // Check-in move o lead pra etapa "Visita" automaticamente — mas SO se
       // ele ainda nao passou desse ponto do funil. Um lead em Negociacao que
@@ -424,7 +433,12 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
       const idxVisita = FUNNEL_STAGE_IDS.indexOf(VISITA_STAGE_ID);
       // idxAtual === -1: etapa desconhecida/vazia (Backlog, Reciclagem, lead
       // sem etapa) — esses entram no funil pela Visita normalmente.
-      const podeMover = idxAtual < idxVisita;
+      //
+      // isLead e' obrigatorio aqui pelo mesmo motivo do webhook acima: sem ele
+      // o check-in num CLIENTE empurrava o deal de volta pra "Visita",
+      // regredindo quem ja fechou (Tiny Cafe, Arena 262, Partei Steak & Beer e
+      // Kitanda Gastrobar, entre 31/07 e 04/08 de 2026).
+      const podeMover = isLead && idxAtual < idxVisita;
 
       if (podeMover && client.id_hubspot) {
         // Registra no historico local (mesma tabela do modal de etapa) e
