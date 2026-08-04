@@ -15,7 +15,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-const GESTOR_EMAILS = ['arthurgothe.takeat@gmail.com', 'outbound@takeat.app', 'brittes@takeat.app'];
+const GESTOR_EMAILS = ['arthurgothe.takeat@gmail.com', 'outbound@takeat.app', 'brittes@takeat.app', 'guilherme.borborema.takeat@gmail.com'];
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
