@@ -74,8 +74,11 @@ export function useMeetings() {
     return [...new Set(list)];
   };
 
+  // Título usa o nome do RESTAURANTE (empresa); cai pro nome do contato só se
+  // não houver empresa. Mesma logica do getClientPrimaryName.
+  const nomeLead = (client: Client) => client.empresa?.trim() || client.nome;
   const tituloFor = (isFollowUp: boolean, client: Client) =>
-    isFollowUp ? `Follow Up - ${client.nome}` : `Reunião - ${client.nome}`;
+    isFollowUp ? `Follow Up - ${nomeLead(client)}` : `Reunião - ${nomeLead(client)}`;
 
   const addMeeting = useMutation({
     mutationFn: async ({
