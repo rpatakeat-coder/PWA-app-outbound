@@ -521,7 +521,7 @@ function MainApp() {
     areaFilter,
     enabled: !waitingForLocation && !areaPermissionDenied,
   });
-  const { meetings, upcomingByClient, meetingsByClient } = useMeetings();
+  const { meetings, upcomingByClient, meetingsByClient, deleteMeeting } = useMeetings();
   // Tarefas geradas automaticamente (motor de regras no banco). O hook dispara
   // a geracao ao autenticar e le as pendentes. O badge do rodape usa a contagem
   // JA filtrada por vendedor (visibleTasksCount), nao o total global.
@@ -642,6 +642,34 @@ function MainApp() {
   const [agendaPastOpen, setAgendaPastOpen] = useState(false);
   // Exportação da agenda em andamento (botão "Exportar JSON" no topo da aba).
   const [exportingAgenda, setExportingAgenda] = useState(false);
+
+  // Cancelar (remover) uma reunião/follow up com confirmação. deleteMeeting já
+  // apaga o evento no Google (demo) / conclui a Task (follow up) e a Meeting no
+  // HubSpot acompanha via sync. Usado na Agenda e no detalhe do lead.
+  const confirmCancelMeeting = (meeting: ClientMeeting) => {
+    const isFollowUp = meeting.type === 'follow_up';
+    const noun = isFollowUp ? 'follow up' : 'reunião';
+    const quando = new Date(meeting.scheduled_at).toLocaleString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+    const detalhe = isFollowUp
+      ? 'A tarefa no HubSpot será concluída.'
+      : 'O evento no Google Calendar será apagado (e a reunião some no HubSpot).';
+    Alert.alert(
+      `Cancelar ${noun}`,
+      `Remover ${noun} de ${quando}?\n\n${detalhe}`,
+      [
+        { text: 'Voltar', style: 'cancel' },
+        {
+          text: 'Remover',
+          style: 'destructive',
+          onPress: () => deleteMeeting.mutate(meeting, {
+            onError: (err: any) => Alert.alert('Erro ao cancelar', err?.message ?? 'Tente novamente.'),
+          }),
+        },
+      ],
+    );
+  };
   // Mudanca de etapa. initialStageId trava o modal numa etapa (ex.: "Mover pra
   // perdido" a partir de uma tarefa); taskId, quando presente, e' a tarefa a
   // resolver depois que o envio concluir.
@@ -2644,6 +2672,14 @@ function MainApp() {
                         <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Reagendar</Text>
                       </TouchableOpacity>
                     )}
+                    {item.kind === 'meeting' && !isViewer && (
+                      <TouchableOpacity
+                        style={[styles.smallActionButton, { backgroundColor: '#dc2626' }]}
+                        onPress={() => confirmCancelMeeting(item.meeting)}
+                      >
+                        <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Cancelar</Text>
+                      </TouchableOpacity>
+                    )}
                     {item.kind === 'route' && (
                       <TouchableOpacity style={styles.smallActionButton} onPress={() => fieldOps.markStopDone.mutate(item.stop)}>
                         <Text style={styles.smallActionButtonText}>Realizada</Text>
@@ -3190,6 +3226,8 @@ function MainApp() {
       onMarkVisited={isViewer ? undefined : () => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
       onScheduleMeeting={isViewer ? undefined : () => { setSchedulingFor({ client: selectedClient, type: 'reuniao' }); setSelectedClient(null); }}
       onFollowUp={isViewer ? undefined : () => { setSchedulingFor({ client: selectedClient, type: 'follow_up' }); setSelectedClient(null); }}
+      onRescheduleMeeting={isViewer ? undefined : (m) => { setSchedulingFor({ client: selectedClient, type: m.type ?? 'reuniao', reschedule: m }); setSelectedClient(null); }}
+      onCancelMeeting={isViewer ? undefined : (m) => confirmCancelMeeting(m)}
       onChangeStage={
         !isViewer && selectedClient.status === 'lead'
           ? () => { setChangingStageFor({ client: selectedClient }); setSelectedClient(null); }
@@ -4632,6 +4670,8 @@ function ClientBottomSheet({
   onScheduleMeeting,
   onFollowUp,
   onChangeStage,
+  onRescheduleMeeting,
+  onCancelMeeting,
   isMarkingVisited,
   onAddToRoute,
   canWriteNotes = true,
@@ -4650,6 +4690,8 @@ function ClientBottomSheet({
   onScheduleMeeting?: () => void;
   onFollowUp?: () => void;
   onChangeStage?: () => void;
+  onRescheduleMeeting?: (m: ClientMeeting) => void;
+  onCancelMeeting?: (m: ClientMeeting) => void;
   isMarkingVisited: boolean;
   onAddToRoute?: () => void;
   canWriteNotes?: boolean;
@@ -4684,6 +4726,26 @@ function ClientBottomSheet({
         {m.observacoes ? (
           <Text style={styles.meetingChipObs} numberOfLines={2}>{m.observacoes}</Text>
         ) : null}
+        {!isPast && (onRescheduleMeeting || onCancelMeeting) && (
+          <View style={styles.meetingChipActions}>
+            {onRescheduleMeeting && (
+              <TouchableOpacity
+                style={[styles.smallActionButton, { backgroundColor: '#f97316' }]}
+                onPress={() => onRescheduleMeeting(m)}
+              >
+                <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Reagendar</Text>
+              </TouchableOpacity>
+            )}
+            {onCancelMeeting && (
+              <TouchableOpacity
+                style={[styles.smallActionButton, { backgroundColor: '#dc2626' }]}
+                onPress={() => onCancelMeeting(m)}
+              >
+                <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Cancelar</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </View>
     );
   };
@@ -6439,6 +6501,7 @@ const styles = StyleSheet.create({
   },
   meetingChipDate: { fontSize: 13, fontWeight: '700', color: '#5b21b6' },
   meetingChipObs: { fontSize: 12, color: '#475569', marginTop: 2 },
+  meetingChipActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   scheduleButton: {
     backgroundColor: '#7c3aed',
     borderRadius: 10,
