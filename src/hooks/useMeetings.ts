@@ -120,32 +120,32 @@ export function useMeetings() {
       }).catch((err) => console.warn('[WEBHOOK] reuniao falhou:', err));
 
       // Follow up -> Task no HubSpot; demo/reuniao -> Meeting no HubSpot.
-      // AWAITED (nao fire-and-forget): no mobile, uma Promise solta era suspensa
-      // quando o vendedor fechava o modal / trocava de tela logo apos agendar, e
-      // a criacao se perdia (reuniao/follow up ficava sem engagement). Esperar
-      // aqui garante criar + gravar o id ANTES do mutation resolver (o spinner
-      // "salvando" ja cobre esse tempinho). Erro no HubSpot NAO quebra o
-      // agendamento — a reuniao ja esta salva no banco.
+      // Direto na edge hubspot-sync (NAO passa pelo n8n). Nao bloqueia o
+      // agendamento: roda em background e guarda o engagement_id na linha pra
+      // depois reagendar/concluir/cancelar o MESMO engagement.
       if (client.id_hubspot) {
-        try {
-          const engagementId = await createAgendaEngagement({
-            meetingType: meeting.type ?? 'reuniao',
-            id_hubspot: client.id_hubspot as string,
-            titulo: titulo_evento,
-            descricao: meeting.observacoes,
-            scheduled_at: meeting.scheduled_at,
-            duration_minutes: meeting.duration_minutes,
-            owner_id: profile?.id_hubspot ?? null,
-          });
-          if (engagementId) {
-            await supabase
-              .from('client_meetings')
-              .update({ hs_engagement_id: engagementId })
-              .eq('id', meeting.id);
+        void (async () => {
+          try {
+            const engagementId = await createAgendaEngagement({
+              meetingType: meeting.type ?? 'reuniao',
+              id_hubspot: client.id_hubspot as string,
+              titulo: titulo_evento,
+              descricao: meeting.observacoes,
+              scheduled_at: meeting.scheduled_at,
+              duration_minutes: meeting.duration_minutes,
+              owner_id: profile?.id_hubspot ?? null,
+            });
+            if (engagementId) {
+              await supabase
+                .from('client_meetings')
+                .update({ hs_engagement_id: engagementId })
+                .eq('id', meeting.id);
+              queryClient.invalidateQueries({ queryKey: ['client_meetings'] });
+            }
+          } catch (err) {
+            console.warn('[HUBSPOT] criar engagement da agenda falhou:', err);
           }
-        } catch (err) {
-          console.warn('[HUBSPOT] criar engagement da agenda falhou:', err);
-        }
+        })();
       }
 
       return meeting;
@@ -243,39 +243,40 @@ export function useMeetings() {
 
       // Atualiza o MESMO engagement no HubSpot (novo horário). Se a reunião foi
       // criada antes desta feature (sem hs_engagement_id), cria agora e guarda.
-      // AWAITED (nao fire-and-forget) — mesma razao do addMeeting: no mobile a
-      // Promise solta se perdia ao fechar o modal.
       if (client.id_hubspot) {
-        try {
-          if (updated.hs_engagement_id) {
-            await rescheduleAgendaEngagement({
-              meetingType: updated.type ?? 'reuniao',
-              engagement_id: updated.hs_engagement_id,
-              titulo: titulo_evento,
-              descricao: updated.observacoes,
-              scheduled_at: updated.scheduled_at,
-              duration_minutes: updated.duration_minutes,
-            });
-          } else {
-            const engagementId = await createAgendaEngagement({
-              meetingType: updated.type ?? 'reuniao',
-              id_hubspot: client.id_hubspot as string,
-              titulo: titulo_evento,
-              descricao: updated.observacoes,
-              scheduled_at: updated.scheduled_at,
-              duration_minutes: updated.duration_minutes,
-              owner_id: profile?.id_hubspot ?? null,
-            });
-            if (engagementId) {
-              await supabase
-                .from('client_meetings')
-                .update({ hs_engagement_id: engagementId })
-                .eq('id', updated.id);
+        void (async () => {
+          try {
+            if (updated.hs_engagement_id) {
+              await rescheduleAgendaEngagement({
+                meetingType: updated.type ?? 'reuniao',
+                engagement_id: updated.hs_engagement_id,
+                titulo: titulo_evento,
+                descricao: updated.observacoes,
+                scheduled_at: updated.scheduled_at,
+                duration_minutes: updated.duration_minutes,
+              });
+            } else {
+              const engagementId = await createAgendaEngagement({
+                meetingType: updated.type ?? 'reuniao',
+                id_hubspot: client.id_hubspot as string,
+                titulo: titulo_evento,
+                descricao: updated.observacoes,
+                scheduled_at: updated.scheduled_at,
+                duration_minutes: updated.duration_minutes,
+                owner_id: profile?.id_hubspot ?? null,
+              });
+              if (engagementId) {
+                await supabase
+                  .from('client_meetings')
+                  .update({ hs_engagement_id: engagementId })
+                  .eq('id', updated.id);
+                queryClient.invalidateQueries({ queryKey: ['client_meetings'] });
+              }
             }
+          } catch (err) {
+            console.warn('[HUBSPOT] atualizar engagement da agenda falhou:', err);
           }
-        } catch (err) {
-          console.warn('[HUBSPOT] atualizar engagement da agenda falhou:', err);
-        }
+        })();
       }
 
       return updated;
