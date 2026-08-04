@@ -54,6 +54,7 @@ import { GestorScreen } from './src/screens/GestorScreen';
 import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
 import { reverseGeocode } from './src/utils/geocoding';
 import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingProvider } from './src/utils/routing';
+import { exportAgenda } from './src/utils/exportAgenda';
 
 const queryClient = new QueryClient();
 
@@ -639,6 +640,8 @@ function MainApp() {
   // Passado da agenda começa fechado (igual lista). Hoje/futuro viram uma
   // timeline contínua agrupada por dia — não precisam de acordeão.
   const [agendaPastOpen, setAgendaPastOpen] = useState(false);
+  // Exportação da agenda em andamento (botão "Exportar JSON" no topo da aba).
+  const [exportingAgenda, setExportingAgenda] = useState(false);
   // Mudanca de etapa. initialStageId trava o modal numa etapa (ex.: "Mover pra
   // perdido" a partir de uma tarefa); taskId, quando presente, e' a tarefa a
   // resolver depois que o envio concluir.
@@ -2706,6 +2709,112 @@ function MainApp() {
     const proximosGroups = groupByDay([...todayItems, ...futureItems]);
     const pastGroups = groupByDay(pastItems);
 
+    // Serializa UM item da agenda pro JSON (mesma leitura do card: cliente,
+    // responsavel, etapa/temperatura, local + campos especificos de
+    // reuniao/rota). `periodo` = passado|hoje|futuro conforme o grupo.
+    const serializeAgendaItem = (
+      item: typeof agendaItems[number],
+      periodo: 'passado' | 'hoje' | 'futuro',
+    ) => {
+      const client = item.client;
+      const temp = stageTemperature(client?.etapa);
+      const base = {
+        tipo: item.kind === 'meeting'
+          ? (item.meeting.type === 'follow_up' ? 'follow_up' : 'reuniao')
+          : 'rota',
+        periodo,
+        quando: item.at ?? null,
+        cliente: client ? getClientPrimaryName(client) : null,
+        client_id: client?.id ?? null,
+        empresa: client?.empresa ?? null,
+        contato: client?.nome ?? null,
+        telefone: client?.telefone ?? null,
+        email: client?.email ?? null,
+        responsavel: client?.vendedor_id_hubspot ? vendorLabel(client.vendedor_id_hubspot) : null,
+        vendedor_id_hubspot: client?.vendedor_id_hubspot ?? null,
+        etapa: client?.etapa ?? null,
+        temperatura: temp?.label ?? null,
+        status_lead: client?.status ?? null,
+        bairro: client?.bairro ?? null,
+        cidade: client?.cidade ?? null,
+        estado: client?.estado ?? null,
+        endereco: [client?.endereco, client?.numero].filter(Boolean).join(', ') || null,
+        latitude: client?.latitude ?? null,
+        longitude: client?.longitude ?? null,
+        visitas_total: client ? (client.visit_count || (client.visited_at ? 1 : 0)) : null,
+        url_hubspot: (client as any)?.url_hubspot ?? null,
+      };
+      if (item.kind === 'meeting') {
+        return {
+          ...base,
+          meeting_id: item.meeting.id,
+          duracao_minutos: item.meeting.duration_minutes ?? null,
+          observacoes: item.meeting.observacoes ?? null,
+          status_reuniao: item.meeting.status ?? null,
+        };
+      }
+      return {
+        ...base,
+        stop_id: item.stop.id ?? null,
+        posicao_rota: (item.stop as any).position ?? null,
+        status_parada: (item.stop as any).status ?? null,
+        minutos_deslocamento: (item.stop as any).estimated_drive_minutes ?? null,
+      };
+    };
+
+    const buildAgendaPayload = () => {
+      const itens = [
+        ...pastItems.map(i => serializeAgendaItem(i, 'passado')),
+        ...todayItems.map(i => serializeAgendaItem(i, 'hoje')),
+        ...futureItems.map(i => serializeAgendaItem(i, 'futuro')),
+      ];
+      return {
+        meta: {
+          tipo: 'agenda',
+          filtro_vendedor: vendorFilterHubspotId === null ? 'Todos' : vendorLabel(vendorFilterHubspotId),
+          gerado_em_app: new Date().toISOString(),
+          contagens: {
+            total: itens.length,
+            passado: pastItems.length,
+            hoje: todayItems.length,
+            futuro: futureItems.length,
+            reunioes: itens.filter(i => i.tipo === 'reuniao').length,
+            follow_ups: itens.filter(i => i.tipo === 'follow_up').length,
+            rotas: itens.filter(i => i.tipo === 'rota').length,
+          },
+        },
+        itens,
+      };
+    };
+
+    // Igual ao runExport do gestor: gera o JSON, abre o Alert e o link (baixa o
+    // .json no navegador). Bloqueia se a agenda estiver vazia.
+    const handleExportAgenda = async () => {
+      if (exportingAgenda) return;
+      if (agendaItems.length === 0) {
+        Alert.alert('Agenda vazia', 'Não há itens na agenda para exportar.');
+        return;
+      }
+      setExportingAgenda(true);
+      try {
+        const payload = buildAgendaPayload();
+        const filtro = vendorFilterHubspotId === null ? 'todos' : vendorLabel(vendorFilterHubspotId);
+        const res = await exportAgenda(payload, `agenda_${filtro}`);
+        Alert.alert(
+          'Exportação pronta 📅',
+          `${payload.meta.contagens.total} itens (${payload.meta.contagens.reunioes} reuniões, ${payload.meta.contagens.follow_ups} follow-ups, ${payload.meta.contagens.rotas} rotas).\n\nToque em Abrir para baixar o .json (abre no navegador). Depois é só jogar na IA.`,
+          [
+            { text: 'Fechar', style: 'cancel' },
+            { text: 'Abrir', onPress: () => Linking.openURL(res.url) },
+          ],
+        );
+      } catch (err: any) {
+        Alert.alert('Erro ao exportar', err?.message ?? 'Tente novamente.');
+      } finally {
+        setExportingAgenda(false);
+      }
+    };
+
     return (
       <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
         <View style={styles.panelCard}>
@@ -2716,6 +2825,19 @@ function MainApp() {
               ? `\n\nFiltro ativo: ${vendorLabel(vendorFilterHubspotId)} (tire no modal de filtros).`
               : ''}
           </Text>
+          {/* Exportar agenda em JSON — visivel so pra gestor (mesma regra da
+              aba do Gestor). Exporta apenas os itens da agenda na tela. */}
+          {canViewGestor && (
+            <TouchableOpacity
+              style={[styles.agendaExportBtn, exportingAgenda && styles.agendaExportBtnDisabled]}
+              onPress={handleExportAgenda}
+              disabled={exportingAgenda}
+            >
+              {exportingAgenda
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={styles.agendaExportBtnText}>📤 Exportar agenda (JSON p/ IA)</Text>}
+            </TouchableOpacity>
+          )}
         </View>
 
         {agendaItems.length === 0 ? (
@@ -5968,6 +6090,16 @@ const styles = StyleSheet.create({
   panelHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   panelTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 4 },
   panelHint: { fontSize: 12, color: '#64748b', lineHeight: 17 },
+  agendaExportBtn: {
+    marginTop: 12,
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    paddingVertical: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  agendaExportBtnDisabled: { opacity: 0.6 },
+  agendaExportBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   segmentRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   segmentButton: {
     flex: 1,
