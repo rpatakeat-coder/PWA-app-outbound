@@ -20,10 +20,11 @@
 // Teto de seguranca: a Search API do HubSpot devolve no maximo 10k resultados
 // por query — por isso a busca e' POR ETAPA (30k de folga), nao uma so.
 //
-// Roda todo DOMINGO, agendada pelo Cron do Supabase:
+// Roda toda SEGUNDA de madrugada, agendada pelo Cron do Supabase:
 //   Dashboard -> Integrations -> Cron -> Create job
 //     Name:     hubspot-usage-sync-semanal
-//     Schedule: 0 9 * * 0            (domingo, 06:00 BRT = 09:00 UTC)
+//     Schedule: 0 7 * * 1            (segunda, 04:00 BRT = 07:00 UTC)
+//   O cron do Supabase e' em UTC — dai o 7, nao o 4.
 //     Type:     Supabase Edge Function -> hubspot-usage-sync
 //   O Cron manda a service role key no Authorization, entao o verify_jwt
 //   continua LIGADO (a function nao fica aberta pra internet).

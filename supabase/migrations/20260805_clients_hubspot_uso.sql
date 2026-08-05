@@ -20,10 +20,10 @@ alter table public.clients
   add column if not exists hs_uso_sincronizado_em timestamptz;
 
 comment on column public.clients.hs_ultima_comanda_em is
-  'HubSpot data_da_ultima_comanda_emitida (deal). Preenchido pela edge hubspot-usage-sync todo domingo. NULL = nunca emitiu comanda ou o deal nao esta nas pipelines de Sucesso/Onboarding.';
+  'HubSpot data_da_ultima_comanda_emitida (deal). Preenchido pela edge hubspot-usage-sync toda segunda. NULL = nunca emitiu comanda ou o deal nao esta nas pipelines de Sucesso/Onboarding.';
 
 comment on column public.clients.hs_cancelamento_solicitado_em is
-  'HubSpot data_solicitacao_cancelamento (deal). Preenchido pela edge hubspot-usage-sync todo domingo.';
+  'HubSpot data_solicitacao_cancelamento (deal). Preenchido pela edge hubspot-usage-sync toda segunda.';
 
 comment on column public.clients.hs_uso_sincronizado_em is
   'Quando a edge hubspot-usage-sync leu este cliente pela ultima vez. Distingue "sem comanda" (colunas NULL, mas sincronizado) de "nunca sincronizado" (esta coluna NULL).';

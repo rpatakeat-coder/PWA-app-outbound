@@ -149,7 +149,7 @@ npx eas-cli build --profile production --platform android   # ou ios
 |---|---|
 | `hubspot-sync` | Saída app → HubSpot: `change_stage`, `update`, `create_pin`, `get_stages`, **`create_note`/`update_note`** (notas do lead e follow up → Observação), **`create_task`** (check-in de visita → Task), **`create_meeting`/`update_meeting`** (demo → Meeting). `update_task` só atende os follow ups criados antes da mudança de regra. |
 | `hubspot-lead-webhook` / `-latlong` | Entrada: leads do HubSpot/RPA → upsert em `clients` (com geocoding). |
-| `hubspot-usage-sync` | Entrada (semanal — domingo, Cron do Supabase): lê `data_da_ultima_comanda_emitida` e `data_solicitacao_cancelamento` dos deals nas etapas de Acompanhamento/Saudável (Onboarding e Sucesso) → grava em `clients`. |
+| `hubspot-usage-sync` | Entrada (semanal — segunda de madrugada, Cron do Supabase): lê `data_da_ultima_comanda_emitida` e `data_solicitacao_cancelamento` dos deals nas etapas de Acompanhamento/Saudável (Onboarding e Sucesso) → grava em `clients`. |
 | `export-report` | Exporta TUDO do período em JSON (painel do gestor) → Storage → signed URL. |
 | `export-agenda` | Exporta a agenda (montada no app) em JSON → Storage → signed URL. |
 | `geocode` | Geocoding/reparo de coordenadas. |
@@ -208,7 +208,8 @@ visita"):
 ## 📊 Uso do produto (HubSpot → app, semanal)
 
 Responde em campo "é cliente, mas será que usa?". A edge `hubspot-usage-sync`
-roda **todo domingo** (Cron do Supabase, `0 9 * * 0`) e grava em `clients`:
+roda **toda segunda às 04:00 BRT** (Cron do Supabase, `0 7 * * 1` — o cron é em
+UTC) e grava em `clients`:
 
 | HubSpot (deal) | `clients` |
 |---|---|

@@ -41,7 +41,7 @@ export interface Client {
   // mark_client_as_visited; o historico completo vive em client_visits).
   visit_count: number;
   won_at: string | null;
-  // Uso do produto, puxado do HubSpot todo domingo pela edge hubspot-usage-sync
+  // Uso do produto, puxado do HubSpot toda segunda pela edge hubspot-usage-sync
   // (deals nas etapas de Acompanhamento/Saudável do Onboarding e do Sucesso).
   // 'YYYY-MM-DD' — sao colunas date no banco, sem hora e sem fuso.
   hs_ultima_comanda_em: string | null;
