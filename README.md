@@ -215,6 +215,7 @@ UTC) e grava em `clients`:
 |---|---|
 | `data_da_ultima_comanda_emitida` | `hs_ultima_comanda_em` (date) |
 | `data_solicitacao_cancelamento` | `hs_cancelamento_solicitado_em` (date) |
+| `numero_de_comandas_ate_o_momento_number` | `hs_qtd_comandas` (integer) |
 | etapa de onde veio | `hs_etapa_uso` (rótulo) + `hs_situacao` (`ativo`/`churn`) |
 | — | `hs_uso_sincronizado_em` (quando o sync passou) |
 

@@ -46,6 +46,9 @@ export interface Client {
   // 'YYYY-MM-DD' — sao colunas date no banco, sem hora e sem fuso.
   hs_ultima_comanda_em: string | null;
   hs_cancelamento_solicitado_em: string | null;
+  // Quantas comandas o cliente ja emitiu. A data diz QUANDO parou, este diz
+  // QUANTO usou — separa "nunca engrenou" de "usava muito e parou".
+  hs_qtd_comandas: number | null;
   // Etapa do HubSpot de onde o dado veio, e a classificação dela pela edge.
   // 'churn' = ex-cliente DE VERDADE (saiu no CRM). Só a data de cancelamento
   // não serve pra isso: ela registra que houve um PEDIDO, e tem cliente ativo

@@ -49,6 +49,7 @@ const FETCH_TIMEOUT_MS = 20_000;
 // Propriedades lidas do deal.
 const PROP_ULTIMA_COMANDA = 'data_da_ultima_comanda_emitida';
 const PROP_CANCELAMENTO = 'data_solicitacao_cancelamento';
+const PROP_QTD_COMANDAS = 'numero_de_comandas_ate_o_momento_number';
 
 // Etapas que definem "cliente" pra este sync. IDs do HubSpot — manter
 // sincronizado com o CRM (mesma convencao dos ids em hubspot-sync).
@@ -199,10 +200,19 @@ function toDateOnly(v: unknown): string | null {
   return d.toISOString().slice(0, 10);
 }
 
+// Propriedade NUMBER do HubSpot chega como string ("1234" ou "1234.0").
+function toInt(v: unknown): number | null {
+  const s = trimOrNull(v);
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
 type DealUso = {
   id_hubspot: string;
   ultima_comanda: string | null;
   cancelamento: string | null;
+  qtd_comandas: number | null;
   etapa: string;                    // rotulo cru, pra depurar sem abrir o CRM
   situacao: 'ativo' | 'churn';      // o que o app consome
 };
@@ -222,7 +232,7 @@ async function buscarEtapa(
     // paginacao, sequencial de proposito.
     const res = await hsFetch(token, '/crm/v3/objects/deals/search', {
       filterGroups: [{ filters: [{ propertyName: 'dealstage', operator: 'EQ', value: stage.id }] }],
-      properties: [PROP_ULTIMA_COMANDA, PROP_CANCELAMENTO],
+      properties: [PROP_ULTIMA_COMANDA, PROP_CANCELAMENTO, PROP_QTD_COMANDAS],
       // Ordenacao estavel: sem ela a paginacao pode repetir/pular registros.
       sorts: [{ propertyName: 'hs_object_id', direction: 'ASCENDING' }],
       limit: SEARCH_PAGE_SIZE,
@@ -247,6 +257,7 @@ async function buscarEtapa(
         id_hubspot: id,
         ultima_comanda: toDateOnly(props[PROP_ULTIMA_COMANDA]),
         cancelamento: toDateOnly(props[PROP_CANCELAMENTO]),
+        qtd_comandas: toInt(props[PROP_QTD_COMANDAS]),
         etapa: stage.label,
         situacao: stage.churn ? 'churn' : 'ativo',
       });
@@ -314,9 +325,25 @@ Deno.serve(async (req: Request) => {
     const { atualizados, erros: errosDb } = await gravar(unicos);
     erros.push(...errosDb);
 
+    // Rede de seguranca pro nome das propriedades: a Search API IGNORA nome
+    // inexistente em vez de reclamar. Se NENHUM deal trouxe valor pra uma
+    // delas, quase certamente o nome interno esta errado — melhor gritar do que
+    // gravar null em milhares de clientes em silencio.
+    const propriedadesSemValor = (
+      [
+        [PROP_ULTIMA_COMANDA, (d: DealUso) => d.ultima_comanda !== null],
+        [PROP_CANCELAMENTO, (d: DealUso) => d.cancelamento !== null],
+        [PROP_QTD_COMANDAS, (d: DealUso) => d.qtd_comandas !== null],
+      ] as [string, (d: DealUso) => boolean][]
+    )
+      .filter(([, temValor]) => unicos.length > 0 && !unicos.some(temValor))
+      .map(([nome]) => nome);
+
     const resumo = {
       ok: erros.length === 0,
       deals_encontrados: unicos.length,
+      // Nome interno errado no HubSpot, ou propriedade vazia em TODOS os deals.
+      ...(propriedadesSemValor.length ? { propriedades_sem_valor: propriedadesSemValor } : {}),
       clientes_atualizados: atualizados,
       em_churn: unicos.filter((d) => d.situacao === 'churn').length,
       // Deals sem pin no app (nunca cadastrados por aqui) — normal.
