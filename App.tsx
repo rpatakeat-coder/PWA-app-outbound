@@ -458,6 +458,10 @@ function MainApp() {
   // - 'visited:<N>': visitado nos ultimos N dias
   // - 'not_visited:<N>': nao visitado nos ultimos N dias (inclui never + visited > N dias)
   const [visitFilter, setVisitFilter] = useState<string | null>(null);
+  // Temperatura da etapa (Quente/Morno/Frio/Fechado/Perdido). Guarda o LABEL
+  // que stageTemperature devolve — a etapa->temperatura já é mapeada lá, e é a
+  // mesma fonte da cor do pin no mapa.
+  const [tempFilter, setTempFilter] = useState<string | null>(null);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isPickingUf, setIsPickingUf] = useState(false);
   const [isPickingStage, setIsPickingStage] = useState(false);
@@ -840,6 +844,9 @@ function MainApp() {
     () => clients.filter(c => {
       if (stateFilter && normalizeUf(c.estado) !== stateFilter) return false;
       if (stageFilter && normalizeStage(c.etapa) !== stageFilter) return false;
+      // Etapa desconhecida não tem temperatura — fica de fora de qualquer
+      // recorte térmico (é o mesmo critério do pin, que cai na cor do status).
+      if (tempFilter && stageTemperature(c.etapa)?.label !== tempFilter) return false;
       if (vendorFilterHubspotId === '__none__') {
         if (c.vendedor_id_hubspot) return false;
       } else if (vendorFilterHubspotId !== null && c.vendedor_id_hubspot !== vendorFilterHubspotId) {
@@ -853,7 +860,7 @@ function MainApp() {
       }
       return true;
     }),
-    [clients, stateFilter, stageFilter, searchTerm, vendorFilterHubspotId, visitFilter],
+    [clients, stateFilter, stageFilter, searchTerm, vendorFilterHubspotId, visitFilter, tempFilter],
   );
 
   // Viewer filtra pela multi-selecao (leads + clientes etc.); vendedor/admin
@@ -928,7 +935,7 @@ function MainApp() {
     return rows;
   }, [expandedStages, listStageSections]);
 
-  const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0) + (vendorFilterHubspotId !== null ? 1 : 0) + (visitFilter !== null ? 1 : 0);
+  const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0) + (vendorFilterHubspotId !== null ? 1 : 0) + (visitFilter !== null ? 1 : 0) + (tempFilter !== null ? 1 : 0);
 
   const filteredWithCoords = useMemo(
     () => filteredClients.filter(c => c.latitude !== null && c.longitude !== null),
@@ -3693,7 +3700,7 @@ function MainApp() {
               <View style={styles.emptyState}>
                 <Text style={{ fontSize: 40, marginBottom: 12 }}>📋</Text>
                 <Text style={styles.emptyStateText}>
-                  {searchTerm || stateFilter || stageFilter
+                  {searchTerm || stateFilter || stageFilter || tempFilter || visitFilter
                     ? 'Nenhum cliente encontrado com esses filtros.'
                     : `Nenhum ${statusConfig[statusFilter]?.label?.toLowerCase() ?? statusFilter} encontrado`}
                 </Text>
@@ -4337,6 +4344,39 @@ function MainApp() {
                   </TouchableOpacity>
                 )}
 
+                <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Temperatura</Text>
+                <Text style={styles.passwordModalHint}>
+                  Vem da etapa do lead — a mesma regra que pinta o pin no mapa.
+                  Lead em etapa sem temperatura definida fica de fora do recorte.
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                  {([
+                    { label: null, texto: 'Sem filtro', cor: '#64748b', emoji: '' },
+                    { label: 'Quente', texto: 'Quente', cor: TEMP_COLORS.hot, emoji: '🔥' },
+                    { label: 'Morno', texto: 'Morno', cor: TEMP_COLORS.warm, emoji: '🟡' },
+                    { label: 'Frio', texto: 'Frio', cor: TEMP_COLORS.cold, emoji: '❄️' },
+                    { label: 'Fechado', texto: 'Fechado', cor: TEMP_COLORS.won, emoji: '✅' },
+                    { label: 'Perdido', texto: 'Perdido', cor: TEMP_COLORS.lost, emoji: '⚫' },
+                  ] as { label: string | null; texto: string; cor: string; emoji: string }[]).map((op) => {
+                    const selected = tempFilter === op.label;
+                    return (
+                      <TouchableOpacity
+                        key={op.texto}
+                        style={[
+                          styles.filterChip,
+                          { borderWidth: 1, borderColor: '#e2e8f0', alignSelf: 'flex-start' },
+                          selected && { backgroundColor: op.cor, borderColor: op.cor },
+                        ]}
+                        onPress={() => setTempFilter(op.label)}
+                      >
+                        <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>
+                          {op.emoji ? `${op.emoji} ` : ''}{op.texto}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
                 <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Visita</Text>
                 <Text style={styles.passwordModalHint}>
                   Filtra pelo timestamp da ultima visita (visited_at). Vale pra qualquer status.
@@ -4430,7 +4470,7 @@ function MainApp() {
                 <View style={styles.filtersFooter}>
                   <TouchableOpacity
                     style={styles.filtersSecondaryButton}
-                    onPress={() => { setSearchQuery(''); setStateFilter(null); setStageFilter(null); setVendorFilterHubspotId(null); setVisitFilter(null); }}
+                    onPress={() => { setSearchQuery(''); setStateFilter(null); setStageFilter(null); setVendorFilterHubspotId(null); setVisitFilter(null); setTempFilter(null); }}
                     disabled={activeFilterCount === 0}
                   >
                     <Text style={[styles.filtersSecondaryButtonText, activeFilterCount === 0 && { opacity: 0.4 }]}>Limpar tudo</Text>
