@@ -4893,14 +4893,21 @@ function ClientBottomSheet({
     const dias = comanda ? diasAte(comanda) : null;
     const cancelamento = parseDia(client.hs_cancelamento_solicitado_em);
 
-    // Cor pela recência da última comanda: é o sinal de "usa / não usa".
-    // Sem comanda nenhuma é o pior caso, não a ausência de informação.
-    const tom =
-      dias === null || dias > 30
-        ? { bg: '#fef2f2', border: '#fecaca', fg: '#b91c1c', sub: '#dc2626' }
-        : dias > 7
-        ? { bg: '#fffbeb', border: '#fde68a', fg: '#b45309', sub: '#d97706' }
-        : { bg: '#f0fdf4', border: '#bbf7d0', fg: '#15803d', sub: '#16a34a' };
+    const VERMELHO = { bg: '#fef2f2', border: '#fecaca', fg: '#b91c1c', sub: '#dc2626' };
+    const AMBAR = { bg: '#fffbeb', border: '#fde68a', fg: '#b45309', sub: '#d97706' };
+    const VERDE = { bg: '#f0fdf4', border: '#bbf7d0', fg: '#15803d', sub: '#16a34a' };
+
+    // Pedido de cancelamento manda na cor: um ex-cliente que emitiu comanda
+    // ontem não pode aparecer em verde só pela recência.
+    // Sem cancelamento, a cor é a recência da última comanda — e nenhuma
+    // comanda é o pior caso, não ausência de informação.
+    const tom = cancelamento
+      ? VERMELHO
+      : dias === null || dias > 30
+      ? VERMELHO
+      : dias > 7
+      ? AMBAR
+      : VERDE;
 
     const sincronizado = new Date(client.hs_uso_sincronizado_em);
     const horas = Math.floor((Date.now() - sincronizado.getTime()) / 3_600_000);
@@ -4913,12 +4920,18 @@ function ClientBottomSheet({
         ? `há ${horas}h`
         : `há ${Math.floor(horas / 24)} dia(s)`;
 
+    const linhaComanda = comanda
+      ? `🧾 Última comanda: ${label(comanda)} • ${haQuanto(dias!)}`
+      : '🧾 Nenhuma comanda emitida';
+
+    // Ex-cliente: o que o vendedor precisa ler primeiro é QUANDO pediram pra
+    // sair — a última comanda vira o detalhe (mostra até quando usaram).
     return {
       tom,
-      titulo: comanda
-        ? `🧾 Última comanda: ${label(comanda)} • ${haQuanto(dias!)}`
-        : '🧾 Nenhuma comanda emitida',
-      cancelamento: cancelamento ? `⚠️ Cancelamento solicitado em ${label(cancelamento)}` : null,
+      titulo: cancelamento
+        ? `⚠️ Cancelamento solicitado em ${label(cancelamento)}`
+        : linhaComanda,
+      detalhe: cancelamento ? linhaComanda : null,
       // Sync parado é visível: o dado some de "hoje" e vira "há N dias".
       rodape: sincLabel ? `Dados do HubSpot • atualizado ${sincLabel}` : null,
     };
@@ -5013,8 +5026,8 @@ function ClientBottomSheet({
                 ]}
               >
                 <Text style={[styles.usoTitulo, { color: uso.tom.fg }]}>{uso.titulo}</Text>
-                {uso.cancelamento && (
-                  <Text style={[styles.usoAlerta, { color: uso.tom.fg }]}>{uso.cancelamento}</Text>
+                {uso.detalhe && (
+                  <Text style={[styles.usoDetalhe, { color: uso.tom.sub }]}>{uso.detalhe}</Text>
                 )}
                 {uso.rodape && (
                   <Text style={[styles.usoRodape, { color: uso.tom.sub }]}>{uso.rodape}</Text>
@@ -6319,7 +6332,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   usoTitulo: { fontSize: 14, fontWeight: '800' },
-  usoAlerta: { fontSize: 12, fontWeight: '700', marginTop: 3 },
+  usoDetalhe: { fontSize: 12, fontWeight: '600', marginTop: 3 },
   usoRodape: { fontSize: 11, marginTop: 4 },
   agendaSectionHeader: {
     flexDirection: 'row',

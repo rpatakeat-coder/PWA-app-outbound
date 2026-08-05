@@ -24,8 +24,8 @@
 //   Dashboard -> Integrations -> Cron -> Create job
 //     Name:     hubspot-usage-sync-semanal
 //     Schedule: 0 7 * * 1            (segunda, 04:00 BRT = 07:00 UTC)
-//   O cron do Supabase e' em UTC — dai o 7, nao o 4.
 //     Type:     Supabase Edge Function -> hubspot-usage-sync
+//   O cron do Supabase e' em UTC — dai o 7, nao o 4.
 //   O Cron manda a service role key no Authorization, entao o verify_jwt
 //   continua LIGADO (a function nao fica aberta pra internet).
 //
