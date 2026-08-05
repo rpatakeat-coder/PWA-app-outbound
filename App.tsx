@@ -2481,6 +2481,11 @@ function MainApp() {
       const days = (task.meta as any)?.days_in_stage;
       const etapaMeta = (task.meta as any)?.etapa as string | undefined;
       const responsavel = task.vendedor_id_hubspot ? vendorLabel(task.vendedor_id_hubspot) : null;
+      // Convenção do time: vendedor desativado é marcado renomeando o profile
+      // com o sufixo "/ DESATIVADO". Vira tag — no meio do nome ele competia
+      // com a informação e ainda estourava a linha.
+      const inativoMatch = responsavel?.match(/^(.*?)\s*\/\s*DESATIVADO\s*$/i) ?? null;
+      const responsavelNome = inativoMatch ? inativoMatch[1].trim() : responsavel;
       // O tipo da tarefa já vive na seção; no título o que importa é o LEAD.
       // Tira o prefixo de severidade ("D5 Agendar Demo" -> "Agendar Demo") pra
       // não repetir o que o badge e o cabeçalho da seção já dizem.
@@ -2504,7 +2509,16 @@ function MainApp() {
             <Text style={styles.taskMeta}>{days} dia(s) em {etapaMeta ?? 'etapa'}</Text>
           ) : null}
           {responsavel ? (
-            <Text style={styles.taskMeta} numberOfLines={1}>{responsavel}</Text>
+            <View style={styles.taskRespRow}>
+              <Text style={[styles.taskMeta, { flexShrink: 1 }]} numberOfLines={1}>
+                {responsavelNome}
+              </Text>
+              {inativoMatch ? (
+                <View style={styles.taskInativoTag}>
+                  <Text style={styles.taskInativoTagText}>DESATIVADO</Text>
+                </View>
+              ) : null}
+            </View>
           ) : null}
 
           <View style={styles.taskActionsRow}>
@@ -6530,6 +6544,15 @@ const styles = StyleSheet.create({
   },
   taskSectionText: { fontSize: 12, fontWeight: '800', color: '#64748b', letterSpacing: 0.4 },
   taskVendorHint: { fontSize: 12, color: '#b45309', marginBottom: 10 },
+  // Responsável + tag de vendedor desativado (sufixo "/ DESATIVADO" no nome).
+  taskRespRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  taskInativoTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+    backgroundColor: '#fee2e2',
+  },
+  taskInativoTagText: { fontSize: 9, fontWeight: '800', color: '#b91c1c', letterSpacing: 0.3 },
   // Cabecalho da aba Tarefas com botao de info
   taskHeaderRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
