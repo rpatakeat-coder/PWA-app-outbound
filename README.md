@@ -149,6 +149,7 @@ npx eas-cli build --profile production --platform android   # ou ios
 |---|---|
 | `hubspot-sync` | Saída app → HubSpot: `change_stage`, `update`, `create_pin`, `get_stages`, **`create_note`/`update_note`** (notas do lead e follow up → Observação), **`create_task`** (check-in de visita → Task), **`create_meeting`/`update_meeting`** (demo → Meeting). `update_task` só atende os follow ups criados antes da mudança de regra. |
 | `hubspot-lead-webhook` / `-latlong` | Entrada: leads do HubSpot/RPA → upsert em `clients` (com geocoding). |
+| `hubspot-usage-sync` | Entrada (1x/dia, Cron do Supabase): lê `data_da_ultima_comanda_emitida` e `data_solicitacao_cancelamento` dos deals nas etapas de Acompanhamento/Saudável (Onboarding e Sucesso) → grava em `clients`. |
 | `export-report` | Exporta TUDO do período em JSON (painel do gestor) → Storage → signed URL. |
 | `export-agenda` | Exporta a agenda (montada no app) em JSON → Storage → signed URL. |
 | `geocode` | Geocoding/reparo de coordenadas. |
@@ -190,6 +191,39 @@ visita"):
   bloqueio de `isLead` continua valendo só para etapa e webhook.
 
 > Só vale para leads que já têm `id_hubspot` (deal). Sem isso, o app ignora sem erro.
+
+---
+
+## 📊 Uso do produto (HubSpot → app, 1x/dia)
+
+Responde em campo "é cliente, mas será que usa?". A edge `hubspot-usage-sync`
+roda diariamente (Cron do Supabase) e grava em `clients`:
+
+| HubSpot (deal) | `clients` |
+|---|---|
+| `data_da_ultima_comanda_emitida` | `hs_ultima_comanda_em` (date) |
+| `data_solicitacao_cancelamento` | `hs_cancelamento_solicitado_em` (date) |
+| — | `hs_uso_sincronizado_em` (quando o sync passou) |
+
+**Quem é "cliente" aqui não é o status local** — é estar numa destas etapas:
+
+| Etapa | Pipeline | Stage ID |
+|---|---|---|
+| Acompanhamento | Onboarding (`87106112`) | `175135768` |
+| Acompanhamento | Sucesso (`87367429`) | `162508353` |
+| Saudável | Sucesso (`87367429`) | `171389297` |
+
+Uma busca por etapa (`dealstage EQ`, paginada de 100 em 100) → gravação em
+lotes de 500 pela RPC `apply_hubspot_uso`. Com ~3 mil clientes: **~30 chamadas
+ao HubSpot e ~6 ao banco por dia**.
+
+No app, o bottom sheet do pin mostra a última comanda com semáforo (verde ≤ 7
+dias, âmbar 8–30, vermelho > 30 ou nenhuma), o pedido de cancelamento quando
+existe, e há quanto tempo o dado foi atualizado. O card só aparece para quem o
+sync alcança — ou seja, cliente de verdade.
+
+> Deal que sai dessas etapas para de ser atualizado e mantém o último valor
+> lido; o rodapé "atualizado há N dias" é o que denuncia isso.
 
 ---
 

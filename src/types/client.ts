@@ -41,6 +41,14 @@ export interface Client {
   // mark_client_as_visited; o historico completo vive em client_visits).
   visit_count: number;
   won_at: string | null;
+  // Uso do produto, puxado do HubSpot 1x/dia pela edge hubspot-usage-sync
+  // (deals nas etapas de Acompanhamento/Saudável do Onboarding e do Sucesso).
+  // 'YYYY-MM-DD' — sao colunas date no banco, sem hora e sem fuso.
+  hs_ultima_comanda_em: string | null;
+  hs_cancelamento_solicitado_em: string | null;
+  // Quando o sync passou por este cliente. NULL = fora do recorte do sync (ou
+  // ele ainda nao rodou); distingue "sem comanda" de "sem dado".
+  hs_uso_sincronizado_em: string | null;
   created_at: string | null;
   updated_at: string | null;
 }

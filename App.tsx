@@ -4864,6 +4864,70 @@ function ClientBottomSheet({
   const createdAt = formatDate(client.created_at);
   const updatedAt = formatDate(client.updated_at);
 
+  // ── Uso do produto (HubSpot, 1x/dia) ──────────────────────────────────────
+  // Só existe pra quem o sync alcança: os deals nas etapas de Acompanhamento /
+  // Saudável (Onboarding e Sucesso). Esse é o recorte de "cliente de verdade",
+  // e é o que responde em campo "é cliente, mas será que usa?".
+  const uso = useMemo(() => {
+    if (!client.hs_uso_sincronizado_em) return null;
+
+    // 'YYYY-MM-DD' com new Date() vira meia-noite UTC e, em BRT, exibe o dia
+    // ANTERIOR. Monta na data local pra bater com o que o HubSpot mostra.
+    const parseDia = (s: string | null) => {
+      if (!s) return null;
+      const [a, m, d] = s.split('-').map(Number);
+      if (!a || !m || !d) return null;
+      const dt = new Date(a, m - 1, d);
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    };
+    const diasAte = (dt: Date) => {
+      const hoje = new Date();
+      const zera = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+      return Math.round((zera(hoje) - zera(dt)) / 86_400_000);
+    };
+    const label = (dt: Date) => dt.toLocaleDateString('pt-BR');
+    const haQuanto = (dias: number) =>
+      dias <= 0 ? 'hoje' : dias === 1 ? 'ontem' : `há ${dias} dias`;
+
+    const comanda = parseDia(client.hs_ultima_comanda_em);
+    const dias = comanda ? diasAte(comanda) : null;
+    const cancelamento = parseDia(client.hs_cancelamento_solicitado_em);
+
+    // Cor pela recência da última comanda: é o sinal de "usa / não usa".
+    // Sem comanda nenhuma é o pior caso, não a ausência de informação.
+    const tom =
+      dias === null || dias > 30
+        ? { bg: '#fef2f2', border: '#fecaca', fg: '#b91c1c', sub: '#dc2626' }
+        : dias > 7
+        ? { bg: '#fffbeb', border: '#fde68a', fg: '#b45309', sub: '#d97706' }
+        : { bg: '#f0fdf4', border: '#bbf7d0', fg: '#15803d', sub: '#16a34a' };
+
+    const sincronizado = new Date(client.hs_uso_sincronizado_em);
+    const horas = Math.floor((Date.now() - sincronizado.getTime()) / 3_600_000);
+    const sincLabel =
+      Number.isNaN(sincronizado.getTime())
+        ? null
+        : horas < 1
+        ? 'agora há pouco'
+        : horas < 24
+        ? `há ${horas}h`
+        : `há ${Math.floor(horas / 24)} dia(s)`;
+
+    return {
+      tom,
+      titulo: comanda
+        ? `🧾 Última comanda: ${label(comanda)} • ${haQuanto(dias!)}`
+        : '🧾 Nenhuma comanda emitida',
+      cancelamento: cancelamento ? `⚠️ Cancelamento solicitado em ${label(cancelamento)}` : null,
+      // Sync parado é visível: o dado some de "hoje" e vira "há N dias".
+      rodape: sincLabel ? `Dados do HubSpot • atualizado ${sincLabel}` : null,
+    };
+  }, [
+    client.hs_uso_sincronizado_em,
+    client.hs_ultima_comanda_em,
+    client.hs_cancelamento_solicitado_em,
+  ]);
+
   // Gesture pra arrastar a aba pra baixo e fechar.
   // Threshold: 100px de drag aciona o fechamento.
   const translateY = useRef(new Animated.Value(0)).current;
@@ -4937,6 +5001,26 @@ function ClientBottomSheet({
                 </View>
               </View>
             </View>
+
+            {/* Uso do produto (HubSpot). Vem antes das visitas de proposito:
+                pra cliente/ex-cliente, "usa ou nao usa" e' a primeira coisa
+                que o vendedor precisa ver ao abrir o pin. */}
+            {uso && (
+              <View
+                style={[
+                  styles.usoBox,
+                  { backgroundColor: uso.tom.bg, borderColor: uso.tom.border },
+                ]}
+              >
+                <Text style={[styles.usoTitulo, { color: uso.tom.fg }]}>{uso.titulo}</Text>
+                {uso.cancelamento && (
+                  <Text style={[styles.usoAlerta, { color: uso.tom.fg }]}>{uso.cancelamento}</Text>
+                )}
+                {uso.rodape && (
+                  <Text style={[styles.usoRodape, { color: uso.tom.sub }]}>{uso.rodape}</Text>
+                )}
+              </View>
+            )}
 
             {/* Contador de visitas: o lead pode ser visitado varias vezes; o
                 numero vem do historico (client_visits) com fallback pro
@@ -6226,6 +6310,17 @@ const styles = StyleSheet.create({
   },
   visitCountText: { fontSize: 14, fontWeight: '800', color: '#15803d' },
   visitCountHint: { fontSize: 12, color: '#16a34a', marginTop: 2 },
+  // Uso do produto (HubSpot) — cores vem do estado, so' o layout fica aqui.
+  usoBox: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginBottom: 10,
+  },
+  usoTitulo: { fontSize: 14, fontWeight: '800' },
+  usoAlerta: { fontSize: 12, fontWeight: '700', marginTop: 3 },
+  usoRodape: { fontSize: 11, marginTop: 4 },
   agendaSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
