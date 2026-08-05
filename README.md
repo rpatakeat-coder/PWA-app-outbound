@@ -20,7 +20,8 @@ sincronizado com o **HubSpot** (CRM) e o **Supabase** (banco + backend).
   - **Exportação JSON** (gestor) — botão que exporta a agenda em JSON para análise.
 - **Tarefas** — cobranças automáticas (ex.: *Agendar Demo* com escalonamento D2 → D5).
 - **Cadastro / edição de leads** — com geocoding e sincronização no HubSpot.
-- **Check-in de visita** — registro de visita com validação de distância.
+- **Check-in de visita** — registro de visita com validação de distância; cada
+  visita (primeira ou re-marcada) cria uma **Task** no deal do HubSpot.
 - **Painel do Gestor** — métricas por vendedor, drill-down e exportação completa (JSON).
 - **Meu desempenho** — métricas do próprio vendedor.
 
@@ -146,7 +147,7 @@ npx eas-cli build --profile production --platform android   # ou ios
 
 | Função | Papel |
 |---|---|
-| `hubspot-sync` | Saída app → HubSpot: `change_stage`, `update`, `create_pin`, `get_stages`, **`create_note`/`update_note`** (notas do lead e follow up → Observação), **`create_meeting`/`update_meeting`** (demo → Meeting). `create_task`/`update_task` seguem só como legado (follow ups criados antes da mudança). |
+| `hubspot-sync` | Saída app → HubSpot: `change_stage`, `update`, `create_pin`, `get_stages`, **`create_note`/`update_note`** (notas do lead e follow up → Observação), **`create_task`** (check-in de visita → Task), **`create_meeting`/`update_meeting`** (demo → Meeting). `update_task` só atende os follow ups criados antes da mudança de regra. |
 | `hubspot-lead-webhook` / `-latlong` | Entrada: leads do HubSpot/RPA → upsert em `clients` (com geocoding). |
 | `export-report` | Exporta TUDO do período em JSON (painel do gestor) → Storage → signed URL. |
 | `export-agenda` | Exporta a agenda (montada no app) em JSON → Storage → signed URL. |
@@ -177,6 +178,15 @@ Ao **agendar** na agenda do app:
   **cancelar** prefixa `[Follow Up cancelado]` na Observação / cancela a Meeting.
   O id do engagement fica em `client_meetings.hs_engagement_id`.
 - O evento no **Google Calendar** (via n8n) continua funcionando em paralelo.
+
+Ao fazer **check-in de visita** (botões "Marcar como visitado" / "Re-marcar
+visita"):
+
+- Cria uma **Task** no deal — assunto `Visita - {lead}`, **pendente**, vencendo
+  na hora do check-in, dona do vendedor, com nº da visita no corpo. Uma por
+  check-in; o app não guarda o id (quem conclui é o vendedor, no HubSpot).
+- Vale inclusive para **cliente/churn** — é atividade na timeline, não funil. O
+  bloqueio de `isLead` continua valendo só para etapa e webhook.
 
 > Só vale para leads que já têm `id_hubspot` (deal). Sem isso, o app ignora sem erro.
 

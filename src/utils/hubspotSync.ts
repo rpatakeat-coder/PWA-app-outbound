@@ -179,6 +179,37 @@ export async function rescheduleAgendaEngagement(input: {
   await invokeHubspotSync(body);
 }
 
+// ============================================================================
+// Check-in de visita -> Task no HubSpot.
+//
+// Vale pros DOIS botoes ("Marcar como visitado" e "Re-marcar visita") — cada
+// check-in gera a sua Task, pendente, vencendo na hora do check-in. Nao tem
+// update/cancel: a visita e' fato consumado, quem fecha a task e' o vendedor
+// no HubSpot; por isso o id nao e' guardado no banco.
+// ============================================================================
+export async function createVisitTask(input: {
+  id_hubspot: string;
+  lead_nome: string;            // empresa (ou nome, se nao houver empresa)
+  visited_at: string;           // ISO do check-in
+  visita_numero: number | null; // contador da RPC (1 = primeira visita)
+  vendedor_nome: string | null;
+  owner_id: string | null;      // hubspot_owner_id do vendedor
+}): Promise<string | null> {
+  const linhas = [`Check-in em ${formatBr(input.visited_at)}`];
+  if (input.visita_numero) linhas.push(`Visita nº ${input.visita_numero}`);
+  if (input.vendedor_nome) linhas.push(`Vendedor: ${input.vendedor_nome}`);
+
+  const data = await invokeHubspotSync({
+    type: 'create_task',
+    id_hubspot: input.id_hubspot,
+    titulo: `Visita - ${input.lead_nome}`,
+    descricao: linhas.join('\n'),
+    due_at: input.visited_at,
+    owner_id: input.owner_id,
+  });
+  return (data?.engagement_id as string | undefined) ?? null;
+}
+
 // Cancela o engagement — usado ao remover no app. Follow up: marca a Observacao
 // como cancelada (o texto fica, e' registro de timeline). Demo: cancela a Meeting.
 export async function cancelAgendaEngagement(input: {

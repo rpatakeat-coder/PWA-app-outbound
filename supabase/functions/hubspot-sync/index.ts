@@ -20,10 +20,11 @@
 //                  Usado pelas notas do lead E pelo follow up agendado.
 //   update_note  — reescreve o corpo da nota (reagendar o follow up) ou marca
 //                  como cancelada (cancelar:true).
-//   create_task / update_task       — LEGADO. Follow up virava Task ate a regra
-//                                      mudar pra Observacao; os handlers ficam
-//                                      pros follow ups antigos, que tem id de
-//                                      Task gravado em hs_engagement_id.
+//   create_task  — Task no deal. Hoje quem usa e' o check-in de visita (uma
+//                  Task pendente por visita, vencendo na hora do check-in).
+//   update_task  — reagendar (due) ou concluir. So' os follow ups da regra
+//                  ANTIGA passam por aqui, via fallback do update_note (eles
+//                  tem id de Task gravado em hs_engagement_id).
 //   create_meeting / update_meeting  — Meeting no deal (demo agendada).
 //                                      update: reagendar (start/end) ou cancelar.
 //   -> devolvem { engagement_id }; o app guarda em
@@ -500,10 +501,12 @@ async function handleUpdateNote(token: string, body: Record<string, unknown>) {
   return json(200, { ok: true, engagement_id: id });
 }
 
-// ---- LEGADO: follow up -> Task ----
-// A regra mudou (follow up agora vira Observacao), mas os follow ups criados
-// antes tem id de Task em hs_engagement_id: o handleUpdateNote cai aqui quando
-// o HubSpot devolve 404 pro id como nota.
+// ---- Task no deal ----
+// Criada pelo check-in de visita (uma por visita, pendente, vencendo na hora
+// do check-in). Follow up NAO usa mais: virou Observacao.
+//
+// O update so' e' exercido pelos follow ups da regra antiga — o handleUpdateNote
+// cai aqui quando o HubSpot devolve 404 pro id deles como nota.
 async function handleCreateTask(token: string, body: Record<string, unknown>) {
   const idHubspot = trimOrNull(body.id_hubspot);
   const due = toIso(body.due_at);
@@ -511,7 +514,7 @@ async function handleCreateTask(token: string, body: Record<string, unknown>) {
 
   const props: Record<string, unknown> = {
     hs_timestamp: due,
-    hs_task_subject: trimOrNull(body.titulo) ?? 'Follow Up',
+    hs_task_subject: trimOrNull(body.titulo) ?? 'Tarefa',
     hs_task_body: richBody(body.descricao),
     hs_task_status: 'NOT_STARTED',
     hs_task_type: 'TODO',

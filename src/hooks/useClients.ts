@@ -3,7 +3,7 @@ import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import type { Client, ClientFormData } from '../types/client';
 import { bboxAround, roundCoordsForKey } from '../utils/area';
-import { sendHubspotEvent } from '../utils/hubspotSync';
+import { createVisitTask, sendHubspotEvent } from '../utils/hubspotSync';
 import { FUNNEL_STAGE_IDS, STAGES, VISITA_STAGE_ID, VISITA_STAGE_LABEL } from '../constants/stages';
 
 const mapRow = (row: any): Client => row as Client;
@@ -372,9 +372,11 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
       if (error) throw error;
       const client = mapRow(data);
 
-      // CLIENTE/CHURN nao vao pro HubSpot em NENHUMA hipotese no check-in.
+      // CLIENTE/CHURN nao entram no FUNIL em nenhuma hipotese no check-in.
       // Visitar um cliente e' pos-venda (relacionamento/suporte), nao evento
-      // de funil: o deal dele nao pode ser tocado — nem etapa, nem propriedade.
+      // de funil: nem etapa nem propriedade do deal dele podem ser tocadas —
+      // dai o isLead travar o webhook e o change_stage abaixo. (A Task de
+      // visita e' criada pra todos: e' atividade na timeline, nao funil.)
       // A visita fica registrada 100% do lado do app (client_visits +
       // visited_at + visit_count), que e' o que alimenta o mapa e as metricas.
       const isLead = client.status === 'lead';
@@ -385,6 +387,30 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
       // Manda todos os campos do cliente + metadata da visita (coords/quando/quem).
       const raw = (data ?? {}) as Record<string, unknown>;
       const dealname = client.empresa ?? client.nome;
+
+      // Toda visita vira uma Task pendente no deal — os dois botoes ("Marcar
+      // como visitado" e "Re-marcar visita") caem aqui, entao cada check-in
+      // gera a sua. Diferente do webhook/etapa abaixo, vale TAMBEM pra
+      // CLIENTE/CHURN: aqui so' criamos uma atividade, o funil fica intocado.
+      //
+      // AWAITADO de proposito: o bottom sheet fecha logo apos o check-in e uma
+      // Promise solta morria junto (mesma licao do agendamento). Erro NAO
+      // quebra a visita — ela ja esta registrada no banco.
+      if (client.id_hubspot) {
+        try {
+          await createVisitTask({
+            id_hubspot: client.id_hubspot,
+            lead_nome: client.empresa?.trim() || client.nome,
+            visited_at: (raw.visited_at as string | undefined) ?? new Date().toISOString(),
+            visita_numero: client.visit_count ?? null,
+            vendedor_nome: profile?.full_name ?? null,
+            owner_id: profile?.id_hubspot ?? null,
+          });
+        } catch (err) {
+          console.warn('[HUBSPOT] criar Task de visita falhou:', err);
+        }
+      }
+
       if (isLead) {
         sendHubspotEvent({
           type: 'visited',
