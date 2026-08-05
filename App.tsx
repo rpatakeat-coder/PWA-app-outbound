@@ -647,6 +647,8 @@ function MainApp() {
   // Passado da agenda começa fechado (igual lista). Hoje/futuro viram uma
   // timeline contínua agrupada por dia — não precisam de acordeão.
   const [agendaPastOpen, setAgendaPastOpen] = useState(false);
+  // Chip de tipo na aba Agenda (null = todos): 'reuniao' | 'follow_up' | 'rota'.
+  const [agendaTypeFilter, setAgendaTypeFilter] = useState<string | null>(null);
   // Exportação da agenda em andamento (botão "Exportar JSON" no topo da aba).
   const [exportingAgenda, setExportingAgenda] = useState(false);
 
@@ -2594,17 +2596,17 @@ function MainApp() {
 
         {/* Chips: quanto tem de cada urgência, e filtro de um toque. */}
         {chips.length > 1 && (
-          <View style={styles.taskChipsRow}>
+          <View style={styles.countChipsRow}>
             {chips.map(([sev, total]) => {
               const ativo = taskSevFilter === sev;
               return (
                 <TouchableOpacity
                   key={sev}
-                  style={[styles.taskChip, ativo && { borderColor: sevColor(sev), backgroundColor: '#fff' }]}
+                  style={[styles.countChip, ativo && { borderColor: sevColor(sev), backgroundColor: '#fff' }]}
                   onPress={() => setTaskSevFilter(ativo ? null : sev)}
                 >
-                  <View style={[styles.taskChipDot, { backgroundColor: sevColor(sev) }]} />
-                  <Text style={[styles.taskChipText, ativo && { color: '#0f172a' }]}>
+                  <View style={[styles.countChipDot, { backgroundColor: sevColor(sev) }]} />
+                  <Text style={[styles.countChipText, ativo && { color: '#0f172a' }]}>
                     {sev} {total}
                   </Text>
                 </TouchableOpacity>
@@ -2621,7 +2623,7 @@ function MainApp() {
           secoes.map((secao) => (
             <View key={secao.sev}>
               <View style={styles.taskSectionHeader}>
-                <View style={[styles.taskChipDot, { backgroundColor: sevColor(secao.sev) }]} />
+                <View style={[styles.countChipDot, { backgroundColor: sevColor(secao.sev) }]} />
                 <Text style={styles.taskSectionText}>
                   {secao.sev} · {secao.total} {secao.total === 1 ? 'tarefa' : 'tarefas'}
                 </Text>
@@ -2648,11 +2650,33 @@ function MainApp() {
     // Aplica o mesmo filtro de vendedor que o mapa/lista usam — se o admin
     // escolheu um vendedor, agenda mostra so itens cujo cliente eh dele.
     // Itens sem client carregado (raro) ficam fora quando ha filtro ativo.
-    const agendaItems = vendorFilterHubspotId === null
+    const porVendedor = vendorFilterHubspotId === null
       ? allAgendaItems
       : vendorFilterHubspotId === '__none__'
         ? allAgendaItems.filter(item => !item.client?.vendedor_id_hubspot)
         : allAgendaItems.filter(item => item.client?.vendedor_id_hubspot === vendorFilterHubspotId);
+
+    // Tipo do compromisso — define a cor da barra do card e os chips do topo.
+    // Demo, follow up e parada de rota renderizavam idênticos; a cor é o que
+    // deixa varrer o dia sem ler o texto de cada um.
+    const tipoDoItem = (item: typeof allAgendaItems[number]) =>
+      item.kind === 'meeting'
+        ? (item.meeting.type === 'follow_up' ? 'follow_up' : 'reuniao')
+        : 'rota';
+    const TIPO_META: Record<string, { label: string; cor: string }> = {
+      reuniao: { label: 'Demos', cor: '#dc2626' },
+      follow_up: { label: 'Follow ups', cor: '#2563eb' },
+      rota: { label: 'Rotas', cor: '#16a34a' },
+    };
+    // Contagem vem de ANTES do filtro de tipo — senão o chip ativo zeraria os
+    // outros e não daria pra voltar sabendo o que tem em cada um.
+    const contagemTipo = (['reuniao', 'follow_up', 'rota'] as const)
+      .map((t) => ({ tipo: t, total: porVendedor.filter((i) => tipoDoItem(i) === t).length }))
+      .filter((c) => c.total > 0);
+
+    const agendaItems = agendaTypeFilter
+      ? porVendedor.filter((i) => tipoDoItem(i) === agendaTypeFilter)
+      : porVendedor;
 
     // Divide em passado / hoje / futuro. "Hoje" fica sempre aberto no topo;
     // passado e futuro viram acordeão fechado (mesmo padrão da aba Lista).
@@ -2701,15 +2725,30 @@ function MainApp() {
           // Pill de temperatura da etapa — mesma escala de cor dos pins do mapa.
           const temp = stageTemperature(client?.etapa);
 
+          const tipo = tipoDoItem(item);
+          const corTipo = TIPO_META[tipo].cor;
+          // Duração só faz sentido em compromisso marcado; parada de rota não
+          // tem. Fica sob o horário, no trilho.
+          const duracao = item.kind === 'meeting' && item.meeting.duration_minutes
+            ? (item.meeting.duration_minutes >= 60
+                ? `${Math.floor(item.meeting.duration_minutes / 60)}h${item.meeting.duration_minutes % 60 ? `${item.meeting.duration_minutes % 60}` : ''}`
+                : `${item.meeting.duration_minutes}min`)
+            : null;
+
           return (
             <View
               key={item.kind === 'meeting' ? `meeting-${item.meeting.id}` : `route-${item.stop.id ?? index}`}
-              style={styles.agendaItem}
+              style={styles.agendaRow}
             >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.agendaTitle}>
-                  {title} <Text style={styles.agendaTitleTime}>— {time}</Text>
-                </Text>
+              {/* Trilho de horário: a hora é a âncora de leitura de uma agenda —
+                  antes vinha em texto menor no fim do nome do lead. */}
+              <View style={styles.agendaTimeRail}>
+                <Text style={styles.agendaTimeText}>{time}</Text>
+                {duracao ? <Text style={styles.agendaDurText}>{duracao}</Text> : null}
+              </View>
+
+              <View style={[styles.agendaCard, { borderLeftColor: corTipo }]}>
+                <Text style={styles.agendaTitle} numberOfLines={2}>{title}</Text>
                 <Text style={styles.agendaSubtitle}>{subtitle}</Text>
                 {contact ? <Text style={styles.agendaMeta}>Contato: {contact}</Text> : null}
                 {responsavel ? <Text style={styles.agendaMeta}>Responsável: {responsavel}</Text> : null}
@@ -2721,57 +2760,64 @@ function MainApp() {
                   </View>
                 )}
                 {client && (
-                  <View style={styles.routeActionsRow}>
-                    <TouchableOpacity
-                      style={styles.smallActionButton}
-                      onPress={() => openClientDetails(client)}
-                    >
-                      <Text style={styles.smallActionButtonText}>Abrir lead</Text>
-                    </TouchableOpacity>
-                    {client.latitude != null && client.longitude != null && (
+                  <>
+                    {/* Ações do dia a dia ficam como botões; as que mexem no
+                        compromisso descem pra linha de texto abaixo. Com cinco
+                        botões iguais, a linha quebrava em três. */}
+                    <View style={styles.routeActionsRow}>
                       <TouchableOpacity
                         style={styles.smallActionButton}
-                        onPress={() => openNavigation({ latitude: client.latitude as number, longitude: client.longitude as number, clientName: title, travelMode: 'driving' })}
+                        onPress={() => openClientDetails(client)}
                       >
-                        <Text style={styles.smallActionButtonText}>Rota</Text>
+                        <Text style={styles.smallActionButtonText}>Abrir lead</Text>
                       </TouchableOpacity>
-                    )}
-                    {toWhatsappNumber(client.telefone) && (
-                      <TouchableOpacity
-                        style={[styles.smallActionButton, { backgroundColor: '#25d366' }]}
-                        onPress={() => openWhatsapp(client.telefone)}
-                      >
-                        <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>WhatsApp</Text>
-                      </TouchableOpacity>
-                    )}
-                    {/* Reagendar: so pra reuniao/follow up (rota nao tem evento
-                        no Google Agenda pra mover). Abre o modal ja preenchido. */}
+                      {client.latitude != null && client.longitude != null && (
+                        <TouchableOpacity
+                          style={styles.smallActionButton}
+                          onPress={() => openNavigation({ latitude: client.latitude as number, longitude: client.longitude as number, clientName: title, travelMode: 'driving' })}
+                        >
+                          <Text style={styles.smallActionButtonText}>Rota</Text>
+                        </TouchableOpacity>
+                      )}
+                      {toWhatsappNumber(client.telefone) && (
+                        <TouchableOpacity
+                          style={[styles.smallActionButton, { backgroundColor: '#25d366', borderColor: '#25d366' }]}
+                          onPress={() => openWhatsapp(client.telefone)}
+                        >
+                          <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>WhatsApp</Text>
+                        </TouchableOpacity>
+                      )}
+                      {item.kind === 'route' && (
+                        <TouchableOpacity style={styles.smallActionButton} onPress={() => fieldOps.markStopDone.mutate(item.stop)}>
+                          <Text style={styles.smallActionButtonText}>Realizada</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+
+                    {/* Reagendar/cancelar: só reunião e follow up (parada de rota
+                        não tem evento no Google Agenda pra mover). */}
                     {item.kind === 'meeting' && !isViewer && (
-                      <TouchableOpacity
-                        style={[styles.smallActionButton, { backgroundColor: '#f97316' }]}
-                        onPress={() => setSchedulingFor({
-                          client,
-                          type: item.meeting.type ?? 'reuniao',
-                          reschedule: item.meeting,
-                        })}
-                      >
-                        <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Reagendar</Text>
-                      </TouchableOpacity>
+                      <View style={styles.agendaLinkRow}>
+                        <TouchableOpacity
+                          onPress={() => setSchedulingFor({
+                            client,
+                            type: item.meeting.type ?? 'reuniao',
+                            reschedule: item.meeting,
+                          })}
+                          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                        >
+                          <Text style={[styles.agendaLink, { color: '#ea580c' }]}>Reagendar</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.agendaLinkSep}>·</Text>
+                        <TouchableOpacity
+                          onPress={() => confirmCancelMeeting(item.meeting)}
+                          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                        >
+                          <Text style={[styles.agendaLink, { color: '#dc2626' }]}>Cancelar</Text>
+                        </TouchableOpacity>
+                      </View>
                     )}
-                    {item.kind === 'meeting' && !isViewer && (
-                      <TouchableOpacity
-                        style={[styles.smallActionButton, { backgroundColor: '#dc2626' }]}
-                        onPress={() => confirmCancelMeeting(item.meeting)}
-                      >
-                        <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Cancelar</Text>
-                      </TouchableOpacity>
-                    )}
-                    {item.kind === 'route' && (
-                      <TouchableOpacity style={styles.smallActionButton} onPress={() => fieldOps.markStopDone.mutate(item.stop)}>
-                        <Text style={styles.smallActionButtonText}>Realizada</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
+                  </>
                 )}
               </View>
             </View>
@@ -2939,16 +2985,14 @@ function MainApp() {
 
     return (
       <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
-        <View style={styles.panelCard}>
-          <Text style={styles.panelTitle}>Agenda do vendedor</Text>
-          <Text style={styles.panelHint}>
-            Rota planejada, demos e follow-ups em ordem cronologica.
-            {vendorFilterHubspotId !== null
-              ? `\n\nFiltro ativo: ${vendorLabel(vendorFilterHubspotId)} (tire no modal de filtros).`
-              : ''}
+        {/* Cabeçalho enxuto: o parágrafo "rota planejada, demos e follow-ups em
+            ordem cronológica" descrevia o que a tela mostra sozinha. */}
+        <View style={styles.taskHeaderRow}>
+          <Text style={styles.panelTitle}>
+            Agenda{agendaItems.length > 0 ? ` · ${agendaItems.length}` : ''}
           </Text>
-          {/* Exportar agenda em JSON — visivel so pra gestor (mesma regra da
-              aba do Gestor). Exporta apenas os itens da agenda na tela. */}
+          {/* Exportar em JSON — só gestor, mesma regra da aba do Gestor.
+              Exporta o que está na tela, então respeita os filtros ativos. */}
           {canViewGestor && (
             <TouchableOpacity
               style={[styles.agendaExportBtn, exportingAgenda && styles.agendaExportBtnDisabled]}
@@ -2957,10 +3001,38 @@ function MainApp() {
             >
               {exportingAgenda
                 ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={styles.agendaExportBtnText}>📤 Exportar agenda (JSON p/ IA)</Text>}
+                : <Text style={styles.agendaExportBtnText}>📤 Exportar JSON</Text>}
             </TouchableOpacity>
           )}
         </View>
+
+        {vendorFilterHubspotId !== null ? (
+          <Text style={styles.taskVendorHint}>
+            Filtro ativo: {vendorLabel(vendorFilterHubspotId)} — tire no modal de filtros.
+          </Text>
+        ) : null}
+
+        {/* Chips por tipo: contam e filtram num toque. */}
+        {contagemTipo.length > 1 && (
+          <View style={styles.countChipsRow}>
+            {contagemTipo.map(({ tipo, total }) => {
+              const ativo = agendaTypeFilter === tipo;
+              const meta = TIPO_META[tipo];
+              return (
+                <TouchableOpacity
+                  key={tipo}
+                  style={[styles.countChip, ativo && { borderColor: meta.cor, backgroundColor: '#fff' }]}
+                  onPress={() => setAgendaTypeFilter(ativo ? null : tipo)}
+                >
+                  <View style={[styles.countChipDot, { backgroundColor: meta.cor }]} />
+                  <Text style={[styles.countChipText, ativo && { color: '#0f172a' }]}>
+                    {meta.label} {total}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {agendaItems.length === 0 ? (
           <View style={styles.emptyState}>
@@ -6451,16 +6523,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1f5f9',
   },
   secondaryButtonText: { fontSize: 12, fontWeight: '800', color: '#334155' },
-  agendaItem: {
-    flexDirection: 'row',
-    gap: 12,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
   visitCountBox: {
     backgroundColor: '#f0fdf4',
     borderWidth: 1,
@@ -6504,8 +6566,25 @@ const styles = StyleSheet.create({
   agendaWeekday: { fontSize: 10, color: '#94a3b8', fontWeight: '600', textTransform: 'capitalize' },
   agendaTime: { fontSize: 14, fontWeight: '800', color: '#dc2626', marginTop: 2 },
   agendaTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
-  agendaTitleTime: { fontSize: 15, fontWeight: '800', color: '#334155' },
   agendaSubtitle: { fontSize: 13, color: '#64748b', marginTop: 3 },
+  // Linha da timeline: trilho de horário à esquerda + card com barra colorida
+  // pelo tipo do compromisso (demo / follow up / rota).
+  agendaRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  agendaTimeRail: { width: 52, alignItems: 'flex-end', paddingTop: 12 },
+  agendaTimeText: { fontSize: 14, fontWeight: '800', color: '#0f172a' },
+  agendaDurText: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
+  agendaCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderLeftWidth: 4,
+  },
+  agendaLinkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
+  agendaLink: { fontSize: 12, fontWeight: '800' },
+  agendaLinkSep: { fontSize: 12, color: '#cbd5e1' },
   agendaMeta: { fontSize: 12, color: '#64748b', marginTop: 2 },
   // Cabecalho de dia da timeline — vermelho, caixa alta, o marcador visual
   // que separa "HOJE" de "AMANHÃ" sem o vendedor ter que ler data por item.
@@ -6560,8 +6639,10 @@ const styles = StyleSheet.create({
   taskTipo: { fontSize: 13, fontWeight: '600', color: '#334155', marginTop: 2 },
   taskActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   // Chips de urgência (contam e filtram) + cabeçalho de cada seção.
-  taskChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  taskChip: {
+  // Chips de contagem+filtro — compartilhados por Tarefas (severidade) e
+  // Agenda (tipo de compromisso).
+  countChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  countChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -6572,8 +6653,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'transparent',
   },
-  taskChipDot: { width: 8, height: 8, borderRadius: 4 },
-  taskChipText: { fontSize: 13, fontWeight: '700', color: '#475569' },
+  countChipDot: { width: 8, height: 8, borderRadius: 4 },
+  countChipText: { fontSize: 13, fontWeight: '700', color: '#475569' },
   taskSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
