@@ -8,20 +8,22 @@
 // recorte de "cliente de verdade", nao o status local do app. Deal -> cliente
 // casa por clients.id_hubspot.
 //
-// Fluxo (1 execucao/dia):
+// Fluxo (1 execucao por semana):
 //   1) Uma busca por etapa (dealstage EQ), paginada de 100 em 100. Filtrar na
 //      QUERY (e nao no codigo) e' o que segura o custo: so' vem quem interessa.
 //   2) Grava em lotes de 500 via RPC apply_hubspot_uso (1 chamada por lote, em
 //      vez de 1 UPDATE por cliente).
 //
-// Custo com ~3 mil clientes nas etapas: ~30 chamadas ao HubSpot + ~6 ao banco.
+// Custo com ~3 mil clientes nas etapas: ~30 chamadas ao HubSpot + ~6 ao banco,
+// espalhadas em ~30s (1 req/s). O portal tem varios outros fluxos disputando o
+// limite por segundo — ver MIN_INTERVAL_MS e o retry de 429 no hsFetch.
 // Teto de seguranca: a Search API do HubSpot devolve no maximo 10k resultados
 // por query — por isso a busca e' POR ETAPA (30k de folga), nao uma so.
 //
-// Roda 1x ao dia, agendada pelo Cron do Supabase:
+// Roda todo DOMINGO, agendada pelo Cron do Supabase:
 //   Dashboard -> Integrations -> Cron -> Create job
-//     Name:     hubspot-usage-sync-daily
-//     Schedule: 0 9 * * *            (06:00 BRT = 09:00 UTC, todo dia)
+//     Name:     hubspot-usage-sync-semanal
+//     Schedule: 0 9 * * 0            (domingo, 06:00 BRT = 09:00 UTC)
 //     Type:     Supabase Edge Function -> hubspot-usage-sync
 //   O Cron manda a service role key no Authorization, entao o verify_jwt
 //   continua LIGADO (a function nao fica aberta pra internet).
@@ -55,9 +57,19 @@ const STAGES = [
 const SEARCH_PAGE_SIZE = 100;
 // A Search API do HubSpot corta em 10k resultados por query (100 paginas).
 const MAX_PAGES_PER_STAGE = 100;
-// A Search API tem limite proprio (~4 req/s por portal), bem mais apertado que
-// o resto da API. As buscas ja sao sequenciais; esta pausa da a folga.
-const SEARCH_PAUSE_MS = 250;
+
+// ===== Convivencia com os outros fluxos do portal =====
+// O limite por SEGUNDO e' do portal inteiro, nao desta function: n8n, RPA e
+// workflows disputam o mesmo balde. Como este sync roda 1x por semana e nao
+// tem ninguem esperando, ele anda devagar de proposito — 1 req/s ocupa ~1 dos
+// ~4 slots/s da Search API e deixa o resto livre.
+const MIN_INTERVAL_MS = 1_000;
+// 429 (secondly/daily limit) e 5xx: espera o Retry-After do HubSpot e tenta de
+// novo. Sem isso, uma rajada de outro fluxo derrubaria a execucao inteira.
+const MAX_RETRIES = 5;
+const BACKOFF_BASE_MS = 2_000;
+const BACKOFF_MAX_MS = 60_000;
+
 // Linhas por chamada da RPC de gravacao.
 const DB_BATCH_SIZE = 500;
 
@@ -77,34 +89,75 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type HsResult = { ok: boolean; status: number; body: any };
 
+// Relogio do rate limit: garante MIN_INTERVAL_MS entre DUAS chamadas quaisquer
+// desta execucao, independente de qual etapa/pagina disparou.
+let proximaChamadaEm = 0;
+async function aguardarVez() {
+  const espera = proximaChamadaEm - Date.now();
+  if (espera > 0) await sleep(espera);
+  proximaChamadaEm = Date.now() + MIN_INTERVAL_MS;
+}
+
+// Quanto esperar depois de um 429/5xx. O HubSpot manda Retry-After (segundos)
+// no 429 — obedecer isso e' melhor que qualquer chute nosso.
+function esperaDoRetry(res: Response | null, tentativa: number): number {
+  const header = res?.headers.get('Retry-After');
+  const segundos = header ? Number(header) : NaN;
+  if (Number.isFinite(segundos) && segundos > 0) return Math.min(segundos * 1000, BACKOFF_MAX_MS);
+  return Math.min(BACKOFF_BASE_MS * 2 ** tentativa, BACKOFF_MAX_MS);
+}
+
+// Contadores da execucao, pro resumo dizer se o portal esta apertado.
+const stats = { chamadas: 0, retries429: 0, retries5xx: 0, esperaMs: 0 };
+
 async function hsFetch(token: string, path: string, payload: unknown): Promise<HsResult> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${HS}${path}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-      signal: ctrl.signal,
-    });
+  for (let tentativa = 0; ; tentativa++) {
+    await aguardarVez();
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+    let res: Response | null = null;
     let body: any = null;
+    let status = 0;
+
     try {
-      body = await res.json();
-    } catch {
-      body = null;
+      res = await fetch(`${HS}${path}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: ctrl.signal,
+      });
+      stats.chamadas++;
+      status = res.status;
+      try {
+        body = await res.json();
+      } catch {
+        body = null;
+      }
+      if (res.ok) return { ok: true, status, body };
+    } catch (err) {
+      console.warn('[usage-sync] HubSpot fetch falhou', path, err);
+    } finally {
+      clearTimeout(timer);
     }
-    if (!res.ok) {
-      console.warn('[usage-sync] HubSpot', path, '->', res.status, JSON.stringify(body)?.slice(0, 400));
+
+    // 429 = limite (por segundo ou diario). 5xx/rede = instabilidade. Nos dois
+    // casos vale re-tentar; 4xx (400/401/403) e' erro nosso, nao adianta.
+    const vaiTentarDeNovo = status === 429 || status >= 500 || status === 0;
+    if (!vaiTentarDeNovo || tentativa >= MAX_RETRIES) {
+      console.warn('[usage-sync] HubSpot', path, '->', status, JSON.stringify(body)?.slice(0, 400));
+      return { ok: false, status, body };
     }
-    return { ok: res.ok, status: res.status, body };
-  } catch (err) {
-    console.warn('[usage-sync] HubSpot fetch falhou', path, err);
-    return { ok: false, status: 0, body: null };
-  } finally {
-    clearTimeout(timer);
+
+    const espera = esperaDoRetry(res, tentativa);
+    if (status === 429) stats.retries429++;
+    else stats.retries5xx++;
+    stats.esperaMs += espera;
+    console.warn(`[usage-sync] ${status} em ${path} — esperando ${espera}ms (tentativa ${tentativa + 1}/${MAX_RETRIES})`);
+    await sleep(espera);
   }
 }
 
@@ -146,7 +199,8 @@ async function buscarEtapa(
   let paginas = 0;
 
   for (let page = 0; page < MAX_PAGES_PER_STAGE; page++) {
-    if (paginas > 0) await sleep(SEARCH_PAUSE_MS);
+    // O ritmo (1 req/s) e o retry de 429 vivem no hsFetch — aqui e' so' a
+    // paginacao, sequencial de proposito.
     const res = await hsFetch(token, '/crm/v3/objects/deals/search', {
       filterGroups: [{ filters: [{ propertyName: 'dealstage', operator: 'EQ', value: stage.id }] }],
       properties: [PROP_ULTIMA_COMANDA, PROP_CANCELAMENTO],
@@ -219,11 +273,9 @@ Deno.serve(async (req: Request) => {
     const todos: DealUso[] = [];
     const porEtapa: Record<string, unknown>[] = [];
     const erros: string[] = [];
-    let chamadasHubspot = 0;
 
     for (const stage of STAGES) {
       const { deals, paginas, truncado, erro } = await buscarEtapa(token, stage);
-      chamadasHubspot += paginas;
       if (erro) erros.push(erro);
       if (truncado) erros.push(`etapa "${stage.label}" passou de 10k deals — a busca foi truncada`);
       todos.push(...deals);
@@ -243,8 +295,13 @@ Deno.serve(async (req: Request) => {
       clientes_atualizados: atualizados,
       // Deals sem pin no app (nunca cadastrados por aqui) — normal.
       deals_sem_pin_no_app: unicos.length - atualizados,
-      chamadas_hubspot: chamadasHubspot,
+      chamadas_hubspot: stats.chamadas,
       chamadas_banco: Math.ceil(unicos.length / DB_BATCH_SIZE),
+      // Se retries_429 vier alto, o portal estava apertado na hora — vale
+      // mover o horario do cron pra longe dos outros fluxos.
+      retries_429: stats.retries429,
+      retries_5xx: stats.retries5xx,
+      espera_por_limite_ms: stats.esperaMs,
       duracao_ms: Date.now() - inicio,
       etapas: porEtapa,
       ...(erros.length ? { erros } : {}),

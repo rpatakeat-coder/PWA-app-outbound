@@ -1,5 +1,5 @@
 -- ============================================================================
--- clients: dados de USO do produto puxados do HubSpot (1x ao dia).
+-- clients: dados de USO do produto puxados do HubSpot (1x por semana).
 --
 -- Quem e' "cliente" aqui NAO vem do status local: vem das pipelines de
 -- Sucesso e Onboarding no HubSpot (menos as etapas excluidas). A edge function
@@ -20,10 +20,10 @@ alter table public.clients
   add column if not exists hs_uso_sincronizado_em timestamptz;
 
 comment on column public.clients.hs_ultima_comanda_em is
-  'HubSpot data_da_ultima_comanda_emitida (deal). Preenchido pela edge hubspot-usage-sync 1x/dia. NULL = nunca emitiu comanda ou o deal nao esta nas pipelines de Sucesso/Onboarding.';
+  'HubSpot data_da_ultima_comanda_emitida (deal). Preenchido pela edge hubspot-usage-sync todo domingo. NULL = nunca emitiu comanda ou o deal nao esta nas pipelines de Sucesso/Onboarding.';
 
 comment on column public.clients.hs_cancelamento_solicitado_em is
-  'HubSpot data_solicitacao_cancelamento (deal). Preenchido pela edge hubspot-usage-sync 1x/dia.';
+  'HubSpot data_solicitacao_cancelamento (deal). Preenchido pela edge hubspot-usage-sync todo domingo.';
 
 comment on column public.clients.hs_uso_sincronizado_em is
   'Quando a edge hubspot-usage-sync leu este cliente pela ultima vez. Distingue "sem comanda" (colunas NULL, mas sincronizado) de "nunca sincronizado" (esta coluna NULL).';

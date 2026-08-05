@@ -4864,7 +4864,7 @@ function ClientBottomSheet({
   const createdAt = formatDate(client.created_at);
   const updatedAt = formatDate(client.updated_at);
 
-  // ── Uso do produto (HubSpot, 1x/dia) ──────────────────────────────────────
+  // ── Uso do produto (HubSpot, 1x por semana) ───────────────────────────────
   // Só existe pra quem o sync alcança: os deals nas etapas de Acompanhamento /
   // Saudável (Onboarding e Sucesso). Esse é o recorte de "cliente de verdade",
   // e é o que responde em campo "é cliente, mas será que usa?".

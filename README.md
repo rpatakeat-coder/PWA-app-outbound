@@ -149,7 +149,7 @@ npx eas-cli build --profile production --platform android   # ou ios
 |---|---|
 | `hubspot-sync` | Saída app → HubSpot: `change_stage`, `update`, `create_pin`, `get_stages`, **`create_note`/`update_note`** (notas do lead e follow up → Observação), **`create_task`** (check-in de visita → Task), **`create_meeting`/`update_meeting`** (demo → Meeting). `update_task` só atende os follow ups criados antes da mudança de regra. |
 | `hubspot-lead-webhook` / `-latlong` | Entrada: leads do HubSpot/RPA → upsert em `clients` (com geocoding). |
-| `hubspot-usage-sync` | Entrada (1x/dia, Cron do Supabase): lê `data_da_ultima_comanda_emitida` e `data_solicitacao_cancelamento` dos deals nas etapas de Acompanhamento/Saudável (Onboarding e Sucesso) → grava em `clients`. |
+| `hubspot-usage-sync` | Entrada (semanal — domingo, Cron do Supabase): lê `data_da_ultima_comanda_emitida` e `data_solicitacao_cancelamento` dos deals nas etapas de Acompanhamento/Saudável (Onboarding e Sucesso) → grava em `clients`. |
 | `export-report` | Exporta TUDO do período em JSON (painel do gestor) → Storage → signed URL. |
 | `export-agenda` | Exporta a agenda (montada no app) em JSON → Storage → signed URL. |
 | `geocode` | Geocoding/reparo de coordenadas. |
@@ -194,10 +194,10 @@ visita"):
 
 ---
 
-## 📊 Uso do produto (HubSpot → app, 1x/dia)
+## 📊 Uso do produto (HubSpot → app, semanal)
 
 Responde em campo "é cliente, mas será que usa?". A edge `hubspot-usage-sync`
-roda diariamente (Cron do Supabase) e grava em `clients`:
+roda **todo domingo** (Cron do Supabase, `0 9 * * 0`) e grava em `clients`:
 
 | HubSpot (deal) | `clients` |
 |---|---|
@@ -215,7 +215,14 @@ roda diariamente (Cron do Supabase) e grava em `clients`:
 
 Uma busca por etapa (`dealstage EQ`, paginada de 100 em 100) → gravação em
 lotes de 500 pela RPC `apply_hubspot_uso`. Com ~3 mil clientes: **~30 chamadas
-ao HubSpot e ~6 ao banco por dia**.
+ao HubSpot e ~6 ao banco, por semana**.
+
+O portal tem outros fluxos (n8n, RPA) disputando o mesmo limite por segundo,
+então o sync anda devagar de propósito: **1 requisição por segundo**
+(`MIN_INTERVAL_MS`), ocupando ~1 dos ~4 slots/s da Search API. Em 429 ou 5xx
+ele respeita o `Retry-After` do HubSpot e tenta de novo (até 5 vezes, backoff
+exponencial). O retorno traz `retries_429` e `espera_por_limite_ms` — se
+subirem, vale mover o horário do cron para longe dos outros fluxos.
 
 No app, o bottom sheet do pin mostra a última comanda com semáforo (verde ≤ 7
 dias, âmbar 8–30, vermelho > 30 ou nenhuma), o pedido de cancelamento quando
