@@ -73,7 +73,14 @@ begin
 end;
 $$;
 
+-- ATENCAO ao revoke do anon: o Supabase tem ALTER DEFAULT PRIVILEGES no schema
+-- public que da EXECUTE pra anon/authenticated em TODA function nova. Esse
+-- grant e' DIRETO no role, entao "revoke from public" NAO o remove — sem a
+-- linha do anon, qualquer um com a anon key (que e' publica, vai dentro do
+-- app) conseguiria chamar esta function SECURITY DEFINER e sobrescrever as
+-- colunas de uso de qualquer cliente.
 revoke all on function public.apply_hubspot_uso(jsonb) from public;
+revoke all on function public.apply_hubspot_uso(jsonb) from anon;
 revoke all on function public.apply_hubspot_uso(jsonb) from authenticated;
 grant execute on function public.apply_hubspot_uso(jsonb) to service_role;
 
