@@ -164,6 +164,17 @@ supabase functions deploy hubspot-sync
 Secrets usados pelas functions: `HUBSPOT_TOKEN`, `HUBSPOT_WEBHOOK_SECRET`,
 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`.
 
+`HUBSPOT_TOKEN` é o token do private app do HubSpot e só é lido por
+`hubspot-sync` e `hubspot-usage-sync` — trocar o private app significa trocar
+esse secret (mais a credencial equivalente no n8n). `HUBSPOT_WEBHOOK_SECRET` é
+outra coisa: segredo compartilhado que valida quem **chama** os webhooks de
+entrada, não muda quando o app do HubSpot muda.
+
+`HUBSPOT_TOKEN_USAGE` (opcional) dá à `hubspot-usage-sync` um token próprio. O
+limite da Search API é de **4 req/s por token**, então um private app dedicado
+tira a varredura semanal da disputa com o n8n/RPA. Sem o secret, ela usa o
+`HUBSPOT_TOKEN` normalmente.
+
 ---
 
 ## 🔗 Integração Agenda → HubSpot

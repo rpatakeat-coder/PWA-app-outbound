@@ -31,8 +31,13 @@
 // Deploy:
 //   supabase functions deploy hubspot-usage-sync
 //
-// Secrets (os mesmos da hubspot-sync — ja configurados no projeto):
-//   HUBSPOT_TOKEN, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+// Secrets:
+//   HUBSPOT_TOKEN_USAGE       — token do private app DEDICADO a este sync. O
+//                               limite da Search API (4 req/s) e' por TOKEN,
+//                               entao um app so' pra ca nao disputa segundo a
+//                               segundo com o n8n/RPA/app. OPCIONAL.
+//   HUBSPOT_TOKEN             — fallback, o mesmo da hubspot-sync.
+//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY — automaticos da plataforma.
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -265,8 +270,12 @@ Deno.serve(async (req: Request) => {
     return json(405, { error: 'Method Not Allowed' });
   }
 
-  const token = Deno.env.get('HUBSPOT_TOKEN');
-  if (!token) return json(503, { error: 'HUBSPOT_TOKEN not configured' });
+  // Token PROPRIO deste sync quando existir. O limite da Search API (4 req/s)
+  // e' por TOKEN, entao um private app so' pra ca isola esta varredura dos
+  // outros fluxos do portal. Sem o secret, cai no token geral e funciona igual.
+  const token = Deno.env.get('HUBSPOT_TOKEN_USAGE') ?? Deno.env.get('HUBSPOT_TOKEN');
+  if (!token) return json(503, { error: 'HUBSPOT_TOKEN_USAGE/HUBSPOT_TOKEN not configured' });
+  const tokenProprio = !!Deno.env.get('HUBSPOT_TOKEN_USAGE');
 
   const inicio = Date.now();
   try {
@@ -295,6 +304,9 @@ Deno.serve(async (req: Request) => {
       clientes_atualizados: atualizados,
       // Deals sem pin no app (nunca cadastrados por aqui) — normal.
       deals_sem_pin_no_app: unicos.length - atualizados,
+      // false = rodando no token geral (compartilha os 4 req/s da Search API
+      // com os outros fluxos). true = private app dedicado.
+      token_dedicado: tokenProprio,
       chamadas_hubspot: stats.chamadas,
       chamadas_banco: Math.ceil(unicos.length / DB_BATCH_SIZE),
       // Se retries_429 vier alto, o portal estava apertado na hora — vale
