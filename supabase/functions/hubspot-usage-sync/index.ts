@@ -53,10 +53,16 @@ const PROP_CANCELAMENTO = 'data_solicitacao_cancelamento';
 // Etapas que definem "cliente" pra este sync. IDs do HubSpot — manter
 // sincronizado com o CRM (mesma convencao dos ids em hubspot-sync).
 // Pipelines: Onboarding = 87106112, Sucesso = 87367429.
+//
+// Churn entra pra que o EX-cliente mostre a data de cancelamento no pin. Ele
+// sozinho e' maior que as outras tres somadas (~2,7k deals = 27 paginas), o
+// que ainda da ~48 chamadas por SEMANA — irrelevante perto do teto diario da
+// conta, e o ritmo de 1 req/s nao muda.
 const STAGES = [
   { id: '175135768', label: 'Acompanhamento (Onboarding)' },
   { id: '162508353', label: 'Acompanhamento (Sucesso)' },
   { id: '171389297', label: 'Saudável (Sucesso)' },
+  { id: '1122729590', label: 'Churn (Sucesso)' },
 ];
 
 // Teto por pagina na Search API.

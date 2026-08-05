@@ -224,10 +224,15 @@ UTC) e grava em `clients`:
 | Acompanhamento | Onboarding (`87106112`) | `175135768` |
 | Acompanhamento | Sucesso (`87367429`) | `162508353` |
 | Saudável | Sucesso (`87367429`) | `171389297` |
+| Churn | Sucesso (`87367429`) | `1122729590` |
+
+Churn entra para que o **ex-cliente** mostre a data de cancelamento no pin.
+Sozinho é maior que as outras três somadas (~2,7 mil deals), o que leva o total
+para ~48 chamadas **por semana**.
 
 Uma busca por etapa (`dealstage EQ`, paginada de 100 em 100) → gravação em
-lotes de 500 pela RPC `apply_hubspot_uso`. Com ~3 mil clientes: **~30 chamadas
-ao HubSpot e ~6 ao banco, por semana**.
+lotes de 500 pela RPC `apply_hubspot_uso`. Com ~4,7 mil deals nas quatro
+etapas: **~48 chamadas ao HubSpot e ~10 ao banco, por semana**.
 
 O portal tem outros fluxos (n8n, RPA) disputando o mesmo limite por segundo,
 então o sync anda devagar de propósito: **1 requisição por segundo**
