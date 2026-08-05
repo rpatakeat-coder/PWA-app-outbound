@@ -4929,9 +4929,24 @@ function ClientBottomSheet({
       ? `🧾 Última comanda: ${label(comanda)} • ${haQuanto(dias!)}`
       : '🧾 Nenhuma comanda emitida';
 
+    // Quantas comandas já saíram. A data diz QUANDO parou, o total diz QUANTO
+    // usou — é o que separa "nunca engrenou" de "usava muito e parou".
+    // Zero é omitido: nesse caso a própria linha de comanda já diz "nenhuma".
+    const qtd = client.hs_qtd_comandas;
+    const linhaQtd =
+      qtd && qtd > 0
+        ? `${qtd.toLocaleString('pt-BR')} ${qtd === 1 ? 'comanda emitida' : 'comandas emitidas'}`
+        : null;
+
     // Ex-cliente: a manchete é QUANDO pediu pra sair, e a última comanda vira
-    // o detalhe (até quando usaram). Cliente ativo com pedido antigo: manchete
+    // detalhe (até quando usaram). Cliente ativo com pedido antigo: manchete
     // continua sendo o uso, e o pedido desce pra aviso.
+    const linhas = [
+      saiu ? linhaComanda : null,
+      linhaQtd,
+      !saiu && cancelamento ? `⚠️ Pediu cancelamento em ${label(cancelamento)}` : null,
+    ].filter(Boolean) as string[];
+
     return {
       tom,
       titulo: saiu
@@ -4939,11 +4954,7 @@ function ClientBottomSheet({
           ? `⚠️ Cancelamento solicitado em ${label(cancelamento)}`
           : '⚠️ Ex-cliente (Churn no HubSpot)'
         : linhaComanda,
-      detalhe: saiu
-        ? linhaComanda
-        : cancelamento
-        ? `⚠️ Pediu cancelamento em ${label(cancelamento)}`
-        : null,
+      linhas,
       // Sync parado é visível: o dado some de "hoje" e vira "há N dias".
       rodape: sincLabel ? `Dados do HubSpot • atualizado ${sincLabel}` : null,
     };
@@ -4952,6 +4963,7 @@ function ClientBottomSheet({
     client.hs_ultima_comanda_em,
     client.hs_cancelamento_solicitado_em,
     client.hs_situacao,
+    client.hs_qtd_comandas,
   ]);
 
   // Gesture pra arrastar a aba pra baixo e fechar.
@@ -5039,9 +5051,11 @@ function ClientBottomSheet({
                 ]}
               >
                 <Text style={[styles.usoTitulo, { color: uso.tom.fg }]}>{uso.titulo}</Text>
-                {uso.detalhe && (
-                  <Text style={[styles.usoDetalhe, { color: uso.tom.sub }]}>{uso.detalhe}</Text>
-                )}
+                {uso.linhas.map((linha) => (
+                  <Text key={linha} style={[styles.usoDetalhe, { color: uso.tom.sub }]}>
+                    {linha}
+                  </Text>
+                ))}
                 {uso.rodape && (
                   <Text style={[styles.usoRodape, { color: uso.tom.sub }]}>{uso.rodape}</Text>
                 )}
