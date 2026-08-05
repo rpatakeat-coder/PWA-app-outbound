@@ -21,7 +21,7 @@ sincronizado com o **HubSpot** (CRM) e o **Supabase** (banco + backend).
 - **Tarefas** — cobranças automáticas (ex.: *Agendar Demo* com escalonamento D2 → D5).
 - **Cadastro / edição de leads** — com geocoding e sincronização no HubSpot.
 - **Check-in de visita** — registro de visita com validação de distância; cada
-  visita (primeira ou re-marcada) cria uma **Task** no deal do HubSpot.
+  visita (primeira ou re-marcada) cria uma **Task concluída** no deal do HubSpot.
 - **Painel do Gestor** — métricas por vendedor, drill-down e exportação completa (JSON).
 - **Meu desempenho** — métricas do próprio vendedor.
 
@@ -182,9 +182,10 @@ Ao **agendar** na agenda do app:
 Ao fazer **check-in de visita** (botões "Marcar como visitado" / "Re-marcar
 visita"):
 
-- Cria uma **Task** no deal — assunto `Visita - {lead}`, **pendente**, vencendo
-  na hora do check-in, dona do vendedor, com nº da visita no corpo. Uma por
-  check-in; o app não guarda o id (quem conclui é o vendedor, no HubSpot).
+- Cria uma **Task** no deal — assunto `Visita - {lead}`, já **concluída**
+  (`concluida: true`), datada na hora do check-in, dona do vendedor, com nº da
+  visita no corpo. É registro de atividade, não pendência: não entra na fila do
+  vendedor. Uma por check-in; o app não guarda o id (não há update/cancel).
 - Vale inclusive para **cliente/churn** — é atividade na timeline, não funil. O
   bloqueio de `isLead` continua valendo só para etapa e webhook.
 

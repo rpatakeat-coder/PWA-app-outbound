@@ -388,9 +388,9 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
       const raw = (data ?? {}) as Record<string, unknown>;
       const dealname = client.empresa ?? client.nome;
 
-      // Toda visita vira uma Task pendente no deal — os dois botoes ("Marcar
-      // como visitado" e "Re-marcar visita") caem aqui, entao cada check-in
-      // gera a sua. Diferente do webhook/etapa abaixo, vale TAMBEM pra
+      // Toda visita vira uma Task JA CONCLUIDA no deal — os dois botoes
+      // ("Marcar como visitado" e "Re-marcar visita") caem aqui, entao cada
+      // check-in gera a sua. Diferente do webhook/etapa abaixo, vale TAMBEM pra
       // CLIENTE/CHURN: aqui so' criamos uma atividade, o funil fica intocado.
       //
       // AWAITADO de proposito: o bottom sheet fecha logo apos o check-in e uma

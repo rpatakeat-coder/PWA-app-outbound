@@ -20,8 +20,9 @@
 //                  Usado pelas notas do lead E pelo follow up agendado.
 //   update_note  — reescreve o corpo da nota (reagendar o follow up) ou marca
 //                  como cancelada (cancelar:true).
-//   create_task  — Task no deal. Hoje quem usa e' o check-in de visita (uma
-//                  Task pendente por visita, vencendo na hora do check-in).
+//   create_task  — Task no deal. Hoje quem usa e' o check-in de visita: uma
+//                  Task por visita, ja CONCLUIDA (concluida:true), datada na
+//                  hora do check-in. Sem a flag, nasce pendente.
 //   update_task  — reagendar (due) ou concluir. So' os follow ups da regra
 //                  ANTIGA passam por aqui, via fallback do update_note (eles
 //                  tem id de Task gravado em hs_engagement_id).
@@ -502,7 +503,7 @@ async function handleUpdateNote(token: string, body: Record<string, unknown>) {
 }
 
 // ---- Task no deal ----
-// Criada pelo check-in de visita (uma por visita, pendente, vencendo na hora
+// Criada pelo check-in de visita (uma por visita, ja concluida, datada na hora
 // do check-in). Follow up NAO usa mais: virou Observacao.
 //
 // O update so' e' exercido pelos follow ups da regra antiga — o handleUpdateNote
@@ -516,7 +517,9 @@ async function handleCreateTask(token: string, body: Record<string, unknown>) {
     hs_timestamp: due,
     hs_task_subject: trimOrNull(body.titulo) ?? 'Tarefa',
     hs_task_body: richBody(body.descricao),
-    hs_task_status: 'NOT_STARTED',
+    // concluida:true nasce fechada — o caso do check-in, que registra algo que
+    // JA aconteceu e nao pode entrar na fila de pendencias do vendedor.
+    hs_task_status: body.concluida === true ? 'COMPLETED' : 'NOT_STARTED',
     hs_task_type: 'TODO',
     hs_task_priority: 'MEDIUM',
   };

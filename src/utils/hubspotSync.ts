@@ -183,9 +183,9 @@ export async function rescheduleAgendaEngagement(input: {
 // Check-in de visita -> Task no HubSpot.
 //
 // Vale pros DOIS botoes ("Marcar como visitado" e "Re-marcar visita") — cada
-// check-in gera a sua Task, pendente, vencendo na hora do check-in. Nao tem
-// update/cancel: a visita e' fato consumado, quem fecha a task e' o vendedor
-// no HubSpot; por isso o id nao e' guardado no banco.
+// check-in gera a sua Task, ja CONCLUIDA e datada na hora do check-in: a visita
+// e' fato consumado, entao a task e' registro de atividade, nao pendencia (nao
+// entra na fila do vendedor). Sem update/cancel — por isso o id nao vai pro banco.
 // ============================================================================
 export async function createVisitTask(input: {
   id_hubspot: string;
@@ -206,6 +206,7 @@ export async function createVisitTask(input: {
     descricao: linhas.join('\n'),
     due_at: input.visited_at,
     owner_id: input.owner_id,
+    concluida: true,
   });
   return (data?.engagement_id as string | undefined) ?? null;
 }
