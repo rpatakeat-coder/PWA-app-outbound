@@ -46,6 +46,13 @@ export interface Client {
   // 'YYYY-MM-DD' — sao colunas date no banco, sem hora e sem fuso.
   hs_ultima_comanda_em: string | null;
   hs_cancelamento_solicitado_em: string | null;
+  // Etapa do HubSpot de onde o dado veio, e a classificação dela pela edge.
+  // 'churn' = ex-cliente DE VERDADE (saiu no CRM). Só a data de cancelamento
+  // não serve pra isso: ela registra que houve um PEDIDO, e tem cliente ativo
+  // com pedido de meses atrás que foi retido e segue emitindo comanda.
+  // Nada a ver com clients.status ('churn' de lá é marcação manual do app).
+  hs_etapa_uso: string | null;
+  hs_situacao: 'ativo' | 'churn' | null;
   // Quando o sync passou por este cliente. NULL = fora do recorte do sync (ou
   // ele ainda nao rodou); distingue "sem comanda" de "sem dado".
   hs_uso_sincronizado_em: string | null;

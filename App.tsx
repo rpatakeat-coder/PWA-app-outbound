@@ -4897,11 +4897,16 @@ function ClientBottomSheet({
     const AMBAR = { bg: '#fffbeb', border: '#fde68a', fg: '#b45309', sub: '#d97706' };
     const VERDE = { bg: '#f0fdf4', border: '#bbf7d0', fg: '#15803d', sub: '#16a34a' };
 
-    // Pedido de cancelamento manda na cor: um ex-cliente que emitiu comanda
-    // ontem não pode aparecer em verde só pela recência.
-    // Sem cancelamento, a cor é a recência da última comanda — e nenhuma
-    // comanda é o pior caso, não ausência de informação.
-    const tom = cancelamento
+    // Ex-cliente é quem está na etapa de Churn no HubSpot — NÃO quem tem data
+    // de cancelamento. A data registra que houve um pedido: há clientes com
+    // pedido de meses atrás que foram retidos e emitem comanda até hoje (56 na
+    // primeira sincronização, o mais antigo de janeiro). Tratá-los como saída
+    // pintaria de vermelho cliente saudável.
+    const saiu = client.hs_situacao === 'churn';
+
+    // Fora do churn, a cor é a recência da última comanda — e nenhuma comanda
+    // é o pior caso, não ausência de informação.
+    const tom = saiu
       ? VERMELHO
       : dias === null || dias > 30
       ? VERMELHO
@@ -4924,14 +4929,21 @@ function ClientBottomSheet({
       ? `🧾 Última comanda: ${label(comanda)} • ${haQuanto(dias!)}`
       : '🧾 Nenhuma comanda emitida';
 
-    // Ex-cliente: o que o vendedor precisa ler primeiro é QUANDO pediram pra
-    // sair — a última comanda vira o detalhe (mostra até quando usaram).
+    // Ex-cliente: a manchete é QUANDO pediu pra sair, e a última comanda vira
+    // o detalhe (até quando usaram). Cliente ativo com pedido antigo: manchete
+    // continua sendo o uso, e o pedido desce pra aviso.
     return {
       tom,
-      titulo: cancelamento
-        ? `⚠️ Cancelamento solicitado em ${label(cancelamento)}`
+      titulo: saiu
+        ? cancelamento
+          ? `⚠️ Cancelamento solicitado em ${label(cancelamento)}`
+          : '⚠️ Ex-cliente (Churn no HubSpot)'
         : linhaComanda,
-      detalhe: cancelamento ? linhaComanda : null,
+      detalhe: saiu
+        ? linhaComanda
+        : cancelamento
+        ? `⚠️ Pediu cancelamento em ${label(cancelamento)}`
+        : null,
       // Sync parado é visível: o dado some de "hoje" e vira "há N dias".
       rodape: sincLabel ? `Dados do HubSpot • atualizado ${sincLabel}` : null,
     };
@@ -4939,6 +4951,7 @@ function ClientBottomSheet({
     client.hs_uso_sincronizado_em,
     client.hs_ultima_comanda_em,
     client.hs_cancelamento_solicitado_em,
+    client.hs_situacao,
   ]);
 
   // Gesture pra arrastar a aba pra baixo e fechar.

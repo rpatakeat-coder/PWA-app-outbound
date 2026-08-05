@@ -215,7 +215,15 @@ UTC) e grava em `clients`:
 |---|---|
 | `data_da_ultima_comanda_emitida` | `hs_ultima_comanda_em` (date) |
 | `data_solicitacao_cancelamento` | `hs_cancelamento_solicitado_em` (date) |
+| etapa de onde veio | `hs_etapa_uso` (rótulo) + `hs_situacao` (`ativo`/`churn`) |
 | — | `hs_uso_sincronizado_em` (quando o sync passou) |
+
+> **Ex-cliente é `hs_situacao = 'churn'`, não "tem data de cancelamento".** A
+> data registra que houve um *pedido*: na primeira sincronização, 56 clientes em
+> etapa ativa tinham pedido de cancelamento (o mais antigo de 05/01/2026) — gente
+> retida, emitindo comanda até hoje. Quem classifica é a edge, pela flag `churn`
+> na constante `STAGES`; o app só lê `hs_situacao`. Também não confundir com
+> `clients.status = 'churn'`, que é marcação manual e não acompanha o HubSpot.
 
 **Quem é "cliente" aqui não é o status local** — é estar numa destas etapas:
 

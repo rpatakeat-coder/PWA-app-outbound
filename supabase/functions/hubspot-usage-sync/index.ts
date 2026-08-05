@@ -58,11 +58,16 @@ const PROP_CANCELAMENTO = 'data_solicitacao_cancelamento';
 // sozinho e' maior que as outras tres somadas (~2,7k deals = 27 paginas), o
 // que ainda da ~48 chamadas por SEMANA — irrelevante perto do teto diario da
 // conta, e o ritmo de 1 req/s nao muda.
+//
+// churn:true marca as etapas de SAIDA. Quem classifica e' aqui, nao o app: a
+// data de cancelamento sozinha nao serve pra isso, porque ela registra que
+// HOUVE um pedido, nao que o cliente saiu (existem clientes em etapa ativa com
+// pedido de meses atras, retidos, emitindo comanda ate hoje).
 const STAGES = [
-  { id: '175135768', label: 'Acompanhamento (Onboarding)' },
-  { id: '162508353', label: 'Acompanhamento (Sucesso)' },
-  { id: '171389297', label: 'Saudável (Sucesso)' },
-  { id: '1122729590', label: 'Churn (Sucesso)' },
+  { id: '175135768', label: 'Acompanhamento (Onboarding)', churn: false },
+  { id: '162508353', label: 'Acompanhamento (Sucesso)', churn: false },
+  { id: '171389297', label: 'Saudável (Sucesso)', churn: false },
+  { id: '1122729590', label: 'Churn (Sucesso)', churn: true },
 ];
 
 // Teto por pagina na Search API.
@@ -198,13 +203,15 @@ type DealUso = {
   id_hubspot: string;
   ultima_comanda: string | null;
   cancelamento: string | null;
+  etapa: string;                    // rotulo cru, pra depurar sem abrir o CRM
+  situacao: 'ativo' | 'churn';      // o que o app consome
 };
 
 // Todos os deals de UMA etapa, paginado. O filtro vai na query — o HubSpot so'
 // devolve quem esta na etapa, entao nao ha descarte no cliente.
 async function buscarEtapa(
   token: string,
-  stage: { id: string; label: string },
+  stage: { id: string; label: string; churn: boolean },
 ): Promise<{ deals: DealUso[]; paginas: number; truncado: boolean; erro?: string }> {
   const deals: DealUso[] = [];
   let after: string | undefined;
@@ -240,6 +247,8 @@ async function buscarEtapa(
         id_hubspot: id,
         ultima_comanda: toDateOnly(props[PROP_ULTIMA_COMANDA]),
         cancelamento: toDateOnly(props[PROP_CANCELAMENTO]),
+        etapa: stage.label,
+        situacao: stage.churn ? 'churn' : 'ativo',
       });
     }
 
@@ -309,6 +318,7 @@ Deno.serve(async (req: Request) => {
       ok: erros.length === 0,
       deals_encontrados: unicos.length,
       clientes_atualizados: atualizados,
+      em_churn: unicos.filter((d) => d.situacao === 'churn').length,
       // Deals sem pin no app (nunca cadastrados por aqui) — normal.
       deals_sem_pin_no_app: unicos.length - atualizados,
       // false = rodando no token geral (compartilha os 4 req/s da Search API
