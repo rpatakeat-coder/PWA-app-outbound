@@ -17,8 +17,13 @@
 //                  que o n8n respondia).
 //   get_stages   — GET das etapas do pipeline; responde { results: [...] }.
 //   create_note  — cria engagement de nota no deal (timeline do HubSpot).
-//   create_task / update_task       — Task no deal (follow up agendado).
-//                                      update: reagendar (due) ou concluir.
+//                  Usado pelas notas do lead E pelo follow up agendado.
+//   update_note  — reescreve o corpo da nota (reagendar o follow up) ou marca
+//                  como cancelada (cancelar:true).
+//   create_task / update_task       — LEGADO. Follow up virava Task ate a regra
+//                                      mudar pra Observacao; os handlers ficam
+//                                      pros follow ups antigos, que tem id de
+//                                      Task gravado em hs_engagement_id.
 //   create_meeting / update_meeting  — Meeting no deal (demo agendada).
 //                                      update: reagendar (start/end) ou cancelar.
 //   -> devolvem { engagement_id }; o app guarda em
@@ -27,8 +32,8 @@
 // reuniao/followup (Google Calendar) CONTINUAM no n8n — dependem da credencial
 // OAuth do Google que vive la. type=visited tambem segue pro n8n (sem rota de
 // HubSpot). O helper src/utils/hubspotSync.ts no app faz esse roteamento.
-// IMPORTANTE: create_task/create_meeting NAO tem fallback pro n8n (o Switch de
-// la criaria um deal na rota default). O app chama a edge direto p/ esses.
+// IMPORTANTE: os types da agenda NAO tem fallback pro n8n (o Switch de la
+// criaria um deal na rota default). O app chama a edge direto p/ esses.
 //
 // Deploy (verify_jwt LIGADO — so o app logado chama):
 //   supabase functions deploy hubspot-sync
@@ -428,7 +433,7 @@ async function handleCreateNote(token: string, body: Record<string, unknown>) {
   return json(200, { ok: true, note_id: note.body?.id ?? null });
 }
 
-// ===== Agenda -> HubSpot (Task pra follow up, Meeting pra demo) =====
+// ===== Agenda -> HubSpot (Observacao pra follow up, Meeting pra demo) =====
 // Reflete o compromisso na timeline do deal. O evento no Google Calendar
 // continua no n8n; aqui criamos/atualizamos o engagement no CRM e devolvemos
 // o engagement_id (o app guarda em client_meetings.hs_engagement_id pra depois
@@ -448,7 +453,57 @@ function richBody(v: unknown): string {
   return s ? escapeHtml(s).replace(/\n/g, '<br>') : '';
 }
 
-// ---- Follow up -> Task ----
+// ---- Follow up -> Observacao (note) ----
+// A criacao reusa o create_note (mesmo handler das notas do lead); aqui so' o
+// update. Reagendar reescreve o corpo; cancelar prefixa o marcador MANTENDO o
+// texto — nota e' registro de timeline, apagar/limpar perderia o historico.
+const NOTE_CANCEL_MARKER = '[Follow Up cancelado]';
+
+async function handleUpdateNote(token: string, body: Record<string, unknown>) {
+  const id = trimOrNull(body.engagement_id);
+  if (!id) return json(400, { error: 'engagement_id e obrigatorio' });
+  const cancelar = body.cancelar === true;
+
+  let novoCorpo: string | null = cancelar ? null : richBody(body.body) || null;
+
+  if (cancelar) {
+    // Precisa do corpo atual pra prefixar o marcador sem perder o texto.
+    const atual = await hsFetch(token, 'GET', `/crm/v3/objects/notes/${id}?properties=hs_note_body`);
+    // 404 = follow up da regra antiga (o id e' de Task, nao de Note).
+    if (atual.status === 404) return await handleUpdateTask(token, { ...body, concluir: true });
+    // Sem o corpo atual em maos, NAO patcheia: sobrescreveria a observacao do
+    // vendedor com so' o marcador.
+    if (!atual.ok) {
+      return json(502, {
+        error: 'HubSpot nao devolveu a observacao',
+        detail: atual.body?.message ?? `status ${atual.status}`,
+      });
+    }
+    const anterior = str(atual.body?.properties?.hs_note_body);
+    novoCorpo = anterior.startsWith(NOTE_CANCEL_MARKER)
+      ? anterior
+      : `${NOTE_CANCEL_MARKER}${anterior ? `<br>${anterior}` : ''}`;
+  }
+
+  if (!novoCorpo) return json(200, { ok: true, noop: true });
+
+  const res = await hsFetch(token, 'PATCH', `/crm/v3/objects/notes/${id}`, {
+    properties: { hs_note_body: novoCorpo },
+  });
+  if (res.status === 404) return await handleUpdateTask(token, body);
+  if (!res.ok) {
+    return json(502, {
+      error: 'HubSpot recusou o update da observacao',
+      detail: res.body?.message ?? `status ${res.status}`,
+    });
+  }
+  return json(200, { ok: true, engagement_id: id });
+}
+
+// ---- LEGADO: follow up -> Task ----
+// A regra mudou (follow up agora vira Observacao), mas os follow ups criados
+// antes tem id de Task em hs_engagement_id: o handleUpdateNote cai aqui quando
+// o HubSpot devolve 404 pro id como nota.
 async function handleCreateTask(token: string, body: Record<string, unknown>) {
   const idHubspot = trimOrNull(body.id_hubspot);
   const due = toIso(body.due_at);
@@ -577,6 +632,8 @@ Deno.serve(async (req: Request) => {
         return await handleGetStages(token);
       case 'create_note':
         return await handleCreateNote(token, body);
+      case 'update_note':
+        return await handleUpdateNote(token, body);
       case 'create_task':
         return await handleCreateTask(token, body);
       case 'update_task':

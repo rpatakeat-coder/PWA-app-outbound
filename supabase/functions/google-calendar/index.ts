@@ -4,7 +4,8 @@
 // agendar/reagendar/cancelar uma DEMO reflete no Google Calendar — e o Meeting
 // no HubSpot acompanha via a sync nativa HubSpot<->Google (bidirectional).
 //
-// Follow up NAO passa por aqui (fica so como Task no HubSpot, via hubspot-sync).
+// Follow up NAO passa por aqui (vira so uma Observacao no HubSpot, via
+// hubspot-sync).
 //
 // Auth: verify_jwt LIGADO (so o app logado chama).
 //

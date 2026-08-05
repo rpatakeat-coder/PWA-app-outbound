@@ -76,7 +76,7 @@ export async function sendHubspotEvent(payload: Record<string, unknown>): Promis
 }
 
 // ============================================================================
-// Agenda -> HubSpot (Task pra follow up, Meeting pra demo).
+// Agenda -> HubSpot (Observacao pra follow up, Meeting pra demo).
 //
 // Chamam a edge hubspot-sync DIRETO (sem passar pelo sendHubspotEvent). O
 // fallback pro n8n desses tipos seria PERIGOSO: a rota default do Switch do n8n
@@ -102,6 +102,22 @@ async function invokeHubspotSync(body: Record<string, unknown>): Promise<any> {
 const endFromStart = (startIso: string, durationMin: number) =>
   new Date(new Date(startIso).getTime() + durationMin * 60_000).toISOString();
 
+// dd/mm/aaaa hh:mm no fuso do aparelho — mesmo formato que a agenda mostra.
+const formatBr = (iso: string) =>
+  new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+
+// Corpo da Observacao do follow up. Diferente da Task, a nota nao tem campo de
+// vencimento — entao a data agendada precisa estar NO TEXTO, senao quem le a
+// timeline do deal nao sabe pra quando o follow up ficou.
+const followUpNoteBody = (titulo: string, descricao: string | null, scheduledAt: string) => {
+  const linhas = [titulo, `Agendado para: ${formatBr(scheduledAt)}`];
+  const obs = descricao?.trim();
+  if (obs) linhas.push('', obs);
+  return linhas.join('\n');
+};
+
 export type AgendaEngagementInput = {
   meetingType: MeetingType;    // 'reuniao' (demo) | 'follow_up'
   id_hubspot: string;          // id do deal
@@ -110,17 +126,18 @@ export type AgendaEngagementInput = {
   scheduled_at: string;        // ISO
   duration_minutes: number;
   owner_id: string | null;     // hubspot_owner_id do vendedor
+  autor_nome?: string | null;  // assina a Observacao do follow up na timeline
 };
 
-// Cria a Task (follow up) ou Meeting (demo) no HubSpot. Retorna o engagement_id
-// (pra guardar em client_meetings.hs_engagement_id) ou null.
+// Cria a Observacao (follow up) ou a Meeting (demo) no HubSpot. Retorna o id do
+// engagement (pra guardar em client_meetings.hs_engagement_id) ou null.
 export async function createAgendaEngagement(input: AgendaEngagementInput): Promise<string | null> {
   const isFollowUp = input.meetingType === 'follow_up';
   const body = isFollowUp
     ? {
-        type: 'create_task', id_hubspot: input.id_hubspot,
-        titulo: input.titulo, descricao: input.descricao,
-        due_at: input.scheduled_at, owner_id: input.owner_id,
+        type: 'create_note', id_hubspot: input.id_hubspot,
+        body: followUpNoteBody(input.titulo, input.descricao, input.scheduled_at),
+        autor_nome: input.autor_nome ?? null,
       }
     : {
         type: 'create_meeting', id_hubspot: input.id_hubspot,
@@ -130,7 +147,8 @@ export async function createAgendaEngagement(input: AgendaEngagementInput): Prom
         owner_id: input.owner_id,
       };
   const data = await invokeHubspotSync(body);
-  return (data?.engagement_id as string | undefined) ?? null;
+  // create_note responde note_id; create_meeting responde engagement_id.
+  return ((data?.note_id ?? data?.engagement_id) as string | undefined) ?? null;
 }
 
 // Reagenda (novo horario) o engagement ja criado.
@@ -145,7 +163,11 @@ export async function rescheduleAgendaEngagement(input: {
   const isFollowUp = input.meetingType === 'follow_up';
   const body = isFollowUp
     ? {
-        type: 'update_task', engagement_id: input.engagement_id,
+        type: 'update_note', engagement_id: input.engagement_id,
+        body: followUpNoteBody(input.titulo, input.descricao, input.scheduled_at),
+        // titulo/descricao/due_at so' servem pros follow ups da regra ANTIGA,
+        // cujo hs_engagement_id e' de Task: a edge detecta (404 na nota) e cai
+        // pro update da task com esses campos.
         titulo: input.titulo, descricao: input.descricao, due_at: input.scheduled_at,
       }
     : {
@@ -157,13 +179,14 @@ export async function rescheduleAgendaEngagement(input: {
   await invokeHubspotSync(body);
 }
 
-// Conclui (Task) / cancela (Meeting) o engagement — usado ao remover no app.
+// Cancela o engagement — usado ao remover no app. Follow up: marca a Observacao
+// como cancelada (o texto fica, e' registro de timeline). Demo: cancela a Meeting.
 export async function cancelAgendaEngagement(input: {
   meetingType: MeetingType;
   engagement_id: string;
 }): Promise<void> {
   const body = input.meetingType === 'follow_up'
-    ? { type: 'update_task', engagement_id: input.engagement_id, concluir: true }
+    ? { type: 'update_note', engagement_id: input.engagement_id, cancelar: true }
     : { type: 'update_meeting', engagement_id: input.engagement_id, cancelar: true };
   await invokeHubspotSync(body);
 }

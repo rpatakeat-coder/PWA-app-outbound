@@ -17,8 +17,9 @@ import {
 // Agenda (reuniao/follow up). Arquitetura pos-n8n:
 //   DEMO (type=reuniao)  -> evento no Google Calendar (edge google-calendar).
 //                           O Meeting no HubSpot vem da sync HubSpot<->Google.
-//   FOLLOW UP            -> Task no HubSpot (edge hubspot-sync). SEM Google,
-//                           SEM Meeting.
+//   FOLLOW UP            -> Observacao (note) na timeline do deal no HubSpot
+//                           (edge hubspot-sync). SEM Google, SEM Meeting e SEM
+//                           Task — a regra de criar Task foi substituida.
 // As chamadas externas sao AWAITADAS (nao fire-and-forget): no mobile a Promise
 // solta se perdia ao fechar o modal. Erro externo NAO quebra o agendamento (a
 // linha ja esta salva no banco).
@@ -111,7 +112,7 @@ export function useMeetings() {
       const titulo = tituloFor(isFollowUp, client);
 
       if (isFollowUp) {
-        // Follow up -> Task no HubSpot (sem Google, sem Meeting).
+        // Follow up -> Observacao no HubSpot (sem Google, sem Meeting).
         if (client.id_hubspot) {
           try {
             const engagementId = await createAgendaEngagement({
@@ -122,6 +123,7 @@ export function useMeetings() {
               scheduled_at: meeting.scheduled_at,
               duration_minutes: meeting.duration_minutes,
               owner_id: profile?.id_hubspot ?? null,
+              autor_nome: profile?.full_name ?? null,
             });
             if (engagementId) {
               await supabase
@@ -130,7 +132,7 @@ export function useMeetings() {
                 .eq('id', meeting.id);
             }
           } catch (err) {
-            console.warn('[HUBSPOT] criar Task de follow up falhou:', err);
+            console.warn('[HUBSPOT] criar Observacao de follow up falhou:', err);
           }
         }
       } else {
@@ -162,7 +164,7 @@ export function useMeetings() {
 
   // Reagenda: muda data/hora (e opcionalmente duração/observações) na MESMA
   // linha. Demo -> atualiza o evento no Google (a sync move o Meeting no
-  // HubSpot). Follow up -> atualiza a Task no HubSpot.
+  // HubSpot). Follow up -> reescreve a Observacao no HubSpot.
   const rescheduleMeeting = useMutation({
     mutationFn: async ({
       meeting,
@@ -208,7 +210,7 @@ export function useMeetings() {
       const titulo = tituloFor(isFollowUp, client);
 
       if (isFollowUp) {
-        // Follow up -> atualiza (ou cria, se antiga sem id) a Task no HubSpot.
+        // Follow up -> atualiza (ou cria, se antiga sem id) a Observacao no HubSpot.
         if (client.id_hubspot) {
           try {
             if (updated.hs_engagement_id) {
@@ -229,6 +231,7 @@ export function useMeetings() {
                 scheduled_at: updated.scheduled_at,
                 duration_minutes: updated.duration_minutes,
                 owner_id: profile?.id_hubspot ?? null,
+                autor_nome: profile?.full_name ?? null,
               });
               if (engagementId) {
                 await supabase
@@ -238,7 +241,7 @@ export function useMeetings() {
               }
             }
           } catch (err) {
-            console.warn('[HUBSPOT] reagendar Task de follow up falhou:', err);
+            console.warn('[HUBSPOT] reagendar Observacao de follow up falhou:', err);
           }
         }
       } else {
@@ -280,7 +283,7 @@ export function useMeetings() {
 
   // Remove a reunião: cancela o compromisso externo antes de apagar a linha.
   // Demo -> deleta o evento no Google (a sync remove o Meeting no HubSpot).
-  // Follow up -> conclui a Task no HubSpot.
+  // Follow up -> marca a Observacao como cancelada no HubSpot.
   const deleteMeeting = useMutation({
     mutationFn: async (meeting: ClientMeeting) => {
       const isFollowUp = meeting.type === 'follow_up';
@@ -292,7 +295,7 @@ export function useMeetings() {
               engagement_id: meeting.hs_engagement_id,
             });
           } catch (err) {
-            console.warn('[HUBSPOT] concluir Task de follow up falhou:', err);
+            console.warn('[HUBSPOT] cancelar Observacao de follow up falhou:', err);
           }
         }
       } else if (meeting.google_event_id) {

@@ -644,8 +644,8 @@ function MainApp() {
   const [exportingAgenda, setExportingAgenda] = useState(false);
 
   // Cancelar (remover) uma reunião/follow up com confirmação. deleteMeeting já
-  // apaga o evento no Google (demo) / conclui a Task (follow up) e a Meeting no
-  // HubSpot acompanha via sync. Usado na Agenda e no detalhe do lead.
+  // apaga o evento no Google (demo — a Meeting no HubSpot acompanha via sync) /
+  // marca a Observação como cancelada (follow up). Usado na Agenda e no lead.
   const confirmCancelMeeting = (meeting: ClientMeeting) => {
     const isFollowUp = meeting.type === 'follow_up';
     const noun = isFollowUp ? 'follow up' : 'reunião';
@@ -653,7 +653,7 @@ function MainApp() {
       day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
     });
     const detalhe = isFollowUp
-      ? 'A tarefa no HubSpot será concluída.'
+      ? 'A observação no HubSpot será marcada como cancelada.'
       : 'O evento no Google Calendar será apagado (e a reunião some no HubSpot).';
     Alert.alert(
       `Cancelar ${noun}`,

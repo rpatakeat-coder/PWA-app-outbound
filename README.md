@@ -146,7 +146,7 @@ npx eas-cli build --profile production --platform android   # ou ios
 
 | Função | Papel |
 |---|---|
-| `hubspot-sync` | Saída app → HubSpot: `change_stage`, `update`, `create_pin`, `create_note`, `get_stages`, **`create_task`/`update_task`** (follow up → Task), **`create_meeting`/`update_meeting`** (demo → Meeting). |
+| `hubspot-sync` | Saída app → HubSpot: `change_stage`, `update`, `create_pin`, `get_stages`, **`create_note`/`update_note`** (notas do lead e follow up → Observação), **`create_meeting`/`update_meeting`** (demo → Meeting). `create_task`/`update_task` seguem só como legado (follow ups criados antes da mudança). |
 | `hubspot-lead-webhook` / `-latlong` | Entrada: leads do HubSpot/RPA → upsert em `clients` (com geocoding). |
 | `export-report` | Exporta TUDO do período em JSON (painel do gestor) → Storage → signed URL. |
 | `export-agenda` | Exporta a agenda (montada no app) em JSON → Storage → signed URL. |
@@ -168,12 +168,14 @@ Secrets usados pelas functions: `HUBSPOT_TOKEN`, `HUBSPOT_WEBHOOK_SECRET`,
 
 Ao **agendar** na agenda do app:
 
-- **Follow up** → cria uma **Task** no HubSpot (assunto `Follow Up - {lead}`,
-  vencimento = data, dono = vendedor), associada ao deal.
+- **Follow up** → cria uma **Observação** (note) na timeline do deal, com
+  `Follow Up - {lead}`, a data agendada no corpo (nota não tem vencimento) e as
+  observações do agendamento, assinada pelo vendedor.
 - **Demo (reunião)** → cria uma **Meeting** no HubSpot (início/fim pela duração),
   associada ao deal.
-- **Reagendar** atualiza o mesmo engagement; **cancelar** conclui a Task / cancela a
-  Meeting. O id do engagement fica em `client_meetings.hs_engagement_id`.
+- **Reagendar** atualiza o mesmo engagement (reescreve o corpo da Observação);
+  **cancelar** prefixa `[Follow Up cancelado]` na Observação / cancela a Meeting.
+  O id do engagement fica em `client_meetings.hs_engagement_id`.
 - O evento no **Google Calendar** (via n8n) continua funcionando em paralelo.
 
 > Só vale para leads que já têm `id_hubspot` (deal). Sem isso, o app ignora sem erro.
