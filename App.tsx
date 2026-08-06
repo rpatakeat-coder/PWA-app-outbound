@@ -466,6 +466,9 @@ function MainApp() {
   // que stageTemperature devolve — a etapa->temperatura já é mapeada lá, e é a
   // mesma fonte da cor do pin no mapa.
   const [tempFilter, setTempFilter] = useState<string | null>(null);
+  // Mostra só os leads vindos de Conta Alvo (materializados pela Rota do dia).
+  // Marcador: conta_alvo_place_id != null.
+  const [contaAlvoOnly, setContaAlvoOnly] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isPickingUf, setIsPickingUf] = useState(false);
   const [isPickingStage, setIsPickingStage] = useState(false);
@@ -874,6 +877,7 @@ function MainApp() {
       // Etapa desconhecida não tem temperatura — fica de fora de qualquer
       // recorte térmico (é o mesmo critério do pin, que cai na cor do status).
       if (tempFilter && stageTemperature(c.etapa)?.label !== tempFilter) return false;
+      if (contaAlvoOnly && !c.conta_alvo_place_id) return false;
       if (vendorFilterHubspotId === '__none__') {
         if (c.vendedor_id_hubspot) return false;
       } else if (vendorFilterHubspotId !== null && c.vendedor_id_hubspot !== vendorFilterHubspotId) {
@@ -887,7 +891,7 @@ function MainApp() {
       }
       return true;
     }),
-    [clients, stateFilter, stageFilter, searchTerm, vendorFilterHubspotId, visitFilter, tempFilter],
+    [clients, stateFilter, stageFilter, searchTerm, vendorFilterHubspotId, visitFilter, tempFilter, contaAlvoOnly],
   );
 
   // Viewer filtra pela multi-selecao (leads + clientes etc.); vendedor/admin
@@ -962,7 +966,7 @@ function MainApp() {
     return rows;
   }, [expandedStages, listStageSections]);
 
-  const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0) + (vendorFilterHubspotId !== null ? 1 : 0) + (visitFilter !== null ? 1 : 0) + (tempFilter !== null ? 1 : 0);
+  const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0) + (vendorFilterHubspotId !== null ? 1 : 0) + (visitFilter !== null ? 1 : 0) + (tempFilter !== null ? 1 : 0) + (contaAlvoOnly ? 1 : 0);
 
   const filteredWithCoords = useMemo(
     () => filteredClients.filter(c => c.latitude !== null && c.longitude !== null),
@@ -4750,6 +4754,30 @@ function MainApp() {
                   })}
                 </View>
 
+                <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Conta Alvo</Text>
+                <Text style={styles.passwordModalHint}>
+                  Só os leads trazidos pela Rota do dia (restaurantes nota ≥ 4,5 e +100 avaliações).
+                  Ativar seleciona o status "Leads" pra os pins aparecerem no mapa.
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.filterChip,
+                    { borderWidth: 1, borderColor: '#e2e8f0', alignSelf: 'flex-start', marginTop: 4 },
+                    contaAlvoOnly && { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
+                  ]}
+                  onPress={() => setContaAlvoOnly((v) => {
+                    const next = !v;
+                    // Conta-alvo tem status 'lead' — ligar o filtro pula pro chip
+                    // Leads pra os pins não sumirem por causa de outro status ativo.
+                    if (next && !isViewer) setStatusFilter('lead' as ClientStatus);
+                    return next;
+                  })}
+                >
+                  <Text style={[styles.filterChipText, contaAlvoOnly && styles.filterChipTextActive]}>
+                    🎯 Só Conta Alvo
+                  </Text>
+                </TouchableOpacity>
+
                 <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Visita</Text>
                 <Text style={styles.passwordModalHint}>
                   Filtra pelo timestamp da ultima visita (visited_at). Vale pra qualquer status.
@@ -4843,7 +4871,7 @@ function MainApp() {
                 <View style={styles.filtersFooter}>
                   <TouchableOpacity
                     style={styles.filtersSecondaryButton}
-                    onPress={() => { setSearchQuery(''); setStateFilter(null); setStageFilter(null); setVendorFilterHubspotId(null); setVisitFilter(null); setTempFilter(null); }}
+                    onPress={() => { setSearchQuery(''); setStateFilter(null); setStageFilter(null); setVendorFilterHubspotId(null); setVisitFilter(null); setTempFilter(null); setContaAlvoOnly(false); }}
                     disabled={activeFilterCount === 0}
                   >
                     <Text style={[styles.filtersSecondaryButtonText, activeFilterCount === 0 && { opacity: 0.4 }]}>Limpar tudo</Text>
