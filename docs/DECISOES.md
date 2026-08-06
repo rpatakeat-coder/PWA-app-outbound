@@ -92,3 +92,15 @@ Regra de progressão de etapa no [ChangeStageModal](../src/screens/ChangeStageMo
 - Teto do "pulo" fica na constante **`FREE_ADVANCE_MAX_STAGE_ID`** (= Demo/Proposta) em [stages.ts](../src/constants/stages.ts) — mudar só esse id reposiciona o limite.
 - Negócio Perdido continua sempre disponível; laterais (Backlog/Reciclagem) não são destino (lead nelas reentra pelo funil).
 - **Não confundir com o GPS da visita:** marcar como visitado continua sendo o check-in `mark_client_as_visited` (com validação de localização). Isso é independente do avanço manual de etapa — o campo aqui só destrava a *escolha* de etapa no modal.
+
+---
+
+## 7. Rota do dia (3 obrigatórias + 3 sugeridas)
+
+"Rota do dia" na aba Rota (botão): parte do **GPS do vendedor**, monta **3 visitas obrigatórias 🔒** + completa até 6 com a sugestão inteligente, otimiza (TSP) e salva. Fluxo manual de rota **intacto**. `field_route_stops.mandatory_reason` (`sla`|`relacionamento`|`conta_alvo`) guarda por que a parada é obrigatória.
+
+- **① Relacionamento** — cliente do vendedor, ativo (`hs_situacao ≠ churn`), `hs_qtd_comandas > 1000`, mais próximo/menos visitado. Sem backend novo.
+- **② Conta Alvo** — restaurante `nota ≥ 4,5 & > 100 avaliações` a **≤ 2 km** do GPS, ainda não cliente. Edge **`conta-alvo-nearby`** (Serper Maps `/maps`, cache por célula ~1,5 km / 14 d em `target_accounts`). **Materializa como lead** (`clients`, marcador **`conta_alvo_place_id`** — **não** usar `origem`, que tem CHECK; `created_by` = auth uid do vendedor, obrigatório). **Deal no HubSpot só no check-in** (`markAsVisited` dispara `create_pin` quando `conta_alvo_place_id && !id_hubspot`). Pin **roxo + 🎯** no mapa + filtro "Só Conta Alvo". Secret `SERPER_API_KEY`.
+- **③ SLA estourado** — regra do MD (`REGRA_SLA_ESTOURADO.md`): `diasParado = hoje − max(entrada na etapa, última atividade humana, criação)`; `breach = diasParado > SLA_etapa` (Prospecção/Visita 5, Conversa 4, Demo 3, Negociação 7, Ag.Pag 2, resto 999). **Isolado** do motor de Tarefas do time. Fonte: edge **`hubspot-activity-sync`** (diário) puxa `hs_lastactivitydate` + `hs_date_entered_<etapa>` → colunas `clients.hs_last_activity_at` / `hs_stage_entered_at`. Pick via RPC **`sla_estourado_candidates(vendedor)`** (mais urgente por `diasParado/SLA`).
+
+Config/deploy: migrations `20260806_route_stop_mandatory_reason`, `20260806_conta_alvo`, `20260806_sla_activity`; edges `conta-alvo-nearby` + `hubspot-activity-sync` (+ cron diário); secrets `SERPER_API_KEY` (rotacionável) e `HUBSPOT_TOKEN(_USAGE)`.

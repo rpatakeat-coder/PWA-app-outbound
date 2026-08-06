@@ -59,6 +59,7 @@ import { useVisitsHeatmap } from './src/hooks/useVisitsHeatmap';
 import { buildHeatCells, heatColor, heatIntensity, HEAT_CELL_M, HEAT_LEGEND_STOPS } from './src/utils/heatmap';
 import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type MandatoryReason } from './src/utils/dailyRoute';
 import { fetchContaAlvo } from './src/utils/contaAlvo';
+import { fetchSlaCandidate } from './src/utils/slaCandidate';
 
 const queryClient = new QueryClient();
 
@@ -1337,7 +1338,8 @@ function MainApp() {
         excludeIds: routeStopClientIds,
         goal: DAILY_GOAL,
         providers: {
-          sla: async () => null,       // TODO Fase 2: RPC sla_estourado_candidates
+          // SLA estourado (regra do MD): lead mais urgente do vendedor via RPC.
+          sla: async (excludeIds) => fetchSlaCandidate(vendor, excludeIds),
           // Conta Alvo: edge acha restaurante 4,5+/100+ a <=2km e materializa
           // como lead. Sem GPS real (só override), nao busca (a regra é "perto
           // de onde o vendedor está").
