@@ -80,3 +80,15 @@ Camada opcional sobre o **mapa principal**, só para o gestor: densidade de chec
 - **Por que `<Circle>` e não `<Heatmap>`:** o `<Heatmap>` nativo do `react-native-maps` **só funciona com Google Maps**. O app usa **Apple Maps no iOS** (não setamos `PROVIDER_GOOGLE`), então o Heatmap nativo não renderiza. Solução: agregar as visitas numa **grade** (~180m/célula) e desenhar um `<Circle>` translúcido por célula (cor/raio pela contagem) — funciona igual em Apple e Google Maps. É o mesmo caminho do `<Polyline>` das rotas (renderiza como filho não-marker do map-clustering).
 - **Dados:** cada visita já grava GPS (`visited_at_lat/lon`) + quem (`visited_by`/`visited_by_name`); RLS de `client_visits` é `SELECT USING(true)`. A busca é **paginada** (contorna o teto de 1000 linhas do PostgREST), **só dispara quando o gestor liga** o calor, com teto de segurança (8k pontos / 300 círculos, priorizando as áreas mais quentes → mostra "(amostra recente)" se atingir).
 - Arquivos: `src/utils/heatmap.ts` (grade + escala de cor, puro), `src/hooks/useVisitsHeatmap.ts` (busca + vendedores derivados), `App.tsx` (toggle 🔥, painel, `<Circle>` no mapa).
+
+---
+
+## 6. Avanço de funil — livre até Demo/Proposta
+
+Regra de progressão de etapa no [ChangeStageModal](../src/screens/ChangeStageModal.tsx).
+
+- **Antes:** "1 etapa por vez" até o fim do funil — pra chegar em Demo/Proposta o vendedor passava por Visita e Conversa uma de cada vez (lento).
+- **Agora (2026-08):** **avanço livre até Demo/Proposta** — lead antes de Demo pode pular direto pra Visita, Conversa **ou** Demo numa tacada. **De Demo/Proposta em diante volta a ser 1 por vez**, porque Negociação/Ag. Pagamento/Onboarding têm campos obrigatórios (MRR, CNPJ, pagamento) que não devem ser pulados.
+- Teto do "pulo" fica na constante **`FREE_ADVANCE_MAX_STAGE_ID`** (= Demo/Proposta) em [stages.ts](../src/constants/stages.ts) — mudar só esse id reposiciona o limite.
+- Negócio Perdido continua sempre disponível; laterais (Backlog/Reciclagem) não são destino (lead nelas reentra pelo funil).
+- **Não confundir com o GPS da visita:** marcar como visitado continua sendo o check-in `mark_client_as_visited` (com validação de localização). Isso é independente do avanço manual de etapa — o campo aqui só destrava a *escolha* de etapa no modal.

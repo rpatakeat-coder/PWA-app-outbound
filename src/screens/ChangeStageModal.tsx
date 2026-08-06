@@ -20,6 +20,7 @@ import {
   FUNNEL_STAGE_IDS,
   LOST_STAGE_ID,
   APP_STAGE_IDS,
+  FREE_ADVANCE_MAX_STAGE_ID,
   STAGES,
   type Stage,
   type StageSubField,
@@ -471,12 +472,21 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone }: Pr
   // Pra registrar o motivo do "Perdido" como nota (que tambem vai pro HubSpot).
   const { addNote } = useClientNotes(client.id);
 
-  // ===== Regra de progressao: avancar 1 etapa por vez (so no funil do app) =====
-  // O HubSpot tem muitas etapas (funil + laterais/origem). Pelo app o vendedor
-  // SO move dentro do funil comercial (FUNNEL_STAGE_IDS) + Negocio Perdido. As
-  // laterais nao aparecem como destino. Se o lead JA estiver numa lateral (foi
-  // movido pelo HubSpot), o app reconhece a etapa atual e libera a reentrada
-  // pela 1a etapa do funil.
+  // ===== Regra de progressao: avanco LIVRE ate Demo/Proposta ==================
+  // (2026-08) Antes era "1 etapa por vez" ate o fim do funil — pra chegar em
+  // Demo/Proposta o vendedor tinha que passar por Visita e Conversa uma de cada
+  // vez, o que deixava lento. Agora:
+  //  - Lead ANTES de Demo/Proposta (ou sem etapa / numa lateral): pode PULAR
+  //    direto pra qualquer etapa de (atual+1) ate Demo/Proposta de uma vez.
+  //  - Lead EM Demo/Proposta ou DEPOIS: volta a 1 etapa por vez — as seguintes
+  //    (Negociacao, Ag. Pagamento, Onboarding) tem campos obrigatorios que nao
+  //    devem ser pulados. Teto ajustavel em FREE_ADVANCE_MAX_STAGE_ID.
+  //  - Negocio Perdido sempre disponivel.
+  // Pelo app o vendedor SO move dentro do funil (FUNNEL_STAGE_IDS) + Perdido; as
+  // laterais nao aparecem como destino. Lead numa lateral reentra pelo funil.
+  //
+  // Obs.: isto NAO mexe no GPS da visita — marcar como visitado continua sendo
+  // o check-in mark_client_as_visited (com validacao de localizacao).
   //
   // Indexa as etapas carregadas por id/label pra resolver a etapa atual do lead
   // (client.etapa e' LABEL) e montar os cards a partir do funil.
@@ -486,19 +496,22 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone }: Pr
 
   // Posicao da etapa atual DENTRO do funil (-1 se lead sem etapa ou em lateral).
   const currentFunnelIdx = currentStageId ? FUNNEL_STAGE_IDS.indexOf(currentStageId) : -1;
+  // Teto do "pulo livre" (Demo/Proposta por padrao).
+  const freeMaxIdx = FUNNEL_STAGE_IDS.indexOf(FREE_ADVANCE_MAX_STAGE_ID);
 
-  // Proximo avanco no funil:
-  //  - lead no funil na posicao i  -> proxima e' i+1
-  //  - lead sem etapa OU em etapa lateral -> reentra pela 1a etapa do funil (0)
-  const nextFunnelId =
-    currentFunnelIdx >= 0
-      ? FUNNEL_STAGE_IDS[currentFunnelIdx + 1] ?? null
-      : FUNNEL_STAGE_IDS[0];
+  // Ids do funil oferecidos como destino:
+  //  - ainda antes do teto -> todas de (atual+1) ate o teto (inclusive);
+  //    lead sem etapa/lateral reentra a partir da 1a (idx 0).
+  //  - no teto ou depois    -> apenas a proxima (1 por vez).
+  const funnelDestIds =
+    currentFunnelIdx >= freeMaxIdx
+      ? [FUNNEL_STAGE_IDS[currentFunnelIdx + 1]].filter((id): id is string => !!id)
+      : FUNNEL_STAGE_IDS.slice(Math.max(currentFunnelIdx + 1, 0), freeMaxIdx + 1);
 
-  // Monta a lista de destinos: a proxima do funil + Negocio Perdido (sempre).
+  // Monta a lista de destinos: as etapas liberadas do funil + Negocio Perdido.
   // So inclui ids que o app aceita (APP_STAGE_IDS) e que existem no get_stages.
   // Usa o Stage vindo do HubSpot (label/cor/ordem atuais) com os campos do app.
-  const destinationIds = [nextFunnelId, LOST_STAGE_ID].filter(
+  const destinationIds = [...funnelDestIds, LOST_STAGE_ID].filter(
     (id): id is string => !!id && APP_STAGE_IDS.includes(id) && id !== currentStageId,
   );
   // Modo travado (initialStageId): so a etapa alvo e' destino. Fallback pro

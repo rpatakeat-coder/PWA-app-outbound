@@ -128,6 +128,16 @@ export const FUNNEL_STAGE_IDS = [
 // Saida sempre disponivel como destino no app (a qualquer momento do funil).
 export const LOST_STAGE_ID = '1396006164'; // Perdido
 
+// Ate qual etapa o vendedor pode PULAR livremente (avancar varias de uma vez).
+// Regra de negocio (2026-08): destravar o funil ate Demo/Proposta — antes era
+// "1 etapa por vez" ate o fim, o que deixava o avanco lento. Da Demo/Proposta
+// EM DIANTE volta a ser 1 por vez, porque as etapas seguintes (Negociacao,
+// Ag. Pagamento, Onboarding) tem campos obrigatorios (MRR, CNPJ, pagamento)
+// que nao devem ser pulados. Mudar so este id reposiciona o teto do "pulo".
+// (O GPS na VISITA e' outra coisa: continua exigido no check-in
+// mark_client_as_visited — nao tem a ver com o avanco manual de etapa.)
+export const FREE_ADVANCE_MAX_STAGE_ID = '1395880471'; // Demo/Proposta
+
 // Visita. Marcar um lead como visitado (check-in com GPS) move ele pra ca
 // automaticamente — desde que a etapa atual seja ANTERIOR a Visita no funil
 // (nao regride quem ja esta em Negociacao, Fechado, etc.).
