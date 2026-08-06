@@ -2622,9 +2622,12 @@ function MainApp() {
                     </Text>
                     {(() => {
                       const mreason = stop?.mandatory_reason as MandatoryReason | undefined;
-                      return mreason && MANDATORY_BADGE[mreason] ? (
-                        <Text style={styles.mandatoryTag}>{MANDATORY_BADGE[mreason]}</Text>
-                      ) : null;
+                      if (!mreason || !MANDATORY_BADGE[mreason]) return null;
+                      // Conta Alvo: acrescenta nota/avaliações do Google no badge.
+                      const rating = client.conta_alvo_place_id && client.conta_alvo_rating != null
+                        ? ` · ⭐ ${Number(client.conta_alvo_rating).toFixed(1)}${client.conta_alvo_reviews != null ? ` (${client.conta_alvo_reviews})` : ''}`
+                        : '';
+                      return <Text style={styles.mandatoryTag}>{MANDATORY_BADGE[mreason]}{rating}</Text>;
                     })()}
                   </View>
                   <View style={[styles.statusBadge, { backgroundColor: isDone ? '#16a34a' : color }]}>
@@ -5596,6 +5599,21 @@ function ClientBottomSheet({
               </View>
             </View>
 
+            {/* Conta Alvo: nota + avaliações do Google (via Serper). Só aparece
+                nos leads trazidos pela Rota do dia (conta_alvo_place_id). */}
+            {client.conta_alvo_place_id && client.conta_alvo_rating != null && (
+              <View style={styles.contaAlvoBox}>
+                <Text style={styles.contaAlvoBoxTitle}>🎯 Conta Alvo</Text>
+                <Text style={styles.contaAlvoBoxText}>
+                  ⭐ {Number(client.conta_alvo_rating).toFixed(1)}
+                  {client.conta_alvo_reviews != null
+                    ? ` · ${client.conta_alvo_reviews.toLocaleString('pt-BR')} avaliações`
+                    : ''}
+                  {' '}no Google
+                </Text>
+              </View>
+            )}
+
             {/* Uso do produto (HubSpot). Vem antes das visitas de proposito:
                 pra cliente/ex-cliente, "usa ou nao usa" e' a primeira coisa
                 que o vendedor precisa ver ao abrir o pin. */}
@@ -6962,6 +6980,18 @@ const styles = StyleSheet.create({
   usoTitulo: { fontSize: 14, fontWeight: '800' },
   usoDetalhe: { fontSize: 12, fontWeight: '600', marginTop: 3 },
   usoRodape: { fontSize: 11, marginTop: 4 },
+  // Caixa da Conta Alvo no sheet — roxo, combinando com o pin/badge.
+  contaAlvoBox: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginBottom: 10,
+    backgroundColor: '#f5f3ff',
+    borderColor: '#ddd6fe',
+  },
+  contaAlvoBoxTitle: { fontSize: 14, fontWeight: '800', color: '#6d28d9' },
+  contaAlvoBoxText: { fontSize: 13, fontWeight: '700', color: '#5b21b6', marginTop: 3 },
   agendaSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',

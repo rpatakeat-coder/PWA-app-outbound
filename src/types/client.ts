@@ -41,6 +41,10 @@ export interface Client {
   origem: string | null;
   // place_id do Google (via Serper) quando veio de Conta Alvo — dedup.
   conta_alvo_place_id: string | null;
+  // Nota e qtd de avaliações do Google (via Serper) da conta-alvo — exibidas
+  // no card do lead. Preenchidas pela edge conta-alvo-nearby.
+  conta_alvo_rating: number | null;
+  conta_alvo_reviews: number | null;
   visited_at: string | null;
   // Quantas vezes o lead ja foi visitado (contador mantido pela RPC
   // mark_client_as_visited; o historico completo vive em client_visits).

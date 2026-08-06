@@ -240,6 +240,8 @@ Deno.serve(async (req: Request) => {
           // NAO seta `origem`: e' coluna pre-existente com CHECK de valores
           // fixos. O marcador de conta-alvo e' conta_alvo_place_id (not null).
           conta_alvo_place_id: pick.place_id,
+          conta_alvo_rating: pick.rating,
+          conta_alvo_reviews: pick.reviews_count,
           vendedor_id_hubspot: vendor,
           geo_source: 'coords', // coords precisas do Google/Serper (raio normal de check-in)
           created_by: createdBy,
