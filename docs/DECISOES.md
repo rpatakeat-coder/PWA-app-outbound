@@ -11,12 +11,13 @@ Arquitetura **pós-n8n** (o n8n saiu do fluxo de reunião/follow up):
 | Ação no app | O que o nosso código faz | HubSpot |
 |---|---|---|
 | **Demo** (`type = reuniao`) | cria **evento no Google Calendar** via edge **`google-calendar`** (OAuth) | Meeting vem da **sync nativa HubSpot↔Google** (`hs_meeting_source: BIDIRECTIONAL_SYNC`). **NÃO** criamos Meeting via API (evita duplicar). |
-| **Follow up** (`type = follow_up`) | cria **Task** via edge **`hubspot-sync`** (`create_task`) | Task. **Sem** Google, **sem** Meeting. |
-| **Reagendar** | demo → `update_event` (move o evento no Google); follow up → `update_task` | acompanha (Meeting via sync; Task direto) |
-| **Cancelar** | demo → `delete_event` (apaga o evento no Google); follow up → conclui a Task | Meeting some via sync; Task concluída |
+| **Follow up** (`type = follow_up`) | cria **Observação (note)** na timeline do deal via edge **`hubspot-sync`** | Observação. **Sem** Google, **sem** Meeting, **sem** Task. |
+| **Reagendar** | demo → `update_event` (move o evento no Google); follow up → reescreve a Observação | acompanha (Meeting via sync; Observação direto) |
+| **Cancelar** | demo → `delete_event` (apaga o evento no Google); follow up → atualiza/remove a Observação | Meeting some via sync |
 
 - **Regra:** follow up **NUNCA** vira Meeting; demo **NUNCA** duplica.
-- **Por quê follow up não vai pro Google:** qualquer evento no Google vira Meeting pela sync — então follow up fica só como Task.
+- **Por quê follow up não vai pro Google:** qualquer evento no Google vira Meeting pela sync — então follow up fica só como Observação no HubSpot.
+- **Histórico:** a regra do follow up já foi (1) Task e depois (2) **Observação** (mudança do time, commit `55e1ec0`). Linhas antigas de `client_meetings` podem ter `hs_engagement_id` de uma Task da regra anterior.
 - Colunas em `client_meetings`: **`google_event_id`** (demo) e **`hs_engagement_id`** (follow up). Preenchidas ao agendar (awaited) e usadas pra reagendar/cancelar o mesmo objeto.
 - Título do evento/task usa o **nome do restaurante** (`empresa`), caindo pro contato (`nome`) se não houver.
 
