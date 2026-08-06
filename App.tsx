@@ -3613,20 +3613,28 @@ function MainApp() {
                 grade, cor/raio conforme a densidade de visitas. Renderiza ANTES
                 dos markers pra os pins ficarem por cima. Funciona em Apple e
                 Google Maps (o <Heatmap> nativo só roda no Google). */}
-            {heatOn && heat.cells.map((cell, idx) => {
+            {heatOn && heat.cells.map((cell) => {
               const t = heatIntensity(cell.n, heat.max);
               return (
                 <Circle
-                  key={`heat-${idx}`}
+                  // key por coordenada: células removidas no filtro por vendedor
+                  // desmontam de fato (com key por índice, o overlay nativo podia
+                  // ficar "preso" mostrando dado antigo).
+                  key={`heat-${cell.lat.toFixed(5)}-${cell.lon.toFixed(5)}`}
                   center={{ latitude: cell.lat, longitude: cell.lon }}
-                  radius={HEAT_CELL_M * (1.05 + 0.75 * t)}
-                  fillColor={heatColor(t, 0.28 + 0.3 * t)}
+                  // Raio bem maior que a célula (180m) → as manchas se sobrepõem
+                  // num "borrão" de calor contínuo, visível já no zoom de cidade.
+                  radius={HEAT_CELL_M * (1.5 + 1.1 * t)}
+                  fillColor={heatColor(t, 0.4 + 0.4 * t)}
                   strokeColor="rgba(0,0,0,0)"
                   strokeWidth={0}
                 />
               );
             })}
-            {filteredMapMarkers.map(client => (
+            {/* Pins normais somem enquanto o calor está ligado: aí o mapa mostra
+                APENAS os lugares visitados (do vendedor filtrado ou de todos),
+                sem os leads engolirem as manchas. Voltam ao desligar o 🔥. */}
+            {!heatOn && filteredMapMarkers.map(client => (
               <MarkerWithReady
                 key={client.id}
                 client={client}
@@ -3646,8 +3654,9 @@ function MainApp() {
               />
             ))}
             {/* Markers da rota com numero da ordem — renderizam acima dos
-                normais e ficam visiveis independente do filtro de status. */}
-            {routeDisplayClients
+                normais e ficam visiveis independente do filtro de status.
+                Também somem no modo calor pra não poluir. */}
+            {!heatOn && routeDisplayClients
               .filter(c => c.latitude != null && c.longitude != null)
               .map((client, index) => {
                 const stop = routeStops.find(s => s.client_id === client.id);
@@ -3663,8 +3672,8 @@ function MainApp() {
               })}
             {/* Polyline da rota: usa geometria real (OSRM, segue ruas) quando
                 disponivel; cai pra linha reta tracejada enquanto carrega ou
-                se a API falhou. */}
-            {routeWaypoints.length >= 2 && (
+                se a API falhou. Oculta no modo calor. */}
+            {!heatOn && routeWaypoints.length >= 2 && (
               <Polyline
                 coordinates={
                   routeGeometry.data && routeGeometry.data.coordinates.length > 1
