@@ -2314,10 +2314,10 @@ function MainApp() {
       </View>
 
       <View style={styles.panelCard}>
-        <Text style={styles.panelTitle}>Sugerir rota do dia</Text>
+        <Text style={styles.panelTitle}>Rota personalizada</Text>
         <Text style={styles.panelHint}>
-          Informe quantos leads quer visitar e quais status entram no recorte.
-          A ordem eh otimizada por estradas reais.
+          Monte você mesmo: escolha quantos leads, quais status e o responsável.
+          A ordem é otimizada por estradas reais. (Alternativa à "Rota do dia" acima.)
         </Text>
 
         <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Quantos leads visitar</Text>
@@ -2439,7 +2439,7 @@ function MainApp() {
         >
           {(fieldOps.saveRoute.isPending || isOptimizing)
             ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.submitButtonText}>Gerar rota</Text>}
+            : <Text style={styles.submitButtonText}>Gerar rota personalizada</Text>}
         </TouchableOpacity>
       </View>
 
