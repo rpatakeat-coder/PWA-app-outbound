@@ -160,7 +160,7 @@ Deno.serve(async (req: Request) => {
     // dentro do raio -> devolve ela (nao cria outra a cada "Gerar rota").
     const reusable = near
       .filter((c: any) =>
-        c.origem === 'conta_alvo' &&
+        c.conta_alvo_place_id &&
         !c.id_hubspot &&
         !c.visited_at &&
         (vendor === null || c.vendedor_id_hubspot === vendor) &&
@@ -233,10 +233,11 @@ Deno.serve(async (req: Request) => {
           longitude: pick.longitude,
           endereco: pick.address,
           status,
-          origem: 'conta_alvo',
+          // NAO seta `origem`: e' coluna pre-existente com CHECK de valores
+          // fixos. O marcador de conta-alvo e' conta_alvo_place_id (not null).
           conta_alvo_place_id: pick.place_id,
           vendedor_id_hubspot: vendor,
-          geo_source: 'conta_alvo',
+          geo_source: 'coords', // coords precisas do Google/Serper (raio normal de check-in)
           created_by: createdBy,
         })
         .select()

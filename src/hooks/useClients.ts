@@ -373,12 +373,12 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
       let client = mapRow(data);
 
       // Conta Alvo: o lead foi materializado localmente pela Rota do dia
-      // (origem='conta_alvo') e o deal no HubSpot so' nasce NA VISITA. Cria
+      // (tem conta_alvo_place_id) e o deal no HubSpot so' nasce NA VISITA. Cria
       // agora (mesmo create_pin do cadastro), grava o id_hubspot e segue o
       // fluxo normal de visita (Task + mover pra "Visita"). AWAITADO: o id
       // precisa existir antes das chamadas abaixo. A edge dedupe por id do pin,
       // entao um retry nao duplica o deal.
-      if (client.origem === 'conta_alvo' && !client.id_hubspot) {
+      if (client.conta_alvo_place_id && !client.id_hubspot) {
         try {
           const body = await sendHubspotEvent({
             type: 'create_pin',
