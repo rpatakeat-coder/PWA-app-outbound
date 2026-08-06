@@ -20,6 +20,10 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+// Marcador de versao — aparece em toda resposta pra confirmar qual bundle esta
+// no ar (o deploy do Supabase as vezes serve versao cacheada).
+const VERSION = 'ca-v3-noorigem';
+
 const SERPER_URL = 'https://google.serper.dev/maps';
 const FETCH_TIMEOUT_MS = 15_000;
 
@@ -258,7 +262,7 @@ Deno.serve(async (req: Request) => {
       .update({ client_id: client.id })
       .eq('place_id', pick.place_id);
 
-    return json(200, { client, place: pick });
+    return json(200, { client, place: pick, ver: VERSION });
   } catch (err) {
     // Erros do supabase-js sao OBJETOS ({message,code,details,hint}) — String()
     // vira "[object Object]". Serializa os campos uteis pra depurar.
@@ -269,6 +273,7 @@ Deno.serve(async (req: Request) => {
     console.error('[conta-alvo-nearby] erro', JSON.stringify(e));
     return json(500, {
       error: 'Erro interno',
+      ver: VERSION,
       detail,
       code: e?.code ?? null,
       hint: e?.hint ?? null,
