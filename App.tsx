@@ -1313,7 +1313,13 @@ function MainApp() {
           // de onde o vendedor está").
           contaAlvo: async () => (
             userLocation
-              ? await fetchContaAlvo({ lat: base.latitude, lon: base.longitude, vendedor_id_hubspot: vendor })
+              ? await fetchContaAlvo({
+                  lat: base.latitude,
+                  lon: base.longitude,
+                  vendedor_id_hubspot: vendor,
+                  // profile.id = auth.users.id (created_by NOT NULL no clients).
+                  created_by: profile?.id ?? null,
+                })
               : null
           ),
         },
@@ -1416,7 +1422,7 @@ function MainApp() {
       },
       onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
     });
-  }, [clients, fieldOps.saveRoute, userLocation, routeStartOverride, isAdmin, routeVendorFilterHubspotId, myHubspotId, routeStopClientIds, routeDate, queryClient]);
+  }, [clients, fieldOps.saveRoute, userLocation, routeStartOverride, isAdmin, routeVendorFilterHubspotId, myHubspotId, profile?.id, routeStopClientIds, routeDate, queryClient]);
 
   const saveManualRoute = useCallback((draft = routeDraft) => {
     if (draft.length === 0) {

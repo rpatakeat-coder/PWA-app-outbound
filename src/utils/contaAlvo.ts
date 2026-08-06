@@ -9,6 +9,9 @@ export async function fetchContaAlvo(params: {
   lat: number;
   lon: number;
   vendedor_id_hubspot: string | null;
+  // auth uid do vendedor logado — clients.created_by e' NOT NULL e a edge
+  // (service role) nao tem usuario, entao vem daqui.
+  created_by: string | null;
 }): Promise<Client | null> {
   try {
     const { data, error } = await supabase.functions.invoke('conta-alvo-nearby', {
@@ -16,6 +19,7 @@ export async function fetchContaAlvo(params: {
         lat: params.lat,
         lon: params.lon,
         vendedor_id_hubspot: params.vendedor_id_hubspot,
+        created_by: params.created_by,
       },
     });
     if (error) {

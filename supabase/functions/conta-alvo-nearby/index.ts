@@ -126,7 +126,7 @@ async function serperNearby(lat: number, lon: number): Promise<Place[]> {
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return json(405, { error: 'Method Not Allowed' });
 
-  let payload: { lat?: number; lon?: number; vendedor_id_hubspot?: string | null };
+  let payload: { lat?: number; lon?: number; vendedor_id_hubspot?: string | null; created_by?: string | null };
   try {
     payload = await req.json();
   } catch {
@@ -135,6 +135,9 @@ Deno.serve(async (req: Request) => {
   const lat = Number(payload?.lat);
   const lon = Number(payload?.lon);
   const vendor = payload?.vendedor_id_hubspot ?? null;
+  // clients.created_by e' NOT NULL (FK auth.users). A edge roda como service
+  // role (sem usuario), entao o app manda o auth uid do vendedor logado.
+  const createdBy = payload?.created_by ?? null;
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
     return json(400, { error: 'lat/lon obrigatorios' });
   }
@@ -217,6 +220,10 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     let client = existing;
     if (!client) {
+      // created_by e' NOT NULL — sem o auth uid do vendedor nao da pra materializar.
+      if (!createdBy) {
+        return json(400, { error: 'created_by obrigatorio pra materializar a conta-alvo' });
+      }
       const { data: inserted, error: insErr } = await db
         .from('clients')
         .insert({
@@ -230,6 +237,7 @@ Deno.serve(async (req: Request) => {
           conta_alvo_place_id: pick.place_id,
           vendedor_id_hubspot: vendor,
           geo_source: 'conta_alvo',
+          created_by: createdBy,
         })
         .select()
         .single();
@@ -251,7 +259,19 @@ Deno.serve(async (req: Request) => {
 
     return json(200, { client, place: pick });
   } catch (err) {
-    console.error('[conta-alvo-nearby] erro', err);
-    return json(500, { error: 'Erro interno', detail: String(err) });
+    // Erros do supabase-js sao OBJETOS ({message,code,details,hint}) — String()
+    // vira "[object Object]". Serializa os campos uteis pra depurar.
+    const e = err as any;
+    const detail =
+      (e && (e.message || e.error_description || e.msg)) ||
+      (typeof e === 'object' ? JSON.stringify(e) : String(e));
+    console.error('[conta-alvo-nearby] erro', JSON.stringify(e));
+    return json(500, {
+      error: 'Erro interno',
+      detail,
+      code: e?.code ?? null,
+      hint: e?.hint ?? null,
+      details: e?.details ?? null,
+    });
   }
 });
