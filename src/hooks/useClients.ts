@@ -370,7 +370,60 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
         p_user_lon: longitude,
       });
       if (error) throw error;
-      const client = mapRow(data);
+      let client = mapRow(data);
+
+      // Conta Alvo: o lead foi materializado localmente pela Rota do dia
+      // (origem='conta_alvo') e o deal no HubSpot so' nasce NA VISITA. Cria
+      // agora (mesmo create_pin do cadastro), grava o id_hubspot e segue o
+      // fluxo normal de visita (Task + mover pra "Visita"). AWAITADO: o id
+      // precisa existir antes das chamadas abaixo. A edge dedupe por id do pin,
+      // entao um retry nao duplica o deal.
+      if (client.origem === 'conta_alvo' && !client.id_hubspot) {
+        try {
+          const body = await sendHubspotEvent({
+            type: 'create_pin',
+            id: client.id,
+            bairro: client.bairro,
+            celular: client.telefone,
+            cep: client.cep,
+            cidade: client.cidade,
+            dealname: client.empresa ?? client.nome,
+            email: client.email,
+            estado_uf: client.estado,
+            id_hubspot: null,
+            latitude: client.latitude !== null ? String(client.latitude) : null,
+            logradouro: client.endereco,
+            longitude: client.longitude !== null ? String(client.longitude) : null,
+            nome: client.nome,
+            numero_do_local: client.numero,
+            observacoes: client.observacoes,
+            url: client.url_hubspot,
+            vendedor_id: profile?.id_hubspot ?? '',
+            vendedor_nome: profile?.full_name ?? '',
+          });
+          const asObj = (typeof body === 'object' && body ? body : null) as Record<string, unknown> | null;
+          const raw0 = typeof body === 'string' ? body : (asObj?.id_hubspot ?? asObj?.deal_id ?? asObj?.id ?? null);
+          let idHubspot = raw0 ? String(raw0) : null;
+          let urlHubspot = (asObj?.url_hubspot ?? asObj?.url ?? null) as string | null;
+          if (idHubspot) {
+            await supabase
+              .from('clients')
+              .update({ id_hubspot: idHubspot, ...(urlHubspot ? { url_hubspot: urlHubspot } : {}) })
+              .eq('id', client.id);
+          } else {
+            // Resposta sem id (a edge grava server-side) — confirma pelo banco.
+            for (let attempt = 1; attempt <= 3 && !idHubspot; attempt++) {
+              await new Promise((r) => setTimeout(r, 1500));
+              const { data: row } = await supabase
+                .from('clients').select('id_hubspot, url_hubspot').eq('id', client.id).maybeSingle();
+              if (row?.id_hubspot) { idHubspot = row.id_hubspot; urlHubspot = (row.url_hubspot as string | null) ?? urlHubspot; }
+            }
+          }
+          if (idHubspot) client = { ...client, id_hubspot: idHubspot, url_hubspot: urlHubspot ?? client.url_hubspot };
+        } catch (err) {
+          console.warn('[CONTA ALVO] criar deal no check-in falhou:', err);
+        }
+      }
 
       // CLIENTE/CHURN nao entram no FUNIL em nenhuma hipotese no check-in.
       // Visitar um cliente e' pos-venda (relacionamento/suporte), nao evento

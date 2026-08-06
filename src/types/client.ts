@@ -36,6 +36,11 @@ export interface Client {
   id_hubspot: string | null;
   url_hubspot: string | null;
   vendedor_id_hubspot: string | null;
+  // Origem do lead. 'conta_alvo' = materializado pela Rota do dia a partir do
+  // Serper/Google; o deal no HubSpot desses só nasce no check-in (markAsVisited).
+  origem: string | null;
+  // place_id do Google (via Serper) quando veio de Conta Alvo — dedup.
+  conta_alvo_place_id: string | null;
   visited_at: string | null;
   // Quantas vezes o lead ja foi visitado (contador mantido pela RPC
   // mark_client_as_visited; o historico completo vive em client_visits).

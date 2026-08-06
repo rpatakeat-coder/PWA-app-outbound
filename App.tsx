@@ -27,7 +27,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import MapView from 'react-native-map-clustering';
 import { Marker, Polyline, Circle, default as RNMapView } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useClients } from './src/hooks/useClients';
 import { useMeetings } from './src/hooks/useMeetings';
 import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
@@ -58,6 +58,7 @@ import { exportAgenda } from './src/utils/exportAgenda';
 import { useVisitsHeatmap } from './src/hooks/useVisitsHeatmap';
 import { buildHeatCells, heatColor, heatIntensity, HEAT_CELL_M, HEAT_LEGEND_STOPS } from './src/utils/heatmap';
 import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type MandatoryReason } from './src/utils/dailyRoute';
+import { fetchContaAlvo } from './src/utils/contaAlvo';
 
 const queryClient = new QueryClient();
 
@@ -532,6 +533,7 @@ function MainApp() {
     enabled: !waitingForLocation && !areaPermissionDenied,
   });
   const { meetings, upcomingByClient, meetingsByClient, deleteMeeting } = useMeetings();
+  const queryClient = useQueryClient();
   // Tarefas geradas automaticamente (motor de regras no banco). O hook dispara
   // a geracao ao autenticar e le as pendentes. O badge do rodape usa a contagem
   // JA filtrada por vendedor (visibleTasksCount), nao o total global.
@@ -1306,7 +1308,14 @@ function MainApp() {
         goal: DAILY_GOAL,
         providers: {
           sla: async () => null,       // TODO Fase 2: RPC sla_estourado_candidates
-          contaAlvo: async () => null, // TODO Fase 3: edge conta-alvo-nearby (2 km)
+          // Conta Alvo: edge acha restaurante 4,5+/100+ a <=2km e materializa
+          // como lead. Sem GPS real (só override), nao busca (a regra é "perto
+          // de onde o vendedor está").
+          contaAlvo: async () => (
+            userLocation
+              ? await fetchContaAlvo({ lat: base.latitude, lon: base.longitude, vendedor_id_hubspot: vendor })
+              : null
+          ),
         },
       });
     } catch (err: any) {
@@ -1381,6 +1390,8 @@ function MainApp() {
       })),
     }, {
       onSuccess: () => {
+        // Se materializou uma conta-alvo (lead novo), atualiza o mapa/lista.
+        queryClient.invalidateQueries({ queryKey: ['clients'] });
         const obrig = [...assembly!.reasonByClientId.values()];
         const providerLabel = optimizationProvider === 'ors'
           ? 'OpenRouteService'
@@ -1405,7 +1416,7 @@ function MainApp() {
       },
       onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
     });
-  }, [clients, fieldOps.saveRoute, userLocation, routeStartOverride, isAdmin, routeVendorFilterHubspotId, myHubspotId, routeStopClientIds, routeDate]);
+  }, [clients, fieldOps.saveRoute, userLocation, routeStartOverride, isAdmin, routeVendorFilterHubspotId, myHubspotId, routeStopClientIds, routeDate, queryClient]);
 
   const saveManualRoute = useCallback((draft = routeDraft) => {
     if (draft.length === 0) {
