@@ -160,6 +160,9 @@ export interface FieldRouteStop {
   notes: string | null;
   distance_meters: number | null;
   estimated_drive_minutes: number | null;
+  // Rota do dia: por que a parada é obrigatória ('sla' | 'relacionamento' |
+  // 'conta_alvo'). NULL = parada normal (sugerida ou adicionada à mão).
+  mandatory_reason: string | null;
   created_at: string;
   updated_at: string;
 }

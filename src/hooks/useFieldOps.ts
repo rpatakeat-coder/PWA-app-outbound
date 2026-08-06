@@ -39,7 +39,7 @@ type RoutePayload = {
   source: 'manual' | 'suggested';
   priorityMode: string;
   base?: { latitude: number; longitude: number } | null;
-  stops: Array<{ client: Client; distance_meters?: number | null }>;
+  stops: Array<{ client: Client; distance_meters?: number | null; mandatory_reason?: string | null }>;
 };
 
 export function useFieldOps(routeDate = todayKey(), enabled = true) {
@@ -118,6 +118,7 @@ export function useFieldOps(routeDate = todayKey(), enabled = true) {
             planned_at: planned.toISOString(),
             distance_meters: meters,
             estimated_drive_minutes: meters != null ? routeEtaMinutes(meters) : null,
+            mandatory_reason: stop.mandatory_reason ?? null,
           };
         });
         const { error: insertError } = await supabase.from('field_route_stops').insert(rows);

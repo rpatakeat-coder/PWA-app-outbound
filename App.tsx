@@ -57,6 +57,7 @@ import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingPr
 import { exportAgenda } from './src/utils/exportAgenda';
 import { useVisitsHeatmap } from './src/hooks/useVisitsHeatmap';
 import { buildHeatCells, heatColor, heatIntensity, HEAT_CELL_M, HEAT_LEGEND_STOPS } from './src/utils/heatmap';
+import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type MandatoryReason } from './src/utils/dailyRoute';
 
 const queryClient = new QueryClient();
 
@@ -1276,6 +1277,136 @@ function MainApp() {
     });
   }, [clients, fieldOps.saveRoute, filteredWithCoords, routeDate, routeLeadCount, routeVendorFilterHubspotId, routeStatusSelection, routeStopClientIds, userLocation, routeStartOverride, vendorById]);
 
+  // ===== Rota do dia (automática) =====
+  // Monta as visitas OBRIGATÓRIAS do dia (Fase 1: Relacionamento; SLA/Conta
+  // Alvo entram nas Fases 2/3) + completa até a meta com sugestões, partindo do
+  // GPS do vendedor, já otimizada (TSP). Não mexe no fluxo manual de rota.
+  const generateDailyRoute = useCallback(async () => {
+    // Base = onde o vendedor ESTÁ agora (a Rota do dia parte daqui). Cai pro
+    // override de ponto de partida só se o GPS não estiver disponível.
+    const base = userLocation ?? (routeStartOverride
+      ? { latitude: routeStartOverride.latitude, longitude: routeStartOverride.longitude }
+      : null);
+    if (!base) {
+      Alert.alert('Sem localização', 'Ative o GPS pra montar a Rota do dia a partir de onde você está.');
+      return;
+    }
+
+    // Vendedor alvo: admin usa o filtro escolhido; vendedor comum, o próprio.
+    const vendor = (isAdmin ? routeVendorFilterHubspotId : myHubspotId) ?? myHubspotId ?? null;
+
+    setIsOptimizing(true);
+    let assembly;
+    try {
+      assembly = await assembleDailyRoute({
+        clients,
+        base,
+        vendor,
+        excludeIds: routeStopClientIds,
+        goal: DAILY_GOAL,
+        providers: {
+          sla: async () => null,       // TODO Fase 2: RPC sla_estourado_candidates
+          contaAlvo: async () => null, // TODO Fase 3: edge conta-alvo-nearby (2 km)
+        },
+      });
+    } catch (err: any) {
+      setIsOptimizing(false);
+      Alert.alert('Erro', err?.message ?? 'Falha ao montar a Rota do dia.');
+      return;
+    }
+
+    const candidates = assembly.candidates;
+    if (candidates.length === 0) {
+      setIsOptimizing(false);
+      Alert.alert('Sem candidatos', 'Não achei clientes/leads com coordenadas pra montar a rota a partir daqui.');
+      return;
+    }
+
+    // Ordena por TSP real (ORS → OSRM), igual à sugestão manual. Sem fallback
+    // pra linha reta: se ambos caírem, avisa.
+    const ordered: Array<{ client: Client; meters: number }> = [];
+    let tripDistanceMeters: number | null = null;
+    let tripDurationSeconds: number | null = null;
+    let optimizationProvider: RoutingProvider | null = null;
+    try {
+      const tripPoints: RoutePoint[] = [
+        { latitude: base.latitude, longitude: base.longitude },
+        ...candidates.map(c => ({ latitude: c.latitude as number, longitude: c.longitude as number })),
+      ];
+      const trip = await fetchOptimizedTrip(tripPoints);
+      const visitOrder = trip.inputOrderToVisit.slice(1);
+      let prevLat = base.latitude;
+      let prevLon = base.longitude;
+      for (const inputIdx of visitOrder) {
+        const c = candidates[inputIdx - 1];
+        if (!c) continue;
+        const segMeters = distanceMeters(prevLat, prevLon, c.latitude as number, c.longitude as number);
+        ordered.push({ client: c, meters: segMeters });
+        prevLat = c.latitude as number;
+        prevLon = c.longitude as number;
+      }
+      tripDistanceMeters = trip.distanceMeters;
+      tripDurationSeconds = trip.durationSeconds;
+      optimizationProvider = trip.provider;
+      setLastProviderUsed(trip.provider);
+    } catch (err: any) {
+      console.warn('[ROTA DIA] Otimização (ORS e OSRM) falhou:', err?.message ?? err);
+      setIsOptimizing(false);
+      Alert.alert(
+        'Erro ao gerar rota',
+        'Não conseguimos calcular a ordem otimizada (OpenRouteService e OSRM estão fora). '
+        + 'Tente novamente em alguns minutos.',
+      );
+      return;
+    } finally {
+      setIsOptimizing(false);
+    }
+
+    if (ordered.length === 0) {
+      Alert.alert('Sem candidatos', 'Não consegui montar a Rota do dia.');
+      return;
+    }
+
+    setRouteDraft(ordered.map(o => o.client));
+    fieldOps.saveRoute.mutate({
+      routeDate,
+      title: 'Rota do dia',
+      source: 'suggested',
+      priorityMode: 'daily',
+      base,
+      stops: ordered.map(o => ({
+        client: o.client,
+        distance_meters: o.meters,
+        mandatory_reason: assembly!.reasonByClientId.get(o.client.id) ?? null,
+      })),
+    }, {
+      onSuccess: () => {
+        const obrig = [...assembly!.reasonByClientId.values()];
+        const providerLabel = optimizationProvider === 'ors'
+          ? 'OpenRouteService'
+          : optimizationProvider === 'osrm' ? 'OSRM (ORS fora)' : '';
+        const tripInfo = tripDistanceMeters != null && tripDurationSeconds != null
+          ? `\n🛣️ ${(tripDistanceMeters / 1000).toFixed(1)} km • ~${Math.round(tripDurationSeconds / 60)} min de carro`
+            + (providerLabel ? ` (via ${providerLabel})` : '')
+          : '';
+        const lines = [
+          `Rota do dia com ${ordered.length} parada${ordered.length === 1 ? '' : 's'}.`,
+          tripInfo,
+          '',
+          obrig.length
+            ? `🔒 Obrigatórias: ${obrig.map(r => MANDATORY_LABEL[r]).join(', ')}`
+            : 'Nenhuma obrigatória encontrada hoje.',
+          assembly!.missing.length
+            ? `⚠️ Sem candidato hoje: ${assembly!.missing.map(r => MANDATORY_LABEL[r]).join(', ')}`
+            : null,
+          '\nObs.: SLA e Conta Alvo entram nas próximas fases.',
+        ].filter(Boolean);
+        Alert.alert('Rota do dia', lines.join('\n'));
+      },
+      onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
+    });
+  }, [clients, fieldOps.saveRoute, userLocation, routeStartOverride, isAdmin, routeVendorFilterHubspotId, myHubspotId, routeStopClientIds, routeDate]);
+
   const saveManualRoute = useCallback((draft = routeDraft) => {
     if (draft.length === 0) {
       Alert.alert('Rota vazia', 'Adicione leads antes de salvar.');
@@ -2113,6 +2244,26 @@ function MainApp() {
 
   const renderRouteScreen = () => (
     <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
+      {/* Rota do dia (automática): monta as obrigatórias + completa a meta.
+          Fica no topo como CTA principal; o fluxo manual segue abaixo. */}
+      <View style={[styles.panelCard, { borderWidth: 1, borderColor: '#ede9fe' }]}>
+        <Text style={styles.panelTitle}>🗺️ Rota do dia</Text>
+        <Text style={styles.panelHint}>
+          Monta as visitas obrigatórias do dia (Relacionamento +1000 comandas; SLA e Conta
+          Alvo em breve) e completa até {DAILY_GOAL} paradas perto de você, já na ordem otimizada.
+          Parte da sua localização atual.
+        </Text>
+        <TouchableOpacity
+          style={[styles.submitButton, { marginTop: 12, backgroundColor: '#7c3aed' }]}
+          onPress={generateDailyRoute}
+          disabled={fieldOps.saveRoute.isPending || isOptimizing}
+        >
+          {(fieldOps.saveRoute.isPending || isOptimizing)
+            ? <ActivityIndicator color="#fff" />
+            : <Text style={styles.submitButtonText}>Gerar Rota do dia</Text>}
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.panelCard}>
         <Text style={styles.panelTitle}>Sugerir rota do dia</Text>
         <Text style={styles.panelHint}>
@@ -2420,6 +2571,12 @@ function MainApp() {
                     <Text style={[styles.routeStopSubtitle, isDone && { textDecorationLine: 'line-through' }]} numberOfLines={1}>
                       {subtitle}
                     </Text>
+                    {(() => {
+                      const mreason = stop?.mandatory_reason as MandatoryReason | undefined;
+                      return mreason && MANDATORY_BADGE[mreason] ? (
+                        <Text style={styles.mandatoryTag}>{MANDATORY_BADGE[mreason]}</Text>
+                      ) : null;
+                    })()}
                   </View>
                   <View style={[styles.statusBadge, { backgroundColor: isDone ? '#16a34a' : color }]}>
                     <Text style={styles.statusBadgeText}>
@@ -6289,6 +6446,7 @@ const styles = StyleSheet.create({
   },
   routeStopHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
   routeStopSubtitle: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  mandatoryTag: { fontSize: 11, fontWeight: '800', color: '#7c3aed', marginTop: 3 },
   checkbox: {
     width: 24,
     height: 24,
