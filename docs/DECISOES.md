@@ -70,3 +70,13 @@ delete from auth.sessions where user_id in (select id from auth.users where emai
 - **Entrada de leads** (HubSpot → app) → edges `hubspot-lead-webhook` / `-latlong`.
 - **Regra de gerar tarefa** (`agendar_demo`, SLAs) é **server-side** (função Postgres `generate_client_tasks()` + cron a cada 30 min). EAS/app **não** afeta isso.
 - `export-report` (botão "Exportar TUDO" do gestor) valida por **lista fixa de e-mails** (`GESTOR_EMAILS`), não pelo `role`. Acesso à aba Gestor = `profiles.role = 'gestor'`.
+
+---
+
+## 5. Mapa de calor de visitas (gestor)
+
+Camada opcional sobre o **mapa principal**, só para o gestor: densidade de check-ins (`client_visits`) por área. Botão **🔥** (acima do FAB); painel embaixo com legenda + filtro **Todos / um vendedor**.
+
+- **Por que `<Circle>` e não `<Heatmap>`:** o `<Heatmap>` nativo do `react-native-maps` **só funciona com Google Maps**. O app usa **Apple Maps no iOS** (não setamos `PROVIDER_GOOGLE`), então o Heatmap nativo não renderiza. Solução: agregar as visitas numa **grade** (~180m/célula) e desenhar um `<Circle>` translúcido por célula (cor/raio pela contagem) — funciona igual em Apple e Google Maps. É o mesmo caminho do `<Polyline>` das rotas (renderiza como filho não-marker do map-clustering).
+- **Dados:** cada visita já grava GPS (`visited_at_lat/lon`) + quem (`visited_by`/`visited_by_name`); RLS de `client_visits` é `SELECT USING(true)`. A busca é **paginada** (contorna o teto de 1000 linhas do PostgREST), **só dispara quando o gestor liga** o calor, com teto de segurança (8k pontos / 300 círculos, priorizando as áreas mais quentes → mostra "(amostra recente)" se atingir).
+- Arquivos: `src/utils/heatmap.ts` (grade + escala de cor, puro), `src/hooks/useVisitsHeatmap.ts` (busca + vendedores derivados), `App.tsx` (toggle 🔥, painel, `<Circle>` no mapa).

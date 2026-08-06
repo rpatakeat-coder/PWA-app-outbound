@@ -25,7 +25,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView from 'react-native-map-clustering';
-import { Marker, Polyline, default as RNMapView } from 'react-native-maps';
+import { Marker, Polyline, Circle, default as RNMapView } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { useClients } from './src/hooks/useClients';
@@ -55,6 +55,8 @@ import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
 import { reverseGeocode } from './src/utils/geocoding';
 import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingProvider } from './src/utils/routing';
 import { exportAgenda } from './src/utils/exportAgenda';
+import { useVisitsHeatmap } from './src/hooks/useVisitsHeatmap';
+import { buildHeatCells, heatColor, heatIntensity, HEAT_CELL_M, HEAT_LEGEND_STOPS } from './src/utils/heatmap';
 
 const queryClient = new QueryClient();
 
@@ -548,6 +550,26 @@ function MainApp() {
   // Aplicacao real do bloqueio esta nas RLS policies do Supabase (is_view_only_user()).
   const isViewer = profile?.role === 'view';
   const fieldOps = useFieldOps(routeDate, isAuthenticated);
+
+  // ===== Mapa de calor de visitas (só gestor) =====
+  // Camada opcional sobre o mapa principal: densidade de check-ins por área.
+  // Só o gestor vê o botão; a busca dos pontos só dispara quando ligado.
+  const [heatOn, setHeatOn] = useState(false);
+  const [heatSeller, setHeatSeller] = useState<string | null>(null); // null = Todos
+  const {
+    points: heatPoints,
+    sellers: heatSellers,
+    capped: heatCapped,
+    isLoading: heatLoading,
+  } = useVisitsHeatmap(canViewGestor && heatOn);
+
+  // Pontos filtrados pelo vendedor selecionado, agregados na grade.
+  const heat = useMemo(() => {
+    if (!heatOn) return { cells: [], max: 0, total: 0 };
+    const pts = heatSeller ? heatPoints.filter((p) => p.sellerId === heatSeller) : heatPoints;
+    const { cells, max } = buildHeatCells(pts);
+    return { cells, max, total: pts.length };
+  }, [heatOn, heatSeller, heatPoints]);
 
   // Se o usuario viewer entrou em uma aba que nao existe pra ele (rota/agenda)
   // via state preservado entre sessoes, joga de volta pro mapa.
@@ -3587,6 +3609,23 @@ function MainApp() {
             // resolve; os pins apenas reposicionam sem transicao.
             animationEnabled={false}
           >
+            {/* Camada de calor (gestor): um círculo translúcido por célula da
+                grade, cor/raio conforme a densidade de visitas. Renderiza ANTES
+                dos markers pra os pins ficarem por cima. Funciona em Apple e
+                Google Maps (o <Heatmap> nativo só roda no Google). */}
+            {heatOn && heat.cells.map((cell, idx) => {
+              const t = heatIntensity(cell.n, heat.max);
+              return (
+                <Circle
+                  key={`heat-${idx}`}
+                  center={{ latitude: cell.lat, longitude: cell.lon }}
+                  radius={HEAT_CELL_M * (1.05 + 0.75 * t)}
+                  fillColor={heatColor(t, 0.28 + 0.3 * t)}
+                  strokeColor="rgba(0,0,0,0)"
+                  strokeWidth={0}
+                />
+              );
+            })}
             {filteredMapMarkers.map(client => (
               <MarkerWithReady
                 key={client.id}
@@ -3681,8 +3720,9 @@ function MainApp() {
 
           {/* Legenda das cores dos pins. Como a temperatura virou COR (nao ha
               mais a bandeirinha de emoji explicando), a legenda passa a ser
-              necessaria pra decifrar o mapa. Fica fora do modo de criacao. */}
-          {!creationMode && (
+              necessaria pra decifrar o mapa. Fica fora do modo de criacao.
+              Some enquanto o mapa de calor está ligado (a legenda dele assume). */}
+          {!creationMode && !heatOn && (
             <View style={[styles.tempLegend, { bottom: 90 + insets.bottom }]} pointerEvents="none">
               {[
                 { c: TEMP_COLORS.hot, l: 'Quente' },
@@ -3699,8 +3739,9 @@ function MainApp() {
             </View>
           )}
 
-          {/* Map buttons */}
-          {userLocation && !creationMode && (
+          {/* Map buttons. Recenter e FAB somem enquanto o calor está ligado
+              (o painel de calor ocupa a faixa de baixo). */}
+          {userLocation && !creationMode && !heatOn && (
             <TouchableOpacity
               style={[styles.mapButton, { bottom: 90 + insets.bottom, left: 16 }]}
               onPress={centerOnUser}
@@ -3711,15 +3752,92 @@ function MainApp() {
             </TouchableOpacity>
           )}
 
+          {/* Toggle do mapa de calor — só gestor. Fica acima do FAB (à direita).
+              Quando ligado some (o painel embaixo, com seu ✕, é o controle de
+              desligar) — assim não sobrepõe o painel. */}
+          {canViewGestor && !creationMode && !heatOn && (
+            <TouchableOpacity
+              style={[styles.mapButton, { left: undefined, right: 16, bottom: 90 + 66 + insets.bottom }]}
+              onPress={() => setHeatOn(true)}
+            >
+              <Text style={{ fontSize: 20 }}>🔥</Text>
+            </TouchableOpacity>
+          )}
+
           {/* Cadastro outbound (📤) escondido: mandava só pro HubSpot sem
               registrar no app. Fica apenas o FAB vermelho (+). */}
-          {!creationMode && !isViewer && (
+          {!creationMode && !isViewer && !heatOn && (
             <TouchableOpacity
               style={[styles.fab, { bottom: 90 + insets.bottom }]}
               onPress={() => setShowCepStep(true)}
             >
               <Text style={styles.fabText}>+</Text>
             </TouchableOpacity>
+          )}
+
+          {/* Painel do mapa de calor (gestor). Título + legenda gradiente +
+              chips de vendedor (Todos + um por vez). O ✕ e o próprio 🔥 desligam. */}
+          {heatOn && !creationMode && (
+            <View style={[styles.heatPanel, { bottom: 90 + insets.bottom }]}>
+              <View style={styles.heatPanelHeader}>
+                <Text style={styles.heatPanelTitle}>🔥 Calor de visitas</Text>
+                {heatLoading ? (
+                  <ActivityIndicator size="small" color="#f97316" />
+                ) : (
+                  <Text style={styles.heatPanelCount}>
+                    {heat.total} {heat.total === 1 ? 'visita' : 'visitas'}
+                    {heatCapped ? ' (amostra recente)' : ''}
+                  </Text>
+                )}
+              </View>
+
+              {/* Legenda: menos → mais visitas */}
+              <View style={styles.heatLegendRow}>
+                <Text style={styles.heatLegendLabel}>menos</Text>
+                <View style={styles.heatLegendBar}>
+                  {HEAT_LEGEND_STOPS.map((c, i) => (
+                    <View key={i} style={{ flex: 1, backgroundColor: c }} />
+                  ))}
+                </View>
+                <Text style={styles.heatLegendLabel}>mais</Text>
+                <TouchableOpacity style={styles.heatCloseBtn} onPress={() => setHeatOn(false)}>
+                  <Text style={styles.heatCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Filtro por vendedor: Todos + um por vez */}
+              {heat.total === 0 && !heatLoading ? (
+                <Text style={styles.heatEmpty}>
+                  {heatSeller ? 'Este vendedor não tem visitas com GPS.' : 'Nenhuma visita com GPS registrada.'}
+                </Text>
+              ) : null}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.heatChips}
+                keyboardShouldPersistTaps="handled"
+              >
+                <TouchableOpacity
+                  style={[styles.heatChip, heatSeller === null && styles.heatChipActive]}
+                  onPress={() => setHeatSeller(null)}
+                >
+                  <Text style={[styles.heatChipText, heatSeller === null && styles.heatChipTextActive]}>
+                    Todos ({heatPoints.length})
+                  </Text>
+                </TouchableOpacity>
+                {heatSellers.map((s) => (
+                  <TouchableOpacity
+                    key={s.id}
+                    style={[styles.heatChip, heatSeller === s.id && styles.heatChipActive]}
+                    onPress={() => setHeatSeller((cur) => (cur === s.id ? null : s.id))}
+                  >
+                    <Text style={[styles.heatChipText, heatSeller === s.id && styles.heatChipTextActive]}>
+                      {s.name} ({s.count})
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
           )}
 
           {creationMode && creationCenter && (
@@ -6302,6 +6420,60 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 4,
   },
+  // ===== Painel do mapa de calor (gestor) =====
+  heatPanel: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    backgroundColor: 'rgba(255,255,255,0.97)',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  heatPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  heatPanelTitle: { fontSize: 14, fontWeight: '800', color: '#0f172a' },
+  heatPanelCount: { fontSize: 12, fontWeight: '600', color: '#64748b' },
+  heatLegendRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  heatLegendLabel: { fontSize: 10, fontWeight: '700', color: '#94a3b8' },
+  heatLegendBar: {
+    flex: 1,
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    flexDirection: 'row',
+  },
+  heatCloseBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 2,
+  },
+  heatCloseText: { fontSize: 13, fontWeight: '800', color: '#475569' },
+  heatEmpty: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic', marginBottom: 6 },
+  heatChips: { gap: 6, paddingRight: 4 },
+  heatChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
+  },
+  heatChipActive: { backgroundColor: '#f97316' },
+  heatChipText: { fontSize: 12, fontWeight: '700', color: '#475569' },
+  heatChipTextActive: { color: '#fff' },
   fab: {
     position: 'absolute',
     right: 16,
