@@ -2,7 +2,25 @@ import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAllSellers } from '../hooks/useAllSellers';
 import { useRouteHistory, useRouteRanking } from '../hooks/useRouteHistory';
+import { useSellerGoals } from '../hooks/useSellerGoals';
+import { useRouteConfig } from '../hooks/useRouteConfig';
 import { exportAgenda } from '../utils/exportAgenda';
+
+// Dias úteis (seg–sex) no intervalo — base da meta do período (meta/dia × úteis).
+function workdaysBetween(startISO: string | null, endISO: string | null): number {
+  if (!startISO || !endISO) return 0;
+  const start = new Date(startISO.slice(0, 10) + 'T00:00:00');
+  const end = new Date(endISO.slice(0, 10) + 'T00:00:00');
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) return 0;
+  let count = 0;
+  const d = new Date(start);
+  while (d <= end) {
+    const dow = d.getDay();
+    if (dow >= 1 && dow <= 5) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return count;
+}
 
 // "Histórico de rotas" (aba Gestor): RANKING dos vendedores escolhidos (por %
 // de conclusão) + drill-down por dia (rota planejada + check-ins reais). O
@@ -87,6 +105,19 @@ export function RouteHistorySection({ range, enabled }: Props) {
   const [sortBy, setSortBy] = useState<'pct' | 'checkins'>('pct');
   const [exportingRank, setExportingRank] = useState(false);
 
+  // Meta diária por vendedor (fallback pra meta global). meta do período =
+  // meta/dia × dias úteis; % = check-ins / meta do período.
+  const { goals } = useSellerGoals(enabled && open);
+  const { config } = useRouteConfig();
+  const defaultMeta = config.meta_visitas_dia || 6;
+  const workdays = useMemo(() => workdaysBetween(range.start, range.end), [range.start, range.end]);
+  const metaOf = (sellerId: string, checkins: number) => {
+    const metaDia = goals.get(sellerId) ?? defaultMeta;
+    const metaPeriodo = workdays > 0 ? metaDia * workdays : 0;
+    const pctMeta = metaPeriodo > 0 ? Math.round((checkins / metaPeriodo) * 100) : null;
+    return { metaDia, metaPeriodo, pctMeta };
+  };
+
   // Ranking ordenado pelo criterio escolhido (a query ja vem por pct; reordena
   // aqui pra trocar sem refetch).
   const rows = useMemo(() => {
@@ -112,6 +143,7 @@ export function RouteHistorySection({ range, enabled }: Props) {
         },
         ranking: rows.map((r, idx) => {
           const s = nameById.get(r.sellerId);
+          const m = metaOf(r.sellerId, r.checkins);
           return {
             posicao: idx + 1,
             vendedor: s?.name ?? 'Vendedor',
@@ -121,6 +153,9 @@ export function RouteHistorySection({ range, enabled }: Props) {
             paradas: r.paradas,
             concluidas: r.concluidas,
             check_ins: r.checkins,
+            meta_dia: m.metaDia,
+            meta_periodo: m.metaPeriodo,
+            pct_meta: m.pctMeta,
             km: Number(r.km.toFixed(1)),
             min: Math.round(r.min),
           };
@@ -227,6 +262,7 @@ export function RouteHistorySection({ range, enabled }: Props) {
               {rows.map((r, idx) => {
                 const s = nameById.get(r.sellerId);
                 const isOpen = expanded === r.sellerId;
+                const meta = metaOf(r.sellerId, r.checkins);
                 return (
                   <View key={r.sellerId}>
                     <TouchableOpacity
@@ -240,7 +276,7 @@ export function RouteHistorySection({ range, enabled }: Props) {
                           {s?.name ?? 'Vendedor'}{s?.deactivated ? ' • desativado' : ''}
                         </Text>
                         <Text style={styles.rankMeta}>
-                          {r.paradas} paradas ({r.concluidas} ✓) · 📍 {r.checkins} · 🛣️ {r.km.toFixed(0)} km
+                          {r.paradas} paradas ({r.concluidas} ✓) · 📍 {r.checkins}{meta.metaPeriodo > 0 ? ` / ${meta.metaPeriodo} meta (${meta.pctMeta}%)` : ''} · 🛣️ {r.km.toFixed(0)} km
                         </Text>
                       </View>
                       <Text style={[styles.rankPct, { color: r.pct >= 70 ? '#16a34a' : r.pct >= 40 ? '#f59e0b' : '#dc2626' }]}>
