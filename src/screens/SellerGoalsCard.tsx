@@ -9,7 +9,9 @@ import { useRouteConfig } from '../hooks/useRouteConfig';
 
 export function SellerGoalsCard() {
   const [open, setOpen] = useState(false);
-  const { data: sellers = [], isLoading: loadingSellers } = useAllSellers(open);
+  const { data: allSellers = [], isLoading: loadingSellers } = useAllSellers(open);
+  // Só vendedores ATIVOS têm meta ("sem meta" e "não vendedor" ficam de fora).
+  const sellers = allSellers.filter((s) => s.status === 'ativo');
   const { goals, save } = useSellerGoals(open);
   const { config } = useRouteConfig();
   const defaultMeta = config.meta_visitas_dia || 6;

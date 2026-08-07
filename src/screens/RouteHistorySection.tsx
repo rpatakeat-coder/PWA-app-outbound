@@ -112,6 +112,8 @@ export function RouteHistorySection({ range, enabled }: Props) {
   const defaultMeta = config.meta_visitas_dia || 6;
   const workdays = useMemo(() => workdaysBetween(range.start, range.end), [range.start, range.end]);
   const metaOf = (sellerId: string, checkins: number) => {
+    // "Sem meta": aparece no ranking mas não compara com meta.
+    if (nameById.get(sellerId)?.status === 'sem_meta') return { metaDia: 0, metaPeriodo: 0, pctMeta: null as number | null };
     const metaDia = goals.get(sellerId) ?? defaultMeta;
     const metaPeriodo = workdays > 0 ? metaDia * workdays : 0;
     const pctMeta = metaPeriodo > 0 ? Math.round((checkins / metaPeriodo) * 100) : null;

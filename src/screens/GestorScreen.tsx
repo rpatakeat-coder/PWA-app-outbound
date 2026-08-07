@@ -29,6 +29,7 @@ import {
   type GestorTaskStatus,
 } from '../hooks/useGestorMetrics';
 import { RouteConfigCard } from './RouteConfigCard';
+import { SellerClassificationCard } from './SellerClassificationCard';
 import { SellerGoalsCard } from './SellerGoalsCard';
 import { DismissedContaAlvoCard } from './DismissedContaAlvoCard';
 import { RouteHistorySection } from './RouteHistorySection';
@@ -714,6 +715,9 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
             : 'Período personalizado'}
         </Text>
       </TouchableOpacity>
+
+      {/* Quem é vendedor ativo / comum sem meta / não é vendedor. */}
+      <SellerClassificationCard />
 
       {/* Config da Rota do dia (raio/nota/avaliações Conta Alvo, meta/dia, SLAs). */}
       <RouteConfigCard />

@@ -1,0 +1,126 @@
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSellerClassification } from '../hooks/useSellerClassification';
+import type { SellerStatus } from '../hooks/useAllSellers';
+
+// "👥 Vendedores & usuários" (aba Gestor): o gestor define quem é vendedor
+// ativo, quem é usuário comum (sem meta) e quem não é vendedor. Aplica nos
+// rankings/metas/filtros.
+
+const OPTIONS: { value: SellerStatus; label: string }[] = [
+  { value: 'ativo', label: 'Vendedor' },
+  { value: 'sem_meta', label: 'Sem meta' },
+  { value: 'nao_vendedor', label: 'Não vend.' },
+];
+
+export function SellerClassificationCard() {
+  const [open, setOpen] = useState(false);
+  const { users, isLoading, save } = useSellerClassification(open);
+  const [form, setForm] = useState<Record<string, SellerStatus>>({});
+  const [hideDeactivated, setHideDeactivated] = useState(false);
+
+  const visible = users.filter((u) => !hideDeactivated || !u.deactivated);
+  const deactivatedCount = users.filter((u) => u.deactivated).length;
+
+  useEffect(() => {
+    if (!open || users.length === 0) return;
+    setForm((prev) => {
+      const next = { ...prev };
+      for (const u of users) if (next[u.id] === undefined) next[u.id] = u.status;
+      return next;
+    });
+  }, [open, users]);
+
+  const onSave = () => {
+    const rows = users.map((u) => ({ seller_id: u.id, status: form[u.id] ?? u.status }));
+    save.mutate(rows, {
+      onSuccess: () => Alert.alert('Salvo ✅', 'Classificação atualizada. Vale nos rankings, metas e filtros.'),
+      onError: (err: any) => Alert.alert('Erro ao salvar', err?.message ?? 'Tente de novo.'),
+    });
+  };
+
+  return (
+    <View style={styles.card}>
+      <TouchableOpacity style={styles.header} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
+        <Text style={styles.title}>👥 Vendedores & usuários</Text>
+        <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
+      </TouchableOpacity>
+
+      {open && (
+        <View style={{ marginTop: 8 }}>
+          <Text style={styles.hint}>
+            Vendedor = rankings + metas. Sem meta = aparece no ranking mas sem meta. Não vend. = sumido.
+          </Text>
+          {deactivatedCount > 0 && (
+            <TouchableOpacity
+              style={[styles.toggle, hideDeactivated && styles.toggleActive]}
+              onPress={() => setHideDeactivated((v) => !v)}
+            >
+              <Text style={[styles.toggleText, hideDeactivated && styles.toggleTextActive]}>
+                {hideDeactivated ? '☑' : '☐'} Ocultar desativados ({deactivatedCount})
+              </Text>
+            </TouchableOpacity>
+          )}
+          {isLoading ? (
+            <ActivityIndicator color="#7c3aed" style={{ marginVertical: 12 }} />
+          ) : (
+            <>
+              {visible.map((u) => {
+                const cur = form[u.id] ?? u.status;
+                return (
+                  <View key={u.id} style={styles.row}>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {u.name}{u.deactivated ? ' • desativado' : ''}
+                    </Text>
+                    <View style={styles.seg}>
+                      {OPTIONS.map((o) => {
+                        const active = cur === o.value;
+                        return (
+                          <TouchableOpacity
+                            key={o.value}
+                            style={[styles.segBtn, active && styles.segBtnActive]}
+                            onPress={() => setForm((f) => ({ ...f, [u.id]: o.value }))}
+                          >
+                            <Text style={[styles.segText, active && styles.segTextActive]}>{o.label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              })}
+              <TouchableOpacity
+                style={[styles.saveBtn, save.isPending && { opacity: 0.6 }]}
+                onPress={onSave}
+                disabled={save.isPending}
+              >
+                {save.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Salvar classificação</Text>}
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#ede9fe', padding: 14, marginBottom: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  title: { fontSize: 15, fontWeight: '800', color: '#5b21b6' },
+  chevron: { fontSize: 12, color: '#7c3aed', fontWeight: '800' },
+  hint: { fontSize: 11, color: '#64748b', marginBottom: 10 },
+  toggle: { alignSelf: 'flex-start', backgroundColor: '#f1f5f9', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 10 },
+  toggleActive: { backgroundColor: '#ede9fe' },
+  toggleText: { fontSize: 12, fontWeight: '700', color: '#475569' },
+  toggleTextActive: { color: '#5b21b6' },
+  row: { marginBottom: 10 },
+  name: { fontSize: 13, fontWeight: '700', color: '#334155', marginBottom: 5 },
+  seg: { flexDirection: 'row', gap: 6 },
+  segBtn: { flex: 1, paddingVertical: 7, borderRadius: 8, backgroundColor: '#f1f5f9', alignItems: 'center' },
+  segBtnActive: { backgroundColor: '#7c3aed' },
+  segText: { fontSize: 12, fontWeight: '700', color: '#475569' },
+  segTextActive: { color: '#fff' },
+  saveBtn: { backgroundColor: '#7c3aed', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 6 },
+  saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+});
