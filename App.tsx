@@ -60,7 +60,8 @@ import { buildHeatCells, heatColor, heatIntensity, HEAT_CELL_M, HEAT_LEGEND_STOP
 import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type MandatoryReason } from './src/utils/dailyRoute';
 import { fetchContaAlvo } from './src/utils/contaAlvo';
 import { fetchSlaCandidate } from './src/utils/slaCandidate';
-import { slaStatus } from './src/utils/sla';
+import { slaStatus, type SlaDays } from './src/utils/sla';
+import { useRouteConfig } from './src/hooks/useRouteConfig';
 
 const queryClient = new QueryClient();
 
@@ -565,6 +566,16 @@ function MainApp() {
   });
   const { meetings, upcomingByClient, meetingsByClient, deleteMeeting } = useMeetings();
   const queryClient = useQueryClient();
+  // Config editável pelo gestor (meta/dia, SLAs, params da Conta Alvo).
+  const { config: routeConfig } = useRouteConfig();
+  const routeSlaDays: SlaDays = {
+    prospeccao: routeConfig.sla_prospeccao,
+    visita: routeConfig.sla_visita,
+    conversa: routeConfig.sla_conversa,
+    demo: routeConfig.sla_demo,
+    negociacao: routeConfig.sla_negociacao,
+    ag_pagamento: routeConfig.sla_ag_pagamento,
+  };
   // Tarefas geradas automaticamente (motor de regras no banco). O hook dispara
   // a geracao ao autenticar e le as pendentes. O badge do rodape usa a contagem
   // JA filtrada por vendedor (visibleTasksCount), nao o total global.
@@ -1412,7 +1423,7 @@ function MainApp() {
         base,
         vendor,
         excludeIds: routeStopClientIds,
-        goal: DAILY_GOAL,
+        goal: routeConfig.meta_visitas_dia || DAILY_GOAL,
         providers: {
           // SLA estourado (regra do MD): lead mais urgente do vendedor via RPC.
           sla: async (excludeIds) => fetchSlaCandidate(vendor, excludeIds),
@@ -1529,7 +1540,7 @@ function MainApp() {
       },
       onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
     });
-  }, [clients, fieldOps.saveRoute, userLocation, routeStartOverride, isAdmin, routeVendorFilterHubspotId, myHubspotId, profile?.id, routeStopClientIds, routeDate, queryClient]);
+  }, [clients, fieldOps.saveRoute, userLocation, routeStartOverride, isAdmin, routeVendorFilterHubspotId, myHubspotId, profile?.id, routeStopClientIds, routeDate, queryClient, routeConfig.meta_visitas_dia]);
 
   const saveManualRoute = useCallback((draft = routeDraft) => {
     if (draft.length === 0) {
@@ -2385,7 +2396,7 @@ function MainApp() {
         <Text style={styles.panelTitle}>🗺️ Rota do dia</Text>
         <Text style={styles.panelHint}>
           Monta as 3 visitas obrigatórias do dia (SLA estourado, Relacionamento +1000 comandas
-          e Conta Alvo) e completa até {DAILY_GOAL} paradas perto de você, já na ordem otimizada.
+          e Conta Alvo) e completa até {routeConfig.meta_visitas_dia} paradas perto de você, já na ordem otimizada.
           Parte da sua localização atual.
         </Text>
         <TouchableOpacity
@@ -3673,6 +3684,7 @@ function MainApp() {
       client={selectedClient}
       insets={insets}
       statusConfig={statusConfig}
+      slaDays={routeSlaDays}
       meetings={meetingsByClient[selectedClient.id] ?? []}
       coordCollision={hasCoordCollision(selectedClient)}
       onClose={() => setSelectedClient(null)}
@@ -5322,6 +5334,7 @@ function ClientBottomSheet({
   client,
   insets,
   statusConfig,
+  slaDays,
   meetings,
   coordCollision,
   onClose,
@@ -5342,6 +5355,7 @@ function ClientBottomSheet({
   client: Client;
   insets: { bottom: number };
   statusConfig: Record<string, { label: string; color: string }>;
+  slaDays?: SlaDays;
   meetings: ClientMeeting[];
   coordCollision: boolean;
   onClose: () => void;
@@ -5705,7 +5719,7 @@ function ClientBottomSheet({
             {/* SLA: dias parado x limite da etapa (regra do MD). Só pra lead em
                 etapa com SLA. Vermelho = estourado, amarelo = perto, verde = ok. */}
             {(() => {
-              const s = slaStatus(client);
+              const s = slaStatus(client, slaDays);
               if (!s.applies) return null;
               const color = s.breach ? '#dc2626' : s.ratio >= 0.7 ? '#f59e0b' : '#16a34a';
               const emoji = s.breach ? '🔴' : s.ratio >= 0.7 ? '🟡' : '🟢';

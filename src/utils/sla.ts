@@ -6,26 +6,49 @@ import type { Client } from '../types/client';
 // passam a ler de lá). diasParado = hoje − max(entrada na etapa, última
 // atividade humana, criação); breach = diasParado > SLA_da_etapa.
 
-// SLA por etapa (dias), chaveado pelo LABEL normalizado (client.etapa é label).
-const SLA_DAYS: Record<string, number> = {
-  'PROSPECÇÃO': 5,
-  'PROSPECCAO': 5,
-  'VISITA': 5,
-  'CONVERSA COM DECISOR': 4,
-  'DIAGNÓSTICO': 4,
-  'DIAGNOSTICO': 4,
-  'DEMO/PROPOSTA': 3,
-  'NEGOCIAÇÃO': 7,
-  'NEGOCIACAO': 7,
-  'AG. PAGAMENTO': 2,
+// SLA por etapa (dias). Defaults do MD; podem vir da route_config (gestor edita).
+export interface SlaDays {
+  prospeccao: number;
+  visita: number;
+  conversa: number;
+  demo: number;
+  negociacao: number;
+  ag_pagamento: number;
+}
+export const DEFAULT_SLA: SlaDays = {
+  prospeccao: 5,
+  visita: 5,
+  conversa: 4,
+  demo: 3,
+  negociacao: 7,
+  ag_pagamento: 2,
 };
 const NO_SLA = 999;
 
 const MS_DAY = 24 * 60 * 60 * 1000;
 
-export function slaForStage(etapa: string | null | undefined): number {
+export function slaForStage(etapa: string | null | undefined, sla: SlaDays = DEFAULT_SLA): number {
   const key = (etapa ?? '').trim().toUpperCase();
-  return SLA_DAYS[key] ?? NO_SLA;
+  switch (key) {
+    case 'PROSPECÇÃO':
+    case 'PROSPECCAO':
+      return sla.prospeccao;
+    case 'VISITA':
+      return sla.visita;
+    case 'CONVERSA COM DECISOR':
+    case 'DIAGNÓSTICO':
+    case 'DIAGNOSTICO':
+      return sla.conversa;
+    case 'DEMO/PROPOSTA':
+      return sla.demo;
+    case 'NEGOCIAÇÃO':
+    case 'NEGOCIACAO':
+      return sla.negociacao;
+    case 'AG. PAGAMENTO':
+      return sla.ag_pagamento;
+    default:
+      return NO_SLA;
+  }
 }
 
 export interface SlaStatus {
@@ -37,8 +60,8 @@ export interface SlaStatus {
   applies: boolean;
 }
 
-export function slaStatus(client: Client, now = Date.now()): SlaStatus {
-  const sla = slaForStage(client.etapa);
+export function slaStatus(client: Client, slaDays: SlaDays = DEFAULT_SLA, now = Date.now()): SlaStatus {
+  const sla = slaForStage(client.etapa, slaDays);
   const applies = sla < NO_SLA && client.status === 'lead';
 
   // Data mais recente entre entrada na etapa, última atividade humana e criação

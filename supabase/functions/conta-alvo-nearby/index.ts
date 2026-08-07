@@ -22,15 +22,16 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 // Marcador de versao — aparece em toda resposta pra confirmar qual bundle esta
 // no ar (o deploy do Supabase as vezes serve versao cacheada).
-const VERSION = 'ca-v3-noorigem';
+const VERSION = 'ca-v4-config';
 
 const SERPER_URL = 'https://google.serper.dev/maps';
 const FETCH_TIMEOUT_MS = 15_000;
 
-// Regra do negocio.
-const MIN_RATING = 4.5;
-const MIN_REVIEWS = 100;
-const RADIUS_M = 2000;
+// Regra do negocio — DEFAULTS. Os valores efetivos vem da tabela route_config
+// (editavel pelo gestor); caem nestes se a tabela/linha nao existir.
+const DEFAULT_RATING = 4.5;
+const DEFAULT_REVIEWS = 100;
+const DEFAULT_RADIUS_M = 2000;
 
 // Grade de cache ~1,5 km (0,0135 graus). Uma celula = uma busca no Serper por
 // ~14 dias.
@@ -40,8 +41,6 @@ const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 // Um lugar a menos de 80 m de um cliente existente = ja esta no CRM, nao
 // prospecta de novo.
 const NEAR_CLIENT_M = 80;
-// Bounding box (graus) pra puxar clientes proximos do banco (~2,2 km).
-const BBOX_DEG = 0.02;
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -82,8 +81,12 @@ type Place = {
   address: string | null;
 };
 
-// Busca no Serper Maps e filtra pela regra (nota/avaliacoes/raio).
-async function serperNearby(lat: number, lon: number): Promise<Place[]> {
+// Busca no Serper Maps e filtra pela regra (nota/avaliacoes/raio) — os limites
+// vem da config (route_config), passados aqui.
+async function serperNearby(
+  lat: number, lon: number,
+  minRating: number, minReviews: number, radiusM: number,
+): Promise<Place[]> {
   const key = Deno.env.get('SERPER_API_KEY');
   if (!key) throw new Error('SERPER_API_KEY nao configurado');
 
@@ -108,8 +111,8 @@ async function serperNearby(lat: number, lon: number): Promise<Place[]> {
       const reviews = p?.ratingCount != null ? Number(p.ratingCount) : null;
       if (!pid || !Number.isFinite(plat) || !Number.isFinite(plon)) continue;
       if (rating == null || reviews == null) continue;
-      if (rating < MIN_RATING || reviews <= MIN_REVIEWS) continue;
-      if (distMeters(lat, lon, plat, plon) > RADIUS_M) continue;
+      if (rating < minRating || reviews <= minReviews) continue;
+      if (distMeters(lat, lon, plat, plon) > radiusM) continue;
       out.push({
         place_id: String(pid),
         name: String(p?.title ?? 'Restaurante'),
@@ -149,13 +152,25 @@ Deno.serve(async (req: Request) => {
   const db = serviceClient();
 
   try {
-    // Clientes proximos (bbox ~2,2km) — pra (1) reusar conta-alvo nao visitada e
+    // Config editavel pelo gestor (route_config). Fallback pros defaults.
+    const { data: cfg } = await db
+      .from('route_config')
+      .select('conta_alvo_raio_m, conta_alvo_nota_min, conta_alvo_reviews_min')
+      .eq('id', 1)
+      .maybeSingle();
+    const radiusM = Number(cfg?.conta_alvo_raio_m) || DEFAULT_RADIUS_M;
+    const minRating = Number(cfg?.conta_alvo_nota_min) || DEFAULT_RATING;
+    const minReviews = Number(cfg?.conta_alvo_reviews_min) || DEFAULT_REVIEWS;
+    // Bbox de dedup acompanha o raio (+~330m de folga) pra nao perder clientes.
+    const bboxDeg = radiusM / 111320 + 0.003;
+
+    // Clientes proximos (bbox ~ raio) — pra (1) reusar conta-alvo nao visitada e
     // (2) excluir lugares que ja sao clientes.
     const { data: nearRows, error: nearErr } = await db
       .from('clients')
       .select('id, nome, empresa, latitude, longitude, status, etapa, id_hubspot, vendedor_id_hubspot, visited_at, origem, conta_alvo_place_id')
-      .gte('latitude', lat - BBOX_DEG).lte('latitude', lat + BBOX_DEG)
-      .gte('longitude', lon - BBOX_DEG).lte('longitude', lon + BBOX_DEG)
+      .gte('latitude', lat - bboxDeg).lte('latitude', lat + bboxDeg)
+      .gte('longitude', lon - bboxDeg).lte('longitude', lon + bboxDeg)
       .not('latitude', 'is', null).not('longitude', 'is', null);
     if (nearErr) throw nearErr;
     const near = nearRows ?? [];
@@ -168,7 +183,7 @@ Deno.serve(async (req: Request) => {
         !c.id_hubspot &&
         !c.visited_at &&
         (vendor === null || c.vendedor_id_hubspot === vendor) &&
-        distMeters(lat, lon, c.latitude, c.longitude) <= RADIUS_M)
+        distMeters(lat, lon, c.latitude, c.longitude) <= radiusM)
       .sort((a: any, b: any) =>
         distMeters(lat, lon, a.latitude, a.longitude) - distMeters(lat, lon, b.latitude, b.longitude));
     if (reusable.length > 0) {
@@ -187,7 +202,7 @@ Deno.serve(async (req: Request) => {
     if (cached && cached.length > 0) {
       candidates = cached as Place[];
     } else {
-      candidates = await serperNearby(lat, lon);
+      candidates = await serperNearby(lat, lon, minRating, minReviews, radiusM);
       if (candidates.length > 0) {
         const now = new Date().toISOString();
         await db.from('target_accounts').upsert(

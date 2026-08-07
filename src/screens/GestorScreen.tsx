@@ -28,6 +28,7 @@ import {
   type GestorTaskItem,
   type GestorTaskStatus,
 } from '../hooks/useGestorMetrics';
+import { RouteConfigCard } from './RouteConfigCard';
 
 interface Props {
   enabled: boolean;
@@ -710,6 +711,9 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
             : 'Período personalizado'}
         </Text>
       </TouchableOpacity>
+
+      {/* Config da Rota do dia (raio/nota/avaliações Conta Alvo, meta/dia, SLAs). */}
+      <RouteConfigCard />
 
       {/* Exportacao de dados (CSV com atividade por vendedor). */}
       <View style={styles.exportCard}>
