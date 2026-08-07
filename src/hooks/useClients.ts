@@ -567,6 +567,61 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
     },
   });
 
+  // Cria o deal no HubSpot pra um lead SEM id_hubspot (conta-alvo antes do
+  // check-in, ou pin cujo webhook de criacao falhou/atrasou). Dispara create_pin
+  // (a edge dedupe por id do pin, entao nao duplica), grava clients.id_hubspot e
+  // retorna o id. null se nao conseguiu. Usado pelo "Mover para etapa" pra
+  // destravar a mudanca de etapa de quem ainda nao virou deal.
+  const ensureHubspotDeal = async (c: Client): Promise<string | null> => {
+    if (c.id_hubspot) return c.id_hubspot;
+    try {
+      const body = await sendHubspotEvent({
+        type: 'create_pin',
+        id: c.id,
+        bairro: c.bairro,
+        celular: c.telefone,
+        cep: c.cep,
+        cidade: c.cidade,
+        dealname: c.empresa ?? c.nome,
+        email: c.email,
+        estado_uf: c.estado,
+        id_hubspot: null,
+        latitude: c.latitude !== null ? String(c.latitude) : null,
+        logradouro: c.endereco,
+        longitude: c.longitude !== null ? String(c.longitude) : null,
+        nome: c.nome,
+        numero_do_local: c.numero,
+        observacoes: c.observacoes,
+        url: c.url_hubspot,
+        vendedor_id: profile?.id_hubspot ?? '',
+        vendedor_nome: profile?.full_name ?? '',
+      });
+      const asObj = (typeof body === 'object' && body ? body : null) as Record<string, unknown> | null;
+      const raw0 = typeof body === 'string' ? body : (asObj?.id_hubspot ?? asObj?.deal_id ?? asObj?.id ?? null);
+      let idHubspot = raw0 ? String(raw0) : null;
+      let urlHubspot = (asObj?.url_hubspot ?? asObj?.url ?? null) as string | null;
+      if (idHubspot) {
+        await supabase
+          .from('clients')
+          .update({ id_hubspot: idHubspot, ...(urlHubspot ? { url_hubspot: urlHubspot } : {}) })
+          .eq('id', c.id);
+      } else {
+        // Resposta sem id (edge grava server-side) — confirma pelo banco.
+        for (let attempt = 1; attempt <= 5 && !idHubspot; attempt++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          const { data: row } = await supabase
+            .from('clients').select('id_hubspot, url_hubspot').eq('id', c.id).maybeSingle();
+          if (row?.id_hubspot) { idHubspot = row.id_hubspot; urlHubspot = (row.url_hubspot as string | null) ?? urlHubspot; }
+        }
+      }
+      if (idHubspot) queryClient.invalidateQueries({ queryKey: ['clients'] });
+      return idHubspot;
+    } catch (err) {
+      console.warn('[ensureHubspotDeal] falhou:', err);
+      return null;
+    }
+  };
+
   return {
     clients: query.data ?? [],
     statuses: statusesQuery.data ?? [],
@@ -578,5 +633,6 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
     updateClient,
     deleteClient,
     markAsVisited,
+    ensureHubspotDeal,
   };
 }

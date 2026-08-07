@@ -40,6 +40,10 @@ interface Props {
   initialStageId?: string;
   // Chamado apos o envio bem-sucedido (ex.: resolver a tarefa que originou).
   onDone?: () => void;
+  // Cria o deal no HubSpot pra um lead SEM id_hubspot (conta-alvo antes do
+  // check-in, ou pin com webhook atrasado) e devolve o id. Sem isso, mover a
+  // etapa de quem nao tem deal trava esperando o id chegar.
+  onCreateHubspotDeal?: (client: Client) => Promise<string | null>;
 }
 
 // Normaliza "1.500,50" / "1500,50" / "1500.50" / "1500" pra "1500.50".
@@ -388,7 +392,7 @@ function PlainTextField({
   );
 }
 
-export function ChangeStageModal({ client, onClose, initialStageId, onDone }: Props) {
+export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCreateHubspotDeal }: Props) {
   const [selectedStageId, setSelectedStageId] = useState<string | null>(initialStageId ?? null);
   // Modo "etapa fixa" (ex.: mover pra Perdido a partir da tarefa): oculta o
   // seletor de etapas e mostra so os sub-campos da etapa alvo.
@@ -440,6 +444,14 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone }: Pr
     if (resolvedHubspotId) return resolvedHubspotId;
     setWaitingId(true);
     try {
+      // Conta Alvo: nunca disparou create_pin (o deal so' nasce no engajamento)
+      // — cria o deal AGORA em vez de esperar um id que nao viria. Ao mover a
+      // etapa, a conta-alvo e' adotada (vira deal no HubSpot).
+      if (client.conta_alvo_place_id && onCreateHubspotDeal) {
+        const id = await onCreateHubspotDeal(client);
+        if (id) { setResolvedHubspotId(id); return id; }
+      }
+      // Pin normal: o id chega via webhook em ~1-3s — faz o polling.
       for (let attempt = 1; attempt <= RESOLVE_MAX_ATTEMPTS; attempt++) {
         setWaitAttempt(attempt);
         const id = await fetchHubspotId();
@@ -448,6 +460,11 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone }: Pr
           return id;
         }
         if (attempt < RESOLVE_MAX_ATTEMPTS) await sleep(RESOLVE_INTERVAL_MS);
+      }
+      // Ultimo recurso (webhook do pin falhou de vez): tenta criar o deal.
+      if (onCreateHubspotDeal) {
+        const id = await onCreateHubspotDeal(client);
+        if (id) { setResolvedHubspotId(id); return id; }
       }
       return null;
     } finally {

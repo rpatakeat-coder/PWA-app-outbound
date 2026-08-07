@@ -558,7 +558,7 @@ function MainApp() {
   const waitingForLocation = showOnlyMyArea && !userLocation && locationPermission === 'pending';
   const areaPermissionDenied = showOnlyMyArea && locationPermission === 'denied';
 
-  const { clients, statuses: dynamicStatuses, isLoading, error, deleteClient, addClient, updateClient, markAsVisited } = useClients({
+  const { clients, statuses: dynamicStatuses, isLoading, error, deleteClient, addClient, updateClient, markAsVisited, ensureHubspotDeal } = useClients({
     areaFilter,
     enabled: !waitingForLocation && !areaPermissionDenied,
   });
@@ -4995,6 +4995,7 @@ function MainApp() {
               : undefined
           }
           onClose={() => setChangingStageFor(null)}
+          onCreateHubspotDeal={ensureHubspotDeal}
         />
       )}
 
