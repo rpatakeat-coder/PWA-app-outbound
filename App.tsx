@@ -1523,7 +1523,6 @@ function MainApp() {
           assembly!.missing.length
             ? `⚠️ Sem candidato hoje: ${assembly!.missing.map(r => MANDATORY_LABEL[r]).join(', ')}`
             : null,
-          '\nObs.: SLA e Conta Alvo entram nas próximas fases.',
         ].filter(Boolean);
         Alert.alert('Rota do dia', lines.join('\n'));
       },
@@ -2384,8 +2383,8 @@ function MainApp() {
       <View style={[styles.panelCard, { borderWidth: 1, borderColor: '#ede9fe' }]}>
         <Text style={styles.panelTitle}>🗺️ Rota do dia</Text>
         <Text style={styles.panelHint}>
-          Monta as visitas obrigatórias do dia (Relacionamento +1000 comandas; SLA e Conta
-          Alvo em breve) e completa até {DAILY_GOAL} paradas perto de você, já na ordem otimizada.
+          Monta as 3 visitas obrigatórias do dia (SLA estourado, Relacionamento +1000 comandas
+          e Conta Alvo) e completa até {DAILY_GOAL} paradas perto de você, já na ordem otimizada.
           Parte da sua localização atual.
         </Text>
         <TouchableOpacity
