@@ -29,6 +29,7 @@ import {
   type GestorTaskStatus,
 } from '../hooks/useGestorMetrics';
 import { RouteConfigCard } from './RouteConfigCard';
+import { RouteHistorySection } from './RouteHistorySection';
 
 interface Props {
   enabled: boolean;
@@ -714,6 +715,13 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
 
       {/* Config da Rota do dia (raio/nota/avaliações Conta Alvo, meta/dia, SLAs). */}
       <RouteConfigCard />
+
+      {/* Histórico de rotas do vendedor (planejado + check-ins reais) no período. */}
+      <RouteHistorySection
+        sellers={query.data?.sellers ?? []}
+        range={periodRange(period)}
+        enabled={enabled}
+      />
 
       {/* Exportacao de dados (CSV com atividade por vendedor). */}
       <View style={styles.exportCard}>
