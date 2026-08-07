@@ -42,18 +42,21 @@ type RoutePayload = {
   stops: Array<{ client: Client; distance_meters?: number | null; mandatory_reason?: string | null }>;
 };
 
-export function useFieldOps(routeDate = todayKey(), enabled = true) {
+// sellerId: de quem carregar a rota. Default = usuario logado. O gestor passa o
+// auth uid de OUTRO vendedor pra monitorar a rota dele (o RLS de field_routes
+// libera o admin a ler qualquer uma). Sem o filtro por seller_id, o gestor
+// (que ve todas via RLS) pegava a rota mais recente de qualquer vendedor.
+export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: string | null) {
   const queryClient = useQueryClient();
   const { user, isAuthenticated } = useAuth();
+  const targetSeller = sellerId ?? user?.id ?? null;
 
   const routesQuery = useQuery<FieldRoute[]>({
-    queryKey: ['field_routes', routeDate],
+    queryKey: ['field_routes', routeDate, targetSeller],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('field_routes')
-        .select('*')
-        .eq('route_date', routeDate)
-        .order('created_at', { ascending: false });
+      let q = supabase.from('field_routes').select('*').eq('route_date', routeDate);
+      if (targetSeller) q = q.eq('seller_id', targetSeller);
+      const { data, error } = await q.order('created_at', { ascending: false });
       if (error) throw error;
       return (data ?? []) as FieldRoute[];
     },

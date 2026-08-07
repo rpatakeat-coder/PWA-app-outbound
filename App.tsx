@@ -582,7 +582,6 @@ function MainApp() {
   // Usuario 'view' = somente leitura. Esconde criar/editar/excluir/rotas/agenda/notas.
   // Aplicacao real do bloqueio esta nas RLS policies do Supabase (is_view_only_user()).
   const isViewer = profile?.role === 'view';
-  const fieldOps = useFieldOps(routeDate, isAuthenticated);
 
   // ===== Mapa de calor de visitas (só gestor) =====
   // Camada opcional sobre o mapa principal: densidade de check-ins por área.
@@ -650,6 +649,25 @@ function MainApp() {
     if (!v) return `id ${idHubspot}`;
     return v.full_name?.trim() || v.email || `id ${idHubspot}`;
   };
+
+  // ===== Rota do gestor: ver a rota do VENDEDOR selecionado (monitoramento) =====
+  // A rota é por seller_id (auth uid); o "Responsável" usa id_hubspot. Mapeia
+  // id_hubspot -> auth uid (profiles.id) pra o gestor carregar a rota do vendedor.
+  const authUidByHubspotId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const v of vendors) m.set(v.id_hubspot, v.id);
+    return m;
+  }, [vendors]);
+  // De quem é a rota exibida: o vendedor escolhido (gestor) ou o próprio.
+  const routeViewSellerId = useMemo(() => {
+    if (isAdmin && routeVendorFilterHubspotId && routeVendorFilterHubspotId !== '__none__') {
+      return authUidByHubspotId.get(routeVendorFilterHubspotId) ?? profile?.id ?? null;
+    }
+    return profile?.id ?? null;
+  }, [isAdmin, routeVendorFilterHubspotId, authUidByHubspotId, profile?.id]);
+  // Gestor monitorando a rota de OUTRO vendedor -> tela read-only.
+  const isMonitoringRoute = !!profile?.id && !!routeViewSellerId && routeViewSellerId !== profile.id;
+  const fieldOps = useFieldOps(routeDate, isAuthenticated, routeViewSellerId);
 
   // Carrega o toggle da preferência local na inicialização.
   useEffect(() => {
@@ -2293,6 +2311,17 @@ function MainApp() {
 
   const renderRouteScreen = () => (
     <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
+      {/* Gestor monitorando a rota de OUTRO vendedor: banner + tela read-only.
+          Muda o "Responsável" pra "Todos" pra voltar a gerar a propria. */}
+      {isMonitoringRoute && (
+        <View style={styles.monitorBanner}>
+          <Text style={styles.monitorBannerText}>
+            👁️ Você está vendo a rota de <Text style={{ fontWeight: '800' }}>{vendorLabel(routeVendorFilterHubspotId)}</Text> (somente leitura).
+            Para gerar/editar a sua, mude o "Responsável" para "Todos os vendedores".
+          </Text>
+        </View>
+      )}
+
       {/* Rota do dia (automática): monta as obrigatórias + completa a meta.
           Fica no topo como CTA principal; o fluxo manual segue abaixo. */}
       <View style={[styles.panelCard, { borderWidth: 1, borderColor: '#ede9fe' }]}>
@@ -2303,9 +2332,9 @@ function MainApp() {
           Parte da sua localização atual.
         </Text>
         <TouchableOpacity
-          style={[styles.submitButton, { marginTop: 12, backgroundColor: '#7c3aed' }]}
+          style={[styles.submitButton, { marginTop: 12, backgroundColor: '#7c3aed' }, isMonitoringRoute && { opacity: 0.4 }]}
           onPress={generateDailyRoute}
-          disabled={fieldOps.saveRoute.isPending || isOptimizing}
+          disabled={fieldOps.saveRoute.isPending || isOptimizing || isMonitoringRoute}
         >
           {(fieldOps.saveRoute.isPending || isOptimizing)
             ? <ActivityIndicator color="#fff" />
@@ -2433,9 +2462,9 @@ function MainApp() {
         )}
 
         <TouchableOpacity
-          style={[styles.submitButton, { marginTop: 16 }]}
+          style={[styles.submitButton, { marginTop: 16 }, isMonitoringRoute && { opacity: 0.4 }]}
           onPress={suggestRoute}
-          disabled={fieldOps.saveRoute.isPending || isOptimizing}
+          disabled={fieldOps.saveRoute.isPending || isOptimizing || isMonitoringRoute}
         >
           {(fieldOps.saveRoute.isPending || isOptimizing)
             ? <ActivityIndicator color="#fff" />
@@ -2444,7 +2473,9 @@ function MainApp() {
       </View>
 
       {/* Adicionar manualmente: busca em tempo real entre todos os leads.
-          Resultado mostra os 10 primeiros matches com botao "Adicionar". */}
+          Resultado mostra os 10 primeiros matches com botao "Adicionar".
+          Escondido no modo monitoramento (o gestor não edita a rota do vendedor). */}
+      {!isMonitoringRoute && (
       <View style={styles.panelCard}>
         <Text style={styles.panelTitle}>Adicionar lead manualmente</Text>
         <Text style={styles.panelHint}>
@@ -2505,11 +2536,14 @@ function MainApp() {
           <Text style={[styles.panelHint, { marginTop: 10 }]}>Digite pelo menos 2 caracteres.</Text>
         )}
       </View>
+      )}
 
       <View style={styles.panelCard}>
         <View style={styles.panelHeaderRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.panelTitle}>Rota de hoje</Text>
+            <Text style={styles.panelTitle}>
+              {isMonitoringRoute ? `Rota de ${vendorLabel(routeVendorFilterHubspotId)}` : 'Rota de hoje'}
+            </Text>
             <Text style={styles.panelHint}>
               {routeDisplayClients.length} leads planejados
               {routeGeometry.data && routeGeometry.data.coordinates.length > 1 && (
@@ -2551,7 +2585,7 @@ function MainApp() {
                 <Text style={styles.secondaryButtonText}>Abrir mapa</Text>
               </TouchableOpacity>
             )}
-            {routeDisplayClients.length > 0 && (
+            {routeDisplayClients.length > 0 && !isMonitoringRoute && (
               <TouchableOpacity
                 style={[styles.secondaryButton, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}
                 onPress={() => {
@@ -2604,7 +2638,7 @@ function MainApp() {
                     onPress={() => {
                       if (stop) fieldOps.toggleStopDone.mutate(stop);
                     }}
-                    disabled={!stop}
+                    disabled={!stop || isMonitoringRoute}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     {isDone && <Text style={styles.checkboxCheckmark}>✓</Text>}
@@ -2637,7 +2671,7 @@ function MainApp() {
                   </View>
                 </View>
                 <View style={styles.routeActionsRow}>
-                  {index > 0 && (
+                  {index > 0 && !isMonitoringRoute && (
                     <TouchableOpacity
                       style={styles.smallActionButton}
                       onPress={() => {
@@ -2649,7 +2683,7 @@ function MainApp() {
                       <Text style={styles.smallActionButtonText}>↑ Subir</Text>
                     </TouchableOpacity>
                   )}
-                  {!isLast && (
+                  {!isLast && !isMonitoringRoute && (
                     <TouchableOpacity
                       style={styles.smallActionButton}
                       onPress={() => {
@@ -2661,7 +2695,7 @@ function MainApp() {
                       <Text style={styles.smallActionButtonText}>↓ Descer</Text>
                     </TouchableOpacity>
                   )}
-                  {stop && (
+                  {stop && !isMonitoringRoute && (
                     <TouchableOpacity style={styles.smallActionButton} onPress={() => fieldOps.removeStop.mutate(stop)}>
                       <Text style={styles.smallActionButtonText}>Remover</Text>
                     </TouchableOpacity>
@@ -6544,6 +6578,16 @@ const styles = StyleSheet.create({
   routeStopHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
   routeStopSubtitle: { fontSize: 12, color: '#64748b', marginTop: 2 },
   mandatoryTag: { fontSize: 11, fontWeight: '800', color: '#7c3aed', marginTop: 3 },
+  // Banner de monitoramento (gestor vendo a rota de outro vendedor).
+  monitorBanner: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  monitorBannerText: { fontSize: 13, color: '#1e3a8a', fontWeight: '600', lineHeight: 18 },
   checkbox: {
     width: 24,
     height: 24,
