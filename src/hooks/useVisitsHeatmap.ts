@@ -11,6 +11,9 @@ export interface VisitPoint {
   lon: number;
   sellerId: string | null; // visited_by (auth uid); null em visitas antigas
   sellerName: string | null; // visited_by_name (snapshot do nome na hora)
+  at: string | null; // visited_at (data/hora da visita, ISO)
+  cidade: string | null; // do lead (clients.cidade, via client_id)
+  bairro: string | null; // do lead (clients.bairro, via client_id)
 }
 
 export interface VisitSeller {
@@ -37,7 +40,9 @@ export function useVisitsHeatmap(enabled: boolean) {
       for (;;) {
         const { data, error } = await supabase
           .from('client_visits')
-          .select('visited_at_lat, visited_at_lon, visited_by, visited_by_name, visited_at')
+          // cidade/bairro vem do lead (embed clients via client_id). RLS de
+          // clients aplica no embed — ok, o heatmap so' roda pro gestor.
+          .select('visited_at_lat, visited_at_lon, visited_by, visited_by_name, visited_at, client:clients(cidade, bairro)')
           .not('visited_at_lat', 'is', null)
           .not('visited_at_lon', 'is', null)
           .order('visited_at', { ascending: false })
@@ -49,14 +54,21 @@ export function useVisitsHeatmap(enabled: boolean) {
           visited_at_lon: number | string;
           visited_by: string | null;
           visited_by_name: string | null;
+          visited_at: string | null;
+          client: { cidade: string | null; bairro: string | null } | { cidade: string | null; bairro: string | null }[] | null;
         }[];
 
         for (const r of rows) {
+          // Embed to-one pode vir como objeto ou array (1 elemento) conforme a versao.
+          const c = Array.isArray(r.client) ? r.client[0] : r.client;
           points.push({
             lat: Number(r.visited_at_lat),
             lon: Number(r.visited_at_lon),
             sellerId: r.visited_by ?? null,
             sellerName: r.visited_by_name ?? null,
+            at: r.visited_at ?? null,
+            cidade: c?.cidade ?? null,
+            bairro: c?.bairro ?? null,
           });
         }
 

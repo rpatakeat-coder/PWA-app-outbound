@@ -633,8 +633,16 @@ function MainApp() {
         vendedores: heatSellers.map((s) => ({ id: s.id, nome: s.name, visitas: s.count })),
         // Agregado da grade (o "calor" de fato): lat/lon do centro + contagem.
         celulas: cells.map((c) => ({ lat: c.lat, lon: c.lon, visitas: c.n })),
-        // Pontos crus (cada check-in): lat/lon + vendedor.
-        pontos: pts.map((p) => ({ lat: p.lat, lon: p.lon, vendedor_id: p.sellerId, vendedor: p.sellerName })),
+        // Pontos crus (cada check-in): lat/lon + vendedor + data/hora + cidade/bairro.
+        pontos: pts.map((p) => ({
+          lat: p.lat,
+          lon: p.lon,
+          vendedor_id: p.sellerId,
+          vendedor: p.sellerName,
+          data_hora: p.at,
+          cidade: p.cidade,
+          bairro: p.bairro,
+        })),
       };
       const res = await exportAgenda(payload, `mapa-calor_${sellerName}`);
       Alert.alert(
