@@ -7,6 +7,7 @@ export interface DismissedContaAlvo {
   id: string;
   nome: string;
   cidade: string | null;
+  dismissedById: string | null;
   dismissedByName: string | null;
   dismissedAt: string | null;
   vendedorHubspotId: string | null;
@@ -20,7 +21,7 @@ export function useDismissedContaAlvo(enabled: boolean) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('clients')
-        .select('id, nome, empresa, cidade, conta_alvo_dismissed_by_name, conta_alvo_dismissed_at, vendedor_id_hubspot')
+        .select('id, nome, empresa, cidade, conta_alvo_dismissed_by, conta_alvo_dismissed_by_name, conta_alvo_dismissed_at, vendedor_id_hubspot')
         .eq('conta_alvo_dismissed', true)
         .order('conta_alvo_dismissed_at', { ascending: false })
         .limit(300);
@@ -29,6 +30,7 @@ export function useDismissedContaAlvo(enabled: boolean) {
         id: c.id,
         nome: (c.empresa?.trim() || c.nome || 'Sem nome') as string,
         cidade: c.cidade ?? null,
+        dismissedById: c.conta_alvo_dismissed_by ?? null,
         dismissedByName: c.conta_alvo_dismissed_by_name ?? null,
         dismissedAt: c.conta_alvo_dismissed_at ?? null,
         vendedorHubspotId: c.vendedor_id_hubspot ?? null,
