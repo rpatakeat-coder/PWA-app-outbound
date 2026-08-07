@@ -2235,6 +2235,16 @@ function MainApp() {
       }
 
       await markAsVisited.mutateAsync({ clientId: client.id, latitude: userLat, longitude: userLon });
+      // Auto-conclui a parada da rota do dia correspondente: o check-in É a
+      // conclusão da visita, então a parada não deveria ficar "pendente" só
+      // porque o vendedor não tocou o checkbox (senão o ranking subestima).
+      // Só na própria rota (não quando o gestor está monitorando outro).
+      if (!isMonitoringRoute) {
+        const stop = fieldOps.stops.find((s) => s.client_id === client.id && s.status !== 'done');
+        if (stop) {
+          try { await fieldOps.markStopDone.mutateAsync(stop); } catch { /* não bloqueia o check-in */ }
+        }
+      }
       Alert.alert('Pronto', 'Lead marcado como visitado.');
       onDone?.();
     } catch (err: any) {
@@ -2243,7 +2253,7 @@ function MainApp() {
       visitingRef.current = false;
       setIsVisiting(false);
     }
-  }, [markAsVisited]);
+  }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, isMonitoringRoute]);
 
   // Conta por status respeitando search + UF — assim o usuario ve em tempo
   // real qual aba traz resultados conforme digita ("Lead (316)" -> "Lead (200)").
