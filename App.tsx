@@ -560,7 +560,7 @@ function MainApp() {
   const waitingForLocation = showOnlyMyArea && !userLocation && locationPermission === 'pending';
   const areaPermissionDenied = showOnlyMyArea && locationPermission === 'denied';
 
-  const { clients, statuses: dynamicStatuses, isLoading, error, deleteClient, addClient, updateClient, markAsVisited, ensureHubspotDeal } = useClients({
+  const { clients, statuses: dynamicStatuses, isLoading, error, deleteClient, addClient, updateClient, markAsVisited, ensureHubspotDeal, dismissContaAlvo } = useClients({
     areaFilter,
     enabled: !waitingForLocation && !areaPermissionDenied,
   });
@@ -991,6 +991,8 @@ function MainApp() {
       // Etapa desconhecida não tem temperatura — fica de fora de qualquer
       // recorte térmico (é o mesmo critério do pin, que cai na cor do status).
       if (tempFilter && stageTemperature(c.etapa)?.label !== tempFilter) return false;
+      // Conta Alvo descartada ("Não interessa") some do mapa/lista.
+      if (c.conta_alvo_dismissed) return false;
       if (contaAlvoOnly && !c.conta_alvo_place_id) return false;
       if (vendorFilterHubspotId === '__none__') {
         if (c.vendedor_id_hubspot) return false;
@@ -2254,6 +2256,32 @@ function MainApp() {
       setIsVisiting(false);
     }
   }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, isMonitoringRoute]);
+
+  // Conta Alvo "Não interessa": descarta o alvo (some do mapa/lista, sai da rota,
+  // não vira deal, não é re-sugerido). Só faz sentido em conta-alvo sem deal.
+  const handleDismissContaAlvo = useCallback((client: Client, done?: () => void) => {
+    Alert.alert(
+      'Não interessa?',
+      `Descartar "${getClientPrimaryName(client)}" como Conta Alvo? Ela some do mapa e não é sugerida de novo. Nenhum deal é criado no HubSpot.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Descartar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await dismissContaAlvo.mutateAsync(client.id);
+              const stop = fieldOps.stops.find((s) => s.client_id === client.id);
+              if (stop) { try { await fieldOps.removeStop.mutateAsync(stop); } catch { /* segue */ } }
+              done?.();
+            } catch (err: any) {
+              Alert.alert('Erro', err?.message ?? 'Não foi possível descartar.');
+            }
+          },
+        },
+      ],
+    );
+  }, [dismissContaAlvo, fieldOps.stops, fieldOps.removeStop]);
 
   // Conta por status respeitando search + UF — assim o usuario ve em tempo
   // real qual aba traz resultados conforme digita ("Lead (316)" -> "Lead (200)").
@@ -3726,6 +3754,7 @@ function MainApp() {
       }}
       onEditLocation={isViewer ? undefined : () => { setEditingLocationFor(selectedClient); setSelectedClient(null); }}
       onMarkVisited={isViewer ? undefined : () => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
+      onDismissContaAlvo={isViewer ? undefined : () => handleDismissContaAlvo(selectedClient, () => setSelectedClient(null))}
       onScheduleMeeting={isViewer ? undefined : () => { setSchedulingFor({ client: selectedClient, type: 'reuniao' }); setSelectedClient(null); }}
       onFollowUp={isViewer ? undefined : () => { setSchedulingFor({ client: selectedClient, type: 'follow_up' }); setSelectedClient(null); }}
       onRescheduleMeeting={isViewer ? undefined : (m) => { setSchedulingFor({ client: selectedClient, type: m.type ?? 'reuniao', reschedule: m }); setSelectedClient(null); }}
@@ -5352,6 +5381,7 @@ function ClientBottomSheet({
   onEdit,
   onEditLocation,
   onMarkVisited,
+  onDismissContaAlvo,
   onScheduleMeeting,
   onFollowUp,
   onChangeStage,
@@ -5373,6 +5403,7 @@ function ClientBottomSheet({
   onEdit?: () => void;
   onEditLocation?: () => void;
   onMarkVisited?: () => void;
+  onDismissContaAlvo?: () => void;
   onScheduleMeeting?: () => void;
   onFollowUp?: () => void;
   onChangeStage?: () => void;
@@ -5743,18 +5774,26 @@ function ClientBottomSheet({
               );
             })()}
 
-            {/* Conta Alvo: nota + avaliações do Google (via Serper). Só aparece
-                nos leads trazidos pela Rota do dia (conta_alvo_place_id). */}
-            {client.conta_alvo_place_id && client.conta_alvo_rating != null && (
+            {/* Conta Alvo: nota + avaliações do Google (via Serper) + "Não
+                interessa". Só nos leads trazidos pela Rota do dia. */}
+            {client.conta_alvo_place_id && (
               <View style={styles.contaAlvoBox}>
                 <Text style={styles.contaAlvoBoxTitle}>🎯 Conta Alvo</Text>
-                <Text style={styles.contaAlvoBoxText}>
-                  ⭐ {Number(client.conta_alvo_rating).toFixed(1)}
-                  {client.conta_alvo_reviews != null
-                    ? ` · ${client.conta_alvo_reviews.toLocaleString('pt-BR')} avaliações`
-                    : ''}
-                  {' '}no Google
-                </Text>
+                {client.conta_alvo_rating != null && (
+                  <Text style={styles.contaAlvoBoxText}>
+                    ⭐ {Number(client.conta_alvo_rating).toFixed(1)}
+                    {client.conta_alvo_reviews != null
+                      ? ` · ${client.conta_alvo_reviews.toLocaleString('pt-BR')} avaliações`
+                      : ''}
+                    {' '}no Google
+                  </Text>
+                )}
+                {/* "Não interessa": só faz sentido enquanto não virou deal. */}
+                {onDismissContaAlvo && !client.id_hubspot && (
+                  <TouchableOpacity style={styles.contaAlvoDismissBtn} onPress={onDismissContaAlvo}>
+                    <Text style={styles.contaAlvoDismissText}>🚫 Não interessa (descartar)</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
 
@@ -7150,6 +7189,8 @@ const styles = StyleSheet.create({
   slaBadgeText: { fontSize: 13, fontWeight: '800' },
   contaAlvoBoxTitle: { fontSize: 14, fontWeight: '800', color: '#6d28d9' },
   contaAlvoBoxText: { fontSize: 13, fontWeight: '700', color: '#5b21b6', marginTop: 3 },
+  contaAlvoDismissBtn: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#fff', borderWidth: 1, borderColor: '#fecaca', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  contaAlvoDismissText: { fontSize: 12, fontWeight: '800', color: '#dc2626' },
   agendaSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',

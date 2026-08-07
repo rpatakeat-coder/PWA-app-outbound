@@ -45,6 +45,8 @@ export interface Client {
   // no card do lead. Preenchidas pela edge conta-alvo-nearby.
   conta_alvo_rating: number | null;
   conta_alvo_reviews: number | null;
+  // Conta Alvo descartada ("Não interessa"): escondida do app + não re-sugerida.
+  conta_alvo_dismissed: boolean | null;
   visited_at: string | null;
   // Quantas vezes o lead ja foi visitado (contador mantido pela RPC
   // mark_client_as_visited; o historico completo vive em client_visits).

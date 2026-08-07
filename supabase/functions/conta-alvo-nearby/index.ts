@@ -22,7 +22,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 // Marcador de versao — aparece em toda resposta pra confirmar qual bundle esta
 // no ar (o deploy do Supabase as vezes serve versao cacheada).
-const VERSION = 'ca-v4-config';
+const VERSION = 'ca-v5-dismiss';
 
 const SERPER_URL = 'https://google.serper.dev/maps';
 const FETCH_TIMEOUT_MS = 15_000;
@@ -168,7 +168,7 @@ Deno.serve(async (req: Request) => {
     // (2) excluir lugares que ja sao clientes.
     const { data: nearRows, error: nearErr } = await db
       .from('clients')
-      .select('id, nome, empresa, latitude, longitude, status, etapa, id_hubspot, vendedor_id_hubspot, visited_at, origem, conta_alvo_place_id')
+      .select('id, nome, empresa, latitude, longitude, status, etapa, id_hubspot, vendedor_id_hubspot, visited_at, origem, conta_alvo_place_id, conta_alvo_dismissed')
       .gte('latitude', lat - bboxDeg).lte('latitude', lat + bboxDeg)
       .gte('longitude', lon - bboxDeg).lte('longitude', lon + bboxDeg)
       .not('latitude', 'is', null).not('longitude', 'is', null);
@@ -180,6 +180,7 @@ Deno.serve(async (req: Request) => {
     const reusable = near
       .filter((c: any) =>
         c.conta_alvo_place_id &&
+        !c.conta_alvo_dismissed &&
         !c.id_hubspot &&
         !c.visited_at &&
         (vendor === null || c.vendedor_id_hubspot === vendor) &&
