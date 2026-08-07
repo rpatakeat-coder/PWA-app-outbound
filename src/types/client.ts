@@ -47,6 +47,10 @@ export interface Client {
   conta_alvo_reviews: number | null;
   // Conta Alvo descartada ("Não interessa"): escondida do app + não re-sugerida.
   conta_alvo_dismissed: boolean | null;
+  // Rastro do descarte: quem (auth uid + nome) e quando.
+  conta_alvo_dismissed_by: string | null;
+  conta_alvo_dismissed_by_name: string | null;
+  conta_alvo_dismissed_at: string | null;
   visited_at: string | null;
   // Quantas vezes o lead ja foi visitado (contador mantido pela RPC
   // mark_client_as_visited; o historico completo vive em client_visits).

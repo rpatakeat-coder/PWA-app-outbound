@@ -30,6 +30,7 @@ import {
 } from '../hooks/useGestorMetrics';
 import { RouteConfigCard } from './RouteConfigCard';
 import { SellerGoalsCard } from './SellerGoalsCard';
+import { DismissedContaAlvoCard } from './DismissedContaAlvoCard';
 import { RouteHistorySection } from './RouteHistorySection';
 
 interface Props {
@@ -719,6 +720,9 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
 
       {/* Meta diária de visitas por vendedor (usada no ranking). */}
       <SellerGoalsCard />
+
+      {/* Contas Alvo dispensadas ("Não interessa") — quem/quando + restaurar. */}
+      <DismissedContaAlvoCard />
 
       {/* Ranking + histórico de rotas (planejado + check-ins) no período. */}
       <RouteHistorySection

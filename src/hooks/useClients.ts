@@ -622,10 +622,19 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
     }
   };
 
-  // Conta Alvo "Não interessa": marca dismissed (o app esconde; a edge nao reusa).
+  // Conta Alvo "Não interessa": marca dismissed + QUEM/QUANDO dispensou (rastro
+  // pro gestor). O app esconde; a edge nao reusa.
   const dismissContaAlvo = useMutation({
     mutationFn: async (clientId: string) => {
-      const { error } = await supabase.from('clients').update({ conta_alvo_dismissed: true }).eq('id', clientId);
+      const { error } = await supabase
+        .from('clients')
+        .update({
+          conta_alvo_dismissed: true,
+          conta_alvo_dismissed_by: user?.id ?? null,
+          conta_alvo_dismissed_by_name: profile?.full_name ?? null,
+          conta_alvo_dismissed_at: new Date().toISOString(),
+        })
+        .eq('id', clientId);
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
