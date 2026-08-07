@@ -588,6 +588,7 @@ function MainApp() {
   // Só o gestor vê o botão; a busca dos pontos só dispara quando ligado.
   const [heatOn, setHeatOn] = useState(false);
   const [heatSeller, setHeatSeller] = useState<string | null>(null); // null = Todos
+  const [exportingHeat, setExportingHeat] = useState(false);
   const {
     points: heatPoints,
     sellers: heatSellers,
@@ -602,6 +603,54 @@ function MainApp() {
     const { cells, max } = buildHeatCells(pts);
     return { cells, max, total: pts.length };
   }, [heatOn, heatSeller, heatPoints]);
+
+  // Exporta o mapa de calor (visitas) em JSON — mesmo mecanismo do export da
+  // agenda (sobe no bucket 'exports', devolve signed URL de 7 dias). Respeita o
+  // filtro de vendedor ativo (Todos ou um). Só gestor (o painel é gestor-only).
+  const handleExportHeatmap = async () => {
+    if (exportingHeat) return;
+    const pts = heatSeller ? heatPoints.filter((p) => p.sellerId === heatSeller) : heatPoints;
+    if (pts.length === 0) {
+      Alert.alert('Sem dados', 'Não há visitas com GPS para exportar.');
+      return;
+    }
+    setExportingHeat(true);
+    try {
+      const sellerName = heatSeller
+        ? (heatSellers.find((s) => s.id === heatSeller)?.name ?? heatSeller)
+        : 'Todos os vendedores';
+      const { cells } = buildHeatCells(pts);
+      const payload = {
+        meta: {
+          tipo: 'mapa_de_calor',
+          gerado_em: new Date().toISOString(),
+          filtro: sellerName,
+          total_visitas: pts.length,
+          amostra_recente: heatCapped,
+          celulas: cells.length,
+          celula_metros: HEAT_CELL_M,
+        },
+        vendedores: heatSellers.map((s) => ({ id: s.id, nome: s.name, visitas: s.count })),
+        // Agregado da grade (o "calor" de fato): lat/lon do centro + contagem.
+        celulas: cells.map((c) => ({ lat: c.lat, lon: c.lon, visitas: c.n })),
+        // Pontos crus (cada check-in): lat/lon + vendedor.
+        pontos: pts.map((p) => ({ lat: p.lat, lon: p.lon, vendedor_id: p.sellerId, vendedor: p.sellerName })),
+      };
+      const res = await exportAgenda(payload, `mapa-calor_${sellerName}`);
+      Alert.alert(
+        'Exportação pronta 🔥',
+        `${payload.meta.total_visitas} visitas • ${payload.meta.celulas} células (${sellerName}).\n\nToque em Abrir pra baixar o .json (abre no navegador).`,
+        [
+          { text: 'Fechar', style: 'cancel' },
+          { text: 'Abrir', onPress: () => Linking.openURL(res.url) },
+        ],
+      );
+    } catch (err: any) {
+      Alert.alert('Erro ao exportar', err?.message ?? 'Tente novamente.');
+    } finally {
+      setExportingHeat(false);
+    }
+  };
 
   // Se o usuario viewer entrou em uma aba que nao existe pra ele (rota/agenda)
   // via state preservado entre sessoes, joga de volta pro mapa.
@@ -4038,14 +4087,25 @@ function MainApp() {
             <View style={[styles.heatPanel, { bottom: 90 + insets.bottom }]}>
               <View style={styles.heatPanelHeader}>
                 <Text style={styles.heatPanelTitle}>🔥 Calor de visitas</Text>
-                {heatLoading ? (
-                  <ActivityIndicator size="small" color="#f97316" />
-                ) : (
-                  <Text style={styles.heatPanelCount}>
-                    {heat.total} {heat.total === 1 ? 'visita' : 'visitas'}
-                    {heatCapped ? ' (amostra recente)' : ''}
-                  </Text>
-                )}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  {heatLoading ? (
+                    <ActivityIndicator size="small" color="#f97316" />
+                  ) : (
+                    <Text style={styles.heatPanelCount}>
+                      {heat.total} {heat.total === 1 ? 'visita' : 'visitas'}
+                      {heatCapped ? ' (amostra recente)' : ''}
+                    </Text>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.heatExportBtn, (exportingHeat || heatLoading || heat.total === 0) && { opacity: 0.5 }]}
+                    onPress={handleExportHeatmap}
+                    disabled={exportingHeat || heatLoading || heat.total === 0}
+                  >
+                    {exportingHeat
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={styles.heatExportBtnText}>📤 JSON</Text>}
+                  </TouchableOpacity>
+                </View>
               </View>
 
               {/* Legenda: menos → mais visitas */}
@@ -6752,6 +6812,8 @@ const styles = StyleSheet.create({
   },
   heatPanelTitle: { fontSize: 14, fontWeight: '800', color: '#0f172a' },
   heatPanelCount: { fontSize: 12, fontWeight: '600', color: '#64748b' },
+  heatExportBtn: { backgroundColor: '#7c3aed', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 },
+  heatExportBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   heatLegendRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   heatLegendLabel: { fontSize: 10, fontWeight: '700', color: '#94a3b8' },
   heatLegendBar: {
