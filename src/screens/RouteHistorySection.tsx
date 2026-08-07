@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAllSellers } from '../hooks/useAllSellers';
 import { useRouteHistory, useRouteRanking } from '../hooks/useRouteHistory';
+import { exportAgenda } from '../utils/exportAgenda';
 
 // "Histórico de rotas" (aba Gestor): RANKING dos vendedores escolhidos (por %
 // de conclusão) + drill-down por dia (rota planejada + check-ins reais). O
@@ -83,6 +84,64 @@ export function RouteHistorySection({ range, enabled }: Props) {
   const ranking = useRouteRanking(selectedIds, range, enabled && open);
   const nameById = useMemo(() => new Map(sellers.map((s) => [s.id, s])), [sellers]);
 
+  const [sortBy, setSortBy] = useState<'pct' | 'checkins'>('pct');
+  const [exportingRank, setExportingRank] = useState(false);
+
+  // Ranking ordenado pelo criterio escolhido (a query ja vem por pct; reordena
+  // aqui pra trocar sem refetch).
+  const rows = useMemo(() => {
+    const data = ranking.data ?? [];
+    return [...data].sort((a, b) =>
+      sortBy === 'checkins'
+        ? b.checkins - a.checkins || b.pct - a.pct || b.paradas - a.paradas
+        : b.pct - a.pct || b.checkins - a.checkins || b.paradas - a.paradas,
+    );
+  }, [ranking.data, sortBy]);
+
+  const handleExportRanking = async () => {
+    if (exportingRank || rows.length === 0) return;
+    setExportingRank(true);
+    try {
+      const payload = {
+        meta: {
+          tipo: 'ranking_rotas',
+          gerado_em: new Date().toISOString(),
+          periodo: { de: range.start, ate: range.end },
+          ordenado_por: sortBy === 'checkins' ? 'check-ins' : '% conclusão',
+          vendedores: rows.length,
+        },
+        ranking: rows.map((r, idx) => {
+          const s = nameById.get(r.sellerId);
+          return {
+            posicao: idx + 1,
+            vendedor: s?.name ?? 'Vendedor',
+            desativado: !!s?.deactivated,
+            pct_conclusao: r.pct,
+            rotas: r.rotas,
+            paradas: r.paradas,
+            concluidas: r.concluidas,
+            check_ins: r.checkins,
+            km: Number(r.km.toFixed(1)),
+            min: Math.round(r.min),
+          };
+        }),
+      };
+      const res = await exportAgenda(payload, `ranking-rotas_${sortBy}`);
+      Alert.alert(
+        'Ranking exportado 🏆',
+        `${rows.length} vendedores.\n\nToque em Abrir pra baixar o .json (abre no navegador).`,
+        [
+          { text: 'Fechar', style: 'cancel' },
+          { text: 'Abrir', onPress: () => Linking.openURL(res.url) },
+        ],
+      );
+    } catch (err: any) {
+      Alert.alert('Erro ao exportar', err?.message ?? 'Tente de novo.');
+    } finally {
+      setExportingRank(false);
+    }
+  };
+
   const toggle = (id: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -140,8 +199,32 @@ export function RouteHistorySection({ range, enabled }: Props) {
             <ActivityIndicator color="#7c3aed" style={{ marginVertical: 14 }} />
           ) : (
             <View style={{ marginTop: 8 }}>
-              <Text style={styles.rankHint}>Ranking por % de conclusão · toque pra abrir os dias</Text>
-              {(ranking.data ?? []).map((r, idx) => {
+              <View style={styles.rankHeader}>
+                <View style={styles.sortToggle}>
+                  <TouchableOpacity
+                    style={[styles.sortChip, sortBy === 'pct' && styles.sortChipActive]}
+                    onPress={() => setSortBy('pct')}
+                  >
+                    <Text style={[styles.sortChipText, sortBy === 'pct' && styles.sortChipTextActive]}>% conclusão</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.sortChip, sortBy === 'checkins' && styles.sortChipActive]}
+                    onPress={() => setSortBy('checkins')}
+                  >
+                    <Text style={[styles.sortChipText, sortBy === 'checkins' && styles.sortChipTextActive]}>Check-ins</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={[styles.exportBtn, exportingRank && { opacity: 0.5 }]}
+                  onPress={handleExportRanking}
+                  disabled={exportingRank}
+                >
+                  {exportingRank
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={styles.exportBtnText}>📤 JSON</Text>}
+                </TouchableOpacity>
+              </View>
+              {rows.map((r, idx) => {
                 const s = nameById.get(r.sellerId);
                 const isOpen = expanded === r.sellerId;
                 return (
@@ -191,7 +274,14 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 12, fontWeight: '700', color: '#475569' },
   chipTextActive: { color: '#fff' },
   empty: { fontSize: 13, color: '#94a3b8', fontStyle: 'italic', marginTop: 12 },
-  rankHint: { fontSize: 11, color: '#94a3b8', fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.3 },
+  rankHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  sortToggle: { flexDirection: 'row', gap: 6 },
+  sortChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: '#f1f5f9' },
+  sortChipActive: { backgroundColor: '#0f172a' },
+  sortChipText: { fontSize: 11, fontWeight: '700', color: '#475569' },
+  sortChipTextActive: { color: '#fff' },
+  exportBtn: { backgroundColor: '#7c3aed', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  exportBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   rankRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
   rankRowOpen: { backgroundColor: '#faf5ff' },
   rankPos: { fontSize: 13, fontWeight: '800', color: '#7c3aed', width: 28 },
