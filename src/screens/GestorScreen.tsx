@@ -716,9 +716,8 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
       {/* Config da Rota do dia (raio/nota/avaliações Conta Alvo, meta/dia, SLAs). */}
       <RouteConfigCard />
 
-      {/* Histórico de rotas do vendedor (planejado + check-ins reais) no período. */}
+      {/* Ranking + histórico de rotas (planejado + check-ins) no período. */}
       <RouteHistorySection
-        sellers={query.data?.sellers ?? []}
         range={periodRange(period)}
         enabled={enabled}
       />

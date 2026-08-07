@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useRouteHistory } from '../hooks/useRouteHistory';
-import type { SellerMetrics } from '../hooks/useGestorMetrics';
+import { useAllSellers } from '../hooks/useAllSellers';
+import { useRouteHistory, useRouteRanking } from '../hooks/useRouteHistory';
 
-// "Histórico de rotas" (aba Gestor): escolhe um vendedor e vê, por dia do
-// período selecionado, a ROTA planejada (paradas + concluídas) e as VISITAS
-// reais (check-ins). Usa os chips de período que já existem na tela.
+// "Histórico de rotas" (aba Gestor): RANKING dos vendedores escolhidos (por %
+// de conclusão) + drill-down por dia (rota planejada + check-ins reais). O
+// filtro lista TODOS os vendedores, inclusive DESATIVADOS. Usa o período dos
+// chips da tela.
 
 interface Props {
-  sellers: SellerMetrics[];
   range: { start: string | null; end: string | null };
   enabled: boolean;
 }
@@ -25,100 +25,150 @@ const fmtTime = (iso: string) => {
   }
 };
 
-export function RouteHistorySection({ sellers, range, enabled }: Props) {
-  const [open, setOpen] = useState(false);
-  const [sellerId, setSellerId] = useState<string | null>(null);
+// Detalhe por dia de UM vendedor (rota planejada + check-ins).
+function SellerDetail({ sellerId, range, enabled }: { sellerId: string; range: Props['range']; enabled: boolean }) {
+  const history = useRouteHistory(sellerId, range, enabled);
+  if (history.isLoading) return <ActivityIndicator color="#7c3aed" style={{ marginVertical: 12 }} />;
+  const days = history.data?.days ?? [];
+  if (days.length === 0) return <Text style={styles.empty}>Sem rotas nem check-ins no período.</Text>;
+  return (
+    <View style={{ marginTop: 4 }}>
+      {days.map((day) => {
+        const done = day.stops.filter((s) => s.done).length;
+        return (
+          <View key={day.date} style={styles.dayCard}>
+            <Text style={styles.dayTitle}>{fmtDay(day.date)}</Text>
+            {day.stops.length > 0 ? (
+              <View style={styles.block}>
+                <Text style={styles.blockTitle}>
+                  🗺️ Rota{day.routeSource === 'manual' ? ' (manual)' : day.routeSource === 'suggested' ? ' (auto)' : ''} —
+                  {' '}{day.stops.length} parada{day.stops.length === 1 ? '' : 's'} ({done} concluída{done === 1 ? '' : 's'})
+                  {day.km > 0 ? ` · 🛣️ ${day.km.toFixed(1)} km / ~${Math.round(day.min)} min` : ''}
+                </Text>
+                {day.stops.map((s, i) => (
+                  <Text key={i} style={[styles.line, s.done && styles.lineDone]}>
+                    {s.done ? '✓' : '○'} {s.position}. {s.nome}
+                  </Text>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.blockMuted}>🗺️ Sem rota planejada nesse dia.</Text>
+            )}
+            {day.visits.length > 0 ? (
+              <View style={styles.block}>
+                <Text style={styles.blockTitle}>📍 {day.visits.length} check-in{day.visits.length === 1 ? '' : 's'}</Text>
+                {day.visits.map((v, i) => (
+                  <Text key={i} style={styles.line}>
+                    {fmtTime(v.at)} — {v.nome}{v.cidade ? ` (${v.cidade})` : ''}
+                  </Text>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.blockMuted}>📍 Sem check-ins nesse dia.</Text>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
-  const seller = sellers.find((s) => s.seller_id === sellerId) ?? null;
-  const history = useRouteHistory(sellerId, range, enabled && open);
+export function RouteHistorySection({ range, enabled }: Props) {
+  const [open, setOpen] = useState(false);
+  const { data: sellers = [], isLoading: loadingSellers } = useAllSellers(enabled && open);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const selectedIds = useMemo(() => [...selected], [selected]);
+  const ranking = useRouteRanking(selectedIds, range, enabled && open);
+  const nameById = useMemo(() => new Map(sellers.map((s) => [s.id, s])), [sellers]);
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
 
   return (
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
-        <Text style={styles.title}>🗺️ Histórico de rotas</Text>
+        <Text style={styles.title}>🗺️ Histórico & ranking de rotas</Text>
         <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
       </TouchableOpacity>
 
       {open && (
         <View style={{ marginTop: 8 }}>
-          <Text style={styles.hint}>Escolha o vendedor — usa o período selecionado acima.</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-            {sellers.map((s) => {
-              const active = s.seller_id === sellerId;
-              return (
-                <TouchableOpacity
-                  key={s.seller_id}
-                  style={[styles.chip, active && styles.chipActive]}
-                  onPress={() => setSellerId(active ? null : s.seller_id)}
-                >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
-                    {s.full_name?.trim() || s.email || 'Sem nome'}
-                  </Text>
+          <View style={styles.filterRow}>
+            <Text style={styles.hint}>Escolha os vendedores (usa o período acima):</Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity onPress={() => setSelected(new Set(sellers.map((s) => s.id)))}>
+                <Text style={styles.filterAction}>Todos</Text>
+              </TouchableOpacity>
+              {selected.size > 0 && (
+                <TouchableOpacity onPress={() => setSelected(new Set())}>
+                  <Text style={styles.filterAction}>Limpar</Text>
                 </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+              )}
+            </View>
+          </View>
 
-          {!sellerId ? (
-            <Text style={styles.empty}>Toque num vendedor pra ver as rotas e visitas dele.</Text>
-          ) : history.isLoading ? (
-            <ActivityIndicator color="#7c3aed" style={{ marginVertical: 14 }} />
-          ) : (history.data?.days ?? []).length === 0 ? (
-            <Text style={styles.empty}>Sem rotas nem check-ins de {seller?.full_name ?? 'vendedor'} no período.</Text>
+          {loadingSellers ? (
+            <ActivityIndicator color="#7c3aed" style={{ marginVertical: 10 }} />
           ) : (
-            <>
-              {history.data?.summary ? (
-                <View style={styles.summaryCard}>
-                  <Text style={styles.summaryTitle}>{seller?.full_name?.trim() || 'Vendedor'} — no período</Text>
-                  <Text style={styles.summaryText}>
-                    {history.data.summary.rotas} rota{history.data.summary.rotas === 1 ? '' : 's'} · {history.data.summary.paradas} paradas · {history.data.summary.pct}% concluídas
-                  </Text>
-                  <Text style={styles.summaryText}>
-                    📍 {history.data.summary.checkins} check-ins · 🛣️ {history.data.summary.km.toFixed(1)} km · ~{Math.round(history.data.summary.min)} min
-                  </Text>
-                </View>
-              ) : null}
-              {(history.data?.days ?? []).map((day) => {
-                const done = day.stops.filter((s) => s.done).length;
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+              {sellers.map((s) => {
+                const active = selected.has(s.id);
                 return (
-                <View key={day.date} style={styles.dayCard}>
-                  <Text style={styles.dayTitle}>{fmtDay(day.date)}</Text>
-
-                  {/* Rota planejada */}
-                  {day.stops.length > 0 ? (
-                    <View style={styles.block}>
-                      <Text style={styles.blockTitle}>
-                        🗺️ Rota{day.routeSource === 'manual' ? ' (manual)' : day.routeSource === 'suggested' ? ' (auto)' : ''} —
-                        {' '}{day.stops.length} parada{day.stops.length === 1 ? '' : 's'} ({done} concluída{done === 1 ? '' : 's'})
-                        {day.km > 0 ? ` · 🛣️ ${day.km.toFixed(1)} km / ~${Math.round(day.min)} min` : ''}
-                      </Text>
-                      {day.stops.map((s, i) => (
-                        <Text key={i} style={[styles.line, s.done && styles.lineDone]}>
-                          {s.done ? '✓' : '○'} {s.position}. {s.nome}
-                        </Text>
-                      ))}
-                    </View>
-                  ) : (
-                    <Text style={styles.blockMuted}>🗺️ Sem rota planejada nesse dia.</Text>
-                  )}
-
-                  {/* Check-ins reais */}
-                  {day.visits.length > 0 ? (
-                    <View style={styles.block}>
-                      <Text style={styles.blockTitle}>📍 {day.visits.length} check-in{day.visits.length === 1 ? '' : 's'}</Text>
-                      {day.visits.map((v, i) => (
-                        <Text key={i} style={styles.line}>
-                          {fmtTime(v.at)} — {v.nome}{v.cidade ? ` (${v.cidade})` : ''}
-                        </Text>
-                      ))}
-                    </View>
-                  ) : (
-                    <Text style={styles.blockMuted}>📍 Sem check-ins nesse dia.</Text>
-                  )}
-                </View>
-              );
+                  <TouchableOpacity
+                    key={s.id}
+                    style={[styles.chip, active && styles.chipActive, s.deactivated && !active && styles.chipOff]}
+                    onPress={() => toggle(s.id)}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
+                      {s.name}{s.deactivated ? ' • desativado' : ''}
+                    </Text>
+                  </TouchableOpacity>
+                );
               })}
-            </>
+            </ScrollView>
+          )}
+
+          {selected.size === 0 ? (
+            <Text style={styles.empty}>Selecione um ou mais vendedores (ou "Todos") pra ver o ranking.</Text>
+          ) : ranking.isLoading ? (
+            <ActivityIndicator color="#7c3aed" style={{ marginVertical: 14 }} />
+          ) : (
+            <View style={{ marginTop: 8 }}>
+              <Text style={styles.rankHint}>Ranking por % de conclusão · toque pra abrir os dias</Text>
+              {(ranking.data ?? []).map((r, idx) => {
+                const s = nameById.get(r.sellerId);
+                const isOpen = expanded === r.sellerId;
+                return (
+                  <View key={r.sellerId}>
+                    <TouchableOpacity
+                      style={[styles.rankRow, isOpen && styles.rankRowOpen]}
+                      onPress={() => setExpanded(isOpen ? null : r.sellerId)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.rankPos}>{idx + 1}º</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.rankName} numberOfLines={1}>
+                          {s?.name ?? 'Vendedor'}{s?.deactivated ? ' • desativado' : ''}
+                        </Text>
+                        <Text style={styles.rankMeta}>
+                          {r.paradas} paradas ({r.concluidas} ✓) · 📍 {r.checkins} · 🛣️ {r.km.toFixed(0)} km
+                        </Text>
+                      </View>
+                      <Text style={[styles.rankPct, { color: r.pct >= 70 ? '#16a34a' : r.pct >= 40 ? '#f59e0b' : '#dc2626' }]}>
+                        {r.pct}%
+                      </Text>
+                    </TouchableOpacity>
+                    {isOpen && <SellerDetail sellerId={r.sellerId} range={range} enabled={enabled && open} />}
+                  </View>
+                );
+              })}
+            </View>
           )}
         </View>
       )}
@@ -131,17 +181,24 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
   chevron: { fontSize: 12, color: '#64748b', fontWeight: '800' },
-  hint: { fontSize: 12, color: '#64748b', marginBottom: 8 },
+  filterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  hint: { fontSize: 12, color: '#64748b', flex: 1 },
+  filterAction: { fontSize: 12, fontWeight: '800', color: '#7c3aed' },
   chips: { gap: 6, paddingBottom: 4 },
-  chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: '#f1f5f9', maxWidth: 160 },
+  chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: '#f1f5f9', maxWidth: 190 },
   chipActive: { backgroundColor: '#7c3aed' },
+  chipOff: { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca' },
   chipText: { fontSize: 12, fontWeight: '700', color: '#475569' },
   chipTextActive: { color: '#fff' },
   empty: { fontSize: 13, color: '#94a3b8', fontStyle: 'italic', marginTop: 12 },
-  summaryCard: { backgroundColor: '#f5f3ff', borderRadius: 10, borderWidth: 1, borderColor: '#ddd6fe', padding: 10, marginTop: 12 },
-  summaryTitle: { fontSize: 13, fontWeight: '800', color: '#5b21b6', marginBottom: 3 },
-  summaryText: { fontSize: 12, fontWeight: '600', color: '#4c1d95', marginTop: 1 },
-  dayCard: { borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 10, marginTop: 10 },
+  rankHint: { fontSize: 11, color: '#94a3b8', fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.3 },
+  rankRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  rankRowOpen: { backgroundColor: '#faf5ff' },
+  rankPos: { fontSize: 13, fontWeight: '800', color: '#7c3aed', width: 28 },
+  rankName: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  rankMeta: { fontSize: 11, color: '#64748b', marginTop: 1 },
+  rankPct: { fontSize: 16, fontWeight: '800' },
+  dayCard: { borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 10, marginTop: 10, marginLeft: 8 },
   dayTitle: { fontSize: 14, fontWeight: '800', color: '#7c3aed', marginBottom: 6 },
   block: { marginBottom: 8 },
   blockTitle: { fontSize: 12, fontWeight: '800', color: '#334155', marginBottom: 3 },
