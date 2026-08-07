@@ -63,12 +63,24 @@ export function RouteHistorySection({ sellers, range, enabled }: Props) {
             <Text style={styles.empty}>Toque num vendedor pra ver as rotas e visitas dele.</Text>
           ) : history.isLoading ? (
             <ActivityIndicator color="#7c3aed" style={{ marginVertical: 14 }} />
-          ) : (history.data ?? []).length === 0 ? (
+          ) : (history.data?.days ?? []).length === 0 ? (
             <Text style={styles.empty}>Sem rotas nem check-ins de {seller?.full_name ?? 'vendedor'} no período.</Text>
           ) : (
-            (history.data ?? []).map((day) => {
-              const done = day.stops.filter((s) => s.done).length;
-              return (
+            <>
+              {history.data?.summary ? (
+                <View style={styles.summaryCard}>
+                  <Text style={styles.summaryTitle}>{seller?.full_name?.trim() || 'Vendedor'} — no período</Text>
+                  <Text style={styles.summaryText}>
+                    {history.data.summary.rotas} rota{history.data.summary.rotas === 1 ? '' : 's'} · {history.data.summary.paradas} paradas · {history.data.summary.pct}% concluídas
+                  </Text>
+                  <Text style={styles.summaryText}>
+                    📍 {history.data.summary.checkins} check-ins · 🛣️ {history.data.summary.km.toFixed(1)} km · ~{Math.round(history.data.summary.min)} min
+                  </Text>
+                </View>
+              ) : null}
+              {(history.data?.days ?? []).map((day) => {
+                const done = day.stops.filter((s) => s.done).length;
+                return (
                 <View key={day.date} style={styles.dayCard}>
                   <Text style={styles.dayTitle}>{fmtDay(day.date)}</Text>
 
@@ -78,6 +90,7 @@ export function RouteHistorySection({ sellers, range, enabled }: Props) {
                       <Text style={styles.blockTitle}>
                         🗺️ Rota{day.routeSource === 'manual' ? ' (manual)' : day.routeSource === 'suggested' ? ' (auto)' : ''} —
                         {' '}{day.stops.length} parada{day.stops.length === 1 ? '' : 's'} ({done} concluída{done === 1 ? '' : 's'})
+                        {day.km > 0 ? ` · 🛣️ ${day.km.toFixed(1)} km / ~${Math.round(day.min)} min` : ''}
                       </Text>
                       {day.stops.map((s, i) => (
                         <Text key={i} style={[styles.line, s.done && styles.lineDone]}>
@@ -104,7 +117,8 @@ export function RouteHistorySection({ sellers, range, enabled }: Props) {
                   )}
                 </View>
               );
-            })
+              })}
+            </>
           )}
         </View>
       )}
@@ -124,6 +138,9 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 12, fontWeight: '700', color: '#475569' },
   chipTextActive: { color: '#fff' },
   empty: { fontSize: 13, color: '#94a3b8', fontStyle: 'italic', marginTop: 12 },
+  summaryCard: { backgroundColor: '#f5f3ff', borderRadius: 10, borderWidth: 1, borderColor: '#ddd6fe', padding: 10, marginTop: 12 },
+  summaryTitle: { fontSize: 13, fontWeight: '800', color: '#5b21b6', marginBottom: 3 },
+  summaryText: { fontSize: 12, fontWeight: '600', color: '#4c1d95', marginTop: 1 },
   dayCard: { borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 10, marginTop: 10 },
   dayTitle: { fontSize: 14, fontWeight: '800', color: '#7c3aed', marginBottom: 6 },
   block: { marginBottom: 8 },

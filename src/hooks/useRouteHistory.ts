@@ -21,6 +21,24 @@ export interface RouteHistoryDay {
   routeSource: string | null; // 'suggested' | 'manual' | null
   stops: HistoryStop[];
   visits: HistoryVisit[];
+  km: number; // soma das distâncias das paradas
+  min: number; // soma dos tempos estimados das paradas
+}
+
+// Agregado do período (topo da seção).
+export interface RouteHistorySummary {
+  rotas: number; // dias com rota planejada
+  paradas: number; // total de paradas
+  concluidas: number; // paradas marcadas como concluídas
+  pct: number; // concluidas / paradas (0..100)
+  checkins: number; // total de check-ins reais
+  km: number;
+  min: number;
+}
+
+export interface RouteHistoryResult {
+  days: RouteHistoryDay[];
+  summary: RouteHistorySummary;
 }
 
 const nameOf = (c: any): string => {
@@ -37,10 +55,14 @@ export function useRouteHistory(
   range: { start: string | null; end: string | null },
   enabled: boolean,
 ) {
-  return useQuery<RouteHistoryDay[]>({
+  return useQuery<RouteHistoryResult>({
     queryKey: ['route_history', sellerId, range.start, range.end],
     queryFn: async () => {
-      if (!sellerId) return [];
+      const empty: RouteHistoryResult = {
+        days: [],
+        summary: { rotas: 0, paradas: 0, concluidas: 0, pct: 0, checkins: 0, km: 0, min: 0 },
+      };
+      if (!sellerId) return empty;
 
       const startDate = range.start ? range.start.slice(0, 10) : '2000-01-01';
       const endDate = range.end ? range.end.slice(0, 10) : new Date().toISOString().slice(0, 10);
@@ -50,7 +72,7 @@ export function useRouteHistory(
       // Rotas planejadas + paradas.
       const { data: routes, error: rErr } = await supabase
         .from('field_routes')
-        .select('id, route_date, source, field_route_stops(status, position, client:clients(nome, empresa))')
+        .select('id, route_date, source, field_route_stops(status, position, distance_meters, estimated_drive_minutes, client:clients(nome, empresa))')
         .eq('seller_id', sellerId)
         .gte('route_date', startDate)
         .lte('route_date', endDate)
@@ -69,18 +91,19 @@ export function useRouteHistory(
 
       const byDay = new Map<string, RouteHistoryDay>();
       const dayOf = (d: string) => {
-        if (!byDay.has(d)) byDay.set(d, { date: d, routeSource: null, stops: [], visits: [] });
+        if (!byDay.has(d)) byDay.set(d, { date: d, routeSource: null, stops: [], visits: [], km: 0, min: 0 });
         return byDay.get(d)!;
       };
 
       for (const r of (routes ?? []) as any[]) {
         const day = dayOf(String(r.route_date));
         day.routeSource = r.source ?? null;
-        const stops = (r.field_route_stops ?? [])
-          .filter((s: any) => s.status !== 'removed')
+        const raw = (r.field_route_stops ?? []).filter((s: any) => s.status !== 'removed');
+        day.stops = raw
           .sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))
           .map((s: any) => ({ nome: nameOf(s.client), done: s.status === 'done', position: s.position ?? 0 }));
-        day.stops = stops;
+        day.km = raw.reduce((sum: number, s: any) => sum + (Number(s.distance_meters) || 0), 0) / 1000;
+        day.min = raw.reduce((sum: number, s: any) => sum + (Number(s.estimated_drive_minutes) || 0), 0);
       }
 
       for (const v of (visits ?? []) as any[]) {
@@ -88,7 +111,22 @@ export function useRouteHistory(
         dayOf(d).visits.push({ at: v.visited_at, nome: nameOf(v.client), cidade: cityOf(v.client) });
       }
 
-      return [...byDay.values()].sort((a, b) => (a.date < b.date ? 1 : -1));
+      const days = [...byDay.values()].sort((a, b) => (a.date < b.date ? 1 : -1));
+
+      // Agregado do período.
+      const paradas = days.reduce((s, d) => s + d.stops.length, 0);
+      const concluidas = days.reduce((s, d) => s + d.stops.filter((x) => x.done).length, 0);
+      const summary: RouteHistorySummary = {
+        rotas: days.filter((d) => d.stops.length > 0).length,
+        paradas,
+        concluidas,
+        pct: paradas > 0 ? Math.round((concluidas / paradas) * 100) : 0,
+        checkins: days.reduce((s, d) => s + d.visits.length, 0),
+        km: days.reduce((s, d) => s + d.km, 0),
+        min: days.reduce((s, d) => s + d.min, 0),
+      };
+
+      return { days, summary };
     },
     enabled: enabled && !!sellerId,
     staleTime: 60 * 1000,
