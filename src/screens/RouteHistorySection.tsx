@@ -179,6 +179,10 @@ export function RouteHistorySection({ range, enabled }: Props) {
     }
   };
 
+  const [hideDeactivated, setHideDeactivated] = useState(false);
+  const visibleSellers = hideDeactivated ? sellers.filter((s) => !s.deactivated) : sellers;
+  const deactivatedCount = sellers.filter((s) => s.deactivated).length;
+
   const toggle = (id: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -198,7 +202,7 @@ export function RouteHistorySection({ range, enabled }: Props) {
           <View style={styles.filterRow}>
             <Text style={styles.hint}>Escolha os vendedores (usa o período acima):</Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TouchableOpacity onPress={() => setSelected(new Set(sellers.map((s) => s.id)))}>
+              <TouchableOpacity onPress={() => setSelected(new Set(visibleSellers.map((s) => s.id)))}>
                 <Text style={styles.filterAction}>Todos</Text>
               </TouchableOpacity>
               {selected.size > 0 && (
@@ -209,11 +213,27 @@ export function RouteHistorySection({ range, enabled }: Props) {
             </View>
           </View>
 
+          {deactivatedCount > 0 && (
+            <TouchableOpacity
+              style={[styles.hideToggle, hideDeactivated && styles.hideToggleActive]}
+              onPress={() => {
+                const next = !hideDeactivated;
+                setHideDeactivated(next);
+                // Ao ocultar, tira desativados já selecionados (somem do ranking também).
+                if (next) setSelected((sel) => new Set([...sel].filter((id) => !nameById.get(id)?.deactivated)));
+              }}
+            >
+              <Text style={[styles.hideToggleText, hideDeactivated && styles.hideToggleTextActive]}>
+                {hideDeactivated ? '☑' : '☐'} Ocultar desativados ({deactivatedCount})
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {loadingSellers ? (
             <ActivityIndicator color="#7c3aed" style={{ marginVertical: 10 }} />
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-              {sellers.map((s) => {
+              {visibleSellers.map((s) => {
                 const active = selected.has(s.id);
                 return (
                   <TouchableOpacity
@@ -305,6 +325,10 @@ const styles = StyleSheet.create({
   filterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   hint: { fontSize: 12, color: '#64748b', flex: 1 },
   filterAction: { fontSize: 12, fontWeight: '800', color: '#7c3aed' },
+  hideToggle: { alignSelf: 'flex-start', backgroundColor: '#f1f5f9', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 8 },
+  hideToggleActive: { backgroundColor: '#ede9fe' },
+  hideToggleText: { fontSize: 12, fontWeight: '700', color: '#475569' },
+  hideToggleTextActive: { color: '#5b21b6' },
   chips: { gap: 6, paddingBottom: 4 },
   chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: '#f1f5f9', maxWidth: 190 },
   chipActive: { backgroundColor: '#7c3aed' },
