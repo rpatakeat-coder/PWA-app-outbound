@@ -68,6 +68,10 @@ export interface Client {
   // Quando o sync passou por este cliente. NULL = fora do recorte do sync (ou
   // ele ainda nao rodou); distingue "sem comanda" de "sem dado".
   hs_uso_sincronizado_em: string | null;
+  // SLA da Rota do dia (sync hubspot-activity-sync): última atividade humana no
+  // deal e entrada na etapa atual. Base do "dias parado" do SLA.
+  hs_last_activity_at: string | null;
+  hs_stage_entered_at: string | null;
   created_at: string | null;
   updated_at: string | null;
 }

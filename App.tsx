@@ -60,6 +60,7 @@ import { buildHeatCells, heatColor, heatIntensity, HEAT_CELL_M, HEAT_LEGEND_STOP
 import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type MandatoryReason } from './src/utils/dailyRoute';
 import { fetchContaAlvo } from './src/utils/contaAlvo';
 import { fetchSlaCandidate } from './src/utils/slaCandidate';
+import { slaStatus } from './src/utils/sla';
 
 const queryClient = new QueryClient();
 
@@ -5701,6 +5702,23 @@ function ClientBottomSheet({
               </View>
             </View>
 
+            {/* SLA: dias parado x limite da etapa (regra do MD). Só pra lead em
+                etapa com SLA. Vermelho = estourado, amarelo = perto, verde = ok. */}
+            {(() => {
+              const s = slaStatus(client);
+              if (!s.applies) return null;
+              const color = s.breach ? '#dc2626' : s.ratio >= 0.7 ? '#f59e0b' : '#16a34a';
+              const emoji = s.breach ? '🔴' : s.ratio >= 0.7 ? '🟡' : '🟢';
+              const txt = s.breach
+                ? `SLA estourado — ${s.diasParado} ${s.diasParado === 1 ? 'dia' : 'dias'} parado (limite ${s.sla})`
+                : `${s.diasParado}/${s.sla} dias parado`;
+              return (
+                <View style={[styles.slaBadge, { backgroundColor: `${color}14`, borderColor: `${color}59` }]}>
+                  <Text style={[styles.slaBadgeText, { color }]}>{emoji} {txt}</Text>
+                </View>
+              );
+            })()}
+
             {/* Conta Alvo: nota + avaliações do Google (via Serper). Só aparece
                 nos leads trazidos pela Rota do dia (conta_alvo_place_id). */}
             {client.conta_alvo_place_id && client.conta_alvo_rating != null && (
@@ -7104,6 +7122,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f3ff',
     borderColor: '#ddd6fe',
   },
+  slaBadge: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10 },
+  slaBadgeText: { fontSize: 13, fontWeight: '800' },
   contaAlvoBoxTitle: { fontSize: 14, fontWeight: '800', color: '#6d28d9' },
   contaAlvoBoxText: { fontSize: 13, fontWeight: '700', color: '#5b21b6', marginTop: 3 },
   agendaSectionHeader: {
