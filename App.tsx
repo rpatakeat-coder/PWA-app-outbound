@@ -23,6 +23,21 @@ import {
   AppState,
 } from 'react-native';
 import { Alert, AlertHost } from './src/components/Alert';
+import {
+  IconBarGraph,
+  IconCalendar,
+  IconCar,
+  IconClipboardCheck,
+  IconFilterList,
+  IconLocation,
+  IconLocationFilled,
+  IconPlus,
+  IconSearch,
+  IconSettings,
+  IconSquareMenu,
+  IconTrendingUp,
+  NavIcon,
+} from './src/components/icons';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 // Camada de mapa web (Google Maps JS API) com a mesma API que o
 // react-native-maps + react-native-map-clustering expunham. O clustering
@@ -3830,7 +3845,7 @@ function MainApp() {
             </TouchableOpacity>
           )}
           <TouchableOpacity style={navStyles.fab} onPress={showFullRouteInNav}>
-            <Text style={navStyles.fabText}>🔍</Text>
+            <IconSearch width={20} height={20} fill="#0f172a" />
           </TouchableOpacity>
         </View>
 
@@ -3976,7 +3991,7 @@ function MainApp() {
               setIsPasswordModalOpen(true);
             }}
           >
-            <Text style={styles.headerIconText}>⚙️</Text>
+            <IconSettings width={20} height={20} fill="#fff" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.logoutButton} onPress={logout}>
             <Text style={styles.logoutButtonText}>Sair</Text>
@@ -4026,7 +4041,7 @@ function MainApp() {
           {/* Search bar: busca por nome, empresa, cidade ou bairro.
               Reflete em mapa, lista e contadores dos chips de status em tempo real. */}
           <View style={styles.searchBar}>
-            <Text style={styles.searchIcon}>🔍</Text>
+            <IconSearch width={18} height={18} fill="#64748b" />
             <TextInput
               style={styles.searchInput}
               placeholder="Buscar por nome, empresa ou cidade"
@@ -4060,11 +4075,9 @@ function MainApp() {
                   style={styles.filterIconButton}
                   onPress={() => { Keyboard.dismiss(); setIsFiltersOpen(true); }}
                 >
-                  <View style={styles.filterFunnel}>
-                    <View style={[styles.filterFunnelBar, { width: 18 }]} />
-                    <View style={[styles.filterFunnelBar, { width: 11 }]} />
-                    <View style={[styles.filterFunnelBar, { width: 5 }]} />
-                  </View>
+                  {/* Antes era um funil desenhado a mao com tres <View> de
+                      larguras decrescentes; agora e' o icone do UI Kit. */}
+                  <IconFilterList width={20} height={20} fill="#fff" />
                   {activeFilterCount > 0 && (
                     <View style={styles.filterIconBadge}>
                       <Text style={styles.filterIconBadgeText}>{activeFilterCount}</Text>
@@ -4342,9 +4355,13 @@ function MainApp() {
               style={[styles.mapButton, { bottom: 90 + insets.bottom, left: 16 }]}
               onPress={centerOnUser}
             >
-              <Text style={{ fontSize: 20 }}>
-                {isFollowingUser ? '📍' : '🧭'}
-              </Text>
+              {/* Cheio quando esta' seguindo o vendedor, vazado quando a
+                  camera esta' livre — mesma leitura que o 📍/🧭 dava. */}
+              {isFollowingUser ? (
+                <IconLocationFilled width={22} height={22} fill="#dc2626" />
+              ) : (
+                <IconLocation width={22} height={22} fill="#0f172a" />
+              )}
             </TouchableOpacity>
           )}
 
@@ -4372,7 +4389,7 @@ function MainApp() {
               style={[styles.fab, { bottom: 90 + insets.bottom }]}
               onPress={() => setShowCepStep(true)}
             >
-              <Text style={styles.fabText}>+</Text>
+              <IconPlus width={26} height={26} fill="#fff" />
             </TouchableOpacity>
           )}
 
@@ -4516,7 +4533,7 @@ function MainApp() {
               style={[styles.fab, { bottom: 90 + insets.bottom }]}
               onPress={() => setShowCepStep(true)}
             >
-              <Text style={styles.fabText}>+</Text>
+              <IconPlus width={26} height={26} fill="#fff" />
             </TouchableOpacity>
           )}
 
@@ -4547,14 +4564,14 @@ function MainApp() {
           style={[styles.navItem, tab === 'map' && styles.navItemActive]}
           onPress={() => setTab('map')}
         >
-          <Text style={[styles.navIcon, tab === 'map' && styles.navIconActive]}>🗺️</Text>
+          <NavIcon Icone={IconLocation} ativo={tab === 'map'} />
           <Text style={[styles.navItemText, tab === 'map' && styles.navItemTextActive]}>Mapa</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.navItem, tab === 'list' && styles.navItemActive]}
           onPress={() => setTab('list')}
         >
-          <Text style={[styles.navIcon, tab === 'list' && styles.navIconActive]}>📋</Text>
+          <NavIcon Icone={IconSquareMenu} ativo={tab === 'list'} />
           <Text style={[styles.navItemText, tab === 'list' && styles.navItemTextActive]}>Lista</Text>
         </TouchableOpacity>
         {!isViewer && (
@@ -4563,14 +4580,14 @@ function MainApp() {
               style={[styles.navItem, tab === 'route' && styles.navItemActive]}
               onPress={() => setTab('route')}
             >
-              <Text style={[styles.navIcon, tab === 'route' && styles.navIconActive]}>🧭</Text>
+              <NavIcon Icone={IconCar} ativo={tab === 'route'} />
               <Text style={[styles.navItemText, tab === 'route' && styles.navItemTextActive]}>Rota</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.navItem, tab === 'agenda' && styles.navItemActive]}
               onPress={() => setTab('agenda')}
             >
-              <Text style={[styles.navIcon, tab === 'agenda' && styles.navIconActive]}>🗓️</Text>
+              <NavIcon Icone={IconCalendar} ativo={tab === 'agenda'} />
               <Text style={[styles.navItemText, tab === 'agenda' && styles.navItemTextActive]}>Agenda</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -4578,7 +4595,7 @@ function MainApp() {
               onPress={() => setTab('tasks')}
             >
               <View>
-                <Text style={[styles.navIcon, tab === 'tasks' && styles.navIconActive]}>✅</Text>
+                <NavIcon Icone={IconClipboardCheck} ativo={tab === 'tasks'} />
                 {visibleTasksCount > 0 && (
                   <View style={styles.navBadge}>
                     <Text style={styles.navBadgeText}>
@@ -4596,7 +4613,7 @@ function MainApp() {
             style={[styles.navItem, tab === 'gestor' && styles.navItemActive]}
             onPress={() => setTab('gestor')}
           >
-            <Text style={[styles.navIcon, tab === 'gestor' && styles.navIconActive]}>📊</Text>
+            <NavIcon Icone={IconBarGraph} ativo={tab === 'gestor'} />
             <Text style={[styles.navItemText, tab === 'gestor' && styles.navItemTextActive]}>Gestor</Text>
           </TouchableOpacity>
         ) : !isViewer && (
@@ -4605,7 +4622,7 @@ function MainApp() {
             style={[styles.navItem, tab === 'meu' && styles.navItemActive]}
             onPress={() => setTab('meu')}
           >
-            <Text style={[styles.navIcon, tab === 'meu' && styles.navIconActive]}>📊</Text>
+            <NavIcon Icone={IconTrendingUp} ativo={tab === 'meu'} />
             <Text style={[styles.navItemText, tab === 'meu' && styles.navItemTextActive]}>Meu</Text>
           </TouchableOpacity>
         )}
@@ -7013,6 +7030,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     gap: 8,
   },
+  // O icone de busca virou SVG do UI Kit (dimensionado por props), entao este
+  // estilo so' serve pros pontos que ainda usam o emoji 🔍 em <Text>.
   searchIcon: { fontSize: 14, color: '#64748b' },
   searchInput: { flex: 1, color: '#0f172a', fontSize: 14, padding: 0 },
   searchClear: { color: '#64748b', fontSize: 14, paddingHorizontal: 4 },
