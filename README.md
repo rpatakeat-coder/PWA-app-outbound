@@ -150,10 +150,19 @@ conferir se algum fluxo está desmontando e remontando o `<MapView>`.
 npm run build        # gera dist/ e carimba a versão no sw.js
 ```
 
-Na Vercel: *New Project* → importar o repo. O `vercel.json` já define build,
-`outputDirectory`, rewrites de SPA e headers de cache. Cadastrar as duas
-variáveis `EXPO_PUBLIC_*` em *Settings → Environment Variables* (Production +
-Preview) e adicionar o domínio final nas restrições da chave do Google.
+Na Vercel: *New Project* → importar o repo. Cadastrar as duas variáveis
+`EXPO_PUBLIC_*` em *Settings → Environment Variables* (Production + Preview) e
+adicionar o domínio final nas restrições da chave do Google.
+
+O que o `vercel.json` faz e por quê (o arquivo é JSON puro, sem comentários —
+a Vercel rejeita propriedades fora do schema):
+
+| Regra | Motivo |
+|---|---|
+| `sw.js` → `max-age=0, must-revalidate` | É o arquivo que anuncia versão nova. Se o browser o servir do cache, o vendedor fica preso na versão antiga indefinidamente. |
+| `/_expo/static/*` → `immutable` | Os bundles do Metro têm hash no nome: conteúdo novo = URL nova, então podem ser cacheados pra sempre. |
+| `manifest.json` → `must-revalidate` | Mudanças de ícone/nome precisam chegar sem esperar expirar cache. |
+| `rewrites: /(.*)` → `/index.html` | SPA: a navegação é interna (abas/modais), não há rotas no servidor. A Vercel só aplica rewrites **depois** de procurar o arquivo no filesystem, então `/sw.js`, `/manifest.json` e `/icons/*` continuam sendo servidos normalmente. |
 
 ### Como a atualização chega no vendedor
 
