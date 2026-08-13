@@ -18,7 +18,7 @@ import { ActivityIndicator, StyleSheet, Text, View, type LayoutChangeEvent } fro
 import { MarkerClusterer, SuperClusterAlgorithm, type Renderer } from '@googlemaps/markerclusterer';
 
 import { MapChildContext, type MapChildContextValue } from './context';
-import { GOOGLE_MAP_ID, loadGoogleMaps } from './loader';
+import { GOOGLE_MAP_ID, USING_DEMO_MAP_ID, loadGoogleMaps, onGoogleAuthFailure } from './loader';
 import {
   boundsForCoordinates,
   boundsToRegion,
@@ -170,6 +170,23 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
   // mapa — e recriar o mapa e' exatamente o evento cobrado (Dynamic Maps).
   const handlers = useRef({ onPanDrag, onRegionChange, onRegionChangeComplete, onPress });
   handlers.current = { onPanDrag, onRegionChange, onRegionChangeComplete, onPress };
+
+  // A recusa da chave chega DEPOIS do script carregar, por callback global —
+  // sem isto o usuario so' veria o mapa cinza da Google, sem saber o motivo.
+  useEffect(
+    () =>
+      onGoogleAuthFailure(() => {
+        setError(
+          USING_DEMO_MAP_ID
+            ? 'O Google recusou a chave do mapa. Falta configurar o Map ID ' +
+                '(EXPO_PUBLIC_GOOGLE_MAPS_MAP_ID) — sem ele os pins não carregam.'
+            : 'O Google recusou a chave do mapa. Verifique se a Maps JavaScript API ' +
+                'está ativa, se este domínio está liberado nas restrições da chave e ' +
+                'se o Map ID é do tipo JavaScript.',
+        );
+      }),
+    [],
+  );
 
   // ---- Criacao do mapa (uma vez por montagem) ----
   useEffect(() => {

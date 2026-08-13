@@ -16,19 +16,54 @@ import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 // Google Cloud (HTTP referrer = seu dominio + apenas Maps JavaScript API).
 // NUNCA reutilizar aqui a GOOGLE_GEOCODING_API_KEY, que e' secret de servidor
 // na Edge Function `geocode` e nao tem restricao de referrer.
-const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '';
+// `||` e nao `??`: uma variavel declarada mas SEM VALOR (a linha
+// `EXPO_PUBLIC_...=` sozinha no .env, ou um campo em branco na Vercel) chega
+// aqui como string VAZIA, nao como undefined — e `?? ` so cai no fallback
+// para null/undefined. Com `??` o valor vazio passava adiante.
+const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 // Map ID e' obrigatorio pra usar AdvancedMarkerElement (os markers custom do
 // app sao views React inteiras, nao icones — so o Advanced aceita HTML).
 // Um Map ID de tipo VECTOR tambem e' o que habilita heading/tilt, usados no
 // modo navegacao (animateCamera com pitch/heading). Com raster, o mapa
 // funciona mas ignora a inclinacao.
-const MAP_ID = process.env.EXPO_PUBLIC_GOOGLE_MAPS_MAP_ID ?? 'DEMO_MAP_ID';
+//
+// Mesmo cuidado aqui, e neste caso o `??` chegou a quebrar em producao:
+// mapId vazio e' um Map ID INVALIDO, entao a Google recusava a autenticacao,
+// pintava o mapa de cinza e — como AdvancedMarkerElement exige Map ID
+// valido — NENHUM pin aparecia.
+const MAP_ID = process.env.EXPO_PUBLIC_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
 
 export const GOOGLE_MAP_ID = MAP_ID;
 
+/** true quando o Map ID e' o de demonstracao, ou seja: nao configurado. */
+export const USING_DEMO_MAP_ID = MAP_ID === 'DEMO_MAP_ID';
+
 export function hasApiKey(): boolean {
   return API_KEY.length > 0;
+}
+
+// ---- Falha de autenticacao ----
+// A Google nao rejeita a chave no carregamento do script: ele baixa normalmente
+// e a recusa vem depois, por este callback global. Sem escutar aqui, o app
+// mostraria a tela cinza generica da Google ("esta pagina nao carregou o
+// Google Maps corretamente") sem nenhuma pista do que corrigir.
+let authFailed = false;
+const authListeners = new Set<() => void>();
+
+export function onGoogleAuthFailure(cb: () => void): () => void {
+  authListeners.add(cb);
+  if (authFailed) cb();
+  return () => {
+    authListeners.delete(cb);
+  };
+}
+
+if (typeof window !== 'undefined') {
+  (window as unknown as { gm_authFailure?: () => void }).gm_authFailure = () => {
+    authFailed = true;
+    authListeners.forEach((cb) => cb());
+  };
 }
 
 let loadPromise: Promise<typeof google.maps> | null = null;
