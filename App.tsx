@@ -66,7 +66,31 @@ import { fetchSlaCandidate } from './src/utils/slaCandidate';
 import { slaStatus, type SlaDays } from './src/utils/sla';
 import { useRouteConfig } from './src/hooks/useRouteConfig';
 
-const queryClient = new QueryClient();
+// Sem essas opcoes valem os padroes do react-query — `staleTime: 0` e
+// `refetchOnWindowFocus: true` —, que num PWA de celular sao o pior caso:
+// TODA vez que o vendedor sai pro WhatsApp e volta, a lista de clientes
+// (~5.5k linhas) e' rebaixada e reparseada na thread principal. Era a
+// principal causa do app "travado" no iPhone.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Janela em que o dado ja' carregado e' considerado bom. Cobre o
+      // vaivem entre apps durante uma visita sem refazer a busca.
+      staleTime: 5 * 60 * 1000,
+      // Mantem em memoria depois de a tela desmontar: trocar de aba e voltar
+      // reaproveita o cache em vez de buscar de novo.
+      gcTime: 30 * 60 * 1000,
+      // Voltar pro app NAO rebaixa. A frescura vem de onde importa: abrir/
+      // recarregar o app, o realtime, e as invalidacoes apos cada acao do
+      // proprio vendedor (visita, mudanca de etapa, cadastro).
+      refetchOnWindowFocus: false,
+      // Reconectar, sim: significa que houve janela sem rede, e o que esta
+      // em tela pode ter perdido atualizacoes.
+      refetchOnReconnect: true,
+      retry: 1,
+    },
+  },
+});
 
 // Normalizacao de UF — no banco existem clientes salvos como "ES" e outros
 // como "ESPIRITO SANTO" / "Espírito Santo". O filtro precisa colapsar todos

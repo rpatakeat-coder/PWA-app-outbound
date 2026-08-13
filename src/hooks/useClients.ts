@@ -8,6 +8,39 @@ import { FUNNEL_STAGE_IDS, STAGES, VISITA_STAGE_ID, VISITA_STAGE_LABEL } from '.
 
 const mapRow = (row: any): Client => row as Client;
 
+// Colunas trazidas na listagem, explicitas em vez de `*`.
+//
+// A tabela tem 59 colunas e ~5.5k linhas: em JSON isso da' ~8,6 MB, baixados
+// e parseados na thread principal a cada carga — no celular esse parse e' o
+// que trava a abertura do app.
+//
+// As 11 ausentes daqui (categoria, complemento, data_primeiro_contato,
+// data_ultimo_contato, faturamento_anual, import_batch_id, is_archived, pais,
+// precision_meters, tags, tipo_negocio) nao sao lidas em nenhum ponto do app.
+// Cortam pouco em VALOR — quase todas estao vazias — mas o JSON repete o NOME
+// da coluna em toda linha, entao 11 chaves x 5.5k linhas ja' evitam ~1,5 MB
+// de `"coluna":null`.
+//
+// ATENCAO ao adicionar coluna nova que a tela use: ela precisa entrar aqui. O
+// tipo Client continua declarando o campo, entao o TypeScript NAO acusa a
+// ausencia — o valor simplesmente chega undefined em runtime.
+const CLIENT_LIST_COLUMNS = [
+  'id', 'nome', 'empresa', 'email', 'telefone',
+  'endereco', 'numero', 'bairro', 'cidade', 'estado', 'cep',
+  'latitude', 'longitude', 'geo_source', 'geo_approximate',
+  'status', 'etapa', 'origem', 'observacoes',
+  'created_at', 'created_by', 'updated_at', 'updated_by',
+  'visited_at', 'visited_at_lat', 'visited_at_lon', 'visited_by', 'visit_count',
+  'id_hubspot', 'url_hubspot', 'vendedor_id_hubspot', 'won_at',
+  'hs_etapa_uso', 'hs_situacao', 'hs_qtd_comandas', 'hs_ultima_comanda_em',
+  'hs_uso_sincronizado_em', 'hs_cancelamento_solicitado_em',
+  'hs_stage_entered_at', 'hs_last_activity_at',
+  'conta_alvo_place_id', 'conta_alvo_rating', 'conta_alvo_reviews',
+  'conta_alvo_dismissed', 'conta_alvo_dismissed_at',
+  'conta_alvo_dismissed_by', 'conta_alvo_dismissed_by_name',
+  'atualizacao_diaria',
+].join(',');
+
 export type AreaFilter = { lat: number; lon: number; radiusKm: number };
 
 export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boolean } = {}) {
@@ -73,7 +106,7 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
         // PULADAS ou duplicadas — o lead "some" da lista de forma intermitente.
         let q = supabase
           .from('clients')
-          .select('*')
+          .select(CLIENT_LIST_COLUMNS)
           .order('id', { ascending: true })
           .range(from, from + PAGE_SIZE - 1);
 
