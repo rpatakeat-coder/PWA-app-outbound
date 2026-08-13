@@ -130,7 +130,7 @@ O mapa usa a **Maps JavaScript API**. São necessárias duas variáveis
 | Variável | O que é |
 |---|---|
 | `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` | Chave de **browser**, restrita por domínio |
-| `EXPO_PUBLIC_GOOGLE_MAPS_MAP_ID` | Map ID **vector** (habilita os pins custom e o tilt da navegação) |
+| `EXPO_PUBLIC_GOOGLE_MAPS_MAP_ID` | Map ID (tipo *JavaScript*). Obrigatório — sem ele os pins não carregam. Use **vector** com *Tilt* e *Rotation* para o modo navegação |
 
 > ⚠️ Chave de browser é **pública** — ela viaja no bundle, como em qualquer mapa web.
 > A proteção é a restrição por *HTTP referrer* + limitar a chave à Maps JavaScript API.
