@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import type { Client, ClientFormData } from '../types/client';
-import { bboxAround, roundCoordsForKey } from '../utils/area';
+import { bboxAround, boundsKey, roundCoordsForKey, type Bounds } from '../utils/area';
 import { createVisitTask, sendHubspotEvent } from '../utils/hubspotSync';
 import { FUNNEL_STAGE_IDS, STAGES, VISITA_STAGE_ID, VISITA_STAGE_LABEL } from '../constants/stages';
 
@@ -43,8 +43,66 @@ const CLIENT_LIST_COLUMNS = [
 
 export type AreaFilter = { lat: number; lon: number; radiusKm: number };
 
-export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boolean } = {}) {
-  const { areaFilter = null, enabled: callerEnabled = true } = opts;
+/**
+ * Busca clientes por NOME/EMPRESA/CIDADE direto no banco.
+ *
+ * Existe porque a listagem principal passou a trazer só a área visível do
+ * mapa: sem isto, procurar um cliente que está a 80 km não acharia nada. O
+ * filtro em memória continua valendo pro que já está carregado; este hook
+ * cobre o resto da base.
+ */
+export function useClientSearch(term: string) {
+  const { isAuthenticated } = useAuth();
+  const limpo = term.trim();
+
+  return useQuery<Client[]>({
+    // Termo na chave: cada busca tem seu próprio cache.
+    queryKey: ['clients-search', limpo],
+    enabled: isAuthenticated && limpo.length >= 2,
+    // Resultado de busca envelhece rápido, mas não a ponto de refazer a
+    // consulta a cada tecla que reabre o mesmo termo.
+    staleTime: 60 * 1000,
+    queryFn: async () => {
+      // Escapa os curingas do LIKE pra uma busca por "100%" não virar
+      // "qualquer coisa" e varrer a tabela inteira.
+      const escapado = limpo.replace(/[%_\\]/g, (m) => `\\${m}`);
+      const alvo = `%${escapado}%`;
+
+      const { data, error } = await supabase
+        .from('clients')
+        .select(CLIENT_LIST_COLUMNS)
+        // `or` com ilike: mesmos campos que o filtro em memória usa.
+        .or(
+          [
+            `nome.ilike.${alvo}`,
+            `empresa.ilike.${alvo}`,
+            `cidade.ilike.${alvo}`,
+            `bairro.ilike.${alvo}`,
+          ].join(','),
+        )
+        // Teto baixo de propósito: é uma lista de sugestões, não um relatório.
+        // Sem ele, buscar "a" traria a base inteira e desfaria o ganho.
+        .limit(50);
+
+      if (error) throw error;
+      return (data ?? []).map(mapRow);
+    },
+  });
+}
+
+export function useClients(
+  opts: {
+    areaFilter?: AreaFilter | null;
+    /**
+     * Caixa da área VISÍVEL do mapa. Quando presente, manda no recorte e o
+     * `areaFilter` (raio fixo em volta do GPS) é ignorado — carregar o que
+     * está na tela é mais direto que um raio de 200 km em volta do vendedor.
+     */
+     bounds?: Bounds | null;
+    enabled?: boolean;
+  } = {},
+) {
+  const { areaFilter = null, bounds = null, enabled: callerEnabled = true } = opts;
   const queryClient = useQueryClient();
   const { isAuthenticated, user, profile } = useAuth();
 
@@ -87,12 +145,16 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
 
   // Chave de cache: usa coords arredondadas pra não invalidar a cada
   // metro de jitter de GPS. A query em si usa lat/lon raw pra precisão.
-  const areaCacheKey = areaFilter
-    ? { ...roundCoordsForKey(areaFilter.lat, areaFilter.lon), r: areaFilter.radiusKm }
-    : null;
+  // Com `bounds` a chave vem da própria caixa, que já chega encaixada na
+  // grade — arrastar o mapa um pouco reaproveita o cache em vez de rebuscar.
+  const recorteCacheKey = bounds
+    ? `bounds:${boundsKey(bounds)}`
+    : areaFilter
+      ? `area:${JSON.stringify({ ...roundCoordsForKey(areaFilter.lat, areaFilter.lon), r: areaFilter.radiusKm })}`
+      : null;
 
   const query = useQuery<Client[]>({
-    queryKey: ['clients', allowedStatuses, areaCacheKey],
+    queryKey: ['clients', allowedStatuses, recorteCacheKey],
     queryFn: async () => {
       // PostgREST capa em 1000 linhas por padrão. Pagina em blocos pra trazer
       // todos os clientes do setor sem precisar mexer no max-rows do servidor.
@@ -119,8 +181,17 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
         // Filtro espacial via bounding box. Clientes sem lat/lon ficam de
         // fora porque .gte/.lte em NULL nunca casa — desejável: cliente
         // sem geo não tem como entrar no raio mesmo.
-        if (areaFilter) {
-          const bbox = bboxAround(areaFilter.lat, areaFilter.lon, areaFilter.radiusKm);
+        //
+        // `bounds` (área visível do mapa) tem precedência sobre o raio fixo
+        // em volta do GPS: quando o mapa manda, é o que está na tela que
+        // interessa, não onde o vendedor está parado.
+        const bbox = bounds
+          ? bounds
+          : areaFilter
+            ? bboxAround(areaFilter.lat, areaFilter.lon, areaFilter.radiusKm)
+            : null;
+
+        if (bbox) {
           q = q
             .gte('latitude', bbox.latMin)
             .lte('latitude', bbox.latMax)
@@ -679,6 +750,12 @@ export function useClients(opts: { areaFilter?: AreaFilter | null; enabled?: boo
     // Viewer nao depende do visibilityQuery (fica desabilitado, logo "pending"
     // pra sempre); so o loading da query principal conta pra ele.
     isLoading: (query.isLoading && query.fetchStatus !== 'idle') || (!isViewer && visibilityQuery.isLoading),
+    // Distingue "abrindo o app" de "trocando de área". Com carregamento por
+    // viewport, arrastar o mapa pra uma região ainda não buscada deixa
+    // `isLoading` true de novo — mas aí a tela CHEIA de carregamento seria
+    // errada: o mapa já está na frente do usuário e o certo é um aviso
+    // discreto por cima dele.
+    jaCarregouAlgumaVez: query.isFetched,
     error: query.error,
     addClient,
     updateClient,

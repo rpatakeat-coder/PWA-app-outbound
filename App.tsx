@@ -31,7 +31,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import MapView, { Marker, Polyline, Circle, type MapViewHandle as RNMapView } from './src/map';
 import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useClients } from './src/hooks/useClients';
+import { useClientSearch, useClients } from './src/hooks/useClients';
 import { useMeetings } from './src/hooks/useMeetings';
 import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
 import { useClientNotes } from './src/hooks/useClientNotes';
@@ -40,7 +40,12 @@ import { useClientVisits } from './src/hooks/useClientVisits';
 import { useClientTasks } from './src/hooks/useClientTasks';
 import { useForceReload } from './src/hooks/useForceReload';
 import { supabase } from './src/integrations/supabase/client';
-import { AREA_RADIUS_KM } from './src/utils/area';
+import {
+  MAX_VIEWPORT_KM,
+  boundsContains,
+  boundsFromRegion,
+  type Bounds,
+} from './src/utils/area';
 import { getShowOnlyMyAreaPref, setShowOnlyMyAreaPref } from './src/utils/userPrefs';
 import type { Client, ClientMeeting, ClientStatus, ClientTask, MeetingType } from './src/types/client';
 import { openMultiStopNavigation, openNavigation } from './src/utils/navigation';
@@ -572,14 +577,57 @@ function MainApp() {
   // Filtro espacial — quando o toggle "minha área" tá ligado e já temos
   // GPS, monta o objeto que vira bounding box na query do Supabase.
   // Sem GPS ou toggle off → null (sem filtro espacial, comportamento antigo).
-  const areaFilter = useMemo(() => {
-    if (!showOnlyMyArea || !userLocation) return null;
-    return {
-      lat: userLocation.latitude,
-      lon: userLocation.longitude,
-      radiusKm: AREA_RADIUS_KM,
-    };
-  }, [showOnlyMyArea, userLocation]);
+  // ===== Carregamento por área visível do mapa =====
+  //
+  // Antes o app trazia tudo num raio fixo de 200 km em volta do GPS — o que,
+  // numa capital, ainda são ~1.100 clientes e ~1,8 MB de JSON antes de a
+  // primeira tela aparecer. Agora quem manda é o que está na tela: a busca
+  // acompanha o mapa e traz só a região visível, com folga.
+  const [mapRegion, setMapRegion] = useState<{
+    latitude: number;
+    longitude: number;
+    latitudeDelta: number;
+    longitudeDelta: number;
+  } | null>(null);
+
+  // Caixa efetivamente buscada. Separada de `mapRegion` porque nem todo
+  // movimento do mapa vira busca nova — ver o boundsContains abaixo.
+  const [activeBounds, setActiveBounds] = useState<Bounds | null>(null);
+  const [viewportTooWide, setViewportTooWide] = useState(false);
+
+  // Primeira caixa: em volta do GPS, do tamanho do initialRegion do mapa.
+  // Dispara a busca junto com a montagem do mapa, em vez de esperar o
+  // primeiro assentamento — senão a tela abre vazia por um instante.
+  useEffect(() => {
+    if (activeBounds || !userLocation || !showOnlyMyArea) return;
+    setActiveBounds(
+      boundsFromRegion({
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      }),
+    );
+  }, [userLocation, activeBounds, showOnlyMyArea]);
+
+  useEffect(() => {
+    if (!showOnlyMyArea || !mapRegion) return;
+
+    const nova = boundsFromRegion(mapRegion);
+
+    // Zoom aberto demais: não busca (pegaria estados inteiros) e mantém na
+    // tela os pins que já vieram, com um aviso pra aproximar.
+    if (!nova) {
+      setViewportTooWide(true);
+      return;
+    }
+    setViewportTooWide(false);
+
+    // A caixa buscada tem meia tela de folga de cada lado. Enquanto o novo
+    // enquadramento couber dentro do que já foi buscado, não há o que pedir
+    // — é isso que faz arrastar o mapa não virar uma rajada de requisições.
+    setActiveBounds((anterior) => (anterior && boundsContains(anterior, nova) ? anterior : nova));
+  }, [mapRegion, showOnlyMyArea]);
 
   // Bloqueia a query enquanto esperamos o GPS lockar com filtro ligado.
   // Sem isso o app dispararia uma query "todos os clientes" e depois outra
@@ -587,10 +635,28 @@ function MainApp() {
   const waitingForLocation = showOnlyMyArea && !userLocation && locationPermission === 'pending';
   const areaPermissionDenied = showOnlyMyArea && locationPermission === 'denied';
 
-  const { clients, statuses: dynamicStatuses, isLoading, error, deleteClient, addClient, updateClient, markAsVisited, ensureHubspotDeal, dismissContaAlvo } = useClients({
-    areaFilter,
-    enabled: !waitingForLocation && !areaPermissionDenied,
+  const { clients: clientsNaArea, statuses: dynamicStatuses, isLoading, jaCarregouAlgumaVez, error, deleteClient, addClient, updateClient, markAsVisited, ensureHubspotDeal, dismissContaAlvo } = useClients({
+    // Filtro ligado: só a área visível. Desligado: base inteira (é o modo do
+    // gestor olhando o país todo — pesado por natureza, e agora é escolha
+    // explícita em vez de padrão).
+    bounds: showOnlyMyArea ? activeBounds : null,
+    // Com o filtro ligado, não busca antes de existir uma caixa: sem isso a
+    // primeira query sairia sem recorte e traria tudo.
+    enabled: !waitingForLocation && !areaPermissionDenied && (!showOnlyMyArea || !!activeBounds),
   });
+
+  // Busca no servidor: cobre a base inteira, não só o pedaço carregado. Sem
+  // isto, procurar por nome um cliente a 80 km não acharia nada depois que a
+  // listagem passou a seguir o mapa.
+  const { data: resultadosBusca, isFetching: buscando } = useClientSearch(searchQuery);
+
+  // O resto do app continua consumindo uma lista só. Os achados da busca
+  // entram por cima dos da área, sem duplicar quem já estava nas duas.
+  const clients = useMemo(() => {
+    if (!resultadosBusca || resultadosBusca.length === 0) return clientsNaArea;
+    const vistos = new Set(clientsNaArea.map((c) => c.id));
+    return [...clientsNaArea, ...resultadosBusca.filter((c) => !vistos.has(c.id))];
+  }, [clientsNaArea, resultadosBusca]);
   const { meetings, upcomingByClient, meetingsByClient, deleteMeeting } = useMeetings();
   const queryClient = useQueryClient();
   // Config editável pelo gestor (meta/dia, SLAs, params da Conta Alvo).
@@ -3565,7 +3631,11 @@ function MainApp() {
   // existe lista (mesmo placeholder da area anterior), refetch roda por baixo
   // sem esconder o app — antes qualquer troca de areaCacheKey (vendedor andou
   // ~1km) trocava o mapa inteiro por "Carregando..." no meio do uso.
-  if (loading || (isLoading && clients.length === 0) || waitingForLocation) {
+  // `jaCarregouAlgumaVez` é o que separa a abertura do app de uma troca de
+  // área. Sem ele, arrastar o mapa pra uma região ainda não buscada trocaria
+  // o app inteiro por um spinner — o carregamento de área tem que ser o aviso
+  // discreto sobre o mapa, não uma tela cheia.
+  if (loading || (isLoading && !jaCarregouAlgumaVez) || waitingForLocation) {
     return (
       <View style={styles.centered}>
         <Image source={require('./assets/icon.png')} style={{ width: 72, height: 72, marginBottom: 16, tintColor: '#dc2626', resizeMode: 'contain' }} />
@@ -3964,6 +4034,11 @@ function MainApp() {
               autoCapitalize="none"
               onSubmitEditing={Keyboard.dismiss}
             />
+            {/* A busca varre a base inteira no servidor, não só a área
+                carregada. Sem este indicador, procurar um cliente distante
+                mostraria "nenhum encontrado" no intervalo até a resposta
+                chegar — e o vendedor concluiria que ele não existe. */}
+            {buscando && <ActivityIndicator size="small" color="#94a3b8" />}
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Text style={styles.searchClear}>✕</Text>
@@ -4052,6 +4127,15 @@ function MainApp() {
               if (creationMode) {
                 setCreationCenter({ latitude: region.latitude, longitude: region.longitude });
               }
+              // Assentamento do mapa = hora de conferir se a área visível
+              // saiu do que já foi carregado. Só aqui, e não no onRegionChange
+              // (que dispara a cada quadro do arraste).
+              setMapRegion({
+                latitude: region.latitude,
+                longitude: region.longitude,
+                latitudeDelta: region.latitudeDelta,
+                longitudeDelta: region.longitudeDelta,
+              });
             }}
             showsBuildings={true}
             // Clustering: agrupa pinos próximos numa bolha com contador.
@@ -4156,6 +4240,25 @@ function MainApp() {
               />
             )}
           </MapView>
+
+          {/* Estado do carregamento por área. Fica sobre o mapa, sem capturar
+              toque (pointerEvents none) pra não atrapalhar o arraste. */}
+          {showOnlyMyArea && (viewportTooWide || isLoading) && (
+            <View style={styles.areaStatusWrap} pointerEvents="none">
+              <View style={styles.areaStatusPill}>
+                {viewportTooWide ? (
+                  <Text style={styles.areaStatusText}>
+                    🔍 Aproxime para carregar os clientes desta região
+                  </Text>
+                ) : (
+                  <>
+                    <ActivityIndicator size="small" color="#fff" />
+                    <Text style={styles.areaStatusText}>Carregando esta região…</Text>
+                  </>
+                )}
+              </View>
+            </View>
+          )}
 
           {/* Pin de criacao ancorado no CENTRO DO MAPA (nao da tela). O
               region.latitude/longitude que salvamos e' o centro do MapView;
@@ -4717,9 +4820,11 @@ function MainApp() {
                 {/* Filtro de área */}
                 <View style={styles.settingsRow}>
                   <View style={{ flex: 1, paddingRight: 12 }}>
-                    <Text style={styles.settingsLabel}>Mostrar só clientes da minha área</Text>
+                    <Text style={styles.settingsLabel}>Carregar só a área do mapa</Text>
                     <Text style={styles.settingsHint}>
-                      Filtra os pinos num raio de {AREA_RADIUS_KM} km do seu GPS.
+                      Traz os clientes da região visível e vai carregando conforme
+                      você move o mapa. Desligue para carregar a base inteira —
+                      é bem mais pesado.
                       Atualiza quando você abrir o app de novo.
                     </Text>
                   </View>
@@ -6956,6 +7061,26 @@ const styles = StyleSheet.create({
   errorText: { color: '#ef4444', fontSize: 16 },
   // Map
   map: { flex: 1 },
+  // Aviso do carregamento por área. No TOPO do mapa: embaixo ficam a legenda
+  // de temperatura, o botao de localizacao e a barra de navegacao.
+  areaStatusWrap: {
+    position: 'absolute',
+    top: 8,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  areaStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(15,23,42,0.88)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    maxWidth: '92%',
+  },
+  areaStatusText: { color: '#fff', fontSize: 12.5, fontWeight: '700' },
   // Legenda de temperatura: fica ACIMA do botao de localizacao (que ocupa
   // left:16 / bottom:90+insets), por isso o offset extra de 56px.
   tempLegend: {
