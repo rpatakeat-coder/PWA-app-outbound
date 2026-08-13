@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -14,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Alert } from '../components/Alert';
 import type { Client, ClientMeeting, MeetingType } from '../types/client';
 import { useMeetings } from '../hooks/useMeetings';
 

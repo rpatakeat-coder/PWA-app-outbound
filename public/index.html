@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!--
+      viewport-fit=cover: sem isso o react-native-safe-area-context nao enxerga
+      as env(safe-area-inset-*) e o app fica com a barra de status do iPhone
+      cobrindo o header quando instalado na tela inicial.
+
+      user-scalable=no: impede o zoom de pinça DA PAGINA. O mapa continua com
+      pinça propria (a Google trata o gesto internamente); sem isso os dois
+      competiriam e a pinça sobre o mapa zoaria o layout inteiro.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no, viewport-fit=cover"
+    />
+    <title>Takeat RPA</title>
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="description" content="Gestao de rota, leads e visitas do time de campo da Takeat." />
+
+    <!-- iOS nao le o manifest pra tudo: precisa destas tags pra abrir em tela
+         cheia (sem barra do Safari) quando adicionado a tela de inicio. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Takeat RPA" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" href="/icons/icon-192.png" />
+
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+
+      /* Segura o "puxa pra atualizar" do Chrome Android: num app de mapa o
+         gesto de arrastar pra baixo e' pan, nao refresh. */
+      body {
+        overscroll-behavior-y: contain;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      /* Pino/controles da Google herdariam a fonte do host; fixa a fonte de
+         sistema pra bater com o resto do app. */
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>
+      Você precisa habilitar o JavaScript para usar este app.
+    </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+  </body>
+</html>

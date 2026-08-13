@@ -1,0 +1,32 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": null,
+  "headers": [
+    {
+      "//": "O sw.js NUNCA pode ser servido do cache do browser: e' o arquivo que anuncia que ha versao nova. Cacheado, o vendedor ficaria preso na versao antiga indefinidamente.",
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    },
+    {
+      "//": "Bundles do Metro tem hash no nome — troca de conteudo = troca de URL, entao podem ser imutaveis.",
+      "source": "/_expo/static/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    },
+    {
+      "source": "/manifest.json",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
+    }
+  ],
+  "rewrites": [
+    {
+      "//": "SPA: o app tem navegacao propria (abas/modais), sem rotas no servidor. Qualquer caminho serve o index.html. Arquivos estaticos existentes tem precedencia sobre rewrites na Vercel, entao /sw.js e /manifest.json nao sao afetados.",
+      "source": "/((?!_expo|icons|assets).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

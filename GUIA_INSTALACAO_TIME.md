@@ -1,56 +1,70 @@
 # Takeat RPA — Guia de instalação pro time
 
-Este app roda dentro do **Expo Go** (gratuito, nas lojas). É a versão de homologação enquanto a versão própria pra App Store / Play Store não sai.
+O app agora é uma **página web instalável** (PWA). Não precisa mais de Expo Go,
+nem de conta Expo, nem de convite. É só abrir o link e instalar.
+
+> **Link do app:** https://SEU-DOMINIO.vercel.app
+> *(substituir pelo domínio final antes de mandar pro time)*
 
 ---
 
-## Passo a passo
+## Por que instalar (e não só abrir no navegador)
 
-### 1. Instale o Expo Go
+Instalado, o app abre em tela cheia (sem a barra do navegador), ganha ícone na
+tela de início e continua abrindo mesmo com internet ruim. Funciona igual ao
+app de antes.
 
-- **iPhone**: https://apps.apple.com/app/expo-go/id982107779
-- **Android**: https://play.google.com/store/apps/details?id=host.exp.exponent
+---
 
-### 2. Crie uma conta Expo (gratuita)
+## iPhone
 
-https://expo.dev/signup
+> Precisa ser no **Safari**. O Chrome no iPhone não instala PWA.
 
-Use seu email da Takeat. Anote a senha.
+1. Abra o link no **Safari**
+2. Toque no botão **Compartilhar** (quadrado com seta pra cima, embaixo)
+3. Role a lista e toque em **Adicionar à Tela de Início**
+4. Toque em **Adicionar** no canto superior direito
+5. Feche o Safari e abra o app pelo **ícone novo** na tela de início
 
-### 3. Aceite o convite no projeto
+---
 
-Você vai receber um email da Expo convidando pra fazer parte do projeto **takeat-rpa**. Clique em **Accept invitation**.
+## Android
 
-> Se não recebeu, peça pro Arthur enviar (ele convida em https://expo.dev/accounts/arthurtakeat/settings/members).
+1. Abra o link no **Chrome**
+2. Deve aparecer sozinho um aviso **"Instalar app"** — toque nele
+3. Se não aparecer: menu **⋮** (canto superior direito) → **Instalar app**
+   (ou **Adicionar à tela inicial**)
+4. Confirme em **Instalar**
+5. Abra o app pelo **ícone novo** na gaveta de apps
 
-### 4. Abra o Expo Go e faça login
+---
 
-Abra o app **Expo Go** no celular → toca no avatar/menu → **Log In** com a conta que você criou no passo 2.
+## Permissão de localização
 
-### 5. Abra o Takeat RPA
+Na primeira vez que abrir o mapa, o navegador pergunta se pode usar sua
+localização. **Toque em Permitir** — sem isso o mapa não centraliza em você,
+o check-in de visita não valida a distância e a rota do dia não calcula.
 
-Depois de logado, você verá o projeto **takeat-rpa** na aba **Projects** ou **Home**. Toca nele e o app abre.
+Se negou sem querer:
 
-> **Alternativa mais simples**: abra este link no celular (com Expo Go instalado e logado):
->
-> https://bit.ly/takeatApp
->
-> Vai abrir uma página que automaticamente lança o Takeat RPA dentro do Expo Go. Esse link **nunca muda** — sempre aponta pra versão mais recente.
+| Aparelho | Como liberar |
+|---|---|
+| iPhone | Ajustes → Safari → Localização → **Perguntar** ou **Permitir**. Depois feche e reabra o app. |
+| Android | Chrome → **⋮** → Configurações → Configurações do site → Localização → ache o site → **Permitir** |
 
 ---
 
 ## Como atualizar o app
 
-**Você não precisa fazer nada.** Quando o Arthur publicar uma versão nova, o app baixa sozinho na próxima vez que você abrir. Se ficou aberto em background, fecha e abre de novo pra forçar a atualização.
+**Você não precisa fazer nada.** Quando sair versão nova, o app atualiza sozinho
+ao ser aberto. Se ficou aberto muito tempo, feche e abra de novo.
 
 ---
 
-## Login no app
+## Login
 
-Use as credenciais que o Arthur mandou (não confunda com o login do Expo — são contas diferentes):
-
-- **Login Expo**: pra abrir o Expo Go e ver o projeto
-- **Login Takeat RPA**: pra usar o app em si (email + senha do Supabase)
+Use as credenciais que o Arthur mandou (email + senha). As contas são criadas
+pelo administrador — não existe "criar conta" na tela de login.
 
 ---
 
@@ -58,11 +72,12 @@ Use as credenciais que o Arthur mandou (não confunda com o login do Expo — s�
 
 | Problema | Solução |
 |---|---|
-| "This project is not available" no Expo Go | Você não foi convidado ainda — fala com o Arthur |
-| App carrega mas tela em branco | Fecha o Expo Go totalmente (swipe up) e abre de novo |
-| Localização não pega | Configurações do iPhone/Android → Expo Go → Localização → "Ao usar o app" |
-| Mapa cinza no Android | Pode acontecer no Expo Go — é limitação. Versão final (TestFlight/Play Store) vai resolver. |
-| App não atualiza | Fecha o Expo Go e reabre. Se persistir, fecha o Expo Go totalmente e tenta de novo. |
+| Não aparece "Adicionar à Tela de Início" no iPhone | Você está no Chrome. Abra o link no **Safari**. |
+| Mapa cinza ou "Mapa indisponível" | Fala com o Arthur — é configuração da chave do mapa, não é o seu aparelho. |
+| Mapa não acha você | Permissão de localização negada — ver a tabela acima. |
+| Botão "Abrir no Maps" não faz nada | O navegador bloqueou o pop-up. Libere pop-ups para o site nas configurações. |
+| App parece travado numa versão antiga | Feche o app totalmente e abra de novo. |
+| Tela branca ao abrir | Feche e abra de novo. Se persistir, desinstale o ícone e refaça a instalação. |
 
 ---
 

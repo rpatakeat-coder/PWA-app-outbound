@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert } from '../components/Alert';
 import { useRouteConfig, type RouteConfig } from '../hooks/useRouteConfig';
 
 // Card "⚙️ Config Rota do dia" na aba Gestor: edita raio/nota/avaliações da

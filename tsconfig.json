@@ -1,4 +1,13 @@
 {
   "compilerOptions": {},
-  "extends": "expo/tsconfig.base"
+  "extends": "expo/tsconfig.base",
+  "exclude": [
+    "node_modules",
+    "dist",
+    // Edge Functions rodam em Deno, nao no bundle do app: usam `Deno.env`,
+    // imports por URL (`jsr:`/`https:`) e nao compartilham este tsconfig.
+    // Sem excluir, o typecheck do app afoga em ~60 erros que nao sao dele.
+    // Elas sao verificadas pelo `deno check` / no deploy do Supabase.
+    "supabase/functions"
+  ]
 }

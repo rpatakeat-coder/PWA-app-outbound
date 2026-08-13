@@ -1,7 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   StyleSheet,
@@ -9,7 +8,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import MapView, { Marker, type Region, PROVIDER_DEFAULT } from 'react-native-maps';
+import { Alert } from '../components/Alert';
+import MapView, { Marker, type Region, type MapViewHandle, PROVIDER_DEFAULT } from '../map';
 import type { Client } from '../types/client';
 import { distanceMeters } from '../hooks/useFieldOps';
 import { reverseGeocode } from '../utils/geocoding';
@@ -48,7 +48,7 @@ export function EditLocationModal({ client, onSave, onClose }: Props) {
   // e capturado no onRegionChangeComplete (assentamento final do mapa).
   const [center, setCenter] = useState({ latitude: currentLat, longitude: currentLng });
   const [saving, setSaving] = useState(false);
-  const mapRef = useRef<MapView | null>(null);
+  const mapRef = useRef<MapViewHandle | null>(null);
 
   const distance = useMemo(
     () => distanceMeters(currentLat, currentLng, center.latitude, center.longitude),

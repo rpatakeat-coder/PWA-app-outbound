@@ -6,13 +6,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
+import { Alert } from '../components/Alert';
 import type { Profile } from '../integrations/supabase/types';
 
 const WEBHOOK_URL = 'https://webhook.takeat.cloud/webhook/c45d62f8-a6d7-406d-ab48-4bebddadba64';

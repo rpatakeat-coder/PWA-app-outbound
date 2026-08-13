@@ -15,7 +15,6 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
   KeyboardAvoidingView,
-  Alert,
   Linking,
   Pressable,
   Animated,
@@ -23,9 +22,13 @@ import {
   Switch,
   AppState,
 } from 'react-native';
+import { Alert, AlertHost } from './src/components/Alert';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView from 'react-native-map-clustering';
-import { Marker, Polyline, Circle, default as RNMapView } from 'react-native-maps';
+// Camada de mapa web (Google Maps JS API) com a mesma API que o
+// react-native-maps + react-native-map-clustering expunham. O clustering
+// deixou de ser um wrapper e virou props do proprio MapView — que e' como
+// este arquivo ja as passava (radius/minPoints/maxZoom/clusterColor).
+import MapView, { Marker, Polyline, Circle, type MapViewHandle as RNMapView } from './src/map';
 import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useClients } from './src/hooks/useClients';
@@ -2185,6 +2188,46 @@ function MainApp() {
     return 2 * R * Math.asin(Math.sqrt(a));
   };
 
+  // Fix "bom o suficiente" pra medir proximidade: acima disso o raio de erro do
+  // proprio GPS ja e' da ordem do limite de check-in.
+  const GOOD_FIX_ACCURACY_M = 50;
+  // Acima disso o fix nao e' GPS de verdade — e' torre/Wi-Fi ou "Localizacao
+  // Exata" desligada no iOS (que devolve um ponto fuzzy a ~1-3km). Nesse caso a
+  // distancia calculada e' ficcao: nao adianta mandar o vendedor "se aproximar".
+  const COARSE_FIX_ACCURACY_M = 150;
+
+  // getCurrentPositionAsync pode voltar rapido com um fix grosseiro/cacheado.
+  // Se vier ruim, escuta ate ~8s e fica com o de menor raio de erro.
+  const getBestFix = useCallback(async (): Promise<Location.LocationObject> => {
+    const first = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+    if ((first.coords.accuracy ?? Number.POSITIVE_INFINITY) <= GOOD_FIX_ACCURACY_M) return first;
+
+    return new Promise((resolve) => {
+      let best = first;
+      let sub: Location.LocationSubscription | null = null;
+      let done = false;
+      let timer: ReturnType<typeof setTimeout>;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        try { sub?.remove?.(); } catch {}
+        resolve(best);
+      };
+      timer = setTimeout(finish, 8000);
+      Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 },
+        (loc) => {
+          const acc = loc.coords.accuracy ?? Number.POSITIVE_INFINITY;
+          if (acc < (best.coords.accuracy ?? Number.POSITIVE_INFINITY)) best = loc;
+          if (acc <= GOOD_FIX_ACCURACY_M) finish();
+        },
+      )
+        .then((s) => { if (done) { try { s.remove(); } catch {} } else { sub = s; } })
+        .catch(() => finish());
+    });
+  }, []);
+
   const visitingRef = useRef(false);
   const [isVisiting, setIsVisiting] = useState(false);
 
@@ -2216,9 +2259,29 @@ function MainApp() {
         return;
       }
 
+      // Coordenada do lead LIDA DO BANCO na hora. O objeto do sheet e' um
+      // snapshot (pode ter sido aberto antes de uma edicao de localizacao feita
+      // nesta sessao ou em outro device) — medir contra pin velho gera um
+      // "voce esta muito longe" fantasma logo depois de arrastar o pin.
+      let targetLat = Number(client.latitude);
+      let targetLon = Number(client.longitude);
+      let isApproxPin = client.geo_approximate === true;
+      try {
+        const { data: freshRow } = await supabase
+          .from('clients')
+          .select('latitude, longitude, geo_approximate')
+          .eq('id', client.id)
+          .maybeSingle();
+        if (freshRow?.latitude != null && freshRow?.longitude != null) {
+          targetLat = Number(freshRow.latitude);
+          targetLon = Number(freshRow.longitude);
+          isApproxPin = freshRow.geo_approximate === true;
+        }
+      } catch { /* sem rede: segue com o snapshot do sheet */ }
+
       let position: Location.LocationObject;
       try {
-        position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+        position = await getBestFix();
       } catch (err: any) {
         Alert.alert('Erro de GPS', err?.message ?? 'Não foi possível obter sua localização.');
         return;
@@ -2226,12 +2289,36 @@ function MainApp() {
 
       const userLat = position.coords.latitude;
       const userLon = position.coords.longitude;
-      const distance = haversineMeters(userLat, userLon, client.latitude as number, client.longitude as number);
+      const fixAccuracy = position.coords.accuracy ?? null;
+      const distance = haversineMeters(userLat, userLon, targetLat, targetLon);
+      // Mesmo criterio da RPC mark_client_as_visited (200m preciso / 500m
+      // aproximado). Antes o app travava em 200m fixo e barrava check-in que o
+      // banco teria aceitado.
+      const maxDistance = isApproxPin ? 500 : 200;
 
-      if (distance > 200) {
+      if (distance > maxDistance) {
+        // Fix grosseiro: o problema nao e' a distancia, e' a leitura. Mandar
+        // "aproxime-se" aqui e' o que fazia o vendedor andar em volta do lead
+        // sem nunca conseguir bater o ponto.
+        if (fixAccuracy != null && fixAccuracy > COARSE_FIX_ACCURACY_M) {
+          Alert.alert(
+            'Localização imprecisa',
+            `Seu aparelho está reportando a posição com margem de erro de ~${Math.round(fixAccuracy)} m `
+            + `(a conta deu ${Math.round(distance)} m até o lead), então não dá pra confirmar que você está no local.\n\n`
+            + 'No iPhone: Ajustes › Privacidade e Segurança › Serviços de Localização › este app › ative "Localização Exata". '
+            + 'Depois volte pro app e tente de novo.',
+            [
+              { text: 'Fechar', style: 'cancel' },
+              { text: 'Abrir configurações', onPress: () => Linking.openSettings() },
+            ],
+          );
+          return;
+        }
         Alert.alert(
           'Você está muito longe',
-          `Distância atual: ${Math.round(distance)} m (limite: 200 m).\nAproxime-se do local para marcar como visitado.`,
+          `Distância atual: ${Math.round(distance)} m (limite: ${maxDistance} m).`
+          + (fixAccuracy != null ? `\nPrecisão do GPS: ±${Math.round(fixAccuracy)} m.` : '')
+          + '\nAproxime-se do local para marcar como visitado.',
         );
         return;
       }
@@ -2255,7 +2342,7 @@ function MainApp() {
       visitingRef.current = false;
       setIsVisiting(false);
     }
-  }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, isMonitoringRoute]);
+  }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, isMonitoringRoute, getBestFix]);
 
   // Conta Alvo "Não interessa": descarta o alvo (some do mapa/lista, sai da rota,
   // não vira deal, não é re-sugerido). Só faz sentido em conta-alvo sem deal.
@@ -6441,6 +6528,10 @@ export default function App() {
       <AuthProvider>
         <QueryClientProvider client={queryClient}>
           <MainApp />
+          {/* Host dos Alert.alert. Fica no topo da arvore e FORA do MainApp
+              pra continuar montado mesmo quando a tela que disparou o alerta
+              desmonta (ex.: erro ao salvar que fecha o modal). */}
+          <AlertHost />
         </QueryClientProvider>
       </AuthProvider>
     </SafeAreaProvider>

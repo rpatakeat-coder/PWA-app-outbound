@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert } from '../components/Alert';
 import { useDismissedContaAlvo } from '../hooks/useDismissedContaAlvo';
 import { exportAgenda } from '../utils/exportAgenda';
 

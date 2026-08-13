@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert } from '../components/Alert';
 import { useSellerClassification } from '../hooks/useSellerClassification';
 import type { SellerStatus } from '../hooks/useAllSellers';
 

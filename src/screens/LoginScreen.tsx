@@ -6,13 +6,13 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   Image,
   KeyboardAvoidingView,
   ScrollView,
   Keyboard,
   Platform,
 } from 'react-native';
+import { Alert } from '../components/Alert';
 import { useAuth } from '../context/AuthContext';
 
 export function LoginScreen() {

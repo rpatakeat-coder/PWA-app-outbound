@@ -1,8 +1,12 @@
 import { registerRootComponent } from 'expo';
 
 import App from './App';
+import { registerServiceWorker } from './src/utils/updates';
 
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
+// registerRootComponent monta o App no #root do public/index.html.
 registerRootComponent(App);
+
+// Service worker: entrega de versao nova (no lugar do OTA do expo-updates) e
+// casca offline. Registrado depois do mount pra nao competir com o primeiro
+// paint — o SW so importa a partir da SEGUNDA visita mesmo.
+registerServiceWorker();

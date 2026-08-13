@@ -4,16 +4,17 @@ import { supabase } from '../integrations/supabase/client';
 import { checkAndReloadIfUpdateAvailable } from '../utils/updates';
 
 // Mantém o app na versão mais nova com 3 gatilhos:
-//  1. Cold start (mount): checa OTA e recarrega se houver bundle novo.
+//  1. Cold start (mount): checa se há build novo e recarrega se houver.
 //     Resolve o caso clássico "abri o app, ainda tô na versão velha".
 //  2. AppState -> active: re-checa quando o usuário volta do background.
-//     Cobre o caso "ficou no tray a semana toda".
+//     Cobre o caso "ficou aberto na aba a semana toda".
 //  3. Realtime subscription em app_force_reload: quando o admin (ou o
 //     cron 2am) atualiza triggered_at, todo cliente conectado faz a
-//     mesma dança de check + fetch + reload.
+//     mesma dança de check + ativar + reload.
 //
-// Em Expo Go o reload é no-op (Updates.isEnabled = false) — o próprio
-// Expo Go já pega o bundle novo a cada launch.
+// No PWA quem entrega a versão nova é o service worker (ver utils/updates).
+// AppState continua funcionando: o react-native-web o implementa em cima do
+// visibilitychange, então 'active' = aba voltou ao primeiro plano.
 export function useForceReload(enabled: boolean) {
   const lastTriggeredAt = useRef<string | null>(null);
 

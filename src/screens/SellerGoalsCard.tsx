@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert } from '../components/Alert';
 import { useAllSellers } from '../hooks/useAllSellers';
 import { useSellerGoals } from '../hooks/useSellerGoals';
 import { useRouteConfig } from '../hooks/useRouteConfig';

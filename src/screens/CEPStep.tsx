@@ -6,13 +6,13 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
+import { Alert } from '../components/Alert';
 import { fetchCepData, geocodeStructured, reverseGeocode, GeocodingError } from '../utils/geocoding';
 import type { ClientFormData } from '../types/client';
 

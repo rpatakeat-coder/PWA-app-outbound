@@ -1,6 +1,6 @@
 # Takeat RPA — App de Campo Outbound
 
-Aplicativo mobile (Expo / React Native) para o time de vendas **outbound** da Takeat.
+**PWA** (instalável no celular) para o time de vendas **outbound** da Takeat.
 Concentra a operação de campo do vendedor: mapa de leads, planejamento de rota,
 agenda de compromissos, tarefas, check-in de visitas e o painel do gestor — tudo
 sincronizado com o **HubSpot** (CRM) e o **Supabase** (banco + backend).
@@ -31,13 +31,13 @@ sincronizado com o **HubSpot** (CRM) e o **Supabase** (banco + backend).
 
 | Camada | Tecnologia |
 |---|---|
-| App | Expo SDK 54, React Native 0.81, React 19, TypeScript |
+| App | PWA — Expo SDK 54 (web) + react-native-web, React 19, TypeScript |
 | Estado/dados | @tanstack/react-query |
-| Mapa | react-native-maps + react-native-map-clustering |
+| Mapa | Google Maps JavaScript API (`src/map/`, shim com a API do react-native-maps) |
 | Backend | Supabase (Postgres, Auth, Storage, Edge Functions/Deno) |
 | CRM | HubSpot (deals, contatos, engagements) |
 | Automações | n8n (Google Calendar, fallback de sync) |
-| Build/OTA | EAS Build + EAS Update |
+| Deploy/atualização | Vercel + service worker (`public/sw.js`) |
 
 ---
 
@@ -87,59 +87,87 @@ src/
   constants/stages.ts        # Etapas do funil + webhook n8n
   integrations/supabase/     # Client + tipos
   types/client.ts            # Tipos de domínio
+  map/                       # Camada de mapa (Google Maps JS API)
+  components/Alert.tsx       # Alert.alert do react-native, implementado pra web
 supabase/
   functions/                 # Edge Functions (Deno)
   migrations/                # Migrations SQL
 assets/                      # Ícones/splash
-eas.json / app.json          # Config EAS + Expo
+public/                      # Casca do PWA: index.html, manifest.json, sw.js, icons/
+scripts/build-web.js         # Build + carimbo de versão no service worker
+app.json / vercel.json       # Config Expo (web) + deploy
 ```
 
 ---
 
 ## 🚀 Rodando localmente
 
-Pré-requisitos: Node 18+ e um **dev build**/Expo Go (SDK 54) no dispositivo.
+Pré-requisitos: Node 18+.
 
 ```bash
 npm install
-npm start            # inicia o Metro (expo start)
+cp .env.example .env.local   # preencha a chave do Google Maps (ver abaixo)
+npm start                    # http://localhost:8081
 ```
 
-Conectar o celular (mesma rede Wi‑Fi) via QR/URL do Metro.
-Se a LAN falhar (isolamento de rede/AP), use o túnel:
+Para testar o **build de produção** (inclui service worker, que não roda em dev):
 
 ```bash
-npx expo start --tunnel
+npm run build
+npm run serve                # http://localhost:3000
 ```
 
-> Este app usa módulos nativos (mapas, localização). Em geral roda no **Expo Go**
-> (SDK 54); para recursos Android específicos use um **dev build** (`eas build`).
+> O service worker só se registra em **HTTPS** ou em **localhost**. Num IP de LAN
+> (`192.168.x.x`) o app funciona, mas sem instalação nem offline.
 
 ---
 
-## 📦 EAS (build & OTA update)
+## 🔑 Chave do Google Maps
 
-Login (uma vez, conta da org `takeat`):
+O mapa usa a **Maps JavaScript API**. São necessárias duas variáveis
+(`.env.example` tem o passo a passo completo):
+
+| Variável | O que é |
+|---|---|
+| `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` | Chave de **browser**, restrita por domínio |
+| `EXPO_PUBLIC_GOOGLE_MAPS_MAP_ID` | Map ID **vector** (habilita os pins custom e o tilt da navegação) |
+
+> ⚠️ Chave de browser é **pública** — ela viaja no bundle, como em qualquer mapa web.
+> A proteção é a restrição por *HTTP referrer* + limitar a chave à Maps JavaScript API.
+> **Nunca** reutilizar aqui a `GOOGLE_GEOCODING_API_KEY`: ela é secret de servidor da
+> Edge Function `geocode` e não tem restrição de referrer.
+
+**Custo:** Dynamic Maps tem 10.000 carregamentos/mês grátis, depois US$ 7/1.000.
+Um carregamento = uma instância de mapa criada. Com ~15 vendedores o uso fica em
+torno de 5.000/mês. Se esse número disparar, o suspeito é remontagem de mapa —
+conferir se algum fluxo está desmontando e remontando o `<MapView>`.
+
+---
+
+## 📦 Deploy (Vercel)
 
 ```bash
-npm run login        # npx eas-cli login
-npm run whoami
+npm run build        # gera dist/ e carimba a versão no sw.js
 ```
 
-Publicar atualização **OTA** (JS, sem passar pela loja) — só chega em builds com o
-mesmo `runtimeVersion` (`exposdk:54.0.0`):
+Na Vercel: *New Project* → importar o repo. O `vercel.json` já define build,
+`outputDirectory`, rewrites de SPA e headers de cache. Cadastrar as duas
+variáveis `EXPO_PUBLIC_*` em *Settings → Environment Variables* (Production +
+Preview) e adicionar o domínio final nas restrições da chave do Google.
 
-```bash
-npm run update:prod "mensagem"     # canal production
-npm run update:preview "mensagem"  # canal preview
-npm run update:dev "mensagem"      # canal development
-```
+### Como a atualização chega no vendedor
 
-Gerar build nativo (quando muda dependência nativa):
+Substitui o EAS Update. Cada build grava um hash do conteúdo em `dist/sw.js`;
+o browser detecta que o arquivo mudou e instala a versão nova em segundo plano.
+Os três gatilhos de `useForceReload` continuam iguais:
 
-```bash
-npx eas-cli build --profile production --platform android   # ou ios
-```
+1. **Abertura do app** — checa e recarrega se houver versão nova
+2. **Volta do background** — mesma checagem
+3. **Tabela `app_force_reload`** — o admin (ou o cron das 2h) atualiza
+   `triggered_at` e todo cliente conectado recarrega
+
+> O carimbo de versão é o que faz isso funcionar: sem ele o `sw.js` seria
+> byte-idêntico entre deploys e nenhuma atualização chegaria.
 
 ---
 

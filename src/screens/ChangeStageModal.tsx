@@ -2,7 +2,6 @@ import React, { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -14,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Alert } from '../components/Alert';
 import type { Client } from '../types/client';
 import {
   WON_STAGE_IDS,
