@@ -87,14 +87,14 @@ export function SellerGoalsCard() {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#ede9fe', padding: 14, marginBottom: 12 },
+  card: { backgroundColor: 'var(--surface)', borderRadius: 14, borderWidth: 1, borderColor: '#ede9fe', padding: 14, marginBottom: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 15, fontWeight: '800', color: '#5b21b6' },
   chevron: { fontSize: 12, color: '#7c3aed', fontWeight: '800' },
-  hint: { fontSize: 12, color: '#64748b', marginBottom: 8 },
+  hint: { fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 },
-  name: { flex: 1, fontSize: 13, fontWeight: '600', color: '#334155' },
-  input: { width: 70, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, fontSize: 14, color: '#0f172a', backgroundColor: '#f8fafc', textAlign: 'center' },
+  name: { flex: 1, fontSize: 13, fontWeight: '600', color: 'var(--text)' },
+  input: { width: 70, borderWidth: 1, borderColor: 'var(--border)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, fontSize: 14, color: 'var(--text)', backgroundColor: 'var(--bg)', textAlign: 'center' },
   saveBtn: { backgroundColor: '#7c3aed', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 8 },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

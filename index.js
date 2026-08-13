@@ -1,7 +1,12 @@
 import { registerRootComponent } from 'expo';
 
 import App from './App';
+import { initTheme } from './src/theme';
 import { registerServiceWorker } from './src/utils/updates';
+
+// Antes de montar o app: aplica o tema salvo direto no <html>. Se ficasse pra
+// depois do primeiro render, a tela abriria clara e piscaria pra escura.
+initTheme();
 
 // registerRootComponent monta o App no #root do public/index.html.
 registerRootComponent(App);

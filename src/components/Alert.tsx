@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderRadius: 14,
     padding: 20,
     shadowColor: '#000',
@@ -144,8 +144,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
   },
-  title: { fontSize: 17, fontWeight: '800', color: '#0f172a' },
-  message: { fontSize: 14, color: '#475569', marginTop: 8, lineHeight: 20 },
+  title: { fontSize: 17, fontWeight: '800', color: 'var(--text)' },
+  message: { fontSize: 14, color: 'var(--text-muted)', marginTop: 8, lineHeight: 20 },
   buttonRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -156,8 +156,8 @@ const styles = StyleSheet.create({
   buttonColumn: { flexDirection: 'column-reverse', alignItems: 'stretch' },
   button: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 },
   buttonFull: { alignItems: 'center' },
-  buttonPressed: { backgroundColor: '#f1f5f9' },
+  buttonPressed: { backgroundColor: 'var(--surface-2)' },
   buttonText: { fontSize: 15, fontWeight: '700', color: '#2563eb' },
-  buttonTextCancel: { color: '#64748b' },
+  buttonTextCancel: { color: 'var(--text-muted)' },
   buttonTextDestructive: { color: '#dc2626' },
 });

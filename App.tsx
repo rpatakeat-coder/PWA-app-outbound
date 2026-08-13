@@ -23,6 +23,8 @@ import {
   AppState,
 } from 'react-native';
 import { Alert, AlertHost } from './src/components/Alert';
+import { useTheme } from './src/theme';
+import { HAS_DARK_MAP } from './src/map';
 import {
   IconBarGraph,
   IconCalendar,
@@ -383,7 +385,7 @@ const markerStyles = StyleSheet.create({
     position: 'absolute',
     top: -6,
     right: -8,
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: '#7c3aed',
@@ -399,7 +401,7 @@ const markerStyles = StyleSheet.create({
     position: 'absolute',
     top: -6,
     left: -8,
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: '#7c3aed',
@@ -476,6 +478,9 @@ function RouteMarker({
 
 function MainApp() {
   const insets = useSafeAreaInsets();
+  // O tema em si e' aplicado por CSS no <html>; daqui so' sai o estado do
+  // seletor nas configuracoes.
+  const { pref: themePref, setPref: setThemePref } = useTheme();
 
   // Altura da linha "developed by RPA" (fonte 10 + folga).
   const BRAND_H = 16;
@@ -2696,7 +2701,7 @@ function MainApp() {
                 style={[
                   styles.filterChip,
                   selected && { backgroundColor: opt.color, borderColor: opt.color },
-                  !selected && { borderWidth: 1, borderColor: '#e2e8f0' },
+                  !selected && { borderWidth: 1, borderColor: 'var(--border)' },
                 ]}
                 onPress={() => {
                   setRouteStatusSelection(prev => {
@@ -2727,7 +2732,7 @@ function MainApp() {
           >
             <Text style={[
               styles.dropdownButtonText,
-              routeVendorFilterHubspotId === null && { color: '#64748b' },
+              routeVendorFilterHubspotId === null && { color: 'var(--text-muted)' },
             ]}>
               {vendorLabel(routeVendorFilterHubspotId)}
             </Text>
@@ -2752,7 +2757,7 @@ function MainApp() {
           >
             <Text style={[
               styles.dropdownButtonText,
-              routeVendorFilterHubspotId === null && { color: '#64748b' },
+              routeVendorFilterHubspotId === null && { color: 'var(--text-muted)' },
             ]}>
               {routeVendorFilterHubspotId === myHubspotId ? 'Somente meus leads' : 'Todos os leads do recorte'}
             </Text>
@@ -2948,7 +2953,7 @@ function MainApp() {
                   <Text style={styles.routePosition}>{index + 1}</Text>
                   <View style={{ flex: 1 }}>
                     <Text
-                      style={[styles.clientName, isDone && { textDecorationLine: 'line-through', color: '#64748b' }]}
+                      style={[styles.clientName, isDone && { textDecorationLine: 'line-through', color: 'var(--text-muted)' }]}
                       numberOfLines={1}
                     >
                       {title}
@@ -3169,11 +3174,11 @@ function MainApp() {
               return (
                 <TouchableOpacity
                   key={sev}
-                  style={[styles.countChip, ativo && { borderColor: sevColor(sev), backgroundColor: '#fff' }]}
+                  style={[styles.countChip, ativo && { borderColor: sevColor(sev), backgroundColor: 'var(--surface)' }]}
                   onPress={() => setTaskSevFilter(ativo ? null : sev)}
                 >
                   <View style={[styles.countChipDot, { backgroundColor: sevColor(sev) }]} />
-                  <Text style={[styles.countChipText, ativo && { color: '#0f172a' }]}>
+                  <Text style={[styles.countChipText, ativo && { color: 'var(--text)' }]}>
                     {sev} {total}
                   </Text>
                 </TouchableOpacity>
@@ -3588,11 +3593,11 @@ function MainApp() {
               return (
                 <TouchableOpacity
                   key={tipo}
-                  style={[styles.countChip, ativo && { borderColor: meta.cor, backgroundColor: '#fff' }]}
+                  style={[styles.countChip, ativo && { borderColor: meta.cor, backgroundColor: 'var(--surface)' }]}
                   onPress={() => setAgendaTypeFilter(ativo ? null : tipo)}
                 >
                   <View style={[styles.countChipDot, { backgroundColor: meta.cor }]} />
-                  <Text style={[styles.countChipText, ativo && { color: '#0f172a' }]}>
+                  <Text style={[styles.countChipText, ativo && { color: 'var(--text)' }]}>
                     {meta.label} {total}
                   </Text>
                 </TouchableOpacity>
@@ -4879,6 +4884,34 @@ function MainApp() {
                   />
                 </View>
 
+                {/* Aparência */}
+                <View style={styles.adminDivider} />
+                <Text style={styles.adminSectionTitle}>Aparência</Text>
+                <Text style={styles.passwordModalHint}>
+                  "Automático" acompanha o ajuste do seu celular.
+                  {!HAS_DARK_MAP && ' O mapa segue claro até o Map ID escuro ser configurado.'}
+                </Text>
+                <View style={styles.themeRow}>
+                  {([
+                    { valor: 'system', rotulo: 'Automático' },
+                    { valor: 'light', rotulo: 'Claro' },
+                    { valor: 'dark', rotulo: 'Escuro' },
+                  ] as const).map((opt) => {
+                    const ativo = themePref === opt.valor;
+                    return (
+                      <TouchableOpacity
+                        key={opt.valor}
+                        style={[styles.themeChip, ativo && styles.themeChipActive]}
+                        onPress={() => setThemePref(opt.valor)}
+                      >
+                        <Text style={[styles.themeChipText, ativo && styles.themeChipTextActive]}>
+                          {opt.rotulo}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
                 <View style={styles.adminDivider} />
                 <Text style={styles.adminSectionTitle}>Trocar senha</Text>
                 <Text style={styles.passwordModalHint}>
@@ -5135,7 +5168,7 @@ function MainApp() {
                   >
                     <Text style={[
                       styles.dropdownButtonText,
-                      vendorFilterHubspotId === null && { color: '#64748b' },
+                      vendorFilterHubspotId === null && { color: 'var(--text-muted)' },
                     ]}>
                       {vendorLabel(vendorFilterHubspotId)}
                     </Text>
@@ -5160,7 +5193,7 @@ function MainApp() {
                   >
                     <Text style={[
                       styles.dropdownButtonText,
-                      vendorFilterHubspotId === null && { color: '#64748b' },
+                      vendorFilterHubspotId === null && { color: 'var(--text-muted)' },
                     ]}>
                       {vendorFilterHubspotId === myHubspotId ? 'Somente meus leads' : 'Todos os leads visiveis'}
                     </Text>
@@ -5191,7 +5224,7 @@ function MainApp() {
                         key={op.texto}
                         style={[
                           styles.filterChip,
-                          { borderWidth: 1, borderColor: '#e2e8f0', alignSelf: 'flex-start' },
+                          { borderWidth: 1, borderColor: 'var(--border)', alignSelf: 'flex-start' },
                           selected && { backgroundColor: op.cor, borderColor: op.cor },
                         ]}
                         onPress={() => setTempFilter(op.label)}
@@ -5212,7 +5245,7 @@ function MainApp() {
                 <TouchableOpacity
                   style={[
                     styles.filterChip,
-                    { borderWidth: 1, borderColor: '#e2e8f0', alignSelf: 'flex-start', marginTop: 4 },
+                    { borderWidth: 1, borderColor: 'var(--border)', alignSelf: 'flex-start', marginTop: 4 },
                     contaAlvoOnly && { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
                   ]}
                   onPress={() => setContaAlvoOnly((v) => {
@@ -5241,7 +5274,7 @@ function MainApp() {
                         style={[
                           styles.filterChip,
                           selected && { backgroundColor: '#dc2626', borderColor: '#dc2626' },
-                          !selected && { borderWidth: 1, borderColor: '#e2e8f0' },
+                          !selected && { borderWidth: 1, borderColor: 'var(--border)' },
                           { alignSelf: 'flex-start' },
                         ]}
                         onPress={() => setVisitFilter(v)}
@@ -5296,7 +5329,7 @@ function MainApp() {
                   onPress={() => setIsPickingUf(true)}
                   disabled={availableStates.length === 0}
                 >
-                  <Text style={[styles.dropdownButtonText, !stateFilter && { color: '#64748b' }]}>
+                  <Text style={[styles.dropdownButtonText, !stateFilter && { color: 'var(--text-muted)' }]}>
                     {stateFilter ?? (availableStates.length === 0 ? 'Sem estados disponiveis' : 'Todos os estados')}
                   </Text>
                   <Text style={styles.dropdownChevron}>▾</Text>
@@ -5311,7 +5344,7 @@ function MainApp() {
                   onPress={() => setIsPickingStage(true)}
                   disabled={availableStages.length === 0}
                 >
-                  <Text style={[styles.dropdownButtonText, !stageFilter && { color: '#64748b' }]}>
+                  <Text style={[styles.dropdownButtonText, !stageFilter && { color: 'var(--text-muted)' }]}>
                     {stageFilter ?? (availableStages.length === 0 ? 'Sem etapas disponiveis' : 'Todas as etapas')}
                   </Text>
                   <Text style={styles.dropdownChevron}>▾</Text>
@@ -5585,7 +5618,7 @@ function MainApp() {
                   onChangeText={v => setForm(s => ({ ...s, numero: v }))}
                 />
               </View>
-              <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: -4, marginBottom: 8 }}>
+              <Text style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: -4, marginBottom: 8 }}>
                 ⚠️ Confira o número — pode ter sido auto-preenchido pelo mapa e estar impreciso.
               </Text>
 
@@ -6150,7 +6183,7 @@ function ClientBottomSheet({
                 <Text style={{ fontSize: 12, color: isApprox ? '#92400e' : '#166534', fontWeight: '700' }}>
                   {isApprox ? 'Localização aproximada' : 'Localização precisa'}
                 </Text>
-                <Text style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{sourceLabel}</Text>
+                <Text style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{sourceLabel}</Text>
                 {isApprox && approxReasons.length > 0 && (
                   <View style={{ marginTop: 4 }}>
                     {approxReasons.map((reason, idx) => (
@@ -6190,8 +6223,8 @@ function ClientBottomSheet({
                           paddingHorizontal: 10,
                           paddingVertical: 7,
                           fontSize: 14,
-                          color: '#0f172a',
-                          backgroundColor: '#f8fafc',
+                          color: 'var(--text)',
+                          backgroundColor: 'var(--bg)',
                         }}
                         value={phoneDraft}
                         onChangeText={setPhoneDraft}
@@ -6799,7 +6832,7 @@ const navStyles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 23,
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -6826,7 +6859,7 @@ const navStyles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingTop: 16,
@@ -6847,11 +6880,11 @@ const navStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   bottomCardBadgeText: { color: '#fff', fontSize: 17, fontWeight: '800' },
-  bottomCardLabel: { color: '#64748b', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  bottomCardTitle: { color: '#0f172a', fontSize: 19, fontWeight: '800', marginTop: 2 },
-  bottomCardSubtitle: { color: '#64748b', fontSize: 13, marginTop: 1 },
+  bottomCardLabel: { color: 'var(--text-muted)', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  bottomCardTitle: { color: 'var(--text)', fontSize: 19, fontWeight: '800', marginTop: 2 },
+  bottomCardSubtitle: { color: 'var(--text-muted)', fontSize: 13, marginTop: 1 },
   bottomCardMetaRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
-  bottomCardMeta: { fontSize: 12, fontWeight: '600', color: '#475569' },
+  bottomCardMeta: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
   bottomCardWarning: { fontSize: 12, color: '#dc2626', fontWeight: '700', marginTop: 6 },
   bottomCardActions: { gap: 8 },
   bottomCardButton: { paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
@@ -6860,14 +6893,14 @@ const navStyles = StyleSheet.create({
   bottomCardSecondaryButton: {
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: 'var(--surface-2)',
     alignItems: 'center',
   },
-  bottomCardSecondaryText: { color: '#0f172a', fontSize: 14, fontWeight: '700' },
+  bottomCardSecondaryText: { color: 'var(--text)', fontSize: 14, fontWeight: '700' },
 });
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: 'var(--surface)' },
   // Header
   header: {
     flexDirection: 'row',
@@ -6894,16 +6927,30 @@ const styles = StyleSheet.create({
   },
   headerIconText: { fontSize: 16 },
   passwordModalCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderRadius: 16,
     padding: 20,
     margin: 20,
     marginBottom: 40,
     alignSelf: 'stretch',
   },
-  passwordModalHint: { fontSize: 13, color: '#64748b', marginBottom: 12 },
-  adminDivider: { height: 1, backgroundColor: '#e2e8f0', marginVertical: 18 },
-  adminSectionTitle: { fontSize: 12, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  passwordModalHint: { fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 },
+  adminDivider: { height: 1, backgroundColor: 'var(--surface-3)', marginVertical: 18 },
+  // Seletor de tema (Automático / Claro / Escuro).
+  themeRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  themeChip: {
+    flex: 1,
+    paddingVertical: 9,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: 'var(--surface-2)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+  },
+  themeChipActive: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
+  themeChipText: { fontSize: 13, fontWeight: '700', color: 'var(--text-muted)' },
+  themeChipTextActive: { color: '#fff' },
+  adminSectionTitle: { fontSize: 12, fontWeight: '700', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   adminButton: {
     backgroundColor: '#0f172a',
     paddingVertical: 14,
@@ -6912,12 +6959,12 @@ const styles = StyleSheet.create({
   },
   adminButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   settingsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
-  settingsLabel: { fontSize: 15, fontWeight: '600', color: '#0f172a', marginBottom: 2 },
-  settingsHint: { fontSize: 12, color: '#64748b' },
+  settingsLabel: { fontSize: 15, fontWeight: '600', color: 'var(--text)', marginBottom: 2 },
+  settingsHint: { fontSize: 12, color: 'var(--text-muted)' },
   skipLocationButton: { marginTop: 18, paddingHorizontal: 16, paddingVertical: 10 },
-  skipLocationButtonText: { color: '#64748b', fontSize: 14, fontWeight: '600', textDecorationLine: 'underline' },
-  permissionTitle: { fontSize: 20, fontWeight: '700', color: '#0f172a', marginBottom: 8, textAlign: 'center' },
-  permissionBody: { fontSize: 14, color: '#475569', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  skipLocationButtonText: { color: 'var(--text-muted)', fontSize: 14, fontWeight: '600', textDecorationLine: 'underline' },
+  permissionTitle: { fontSize: 20, fontWeight: '700', color: 'var(--text)', marginBottom: 8, textAlign: 'center' },
+  permissionBody: { fontSize: 14, color: 'var(--text-muted)', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
   permissionPrimaryButton: {
     backgroundColor: '#dc2626',
     paddingHorizontal: 24,
@@ -6935,11 +6982,11 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: 'var(--border)',
   },
-  permissionSecondaryButtonText: { color: '#64748b', fontSize: 14, fontWeight: '600' },
+  permissionSecondaryButtonText: { color: 'var(--text-muted)', fontSize: 14, fontWeight: '600' },
   // Filter Bar
-  filterBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  filterBar: { backgroundColor: 'var(--surface)', borderBottomWidth: 1, borderBottomColor: 'var(--border-soft)' },
   // paddingRight maior que o esquerdo de proposito: quando a lista chega ao
   // fim, o ultimo chip fica com ar em vez de colado na borda da tela (antes
   // parecia cortado/quebrado, nao rolavel).
@@ -6952,11 +6999,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: 'var(--surface-2)',
     marginRight: 6,
   },
   filterChipActive: { backgroundColor: '#dc2626' },
-  filterChipText: { fontSize: 12, fontWeight: '600', color: '#64748b' },
+  filterChipText: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
   filterChipTextActive: { color: '#fff' },
   filterDot: { width: 8, height: 8, borderRadius: 4, marginRight: 5 },
   // Multi-select dos status na aba Rota (wrap, varios chips em ordem livre)
@@ -6967,11 +7014,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: 'var(--border-soft)',
     gap: 10,
   },
-  manualRowTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
-  manualRowSubtitle: { fontSize: 12, color: '#64748b', marginTop: 1 },
+  manualRowTitle: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
+  manualRowSubtitle: { fontSize: 12, color: 'var(--text-muted)', marginTop: 1 },
   manualRowWarning: { fontSize: 11, color: '#dc2626', fontWeight: '600', marginTop: 2 },
   // Badge admin: indica qual roteador foi usado pra otimizar a ultima rota.
   providerBadge: {
@@ -6987,14 +7034,14 @@ const styles = StyleSheet.create({
   providerBadgeText: { fontSize: 10, fontWeight: '700', color: '#166534' },
   // Card de stop da rota (com checkbox + linha de acoes)
   routeStopCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderRadius: 10,
     padding: 12,
     marginTop: 8,
     borderLeftWidth: 4,
   },
   routeStopHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
-  routeStopSubtitle: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  routeStopSubtitle: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
   mandatoryTag: { fontSize: 11, fontWeight: '800', color: '#7c3aed', marginTop: 3 },
   // Banner de monitoramento (gestor vendo a rota de outro vendedor).
   monitorBanner: {
@@ -7011,8 +7058,8 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: '#cbd5e1',
-    backgroundColor: '#fff',
+    borderColor: 'var(--border)',
+    backgroundColor: 'var(--surface)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -7022,7 +7069,7 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f1f5f9',
+    backgroundColor: 'var(--surface-2)',
     marginHorizontal: 12,
     marginTop: 8,
     paddingHorizontal: 12,
@@ -7032,9 +7079,9 @@ const styles = StyleSheet.create({
   },
   // O icone de busca virou SVG do UI Kit (dimensionado por props), entao este
   // estilo so' serve pros pontos que ainda usam o emoji 🔍 em <Text>.
-  searchIcon: { fontSize: 14, color: '#64748b' },
-  searchInput: { flex: 1, color: '#0f172a', fontSize: 14, padding: 0 },
-  searchClear: { color: '#64748b', fontSize: 14, paddingHorizontal: 4 },
+  searchIcon: { fontSize: 14, color: 'var(--text-muted)' },
+  searchInput: { flex: 1, color: 'var(--text)', fontSize: 14, padding: 0 },
+  searchClear: { color: 'var(--text-muted)', fontSize: 14, paddingHorizontal: 4 },
   // Linha horizontal com o icone de filtros ancorado a esquerda + chips de status rolando.
   filterBarRow: { flexDirection: 'row', alignItems: 'center' },
   filterIconButton: {
@@ -7049,7 +7096,7 @@ const styles = StyleSheet.create({
   filterIconText: { fontSize: 18 },
   // Funil minimalista feito com 3 barrinhas afinando — sem dep nova.
   filterFunnel: { alignItems: 'center', gap: 3 },
-  filterFunnelBar: { height: 2, borderRadius: 1, backgroundColor: '#fff' },
+  filterFunnelBar: { height: 2, borderRadius: 1, backgroundColor: 'var(--surface)' },
   filterIconBadge: {
     position: 'absolute',
     top: -4,
@@ -7067,7 +7114,7 @@ const styles = StyleSheet.create({
   filterIconBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
   // Modal de filtros (UF e etapa comercial)
   filtersSheet: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -7079,16 +7126,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'var(--bg)',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: 'var(--border)',
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 14,
     marginTop: 8,
   },
-  dropdownButtonText: { fontSize: 15, fontWeight: '600', color: '#0f172a' },
-  dropdownChevron: { fontSize: 16, color: '#64748b' },
+  dropdownButtonText: { fontSize: 15, fontWeight: '600', color: 'var(--text)' },
+  dropdownChevron: { fontSize: 16, color: 'var(--text-muted)' },
   // Lista vertical do seletor de UF (modo "picker" dentro do mesmo sheet).
   ufPickerList: { maxHeight: 380, marginTop: 4 },
   ufPickerRow: {
@@ -7098,18 +7145,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: 'var(--border-soft)',
   },
-  ufPickerRowText: { fontSize: 15, color: '#0f172a' },
+  ufPickerRowText: { fontSize: 15, color: 'var(--text)' },
   ufPickerRowTextActive: { fontWeight: '800', color: '#dc2626' },
   ufPickerCheck: { fontSize: 16, fontWeight: '800', color: '#dc2626' },
-  backButton: { color: '#64748b', fontSize: 15, fontWeight: '600', width: 60 },
+  backButton: { color: 'var(--text-muted)', fontSize: 15, fontWeight: '600', width: 60 },
   filtersFooter: { flexDirection: 'row', gap: 10, marginTop: 20 },
-  filtersSecondaryButton: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', backgroundColor: '#f1f5f9' },
-  filtersSecondaryButtonText: { color: '#0f172a', fontSize: 15, fontWeight: '700' },
+  filtersSecondaryButton: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', backgroundColor: 'var(--surface-2)' },
+  filtersSecondaryButtonText: { color: 'var(--text)', fontSize: 15, fontWeight: '700' },
   // Loading
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  loadingText: { marginTop: 12, color: '#64748b', fontSize: 15 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface)' },
+  loadingText: { marginTop: 12, color: 'var(--text-muted)', fontSize: 15 },
   errorText: { color: '#ef4444', fontSize: 16 },
   // Map
   map: { flex: 1 },
@@ -7163,11 +7210,11 @@ const styles = StyleSheet.create({
   // em vez de a quebra depender do comprimento de cada rotulo.
   tempLegendRow: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 104 },
   tempLegendDot: { width: 10, height: 10, borderRadius: 5 },
-  tempLegendLabel: { fontSize: 11, fontWeight: '700', color: '#334155' },
+  tempLegendLabel: { fontSize: 11, fontWeight: '700', color: 'var(--text)' },
   mapButton: {
     position: 'absolute',
     left: 16,
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -7185,7 +7232,7 @@ const styles = StyleSheet.create({
   mapButtonRight: {
     position: 'absolute',
     right: 16,
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -7219,12 +7266,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
-  heatPanelTitle: { fontSize: 14, fontWeight: '800', color: '#0f172a' },
-  heatPanelCount: { fontSize: 12, fontWeight: '600', color: '#64748b' },
+  heatPanelTitle: { fontSize: 14, fontWeight: '800', color: 'var(--text)' },
+  heatPanelCount: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
   heatExportBtn: { backgroundColor: '#7c3aed', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 },
   heatExportBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   heatLegendRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  heatLegendLabel: { fontSize: 10, fontWeight: '700', color: '#94a3b8' },
+  heatLegendLabel: { fontSize: 10, fontWeight: '700', color: 'var(--text-subtle)' },
   heatLegendBar: {
     flex: 1,
     height: 8,
@@ -7236,22 +7283,22 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: 'var(--surface-2)',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 2,
   },
-  heatCloseText: { fontSize: 13, fontWeight: '800', color: '#475569' },
-  heatEmpty: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic', marginBottom: 6 },
+  heatCloseText: { fontSize: 13, fontWeight: '800', color: 'var(--text-muted)' },
+  heatEmpty: { fontSize: 12, color: 'var(--text-subtle)', fontStyle: 'italic', marginBottom: 6 },
   heatChips: { gap: 6, paddingRight: 4 },
   heatChip: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: 'var(--surface-2)',
   },
   heatChipActive: { backgroundColor: '#f97316' },
-  heatChipText: { fontSize: 12, fontWeight: '700', color: '#475569' },
+  heatChipText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)' },
   heatChipTextActive: { color: '#fff' },
   fab: {
     position: 'absolute',
@@ -7295,7 +7342,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderRadius: 14,
     padding: 14,
     shadowColor: '#000',
@@ -7304,20 +7351,20 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
   },
-  creationBarTitle: { fontSize: 15, fontWeight: '700', color: '#0f172a', marginBottom: 2 },
-  creationBarHint: { fontSize: 12, color: '#64748b' },
-  creationBarCoords: { fontSize: 12, color: '#0f172a', marginTop: 6, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  creationBarTitle: { fontSize: 15, fontWeight: '700', color: 'var(--text)', marginBottom: 2 },
+  creationBarHint: { fontSize: 12, color: 'var(--text-muted)' },
+  creationBarCoords: { fontSize: 12, color: 'var(--text)', marginTop: 6, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
   creationBarRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  creationBarCancel: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#f1f5f9' },
-  creationBarCancelText: { color: '#0f172a', fontWeight: '700' },
+  creationBarCancel: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: 'var(--surface-2)' },
+  creationBarCancelText: { color: 'var(--text)', fontWeight: '700' },
   creationBarConfirm: { flex: 2, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#16a34a' },
   creationBarConfirmText: { color: '#fff', fontWeight: '700' },
   // Bottom Nav
   bottomNav: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    backgroundColor: '#fff',
+    borderTopColor: 'var(--border)',
+    backgroundColor: 'var(--surface)',
   },
   // Sao ate 6 abas (Mapa/Lista/Rota/Agenda/Tarefas/Gestor). Num celular
   // estreito o rotulo de 11px encostava no do vizinho; icone e texto um ponto
@@ -7348,7 +7395,7 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   navBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  navItemText: { fontSize: 10, fontWeight: '600', color: '#94a3b8' },
+  navItemText: { fontSize: 10, fontWeight: '600', color: 'var(--text-subtle)' },
   brandMark: {
     position: 'absolute',
     left: 0,
@@ -7358,13 +7405,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontStyle: 'italic',
     letterSpacing: 0.5,
-    color: '#cbd5e1',
+    color: 'var(--text-faint)',
   },
   navItemTextActive: { color: '#dc2626' },
   // List
   listContent: { padding: 12 },
   clientCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderRadius: 12,
     padding: 14,
     marginBottom: 8,
@@ -7378,23 +7425,23 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   cardNameRow: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
   cardLogo: { width: 18, height: 18, resizeMode: 'contain', marginRight: 8 },
-  clientName: { fontSize: 15, fontWeight: '700', color: '#0f172a', flex: 1 },
-  clientContact: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  clientName: { fontSize: 15, fontWeight: '700', color: 'var(--text)', flex: 1 },
+  clientContact: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
   clientStage: { fontSize: 12, color: '#7c3aed', fontWeight: '700', marginTop: 2 },
   stageAccordionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: 'var(--border)',
   },
-  stageAccordionTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
-  stageAccordionMeta: { fontSize: 12, color: '#64748b', marginTop: 2 },
-  stageAccordionChevron: { fontSize: 13, color: '#64748b', fontWeight: '800', marginLeft: 10 },
+  stageAccordionTitle: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
+  stageAccordionMeta: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
+  stageAccordionChevron: { fontSize: 13, color: 'var(--text-muted)', fontWeight: '800', marginLeft: 10 },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   statusBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   cardMeetingBadge: {
@@ -7415,21 +7462,21 @@ const styles = StyleSheet.create({
     borderColor: '#bbf7d0',
   },
   cardVisitBadgeText: { color: '#15803d', fontSize: 10, fontWeight: '700' },
-  clientCity: { fontSize: 13, color: '#64748b', marginBottom: 2 },
-  clientPhone: { fontSize: 13, color: '#334155' },
+  clientCity: { fontSize: 13, color: 'var(--text-muted)', marginBottom: 2 },
+  clientPhone: { fontSize: 13, color: 'var(--text)' },
   emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 60 },
-  emptyStateText: { fontSize: 15, color: '#94a3b8' },
+  emptyStateText: { fontSize: 15, color: 'var(--text-subtle)' },
   panelCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: 'var(--border)',
   },
   panelHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  panelTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 4 },
-  panelHint: { fontSize: 12, color: '#64748b', lineHeight: 17 },
+  panelTitle: { fontSize: 16, fontWeight: '800', color: 'var(--text)', marginBottom: 4 },
+  panelHint: { fontSize: 12, color: 'var(--text-muted)', lineHeight: 17 },
   agendaExportBtn: {
     marginTop: 12,
     backgroundColor: '#0f172a',
@@ -7446,13 +7493,13 @@ const styles = StyleSheet.create({
     minHeight: 38,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: 'var(--border)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 8,
   },
   segmentButtonActive: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
-  segmentButtonText: { fontSize: 12, fontWeight: '700', color: '#475569', textAlign: 'center' },
+  segmentButtonText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)', textAlign: 'center' },
   segmentButtonTextActive: { color: '#fff' },
   routePosition: {
     minWidth: 26,
@@ -7471,18 +7518,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 8,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: 'var(--surface-2)',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: 'var(--border)',
   },
-  smallActionButtonText: { fontSize: 12, fontWeight: '700', color: '#334155' },
+  smallActionButtonText: { fontSize: 12, fontWeight: '700', color: 'var(--text)' },
   secondaryButton: {
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: 'var(--surface-2)',
   },
-  secondaryButtonText: { fontSize: 12, fontWeight: '800', color: '#334155' },
+  secondaryButtonText: { fontSize: 12, fontWeight: '800', color: 'var(--text)' },
   visitCountBox: {
     backgroundColor: '#f0fdf4',
     borderWidth: 1,
@@ -7519,7 +7566,7 @@ const styles = StyleSheet.create({
   slaBadgeText: { fontSize: 13, fontWeight: '800' },
   contaAlvoBoxTitle: { fontSize: 14, fontWeight: '800', color: '#6d28d9' },
   contaAlvoBoxText: { fontSize: 13, fontWeight: '700', color: '#5b21b6', marginTop: 3 },
-  contaAlvoDismissBtn: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#fff', borderWidth: 1, borderColor: '#fecaca', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  contaAlvoDismissBtn: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: '#fecaca', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   contaAlvoDismissText: { fontSize: 12, fontWeight: '800', color: '#dc2626' },
   agendaSectionHeader: {
     flexDirection: 'row',
@@ -7532,36 +7579,36 @@ const styles = StyleSheet.create({
   agendaSectionTitle: {
     fontSize: 15,
     fontWeight: '900',
-    color: '#0f172a',
+    color: 'var(--text)',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  agendaSectionMeta: { fontSize: 12, color: '#64748b', fontWeight: '600' },
+  agendaSectionMeta: { fontSize: 12, color: 'var(--text-muted)', fontWeight: '600' },
   agendaWhen: { width: 56, alignItems: 'center' },
-  agendaDate: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
-  agendaWeekday: { fontSize: 10, color: '#94a3b8', fontWeight: '600', textTransform: 'capitalize' },
+  agendaDate: { fontSize: 13, fontWeight: '800', color: 'var(--text)' },
+  agendaWeekday: { fontSize: 10, color: 'var(--text-subtle)', fontWeight: '600', textTransform: 'capitalize' },
   agendaTime: { fontSize: 14, fontWeight: '800', color: '#dc2626', marginTop: 2 },
-  agendaTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a' },
-  agendaSubtitle: { fontSize: 13, color: '#64748b', marginTop: 3 },
+  agendaTitle: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
+  agendaSubtitle: { fontSize: 13, color: 'var(--text-muted)', marginTop: 3 },
   // Linha da timeline: trilho de horário à esquerda + card com barra colorida
   // pelo tipo do compromisso (demo / follow up / rota).
   agendaRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   agendaTimeRail: { width: 52, alignItems: 'flex-end', paddingTop: 12 },
-  agendaTimeText: { fontSize: 14, fontWeight: '800', color: '#0f172a' },
-  agendaDurText: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
+  agendaTimeText: { fontSize: 14, fontWeight: '800', color: 'var(--text)' },
+  agendaDurText: { fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 },
   agendaCard: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: 'var(--border)',
     borderLeftWidth: 4,
   },
   agendaLinkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
   agendaLink: { fontSize: 12, fontWeight: '800' },
-  agendaLinkSep: { fontSize: 12, color: '#cbd5e1' },
-  agendaMeta: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  agendaLinkSep: { fontSize: 12, color: 'var(--text-faint)' },
+  agendaMeta: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
   // Cabecalho de dia da timeline — vermelho, caixa alta, o marcador visual
   // que separa "HOJE" de "AMANHÃ" sem o vendedor ter que ler data por item.
   agendaDayHeader: {
@@ -7578,7 +7625,7 @@ const styles = StyleSheet.create({
     color: '#dc2626',
     letterSpacing: 0.6,
   },
-  agendaDayHeaderCount: { fontSize: 11, color: '#94a3b8', fontWeight: '700' },
+  agendaDayHeaderCount: { fontSize: 11, color: 'var(--text-subtle)', fontWeight: '700' },
   // Pill de temperatura da etapa (Quente/Morno/Frio) — cor vem de TEMP_COLORS
   // com alpha em hex (1a = ~10% fundo, 59 = ~35% borda).
   agendaTempPill: {
@@ -7591,18 +7638,18 @@ const styles = StyleSheet.create({
   },
   agendaTempPillText: { fontSize: 11, fontWeight: '800' },
   // Tarefas
-  taskMeta: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  taskMeta: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
   // Card da tarefa: lead como título, badge de urgência à direita.
   taskCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderRadius: 12,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: 'var(--border)',
   },
   taskCardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  taskLead: { flex: 1, fontSize: 16, fontWeight: '800', color: '#0f172a' },
+  taskLead: { flex: 1, fontSize: 16, fontWeight: '800', color: 'var(--text)' },
   taskBadge: {
     minWidth: 34,
     paddingHorizontal: 8,
@@ -7612,7 +7659,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   taskBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  taskTipo: { fontSize: 13, fontWeight: '600', color: '#334155', marginTop: 2 },
+  taskTipo: { fontSize: 13, fontWeight: '600', color: 'var(--text)', marginTop: 2 },
   taskActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   // Chips de urgência (contam e filtram) + cabeçalho de cada seção.
   // Chips de contagem+filtro — compartilhados por Tarefas (severidade) e
@@ -7625,12 +7672,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: 'var(--surface-2)',
     borderWidth: 1.5,
     borderColor: 'transparent',
   },
   countChipDot: { width: 8, height: 8, borderRadius: 4 },
-  countChipText: { fontSize: 13, fontWeight: '700', color: '#475569' },
+  countChipText: { fontSize: 13, fontWeight: '700', color: 'var(--text-muted)' },
   taskSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -7639,7 +7686,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingHorizontal: 2,
   },
-  taskSectionText: { fontSize: 12, fontWeight: '800', color: '#64748b', letterSpacing: 0.4 },
+  taskSectionText: { fontSize: 12, fontWeight: '800', color: 'var(--text-muted)', letterSpacing: 0.4 },
   taskVendorHint: { fontSize: 12, color: '#b45309', marginBottom: 10 },
   // Responsável + tag de vendedor desativado (sufixo "/ DESATIVADO" no nome).
   taskRespRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
@@ -7663,7 +7710,7 @@ const styles = StyleSheet.create({
   taskInfoButtonText: { fontSize: 18, color: '#2563eb', fontWeight: '700' },
   // Modal de regras
   taskRulesCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     padding: 18,
@@ -7674,34 +7721,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginBottom: 8,
   },
-  taskRulesTitle: { fontSize: 17, fontWeight: '800', color: '#0f172a', flex: 1 },
+  taskRulesTitle: { fontSize: 17, fontWeight: '800', color: 'var(--text)', flex: 1 },
   taskRulesClose: {
     width: 30, height: 30, borderRadius: 15,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1f5f9',
+    alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface-2)',
   },
-  taskRulesCloseText: { fontSize: 15, color: '#475569', fontWeight: '700' },
-  taskRulesIntro: { fontSize: 13, color: '#64748b', lineHeight: 19, marginBottom: 12 },
+  taskRulesCloseText: { fontSize: 15, color: 'var(--text-muted)', fontWeight: '700' },
+  taskRulesIntro: { fontSize: 13, color: 'var(--text-muted)', lineHeight: 19, marginBottom: 12 },
   ruleCard: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'var(--bg)',
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: 'var(--border)',
   },
-  ruleTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a', marginBottom: 8 },
+  ruleTitle: { fontSize: 15, fontWeight: '800', color: 'var(--text)', marginBottom: 8 },
   ruleSectionLabel: {
-    fontSize: 11, fontWeight: '800', color: '#94a3b8',
+    fontSize: 11, fontWeight: '800', color: 'var(--text-subtle)',
     textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 10, marginBottom: 3,
   },
-  ruleText: { fontSize: 13, color: '#334155', lineHeight: 19 },
+  ruleText: { fontSize: 13, color: 'var(--text)', lineHeight: 19 },
   ruleLevelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   ruleLevelBadge: {
     minWidth: 34, height: 24, borderRadius: 12, paddingHorizontal: 6,
     alignItems: 'center', justifyContent: 'center',
   },
   ruleLevelBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  ruleLevelText: { fontSize: 13, color: '#334155', flex: 1, lineHeight: 18 },
+  ruleLevelText: { fontSize: 13, color: 'var(--text)', flex: 1, lineHeight: 18 },
   taskRulesDoneButton: {
     marginTop: 14,
     backgroundColor: '#dc2626',
@@ -7718,61 +7765,61 @@ const styles = StyleSheet.create({
   routeStartRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
   routeStartOption: {
     flex: 1, paddingVertical: 10, paddingHorizontal: 10, borderRadius: 10,
-    backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', alignItems: 'center',
+    backgroundColor: 'var(--bg)', borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center',
   },
   routeStartOptionActive: { backgroundColor: '#eff6ff', borderColor: '#3b82f6' },
-  routeStartText: { fontSize: 13, fontWeight: '600', color: '#64748b' },
+  routeStartText: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
   routeStartTextActive: { color: '#2563eb' },
   routeStartPick: {
     paddingVertical: 11, paddingHorizontal: 4,
-    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+    borderBottomWidth: 1, borderBottomColor: 'var(--border-soft)',
   },
-  routeStartPickName: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
-  routeStartPickMeta: { fontSize: 12, color: '#64748b', marginTop: 1 },
+  routeStartPickName: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
+  routeStartPickMeta: { fontSize: 12, color: 'var(--text-muted)', marginTop: 1 },
   metricCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderRadius: 12,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: 'var(--border)',
   },
-  metricLabel: { fontSize: 13, fontWeight: '800', color: '#334155' },
-  metricValue: { fontSize: 15, fontWeight: '900', color: '#0f172a' },
-  progressTrack: { height: 8, borderRadius: 4, backgroundColor: '#e2e8f0', overflow: 'hidden', marginTop: 10 },
+  metricLabel: { fontSize: 13, fontWeight: '800', color: 'var(--text)' },
+  metricValue: { fontSize: 15, fontWeight: '900', color: 'var(--text)' },
+  progressTrack: { height: 8, borderRadius: 4, backgroundColor: 'var(--surface-3)', overflow: 'hidden', marginTop: 10 },
   progressFill: { height: 8, borderRadius: 4, backgroundColor: '#16a34a' },
-  rankingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  rankingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
   warningText: { fontSize: 12, color: '#92400e', backgroundColor: '#fef3c7', padding: 10, borderRadius: 8, marginTop: 10 },
   masterGrid: { gap: 8, marginTop: 8 },
-  masterMetric: { fontSize: 13, fontWeight: '700', color: '#334155', backgroundColor: '#f8fafc', padding: 10, borderRadius: 8 },
-  auditRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
-  auditAction: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
+  masterMetric: { fontSize: 13, fontWeight: '700', color: 'var(--text)', backgroundColor: 'var(--bg)', padding: 10, borderRadius: 8 },
+  auditRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
+  auditAction: { fontSize: 13, fontWeight: '800', color: 'var(--text)' },
   // Modal Form
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '92%' },
+  modalContent: { backgroundColor: 'var(--surface)', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '92%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: '#0f172a' },
-  closeButton: { fontSize: 22, color: '#94a3b8', padding: 4 },
-  fieldLabel: { fontSize: 12, fontWeight: '700', color: '#64748b', marginBottom: 8, marginTop: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: 'var(--text)' },
+  closeButton: { fontSize: 22, color: 'var(--text-subtle)', padding: 4 },
+  fieldLabel: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)', marginBottom: 8, marginTop: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
   statusSelector: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   statusOption: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1.5,
-    borderColor: '#e2e8f0',
+    borderColor: 'var(--border)',
   },
-  statusOptionText: { fontSize: 13, fontWeight: '600', color: '#64748b' },
+  statusOptionText: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
   input: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'var(--bg)',
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 10,
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    color: '#0f172a',
+    borderColor: 'var(--border)',
+    color: 'var(--text)',
   },
   inputRow: { flexDirection: 'row' },
   submitButton: {
@@ -7787,27 +7834,27 @@ const styles = StyleSheet.create({
   locationSummaryText: { fontSize: 12, color: '#16a34a', fontWeight: '500' },
   // Bottom Sheet
   bottomSheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  bottomSheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' },
-  bottomSheetHandle: { alignSelf: 'center', width: 40, height: 4, backgroundColor: '#e2e8f0', borderRadius: 2 },
+  bottomSheet: { backgroundColor: 'var(--surface)', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' },
+  bottomSheetHandle: { alignSelf: 'center', width: 40, height: 4, backgroundColor: 'var(--surface-3)', borderRadius: 2 },
   dragHandleArea: { width: '100%', paddingTop: 14, paddingBottom: 14, alignItems: 'center' },
   bottomSheetContent: { paddingHorizontal: 20 },
   bsHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   bsLogoWrap: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   bsLogo: { width: 28, height: 28, tintColor: '#fff', resizeMode: 'contain' },
   bsHeaderInfo: { flex: 1 },
-  clientDetailsName: { fontSize: 20, fontWeight: '700', color: '#0f172a', marginBottom: 2 },
-  bsContactSubtitle: { fontSize: 12, color: '#64748b', marginBottom: 6 },
+  clientDetailsName: { fontSize: 20, fontWeight: '700', color: 'var(--text)', marginBottom: 2 },
+  bsContactSubtitle: { fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 },
   statusBadgeLarge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start' },
   infoGrid: { gap: 12, marginBottom: 16 },
   infoItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   infoIcon: { fontSize: 16, marginTop: 2 },
-  detailLabel: { fontSize: 11, fontWeight: '600', color: '#94a3b8', marginBottom: 2, textTransform: 'uppercase' },
-  detailValue: { fontSize: 14, color: '#0f172a' },
-  observationsSection: { marginBottom: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  detailLabel: { fontSize: 11, fontWeight: '600', color: 'var(--text-subtle)', marginBottom: 2, textTransform: 'uppercase' },
+  detailValue: { fontSize: 14, color: 'var(--text)' },
+  observationsSection: { marginBottom: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
   // Historico de notas: cada entrada vira card cronologico no bottom sheet.
-  notesSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9', marginBottom: 16 },
+  notesSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: 'var(--border-soft)', marginBottom: 16 },
   noteItem: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'var(--bg)',
     borderRadius: 10,
     padding: 12,
     marginTop: 8,
@@ -7815,24 +7862,24 @@ const styles = StyleSheet.create({
     borderLeftColor: '#3b82f6',
   },
   noteHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6, gap: 8 },
-  noteAuthor: { fontSize: 12, fontWeight: '700', color: '#0f172a', marginBottom: 1 },
-  noteDate: { fontSize: 11, color: '#64748b' },
+  noteAuthor: { fontSize: 12, fontWeight: '700', color: 'var(--text)', marginBottom: 1 },
+  noteDate: { fontSize: 11, color: 'var(--text-muted)' },
   noteActions: { flexDirection: 'row', gap: 12 },
   noteAction: { fontSize: 12, fontWeight: '700', color: '#3b82f6' },
-  noteDelete: { fontSize: 14, color: '#94a3b8', paddingHorizontal: 4 },
-  noteBody: { fontSize: 14, color: '#0f172a', lineHeight: 20 },
+  noteDelete: { fontSize: 14, color: 'var(--text-subtle)', paddingHorizontal: 4 },
+  noteBody: { fontSize: 14, color: 'var(--text)', lineHeight: 20 },
   // Modo edicao inline: botoes Cancelar/Salvar abaixo do textarea.
   noteEditActions: { flexDirection: 'row', gap: 8, marginTop: 8, justifyContent: 'flex-end' },
-  noteEditCancel: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: '#f1f5f9' },
-  noteEditCancelText: { color: '#64748b', fontWeight: '700', fontSize: 13 },
+  noteEditCancel: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: 'var(--surface-2)' },
+  noteEditCancelText: { color: 'var(--text-muted)', fontWeight: '700', fontSize: 13 },
   noteEditSave: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: '#dc2626' },
   noteEditSaveText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  navigationSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9', marginBottom: 16 },
+  navigationSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: 'var(--border-soft)', marginBottom: 16 },
   navigationRow: { flexDirection: 'row', gap: 10 },
   navRouteButton: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1 },
   navButtonDriving: { backgroundColor: '#eff6ff', borderColor: '#3b82f6' },
   navButtonWalking: { backgroundColor: '#fefce8', borderColor: '#eab308' },
-  navRouteButtonText: { fontSize: 14, fontWeight: '600', color: '#0f172a' },
+  navRouteButtonText: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
   addRouteButton: {
     backgroundColor: '#0f172a',
     borderRadius: 10,
@@ -7841,9 +7888,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   addRouteButtonText: { color: '#fff', fontSize: 14, fontWeight: '800' },
-  meetingsSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: '#f1f5f9', marginBottom: 16 },
+  meetingsSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: 'var(--border-soft)', marginBottom: 16 },
   meetingsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  meetingsEmpty: { fontSize: 12, color: '#94a3b8', marginBottom: 8 },
+  meetingsEmpty: { fontSize: 12, color: 'var(--text-subtle)', marginBottom: 8 },
   meetingChip: {
     backgroundColor: '#f5f3ff',
     borderRadius: 10,
@@ -7853,7 +7900,7 @@ const styles = StyleSheet.create({
     borderColor: '#ddd6fe',
   },
   meetingChipDate: { fontSize: 13, fontWeight: '700', color: '#5b21b6' },
-  meetingChipObs: { fontSize: 12, color: '#475569', marginTop: 2 },
+  meetingChipObs: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
   meetingChipActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   scheduleButton: {
     backgroundColor: '#7c3aed',

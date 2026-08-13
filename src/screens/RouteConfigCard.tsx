@@ -128,7 +128,7 @@ export function RouteConfigCard() {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#ede9fe',
@@ -138,12 +138,12 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 15, fontWeight: '800', color: '#5b21b6' },
   chevron: { fontSize: 12, color: '#7c3aed', fontWeight: '800' },
-  section: { fontSize: 12, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 12, marginBottom: 6 },
+  section: { fontSize: 12, fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 12, marginBottom: 6 },
   row: { flexDirection: 'row', gap: 8 },
   field: { flex: 1, marginBottom: 6 },
-  fieldLabel: { fontSize: 11, fontWeight: '700', color: '#475569', marginBottom: 4 },
-  input: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: '#0f172a', backgroundColor: '#f8fafc' },
-  fieldHint: { fontSize: 10, color: '#94a3b8', marginTop: 2 },
+  fieldLabel: { fontSize: 11, fontWeight: '700', color: 'var(--text-muted)', marginBottom: 4 },
+  input: { borderWidth: 1, borderColor: 'var(--border)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: 'var(--text)', backgroundColor: 'var(--bg)' },
+  fieldHint: { fontSize: 10, color: 'var(--text-subtle)', marginTop: 2 },
   saveBtn: { backgroundColor: '#7c3aed', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 14 },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

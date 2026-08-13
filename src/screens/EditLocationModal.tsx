@@ -119,7 +119,7 @@ export function EditLocationModal({ client, onSave, onClose }: Props) {
           <Text style={styles.hint}>
             Mova o mapa até o local certo — o{' '}
             <Text style={{ color: '#dc2626', fontWeight: '800' }}>pino central</Text> marca a nova
-            posição. O pino <Text style={{ color: '#64748b', fontWeight: '800' }}>cinza</Text> mostra
+            posição. O pino <Text style={{ color: 'var(--text-muted)', fontWeight: '800' }}>cinza</Text> mostra
             onde está hoje.
           </Text>
 
@@ -194,17 +194,17 @@ const ARROW = 8;
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    backgroundColor: 'var(--surface)', borderTopLeftRadius: 20, borderTopRightRadius: 20,
     paddingHorizontal: 16, paddingTop: 14, paddingBottom: 24, maxHeight: '90%',
   },
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  title: { fontSize: 18, fontWeight: '800', color: '#0f172a' },
-  subtitle: { fontSize: 13, color: '#64748b', marginTop: 1 },
-  close: { fontSize: 22, color: '#94a3b8', paddingHorizontal: 4 },
-  hint: { fontSize: 12, color: '#64748b', marginVertical: 8, lineHeight: 17 },
+  title: { fontSize: 18, fontWeight: '800', color: 'var(--text)' },
+  subtitle: { fontSize: 13, color: 'var(--text-muted)', marginTop: 1 },
+  close: { fontSize: 22, color: 'var(--text-subtle)', paddingHorizontal: 4 },
+  hint: { fontSize: 12, color: 'var(--text-muted)', marginVertical: 8, lineHeight: 17 },
   mapWrap: {
     height: 340, borderRadius: 14, overflow: 'hidden',
-    borderWidth: 1, borderColor: '#e2e8f0', backgroundColor: '#eef2f7',
+    borderWidth: 1, borderColor: 'var(--border)', backgroundColor: '#eef2f7',
     justifyContent: 'center', alignItems: 'center',
   },
   // Conjunto pin+seta+dot centrado no meio do mapWrap. O translateY sobe o
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginTop: 10, marginBottom: 4, gap: 8,
   },
-  infoText: { flex: 1, fontSize: 12, color: '#475569', fontWeight: '600' },
+  infoText: { flex: 1, fontSize: 12, color: 'var(--text-muted)', fontWeight: '600' },
   resetLink: { fontSize: 12, color: '#2563eb', fontWeight: '700' },
   saveBtn: {
     backgroundColor: '#dc2626', borderRadius: 12, paddingVertical: 14,
@@ -242,5 +242,5 @@ const styles = StyleSheet.create({
   saveBtnDisabled: { opacity: 0.5 },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   cancelBtn: { paddingVertical: 12, alignItems: 'center', marginTop: 2 },
-  cancelBtnText: { color: '#64748b', fontSize: 14, fontWeight: '600' },
+  cancelBtnText: { color: 'var(--text-muted)', fontSize: 14, fontWeight: '600' },
 });

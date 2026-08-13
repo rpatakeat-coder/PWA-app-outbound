@@ -149,7 +149,7 @@ function MultiSelectField({
     <View style={{ marginBottom: 12 }}>
       <Text style={styles.subOptionsLabel}>
         {label}{subField.optional ? ' (opcional)' : ''}
-        {' '}<Text style={{ color: '#94a3b8', fontWeight: '500' }}>(pode escolher varios)</Text>
+        {' '}<Text style={{ color: 'var(--text-subtle)', fontWeight: '500' }}>(pode escolher varios)</Text>
       </Text>
       <View style={styles.subOptionsGrid}>
         {opts.map((opt) => {
@@ -1015,7 +1015,7 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '92%',
@@ -1026,13 +1026,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
-  title: { fontSize: 20, fontWeight: '700', color: '#0f172a' },
-  closeBtn: { fontSize: 22, color: '#94a3b8', paddingHorizontal: 4 },
-  subtitle: { fontSize: 13, color: '#64748b', marginBottom: 12 },
+  title: { fontSize: 20, fontWeight: '700', color: 'var(--text)' },
+  closeBtn: { fontSize: 22, color: 'var(--text-subtle)', paddingHorizontal: 4 },
+  subtitle: { fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 },
   sectionLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#64748b',
+    color: 'var(--text-muted)',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginTop: 6,
@@ -1054,14 +1054,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#f8fafc',
+    borderColor: 'var(--border)',
+    backgroundColor: 'var(--bg)',
     marginBottom: 8,
     gap: 10,
   },
   stageDot: { width: 12, height: 12, borderRadius: 6 },
-  stageLabel: { fontSize: 14, fontWeight: '700', color: '#0f172a', flex: 1 },
-  stageHint: { fontSize: 10, color: '#94a3b8', fontStyle: 'italic' },
+  stageLabel: { fontSize: 14, fontWeight: '700', color: 'var(--text)', flex: 1 },
+  stageHint: { fontSize: 10, color: 'var(--text-subtle)', fontStyle: 'italic' },
   subOptionsWrap: {
     marginLeft: 18,
     marginBottom: 12,
@@ -1072,7 +1072,7 @@ const styles = StyleSheet.create({
   subOptionsLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#64748b',
+    color: 'var(--text-muted)',
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
@@ -1083,30 +1083,30 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#cbd5e1',
-    backgroundColor: '#fff',
+    borderColor: 'var(--border)',
+    backgroundColor: 'var(--surface)',
   },
-  subOptionChipText: { fontSize: 12, fontWeight: '600', color: '#475569' },
+  subOptionChipText: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
   currencyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#cbd5e1',
+    borderColor: 'var(--border)',
     paddingHorizontal: 12,
   },
-  currencyPrefix: { fontSize: 14, fontWeight: '700', color: '#475569', marginRight: 6 },
-  currencyInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: '#0f172a' },
+  currencyPrefix: { fontSize: 14, fontWeight: '700', color: 'var(--text-muted)', marginRight: 6 },
+  currencyInput: { flex: 1, paddingVertical: 12, fontSize: 15, color: 'var(--text)' },
   plainInput: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'var(--bg)',
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#0f172a',
+    color: 'var(--text)',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: 'var(--border)',
   },
   plainInputMultiline: { minHeight: 90, textAlignVertical: 'top' },
   submitWaitRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

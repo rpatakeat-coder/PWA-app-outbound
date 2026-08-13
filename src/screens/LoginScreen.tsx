@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderRadius: 16,
     padding: 24,
     shadowColor: '#000',
@@ -180,17 +180,17 @@ const styles = StyleSheet.create({
   formTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#0f172a',
+    color: 'var(--text)',
     marginBottom: 20,
     textAlign: 'center',
   },
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'var(--bg)',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: 'var(--border)',
     marginBottom: 12,
     paddingHorizontal: 12,
   },
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     fontSize: 16,
-    color: '#0f172a',
+    color: 'var(--text)',
   },
   button: {
     backgroundColor: '#dc2626',

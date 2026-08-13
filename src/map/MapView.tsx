@@ -18,7 +18,8 @@ import { ActivityIndicator, StyleSheet, Text, View, type LayoutChangeEvent } fro
 import { MarkerClusterer, SuperClusterAlgorithm, type Renderer } from '@googlemaps/markerclusterer';
 
 import { MapChildContext, type MapChildContextValue } from './context';
-import { GOOGLE_MAP_ID, USING_DEMO_MAP_ID, loadGoogleMaps, onGoogleAuthFailure } from './loader';
+import { USING_DEMO_MAP_ID, loadGoogleMaps, mapIdParaTema, onGoogleAuthFailure } from './loader';
+import { resolver } from '../theme';
 import {
   boundsForCoordinates,
   boundsToRegion,
@@ -207,7 +208,15 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
         const map = new maps.Map(containerRef.current, {
           center,
           zoom,
-          mapId: GOOGLE_MAP_ID,
+          // Lido na CRIACAO do mapa, nao reativo: trocar o mapId exigiria
+          // recriar a instancia, e cada instancia nova e' um evento cobrado no
+          // SKU Dynamic Maps. Quem alterna o tema pelas configuracoes ve o
+          // mapa novo na proxima abertura da aba.
+          mapId: mapIdParaTema(
+            resolver(
+              (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') ?? 'system',
+            ) === 'dark',
+          ),
           // UI propria do app: os controles padrao da Google brigariam com os
           // botoes flutuantes (centralizar, calor, rota) desenhados por cima.
           disableDefaultUI: true,

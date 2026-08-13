@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: 'var(--surface)',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -453,24 +453,24 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#0f172a',
+    color: 'var(--text)',
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 13,
-    color: '#64748b',
+    color: 'var(--text-muted)',
     marginBottom: 16,
   },
   // Options
   optionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'var(--bg)',
     borderRadius: 12,
     padding: 16,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: 'var(--border)',
   },
   optionIcon: {
     fontSize: 28,
@@ -482,38 +482,38 @@ const styles = StyleSheet.create({
   optionTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#0f172a',
+    color: 'var(--text)',
     marginBottom: 2,
   },
   optionDesc: {
     fontSize: 12,
-    color: '#64748b',
+    color: 'var(--text-muted)',
     lineHeight: 16,
   },
   optionArrow: {
     fontSize: 24,
-    color: '#94a3b8',
+    color: 'var(--text-subtle)',
     fontWeight: '300',
   },
   // Form
   label: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#64748b',
+    color: 'var(--text-muted)',
     marginBottom: 6,
     marginTop: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: 'var(--bg)',
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    color: '#0f172a',
+    borderColor: 'var(--border)',
+    color: 'var(--text)',
   },
   inputRow: {
     flexDirection: 'row',
@@ -553,12 +553,12 @@ const styles = StyleSheet.create({
   resultAddress: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#0f172a',
+    color: 'var(--text)',
     marginBottom: 2,
   },
   resultCity: {
     fontSize: 14,
-    color: '#64748b',
+    color: 'var(--text-muted)',
     marginBottom: 8,
   },
   warningBox: {
@@ -593,7 +593,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   cancelBtnText: {
-    color: '#64748b',
+    color: 'var(--text-muted)',
     fontSize: 14,
     fontWeight: '600',
   },
