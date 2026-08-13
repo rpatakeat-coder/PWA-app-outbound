@@ -621,7 +621,7 @@ const styles = StyleSheet.create({
     borderColor: '#ddd6fe',
   },
   rescheduleBanner: {
-    backgroundColor: '#fff7ed',
+    backgroundColor: 'var(--surface-warn)',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,

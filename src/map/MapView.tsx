@@ -19,7 +19,7 @@ import { MarkerClusterer, SuperClusterAlgorithm, type Renderer } from '@googlema
 
 import { MapChildContext, type MapChildContextValue } from './context';
 import { USING_DEMO_MAP_ID, loadGoogleMaps, mapIdParaTema, onGoogleAuthFailure } from './loader';
-import { resolver } from '../theme';
+import { useTheme } from '../theme';
 import {
   boundsForCoordinates,
   boundsToRegion,
@@ -160,6 +160,10 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
     mapRef,
   } = props;
 
+  // O mapa nao le CSS: o estilo escuro vem de um Map ID proprio, definido na
+  // construcao. Por isso o tema entra aqui como dependencia, e nao como cor.
+  const { isDark } = useTheme();
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const clustererRef = useRef<MarkerClusterer | null>(null);
@@ -189,7 +193,13 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
     [],
   );
 
-  // ---- Criacao do mapa (uma vez por montagem) ----
+  // ---- Criacao do mapa ----
+  // Recriado quando o TEMA muda. O estilo do mapa nao vem do CSS da pagina —
+  // vem do Map ID —, e o Map ID so' pode ser definido na construcao. Antes eu
+  // lia o tema so' uma vez pra economizar eventos do SKU Dynamic Maps, mas o
+  // efeito era o mapa continuar claro depois de ligar o modo escuro, ate' o
+  // usuario sair da aba e voltar. Trocar de tema e' raro (uma vez por dia, no
+  // maximo), entao um carregamento a mais nesse momento nao pesa na cota.
   useEffect(() => {
     let cancelled = false;
 
@@ -208,15 +218,7 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
         const map = new maps.Map(containerRef.current, {
           center,
           zoom,
-          // Lido na CRIACAO do mapa, nao reativo: trocar o mapId exigiria
-          // recriar a instancia, e cada instancia nova e' um evento cobrado no
-          // SKU Dynamic Maps. Quem alterna o tema pelas configuracoes ve o
-          // mapa novo na proxima abertura da aba.
-          mapId: mapIdParaTema(
-            resolver(
-              (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') ?? 'system',
-            ) === 'dark',
-          ),
+          mapId: mapIdParaTema(isDark),
           // UI propria do app: os controles padrao da Google brigariam com os
           // botoes flutuantes (centralizar, calor, rota) desenhados por cima.
           disableDefaultUI: true,
@@ -327,12 +329,19 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
       clustererRef.current?.clearMarkers();
       clustererRef.current = null;
       mapInstanceRef.current = null;
+      // Zera o contexto: os overlays filhos desmontam e soltam seus markers
+      // ANTES de o mapa novo nascer. Sem isso eles tentariam se registrar num
+      // mapa que ja' nao existe.
+      setCtx(null);
+      // A Google nao tem "destroy": o que ela criou fica no container. Sem
+      // limpar, o mapa novo seria montado por cima do antigo.
+      containerRef.current?.replaceChildren();
     };
-    // Intencionalmente sem deps: o mapa e' criado uma vez e vive ate o
-    // unmount. initialRegion/clustering sao snapshot inicial, como no
-    // react-native-maps (initialRegion nao e' controlado).
+    // `isDark` e' a UNICA dependencia: so' o tema justifica recriar o mapa
+    // (o Map ID nao pode ser trocado depois). initialRegion e as props de
+    // clustering sao snapshot inicial, como no react-native-maps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isDark]);
 
   // ---- Ponto azul da posicao do usuario ----
   // O react-native-maps delega isso ao SO; na web desenhamos e acompanhamos

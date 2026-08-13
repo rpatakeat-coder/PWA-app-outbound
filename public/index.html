@@ -56,6 +56,12 @@
         --text-faint: #cbd5e1;
         --border: #e2e8f0;
         --border-soft: #f1f5f9;
+        /* Superfícies que flutuam SOBRE o mapa (legenda, painel de calor).
+           Translúcidas de propósito — o mapa aparece por trás. Precisam de
+           token próprio: com o branco fixo, o texto tokenizado ficava claro
+           sobre claro e sumia no modo escuro. */
+        --surface-overlay: rgba(255, 255, 255, 0.94);
+        --surface-warn: #fff7ed;
         color-scheme: light;
       }
 
@@ -72,6 +78,8 @@
           --text-faint: #5d6b80;
           --border: #2a3852;
           --border-soft: #1f2b40;
+          --surface-overlay: rgba(15, 23, 38, 0.92);
+          --surface-warn: #2a2013;
           color-scheme: dark;
         }
       }
