@@ -4341,7 +4341,12 @@ function MainApp() {
               desligar) — assim não sobrepõe o painel. */}
           {canViewGestor && !creationMode && !heatOn && (
             <TouchableOpacity
-              style={[styles.mapButton, { left: undefined, right: 16, bottom: 90 + 66 + insets.bottom }]}
+              // Estilo proprio em vez de `{ left: undefined }` sobre o
+              // mapButton: no react-native-web o estilo base vira classe CSS e
+              // `undefined` nao emite regra nenhuma — ou seja, nao CANCELA o
+              // `left: 16` da base. O botao ficava com left E right ao mesmo
+              // tempo, ancorava a' esquerda e caia em cima da legenda de cores.
+              style={[styles.mapButtonRight, { bottom: 90 + 66 + insets.bottom }]}
               onPress={() => setHeatOn(true)}
             >
               <Text style={{ fontSize: 20 }}>🔥</Text>
@@ -7109,6 +7114,24 @@ const styles = StyleSheet.create({
   mapButton: {
     position: 'absolute',
     left: 16,
+    backgroundColor: '#fff',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  // Mesma pilula, ancorada a' DIREITA. Existe como estilo proprio porque
+  // sobrescrever `left` com `undefined` nao funciona no react-native-web
+  // (ver comentario no botao do mapa de calor).
+  mapButtonRight: {
+    position: 'absolute',
+    right: 16,
     backgroundColor: '#fff',
     width: 44,
     height: 44,
