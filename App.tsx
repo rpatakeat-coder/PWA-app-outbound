@@ -461,6 +461,16 @@ function RouteMarker({
 
 function MainApp() {
   const insets = useSafeAreaInsets();
+
+  // Altura da linha "developed by RPA" (fonte 10 + folga).
+  const BRAND_H = 16;
+  // Num iPhone a area segura de baixo (barra de gestos) ja' tem ~34px de sobra
+  // — a assinatura mora DENTRO dela e nao custa altura nenhuma. Reserva-se
+  // espaco proprio so' em aparelho sem essa area, senao a faixa branca abaixo
+  // das abas fica grande a' toa.
+  const navPaddingBottom = Math.max(insets.bottom, BRAND_H);
+  // 4px de respiro entre os rotulos das abas e a assinatura.
+  const brandMarkBottom = Math.max(navPaddingBottom - BRAND_H + 2, 2);
   const { isAuthenticated, loading, logout, profile, updatePassword } = useAuth();
   const [tab, setTab] = useState<AppTab>('map');
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -4524,10 +4534,13 @@ function MainApp() {
       {selectedClientSheet}
 
       {/* Bottom Navigation */}
-      {/* +16 abaixo do inset: e' a faixa onde a assinatura "developed by RPA"
-          fica. Sem essa reserva ela encostava nos rotulos das abas em aparelho
-          com pouca (ou nenhuma) area segura embaixo. */}
-      <View style={[styles.bottomNav, { paddingBottom: insets.bottom + 16 }]}>
+      {/* A assinatura "developed by RPA" cabe DENTRO da area segura — nao soma
+          altura. Somar (era `insets.bottom + 16`) empilhava a faixa da
+          assinatura em cima dos ~34px da barra de gestos do iPhone e criava um
+          vazio branco grande embaixo das abas.
+          Reserva-se espaco proprio so' quando o aparelho nao tem area segura
+          suficiente pra abrigar o texto. */}
+      <View style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]}>
         <TouchableOpacity
           style={[styles.navItem, tab === 'map' && styles.navItemActive]}
           onPress={() => setTab('map')}
@@ -4595,7 +4608,7 @@ function MainApp() {
           </TouchableOpacity>
         )}
         <Text
-          style={[styles.brandMark, { bottom: insets.bottom + 2 }]}
+          style={[styles.brandMark, { bottom: brandMarkBottom }]}
           pointerEvents="none"
         >
           developed by RPA
