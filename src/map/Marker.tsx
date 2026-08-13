@@ -63,6 +63,12 @@ export default function Marker({
 
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
 
+  // Em ref: o listener de clique e' registrado uma vez na criacao do marker,
+  // mas `onPress` e' recriado a cada render do pai. Sem a ref, o listener
+  // ficaria preso na primeira versao do callback.
+  const pressRef = useRef(onPress);
+  pressRef.current = onPress;
+
   const ax = anchor?.x ?? 0.5;
   // Default do react-native-maps: base-centro. Combina com o desenho dos pins
   // do app, que tem uma seta apontando pra baixo.
@@ -98,12 +104,25 @@ export default function Marker({
       content,
       zIndex,
       title,
+      // Obrigatorio pra o marker receber clique: o padrao e' false, e nesse
+      // modo a Google marca o conteudo como inerte a ponteiro — um listener
+      // de DOM no proprio conteudo nunca chega a disparar.
+      gmpClickable: true,
     });
     markerRef.current = marker;
+
+    // `gmp-click` e' o evento oficial do AdvancedMarkerElement. Escutar aqui
+    // (e nao um 'click' de DOM no conteudo) e' o que funciona com o
+    // clustering: o marker e' removido e readicionado ao mapa ao agrupar e
+    // desagrupar, e o listener acompanha a instancia, nao o no do DOM.
+    const clickListener = marker.addListener('gmp-click', () => {
+      pressRef.current?.();
+    });
 
     const unregister = ctx.registerMarker(marker, cluster);
 
     return () => {
+      clickListener.remove();
       unregister();
       markerRef.current = null;
     };
@@ -127,24 +146,6 @@ export default function Marker({
   useEffect(() => {
     if (contentRef.current) contentRef.current.style.transform = transform;
   }, [transform]);
-
-  // ---- Clique ----
-  // Listener de DOM no proprio conteudo em vez do evento `gmp-click`: o pin
-  // e' HTML nosso, entao o clique chega aqui primeiro e funciona igual em
-  // qualquer versao da API.
-  const pressRef = useRef(onPress);
-  pressRef.current = onPress;
-  useEffect(() => {
-    const el = contentRef.current;
-    if (!el) return;
-    el.style.cursor = 'pointer';
-    const handler = (e: MouseEvent) => {
-      e.stopPropagation(); // nao deixa virar clique no mapa
-      pressRef.current?.();
-    };
-    el.addEventListener('click', handler);
-    return () => el.removeEventListener('click', handler);
-  }, []);
 
   if (!contentRef.current || !children) return null;
   return createPortal(children, contentRef.current);
