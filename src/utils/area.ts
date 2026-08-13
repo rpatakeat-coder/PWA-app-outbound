@@ -109,6 +109,35 @@ export function boundsFromRegion(region: {
   return snapped;
 }
 
+/**
+ * Caixa de RENDERIZAÇÃO — o que vira pino na tela. Bem menor que a de busca.
+ *
+ * São coisas diferentes: buscamos com folga pra arrastar sem refazer a
+ * consulta, mas DESENHAR tudo que veio é o que enche o DOM. Pior: acima do
+ * `maxZoom` do clustering, a biblioteca anexa ao mapa todos os markers —
+ * inclusive os fora da tela — e eles ficam lá. Recortar aqui torna a
+ * contagem de pinos independente desse comportamento.
+ *
+ * Margem de 15% pra o pino não nascer bem na borda durante o arraste, e
+ * encaixe numa grade de 0,01° (~1,1 km) pra a lista não mudar a cada pixel.
+ */
+export function boundsForRender(region: {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+}): Bounds {
+  const GRID = 0.01;
+  const halfLat = (Math.abs(region.latitudeDelta) / 2) * 1.15;
+  const halfLon = (Math.abs(region.longitudeDelta) / 2) * 1.15;
+  return {
+    latMin: Math.floor((region.latitude - halfLat) / GRID) * GRID,
+    latMax: Math.ceil((region.latitude + halfLat) / GRID) * GRID,
+    lonMin: Math.floor((region.longitude - halfLon) / GRID) * GRID,
+    lonMax: Math.ceil((region.longitude + halfLon) / GRID) * GRID,
+  };
+}
+
 /** Chave estável pra queryKey — os valores já vêm encaixados na grade. */
 export function boundsKey(b: Bounds): string {
   const f = (n: number) => n.toFixed(2);

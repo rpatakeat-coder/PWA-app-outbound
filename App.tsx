@@ -43,6 +43,7 @@ import { supabase } from './src/integrations/supabase/client';
 import {
   MAX_VIEWPORT_KM,
   boundsContains,
+  boundsForRender,
   boundsFromRegion,
   type Bounds,
 } from './src/utils/area';
@@ -271,14 +272,17 @@ function CustomMarker({ color, meetingCount, isContaAlvo }: { color: string; mee
   return (
     <View style={markerStyles.container}>
       <View style={[markerStyles.pin, { backgroundColor: color }]}>
-        <Image
-          source={require('./assets/icon.png')}
-          style={markerStyles.logo}
-          // `defaultSource` saiu: era o MESMO arquivo do `source`, entao na web
-          // virava uma segunda referencia a' imagem por pin sem ganho nenhum
-          // (existia como fallback do carregamento assincrono no nativo).
-          fadeDuration={0}
-        />
+        {/* Asset ja' BRANCO e ja' no tamanho de exibicao — nao usa tintColor.
+            O react-native-web implementa tintColor criando um <svg> com um
+            <filter> inline POR IMAGEM e aplicando `filter: url(#id)` no <img>.
+            Filtro SVG obriga o navegador a re-rasterizar o elemento; com
+            centenas de pinos sendo reposicionados a cada quadro do arraste,
+            a GPU de celular nao da' conta (no desktop passava despercebido —
+            era o "trava so' no mapa, so' no celular").
+
+            De quebra o arquivo saiu de 1295x1637 / 99 KB para 38x48 / 1,4 KB:
+            o anterior era reamostrado a cada pintura pra caber em 20px. */}
+        <Image source={require('./assets/pin-logo.png')} style={markerStyles.logo} fadeDuration={0} />
         {meetingCount > 0 && (
           <View style={markerStyles.meetingBadge}>
             <Text style={markerStyles.meetingBadgeText}>📅</Text>
@@ -347,7 +351,7 @@ const markerStyles = StyleSheet.create({
   logo: {
     width: 20,
     height: 20,
-    tintColor: '#fff',
+    // Sem `tintColor`: o asset ja' vem branco (ver comentario no CustomMarker).
     resizeMode: 'contain',
   },
   arrow: {
@@ -1159,14 +1163,38 @@ function MainApp() {
   // Viewer (somente leitura) enxerga os pins dos status que ele marcou nos
   // chips (multi-selecao — leads E clientes juntos, por ex.), ignorando o
   // statusFilter de status unico usado por vendedor/admin.
+  // Recorte de RENDERIZAÇÃO: só vira pino quem está na área visível (+15%).
+  // Encaixado numa grade de ~1,1 km, então arrastar não recalcula a lista a
+  // cada pixel. Sem isto, todo cliente carregado virava um nó de DOM vivo —
+  // acima do maxZoom do clustering a biblioteca anexa TODOS ao mapa, mesmo
+  // os fora da tela, e é isso que travava ao aproximar.
+  const renderBounds = useMemo(
+    () => (mapRegion ? boundsForRender(mapRegion) : null),
+    [mapRegion],
+  );
+
   const filteredMapMarkers = useMemo(
     () => {
       const base = isViewer
         ? clients.filter(c => viewerStatuses.has(c.status as ClientStatus) && c.latitude !== null && c.longitude !== null)
         : filteredWithCoords;
-      return base.filter(c => !routeStopClientIds.has(c.id));
+      const semRota = base.filter(c => !routeStopClientIds.has(c.id));
+
+      // Antes do mapa reportar o primeiro enquadramento não há o que recortar.
+      if (!renderBounds) return semRota;
+
+      return semRota.filter((c) => {
+        const lat = c.latitude as number;
+        const lon = c.longitude as number;
+        return (
+          lat >= renderBounds.latMin &&
+          lat <= renderBounds.latMax &&
+          lon >= renderBounds.lonMin &&
+          lon <= renderBounds.lonMax
+        );
+      });
     },
-    [isViewer, clients, viewerStatuses, filteredWithCoords, routeStopClientIds],
+    [isViewer, clients, viewerStatuses, filteredWithCoords, routeStopClientIds, renderBounds],
   );
 
   // Pontos da rota pra OSRM: comeca em userLocation (arredondado pra cache
@@ -4254,7 +4282,10 @@ function MainApp() {
                   style={{ position: 'absolute', left: centerX - 18, top: centerY - 43, alignItems: 'center' }}
                 >
                   <View style={[markerStyles.pin, { backgroundColor: '#dc2626' }]}>
-                    <Image source={require('./assets/icon.png')} style={markerStyles.logo} fadeDuration={0} />
+                    {/* Mesmo asset branco dos pinos do mapa: markerStyles.logo
+                        deixou de ter tintColor, então o icon.png original
+                        apareceria vermelho sobre o círculo vermelho. */}
+                    <Image source={require('./assets/pin-logo.png')} style={markerStyles.logo} fadeDuration={0} />
                   </View>
                   <View style={[markerStyles.arrow, { borderTopColor: '#dc2626' }]} />
                 </View>
