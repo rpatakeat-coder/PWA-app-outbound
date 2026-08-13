@@ -37,6 +37,19 @@
       html,
       body {
         height: 100%;
+        /*
+          No PWA instalado do iOS, `height: 100%` resolve pra altura que o
+          Safari reportou no carregamento — que NAO inclui a faixa da barra de
+          gestos. O app terminava acima dela e sobrava uma faixa branca do
+          fundo do body embaixo da barra de abas.
+
+          `100dvh` (dynamic viewport height) mede a viewport de verdade, ja'
+          contando a area segura. `-webkit-fill-available` fica antes como
+          reserva pra iOS < 15.4, que ignora dvh; quem entende as duas usa a
+          ultima declarada.
+        */
+        height: -webkit-fill-available;
+        height: 100dvh;
       }
       /* These styles disable body scrolling if you are using <ScrollView> */
       body {

@@ -4327,7 +4327,9 @@ function MainApp() {
               ].map(item => (
                 <View key={item.l} style={styles.tempLegendRow}>
                   <View style={[styles.tempLegendDot, { backgroundColor: item.c }]} />
-                  <Text style={styles.tempLegendLabel}>{item.l}</Text>
+                  {/* numberOfLines={1}: sem isto "🎯 Conta Alvo" quebrava em
+                      duas linhas dentro da coluna e desalinhava a legenda. */}
+                  <Text style={styles.tempLegendLabel} numberOfLines={1}>{item.l}</Text>
                 </View>
               ))}
             </View>
@@ -7120,7 +7122,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     marginBottom: 56,
-    maxWidth: 196,
+    // 2 colunas de 104 + 10 de vao + 18 de padding. Os 104 sao ditados pelo
+    // rotulo mais longo, "🎯 Conta Alvo": com menos, ele quebrava em duas
+    // linhas e desalinhava a grade.
+    maxWidth: 236,
     flexDirection: 'row',
     flexWrap: 'wrap',
     backgroundColor: 'rgba(255,255,255,0.94)',
@@ -7137,7 +7142,7 @@ const styles = StyleSheet.create({
   },
   // Largura fixa: e' o que garante exatamente 2 colunas dentro do maxWidth,
   // em vez de a quebra depender do comprimento de cada rotulo.
-  tempLegendRow: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 84 },
+  tempLegendRow: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 104 },
   tempLegendDot: { width: 10, height: 10, borderRadius: 5 },
   tempLegendLabel: { fontSize: 11, fontWeight: '700', color: '#334155' },
   mapButton: {
