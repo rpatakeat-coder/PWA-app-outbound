@@ -4524,7 +4524,10 @@ function MainApp() {
       {selectedClientSheet}
 
       {/* Bottom Navigation */}
-      <View style={[styles.bottomNav, { paddingBottom: insets.bottom }]}>
+      {/* +16 abaixo do inset: e' a faixa onde a assinatura "developed by RPA"
+          fica. Sem essa reserva ela encostava nos rotulos das abas em aparelho
+          com pouca (ou nenhuma) area segura embaixo. */}
+      <View style={[styles.bottomNav, { paddingBottom: insets.bottom + 16 }]}>
         <TouchableOpacity
           style={[styles.navItem, tab === 'map' && styles.navItemActive]}
           onPress={() => setTab('map')}
@@ -4592,7 +4595,7 @@ function MainApp() {
           </TouchableOpacity>
         )}
         <Text
-          style={[styles.brandMark, { bottom: Math.max(insets.bottom - 4, 2) }]}
+          style={[styles.brandMark, { bottom: insets.bottom + 2 }]}
           pointerEvents="none"
         >
           developed by RPA
@@ -6905,11 +6908,16 @@ const styles = StyleSheet.create({
   permissionSecondaryButtonText: { color: '#64748b', fontSize: 14, fontWeight: '600' },
   // Filter Bar
   filterBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  filterScroll: { paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
+  // paddingRight maior que o esquerdo de proposito: quando a lista chega ao
+  // fim, o ultimo chip fica com ar em vez de colado na borda da tela (antes
+  // parecia cortado/quebrado, nao rolavel).
+  filterScroll: { paddingLeft: 12, paddingRight: 20, paddingVertical: 8, gap: 6 },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    // 12 -> 10: com ate 4 status ("Lead", "Cliente", "Ex-Cliente",
+    // "Ganho - Field Sales") cada pixel poupado adia o corte na borda.
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 20,
     backgroundColor: '#f1f5f9',
@@ -6918,7 +6926,7 @@ const styles = StyleSheet.create({
   filterChipActive: { backgroundColor: '#dc2626' },
   filterChipText: { fontSize: 12, fontWeight: '600', color: '#64748b' },
   filterChipTextActive: { color: '#fff' },
-  filterDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+  filterDot: { width: 8, height: 8, borderRadius: 4, marginRight: 5 },
   // Multi-select dos status na aba Rota (wrap, varios chips em ordem livre)
   statusMultiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   // Resultado da busca manual: titulo + cidade + botao adicionar
@@ -7093,22 +7101,30 @@ const styles = StyleSheet.create({
   areaStatusText: { color: '#fff', fontSize: 12.5, fontWeight: '700' },
   // Legenda de temperatura: fica ACIMA do botao de localizacao (que ocupa
   // left:16 / bottom:90+insets), por isso o offset extra de 56px.
+  // Em DUAS COLUNAS: em pe' as 6 linhas comiam um terco da altura do mapa no
+  // celular. Lado a lado a legenda ocupa metade da altura e continua legivel.
   tempLegend: {
     position: 'absolute',
     left: 16,
     marginBottom: 56,
+    maxWidth: 196,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     backgroundColor: 'rgba(255,255,255,0.94)',
     borderRadius: 10,
     paddingHorizontal: 9,
     paddingVertical: 7,
-    gap: 4,
+    rowGap: 4,
+    columnGap: 10,
     shadowColor: '#000',
     shadowOpacity: 0.15,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 6,
     elevation: 3,
   },
-  tempLegendRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  // Largura fixa: e' o que garante exatamente 2 colunas dentro do maxWidth,
+  // em vez de a quebra depender do comprimento de cada rotulo.
+  tempLegendRow: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 84 },
   tempLegendDot: { width: 10, height: 10, borderRadius: 5 },
   tempLegendLabel: { fontSize: 11, fontWeight: '700', color: '#334155' },
   mapButton: {
@@ -7266,9 +7282,18 @@ const styles = StyleSheet.create({
     borderTopColor: '#e2e8f0',
     backgroundColor: '#fff',
   },
-  navItem: { flex: 1, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' },
+  // Sao ate 6 abas (Mapa/Lista/Rota/Agenda/Tarefas/Gestor). Num celular
+  // estreito o rotulo de 11px encostava no do vizinho; icone e texto um ponto
+  // menores, com folga horizontal, deixam os seis respirarem.
+  navItem: {
+    flex: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   navItemActive: { borderTopWidth: 2, borderTopColor: '#dc2626' },
-  navIcon: { fontSize: 18, marginBottom: 2 },
+  navIcon: { fontSize: 17, marginBottom: 2 },
   navIconActive: {},
   // Badge de notificacao de tarefas pendentes, sobreposto no icone da aba.
   navBadge: {
@@ -7286,7 +7311,7 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   navBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  navItemText: { fontSize: 11, fontWeight: '600', color: '#94a3b8' },
+  navItemText: { fontSize: 10, fontWeight: '600', color: '#94a3b8' },
   brandMark: {
     position: 'absolute',
     left: 0,
