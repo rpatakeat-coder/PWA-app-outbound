@@ -267,19 +267,17 @@ const getClientPrimaryName = (client: Client) => client.empresa?.trim() || clien
 // Cor dedicada da Conta Alvo (Rota do dia) — roxo, destaca do funil térmico.
 const CONTA_ALVO_COLOR = '#7c3aed';
 
-function CustomMarker({ color, meetingCount, isContaAlvo, onLogoLoad }: { color: string; meetingCount: number; isContaAlvo?: boolean; onLogoLoad?: () => void }) {
+function CustomMarker({ color, meetingCount, isContaAlvo }: { color: string; meetingCount: number; isContaAlvo?: boolean }) {
   return (
     <View style={markerStyles.container}>
       <View style={[markerStyles.pin, { backgroundColor: color }]}>
         <Image
           source={require('./assets/icon.png')}
           style={markerStyles.logo}
-          // Asset embarcado: pinta sincronamente. defaultSource garante fallback.
-          defaultSource={require('./assets/icon.png')}
+          // `defaultSource` saiu: era o MESMO arquivo do `source`, entao na web
+          // virava uma segunda referencia a' imagem por pin sem ganho nenhum
+          // (existia como fallback do carregamento assincrono no nativo).
           fadeDuration={0}
-          // Avisa o MarkerWithReady que o PNG terminou de decodificar — só a
-          // partir daí o snapshot do marker pode ser congelado com segurança.
-          onLoadEnd={onLogoLoad}
         />
         {meetingCount > 0 && (
           <View style={markerStyles.meetingBadge}>
@@ -307,52 +305,20 @@ const MarkerWithReady = React.memo(
     isContaAlvo,
     coordinate,
   }: { client: Client; onPress: (client: Client) => void; color: string; meetingCount: number; isContaAlvo?: boolean; coordinate: { latitude: number; longitude: number } }) {
-    // Pinta o marker num primeiro frame com tracksViewChanges=true
-    // e desliga em seguida pra evitar re-renderizações contínuas.
-    // Religa o tracking sempre que algo que afeta o snapshot muda
-    // (badge de reunião, cor, OU a coordenada). A coordenada é crítica:
-    // ao dar zoom, a lib de clustering divide os clusters e reposiciona
-    // markers reaproveitando o mesmo native view. Se não re-snapshotarmos
-    // nesse momento, o view nativo fica com um snapshot vazio/velho e o
-    // pin some do mapa. Religando o tracking por um instante forçamos o
-    // native a recapturar a imagem do marker na nova posição.
-    const [tracking, setTracking] = useState(true);
-    // O snapshot só pode ser congelado DEPOIS que o PNG do logo decodificou.
-    // onLayout dispara quando o layout termina, mas o decode da imagem é
-    // assíncrono — quando um cluster se divide no zoom, dezenas de markers
-    // montam juntos e o decode enfileira; nos que passavam de 800ms o
-    // snapshot congelava vazio e o pin ficava INVISÍVEL até o próximo
-    // re-track (o "some ao aproximar, uns sim outros não" do campo).
-    const [logoLoaded, setLogoLoaded] = useState(false);
-    // Contador que força a janela de re-snapshot a reabrir (onLayout). O
-    // onLayout antigo fazia setTracking(true) sem timer — além de não
-    // resolver o decode tardio, deixava o marker em tracking pra sempre.
-    const [pokeKey, setPokeKey] = useState(0);
-    useEffect(() => {
-      setTracking(true);
-      // 800ms basta pra o native completar o snapshot; timer curto evita
-      // manter dezenas de markers em tracking contínuo (custo de perf).
-      const t = setTimeout(() => setTracking(false), 800);
-      return () => clearTimeout(t);
-    }, [meetingCount, color, coordinate.latitude, coordinate.longitude, logoLoaded, pokeKey]);
-
+    // Aqui existia toda a maquinaria de `tracksViewChanges`: tres estados,
+    // um timer de 800ms por marker e um onLayout que forcava re-render. Ela
+    // resolvia um bug EXCLUSIVO do render nativo — o iOS tira um "snapshot"
+    // da view do marker, e o snapshot saia vazio quando o PNG do logo ainda
+    // nao tinha decodificado (o "pin some ao dar zoom" do campo).
+    //
+    // Na web nao ha snapshot: o pin e' HTML ao vivo, sempre pintado. Manter
+    // aquilo custava, por pin, 3 useState + 1 setTimeout + renders extras —
+    // com algumas centenas de pins na tela, puro desperdicio.
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
-    const handleLogoLoad = useCallback(() => setLogoLoaded(true), []);
-    const handleLayout = useCallback(() => setPokeKey((k) => k + 1), []);
 
     return (
-      <Marker
-        coordinate={coordinate}
-        onPress={handlePress}
-        // Enquanto o logo não carregou, mantém tracking ligado (snapshot
-        // congelado sem a imagem = pin invisível). Depois disso, o tracking
-        // vira janelas curtas de 800ms a cada mudança relevante.
-        tracksViewChanges={tracking || !logoLoaded}
-        // Redesenha o snapshot assim que o custom view termina o layout —
-        // garante que markers recém-montados no zoom capturem a imagem.
-        onLayout={handleLayout}
-      >
-        <CustomMarker color={color} meetingCount={meetingCount} isContaAlvo={isContaAlvo} onLogoLoad={handleLogoLoad} />
+      <Marker coordinate={coordinate} onPress={handlePress}>
+        <CustomMarker color={color} meetingCount={meetingCount} isContaAlvo={isContaAlvo} />
       </Marker>
     );
   },
@@ -4139,12 +4105,20 @@ function MainApp() {
             }}
             showsBuildings={true}
             // Clustering: agrupa pinos próximos numa bolha com contador.
-            // Com 2300+ clientes, sem isso o pan/zoom no zoom-out fica inviável.
-            // maxZoom: acima desse nível, lib desliga o clustering e mostra
-            // todos os pinos individuais (ajuste fino: 15=bairro, 17=quarteirão).
+            //
+            // maxZoom = nivel ATE o qual se agrupa; acima dele todo pino vira
+            // elemento individual. Estava em 9, herdado do app nativo: como o
+            // uso normal e' zoom 13+, na pratica o agrupamento nunca acontecia
+            // e a tela desenhava um no de DOM por cliente. No nativo o pino era
+            // barato; no navegador cada um custa ~6 nos, e ai' o mapa engasga.
+            //
+            // 14 mantem pino individual do zoom de rua pra baixo (que e' onde o
+            // vendedor decide a visita) e agrupa no de bairro pra cima. Subir
+            // este numero = mais pinos soltos e mais peso; baixar = mais bolhas
+            // de contagem.
             radius={50}
             minPoints={3}
-            maxZoom={9}
+            maxZoom={14}
             clusterColor="#3b82f6"
             clusterTextColor="#ffffff"
             spiralEnabled={false}
