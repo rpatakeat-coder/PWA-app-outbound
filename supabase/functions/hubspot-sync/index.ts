@@ -327,10 +327,15 @@ async function handleCreatePin(token: string, body: Record<string, unknown>) {
     }
   }
 
+  // phone: mesmo body.celular que alimenta a propriedade `celular` do deal — o
+  // app manda o telefone uma vez so'. `celular` e' custom do deal; no contato o
+  // equivalente padrao e' `phone` (o que aparece no cartao do registro). Sem
+  // isso o contato nascia sem telefone nenhum enquanto o deal tinha o numero.
   const contact = await hsFetch(token, 'POST', '/crm/objects/2026-03/contacts', {
     properties: {
       email: str(body.email),
       firstname: str(body.nome),
+      phone: str(body.celular),
       state: str(body.estado_uf),
       city: str(body.cidade),
       hubspot_owner_id: str(body.vendedor_id),
