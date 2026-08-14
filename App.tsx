@@ -4901,6 +4901,43 @@ function MainApp() {
                   </TouchableOpacity>
                 </View>
 
+                {/* Atalho pro cockpit de gestão — só gestor.
+                    Fica no topo porque é o motivo mais provável de o gestor
+                    abrir as Configurações. O cockpit vive em /gestao, no mesmo
+                    domínio: a sessão do Supabase é a mesma, então ele entra
+                    direto, sem novo login. */}
+                {canViewGestor && (
+                  <>
+                    <TouchableOpacity
+                      style={styles.gestaoButton}
+                      // Link de VERDADE, não window.open: o react-native-web
+                      // renderiza um <a> quando recebe `href`, e isso evita a
+                      // mesma armadilha que já corrigimos na navegação — o
+                      // bloqueador de pop-up mata window.open quando ele não
+                      // roda dentro do gesto do usuário, e a Pressability do
+                      // RNW pode adiar o handler o suficiente pra isso. De
+                      // quebra, um <a> é focável por teclado e abre no botão
+                      // direito.
+                      //
+                      // Aba nova porque o gestor consulta o cockpit e volta
+                      // pro mapa: trocar a página descarregaria o app de campo
+                      // e ele perderia a rota do dia já carregada.
+                      {...({ href: '/gestao/', hrefAttrs: { target: '_blank', rel: 'noopener' } } as any)}
+                      accessibilityRole="link"
+                    >
+                      <IconBarGraph width={20} height={20} fill="#fff" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.gestaoButtonText}>Abrir painel de gestão</Text>
+                        <Text style={styles.gestaoButtonHint}>
+                          Funil do time, travados e gargalo. Melhor no computador.
+                        </Text>
+                      </View>
+                      <Text style={styles.gestaoButtonArrow}>↗</Text>
+                    </TouchableOpacity>
+                    <View style={styles.adminDivider} />
+                  </>
+                )}
+
                 {/* Filtro de área */}
                 <View style={styles.settingsRow}>
                   <View style={{ flex: 1, paddingRight: 12 }}>
@@ -6981,6 +7018,21 @@ const styles = StyleSheet.create({
   },
   passwordModalHint: { fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 },
   adminDivider: { height: 1, backgroundColor: 'var(--surface-3)', marginVertical: 18 },
+  // Atalho pro cockpit de gestão (/gestao). Vermelho da marca: é a ação
+  // principal desta tela pra quem é gestor.
+  gestaoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#C8131B',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    minHeight: 44,
+  },
+  gestaoButtonText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  gestaoButtonHint: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 2 },
+  gestaoButtonArrow: { color: '#fff', fontSize: 18, fontWeight: '700' },
   // Seletor de tema (Automático / Claro / Escuro).
   themeRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
   themeChip: {
