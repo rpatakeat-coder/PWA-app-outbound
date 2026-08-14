@@ -1,0 +1,44 @@
+{
+  "geradoEm": "2026-08-11T20:33:58.975Z",
+  "janela": {
+    "atual": "10/08–11/08/2026",
+    "anterior": "03/08–07/08/2026"
+  },
+  "kpisComparativo": {
+    "atual": {
+      "leadsCriados": 31,
+      "ganhos": 2,
+      "perdidos": 55,
+      "reciclagem": 13,
+      "reunioes": 1
+    },
+    "anterior": {
+      "leadsCriados": 110,
+      "ganhos": 14,
+      "perdidos": 99,
+      "reciclagem": 100,
+      "reunioes": 3
+    }
+  },
+  "resumoGeral": "A semana de 10–11/08 foi curtíssima em volume: apenas <b>31 leads criados</b> contra <b>110 da semana anterior</b>, e só <b>2 ganhos</b> frente aos <b>14 anteriores</b> — queda de 86% nos fechamentos. O ponto que mais preocupa é que os <b>55 perdidos</b> continuam em volume expressivo enquanto a reciclagem despencou de <b>100 para 13</b>, o que levanta a dúvida se os descartes estão sendo feitos com critério ou se a reciclagem simplesmente parou de acontecer. Com <b>reuniões caindo de 3 para 1</b>, o funil está travando na conversão intermediária, não apenas na entrada. Os gargalos apontados nas últimas duas semanas — leads travados, descarte sem auditoria e reuniões abaixo da meta — <b>não foram resolvidos</b> e agora se agravam num contexto de menor volume de entrada.",
+  "comoAgir": [
+    "Audite os <b>55 perdidos desta semana</b> antes de quarta-feira: com a reciclagem caindo de 100 para 13, o risco real é que descartes indevidos estejam sendo feitos sem reverificação — mapeie se há concentração por praça ou etapa e reverta os casos que não têm justificativa clara de perda definitiva.",
+    "Os leads travados no funil precisam de resolução até quinta-feira: exija evidência de contato real ou justificativa de descarte para cada caso em aberto há mais de 10 dias — se essa auditoria não foi feita nas duas semanas anteriores, ela é a prioridade número um dos 1:1s desta semana, não pauta opcional.",
+    "Com apenas <b>1 reunião (Demo/Proposta)</b> na semana, mapeie hoje onde o funil está travando: se a concentração está em Visita sem avanço para Demo, o problema é abordagem ou timing na conversa presencial; defina uma meta mínima de <b>6 reuniões até sexta</b> e acompanhe diariamente — não espere o 1:1 da semana que vem para saber se a meta foi atingida.",
+    "Com volume de entrada caindo para <b>31 leads</b>, esta semana é o momento de revisar a qualidade do que entrou nas últimas 3 semanas: se o funil está cheio de leads que não avançam, o problema não é quantidade — é critério de criação; defina ou reforce o critério mínimo de qualificação antes de criar lead e comunique ao time ainda nesta semana."
+  ],
+  "ganhosSemanaDetalhe": [],
+  "reunioesSemanaDetalhe": [],
+  "quentesDemoOuNegociacao": [],
+  "porRep": {
+    "86100505": {
+      "name": "Executivo Exemplo 1",
+      "resumoIndividual": "Você encerrou a semana com <b>12 negócios em aberto</b>, sendo que <b>7 estão na etapa Visita</b> — um a mais do que os 6 que você tinha na semana passada, o que indica que o funil cresceu mas o gargalo na Visita permanece. <b>Nenhum fechamento</b> aconteceu nessa semana, e você está em <b>3 de 10 na meta do mês</b>, com os dias passando. Os <b>5 leads com SLA estourado</b> (eram 4 na semana passada) mostram que o ponto de resolução ainda não foi concluído — se você tratou algum deles, registre no CRM; se não tratou, isso precisa ser a primeira parada hoje.",
+      "comoAgirIndividual": [
+        "Os <b>5 leads com SLA estourado</b> continuam abertos — pare o que estiver fazendo e contate cada um hoje: registre status no CRM e decida se avança ou descarta. Nenhum deles pode ir pra mais uma semana sem movimentação.",
+        "Dos <b>7 negócios em etapa Visita</b>, identifique agora os <b>3 com maior probabilidade de fechar até o fim do mês</b> e concentre sua agenda neles — defina data de proposta ou próximo passo concreto para cada um até quinta-feira.",
+        "Com <b>7 fechamentos necessários para bater a meta de 10</b> e pouco tempo no mês, avalie os demais negócios em aberto e descarte ou pause os que não têm viabilidade real de fechar agora — funil limpo te dá foco onde importa."
+      ]
+    }
+  }
+}

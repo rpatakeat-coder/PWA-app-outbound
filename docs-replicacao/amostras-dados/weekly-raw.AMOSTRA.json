@@ -1,0 +1,180 @@
+{
+  "geradoEm": "2026-08-14T08:02:48.271Z",
+  "janela": {
+    "atual": "10/08–14/08/2026",
+    "anterior": "03/08–07/08/2026"
+  },
+  "kpisComparativo": {
+    "atual": {
+      "leadsCriados": 73,
+      "ganhos": 8,
+      "perdidos": 100,
+      "reciclagem": 19,
+      "reunioes": 5
+    },
+    "anterior": {
+      "leadsCriados": 108,
+      "ganhos": 14,
+      "perdidos": 99,
+      "reciclagem": 100,
+      "reunioes": 1
+    }
+  },
+  "ganhosSemanaDetalhe": [
+    {
+      "nome": "Cliente Exemplo 1",
+      "ownerId": "87069181",
+      "mrr": 313
+    },
+    {
+      "nome": "Cliente Exemplo 2",
+      "ownerId": "87069181",
+      "mrr": 313
+    }
+  ],
+  "reunioesSemanaDetalhe": [
+    {
+      "nome": "Cliente Exemplo 1",
+      "ownerId": "87569072"
+    },
+    {
+      "nome": "Cliente Exemplo 2",
+      "ownerId": "91477292"
+    }
+  ],
+  "quentesDemoOuNegociacao": [
+    {
+      "name": "Restaurante Exemplo 30",
+      "id": "63054359114",
+      "stage": "Negociação",
+      "stageId": "1395880472",
+      "dias": 1,
+      "slaBreach": false,
+      "slaRatio": 14,
+      "rank": 5,
+      "temperatura": "quente",
+      "proximaReuniao": null,
+      "proximaAtividade": null,
+      "ultimaInteracao": "2026-08-11T17:53:13.604Z",
+      "valor": 0,
+      "lat": -23.62636694,
+      "cep": null,
+      "bairro": null,
+      "cidade": "São Paulo",
+      "logradouro": null,
+      "numero": null,
+      "lng": -46.70136313,
+      "vendedor": "Executivo Exemplo",
+      "ownerId": "89842507",
+      "notas": []
+    },
+    {
+      "name": "Restaurante Exemplo 31",
+      "id": "63567678330",
+      "stage": "Negociação",
+      "stageId": "1395880472",
+      "dias": 1,
+      "slaBreach": false,
+      "slaRatio": 14,
+      "rank": 5,
+      "temperatura": "quente",
+      "proximaReuniao": null,
+      "proximaAtividade": null,
+      "ultimaInteracao": "2026-08-11T20:12:00.207Z",
+      "valor": 0,
+      "lat": -23.62531566,
+      "cep": null,
+      "bairro": null,
+      "cidade": "São Paulo",
+      "logradouro": null,
+      "numero": null,
+      "lng": -46.70093206,
+      "vendedor": "Executivo Exemplo",
+      "ownerId": "89842507",
+      "notas": [
+        {
+          "texto": "Follow Up - Restaurante Exemplo 31 Agendado para: 14/08/2026, 09:00 Exemplo de anotação livre do CRM. — Executivo Exemplo (via App de campo)",
+          "data": "2026-08-10T17:59:57.626Z"
+        }
+      ]
+    }
+  ],
+  "snapshotReps": {
+    "86100505": {
+      "name": "Executivo Exemplo 1",
+      "open": 12,
+      "stages": {
+        "1395880469": 1,
+        "1395880470": 2,
+        "1395880471": 1,
+        "1395880472": 2,
+        "1395880473": 1,
+        "1396005401": 5
+      },
+      "criticos": [
+        {
+          "name": "Restaurante Exemplo 32",
+          "id": "63051219269",
+          "stage": "Visita",
+          "stageId": "1396005401",
+          "dias": 15,
+          "slaBreach": true,
+          "slaRatio": 300,
+          "rank": 2,
+          "temperatura": "frio",
+          "proximaReuniao": null,
+          "proximaAtividade": null,
+          "ultimaInteracao": null,
+          "valor": 0,
+          "lat": -20.35207349,
+          "cep": null,
+          "bairro": null,
+          "cidade": "Vila Velha",
+          "logradouro": null,
+          "numero": null,
+          "lng": -40.2853241,
+          "destaque": true
+        },
+        {
+          "name": "Restaurante Exemplo 33",
+          "id": "62954470726",
+          "stage": "Conversa com Decisor",
+          "stageId": "1395880470",
+          "dias": 14,
+          "slaBreach": true,
+          "slaRatio": 350,
+          "rank": 3,
+          "temperatura": "frio",
+          "proximaReuniao": null,
+          "proximaAtividade": null,
+          "ultimaInteracao": null,
+          "valor": 0,
+          "lat": -20.35362665,
+          "cep": null,
+          "bairro": null,
+          "cidade": "Vila Velha",
+          "logradouro": null,
+          "numero": null,
+          "lng": -40.28437685,
+          "destaque": true
+        }
+      ],
+      "travados": [],
+      "quentes": [],
+      "plotaveis": [],
+      "leadsTravados": 7,
+      "ganhosSemana": 1,
+      "ganhosSemanaNomes": [
+        "Naha sushi"
+      ],
+      "avancosHojeNomes": [],
+      "propostasHojeNomes": [],
+      "fechadosNoMes": 4,
+      "metaMensal": 10,
+      "visitasHubspotHoje": 0,
+      "avancosHubspotHoje": 0,
+      "propostasHubspotHoje": 0,
+      "fechamentosHubspotHoje": 0
+    }
+  }
+}

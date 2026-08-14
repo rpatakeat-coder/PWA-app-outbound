@@ -40,3 +40,7 @@ yarn-error.*
 /ios
 /android
 .env.local
+
+# Build do cockpit de gestao
+gestao/dist/
+gestao/node_modules/

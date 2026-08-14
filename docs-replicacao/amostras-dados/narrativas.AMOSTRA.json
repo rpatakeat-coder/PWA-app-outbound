@@ -1,0 +1,23 @@
+{
+  "_comment": "Camada analítica — NÃO é sobrescrita pelo build diário. Só muda quando Julyan pedir 'atualiza a análise'. Chave = HubSpot owner ID.",
+  "_atualizado_em": "2026-08-14",
+  "reps": {
+    "86100505": {
+      "name": "Executivo Exemplo 1",
+      "praca": "Vila Velha/ES",
+      "tag": "crit",
+      "tagLabel": "SLA estourado",
+      "gargalo": "<b>HubSpot (dado ao vivo, 14/08):</b> 12 negócios abertos, 42% parados em Visita (5 de 12) — o funil não evolui para conversas qualificadas, com apenas 2 negócios chegando a Conversa com Decisor e 2 em Negociação. Um único negócio em Ag. Pagamento indica avanço mínimo. O sinal mais crítico: 7 de 12 leads com SLA estourado — mais da metade do funil está sem follow-up no prazo, o que compromete qualquer chance de progressão real.",
+      "boasPraticas": [
+        "Manter o padrão de nota completa (pagamento + instalação + próxima ação) — vira referência pro time",
+        "Usar como case de \"como registrar uma visita\" nos roleplays",
+        "Aproveitar a folga no funil pra puxar mais volume de prospecção"
+      ],
+      "compromissos": [
+        "Zerar os 7 leads com SLA estourado até sexta 15/08 com evidência de contato (ligação, mensagem ou visita) e data de próxima ação registradas em cada card no HubSpot — mostrar ao vivo pro gestor na conferência do dia",
+        "Avançar pelo menos 3 dos negócios parados em Visita para Negociação ou Conversa com Decisor até sexta 15/08, com nome do decisor abordado e próxima ação datada registrada em cada card movido no HubSpot",
+        "Enviar print dos cards movidos no HubSpot via WhatsApp até as 18h de cada dia desta semana — dia sem print não conta como dia cumprido"
+      ]
+    }
+  }
+}

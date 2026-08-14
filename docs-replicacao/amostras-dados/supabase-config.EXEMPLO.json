@@ -1,0 +1,5 @@
+{
+  "_comment": "Formato do arquivo. Chaves PÚBLICAS por natureza (o navegador precisa delas), protegidas por RLS e restrição de domínio — mas gere as SUAS, nunca reaproveite as de outro projeto.",
+  "url": "https://SEU-PROJETO.supabase.co",
+  "anonKey": "SUA_ANON_KEY_AQUI"
+}

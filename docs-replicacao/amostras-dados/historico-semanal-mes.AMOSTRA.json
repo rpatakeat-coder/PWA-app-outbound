@@ -1,0 +1,77 @@
+{
+  "mesAno": "2026-08",
+  "semanas": [
+    {
+      "numeroSemana": 0,
+      "janela": {
+        "atual": "28/07–03/08/2026",
+        "anterior": "21/07–27/07/2026"
+      },
+      "kpisSemana": {
+        "leadsCriados": 79,
+        "ganhos": 19,
+        "perdidos": 100,
+        "reciclagem": 100,
+        "reunioes": 2
+      },
+      "resumoGeral": "O funil piorou no topo e travou no meio: leads criados caíram de <b>125 para 79</b> (segunda queda seguida) e reuniões despencaram de <b>14 para apenas 2</b> — pior que a semana retrasada, mostrando que a intervenção de assumir agenda diretamente ainda não girou em resultado. Por outro lado, ganhos saltaram de <b>6 para 19</b> e o total de leads travados no time caiu de 237 para <b>108</b>, sinal de que a limpeza começou a acontecer. O salto de <b>100 Perdidos e 100 Reciclagem</b> em uma semana que vinha de zero precisa de checagem: é faxina qualificada ou descarte em lote?",
+      "comoAgir": [
+        "Audite lead a lead uma amostra dos <b>100 Perdidos e 100 Reciclagem</b> antes de validar o número como saudável — se for descarte em lote disfarçado, reverta e reclassifique esta semana.",
+        "Reuniões caíram de <b>14 para 2</b> mesmo após você assumir a agenda diretamente na semana passada — isso não é mais problema de delegação, é bloqueio estrutural: mapeie hoje o que está impedindo a marcação (agenda do decisor, qualificação fraca, etapa anterior lenta) e corrija a causa, não só a agenda.",
+        "Geração de leads caiu pela segunda semana seguida (<b>125 → 79</b>): implemente meta diária por executivo com check diário nesta semana, sem esperar o 1:1 semanal — se não reverter, o funil fica vazio em 2-3 semanas.",
+        "Travados caíram de 237 para <b>108</b> — reconheça o avanço, mas mantenha data-limite fixa para os casos mais antigos que restaram e exija evidência de contato/descarte, não promessa de ação."
+      ],
+      "porRep": {
+        "86100505": {
+          "comoAgirIndividual": [
+            "Prioridade zero: lance HOJE os <b>9 fechamentos</b> pendentes (4 dessa semana + 5 da semana passada) no sistema — nenhuma meta bate até isso ser resolvido",
+            "Defina prazo e próxima ação pros <b>7 negócios</b> ainda parados em Conversa com Decisor, sem deixar nenhum pra amanhã",
+            "Reserve 1h ainda essa semana pra zerar os <b>17 SLA</b> estourados restantes — responda ou desqualifique, sem deixar acumular de novo"
+          ]
+        },
+        "86100506": {
+          "comoAgirIndividual": [
+            "Formalize HOJE os <b>6 ganhos</b> no sistema — sem isso seu mês continua zerado e não reflete o trabalho real que você fez",
+            "SLA estourado subiu para <b>17 leads</b>: feche contato ou descarte pelo menos 12 até quarta, esse número não pode continuar crescendo",
+            "Com <b>17 negócios</b> concentrados em Prospecção, defina próximo passo claro pra cada um até quinta, priorizando quem já tem contato feito"
+          ]
+        },
+        "87069181": {
+          "comoAgirIndividual": [
+            "Zere os <b>15 leads com SLA estourado</b> hoje — não há mais margem pra empurrar, é o quarto ciclo nesse mesmo ponto",
+            "Dos <b>10 negócios em Visita</b>, escolha 5 com sinal real de fechamento e registre uma ação concreta em cada até quarta-feira — não repita o prazo que já passou sem resultado",
+            "Feche pelo menos <b>1 negócio</b> esta semana antes de abrir qualquer lead novo — sem isso, os 10 do mês ficam matematicamente inviáveis em agosto"
+          ]
+        },
+        "87569072": {
+          "comoAgirIndividual": [
+            "Triagem imediata dos <b>14 negócios em Prospecção</b> hoje: separe objeção real de falta de follow-up e defina próxima ação para cada um — isso já devia estar feito.",
+            "Zere os <b>18 SLAs estourados</b> antes de abrir qualquer lead novo; esse número aumentou em vez de cair, e é ele que trava todo o funil.",
+            "Marque até quarta pelo menos <b>3 calls ou propostas com data</b> entre os negócios já triados — sem isso o mês fecha igual começou, em 0 de 10."
+          ]
+        },
+        "89842507": {
+          "comoAgirIndividual": [
+            "Pare tudo hoje e escreva, negócio por negócio, o que falta nos <b>9 de Conversa com Decisor</b> (proposta, decisor ou follow-up) com data de próxima ação — isso não saiu do lugar e não é mais opcional.",
+            "Os <b>27 leads com SLA estourado</b> pioraram desde a semana passada: separe em reengajar hoje ou descartar por fit até amanhã, sem exceção — pipeline morto não vira meta.",
+            "Repita o que funcionou: escolha <b>3 negócios</b> dos 30 abertos pra fechar até quinta e coloque na meta de agosto — você já provou que sabe converter, falta direcionar isso pro mês certo."
+          ]
+        },
+        "91477292": {
+          "comoAgirIndividual": [
+            "Trate os <b>3 SLAs estourados</b> hoje antes de tocar em qualquer negócio novo — não deixe reabrir o acúmulo que você acabou de zerar",
+            "Dos <b>5 negócios em Conversa com Decisor</b>, defina prazo de resposta para cada um esta semana: quem não decidir até sexta, você avança pra proposta ou marca como perdido",
+            "Com 2 de 10 fechados e a semana acabando, escolha 3 negócios do funil atual com decisor já engajado e trabalhe fechamento diário até quinta — não dá mais pra distribuir esforço igual entre os 9"
+          ]
+        },
+        "94079973": {
+          "comoAgirIndividual": [
+            "Hoje, antes de qualquer outra tarefa: zere os <b>11 SLAs</b> com pelo menos um contato de reposicionamento em cada lead — isso já devia ter sido feito na semana passada",
+            "Abra os <b>9 negócios de Prospecção</b> e escreva o motivo real do travamento de cada um — sem isso você continua tomando decisão no achismo",
+            "Escolha os <b>2 deals mais avançados</b> do seu funil e trave data de fechamento até sexta — você está zerado no mês e cada semana sem esse movimento aumenta a distância da meta de 10"
+          ]
+        }
+      }
+    }
+  ]
+}

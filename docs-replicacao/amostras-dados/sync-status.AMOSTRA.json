@@ -1,0 +1,30 @@
+{
+  "ultimaExecucao": "2026-08-14T08:02:13.879Z",
+  "totalExecutivos": 7,
+  "falhas": [
+    {
+      "ownerId": "86100506",
+      "nome": "Executivo Exemplo 1",
+      "data": "2026-08-14",
+      "etapa": "verificação pós-escrita",
+      "erro": "linha não encontrada depois de gravar",
+      "em": "2026-08-14T08:00:56.087Z"
+    },
+    {
+      "ownerId": "86100506",
+      "nome": "Executivo Exemplo 1",
+      "data": "2026-08-13",
+      "etapa": "verificação pós-escrita",
+      "erro": "banco tem {\"realizado_visitas\":0,\"realizado_avancos\":0,\"realizado_propostas\":0,\"realizado_fechamentos\":0}, devia ter {\"realizado_visitas\":0,\"realizado_avancos\":1,\"realizado_propostas\":0,\"realizado_fechamentos\":0}",
+      "em": "2026-08-14T08:00:57.768Z"
+    },
+    {
+      "ownerId": "87569072",
+      "nome": "Executivo Exemplo 2",
+      "data": "2026-08-14",
+      "etapa": "verificação pós-escrita",
+      "erro": "linha não encontrada depois de gravar",
+      "em": "2026-08-14T08:01:01.165Z"
+    }
+  ]
+}

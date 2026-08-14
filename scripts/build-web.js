@@ -20,6 +20,31 @@ execSync('npx expo export --platform web --output-dir dist --clear', {
   stdio: 'inherit',
 });
 
+// ---- Cockpit de gestao (front separado, mesmo dominio) ----
+//
+// Sao dois front-ends com bundlers diferentes de proposito: o app de campo e'
+// react-native-web (o codigo de tela e' React Native) e sai pelo Metro; o
+// cockpit e' React DOM denso, de mesa, e sai pelo Vite — que e' o bundler que
+// o design system da Takeat espera (a dependencia @vanilla-extract/vite-plugin
+// nao deixa duvida). Medido: o mesmo componente do kit custa 394 KB no Vite
+// contra 2.512 KB quando forcado pelo Metro.
+//
+// O build do cockpit vai pra dist/gestao/ e passa a ser servido no mesmo
+// dominio, sob /gestao — e' isso que faz a sessao do Supabase ser
+// compartilhada entre os dois sem nenhuma linha de sincronia.
+const gestao = path.join(root, 'gestao');
+if (fs.existsSync(gestao)) {
+  console.log('\n> vite build (cockpit de gestao)');
+  if (!fs.existsSync(path.join(gestao, 'node_modules'))) {
+    execSync('npm install --legacy-peer-deps', { cwd: gestao, stdio: 'inherit' });
+  }
+  execSync('npm run build', { cwd: gestao, stdio: 'inherit' });
+
+  const destino = path.join(distDir, 'gestao');
+  fs.cpSync(path.join(gestao, 'dist'), destino, { recursive: true });
+  console.log('> cockpit copiado pra dist/gestao/');
+}
+
 /** Lista recursiva de arquivos, com caminho relativo a `dir`. */
 function walk(dir, base = dir) {
   const out = [];

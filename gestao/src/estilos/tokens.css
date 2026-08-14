@@ -1,0 +1,91 @@
+/*
+  Tokens do cockpit — de docs-replicacao/07-DESIGN-SYSTEM.md.
+
+  Uma divergencia deliberada: o documento traz --red:#E51A31, mas a paleta da
+  marca (a mesma ja' aplicada no PWA de campo) usa #C8131B. Como os dois
+  produtos vivem no mesmo dominio e o vendedor alterna entre eles, dois
+  vermelhos diferentes leriam como bug. Fica o da marca.
+
+  As correcoes de contraste do documento foram mantidas: --amber-ink existe
+  porque o par ambar padrao sobre --amber-soft da' 3.37:1, abaixo do AA.
+*/
+:root {
+  /* Superficies */
+  --bg: #efe9dc;
+  --panel: #fdfbf0;
+  --panel2: #fbf6ec;
+  --sunk: #f3ede0;
+
+  /* Texto */
+  --ink: #1a1613;
+  --muted: #6e6558;
+  --muted2: #736857;
+  --ter: #a2937a;
+
+  /* Linhas */
+  --line: #e4dbc6;
+  --line-soft: #f0e9d8;
+  --line-btn: #d8cfba;
+
+  /* Marca e estado */
+  --red: #c8131b;
+  --red-dk: #a50f16;
+  --red-soft: #fbeef0;
+  --green: #1e7a63;
+  --green-soft: #e9f4ef;
+  --amber: #b0782a;
+  --amber-soft: #fbf1df;
+  --amber-ink: #8a5d1f;
+
+  /* Bloco escuro — um por tela, so' o banner (regra 4 do doc) */
+  --dark: #1a1613;
+  --dark-ink: #fffdf8;
+  --dark-mut: #9c9284;
+
+  --sombra-card: 0 1px 2px rgba(26, 22, 19, 0.04), 0 4px 12px rgba(26, 22, 19, 0.04);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* O cockpit e' ferramenta de mesa: densidade alta, largura util grande.
+   Abaixo de 900px ele avisa que o lugar certo e' o app de campo. */
+.envoltorio {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 20px 24px 64px;
+}
+
+.cartao {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--sombra-card);
+  padding: 16px 18px;
+}
+
+.titulo-secao {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 12px;
+}

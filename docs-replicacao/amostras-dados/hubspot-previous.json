@@ -1,0 +1,14 @@
+{
+  "updatedAt": "2026-08-13T21:08:46.029Z",
+  "kpis": {
+    "leadsCriados": 68,
+    "ganhos": 7,
+    "perdidos": 66,
+    "emAberto": 147,
+    "emReciclagem": 301,
+    "leadsTravados": 43,
+    "fechadosNoMes": 21,
+    "metaMensalFechados": 80,
+    "taxaAvanco": 70
+  }
+}

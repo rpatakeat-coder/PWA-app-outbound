@@ -1,0 +1,30 @@
+{
+  "_comment": "Mapeia o e-mail de login (mesmo do CRM) pro executivo correspondente. role:manager vê tudo; role:rep vê só o próprio cockpit. ownerId é o owner id do CRM.",
+  "usuarios": [
+    {
+      "email": "gestor@empresa.com",
+      "role": "manager",
+      "ownerId": null,
+      "nome": "Gestor Exemplo"
+    },
+    {
+      "email": "exec1@empresa.com",
+      "role": "rep",
+      "ownerId": "11111111",
+      "nome": "Executivo Um"
+    },
+    {
+      "email": "exec2@empresa.com",
+      "role": "rep",
+      "ownerId": "22222222",
+      "nome": "Executivo Dois"
+    },
+    {
+      "email": "novo@empresa.com",
+      "role": "rep",
+      "ownerId": "pendente_novo",
+      "nome": "Executivo Novo",
+      "aComecar": true
+    }
+  ]
+}

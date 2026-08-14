@@ -1,0 +1,57 @@
+{
+  "pracas": [
+    {
+      "nome": "Vila Velha/ES",
+      "responsaveis": [
+        "Executivo Exemplo 1"
+      ],
+      "leads": [
+        {
+          "nome": "Restaurante Exemplo 34",
+          "tipo": "Restaurante/Tecnologia de pedido",
+          "bairro": null,
+          "nota": 4.8,
+          "avaliacoes": 6279,
+          "motivo": "Volume altíssimo de avaliações, já opera com tablet/tecnologia de pedido — bom fit de maturidade digital.",
+          "responsavel": "Executivo Exemplo",
+          "telefone": null,
+          "endereco": null,
+          "name": "Restaurante Exemplo 34",
+          "cep": null,
+          "logradouro": null,
+          "numero": null
+        },
+        {
+          "nome": "Restaurante Exemplo 35",
+          "tipo": "Steakhouse/Churrascaria",
+          "bairro": null,
+          "nota": 4.9,
+          "avaliacoes": 2930,
+          "motivo": "Nota altíssima com volume grande — casa de carnes consolidada, ticket alto.",
+          "responsavel": "Executivo Exemplo",
+          "telefone": null,
+          "endereco": null,
+          "name": "Restaurante Exemplo 35",
+          "cep": null,
+          "logradouro": null,
+          "numero": null
+        },
+        {
+          "nome": "Restaurante Exemplo 36",
+          "tipo": "Italiano/Pizzaria",
+          "bairro": null,
+          "nota": 4.6,
+          "avaliacoes": 2638,
+          "motivo": "Casa popular em frente à praia, fila constante — cardápio digital ajudaria a girar mesa.",
+          "responsavel": "Executivo Exemplo",
+          "telefone": null,
+          "endereco": null,
+          "name": "Restaurante Exemplo 36",
+          "cep": null,
+          "logradouro": null,
+          "numero": null
+        }
+      ]
+    }
+  ]
+}

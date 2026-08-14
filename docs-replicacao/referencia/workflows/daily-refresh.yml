@@ -1,0 +1,133 @@
+name: Atualizar cockpit diariamente
+
+on:
+  schedule:
+    # Três rodadas por dia (a 3ª é pedido do Julyan, 13/08 — reduzir a janela entre uma
+    # visita acontecer e aparecer certa na Daily):
+    #
+    # 1) 23:59 em Brasília (02:59 UTC do dia seguinte) — FECHA O DIA. A essa hora o
+    #    expediente já acabou; captura o realizado (visitas/avanços/propostas/
+    #    fechamentos) quase completo e já deixa o gargalo do dia gerado pela IA.
+    - cron: '59 2 * * *'
+    # 2) 08:59 em Brasília (11:59 UTC) — 1 min antes da Daily das 9h. Refresca tudo de
+    #    novo bem em cima da hora, pra qualquer HubSpot atualizado de madrugada/cedo já
+    #    entrar na Daily. fetch-hubspot.js grava "hoje" E "ontem" a cada execução — essa
+    #    rodada também refecha o dia anterior, como segurança caso a das 23:59 falhe.
+    - cron: '59 11 * * *'
+    # 3) 15:00 em Brasília (18:00 UTC), dias úteis — meio da tarde, quando a maior parte
+    #    das visitas da manhã já foi registrada mas ainda dá tempo de agir no resto do
+    #    dia. Só de segunda a sexta (sem sentido rodar fim de semana, ninguém em campo).
+    - cron: '0 18 * * 1-5'
+  workflow_dispatch: {} # permite rodar manualmente pelo botão "Run workflow" no GitHub
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Buscar dados frescos do HubSpot
+        env:
+          HUBSPOT_TOKEN: ${{ secrets.HUBSPOT_TOKEN }}
+          # Também grava o snapshot do dia (realizado_visitas etc.) na tabela dailies —
+          # sem essas duas variáveis o snapshot é pulado em silêncio e o histórico
+          # da Daily volta a depender de alguém abrir a tela antes da meia-noite.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/fetch-hubspot.js
+
+      - name: Gerar diagnóstico de gargalo do dia (IA — só o texto, nunca mexe em compromissos de PDI)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: node scripts/generate-daily-gargalo.js
+
+      - name: Atualizar análise de coaching por executivo (IA — todo dia, análise da semana corrente)
+        # É idempotente: apaga e regrava a análise da semana corrente (owner+semana),
+        # então rodar diariamente não duplica nada. O workflow de sexta continua
+        # existindo à parte (fecha a semana às 16h e cuida do mensal).
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/generate-individual-analysis.js
+
+      - name: Atualizar números de ganhos/ranking/reuniões (sem gerar texto de IA)
+        env:
+          HUBSPOT_TOKEN: ${{ secrets.HUBSPOT_TOKEN }}
+        run: node scripts/fetch-weekly-comparison.js
+
+      - name: Atualizar lista de clientes Takeat ativos (pra sugestão de microrrota)
+        env:
+          HUBSPOT_TOKEN: ${{ secrets.HUBSPOT_TOKEN }}
+        run: node scripts/fetch-clientes-ativos.js
+
+      # Enche o cache de estabelecimentos OSM das praças fixas de cada executivo, pra que
+      # de dia a Rota & Agenda responda em ~500ms em vez dos 62s medidos na 1ª consulta ao
+      # vivo. Âncora com cache fresco (< 21 dias) é pulado sem gastar consulta, então esta
+      # etapa é praticamente gratuita na rodada das 08:59 e serve de 2ª tentativa pra
+      # qualquer praça que tenha falhado às 23:59.
+      #
+      # continue-on-error: a Overpass é um serviço público mantido por voluntários e cai
+      # sozinha às vezes. Se cair, o executivo só volta a esperar alguns segundos na
+      # primeira consulta — não é motivo pra deixar o cockpit inteiro sem atualizar.
+      - name: Pré-aquecer cache de estabelecimentos OSM das praças de campo
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/prewarm-osm.js
+
+      - name: Gerar HTML final
+        run: node scripts/build.js
+
+      - name: Commitar e enviar alterações (se houver)
+        run: |
+          git config user.name "cockpit-bot"
+          git config user.email "cockpit-bot@users.noreply.github.com"
+          git add data/hubspot.json data/hubspot-previous.json data/weekly-raw.json data/narrativas.json data/clientes-ativos.json data/sync-status.json public/index.html
+          git diff --staged --quiet && echo "Nada mudou hoje." && exit 0
+
+          git commit -m "Atualização automática do cockpit ($(date -u +'%H:%M UTC'))"
+
+          # O checkout deste job foi feito no início do workflow — se alguém commitou
+          # direto no main enquanto o robô rodava (ex.: colando um arquivo no editor do
+          # GitHub), o push simples é rejeitado por não ser mais fast-forward. Busca o
+          # que mudou e reaplica o commit do robô por cima antes de tentar de novo, em
+          # vez de deixar a atualização do dia se perder.
+          for tentativa in 1 2 3; do
+            if git push; then
+              echo "Push OK."
+              exit 0
+            fi
+            echo "Push rejeitado (tentativa $tentativa) — buscando o main mais recente e tentando de novo..."
+            git fetch origin main
+            git rebase origin/main
+          done
+
+          echo "Não consegui enviar mesmo após 3 tentativas — verifique manualmente."
+          exit 1
+
+      # Se qualquer passo acima falhar (token expirado, HubSpot mudou algo, etc.),
+      # abre um Issue visível no repositório — assim dá pra perceber sem precisar
+      # entrar no site todo dia pra conferir se a data bateu.
+      - name: Avisar sobre falha (abre Issue)
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `⚠️ Falha na atualização diária do cockpit — ${new Date().toISOString().slice(0,10)}`,
+              body: `A atualização automática do cockpit falhou.\n\nVeja o log completo aqui: ${context.payload.repository.html_url}/actions/runs/${context.runId}\n\nCausas comuns: token do HubSpot expirado/revogado, mudança de escopo na API, ou limite de requisições.`
+            });
