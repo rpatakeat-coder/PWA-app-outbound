@@ -1,6 +1,7 @@
 import { registerRootComponent } from 'expo';
 
 import App from './App';
+import { BarreiraDeErro } from './src/components/BarreiraDeErro';
 import { initTheme } from './src/theme';
 import { registerServiceWorker } from './src/utils/updates';
 
@@ -9,8 +10,20 @@ import { registerServiceWorker } from './src/utils/updates';
 // render, a tela abriria clara e piscaria pra escura.
 initTheme();
 
-// registerRootComponent monta o App no #root do public/index.html.
-registerRootComponent(App);
+// Erro de renderizacao NAO pode virar tela preta.
+//
+// Sem barreira, o React desmonta a arvore inteira e sobra o `body`, que no tema
+// escuro e' quase preto. Foi exatamente o que aconteceu em 14/08/2026 e custou
+// uma investigacao inteira, porque o vendedor em campo nao tinha o que
+// reportar. Ver src/components/BarreiraDeErro.tsx.
+const AppProtegido = () => (
+  <BarreiraDeErro>
+    <App />
+  </BarreiraDeErro>
+);
+
+// registerRootComponent monta no #root do public/index.html.
+registerRootComponent(AppProtegido);
 
 // Service worker: entrega de versao nova (no lugar do OTA do expo-updates) e
 // casca offline. Registrado depois do mount pra nao competir com o primeiro

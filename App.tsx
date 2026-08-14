@@ -5971,7 +5971,6 @@ function ClientBottomSheet({
     const label = (dt: Date) => dt.toLocaleDateString('pt-BR');
     const haQuanto = (dias: number) =>
       dias <= 0 ? 'hoje' : dias === 1 ? 'ontem' : `há ${dias} dias`;
-      const iconColors = useIconColors();
 
     const comanda = parseDia(client.hs_ultima_comanda_em);
     const dias = comanda ? diasAte(comanda) : null;
