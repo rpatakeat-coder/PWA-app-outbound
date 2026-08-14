@@ -24,7 +24,6 @@ import {
 } from 'react-native';
 import { Alert, AlertHost } from './src/components/Alert';
 import { useTheme } from './src/theme';
-import { HAS_DARK_MAP } from './src/map';
 import {
   IconBarGraph,
   IconCalendar,
@@ -4888,8 +4887,8 @@ function MainApp() {
                 <View style={styles.adminDivider} />
                 <Text style={styles.adminSectionTitle}>Aparência</Text>
                 <Text style={styles.passwordModalHint}>
-                  "Automático" acompanha o ajuste do seu celular.
-                  {!HAS_DARK_MAP && ' O mapa segue claro até o Map ID escuro ser configurado.'}
+                  "Automático" acompanha o ajuste do seu celular. O mapa acompanha
+                  o tema junto com o resto do app.
                 </Text>
                 <View style={styles.themeRow}>
                   {([

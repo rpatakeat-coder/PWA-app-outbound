@@ -34,20 +34,14 @@ const API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 // valido — NENHUM pin aparecia.
 const MAP_ID = process.env.EXPO_PUBLIC_GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID';
 
-// Map ID de estilo escuro, pro modo noturno. O mapa nao obedece a CSS — o
-// estilo vem do Google —, entao a unica forma de escurece-lo e' um segundo
-// Map ID com estilo escuro criado no console. Sem ele configurado, o modo
-// escuro usa o mapa claro (funciona, so' destoa).
-const MAP_ID_DARK = process.env.EXPO_PUBLIC_GOOGLE_MAPS_MAP_ID_DARK || '';
-
 export const GOOGLE_MAP_ID = MAP_ID;
-export const GOOGLE_MAP_ID_DARK = MAP_ID_DARK;
-export const HAS_DARK_MAP = MAP_ID_DARK.length > 0;
 
-/** Map ID a usar no tema atual. Cai no claro quando nao ha versao escura. */
-export function mapIdParaTema(escuro: boolean): string {
-  return escuro && MAP_ID_DARK ? MAP_ID_DARK : MAP_ID;
-}
+// O mapa escuro NAO precisa de um segundo Map ID: na estilizacao em nuvem
+// atual, o MESMO Map ID carrega as duas variantes ("Modo claro" e "Modo
+// escuro" na tela do Map ID, no console), e quem escolhe entre elas e' a
+// opcao `colorScheme` do mapa. Verificado no mapa real: o mesmo ID renderiza
+// claro com LIGHT e escuro com DARK.
+export type ColorScheme = 'LIGHT' | 'DARK';
 
 /** true quando o Map ID e' o de demonstracao, ou seja: nao configurado. */
 export const USING_DEMO_MAP_ID = MAP_ID === 'DEMO_MAP_ID';

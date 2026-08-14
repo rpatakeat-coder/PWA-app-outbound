@@ -18,7 +18,7 @@ import { ActivityIndicator, StyleSheet, Text, View, type LayoutChangeEvent } fro
 import { MarkerClusterer, SuperClusterAlgorithm, type Renderer } from '@googlemaps/markerclusterer';
 
 import { MapChildContext, type MapChildContextValue } from './context';
-import { USING_DEMO_MAP_ID, loadGoogleMaps, mapIdParaTema, onGoogleAuthFailure } from './loader';
+import { GOOGLE_MAP_ID, USING_DEMO_MAP_ID, loadGoogleMaps, onGoogleAuthFailure } from './loader';
 import { useTheme } from '../theme';
 import {
   boundsForCoordinates,
@@ -218,7 +218,11 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
         const map = new maps.Map(containerRef.current, {
           center,
           zoom,
-          mapId: mapIdParaTema(isDark),
+          mapId: GOOGLE_MAP_ID,
+          // Seleciona a variante clara/escura do estilo publicado nesse Map ID.
+          // Precisa vir na construcao — nao ha setter depois; por isso o
+          // efeito inteiro depende de `isDark`.
+          colorScheme: isDark ? 'DARK' : 'LIGHT',
           // UI propria do app: os controles padrao da Google brigariam com os
           // botoes flutuantes (centralizar, calor, rota) desenhados por cima.
           disableDefaultUI: true,

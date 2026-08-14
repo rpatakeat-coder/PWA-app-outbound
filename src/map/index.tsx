@@ -21,7 +21,7 @@ export type { PolylineProps } from './Polyline';
 export type { CircleProps } from './Circle';
 export type { Region, LatLng } from './geo';
 
-export { hasApiKey, GOOGLE_MAP_ID, HAS_DARK_MAP } from './loader';
+export { hasApiKey, GOOGLE_MAP_ID } from './loader';
 
 // Na web so existe um provedor — a propria Google JS API. As constantes
 // continuam exportadas porque EditLocationModal passa PROVIDER_DEFAULT; sao
