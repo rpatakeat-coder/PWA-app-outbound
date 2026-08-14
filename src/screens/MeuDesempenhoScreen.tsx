@@ -73,7 +73,7 @@ function LeadsModal({
             keyExtractor={(item, i) => `${item.client_id}-${i}`}
             contentContainerStyle={{ paddingBottom: 24 }}
             ListEmptyComponent={q.isLoading
-              ? <View style={{ paddingVertical: 30, alignItems: 'center' }}><ActivityIndicator color="#C8131B" /></View>
+              ? <View style={{ paddingVertical: 30, alignItems: 'center' }}><ActivityIndicator color="var(--brand-text)" /></View>
               : <Text style={styles.modalEmpty}>Nenhum lead nesse recorte.</Text>}
             renderItem={({ item }) => {
               const when = formatLeadDate(item.at);
@@ -148,7 +148,7 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
       </View>
 
       {query.isLoading ? (
-        <View style={styles.loadingBlock}><ActivityIndicator size="large" color="#C8131B" /><Text style={styles.loadingText}>Carregando...</Text></View>
+        <View style={styles.loadingBlock}><ActivityIndicator size="large" color="var(--brand-text)" /><Text style={styles.loadingText}>Carregando...</Text></View>
       ) : query.isError ? (
         <View style={styles.loadingBlock}>
           <Text style={styles.errorText}>Erro ao carregar suas métricas.</Text>
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   statusChipText: { fontSize: 11, color: 'var(--text-muted)', fontWeight: '600' },
   loadingBlock: { paddingVertical: 60, alignItems: 'center', gap: 12 },
   loadingText: { color: 'var(--text-muted)', fontSize: 13 },
-  errorText: { color: '#C8131B', fontSize: 15, fontWeight: '700' },
+  errorText: { color: 'var(--brand-text)', fontSize: 15, fontWeight: '700' },
   retry: { marginTop: 12, backgroundColor: '#222222', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
   retryText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   footerHint: { marginTop: 20, textAlign: 'center', fontSize: 11, color: 'var(--text-subtle)', fontStyle: 'italic' },

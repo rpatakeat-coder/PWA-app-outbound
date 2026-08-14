@@ -118,7 +118,7 @@ export function EditLocationModal({ client, onSave, onClose }: Props) {
 
           <Text style={styles.hint}>
             Mova o mapa até o local certo — o{' '}
-            <Text style={{ color: '#C8131B', fontWeight: '800' }}>pino central</Text> marca a nova
+            <Text style={{ color: 'var(--brand-text)', fontWeight: '800' }}>pino central</Text> marca a nova
             posição. O pino <Text style={{ color: 'var(--text-muted)', fontWeight: '800' }}>cinza</Text> mostra
             onde está hoje.
           </Text>
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     marginTop: 10, marginBottom: 4, gap: 8,
   },
   infoText: { flex: 1, fontSize: 12, color: 'var(--text-muted)', fontWeight: '600' },
-  resetLink: { fontSize: 12, color: '#2563eb', fontWeight: '700' },
+  resetLink: { fontSize: 12, color: 'var(--info-text)', fontWeight: '700' },
   saveBtn: {
     backgroundColor: '#C8131B', borderRadius: 12, paddingVertical: 14,
     alignItems: 'center', marginTop: 10,

@@ -63,7 +63,7 @@ export function SellerClassificationCard() {
             </TouchableOpacity>
           )}
           {isLoading ? (
-            <ActivityIndicator color="#C8131B" style={{ marginVertical: 12 }} />
+            <ActivityIndicator color="var(--brand-text)" style={{ marginVertical: 12 }} />
           ) : (
             <>
               {visible.map((u) => {
@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: 'var(--surface)', borderRadius: 14, borderWidth: 1, borderColor: 'var(--tint-red-border)', padding: 14, marginBottom: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 15, fontWeight: '800', color: 'var(--tint-red-text)' },
-  chevron: { fontSize: 12, color: '#C8131B', fontWeight: '800' },
+  chevron: { fontSize: 12, color: 'var(--brand-text)', fontWeight: '800' },
   hint: { fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 },
   toggle: { alignSelf: 'flex-start', backgroundColor: 'var(--surface-2)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 10 },
   toggleActive: { backgroundColor: 'var(--tint-red)' },

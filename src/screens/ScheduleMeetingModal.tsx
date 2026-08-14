@@ -679,7 +679,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
   },
-  meetingDeleteText: { fontSize: 12, fontWeight: '700', color: '#C8131B' },
+  meetingDeleteText: { fontSize: 12, fontWeight: '700', color: 'var(--brand-text)' },
 });
 
 const calStyles = StyleSheet.create({

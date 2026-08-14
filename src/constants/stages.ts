@@ -226,7 +226,7 @@ export const STAGES: Stage[] = [
     id: '1395880470',
     // Renomeada no HubSpot em 2026-07 (era "Diagnóstico"; mesmo id).
     label: 'Conversa com decisor',
-    color: '#8b5cf6',
+    color: 'var(--violet-text)',
     subFields: [
       {
         field: 'gargalo_operacional',
@@ -259,7 +259,7 @@ export const STAGES: Stage[] = [
   {
     id: '1396006164',
     label: 'Perdido',
-    color: '#E03A41',
+    color: 'var(--brand-text)',
     subFields: [
       {
         field: 'motivo_do_perdido',

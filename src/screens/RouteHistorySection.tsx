@@ -48,7 +48,7 @@ const fmtTime = (iso: string) => {
 // Detalhe por dia de UM vendedor (rota planejada + check-ins).
 function SellerDetail({ sellerId, range, enabled }: { sellerId: string; range: Props['range']; enabled: boolean }) {
   const history = useRouteHistory(sellerId, range, enabled);
-  if (history.isLoading) return <ActivityIndicator color="#C8131B" style={{ marginVertical: 12 }} />;
+  if (history.isLoading) return <ActivityIndicator color="var(--brand-text)" style={{ marginVertical: 12 }} />;
   const days = history.data?.days ?? [];
   if (days.length === 0) return <Text style={styles.empty}>Sem rotas nem check-ins no período.</Text>;
   return (
@@ -231,7 +231,7 @@ export function RouteHistorySection({ range, enabled }: Props) {
           )}
 
           {loadingSellers ? (
-            <ActivityIndicator color="#C8131B" style={{ marginVertical: 10 }} />
+            <ActivityIndicator color="var(--brand-text)" style={{ marginVertical: 10 }} />
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
               {visibleSellers.map((s) => {
@@ -254,7 +254,7 @@ export function RouteHistorySection({ range, enabled }: Props) {
           {selected.size === 0 ? (
             <Text style={styles.empty}>Selecione um ou mais vendedores (ou "Todos") pra ver o ranking.</Text>
           ) : ranking.isLoading ? (
-            <ActivityIndicator color="#C8131B" style={{ marginVertical: 14 }} />
+            <ActivityIndicator color="var(--brand-text)" style={{ marginVertical: 14 }} />
           ) : (
             <View style={{ marginTop: 8 }}>
               <View style={styles.rankHeader}>
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
   chevron: { fontSize: 12, color: 'var(--text-muted)', fontWeight: '800' },
   filterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   hint: { fontSize: 12, color: 'var(--text-muted)', flex: 1 },
-  filterAction: { fontSize: 12, fontWeight: '800', color: '#C8131B' },
+  filterAction: { fontSize: 12, fontWeight: '800', color: 'var(--brand-text)' },
   hideToggle: { alignSelf: 'flex-start', backgroundColor: 'var(--surface-2)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 8 },
   hideToggleActive: { backgroundColor: 'var(--tint-red)' },
   hideToggleText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)' },
@@ -347,12 +347,12 @@ const styles = StyleSheet.create({
   exportBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   rankRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
   rankRowOpen: { backgroundColor: 'var(--tint-red)' },
-  rankPos: { fontSize: 13, fontWeight: '800', color: '#C8131B', width: 28 },
+  rankPos: { fontSize: 13, fontWeight: '800', color: 'var(--brand-text)', width: 28 },
   rankName: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   rankMeta: { fontSize: 11, color: 'var(--text-muted)', marginTop: 1 },
   rankPct: { fontSize: 16, fontWeight: '800' },
   dayCard: { borderTopWidth: 1, borderTopColor: 'var(--border-soft)', paddingTop: 10, marginTop: 10, marginLeft: 8 },
-  dayTitle: { fontSize: 14, fontWeight: '800', color: '#C8131B', marginBottom: 6 },
+  dayTitle: { fontSize: 14, fontWeight: '800', color: 'var(--brand-text)', marginBottom: 6 },
   block: { marginBottom: 8 },
   blockTitle: { fontSize: 12, fontWeight: '800', color: 'var(--text)', marginBottom: 3 },
   blockMuted: { fontSize: 12, color: 'var(--text-subtle)', marginBottom: 6 },

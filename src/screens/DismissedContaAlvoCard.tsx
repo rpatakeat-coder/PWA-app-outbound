@@ -97,7 +97,7 @@ export function DismissedContaAlvoCard() {
       {open && (
         <View style={{ marginTop: 8 }}>
           {isLoading ? (
-            <ActivityIndicator color="#C8131B" style={{ marginVertical: 12 }} />
+            <ActivityIndicator color="var(--brand-text)" style={{ marginVertical: 12 }} />
           ) : data.length === 0 ? (
             <Text style={styles.empty}>Nenhuma conta-alvo dispensada.</Text>
           ) : (
@@ -187,5 +187,5 @@ const styles = StyleSheet.create({
   name: { fontSize: 13, fontWeight: '700', color: 'var(--text)' },
   meta: { fontSize: 11, color: 'var(--text-muted)', marginTop: 1 },
   restoreBtn: { backgroundColor: 'var(--surface-2)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
-  restoreText: { fontSize: 12, fontWeight: '800', color: '#C8131B' },
+  restoreText: { fontSize: 12, fontWeight: '800', color: 'var(--brand-text)' },
 });

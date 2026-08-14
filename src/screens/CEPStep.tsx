@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     fontSize: 15,
-    color: '#C8131B',
+    color: 'var(--brand-text)',
     fontWeight: '600',
   },
   title: {

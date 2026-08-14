@@ -198,7 +198,7 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
   { value: 'lead', label: 'Lead', color: '#3b82f6' },
   { value: 'ativo', label: 'Cliente Ativo', color: '#22c55e' },
   { value: 'em_integracao', label: 'Em Integração', color: '#f97316' },
-  { value: 'ex_cliente', label: 'Ex-cliente', color: '#E03A41' },
+  { value: 'ex_cliente', label: 'Ex-cliente', color: 'var(--brand-text)' },
 ];
 
 type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'tasks' | 'gestor' | 'meu';
@@ -225,7 +225,7 @@ const TASK_RULES: TaskRuleDoc[] = [
     trigger: 'Lead na etapa Conversa com decisor sem uma reunião (demo) futura agendada.',
     levels: [
       { badge: 'D2', color: '#FFB32F', when: 'a partir de 2 dias úteis na etapa' },
-      { badge: 'D5', color: '#C8131B', when: 'a partir de 5 dias úteis na etapa (a mesma tarefa escala de D2 para D5)' },
+      { badge: 'D5', color: 'var(--brand-text)', when: 'a partir de 5 dias úteis na etapa (a mesma tarefa escala de D2 para D5)' },
     ],
     suppress:
       'Se o lead tiver uma reunião do tipo "reunião" (não follow-up) com data futura e status "agendada", a tarefa não é criada.',
@@ -239,7 +239,7 @@ const TASK_RULES: TaskRuleDoc[] = [
     title: 'SLA por etapa (prazo no funil)',
     trigger: 'Lead parado numa etapa do funil por mais dias que o SLA daquela etapa, sem avançar.',
     levels: [
-      { badge: 'Xd', color: '#2563eb', when: 'o número no badge = dias que o lead está parado na etapa' },
+      { badge: 'Xd', color: 'var(--info-text)', when: 'o número no badge = dias que o lead está parado na etapa' },
     ],
     suppress:
       'Cada etapa tem um prazo (SLA) próprio configurável. Prazos iniciais: Prospecção 3d (Qualificar), Demo/Proposta 3d (Enviar proposta), Negociação 5d (Fechar), Aguardando Pagamento 3d (Confirmar pagamento).',
@@ -2774,7 +2774,7 @@ function MainApp() {
             </Text>
             <Text style={[
               styles.dropdownChevron,
-              routeVendorFilterHubspotId === myHubspotId && { color: '#C8131B' },
+              routeVendorFilterHubspotId === myHubspotId && { color: 'var(--brand-text)' },
             ]}>{routeVendorFilterHubspotId === myHubspotId ? '✓' : '○'}</Text>
           </TouchableOpacity>
         )}
@@ -2925,7 +2925,7 @@ function MainApp() {
                   );
                 }}
               >
-                <Text style={[styles.secondaryButtonText, { color: '#C8131B' }]}>Limpar</Text>
+                <Text style={[styles.secondaryButtonText, { color: 'var(--brand-text)' }]}>Limpar</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -3396,7 +3396,7 @@ function MainApp() {
                           onPress={() => confirmCancelMeeting(item.meeting)}
                           hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                         >
-                          <Text style={[styles.agendaLink, { color: '#C8131B' }]}>Cancelar</Text>
+                          <Text style={[styles.agendaLink, { color: 'var(--brand-text)' }]}>Cancelar</Text>
                         </TouchableOpacity>
                       </View>
                     )}
@@ -3674,7 +3674,7 @@ function MainApp() {
     return (
       <View style={styles.centered}>
         <Image source={require('./assets/icon.png')} style={{ width: 72, height: 72, marginBottom: 16, tintColor: '#C8131B', resizeMode: 'contain' }} />
-        <ActivityIndicator size="large" color="#C8131B" />
+        <ActivityIndicator size="large" color="var(--brand-text)" />
         <Text style={styles.loadingText}>{waitingForLocation ? 'Localizando você...' : 'Carregando...'}</Text>
         {waitingForLocation && (
           <TouchableOpacity
@@ -5210,7 +5210,7 @@ function MainApp() {
                     </Text>
                     <Text style={[
                       styles.dropdownChevron,
-                      vendorFilterHubspotId === myHubspotId && { color: '#C8131B' },
+                      vendorFilterHubspotId === myHubspotId && { color: 'var(--brand-text)' },
                     ]}>{vendorFilterHubspotId === myHubspotId ? '✓' : '○'}</Text>
                   </TouchableOpacity>
                 )}
@@ -5317,7 +5317,7 @@ function MainApp() {
                           </View>
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#C8131B', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: 'var(--brand-text)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>
                             Nao visitados
                           </Text>
                           <View style={{ gap: 6 }}>
@@ -5555,7 +5555,7 @@ function MainApp() {
                   })}
               </View>
               {editingClient && (editingClient.status === 'cliente' || editingClient.status === 'churn') && (
-                <Text style={{ fontSize: 12, color: '#C8131B', marginTop: -4, marginBottom: 6 }}>
+                <Text style={{ fontSize: 12, color: 'var(--brand-text)', marginTop: -4, marginBottom: 6 }}>
                   Cliente atual / ex-cliente nao pode voltar pra "lead".
                 </Text>
               )}
@@ -6504,7 +6504,7 @@ function ClientBottomSheet({
                               }}
                               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                             >
-                              <Text style={[styles.noteAction, { color: '#C8131B' }]}>Apagar</Text>
+                              <Text style={[styles.noteAction, { color: 'var(--brand-text)' }]}>Apagar</Text>
                             </TouchableOpacity>
                           </View>
                         )}
@@ -6901,7 +6901,7 @@ const navStyles = StyleSheet.create({
   bottomCardSubtitle: { color: 'var(--text-muted)', fontSize: 13, marginTop: 1 },
   bottomCardMetaRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
   bottomCardMeta: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
-  bottomCardWarning: { fontSize: 12, color: '#C8131B', fontWeight: '700', marginTop: 6 },
+  bottomCardWarning: { fontSize: 12, color: 'var(--brand-text)', fontWeight: '700', marginTop: 6 },
   bottomCardActions: { gap: 8 },
   bottomCardButton: { paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   bottomCardButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
@@ -7035,7 +7035,7 @@ const styles = StyleSheet.create({
   },
   manualRowTitle: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   manualRowSubtitle: { fontSize: 12, color: 'var(--text-muted)', marginTop: 1 },
-  manualRowWarning: { fontSize: 11, color: '#C8131B', fontWeight: '600', marginTop: 2 },
+  manualRowWarning: { fontSize: 11, color: 'var(--brand-text)', fontWeight: '600', marginTop: 2 },
   // Badge admin: indica qual roteador foi usado pra otimizar a ultima rota.
   providerBadge: {
     alignSelf: 'flex-start',
@@ -7058,7 +7058,7 @@ const styles = StyleSheet.create({
   },
   routeStopHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
   routeStopSubtitle: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
-  mandatoryTag: { fontSize: 11, fontWeight: '800', color: '#C8131B', marginTop: 3 },
+  mandatoryTag: { fontSize: 11, fontWeight: '800', color: 'var(--brand-text)', marginTop: 3 },
   // Banner de monitoramento (gestor vendo a rota de outro vendedor).
   monitorBanner: {
     backgroundColor: 'var(--tint-blue)',
@@ -7164,8 +7164,8 @@ const styles = StyleSheet.create({
     borderBottomColor: 'var(--border-soft)',
   },
   ufPickerRowText: { fontSize: 15, color: 'var(--text)' },
-  ufPickerRowTextActive: { fontWeight: '800', color: '#C8131B' },
-  ufPickerCheck: { fontSize: 16, fontWeight: '800', color: '#C8131B' },
+  ufPickerRowTextActive: { fontWeight: '800', color: 'var(--brand-text)' },
+  ufPickerCheck: { fontSize: 16, fontWeight: '800', color: 'var(--brand-text)' },
   backButton: { color: 'var(--text-muted)', fontSize: 15, fontWeight: '600', width: 60 },
   filtersFooter: { flexDirection: 'row', gap: 10, marginTop: 20 },
   filtersSecondaryButton: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', backgroundColor: 'var(--surface-2)' },
@@ -7173,7 +7173,7 @@ const styles = StyleSheet.create({
   // Loading
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface)' },
   loadingText: { marginTop: 12, color: 'var(--text-muted)', fontSize: 15 },
-  errorText: { color: '#E03A41', fontSize: 16 },
+  errorText: { color: 'var(--brand-text)', fontSize: 16 },
   // Map
   map: { flex: 1 },
   // Aviso do carregamento por área. No TOPO do mapa: embaixo ficam a legenda
@@ -7423,7 +7423,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     color: 'var(--text-faint)',
   },
-  navItemTextActive: { color: '#C8131B' },
+  navItemTextActive: { color: 'var(--brand-text)' },
   // List
   listContent: { padding: 12 },
   clientCard: {
@@ -7443,7 +7443,7 @@ const styles = StyleSheet.create({
   cardLogo: { width: 18, height: 18, resizeMode: 'contain', marginRight: 8 },
   clientName: { fontSize: 15, fontWeight: '700', color: 'var(--text)', flex: 1 },
   clientContact: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
-  clientStage: { fontSize: 12, color: '#C8131B', fontWeight: '700', marginTop: 2 },
+  clientStage: { fontSize: 12, color: 'var(--brand-text)', fontWeight: '700', marginTop: 2 },
   stageAccordionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -7583,7 +7583,7 @@ const styles = StyleSheet.create({
   contaAlvoBoxTitle: { fontSize: 14, fontWeight: '800', color: 'var(--tint-red-text)' },
   contaAlvoBoxText: { fontSize: 13, fontWeight: '700', color: 'var(--tint-red-text)', marginTop: 3 },
   contaAlvoDismissBtn: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--tint-red-border)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
-  contaAlvoDismissText: { fontSize: 12, fontWeight: '800', color: '#C8131B' },
+  contaAlvoDismissText: { fontSize: 12, fontWeight: '800', color: 'var(--brand-text)' },
   agendaSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -7603,7 +7603,7 @@ const styles = StyleSheet.create({
   agendaWhen: { width: 56, alignItems: 'center' },
   agendaDate: { fontSize: 13, fontWeight: '800', color: 'var(--text)' },
   agendaWeekday: { fontSize: 10, color: 'var(--text-subtle)', fontWeight: '600', textTransform: 'capitalize' },
-  agendaTime: { fontSize: 14, fontWeight: '800', color: '#C8131B', marginTop: 2 },
+  agendaTime: { fontSize: 14, fontWeight: '800', color: 'var(--brand-text)', marginTop: 2 },
   agendaTitle: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
   agendaSubtitle: { fontSize: 13, color: 'var(--text-muted)', marginTop: 3 },
   // Linha da timeline: trilho de horário à esquerda + card com barra colorida
@@ -7638,7 +7638,7 @@ const styles = StyleSheet.create({
   agendaDayHeaderText: {
     fontSize: 12,
     fontWeight: '900',
-    color: '#C8131B',
+    color: 'var(--brand-text)',
     letterSpacing: 0.6,
   },
   agendaDayHeaderCount: { fontSize: 11, color: 'var(--text-subtle)', fontWeight: '700' },
@@ -7723,7 +7723,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'var(--tint-blue)',
   },
-  taskInfoButtonText: { fontSize: 18, color: '#2563eb', fontWeight: '700' },
+  taskInfoButtonText: { fontSize: 18, color: 'var(--info-text)', fontWeight: '700' },
   // Modal de regras
   taskRulesCard: {
     backgroundColor: 'var(--surface)',
@@ -7785,7 +7785,7 @@ const styles = StyleSheet.create({
   },
   routeStartOptionActive: { backgroundColor: 'var(--tint-blue)', borderColor: '#3b82f6' },
   routeStartText: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
-  routeStartTextActive: { color: '#2563eb' },
+  routeStartTextActive: { color: 'var(--info-text)' },
   routeStartPick: {
     paddingVertical: 11, paddingHorizontal: 4,
     borderBottomWidth: 1, borderBottomColor: 'var(--border-soft)',
@@ -7944,7 +7944,7 @@ const styles = StyleSheet.create({
   changeStageButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 8 },
   deleteButton: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: 'var(--tint-red)', borderWidth: 1, borderColor: 'var(--tint-red-border)' },
-  deleteButtonText: { fontSize: 14, fontWeight: '700', color: '#C8131B' },
+  deleteButtonText: { fontSize: 14, fontWeight: '700', color: 'var(--brand-text)' },
   closeActionButton: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#C8131B' },
   closeActionButtonText: { fontSize: 14, fontWeight: '700', color: '#fff' },
 });

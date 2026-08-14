@@ -270,7 +270,7 @@ function LeadListModal({ state, onClose, onOpenClient }: {
             ListEmptyComponent={
               leadsQuery.isLoading ? (
                 <View style={{ paddingVertical: 32, alignItems: 'center' }}>
-                  <ActivityIndicator color="#C8131B" />
+                  <ActivityIndicator color="var(--brand-text)" />
                 </View>
               ) : (
                 <Text style={styles.modalEmpty}>Nenhum lead nesse recorte.</Text>
@@ -360,7 +360,7 @@ function TasksModal({ state, period, onClose, onOpenClient }: {
             ListEmptyComponent={
               q.isLoading ? (
                 <View style={{ paddingVertical: 32, alignItems: 'center' }}>
-                  <ActivityIndicator color="#C8131B" />
+                  <ActivityIndicator color="var(--brand-text)" />
                 </View>
               ) : (
                 <Text style={styles.modalEmpty}>Nenhuma tarefa nesse recorte.</Text>
@@ -551,7 +551,7 @@ function SellerCard({
         <MetricBox
           value={taskCounts.pending}
           label="Pendentes"
-          color="#C8131B"
+          color="var(--brand-text)"
           onPress={() => onOpenTasks(`Tarefas pendentes — ${displayName}`, seller.id_hubspot, 'pendente')}
         />
         <MetricBox
@@ -758,7 +758,7 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
             disabled={!!exporting}
           >
             {exporting === 'period'
-              ? <ActivityIndicator color="#0f172a" />
+              ? <ActivityIndicator color="var(--text)" />
               : <Text style={styles.exportBtnGhostText}>Período selecionado</Text>}
           </TouchableOpacity>
         </View>
@@ -766,7 +766,7 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
 
       {query.isLoading ? (
         <View style={styles.loadingBlock}>
-          <ActivityIndicator size="large" color="#C8131B" />
+          <ActivityIndicator size="large" color="var(--brand-text)" />
           <Text style={styles.loadingText}>Carregando métricas...</Text>
         </View>
       ) : query.isError ? (
@@ -785,7 +785,7 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
             <StatCard
               label="Total de leads"
               value={query.data.global.total_clients}
-              color="#0f172a"
+              color="var(--text)"
               onPress={() => openLeads('Todos os leads', { metric: 'all', period })}
             />
             <StatCard
@@ -1018,7 +1018,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: '#C8131B', fontSize: 14, fontWeight: '800' },
+  avatarText: { color: 'var(--brand-text)', fontSize: 14, fontWeight: '800' },
   sellerName: { fontSize: 15, fontWeight: '700', color: 'var(--text)' },
   sellerEmail: { fontSize: 12, color: 'var(--text-muted)', marginTop: 1 },
 
@@ -1080,7 +1080,7 @@ const styles = StyleSheet.create({
 
   loadingBlock: { paddingVertical: 60, alignItems: 'center', gap: 12 },
   loadingText: { color: 'var(--text-muted)', fontSize: 13 },
-  errorText: { color: '#C8131B', fontSize: 15, fontWeight: '700' },
+  errorText: { color: 'var(--brand-text)', fontSize: 15, fontWeight: '700' },
   errorSub: { color: 'var(--text-muted)', fontSize: 12, textAlign: 'center', paddingHorizontal: 24 },
   retryButton: {
     marginTop: 12,
@@ -1154,7 +1154,7 @@ const styles = StyleSheet.create({
   modalLeadDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
   modalLeadName: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   modalLeadMeta: { fontSize: 11, color: 'var(--text-muted)', marginTop: 1 },
-  modalLeadExec: { fontSize: 11, color: '#2563eb', fontWeight: '700', marginTop: 2 },
+  modalLeadExec: { fontSize: 11, color: 'var(--info-text)', fontWeight: '700', marginTop: 2 },
   modalLeadChevron: { fontSize: 22, color: 'var(--text-faint)', fontWeight: '700', marginLeft: 4, alignSelf: 'center' },
   modalLeadNote: {
     fontSize: 13,

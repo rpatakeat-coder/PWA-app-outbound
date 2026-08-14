@@ -53,7 +53,7 @@ export function SellerGoalsCard() {
         <View style={{ marginTop: 8 }}>
           <Text style={styles.hint}>Meta diária de visitas (check-ins). Vazio = padrão global ({defaultMeta}).</Text>
           {loadingSellers ? (
-            <ActivityIndicator color="#C8131B" style={{ marginVertical: 12 }} />
+            <ActivityIndicator color="var(--brand-text)" style={{ marginVertical: 12 }} />
           ) : (
             <>
               {sellers.map((s) => (
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: 'var(--surface)', borderRadius: 14, borderWidth: 1, borderColor: 'var(--tint-red-border)', padding: 14, marginBottom: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 15, fontWeight: '800', color: 'var(--tint-red-text)' },
-  chevron: { fontSize: 12, color: '#C8131B', fontWeight: '800' },
+  chevron: { fontSize: 12, color: 'var(--brand-text)', fontWeight: '800' },
   hint: { fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 },
   name: { flex: 1, fontSize: 13, fontWeight: '600', color: 'var(--text)' },

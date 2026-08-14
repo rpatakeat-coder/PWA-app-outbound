@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
   button: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 },
   buttonFull: { alignItems: 'center' },
   buttonPressed: { backgroundColor: 'var(--surface-2)' },
-  buttonText: { fontSize: 15, fontWeight: '700', color: '#2563eb' },
+  buttonText: { fontSize: 15, fontWeight: '700', color: 'var(--info-text)' },
   buttonTextCancel: { color: 'var(--text-muted)' },
-  buttonTextDestructive: { color: '#C8131B' },
+  buttonTextDestructive: { color: 'var(--brand-text)' },
 });

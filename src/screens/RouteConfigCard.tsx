@@ -82,7 +82,7 @@ export function RouteConfigCard() {
       {open && (
         <View style={{ marginTop: 6 }}>
           {isLoading ? (
-            <ActivityIndicator color="#C8131B" style={{ marginVertical: 12 }} />
+            <ActivityIndicator color="var(--brand-text)" style={{ marginVertical: 12 }} />
           ) : (
             <>
               <Text style={styles.section}>Conta Alvo</Text>
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 15, fontWeight: '800', color: 'var(--tint-red-text)' },
-  chevron: { fontSize: 12, color: '#C8131B', fontWeight: '800' },
+  chevron: { fontSize: 12, color: 'var(--brand-text)', fontWeight: '800' },
   section: { fontSize: 12, fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 12, marginBottom: 6 },
   row: { flexDirection: 'row', gap: 8 },
   field: { flex: 1, marginBottom: 6 },

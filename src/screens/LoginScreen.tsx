@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   errorText: {
-    color: '#C8131B',
+    color: 'var(--brand-text)',
     fontSize: 13,
     marginBottom: 8,
     textAlign: 'center',

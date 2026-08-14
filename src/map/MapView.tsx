@@ -490,7 +490,7 @@ const mapStyles = StyleSheet.create({
     backgroundColor: 'var(--surface-2)',
     padding: 24,
   },
-  errorTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 6 },
+  errorTitle: { fontSize: 16, fontWeight: '800', color: 'var(--text)', marginBottom: 6 },
   errorBody: { fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' },
 });
 
