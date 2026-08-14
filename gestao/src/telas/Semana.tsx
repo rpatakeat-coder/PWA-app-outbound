@@ -204,7 +204,7 @@ export function Semana() {
     if (!r.ok) {
       setAviso(
         r.configuravel
-          ? 'A leitura por IA ainda não está ligada. Configure a chave da Anthropic nos secrets do Supabase (ANTHROPIC_API_KEY) e faça o deploy da função resumo-semanal. Os números desta tela funcionam sem isso.'
+          ? 'A leitura por IA ainda não está ligada. Configure OPENAI_API_KEY nos secrets do Supabase e faça o deploy da função resumo-semanal. Os números desta tela funcionam sem isso.'
           : `Não consegui gerar: ${r.erro}`,
       );
     }
@@ -223,7 +223,8 @@ export function Semana() {
   }
   if (!dados) return <div className="cartao">Comparando as duas semanas…</div>;
 
-  const { janela, janelaAnterior, metricas, linhas, comparacaoCompleta, diasDecorridos } = dados;
+  const { janela, janelaAnterior, metricas, linhas, comparacaoCompleta, diasDecorridos, foraDaLista } =
+    dados;
   const ganhos = metricas.find((m) => m.chave === 'ganhos')!;
   const perdidos = metricas.find((m) => m.chave === 'perdidos')!;
   const piorando = linhas.filter((l) => l.piora >= 2);
@@ -351,6 +352,37 @@ export function Semana() {
             </tbody>
           </table>
         )}
+        {/* Sem esta linha, somar a coluna nao bate com o card acima e a tela
+            inteira perde credibilidade. O resto NAO e' erro de conta: e'
+            atividade de quem esta fora do recorte de ativos. */}
+        {(foraDaLista.visitas > 0 || foraDaLista.avancos > 0 || foraDaLista.ganhos > 0) && (
+          <div
+            style={{
+              background: 'var(--sunk)',
+              border: '1px solid var(--line)',
+              borderRadius: 8,
+              padding: '9px 12px',
+              fontSize: 13,
+              color: 'var(--muted)',
+              marginTop: 12,
+            }}
+          >
+            Os cards contam a operação inteira; esta tabela, só quem está na lista de ativos. A
+            diferença é{' '}
+            <strong style={{ color: 'var(--ink)' }}>
+              {[
+                foraDaLista.visitas && `${foraDaLista.visitas} visitas`,
+                foraDaLista.avancos && `${foraDaLista.avancos} avanços`,
+                foraDaLista.ganhos && `${foraDaLista.ganhos} fechamentos`,
+              ]
+                .filter(Boolean)
+                .join(', ')}
+            </strong>{' '}
+            de quem está desativado, marcado como não-vendedor, ou sem perfil vinculado
+            {foraDaLista.quem.length > 0 && ` (${foraDaLista.quem.join(', ')})`}.
+          </div>
+        )}
+
         <div style={{ color: 'var(--ter)', fontSize: 12, marginTop: 12 }}>
           Setas comparam com a semana civil anterior. Verde é melhora, vermelho é piora — em
           “Perdidos”, subir é vermelho.

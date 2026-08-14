@@ -29,6 +29,9 @@ export interface LeadCitado {
   id: string;
   nome: string;
   quem: string | null;
+  /** perfilId de quem fez. A atribuicao por linha usa ISTO, e nao o nome:
+   *  comparar string de nome quebra com homonimo e com nome nulo. */
+  quemId: string | null;
 }
 
 export interface MetricaSemanal {
@@ -57,6 +60,11 @@ export interface DadosSemana {
   comparacaoCompleta: boolean;
   metricas: MetricaSemanal[];
   linhas: LinhaSemanal[];
+  /** Atividade da semana que NAO aparece em nenhuma linha da tabela: gente
+   *  desativada, marcada como nao-vendedor, ou sem perfil. Os cards contam a
+   *  operacao inteira e a tabela so' os listados — sem este numero explicito,
+   *  a soma das linhas nao bate com o card e a tela perde a credibilidade. */
+  foraDaLista: { visitas: number; avancos: number; ganhos: number; quem: string[] };
 }
 
 export interface LeituraIA {
@@ -174,6 +182,12 @@ export async function carregarSemana(): Promise<DadosSemana> {
       .filter((p) => p.ownerId)
       .map((p) => [p.ownerId!, p.nome]),
   );
+  const perfilPorOwner = new Map(
+    ativos(equipe)
+      .filter((p) => p.ownerId)
+      .map((p) => [p.ownerId!, p.perfilId]),
+  );
+  const listados = new Set(ativos(equipe).map((p) => p.perfilId));
 
   const naSemana = (dias: string[], iso: string) => dias.includes(diaBRT(iso));
 
@@ -196,6 +210,7 @@ export async function carregarSemana(): Promise<DadosSemana> {
       id: v.client_id,
       nome: nomeDoCliente.get(v.client_id) ?? 'lead removido',
       quem: v.visited_by ? nomePorPerfil.get(v.visited_by) ?? null : null,
+      quemId: v.visited_by ?? null,
     };
     const alvo = naSemana(estaSemana, v.visited_at)
       ? 'atual'
@@ -218,6 +233,7 @@ export async function carregarSemana(): Promise<DadosSemana> {
       id: m.client_id,
       nome: nomeDoCliente.get(m.client_id) ?? 'lead removido',
       quem: m.created_by ? nomePorPerfil.get(m.created_by) ?? null : null,
+      quemId: m.created_by ?? null,
     };
     const balde = alvo === 'atual' ? atual : anterior;
 
@@ -244,6 +260,7 @@ export async function carregarSemana(): Promise<DadosSemana> {
       id: c.id,
       nome: (c.empresa || '').trim() || c.nome || 'sem nome',
       quem: c.vendedor_id_hubspot ? nomePorOwner.get(c.vendedor_id_hubspot) ?? null : null,
+      quemId: c.vendedor_id_hubspot ? perfilPorOwner.get(c.vendedor_id_hubspot) ?? null : null,
     };
     (alvo === 'atual' ? atual : anterior).ganhos.push(item);
   }
@@ -272,8 +289,8 @@ export async function carregarSemana(): Promise<DadosSemana> {
   const linhas: LinhaSemanal[] = ativos(equipe)
     .map((p: MembroEquipe) => {
       const b = porPessoa.get(p.perfilId) ?? { atual: vazio(), anterior: vazio() };
-      const ganhosAtual = atual.ganhos.filter((g) => g.quem === p.nome).length;
-      const ganhosAnterior = anterior.ganhos.filter((g) => g.quem === p.nome).length;
+      const ganhosAtual = atual.ganhos.filter((g) => g.quemId === p.perfilId).length;
+      const ganhosAnterior = anterior.ganhos.filter((g) => g.quemId === p.perfilId).length;
       const visitas = calcularDelta(b.atual.visitas.length, b.anterior.visitas.length);
       const avancos = calcularDelta(b.atual.avancos.length, b.anterior.avancos.length);
       const ganhos = calcularDelta(ganhosAtual, ganhosAnterior);
@@ -288,6 +305,25 @@ export async function carregarSemana(): Promise<DadosSemana> {
     })
     .sort((a, b) => b.piora - a.piora || a.visitas.diferenca - b.visitas.diferenca);
 
+  // O que sobra entre o card e a tabela. Nao e' erro de conta: e' atividade de
+  // quem esta' fora do recorte de "ativos" (desativado, nao-vendedor, ou sem
+  // perfil ligado). Mostrar o resto explicitamente e' melhor que esconder — e
+  // muito melhor que deixar o gestor somar a coluna e achar que a tela mente.
+  const foraDoRecorte = (itens: LeadCitado[]) =>
+    itens.filter((i) => !i.quemId || !listados.has(i.quemId));
+
+  const orfaos = [
+    ...foraDoRecorte(atual.visitas),
+    ...foraDoRecorte(atual.avancos),
+    ...foraDoRecorte(atual.ganhos),
+  ];
+  const foraDaLista = {
+    visitas: foraDoRecorte(atual.visitas).length,
+    avancos: foraDoRecorte(atual.avancos).length,
+    ganhos: foraDoRecorte(atual.ganhos).length,
+    quem: [...new Set(orfaos.map((i) => i.quem).filter((n): n is string => !!n))],
+  };
+
   return {
     atualizadoEm: new Date(),
     janela: { inicio: estaSemana[0], fim: estaSemana[4] },
@@ -296,5 +332,6 @@ export async function carregarSemana(): Promise<DadosSemana> {
     comparacaoCompleta: diasDecorridos >= 5,
     metricas,
     linhas,
+    foraDaLista,
   };
 }
