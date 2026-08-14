@@ -23,15 +23,25 @@ function rotuloDoDia(dia: string): string {
 function CelulaSemana({ d, hoje }: { d: DiaDoExecutivo; hoje: string }) {
   const ehHoje = d.dia === hoje;
   const cor =
-    d.bateuMeta == null
+    d.cumpriu == null
       ? 'var(--ter)'
-      : d.bateuMeta
+      : d.cumpriu
         ? 'var(--green)'
         : d.visitas > 0
           ? 'var(--amber)'
           : 'var(--red)';
   return (
-    <div style={{ textAlign: 'center', minWidth: 34 }} title={`${d.dia}: ${d.visitas} visitas`}>
+    <div
+      style={{ textAlign: 'center', minWidth: 34 }}
+      title={
+        `${d.dia}: ${d.visitas} visitas` +
+        (d.prometido != null
+          ? ` de ${d.prometido} paradas planejadas`
+          : d.medidoPor === 'meta'
+            ? ' (medido pela meta padrão)'
+            : '')
+      }
+    >
       <div style={{ fontSize: 10, color: 'var(--ter)', textTransform: 'lowercase' }}>
         {rotuloDoDia(d.dia)}
       </div>
@@ -48,30 +58,37 @@ function CelulaSemana({ d, hoje }: { d: DiaDoExecutivo; hoje: string }) {
           background: ehHoje ? 'var(--sunk)' : undefined,
         }}
       >
-        {d.bateuMeta == null ? '·' : d.visitas}
+        {d.cumpriu == null ? '·' : d.visitas}
       </div>
     </div>
   );
 }
 
 function Pilula({ e }: { e: ExecutivoDaily }) {
-  const { hoje, metaVisitas } = e;
+  const { hoje } = e;
   let texto: string;
   let fundo = 'var(--sunk)';
   let cor = 'var(--muted)';
 
+  // O texto diz CONTRA O QUE estamos medindo. "Nao cumpriu a rota que montou"
+  // e "ficou abaixo da meta padrao" sao conversas diferentes na reuniao.
+  const alvo = hoje.prometido ?? e.metaVisitas;
+
   if (hoje.pontos === 0) {
-    texto = 'sem registro hoje';
+    texto = hoje.prometido != null ? `0 de ${hoje.prometido} paradas` : 'sem registro hoje';
     fundo = 'var(--red-soft)';
     cor = 'var(--red)';
-  } else if (metaVisitas == null) {
-    texto = 'sem meta';
-  } else if (hoje.visitas >= metaVisitas) {
-    texto = 'meta batida';
+  } else if (alvo == null) {
+    texto = 'sem rota e sem meta';
+  } else if (hoje.cumpriu) {
+    texto = hoje.medidoPor === 'rota' ? 'rota cumprida' : 'meta batida';
     fundo = 'var(--green-soft)';
     cor = 'var(--green)';
   } else {
-    texto = `${hoje.visitas}/${metaVisitas} visitas`;
+    texto =
+      hoje.medidoPor === 'rota'
+        ? `${hoje.visitas} de ${alvo} paradas`
+        : `${hoje.visitas}/${alvo} visitas`;
     fundo = 'var(--amber-soft)';
     cor = 'var(--amber-ink)';
   }
@@ -89,6 +106,27 @@ function Pilula({ e }: { e: ExecutivoDaily }) {
     >
       {texto}
     </span>
+  );
+}
+
+/** Visitas contra o que a pessoa prometeu. O denominador so' aparece quando
+ *  existe promessa — inventar "de 6" a partir da meta padrao faria parecer que
+ *  ela combinou 6, quando ninguem combinou nada. */
+function CelulaVisitas({ d }: { d: DiaDoExecutivo }) {
+  return (
+    <td style={{ textAlign: 'center' }}>
+      <span
+        style={{
+          fontWeight: d.visitas ? 800 : 600,
+          color: d.visitas ? 'var(--ink)' : 'var(--ter)',
+        }}
+      >
+        {d.visitas || '–'}
+      </span>
+      {d.prometido != null && (
+        <span style={{ color: 'var(--ter)', fontWeight: 700 }}> / {d.prometido}</span>
+      )}
+    </td>
   );
 }
 
@@ -186,7 +224,7 @@ export function Daily() {
       {/* Nota de contexto, nao alarme. A meta global e' uma configuracao valida
           — o gestor ja' a definiu em Config Rota do dia. Tratar isso como
           pendencia mandaria ele cadastrar o que ja' esta' cadastrado. */}
-      {(dados.comMetaPropria === 0 || dados.semMeta > 0) && (
+      {(dados.comMetaPropria === 0 || dados.semMeta > 0 || dados.comRotaHoje > 0) && (
         <div
           style={{
             background: 'var(--sunk)',
@@ -198,9 +236,17 @@ export function Daily() {
             marginBottom: 14,
           }}
         >
+          {dados.comRotaHoje > 0 && (
+            <>
+              <strong style={{ color: 'var(--ink)' }}>
+                {dados.comRotaHoje} de {dados.executivos.length}
+              </strong>{' '}
+              montaram Rota do dia e estão sendo medidos contra a própria promessa.{' '}
+            </>
+          )}
           {dados.comMetaPropria === 0 && (
             <>
-              Todos estão sendo medidos pela meta global de{' '}
+              O resto cai na meta global de{' '}
               <strong style={{ color: 'var(--ink)' }}>{dados.metaGlobal} visitas/dia</strong>. Metas
               individuais são opcionais e ficam no app de campo, em Metas por vendedor.
             </>
@@ -230,7 +276,10 @@ export function Daily() {
               <thead>
                 <tr style={{ color: 'var(--muted)', textAlign: 'left' }}>
                   <th style={{ padding: '6px 0', fontWeight: 700 }}>Executivo</th>
-                  <th style={{ fontWeight: 700, textAlign: 'center' }} title="Check-ins com GPS">
+                  <th
+                    style={{ fontWeight: 700, textAlign: 'center' }}
+                    title="Check-ins com GPS / paradas planejadas na rota do dia"
+                  >
                     Visitas
                   </th>
                   <th style={{ fontWeight: 700, textAlign: 'center' }} title="Subiram de etapa no funil">
@@ -243,7 +292,7 @@ export function Daily() {
                     Fechou
                   </th>
                   <th style={{ fontWeight: 700, textAlign: 'center' }}>Pontos</th>
-                  <th style={{ fontWeight: 700, textAlign: 'center' }} title="Dias úteis seguidos batendo a meta, até ontem">
+                  <th style={{ fontWeight: 700, textAlign: 'center' }} title="Dias úteis seguidos cumprindo o combinado (a rota que montou, ou a meta padrão), até ontem">
                     Seq.
                   </th>
                   <th style={{ fontWeight: 700, textAlign: 'center' }}>Semana</th>
@@ -263,7 +312,7 @@ export function Daily() {
                     }}
                   >
                     <td style={{ padding: '9px 0', fontWeight: 700 }}>{e.nome}</td>
-                    <Numero valor={e.hoje.visitas} />
+                    <CelulaVisitas d={e.hoje} />
                     <Numero valor={e.hoje.avancos} />
                     <Numero valor={e.hoje.propostas} />
                     <Numero valor={e.hoje.fechamentos} peso />
@@ -296,7 +345,9 @@ export function Daily() {
 
         <div style={{ color: 'var(--ter)', fontSize: 12, marginTop: 12 }}>
           Pontos: visita 10 · avanço 25 · proposta 40 · fechamento 100. Tudo derivado do que foi
-          registrado no app — ninguém digita o realizado.
+          registrado no app — ninguém digita nada aqui. Quando há “/ N” nas visitas, N são as
+          paradas que a pessoa planejou na Rota do dia: aí o placar cobra a promessa dela, não a
+          meta padrão.
         </div>
       </section>
 

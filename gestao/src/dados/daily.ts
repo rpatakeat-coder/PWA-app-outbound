@@ -2,16 +2,24 @@
 //
 // Responde "quem prometeu, quem cumpriu, quem esta' vazio?" (02-FUNCIONALIDADES.md).
 //
-// UMA SUBSTITUICAO CONSCIENTE EM RELACAO AO DOC
+// ONDE ESTA' A PROMESSA
 // O cockpit original guardava a Daily numa tabela `dailies`, onde o executivo
-// digitava o PROMETIDO de manha. Essa tabela nao existe aqui e nao a criei
-// vazia de proposito: tabela que ninguem escreve gera tela que so' mostra
-// travessao, e a regra 5 do doc e' nao declarar integracao que nao existe.
+// digitava de manha quantas visitas prometia. Nao criei essa tabela — a
+// promessa ja' existe neste app, num formato melhor: a ROTA DO DIA.
 //
-// O que existe e' uma meta PERMANENTE de visitas por dia (ver equipe.ts), nao
-// uma promessa daquela manha. Sao coisas diferentes e a tela rotula "meta",
-// nunca "prometido". Quando a captura da promessa entrar no app de campo, esta
-// camada ganha a coluna sem mudar o resto.
+// Quando o vendedor monta e salva a rota (useFieldOps.saveRoute), nasce uma
+// field_routes com status 'planned' e uma field_route_stops por lead. Isso nao
+// e' "prometo 8 visitas": e' "prometo ESTES 8 lugares". Promessa especifica,
+// feita por ato deliberado, e que ele ja' fazia antes desta tela existir.
+//
+// Entao:
+//   prometido = paradas planejadas na rota daquele dia
+//   realizado = check-ins (client_visits)
+//   cumpriu   = realizado >= prometido
+//
+// Sem rota no dia, o piso e' a meta permanente de visitas (equipe.ts) — e a
+// tela diz qual das duas esta' medindo, porque "nao cumpriu a rota que montou"
+// e "ficou abaixo da meta padrao" sao conversas diferentes.
 //
 // O REALIZADO E' 100% DERIVADO — ninguem digita:
 //   visitas ..... client_visits (check-in com GPS)
@@ -45,8 +53,15 @@ export interface DiaDoExecutivo {
   propostas: number;
   fechamentos: number;
   pontos: number;
-  /** null quando a pessoa nao tem meta cadastrada — nao da' pra dizer se bateu. */
-  bateuMeta: boolean | null;
+  /** Paradas planejadas na rota daquele dia. null = nao montou rota. */
+  prometido: number | null;
+  /** Contra o que estamos medindo: a rota que ELE montou, ou a meta padrao. */
+  medidoPor: 'rota' | 'meta' | null;
+  /** Rota montada a mao pesa mais que rota sugerida e aceita — as duas sao
+   *  compromisso, mas so' a primeira e' plano dele. */
+  rotaManual: boolean;
+  /** Cumpriu o que valia pra aquele dia. null quando nao ha' nem rota nem meta. */
+  cumpriu: boolean | null;
 }
 
 export interface ExecutivoDaily {
@@ -57,8 +72,8 @@ export interface ExecutivoDaily {
   hoje: DiaDoExecutivo;
   /** Os 5 ultimos dias uteis, do mais antigo pro mais novo (ordem de leitura). */
   semana: DiaDoExecutivo[];
-  /** Dias uteis consecutivos batendo a meta, contando de ontem pra tras.
-   *  null sem meta cadastrada. */
+  /** Dias uteis consecutivos CUMPRINDO o combinado, contando de ontem pra tras.
+   *  null quando nao ha' nem rota nem meta pra comparar. */
   sequencia: number | null;
   /** O que ele fez hoje, por nome — a linha de execucao que o doc pede. */
   execucao: {
@@ -83,6 +98,9 @@ export interface DadosDaily {
   /** Quantos rodam com meta PROPRIA. Se for 0, o placar inteiro esta' medindo
    *  contra o mesmo numero global — util saber antes de cobrar alguem. */
   comMetaPropria: number;
+  /** Quantos montaram rota hoje, ou seja: quantos estao sendo medidos contra a
+   *  propria promessa em vez da meta padrao. */
+  comRotaHoje: number;
 }
 
 const ordemFunil = new Map((ETAPAS_FUNIL as readonly string[]).map((e, i) => [e, i] as const));
@@ -91,7 +109,7 @@ export async function carregarDaily(): Promise<DadosDaily> {
   const hoje = diaBRT(new Date());
   const desde = new Date(Date.now() - DIAS_DE_HISTORICO * 86_400_000).toISOString();
 
-  const [equipe, visitas, mudancas, clientes] = await Promise.all([
+  const [equipe, visitas, mudancas, clientes, rotas] = await Promise.all([
     carregarEquipe(),
     buscarTudo<any>((de, ate) =>
       supabase
@@ -109,6 +127,16 @@ export async function carregarDaily(): Promise<DadosDaily> {
     ),
     buscarTudo<any>((de, ate) =>
       supabase.from('clients').select('id, nome, empresa, won_at, vendedor_id_hubspot').range(de, ate),
+    ),
+    // As paradas vem ANINHADAS na rota, num round trip so' — mesmo padrao do
+    // useRouteHistory no app de campo. Sao ~1 linha por vendedor por dia no
+    // nivel de cima, entao a paginacao trabalha sobre um conjunto pequeno.
+    buscarTudo<any>((de, ate) =>
+      supabase
+        .from('field_routes')
+        .select('seller_id, route_date, status, source, field_route_stops(status)')
+        .gte('route_date', diasUteisAte(diaBRT(new Date()), TETO_SEQUENCIA).slice(-1)[0])
+        .range(de, ate),
     ),
   ]);
 
@@ -161,6 +189,22 @@ export async function carregarDaily(): Promise<DadosDaily> {
     fechamentosPorOwnerDia.set(k, lista);
   }
 
+  // --- a promessa: paradas planejadas por (pessoa, dia) --------------------
+  // 'cancelled' nao conta: cancelar a rota nao pode deixar o dia parecendo
+  // prometido. 'removed' tambem sai — parada removida saiu do plano.
+  const promessaPor = new Map<string, { paradas: number; manual: boolean }>();
+  for (const r of rotas) {
+    if (r.status === 'cancelled') continue;
+    const paradas = (r.field_route_stops ?? []).filter(
+      (p: any) => p.status !== 'removed',
+    ).length;
+    if (paradas === 0) continue; // rota vazia nao e' promessa
+    promessaPor.set(`${r.seller_id}|${r.route_date}`, {
+      paradas,
+      manual: r.source === 'manual',
+    });
+  }
+
   const cincoDias = diasUteisAte(hoje, 5).reverse(); // do mais antigo pro mais novo
   const diasDaSequencia = diasUteisAte(hoje, TETO_SEQUENCIA);
 
@@ -198,21 +242,36 @@ export async function carregarDaily(): Promise<DadosDaily> {
           propostas: b.propostas.length,
           fechamentos: fech.length,
         };
+        // A promessa do dia vence a meta permanente. Se ele montou rota, e' a
+        // rota dele que vale — cobrar contra a meta padrao quando ele planejou
+        // outra coisa seria medir a pessoa por um numero que ela nao escolheu.
+        const promessa = promessaPor.get(chave(p.perfilId, dia));
+        const alvo = promessa?.paradas ?? meta;
+        const medidoPor: 'rota' | 'meta' | null = promessa ? 'rota' : meta != null ? 'meta' : null;
+
         return {
           dia,
           ...bruto,
           pontos: pontosDoDia(bruto),
-          bateuMeta: meta == null ? null : bruto.visitas >= meta,
+          prometido: promessa?.paradas ?? null,
+          medidoPor,
+          rotaManual: promessa?.manual ?? false,
+          cumpriu: alvo == null ? null : bruto.visitas >= alvo,
         };
       };
 
       // A sequencia conta de ONTEM pra tras: o dia de hoje ainda esta'
       // acontecendo, e zera-lo as 9h da manha faria o placar mentir todo dia.
       let sequencia: number | null = null;
-      if (meta != null) {
+      if (meta != null || promessaPor.has(chave(p.perfilId, hoje))) {
         sequencia = 0;
         for (const dia of diasDaSequencia.slice(1)) {
-          if (doDia(dia).bateuMeta) sequencia++;
+          const d = doDia(dia);
+          // Dia sem rota E sem meta nao quebra a sequencia nem conta: nao ha'
+          // com o que comparar, e zerar por falta de dado puniria a pessoa por
+          // uma lacuna de cadastro.
+          if (d.cumpriu === null) continue;
+          if (d.cumpriu) sequencia++;
           else break;
         }
       }
@@ -258,6 +317,7 @@ export async function carregarDaily(): Promise<DadosDaily> {
     executivos,
     totais,
     semMeta: executivos.filter((e) => e.metaVisitas == null).length,
+    comRotaHoje: executivos.filter((e) => e.hoje.prometido != null).length,
     metaGlobal: equipe.metaGlobal,
     comMetaPropria: ativos(equipe).filter((m) => !m.metaEhGlobal && m.metaVisitasDia != null)
       .length,
