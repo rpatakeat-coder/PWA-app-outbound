@@ -41,6 +41,8 @@ export interface LeadAberto {
 }
 
 export interface Executivo {
+  /** UUID em profiles — chave das metas e do 1:1. */
+  perfilId: string;
   ownerId: string;
   nome: string;
   email: string;
@@ -60,9 +62,11 @@ export interface DadosCockpit {
     emAberto: number;
     travados: number;
     fechadosNoMes: number | null;
-    metaDoTime: number | null;
+
     /** % de leads que mudaram de etapa nos ultimos 7 dias. */
     taxaAvancoSemana: number | null;
+    /** Soma das metas DIARIAS de visita do time. */
+    metaVisitasDia: number | null;
   };
 }
 
@@ -156,11 +160,18 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
       )
     : null;
 
-  const metaPorVendedor = new Map<string, number>();
+  // A meta que existe no banco e' de VISITAS POR DIA (seller_visit_goals:
+  // seller_id + meta_visitas_dia) — nao de fechamento por mes, que era o que
+  // o cockpit original media. Sao perguntas diferentes e a tela rotula a que
+  // temos, em vez de fingir que responde a outra.
+  //
+  // A chave e' o UUID do PERFIL, nao o owner id do HubSpot: por isso o mapa e'
+  // por profile.id e nao por id_hubspot.
+  const metaPorPerfil = new Map<string, number>();
   for (const m of (metas.data ?? []) as any[]) {
-    const chave = m.seller_id ?? m.vendedor_id_hubspot ?? m.owner_id;
-    const valor = m.goal ?? m.meta ?? m.daily_goal;
-    if (chave && typeof valor === 'number') metaPorVendedor.set(String(chave), valor);
+    if (m.seller_id && typeof m.meta_visitas_dia === 'number') {
+      metaPorPerfil.set(m.seller_id, m.meta_visitas_dia);
+    }
   }
 
   const executivos: Executivo[] = ((pessoas.data ?? []) as any[])
@@ -170,6 +181,7 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
     .map((p) => {
       const meus = leads.filter((l) => l.vendedorId === p.id_hubspot);
       return {
+        perfilId: p.id,
         ownerId: p.id_hubspot,
         nome: p.full_name || p.email,
         email: p.email,
@@ -178,7 +190,7 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
         fechadosNoMes: fechados
           ? fechados.filter((c) => c.vendedor_id_hubspot === p.id_hubspot).length
           : null,
-        meta: metaPorVendedor.get(p.id_hubspot) ?? null,
+        meta: metaPorPerfil.get(p.id) ?? null,
       };
     })
     .sort((a, b) => b.travados - a.travados || b.abertos - a.abertos);
@@ -206,7 +218,7 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
       fechadosNoMes: fechados ? fechados.length : null,
       // null quando ninguem tem meta: a tela mostra estado vazio em vez de
       // exibir "0" e dar a impressao de que a meta e' zero.
-      metaDoTime: metasConhecidas.length
+      metaVisitasDia: metasConhecidas.length
         ? metasConhecidas.reduce((s, e) => s + (e.meta ?? 0), 0)
         : null,
       taxaAvancoSemana: leads.length ? Math.round((avancosNoFunil / leads.length) * 100) : null,
