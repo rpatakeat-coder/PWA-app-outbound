@@ -4023,9 +4023,6 @@ function MainApp() {
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Configuracoes"
-            // 40px de caixa + 4 de folga = 48 de area efetiva, sem alargar o
-            // cabecalho, que e' apertado.
-            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             style={styles.headerIconButton}
             onPress={() => {
               setNewPassword('');
@@ -6962,12 +6959,13 @@ const styles = StyleSheet.create({
   logoutButtonText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerIconButton: {
-    // 40x40 em vez de 32x32: medido na tela real, era o UNICO alvo de toque
-    // abaixo do minimo fora do mapa. Fica no canto superior, onde o polegar
-    // ja' alcanca mal.
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    // 44x44 em vez de 32x32, com TAMANHO REAL e nao hitSlop: testado no
+    // navegador, o react-native-web ignora hitSlop no TouchableOpacity —
+    // clique 5px fora da caixa nao dispara nada. Fica no canto superior, onde
+    // o polegar ja' alcanca mal.
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -7127,7 +7125,11 @@ const styles = StyleSheet.create({
   // O icone de busca virou SVG do UI Kit (dimensionado por props), entao este
   // estilo so' serve pros pontos que ainda usam o emoji 🔍 em <Text>.
   searchIcon: { fontSize: 14, color: 'var(--text-muted)' },
-  searchInput: { flex: 1, color: 'var(--text)', fontSize: 14, padding: 0 },
+  // minHeight 40: com `padding: 0`, a caixa do <input> tinha 17px de altura —
+  // medido na tela. O container tem padding, mas clicar no padding NAO foca o
+  // campo (nao ha <label> associado), entao o alvo real de toque era a faixa
+  // de 17px. Com 40 aqui + 8 de padding do container, a barra fica em 56.
+  searchInput: { flex: 1, minHeight: 44, color: 'var(--text)', fontSize: 14, padding: 0 },
   searchClear: { color: 'var(--text-muted)', fontSize: 14, paddingHorizontal: 4 },
   // Linha horizontal com o icone de filtros ancorado a esquerda + chips de status rolando.
   filterBarRow: { flexDirection: 'row', alignItems: 'center' },
