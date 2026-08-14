@@ -4023,6 +4023,9 @@ function MainApp() {
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Configuracoes"
+            // 40px de caixa + 4 de folga = 48 de area efetiva, sem alargar o
+            // cabecalho, que e' apertado.
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             style={styles.headerIconButton}
             onPress={() => {
               setNewPassword('');
@@ -6959,9 +6962,12 @@ const styles = StyleSheet.create({
   logoutButtonText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerIconButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
+    // 40x40 em vez de 32x32: medido na tela real, era o UNICO alvo de toque
+    // abaixo do minimo fora do mapa. Fica no canto superior, onde o polegar
+    // ja' alcanca mal.
+    width: 40,
+    height: 40,
+    borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
