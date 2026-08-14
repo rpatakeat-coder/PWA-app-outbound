@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { IconText, IconCloseCircle } from '../components/icons';
 import { Alert } from '../components/Alert';
 import { useDismissedContaAlvo } from '../hooks/useDismissedContaAlvo';
 import { exportAgenda } from '../utils/exportAgenda';
@@ -90,7 +91,7 @@ export function DismissedContaAlvoCard() {
   return (
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
-        <Text style={styles.title}>🚫 Contas Alvo dispensadas{data.length ? ` · ${data.length}` : ''}</Text>
+        <IconText Icone={IconCloseCircle} style={styles.title} tone="tintRedText">Contas Alvo dispensadas{data.length ? ` · ${data.length}` : ''}</IconText>
         <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
       </TouchableOpacity>
 

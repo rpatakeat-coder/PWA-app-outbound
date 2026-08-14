@@ -11,10 +11,19 @@
 // width/height/fill; `fill` no <svg> tinge o icone inteiro, ja' que em SVG
 // essa propriedade e' herdada pelos paths.
 import React from 'react';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { useTheme } from '../theme';
 
+import { IconWarning } from 'takeat-design-system-ui-kit/icons/IconWarning';
+import { IconUndo } from 'takeat-design-system-ui-kit/icons/IconUndo';
+import { IconRefresh } from 'takeat-design-system-ui-kit/icons/IconRefresh';
+import { IconArrowFoward } from 'takeat-design-system-ui-kit/icons/IconArrowFoward';
+import { IconPencil } from 'takeat-design-system-ui-kit/icons/IconPencil';
+import { IconUserGroup } from 'takeat-design-system-ui-kit/icons/IconUserGroup';
+import { IconCloseCircle } from 'takeat-design-system-ui-kit/icons/IconCloseCircle';
+import { IconDownload } from 'takeat-design-system-ui-kit/icons/IconDownload';
+import { IconStar } from 'takeat-design-system-ui-kit/icons/IconStar';
 import { IconBarGraph } from 'takeat-design-system-ui-kit/icons/IconBarGraph';
 import { IconCheck } from 'takeat-design-system-ui-kit/icons/IconCheck';
 import { IconClose } from 'takeat-design-system-ui-kit/icons/IconClose';
@@ -31,6 +40,15 @@ import { IconSquareMenu } from 'takeat-design-system-ui-kit/icons/IconSquareMenu
 import { IconTrendingUp } from 'takeat-design-system-ui-kit/icons/IconTrendingUp';
 
 export {
+  IconWarning,
+  IconUndo,
+  IconRefresh,
+  IconArrowFoward,
+  IconPencil,
+  IconUserGroup,
+  IconCloseCircle,
+  IconDownload,
+  IconStar,
   IconBarGraph,
   IconCheck,
   IconClose,
@@ -75,14 +93,49 @@ export function useIconColors() {
      * par do token --brand-text.
      */
     brandText: isDark ? '#F2727A' : '#C8131B',
+    /** Mesmo par do token --tint-red-text: titulos das secoes do Gestor. */
+    tintRedText: isDark ? '#F2A3A7' : '#A50F16',
   };
+}
+
+/**
+ * Icone + texto na mesma linha.
+ *
+ * Existe pra substituir os emojis que ficavam DENTRO do texto ("🚗 Maps",
+ * "👥 Vendedores & usuarios"). Trocar cada um na mao viraria uma <View> de
+ * linha por chamada, com alinhamento e gap repetidos — e cada repeticao e'
+ * uma chance de desalinhar uma tela.
+ *
+ * O `tone` resolve a cor do icone pelo tema: o <Text> ao lado usa var(--x) do
+ * CSS, mas o <svg> precisa de valor concreto em JavaScript.
+ */
+export function IconText({
+  Icone,
+  children,
+  style,
+  size = 16,
+  tone = 'onSurface',
+}: {
+  Icone: IconeSvg;
+  children: React.ReactNode;
+  style?: any;
+  size?: number;
+  tone?: 'onSurface' | 'muted' | 'onBrand' | 'brand' | 'brandText' | 'tintRedText';
+}) {
+  const cores = useIconColors();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
+      <Icone width={size} height={size} fill={cores[tone]} />
+      <Text style={style}>{children}</Text>
+    </View>
+  );
 }
 
 /**
  * Icone das abas da barra inferior.
  *
- * O <View> em volta existe pra reproduzir o espacamento que o <Text> do emoji
- * dava (o marginBottom do estilo navIcon) — sem ele o rotulo cola no icone.
+ * O <View> em volta reproduz o espacamento que o <Text> do emoji dava (o
+ * marginBottom do estilo navIcon) — sem ele o rotulo cola no icone.
  */
 export function NavIcon({
   Icone,

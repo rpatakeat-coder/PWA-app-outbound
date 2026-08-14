@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { IconText, IconSettings } from '../components/icons';
 import { Alert } from '../components/Alert';
 import { useRouteConfig, type RouteConfig } from '../hooks/useRouteConfig';
 
@@ -75,7 +76,7 @@ export function RouteConfigCard() {
   return (
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
-        <Text style={styles.title}>⚙️ Config Rota do dia</Text>
+        <IconText Icone={IconSettings} style={styles.title} tone="tintRedText">Config Rota do dia</IconText>
         <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
       </TouchableOpacity>
 

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { IconText, IconLocation } from '../components/icons';
 import { Alert } from '../components/Alert';
 import { useAllSellers } from '../hooks/useAllSellers';
 import { useRouteHistory, useRouteRanking } from '../hooks/useRouteHistory';
@@ -194,7 +195,7 @@ export function RouteHistorySection({ range, enabled }: Props) {
   return (
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
-        <Text style={styles.title}>🗺️ Histórico & ranking de rotas</Text>
+        <IconText Icone={IconLocation} style={styles.title} tone="tintRedText">Histórico & ranking de rotas</IconText>
         <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
       </TouchableOpacity>
 

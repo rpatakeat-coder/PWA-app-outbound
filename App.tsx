@@ -28,6 +28,13 @@ import {
   IconBarGraph,
   IconCalendar,
   IconCheck,
+  IconArrowFoward,
+  IconCloseCircle,
+  IconDownload,
+  IconRefresh,
+  IconText,
+  IconUndo,
+  IconWarning,
   IconClose,
   IconCar,
   IconClipboardCheck,
@@ -2645,7 +2652,7 @@ function MainApp() {
       {/* Rota do dia (automática): monta as obrigatórias + completa a meta.
           Fica no topo como CTA principal; o fluxo manual segue abaixo. */}
       <View style={[styles.panelCard, { borderWidth: 1, borderColor: 'var(--tint-red-border)' }]}>
-        <Text style={styles.panelTitle}>🗺️ Rota do dia</Text>
+        <IconText Icone={IconLocation} style={styles.panelTitle} tone="onSurface">Rota do dia</IconText>
         <Text style={styles.panelHint}>
           Monta as 3 visitas obrigatórias do dia (SLA estourado, Relacionamento +1000 comandas
           e Conta Alvo) e completa até {routeConfig.meta_visitas_dia} paradas perto de você, já na ordem otimizada.
@@ -3586,7 +3593,7 @@ function MainApp() {
             >
               {exportingAgenda
                 ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={styles.agendaExportBtnText}>📤 Exportar JSON</Text>}
+                : <IconText Icone={IconDownload} style={styles.agendaExportBtnText} tone="onBrand">Exportar JSON</IconText>}
             </TouchableOpacity>
           )}
         </View>
@@ -3840,7 +3847,7 @@ function MainApp() {
             </TouchableOpacity>
             <View style={{ flex: 1, alignItems: 'center' }}>
               <Text style={navStyles.headerPillTitle}>Parada {currentStopIndex + 1} de {routeDisplayClients.length}</Text>
-              {gpsUnstable && <Text style={navStyles.headerPillWarning}>⚠ Sinal de GPS instavel</Text>}
+              {gpsUnstable && <IconText Icone={IconWarning} style={navStyles.headerPillWarning} tone="onSurface">Sinal de GPS instavel</IconText>}
             </View>
             <View style={{ width: 24 }} />
           </View>
@@ -3903,7 +3910,7 @@ function MainApp() {
                 );
               }}
             >
-              <Text style={navStyles.bottomCardButtonText}>✓ Finalizar visita</Text>
+              <IconText Icone={IconCheck} style={navStyles.bottomCardButtonText} tone="onBrand">Finalizar visita</IconText>
             </TouchableOpacity>
             <View style={navStyles.bottomCardSecondaryRow}>
               {!isLast && (
@@ -3911,7 +3918,7 @@ function MainApp() {
                   style={[navStyles.bottomCardSecondaryButton, { flex: 1 }]}
                   onPress={skipNavigationStop}
                 >
-                  <Text style={navStyles.bottomCardSecondaryText}>↪ Pular</Text>
+                  <IconText Icone={IconUndo} style={navStyles.bottomCardSecondaryText} tone="onSurface">Pular</IconText>
                 </TouchableOpacity>
               )}
               <TouchableOpacity
@@ -4433,7 +4440,7 @@ function MainApp() {
                   >
                     {exportingHeat
                       ? <ActivityIndicator size="small" color="#fff" />
-                      : <Text style={styles.heatExportBtnText}>📤 JSON</Text>}
+                      : <IconText Icone={IconDownload} style={styles.heatExportBtnText} tone="onBrand">JSON</IconText>}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -4823,7 +4830,7 @@ function MainApp() {
                       setChangingStageFor({ client, taskId: task.id });
                     }}
                   >
-                    <Text style={styles.taskDoneOptionText}>➡️ Avançar etapa</Text>
+                    <IconText Icone={IconArrowFoward} style={styles.taskDoneOptionText} tone="onBrand">Avançar etapa</IconText>
                     <Text style={styles.taskDoneOptionHint}>
                       Move o lead pra próxima etapa do funil e conclui a tarefa.
                     </Text>
@@ -4835,7 +4842,7 @@ function MainApp() {
                       setChangingStageFor({ client, initialStageId: LOST_STAGE_ID, taskId: task.id });
                     }}
                   >
-                    <Text style={styles.taskDoneOptionText}>❌ Mover p/ Perdido</Text>
+                    <IconText Icone={IconCloseCircle} style={styles.taskDoneOptionText} tone="onBrand">Mover p/ Perdido</IconText>
                     <Text style={styles.taskDoneOptionHint}>
                       Registra o motivo do perdido e conclui a tarefa.
                     </Text>
@@ -4847,7 +4854,7 @@ function MainApp() {
                       resolveTask.mutate({ id: task.id, status: 'concluida' });
                     }}
                   >
-                    <Text style={styles.taskDoneOptionText}>✔️ Manter na etapa</Text>
+                    <IconText Icone={IconCheck} style={styles.taskDoneOptionText} tone="onBrand">Manter na etapa</IconText>
                     <Text style={styles.taskDoneOptionHint}>
                       Só conclui a tarefa; o lead segue na etapa e no fluxo automático.
                     </Text>
@@ -5021,7 +5028,7 @@ function MainApp() {
                         );
                       }}
                     >
-                      <Text style={styles.adminButtonText}>🔄 Forçar reload de todos</Text>
+                      <IconText Icone={IconRefresh} style={styles.adminButtonText} tone="onSurface">Forçar reload de todos</IconText>
                     </TouchableOpacity>
                   </>
                 )}
@@ -6103,7 +6110,7 @@ function ClientBottomSheet({
                 {/* "Não interessa": só faz sentido enquanto não virou deal. */}
                 {onDismissContaAlvo && !client.id_hubspot && (
                   <TouchableOpacity style={styles.contaAlvoDismissBtn} onPress={onDismissContaAlvo}>
-                    <Text style={styles.contaAlvoDismissText}>🚫 Não interessa (descartar)</Text>
+                    <IconText Icone={IconCloseCircle} style={styles.contaAlvoDismissText} tone="onSurface">Não interessa (descartar)</IconText>
                   </TouchableOpacity>
                 )}
               </View>
@@ -6611,7 +6618,7 @@ function ClientBottomSheet({
                       onClose();
                     }}
                   >
-                    <Text style={styles.navRouteButtonText}>🚗 Carro</Text>
+                    <IconText Icone={IconCar} style={styles.navRouteButtonText} tone="onSurface">Carro</IconText>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.navRouteButton, styles.navButtonWalking]}
@@ -6678,7 +6685,7 @@ function ClientBottomSheet({
                   style={styles.scheduleButton}
                   onPress={onScheduleMeeting}
                 >
-                  <Text style={styles.scheduleButtonText}>📅 Agendar reunião</Text>
+                  <IconText Icone={IconCalendar} style={styles.scheduleButtonText} tone="onSurface">Agendar reunião</IconText>
                 </TouchableOpacity>
               )}
               {onScheduleMeeting && !canScheduleMeeting && (
@@ -6705,7 +6712,7 @@ function ClientBottomSheet({
                   style={styles.followUpButton}
                   onPress={onFollowUp}
                 >
-                  <Text style={styles.followUpButtonText}>🔁 Marcar Follow Up</Text>
+                  <IconText Icone={IconRefresh} style={styles.followUpButtonText} tone="onSurface">Marcar Follow Up</IconText>
                 </TouchableOpacity>
               )}
             </View>
@@ -6717,7 +6724,7 @@ function ClientBottomSheet({
                 style={styles.changeStageButton}
                 onPress={onChangeStage}
               >
-                <Text style={styles.changeStageButtonText}>🔄 Mover para etapa</Text>
+                <IconText Icone={IconRefresh} style={styles.changeStageButtonText} tone="onSurface">Mover para etapa</IconText>
               </TouchableOpacity>
             )}
 

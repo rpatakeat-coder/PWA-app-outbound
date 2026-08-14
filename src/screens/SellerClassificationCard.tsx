@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { IconText, IconUserGroup } from '../components/icons';
 import { Alert } from '../components/Alert';
 import { useSellerClassification } from '../hooks/useSellerClassification';
 import type { SellerStatus } from '../hooks/useAllSellers';
@@ -43,7 +44,7 @@ export function SellerClassificationCard() {
   return (
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
-        <Text style={styles.title}>👥 Vendedores & usuários</Text>
+        <IconText Icone={IconUserGroup} style={styles.title} tone="tintRedText">Vendedores & usuários</IconText>
         <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
       </TouchableOpacity>
 
