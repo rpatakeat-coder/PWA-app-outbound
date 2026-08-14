@@ -233,13 +233,21 @@ async function reconcileStageChange(token: string, idHubspot: string, clientId: 
     const deal = await hsFetch(
       token,
       'GET',
-      `/crm/v3/objects/deals/${idHubspot}?properties=dealstage,pipeline,hubspot_owner_id`,
+      // `closedate` entra aqui pra o app saber QUANDO o negocio fechou.
+      // Antes so' sabiamos que o cliente virou cliente (clients.status), nunca
+      // a data: `won_at` estava vazio nas 5.5k linhas e nenhuma mudanca de
+      // etapa registrada apontava pra ganho — na pratica o funil do app morre
+      // em Negociacao e o fechamento acontece direto no HubSpot. Sem data nao
+      // ha' "fechados no mes", que e' o numero que um gestor comercial mais
+      // olha.
+      `/crm/v3/objects/deals/${idHubspot}?properties=dealstage,pipeline,hubspot_owner_id,closedate`,
     );
     if (!deal.ok) return;
     const props = deal.body?.properties ?? {};
     const pipeline = trimOrNull(props.pipeline);
     const dealstage = trimOrNull(props.dealstage);
     const ownerId = trimOrNull(props.hubspot_owner_id);
+    const closedate = trimOrNull(props.closedate);
     if (!pipeline || !dealstage) return;
 
     const stage = await hsFetch(
@@ -255,6 +263,28 @@ async function reconcileStageChange(token: string, idHubspot: string, clientId: 
       atualizacao_diaria: true,
     };
     if (ownerId) update.vendedor_id_hubspot = ownerId;
+
+    // Carimba a data do ganho quando o deal esta' numa etapa de fechamento.
+    //
+    // Os ids sao os mesmos de WON_STAGE_IDS em src/constants/stages.ts
+    // (Ganho e Onboarding). O deal passa pelas DUAS, entao o carimbo tem que
+    // acontecer UMA vez so' — por isso a RPC, que so' escreve quando won_at
+    // ainda e' NULL. Repetir o update aqui sobrescreveria a data do fechamento
+    // pela data do onboarding.
+    //
+    // `closedate` vem do HubSpot em ISO. Se vier vazio (deal fechado sem data,
+    // acontece em importacao antiga), nao inventamos: deixa null e o KPI
+    // continua honesto sobre o que nao sabe.
+    const ETAPAS_DE_GANHO = ['1396006162', '1396006163'];
+    if (ETAPAS_DE_GANHO.includes(dealstage) && closedate) {
+      const { error: erroGanho } = await serviceClient().rpc('stamp_won_at_com_data', {
+        p_client_id: clientId,
+        p_won_at: closedate,
+      });
+      if (erroGanho) {
+        console.warn('[hubspot-sync] carimbo de won_at falhou', erroGanho.message);
+      }
+    }
 
     const { error } = await serviceClient().from('clients').update(update).eq('id', clientId);
     if (error) console.warn('[hubspot-sync] reconcile clients falhou', error.message);
