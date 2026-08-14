@@ -20,29 +20,40 @@
 // nao e' ameaca que justifique a duplicacao. Os numeros recebidos ficam
 // gravados em `resumos_ia.numeros` pra auditoria.
 //
-// FAIL-CLOSED (principio 6 do doc): sem ANTHROPIC_API_KEY a funcao se RECUSA a
+// FAIL-CLOSED (principio 6 do doc): sem OPENAI_API_KEY a funcao se RECUSA a
 // operar e diz isso. Ela nunca degrada pra texto generico — texto plausivel sem
 // IA e' exatamente o tipo de mentira silenciosa que o doc manda evitar.
 //
 // Deploy:
-//   supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+//   supabase secrets set OPENAI_API_KEY=sk-...
 //   supabase functions deploy resumo-semanal
+//
+// Opcional:
+//   supabase secrets set OPENAI_MODEL=gpt-4o-mini
 //
 // Depende da migration 20260814_resumos_ia.sql.
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-// Identificador do modelo.
+const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+
+// Identificador do modelo, com o default aqui e sobrescrita por secret.
 //
 // LEIA ANTES DE TROCAR. O doc registra um incidente em que alguem colocou uma
 // string de modelo invalida: as chamadas passaram a falhar em silencio, o
 // resumo reciclou o texto da semana anterior e ninguem percebeu por 4 dias.
-// Ironia util: a string daquele incidente era "claude-sonnet-5", que HOJE e'
-// valida — o que mostra que a licao nao e' "evite esse nome", e' "confira o
-// identificador contra a documentacao vigente e falhe alto quando ele quebrar".
-// Por isso um 4xx aqui NAO tem retry e vira linha de falha visivel na tela.
-const MODELO = 'claude-sonnet-5';
+// A licao nao e' "evite tal nome", e' "confira o identificador contra a
+// documentacao vigente e falhe alto quando ele quebrar".
+//
+// Por isso duas coisas aqui: o modelo sai por SECRET (`OPENAI_MODEL`), pra
+// trocar sem mexer em codigo nem redeployar, e um 4xx NAO tem retry — vira
+// linha de falha visivel na tela, com a mensagem crua da OpenAI junto.
+//
+// Nao consigo verificar daqui quais modelos a SUA conta enxerga; se este
+// default nao existir pra voce, a tela vai dizer exatamente isso e o secret
+// resolve.
+const MODELO = Deno.env.get('OPENAI_MODEL')?.trim() || 'gpt-4o';
 const MAX_TOKENS = 1200;
 const TIMEOUT_MS = 45_000;
 
@@ -66,63 +77,85 @@ function serviceClient() {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Cliente da Claude com o padrao de robustez do doc.
+/** Cliente da OpenAI com o padrao de robustez do doc.
  *
- *  429 (rate limit), 529 (overloaded) e 5xx merecem retry — sao transitorios.
+ *  429 (rate limit) e 5xx merecem retry — sao transitorios.
  *  4xx falha DIRETO: modelo invalido ou chave errada nao melhoram repetindo, e
- *  insistir so' atrasa a hora em que o erro aparece pra quem pode consertar. */
-async function chamarClaude(
+ *  insistir so' atrasa a hora em que o erro aparece pra quem pode consertar.
+ *
+ *  A excecao e' o parametro de limite de tokens: os modelos de raciocinio da
+ *  OpenAI recusam `max_tokens` e exigem `max_completion_tokens`. Sao os MESMOS
+ *  dados com nome diferente, entao esse 400 especifico ganha uma segunda
+ *  tentativa com o outro nome — sem isso, trocar o modelo pelo secret quebraria
+ *  a funcao com um erro que parece de configuracao mas nao e'. */
+async function chamarModelo(
   apiKey: string,
   prompt: string,
   tentativa = 1,
+  campoDeTokens: 'max_tokens' | 'max_completion_tokens' = 'max_tokens',
 ): Promise<{ ok: true; texto: string } | { ok: false; erro: string }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(OPENAI_URL, {
       method: 'POST',
       headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        Authorization: `Bearer ${apiKey}`,
         'content-type': 'application/json',
       },
       signal: ctrl.signal,
       body: JSON.stringify({
         model: MODELO,
-        max_tokens: MAX_TOKENS,
         messages: [{ role: 'user', content: prompt }],
+        [campoDeTokens]: MAX_TOKENS,
       }),
     });
 
-    if ((res.status === 429 || res.status === 529 || res.status >= 500) && tentativa <= 4) {
+    if ((res.status === 429 || res.status >= 500) && tentativa <= 4) {
       clearTimeout(timer);
       await sleep(1500 * tentativa);
-      return chamarClaude(apiKey, prompt, tentativa + 1);
+      return chamarModelo(apiKey, prompt, tentativa + 1, campoDeTokens);
     }
 
     const corpo = await res.json().catch(() => null);
 
     if (!res.ok) {
       const detalhe = corpo?.error?.message ?? `HTTP ${res.status}`;
-      return { ok: false, erro: `API da Anthropic recusou (${res.status}): ${detalhe}` };
+
+      // O unico 4xx que vale repetir: o modelo quer o outro nome do parametro.
+      if (
+        res.status === 400 &&
+        campoDeTokens === 'max_tokens' &&
+        /max_completion_tokens|unsupported parameter.*max_tokens/i.test(detalhe)
+      ) {
+        clearTimeout(timer);
+        return chamarModelo(apiKey, prompt, tentativa, 'max_completion_tokens');
+      }
+
+      return { ok: false, erro: `A OpenAI recusou (${res.status}): ${detalhe}` };
     }
 
-    // Resposta sem bloco de texto tambem e' falha — o doc pede retry aqui,
-    // porque acontece e degradar pra string vazia produziria um card em branco
-    // que parece "a semana foi tranquila".
-    const texto = (corpo?.content ?? [])
-      .filter((b: any) => b?.type === 'text')
-      .map((b: any) => b.text)
-      .join('\n')
-      .trim();
+    // Resposta sem texto tambem e' falha. Degradar pra string vazia produziria
+    // um card em branco que se le como "a semana foi tranquila" — o tipo de
+    // silencio que o doc manda transformar em erro visivel.
+    const escolha = corpo?.choices?.[0];
+    const texto = (escolha?.message?.content ?? '').trim();
 
     if (!texto) {
+      // `length` significa que o limite de tokens cortou a resposta antes do
+      // primeiro caractere util — repetir com o mesmo limite daria no mesmo.
+      if (escolha?.finish_reason === 'length') {
+        return {
+          ok: false,
+          erro: `A resposta estourou o limite de ${MAX_TOKENS} tokens sem produzir texto. Se o modelo for de raciocinio, ele gasta tokens pensando: aumente MAX_TOKENS ou use um modelo sem raciocinio.`,
+        };
+      }
       if (tentativa <= 2) {
         clearTimeout(timer);
         await sleep(1000);
-        return chamarClaude(apiKey, prompt, tentativa + 1);
+        return chamarModelo(apiKey, prompt, tentativa + 1, campoDeTokens);
       }
-      return { ok: false, erro: 'A resposta voltou sem bloco de texto.' };
+      return { ok: false, erro: 'A resposta voltou vazia.' };
     }
 
     return { ok: true, texto };
@@ -183,10 +216,10 @@ Deno.serve(async (req) => {
 
   // Fail-closed. Sem chave a funcao para aqui e diz o porque — nunca inventa
   // um texto generico pra "nao quebrar a tela".
-  const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+  const apiKey = Deno.env.get('OPENAI_API_KEY');
   if (!apiKey) {
     return json(503, {
-      error: 'ANTHROPIC_API_KEY não configurada. Rode: supabase secrets set ANTHROPIC_API_KEY=…',
+      error: 'OPENAI_API_KEY não configurada. Rode: supabase secrets set OPENAI_API_KEY=sk-…',
       configuravel: true,
     });
   }
@@ -210,7 +243,7 @@ Deno.serve(async (req) => {
     return json(400, { error: 'Corpo inválido: esperava { janela, janelaAnterior, metricas, linhas }' });
   }
 
-  const r = await chamarClaude(apiKey, montarPrompt(numeros));
+  const r = await chamarModelo(apiKey, montarPrompt(numeros));
 
   // Sucesso e falha viram linha na MESMA tabela. E' o que impede o sistema de
   // seguir exibindo texto velho como se fosse novo.
