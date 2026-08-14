@@ -11,6 +11,8 @@
 // e' chumbado; quando o dado nao existe, a funcao devolve null e a tela mostra
 // estado vazio honesto — regra 6 de 02-FUNCIONALIDADES.md.
 import { supabase } from '../supabase';
+import { buscarTudo } from './paginar';
+import { carregarEquipe, ativos, type MembroEquipe } from './equipe';
 
 /** Etapas que contam como funil aberto. As demais (Perdido, Backlog, CASA DOS
  *  DADOS, Visita) sao estoque ou desfecho, nao negociacao em andamento. */
@@ -86,23 +88,32 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
 
   const seteDiasAtras = new Date(Date.now() - 7 * DIA_MS).toISOString();
 
-  const [sla, clientes, mudancas, pessoas, metas] = await Promise.all([
+  // clients e client_stage_changes vao PAGINADAS (buscarTudo). Sao as duas
+  // tabelas que crescem sem teto, e o corte silencioso do PostgREST em 1.000
+  // linhas nao daria erro nenhum: os leads mais antigos simplesmente perderiam
+  // a data de entrada na etapa e sumiriam da conta de travados. Numero errado
+  // pra menos, com cara de certo.
+  const [sla, clientes, mudancas, equipe] = await Promise.all([
     supabase.from('stage_sla').select('stage_label, sla_days').eq('is_active', true),
-    supabase
-      .from('clients')
-      .select('id, nome, empresa, etapa, vendedor_id_hubspot, won_at')
-      .not('etapa', 'is', null),
+    buscarTudo<any>((de, ate) =>
+      supabase
+        .from('clients')
+        .select('id, nome, empresa, etapa, vendedor_id_hubspot, won_at')
+        .not('etapa', 'is', null)
+        .range(de, ate),
+    ),
     // Ultima entrada de etapa por lead: define ha' quanto tempo ele esta' parado.
-    supabase
-      .from('client_stage_changes')
-      .select('client_id, to_stage, created_at')
-      .order('created_at', { ascending: false }),
-    supabase.from('profiles').select('id, full_name, email, id_hubspot, role'),
-    supabase.from('seller_visit_goals').select('*'),
+    buscarTudo<any>((de, ate) =>
+      supabase
+        .from('client_stage_changes')
+        .select('client_id, to_stage, created_at')
+        .order('created_at', { ascending: false })
+        .range(de, ate),
+    ),
+    carregarEquipe(),
   ]);
 
-  const erro = sla.error || clientes.error || mudancas.error || pessoas.error;
-  if (erro) throw erro;
+  if (sla.error) throw sla.error;
 
   const slaPorEtapa: RegraSla[] = (sla.data ?? []).map((r: any) => ({
     etapa: r.stage_label,
@@ -113,11 +124,11 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
   // Primeira ocorrencia por client_id = a mais recente, ja' que veio ordenado
   // por created_at desc. Evita um GROUP BY que o PostgREST nao expoe.
   const entradaNaEtapa = new Map<string, string>();
-  for (const m of (mudancas.data ?? []) as any[]) {
+  for (const m of mudancas as any[]) {
     if (!entradaNaEtapa.has(m.client_id)) entradaNaEtapa.set(m.client_id, m.created_at);
   }
 
-  const leads: LeadAberto[] = ((clientes.data ?? []) as any[])
+  const leads: LeadAberto[] = (clientes as any[])
     .filter((c) => (ETAPAS_FUNIL as readonly string[]).includes(c.etapa))
     .map((c) => {
       const entrou = entradaNaEtapa.get(c.id) ?? null;
@@ -147,57 +158,52 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
     };
   });
 
-  // "Fechados no mes" NAO e' calculavel hoje, e isso e' um achado, nao um
-  // esquecimento: `won_at` esta' vazio em 100% das linhas, a tabela
-  // client_status_history nao tem nenhum registro, e nenhuma mudanca de etapa
-  // do mes aponta pra uma etapa de ganho. Sem sinal, devolvemos null — a tela
-  // mostra travessao e explica. Zero seria pior que travessao: leria como "o
-  // time nao vendeu nada" em vez de "ainda nao medimos isso".
-  const temSinalDeGanho = ((clientes.data ?? []) as any[]).some((c) => c.won_at);
+  // "Fechados no mes" vem de `won_at` — a data REAL do fechamento.
+  //
+  // Historico: quando esta tela nasceu, won_at estava vazio em 100% das linhas
+  // e este KPI devolvia null. Nao era esquecimento — o funil do app termina na
+  // pratica em Negociacao e o fechamento acontece direto no HubSpot, entao a
+  // RPC de carimbo nunca era chamada. Corrigido em 14/08/2026 por dois lados:
+  // a hubspot-sync passou a ler `closedate` do deal e carimbar na hora, e um
+  // backfill (scripts/backfill-won-at.sql) preencheu 438 fechamentos antigos.
+  //
+  // A guarda continua aqui de proposito. Se um dia a fonte secar de novo, a
+  // tela volta a mostrar travessao em vez de zero — zero leria como "o time nao
+  // vendeu nada", que e' uma afirmacao, quando a verdade seria "parei de medir".
+  const temSinalDeGanho = (clientes as any[]).some((c) => c.won_at);
   const fechados = temSinalDeGanho
-    ? ((clientes.data ?? []) as any[]).filter(
-        (c) => c.won_at && new Date(c.won_at) >= inicioDoMes,
-      )
+    ? (clientes as any[]).filter((c) => c.won_at && new Date(c.won_at) >= inicioDoMes)
     : null;
 
-  // A meta que existe no banco e' de VISITAS POR DIA (seller_visit_goals:
-  // seller_id + meta_visitas_dia) — nao de fechamento por mes, que era o que
-  // o cockpit original media. Sao perguntas diferentes e a tela rotula a que
+  // A meta e' de VISITAS POR DIA, nao de fechamento por mes (que era o que o
+  // cockpit original media). Sao perguntas diferentes e a tela rotula a que
   // temos, em vez de fingir que responde a outra.
   //
-  // A chave e' o UUID do PERFIL, nao o owner id do HubSpot: por isso o mapa e'
-  // por profile.id e nao por id_hubspot.
-  const metaPorPerfil = new Map<string, number>();
-  for (const m of (metas.data ?? []) as any[]) {
-    if (m.seller_id && typeof m.meta_visitas_dia === 'number') {
-      metaPorPerfil.set(m.seller_id, m.meta_visitas_dia);
-    }
-  }
-
-  const executivos: Executivo[] = ((pessoas.data ?? []) as any[])
-    // Desativados saem: o nome traz o marcador e eles nao trabalham mais,
-    // entao apareceriam com carteira parada e travados que ninguem vai atacar.
-    .filter((p) => p.role === 'user' && p.id_hubspot && !/desativad/i.test(p.full_name ?? ''))
-    .map((p) => {
-      const meus = leads.filter((l) => l.vendedorId === p.id_hubspot);
+  // Quem resolve a meta efetiva e' equipe.ts — inclusive o fallback pra meta
+  // global de route_config, que esta camada ignorava e por isso mostrava o time
+  // inteiro como "sem meta".
+  const executivos: Executivo[] = ativos(equipe)
+    .filter((p: MembroEquipe) => p.ownerId)
+    .map((p: MembroEquipe) => {
+      const meus = leads.filter((l) => l.vendedorId === p.ownerId);
       return {
-        perfilId: p.id,
-        ownerId: p.id_hubspot,
-        nome: p.full_name || p.email,
+        perfilId: p.perfilId,
+        ownerId: p.ownerId!,
+        nome: p.nome,
         email: p.email,
         abertos: meus.length,
         travados: meus.filter((l) => l.travado).length,
         fechadosNoMes: fechados
-          ? fechados.filter((c) => c.vendedor_id_hubspot === p.id_hubspot).length
+          ? fechados.filter((c) => c.vendedor_id_hubspot === p.ownerId).length
           : null,
-        meta: metaPorPerfil.get(p.id) ?? null,
+        meta: p.metaVisitasDia,
       };
     })
     .sort((a, b) => b.travados - a.travados || b.abertos - a.abertos);
 
   // Taxa de avanco: leads do funil que mudaram de etapa nos ultimos 7 dias.
   const avancaram = new Set(
-    ((mudancas.data ?? []) as any[])
+    (mudancas as any[])
       .filter((m) => m.created_at >= seteDiasAtras)
       .map((m) => m.client_id),
   );
@@ -216,8 +222,12 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
       emAberto: leads.length,
       travados: leads.filter((l) => l.travado).length,
       fechadosNoMes: fechados ? fechados.length : null,
-      // null quando ninguem tem meta: a tela mostra estado vazio em vez de
-      // exibir "0" e dar a impressao de que a meta e' zero.
+      // Soma das metas de quem TEM meta. Quem o gestor marcou como 'sem_meta'
+      // nao entra — somar zero por ele baixaria o alvo do time e faria a
+      // aderencia parecer melhor do que e'.
+      //
+      // null so' quando ninguem tem meta alguma, o que hoje nao acontece: sem
+      // meta propria, vale a global de route_config (ver equipe.ts).
       metaVisitasDia: metasConhecidas.length
         ? metasConhecidas.reduce((s, e) => s + (e.meta ?? 0), 0)
         : null,
