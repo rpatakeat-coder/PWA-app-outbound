@@ -5903,9 +5903,14 @@ function ClientBottomSheet({
     const dias = comanda ? diasAte(comanda) : null;
     const cancelamento = parseDia(client.hs_cancelamento_solicitado_em);
 
-    const VERMELHO = { bg: '#fef2f2', border: '#fecaca', fg: '#b91c1c', sub: '#dc2626' };
-    const AMBAR = { bg: '#fffbeb', border: '#fde68a', fg: '#b45309', sub: '#d97706' };
-    const VERDE = { bg: '#f0fdf4', border: '#bbf7d0', fg: '#15803d', sub: '#16a34a' };
+    // Paletas do selo de uso do cliente. Ficam em objeto JS, e nao em
+    // StyleSheet — por isso escaparam da tokenizacao automatica e eram o
+    // ultimo ponto onde o tema escuro ainda pintava caixas claras.
+    // `sub` fica literal de proposito: e' cor de MARCA/status (vermelho,
+    // ambar, verde fortes), legivel nos dois temas.
+    const VERMELHO = { bg: 'var(--tint-red)', border: 'var(--tint-red-border)', fg: 'var(--tint-red-text)', sub: '#dc2626' };
+    const AMBAR = { bg: 'var(--tint-amber)', border: 'var(--tint-amber-border)', fg: 'var(--tint-amber-text)', sub: '#d97706' };
+    const VERDE = { bg: 'var(--tint-green)', border: 'var(--tint-green-border)', fg: 'var(--tint-green-text)', sub: '#16a34a' };
 
     // Ex-cliente é quem está na etapa de Churn no HubSpot — NÃO quem tem data
     // de cancelamento. A data registra que houve um pedido: há clientes com

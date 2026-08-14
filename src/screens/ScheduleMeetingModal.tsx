@@ -625,7 +625,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#fed7aa',
+    borderColor: 'var(--tint-amber-border)',
     marginTop: 8,
   },
   rescheduleBannerTitle: {
