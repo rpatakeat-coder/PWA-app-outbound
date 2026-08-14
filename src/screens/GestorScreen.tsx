@@ -13,6 +13,10 @@ import {
 } from 'react-native';
 import { Alert } from '../components/Alert';
 import {
+  IconBarGraph,
+  IconText,
+} from '../components/icons';
+import {
   useGestorMetrics,
   useMetricLeads,
   useGestorTaskMetrics,
@@ -736,7 +740,7 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
 
       {/* Exportacao de dados (CSV com atividade por vendedor). */}
       <View style={styles.exportCard}>
-        <Text style={styles.exportTitle}>📊 Exportar TUDO (JSON p/ IA)</Text>
+        <IconText Icone={IconBarGraph} style={styles.exportTitle} tone="onSurface">Exportar TUDO (JSON p/ IA)</IconText>
         <Text style={styles.exportHint}>
           Exporta tudo do período — leads (dados completos), tarefas, visitas, reuniões,
           follow-ups, mudanças de etapa (com motivos) e notas, cada um com o vendedor.

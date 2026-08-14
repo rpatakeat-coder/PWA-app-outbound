@@ -1,6 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { IconText, IconCloseCircle } from '../components/icons';
+import {
+  IconCloseCircle,
+  IconDownload,
+  IconText,
+} from '../components/icons';
 import { Alert } from '../components/Alert';
 import { useDismissedContaAlvo } from '../hooks/useDismissedContaAlvo';
 import { exportAgenda } from '../utils/exportAgenda';
@@ -121,7 +125,7 @@ export function DismissedContaAlvoCard() {
                   onPress={onExport}
                   disabled={exporting || filtered.length === 0}
                 >
-                  {exporting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.exportBtnText}>📤 JSON</Text>}
+                  {exporting ? <ActivityIndicator size="small" color="#fff" /> : <IconText Icone={IconDownload} style={styles.exportBtnText} tone="onBrand">JSON</IconText>}
                 </TouchableOpacity>
               </View>
 

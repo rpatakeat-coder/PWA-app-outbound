@@ -25,27 +25,34 @@ import {
 import { Alert, AlertHost } from './src/components/Alert';
 import { useTheme } from './src/theme';
 import {
+  IconArrowDown,
+  IconArrowFoward,
+  IconArrowUp,
   IconBarGraph,
   IconCalendar,
+  IconCall,
+  IconCar,
   IconCheck,
-  IconArrowFoward,
+  IconClipboardCheck,
+  IconClock,
+  IconClose,
   IconCloseCircle,
   IconDownload,
-  IconRefresh,
-  IconText,
-  IconUndo,
-  IconWarning,
-  IconClose,
-  IconCar,
-  IconClipboardCheck,
   IconFilterList,
+  IconHome,
   IconLocation,
   IconLocationFilled,
+  IconMail,
   IconPlus,
+  IconRefresh,
   IconSearch,
   IconSettings,
   IconSquareMenu,
+  IconStore,
+  IconText,
   IconTrendingUp,
+  IconUndo,
+  IconWarning,
   NavIcon,
   useIconColors,
 } from './src/components/icons';
@@ -302,6 +309,7 @@ const getClientPrimaryName = (client: Client) => client.empresa?.trim() || clien
 const CONTA_ALVO_COLOR = '#7c3aed';
 
 function CustomMarker({ color, meetingCount, isContaAlvo }: { color: string; meetingCount: number; isContaAlvo?: boolean }) {
+  const iconColors = useIconColors();
   return (
     <View style={markerStyles.container}>
       <View style={[markerStyles.pin, { backgroundColor: color }]}>
@@ -318,7 +326,7 @@ function CustomMarker({ color, meetingCount, isContaAlvo }: { color: string; mee
         <Image source={require('./assets/pin-logo.png')} style={markerStyles.logo} fadeDuration={0} />
         {meetingCount > 0 && (
           <View style={markerStyles.meetingBadge}>
-            <Text style={markerStyles.meetingBadgeText}>📅</Text>
+            <IconCalendar width={16} height={16} fill={iconColors.onSurface} />
           </View>
         )}
         {/* Conta Alvo: badge 🎯 no canto esquerdo (o de reunião fica no direito). */}
@@ -2809,7 +2817,7 @@ function MainApp() {
           Busque pelo nome do restaurante ou contato pra incluir na rota.
         </Text>
         <View style={[styles.searchBar, { marginHorizontal: 0, marginTop: 8 }]}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <IconSearch width={16} height={16} fill={iconColors.muted} />
           <TextInput
             style={styles.searchInput}
             placeholder="Buscar restaurante, contato, cidade..."
@@ -3007,7 +3015,7 @@ function MainApp() {
                         if (nextStops.length) fieldOps.updateStops.mutate(nextStops);
                       }}
                     >
-                      <Text style={styles.smallActionButtonText}>↑ Subir</Text>
+                      <IconText Icone={IconArrowUp} style={styles.smallActionButtonText} tone="onSurface">Subir</IconText>
                     </TouchableOpacity>
                   )}
                   {!isLast && !isMonitoringRoute && (
@@ -3019,7 +3027,7 @@ function MainApp() {
                         if (nextStops.length) fieldOps.updateStops.mutate(nextStops);
                       }}
                     >
-                      <Text style={styles.smallActionButtonText}>↓ Descer</Text>
+                      <IconText Icone={IconArrowDown} style={styles.smallActionButtonText} tone="onSurface">Descer</IconText>
                     </TouchableOpacity>
                   )}
                   {stop && !isMonitoringRoute && (
@@ -4455,7 +4463,7 @@ function MainApp() {
                 </View>
                 <Text style={styles.heatLegendLabel}>mais</Text>
                 <TouchableOpacity style={styles.heatCloseBtn} onPress={() => setHeatOn(false)}>
-                  <Text style={styles.heatCloseText}>✕</Text>
+                  <IconClose width={16} height={16} fill={iconColors.muted} />
                 </TouchableOpacity>
               </View>
 
@@ -5728,6 +5736,7 @@ function ClientBottomSheet({
   canWriteNotes?: boolean;
   onSavePhone?: (telefone: string) => Promise<void>;
 }) {
+  const iconColors = useIconColors();
   const statusColor = statusConfig[client.status]?.color || '#3b82f6';
   const statusLabel = statusConfig[client.status]?.label || client.status;
   const primaryName = getClientPrimaryName(client);
@@ -5919,6 +5928,7 @@ function ClientBottomSheet({
     const label = (dt: Date) => dt.toLocaleDateString('pt-BR');
     const haQuanto = (dias: number) =>
       dias <= 0 ? 'hoje' : dias === 1 ? 'ontem' : `há ${dias} dias`;
+      const iconColors = useIconColors();
 
     const comanda = parseDia(client.hs_ultima_comanda_em);
     const dias = comanda ? diasAte(comanda) : null;
@@ -6223,7 +6233,7 @@ function ClientBottomSheet({
             <View style={styles.infoGrid}>
               {client.empresa && (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoIcon}>🏢</Text>
+                  <IconStore width={16} height={16} fill={iconColors.onSurface} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.detailLabel}>Empresa</Text>
                     <Text style={styles.detailValue}>{client.empresa}</Text>
@@ -6235,7 +6245,7 @@ function ClientBottomSheet({
                   updateClient (mesmo fluxo do form — sincroniza HubSpot). */}
               {onSavePhone ? (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoIcon}>📞</Text>
+                  <IconCall width={16} height={16} fill={iconColors.onSurface} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.detailLabel}>Telefone</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
@@ -6281,7 +6291,7 @@ function ClientBottomSheet({
                 </View>
               ) : client.telefone ? (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoIcon}>📞</Text>
+                  <IconCall width={16} height={16} fill={iconColors.onSurface} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.detailLabel}>Telefone</Text>
                     <Text style={styles.detailValue}>{client.telefone}</Text>
@@ -6290,7 +6300,7 @@ function ClientBottomSheet({
               ) : null}
               {client.email && (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoIcon}>✉️</Text>
+                  <IconMail width={16} height={16} fill={iconColors.onSurface} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.detailLabel}>Email</Text>
                     <Text style={styles.detailValue}>{client.email}</Text>
@@ -6298,7 +6308,7 @@ function ClientBottomSheet({
                 </View>
               )}
               <View style={styles.infoItem}>
-                <Text style={styles.infoIcon}>🏠</Text>
+                <IconHome width={16} height={16} fill={iconColors.onSurface} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.detailLabel}>Endereço</Text>
                   <Text style={styles.detailValue}>
@@ -6309,7 +6319,7 @@ function ClientBottomSheet({
               </View>
               {client.bairro && (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoIcon}>🏘️</Text>
+                  <IconStore width={16} height={16} fill={iconColors.onSurface} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.detailLabel}>Bairro</Text>
                     <Text style={styles.detailValue}>{client.bairro}</Text>
@@ -6318,7 +6328,7 @@ function ClientBottomSheet({
               )}
               {(client.cidade || client.estado) && (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoIcon}>📍</Text>
+                  <IconLocation width={16} height={16} fill={iconColors.onSurface} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.detailLabel}>Cidade / UF</Text>
                     <Text style={styles.detailValue}>
@@ -6329,7 +6339,7 @@ function ClientBottomSheet({
               )}
               {client.cep && (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoIcon}>📮</Text>
+                  <IconMail width={16} height={16} fill={iconColors.onSurface} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.detailLabel}>CEP</Text>
                     <Text style={styles.detailValue}>{client.cep}</Text>
@@ -6338,7 +6348,7 @@ function ClientBottomSheet({
               )}
               {client.latitude !== null && client.longitude !== null && (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoIcon}>🧭</Text>
+                  <IconLocation width={16} height={16} fill={iconColors.onSurface} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.detailLabel}>Coordenadas</Text>
                     <Text style={styles.detailValue}>
@@ -6349,7 +6359,7 @@ function ClientBottomSheet({
               )}
               {client.etapa && (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoIcon}>↪</Text>
+                  <IconUndo width={16} height={16} fill={iconColors.onSurface} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.detailLabel}>Etapa</Text>
                     <Text style={styles.detailValue}>{client.etapa}</Text>
@@ -6367,7 +6377,7 @@ function ClientBottomSheet({
               )}
               {(createdAt || updatedAt) && (
                 <View style={styles.infoItem}>
-                  <Text style={styles.infoIcon}>🕒</Text>
+                  <IconClock width={16} height={16} fill={iconColors.onSurface} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.detailLabel}>Criado / atualizado</Text>
                     <Text style={styles.detailValue}>

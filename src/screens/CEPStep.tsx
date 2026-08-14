@@ -13,6 +13,13 @@ import {
   TouchableWithoutFeedback,
 } from 'react-native';
 import { Alert } from '../components/Alert';
+import {
+  IconArrowBack,
+  IconLocation,
+  IconMail,
+  IconText,
+  useIconColors,
+} from '../components/icons';
 import { fetchCepData, geocodeStructured, reverseGeocode, GeocodingError } from '../utils/geocoding';
 import type { ClientFormData } from '../types/client';
 
@@ -46,6 +53,7 @@ interface CEPStepProps {
 type Mode = 'choose' | 'cep' | 'coords';
 
 export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
+  const iconColors = useIconColors();
   const [mode, setMode] = useState<Mode>('choose');
   const [loading, setLoading] = useState(false);
 
@@ -189,7 +197,7 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
           <Text style={styles.subtitle}>Escolha a forma de inserir a localização</Text>
 
           <TouchableOpacity style={styles.optionCard} onPress={() => setMode('cep')}>
-            <Text style={styles.optionIcon}>📮</Text>
+            <IconMail width={16} height={16} fill={iconColors.onSurface} />
             <View style={styles.optionInfo}>
               <Text style={styles.optionTitle}>Cadastrar via CEP</Text>
               <Text style={styles.optionDesc}>Informe o CEP e o endereço será preenchido automaticamente</Text>
@@ -198,7 +206,7 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.optionCard} onPress={() => setMode('coords')}>
-            <Text style={styles.optionIcon}>📍</Text>
+            <IconLocation width={16} height={16} fill={iconColors.onSurface} />
             <View style={styles.optionInfo}>
               <Text style={styles.optionTitle}>Cadastrar via Coordenadas</Text>
               <Text style={styles.optionDesc}>Informe latitude e longitude diretamente</Text>
@@ -208,7 +216,7 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
 
           {onPickOnMap && (
             <TouchableOpacity style={styles.optionCard} onPress={onPickOnMap}>
-              <Text style={styles.optionIcon}>📌</Text>
+              <IconLocation width={16} height={16} fill={iconColors.onSurface} />
               <View style={styles.optionInfo}>
                 <Text style={styles.optionTitle}>Colocar pelo pin no mapa</Text>
                 <Text style={styles.optionDesc}>
@@ -244,11 +252,11 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
               <View style={styles.card}>
                 <View style={styles.headerRow}>
                   <TouchableOpacity onPress={() => { setMode('choose'); setCepData(null); setCep(''); setNumero(''); setEnderecoManual(''); }}>
-                    <Text style={styles.backBtn}>← Voltar</Text>
+                    <IconText Icone={IconArrowBack} style={styles.backBtn} tone="brandText">Voltar</IconText>
                   </TouchableOpacity>
                 </View>
 
-                <Text style={styles.title}>📮 Cadastro via CEP</Text>
+                <IconText Icone={IconMail} style={styles.title} tone="onSurface">Cadastro via CEP</IconText>
 
                 {/* CEP Input */}
                 <Text style={styles.label}>CEP</Text>
@@ -366,11 +374,11 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
             <View style={styles.card}>
               <View style={styles.headerRow}>
                 <TouchableOpacity onPress={() => { setMode('choose'); setLatitude(''); setLongitude(''); }}>
-                  <Text style={styles.backBtn}>← Voltar</Text>
+                  <IconText Icone={IconArrowBack} style={styles.backBtn} tone="brandText">Voltar</IconText>
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.title}>📍 Cadastro via Coordenadas</Text>
+              <IconText Icone={IconLocation} style={styles.title} tone="onSurface">Cadastro via Coordenadas</IconText>
               <Text style={styles.subtitle}>
                 O endereço será preenchido automaticamente
               </Text>

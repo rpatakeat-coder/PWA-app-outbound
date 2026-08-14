@@ -13,9 +13,15 @@ import {
   Platform,
 } from 'react-native';
 import { Alert } from '../components/Alert';
+import {
+  IconLock,
+  IconMail,
+  useIconColors,
+} from '../components/icons';
 import { useAuth } from '../context/AuthContext';
 
 export function LoginScreen() {
+  const iconColors = useIconColors();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -78,7 +84,7 @@ export function LoginScreen() {
             <Text style={styles.formTitle}>Entrar na conta</Text>
 
             <View style={styles.inputWrap}>
-              <Text style={styles.inputIcon}>✉️</Text>
+              <IconMail width={16} height={16} fill={iconColors.onSurface} />
               <TextInput
                 style={styles.input}
                 placeholder="Email"
@@ -93,7 +99,7 @@ export function LoginScreen() {
             </View>
 
             <View style={styles.inputWrap}>
-              <Text style={styles.inputIcon}>🔒</Text>
+              <IconLock width={16} height={16} fill={iconColors.onSurface} />
               <TextInput
                 style={styles.input}
                 placeholder="Senha"

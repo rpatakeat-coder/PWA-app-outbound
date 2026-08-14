@@ -1,6 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { IconText, IconLocation } from '../components/icons';
+import {
+  IconDownload,
+  IconLocation,
+  IconText,
+} from '../components/icons';
 import { Alert } from '../components/Alert';
 import { useAllSellers } from '../hooks/useAllSellers';
 import { useRouteHistory, useRouteRanking } from '../hooks/useRouteHistory';
@@ -73,7 +77,7 @@ function SellerDetail({ sellerId, range, enabled }: { sellerId: string; range: P
                 ))}
               </View>
             ) : (
-              <Text style={styles.blockMuted}>🗺️ Sem rota planejada nesse dia.</Text>
+              <IconText Icone={IconLocation} style={styles.blockMuted} tone="muted">Sem rota planejada nesse dia.</IconText>
             )}
             {day.visits.length > 0 ? (
               <View style={styles.block}>
@@ -85,7 +89,7 @@ function SellerDetail({ sellerId, range, enabled }: { sellerId: string; range: P
                 ))}
               </View>
             ) : (
-              <Text style={styles.blockMuted}>📍 Sem check-ins nesse dia.</Text>
+              <IconText Icone={IconLocation} style={styles.blockMuted} tone="muted">Sem check-ins nesse dia.</IconText>
             )}
           </View>
         );
@@ -280,7 +284,7 @@ export function RouteHistorySection({ range, enabled }: Props) {
                 >
                   {exportingRank
                     ? <ActivityIndicator size="small" color="#fff" />
-                    : <Text style={styles.exportBtnText}>📤 JSON</Text>}
+                    : <IconText Icone={IconDownload} style={styles.exportBtnText} tone="onBrand">JSON</IconText>}
                 </TouchableOpacity>
               </View>
               {rows.map((r, idx) => {

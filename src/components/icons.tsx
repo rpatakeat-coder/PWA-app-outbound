@@ -15,6 +15,27 @@ import { Text, View } from 'react-native';
 
 import { useTheme } from '../theme';
 
+import { IconArrowBack } from 'takeat-design-system-ui-kit/icons/IconArrowBack';
+import { IconArrowUp } from 'takeat-design-system-ui-kit/icons/IconArrowUp';
+import { IconArrowDown } from 'takeat-design-system-ui-kit/icons/IconArrowDown';
+import { IconCached } from 'takeat-design-system-ui-kit/icons/IconCached';
+import { IconCall } from 'takeat-design-system-ui-kit/icons/IconCall';
+import { IconCheckbox } from 'takeat-design-system-ui-kit/icons/IconCheckbox';
+import { IconCheckboxChecked } from 'takeat-design-system-ui-kit/icons/IconCheckboxChecked';
+import { IconCheckCircle } from 'takeat-design-system-ui-kit/icons/IconCheckCircle';
+import { IconClock } from 'takeat-design-system-ui-kit/icons/IconClock';
+import { IconEye } from 'takeat-design-system-ui-kit/icons/IconEye';
+import { IconHome } from 'takeat-design-system-ui-kit/icons/IconHome';
+import { IconMail } from 'takeat-design-system-ui-kit/icons/IconMail';
+import { IconMedal } from 'takeat-design-system-ui-kit/icons/IconMedal';
+import { IconStore } from 'takeat-design-system-ui-kit/icons/IconStore';
+import { IconTrophy } from 'takeat-design-system-ui-kit/icons/IconTrophy';
+import { IconUser } from 'takeat-design-system-ui-kit/icons/IconUser';
+import { IconWhatsapp } from 'takeat-design-system-ui-kit/icons/IconWhatsapp';
+import { IconCelebratingUser } from 'takeat-design-system-ui-kit/icons/IconCelebratingUser';
+import { IconExternalLink } from 'takeat-design-system-ui-kit/icons/IconExternalLink';
+import { IconBill } from 'takeat-design-system-ui-kit/icons/IconBill';
+import { IconLock } from 'takeat-design-system-ui-kit/icons/IconLock';
 import { IconWarning } from 'takeat-design-system-ui-kit/icons/IconWarning';
 import { IconUndo } from 'takeat-design-system-ui-kit/icons/IconUndo';
 import { IconRefresh } from 'takeat-design-system-ui-kit/icons/IconRefresh';
@@ -40,29 +61,50 @@ import { IconSquareMenu } from 'takeat-design-system-ui-kit/icons/IconSquareMenu
 import { IconTrendingUp } from 'takeat-design-system-ui-kit/icons/IconTrendingUp';
 
 export {
-  IconWarning,
-  IconUndo,
-  IconRefresh,
+  IconArrowBack,
+  IconArrowDown,
   IconArrowFoward,
-  IconPencil,
-  IconUserGroup,
+  IconArrowUp,
+  IconBarGraph,
+  IconBill,
+  IconCached,
+  IconCalendar,
+  IconCall,
+  IconCar,
+  IconCelebratingUser,
+  IconCheck,
+  IconCheckCircle,
+  IconCheckbox,
+  IconCheckboxChecked,
+  IconClipboardCheck,
+  IconClock,
+  IconClose,
   IconCloseCircle,
   IconDownload,
-  IconStar,
-  IconBarGraph,
-  IconCheck,
-  IconClose,
-  IconCalendar,
-  IconCar,
-  IconClipboardCheck,
+  IconExternalLink,
+  IconEye,
   IconFilterList,
+  IconHome,
   IconLocation,
   IconLocationFilled,
+  IconLock,
+  IconMail,
+  IconMedal,
+  IconPencil,
   IconPlus,
+  IconRefresh,
   IconSearch,
   IconSettings,
   IconSquareMenu,
+  IconStar,
+  IconStore,
   IconTrendingUp,
+  IconTrophy,
+  IconUndo,
+  IconUser,
+  IconUserGroup,
+  IconWarning,
+  IconWhatsapp,
 };
 
 type IconeSvg = (props: Record<string, unknown>) => React.JSX.Element;

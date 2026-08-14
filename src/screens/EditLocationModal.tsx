@@ -9,7 +9,12 @@ import {
   View,
 } from 'react-native';
 import { Alert } from '../components/Alert';
-import { IconClose, useIconColors } from '../components/icons';
+import {
+  IconClose,
+  IconLocation,
+  IconText,
+  useIconColors,
+} from '../components/icons';
 import MapView, { Marker, type Region, type MapViewHandle, PROVIDER_DEFAULT } from '../map';
 import type { Client } from '../types/client';
 import { distanceMeters } from '../hooks/useFieldOps';
@@ -110,7 +115,7 @@ export function EditLocationModal({ client, onSave, onClose }: Props) {
         <View style={styles.sheet}>
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.title}>📍 Editar localização</Text>
+              <IconText Icone={IconLocation} style={styles.title} tone="onSurface">Editar localização</IconText>
               <Text style={styles.subtitle} numberOfLines={1}>{clientName}</Text>
             </View>
             <TouchableOpacity onPress={onClose} disabled={saving}>
