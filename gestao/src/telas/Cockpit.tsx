@@ -94,6 +94,7 @@ export function Cockpit() {
   const [erro, setErro] = useState<string | null>(null);
   const [etapaAberta, setEtapaAberta] = useState<string | null>(null);
   const [execAberto, setExecAberto] = useState<Executivo | null>(null);
+  const [semDonoAberto, setSemDonoAberto] = useState(false);
 
   useEffect(() => {
     carregarCockpit().then(setDados).catch((e) => setErro(e.message ?? String(e)));
@@ -284,6 +285,33 @@ export function Cockpit() {
               </tbody>
             </table>
           )}
+
+          {/* Sem esta linha, somar a coluna "Abertos" nao bate com o KPI "Em
+              aberto" — e o pior: ninguem vai atras desses leads, porque eles
+              nao aparecem na carteira de ninguem. */}
+          {dados.semDonoAtivo.total > 0 && (
+            <button
+              onClick={() => setSemDonoAberto(true)}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                marginTop: 12,
+                background: 'var(--amber-soft)',
+                color: 'var(--amber-ink)',
+                border: '1px solid var(--line)',
+                borderRadius: 8,
+                padding: '9px 12px',
+                fontSize: 13,
+                font: 'inherit',
+                cursor: 'pointer',
+              }}
+            >
+              <strong>{dados.semDonoAtivo.total} leads sem dono ativo</strong> — carteira de quem
+              foi desativado. Contam no “Em aberto” acima e não aparecem em nenhuma linha desta
+              tabela. Ver quais →
+            </button>
+          )}
         </section>
       </div>
 
@@ -328,6 +356,29 @@ export function Cockpit() {
           </div>
         )}
         <ListaDeLeads leads={leadsDoExec} />
+      </Drawer>
+
+      <Drawer
+        aberto={semDonoAberto}
+        titulo="Leads sem dono ativo"
+        subtitulo={`${dados.semDonoAtivo.total} leads · ${dados.semDonoAtivo.leads.filter((l) => l.travado).length} acima do SLA`}
+        aoFechar={() => setSemDonoAberto(false)}
+      >
+        <div
+          style={{
+            background: 'var(--amber-soft)',
+            color: 'var(--amber-ink)',
+            border: '1px solid var(--line)',
+            borderRadius: 8,
+            padding: '10px 12px',
+            marginBottom: 14,
+            fontSize: 13,
+          }}
+        >
+          São leads cujo dono no HubSpot está desativado. Enquanto o dono não mudar lá, eles
+          continuam invisíveis na carteira de todo mundo — inclusive na rota do dia.
+        </div>
+        <ListaDeLeads leads={dados.semDonoAtivo.leads} />
       </Drawer>
     </>
   );

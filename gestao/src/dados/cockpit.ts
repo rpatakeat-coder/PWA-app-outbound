@@ -60,6 +60,11 @@ export interface DadosCockpit {
   leads: LeadAberto[];
   funil: { etapa: string; total: number; travados: number; sla: number | null }[];
   executivos: Executivo[];
+  /** Leads do funil cujo dono nao esta na lista de executivos ativos —
+   *  tipicamente carteira de quem foi desativado. Eles contam no KPI "em
+   *  aberto" e nao aparecem em nenhuma linha da tabela; sem este numero
+   *  explicito, somar a coluna nao bate com o card e ninguem vai atras deles. */
+  semDonoAtivo: { total: number; leads: LeadAberto[] };
   kpis: {
     emAberto: number;
     travados: number;
@@ -201,6 +206,9 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
     })
     .sort((a, b) => b.travados - a.travados || b.abertos - a.abertos);
 
+  const donosAtivos = new Set(executivos.map((e) => e.ownerId));
+  const orfaos = leads.filter((l) => !l.vendedorId || !donosAtivos.has(l.vendedorId));
+
   // Taxa de avanco: leads do funil que mudaram de etapa nos ultimos 7 dias.
   const avancaram = new Set(
     (mudancas as any[])
@@ -218,6 +226,7 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
     leads,
     funil,
     executivos,
+    semDonoAtivo: { total: orfaos.length, leads: orfaos },
     kpis: {
       emAberto: leads.length,
       travados: leads.filter((l) => l.travado).length,
