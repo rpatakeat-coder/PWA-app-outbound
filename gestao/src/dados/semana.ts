@@ -107,7 +107,16 @@ export async function gerarLeituraIA(
       janelaAnterior: dados.janelaAnterior,
       diasDecorridos: dados.diasDecorridos,
       comparacaoCompleta: dados.comparacaoCompleta,
-      metricas: dados.metricas.map((m) => ({ rotulo: m.rotulo, delta: m.delta })),
+      // Vao junto ate' 6 nomes de lead por metrica. Sem eles a IA so' consegue
+      // escrever "avaliar a qualidade das propostas"; com eles ela consegue
+      // "cobrar a proposta do Fulano". A acao vira executavel em vez de
+      // conselho generico — foi exatamente o que falhou na primeira geracao.
+      metricas: dados.metricas.map((m) => ({
+        rotulo: m.rotulo,
+        delta: m.delta,
+        exemplos: m.leads.slice(0, 6).map((l) => l.nome),
+        totalDeExemplos: m.leads.length,
+      })),
       linhas: dados.linhas.map((l) => ({
         nome: l.nome,
         visitas: l.visitas,

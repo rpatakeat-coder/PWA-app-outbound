@@ -168,9 +168,18 @@ async function chamarModelo(
 }
 
 function montarPrompt(n: any): string {
-  const linha = (m: any) =>
-    `- ${m.rotulo}: ${m.delta.atual} nesta semana, ${m.delta.anterior} na anterior ` +
-    `(${m.delta.diferenca >= 0 ? '+' : ''}${m.delta.diferenca})`;
+  const linha = (m: any) => {
+    const base =
+      `- ${m.rotulo}: ${m.delta.atual} nesta semana, ${m.delta.anterior} na anterior ` +
+      `(${m.delta.diferenca >= 0 ? '+' : ''}${m.delta.diferenca})`;
+    // Os nomes tornam a acao executavel. Sem eles a IA so' consegue dizer
+    // "avaliar as propostas"; com eles, "cobrar a proposta do Fulano".
+    if (!m.exemplos?.length) return base;
+    const resto = m.totalDeExemplos > m.exemplos.length
+      ? ` e mais ${m.totalDeExemplos - m.exemplos.length}`
+      : '';
+    return `${base}. Sao eles: ${m.exemplos.join(', ')}${resto}`;
+  };
 
   const pessoas = (n.linhas ?? [])
     .map(
@@ -195,19 +204,35 @@ POR PESSOA:
 ${pessoas || '(sem executivos ativos)'}
 
 REGRAS DE ESCRITA — siga todas:
-1. Baseie-se SO' nos numeros acima. NAO invente nenhum dado que nao foi dado.
-   Se algo nao da' pra afirmar com esses numeros, diga que nao da'.
+1. Baseie-se SO' nos numeros e nomes acima. NAO invente nenhum dado que nao foi
+   dado. Se algo nao da' pra afirmar com esses numeros, diga que nao da'.
 2. Nao repita a lista de numeros. O gestor ja' os ve' na tela. Escreva o que
    eles SIGNIFICAM juntos.
 3. Portugues do Brasil, direto, sem jargao corporativo e sem entusiasmo
    artificial. Nada de "excelente performance" ou "vamos juntos".
 4. Formato exato:
    - Um paragrafo de 3 a 5 frases com a leitura geral.
-   - Depois, a linha "COMO AGIR:" e 3 acoes numeradas, cada uma comecando por
-     um verbo e citando a pessoa ou a metrica que a justifica.
-5. Se houver alguem caindo em mais de uma frente, cite pelo nome — o gestor
+   - Depois, a linha "COMO AGIR:" e 3 acoes numeradas.
+5. CADA UMA DAS 3 ACOES precisa, obrigatoriamente:
+   (a) comecar por um verbo no infinitivo;
+   (b) conter PELO MENOS UM numero concreto tirado dos dados acima;
+   (c) nomear uma PESSOA da lista ou um LEAD citado acima.
+   Pelo menos 2 das 3 acoes tem que nomear uma pessoa.
+6. Acao sem numero e sem nome nao serve. Exemplos do que e' REJEITADO:
+   - "Analisar o motivo da queda nas visitas e ajustar a estrategia."
+   - "Avaliar a qualidade das propostas para melhorar a conversao."
+   - "Reforcar o acompanhamento do time."
+   Nenhuma delas diz a quem falar nem quanto. Reescreva no padrao destas:
+   - "Perguntar a NOME_EXEMPLO_1 o que travou a semana dele: caiu de 12 para 3
+      visitas e perdeu os 2 fechamentos que tinha."
+   - "Puxar com NOME_EXEMPLO_2 as 4 propostas paradas — LEAD_EXEMPLO entre
+      elas — que nao andaram desde segunda."
+   ATENCAO: NOME_EXEMPLO_1, NOME_EXEMPLO_2 e LEAD_EXEMPLO sao marcadores dos
+   exemplos, nao pessoas. NUNCA escreva esses marcadores na resposta e nunca
+   invente nome: use SOMENTE os nomes que aparecem nas listas deste prompt.
+7. Se houver alguem caindo em mais de uma frente, cite pelo nome — o gestor
    precisa saber com quem falar. Elogie por nome tambem quando o numero mandar.
-6. Nao use markdown, asteriscos nem cabecalhos. Texto corrido.`;
+8. Nao use markdown, asteriscos nem cabecalhos. Texto corrido.`;
 }
 
 Deno.serve(async (req) => {
