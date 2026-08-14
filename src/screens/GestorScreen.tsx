@@ -263,7 +263,7 @@ function LeadListModal({ state, onClose, onOpenClient }: {
                   : `${leads.length} ${leads.length === 1 ? 'lead' : 'leads'}`}
               </Text>
             </View>
-            <TouchableOpacity style={styles.modalCloseButton} onPress={onClose}>
+            <TouchableOpacity style={styles.modalCloseButton} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Text style={styles.modalCloseText}>Fechar</Text>
             </TouchableOpacity>
           </View>
@@ -353,7 +353,7 @@ function TasksModal({ state, period, onClose, onOpenClient }: {
                   : `${tasks.length} ${tasks.length === 1 ? 'tarefa' : 'tarefas'}`}
               </Text>
             </View>
-            <TouchableOpacity style={styles.modalCloseButton} onPress={onClose}>
+            <TouchableOpacity style={styles.modalCloseButton} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Text style={styles.modalCloseText}>Fechar</Text>
             </TouchableOpacity>
           </View>

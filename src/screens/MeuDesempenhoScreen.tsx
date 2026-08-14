@@ -64,7 +64,7 @@ function LeadsModal({
                 {q.isLoading ? 'Carregando...' : `${leads.length} ${leads.length === 1 ? 'lead' : 'leads'}`}
               </Text>
             </View>
-            <TouchableOpacity style={styles.modalClose} onPress={onClose}>
+            <TouchableOpacity style={styles.modalClose} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Text style={styles.modalCloseText}>Fechar</Text>
             </TouchableOpacity>
           </View>

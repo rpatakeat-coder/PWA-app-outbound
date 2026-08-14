@@ -4468,7 +4468,7 @@ function MainApp() {
                   ))}
                 </View>
                 <Text style={styles.heatLegendLabel}>mais</Text>
-                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" style={styles.heatCloseBtn} onPress={() => setHeatOn(false)}>
+                <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Fechar" style={styles.heatCloseBtn} onPress={() => setHeatOn(false)}>
                   <IconClose width={16} height={16} fill={iconColors.muted} />
                 </TouchableOpacity>
               </View>
@@ -7412,6 +7412,11 @@ const styles = StyleSheet.create({
   // menores, com folga horizontal, deixam os seis respirarem.
   navItem: {
     flex: 1,
+    // minHeight 48: e' o controle mais tocado do app, com o polegar, em pe' na
+    // rua. Estava em ~30px de altura efetiva (padding 6 + icone 17 + rotulo
+    // 10) — abaixo dos 44px que iOS e Android recomendam como alvo minimo, o
+    // que se traduz em toque errado de aba no meio da visita.
+    minHeight: 48,
     paddingVertical: 6,
     paddingHorizontal: 2,
     alignItems: 'center',
