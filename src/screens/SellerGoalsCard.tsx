@@ -87,9 +87,9 @@ export function SellerGoalsCard() {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: 'var(--surface)', borderRadius: 14, borderWidth: 1, borderColor: '#ede9fe', padding: 14, marginBottom: 12 },
+  card: { backgroundColor: 'var(--surface)', borderRadius: 14, borderWidth: 1, borderColor: 'var(--tint-purple-border)', padding: 14, marginBottom: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: 15, fontWeight: '800', color: '#5b21b6' },
+  title: { fontSize: 15, fontWeight: '800', color: 'var(--tint-purple-text)' },
   chevron: { fontSize: 12, color: '#7c3aed', fontWeight: '800' },
   hint: { fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 },

@@ -1039,14 +1039,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   warningBox: {
-    backgroundColor: '#fef3c7',
+    backgroundColor: 'var(--tint-amber)',
     borderRadius: 10,
     padding: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#fde68a',
+    borderColor: 'var(--tint-amber-border)',
   },
-  warningText: { fontSize: 12, color: '#92400e', lineHeight: 17 },
+  warningText: { fontSize: 12, color: 'var(--tint-amber-text)', lineHeight: 17 },
   stageCard: {
     flexDirection: 'row',
     alignItems: 'center',

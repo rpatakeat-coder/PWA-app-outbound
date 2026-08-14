@@ -106,15 +106,15 @@ export function SellerClassificationCard() {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: 'var(--surface)', borderRadius: 14, borderWidth: 1, borderColor: '#ede9fe', padding: 14, marginBottom: 12 },
+  card: { backgroundColor: 'var(--surface)', borderRadius: 14, borderWidth: 1, borderColor: 'var(--tint-purple-border)', padding: 14, marginBottom: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: 15, fontWeight: '800', color: '#5b21b6' },
+  title: { fontSize: 15, fontWeight: '800', color: 'var(--tint-purple-text)' },
   chevron: { fontSize: 12, color: '#7c3aed', fontWeight: '800' },
   hint: { fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 },
   toggle: { alignSelf: 'flex-start', backgroundColor: 'var(--surface-2)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 10 },
-  toggleActive: { backgroundColor: '#ede9fe' },
+  toggleActive: { backgroundColor: 'var(--tint-purple)' },
   toggleText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)' },
-  toggleTextActive: { color: '#5b21b6' },
+  toggleTextActive: { color: 'var(--tint-purple-text)' },
   row: { marginBottom: 10 },
   name: { fontSize: 13, fontWeight: '700', color: 'var(--text)', marginBottom: 5 },
   seg: { flexDirection: 'row', gap: 6 },

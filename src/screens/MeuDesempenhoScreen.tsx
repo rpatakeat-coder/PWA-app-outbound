@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   modalClose: { backgroundColor: 'var(--surface-2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
   modalCloseText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)' },
   modalEmpty: { textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, paddingVertical: 24 },
-  leadRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f8fafc' },
+  leadRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: 'var(--border-soft)' },
   leadDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
   leadName: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   leadMeta: { fontSize: 11, color: 'var(--text-muted)', marginTop: 1 },

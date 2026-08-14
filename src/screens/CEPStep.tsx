@@ -534,11 +534,11 @@ const styles = StyleSheet.create({
   // Result
   resultBox: {
     marginTop: 16,
-    backgroundColor: '#f0fdf4',
+    backgroundColor: 'var(--tint-green)',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#bbf7d0',
+    borderColor: 'var(--tint-green-border)',
   },
   resultHeader: {
     marginBottom: 8,
@@ -562,16 +562,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   warningBox: {
-    backgroundColor: '#fefce8',
+    backgroundColor: 'var(--tint-amber)',
     borderRadius: 8,
     padding: 10,
     marginBottom: 4,
     borderWidth: 1,
-    borderColor: '#fde68a',
+    borderColor: 'var(--tint-amber-border)',
   },
   warningText: {
     fontSize: 13,
-    color: '#92400e',
+    color: 'var(--tint-amber-text)',
     fontWeight: '500',
   },
   // Buttons

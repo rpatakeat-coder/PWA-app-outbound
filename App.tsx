@@ -2630,7 +2630,7 @@ function MainApp() {
 
       {/* Rota do dia (automática): monta as obrigatórias + completa a meta.
           Fica no topo como CTA principal; o fluxo manual segue abaixo. */}
-      <View style={[styles.panelCard, { borderWidth: 1, borderColor: '#ede9fe' }]}>
+      <View style={[styles.panelCard, { borderWidth: 1, borderColor: 'var(--tint-purple-border)' }]}>
         <Text style={styles.panelTitle}>🗺️ Rota do dia</Text>
         <Text style={styles.panelHint}>
           Monta as 3 visitas obrigatórias do dia (SLA estourado, Relacionamento +1000 comandas
@@ -2725,7 +2725,7 @@ function MainApp() {
           <TouchableOpacity
             style={[
               styles.dropdownButton,
-              routeVendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: '#fef2f2' },
+              routeVendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: 'var(--tint-red)' },
             ]}
             onPress={() => setIsPickingRouteVendor(true)}
           >
@@ -2741,7 +2741,7 @@ function MainApp() {
           <TouchableOpacity
             style={[
               styles.dropdownButton,
-              routeVendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: '#fef2f2' },
+              routeVendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: 'var(--tint-red)' },
             ]}
             onPress={() => {
               if (!myHubspotId) {
@@ -2861,8 +2861,8 @@ function MainApp() {
             {/* Badge admin: mostra qual provedor foi usado na ultima sugestao.
                 ORS = caminho feliz; OSRM = ORS caiu e o fallback rolou. */}
             {isAdmin && lastProviderUsed && (
-              <View style={[styles.providerBadge, lastProviderUsed === 'osrm' && { backgroundColor: '#fef3c7', borderColor: '#fde68a' }]}>
-                <Text style={[styles.providerBadgeText, lastProviderUsed === 'osrm' && { color: '#92400e' }]}>
+              <View style={[styles.providerBadge, lastProviderUsed === 'osrm' && { backgroundColor: 'var(--tint-amber)', borderColor: 'var(--tint-amber-border)' }]}>
+                <Text style={[styles.providerBadgeText, lastProviderUsed === 'osrm' && { color: 'var(--tint-amber-text)' }]}>
                   {lastProviderUsed === 'ors'
                     ? '✓ Via OpenRouteService'
                     : '⚠ Via OSRM (ORS estava fora)'}
@@ -2893,7 +2893,7 @@ function MainApp() {
             )}
             {routeDisplayClients.length > 0 && !isMonitoringRoute && (
               <TouchableOpacity
-                style={[styles.secondaryButton, { backgroundColor: '#fef2f2', borderColor: '#fecaca' }]}
+                style={[styles.secondaryButton, { backgroundColor: 'var(--tint-red)', borderColor: 'var(--tint-red-border)' }]}
                 onPress={() => {
                   Alert.alert(
                     'Limpar rota',
@@ -2934,7 +2934,7 @@ function MainApp() {
                 style={[
                   styles.routeStopCard,
                   { borderLeftColor: isDone ? '#16a34a' : color },
-                  isDone && { backgroundColor: '#f0fdf4' },
+                  isDone && { backgroundColor: 'var(--tint-green)' },
                 ]}
               >
                 <View style={styles.routeStopHeader}>
@@ -5161,7 +5161,7 @@ function MainApp() {
                   <TouchableOpacity
                     style={[
                       styles.dropdownButton,
-                      vendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: '#fef2f2' },
+                      vendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: 'var(--tint-red)' },
                     ]}
                     onPress={() => setIsPickingVendor(true)}
                   >
@@ -5177,7 +5177,7 @@ function MainApp() {
                   <TouchableOpacity
                     style={[
                       styles.dropdownButton,
-                      vendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: '#fef2f2' },
+                      vendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: 'var(--tint-red)' },
                     ]}
                     onPress={() => {
                       if (!myHubspotId) {
@@ -6042,8 +6042,8 @@ function ClientBottomSheet({
                     </Text>
                   </View>
                   {isApprox && (
-                    <View style={{ backgroundColor: '#fef3c7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                      <Text style={{ fontSize: 9, color: '#92400e', fontWeight: '600' }}>≈ Aprox.</Text>
+                    <View style={{ backgroundColor: 'var(--tint-amber)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                      <Text style={{ fontSize: 9, color: 'var(--tint-amber-text)', fontWeight: '600' }}>≈ Aprox.</Text>
                     </View>
                   )}
                 </View>
@@ -6186,7 +6186,7 @@ function ClientBottomSheet({
                 {isApprox && approxReasons.length > 0 && (
                   <View style={{ marginTop: 4 }}>
                     {approxReasons.map((reason, idx) => (
-                      <Text key={idx} style={{ fontSize: 11, color: '#92400e' }}>• {reason}</Text>
+                      <Text key={idx} style={{ fontSize: 11, color: 'var(--tint-amber-text)' }}>• {reason}</Text>
                     ))}
                   </View>
                 )}
@@ -7026,11 +7026,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: '#dcfce7',
+    backgroundColor: 'var(--tint-green)',
     borderWidth: 1,
-    borderColor: '#bbf7d0',
+    borderColor: 'var(--tint-green-border)',
   },
-  providerBadgeText: { fontSize: 10, fontWeight: '700', color: '#166534' },
+  providerBadgeText: { fontSize: 10, fontWeight: '700', color: 'var(--tint-green-text)' },
   // Card de stop da rota (com checkbox + linha de acoes)
   routeStopCard: {
     backgroundColor: 'var(--surface)',
@@ -7044,14 +7044,14 @@ const styles = StyleSheet.create({
   mandatoryTag: { fontSize: 11, fontWeight: '800', color: '#7c3aed', marginTop: 3 },
   // Banner de monitoramento (gestor vendo a rota de outro vendedor).
   monitorBanner: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: 'var(--tint-blue)',
     borderWidth: 1,
-    borderColor: '#bfdbfe',
+    borderColor: 'var(--tint-blue-border)',
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
   },
-  monitorBannerText: { fontSize: 13, color: '#1e3a8a', fontWeight: '600', lineHeight: 18 },
+  monitorBannerText: { fontSize: 13, color: 'var(--tint-blue-text)', fontWeight: '600', lineHeight: 18 },
   checkbox: {
     width: 24,
     height: 24,
@@ -7447,20 +7447,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: '#f5f3ff',
+    backgroundColor: 'var(--tint-purple)',
     borderWidth: 1,
     borderColor: '#c4b5fd',
   },
-  cardMeetingBadgeText: { color: '#6d28d9', fontSize: 10, fontWeight: '700' },
+  cardMeetingBadgeText: { color: 'var(--tint-purple-text)', fontSize: 10, fontWeight: '700' },
   cardVisitBadge: {
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: '#f0fdf4',
+    backgroundColor: 'var(--tint-green)',
     borderWidth: 1,
-    borderColor: '#bbf7d0',
+    borderColor: 'var(--tint-green-border)',
   },
-  cardVisitBadgeText: { color: '#15803d', fontSize: 10, fontWeight: '700' },
+  cardVisitBadgeText: { color: 'var(--tint-green-text)', fontSize: 10, fontWeight: '700' },
   clientCity: { fontSize: 13, color: 'var(--text-muted)', marginBottom: 2 },
   clientPhone: { fontSize: 13, color: 'var(--text)' },
   emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 60 },
@@ -7530,15 +7530,15 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: { fontSize: 12, fontWeight: '800', color: 'var(--text)' },
   visitCountBox: {
-    backgroundColor: '#f0fdf4',
+    backgroundColor: 'var(--tint-green)',
     borderWidth: 1,
-    borderColor: '#bbf7d0',
+    borderColor: 'var(--tint-green-border)',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 9,
     marginBottom: 10,
   },
-  visitCountText: { fontSize: 14, fontWeight: '800', color: '#15803d' },
+  visitCountText: { fontSize: 14, fontWeight: '800', color: 'var(--tint-green-text)' },
   visitCountHint: { fontSize: 12, color: '#16a34a', marginTop: 2 },
   // Uso do produto (HubSpot) — cores vem do estado, so' o layout fica aqui.
   usoBox: {
@@ -7558,14 +7558,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
     marginBottom: 10,
-    backgroundColor: '#f5f3ff',
-    borderColor: '#ddd6fe',
+    backgroundColor: 'var(--tint-purple)',
+    borderColor: 'var(--tint-purple-border)',
   },
   slaBadge: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10 },
   slaBadgeText: { fontSize: 13, fontWeight: '800' },
-  contaAlvoBoxTitle: { fontSize: 14, fontWeight: '800', color: '#6d28d9' },
-  contaAlvoBoxText: { fontSize: 13, fontWeight: '700', color: '#5b21b6', marginTop: 3 },
-  contaAlvoDismissBtn: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: '#fecaca', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  contaAlvoBoxTitle: { fontSize: 14, fontWeight: '800', color: 'var(--tint-purple-text)' },
+  contaAlvoBoxText: { fontSize: 13, fontWeight: '700', color: 'var(--tint-purple-text)', marginTop: 3 },
+  contaAlvoDismissBtn: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--tint-red-border)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   contaAlvoDismissText: { fontSize: 12, fontWeight: '800', color: '#dc2626' },
   agendaSectionHeader: {
     flexDirection: 'row',
@@ -7686,16 +7686,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   taskSectionText: { fontSize: 12, fontWeight: '800', color: 'var(--text-muted)', letterSpacing: 0.4 },
-  taskVendorHint: { fontSize: 12, color: '#b45309', marginBottom: 10 },
+  taskVendorHint: { fontSize: 12, color: 'var(--tint-amber-text)', marginBottom: 10 },
   // Responsável + tag de vendedor desativado (sufixo "/ DESATIVADO" no nome).
   taskRespRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   taskInativoTag: {
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 4,
-    backgroundColor: '#fee2e2',
+    backgroundColor: 'var(--tint-red)',
   },
-  taskInativoTagText: { fontSize: 9, fontWeight: '800', color: '#b91c1c', letterSpacing: 0.3 },
+  taskInativoTagText: { fontSize: 9, fontWeight: '800', color: 'var(--tint-red-text)', letterSpacing: 0.3 },
   // Cabecalho da aba Tarefas com botao de info
   taskHeaderRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -7704,7 +7704,7 @@ const styles = StyleSheet.create({
   taskInfoButton: {
     width: 30, height: 30, borderRadius: 15,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#eff6ff',
+    backgroundColor: 'var(--tint-blue)',
   },
   taskInfoButtonText: { fontSize: 18, color: '#2563eb', fontWeight: '700' },
   // Modal de regras
@@ -7766,7 +7766,7 @@ const styles = StyleSheet.create({
     flex: 1, paddingVertical: 10, paddingHorizontal: 10, borderRadius: 10,
     backgroundColor: 'var(--bg)', borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center',
   },
-  routeStartOptionActive: { backgroundColor: '#eff6ff', borderColor: '#3b82f6' },
+  routeStartOptionActive: { backgroundColor: 'var(--tint-blue)', borderColor: '#3b82f6' },
   routeStartText: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
   routeStartTextActive: { color: '#2563eb' },
   routeStartPick: {
@@ -7788,7 +7788,7 @@ const styles = StyleSheet.create({
   progressTrack: { height: 8, borderRadius: 4, backgroundColor: 'var(--surface-3)', overflow: 'hidden', marginTop: 10 },
   progressFill: { height: 8, borderRadius: 4, backgroundColor: '#16a34a' },
   rankingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
-  warningText: { fontSize: 12, color: '#92400e', backgroundColor: '#fef3c7', padding: 10, borderRadius: 8, marginTop: 10 },
+  warningText: { fontSize: 12, color: 'var(--tint-amber-text)', backgroundColor: 'var(--tint-amber)', padding: 10, borderRadius: 8, marginTop: 10 },
   masterGrid: { gap: 8, marginTop: 8 },
   masterMetric: { fontSize: 13, fontWeight: '700', color: 'var(--text)', backgroundColor: 'var(--bg)', padding: 10, borderRadius: 8 },
   auditRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
@@ -7829,7 +7829,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   submitButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  locationSummary: { backgroundColor: '#f0fdf4', borderRadius: 8, padding: 10, marginTop: 8, borderWidth: 1, borderColor: '#bbf7d0' },
+  locationSummary: { backgroundColor: 'var(--tint-green)', borderRadius: 8, padding: 10, marginTop: 8, borderWidth: 1, borderColor: 'var(--tint-green-border)' },
   locationSummaryText: { fontSize: 12, color: '#16a34a', fontWeight: '500' },
   // Bottom Sheet
   bottomSheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
@@ -7876,8 +7876,8 @@ const styles = StyleSheet.create({
   navigationSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: 'var(--border-soft)', marginBottom: 16 },
   navigationRow: { flexDirection: 'row', gap: 10 },
   navRouteButton: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1 },
-  navButtonDriving: { backgroundColor: '#eff6ff', borderColor: '#3b82f6' },
-  navButtonWalking: { backgroundColor: '#fefce8', borderColor: '#eab308' },
+  navButtonDriving: { backgroundColor: 'var(--tint-blue)', borderColor: '#3b82f6' },
+  navButtonWalking: { backgroundColor: 'var(--tint-amber)', borderColor: '#eab308' },
   navRouteButtonText: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
   addRouteButton: {
     backgroundColor: '#0f172a',
@@ -7891,14 +7891,14 @@ const styles = StyleSheet.create({
   meetingsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   meetingsEmpty: { fontSize: 12, color: 'var(--text-subtle)', marginBottom: 8 },
   meetingChip: {
-    backgroundColor: '#f5f3ff',
+    backgroundColor: 'var(--tint-purple)',
     borderRadius: 10,
     padding: 10,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: '#ddd6fe',
+    borderColor: 'var(--tint-purple-border)',
   },
-  meetingChipDate: { fontSize: 13, fontWeight: '700', color: '#5b21b6' },
+  meetingChipDate: { fontSize: 13, fontWeight: '700', color: 'var(--tint-purple-text)' },
   meetingChipObs: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
   meetingChipActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   scheduleButton: {
@@ -7926,7 +7926,7 @@ const styles = StyleSheet.create({
   },
   changeStageButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 8 },
-  deleteButton: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca' },
+  deleteButton: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: 'var(--tint-red)', borderWidth: 1, borderColor: 'var(--tint-red-border)' },
   deleteButtonText: { fontSize: 14, fontWeight: '700', color: '#dc2626' },
   closeActionButton: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#dc2626' },
   closeActionButtonText: { fontSize: 14, fontWeight: '700', color: '#fff' },

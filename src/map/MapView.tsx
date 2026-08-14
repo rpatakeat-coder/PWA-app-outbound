@@ -160,7 +160,8 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
     mapRef,
   } = props;
 
-  // O mapa nao le CSS: o estilo escuro vem de um Map ID proprio, definido na
+  // O mapa nao le CSS: a variante clara/escura vem do estilo publicado no Map
+  // ID e e' escolhida por `colorScheme`, que so' pode ser definido na
   // construcao. Por isso o tema entra aqui como dependencia, e nao como cor.
   const { isDark } = useTheme();
 
@@ -194,12 +195,11 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
   );
 
   // ---- Criacao do mapa ----
-  // Recriado quando o TEMA muda. O estilo do mapa nao vem do CSS da pagina —
-  // vem do Map ID —, e o Map ID so' pode ser definido na construcao. Antes eu
-  // lia o tema so' uma vez pra economizar eventos do SKU Dynamic Maps, mas o
-  // efeito era o mapa continuar claro depois de ligar o modo escuro, ate' o
-  // usuario sair da aba e voltar. Trocar de tema e' raro (uma vez por dia, no
-  // maximo), entao um carregamento a mais nesse momento nao pesa na cota.
+  // Recriado quando o TEMA muda, porque `colorScheme` so' vale na construcao.
+  // Antes eu lia o tema uma unica vez pra economizar eventos do SKU Dynamic
+  // Maps, mas o efeito era o mapa continuar claro depois de ligar o modo
+  // escuro, ate' o usuario sair da aba e voltar. Trocar de tema e' raro (uma
+  // vez por dia, no maximo), entao um carregamento a mais nao pesa na cota.
   useEffect(() => {
     let cancelled = false;
 
@@ -487,7 +487,7 @@ const mapStyles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#e2e8f0',
+    backgroundColor: 'var(--surface-2)',
     padding: 24,
   },
   errorTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 6 },

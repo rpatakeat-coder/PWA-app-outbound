@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
   hint: { fontSize: 12, color: 'var(--text-muted)', marginVertical: 8, lineHeight: 17 },
   mapWrap: {
     height: 340, borderRadius: 14, overflow: 'hidden',
-    borderWidth: 1, borderColor: 'var(--border)', backgroundColor: '#eef2f7',
+    borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)',
     justifyContent: 'center', alignItems: 'center',
   },
   // Conjunto pin+seta+dot centrado no meio do mapWrap. O translateY sobe o

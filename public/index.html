@@ -45,7 +45,52 @@
       se elas invertessem, o mapa perderia a leitura.
     -->
     <style id="takeat-theme">
+      /*
+        Paleta em variáveis CSS.
+
+        Funciona porque o app roda em react-native-web: os estilos viram
+        classes CSS e `backgroundColor: 'var(--surface)'` chega intacto ao
+        navegador. Trocar de tema é mudar um atributo no <html> — sem contexto
+        de tema no React, sem re-render, sem StyleSheet virar função.
+
+        SÓ o "cromo" é tokenizado. Cores com SIGNIFICADO — temperatura do
+        funil, status, vermelho da marca — seguem literais: se invertessem, o
+        mapa perderia a leitura.
+
+        Os valores escuros são declarados UMA vez (--d-*) e os dois seletores
+        (preferência do aparelho e escolha manual) apenas apontam pra eles.
+        Antes eu repetia a paleta nos dois blocos e eles saíram de sincronia:
+        o manual ficou sem os tons de destaque.
+      */
       :root {
+        --d-bg: #0b1220;
+        --d-surface: #131c2e;
+        --d-surface-2: #1b2639;
+        --d-surface-3: #26344c;
+        --d-text: #e8eef7;
+        --d-text-muted: #a9b7ca;
+        --d-text-subtle: #8494aa;
+        --d-text-faint: #5d6b80;
+        --d-border: #2a3852;
+        --d-border-soft: #1f2b40;
+        --d-surface-overlay: rgba(15, 23, 38, 0.92);
+        --d-surface-warn: #2a2013;
+        --d-tint-red: #2a1416;
+        --d-tint-red-border: #5a2529;
+        --d-tint-red-text: #fca5a5;
+        --d-tint-purple: #231a3d;
+        --d-tint-purple-border: #453473;
+        --d-tint-purple-text: #c4b5fd;
+        --d-tint-green: #0f2a1a;
+        --d-tint-green-border: #245c3a;
+        --d-tint-green-text: #86efac;
+        --d-tint-amber: #2b2110;
+        --d-tint-amber-border: #6b5320;
+        --d-tint-amber-text: #fcd34d;
+        --d-tint-blue: #0f1f38;
+        --d-tint-blue-border: #2b4a7a;
+        --d-tint-blue-text: #bfdbfe;
+
         --bg: #f8fafc;
         --surface: #ffffff;
         --surface-2: #f1f5f9;
@@ -56,46 +101,89 @@
         --text-faint: #cbd5e1;
         --border: #e2e8f0;
         --border-soft: #f1f5f9;
-        /* Superfícies que flutuam SOBRE o mapa (legenda, painel de calor).
-           Translúcidas de propósito — o mapa aparece por trás. Precisam de
-           token próprio: com o branco fixo, o texto tokenizado ficava claro
-           sobre claro e sumia no modo escuro. */
         --surface-overlay: rgba(255, 255, 255, 0.94);
         --surface-warn: #fff7ed;
+        --tint-red: #fef2f2;
+        --tint-red-border: #fecaca;
+        --tint-red-text: #991b1b;
+        --tint-purple: #f5f3ff;
+        --tint-purple-border: #ddd6fe;
+        --tint-purple-text: #5b21b6;
+        --tint-green: #f0fdf4;
+        --tint-green-border: #bbf7d0;
+        --tint-green-text: #166534;
+        --tint-amber: #fef3c7;
+        --tint-amber-border: #fde68a;
+        --tint-amber-text: #92400e;
+        --tint-blue: #eff6ff;
+        --tint-blue-border: #bfdbfe;
+        --tint-blue-text: #1e3a8a;
         color-scheme: light;
       }
 
       /* Padrão do aparelho, quando o vendedor não escolheu nada. */
       @media (prefers-color-scheme: dark) {
         :root:not([data-theme='light']) {
-          --bg: #0b1220;
-          --surface: #131c2e;
-          --surface-2: #1b2639;
-          --surface-3: #26344c;
-          --text: #e8eef7;
-          --text-muted: #a9b7ca;
-          --text-subtle: #8494aa;
-          --text-faint: #5d6b80;
-          --border: #2a3852;
-          --border-soft: #1f2b40;
-          --surface-overlay: rgba(15, 23, 38, 0.92);
-          --surface-warn: #2a2013;
+          --bg: var(--d-bg);
+          --surface: var(--d-surface);
+          --surface-2: var(--d-surface-2);
+          --surface-3: var(--d-surface-3);
+          --text: var(--d-text);
+          --text-muted: var(--d-text-muted);
+          --text-subtle: var(--d-text-subtle);
+          --text-faint: var(--d-text-faint);
+          --border: var(--d-border);
+          --border-soft: var(--d-border-soft);
+          --surface-overlay: var(--d-surface-overlay);
+          --surface-warn: var(--d-surface-warn);
+          --tint-red: var(--d-tint-red);
+          --tint-red-border: var(--d-tint-red-border);
+          --tint-red-text: var(--d-tint-red-text);
+          --tint-purple: var(--d-tint-purple);
+          --tint-purple-border: var(--d-tint-purple-border);
+          --tint-purple-text: var(--d-tint-purple-text);
+          --tint-green: var(--d-tint-green);
+          --tint-green-border: var(--d-tint-green-border);
+          --tint-green-text: var(--d-tint-green-text);
+          --tint-amber: var(--d-tint-amber);
+          --tint-amber-border: var(--d-tint-amber-border);
+          --tint-amber-text: var(--d-tint-amber-text);
+          --tint-blue: var(--d-tint-blue);
+          --tint-blue-border: var(--d-tint-blue-border);
+          --tint-blue-text: var(--d-tint-blue-text);
           color-scheme: dark;
         }
       }
 
       /* Escolha explícita nas configurações vence o padrão do aparelho. */
       :root[data-theme='dark'] {
-        --bg: #0b1220;
-        --surface: #131c2e;
-        --surface-2: #1b2639;
-        --surface-3: #26344c;
-        --text: #e8eef7;
-        --text-muted: #a9b7ca;
-        --text-subtle: #8494aa;
-        --text-faint: #5d6b80;
-        --border: #2a3852;
-        --border-soft: #1f2b40;
+          --bg: var(--d-bg);
+          --surface: var(--d-surface);
+          --surface-2: var(--d-surface-2);
+          --surface-3: var(--d-surface-3);
+          --text: var(--d-text);
+          --text-muted: var(--d-text-muted);
+          --text-subtle: var(--d-text-subtle);
+          --text-faint: var(--d-text-faint);
+          --border: var(--d-border);
+          --border-soft: var(--d-border-soft);
+          --surface-overlay: var(--d-surface-overlay);
+          --surface-warn: var(--d-surface-warn);
+          --tint-red: var(--d-tint-red);
+          --tint-red-border: var(--d-tint-red-border);
+          --tint-red-text: var(--d-tint-red-text);
+          --tint-purple: var(--d-tint-purple);
+          --tint-purple-border: var(--d-tint-purple-border);
+          --tint-purple-text: var(--d-tint-purple-text);
+          --tint-green: var(--d-tint-green);
+          --tint-green-border: var(--d-tint-green-border);
+          --tint-green-text: var(--d-tint-green-text);
+          --tint-amber: var(--d-tint-amber);
+          --tint-amber-border: var(--d-tint-amber-border);
+          --tint-amber-text: var(--d-tint-amber-text);
+          --tint-blue: var(--d-tint-blue);
+          --tint-blue-border: var(--d-tint-blue-border);
+          --tint-blue-text: var(--d-tint-blue-text);
         color-scheme: dark;
       }
 
