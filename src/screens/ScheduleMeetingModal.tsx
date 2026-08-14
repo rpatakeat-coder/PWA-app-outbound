@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -13,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { Alert } from '../components/Alert';
 import { IconClose, useIconColors } from '../components/icons';
 import type { Client, ClientMeeting, MeetingType } from '../types/client';
@@ -398,7 +398,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao',
           >
             <View style={styles.headerRow}>
               <Text style={styles.title}>{isReschedule ? copy.rescheduleTitle : copy.title}</Text>
-              <TouchableOpacity onPress={onClose} disabled={isPending}>
+              <TouchableOpacity onPress={onClose} disabled={isPending} accessibilityRole="button" accessibilityLabel="Fechar">
                 <IconClose width={20} height={20} fill={iconColors.muted} />
               </TouchableOpacity>
             </View>

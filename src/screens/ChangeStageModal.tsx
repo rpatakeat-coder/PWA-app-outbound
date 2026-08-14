@@ -1,8 +1,8 @@
 import React, { useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import {
+  useQueryClient } from '@tanstack/react-query';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { Alert } from '../components/Alert';
 import { IconClose, useIconColors } from '../components/icons';
 import type { Client } from '../types/client';
@@ -836,7 +837,7 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
               <Text style={styles.title}>
                 {lockedStage ? '🚫 Mover para perdido' : '🔄 Mover para etapa'}
               </Text>
-              <TouchableOpacity onPress={onClose} disabled={submitting}>
+              <TouchableOpacity onPress={onClose} disabled={submitting} accessibilityRole="button" accessibilityLabel="Fechar">
                 <IconClose width={20} height={20} fill={iconColors.muted} />
               </TouchableOpacity>
             </View>

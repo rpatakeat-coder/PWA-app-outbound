@@ -7,11 +7,11 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
-  KeyboardAvoidingView,
   Platform,
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { Alert } from '../components/Alert';
 import {
   IconClose,
@@ -130,7 +130,7 @@ export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScr
             <View style={styles.card}>
               <View style={styles.headerRow}>
                 <IconText Icone={IconDownload} style={styles.title} tone="onSurface">Cadastro Outbound</IconText>
-                <TouchableOpacity onPress={onClose} disabled={submitting}>
+                <TouchableOpacity onPress={onClose} disabled={submitting} accessibilityRole="button" accessibilityLabel="Fechar">
                   <IconClose width={20} height={20} fill={iconColors.muted} />
                 </TouchableOpacity>
               </View>

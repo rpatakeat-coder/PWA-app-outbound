@@ -7,11 +7,11 @@ import {
   StyleSheet,
   ActivityIndicator,
   Image,
-  KeyboardAvoidingView,
   ScrollView,
   Keyboard,
   Platform,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { Alert } from '../components/Alert';
 import {
   IconLock,

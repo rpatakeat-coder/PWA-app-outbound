@@ -1,5 +1,11 @@
-import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import {
+  StatusBar } from 'expo-status-bar';
+import React,
+  { useEffect,
+  useMemo,
+  useState,
+  useRef,
+  useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,7 +20,6 @@ import {
   Platform,
   Keyboard,
   TouchableWithoutFeedback,
-  KeyboardAvoidingView,
   Linking,
   Pressable,
   Animated,
@@ -22,6 +27,7 @@ import {
   Switch,
   AppState,
 } from 'react-native';
+import { KeyboardAvoidingView } from './src/components/KeyboardAvoidingView';
 import { Alert, AlertHost } from './src/components/Alert';
 import { useTheme } from './src/theme';
 import {
@@ -2828,7 +2834,7 @@ function MainApp() {
             autoCapitalize="none"
           />
           {routeManualSearch.length > 0 && (
-            <TouchableOpacity onPress={() => setRouteManualSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setRouteManualSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <IconClose width={15} height={15} fill={iconColors.muted} />
             </TouchableOpacity>
           )}
@@ -2968,7 +2974,7 @@ function MainApp() {
               >
                 <View style={styles.routeStopHeader}>
                   {/* Checkbox: toggle done/planned. Persiste via toggleStopDone */}
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Selecionado"
                     style={[styles.checkbox, isDone && styles.checkboxChecked]}
                     onPress={() => {
                       if (stop) fieldOps.toggleStopDone.mutate(stop);
@@ -3850,7 +3856,7 @@ function MainApp() {
         {/* Header overlay translucido (nao consome MapView clicks) */}
         <View style={[navStyles.headerOverlay, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
           <View style={navStyles.headerPill} pointerEvents="auto">
-            <TouchableOpacity onPress={exitNavigation} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <TouchableOpacity onPress={exitNavigation} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessibilityRole="button" accessibilityLabel="Fechar">
               <IconClose width={20} height={20} fill={iconColors.onBrand} />
             </TouchableOpacity>
             <View style={{ flex: 1, alignItems: 'center' }}>
@@ -3877,7 +3883,7 @@ function MainApp() {
               <View style={navStyles.fabChevron} />
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={navStyles.fab} onPress={showFullRouteInNav}>
+          <TouchableOpacity style={navStyles.fab} onPress={showFullRouteInNav} accessibilityRole="button" accessibilityLabel="Buscar">
             <IconSearch width={20} height={20} fill={iconColors.onSurface} />
           </TouchableOpacity>
         </View>
@@ -4016,7 +4022,7 @@ function MainApp() {
           )}
         </View>
         <View style={styles.headerActions}>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Configuracoes"
             style={styles.headerIconButton}
             onPress={() => {
               setNewPassword('');
@@ -4092,7 +4098,7 @@ function MainApp() {
                 chegar — e o vendedor concluiria que ele não existe. */}
             {buscando && <ActivityIndicator size="small" color="#94a3b8" />}
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <IconClose width={15} height={15} fill={iconColors.muted} />
               </TouchableOpacity>
             )}
@@ -4387,7 +4393,7 @@ function MainApp() {
             <TouchableOpacity
               style={[styles.mapButton, { bottom: 90 + insets.bottom, left: 16 }]}
               onPress={centerOnUser}
-            >
+             accessibilityRole="button" accessibilityLabel="Centralizar no meu local">
               {/* Cheio quando esta' seguindo o vendedor, vazado quando a
                   camera esta' livre — mesma leitura que o 📍/🧭 dava. */}
               {isFollowingUser ? (
@@ -4418,7 +4424,7 @@ function MainApp() {
           {/* Cadastro outbound (📤) escondido: mandava só pro HubSpot sem
               registrar no app. Fica apenas o FAB vermelho (+). */}
           {!creationMode && !isViewer && !heatOn && (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Adicionar lead"
               style={[styles.fab, { bottom: 90 + insets.bottom }]}
               onPress={() => setShowCepStep(true)}
             >
@@ -4462,7 +4468,7 @@ function MainApp() {
                   ))}
                 </View>
                 <Text style={styles.heatLegendLabel}>mais</Text>
-                <TouchableOpacity style={styles.heatCloseBtn} onPress={() => setHeatOn(false)}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" style={styles.heatCloseBtn} onPress={() => setHeatOn(false)}>
                   <IconClose width={16} height={16} fill={iconColors.muted} />
                 </TouchableOpacity>
               </View>
@@ -4562,7 +4568,7 @@ function MainApp() {
 
           {/* Cadastro outbound (📤) escondido — só o FAB vermelho (+). */}
           {!isViewer && (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Adicionar lead"
               style={[styles.fab, { bottom: 90 + insets.bottom }]}
               onPress={() => setShowCepStep(true)}
             >
@@ -4678,7 +4684,7 @@ function MainApp() {
           <View style={[styles.taskRulesCard, { maxHeight: '80%' }]}>
             <View style={styles.taskRulesHeader}>
               <Text style={styles.taskRulesTitle}>Partir de qual local?</Text>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar"
                 style={styles.taskRulesClose}
                 onPress={() => setIsPickingRouteStart(false)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -4750,7 +4756,7 @@ function MainApp() {
           <View style={styles.taskRulesCard}>
             <View style={styles.taskRulesHeader}>
               <Text style={styles.taskRulesTitle}>Como as tarefas são geradas</Text>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar"
                 style={styles.taskRulesClose}
                 onPress={() => setIsTaskRulesOpen(false)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -4820,7 +4826,7 @@ function MainApp() {
                 <>
                   <View style={styles.taskRulesHeader}>
                     <Text style={styles.taskRulesTitle}>Concluir "{task.title}"</Text>
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar"
                       style={styles.taskRulesClose}
                       onPress={() => setCompletingTask(null)}
                       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -4890,7 +4896,7 @@ function MainApp() {
               <View style={styles.passwordModalCard}>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Configurações</Text>
-                  <TouchableOpacity onPress={() => setIsPasswordModalOpen(false)}>
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setIsPasswordModalOpen(false)}>
                     <IconClose width={20} height={20} fill={iconColors.muted} />
                   </TouchableOpacity>
                 </View>
@@ -5169,7 +5175,7 @@ function MainApp() {
               <>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Filtros</Text>
-                  <TouchableOpacity onPress={() => setIsFiltersOpen(false)}>
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setIsFiltersOpen(false)}>
                     <IconClose width={20} height={20} fill={iconColors.muted} />
                   </TouchableOpacity>
                 </View>
@@ -5408,7 +5414,7 @@ function MainApp() {
           <Pressable style={styles.filtersSheet} onPress={() => {}}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Selecione o vendedor</Text>
-              <TouchableOpacity onPress={() => setIsPickingRouteVendor(false)}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setIsPickingRouteVendor(false)}>
                 <IconClose width={20} height={20} fill={iconColors.muted} />
               </TouchableOpacity>
             </View>
@@ -5530,7 +5536,7 @@ function MainApp() {
               <View style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>{editingClient ? 'Editar Cliente' : 'Novo Cadastro'}</Text>
-                  <TouchableOpacity onPress={() => { setIsFormOpen(false); resetForm(); setEditingClient(null); }}>
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => { setIsFormOpen(false); resetForm(); setEditingClient(null); }}>
                     <IconClose width={20} height={20} fill={iconColors.muted} />
                   </TouchableOpacity>
                 </View>

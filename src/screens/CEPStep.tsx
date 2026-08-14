@@ -7,11 +7,11 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
-  KeyboardAvoidingView,
   Platform,
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
+import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { Alert } from '../components/Alert';
 import {
   IconArrowBack,

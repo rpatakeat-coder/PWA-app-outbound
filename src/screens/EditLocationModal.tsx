@@ -118,7 +118,7 @@ export function EditLocationModal({ client, onSave, onClose }: Props) {
               <IconText Icone={IconLocation} style={styles.title} tone="onSurface">Editar localização</IconText>
               <Text style={styles.subtitle} numberOfLines={1}>{clientName}</Text>
             </View>
-            <TouchableOpacity onPress={onClose} disabled={saving}>
+            <TouchableOpacity onPress={onClose} disabled={saving} accessibilityRole="button" accessibilityLabel="Fechar">
               <IconClose width={20} height={20} fill={iconColors.muted} />
             </TouchableOpacity>
           </View>
