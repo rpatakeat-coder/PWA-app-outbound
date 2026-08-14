@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { Alert } from '../components/Alert';
+import { IconClose, useIconColors } from '../components/icons';
 import type { Client, ClientMeeting, MeetingType } from '../types/client';
 import { useMeetings } from '../hooks/useMeetings';
 
@@ -242,6 +243,7 @@ function HourMinutePicker({
 }
 
 export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao', rescheduleOf }: ScheduleMeetingModalProps) {
+  const iconColors = useIconColors();
   // Em modo reagendar o tipo vem da própria reunião (não do prop).
   const effectiveType: MeetingType = rescheduleOf ? (rescheduleOf.type ?? 'reuniao') : meetingType;
   const copy = COPY[effectiveType];
@@ -397,7 +399,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao',
             <View style={styles.headerRow}>
               <Text style={styles.title}>{isReschedule ? copy.rescheduleTitle : copy.title}</Text>
               <TouchableOpacity onPress={onClose} disabled={isPending}>
-                <Text style={styles.closeBtn}>✕</Text>
+                <IconClose width={20} height={20} fill={iconColors.muted} />
               </TouchableOpacity>
             </View>
             <Text style={styles.subtitle} numberOfLines={2}>

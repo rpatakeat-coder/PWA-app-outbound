@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { Alert } from '../components/Alert';
+import { IconClose, useIconColors } from '../components/icons';
 import type { Client } from '../types/client';
 import {
   WON_STAGE_IDS,
@@ -393,6 +394,7 @@ function PlainTextField({
 }
 
 export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCreateHubspotDeal }: Props) {
+  const iconColors = useIconColors();
   const [selectedStageId, setSelectedStageId] = useState<string | null>(initialStageId ?? null);
   // Modo "etapa fixa" (ex.: mover pra Perdido a partir da tarefa): oculta o
   // seletor de etapas e mostra so os sub-campos da etapa alvo.
@@ -835,7 +837,7 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
                 {lockedStage ? '🚫 Mover para perdido' : '🔄 Mover para etapa'}
               </Text>
               <TouchableOpacity onPress={onClose} disabled={submitting}>
-                <Text style={styles.closeBtn}>✕</Text>
+                <IconClose width={20} height={20} fill={iconColors.muted} />
               </TouchableOpacity>
             </View>
             <Text style={styles.subtitle} numberOfLines={2}>

@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { Alert } from '../components/Alert';
+import { IconClose, useIconColors } from '../components/icons';
 import MapView, { Marker, type Region, type MapViewHandle, PROVIDER_DEFAULT } from '../map';
 import type { Client } from '../types/client';
 import { distanceMeters } from '../hooks/useFieldOps';
@@ -38,6 +39,7 @@ function fmtDistance(m: number): string {
 }
 
 export function EditLocationModal({ client, onSave, onClose }: Props) {
+  const iconColors = useIconColors();
   // Posicao ATUAL do cliente (pino cinza, fixo). Se por acaso nao tiver coords,
   // cai num default (centro do Brasil) so pra o mapa abrir.
   const currentLat = client.latitude ?? -14.235;
@@ -112,7 +114,7 @@ export function EditLocationModal({ client, onSave, onClose }: Props) {
               <Text style={styles.subtitle} numberOfLines={1}>{clientName}</Text>
             </View>
             <TouchableOpacity onPress={onClose} disabled={saving}>
-              <Text style={styles.close}>✕</Text>
+              <IconClose width={20} height={20} fill={iconColors.muted} />
             </TouchableOpacity>
           </View>
 

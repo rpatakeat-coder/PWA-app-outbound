@@ -27,6 +27,8 @@ import { useTheme } from './src/theme';
 import {
   IconBarGraph,
   IconCalendar,
+  IconCheck,
+  IconClose,
   IconCar,
   IconClipboardCheck,
   IconFilterList,
@@ -2812,7 +2814,7 @@ function MainApp() {
           />
           {routeManualSearch.length > 0 && (
             <TouchableOpacity onPress={() => setRouteManualSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.searchClear}>✕</Text>
+              <IconClose width={15} height={15} fill={iconColors.muted} />
             </TouchableOpacity>
           )}
         </View>
@@ -2959,7 +2961,7 @@ function MainApp() {
                     disabled={!stop || isMonitoringRoute}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    {isDone && <Text style={styles.checkboxCheckmark}>✓</Text>}
+                    {isDone && <IconCheck width={14} height={14} fill={iconColors.onBrand} />}
                   </TouchableOpacity>
                   <Text style={styles.routePosition}>{index + 1}</Text>
                   <View style={{ flex: 1 }}>
@@ -3834,7 +3836,7 @@ function MainApp() {
         <View style={[navStyles.headerOverlay, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
           <View style={navStyles.headerPill} pointerEvents="auto">
             <TouchableOpacity onPress={exitNavigation} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-              <Text style={navStyles.headerPillClose}>✕</Text>
+              <IconClose width={20} height={20} fill={iconColors.onBrand} />
             </TouchableOpacity>
             <View style={{ flex: 1, alignItems: 'center' }}>
               <Text style={navStyles.headerPillTitle}>Parada {currentStopIndex + 1} de {routeDisplayClients.length}</Text>
@@ -4076,7 +4078,7 @@ function MainApp() {
             {buscando && <ActivityIndicator size="small" color="#94a3b8" />}
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={styles.searchClear}>✕</Text>
+                <IconClose width={15} height={15} fill={iconColors.muted} />
               </TouchableOpacity>
             )}
           </View>
@@ -4666,7 +4668,7 @@ function MainApp() {
                 onPress={() => setIsPickingRouteStart(false)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Text style={styles.taskRulesCloseText}>✕</Text>
+                <IconClose width={16} height={16} fill={iconColors.muted} />
               </TouchableOpacity>
             </View>
             <Text style={styles.taskRulesIntro}>
@@ -4738,7 +4740,7 @@ function MainApp() {
                 onPress={() => setIsTaskRulesOpen(false)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Text style={styles.taskRulesCloseText}>✕</Text>
+                <IconClose width={16} height={16} fill={iconColors.muted} />
               </TouchableOpacity>
             </View>
             <Text style={styles.taskRulesIntro}>
@@ -4808,7 +4810,7 @@ function MainApp() {
                       onPress={() => setCompletingTask(null)}
                       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
-                      <Text style={styles.taskRulesCloseText}>✕</Text>
+                      <IconClose width={16} height={16} fill={iconColors.muted} />
                     </TouchableOpacity>
                   </View>
                   <Text style={styles.taskRulesIntro}>
@@ -4874,7 +4876,7 @@ function MainApp() {
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Configurações</Text>
                   <TouchableOpacity onPress={() => setIsPasswordModalOpen(false)}>
-                    <Text style={styles.closeButton}>✕</Text>
+                    <IconClose width={20} height={20} fill={iconColors.muted} />
                   </TouchableOpacity>
                 </View>
 
@@ -5060,14 +5062,14 @@ function MainApp() {
                     onPress={() => { setVendorFilterHubspotId(null); setIsPickingVendor(false); }}
                   >
                     <Text style={[styles.ufPickerRowText, vendorFilterHubspotId === null && styles.ufPickerRowTextActive]}>Todos os vendedores</Text>
-                    {vendorFilterHubspotId === null && <Text style={styles.ufPickerCheck}>✓</Text>}
+                    {vendorFilterHubspotId === null && <IconCheck width={16} height={16} fill={iconColors.brandText} />}
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.ufPickerRow}
                     onPress={() => { setVendorFilterHubspotId('__none__'); setIsPickingVendor(false); }}
                   >
                     <Text style={[styles.ufPickerRowText, vendorFilterHubspotId === '__none__' && styles.ufPickerRowTextActive]}>Sem vendedor associado</Text>
-                    {vendorFilterHubspotId === '__none__' && <Text style={styles.ufPickerCheck}>✓</Text>}
+                    {vendorFilterHubspotId === '__none__' && <IconCheck width={16} height={16} fill={iconColors.brandText} />}
                   </TouchableOpacity>
                   {vendors.length === 0 && (
                     <Text style={[styles.passwordModalHint, { padding: 16 }]}>
@@ -5084,7 +5086,7 @@ function MainApp() {
                         onPress={() => { setVendorFilterHubspotId(v.id_hubspot); setIsPickingVendor(false); }}
                       >
                         <Text style={[styles.ufPickerRowText, selected && styles.ufPickerRowTextActive]}>{label}</Text>
-                        {selected && <Text style={styles.ufPickerCheck}>✓</Text>}
+                        {selected && <IconCheck width={16} height={16} fill={iconColors.brandText} />}
                       </TouchableOpacity>
                     );
                   })}
@@ -5105,7 +5107,7 @@ function MainApp() {
                     onPress={() => { setStateFilter(null); setIsPickingUf(false); }}
                   >
                     <Text style={[styles.ufPickerRowText, !stateFilter && styles.ufPickerRowTextActive]}>Todos os estados</Text>
-                    {!stateFilter && <Text style={styles.ufPickerCheck}>✓</Text>}
+                    {!stateFilter && <IconCheck width={16} height={16} fill={iconColors.brandText} />}
                   </TouchableOpacity>
                   {availableStates.map(uf => (
                     <TouchableOpacity
@@ -5114,7 +5116,7 @@ function MainApp() {
                       onPress={() => { setStateFilter(uf); setIsPickingUf(false); }}
                     >
                       <Text style={[styles.ufPickerRowText, stateFilter === uf && styles.ufPickerRowTextActive]}>{uf}</Text>
-                      {stateFilter === uf && <Text style={styles.ufPickerCheck}>✓</Text>}
+                      {stateFilter === uf && <IconCheck width={16} height={16} fill={iconColors.brandText} />}
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -5134,7 +5136,7 @@ function MainApp() {
                     onPress={() => { setStageFilter(null); setIsPickingStage(false); }}
                   >
                     <Text style={[styles.ufPickerRowText, !stageFilter && styles.ufPickerRowTextActive]}>Todas as etapas</Text>
-                    {!stageFilter && <Text style={styles.ufPickerCheck}>✓</Text>}
+                    {!stageFilter && <IconCheck width={16} height={16} fill={iconColors.brandText} />}
                   </TouchableOpacity>
                   {availableStages.map(stage => (
                     <TouchableOpacity
@@ -5143,7 +5145,7 @@ function MainApp() {
                       onPress={() => { setStageFilter(stage); setIsPickingStage(false); }}
                     >
                       <Text style={[styles.ufPickerRowText, stageFilter === stage && styles.ufPickerRowTextActive]}>{stage}</Text>
-                      {stageFilter === stage && <Text style={styles.ufPickerCheck}>✓</Text>}
+                      {stageFilter === stage && <IconCheck width={16} height={16} fill={iconColors.brandText} />}
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -5153,7 +5155,7 @@ function MainApp() {
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Filtros</Text>
                   <TouchableOpacity onPress={() => setIsFiltersOpen(false)}>
-                    <Text style={styles.closeButton}>✕</Text>
+                    <IconClose width={20} height={20} fill={iconColors.muted} />
                   </TouchableOpacity>
                 </View>
 
@@ -5392,7 +5394,7 @@ function MainApp() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Selecione o vendedor</Text>
               <TouchableOpacity onPress={() => setIsPickingRouteVendor(false)}>
-                <Text style={styles.closeButton}>✕</Text>
+                <IconClose width={20} height={20} fill={iconColors.muted} />
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.ufPickerList} contentContainerStyle={{ paddingBottom: 12 }}>
@@ -5401,14 +5403,14 @@ function MainApp() {
                 onPress={() => { setRouteVendorFilterHubspotId(null); setIsPickingRouteVendor(false); }}
               >
                 <Text style={[styles.ufPickerRowText, routeVendorFilterHubspotId === null && styles.ufPickerRowTextActive]}>Todos os vendedores</Text>
-                {routeVendorFilterHubspotId === null && <Text style={styles.ufPickerCheck}>✓</Text>}
+                {routeVendorFilterHubspotId === null && <IconCheck width={16} height={16} fill={iconColors.brandText} />}
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.ufPickerRow}
                 onPress={() => { setRouteVendorFilterHubspotId('__none__'); setIsPickingRouteVendor(false); }}
               >
                 <Text style={[styles.ufPickerRowText, routeVendorFilterHubspotId === '__none__' && styles.ufPickerRowTextActive]}>Sem vendedor associado</Text>
-                {routeVendorFilterHubspotId === '__none__' && <Text style={styles.ufPickerCheck}>✓</Text>}
+                {routeVendorFilterHubspotId === '__none__' && <IconCheck width={16} height={16} fill={iconColors.brandText} />}
               </TouchableOpacity>
               {vendors.length === 0 && (
                 <Text style={[styles.passwordModalHint, { padding: 16 }]}>
@@ -5425,7 +5427,7 @@ function MainApp() {
                     onPress={() => { setRouteVendorFilterHubspotId(v.id_hubspot); setIsPickingRouteVendor(false); }}
                   >
                     <Text style={[styles.ufPickerRowText, selected && styles.ufPickerRowTextActive]}>{label}</Text>
-                    {selected && <Text style={styles.ufPickerCheck}>✓</Text>}
+                    {selected && <IconCheck width={16} height={16} fill={iconColors.brandText} />}
                   </TouchableOpacity>
                 );
               })}
@@ -5514,7 +5516,7 @@ function MainApp() {
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>{editingClient ? 'Editar Cliente' : 'Novo Cadastro'}</Text>
                   <TouchableOpacity onPress={() => { setIsFormOpen(false); resetForm(); setEditingClient(null); }}>
-                    <Text style={styles.closeButton}>✕</Text>
+                    <IconClose width={20} height={20} fill={iconColors.muted} />
                   </TouchableOpacity>
                 </View>
                 <ScrollView

@@ -13,6 +13,7 @@ import {
   TouchableWithoutFeedback,
 } from 'react-native';
 import { Alert } from '../components/Alert';
+import { IconClose, useIconColors } from '../components/icons';
 import type { Profile } from '../integrations/supabase/types';
 
 const WEBHOOK_URL = 'https://webhook.takeat.cloud/webhook/c45d62f8-a6d7-406d-ab48-4bebddadba64';
@@ -31,6 +32,7 @@ const formatCelular = (value: string) => {
 };
 
 export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScreenProps) {
+  const iconColors = useIconColors();
   const [nomeCliente, setNomeCliente] = useState('');
   const [nomeEmpresa, setNomeEmpresa] = useState('');
   const [celular, setCelular] = useState('');
@@ -124,7 +126,7 @@ export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScr
               <View style={styles.headerRow}>
                 <Text style={styles.title}>📤 Cadastro Outbound</Text>
                 <TouchableOpacity onPress={onClose} disabled={submitting}>
-                  <Text style={styles.closeBtn}>✕</Text>
+                  <IconClose width={20} height={20} fill={iconColors.muted} />
                 </TouchableOpacity>
               </View>
               <Text style={styles.subtitle}>

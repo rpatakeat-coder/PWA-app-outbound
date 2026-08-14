@@ -16,6 +16,8 @@ import { View } from 'react-native';
 import { useTheme } from '../theme';
 
 import { IconBarGraph } from 'takeat-design-system-ui-kit/icons/IconBarGraph';
+import { IconCheck } from 'takeat-design-system-ui-kit/icons/IconCheck';
+import { IconClose } from 'takeat-design-system-ui-kit/icons/IconClose';
 import { IconCalendar } from 'takeat-design-system-ui-kit/icons/IconCalendar';
 import { IconCar } from 'takeat-design-system-ui-kit/icons/IconCar';
 import { IconClipboardCheck } from 'takeat-design-system-ui-kit/icons/IconClipboardCheck';
@@ -30,6 +32,8 @@ import { IconTrendingUp } from 'takeat-design-system-ui-kit/icons/IconTrendingUp
 
 export {
   IconBarGraph,
+  IconCheck,
+  IconClose,
   IconCalendar,
   IconCar,
   IconClipboardCheck,
@@ -65,6 +69,12 @@ export function useIconColors() {
     onBrand: '#FFFFFF',
     /** Destaque (aba ativa, seguindo o usuario no mapa). */
     brand: '#C8131B',
+    /**
+     * Vermelho da marca com contraste suficiente pra TEXTO/icone sobre fundo
+     * escuro. O #C8131B da' 2.82 contra a superficie escura — ilegivel. Mesmo
+     * par do token --brand-text.
+     */
+    brandText: isDark ? '#F2727A' : '#C8131B',
   };
 }
 
