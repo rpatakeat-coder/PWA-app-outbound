@@ -46,78 +46,76 @@
     -->
     <style id="takeat-theme">
       /*
-        Paleta em variáveis CSS.
+        Paleta da Takeat em variáveis CSS.
 
         Funciona porque o app roda em react-native-web: os estilos viram
         classes CSS e `backgroundColor: 'var(--surface)'` chega intacto ao
         navegador. Trocar de tema é mudar um atributo no <html> — sem contexto
-        de tema no React, sem re-render, sem StyleSheet virar função.
+        de tema no React e sem StyleSheet virar função.
 
-        SÓ o "cromo" é tokenizado. Cores com SIGNIFICADO — temperatura do
-        funil, status, vermelho da marca — seguem literais: se invertessem, o
-        mapa perderia a leitura.
+        Base da marca: vermelho #C8131B, creme #FFFEF2, preto #222222,
+        amarelo #FFD966 / #FFB32F, acento #A50F16.
 
-        Os valores escuros são declarados UMA vez (--d-*) e os dois seletores
+        O tema escuro é derivado dela — preto QUENTE, não cinza-azulado, para
+        combinar com o creme e o vermelho — e o creme da marca vira a cor do
+        texto.
+
+        Cores com SIGNIFICADO (temperatura do funil, status) seguem literais
+        no código: se invertessem, o mapa perderia a leitura.
+
+        Os valores escuros são declarados UMA vez (--d-*); os dois seletores
         (preferência do aparelho e escolha manual) apenas apontam pra eles.
-        Antes eu repetia a paleta nos dois blocos e eles saíram de sincronia:
-        o manual ficou sem os tons de destaque.
       */
       :root {
-        --d-bg: #0b1220;
-        --d-surface: #131c2e;
-        --d-surface-2: #1b2639;
-        --d-surface-3: #26344c;
-        --d-text: #e8eef7;
-        --d-text-muted: #a9b7ca;
-        --d-text-subtle: #8494aa;
-        --d-text-faint: #5d6b80;
-        --d-border: #2a3852;
-        --d-border-soft: #1f2b40;
-        --d-surface-overlay: rgba(15, 23, 38, 0.92);
-        --d-surface-warn: #2a2013;
-        --d-tint-red: #2a1416;
-        --d-tint-red-border: #5a2529;
-        --d-tint-red-text: #fca5a5;
-        --d-tint-purple: #231a3d;
-        --d-tint-purple-border: #453473;
-        --d-tint-purple-text: #c4b5fd;
-        --d-tint-green: #0f2a1a;
-        --d-tint-green-border: #245c3a;
-        --d-tint-green-text: #86efac;
-        --d-tint-amber: #2b2110;
-        --d-tint-amber-border: #6b5320;
-        --d-tint-amber-text: #fcd34d;
-        --d-tint-blue: #0f1f38;
-        --d-tint-blue-border: #2b4a7a;
-        --d-tint-blue-text: #bfdbfe;
+        --d-bg: #17150F;
+        --d-surface: #211E17;
+        --d-surface-2: #2B2720;
+        --d-surface-3: #3A352B;
+        --d-text: #FFFEF2;
+        --d-text-muted: #BDB6A4;
+        --d-text-subtle: #8F887A;
+        --d-text-faint: #635D52;
+        --d-border: #3A352B;
+        --d-border-soft: #2A261F;
+        --d-surface-overlay: rgba(28, 25, 18, 0.93);
+        --d-surface-warn: #2E2515;
+        --d-tint-red: #2E1214;
+        --d-tint-red-border: #632024;
+        --d-tint-red-text: #F2A3A7;
+        --d-tint-green: #122A18;
+        --d-tint-green-border: #265C33;
+        --d-tint-green-text: #8FE0A2;
+        --d-tint-amber: #302512;
+        --d-tint-amber-border: #6E5520;
+        --d-tint-amber-text: #FFD966;
+        --d-tint-blue: #101E33;
+        --d-tint-blue-border: #2C4970;
+        --d-tint-blue-text: #BBD6F5;
 
-        --bg: #f8fafc;
-        --surface: #ffffff;
-        --surface-2: #f1f5f9;
-        --surface-3: #e2e8f0;
-        --text: #0f172a;
-        --text-muted: #64748b;
-        --text-subtle: #94a3b8;
-        --text-faint: #cbd5e1;
-        --border: #e2e8f0;
-        --border-soft: #f1f5f9;
-        --surface-overlay: rgba(255, 255, 255, 0.94);
-        --surface-warn: #fff7ed;
-        --tint-red: #fef2f2;
-        --tint-red-border: #fecaca;
-        --tint-red-text: #991b1b;
-        --tint-purple: #f5f3ff;
-        --tint-purple-border: #ddd6fe;
-        --tint-purple-text: #5b21b6;
-        --tint-green: #f0fdf4;
-        --tint-green-border: #bbf7d0;
-        --tint-green-text: #166534;
-        --tint-amber: #fef3c7;
-        --tint-amber-border: #fde68a;
-        --tint-amber-text: #92400e;
-        --tint-blue: #eff6ff;
-        --tint-blue-border: #bfdbfe;
-        --tint-blue-text: #1e3a8a;
+        --bg: #FFFEF2;
+        --surface: #FFFFFF;
+        --surface-2: #F9F4E4;
+        --surface-3: #F0E6CC;
+        --text: #222222;
+        --text-muted: #6B6B6B;
+        --text-subtle: #8A8A8A;
+        --text-faint: #B5B5B5;
+        --border: #F0E6CC;
+        --border-soft: #F7F1E1;
+        --surface-overlay: rgba(255, 254, 242, 0.94);
+        --surface-warn: #FFF6E0;
+        --tint-red: #FDEDEE;
+        --tint-red-border: #F5C9CC;
+        --tint-red-text: #A50F16;
+        --tint-green: #EFF8F0;
+        --tint-green-border: #C3E6C9;
+        --tint-green-text: #1B6B32;
+        --tint-amber: #FFF6E0;
+        --tint-amber-border: #FFD966;
+        --tint-amber-text: #8A5A00;
+        --tint-blue: #EEF4FB;
+        --tint-blue-border: #C6DBF2;
+        --tint-blue-text: #1B4A85;
         color-scheme: light;
       }
 
@@ -139,9 +137,6 @@
           --tint-red: var(--d-tint-red);
           --tint-red-border: var(--d-tint-red-border);
           --tint-red-text: var(--d-tint-red-text);
-          --tint-purple: var(--d-tint-purple);
-          --tint-purple-border: var(--d-tint-purple-border);
-          --tint-purple-text: var(--d-tint-purple-text);
           --tint-green: var(--d-tint-green);
           --tint-green-border: var(--d-tint-green-border);
           --tint-green-text: var(--d-tint-green-text);
@@ -172,9 +167,6 @@
           --tint-red: var(--d-tint-red);
           --tint-red-border: var(--d-tint-red-border);
           --tint-red-text: var(--d-tint-red-text);
-          --tint-purple: var(--d-tint-purple);
-          --tint-purple-border: var(--d-tint-purple-border);
-          --tint-purple-text: var(--d-tint-purple-text);
           --tint-green: var(--d-tint-green);
           --tint-green-border: var(--d-tint-green-border);
           --tint-green-text: var(--d-tint-green-text);

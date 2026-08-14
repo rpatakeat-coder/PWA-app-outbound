@@ -88,7 +88,7 @@ export function LoginScreen() {
                 editable={!loading}
                 value={email}
                 onChangeText={setEmail}
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="var(--text-subtle)"
               />
             </View>
 
@@ -101,7 +101,7 @@ export function LoginScreen() {
                 editable={!loading}
                 value={password}
                 onChangeText={setPassword}
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="var(--text-subtle)"
               />
             </View>
 
@@ -133,7 +133,7 @@ export function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#dc2626',
+    backgroundColor: '#C8131B',
   },
   scrollContent: {
     flexGrow: 1,
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     color: 'var(--text)',
   },
   button: {
-    backgroundColor: '#dc2626',
+    backgroundColor: '#C8131B',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   errorText: {
-    color: '#dc2626',
+    color: '#C8131B',
     fontSize: 13,
     marginBottom: 8,
     textAlign: 'center',

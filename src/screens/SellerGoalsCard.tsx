@@ -53,7 +53,7 @@ export function SellerGoalsCard() {
         <View style={{ marginTop: 8 }}>
           <Text style={styles.hint}>Meta diária de visitas (check-ins). Vazio = padrão global ({defaultMeta}).</Text>
           {loadingSellers ? (
-            <ActivityIndicator color="#7c3aed" style={{ marginVertical: 12 }} />
+            <ActivityIndicator color="#C8131B" style={{ marginVertical: 12 }} />
           ) : (
             <>
               {sellers.map((s) => (
@@ -67,7 +67,7 @@ export function SellerGoalsCard() {
                     onChangeText={(v) => setForm((f) => ({ ...f, [s.id]: v }))}
                     keyboardType="number-pad"
                     placeholder={String(defaultMeta)}
-                    placeholderTextColor="#94a3b8"
+                    placeholderTextColor="var(--text-subtle)"
                   />
                 </View>
               ))}
@@ -87,14 +87,14 @@ export function SellerGoalsCard() {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: 'var(--surface)', borderRadius: 14, borderWidth: 1, borderColor: 'var(--tint-purple-border)', padding: 14, marginBottom: 12 },
+  card: { backgroundColor: 'var(--surface)', borderRadius: 14, borderWidth: 1, borderColor: 'var(--tint-red-border)', padding: 14, marginBottom: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: 15, fontWeight: '800', color: 'var(--tint-purple-text)' },
-  chevron: { fontSize: 12, color: '#7c3aed', fontWeight: '800' },
+  title: { fontSize: 15, fontWeight: '800', color: 'var(--tint-red-text)' },
+  chevron: { fontSize: 12, color: '#C8131B', fontWeight: '800' },
   hint: { fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 },
   name: { flex: 1, fontSize: 13, fontWeight: '600', color: 'var(--text)' },
   input: { width: 70, borderWidth: 1, borderColor: 'var(--border)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, fontSize: 14, color: 'var(--text)', backgroundColor: 'var(--bg)', textAlign: 'center' },
-  saveBtn: { backgroundColor: '#7c3aed', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 8 },
+  saveBtn: { backgroundColor: '#C8131B', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 8 },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

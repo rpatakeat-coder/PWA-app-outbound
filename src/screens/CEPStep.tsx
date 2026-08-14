@@ -256,7 +256,7 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
                   <TextInput
                     style={[styles.input, { flex: 1 }]}
                     placeholder="00000-000"
-                    placeholderTextColor="#94a3b8"
+                    placeholderTextColor="var(--text-subtle)"
                     keyboardType="numeric"
                     value={cep}
                     onChangeText={v => setCep(formatCEP(v))}
@@ -304,7 +304,7 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
                         <TextInput
                           style={styles.input}
                           placeholder="Rua, Avenida..."
-                          placeholderTextColor="#94a3b8"
+                          placeholderTextColor="var(--text-subtle)"
                           value={enderecoManual}
                           onChangeText={setEnderecoManual}
                           editable={!loading}
@@ -316,7 +316,7 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
                     <TextInput
                       style={[styles.input, { width: 120 }]}
                       placeholder="Nº"
-                      placeholderTextColor="#94a3b8"
+                      placeholderTextColor="var(--text-subtle)"
                       keyboardType="default"
                       value={numero}
                       onChangeText={setNumero}
@@ -379,7 +379,7 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
               <TextInput
                 style={styles.input}
                 placeholder="-23.550520"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="var(--text-subtle)"
                 keyboardType="numeric"
                 value={latitude}
                 onChangeText={setLatitude}
@@ -390,7 +390,7 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
               <TextInput
                 style={styles.input}
                 placeholder="-46.633308"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="var(--text-subtle)"
                 keyboardType="numeric"
                 value={longitude}
                 onChangeText={setLongitude}
@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     fontSize: 15,
-    color: '#dc2626',
+    color: '#C8131B',
     fontWeight: '600',
   },
   title: {
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   searchBtn: {
-    backgroundColor: '#dc2626',
+    backgroundColor: '#C8131B',
     borderRadius: 10,
     paddingHorizontal: 20,
     justifyContent: 'center',
@@ -576,7 +576,7 @@ const styles = StyleSheet.create({
   },
   // Buttons
   submitBtn: {
-    backgroundColor: '#dc2626',
+    backgroundColor: '#C8131B',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',

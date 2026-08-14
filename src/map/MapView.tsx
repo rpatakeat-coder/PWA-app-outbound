@@ -491,7 +491,7 @@ const mapStyles = StyleSheet.create({
     padding: 24,
   },
   errorTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 6 },
-  errorBody: { fontSize: 13, color: '#475569', textAlign: 'center' },
+  errorBody: { fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' },
 });
 
 export default MapViewInner;

@@ -32,7 +32,7 @@ function aplicar(pref: ThemePref) {
   // A cor da barra de status do iOS/Android nao vem do CSS da pagina: e' lida
   // desta meta tag. Sem atualiza-la, o topo da tela fica claro num app escuro.
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', resolver(pref) === 'dark' ? '#0b1220' : '#dc2626');
+  if (meta) meta.setAttribute('content', resolver(pref) === 'dark' ? '#17150F' : '#C8131B');
 }
 
 function preferenciaDoAparelho(): ThemeResolved {

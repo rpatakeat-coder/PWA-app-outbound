@@ -196,7 +196,7 @@ function CurrencyField({
         <TextInput
           style={styles.currencyInput}
           placeholder={subField.placeholder ?? '0,00'}
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor="var(--text-subtle)"
           keyboardType="decimal-pad"
           value={value}
           onChangeText={onChange}
@@ -290,7 +290,7 @@ function DateField({
       <TextInput
         style={styles.plainInput}
         placeholder={subField.placeholder ?? 'dd/mm/aaaa'}
-        placeholderTextColor="#94a3b8"
+        placeholderTextColor="var(--text-subtle)"
         keyboardType="number-pad"
         value={value}
         onChangeText={(raw) => onChange(maskDate(raw))}
@@ -378,7 +378,7 @@ function PlainTextField({
       <TextInput
         style={[styles.plainInput, multiline && styles.plainInputMultiline]}
         placeholder={subField.placeholder ?? ''}
-        placeholderTextColor="#94a3b8"
+        placeholderTextColor="var(--text-subtle)"
         keyboardType={keyboardType as any}
         autoCapitalize={autoCapitalize as any}
         autoCorrect={kind !== 'email'}
@@ -1111,7 +1111,7 @@ const styles = StyleSheet.create({
   plainInputMultiline: { minHeight: 90, textAlignVertical: 'top' },
   submitWaitRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   submit: {
-    backgroundColor: '#0f172a',
+    backgroundColor: '#222222',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',

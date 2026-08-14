@@ -32,7 +32,7 @@ const PERIOD_OPTIONS: { value: GestorPeriodPreset; label: string }[] = [
 
 const STATUS_COLOR: Record<string, string> = {
   lead: '#3b82f6', lead_visitado: '#a855f7', cliente: '#22c55e',
-  em_integracao: '#f97316', churn: '#ef4444', ex_cliente: '#ef4444',
+  em_integracao: '#f97316', churn: '#E03A41', ex_cliente: '#E03A41',
 };
 const STATUS_LABEL: Record<string, string> = {
   lead: 'Leads', lead_visitado: 'Visitados', cliente: 'Clientes',
@@ -73,7 +73,7 @@ function LeadsModal({
             keyExtractor={(item, i) => `${item.client_id}-${i}`}
             contentContainerStyle={{ paddingBottom: 24 }}
             ListEmptyComponent={q.isLoading
-              ? <View style={{ paddingVertical: 30, alignItems: 'center' }}><ActivityIndicator color="#dc2626" /></View>
+              ? <View style={{ paddingVertical: 30, alignItems: 'center' }}><ActivityIndicator color="#C8131B" /></View>
               : <Text style={styles.modalEmpty}>Nenhum lead nesse recorte.</Text>}
             renderItem={({ item }) => {
               const when = formatLeadDate(item.at);
@@ -148,7 +148,7 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
       </View>
 
       {query.isLoading ? (
-        <View style={styles.loadingBlock}><ActivityIndicator size="large" color="#dc2626" /><Text style={styles.loadingText}>Carregando...</Text></View>
+        <View style={styles.loadingBlock}><ActivityIndicator size="large" color="#C8131B" /><Text style={styles.loadingText}>Carregando...</Text></View>
       ) : query.isError ? (
         <View style={styles.loadingBlock}>
           <Text style={styles.errorText}>Erro ao carregar suas métricas.</Text>
@@ -163,7 +163,7 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
             <Stat value={m.meetings_scheduled} label="Reuniões" color="#f97316" onPress={() => open('Minhas reuniões', 'meetings')} />
             <Stat value={m.follow_ups_scheduled} label="Follow ups" color="#0891b2" onPress={() => open('Meus follow ups', 'follow_ups')} />
             <Stat value={m.stage_changes} label="Mudanças etapa" color="#0ea5e9" onPress={() => open('Mudanças de etapa', 'stage_changes')} />
-            <Stat value={m.notes_created} label="Notas" color="#facc15" onPress={() => open('Minhas notas', 'notes')} />
+            <Stat value={m.notes_created} label="Notas" color="#FFD966" onPress={() => open('Minhas notas', 'notes')} />
             <Stat value={m.won_in_period} label="Fechados 🎉" color="#16a34a" onPress={() => open('Clientes que fechei', 'won')} />
           </View>
 
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 120 },
   periodRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   periodChip: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: 'var(--surface)', alignItems: 'center', borderWidth: 1, borderColor: 'var(--border)' },
-  periodChipActive: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
+  periodChipActive: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
   periodChipText: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
   periodChipTextActive: { color: '#fff' },
   sectionTitle: { fontSize: 13, fontWeight: '700', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 8, marginBottom: 10 },
@@ -221,8 +221,8 @@ const styles = StyleSheet.create({
   statusChipText: { fontSize: 11, color: 'var(--text-muted)', fontWeight: '600' },
   loadingBlock: { paddingVertical: 60, alignItems: 'center', gap: 12 },
   loadingText: { color: 'var(--text-muted)', fontSize: 13 },
-  errorText: { color: '#dc2626', fontSize: 15, fontWeight: '700' },
-  retry: { marginTop: 12, backgroundColor: '#0f172a', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
+  errorText: { color: '#C8131B', fontSize: 15, fontWeight: '700' },
+  retry: { marginTop: 12, backgroundColor: '#222222', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
   retryText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   footerHint: { marginTop: 20, textAlign: 'center', fontSize: 11, color: 'var(--text-subtle)', fontStyle: 'italic' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', justifyContent: 'flex-end' },
@@ -237,5 +237,5 @@ const styles = StyleSheet.create({
   leadDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
   leadName: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   leadMeta: { fontSize: 11, color: 'var(--text-muted)', marginTop: 1 },
-  leadNote: { fontSize: 13, color: 'var(--text)', marginTop: 6, lineHeight: 18, backgroundColor: 'var(--bg)', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, borderLeftWidth: 3, borderLeftColor: '#facc15' },
+  leadNote: { fontSize: 13, color: 'var(--text)', marginTop: 6, lineHeight: 18, backgroundColor: 'var(--bg)', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, borderLeftWidth: 3, borderLeftColor: '#FFD966' },
 });

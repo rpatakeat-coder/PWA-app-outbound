@@ -135,7 +135,7 @@ export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScr
               <TextInput
                 style={styles.input}
                 placeholder="Ex: Julyan Teste"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="var(--text-subtle)"
                 value={nomeCliente}
                 onChangeText={setNomeCliente}
                 editable={!submitting}
@@ -145,7 +145,7 @@ export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScr
               <TextInput
                 style={styles.input}
                 placeholder="Ex: Restaurante do Julyan"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="var(--text-subtle)"
                 value={nomeEmpresa}
                 onChangeText={setNomeEmpresa}
                 editable={!submitting}
@@ -155,7 +155,7 @@ export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScr
               <TextInput
                 style={styles.input}
                 placeholder="(27) 99618-3875"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="var(--text-subtle)"
                 keyboardType="phone-pad"
                 value={celular}
                 onChangeText={v => setCelular(formatCelular(v))}
@@ -167,7 +167,7 @@ export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScr
               <TextInput
                 style={[styles.input, styles.textarea]}
                 placeholder="Anotações sobre o contato..."
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="var(--text-subtle)"
                 value={observacoes}
                 onChangeText={setObservacoes}
                 editable={!submitting}
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   submitBtn: {
-    backgroundColor: '#dc2626',
+    backgroundColor: '#C8131B',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',

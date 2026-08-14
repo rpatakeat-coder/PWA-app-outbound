@@ -159,5 +159,5 @@ const styles = StyleSheet.create({
   buttonPressed: { backgroundColor: 'var(--surface-2)' },
   buttonText: { fontSize: 15, fontWeight: '700', color: '#2563eb' },
   buttonTextCancel: { color: 'var(--text-muted)' },
-  buttonTextDestructive: { color: '#dc2626' },
+  buttonTextDestructive: { color: '#C8131B' },
 });

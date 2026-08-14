@@ -97,7 +97,7 @@ export function DismissedContaAlvoCard() {
       {open && (
         <View style={{ marginTop: 8 }}>
           {isLoading ? (
-            <ActivityIndicator color="#7c3aed" style={{ marginVertical: 12 }} />
+            <ActivityIndicator color="#C8131B" style={{ marginVertical: 12 }} />
           ) : data.length === 0 ? (
             <Text style={styles.empty}>Nenhuma conta-alvo dispensada.</Text>
           ) : (
@@ -173,19 +173,19 @@ const styles = StyleSheet.create({
   filterHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   chipsRow: { flexDirection: 'row', gap: 6 },
   pchip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: 'var(--surface-2)' },
-  pchipActive: { backgroundColor: '#0f172a' },
+  pchipActive: { backgroundColor: '#222222' },
   pchipText: { fontSize: 11, fontWeight: '700', color: 'var(--text-muted)' },
   pchipTextActive: { color: '#fff' },
-  exportBtn: { backgroundColor: '#7c3aed', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  exportBtn: { backgroundColor: '#C8131B', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   exportBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   chips: { gap: 6, paddingBottom: 6 },
   chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: 'var(--surface-2)', maxWidth: 190 },
-  chipActive: { backgroundColor: '#7c3aed' },
+  chipActive: { backgroundColor: '#C8131B' },
   chipText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)' },
   chipTextActive: { color: '#fff' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
   name: { fontSize: 13, fontWeight: '700', color: 'var(--text)' },
   meta: { fontSize: 11, color: 'var(--text-muted)', marginTop: 1 },
   restoreBtn: { backgroundColor: 'var(--surface-2)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
-  restoreText: { fontSize: 12, fontWeight: '800', color: '#7c3aed' },
+  restoreText: { fontSize: 12, fontWeight: '800', color: '#C8131B' },
 });

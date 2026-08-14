@@ -63,7 +63,7 @@ export function SellerClassificationCard() {
             </TouchableOpacity>
           )}
           {isLoading ? (
-            <ActivityIndicator color="#7c3aed" style={{ marginVertical: 12 }} />
+            <ActivityIndicator color="#C8131B" style={{ marginVertical: 12 }} />
           ) : (
             <>
               {visible.map((u) => {
@@ -106,22 +106,22 @@ export function SellerClassificationCard() {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: 'var(--surface)', borderRadius: 14, borderWidth: 1, borderColor: 'var(--tint-purple-border)', padding: 14, marginBottom: 12 },
+  card: { backgroundColor: 'var(--surface)', borderRadius: 14, borderWidth: 1, borderColor: 'var(--tint-red-border)', padding: 14, marginBottom: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: 15, fontWeight: '800', color: 'var(--tint-purple-text)' },
-  chevron: { fontSize: 12, color: '#7c3aed', fontWeight: '800' },
+  title: { fontSize: 15, fontWeight: '800', color: 'var(--tint-red-text)' },
+  chevron: { fontSize: 12, color: '#C8131B', fontWeight: '800' },
   hint: { fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 },
   toggle: { alignSelf: 'flex-start', backgroundColor: 'var(--surface-2)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 10 },
-  toggleActive: { backgroundColor: 'var(--tint-purple)' },
+  toggleActive: { backgroundColor: 'var(--tint-red)' },
   toggleText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)' },
-  toggleTextActive: { color: 'var(--tint-purple-text)' },
+  toggleTextActive: { color: 'var(--tint-red-text)' },
   row: { marginBottom: 10 },
   name: { fontSize: 13, fontWeight: '700', color: 'var(--text)', marginBottom: 5 },
   seg: { flexDirection: 'row', gap: 6 },
   segBtn: { flex: 1, paddingVertical: 7, borderRadius: 8, backgroundColor: 'var(--surface-2)', alignItems: 'center' },
-  segBtnActive: { backgroundColor: '#7c3aed' },
+  segBtnActive: { backgroundColor: '#C8131B' },
   segText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)' },
   segTextActive: { color: '#fff' },
-  saveBtn: { backgroundColor: '#7c3aed', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 6 },
+  saveBtn: { backgroundColor: '#C8131B', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 6 },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

@@ -453,7 +453,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao',
                 <TextInput
                   style={styles.input}
                   placeholder="Ex: cliente não pôde comparecer"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="var(--text-subtle)"
                   value={motivo}
                   onChangeText={setMotivo}
                   editable={!isPending}
@@ -465,7 +465,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao',
             <TextInput
               style={[styles.input, styles.textarea]}
               placeholder={`Anotações sobre o ${copy.noun}...`}
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor="var(--text-subtle)"
               value={observacoes}
               onChangeText={setObservacoes}
               multiline
@@ -487,7 +487,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao',
                   value={enviarConvite}
                   onValueChange={setEnviarConvite}
                   trackColor={{ false: '#cbd5e1', true: '#a78bfa' }}
-                  thumbColor={enviarConvite ? '#7c3aed' : '#f8fafc'}
+                  thumbColor={enviarConvite ? '#C8131B' : '#f8fafc'}
                   disabled={isPending}
                 />
               </View>
@@ -495,7 +495,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao',
                 <TextInput
                   style={[styles.input, { marginTop: 10 }]}
                   placeholder="email@exemplo.com"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="var(--text-subtle)"
                   value={inviteEmail}
                   onChangeText={setInviteEmail}
                   keyboardType="email-address"
@@ -609,16 +609,16 @@ const styles = StyleSheet.create({
     borderColor: 'var(--border)',
     backgroundColor: 'var(--bg)',
   },
-  durationChipActive: { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
+  durationChipActive: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
   durationChipTxt: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
   durationChipTxtActive: { color: '#fff' },
   inviteBox: {
     marginTop: 16,
-    backgroundColor: 'var(--tint-purple)',
+    backgroundColor: 'var(--tint-red)',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: 'var(--tint-purple-border)',
+    borderColor: 'var(--tint-red-border)',
   },
   rescheduleBanner: {
     backgroundColor: 'var(--surface-warn)',
@@ -638,10 +638,10 @@ const styles = StyleSheet.create({
   rescheduleBannerValue: { fontSize: 15, fontWeight: '700', color: 'var(--tint-amber-text)', marginTop: 3 },
   rescheduleBannerHint: { fontSize: 12, color: 'var(--tint-amber-text)', marginTop: 4 },
   inviteHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  inviteTitle: { fontSize: 14, fontWeight: '700', color: 'var(--tint-purple-text)' },
-  inviteSubtitle: { fontSize: 12, color: 'var(--tint-purple-text)', marginTop: 2 },
+  inviteTitle: { fontSize: 14, fontWeight: '700', color: 'var(--tint-red-text)' },
+  inviteSubtitle: { fontSize: 12, color: 'var(--tint-red-text)', marginTop: 2 },
   submit: {
-    backgroundColor: '#7c3aed',
+    backgroundColor: '#C8131B',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -679,7 +679,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
   },
-  meetingDeleteText: { fontSize: 12, fontWeight: '700', color: '#dc2626' },
+  meetingDeleteText: { fontSize: 12, fontWeight: '700', color: '#C8131B' },
 });
 
 const calStyles = StyleSheet.create({
@@ -718,8 +718,8 @@ const calStyles = StyleSheet.create({
     borderRadius: 8,
   },
   cellEmpty: { width: `${100 / 7}%`, aspectRatio: 1 },
-  cellToday: { borderWidth: 1, borderColor: '#7c3aed' },
-  cellSelected: { backgroundColor: '#7c3aed' },
+  cellToday: { borderWidth: 1, borderColor: '#C8131B' },
+  cellSelected: { backgroundColor: '#C8131B' },
   cellPast: { opacity: 0.35 },
   cellTxt: { fontSize: 14, color: 'var(--text)', fontWeight: '600' },
   cellTxtPast: { color: 'var(--text-subtle)' },
@@ -748,7 +748,7 @@ const pickerStyles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 2,
   },
-  itemActive: { backgroundColor: '#7c3aed' },
+  itemActive: { backgroundColor: '#C8131B' },
   itemTxt: { fontSize: 16, color: 'var(--text)', fontWeight: '600' },
   itemTxtActive: { color: '#fff', fontWeight: '700' },
 });

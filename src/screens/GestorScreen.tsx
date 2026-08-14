@@ -53,8 +53,8 @@ const STATUS_COLOR: Record<string, string> = {
   lead_visitado: '#a855f7',
   cliente: '#22c55e',
   em_integracao: '#f97316',
-  churn: '#ef4444',
-  ex_cliente: '#ef4444',
+  churn: '#E03A41',
+  ex_cliente: '#E03A41',
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -270,7 +270,7 @@ function LeadListModal({ state, onClose, onOpenClient }: {
             ListEmptyComponent={
               leadsQuery.isLoading ? (
                 <View style={{ paddingVertical: 32, alignItems: 'center' }}>
-                  <ActivityIndicator color="#dc2626" />
+                  <ActivityIndicator color="#C8131B" />
                 </View>
               ) : (
                 <Text style={styles.modalEmpty}>Nenhum lead nesse recorte.</Text>
@@ -322,7 +322,7 @@ function LeadListModal({ state, onClose, onOpenClient }: {
 
 // Cor do badge de severidade da tarefa (mesma convencao da aba Tarefas).
 const taskSevColor = (s: string | null) =>
-  s === 'D5' ? '#dc2626' : s === 'D2' ? '#f59e0b' : s === 'SLA' ? '#2563eb' : '#64748b';
+  s === 'D5' ? '#C8131B' : s === 'D2' ? '#FFB32F' : s === 'SLA' ? '#2563eb' : '#64748b';
 
 function TasksModal({ state, period, onClose, onOpenClient }: {
   state: TaskModalState | null;
@@ -360,7 +360,7 @@ function TasksModal({ state, period, onClose, onOpenClient }: {
             ListEmptyComponent={
               q.isLoading ? (
                 <View style={{ paddingVertical: 32, alignItems: 'center' }}>
-                  <ActivityIndicator color="#dc2626" />
+                  <ActivityIndicator color="#C8131B" />
                 </View>
               ) : (
                 <Text style={styles.modalEmpty}>Nenhuma tarefa nesse recorte.</Text>
@@ -530,7 +530,7 @@ function SellerCard({
       <View style={styles.metricsRow}>
         <MetricBox value={seller.follow_ups_scheduled} label="Follow ups" color="#0891b2" onPress={() => open('Follow ups', { metric: 'follow_ups' })} />
         <MetricBox value={seller.stage_changes} label="Mudanças" color="#0ea5e9" onPress={() => open('Mudanças de etapa', { metric: 'stage_changes' })} />
-        <MetricBox value={seller.notes_created} label="Notas" color="#facc15" onPress={() => open('Notas', { metric: 'notes' })} />
+        <MetricBox value={seller.notes_created} label="Notas" color="#FFD966" onPress={() => open('Notas', { metric: 'notes' })} />
       </View>
 
       <View style={styles.assignedRow}>
@@ -551,7 +551,7 @@ function SellerCard({
         <MetricBox
           value={taskCounts.pending}
           label="Pendentes"
-          color="#dc2626"
+          color="#C8131B"
           onPress={() => onOpenTasks(`Tarefas pendentes — ${displayName}`, seller.id_hubspot, 'pendente')}
         />
         <MetricBox
@@ -766,7 +766,7 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
 
       {query.isLoading ? (
         <View style={styles.loadingBlock}>
-          <ActivityIndicator size="large" color="#dc2626" />
+          <ActivityIndicator size="large" color="#C8131B" />
           <Text style={styles.loadingText}>Carregando métricas...</Text>
         </View>
       ) : query.isError ? (
@@ -856,7 +856,7 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
             <StatCard
               label="Notas"
               value={query.data.global.notes_in_period}
-              color="#facc15"
+              color="#FFD966"
               onPress={() => openLeads('Notas no período', { metric: 'notes', period })}
             />
           </View>
@@ -936,7 +936,7 @@ const styles = StyleSheet.create({
   exportHint: { fontSize: 11, color: 'var(--text-muted)', marginTop: 4, marginBottom: 10, lineHeight: 15 },
   exportRow: { flexDirection: 'row', gap: 8 },
   exportBtn: { flex: 1, paddingVertical: 11, borderRadius: 10, alignItems: 'center' },
-  exportBtnPrimary: { backgroundColor: '#0f172a' },
+  exportBtnPrimary: { backgroundColor: '#222222' },
   exportBtnPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   exportBtnGhost: { backgroundColor: 'var(--surface-2)', borderWidth: 1, borderColor: 'var(--border)' },
   exportBtnGhostText: { color: 'var(--text)', fontSize: 13, fontWeight: '700' },
@@ -951,8 +951,8 @@ const styles = StyleSheet.create({
     borderColor: 'var(--border)',
   },
   periodChipActive: {
-    backgroundColor: '#dc2626',
-    borderColor: '#dc2626',
+    backgroundColor: '#C8131B',
+    borderColor: '#C8131B',
   },
   periodChipText: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
   periodChipTextActive: { color: '#fff' },
@@ -1005,7 +1005,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     height: 24,
     borderRadius: 6,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#222222',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1018,7 +1018,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: '#dc2626', fontSize: 14, fontWeight: '800' },
+  avatarText: { color: '#C8131B', fontSize: 14, fontWeight: '800' },
   sellerName: { fontSize: 15, fontWeight: '700', color: 'var(--text)' },
   sellerEmail: { fontSize: 12, color: 'var(--text-muted)', marginTop: 1 },
 
@@ -1080,11 +1080,11 @@ const styles = StyleSheet.create({
 
   loadingBlock: { paddingVertical: 60, alignItems: 'center', gap: 12 },
   loadingText: { color: 'var(--text-muted)', fontSize: 13 },
-  errorText: { color: '#dc2626', fontSize: 15, fontWeight: '700' },
+  errorText: { color: '#C8131B', fontSize: 15, fontWeight: '700' },
   errorSub: { color: 'var(--text-muted)', fontSize: 12, textAlign: 'center', paddingHorizontal: 24 },
   retryButton: {
     marginTop: 12,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#222222',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 10,
@@ -1166,7 +1166,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderLeftWidth: 3,
-    borderLeftColor: '#facc15',
+    borderLeftColor: '#FFD966',
   },
 });
 
@@ -1214,7 +1214,7 @@ const rangeStyles = StyleSheet.create({
     borderRadius: 8,
   },
   cellEmpty: { width: `${100 / 7}%`, aspectRatio: 1.15 },
-  cellEdge: { backgroundColor: '#dc2626' },
+  cellEdge: { backgroundColor: '#C8131B' },
   cellBetween: { backgroundColor: 'var(--tint-red)' },
   cellFuture: { opacity: 0.35 },
   cellTxt: { fontSize: 14, color: 'var(--text)', fontWeight: '600' },
@@ -1235,7 +1235,7 @@ const rangeStyles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
-    backgroundColor: '#dc2626',
+    backgroundColor: '#C8131B',
   },
   applyBtnDisabled: { opacity: 0.5 },
   applyTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },

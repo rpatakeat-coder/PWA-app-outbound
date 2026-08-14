@@ -38,6 +38,7 @@ import {
   IconSquareMenu,
   IconTrendingUp,
   NavIcon,
+  useIconColors,
 } from './src/components/icons';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 // Camada de mapa web (Google Maps JS API) com a mesma API que o
@@ -197,7 +198,7 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
   { value: 'lead', label: 'Lead', color: '#3b82f6' },
   { value: 'ativo', label: 'Cliente Ativo', color: '#22c55e' },
   { value: 'em_integracao', label: 'Em Integração', color: '#f97316' },
-  { value: 'ex_cliente', label: 'Ex-cliente', color: '#ef4444' },
+  { value: 'ex_cliente', label: 'Ex-cliente', color: '#E03A41' },
 ];
 
 type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'tasks' | 'gestor' | 'meu';
@@ -223,8 +224,8 @@ const TASK_RULES: TaskRuleDoc[] = [
     title: 'Agendar Demo',
     trigger: 'Lead na etapa Conversa com decisor sem uma reunião (demo) futura agendada.',
     levels: [
-      { badge: 'D2', color: '#f59e0b', when: 'a partir de 2 dias úteis na etapa' },
-      { badge: 'D5', color: '#dc2626', when: 'a partir de 5 dias úteis na etapa (a mesma tarefa escala de D2 para D5)' },
+      { badge: 'D2', color: '#FFB32F', when: 'a partir de 2 dias úteis na etapa' },
+      { badge: 'D5', color: '#C8131B', when: 'a partir de 5 dias úteis na etapa (a mesma tarefa escala de D2 para D5)' },
     ],
     suppress:
       'Se o lead tiver uma reunião do tipo "reunião" (não follow-up) com data futura e status "agendada", a tarefa não é criada.',
@@ -282,6 +283,13 @@ const getClientPrimaryName = (client: Client) => client.empresa?.trim() || clien
 // perdido) — antes era uma bandeirinha de emoji no canto, pequena demais pra
 // ler em zoom baixo. Leads sem etapa conhecida caem na cor do status.
 // Cor dedicada da Conta Alvo (Rota do dia) — roxo, destaca do funil térmico.
+// Roxo — a UNICA cor roxa que sobrou no app, e de proposito.
+//
+// Aqui ela nao e' decoracao: e' o que distingue a Conta Alvo das demais no
+// mapa e na legenda. O vermelho da marca ja' esta' ocupado por "Quente"
+// (TEMP_COLORS.hot) e as outras posicoes tambem estao tomadas — ambar =
+// Morno, azul = Frio, verde = Fechado, cinza = Perdido. Pintar a Conta Alvo
+// de vermelho deixaria duas entradas identicas na legenda.
 const CONTA_ALVO_COLOR = '#7c3aed';
 
 function CustomMarker({ color, meetingCount, isContaAlvo }: { color: string; meetingCount: number; isContaAlvo?: boolean }) {
@@ -387,7 +395,7 @@ const markerStyles = StyleSheet.create({
     backgroundColor: 'var(--surface)',
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#7c3aed',
+    borderColor: '#C8131B',
     paddingHorizontal: 3,
     paddingVertical: 1,
     minWidth: 18,
@@ -403,7 +411,9 @@ const markerStyles = StyleSheet.create({
     backgroundColor: 'var(--surface)',
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#7c3aed',
+    // Segue a cor do PINO de Conta Alvo, nao o vermelho da interface: o badge
+    // marca justamente esse dado, e o pino embaixo dele e' roxo.
+    borderColor: CONTA_ALVO_COLOR,
     paddingHorizontal: 3,
     paddingVertical: 1,
     minWidth: 18,
@@ -416,7 +426,7 @@ const markerStyles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#dc2626',
+    backgroundColor: '#C8131B',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
@@ -431,7 +441,7 @@ const markerStyles = StyleSheet.create({
     borderTopWidth: 10,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: '#dc2626',
+    borderTopColor: '#C8131B',
     marginTop: -1,
   },
 });
@@ -480,6 +490,8 @@ function MainApp() {
   // O tema em si e' aplicado por CSS no <html>; daqui so' sai o estado do
   // seletor nas configuracoes.
   const { pref: themePref, setPref: setThemePref } = useTheme();
+  // Icones recebem cor por prop; `var()` nao resolve em atributo SVG.
+  const iconColors = useIconColors();
 
   // Altura da linha "developed by RPA" (fonte 10 + folga).
   const BRAND_H = 16;
@@ -2630,7 +2642,7 @@ function MainApp() {
 
       {/* Rota do dia (automática): monta as obrigatórias + completa a meta.
           Fica no topo como CTA principal; o fluxo manual segue abaixo. */}
-      <View style={[styles.panelCard, { borderWidth: 1, borderColor: 'var(--tint-purple-border)' }]}>
+      <View style={[styles.panelCard, { borderWidth: 1, borderColor: 'var(--tint-red-border)' }]}>
         <Text style={styles.panelTitle}>🗺️ Rota do dia</Text>
         <Text style={styles.panelHint}>
           Monta as 3 visitas obrigatórias do dia (SLA estourado, Relacionamento +1000 comandas
@@ -2638,7 +2650,7 @@ function MainApp() {
           Parte da sua localização atual.
         </Text>
         <TouchableOpacity
-          style={[styles.submitButton, { marginTop: 12, backgroundColor: '#7c3aed' }, isMonitoringRoute && { opacity: 0.4 }]}
+          style={[styles.submitButton, { marginTop: 12, backgroundColor: '#C8131B' }, isMonitoringRoute && { opacity: 0.4 }]}
           onPress={generateDailyRoute}
           disabled={fieldOps.saveRoute.isPending || isOptimizing || isMonitoringRoute}
         >
@@ -2662,7 +2674,7 @@ function MainApp() {
           onChangeText={setRouteLeadCount}
           keyboardType="number-pad"
           placeholder="Ex.: 8"
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor="var(--text-subtle)"
         />
 
         {/* Ponto de partida da rota. Default: minha localizacao (GPS). O
@@ -2725,7 +2737,7 @@ function MainApp() {
           <TouchableOpacity
             style={[
               styles.dropdownButton,
-              routeVendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: 'var(--tint-red)' },
+              routeVendorFilterHubspotId !== null && { borderColor: '#C8131B', backgroundColor: 'var(--tint-red)' },
             ]}
             onPress={() => setIsPickingRouteVendor(true)}
           >
@@ -2741,7 +2753,7 @@ function MainApp() {
           <TouchableOpacity
             style={[
               styles.dropdownButton,
-              routeVendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: 'var(--tint-red)' },
+              routeVendorFilterHubspotId !== null && { borderColor: '#C8131B', backgroundColor: 'var(--tint-red)' },
             ]}
             onPress={() => {
               if (!myHubspotId) {
@@ -2762,7 +2774,7 @@ function MainApp() {
             </Text>
             <Text style={[
               styles.dropdownChevron,
-              routeVendorFilterHubspotId === myHubspotId && { color: '#dc2626' },
+              routeVendorFilterHubspotId === myHubspotId && { color: '#C8131B' },
             ]}>{routeVendorFilterHubspotId === myHubspotId ? '✓' : '○'}</Text>
           </TouchableOpacity>
         )}
@@ -2792,7 +2804,7 @@ function MainApp() {
           <TextInput
             style={styles.searchInput}
             placeholder="Buscar restaurante, contato, cidade..."
-            placeholderTextColor="#94a3b8"
+            placeholderTextColor="var(--text-subtle)"
             value={routeManualSearch}
             onChangeText={setRouteManualSearch}
             autoCorrect={false}
@@ -2881,7 +2893,7 @@ function MainApp() {
             )}
             {routeDisplayClients.length > 0 ? (
               <TouchableOpacity
-                style={[styles.secondaryButton, { backgroundColor: '#dc2626' }]}
+                style={[styles.secondaryButton, { backgroundColor: '#C8131B' }]}
                 onPress={viewRouteOnMap}
               >
                 <Text style={[styles.secondaryButtonText, { color: '#fff' }]}>Ver no mapa</Text>
@@ -2913,7 +2925,7 @@ function MainApp() {
                   );
                 }}
               >
-                <Text style={[styles.secondaryButtonText, { color: '#dc2626' }]}>Limpar</Text>
+                <Text style={[styles.secondaryButtonText, { color: '#C8131B' }]}>Limpar</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -3026,7 +3038,7 @@ function MainApp() {
     // visibleTasks/tasksActiveVendor — compartilhado com o badge do rodape.
     const activeVendor = tasksActiveVendor;
 
-    const sevColor = (s: string | null) => (s === 'D5' ? '#dc2626' : s === 'D2' ? '#f59e0b' : s === 'SLA' ? '#2563eb' : '#64748b');
+    const sevColor = (s: string | null) => (s === 'D5' ? '#C8131B' : s === 'D2' ? '#FFB32F' : s === 'SLA' ? '#2563eb' : '#64748b');
     // Peso da urgência — ordena chips, seções e a lista dentro de cada seção.
     const sevRank = (s: string | null) => (s === 'D5' ? 3 : s === 'D2' ? 2 : s === 'SLA' ? 1 : 0);
     // Severidade nula vira uma chave própria pra não sumir do agrupamento.
@@ -3112,7 +3124,7 @@ function MainApp() {
             )}
             {client && task.task_type === 'agendar_demo' && (
               <TouchableOpacity
-                style={[styles.smallActionButton, { backgroundColor: '#7c3aed', borderColor: '#7c3aed' }]}
+                style={[styles.smallActionButton, { backgroundColor: '#C8131B', borderColor: '#C8131B' }]}
                 onPress={() => setSchedulingFor({ client, type: 'reuniao' })}
               >
                 <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Agendar demo</Text>
@@ -3235,7 +3247,7 @@ function MainApp() {
         ? (item.meeting.type === 'follow_up' ? 'follow_up' : 'reuniao')
         : 'rota';
     const TIPO_META: Record<string, { label: string; cor: string }> = {
-      reuniao: { label: 'Demos', cor: '#dc2626' },
+      reuniao: { label: 'Demos', cor: '#C8131B' },
       follow_up: { label: 'Follow ups', cor: '#2563eb' },
       rota: { label: 'Rotas', cor: '#16a34a' },
     };
@@ -3384,7 +3396,7 @@ function MainApp() {
                           onPress={() => confirmCancelMeeting(item.meeting)}
                           hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                         >
-                          <Text style={[styles.agendaLink, { color: '#dc2626' }]}>Cancelar</Text>
+                          <Text style={[styles.agendaLink, { color: '#C8131B' }]}>Cancelar</Text>
                         </TouchableOpacity>
                       </View>
                     )}
@@ -3661,8 +3673,8 @@ function MainApp() {
   if (loading || (isLoading && !jaCarregouAlgumaVez) || waitingForLocation) {
     return (
       <View style={styles.centered}>
-        <Image source={require('./assets/icon.png')} style={{ width: 72, height: 72, marginBottom: 16, tintColor: '#dc2626', resizeMode: 'contain' }} />
-        <ActivityIndicator size="large" color="#dc2626" />
+        <Image source={require('./assets/icon.png')} style={{ width: 72, height: 72, marginBottom: 16, tintColor: '#C8131B', resizeMode: 'contain' }} />
+        <ActivityIndicator size="large" color="#C8131B" />
         <Text style={styles.loadingText}>{waitingForLocation ? 'Localizando você...' : 'Carregando...'}</Text>
         {waitingForLocation && (
           <TouchableOpacity
@@ -3733,7 +3745,7 @@ function MainApp() {
     const noCoords = navigationCurrentStop.latitude == null || navigationCurrentStop.longitude == null;
 
     return (
-      <View style={[styles.container, { paddingTop: insets.top, backgroundColor: '#0f172a' }]}>
+      <View style={[styles.container, { paddingTop: insets.top, backgroundColor: '#222222' }]}>
         <StatusBar style="light" />
 
         {/* Mapa cheio. zIndex baixo: cards e botoes flutuam sobre. */}
@@ -3849,7 +3861,7 @@ function MainApp() {
             </TouchableOpacity>
           )}
           <TouchableOpacity style={navStyles.fab} onPress={showFullRouteInNav}>
-            <IconSearch width={20} height={20} fill="#0f172a" />
+            <IconSearch width={20} height={20} fill={iconColors.onSurface} />
           </TouchableOpacity>
         </View>
 
@@ -4045,11 +4057,11 @@ function MainApp() {
           {/* Search bar: busca por nome, empresa, cidade ou bairro.
               Reflete em mapa, lista e contadores dos chips de status em tempo real. */}
           <View style={styles.searchBar}>
-            <IconSearch width={18} height={18} fill="#64748b" />
+            <IconSearch width={18} height={18} fill={iconColors.muted} />
             <TextInput
               style={styles.searchInput}
               placeholder="Buscar por nome, empresa ou cidade"
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor="var(--text-subtle)"
               value={searchQuery}
               onChangeText={setSearchQuery}
               returnKeyType="search"
@@ -4259,7 +4271,7 @@ function MainApp() {
                     ? routeGeometry.data.coordinates
                     : routeWaypoints
                 }
-                strokeColor="#dc2626"
+                strokeColor="#C8131B"
                 strokeWidth={4}
                 lineDashPattern={
                   routeGeometry.data && routeGeometry.data.coordinates.length > 1
@@ -4308,13 +4320,13 @@ function MainApp() {
                   pointerEvents="none"
                   style={{ position: 'absolute', left: centerX - 18, top: centerY - 43, alignItems: 'center' }}
                 >
-                  <View style={[markerStyles.pin, { backgroundColor: '#dc2626' }]}>
+                  <View style={[markerStyles.pin, { backgroundColor: '#C8131B' }]}>
                     {/* Mesmo asset branco dos pinos do mapa: markerStyles.logo
                         deixou de ter tintColor, então o icon.png original
                         apareceria vermelho sobre o círculo vermelho. */}
                     <Image source={require('./assets/pin-logo.png')} style={markerStyles.logo} fadeDuration={0} />
                   </View>
-                  <View style={[markerStyles.arrow, { borderTopColor: '#dc2626' }]} />
+                  <View style={[markerStyles.arrow, { borderTopColor: '#C8131B' }]} />
                 </View>
                 {/* Dot no centro EXATO do mapa = onde a coordenada e' capturada.
                     Dot tem 8px — offset de metade (4) centraliza no ponto. */}
@@ -4362,9 +4374,9 @@ function MainApp() {
               {/* Cheio quando esta' seguindo o vendedor, vazado quando a
                   camera esta' livre — mesma leitura que o 📍/🧭 dava. */}
               {isFollowingUser ? (
-                <IconLocationFilled width={22} height={22} fill="#dc2626" />
+                <IconLocationFilled width={22} height={22} fill={iconColors.brand} />
               ) : (
-                <IconLocation width={22} height={22} fill="#0f172a" />
+                <IconLocation width={22} height={22} fill={iconColors.onSurface} />
               )}
             </TouchableOpacity>
           )}
@@ -4666,7 +4678,7 @@ function MainApp() {
               value={routeManualSearch}
               onChangeText={setRouteManualSearch}
               placeholder="Buscar por nome ou empresa..."
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor="var(--text-subtle)"
             />
             <ScrollView style={{ maxHeight: 380 }} keyboardShouldPersistTaps="handled">
               {(() => {
@@ -4815,7 +4827,7 @@ function MainApp() {
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.taskDoneOption, { backgroundColor: '#ef4444' }]}
+                    style={[styles.taskDoneOption, { backgroundColor: '#E03A41' }]}
                     onPress={() => {
                       setCompletingTask(null);
                       setChangingStageFor({ client, initialStageId: LOST_STAGE_ID, taskId: task.id });
@@ -4919,7 +4931,7 @@ function MainApp() {
                 <TextInput
                   style={styles.input}
                   placeholder="Nova senha"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="var(--text-subtle)"
                   secureTextEntry
                   value={newPassword}
                   onChangeText={setNewPassword}
@@ -4928,7 +4940,7 @@ function MainApp() {
                 <TextInput
                   style={styles.input}
                   placeholder="Confirmar nova senha"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="var(--text-subtle)"
                   secureTextEntry
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
@@ -5161,7 +5173,7 @@ function MainApp() {
                   <TouchableOpacity
                     style={[
                       styles.dropdownButton,
-                      vendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: 'var(--tint-red)' },
+                      vendorFilterHubspotId !== null && { borderColor: '#C8131B', backgroundColor: 'var(--tint-red)' },
                     ]}
                     onPress={() => setIsPickingVendor(true)}
                   >
@@ -5177,7 +5189,7 @@ function MainApp() {
                   <TouchableOpacity
                     style={[
                       styles.dropdownButton,
-                      vendorFilterHubspotId !== null && { borderColor: '#dc2626', backgroundColor: 'var(--tint-red)' },
+                      vendorFilterHubspotId !== null && { borderColor: '#C8131B', backgroundColor: 'var(--tint-red)' },
                     ]}
                     onPress={() => {
                       if (!myHubspotId) {
@@ -5198,7 +5210,7 @@ function MainApp() {
                     </Text>
                     <Text style={[
                       styles.dropdownChevron,
-                      vendorFilterHubspotId === myHubspotId && { color: '#dc2626' },
+                      vendorFilterHubspotId === myHubspotId && { color: '#C8131B' },
                     ]}>{vendorFilterHubspotId === myHubspotId ? '✓' : '○'}</Text>
                   </TouchableOpacity>
                 )}
@@ -5245,7 +5257,7 @@ function MainApp() {
                   style={[
                     styles.filterChip,
                     { borderWidth: 1, borderColor: 'var(--border)', alignSelf: 'flex-start', marginTop: 4 },
-                    contaAlvoOnly && { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
+                    contaAlvoOnly && { backgroundColor: '#C8131B', borderColor: '#C8131B' },
                   ]}
                   onPress={() => setContaAlvoOnly((v) => {
                     const next = !v;
@@ -5272,7 +5284,7 @@ function MainApp() {
                         key={label}
                         style={[
                           styles.filterChip,
-                          selected && { backgroundColor: '#dc2626', borderColor: '#dc2626' },
+                          selected && { backgroundColor: '#C8131B', borderColor: '#C8131B' },
                           !selected && { borderWidth: 1, borderColor: 'var(--border)' },
                           { alignSelf: 'flex-start' },
                         ]}
@@ -5305,7 +5317,7 @@ function MainApp() {
                           </View>
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#dc2626', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#C8131B', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>
                             Nao visitados
                           </Text>
                           <View style={{ gap: 6 }}>
@@ -5543,7 +5555,7 @@ function MainApp() {
                   })}
               </View>
               {editingClient && (editingClient.status === 'cliente' || editingClient.status === 'churn') && (
-                <Text style={{ fontSize: 12, color: '#dc2626', marginTop: -4, marginBottom: 6 }}>
+                <Text style={{ fontSize: 12, color: '#C8131B', marginTop: -4, marginBottom: 6 }}>
                   Cliente atual / ex-cliente nao pode voltar pra "lead".
                 </Text>
               )}
@@ -5552,21 +5564,21 @@ function MainApp() {
               <TextInput
                 style={styles.input}
                 placeholder="Nome do restaurante *"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="var(--text-subtle)"
                 value={form.empresa}
                 onChangeText={v => setForm(s => ({ ...s, empresa: v }))}
               />
               <TextInput
                 style={styles.input}
                 placeholder="Nome do contato *"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="var(--text-subtle)"
                 value={form.nome}
                 onChangeText={v => setForm(s => ({ ...s, nome: v }))}
               />
               <TextInput
                 style={styles.input}
                 placeholder="Telefone"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="var(--text-subtle)"
                 keyboardType="phone-pad"
                 value={form.telefone}
                 onChangeText={v => setForm(s => ({ ...s, telefone: v }))}
@@ -5574,7 +5586,7 @@ function MainApp() {
               <TextInput
                 style={styles.input}
                 placeholder="Email"
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="var(--text-subtle)"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={form.email}
@@ -5586,14 +5598,14 @@ function MainApp() {
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
                   placeholder="Cidade"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="var(--text-subtle)"
                   value={form.cidade}
                   onChangeText={v => setForm(s => ({ ...s, cidade: v }))}
                 />
                 <TextInput
                   style={[styles.input, { width: 80, marginLeft: 8 }]}
                   placeholder="UF"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="var(--text-subtle)"
                   maxLength={2}
                   autoCapitalize="characters"
                   value={form.estado}
@@ -5604,14 +5616,14 @@ function MainApp() {
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
                   placeholder="Endereço (rua)"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="var(--text-subtle)"
                   value={form.endereco}
                   onChangeText={v => setForm(s => ({ ...s, endereco: v }))}
                 />
                 <TextInput
                   style={[styles.input, { width: 90, marginLeft: 8 }]}
                   placeholder="Número"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="var(--text-subtle)"
                   keyboardType="default"
                   value={form.numero}
                   onChangeText={v => setForm(s => ({ ...s, numero: v }))}
@@ -5625,7 +5637,7 @@ function MainApp() {
               <TextInput
                 style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
                 placeholder="Anotações sobre este contato..."
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="var(--text-subtle)"
                 multiline
                 value={form.observacoes}
                 onChangeText={v => setForm(s => ({ ...s, observacoes: v }))}
@@ -5748,7 +5760,7 @@ function ClientBottomSheet({
             )}
             {onCancelMeeting && (
               <TouchableOpacity
-                style={[styles.smallActionButton, { backgroundColor: '#dc2626' }]}
+                style={[styles.smallActionButton, { backgroundColor: '#C8131B' }]}
                 onPress={() => onCancelMeeting(m)}
               >
                 <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Cancelar</Text>
@@ -5908,8 +5920,8 @@ function ClientBottomSheet({
     // ultimo ponto onde o tema escuro ainda pintava caixas claras.
     // `sub` fica literal de proposito: e' cor de MARCA/status (vermelho,
     // ambar, verde fortes), legivel nos dois temas.
-    const VERMELHO = { bg: 'var(--tint-red)', border: 'var(--tint-red-border)', fg: 'var(--tint-red-text)', sub: '#dc2626' };
-    const AMBAR = { bg: 'var(--tint-amber)', border: 'var(--tint-amber-border)', fg: 'var(--tint-amber-text)', sub: '#d97706' };
+    const VERMELHO = { bg: 'var(--tint-red)', border: 'var(--tint-red-border)', fg: 'var(--tint-red-text)', sub: '#C8131B' };
+    const AMBAR = { bg: 'var(--tint-amber)', border: 'var(--tint-amber-border)', fg: 'var(--tint-amber-text)', sub: '#E09A1F' };
     const VERDE = { bg: 'var(--tint-green)', border: 'var(--tint-green-border)', fg: 'var(--tint-green-text)', sub: '#16a34a' };
 
     // Ex-cliente é quem está na etapa de Churn no HubSpot — NÃO quem tem data
@@ -6060,7 +6072,7 @@ function ClientBottomSheet({
             {(() => {
               const s = slaStatus(client, slaDays);
               if (!s.applies) return null;
-              const color = s.breach ? '#dc2626' : s.ratio >= 0.7 ? '#f59e0b' : '#16a34a';
+              const color = s.breach ? '#C8131B' : s.ratio >= 0.7 ? '#FFB32F' : '#16a34a';
               const emoji = s.breach ? '🔴' : s.ratio >= 0.7 ? '🟡' : '🟢';
               const txt = s.breach
                 ? `SLA estourado — ${s.diasParado} ${s.diasParado === 1 ? 'dia' : 'dias'} parado (limite ${s.sla})`
@@ -6233,7 +6245,7 @@ function ClientBottomSheet({
                         value={phoneDraft}
                         onChangeText={setPhoneDraft}
                         placeholder="(00) 00000-0000"
-                        placeholderTextColor="#94a3b8"
+                        placeholderTextColor="var(--text-subtle)"
                         keyboardType="phone-pad"
                         editable={!savingPhone}
                       />
@@ -6492,7 +6504,7 @@ function ClientBottomSheet({
                               }}
                               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                             >
-                              <Text style={[styles.noteAction, { color: '#dc2626' }]}>Apagar</Text>
+                              <Text style={[styles.noteAction, { color: '#C8131B' }]}>Apagar</Text>
                             </TouchableOpacity>
                           </View>
                         )}
@@ -6545,7 +6557,7 @@ function ClientBottomSheet({
                   <TextInput
                     style={[styles.input, { marginTop: 8, minHeight: 64 }]}
                     placeholder="Adicionar nova nota..."
-                    placeholderTextColor="#94a3b8"
+                    placeholderTextColor="var(--text-subtle)"
                     value={newNote}
                     onChangeText={setNewNote}
                     multiline
@@ -6713,7 +6725,7 @@ function ClientBottomSheet({
             {/* Actions */}
             {onEditLocation && (
               <TouchableOpacity
-                style={{ paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#0f172a', marginBottom: 8, flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                style={{ paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#222222', marginBottom: 8, flexDirection: 'row', justifyContent: 'center', gap: 6 }}
                 onPress={onEditLocation}
               >
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>📍 Editar localização (mover pin)</Text>
@@ -6889,7 +6901,7 @@ const navStyles = StyleSheet.create({
   bottomCardSubtitle: { color: 'var(--text-muted)', fontSize: 13, marginTop: 1 },
   bottomCardMetaRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
   bottomCardMeta: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
-  bottomCardWarning: { fontSize: 12, color: '#dc2626', fontWeight: '700', marginTop: 6 },
+  bottomCardWarning: { fontSize: 12, color: '#C8131B', fontWeight: '700', marginTop: 6 },
   bottomCardActions: { gap: 8 },
   bottomCardButton: { paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   bottomCardButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
@@ -6912,7 +6924,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#dc2626',
+    backgroundColor: '#C8131B',
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerLogo: { width: 32, height: 32, tintColor: '#fff', resizeMode: 'contain' },
@@ -6951,12 +6963,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'var(--border)',
   },
-  themeChipActive: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
+  themeChipActive: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
   themeChipText: { fontSize: 13, fontWeight: '700', color: 'var(--text-muted)' },
   themeChipTextActive: { color: '#fff' },
   adminSectionTitle: { fontSize: 12, fontWeight: '700', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   adminButton: {
-    backgroundColor: '#0f172a',
+    backgroundColor: '#222222',
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
@@ -6970,7 +6982,7 @@ const styles = StyleSheet.create({
   permissionTitle: { fontSize: 20, fontWeight: '700', color: 'var(--text)', marginBottom: 8, textAlign: 'center' },
   permissionBody: { fontSize: 14, color: 'var(--text-muted)', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
   permissionPrimaryButton: {
-    backgroundColor: '#dc2626',
+    backgroundColor: '#C8131B',
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 12,
@@ -7006,7 +7018,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'var(--surface-2)',
     marginRight: 6,
   },
-  filterChipActive: { backgroundColor: '#dc2626' },
+  filterChipActive: { backgroundColor: '#C8131B' },
   filterChipText: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
   filterChipTextActive: { color: '#fff' },
   filterDot: { width: 8, height: 8, borderRadius: 4, marginRight: 5 },
@@ -7023,7 +7035,7 @@ const styles = StyleSheet.create({
   },
   manualRowTitle: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   manualRowSubtitle: { fontSize: 12, color: 'var(--text-muted)', marginTop: 1 },
-  manualRowWarning: { fontSize: 11, color: '#dc2626', fontWeight: '600', marginTop: 2 },
+  manualRowWarning: { fontSize: 11, color: '#C8131B', fontWeight: '600', marginTop: 2 },
   // Badge admin: indica qual roteador foi usado pra otimizar a ultima rota.
   providerBadge: {
     alignSelf: 'flex-start',
@@ -7046,7 +7058,7 @@ const styles = StyleSheet.create({
   },
   routeStopHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
   routeStopSubtitle: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
-  mandatoryTag: { fontSize: 11, fontWeight: '800', color: '#7c3aed', marginTop: 3 },
+  mandatoryTag: { fontSize: 11, fontWeight: '800', color: '#C8131B', marginTop: 3 },
   // Banner de monitoramento (gestor vendo a rota de outro vendedor).
   monitorBanner: {
     backgroundColor: 'var(--tint-blue)',
@@ -7093,7 +7105,7 @@ const styles = StyleSheet.create({
     height: 36,
     marginLeft: 8,
     borderRadius: 10,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#222222',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -7105,7 +7117,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: '#dc2626',
+    backgroundColor: '#C8131B',
     minWidth: 16,
     height: 16,
     borderRadius: 8,
@@ -7152,8 +7164,8 @@ const styles = StyleSheet.create({
     borderBottomColor: 'var(--border-soft)',
   },
   ufPickerRowText: { fontSize: 15, color: 'var(--text)' },
-  ufPickerRowTextActive: { fontWeight: '800', color: '#dc2626' },
-  ufPickerCheck: { fontSize: 16, fontWeight: '800', color: '#dc2626' },
+  ufPickerRowTextActive: { fontWeight: '800', color: '#C8131B' },
+  ufPickerCheck: { fontSize: 16, fontWeight: '800', color: '#C8131B' },
   backButton: { color: 'var(--text-muted)', fontSize: 15, fontWeight: '600', width: 60 },
   filtersFooter: { flexDirection: 'row', gap: 10, marginTop: 20 },
   filtersSecondaryButton: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', backgroundColor: 'var(--surface-2)' },
@@ -7161,7 +7173,7 @@ const styles = StyleSheet.create({
   // Loading
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface)' },
   loadingText: { marginTop: 12, color: 'var(--text-muted)', fontSize: 15 },
-  errorText: { color: '#ef4444', fontSize: 16 },
+  errorText: { color: '#E03A41', fontSize: 16 },
   // Map
   map: { flex: 1 },
   // Aviso do carregamento por área. No TOPO do mapa: embaixo ficam a legenda
@@ -7272,7 +7284,7 @@ const styles = StyleSheet.create({
   },
   heatPanelTitle: { fontSize: 14, fontWeight: '800', color: 'var(--text)' },
   heatPanelCount: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
-  heatExportBtn: { backgroundColor: '#7c3aed', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 },
+  heatExportBtn: { backgroundColor: '#C8131B', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 },
   heatExportBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   heatLegendRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   heatLegendLabel: { fontSize: 10, fontWeight: '700', color: 'var(--text-subtle)' },
@@ -7307,7 +7319,7 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: 16,
-    backgroundColor: '#dc2626',
+    backgroundColor: '#C8131B',
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -7339,7 +7351,7 @@ const styles = StyleSheet.create({
   // Ponto vermelho no centro exato do mapa — marca onde a coordenada e' capturada.
   creationCenterDotInner: {
     width: 8, height: 8, borderRadius: 4,
-    backgroundColor: '#dc2626',
+    backgroundColor: '#C8131B',
     borderWidth: 2, borderColor: '#fff',
   },
   creationBar: {
@@ -7380,7 +7392,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  navItemActive: { borderTopWidth: 2, borderTopColor: '#dc2626' },
+  navItemActive: { borderTopWidth: 2, borderTopColor: '#C8131B' },
   navIcon: { fontSize: 17, marginBottom: 2 },
   navIconActive: {},
   // Badge de notificacao de tarefas pendentes, sobreposto no icone da aba.
@@ -7388,7 +7400,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -6,
     right: -12,
-    backgroundColor: '#dc2626',
+    backgroundColor: '#C8131B',
     borderRadius: 9,
     minWidth: 18,
     height: 18,
@@ -7411,7 +7423,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     color: 'var(--text-faint)',
   },
-  navItemTextActive: { color: '#dc2626' },
+  navItemTextActive: { color: '#C8131B' },
   // List
   listContent: { padding: 12 },
   clientCard: {
@@ -7431,7 +7443,7 @@ const styles = StyleSheet.create({
   cardLogo: { width: 18, height: 18, resizeMode: 'contain', marginRight: 8 },
   clientName: { fontSize: 15, fontWeight: '700', color: 'var(--text)', flex: 1 },
   clientContact: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
-  clientStage: { fontSize: 12, color: '#7c3aed', fontWeight: '700', marginTop: 2 },
+  clientStage: { fontSize: 12, color: '#C8131B', fontWeight: '700', marginTop: 2 },
   stageAccordionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -7452,11 +7464,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: 'var(--tint-purple)',
+    backgroundColor: 'var(--tint-red)',
     borderWidth: 1,
     borderColor: '#c4b5fd',
   },
-  cardMeetingBadgeText: { color: 'var(--tint-purple-text)', fontSize: 10, fontWeight: '700' },
+  cardMeetingBadgeText: { color: 'var(--tint-red-text)', fontSize: 10, fontWeight: '700' },
   cardVisitBadge: {
     paddingHorizontal: 6,
     paddingVertical: 3,
@@ -7483,7 +7495,7 @@ const styles = StyleSheet.create({
   panelHint: { fontSize: 12, color: 'var(--text-muted)', lineHeight: 17 },
   agendaExportBtn: {
     marginTop: 12,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#222222',
     borderRadius: 10,
     paddingVertical: 11,
     alignItems: 'center',
@@ -7502,14 +7514,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 8,
   },
-  segmentButtonActive: { backgroundColor: '#dc2626', borderColor: '#dc2626' },
+  segmentButtonActive: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
   segmentButtonText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)', textAlign: 'center' },
   segmentButtonTextActive: { color: '#fff' },
   routePosition: {
     minWidth: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#222222',
     color: '#fff',
     fontSize: 12,
     fontWeight: '800',
@@ -7563,15 +7575,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
     marginBottom: 10,
-    backgroundColor: 'var(--tint-purple)',
-    borderColor: 'var(--tint-purple-border)',
+    backgroundColor: 'var(--tint-red)',
+    borderColor: 'var(--tint-red-border)',
   },
   slaBadge: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10 },
   slaBadgeText: { fontSize: 13, fontWeight: '800' },
-  contaAlvoBoxTitle: { fontSize: 14, fontWeight: '800', color: 'var(--tint-purple-text)' },
-  contaAlvoBoxText: { fontSize: 13, fontWeight: '700', color: 'var(--tint-purple-text)', marginTop: 3 },
+  contaAlvoBoxTitle: { fontSize: 14, fontWeight: '800', color: 'var(--tint-red-text)' },
+  contaAlvoBoxText: { fontSize: 13, fontWeight: '700', color: 'var(--tint-red-text)', marginTop: 3 },
   contaAlvoDismissBtn: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--tint-red-border)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
-  contaAlvoDismissText: { fontSize: 12, fontWeight: '800', color: '#dc2626' },
+  contaAlvoDismissText: { fontSize: 12, fontWeight: '800', color: '#C8131B' },
   agendaSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -7591,7 +7603,7 @@ const styles = StyleSheet.create({
   agendaWhen: { width: 56, alignItems: 'center' },
   agendaDate: { fontSize: 13, fontWeight: '800', color: 'var(--text)' },
   agendaWeekday: { fontSize: 10, color: 'var(--text-subtle)', fontWeight: '600', textTransform: 'capitalize' },
-  agendaTime: { fontSize: 14, fontWeight: '800', color: '#dc2626', marginTop: 2 },
+  agendaTime: { fontSize: 14, fontWeight: '800', color: '#C8131B', marginTop: 2 },
   agendaTitle: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
   agendaSubtitle: { fontSize: 13, color: 'var(--text-muted)', marginTop: 3 },
   // Linha da timeline: trilho de horário à esquerda + card com barra colorida
@@ -7626,7 +7638,7 @@ const styles = StyleSheet.create({
   agendaDayHeaderText: {
     fontSize: 12,
     fontWeight: '900',
-    color: '#dc2626',
+    color: '#C8131B',
     letterSpacing: 0.6,
   },
   agendaDayHeaderCount: { fontSize: 11, color: 'var(--text-subtle)', fontWeight: '700' },
@@ -7755,7 +7767,7 @@ const styles = StyleSheet.create({
   ruleLevelText: { fontSize: 13, color: 'var(--text)', flex: 1, lineHeight: 18 },
   taskRulesDoneButton: {
     marginTop: 14,
-    backgroundColor: '#dc2626',
+    backgroundColor: '#C8131B',
     borderRadius: 12,
     paddingVertical: 13,
     alignItems: 'center',
@@ -7827,7 +7839,7 @@ const styles = StyleSheet.create({
   },
   inputRow: { flexDirection: 'row' },
   submitButton: {
-    backgroundColor: '#dc2626',
+    backgroundColor: '#C8131B',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -7876,7 +7888,7 @@ const styles = StyleSheet.create({
   noteEditActions: { flexDirection: 'row', gap: 8, marginTop: 8, justifyContent: 'flex-end' },
   noteEditCancel: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: 'var(--surface-2)' },
   noteEditCancelText: { color: 'var(--text-muted)', fontWeight: '700', fontSize: 13 },
-  noteEditSave: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: '#dc2626' },
+  noteEditSave: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: '#C8131B' },
   noteEditSaveText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   navigationSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: 'var(--border-soft)', marginBottom: 16 },
   navigationRow: { flexDirection: 'row', gap: 10 },
@@ -7885,7 +7897,7 @@ const styles = StyleSheet.create({
   navButtonWalking: { backgroundColor: 'var(--tint-amber)', borderColor: '#eab308' },
   navRouteButtonText: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
   addRouteButton: {
-    backgroundColor: '#0f172a',
+    backgroundColor: '#222222',
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
@@ -7896,18 +7908,18 @@ const styles = StyleSheet.create({
   meetingsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   meetingsEmpty: { fontSize: 12, color: 'var(--text-subtle)', marginBottom: 8 },
   meetingChip: {
-    backgroundColor: 'var(--tint-purple)',
+    backgroundColor: 'var(--tint-red)',
     borderRadius: 10,
     padding: 10,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: 'var(--tint-purple-border)',
+    borderColor: 'var(--tint-red-border)',
   },
-  meetingChipDate: { fontSize: 13, fontWeight: '700', color: 'var(--tint-purple-text)' },
+  meetingChipDate: { fontSize: 13, fontWeight: '700', color: 'var(--tint-red-text)' },
   meetingChipObs: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
   meetingChipActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   scheduleButton: {
-    backgroundColor: '#7c3aed',
+    backgroundColor: '#C8131B',
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
@@ -7923,7 +7935,7 @@ const styles = StyleSheet.create({
   },
   followUpButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   changeStageButton: {
-    backgroundColor: '#0f172a',
+    backgroundColor: '#222222',
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
@@ -7932,7 +7944,7 @@ const styles = StyleSheet.create({
   changeStageButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 8 },
   deleteButton: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: 'var(--tint-red)', borderWidth: 1, borderColor: 'var(--tint-red-border)' },
-  deleteButtonText: { fontSize: 14, fontWeight: '700', color: '#dc2626' },
-  closeActionButton: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#dc2626' },
+  deleteButtonText: { fontSize: 14, fontWeight: '700', color: '#C8131B' },
+  closeActionButton: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#C8131B' },
   closeActionButtonText: { fontSize: 14, fontWeight: '700', color: '#fff' },
 });

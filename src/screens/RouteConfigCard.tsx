@@ -66,7 +66,7 @@ export function RouteConfigCard() {
         value={form[k]}
         onChangeText={(v) => setField(k, v)}
         keyboardType="decimal-pad"
-        placeholderTextColor="#94a3b8"
+        placeholderTextColor="var(--text-subtle)"
       />
       {hint ? <Text style={styles.fieldHint}>{hint}</Text> : null}
     </View>
@@ -82,7 +82,7 @@ export function RouteConfigCard() {
       {open && (
         <View style={{ marginTop: 6 }}>
           {isLoading ? (
-            <ActivityIndicator color="#7c3aed" style={{ marginVertical: 12 }} />
+            <ActivityIndicator color="#C8131B" style={{ marginVertical: 12 }} />
           ) : (
             <>
               <Text style={styles.section}>Conta Alvo</Text>
@@ -131,19 +131,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'var(--surface)',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'var(--tint-purple-border)',
+    borderColor: 'var(--tint-red-border)',
     padding: 14,
     marginBottom: 12,
   },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: 15, fontWeight: '800', color: 'var(--tint-purple-text)' },
-  chevron: { fontSize: 12, color: '#7c3aed', fontWeight: '800' },
+  title: { fontSize: 15, fontWeight: '800', color: 'var(--tint-red-text)' },
+  chevron: { fontSize: 12, color: '#C8131B', fontWeight: '800' },
   section: { fontSize: 12, fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 12, marginBottom: 6 },
   row: { flexDirection: 'row', gap: 8 },
   field: { flex: 1, marginBottom: 6 },
   fieldLabel: { fontSize: 11, fontWeight: '700', color: 'var(--text-muted)', marginBottom: 4 },
   input: { borderWidth: 1, borderColor: 'var(--border)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: 'var(--text)', backgroundColor: 'var(--bg)' },
   fieldHint: { fontSize: 10, color: 'var(--text-subtle)', marginTop: 2 },
-  saveBtn: { backgroundColor: '#7c3aed', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 14 },
+  saveBtn: { backgroundColor: '#C8131B', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 14 },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

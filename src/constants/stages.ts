@@ -168,8 +168,8 @@ export type StageTemperature = { emoji: string; label: string; color: string };
 // verde pra ganho e cinza-escuro pra perdido. Tons saturados o suficiente
 // pra distinguir sobre o mapa cinza do Google.
 export const TEMP_COLORS = {
-  hot:  '#dc2626', // vermelho
-  warm: '#f59e0b', // ambar
+  hot:  '#C8131B', // vermelho
+  warm: '#FFB32F', // ambar
   cold: '#0ea5e9', // azul
   won:  '#16a34a', // verde
   lost: '#475569', // cinza-ardosia
@@ -195,7 +195,7 @@ export function stageTemperature(etapa: string | null | undefined): StageTempera
 // Paleta ciclica pra colorir etapas novas do HubSpot que nao tem cor propria
 // no mapa hardcoded. Mantem o visual consistente sem precisar cor por etapa.
 export const STAGE_PALETTE = [
-  '#3b82f6', '#8b5cf6', '#f59e0b', '#f97316', '#ef4444',
+  '#3b82f6', '#8b5cf6', '#FFB32F', '#f97316', '#E03A41',
   '#0ea5e9', '#10b981', '#a855f7', '#14b8a6', '#eab308',
 ];
 
@@ -236,7 +236,7 @@ export const STAGES: Stage[] = [
       },
     ],
   },
-  { id: '1395880471', label: 'Demo/Proposta', color: '#f59e0b' },
+  { id: '1395880471', label: 'Demo/Proposta', color: '#FFB32F' },
   {
     id: '1395880472',
     label: 'Negociação',
@@ -259,7 +259,7 @@ export const STAGES: Stage[] = [
   {
     id: '1396006164',
     label: 'Perdido',
-    color: '#ef4444',
+    color: '#E03A41',
     subFields: [
       {
         field: 'motivo_do_perdido',

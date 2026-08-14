@@ -118,7 +118,7 @@ export function EditLocationModal({ client, onSave, onClose }: Props) {
 
           <Text style={styles.hint}>
             Mova o mapa até o local certo — o{' '}
-            <Text style={{ color: '#dc2626', fontWeight: '800' }}>pino central</Text> marca a nova
+            <Text style={{ color: '#C8131B', fontWeight: '800' }}>pino central</Text> marca a nova
             posição. O pino <Text style={{ color: 'var(--text-muted)', fontWeight: '800' }}>cinza</Text> mostra
             onde está hoje.
           </Text>
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     transform: [{ translateY: -(PIN_H + ARROW) / 2 }],
   },
   centerPin: {
-    width: PIN_W, height: PIN_H, borderRadius: PIN_W / 2, backgroundColor: '#dc2626',
+    width: PIN_W, height: PIN_H, borderRadius: PIN_W / 2, backgroundColor: '#C8131B',
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: '#fff',
   },
@@ -222,11 +222,11 @@ const styles = StyleSheet.create({
   centerPinArrow: {
     width: 0, height: 0, backgroundColor: 'transparent',
     borderLeftWidth: ARROW, borderRightWidth: ARROW, borderTopWidth: ARROW,
-    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#dc2626',
+    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: '#C8131B',
     marginTop: -1,
   },
   centerDot: {
-    width: 6, height: 6, borderRadius: 3, backgroundColor: '#dc2626',
+    width: 6, height: 6, borderRadius: 3, backgroundColor: '#C8131B',
     marginTop: 2,
   },
   infoRow: {
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
   infoText: { flex: 1, fontSize: 12, color: 'var(--text-muted)', fontWeight: '600' },
   resetLink: { fontSize: 12, color: '#2563eb', fontWeight: '700' },
   saveBtn: {
-    backgroundColor: '#dc2626', borderRadius: 12, paddingVertical: 14,
+    backgroundColor: '#C8131B', borderRadius: 12, paddingVertical: 14,
     alignItems: 'center', marginTop: 10,
   },
   saveBtnDisabled: { opacity: 0.5 },
