@@ -110,20 +110,14 @@ export function Cockpit() {
 
   if (erro) {
     return (
-      <div className="envoltorio">
-        <div className="cartao" style={{ borderColor: 'var(--red)' }}>
-          <strong>Não consegui carregar os dados.</strong>
-          <div style={{ color: 'var(--muted)', marginTop: 6 }}>{erro}</div>
-        </div>
+      <div className="cartao" style={{ borderColor: 'var(--red)' }}>
+        <strong>Não consegui carregar os dados.</strong>
+        <div style={{ color: 'var(--muted)', marginTop: 6 }}>{erro}</div>
       </div>
     );
   }
   if (!dados) {
-    return (
-      <div className="envoltorio">
-        <div className="cartao">Carregando o time…</div>
-      </div>
-    );
+    return <div className="cartao">Carregando o time…</div>;
   }
 
   const { kpis, funil, executivos } = dados;
@@ -131,7 +125,7 @@ export function Cockpit() {
   const gargalo = [...funil].sort((a, b) => b.travados - a.travados || b.total - a.total)[0];
 
   return (
-    <div className="envoltorio">
+    <>
       <div
         style={{
           background: 'var(--dark)',
@@ -335,6 +329,6 @@ export function Cockpit() {
         )}
         <ListaDeLeads leads={leadsDoExec} />
       </Drawer>
-    </div>
+    </>
   );
 }
