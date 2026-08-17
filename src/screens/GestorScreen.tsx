@@ -37,6 +37,7 @@ import { SellerClassificationCard } from './SellerClassificationCard';
 import { SellerGoalsCard } from './SellerGoalsCard';
 import { DismissedContaAlvoCard } from './DismissedContaAlvoCard';
 import { RouteHistorySection } from './RouteHistorySection';
+import { MinhaDailyCard } from './MinhaDailyCard';
 
 interface Props {
   enabled: boolean;
@@ -719,6 +720,14 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
             : 'Período personalizado'}
         </Text>
       </TouchableOpacity>
+
+      {/* A promessa do dia de QUEM ESTA OLHANDO.
+          A navegacao e' ou/ou: quem e' gestor ve a aba "Gestor" e nunca a aba
+          "Meu". Sem este cartao aqui, um gestor que faz campo — e existe pelo
+          menos um, com 9 rotas em 90 dias — apareceria no placar da Daily sendo
+          cobrado por uma palavra que o app nao deixava ele dar.
+          O cartao se esconde sozinho pra quem esta marcado como nao-vendedor. */}
+      <MinhaDailyCard enabled={enabled} />
 
       {/* Quem é vendedor ativo / comum sem meta / não é vendedor. */}
       <SellerClassificationCard />

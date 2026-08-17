@@ -49,6 +49,9 @@ export interface DiaDaMinhaDaily {
 }
 
 export interface MinhaDaily {
+  /** false quando o gestor marcou a pessoa como 'nao_vendedor'. Sem isso, o
+   *  cartao apareceria pedindo promessa de visita pra quem nao faz campo. */
+  souDeCampo: boolean;
   hoje: DiaDaMinhaDaily;
   /** Os 5 ultimos dias uteis, do mais antigo pro mais novo. */
   semana: DiaDaMinhaDaily[];
@@ -73,7 +76,12 @@ export function useMinhaDaily(enabled: boolean) {
       const dias = diasUteisAte(hoje, JANELA);
       const maisAntigo = dias[dias.length - 1];
 
-      const [promessas, visitas] = await Promise.all([
+      const [classificacao, promessas, visitas] = await Promise.all([
+        supabase
+          .from('seller_classification')
+          .select('status')
+          .eq('seller_id', meuId)
+          .maybeSingle(),
         supabase
           .from('dailies')
           .select('data, prometido_visitas, nota_campo')
@@ -121,6 +129,8 @@ export function useMinhaDaily(enabled: boolean) {
       }
 
       return {
+        // Sem linha = 'ativo' (default declarado na migration de classificacao).
+        souDeCampo: ((classificacao.data as any)?.status ?? 'ativo') !== 'nao_vendedor',
         hoje: monta(hoje),
         semana: diasUteisAte(hoje, 5).reverse().map(monta),
         sequencia,

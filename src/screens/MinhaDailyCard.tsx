@@ -48,6 +48,10 @@ export function MinhaDailyCard({ enabled }: { enabled: boolean }) {
     );
   }
   if (!daily) return null;
+  // Quem o gestor marcou como "nao e' vendedor" nao ve' o cartao: pedir
+  // promessa de visita pra quem nao faz campo e' ruido, e a curadoria pra isso
+  // ja' existe (seller_classification).
+  if (!daily.souDeCampo) return null;
 
   const { hoje, semana, sequencia } = daily;
   const prometido = hoje.prometido;
