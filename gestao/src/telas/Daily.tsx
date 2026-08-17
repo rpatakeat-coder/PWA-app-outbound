@@ -36,7 +36,9 @@ function CelulaSemana({ d, hoje }: { d: DiaDoExecutivo; hoje: string }) {
       title={
         `${d.dia}: ${d.visitas} visitas` +
         (d.prometido != null
-          ? ` de ${d.prometido} paradas planejadas`
+          ? d.medidoPor === 'promessa'
+            ? ` de ${d.prometido} que ele prometeu`
+            : ` de ${d.prometido} paradas planejadas`
           : d.medidoPor === 'meta'
             ? ' (medido pela meta padrão)'
             : '')
@@ -75,20 +77,28 @@ function Pilula({ e }: { e: ExecutivoDaily }) {
   const alvo = hoje.prometido ?? e.metaVisitas;
 
   if (hoje.pontos === 0) {
-    texto = hoje.prometido != null ? `0 de ${hoje.prometido} paradas` : 'sem registro hoje';
+    texto =
+      hoje.prometido != null
+        ? `0 de ${hoje.prometido} ${hoje.medidoPor === 'promessa' ? 'prometidas' : 'paradas'}`
+        : 'sem registro hoje';
     fundo = 'var(--red-soft)';
     cor = 'var(--red)';
   } else if (alvo == null) {
     texto = 'sem rota e sem meta';
   } else if (hoje.cumpriu) {
-    texto = hoje.medidoPor === 'rota' ? 'rota cumprida' : 'meta batida';
+    texto =
+      hoje.medidoPor === 'promessa' ? 'palavra cumprida'
+      : hoje.medidoPor === 'rota' ? 'rota cumprida'
+      : 'meta batida';
     fundo = 'var(--green-soft)';
     cor = 'var(--green)';
   } else {
     texto =
-      hoje.medidoPor === 'rota'
-        ? `${hoje.visitas} de ${alvo} paradas`
-        : `${hoje.visitas}/${alvo} visitas`;
+      hoje.medidoPor === 'promessa'
+        ? `${hoje.visitas} de ${alvo} prometidas`
+        : hoje.medidoPor === 'rota'
+          ? `${hoje.visitas} de ${alvo} paradas`
+          : `${hoje.visitas}/${alvo} visitas`;
     fundo = 'var(--amber-soft)';
     cor = 'var(--amber-ink)';
   }

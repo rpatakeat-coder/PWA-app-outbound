@@ -18,6 +18,7 @@ import {
   type MetricLead,
   type MyMetricLeadsParams,
 } from '../hooks/useGestorMetrics';
+import { MinhaDailyCard } from './MinhaDailyCard';
 
 interface Props {
   enabled: boolean;
@@ -135,6 +136,11 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={query.isFetching && !query.isLoading} onRefresh={() => query.refetch()} />}
     >
+      {/* A Daily fica ACIMA do seletor de periodo de proposito: ela e' sempre
+          de HOJE, e ficaria mentindo se parecesse responder ao filtro de 7/30
+          dias que vem logo abaixo. */}
+      <MinhaDailyCard enabled={enabled} />
+
       <View style={styles.periodRow}>
         {PERIOD_OPTIONS.map(opt => (
           <TouchableOpacity

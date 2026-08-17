@@ -55,8 +55,11 @@ export interface DiaDoExecutivo {
   pontos: number;
   /** Paradas planejadas na rota daquele dia. null = nao montou rota. */
   prometido: number | null;
-  /** Contra o que estamos medindo: a rota que ELE montou, ou a meta padrao. */
-  medidoPor: 'rota' | 'meta' | null;
+  /** Contra o que estamos medindo, em ordem de precedencia:
+   *   'promessa' — o numero que ELE declarou de manha (tabela dailies);
+   *   'rota'     — as paradas que ele planejou na Rota do dia;
+   *   'meta'     — a meta padrao, quando nao declarou nem montou rota. */
+  medidoPor: 'promessa' | 'rota' | 'meta' | null;
   /** Rota montada a mao pesa mais que rota sugerida e aceita — as duas sao
    *  compromisso, mas so' a primeira e' plano dele. */
   rotaManual: boolean;
@@ -109,7 +112,7 @@ export async function carregarDaily(): Promise<DadosDaily> {
   const hoje = diaBRT(new Date());
   const desde = new Date(Date.now() - DIAS_DE_HISTORICO * 86_400_000).toISOString();
 
-  const [equipe, visitas, mudancas, clientes, rotas] = await Promise.all([
+  const [equipe, visitas, mudancas, clientes, declaradas, rotas] = await Promise.all([
     carregarEquipe(),
     buscarTudo<any>((de, ate) =>
       supabase
@@ -137,6 +140,14 @@ export async function carregarDaily(): Promise<DadosDaily> {
     // As paradas vem ANINHADAS na rota, num round trip so' — mesmo padrao do
     // useRouteHistory no app de campo. Sao ~1 linha por vendedor por dia no
     // nivel de cima, entao a paginacao trabalha sobre um conjunto pequeno.
+    // A PROMESSA DECLARADA pelo proprio vendedor (tabela dailies). Tem
+    // precedencia sobre as paradas da rota: montar rota e' planejar, dizer
+    // "hoje faco 8" e' dar a palavra — e o placar existe pra cobrar a palavra.
+    supabase
+      .from('dailies')
+      .select('seller_id, data, prometido_visitas')
+      .gte('data', diasUteisAte(diaBRT(new Date()), TETO_SEQUENCIA).slice(-1)[0])
+      .not('prometido_visitas', 'is', null),
     buscarTudo<any>((de, ate) =>
       supabase
         .from('field_routes')
@@ -200,6 +211,16 @@ export async function carregarDaily(): Promise<DadosDaily> {
   // --- a promessa: paradas planejadas por (pessoa, dia) --------------------
   // 'cancelled' nao conta: cancelar a rota nao pode deixar o dia parecendo
   // prometido. 'removed' tambem sai — parada removida saiu do plano.
+  // Declarada vence rota. `declaradas` pode falhar se a migration ainda nao
+  // rodou — nesse caso o mapa fica vazio e tudo volta a valer pela rota, que e'
+  // exatamente o comportamento anterior.
+  const declaradaPor = new Map<string, number>();
+  for (const d of (declaradas.data ?? []) as any[]) {
+    if (typeof d.prometido_visitas === 'number') {
+      declaradaPor.set(`${d.seller_id}|${d.data}`, d.prometido_visitas);
+    }
+  }
+
   const promessaPor = new Map<string, { paradas: number; manual: boolean }>();
   for (const r of rotas) {
     if (r.status === 'cancelled') continue;
@@ -253,15 +274,17 @@ export async function carregarDaily(): Promise<DadosDaily> {
         // A promessa do dia vence a meta permanente. Se ele montou rota, e' a
         // rota dele que vale — cobrar contra a meta padrao quando ele planejou
         // outra coisa seria medir a pessoa por um numero que ela nao escolheu.
+        const declarada = declaradaPor.get(chave(p.perfilId, dia));
         const promessa = promessaPor.get(chave(p.perfilId, dia));
-        const alvo = promessa?.paradas ?? meta;
-        const medidoPor: 'rota' | 'meta' | null = promessa ? 'rota' : meta != null ? 'meta' : null;
+        const alvo = declarada ?? promessa?.paradas ?? meta;
+        const medidoPor: 'promessa' | 'rota' | 'meta' | null =
+          declarada != null ? 'promessa' : promessa ? 'rota' : meta != null ? 'meta' : null;
 
         return {
           dia,
           ...bruto,
           pontos: pontosDoDia(bruto),
-          prometido: promessa?.paradas ?? null,
+          prometido: declarada ?? promessa?.paradas ?? null,
           medidoPor,
           rotaManual: promessa?.manual ?? false,
           cumpriu: alvo == null ? null : bruto.visitas >= alvo,
@@ -271,7 +294,7 @@ export async function carregarDaily(): Promise<DadosDaily> {
       // A sequencia conta de ONTEM pra tras: o dia de hoje ainda esta'
       // acontecendo, e zera-lo as 9h da manha faria o placar mentir todo dia.
       let sequencia: number | null = null;
-      if (meta != null || promessaPor.has(chave(p.perfilId, hoje))) {
+      if (meta != null || promessaPor.has(chave(p.perfilId, hoje)) || declaradaPor.has(chave(p.perfilId, hoje))) {
         sequencia = 0;
         for (const dia of diasDaSequencia.slice(1)) {
           const d = doDia(dia);
