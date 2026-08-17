@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useMinhaDaily } from '../hooks/useMinhaDaily';
+import { useAuth } from '../context/AuthContext';
 import { Alert } from '../components/Alert';
 
 // "Minha Daily" — a promessa do dia e o placar dela, pro proprio vendedor.
@@ -36,6 +37,8 @@ function Celula({ d, ehHoje }: { d: { visitas: number; prometido: number | null;
 
 export function MinhaDailyCard({ enabled }: { enabled: boolean }) {
   const { daily, isLoading, prometer, anotar } = useMinhaDaily(enabled);
+  const { profile } = useAuth();
+  const ehGestor = profile?.role === 'gestor';
   const [editando, setEditando] = useState(false);
   const [valor, setValor] = useState('');
   const [nota, setNota] = useState<string | null>(null);
@@ -146,6 +149,25 @@ export function MinhaDailyCard({ enabled }: { enabled: boolean }) {
         ))}
       </View>
 
+      {/* Onde a promessa vai parar.
+          Sem esta linha, o vendedor digita um numero e nao faz ideia de que
+          alguem olha — e um placar invisivel nao motiva nem cobra, so' gera
+          desconfianca quando ele descobre depois. Pra gestor o texto vira link:
+          ele CONSULTA o cockpit; o vendedor comum nao tem acesso, e mandar ele
+          pra uma tela que recusa a entrada seria pior que nao mostrar nada. */}
+      {ehGestor ? (
+        <Text
+          style={styles.destino}
+          {...({ href: '/gestao/#/daily', hrefAttrs: { target: '_blank', rel: 'noopener' } } as any)}
+        >
+          Este número aparece na Daily do time →
+        </Text>
+      ) : (
+        <Text style={styles.destinoTexto}>
+          Sua palavra do dia aparece na Daily do time, junto com o que você fez.
+        </Text>
+      )}
+
       <TextInput
         style={styles.nota}
         value={nota ?? daily.notaDeHoje ?? ''}
@@ -212,6 +234,11 @@ const styles = StyleSheet.create({
   celulaNum: { fontSize: 15, fontWeight: '800' },
   celulaDen: { fontSize: 10, color: 'var(--text-faint)' },
 
+  destino: {
+    marginTop: 12, fontSize: 12, fontWeight: '700',
+    color: 'var(--brand-text)', textDecorationLine: 'none',
+  },
+  destinoTexto: { marginTop: 12, fontSize: 12, color: 'var(--text-subtle)' },
   nota: {
     marginTop: 14, minHeight: 60, padding: 10,
     borderRadius: 10, borderWidth: 1, borderColor: 'var(--border)',

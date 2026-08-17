@@ -96,6 +96,7 @@ import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { ChangeStageModal } from './src/screens/ChangeStageModal';
 import { EditLocationModal } from './src/screens/EditLocationModal';
+import { MinhaDailyCard } from './src/screens/MinhaDailyCard';
 import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
 import { useStages } from './src/hooks/useStages';
 import { GestorScreen } from './src/screens/GestorScreen';
@@ -1208,6 +1209,17 @@ function MainApp() {
     }
     return rows;
   }, [expandedStages, listStageSections]);
+
+  // A busca e os filtros de status/UF/etapa recortam a LISTA DE LEADS — que so'
+  // existe no mapa e na lista. Nas outras abas eles ficavam visiveis sem ter o
+  // que filtrar: a Rota tem o proprio recorte de status e vendedor, a Agenda
+  // filtra por tipo de compromisso, Tarefas por severidade, e Gestor/Meu tem
+  // seletor de periodo. Filtro que nao afeta a tela na frente e' ruido, e pior:
+  // faz o vendedor achar que mexeu em algo quando nao mexeu.
+  //
+  // A sugestao de rota NAO depende deles (poolBase = clients, a base inteira),
+  // entao esconder aqui nao muda nenhum resultado.
+  const ehAbaDeLeads = tab === 'map' || tab === 'list';
 
   const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0) + (vendorFilterHubspotId !== null ? 1 : 0) + (visitFilter !== null ? 1 : 0) + (tempFilter !== null ? 1 : 0) + (contaAlvoOnly ? 1 : 0);
 
@@ -2663,6 +2675,15 @@ function MainApp() {
         </View>
       )}
 
+      {/* A promessa do dia mora AQUI, e nao so' na aba "Meu".
+          Esta e' a tela onde o vendedor planeja o dia — perguntar "quantas
+          visitas hoje?" em qualquer outro lugar seria perguntar fora do
+          momento em que ele esta' decidindo isso. O mesmo cartao aparece em
+          "Meu" (e no Gestor, pra gestor que faz campo); os tres leem e
+          escrevem a mesma linha de `dailies`, entao nao ha' duas verdades.
+          O numero declarado aqui e' o que o cockpit de gestao cobra. */}
+      {!isMonitoringRoute && <MinhaDailyCard enabled={tab === 'route'} />}
+
       {/* Rota do dia (automática): monta as obrigatórias + completa a meta.
           Fica no topo como CTA principal; o fluxo manual segue abaixo. */}
       <View style={[styles.panelCard, { borderWidth: 1, borderColor: 'var(--tint-red-border)' }]}>
@@ -4042,7 +4063,7 @@ function MainApp() {
           chips de status em MULTI-selecao pra escolher ver leads, clientes ou
           ambos no mesmo mapa. Toque alterna cada status; nao da pra desmarcar
           todos (o mapa ficaria vazio). */}
-      {isViewer && (
+      {isViewer && ehAbaDeLeads && (
         <View style={styles.filterBar}>
           <ScrollView
             horizontal
@@ -4075,7 +4096,7 @@ function MainApp() {
       )}
 
       {/* Vendedor/admin: search + chips de status (um por vez) + filtros. */}
-      {!isViewer && (
+      {!isViewer && ehAbaDeLeads && (
         <>
           {/* Search bar: busca por nome, empresa, cidade ou bairro.
               Reflete em mapa, lista e contadores dos chips de status em tempo real. */}
