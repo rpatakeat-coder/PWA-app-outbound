@@ -61,6 +61,10 @@ import {
   IconWarning,
   NavIcon,
   useIconColors,
+  IconUser,
+  IconExternalLink,
+  IconWhatsapp,
+  IconPencil,
 } from './src/components/icons';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 // Camada de mapa web (Google Maps JS API) com a mesma API que o
@@ -5813,7 +5817,11 @@ function ClientBottomSheet({
   const followUps = meetings.filter(m => m.type === 'follow_up').slice().sort(sortByDate);
 
   // Chip visual de um agendamento (reunião ou follow up). O emoji distingue.
-  const renderMeetingChip = (m: ClientMeeting, emoji: string) => {
+  // Recebe o COMPONENTE do icone, e nao um emoji. Emoji muda de desenho e de
+  // largura em cada sistema — no Android o calendario e' outro traco, e a
+  // linha desalinhava. O icone do UI Kit e' o mesmo em todo lugar e acompanha
+  // a cor do tema.
+  const renderMeetingChip = (m: ClientMeeting, Icone: typeof IconCalendar) => {
     const d = new Date(m.scheduled_at);
     const isPast = d.getTime() < Date.now();
     const label = d.toLocaleString('pt-BR', {
@@ -5826,7 +5834,9 @@ function ClientBottomSheet({
         : `${m.duration_minutes} min`;
     return (
       <View key={m.id} style={[styles.meetingChip, isPast && { opacity: 0.55 }]}>
-        <Text style={styles.meetingChipDate}>{emoji} {label} • {durationLabel}{isPast ? ' (passada)' : ''}</Text>
+        <IconText Icone={Icone} size={14} style={styles.meetingChipDate} tone="muted">
+          {label} • {durationLabel}{isPast ? ' (passada)' : ''}
+        </IconText>
         {m.observacoes ? (
           <Text style={styles.meetingChipObs} numberOfLines={2}>{m.observacoes}</Text>
         ) : null}
@@ -6700,7 +6710,7 @@ function ClientBottomSheet({
                       onClose();
                     }}
                   >
-                    <Text style={styles.navRouteButtonText}>🚶 A pé</Text>
+                    <IconText Icone={IconUser} style={styles.navRouteButtonText} tone="onSurface">A pé</IconText>
                   </TouchableOpacity>
                 </View>
               )}
@@ -6715,7 +6725,7 @@ function ClientBottomSheet({
                   Linking.openURL(url).catch(() => Alert.alert('Erro', 'Não foi possível abrir o Google Maps.'));
                 }}
               >
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>🗺️ Abrir no Google Maps</Text>
+                <IconText Icone={IconExternalLink} style={{ color: '#fff', fontWeight: '700', fontSize: 14 }} tone="onBrand">Abrir no Google Maps</IconText>
               </TouchableOpacity>
               {(() => {
                 const waNum = toWhatsappNumber(client.telefone);
@@ -6731,9 +6741,9 @@ function ClientBottomSheet({
                     disabled={!waNum}
                     onPress={() => openWhatsapp(client.telefone)}
                   >
-                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
-                      {waNum ? '💬 Abrir WhatsApp' : '💬 WhatsApp (sem telefone)'}
-                    </Text>
+                    <IconText Icone={IconWhatsapp} style={{ color: '#fff', fontWeight: '700', fontSize: 14 }} tone="onBrand">
+                      {waNum ? 'Abrir WhatsApp' : 'WhatsApp (sem telefone)'}
+                    </IconText>
                   </TouchableOpacity>
                 );
               })()}
@@ -6749,7 +6759,7 @@ function ClientBottomSheet({
               {reunioes.length === 0 ? (
                 <Text style={styles.meetingsEmpty}>Nenhuma reunião agendada.</Text>
               ) : (
-                reunioes.map((m) => renderMeetingChip(m, '📅'))
+                reunioes.map((m) => renderMeetingChip(m, IconCalendar))
               )}
               {/* Agendar reuniao: so de "Conversa com decisor" em diante no
                   funil — antes disso a cadencia ainda nao pede demo. */}
@@ -6778,7 +6788,7 @@ function ClientBottomSheet({
               {followUps.length === 0 ? (
                 <Text style={styles.meetingsEmpty}>Nenhum follow up marcado.</Text>
               ) : (
-                followUps.map((m) => renderMeetingChip(m, '🔁'))
+                followUps.map((m) => renderMeetingChip(m, IconRefresh))
               )}
               {onFollowUp && (
                 <TouchableOpacity
@@ -6810,7 +6820,7 @@ function ClientBottomSheet({
                 style={{ paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#222222', marginBottom: 8, flexDirection: 'row', justifyContent: 'center', gap: 6 }}
                 onPress={onEditLocation}
               >
-                <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>📍 Editar localização (mover pin)</Text>
+                <IconText Icone={IconPencil} style={{ fontSize: 14, fontWeight: '700', color: '#fff' }} tone="onBrand">Editar localização (mover pin)</IconText>
               </TouchableOpacity>
             )}
             {onDelete && (
