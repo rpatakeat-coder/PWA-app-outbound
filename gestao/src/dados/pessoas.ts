@@ -78,6 +78,10 @@ export interface Registro1a1 {
   pauta: string | null;
   combinado: string | null;
   autorNome: string | null;
+  audioCaminho: string | null;
+  audioBytes: number | null;
+  transcricao: string | null;
+  transcricaoErro: string | null;
 }
 
 export async function carregarPessoas(): Promise<DadosPessoas> {
@@ -126,7 +130,10 @@ export async function carregarPessoas(): Promise<DadosPessoas> {
     // derruba nada — vira `registros: null` e a secao explica.
     supabase
       .from('um_a_um')
-      .select('id, seller_id, realizado_em, pauta, combinado, created_by_name')
+      .select(
+        'id, seller_id, realizado_em, pauta, combinado, created_by_name, ' +
+          'audio_caminho, audio_bytes, transcricao, transcricao_erro',
+      )
       .order('realizado_em', { ascending: false })
       .limit(200),
   ]);
@@ -294,6 +301,10 @@ export async function carregarPessoas(): Promise<DadosPessoas> {
         pauta: r.pauta,
         combinado: r.combinado,
         autorNome: r.created_by_name,
+        audioCaminho: r.audio_caminho ?? null,
+        audioBytes: r.audio_bytes ?? null,
+        transcricao: r.transcricao ?? null,
+        transcricaoErro: r.transcricao_erro ?? null,
       }));
 
   return { atualizadoEm: new Date(), pessoas, janelaDias: janela.length, registros };
@@ -305,7 +316,7 @@ export async function registrar1a1(entrada: {
   perfilId: string;
   pauta: string;
   combinado: string;
-}): Promise<{ ok: boolean; erro?: string }> {
+}): Promise<{ ok: boolean; erro?: string; id?: string }> {
   const { data: sessao } = await supabase.auth.getUser();
   const autorId = sessao?.user?.id ?? null;
 
@@ -323,13 +334,83 @@ export async function registrar1a1(entrada: {
     autorNome = (perfil as any)?.full_name?.trim() || autorNome;
   }
 
-  const { error } = await supabase.from('um_a_um').insert({
-    seller_id: entrada.perfilId,
-    pauta: entrada.pauta.trim() || null,
-    combinado: entrada.combinado.trim() || null,
-    created_by: autorId,
-    created_by_name: autorNome,
-  });
+  const { data, error } = await supabase
+    .from('um_a_um')
+    .insert({
+      seller_id: entrada.perfilId,
+      pauta: entrada.pauta.trim() || null,
+      combinado: entrada.combinado.trim() || null,
+      created_by: autorId,
+      created_by_name: autorNome,
+    })
+    .select('id')
+    .single();
+  if (error) return { ok: false, erro: error.message };
+  return { ok: true, id: (data as any)?.id };
+}
+
+const BUCKET = 'um-a-um';
+
+/** Sobe o audio e amarra ao registro.
+ *
+ *  O caminho leva o id do vendedor E o do registro: agrupa por pessoa (util pra
+ *  auditar ou limpar depois) e nunca colide. `upsert: true` deixa regravar o
+ *  mesmo 1:1 sem duplicar arquivo no bucket. */
+export async function anexarAudio1a1(
+  registroId: string,
+  perfilId: string,
+  arquivo: Blob,
+): Promise<{ ok: boolean; erro?: string }> {
+  const tipo = arquivo.type || 'audio/webm';
+  const ext = tipo.includes('mp4') || tipo.includes('m4a')
+    ? 'm4a'
+    : tipo.includes('mpeg') || tipo.includes('mp3')
+      ? 'mp3'
+      : tipo.includes('wav')
+        ? 'wav'
+        : 'webm';
+  const caminho = `${perfilId}/${registroId}.${ext}`;
+
+  const { error: erroUpload } = await supabase.storage
+    .from(BUCKET)
+    .upload(caminho, arquivo, { contentType: tipo, upsert: true });
+  if (erroUpload) return { ok: false, erro: erroUpload.message };
+
+  const { error } = await supabase
+    .from('um_a_um')
+    .update({ audio_caminho: caminho, audio_tipo: tipo, audio_bytes: arquivo.size })
+    .eq('id', registroId);
   if (error) return { ok: false, erro: error.message };
   return { ok: true };
+}
+
+/** URL assinada pra ouvir. Vida curta de proposito: e' a gravacao de uma
+ *  conversa entre gestor e subordinado, nao um arquivo pra circular. */
+export async function urlDoAudio(caminho: string): Promise<string | null> {
+  const { data } = await supabase.storage.from(BUCKET).createSignedUrl(caminho, 3600);
+  return data?.signedUrl ?? null;
+}
+
+/** Dispara a transcricao. O audio NAO sobe de novo — quem baixa do bucket e' a
+ *  edge function, com service role. */
+export async function transcrever1a1(
+  registroId: string,
+): Promise<{ ok: boolean; texto?: string; erro?: string; configuravel?: boolean }> {
+  const { data, error } = await supabase.functions.invoke('transcrever-1a1', {
+    body: { registroId },
+  });
+  if (error) {
+    let detalhe = error.message;
+    let configuravel = false;
+    try {
+      const corpo = await (error as any).context?.json?.();
+      if (corpo?.error) detalhe = corpo.error;
+      if (corpo?.configuravel) configuravel = true;
+    } catch {
+      /* mantem a mensagem generica */
+    }
+    return { ok: false, erro: detalhe, configuravel };
+  }
+  if ((data as any)?.error) return { ok: false, erro: (data as any).error };
+  return { ok: true, texto: (data as any)?.texto };
 }

@@ -9,11 +9,16 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   carregarPessoas,
   registrar1a1,
+  anexarAudio1a1,
+  transcrever1a1,
+  urlDoAudio,
+  type Registro1a1,
   type DadosPessoas,
   type Pessoa,
   type Semaforo,
 } from '../dados/pessoas';
 import { Drawer } from '../componentes/Drawer';
+import { GravadorDeAudio } from '../componentes/GravadorDeAudio';
 
 const DATA = new Intl.DateTimeFormat('pt-BR', {
   dateStyle: 'short',
@@ -101,6 +106,80 @@ function Cartao({ p, aoAbrir }: { p: Pessoa; aoAbrir: () => void }) {
   );
 }
 
+/** Audio e transcricao de um 1:1 ja' registrado.
+ *
+ *  A transcricao vem RECOLHIDA. Uma conversa de 40 minutos vira um paredao de
+ *  texto, e o que o gestor rele' antes do proximo 1:1 e' o "combinado", nao o
+ *  verbatim — o texto completo fica a um clique pra quando ele precisar
+ *  procurar o que foi dito. */
+function ItemDeAudio({
+  r,
+  ocupado,
+  aoOuvir,
+  aoTranscrever,
+}: {
+  r: Registro1a1;
+  ocupado: boolean;
+  aoOuvir: (caminho: string) => void;
+  aoTranscrever: (id: string) => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  if (!r.audioCaminho && !r.transcricao && !r.transcricaoErro) return null;
+
+  const link = {
+    border: 'none', background: 'none', padding: 0, cursor: 'pointer',
+    font: 'inherit', fontSize: 12, fontWeight: 700, color: 'var(--red)',
+  } as const;
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        {r.audioCaminho && (
+          <button onClick={() => aoOuvir(r.audioCaminho!)} style={link}>
+            ▶ Ouvir
+            {r.audioBytes ? ` · ${(r.audioBytes / 1024 / 1024).toFixed(1)} MB` : ''}
+          </button>
+        )}
+        {r.transcricao && (
+          <button onClick={() => setAberto((v) => !v)} style={link}>
+            {aberto ? 'Esconder transcrição' : 'Ver transcrição'}
+          </button>
+        )}
+        {r.audioCaminho && !r.transcricao && (
+          <button onClick={() => aoTranscrever(r.id)} disabled={ocupado} style={link}>
+            {ocupado ? 'Transcrevendo…' : 'Transcrever'}
+          </button>
+        )}
+      </div>
+
+      {r.transcricaoErro && !r.transcricao && (
+        <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 4 }}>
+          {r.transcricaoErro}
+        </div>
+      )}
+
+      {aberto && r.transcricao && (
+        <div
+          style={{
+            marginTop: 6,
+            background: 'var(--sunk)',
+            border: '1px solid var(--line)',
+            borderRadius: 8,
+            padding: '10px 12px',
+            fontSize: 13,
+            lineHeight: 1.6,
+            whiteSpace: 'pre-wrap',
+            maxHeight: 320,
+            overflowY: 'auto',
+          }}
+        >
+          {r.transcricao}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Pessoas() {
   const [dados, setDados] = useState<DadosPessoas | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -109,6 +188,8 @@ export function Pessoas() {
   const [combinado, setCombinado] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [audio, setAudio] = useState<Blob | null>(null);
+  const [transcrevendo, setTranscrevendo] = useState<string | null>(null);
 
   const recarregar = () =>
     carregarPessoas()
@@ -125,12 +206,12 @@ export function Pessoas() {
   );
 
   const salvar = async () => {
-    if (!aberta || (!pauta.trim() && !combinado.trim())) return;
+    if (!aberta || (!pauta.trim() && !combinado.trim() && !audio)) return;
     setSalvando(true);
     setAviso(null);
     const r = await registrar1a1({ perfilId: aberta.perfilId, pauta, combinado });
-    setSalvando(false);
-    if (!r.ok) {
+    if (!r.ok || !r.id) {
+      setSalvando(false);
       setAviso(
         /relation .* does not exist|schema cache/i.test(r.erro ?? '')
           ? 'A tabela um_a_um ainda não existe. Rode a migration 20260814_um_a_um.sql.'
@@ -138,10 +219,59 @@ export function Pessoas() {
       );
       return;
     }
+
+    // O registro nasce primeiro e o audio e' anexado depois, porque o caminho
+    // no bucket leva o id da linha. Se o upload falhar, o 1:1 escrito NAO se
+    // perde — some so' o audio, e a mensagem diz isso.
+    if (audio) {
+      setAviso('Enviando o áudio…');
+      const up = await anexarAudio1a1(r.id, aberta.perfilId, audio);
+      if (!up.ok) {
+        setSalvando(false);
+        setAviso(
+          /bucket|not found/i.test(up.erro ?? '')
+            ? 'O 1:1 foi salvo, mas o áudio não subiu: falta rodar a migration 20260814_um_a_um_audio.sql.'
+            : `O 1:1 foi salvo, mas o áudio não subiu: ${up.erro}`,
+        );
+        setPauta(''); setCombinado(''); setAudio(null);
+        recarregar();
+        return;
+      }
+      setAviso('Transcrevendo…');
+      const t = await transcrever1a1(r.id);
+      if (!t.ok) {
+        setAviso(
+          t.configuravel
+            ? 'Salvo com áudio. A transcrição não está ligada: falta o secret OPENAI_API_KEY e o deploy da função transcrever-1a1.'
+            : `Salvo com áudio, mas a transcrição falhou: ${t.erro}`,
+        );
+      } else {
+        setAviso('Registrado, com áudio e transcrição.');
+      }
+    } else {
+      setAviso('Registrado.');
+    }
+
+    setSalvando(false);
     setPauta('');
     setCombinado('');
-    setAviso('Registrado.');
+    setAudio(null);
     recarregar();
+  };
+
+  /** Retentar a transcricao de um registro que ja' existe. */
+  const retranscrever = async (id: string) => {
+    setTranscrevendo(id);
+    const t = await transcrever1a1(id);
+    setTranscrevendo(null);
+    if (!t.ok) setAviso(`Transcrição falhou: ${t.erro}`);
+    recarregar();
+  };
+
+  const ouvir = async (caminho: string) => {
+    const url = await urlDoAudio(caminho);
+    if (url) window.open(url, '_blank', 'noopener');
+    else setAviso('Não consegui gerar o link do áudio.');
   };
 
   if (erro) {
@@ -360,9 +490,42 @@ export function Pessoas() {
                       marginBottom: 8,
                     }}
                   />
+                  <div style={{ marginBottom: 10 }}>
+                    <GravadorDeAudio aoConcluir={setAudio} desabilitado={salvando} />
+                    {audio && (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          fontSize: 13,
+                          background: 'var(--green-soft)',
+                          color: 'var(--green)',
+                          borderRadius: 8,
+                          padding: '8px 10px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 10,
+                        }}
+                      >
+                        <span>
+                          Áudio pronto · {(audio.size / 1024 / 1024).toFixed(1)} MB. Ele sobe e é
+                          transcrito ao registrar.
+                        </span>
+                        <button
+                          onClick={() => setAudio(null)}
+                          style={{
+                            border: 'none', background: 'none', cursor: 'pointer',
+                            color: 'var(--green)', font: 'inherit', fontWeight: 800,
+                          }}
+                        >
+                          remover
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     onClick={salvar}
-                    disabled={salvando || (!pauta.trim() && !combinado.trim())}
+                    disabled={salvando || (!pauta.trim() && !combinado.trim() && !audio)}
                     style={{
                       border: 'none',
                       background: 'var(--red)',
@@ -372,7 +535,7 @@ export function Pessoas() {
                       font: 'inherit',
                       fontWeight: 800,
                       cursor: salvando ? 'default' : 'pointer',
-                      opacity: !pauta.trim() && !combinado.trim() ? 0.5 : 1,
+                      opacity: !pauta.trim() && !combinado.trim() && !audio ? 0.5 : 1,
                     }}
                   >
                     {salvando ? 'Salvando…' : 'Registrar'}
@@ -401,6 +564,12 @@ export function Pessoas() {
                         <strong>Combinado:</strong> {r.combinado}
                       </div>
                     )}
+                    <ItemDeAudio
+                      r={r}
+                      ocupado={transcrevendo === r.id}
+                      aoOuvir={ouvir}
+                      aoTranscrever={retranscrever}
+                    />
                   </div>
                 ))}
               </div>
