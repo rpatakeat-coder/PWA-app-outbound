@@ -1,10 +1,46 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Takeat · Gestão</title>
+
+    <!--
+      Poppins — typography.fontFamily.sans do design system oficial.
+      Só os pesos que o cockpit usa (400/500/600/800): puxar a família inteira
+      seriam ~10 arquivos pra nada. `display=swap` mostra o texto na fonte de
+      sistema enquanto a Poppins carrega, em vez de deixar a tela em branco.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <script>
+      // Tema ANTES do primeiro paint.
+      //
+      // O cockpit e o app de campo vivem no mesmo domínio, então dividem o
+      // localStorage: a chave 'takeat.theme' é a mesma que src/theme.ts grava
+      // quando o vendedor escolhe claro/escuro lá. Sem isto, quem está no
+      // escuro abriria /gestao numa tela branca.
+      //
+      // Inline e antes do bundle de propósito — se ficasse pra depois do React
+      // montar, a tela abriria clara e piscaria pra escura.
+      try {
+        var pref = localStorage.getItem('takeat.theme');
+        if (pref === 'dark' || pref === 'light') {
+          document.documentElement.setAttribute('data-theme', pref);
+        }
+        // Sem preferência salva: nada a fazer — o @media prefers-color-scheme
+        // do tokens.css já resolve pelo padrão do aparelho.
+      } catch (e) {
+        // localStorage bloqueado (aba anônima com cookies restritos): segue no
+        // padrão do aparelho em vez de quebrar a página.
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

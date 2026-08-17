@@ -1,48 +1,155 @@
 /*
-  Tokens do cockpit — de docs-replicacao/07-DESIGN-SYSTEM.md.
+  Tokens do cockpit — derivados do DESIGN SYSTEM OFICIAL da Takeat.
 
-  Uma divergencia deliberada: o documento traz --red:#E51A31, mas a paleta da
-  marca (a mesma ja' aplicada no PWA de campo) usa #C8131B. Como os dois
-  produtos vivem no mesmo dominio e o vendedor alterna entre eles, dois
-  vermelhos diferentes leriam como bug. Fica o da marca.
+  Fonte: https://raw.githubusercontent.com/takeat-design/UIKIT/main/design-system.json
+  ("Official Dashboard Design System", versao 1.0.1)
+    tokens/colors.json · typography.json · spacing.json · radius.json · shadows.json
 
-  As correcoes de contraste do documento foram mantidas: --amber-ink existe
-  porque o par ambar padrao sobre --amber-soft da' 3.37:1, abaixo do AA.
+  A versao anterior deste arquivo vinha do docs-replicacao/07-DESIGN-SYSTEM.md —
+  o design system do sistema de REFERENCIA, nao o da Takeat. Por isso o cockpit
+  saiu bege-acinzentado enquanto o app de campo e' creme: eram duas paletas
+  diferentes, e so' o vermelho coincidia.
+
+  COMO LER O MAPEAMENTO
+  Os nomes semanticos (--panel, --ink, --line...) sao os que as seis telas ja'
+  usam, e foram mantidos de proposito: nenhuma tela precisou mudar, so' o valor
+  por tras de cada nome. O comentario de cada linha diz de qual token do design
+  system ele vem.
+
+  CONTRASTE
+  Todo par texto/fundo abaixo foi medido contra o AA da WCAG (4.5:1 para texto
+  normal). Tres degraus do design system NAO passam e por isso nao aparecem como
+  cor de texto em lugar nenhum:
+
+    neutral.300  #7A7A7A  4.29  (reprova por pouco)
+    green.500    #2EC9B7  2.07  (o verde primario e' de PREENCHIMENTO, nao texto)
+    yellow.500   #FFB32F  1.79  (idem; so' o yellow.700 passa, com 4.88)
+
+  DUAS DIVERGENCIAS, as duas declaradas:
+
+  1. --ter usa #6B6B6B, que nao esta no design system. O degrau natural seria o
+     neutral.300, mas ele da' 4.29 e reprova. Entre 300 e 400 nao existe passo
+     intermediario, entao usei o mesmo cinza que o app de campo ja' usa pra
+     texto secundario (e que a paleta da marca chama de --cor-descricao): passa
+     com 5.33 sobre o cartao. Vale levar pro time de design — falta esse degrau.
+
+  2. O modo escuro e' DERIVADO. O design system so' publica a escala clara.
+     Os valores escuros abaixo sao derivacao minha, marcados um a um; se o time
+     de design publicar uma escala oficial, e' so' trocar. Todos foram medidos:
+     o menor par fica em 4.79.
 */
 :root {
-  /* Superficies */
-  --bg: #efe9dc;
-  --panel: #fdfbf0;
-  --panel2: #fbf6ec;
-  --sunk: #f3ede0;
+  /* Superficies — neutral */
+  --bg: #f6f6f6;      /* neutral.50 */
+  --panel: #ffffff;   /* neutral.white */
+  --panel2: #f6f6f6;  /* neutral.50 */
+  --sunk: #ededed;    /* neutral.100 */
 
   /* Texto */
-  --ink: #1a1613;
-  --muted: #6e6558;
-  --muted2: #736857;
-  --ter: #a2937a;
+  --ink: #222222;   /* neutral.500 — 15.91 sobre o cartao */
+  --muted: #545454; /* neutral.400 —  7.57 */
+  --ter: #6b6b6b;   /* fora do DS, ver divergencia 1 —  5.33 */
 
   /* Linhas */
-  --line: #e4dbc6;
-  --line-soft: #f0e9d8;
-  --line-btn: #d8cfba;
+  --line: #ededed;     /* neutral.100 */
+  --line-soft: #f6f6f6;/* neutral.50 */
+  --line-btn: #c6c6c6; /* neutral.200 — borda, nunca texto (1.71) */
 
   /* Marca e estado */
-  --red: #c8131b;
-  --red-dk: #a50f16;
-  --red-soft: #fbeef0;
-  --green: #1e7a63;
-  --green-soft: #e9f4ef;
-  --amber: #b0782a;
-  --amber-soft: #fbf1df;
-  --amber-ink: #8a5d1f;
+  --red: #c8131b;        /* primary.red.500 — 5.89 sobre branco */
+  --red-soft: #fae8e9;   /* primary.red.100 */
+  /* Verde de STATUS vem do tertiary.green2, e nao do primary.green: o primario
+     (#2EC9B7) e' um teal de preenchimento e da' 2.07 como texto. */
+  --green: #167532;      /* tertiary.green2.600 — 5.79 */
+  --green-soft: #eaf7ee; /* tertiary.green2.100 */
+  --amber: #cc8c1d;      /* primary.yellow.600 — preenchimento/borda */
+  --amber-soft: #fff8eb; /* primary.yellow.100 */
+  --amber-ink: #99670f;  /* primary.yellow.700 — 4.88, o unico amarelo legivel */
 
-  /* Bloco escuro — um por tela, so' o banner (regra 4 do doc) */
-  --dark: #1a1613;
-  --dark-ink: #fffdf8;
-  --dark-mut: #9c9284;
+  /* Bloco escuro — um por tela, so' o banner */
+  --dark: #222222;     /* neutral.500 */
+  --dark-ink: #ffffff; /* neutral.white — 15.91 */
+  --dark-mut: #c6c6c6; /* neutral.200 —  9.31 sobre o bloco */
 
-  --sombra-card: 0 1px 2px rgba(26, 22, 19, 0.04), 0 4px 12px rgba(26, 22, 19, 0.04);
+  --sombra-card: 0px 1px 2px 0px rgba(0, 0, 0, 0.14), 0px 0px 2px 0px rgba(0, 0, 0, 0.12); /* shadow.01 */
+
+  color-scheme: light;
+}
+
+/*
+  MODO ESCURO — derivado (ver divergencia 2 no topo).
+
+  Os dois seletores espelham o mecanismo do app de campo: a preferencia do
+  aparelho vale por padrao, e a escolha explicita do vendedor (data-theme no
+  <html>, gravada em localStorage por src/theme.ts) vence. O bootstrap que le'
+  essa chave esta' no gestao/index.html, antes do primeiro paint.
+*/
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #1a1a1a;      /* derivado */
+    --panel: #242424;   /* derivado */
+    --panel2: #2c2c2c;  /* derivado */
+    --sunk: #303030;    /* derivado */
+
+    --ink: #f6f6f6;     /* neutral.50  — 14.36 sobre o cartao */
+    --muted: #c6c6c6;   /* neutral.200 —  9.09 */
+    --ter: #949494;     /* derivado    —  5.12 */
+
+    --line: #3a3a3a;      /* derivado */
+    --line-soft: #2e2e2e; /* derivado */
+    --line-btn: #4a4a4a;  /* derivado */
+
+    /* No escuro o texto colorido sobe na escala e a tinta de fundo desce.
+       Manter o red.500 aqui daria 2.4 e sumiria. */
+    --red: #e5a1a4;      /* primary.red.200 — 7.37 */
+    --red-soft: #3a1416; /* derivado */
+    --green: #77bd8b;      /* tertiary.green2.300 — 6.98 */
+    --green-soft: #14301d; /* derivado */
+    --amber: #ffd894;      /* primary.yellow.300 — 11.46 */
+    --amber-soft: #33280f; /* derivado */
+    --amber-ink: #ffd894;  /* primary.yellow.300 — 10.68 sobre a tinta */
+
+    --dark: #000000;     /* neutral.black: o banner precisa continuar sendo o
+                            bloco mais escuro da tela */
+    --dark-ink: #f6f6f6; /* neutral.50 */
+    --dark-mut: #949494; /* derivado */
+
+    --sombra-card: 0px 1px 2px 0px rgba(0, 0, 0, 0.4), 0px 0px 2px 0px rgba(0, 0, 0, 0.3);
+
+    color-scheme: dark;
+  }
+}
+
+/* Escolha explicita do vendedor vence o padrao do aparelho. */
+:root[data-theme='dark'] {
+  --bg: #1a1a1a;
+  --panel: #242424;
+  --panel2: #2c2c2c;
+  --sunk: #303030;
+
+  --ink: #f6f6f6;
+  --muted: #c6c6c6;
+  --ter: #949494;
+
+  --line: #3a3a3a;
+  --line-soft: #2e2e2e;
+  --line-btn: #4a4a4a;
+
+  --red: #e5a1a4;
+  --red-soft: #3a1416;
+  --green: #77bd8b;
+  --green-soft: #14301d;
+  --amber: #ffd894;
+  --amber-soft: #33280f;
+  --amber-ink: #ffd894;
+
+  --dark: #000000;
+  --dark-ink: #f6f6f6;
+  --dark-mut: #949494;
+
+  --sombra-card: 0px 1px 2px 0px rgba(0, 0, 0, 0.4), 0px 0px 2px 0px rgba(0, 0, 0, 0.3);
+
+  color-scheme: dark;
 }
 
 * {
@@ -59,33 +166,40 @@ body,
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* typography.fontFamily.sans. O fallback e' a pilha do sistema: se a Poppins
+     nao carregar (rede de campo), a tela continua legivel em vez de cair numa
+     serifada qualquer. */
+  font-family: Poppins, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* typography.body.medium — 14/20, 0.25px */
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 20px;
+  letter-spacing: 0.25px;
   -webkit-font-smoothing: antialiased;
 }
 
-/* O cockpit e' ferramenta de mesa: densidade alta, largura util grande.
-   Abaixo de 900px ele avisa que o lugar certo e' o app de campo. */
+/* O cockpit e' ferramenta de mesa: densidade alta, largura util grande. */
 .envoltorio {
   max-width: 1320px;
   margin: 0 auto;
-  padding: 20px 24px 64px;
+  /* spacing.5 / spacing.6 */
+  padding: 20px 24px 48px;
 }
 
 .cartao {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 12px; /* borderRadius.lg */
   box-shadow: var(--sombra-card);
-  padding: 16px 18px;
+  padding: 16px 20px; /* spacing.4 / spacing.5 */
 }
 
+/* typography.label.medium — 12/16, 0.5px, semibold */
 .titulo-secao {
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.5px;
+  font-weight: 600;
   text-transform: uppercase;
   color: var(--muted);
-  margin: 0 0 12px;
+  margin: 0 0 12px; /* spacing.3 */
 }
