@@ -82,6 +82,16 @@ export interface Registro1a1 {
   audioBytes: number | null;
   transcricao: string | null;
   transcricaoErro: string | null;
+  documentos: DocumentoDe1a1[];
+}
+
+export interface DocumentoDe1a1 {
+  id: string;
+  nome: string;
+  caminho: string;
+  tipo: string | null;
+  bytes: number | null;
+  enviadoPorNome: string | null;
 }
 
 export async function carregarPessoas(): Promise<DadosPessoas> {
@@ -292,6 +302,33 @@ export async function carregarPessoas(): Promise<DadosPessoas> {
 
   pessoas.sort((a, b) => b.urgencia - a.urgencia || a.nome.localeCompare(b.nome));
 
+  // Documentos dos registros carregados, numa consulta so'. A tabela pode nao
+  // existir ainda (migration nao rodada) — nesse caso cada registro fica com
+  // lista vazia e o resto da tela nao muda.
+  const docsPorRegistro = new Map<string, DocumentoDe1a1[]>();
+  if (!umAUm.error) {
+    const ids = ((umAUm.data ?? []) as any[]).map((r) => r.id);
+    if (ids.length) {
+      const { data: docs } = await supabase
+        .from('um_a_um_documentos')
+        .select('id, registro_id, nome, caminho, tipo, bytes, enviado_por_nome')
+        .in('registro_id', ids)
+        .order('created_at', { ascending: true });
+      for (const d of (docs ?? []) as any[]) {
+        const lista = docsPorRegistro.get(d.registro_id) ?? [];
+        lista.push({
+          id: d.id,
+          nome: d.nome,
+          caminho: d.caminho,
+          tipo: d.tipo ?? null,
+          bytes: d.bytes ?? null,
+          enviadoPorNome: d.enviado_por_nome ?? null,
+        });
+        docsPorRegistro.set(d.registro_id, lista);
+      }
+    }
+  }
+
   const registros: Registro1a1[] | null = umAUm.error
     ? null
     : ((umAUm.data ?? []) as any[]).map((r) => ({
@@ -305,6 +342,7 @@ export async function carregarPessoas(): Promise<DadosPessoas> {
         audioBytes: r.audio_bytes ?? null,
         transcricao: r.transcricao ?? null,
         transcricaoErro: r.transcricao_erro ?? null,
+        documentos: docsPorRegistro.get(r.id) ?? [],
       }));
 
   return { atualizadoEm: new Date(), pessoas, janelaDias: janela.length, registros };
@@ -389,6 +427,86 @@ export async function anexarAudio1a1(
 export async function urlDoAudio(caminho: string): Promise<string | null> {
   const { data } = await supabase.storage.from(BUCKET).createSignedUrl(caminho, 3600);
   return data?.signedUrl ?? null;
+}
+
+/** Higieniza o nome pro caminho do bucket.
+ *
+ *  A chave do storage nao aceita acento, espaco nem barra com seguranca — e
+ *  "Plano de A\u00e7\u00e3o 2026 (final).pdf" tem os tres. O nome ORIGINAL fica na
+ *  coluna `nome`, que e' o que a pessoa ve' e o que ela baixa. */
+function higienizar(nome: string): string {
+  return nome
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 80);
+}
+
+/** Teto por arquivo. O Supabase corta em 50 MB por padrao; parar antes deixa a
+ *  mensagem legivel em vez de um erro de infraestrutura no meio do upload. */
+export const LIMITE_DOC_BYTES = 25 * 1024 * 1024;
+
+export async function anexarDocumento1a1(
+  registroId: string,
+  perfilId: string,
+  arquivo: File,
+): Promise<{ ok: boolean; erro?: string }> {
+  if (arquivo.size > LIMITE_DOC_BYTES) {
+    return {
+      ok: false,
+      erro: `"${arquivo.name}" tem ${(arquivo.size / 1024 / 1024).toFixed(1)} MB e o limite e' 25 MB.`,
+    };
+  }
+
+  const id = crypto.randomUUID();
+  const caminho = `${perfilId}/${registroId}/docs/${id}-${higienizar(arquivo.name)}`;
+
+  const { error: erroUpload } = await supabase.storage
+    .from(BUCKET)
+    .upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false });
+  if (erroUpload) return { ok: false, erro: erroUpload.message };
+
+  const { data: sessao } = await supabase.auth.getUser();
+  let autorNome: string | null = sessao?.user?.email ?? null;
+  if (sessao?.user?.id) {
+    const { data: perfil } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', sessao.user.id)
+      .maybeSingle();
+    autorNome = (perfil as any)?.full_name?.trim() || autorNome;
+  }
+
+  const { error } = await supabase.from('um_a_um_documentos').insert({
+    id,
+    registro_id: registroId,
+    caminho,
+    nome: arquivo.name,
+    tipo: arquivo.type || null,
+    bytes: arquivo.size,
+    enviado_por: sessao?.user?.id ?? null,
+    enviado_por_nome: autorNome,
+  });
+  if (error) return { ok: false, erro: error.message };
+  return { ok: true };
+}
+
+/** URL assinada pra baixar. `download` faz o navegador salvar com o nome
+ *  ORIGINAL em vez de abrir com o nome higienizado do bucket. */
+export async function urlDoDocumento(caminho: string, nome: string): Promise<string | null> {
+  const { data } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(caminho, 3600, { download: nome });
+  return data?.signedUrl ?? null;
+}
+
+/** Remove o vinculo. O arquivo permanece no bucket de proposito — mesma escolha
+ *  do audio: some o registro, sumiria tambem a prova do que foi apresentado. */
+export async function removerDocumento1a1(id: string): Promise<{ ok: boolean; erro?: string }> {
+  const { error } = await supabase.from('um_a_um_documentos').delete().eq('id', id);
+  if (error) return { ok: false, erro: error.message };
+  return { ok: true };
 }
 
 /** Dispara a transcricao. O audio NAO sobe de novo — quem baixa do bucket e' a

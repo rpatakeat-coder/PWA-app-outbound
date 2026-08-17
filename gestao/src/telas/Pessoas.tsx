@@ -12,7 +12,12 @@ import {
   anexarAudio1a1,
   transcrever1a1,
   urlDoAudio,
+  anexarDocumento1a1,
+  urlDoDocumento,
+  removerDocumento1a1,
+  LIMITE_DOC_BYTES,
   type Registro1a1,
+  type DocumentoDe1a1,
   type DadosPessoas,
   type Pessoa,
   type Semaforo,
@@ -106,6 +111,139 @@ function Cartao({ p, aoAbrir }: { p: Pessoa; aoAbrir: () => void }) {
   );
 }
 
+const KB = 1024;
+function tamanho(bytes: number | null): string {
+  if (!bytes) return '';
+  return bytes >= KB * KB ? `${(bytes / KB / KB).toFixed(1)} MB` : `${Math.round(bytes / KB)} KB`;
+}
+
+/** Escolha dos documentos apresentados na conversa.
+ *
+ *  Os arquivos ficam SEGURADOS aqui ate' o registro ser salvo, porque o caminho
+ *  no bucket leva o id da linha — que so' existe depois do insert. */
+function SeletorDeDocumentos({
+  escolhidos,
+  aoMudar,
+  desabilitado,
+  aoAvisar,
+}: {
+  escolhidos: File[];
+  aoMudar: (f: File[]) => void;
+  desabilitado?: boolean;
+  aoAvisar: (m: string) => void;
+}) {
+  const aoEscolher = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const novos = [...(e.target.files ?? [])];
+    // Barra o arquivo grande AQUI, e nao depois de meio upload: o gestor
+    // descobre na hora de escolher, com o nome do arquivo na frente.
+    const grandes = novos.filter((f) => f.size > LIMITE_DOC_BYTES);
+    if (grandes.length) {
+      aoAvisar(`"${grandes[0].name}" passa de 25 MB e não pode ser anexado.`);
+    }
+    aoMudar([...escolhidos, ...novos.filter((f) => f.size <= LIMITE_DOC_BYTES)]);
+    e.target.value = '';
+  };
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <label
+        style={{
+          display: 'inline-block',
+          border: '1px solid var(--line-btn)',
+          background: 'var(--panel2)',
+          borderRadius: 8,
+          padding: '9px 14px',
+          font: 'inherit',
+          fontWeight: 700,
+          fontSize: 13,
+          cursor: desabilitado ? 'default' : 'pointer',
+          color: 'var(--ink)',
+          opacity: desabilitado ? 0.5 : 1,
+        }}
+      >
+        Anexar documento
+        <input type="file" multiple onChange={aoEscolher} disabled={desabilitado} style={{ display: 'none' }} />
+      </label>
+
+      {escolhidos.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          {escolhidos.map((f, i) => (
+            <div
+              key={`${f.name}-${i}`}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 10,
+                fontSize: 13,
+                padding: '5px 0',
+                borderTop: i ? '1px solid var(--line-soft)' : undefined,
+              }}
+            >
+              <span>
+                {f.name} <span style={{ color: 'var(--ter)' }}>{tamanho(f.size)}</span>
+              </span>
+              <button
+                onClick={() => aoMudar(escolhidos.filter((_, j) => j !== i))}
+                style={{
+                  border: 'none', background: 'none', cursor: 'pointer',
+                  color: 'var(--muted)', font: 'inherit', fontWeight: 800,
+                }}
+              >
+                remover
+              </button>
+            </div>
+          ))}
+          <div style={{ fontSize: 12, color: 'var(--ter)', marginTop: 4 }}>
+            Sobem ao registrar. Ficam na mesma área privada do áudio.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Documentos de um 1:1 ja' registrado. */
+function ListaDeDocumentos({
+  docs,
+  aoBaixar,
+  aoRemover,
+}: {
+  docs: DocumentoDe1a1[];
+  aoBaixar: (d: DocumentoDe1a1) => void;
+  aoRemover: (id: string) => void;
+}) {
+  if (docs.length === 0) return null;
+  return (
+    <div style={{ marginTop: 6 }}>
+      {docs.map((d) => (
+        <div key={d.id} style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 12 }}>
+          <button
+            onClick={() => aoBaixar(d)}
+            style={{
+              border: 'none', background: 'none', padding: 0, cursor: 'pointer',
+              font: 'inherit', fontSize: 12, fontWeight: 700, color: 'var(--red)',
+              textAlign: 'left',
+            }}
+          >
+            ↓ {d.nome}
+          </button>
+          <span style={{ color: 'var(--ter)' }}>{tamanho(d.bytes)}</span>
+          <button
+            onClick={() => aoRemover(d.id)}
+            title="Tira o documento deste 1:1. O arquivo continua guardado."
+            style={{
+              border: 'none', background: 'none', padding: 0, cursor: 'pointer',
+              font: 'inherit', fontSize: 12, color: 'var(--ter)',
+            }}
+          >
+            remover
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Audio e transcricao de um 1:1 ja' registrado.
  *
  *  A transcricao vem RECOLHIDA. Uma conversa de 40 minutos vira um paredao de
@@ -189,6 +327,7 @@ export function Pessoas() {
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [audio, setAudio] = useState<Blob | null>(null);
+  const [docs, setDocs] = useState<File[]>([]);
   const [transcrevendo, setTranscrevendo] = useState<string | null>(null);
 
   const recarregar = () =>
@@ -206,7 +345,7 @@ export function Pessoas() {
   );
 
   const salvar = async () => {
-    if (!aberta || (!pauta.trim() && !combinado.trim() && !audio)) return;
+    if (!aberta || (!pauta.trim() && !combinado.trim() && !audio && docs.length === 0)) return;
     setSalvando(true);
     setAviso(null);
     const r = await registrar1a1({ perfilId: aberta.perfilId, pauta, combinado });
@@ -218,6 +357,15 @@ export function Pessoas() {
           : `Não consegui salvar: ${r.erro}`,
       );
       return;
+    }
+
+    // Documentos primeiro: sao rapidos e independentes da transcricao. Falha
+    // aqui nao aborta o resto — o 1:1 escrito ja' esta' salvo.
+    const falhasDoc: string[] = [];
+    for (const d of docs) {
+      setAviso(`Enviando ${d.name}…`);
+      const up = await anexarDocumento1a1(r.id, aberta.perfilId, d);
+      if (!up.ok) falhasDoc.push(up.erro ?? d.name);
     }
 
     // O registro nasce primeiro e o audio e' anexado depois, porque o caminho
@@ -252,10 +400,31 @@ export function Pessoas() {
       setAviso('Registrado.');
     }
 
+    if (falhasDoc.length) {
+      setAviso(
+        /relation .* does not exist|schema cache/i.test(falhasDoc.join(' '))
+          ? 'Salvo, mas os documentos não subiram: falta rodar a migration 20260814_um_a_um_documentos.sql.'
+          : `Salvo, mas ${falhasDoc.length} documento(s) falharam: ${falhasDoc[0]}`,
+      );
+    }
+
     setSalvando(false);
     setPauta('');
     setCombinado('');
     setAudio(null);
+    setDocs([]);
+    recarregar();
+  };
+
+  const baixarDoc = async (d: DocumentoDe1a1) => {
+    const url = await urlDoDocumento(d.caminho, d.nome);
+    if (url) window.open(url, '_blank', 'noopener');
+    else setAviso('Não consegui gerar o link do documento.');
+  };
+
+  const removerDoc = async (id: string) => {
+    const r = await removerDocumento1a1(id);
+    if (!r.ok) setAviso(`Não consegui remover: ${r.erro}`);
     recarregar();
   };
 
@@ -523,9 +692,16 @@ export function Pessoas() {
                     )}
                   </div>
 
+                  <SeletorDeDocumentos
+                    escolhidos={docs}
+                    aoMudar={setDocs}
+                    desabilitado={salvando}
+                    aoAvisar={setAviso}
+                  />
+
                   <button
                     onClick={salvar}
-                    disabled={salvando || (!pauta.trim() && !combinado.trim() && !audio)}
+                    disabled={salvando || (!pauta.trim() && !combinado.trim() && !audio && docs.length === 0)}
                     style={{
                       border: 'none',
                       background: 'var(--red)',
@@ -535,7 +711,7 @@ export function Pessoas() {
                       font: 'inherit',
                       fontWeight: 800,
                       cursor: salvando ? 'default' : 'pointer',
-                      opacity: !pauta.trim() && !combinado.trim() && !audio ? 0.5 : 1,
+                      opacity: !pauta.trim() && !combinado.trim() && !audio && docs.length === 0 ? 0.5 : 1,
                     }}
                   >
                     {salvando ? 'Salvando…' : 'Registrar'}
@@ -564,6 +740,11 @@ export function Pessoas() {
                         <strong>Combinado:</strong> {r.combinado}
                       </div>
                     )}
+                    <ListaDeDocumentos
+                      docs={r.documentos}
+                      aoBaixar={baixarDoc}
+                      aoRemover={removerDoc}
+                    />
                     <ItemDeAudio
                       r={r}
                       ocupado={transcrevendo === r.id}
