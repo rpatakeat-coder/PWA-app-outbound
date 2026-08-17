@@ -50,7 +50,28 @@ export interface Equipe {
   comMetaPropria: number;
 }
 
-export async function carregarEquipe(): Promise<Equipe> {
+// Cache do processo. As seis abas chamam carregarEquipe(), e sao QUATRO
+// consultas cada vez — trocar de aba refazia 24 idas ao banco pra ler a mesma
+// lista de 22 pessoas, que muda uma vez por mes.
+//
+// TTL curto de proposito: se o gestor mexer na classificacao no app de campo e
+// voltar pro cockpit, ele ve o efeito em ate um minuto sem precisar recarregar.
+let cache: { em: number; promessa: Promise<Equipe> } | null = null;
+const VALIDADE_MS = 60_000;
+
+export function carregarEquipe(): Promise<Equipe> {
+  const agora = Date.now();
+  if (cache && agora - cache.em < VALIDADE_MS) return cache.promessa;
+  const promessa = buscarEquipe();
+  // Guarda a PROMESSA, nao o resultado: duas abas abrindo juntas compartilham
+  // a mesma consulta em vez de disparar duas.
+  cache = { em: agora, promessa };
+  // Falha nao fica em cache — senao um erro de rede envenenaria a sessao toda.
+  promessa.catch(() => { cache = null; });
+  return promessa;
+}
+
+async function buscarEquipe(): Promise<Equipe> {
   const [perfis, classificacao, metas, config] = await Promise.all([
     // Igual ao useAllSellers do app: 'view' nao e' campo, entao nao entra.
     supabase.from('profiles').select('id, full_name, email, id_hubspot, role').neq('role', 'view'),

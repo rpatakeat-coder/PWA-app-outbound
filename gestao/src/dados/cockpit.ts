@@ -98,13 +98,16 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
   // linhas nao daria erro nenhum: os leads mais antigos simplesmente perderiam
   // a data de entrada na etapa e sumiriam da conta de travados. Numero errado
   // pra menos, com cara de certo.
-  const [sla, clientes, mudancas, equipe] = await Promise.all([
+  const [sla, clientes, mudancas, equipe, ganhosDoMes, temGanho] = await Promise.all([
     supabase.from('stage_sla').select('stage_label, sla_days').eq('is_active', true),
     buscarTudo<any>((de, ate) =>
       supabase
         .from('clients')
         .select('id, nome, empresa, etapa, vendedor_id_hubspot, won_at')
-        .not('etapa', 'is', null)
+        // Filtro no BANCO, nao no navegador. Antes vinha todo mundo que tinha
+        // etapa (~5.6 mil linhas) e o `.filter` abaixo jogava ~4.7 mil fora —
+        // seis idas e voltas de rede pra usar um sexto do que chegou.
+        .in('etapa', ETAPAS_FUNIL as unknown as string[])
         .range(de, ate),
     ),
     // Ultima entrada de etapa por lead: define ha' quanto tempo ele esta' parado.
@@ -116,6 +119,18 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
         .range(de, ate),
     ),
     carregarEquipe(),
+    // Fechamentos do mes vem numa consulta PROPRIA, e nao da lista acima.
+    // Quem fechou esta' em Ganho/Onboarding — fora de ETAPAS_FUNIL —, entao
+    // desde que o filtro de etapa passou pro banco esses clientes nao chegam
+    // mais aqui pela outra consulta. Sao poucas linhas: so' o mes corrente.
+    supabase
+      .from('clients')
+      .select('id, vendedor_id_hubspot, won_at')
+      .gte('won_at', inicioDoMes.toISOString()),
+    // Existe QUALQUER fechamento datado na base? Uma linha basta. Serve pra
+    // distinguir "o time nao vendeu este mes" (zero) de "ninguem carimbou
+    // ganho ainda" (travessao) — a guarda que existe desde que o KPI nasceu.
+    supabase.from('clients').select('id').not('won_at', 'is', null).limit(1),
   ]);
 
   if (sla.error) throw sla.error;
@@ -133,9 +148,7 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
     if (!entradaNaEtapa.has(m.client_id)) entradaNaEtapa.set(m.client_id, m.created_at);
   }
 
-  const leads: LeadAberto[] = (clientes as any[])
-    .filter((c) => (ETAPAS_FUNIL as readonly string[]).includes(c.etapa))
-    .map((c) => {
+  const leads: LeadAberto[] = (clientes as any[]).map((c) => {
       const entrou = entradaNaEtapa.get(c.id) ?? null;
       const dias = diasEntre(entrou);
       const prazo = diasDoSla.get(c.etapa) ?? null;
@@ -151,7 +164,7 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
         slaRatio: ratio,
         travado: ratio != null && ratio > 100,
       };
-    });
+  });
 
   const funil = ETAPAS_FUNIL.map((etapa) => {
     const doEtapa = leads.filter((l) => l.etapa === etapa);
@@ -175,10 +188,8 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
   // A guarda continua aqui de proposito. Se um dia a fonte secar de novo, a
   // tela volta a mostrar travessao em vez de zero — zero leria como "o time nao
   // vendeu nada", que e' uma afirmacao, quando a verdade seria "parei de medir".
-  const temSinalDeGanho = (clientes as any[]).some((c) => c.won_at);
-  const fechados = temSinalDeGanho
-    ? (clientes as any[]).filter((c) => c.won_at && new Date(c.won_at) >= inicioDoMes)
-    : null;
+  const temSinalDeGanho = ((temGanho.data ?? []) as any[]).length > 0;
+  const fechados = temSinalDeGanho ? ((ganhosDoMes.data ?? []) as any[]) : null;
 
   // A meta e' de VISITAS POR DIA, nao de fechamento por mes (que era o que o
   // cockpit original media). Sao perguntas diferentes e a tela rotula a que

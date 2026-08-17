@@ -31,7 +31,7 @@
 // lista o erro oposto como um dos que mais custou no sistema original — datas em
 // UTC faziam a janela virar depois das 21h e as visitas do dia sumirem.
 import { supabase } from '../supabase';
-import { buscarTudo } from './paginar';
+import { buscarTudo, nomesPorId } from './paginar';
 import { ETAPAS_FUNIL } from './cockpit';
 import { carregarEquipe, ativos, type MembroEquipe } from './equipe';
 import { pontosDoDia, ehAvanco } from './regras';
@@ -125,8 +125,14 @@ export async function carregarDaily(): Promise<DadosDaily> {
         .gte('created_at', desde)
         .range(de, ate),
     ),
+    // So' os fechamentos da janela, e nao a tabela toda: o resto dos clientes
+    // nao participa de nenhuma conta desta tela.
     buscarTudo<any>((de, ate) =>
-      supabase.from('clients').select('id, nome, empresa, won_at, vendedor_id_hubspot').range(de, ate),
+      supabase
+        .from('clients')
+        .select('id, nome, empresa, won_at, vendedor_id_hubspot')
+        .gte('won_at', desde)
+        .range(de, ate),
     ),
     // As paradas vem ANINHADAS na rota, num round trip so' — mesmo padrao do
     // useRouteHistory no app de campo. Sao ~1 linha por vendedor por dia no
@@ -140,9 +146,11 @@ export async function carregarDaily(): Promise<DadosDaily> {
     ),
   ]);
 
-  const nomeDoCliente = new Map<string, string>(
-    clientes.map((c) => [c.id, (c.empresa || '').trim() || c.nome || 'sem nome']),
-  );
+  // Nomes de quem foi visitado ou teve etapa mexida na janela, por id.
+  const nomeDoCliente = await nomesPorId([
+    ...visitas.map((v) => v.client_id),
+    ...mudancas.map((m) => m.client_id),
+  ]);
 
 
   // --- indexacao por (pessoa, dia) ----------------------------------------

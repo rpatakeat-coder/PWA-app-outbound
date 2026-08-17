@@ -1,3 +1,4 @@
+import { supabase } from '../supabase';
 // Busca uma tabela inteira, em paginas.
 //
 // POR QUE ISTO EXISTE
@@ -28,4 +29,25 @@ export async function buscarTudo<T>(
     if (lote.length < PAGINA) return tudo;
   }
   return tudo;
+}
+
+/** Nomes dos leads citados, buscados POR ID.
+ *
+ *  Existe porque estas telas so' precisam do nome de quem aparece na janela —
+ *  algumas centenas — e antes baixavam a tabela `clients` inteira (~5,6 mil
+ *  linhas, seis paginas SEQUENCIAIS) pra montar o dicionario. */
+export async function nomesPorId(ids: (string | null | undefined)[]): Promise<Map<string, string>> {
+  const unicos = [...new Set(ids.filter((x): x is string => !!x))];
+  const mapa = new Map<string, string>();
+  const LOTE = 200; // ids por consulta: tamanho de URL do PostgREST
+  for (let i = 0; i < unicos.length; i += LOTE) {
+    const { data } = await supabase
+      .from('clients')
+      .select('id, nome, empresa')
+      .in('id', unicos.slice(i, i + LOTE));
+    for (const c of data ?? []) {
+      mapa.set(c.id, (c.empresa || '').trim() || c.nome || 'sem nome');
+    }
+  }
+  return mapa;
 }

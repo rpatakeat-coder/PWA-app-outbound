@@ -87,7 +87,7 @@ export async function carregarAgenda(): Promise<DadosAgenda> {
   const fimDaJanela = new Date(`${ultimo}T23:59:59Z`);
   fimDaJanela.setUTCDate(fimDaJanela.getUTCDate() + 2);
 
-  const [equipe, rotas, reunioesBrutas, clientes] = await Promise.all([
+  const [equipe, rotas, reunioesBrutas] = await Promise.all([
     carregarEquipe(),
     buscarTudo<any>((de, ate) =>
       supabase
@@ -105,7 +105,6 @@ export async function carregarAgenda(): Promise<DadosAgenda> {
         .lte('scheduled_at', fimDaJanela.toISOString())
         .range(de, ate),
     ),
-    buscarTudo<any>((de, ate) => supabase.from('clients').select('id, nome, empresa').range(de, ate)),
   ]);
 
   const rotasValidas = rotas.filter((r) => ROTA_VALE.has(r.status));
@@ -121,7 +120,7 @@ export async function carregarAgenda(): Promise<DadosAgenda> {
     const lote = await buscarTudo<any>((de, ate) =>
       supabase
         .from('field_route_stops')
-        .select('route_id, status')
+        .select('route_id, client_id, status')
         .in('route_id', fatia)
         .range(de, ate),
     );
@@ -137,9 +136,23 @@ export async function carregarAgenda(): Promise<DadosAgenda> {
     porRota.set(p.route_id, atual);
   }
 
-  const nomeDoCliente = new Map<string, string>(
-    clientes.map((c) => [c.id, (c.empresa || '').trim() || c.nome || 'sem nome']),
-  );
+  // Nomes SO' dos leads que aparecem nesta semana.
+  //
+  // Antes esta tela baixava a tabela `clients` inteira (~5,6 mil linhas, seis
+  // paginas sequenciais) pra montar um dicionario de nomes e usar umas 200
+  // entradas. Agora pede por id — uma consulta, poucas linhas.
+  const idsCitados = [
+    ...new Set([...paradas.map((p) => p.client_id), ...reunioesBrutas.map((m) => m.client_id)]),
+  ].filter(Boolean);
+
+  const nomeDoCliente = new Map<string, string>();
+  for (let i = 0; i < idsCitados.length; i += LOTE) {
+    const fatia = idsCitados.slice(i, i + LOTE);
+    const { data } = await supabase.from('clients').select('id, nome, empresa').in('id', fatia);
+    for (const c of data ?? []) {
+      nomeDoCliente.set(c.id, (c.empresa || '').trim() || c.nome || 'sem nome');
+    }
+  }
 
   const reunioes: Reuniao[] = reunioesBrutas
     .map((m) => {

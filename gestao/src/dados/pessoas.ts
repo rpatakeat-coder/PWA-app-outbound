@@ -90,16 +90,24 @@ export async function carregarPessoas(): Promise<DadosPessoas> {
   inicioDoMes.setDate(1);
   inicioDoMes.setHours(0, 0, 0, 0);
 
-  const [equipe, sla, clientes, mudancas, visitas, umAUm] = await Promise.all([
+  const [equipe, sla, clientes, ganhosDoMes, mudancas, visitas, umAUm] = await Promise.all([
     carregarEquipe(),
     supabase.from('stage_sla').select('stage_label, sla_days').eq('is_active', true),
+    // Funil filtrado no BANCO. Antes vinha todo cliente com etapa e o filtro
+    // acontecia no navegador.
     buscarTudo<any>((de, ate) =>
       supabase
         .from('clients')
         .select('id, etapa, vendedor_id_hubspot, won_at')
-        .not('etapa', 'is', null)
+        .in('etapa', ETAPAS_FUNIL as unknown as string[])
         .range(de, ate),
     ),
+    // Fechamentos do mes numa consulta propria: quem fechou saiu do funil e
+    // nao chega mais pela consulta acima.
+    supabase
+      .from('clients')
+      .select('vendedor_id_hubspot, won_at')
+      .gte('won_at', inicioDoMes.toISOString()),
     buscarTudo<any>((de, ate) =>
       supabase
         .from('client_stage_changes')
@@ -134,9 +142,7 @@ export async function carregarPessoas(): Promise<DadosPessoas> {
 
   const agora = Date.now();
   type Lead = { etapa: string; dono: string | null; travado: boolean };
-  const leads: Lead[] = clientes
-    .filter((c) => (ETAPAS_FUNIL as readonly string[]).includes(c.etapa))
-    .map((c) => {
+  const leads: Lead[] = clientes.map((c) => {
       const entrou = entrouEm.get(c.id);
       const prazo = diasDoSla.get(c.etapa);
       const dias = entrou ? Math.floor((agora - new Date(entrou).getTime()) / DIA_MS) : null;
@@ -145,7 +151,7 @@ export async function carregarPessoas(): Promise<DadosPessoas> {
         dono: c.vendedor_id_hubspot,
         travado: dias != null && !!prazo && dias > prazo,
       };
-    });
+  });
 
   // Visitas por pessoa: contagem na janela e a data da ultima.
   const visitasPorPessoa = new Map<string, string[]>();
@@ -165,9 +171,8 @@ export async function carregarPessoas(): Promise<DadosPessoas> {
   }
 
   const fechadosPorOwner = new Map<string, number>();
-  for (const c of clientes) {
+  for (const c of (ganhosDoMes.data ?? []) as any[]) {
     if (!c.won_at || !c.vendedor_id_hubspot) continue;
-    if (new Date(c.won_at) < inicioDoMes) continue;
     fechadosPorOwner.set(
       c.vendedor_id_hubspot,
       (fechadosPorOwner.get(c.vendedor_id_hubspot) ?? 0) + 1,

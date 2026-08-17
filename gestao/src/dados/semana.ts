@@ -16,7 +16,7 @@
 // contrario". Enquanto nao houver gerador configurado, a tela mostra os numeros
 // sem narrativa, que e' um estado honesto e nao um estado quebrado.
 import { supabase } from '../supabase';
-import { buscarTudo } from './paginar';
+import { buscarTudo, nomesPorId } from './paginar';
 import { ETAPAS_FUNIL } from './cockpit';
 import { carregarEquipe, ativos, type MembroEquipe } from './equipe';
 import { calcularDelta, ehAvanco, type Delta } from './regras';
@@ -173,18 +173,21 @@ export async function carregarSemana(): Promise<DadosSemana> {
         .gte('visited_at', `${inicio}T00:00:00Z`)
         .range(de, ate),
     ),
+    // So' os ganhos das duas semanas comparadas.
     buscarTudo<any>((de, ate) =>
       supabase
         .from('clients')
         .select('id, nome, empresa, won_at, vendedor_id_hubspot')
+        .gte('won_at', `${inicio}T00:00:00Z`)
         .range(de, ate),
     ),
   ]);
 
   const ordemFunil = new Map((ETAPAS_FUNIL as readonly string[]).map((e, i) => [e, i] as const));
-  const nomeDoCliente = new Map<string, string>(
-    clientes.map((c) => [c.id, (c.empresa || '').trim() || c.nome || 'sem nome']),
-  );
+  const nomeDoCliente = await nomesPorId([
+    ...visitas.map((v) => v.client_id),
+    ...mudancas.map((m) => m.client_id),
+  ]);
   const nomePorPerfil = new Map(ativos(equipe).map((p) => [p.perfilId, p.nome]));
   const nomePorOwner = new Map(
     ativos(equipe)
