@@ -44,6 +44,20 @@
       temperatura do funil, status, vermelho da marca — permanecem literais:
       se elas invertessem, o mapa perderia a leitura.
     -->
+    <!--
+      Poppins — typography.fontFamily.sans do design system oficial da Takeat.
+      Só os pesos usados (400/500/600/800). `display=swap` mostra o texto na
+      fonte do sistema enquanto a Poppins carrega: num app de rua, com 3G ruim,
+      é a diferença entre ler agora e esperar o download.
+      Se ela nunca chegar, o fallback abaixo mantém tudo legível.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;800&display=swap"
+      rel="stylesheet"
+    />
+
     <style id="takeat-theme">
       /*
         Paleta da Takeat em variáveis CSS.
@@ -53,8 +67,25 @@
         navegador. Trocar de tema é mudar um atributo no <html> — sem contexto
         de tema no React e sem StyleSheet virar função.
 
-        Base da marca: vermelho #C8131B, creme #FFFEF2, preto #222222,
-        amarelo #FFD966 / #FFB32F, acento #A50F16.
+        Os valores vem do DESIGN SYSTEM OFICIAL da Takeat:
+        https://raw.githubusercontent.com/takeat-design/UIKIT/main/design-system.json
+        ("Official Dashboard Design System" 1.0.1) — os mesmos tokens que o
+        cockpit de gestao usa, pra os dois produtos pararem de divergir.
+
+        A paleta creme anterior (#FFFEF2 / #F0E6CC) saiu: ela nao existe no
+        design system, cuja escala neutra e' cinza (neutral.50 -> .500).
+
+        Tres degraus do design system NAO passam no AA e por isso nao aparecem
+        como cor de texto: neutral.300 (4.29), green.500 (2.07, e' teal de
+        preenchimento) e yellow.500 (1.79). O verde de status vem do
+        tertiary.green2 e o amarelo legivel e' so' o yellow.700.
+
+        --text-subtle usa #6B6B6B, que NAO esta no design system: entre o
+        neutral.300 e o .400 falta um degrau, e o 300 reprova. Vale levar pro
+        time de design.
+
+        O modo escuro (--d-*) e' derivado: o design system so' publica a escala
+        clara. Todos os pares foram medidos.
 
         O tema escuro é derivado dela — preto QUENTE, não cinza-azulado, para
         combinar com o creme e o vermelho — e o creme da marca vira a cor do
@@ -67,61 +98,61 @@
         (preferência do aparelho e escolha manual) apenas apontam pra eles.
       */
       :root {
-        --d-bg: #17150F;
-        --d-surface: #211E17;
-        --d-surface-2: #2B2720;
-        --d-surface-3: #3A352B;
-        --d-text: #FFFEF2;
-        --d-text-muted: #BDB6A4;
-        --d-text-subtle: #8F887A;
-        --d-text-faint: #635D52;
-        --d-border: #3A352B;
-        --d-border-soft: #2A261F;
-        --d-surface-overlay: rgba(28, 25, 18, 0.93);
-        --d-surface-warn: #2E2515;
-        --d-tint-red: #2E1214;
-        --d-tint-red-border: #632024;
-        --d-tint-red-text: #F2A3A7;
-        --d-tint-green: #122A18;
-        --d-tint-green-border: #265C33;
-        --d-tint-green-text: #8FE0A2;
-        --d-tint-amber: #302512;
+        --d-bg: #1A1A1A;
+        --d-surface: #242424;
+        --d-surface-2: #2C2C2C;
+        --d-surface-3: #303030;
+        --d-text: #F6F6F6;
+        --d-text-muted: #C6C6C6;
+        --d-text-subtle: #949494;
+        --d-text-faint: #6E6E6E;
+        --d-border: #3A3A3A;
+        --d-border-soft: #2E2E2E;
+        --d-surface-overlay: rgba(26, 26, 26, 0.93);
+        --d-surface-warn: #33280F;
+        --d-tint-red: #3A1416;
+        --d-tint-red-border: #7A2E32;
+        --d-tint-red-text: #E5A1A4;
+        --d-tint-green: #14301D;
+        --d-tint-green-border: #2E5C3C;
+        --d-tint-green-text: #77BD8B;
+        --d-tint-amber: #33280F;
         --d-tint-amber-border: #6E5520;
-        --d-tint-amber-text: #FFD966;
-        --d-tint-blue: #101E33;
-        --d-tint-blue-border: #2C4970;
-        --d-brand-text: #F2727A;
-        --d-info-text: #8AB4F8;
+        --d-tint-amber-text: #FFD894;
+        --d-tint-blue: #0A2836;
+        --d-tint-blue-border: #1E5A78;
+        --d-brand-text: #E5A1A4;
+        --d-info-text: #66CFFF;
         --d-violet-text: #C4B5FD;
-        --d-tint-blue-text: #BBD6F5;
+        --d-tint-blue-text: #99DFFF;
 
-        --bg: #FFFEF2;
+        --bg: #F6F6F6;
         --surface: #FFFFFF;
-        --surface-2: #F9F4E4;
-        --surface-3: #F0E6CC;
+        --surface-2: #F6F6F6;
+        --surface-3: #EDEDED;
         --text: #222222;
-        --text-muted: #6B6B6B;
-        --text-subtle: #8A8A8A;
-        --text-faint: #B5B5B5;
-        --border: #F0E6CC;
-        --border-soft: #F7F1E1;
-        --surface-overlay: rgba(255, 254, 242, 0.94);
-        --surface-warn: #FFF6E0;
-        --tint-red: #FDEDEE;
-        --tint-red-border: #F5C9CC;
-        --tint-red-text: #A50F16;
-        --tint-green: #EFF8F0;
-        --tint-green-border: #C3E6C9;
-        --tint-green-text: #1B6B32;
-        --tint-amber: #FFF6E0;
-        --tint-amber-border: #FFD966;
-        --tint-amber-text: #8A5A00;
-        --tint-blue: #EEF4FB;
-        --tint-blue-border: #C6DBF2;
+        --text-muted: #545454;
+        --text-subtle: #6B6B6B;
+        --text-faint: #7A7A7A;
+        --border: #EDEDED;
+        --border-soft: #F6F6F6;
+        --surface-overlay: rgba(255, 255, 255, 0.94);
+        --surface-warn: #FFF8EB;
+        --tint-red: #FAE8E9;
+        --tint-red-border: #E5A1A4;
+        --tint-red-text: #94090F;
+        --tint-green: #EAF7EE;
+        --tint-green-border: #A5C7AF;
+        --tint-green-text: #167532;
+        --tint-amber: #FFF8EB;
+        --tint-amber-border: #FFD894;
+        --tint-amber-text: #99670F;
+        --tint-blue: #E6F7FF;
+        --tint-blue-border: #99DFFF;
         --brand-text: #C8131B;
-        --info-text: #2563EB;
+        --info-text: #016999;
         --violet-text: #8B5CF6;
-        --tint-blue-text: #1B4A85;
+        --tint-blue-text: #016999;
         color-scheme: light;
       }
 
@@ -151,9 +182,6 @@
           --tint-amber-text: var(--d-tint-amber-text);
           --tint-blue: var(--d-tint-blue);
           --tint-blue-border: var(--d-tint-blue-border);
-          --brand-text: #C8131B;
-        --info-text: #2563EB;
-        --violet-text: #8B5CF6;
         --brand-text: var(--d-brand-text);
         --info-text: var(--d-info-text);
         --violet-text: var(--d-violet-text);
@@ -187,11 +215,11 @@
           --tint-amber-text: var(--d-tint-amber-text);
           --tint-blue: var(--d-tint-blue);
           --tint-blue-border: var(--d-tint-blue-border);
-          --brand-text: #C8131B;
-        --info-text: #2563EB;
-        --violet-text: #8B5CF6;
         --tint-blue-text: var(--d-tint-blue-text);
-        color-scheme: dark;
+          --brand-text: var(--d-brand-text);
+          --info-text: var(--d-info-text);
+          --violet-text: var(--d-violet-text);
+          color-scheme: dark;
       }
 
       body {
@@ -240,7 +268,7 @@
       /* Pino/controles da Google herdariam a fonte do host; fixa a fonte de
          sistema pra bater com o resto do app. */
       body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: Poppins, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
     </style>
   </head>

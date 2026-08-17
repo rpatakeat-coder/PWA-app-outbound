@@ -116,27 +116,28 @@ type IconeSvg = (props: Record<string, unknown>) => React.JSX.Element;
  * resolve em atributo de apresentacao do SVG — so' em CSS. Entao, ao
  * contrario do resto do app, aqui o tema precisa ser lido em JavaScript.
  *
- * Valores da paleta da marca: preto #222222 / creme #FFFEF2.
+ * Valores do design system oficial: neutral.500 #222222 no claro,
+ * neutral.50 #F6F6F6 no escuro.
  */
 export function useIconColors() {
   const { isDark } = useTheme();
   return {
-    /** Sobre cartao/superficie clara ou escura. */
-    onSurface: isDark ? '#FFFEF2' : '#222222',
-    /** Secundario: placeholder de busca, icone inativo. */
-    muted: isDark ? '#8F887A' : '#6B6B6B',
+    /** Sobre cartao/superficie clara ou escura. Mesmo par do token --text. */
+    onSurface: isDark ? '#F6F6F6' : '#222222',
+    /** Secundario: placeholder de busca, icone inativo. Par do --text-muted. */
+    muted: isDark ? '#C6C6C6' : '#545454',
     /** Sobre o vermelho da marca ou outro fundo forte. */
     onBrand: '#FFFFFF',
     /** Destaque (aba ativa, seguindo o usuario no mapa). */
     brand: '#C8131B',
     /**
      * Vermelho da marca com contraste suficiente pra TEXTO/icone sobre fundo
-     * escuro. O #C8131B da' 2.82 contra a superficie escura — ilegivel. Mesmo
-     * par do token --brand-text.
+     * escuro. O #C8131B da' 2.64 contra a superficie escura — ilegivel. Mesmo
+     * par do token --brand-text (primary.red.200 no escuro, .500 no claro).
      */
-    brandText: isDark ? '#F2727A' : '#C8131B',
+    brandText: isDark ? '#E5A1A4' : '#C8131B',
     /** Mesmo par do token --tint-red-text: titulos das secoes do Gestor. */
-    tintRedText: isDark ? '#F2A3A7' : '#A50F16',
+    tintRedText: isDark ? '#E5A1A4' : '#94090F',
   };
 }
 

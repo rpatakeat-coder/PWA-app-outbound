@@ -3,7 +3,7 @@
 // POR QUE EXISTE
 // Em 14/08/2026 um hook mal posicionado derrubava a arvore do React ao abrir
 // certos leads. Sem barreira, o React desmonta tudo e sobra o `body` — que no
-// tema escuro e' #17150F. O vendedor via TELA PRETA, sem mensagem, sem log e
+// tema escuro e' quase preto. O vendedor via TELA PRETA, sem mensagem, sem log e
 // sem nada pra reportar. Achar a causa exigiu uma investigacao inteira a partir
 // de "fica preto as vezes".
 //
@@ -55,7 +55,7 @@ export class BarreiraDeErro extends Component<{ children: ReactNode }, Estado> {
       <div
         style={{
           minHeight: '100vh',
-          background: '#FFFEF2',
+          background: '#F6F6F6',
           color: '#222222',
           padding: '32px 20px',
           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
@@ -66,7 +66,7 @@ export class BarreiraDeErro extends Component<{ children: ReactNode }, Estado> {
           <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 8 }}>
             O app travou nesta tela.
           </div>
-          <div style={{ fontSize: 15, lineHeight: 1.6, color: '#6B6B6B', marginBottom: 20 }}>
+          <div style={{ fontSize: 15, lineHeight: 1.6, color: '#545454', marginBottom: 20 }}>
             Não é problema da sua internet nem do seu celular. Toque em recarregar para
             continuar trabalhando — nada do que você registrou foi perdido.
           </div>
@@ -91,18 +91,18 @@ export class BarreiraDeErro extends Component<{ children: ReactNode }, Estado> {
             Recarregar
           </button>
 
-          <div style={{ fontSize: 13, color: '#6B6B6B', margin: '24px 0 8px' }}>
+          <div style={{ fontSize: 13, color: '#545454', margin: '24px 0 8px' }}>
             Se acontecer de novo, mande um print desta parte para quem cuida do app:
           </div>
           <pre
             style={{
-              background: '#F9F4E4',
-              border: '1px solid #F0E6CC',
+              background: '#EDEDED',
+              border: '1px solid #C6C6C6',
               borderRadius: 8,
               padding: 12,
               fontSize: 12,
               lineHeight: 1.5,
-              color: '#8A5A00',
+              color: '#222222',
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
               margin: 0,
