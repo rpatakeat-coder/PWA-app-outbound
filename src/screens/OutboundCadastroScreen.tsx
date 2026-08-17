@@ -18,6 +18,7 @@ import {
   IconDownload,
   IconText,
   useIconColors,
+  IconWarning,
 } from '../components/icons';
 import type { Profile } from '../integrations/supabase/types';
 
@@ -189,9 +190,7 @@ export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScr
                     {profile.full_name || profile.email}
                   </Text>
                   {!profile.id_hubspot && (
-                    <Text style={styles.vendedorBoxHint}>
-                      ⚠ Sem id_hubspot — o negócio será criado, mas não ficará associado ao seu usuário no HubSpot.
-                    </Text>
+                    <IconText Icone={IconWarning} style={styles.vendedorBoxHint} tone="onSurface">Sem id_hubspot — o negócio será criado, mas não ficará associado ao seu usuário no HubSpot.</IconText>
                   )}
                 </View>
               )}

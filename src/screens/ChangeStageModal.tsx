@@ -835,7 +835,7 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
           >
             <View style={styles.headerRow}>
               <Text style={styles.title}>
-                {lockedStage ? '🚫 Mover para perdido' : '🔄 Mover para etapa'}
+                {lockedStage ? 'Mover para perdido' : 'Mover para etapa'}
               </Text>
               <TouchableOpacity onPress={onClose} disabled={submitting} accessibilityRole="button" accessibilityLabel="Fechar">
                 <IconClose width={20} height={20} fill={iconColors.muted} />

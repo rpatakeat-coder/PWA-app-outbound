@@ -30,7 +30,6 @@ interface ScheduleMeetingModalProps {
 
 // Textos que variam entre reunião e follow up.
 const COPY: Record<MeetingType, {
-  emoji: string;
   noun: string;      // "reunião" / "follow up"
   title: string;     // título do modal
   scheduledAlert: string;
@@ -43,28 +42,28 @@ const COPY: Record<MeetingType, {
   rescheduleButton: string;
 }> = {
   reuniao: {
-    emoji: '📅',
+    
     noun: 'reunião',
-    title: '📅 Agendar reunião',
+    title: 'Agendar reunião',
     scheduledAlert: 'Reunião agendada',
     buttonLabel: 'Confirmar agendamento',
     listTitle: 'Reuniões deste lead',
     emptyList: 'Nenhuma reunião agendada.',
     cancelTitle: 'Cancelar reunião',
-    rescheduleTitle: '🔄 Reagendar reunião',
+    rescheduleTitle: 'Reagendar reunião',
     rescheduledAlert: 'Reunião reagendada',
     rescheduleButton: 'Confirmar novo horário',
   },
   follow_up: {
-    emoji: '🔁',
+    
     noun: 'follow up',
-    title: '🔁 Marcar Follow Up',
+    title: 'Marcar Follow Up',
     scheduledAlert: 'Follow up marcado',
     buttonLabel: 'Confirmar follow up',
     listTitle: 'Follow ups deste lead',
     emptyList: 'Nenhum follow up marcado.',
     cancelTitle: 'Cancelar follow up',
-    rescheduleTitle: '🔄 Reagendar follow up',
+    rescheduleTitle: 'Reagendar follow up',
     rescheduledAlert: 'Follow up reagendado',
     rescheduleButton: 'Confirmar novo horário',
   },

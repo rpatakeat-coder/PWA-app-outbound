@@ -20,9 +20,9 @@ export const MANDATORY_LABEL: Record<MandatoryReason, string> = {
 
 // Cadeado/etiqueta curta por regra, pro card da parada.
 export const MANDATORY_BADGE: Record<MandatoryReason, string> = {
-  sla: '🔒 SLA',
-  relacionamento: '🔒 Relacionamento',
-  conta_alvo: '🔒 Conta Alvo',
+  sla: 'SLA',
+  relacionamento: 'Relacionamento',
+  conta_alvo: 'Conta Alvo',
 };
 
 export const DAILY_GOAL = 6;

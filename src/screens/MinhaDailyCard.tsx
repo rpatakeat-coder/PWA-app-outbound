@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View 
 import { useMinhaDaily } from '../hooks/useMinhaDaily';
 import { useAuth } from '../context/AuthContext';
 import { Alert } from '../components/Alert';
+import { IconText, IconTrendingUp } from '../components/icons';
 
 // "Minha Daily" — a promessa do dia e o placar dela, pro proprio vendedor.
 //
@@ -78,7 +79,7 @@ export function MinhaDailyCard({ enabled }: { enabled: boolean }) {
     <View style={styles.card}>
       <View style={styles.topo}>
         <Text style={styles.titulo}>Minha Daily</Text>
-        {sequencia > 0 && <Text style={styles.sequencia}>🔥 {sequencia} dias seguidos</Text>}
+        {sequencia > 0 && <IconText Icone={IconTrendingUp} style={styles.sequencia} tone="onSurface">{sequencia} dias seguidos</IconText>}
       </View>
 
       {prometido == null || editando ? (

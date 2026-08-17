@@ -170,7 +170,7 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
             <Stat value={m.follow_ups_scheduled} label="Follow ups" color="#0891b2" onPress={() => open('Meus follow ups', 'follow_ups')} />
             <Stat value={m.stage_changes} label="Mudanças etapa" color="#0ea5e9" onPress={() => open('Mudanças de etapa', 'stage_changes')} />
             <Stat value={m.notes_created} label="Notas" color="#FFD966" onPress={() => open('Minhas notas', 'notes')} />
-            <Stat value={m.won_in_period} label="Fechados 🎉" color="#16a34a" onPress={() => open('Clientes que fechei', 'won')} />
+            <Stat value={m.won_in_period} label="Fechados" color="#16a34a" onPress={() => open('Clientes que fechei', 'won')} />
           </View>
 
           <Text style={styles.sectionTitle}>Meus leads (snapshot atual)</Text>

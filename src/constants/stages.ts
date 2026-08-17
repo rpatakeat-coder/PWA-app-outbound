@@ -160,9 +160,12 @@ export const APP_STAGE_IDS = [...FUNNEL_STAGE_IDS, LOST_STAGE_ID];
 // ---------------------------------------------------------------------------
 // color: cor do PIN no mapa. A temperatura passou a ser comunicada pela cor
 // do proprio pin (mais legivel de longe que a bandeirinha de emoji, que era
-// pequena demais em zoom baixo). O emoji continua aqui porque a legenda e o
+// pequena demais em zoom baixo). O emoji saiu de vez em 14/08/2026: a legenda
+// passou a usar um ponto na MESMA cor do pin, que ensina o mapa em vez de
+// inventar um segundo vocabulario. O que sobrou aqui e' cor e rotulo.
+// Restante do comentario original:
 // sheet do lead ainda usam.
-export type StageTemperature = { emoji: string; label: string; color: string };
+export type StageTemperature = { label: string; color: string };
 
 // Escala termica: vermelho (quente) -> ambar (morno) -> azul (frio), com
 // verde pra ganho e cinza-escuro pra perdido. Tons saturados o suficiente
@@ -184,11 +187,11 @@ const TEMP_LOST = new Set(['PERDIDO', 'NEGÓCIO PERDIDO']);
 export function stageTemperature(etapa: string | null | undefined): StageTemperature | null {
   const key = (etapa ?? '').trim().toUpperCase();
   if (!key) return null;
-  if (TEMP_HOT.has(key)) return { emoji: '🔥', label: 'Quente', color: TEMP_COLORS.hot };
-  if (TEMP_WARM.has(key)) return { emoji: '🟡', label: 'Morno', color: TEMP_COLORS.warm };
-  if (TEMP_COLD.has(key)) return { emoji: '❄️', label: 'Frio', color: TEMP_COLORS.cold };
-  if (TEMP_WON.has(key)) return { emoji: '✅', label: 'Fechado', color: TEMP_COLORS.won };
-  if (TEMP_LOST.has(key)) return { emoji: '⚫', label: 'Perdido', color: TEMP_COLORS.lost };
+  if (TEMP_HOT.has(key)) return { label: 'Quente', color: TEMP_COLORS.hot };
+  if (TEMP_WARM.has(key)) return { label: 'Morno', color: TEMP_COLORS.warm };
+  if (TEMP_COLD.has(key)) return { label: 'Frio', color: TEMP_COLORS.cold };
+  if (TEMP_WON.has(key)) return { label: 'Fechado', color: TEMP_COLORS.won };
+  if (TEMP_LOST.has(key)) return { label: 'Perdido', color: TEMP_COLORS.lost };
   return null; // etapa desconhecida: pin cai na cor do status
 }
 

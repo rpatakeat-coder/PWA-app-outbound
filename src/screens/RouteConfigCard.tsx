@@ -54,7 +54,7 @@ export function RouteConfigCard() {
       sla_ag_pagamento: Math.round(numOr(form.sla_ag_pagamento, 2)),
     };
     save.mutate(patch, {
-      onSuccess: () => Alert.alert('Salvo ✅', 'Config da Rota do dia atualizada. Vale já nas próximas gerações/buscas.'),
+      onSuccess: () => Alert.alert('Salvo', 'Config da Rota do dia atualizada. Vale já nas próximas gerações/buscas.'),
       onError: (err: any) => Alert.alert('Erro ao salvar', err?.message ?? 'Tente de novo.'),
     });
   };

@@ -15,7 +15,7 @@ import { Alert } from '../components/Alert';
 import {
   IconBarGraph,
   IconText,
-} from '../components/icons';
+  IconCalendar, IconUser} from '../components/icons';
 import {
   useGestorMetrics,
   useMetricLeads,
@@ -296,7 +296,7 @@ function LeadListModal({ state, onClose, onOpenClient }: {
                       {when ? ` • ${when}` : ''}
                     </Text>
                     {exec ? (
-                      <Text style={styles.modalLeadExec} numberOfLines={1}>👤 {exec}</Text>
+                      <IconText Icone={IconUser} size={12} style={styles.modalLeadExec} tone="muted">{exec}</IconText>
                     ) : null}
                     {item.note?.trim() ? (
                       <Text style={styles.modalLeadNote}>{item.note.trim()}</Text>
@@ -651,7 +651,7 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
         ? `${c.leads} leads · ${c.tarefas} tarefas · ${c.visitas} visitas · ${c.reunioes} reuniões · ${c.follow_ups} follow-ups · ${c.mudancas_etapa} etapas · ${c.notas} notas`
         : '';
       Alert.alert(
-        'Exportação pronta 📊',
+        'Exportação pronta',
         `Período ${res.period.label.replace(/_/g, ' ')}.\n${resumo}\n\nToque em Abrir para baixar o .json (abre no navegador). Depois é só jogar na IA.`,
         [
           { text: 'Fechar', style: 'cancel' },
@@ -714,11 +714,9 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
         style={[styles.customChip, preset === 'custom' && styles.periodChipActive]}
         onPress={() => setRangePickerOpen(true)}
       >
-        <Text style={[styles.periodChipText, preset === 'custom' && styles.periodChipTextActive]}>
-          📅 {preset === 'custom' && customStart && customEnd
+        <IconText Icone={IconCalendar} style={[styles.periodChipText, preset === 'custom' && styles.periodChipTextActive]} tone="onSurface">{preset === 'custom' && customStart && customEnd
             ? `${fmtShort(customStart)} até ${fmtShort(customEnd)} — toque pra alterar`
-            : 'Período personalizado'}
-        </Text>
+            : 'Período personalizado'}</IconText>
       </TouchableOpacity>
 
       {/* A promessa do dia de QUEM ESTA OLHANDO.

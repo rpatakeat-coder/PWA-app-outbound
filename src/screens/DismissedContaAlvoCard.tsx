@@ -81,7 +81,7 @@ export function DismissedContaAlvoCard() {
         })),
       };
       const res = await exportAgenda(payload, 'contas-alvo-dispensadas');
-      Alert.alert('Exportado 📤', `${filtered.length} contas-alvo dispensadas.\n\nToque em Abrir pra baixar o .json.`, [
+      Alert.alert('Exportado', `${filtered.length} contas-alvo dispensadas.\n\nToque em Abrir pra baixar o .json.`, [
         { text: 'Fechar', style: 'cancel' },
         { text: 'Abrir', onPress: () => Linking.openURL(res.url) },
       ]);

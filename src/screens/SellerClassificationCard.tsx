@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { IconText, IconUserGroup } from '../components/icons';
+import { IconText, IconUserGroup, IconCheckbox, IconCheckboxChecked} from '../components/icons';
 import { Alert } from '../components/Alert';
 import { useSellerClassification } from '../hooks/useSellerClassification';
 import type { SellerStatus } from '../hooks/useAllSellers';
@@ -36,7 +36,7 @@ export function SellerClassificationCard() {
   const onSave = () => {
     const rows = users.map((u) => ({ seller_id: u.id, status: form[u.id] ?? u.status }));
     save.mutate(rows, {
-      onSuccess: () => Alert.alert('Salvo ✅', 'Classificação atualizada. Vale nos rankings, metas e filtros.'),
+      onSuccess: () => Alert.alert('Salvo', 'Classificação atualizada. Vale nos rankings, metas e filtros.'),
       onError: (err: any) => Alert.alert('Erro ao salvar', err?.message ?? 'Tente de novo.'),
     });
   };
@@ -59,7 +59,13 @@ export function SellerClassificationCard() {
               onPress={() => setHideDeactivated((v) => !v)}
             >
               <Text style={[styles.toggleText, hideDeactivated && styles.toggleTextActive]}>
-                {hideDeactivated ? '☑' : '☐'} Ocultar desativados ({deactivatedCount})
+                <IconText
+                Icone={hideDeactivated ? IconCheckboxChecked : IconCheckbox}
+                size={14}
+                tone="muted"
+              >
+                Ocultar desativados ({deactivatedCount})
+              </IconText>
               </Text>
             </TouchableOpacity>
           )}

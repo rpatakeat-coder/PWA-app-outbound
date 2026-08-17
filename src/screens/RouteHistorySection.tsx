@@ -3,8 +3,7 @@ import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpac
 import {
   IconDownload,
   IconLocation,
-  IconText,
-} from '../components/icons';
+  IconText, IconCheckbox, IconCheckboxChecked} from '../components/icons';
 import { Alert } from '../components/Alert';
 import { useAllSellers } from '../hooks/useAllSellers';
 import { useRouteHistory, useRouteRanking } from '../hooks/useRouteHistory';
@@ -65,11 +64,11 @@ function SellerDetail({ sellerId, range, enabled }: { sellerId: string; range: P
             <Text style={styles.dayTitle}>{fmtDay(day.date)}</Text>
             {day.stops.length > 0 ? (
               <View style={styles.block}>
-                <Text style={styles.blockTitle}>
-                  🗺️ Rota{day.routeSource === 'manual' ? ' (manual)' : day.routeSource === 'suggested' ? ' (auto)' : ''} —
+                <IconText Icone={IconLocation} size={14} style={styles.blockTitle} tone="muted">
+                  Rota{day.routeSource === 'manual' ? ' (manual)' : day.routeSource === 'suggested' ? ' (auto)' : ''} —
                   {' '}{day.stops.length} parada{day.stops.length === 1 ? '' : 's'} ({done} concluída{done === 1 ? '' : 's'})
-                  {day.km > 0 ? ` · 🛣️ ${day.km.toFixed(1)} km / ~${Math.round(day.min)} min` : ''}
-                </Text>
+                  {day.km > 0 ? ` · ${day.km.toFixed(1)} km / ~${Math.round(day.min)} min` : ''}
+                </IconText>
                 {day.stops.map((s, i) => (
                   <Text key={i} style={[styles.line, s.done && styles.lineDone]}>
                     {s.done ? '✓' : '○'} {s.position}. {s.nome}
@@ -81,7 +80,7 @@ function SellerDetail({ sellerId, range, enabled }: { sellerId: string; range: P
             )}
             {day.visits.length > 0 ? (
               <View style={styles.block}>
-                <Text style={styles.blockTitle}>📍 {day.visits.length} check-in{day.visits.length === 1 ? '' : 's'}</Text>
+                <IconText Icone={IconLocation} style={styles.blockTitle} tone="onSurface">{day.visits.length} check-in{day.visits.length === 1 ? '' : 's'}</IconText>
                 {day.visits.map((v, i) => (
                   <Text key={i} style={styles.line}>
                     {fmtTime(v.at)} — {v.nome}{v.cidade ? ` (${v.cidade})` : ''}
@@ -171,7 +170,7 @@ export function RouteHistorySection({ range, enabled }: Props) {
       };
       const res = await exportAgenda(payload, `ranking-rotas_${sortBy}`);
       Alert.alert(
-        'Ranking exportado 🏆',
+        'Ranking exportado',
         `${rows.length} vendedores.\n\nToque em Abrir pra baixar o .json (abre no navegador).`,
         [
           { text: 'Fechar', style: 'cancel' },
@@ -230,7 +229,13 @@ export function RouteHistorySection({ range, enabled }: Props) {
               }}
             >
               <Text style={[styles.hideToggleText, hideDeactivated && styles.hideToggleTextActive]}>
-                {hideDeactivated ? '☑' : '☐'} Ocultar desativados ({deactivatedCount})
+                <IconText
+                Icone={hideDeactivated ? IconCheckboxChecked : IconCheckbox}
+                size={14}
+                tone="muted"
+              >
+                Ocultar desativados ({deactivatedCount})
+              </IconText>
               </Text>
             </TouchableOpacity>
           )}
@@ -304,7 +309,7 @@ export function RouteHistorySection({ range, enabled }: Props) {
                           {s?.name ?? 'Vendedor'}{s?.deactivated ? ' • desativado' : ''}
                         </Text>
                         <Text style={styles.rankMeta}>
-                          {r.paradas} paradas ({r.concluidas} ✓) · 📍 {r.checkins}{meta.metaPeriodo > 0 ? ` / ${meta.metaPeriodo} meta (${meta.pctMeta}%)` : ''} · 🛣️ {r.km.toFixed(0)} km
+                          {r.paradas} paradas ({r.concluidas} feitas) · {r.checkins} check-in{r.checkins === 1 ? '' : 's'}{meta.metaPeriodo > 0 ? ` / ${meta.metaPeriodo} meta (${meta.pctMeta}%)` : ''} · {r.km.toFixed(0)} km
                         </Text>
                       </View>
                       <Text style={[styles.rankPct, { color: r.pct >= 70 ? '#16a34a' : r.pct >= 40 ? '#FFB32F' : '#C8131B' }]}>

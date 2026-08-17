@@ -12,6 +12,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { carregarDaily, type DadosDaily, type ExecutivoDaily, type DiaDoExecutivo } from '../dados/daily';
 import { Drawer } from '../componentes/Drawer';
+// Unico icone do cockpit hoje. Vem do design system, e nao de um emoji: o
+// 🔥 muda de desenho em cada sistema (no Windows e' laranja chapado, no Mac
+// tem degrade) e nao acompanha a cor do tema.
+import { IconTrendingUp } from 'takeat-design-system-ui-kit/icons/IconTrendingUp';
 
 const DIA_CURTO = new Intl.DateTimeFormat('pt-BR', { weekday: 'short', timeZone: 'UTC' });
 
@@ -331,7 +335,12 @@ export function Daily() {
                       {e.sequencia == null ? (
                         <span style={{ color: 'var(--ter)' }}>–</span>
                       ) : e.sequencia > 0 ? (
-                        <span style={{ fontWeight: 800 }}>🔥 {e.sequencia}</span>
+                        <span
+                          style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                        >
+                          <IconTrendingUp width={12} height={12} fill="var(--amber-ink)" />
+                          {e.sequencia}
+                        </span>
                       ) : (
                         <span style={{ color: 'var(--ter)' }}>0</span>
                       )}

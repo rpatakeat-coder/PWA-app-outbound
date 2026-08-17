@@ -65,6 +65,9 @@ import {
   IconExternalLink,
   IconWhatsapp,
   IconPencil,
+  IconStar,
+  IconEye,
+  IconCheckCircle,
 } from './src/components/icons';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 // Camada de mapa web (Google Maps JS API) com a mesma API que o
@@ -343,7 +346,7 @@ function CustomMarker({ color, meetingCount, isContaAlvo }: { color: string; mee
         {/* Conta Alvo: badge 🎯 no canto esquerdo (o de reunião fica no direito). */}
         {isContaAlvo && (
           <View style={markerStyles.contaAlvoBadge}>
-            <Text style={markerStyles.contaAlvoBadgeText}>🎯</Text>
+            <IconStar width={9} height={9} fill="#fff" />
           </View>
         )}
       </View>
@@ -790,7 +793,7 @@ function MainApp() {
       };
       const res = await exportAgenda(payload, `mapa-calor_${sellerName}`);
       Alert.alert(
-        'Exportação pronta 🔥',
+        'Exportação pronta',
         `${payload.meta.total_visitas} visitas • ${payload.meta.celulas} células (${sellerName}).\n\nToque em Abrir pra baixar o .json (abre no navegador).`,
         [
           { text: 'Fechar', style: 'cancel' },
@@ -1544,7 +1547,7 @@ function MainApp() {
           ? 'OpenRouteService'
           : optimizationProvider === 'osrm' ? 'OSRM (ORS fora)' : '';
         const tripInfo = tripDistanceMeters != null && tripDurationSeconds != null
-          ? `\n\n🛣️ ${(tripDistanceMeters / 1000).toFixed(1)} km • ~${Math.round(tripDurationSeconds / 60)} min de carro`
+          ? `\n\n${(tripDistanceMeters / 1000).toFixed(1)} km • ~${Math.round(tripDurationSeconds / 60)} min de carro`
             + (providerLabel ? `\n(Otimizado via ${providerLabel})` : '')
           : '';
         const lines = [
@@ -1691,7 +1694,7 @@ function MainApp() {
           ? 'OpenRouteService'
           : optimizationProvider === 'osrm' ? 'OSRM (ORS fora)' : '';
         const tripInfo = tripDistanceMeters != null && tripDurationSeconds != null
-          ? `\n🛣️ ${(tripDistanceMeters / 1000).toFixed(1)} km • ~${Math.round(tripDurationSeconds / 60)} min de carro`
+          ? `\n${(tripDistanceMeters / 1000).toFixed(1)} km • ~${Math.round(tripDurationSeconds / 60)} min de carro`
             + (providerLabel ? ` (via ${providerLabel})` : '')
           : '';
         const lines = [
@@ -1699,10 +1702,10 @@ function MainApp() {
           tripInfo,
           '',
           obrig.length
-            ? `🔒 Obrigatórias: ${obrig.map(r => MANDATORY_LABEL[r]).join(', ')}`
+            ? `Obrigatórias: ${obrig.map(r => MANDATORY_LABEL[r]).join(', ')}`
             : 'Nenhuma obrigatória encontrada hoje.',
           assembly!.missing.length
-            ? `⚠️ Sem candidato hoje: ${assembly!.missing.map(r => MANDATORY_LABEL[r]).join(', ')}`
+            ? `Sem candidato hoje: ${assembly!.missing.map(r => MANDATORY_LABEL[r]).join(', ')}`
             : null,
         ].filter(Boolean);
         Alert.alert('Rota do dia', lines.join('\n'));
@@ -1985,7 +1988,7 @@ function MainApp() {
     }
     if (currentStopIndex + 1 >= routeDisplayClients.length) {
       Alert.alert(
-        '🎉 Rota concluida',
+        'Rota concluida',
         `Voce visitou os ${routeDisplayClients.length} leads da rota de hoje.`,
         [{ text: 'OK', onPress: () => setIsNavigating(false) }],
       );
@@ -2205,7 +2208,7 @@ function MainApp() {
         'Deseja agendar uma reunião com este lead agora?',
         [
           { text: 'Agora não', style: 'cancel' },
-          { text: '📅 Agendar reunião', onPress: () => setSchedulingFor({ client: created, type: 'reuniao' }) },
+          { text: 'Agendar reunião', onPress: () => setSchedulingFor({ client: created, type: 'reuniao' }) },
         ],
       );
     } catch (err: any) {
@@ -2594,12 +2597,12 @@ function MainApp() {
                 status "lead visitado" ja comunica. */}
             {(item.visit_count ?? 0) > 1 && (
               <View style={styles.cardVisitBadge}>
-                <Text style={styles.cardVisitBadgeText}>📍 {item.visit_count}</Text>
+                <IconText Icone={IconLocation} style={styles.cardVisitBadgeText} tone="onSurface">{item.visit_count}</IconText>
               </View>
             )}
             {meetingCount > 0 && (
               <View style={styles.cardMeetingBadge}>
-                <Text style={styles.cardMeetingBadgeText}>📅 {meetingCount}</Text>
+                <IconText Icone={IconCalendar} style={styles.cardMeetingBadgeText} tone="onSurface">{meetingCount}</IconText>
               </View>
             )}
             <View style={[styles.statusBadge, { backgroundColor: color }]}>
@@ -2673,7 +2676,7 @@ function MainApp() {
       {isMonitoringRoute && (
         <View style={styles.monitorBanner}>
           <Text style={styles.monitorBannerText}>
-            👁️ Você está vendo a rota de <Text style={{ fontWeight: '800' }}>{vendorLabel(routeVendorFilterHubspotId)}</Text> (somente leitura).
+            <IconText Icone={IconEye} style={styles.monitorBannerText} tone="onSurface">Você está vendo a rota de</IconText> <Text style={{ fontWeight: '800' }}>{vendorLabel(routeVendorFilterHubspotId)}</Text> (somente leitura).
             Para gerar/editar a sua, mude o "Responsável" para "Todos os vendedores".
           </Text>
         </View>
@@ -2734,16 +2737,14 @@ function MainApp() {
             style={[styles.routeStartOption, !routeStartOverride && styles.routeStartOptionActive]}
             onPress={() => setRouteStartOverride(null)}
           >
-            <Text style={[styles.routeStartText, !routeStartOverride && styles.routeStartTextActive]}>
-              📍 Minha localização
-            </Text>
+            <IconText Icone={IconLocation} style={[styles.routeStartText, !routeStartOverride && styles.routeStartTextActive]} tone="onSurface">Minha localização</IconText>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.routeStartOption, !!routeStartOverride && styles.routeStartOptionActive]}
             onPress={() => setIsPickingRouteStart(true)}
           >
             <Text style={[styles.routeStartText, !!routeStartOverride && styles.routeStartTextActive]} numberOfLines={1}>
-              {routeStartOverride ? `🎯 ${routeStartOverride.label}` : '🎯 Escolher local'}
+              {routeStartOverride ? routeStartOverride.label : 'Escolher local'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -2924,8 +2925,8 @@ function MainApp() {
               <View style={[styles.providerBadge, lastProviderUsed === 'osrm' && { backgroundColor: 'var(--tint-amber)', borderColor: 'var(--tint-amber-border)' }]}>
                 <Text style={[styles.providerBadgeText, lastProviderUsed === 'osrm' && { color: 'var(--tint-amber-text)' }]}>
                   {lastProviderUsed === 'ors'
-                    ? '✓ Via OpenRouteService'
-                    : '⚠ Via OSRM (ORS estava fora)'}
+                    ? 'Via OpenRouteService'
+                    : 'Via OSRM (ORS estava fora)'}
                 </Text>
               </View>
             )}
@@ -2936,7 +2937,7 @@ function MainApp() {
                 style={[styles.secondaryButton, { backgroundColor: '#16a34a' }]}
                 onPress={startNavigation}
               >
-                <Text style={[styles.secondaryButtonText, { color: '#fff' }]}>🧭 Navegar</Text>
+                <IconText Icone={IconLocation} style={[styles.secondaryButtonText, { color: '#fff' }]} tone="onSurface">Navegar</IconText>
               </TouchableOpacity>
             )}
             {routeDisplayClients.length > 0 ? (
@@ -3248,7 +3249,7 @@ function MainApp() {
 
         {sorted.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>Nenhuma tarefa pendente. 🎉</Text>
+            <Text style={styles.emptyStateText}>Nenhuma tarefa pendente.</Text>
           </View>
         ) : (
           secoes.map((secao) => (
@@ -3600,7 +3601,7 @@ function MainApp() {
         const filtro = vendorFilterHubspotId === null ? 'todos' : vendorLabel(vendorFilterHubspotId);
         const res = await exportAgenda(payload, `agenda_${filtro}`);
         Alert.alert(
-          'Exportação pronta 📅',
+          'Exportação pronta',
           `${payload.meta.contagens.total} itens (${payload.meta.contagens.reunioes} reuniões, ${payload.meta.contagens.follow_ups} follow-ups, ${payload.meta.contagens.rotas} rotas).\n\nToque em Abrir para baixar o .json (abre no navegador). Depois é só jogar na IA.`,
           [
             { text: 'Fechar', style: 'cancel' },
@@ -3739,7 +3740,7 @@ function MainApp() {
   if (areaPermissionDenied) {
     return (
       <View style={[styles.centered, { paddingHorizontal: 32 }]}>
-        <Text style={{ fontSize: 56, marginBottom: 16 }}>📍</Text>
+        <IconLocation width={56} height={56} fill={iconColors.muted} style={{ marginBottom: 16 }} />
         <Text style={styles.permissionTitle}>Localização desativada</Text>
         <Text style={styles.permissionBody}>
           Pra mostrar só os clientes da sua área a gente precisa da localização do
@@ -3924,7 +3925,7 @@ function MainApp() {
               <Text style={navStyles.bottomCardTitle} numberOfLines={1}>{navTitle}</Text>
               {navSubtitle ? <Text style={navStyles.bottomCardSubtitle} numberOfLines={1}>{navSubtitle}</Text> : null}
               <View style={navStyles.bottomCardMetaRow}>
-                {distLabel && <Text style={navStyles.bottomCardMeta}>📍 {distLabel}</Text>}
+                {distLabel && <IconText Icone={IconLocation} style={navStyles.bottomCardMeta} tone="onSurface">{distLabel}</IconText>}
                 <Text style={[navStyles.bottomCardMeta, { color: navStatusColor }]}>● {navStatusLabel}</Text>
               </View>
               {noCoords && (
@@ -3972,7 +3973,7 @@ function MainApp() {
                   travelMode: 'driving',
                 })}
               >
-                <Text style={[navStyles.bottomCardSecondaryText, noCoords && { opacity: 0.4 }]}>🚗 Maps</Text>
+                <IconText Icone={IconCar} style={[navStyles.bottomCardSecondaryText, noCoords && { opacity: 0.4 }]} tone="onSurface">Maps</IconText>
               </TouchableOpacity>
             </View>
           </View>
@@ -4336,9 +4337,7 @@ function MainApp() {
             <View style={styles.areaStatusWrap} pointerEvents="none">
               <View style={styles.areaStatusPill}>
                 {viewportTooWide ? (
-                  <Text style={styles.areaStatusText}>
-                    🔍 Aproxime para carregar os clientes desta região
-                  </Text>
+                  <IconText Icone={IconSearch} style={styles.areaStatusText} tone="onSurface">Aproxime para carregar os clientes desta região</IconText>
                 ) : (
                   <>
                     <ActivityIndicator size="small" color="#fff" />
@@ -4400,7 +4399,7 @@ function MainApp() {
                 { c: TEMP_COLORS.cold, l: 'Frio' },
                 { c: TEMP_COLORS.won, l: 'Fechado' },
                 { c: TEMP_COLORS.lost, l: 'Perdido' },
-                { c: CONTA_ALVO_COLOR, l: '🎯 Conta Alvo' },
+                { c: CONTA_ALVO_COLOR, l: 'Conta Alvo' },
               ].map(item => (
                 <View key={item.l} style={styles.tempLegendRow}>
                   <View style={[styles.tempLegendDot, { backgroundColor: item.c }]} />
@@ -4442,7 +4441,7 @@ function MainApp() {
               style={[styles.mapButtonRight, { bottom: 90 + 66 + insets.bottom }]}
               onPress={() => setHeatOn(true)}
             >
-              <Text style={{ fontSize: 20 }}>🔥</Text>
+              <IconTrendingUp width={20} height={20} fill={iconColors.onSurface} />
             </TouchableOpacity>
           )}
 
@@ -4462,7 +4461,7 @@ function MainApp() {
           {heatOn && !creationMode && (
             <View style={[styles.heatPanel, { bottom: 90 + insets.bottom }]}>
               <View style={styles.heatPanelHeader}>
-                <Text style={styles.heatPanelTitle}>🔥 Calor de visitas</Text>
+                <IconText Icone={IconTrendingUp} style={styles.heatPanelTitle} tone="onSurface">Calor de visitas</IconText>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   {heatLoading ? (
                     <ActivityIndicator size="small" color="#f97316" />
@@ -4581,7 +4580,7 @@ function MainApp() {
             keyboardDismissMode="on-drag"
             ListEmptyComponent={
               <View style={styles.emptyState}>
-                <Text style={{ fontSize: 40, marginBottom: 12 }}>📋</Text>
+                <IconClipboardCheck width={40} height={40} fill={iconColors.muted} style={{ marginBottom: 12 }} />
                 <Text style={styles.emptyStateText}>
                   {searchTerm || stateFilter || stageFilter || tempFilter || visitFilter
                     ? 'Nenhum cliente encontrado com esses filtros.'
@@ -5308,11 +5307,11 @@ function MainApp() {
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
                   {([
                     { label: null, texto: 'Sem filtro', cor: '#64748b', emoji: '' },
-                    { label: 'Quente', texto: 'Quente', cor: TEMP_COLORS.hot, emoji: '🔥' },
-                    { label: 'Morno', texto: 'Morno', cor: TEMP_COLORS.warm, emoji: '🟡' },
-                    { label: 'Frio', texto: 'Frio', cor: TEMP_COLORS.cold, emoji: '❄️' },
-                    { label: 'Fechado', texto: 'Fechado', cor: TEMP_COLORS.won, emoji: '✅' },
-                    { label: 'Perdido', texto: 'Perdido', cor: TEMP_COLORS.lost, emoji: '⚫' },
+                    { label: 'Quente', texto: 'Quente', cor: TEMP_COLORS.hot },
+                    { label: 'Morno', texto: 'Morno', cor: TEMP_COLORS.warm },
+                    { label: 'Frio', texto: 'Frio', cor: TEMP_COLORS.cold },
+                    { label: 'Fechado', texto: 'Fechado', cor: TEMP_COLORS.won },
+                    { label: 'Perdido', texto: 'Perdido', cor: TEMP_COLORS.lost },
                   ] as { label: string | null; texto: string; cor: string; emoji: string }[]).map((op) => {
                     const selected = tempFilter === op.label;
                     return (
@@ -5325,9 +5324,19 @@ function MainApp() {
                         ]}
                         onPress={() => setTempFilter(op.label)}
                       >
-                        <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>
-                          {op.emoji ? `${op.emoji} ` : ''}{op.texto}
-                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          {op.cor && (
+                            <View
+                              style={{
+                                width: 8, height: 8, borderRadius: 4,
+                                backgroundColor: selected ? '#fff' : op.cor,
+                              }}
+                            />
+                          )}
+                          <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>
+                            {op.texto}
+                          </Text>
+                        </View>
                       </TouchableOpacity>
                     );
                   })}
@@ -5352,9 +5361,7 @@ function MainApp() {
                     return next;
                   })}
                 >
-                  <Text style={[styles.filterChipText, contaAlvoOnly && styles.filterChipTextActive]}>
-                    🎯 Só Conta Alvo
-                  </Text>
+                  <IconText Icone={IconStar} style={[styles.filterChipText, contaAlvoOnly && styles.filterChipTextActive]} tone="onSurface">Só Conta Alvo</IconText>
                 </TouchableOpacity>
 
                 <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Visita</Text>
@@ -5714,9 +5721,7 @@ function MainApp() {
                   onChangeText={v => setForm(s => ({ ...s, numero: v }))}
                 />
               </View>
-              <Text style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: -4, marginBottom: 8 }}>
-                ⚠️ Confira o número — pode ter sido auto-preenchido pelo mapa e estar impreciso.
-              </Text>
+              <IconText Icone={IconWarning} style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: -4, marginBottom: 8 }} tone="onSurface">Confira o número — pode ter sido auto-preenchido pelo mapa e estar impreciso.</IconText>
 
               <Text style={styles.fieldLabel}>Observações</Text>
               <TextInput
@@ -5731,9 +5736,7 @@ function MainApp() {
               {/* Location summary if filled by CEP/coords */}
               {(form.latitude || form.longitude) && (
                 <View style={styles.locationSummary}>
-                  <Text style={styles.locationSummaryText}>
-                    📍 Localização definida ({form.latitude}, {form.longitude})
-                  </Text>
+                  <IconText Icone={IconLocation} style={styles.locationSummaryText} tone="onSurface">Localização definida ({form.latitude}, {form.longitude})</IconText>
                 </View>
               )}
 
@@ -6045,8 +6048,8 @@ function ClientBottomSheet({
         : `há ${Math.floor(horas / 24)} dia(s)`;
 
     const linhaComanda = comanda
-      ? `🧾 Última comanda: ${label(comanda)} • ${haQuanto(dias!)}`
-      : '🧾 Nenhuma comanda emitida';
+      ? `Última comanda: ${label(comanda)} • ${haQuanto(dias!)}`
+      : 'Nenhuma comanda emitida';
 
     // Quantas comandas já saíram. A data diz QUANDO parou, o total diz QUANTO
     // usou — é o que separa "nunca engrenou" de "usava muito e parou".
@@ -6063,15 +6066,15 @@ function ClientBottomSheet({
     const linhas = [
       saiu ? linhaComanda : null,
       linhaQtd,
-      !saiu && cancelamento ? `⚠️ Pediu cancelamento em ${label(cancelamento)}` : null,
+      !saiu && cancelamento ? `Pediu cancelamento em ${label(cancelamento)}` : null,
     ].filter(Boolean) as string[];
 
     return {
       tom,
       titulo: saiu
         ? cancelamento
-          ? `⚠️ Cancelamento solicitado em ${label(cancelamento)}`
-          : '⚠️ Ex-cliente (Churn no HubSpot)'
+          ? `Cancelamento solicitado em ${label(cancelamento)}`
+          : 'Ex-cliente (Churn no HubSpot)'
         : linhaComanda,
       linhas,
       // Sync parado é visível: o dado some de "hoje" e vira "há N dias".
@@ -6165,13 +6168,12 @@ function ClientBottomSheet({
               const s = slaStatus(client, slaDays);
               if (!s.applies) return null;
               const color = s.breach ? '#C8131B' : s.ratio >= 0.7 ? '#FFB32F' : '#16a34a';
-              const emoji = s.breach ? '🔴' : s.ratio >= 0.7 ? '🟡' : '🟢';
               const txt = s.breach
                 ? `SLA estourado — ${s.diasParado} ${s.diasParado === 1 ? 'dia' : 'dias'} parado (limite ${s.sla})`
                 : `${s.diasParado}/${s.sla} dias parado`;
               return (
                 <View style={[styles.slaBadge, { backgroundColor: `${color}14`, borderColor: `${color}59` }]}>
-                  <Text style={[styles.slaBadgeText, { color }]}>{emoji} {txt}</Text>
+                  <Text style={[styles.slaBadgeText, { color }]}>{txt}</Text>
                 </View>
               );
             })()}
@@ -6180,10 +6182,10 @@ function ClientBottomSheet({
                 interessa". Só nos leads trazidos pela Rota do dia. */}
             {client.conta_alvo_place_id && (
               <View style={styles.contaAlvoBox}>
-                <Text style={styles.contaAlvoBoxTitle}>🎯 Conta Alvo</Text>
+                <IconText Icone={IconStar} style={styles.contaAlvoBoxTitle} tone="onSurface">Conta Alvo</IconText>
                 {client.conta_alvo_rating != null && (
                   <Text style={styles.contaAlvoBoxText}>
-                    ⭐ {Number(client.conta_alvo_rating).toFixed(1)}
+                    {Number(client.conta_alvo_rating).toFixed(1)}★
                     {client.conta_alvo_reviews != null
                       ? ` · ${client.conta_alvo_reviews.toLocaleString('pt-BR')} avaliações`
                       : ''}
@@ -6226,9 +6228,7 @@ function ClientBottomSheet({
                 visit_count do proprio lead. */}
             {visitCount > 0 && (
               <View style={styles.visitCountBox}>
-                <Text style={styles.visitCountText}>
-                  📍 {visitCount} {visitCount === 1 ? 'visita realizada' : 'visitas realizadas'}
-                </Text>
+                <IconText Icone={IconLocation} style={styles.visitCountText} tone="onSurface">{visitCount} {visitCount === 1 ? 'visita realizada' : 'visitas realizadas'}</IconText>
                 {client.visited_at ? (
                   <Text style={styles.visitCountHint}>
                     Última: {new Date(client.visited_at).toLocaleString('pt-BR', {
@@ -6261,7 +6261,7 @@ function ClientBottomSheet({
                       <ActivityIndicator color="#fff" />
                     ) : (
                       <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
-                        {client.visited_at ? '🔁 Re-marcar visita' : '✅ Marcar como visitado'}
+                        {client.visited_at ? 'Re-marcar visita' : 'Marcar como visitado'}
                       </Text>
                     )}
                   </TouchableOpacity>
@@ -6278,7 +6278,7 @@ function ClientBottomSheet({
                     }}
                     onPress={onEdit}
                   >
-                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>✏️ Editar</Text>
+                    <IconText Icone={IconPencil} style={{ color: '#fff', fontWeight: '700', fontSize: 13 }} tone="onSurface">Editar</IconText>
                   </TouchableOpacity>
                 )}
               </View>
@@ -6286,7 +6286,9 @@ function ClientBottomSheet({
 
             {/* Geo quality indicator */}
             <View style={{ backgroundColor: isApprox ? '#fefce8' : '#f0fdf4', borderRadius: 8, padding: 10, marginBottom: 12, flexDirection: 'row', gap: 8 }}>
-              <Text style={{ fontSize: 14 }}>{isApprox ? '⚠️' : '✅'}</Text>
+              {isApprox
+                    ? <IconWarning width={14} height={14} fill={iconColors.muted} />
+                    : <IconCheckCircle width={14} height={14} fill={iconColors.muted} />}
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 12, color: isApprox ? '#92400e' : '#166534', fontWeight: '700' }}>
                   {isApprox ? 'Localização aproximada' : 'Localização precisa'}
@@ -6502,9 +6504,9 @@ function ClientBottomSheet({
                       <View key={`stage-${change.id}`} style={styles.noteItem}>
                         <View style={styles.noteHeaderRow}>
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.noteAuthor} numberOfLines={1}>
-                              🔄 {authorLabel}
-                            </Text>
+                            <IconText Icone={IconRefresh} size={13} style={styles.noteAuthor} tone="muted">
+                              {authorLabel}
+                            </IconText>
                             <Text style={styles.noteDate}>{when}</Text>
                           </View>
                         </View>
@@ -6523,7 +6525,7 @@ function ClientBottomSheet({
                         <View style={styles.noteHeaderRow}>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.noteAuthor} numberOfLines={1}>
-                              {isFollowUp ? '🔁 Follow up' : '📅 Reunião/demo'}
+                              {isFollowUp ? 'Follow up' : 'Reunião/demo'}
                               {isPast ? ' (realizada/passada)' : ' (agendada)'}
                             </Text>
                             <Text style={styles.noteDate}>{when}</Text>
@@ -6540,10 +6542,10 @@ function ClientBottomSheet({
                       <View key={`visit-${entry.createdAt}`} style={styles.noteItem}>
                         <View style={styles.noteHeaderRow}>
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.noteAuthor} numberOfLines={1}>
-                              📍 Check-in de visita
+                            <IconText Icone={IconLocation} size={13} style={styles.noteAuthor} tone="muted">
+                              Check-in de visita
                               {entry.visitNumber ? ` — ${entry.visitNumber}ª` : ''}
-                            </Text>
+                            </IconText>
                             <Text style={styles.noteDate}>
                               {when}{entry.visitedByName ? ` • ${entry.visitedByName}` : ''}
                             </Text>
@@ -6564,7 +6566,7 @@ function ClientBottomSheet({
                     <View key={`note-${note.id}`} style={styles.noteItem}>
                       <View style={styles.noteHeaderRow}>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.noteAuthor} numberOfLines={1}>👤 {authorLabel}</Text>
+                          <IconText Icone={IconUser} size={13} style={styles.noteAuthor} tone="muted">{authorLabel}</IconText>
                           <Text style={styles.noteDate}>
                             {when}{wasEdited ? ' • editado' : ''}
                           </Text>

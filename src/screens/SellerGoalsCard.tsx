@@ -38,7 +38,7 @@ export function SellerGoalsCard() {
       return { seller_id: s.id, meta_visitas_dia: n };
     });
     save.mutate(rows, {
-      onSuccess: () => Alert.alert('Salvo ✅', 'Metas atualizadas. O ranking já compara feito x meta.'),
+      onSuccess: () => Alert.alert('Salvo', 'Metas atualizadas. O ranking já compara feito x meta.'),
       onError: (err: any) => Alert.alert('Erro ao salvar', err?.message ?? 'Tente de novo.'),
     });
   };
