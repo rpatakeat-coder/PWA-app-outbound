@@ -30,13 +30,31 @@
 //
 //   { "email": "joao@takeat.app",
 //     "nome": "João Silva",
-//     "id_hubspot": "12345678",  // obrigatorio
-//     "senha": "opcional" }      // sem ela, uma temporaria e' gerada
+//     "id_hubspot": "12345678",  // obrigatorio — ver "CONFIGURACAO POR PESSOA"
+//     "senha": "opcional",       // sem ela, uma temporaria e' gerada
+//     "dry_run": false }         // true valida tudo e NAO cria nada
 //
 //   201 -> { id, email, nome, role: "user", id_hubspot, senha?, aviso? }
+//   200 -> { id, ..., ja_existia: true }  — o e-mail ja tinha conta
+//   200 -> { ..., dry_run: true, pode_criar, problemas[] }
 //   400 -> dado faltando ou invalido, com a mensagem do que consertar
-//   403 -> quem chamou nao e' gestor
-//   409 -> ja existe conta com esse e-mail
+//   401 -> credencial invalida (token errado, expirado ou ausente)
+//   403 -> credencial valida, mas quem chamou nao e' gestor
+//
+// IDENTIFICADOR ESTAVEL: o `id` devolvido e' o UUID de auth.users. E' a MESMA
+// chave de profiles.id, client_visits.visited_by, dailies.seller_id e
+// field_routes.seller_id. Guarde ELE, nao o e-mail: e-mail muda e diverge
+// entre sistemas; este uuid nunca muda enquanto a conta existir.
+//
+// IDEMPOTENTE POR E-MAIL: reenviar a mesma criacao devolve 200 com o id que ja'
+// existe e `ja_existia: true`, em vez de erro. Retry por timeout de rede e'
+// seguro e nao duplica.
+//
+// CONFIGURACAO POR PESSOA: `id_hubspot` e' o owner id do HubSpot, e e' o unico
+// campo que depende de dado de outro sistema. Ele NAO e' global nem por setor:
+// e' individual, e sai de /crm/v3/owners (ou Settings -> Users & Teams). Se
+// vier errado, a pessoa loga e trabalha, mas aparece com zero leads em todas as
+// telas — por isso a funcao CONFERE o id contra o HubSpot antes de criar.
 //
 // Exemplo:
 //   curl -X POST https://<ref>.supabase.co/functions/v1/criar-usuario \
@@ -123,6 +141,7 @@ Deno.serve(async (req) => {
   const nome = String(corpo?.nome ?? '').trim();
   const idHubspot = corpo?.id_hubspot ? String(corpo.id_hubspot).trim() : null;
   const senhaInformada = corpo?.senha ? String(corpo.senha) : null;
+  const dryRun = corpo?.dry_run === true;
 
   // --- validacao, com mensagem que diz O QUE consertar ---------------------
   if (!ehEmail(email)) return json(400, { error: 'E-mail inválido.' });
@@ -147,6 +166,91 @@ Deno.serve(async (req) => {
     });
   }
 
+  // --- o e-mail ja tem conta? -----------------------------------------------
+  // Precisa vir ANTES de qualquer escrita, e serve pros dois modos: no dry_run
+  // e' o aviso, na criacao e' a idempotencia.
+  const { data: perfilExistente } = await svc
+    .from('profiles')
+    .select('id, email, full_name, role, id_hubspot')
+    .eq('email', email)
+    .maybeSingle();
+
+  // --- o owner do HubSpot existe? -------------------------------------------
+  // E' a checagem que evita o bug mais caro deste cadastro: id errado cria um
+  // vendedor que loga, trabalha, e aparece com zero leads em todas as telas —
+  // sintoma que nao parece cadastro incompleto.
+  //
+  // HubSpot fora do ar NAO bloqueia a criacao (seria acoplar o provisionamento
+  // a disponibilidade de terceiro), mas vira aviso na resposta. Owner que o
+  // HubSpot NEGA, sim: aquilo e' erro de dado, e o certo e' recusar.
+  async function conferirOwner(): Promise<{ ok: boolean; motivo?: string; nome?: string }> {
+    const token = Deno.env.get('HUBSPOT_TOKEN');
+    if (!token) return { ok: true, motivo: 'HUBSPOT_TOKEN não configurado — id não conferido.' };
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      const res = await fetch(`https://api.hubapi.com/crm/v3/owners/${idHubspot}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      if (res.status === 404) {
+        return { ok: false, motivo: `O HubSpot não conhece o owner ${idHubspot}.` };
+      }
+      if (!res.ok) return { ok: true, motivo: `HubSpot respondeu ${res.status} — id não conferido.` };
+      const owner = await res.json().catch(() => null);
+      if (owner?.archived) {
+        return { ok: false, motivo: `O owner ${idHubspot} está arquivado no HubSpot.` };
+      }
+      const nome = [owner?.firstName, owner?.lastName].filter(Boolean).join(' ').trim();
+      return { ok: true, nome: nome || owner?.email };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { ok: true, motivo: `Não consegui falar com o HubSpot (${msg}) — id não conferido.` };
+    }
+  }
+
+  const owner = await conferirOwner();
+
+  // --- dry_run: valida tudo e NAO escreve nada ------------------------------
+  if (dryRun) {
+    const problemas: string[] = [];
+    if (perfilExistente) problemas.push(`Já existe conta com o e-mail ${email}.`);
+    if (!owner.ok) problemas.push(owner.motivo!);
+    return json(200, {
+      dry_run: true,
+      pode_criar: problemas.length === 0,
+      problemas,
+      aviso: owner.ok ? owner.motivo : undefined,
+      // Devolve o id de quem ja' existe: quem integra consegue gravar o
+      // vinculo sem precisar de uma segunda chamada.
+      id: (perfilExistente as any)?.id,
+      email,
+      nome,
+      role: PAPEL_FIXO,
+      id_hubspot: idHubspot,
+      owner_no_hubspot: owner.nome,
+    });
+  }
+
+  if (!owner.ok) return json(400, { error: owner.motivo });
+
+  // --- idempotencia ---------------------------------------------------------
+  // Reenviar (timeout de rede, retry da fila) devolve o MESMO id em vez de
+  // erro. Sem isto, quem integra nao consegue distinguir "eu ja' criei" de
+  // "outra pessoa criou" e acaba com cadastro duplicado ou vinculo perdido.
+  if (perfilExistente) {
+    return json(200, {
+      id: (perfilExistente as any).id,
+      email: (perfilExistente as any).email,
+      nome: (perfilExistente as any).full_name,
+      role: (perfilExistente as any).role,
+      id_hubspot: (perfilExistente as any).id_hubspot,
+      ja_existia: true,
+      aviso: 'Conta já existia; nada foi alterado. A senha não é recuperável — use recuperação de senha se preciso.',
+    });
+  }
+
   const senha = senhaInformada ?? senhaTemporaria();
 
   // --- 1. conta de login ----------------------------------------------------
@@ -162,11 +266,18 @@ Deno.serve(async (req) => {
   if (erroCriar || !criado?.user) {
     const msg = erroCriar?.message ?? 'erro desconhecido';
     const jaExiste = /already been registered|already exists|duplicate/i.test(msg);
-    return json(jaExiste ? 409 : 500, {
-      error: jaExiste
-        ? `Já existe uma conta com o e-mail ${email}.`
-        : `Não consegui criar o login: ${msg}`,
-    });
+    if (jaExiste) {
+      // Corrida: alguem criou entre a consulta acima e este insert. Resolve
+      // como idempotencia, e nao como erro — o resultado desejado aconteceu.
+      const { data: agora } = await svc
+        .from('profiles').select('id, email, full_name, role, id_hubspot').eq('email', email).maybeSingle();
+      return json(200, {
+        id: (agora as any)?.id, email, nome: (agora as any)?.full_name ?? nome,
+        role: (agora as any)?.role ?? PAPEL_FIXO, id_hubspot: (agora as any)?.id_hubspot ?? idHubspot,
+        ja_existia: true,
+      });
+    }
+    return json(500, { error: `Não consegui criar o login: ${msg}` });
   }
 
   const id = criado.user.id;
@@ -201,8 +312,13 @@ Deno.serve(async (req) => {
     // mandar convite, entao o gestor precisa entregar a senha pra pessoa. Ela
     // nao fica guardada em lugar nenhum legivel: o banco so' tem o hash.
     senha: senhaInformada ? undefined : senha,
-    aviso: senhaInformada
-      ? undefined
-      : 'Senha temporária gerada. Ela aparece só nesta resposta — copie agora e peça para a pessoa trocar no primeiro acesso.',
+    ja_existia: false,
+    owner_no_hubspot: owner.nome,
+    aviso: [
+      senhaInformada
+        ? null
+        : 'Senha temporária gerada. Ela aparece só nesta resposta — copie agora e peça para a pessoa trocar no primeiro acesso.',
+      owner.motivo,
+    ].filter(Boolean).join(' ') || undefined,
   });
 });
