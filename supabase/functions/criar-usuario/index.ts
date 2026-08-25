@@ -30,11 +30,10 @@
 //
 //   { "email": "joao@takeat.app",
 //     "nome": "João Silva",
-//     "role": "user",            // user | view | gestor  (padrao: user)
-//     "id_hubspot": "12345678",  // obrigatorio quando role=user
+//     "id_hubspot": "12345678",  // obrigatorio
 //     "senha": "opcional" }      // sem ela, uma temporaria e' gerada
 //
-//   201 -> { id, email, nome, role, id_hubspot, senha?, aviso? }
+//   201 -> { id, email, nome, role: "user", id_hubspot, senha?, aviso? }
 //   400 -> dado faltando ou invalido, com a mensagem do que consertar
 //   403 -> quem chamou nao e' gestor
 //   409 -> ja existe conta com esse e-mail
@@ -51,9 +50,17 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-/** Papeis aceitos — os mesmos do CHECK em profiles_role_check. */
-const PAPEIS = ['user', 'view', 'gestor'] as const;
-type Papel = (typeof PAPEIS)[number];
+// Esta API cria SOMENTE vendedor.
+//
+// Nao e' limitacao: e' o que fecha a porta. Uma rota capaz de escolher o papel
+// e' uma via de escalonamento de privilegio — bastaria um gestor com a sessao
+// aberta num aparelho alheio, ou a service role key vazando, pra nascer um
+// 'gestor' novo com acesso a base inteira de clientes.
+//
+// Promover alguem continua possivel, mas pelo caminho que ja' existe e que e'
+// auditavel: o gatilho profiles_prevent_role_self_escalation deixa um gestor
+// mudar o papel de outra pessoa direto na tabela.
+const PAPEL_FIXO = 'user' as const;
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -98,7 +105,6 @@ Deno.serve(async (req) => {
   // Dois caminhos, igual as outras funcoes deste projeto: a service role key
   // (script, integracao) ou um JWT de usuario com role='gestor' (a tela).
   const ehServiceRole = credencial === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  let criadoPor: string | null = null;
 
   if (!ehServiceRole) {
     const { data: userData, error: erroUser } = await svc.auth.getUser(credencial);
@@ -110,28 +116,30 @@ Deno.serve(async (req) => {
       .maybeSingle();
     // Criar usuario e' CONCEDER ACESSO a base inteira de clientes. So gestor.
     if (perfil?.role !== 'gestor') return json(403, { error: 'Só gestor cria usuário' });
-    criadoPor = userData.user.id;
   }
 
   const corpo = await req.json().catch(() => null);
   const email = String(corpo?.email ?? '').trim().toLowerCase();
   const nome = String(corpo?.nome ?? '').trim();
-  const papel = String(corpo?.role ?? 'user') as Papel;
   const idHubspot = corpo?.id_hubspot ? String(corpo.id_hubspot).trim() : null;
   const senhaInformada = corpo?.senha ? String(corpo.senha) : null;
 
   // --- validacao, com mensagem que diz O QUE consertar ---------------------
   if (!ehEmail(email)) return json(400, { error: 'E-mail inválido.' });
   if (nome.length < 2) return json(400, { error: 'Informe o nome completo da pessoa.' });
-  if (!PAPEIS.includes(papel)) {
-    return json(400, { error: `Papel inválido. Use um de: ${PAPEIS.join(', ')}.` });
+  // Recusa em vez de ignorar: quem mandou `role` esperava que funcionasse, e
+  // criar um vendedor calado seria o pior dos dois mundos.
+  if (corpo?.role && corpo.role !== PAPEL_FIXO) {
+    return json(400, {
+      error:
+        'Esta API cria apenas vendedor. Para mudar o papel de alguém, altere ' +
+        'profiles.role direto — a permissão para isso já é só de gestor.',
+    });
   }
   if (senhaInformada && senhaInformada.length < 8) {
     return json(400, { error: 'A senha precisa de pelo menos 8 caracteres.' });
   }
-  // 'view' e 'gestor' nao tem carteira no CRM; exigir owner id deles seria
-  // pedir um dado que nao existe.
-  if (papel === 'user' && !idHubspot) {
+  if (!idHubspot) {
     return json(400, {
       error:
         'Vendedor precisa do id_hubspot (owner do CRM). Sem ele a pessoa loga, ' +
@@ -170,7 +178,7 @@ Deno.serve(async (req) => {
   const { error: erroPerfil } = await svc
     .from('profiles')
     .upsert(
-      { id, email, full_name: nome, role: papel, id_hubspot: idHubspot },
+      { id, email, full_name: nome, role: PAPEL_FIXO, id_hubspot: idHubspot },
       { onConflict: 'id' },
     );
 
@@ -183,22 +191,11 @@ Deno.serve(async (req) => {
     });
   }
 
-  // --- 3. classificacao (opcional) -----------------------------------------
-  // Sem linha, `seller_classification` assume 'ativo'. Gravar explicitamente
-  // pra quem NAO e' vendedor evita que a pessoa apareca nos rankings e no
-  // placar da Daily so' porque ninguem curou a lista depois.
-  if (papel !== 'user') {
-    await svc
-      .from('seller_classification')
-      .upsert({ seller_id: id, status: 'nao_vendedor', updated_by: criadoPor }, { onConflict: 'seller_id' })
-      .then(() => {}, () => {}); // tabela opcional: falha aqui nao invalida o cadastro
-  }
-
   return json(201, {
     id,
     email,
     nome,
-    role: papel,
+    role: PAPEL_FIXO,
     id_hubspot: idHubspot,
     // A senha aparece UMA vez, na resposta. Nao ha' SMTP neste projeto pra
     // mandar convite, entao o gestor precisa entregar a senha pra pessoa. Ela
