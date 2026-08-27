@@ -105,6 +105,7 @@ import { ChangeStageModal } from './src/screens/ChangeStageModal';
 import { EditLocationModal } from './src/screens/EditLocationModal';
 import { MinhaDailyCard } from './src/screens/MinhaDailyCard';
 import { useLayout } from './src/hooks/useLayout';
+import { useNomesDeClientes } from './src/hooks/useNomesDeClientes';
 import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
 import { useStages } from './src/hooks/useStages';
 import { GestorScreen } from './src/screens/GestorScreen';
@@ -707,6 +708,13 @@ function MainApp() {
     return [...clientsNaArea, ...resultadosBusca.filter((c) => !vistos.has(c.id))];
   }, [clientsNaArea, resultadosBusca]);
   const { meetings, upcomingByClient, meetingsByClient, deleteMeeting } = useMeetings();
+  // Nomes dos leads das reunioes da agenda, POR ID. A lista `clients` cobre
+  // so' a area visivel do mapa; sem isto a agenda mostrava "Lead" em tudo.
+  const idsClientesDasReunioes = useMemo(
+    () => [...new Set(meetings.map((m) => m.client_id).filter(Boolean))] as string[],
+    [meetings],
+  );
+  const nomesReunioes = useNomesDeClientes(idsClientesDasReunioes, tab === 'agenda');
   const queryClient = useQueryClient();
   // Config editável pelo gestor (meta/dia, SLAs, params da Conta Alvo).
   const { config: routeConfig } = useRouteConfig();
@@ -933,6 +941,8 @@ function MainApp() {
   const [agendaPastOpen, setAgendaPastOpen] = useState(false);
   // Chip de tipo na aba Agenda (null = todos): 'reuniao' | 'follow_up' | 'rota'.
   const [agendaTypeFilter, setAgendaTypeFilter] = useState<string | null>(null);
+  // Semana exibida no calendario web: 0 = corrente, -1 = anterior, +1 = proxima.
+  const [calSemanaOffset, setCalSemanaOffset] = useState(0);
   // Exportação da agenda em andamento (botão "Exportar JSON" no topo da aba).
   const [exportingAgenda, setExportingAgenda] = useState(false);
 
@@ -3406,11 +3416,20 @@ function MainApp() {
     // Passado mais recente primeiro — o que acabou de passar é o mais relevante.
     pastItems.reverse();
 
+    // Nome do lead do item, com a base inteira como fonte: primeiro o client
+    // carregado (area do mapa), senao o dicionario por id (reunioes fora do
+    // viewport). So' depois disso admite "nao encontrado".
+    const nomeDoItem = (item: typeof allAgendaItems[number]): string | null => {
+      if (item.client) return getClientPrimaryName(item.client);
+      if (item.kind === 'meeting') return nomesReunioes.get(item.meeting.client_id) ?? null;
+      return null;
+    };
+
     const renderAgendaItem = (item: typeof agendaItems[number], index: number) => {
           const date = item.at ? new Date(item.at) : null;
           const time = date ? date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
           const client = item.client;
-          const title = client ? getClientPrimaryName(client) : 'Lead nao encontrado';
+          const title = nomeDoItem(item) ?? 'Lead nao encontrado';
           const contact = client?.empresa?.trim() && client.nome && client.nome !== client.empresa ? client.nome : null;
           const responsavel = client?.vendedor_id_hubspot
             ? vendorLabel(client.vendedor_id_hubspot)
@@ -3742,59 +3761,90 @@ function MainApp() {
         )}
 
         {layout.ehDesktop && agendaItems.length > 0 ? (
-          // CALENDARIO SEMANAL — so' no desktop. No celular a agenda continua
-          // a lista cronologica: em pe' na rua a pergunta e' "o que e' agora",
-          // e lista responde melhor. Na mesa a pergunta vira "como esta' minha
-          // semana", e ai' o calendario responde melhor.
-          <View style={styles.calSemana}>
-            {(() => {
-              const hojeCal = new Date();
-              const desloc = (hojeCal.getDay() + 6) % 7; // 0 = segunda
-              const seg = new Date(hojeCal);
-              seg.setDate(hojeCal.getDate() - desloc);
-              seg.setHours(0, 0, 0, 0);
-              return Array.from({ length: 7 }, (_, k) => {
-                const d = new Date(seg);
-                d.setDate(seg.getDate() + k);
-                const doDia = agendaItems
-                  .filter((it) => {
-                    if (!it.at) return false;
-                    const t = new Date(it.at);
-                    return t.getFullYear() === d.getFullYear() && t.getMonth() === d.getMonth() && t.getDate() === d.getDate();
-                  })
-                  .sort((a, b) => String(a.at).localeCompare(String(b.at)));
-                const ehHojeCal = d.toDateString() === hojeCal.toDateString();
-                return (
-                  <View key={k} style={[styles.calDia, ehHojeCal && styles.calDiaHoje]}>
-                    <Text style={[styles.calDiaTitulo, ehHojeCal && { color: 'var(--brand-text)' }]}>
-                      {d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')} {d.getDate()}
-                    </Text>
-                    {doDia.length === 0 ? (
-                      <Text style={styles.calVazio}>—</Text>
-                    ) : (
-                      doDia.map((it, ix) => {
-                        const meta = TIPO_META[tipoDoItem(it)];
-                        const hora = it.at
-                          ? new Date(it.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                          : '';
-                        const nomeChip = it.client ? getClientPrimaryName(it.client) : 'Lead';
-                        return (
-                          <TouchableOpacity
-                            key={ix}
-                            style={[styles.calChip, { borderLeftColor: meta?.cor ?? 'var(--border)' }]}
-                            onPress={() => it.client && openClientById(it.client.id)}
-                          >
-                            <Text style={styles.calChipHora}>{hora}</Text>
-                            <Text style={styles.calChipTitulo} numberOfLines={2}>{nomeChip}</Text>
-                          </TouchableOpacity>
-                        );
-                      })
-                    )}
-                  </View>
-                );
-              });
-            })()}
-          </View>
+          // CALENDARIO SEMANAL — so' desktop. No celular a agenda segue lista:
+          // na rua a pergunta e' "o que e' agora"; na mesa, "como esta' minha
+          // semana". Sabado e domingo so' aparecem quando tem compromisso —
+          // vazios, roubavam 2/7 da largura pra mostrar um travessao.
+          (() => {
+            const hojeCal = new Date();
+            const desloc = (hojeCal.getDay() + 6) % 7; // 0 = segunda
+            const seg = new Date(hojeCal);
+            seg.setDate(hojeCal.getDate() - desloc + calSemanaOffset * 7);
+            seg.setHours(0, 0, 0, 0);
+            const diasCal = Array.from({ length: 7 }, (_, k) => {
+              const d = new Date(seg);
+              d.setDate(seg.getDate() + k);
+              const itens = agendaItems
+                .filter((it) => {
+                  if (!it.at) return false;
+                  const t = new Date(it.at);
+                  return t.getFullYear() === d.getFullYear() && t.getMonth() === d.getMonth() && t.getDate() === d.getDate();
+                })
+                .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+              return { d, itens };
+            });
+            const semFimDeSemana = diasCal[5].itens.length === 0 && diasCal[6].itens.length === 0;
+            const visiveis = semFimDeSemana ? diasCal.slice(0, 5) : diasCal;
+            const fimSemana = diasCal[6].d;
+            const rotuloJanela = `${seg.getDate()} ${seg.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')} – ${fimSemana.getDate()} ${fimSemana.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}`;
+            const totalDaSemana = diasCal.reduce((soma, dia) => soma + dia.itens.length, 0);
+            return (
+              <>
+                <View style={styles.calNav}>
+                  <TouchableOpacity style={styles.calNavBotao} onPress={() => setCalSemanaOffset((v) => v - 1)}>
+                    <Text style={styles.calNavSeta}>‹</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.calNavRotulo}>
+                    {rotuloJanela}
+                    <Text style={styles.calNavTotal}>  ·  {totalDaSemana} {totalDaSemana === 1 ? 'item' : 'itens'}</Text>
+                  </Text>
+                  {calSemanaOffset !== 0 && (
+                    <TouchableOpacity style={styles.calNavHoje} onPress={() => setCalSemanaOffset(0)}>
+                      <Text style={styles.calNavHojeTexto}>hoje</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity style={styles.calNavBotao} onPress={() => setCalSemanaOffset((v) => v + 1)}>
+                    <Text style={styles.calNavSeta}>›</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.calSemana}>
+                  {visiveis.map(({ d, itens }, k) => {
+                    const ehHojeCal = d.toDateString() === hojeCal.toDateString();
+                    return (
+                      <View key={k} style={[styles.calDia, ehHojeCal && styles.calDiaHoje]}>
+                        <Text style={[styles.calDiaTitulo, ehHojeCal && { color: 'var(--brand-text)' }]}>
+                          {d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')} {d.getDate()}
+                        </Text>
+                        {itens.length === 0 ? (
+                          <Text style={styles.calVazio}>livre</Text>
+                        ) : (
+                          itens.map((it, ix) => {
+                            const meta = TIPO_META[tipoDoItem(it)];
+                            const hora = it.at
+                              ? new Date(it.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                              : '';
+                            const nomeChip = nomeDoItem(it) ?? meta?.label ?? 'Item';
+                            const idCliente = it.client?.id ?? (it.kind === 'meeting' ? it.meeting.client_id : null);
+                            return (
+                              <TouchableOpacity
+                                key={ix}
+                                style={[styles.calChip, { borderLeftColor: meta?.cor ?? 'var(--border)' }]}
+                                disabled={!idCliente}
+                                onPress={() => idCliente && openClientById(idCliente)}
+                              >
+                                <Text style={styles.calChipHora}>{hora} · {meta?.label}</Text>
+                                <Text style={styles.calChipTitulo} numberOfLines={2}>{nomeChip}</Text>
+                              </TouchableOpacity>
+                            );
+                          })
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </>
+            );
+          })()
         ) : agendaItems.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>Agenda vazia.</Text>
@@ -7730,7 +7780,20 @@ const styles = StyleSheet.create({
     fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '700',
     textTransform: 'lowercase', color: 'var(--text-muted)', marginBottom: 6,
   },
-  calVazio: { fontSize: 12, color: 'var(--text-faint)', textAlign: 'center', marginTop: 12 },
+  calVazio: { fontSize: 12, color: 'var(--text-faint)', textAlign: 'center', marginTop: 16 },
+  calNav: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  calNavBotao: {
+    width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface)',
+  },
+  calNavSeta: { fontSize: 16, lineHeight: 20, color: 'var(--text)', fontWeight: '600' },
+  calNavRotulo: { fontSize: 14, fontWeight: '600', color: 'var(--text)', letterSpacing: 0.1 },
+  calNavTotal: { fontSize: 12, fontWeight: '500', color: 'var(--text-subtle)' },
+  calNavHoje: {
+    paddingHorizontal: 12, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'var(--tint-red)',
+  },
+  calNavHojeTexto: { fontSize: 12, fontWeight: '700', color: 'var(--tint-red-text)' },
   calChip: {
     borderLeftWidth: 3,
     backgroundColor: 'var(--surface-2)',
