@@ -78,6 +78,41 @@ export function TarefasScreen({
   for (const t of sorted) contagem.set(sevKey(t.severity), (contagem.get(sevKey(t.severity)) ?? 0) + 1);
   const chips = [...contagem.entries()].sort((a, b) => sevRank(b[0]) - sevRank(a[0]));
 
+  // ---- Vencimento (prompt 08a) ----
+  // Campo real: meta.due_date (gerado pelo cron de SLA como entrada na
+  // etapa + sla_days em dias uteis — migration 20260725). D2/D5 nao gravam
+  // o campo, mas o vencimento e' a MESMA aritmetica do gerador: a tarefa
+  // vence quando days_in_stage cruza o limite (2 ou 5). Nada aqui inventa
+  // criterio novo — e' o calculo que o SQL usa, feito no cliente.
+  // Datas comparadas no dia de Brasilia (regra do CLAUDE.md).
+  const diaBRTde = (iso: unknown): string | null =>
+    typeof iso === 'string' && iso
+      ? new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+      : null;
+  const hojeBRT = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const baldeDeVencimento = (task: ClientTask): 'atrasadas' | 'hoje' | 'proximas' => {
+    const meta = (task.meta ?? {}) as { due_date?: unknown; days_in_stage?: unknown; sla_days?: unknown };
+    const due = diaBRTde(meta.due_date);
+    if (due) return due < hojeBRT ? 'atrasadas' : due === hojeBRT ? 'hoje' : 'proximas';
+    const dias = typeof meta.days_in_stage === 'number' ? meta.days_in_stage : null;
+    const limite =
+      task.severity === 'D5' ? 5
+      : task.severity === 'D2' ? 2
+      : typeof meta.sla_days === 'number' ? meta.sla_days : null;
+    if (dias !== null && limite !== null) return dias > limite ? 'atrasadas' : 'hoje';
+    // Sem vencimento derivavel (ex.: follow-up avulso): e' acao de agora.
+    return 'hoje';
+  };
+  const COLUNAS_VENCIMENTO = [
+    { chave: 'atrasadas' as const, titulo: 'Atrasadas', cor: '#C8131B', tintaBg: 'var(--tint-red)', tintaFg: 'var(--tint-red-text)' },
+    { chave: 'hoje' as const, titulo: 'Hoje', cor: '#FFB32F', tintaBg: 'var(--tint-amber)', tintaFg: 'var(--tint-amber-text)' },
+    { chave: 'proximas' as const, titulo: 'Próximas', cor: '#0ea5e9', tintaBg: 'var(--tint-blue)', tintaFg: 'var(--tint-blue-text)' },
+  ];
+  const colunasVencimento = COLUNAS_VENCIMENTO.map(c => ({
+    ...c,
+    itens: sorted.filter(task => baldeDeVencimento(task) === c.chave),
+  }));
+
   // O chip filtra a lista; a seção que sobra continua com cabeçalho, pra
   // deixar claro que é um recorte e não a lista inteira.
   const secoes = chips
@@ -130,9 +165,7 @@ export function TarefasScreen({
                   ? { backgroundColor: 'var(--tint-red)' }
                   : task.severity === 'D2'
                     ? { backgroundColor: 'var(--tint-amber)' }
-                    : task.severity === 'SLA'
-                      ? { backgroundColor: 'var(--tint-blue)' }
-                      : { backgroundColor: 'var(--surface-2)' }
+                    : { backgroundColor: 'var(--surface-2)' }
                 : { backgroundColor: sevColor(task.severity) },
             ]}
           >
@@ -145,9 +178,7 @@ export function TarefasScreen({
                       ? 'var(--tint-red-text)'
                       : task.severity === 'D2'
                         ? 'var(--tint-amber-text)'
-                        : task.severity === 'SLA'
-                          ? 'var(--tint-blue-text)'
-                          : 'var(--text-faint)',
+                        : 'var(--text-faint)',
                 },
               ]}
             >
@@ -325,20 +356,15 @@ export function TarefasScreen({
         layout.ehDesktop ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
-              {secoes.map((secao) => {
-                const tinta =
-                  secao.sev === 'D5'
-                    ? { bg: 'var(--tint-red)', fg: 'var(--tint-red-text)' }
-                    : secao.sev === 'D2'
-                      ? { bg: 'var(--tint-amber)', fg: 'var(--tint-amber-text)' }
-                      : { bg: 'var(--tint-blue)', fg: 'var(--tint-blue-text)' };
-                return (
-                <View key={secao.sev} style={styles.kanbanColuna}>
+              {/* Colunas por VENCIMENTO (prompt 08a/08b). As tres sempre
+                  aparecem — coluna vazia mostra a copy padrao. */}
+              {colunasVencimento.map((col) => (
+                <View key={col.chave} style={styles.kanbanColuna}>
                   <View style={styles.kanbanCabecalho}>
-                    <View style={[sharedStyles.countChipDot, { backgroundColor: sevColor(secao.sev) }]} />
-                    <Text style={styles.kanbanTitulo}>{secao.sev}</Text>
-                    <View style={[styles.kanbanContagem, { backgroundColor: tinta.bg }]}>
-                      <Text style={[styles.kanbanContagemTexto, { color: tinta.fg }]}>{secao.total}</Text>
+                    <View style={[sharedStyles.countChipDot, { backgroundColor: col.cor }]} />
+                    <Text style={styles.kanbanTitulo}>{col.titulo}</Text>
+                    <View style={[styles.kanbanContagem, { backgroundColor: col.tintaBg }]}>
+                      <Text style={[styles.kanbanContagemTexto, { color: col.tintaFg }]}>{col.itens.length}</Text>
                     </View>
                   </View>
                   <ScrollView
@@ -346,11 +372,16 @@ export function TarefasScreen({
                     contentContainerStyle={{ padding: 12 }}
                     showsVerticalScrollIndicator
                   >
-                    {secao.itens.map(renderTaskCard)}
+                    {col.itens.length === 0 ? (
+                      <Text style={[sharedStyles.emptyStateText, { fontSize: 12, textAlign: 'center', paddingVertical: 16 }]}>
+                        Nenhuma tarefa pendente.
+                      </Text>
+                    ) : (
+                      col.itens.map(renderTaskCard)
+                    )}
                   </ScrollView>
                 </View>
-                );
-              })}
+              ))}
             </View>
           </ScrollView>
         ) : (
