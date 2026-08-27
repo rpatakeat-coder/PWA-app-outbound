@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F6F6F6;--raised:#FFFFFF;--nested:#F6F6F6;--fill:#EDEDED;
+  --t1:#222222;--t2:#545454;--t3:#7A7A7A;--t4:#C6C6C6;
+  --s-subtle:#EDEDED;--s-default:#C6C6C6;--s-strong:#7A7A7A;
+  --brand:#C8131B;--brand-dark:#94090F;--brand-tint:#FAE8E9;
+  --teal:#2EC9B7;--teal-dark:#1D9688;--blue:#01AFFF;--blue-dark:#018CCC;
+  --yellow:#FFB32F;--yellow-dark:#CC8C1D;--green:#27A84C;--green-dark:#167532;
+  --gestor:#A82743;
+  color-scheme:light;
+}
+[data-theme='dark']{
+  --bg:#121212;--raised:#1E1E1E;--nested:#262626;--fill:#2A2A2A;
+  --t1:rgba(255,255,255,.92);--t2:rgba(255,255,255,.64);--t3:rgba(255,255,255,.42);--t4:rgba(255,255,255,.28);
+  --s-subtle:rgba(255,255,255,.08);--s-default:rgba(255,255,255,.14);--s-strong:rgba(255,255,255,.24);
+  --brand:#C8131B;--brand-dark:#E5A1A4;--brand-tint:#3A1416;
+  color-scheme:dark;
+}
+body{margin:0;background:var(--bg);font-family:Poppins,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased;}
+.ms{font-family:'Material Symbols Rounded';font-weight:400;font-style:normal;line-height:1;letter-spacing:normal;display:inline-block;white-space:nowrap;direction:ltr;-webkit-font-feature-settings:'liga';}
+a{color:#018CCC;text-decoration:none;}
+a:hover{color:#016999;text-decoration:underline;}
+*:focus-visible{outline:2px solid #016999;outline-offset:2px;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-thumb{background:#C6C6C6;border-radius:8px;border:3px solid transparent;background-clip:content-box;}
+</style>
+</helmet>
+
+<div data-theme="{{ theme }}" style="min-height:100vh;background:var(--bg);color:var(--t2);display:flex;">
+
+  <!-- ══════════ SIDEBAR COLAPSÁVEL ══════════ -->
+  <sc-if value="{{ mostraShell }}" hint-placeholder-val="{{ true }}">
+  <nav onMouseEnter="{{ expandRail }}" onMouseLeave="{{ collapseRail }}"
+       style="position:fixed;left:0;top:0;bottom:0;z-index:40;width:{{ railW }};background:var(--raised);border-right:1px solid var(--s-subtle);display:flex;flex-direction:column;transition:width .16s cubic-bezier(.2,.7,.3,1);overflow:hidden;box-shadow:{{ railShadow }};">
+
+    <div style="height:64px;flex:0 0 64px;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--s-subtle);">
+      <img src="assets/takeat-icon.svg" alt="Takeat" style="width:28px;height:28px;flex:0 0 28px;object-fit:contain;">
+      <div style="min-width:0;opacity:{{ labelOpacity }};transition:opacity .16s;">
+        <div style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:700;color:var(--t1);white-space:nowrap;">Field Sales</div>
+        <div style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:500;color:var(--t3);white-space:nowrap;">Outbound</div>
+      </div>
+    </div>
+
+    <div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 8px;display:flex;flex-direction:column;gap:2px;">
+      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="7">
+        <button onClick="{{ n.go }}" title="{{ n.label }}"
+          style="width:100%;height:44px;flex:0 0 44px;display:flex;align-items:center;gap:16px;padding:0 16px;border:0;border-radius:8px;background:{{ n.bg }};color:{{ n.fg }};font-family:inherit;cursor:pointer;text-align:left;box-sizing:border-box;position:relative;">
+          <span class="ms" style="font-size:24px;flex:0 0 24px;">{{ n.icon }}</span>
+          <span style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:{{ n.weight }};white-space:nowrap;opacity:{{ labelOpacity }};transition:opacity .16s;">{{ n.label }}</span>
+          <sc-if value="{{ n.badge }}" hint-placeholder-val="{{ false }}">
+            <span style="position:absolute;left:{{ n.badgeLeft }};top:6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--brand);color:#fff;font-size:11px;line-height:18px;letter-spacing:0;font-weight:700;text-align:center;box-sizing:border-box;">{{ n.badge }}</span>
+          </sc-if>
+        </button>
+      </sc-for>
+    </div>
+
+    <div style="padding:12px 8px;border-top:1px solid var(--s-subtle);display:flex;flex-direction:column;gap:2px;">
+      <button onClick="{{ toggleTheme }}" title="Tema"
+        style="width:100%;height:44px;display:flex;align-items:center;gap:16px;padding:0 16px;border:0;border-radius:8px;background:transparent;color:var(--t2);font-family:inherit;cursor:pointer;text-align:left;box-sizing:border-box;" style-hover="background:var(--nested);">
+        <span class="ms" style="font-size:24px;flex:0 0 24px;">{{ themeIcon }}</span>
+        <span style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:500;white-space:nowrap;opacity:{{ labelOpacity }};">{{ themeLabel }}</span>
+      </button>
+      <div style="height:44px;display:flex;align-items:center;gap:16px;padding:0 12px;box-sizing:border-box;">
+        <span style="width:32px;height:32px;flex:0 0 32px;border-radius:9999px;background:var(--brand-tint);color:var(--brand-dark);font-size:12px;line-height:32px;letter-spacing:.5px;font-weight:700;text-align:center;">RP</span>
+        <div style="min-width:0;opacity:{{ labelOpacity }};">
+          <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t1);white-space:nowrap;">Rafael Pereira</div>
+          <div style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:500;color:var(--t3);white-space:nowrap;">Gestor</div>
+        </div>
+      </div>
+    </div>
+  </nav>
+  </sc-if>
+
+  <!-- ══════════ CONTEÚDO ══════════ -->
+  <main style="flex:1;min-width:0;margin-left:{{ mainInset }};display:flex;flex-direction:column;">
+
+    <sc-if value="{{ mostraShell }}" hint-placeholder-val="{{ true }}">
+    <header style="height:64px;flex:0 0 64px;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:0 24px;background:var(--raised);border-bottom:1px solid var(--s-subtle);position:sticky;top:0;z-index:20;">
+      <div style="display:flex;align-items:baseline;gap:12px;min-width:0;">
+        <h1 style="margin:0;font-size:22px;line-height:28px;font-weight:700;color:var(--t1);white-space:nowrap;">{{ tituloTela }}</h1>
+        <span style="font-size:12px;line-height:16px;letter-spacing:.4px;font-weight:500;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ subtituloTela }}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;flex:0 0 auto;">
+        <div style="display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;border-radius:8px;border:1px solid var(--s-strong);background:var(--raised);min-width:280px;">
+          <span class="ms" style="font-size:20px;color:var(--t3);">search</span>
+          <input placeholder="Buscar lead, cidade ou contato" style="flex:1;min-width:0;border:0;outline:0;background:transparent;font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.25px;color:var(--t2);">
+          <span style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t4);border:1px solid var(--s-subtle);border-radius:4px;padding:1px 5px;">⌘K</span>
+        </div>
+        <button style="width:40px;height:40px;border:1px solid var(--s-default);border-radius:8px;background:var(--raised);color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative;" style-hover="background:var(--nested);" title="Avisos">
+          <span class="ms" style="font-size:20px;">notifications</span>
+          <span style="position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:4px;background:var(--brand);border:1.5px solid var(--raised);"></span>
+        </button>
+        <button onClick="{{ openCadastro }}" style="height:40px;padding:0 16px;border:0;border-radius:12px;background:var(--brand);color:#fff;font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;" style-hover="background:var(--brand-dark);">
+          <span class="ms" style="font-size:24px;">add</span>Novo lead
+        </button>
+      </div>
+    </header>
+    </sc-if>
+
+    <div style="flex:1;min-height:0;">
+
+      <!-- ─────── MAPA ─────── -->
+      <sc-if value="{{ ehMapa }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;height:calc(100vh - 64px);">
+          <aside style="width:352px;flex:0 0 352px;background:var(--raised);border-right:1px solid var(--s-subtle);display:flex;flex-direction:column;">
+            <div style="padding:16px;border-bottom:1px solid var(--s-subtle);display:flex;flex-direction:column;gap:16px;">
+              <div style="display:flex;gap:8px;">
+                <sc-for list="{{ segStatus }}" as="s" hint-placeholder-count="3">
+                  <button onClick="{{ s.go }}" style="flex:1;height:40px;padding:0 12px;border:1px solid {{ s.border }};background:{{ s.bg }};color:{{ s.fg }};border-radius:{{ s.radius }};font-family:inherit;font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;cursor:pointer;white-space:nowrap;">{{ s.label }}</button>
+                </sc-for>
+              </div>
+              <div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                  <span style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t3);text-transform:uppercase;">Temperatura da etapa</span>
+                  <button style="border:0;background:transparent;font-family:inherit;font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--blue-dark);cursor:pointer;padding:0;">Limpar</button>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                  <sc-for list="{{ legenda }}" as="g" hint-placeholder-count="6">
+                    <button style="display:flex;align-items:center;gap:8px;height:32px;padding:0 12px;border:1px solid {{ g.border }};border-radius:8px;background:{{ g.bg }};color:{{ g.fg }};font-family:inherit;font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;cursor:pointer;">
+                      <span style="width:10px;height:10px;border-radius:5px;background:{{ g.cor }};"></span>{{ g.rotulo }}
+                      <span style="color:var(--t3);font-weight:500;">{{ g.n }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;border-radius:8px;background:var(--nested);">
+                <div>
+                  <div style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--t1);">Calor de visitas</div>
+                  <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);">1.284 check-ins · 90 dias</div>
+                </div>
+                <button onClick="{{ toggleHeat }}" style="width:44px;height:24px;border:0;border-radius:9999px;background:{{ heatTrackBg }};cursor:pointer;padding:2px;display:flex;justify-content:{{ heatJustify }};transition:all .16s;">
+                  <span style="width:20px;height:20px;border-radius:9999px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);"></span>
+                </button>
+              </div>
+            </div>
+
+            <div style="flex:1;overflow-y:auto;">
+              <div style="padding:12px 16px 8px;display:flex;align-items:center;justify-content:space-between;">
+                <span style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:var(--t2);text-transform:uppercase;">Nesta área · 412</span>
+                <span style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:500;color:var(--t3);">por distância</span>
+              </div>
+              <sc-for list="{{ leads }}" as="l" hint-placeholder-count="8">
+                <button onClick="{{ openFicha }}" style="width:100%;display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border:0;border-bottom:1px solid var(--s-subtle);background:transparent;font-family:inherit;cursor:pointer;text-align:left;box-sizing:border-box;" style-hover="background:var(--nested);">
+                  <span style="width:4px;align-self:stretch;min-height:40px;border-radius:2px;background:{{ l.cor }};flex:0 0 4px;"></span>
+                  <span style="flex:1;min-width:0;">
+                    <span style="display:block;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ l.nome }}</span>
+                    <span style="display:block;font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);">{{ l.etapa }} · {{ l.cidade }}</span>
+                  </span>
+                  <span style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t3);flex:0 0 auto;">{{ l.dist }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </aside>
+
+          <div style="flex:1;min-width:0;position:relative;background:#E5E3DF;overflow:hidden;">
+            <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent 79px,#D8D5D0 79px,#D8D5D0 81px,transparent 81px),linear-gradient(0deg,transparent 79px,#D8D5D0 79px,#D8D5D0 81px,transparent 81px);background-size:120px 120px;"></div>
+            <div style="position:absolute;left:50%;top:0;bottom:0;width:16px;transform:translateX(-50%) rotate(8deg);background:#CFCBC4;"></div>
+            <div style="position:absolute;left:0;right:0;top:62%;height:22px;background:#CFCBC4;"></div>
+            <sc-for list="{{ pins }}" as="p" hint-placeholder-count="9">
+              <div style="position:absolute;left:{{ p.x }};top:{{ p.y }};transform:translate(-50%,-100%);cursor:pointer;">
+                <div style="width:40px;height:40px;border-radius:20px;background:{{ p.cor }};border:2.5px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 8px rgba(0,0,0,.24);">
+                  <img src="assets/takeat-icon-white.svg" alt="" style="width:20px;height:20px;">
+                </div>
+                <div style="width:0;height:0;margin:-1px auto 0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:9px solid {{ p.cor }};"></div>
+              </div>
+            </sc-for>
+            <div style="position:absolute;right:16px;top:16px;display:flex;flex-direction:column;gap:8px;">
+              <button style="width:40px;height:40px;border:1px solid var(--s-subtle);border-radius:8px;background:var(--raised);color:var(--t2);cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,.14);display:flex;align-items:center;justify-content:center;" title="Centralizar em mim"><span class="ms" style="font-size:20px;">my_location</span></button>
+              <button style="width:40px;height:40px;border:1px solid var(--s-subtle);border-radius:8px;background:var(--raised);color:var(--t2);cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,.14);display:flex;align-items:center;justify-content:center;" title="Camadas"><span class="ms" style="font-size:20px;">layers</span></button>
+            </div>
+            <div style="position:absolute;left:16px;bottom:16px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;max-width:calc(100% - 32px);padding:12px 16px;border-radius:8px;background:var(--raised);box-shadow:0 4px 8px rgba(0,0,0,.14);">
+              <sc-for list="{{ legenda }}" as="g" hint-placeholder-count="6">
+                <span style="display:flex;align-items:center;gap:6px;">
+                  <span style="width:10px;height:10px;border-radius:5px;background:{{ g.cor }};"></span>
+                  <span style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t2);white-space:nowrap;">{{ g.rotulo }}</span>
+                </span>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ─────── LISTA (tabela) ─────── -->
+      <sc-if value="{{ ehLista }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:24px;max-width:1600px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <sc-for list="{{ chipsLista }}" as="c" hint-placeholder-count="5">
+                <button onClick="{{ c.go }}" style="display:flex;align-items:center;gap:8px;height:32px;padding:0 12px;border:1px solid {{ c.border }};border-radius:8px;background:{{ c.bg }};color:{{ c.fg }};font-family:inherit;font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;cursor:pointer;">
+                  <span style="width:8px;height:8px;border-radius:4px;background:{{ c.cor }};"></span>{{ c.label }}
+                </button>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button style="display:flex;align-items:center;gap:8px;height:40px;padding:0 16px;border:1px solid var(--s-default);border-radius:12px;background:var(--raised);color:var(--t2);font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;" style-hover="background:var(--nested);"><span class="ms" style="font-size:24px;">filter_list</span>Filtros<span style="min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--brand);color:#fff;font-size:11px;line-height:18px;font-weight:700;text-align:center;box-sizing:border-box;">2</span></button>
+              <button style="display:flex;align-items:center;gap:8px;height:40px;padding:0 16px;border:1px solid var(--teal-dark);border-radius:12px;background:transparent;color:var(--teal-dark);font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;"><span class="ms" style="font-size:24px;">download</span>Baixar planilha</button>
+            </div>
+          </div>
+
+          <div style="background:var(--raised);border:1px solid var(--s-subtle);border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,.14),0 0 2px rgba(0,0,0,.12);">
+            <div style="display:grid;grid-template-columns:minmax(240px,2fr) minmax(150px,1fr) 160px 120px minmax(140px,1fr) 110px 96px 48px;gap:16px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--s-default);background:var(--nested);">
+              <sc-for list="{{ colunas }}" as="col" hint-placeholder-count="8">
+                <span style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:var(--t2);text-align:{{ col.align }};white-space:nowrap;">{{ col.label }}</span>
+              </sc-for>
+            </div>
+            <sc-for list="{{ leadsTabela }}" as="l" hint-placeholder-count="10">
+              <div onClick="{{ openFicha }}" style="display:grid;grid-template-columns:minmax(240px,2fr) minmax(150px,1fr) 160px 120px minmax(140px,1fr) 110px 96px 48px;gap:16px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--s-subtle);cursor:pointer;" style-hover="background:var(--nested);">
+                <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+                  <span style="width:4px;height:32px;border-radius:2px;background:{{ l.cor }};flex:0 0 4px;"></span>
+                  <div style="min-width:0;">
+                    <div style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ l.nome }}</div>
+                    <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);">{{ l.status }}</div>
+                  </div>
+                </div>
+                <div style="font-size:14px;line-height:20px;letter-spacing:.25px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ l.contato }}</div>
+                <div><span style="display:inline-block;padding:4px 8px;border-radius:4px;background:{{ l.etapaBg }};color:{{ l.etapaFg }};font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;white-space:nowrap;">{{ l.etapa }}</span></div>
+                <div style="display:flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;border-radius:5px;background:{{ l.cor }};"></span><span style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t2);">{{ l.temp }}</span></div>
+                <div style="font-size:14px;line-height:20px;letter-spacing:.25px;color:var(--t2);">{{ l.cidade }}</div>
+                <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;color:{{ l.visitaFg }};">{{ l.visita }}</div>
+                <div style="text-align:center;font-size:14px;line-height:20px;font-weight:600;color:var(--t2);font-variant-numeric:tabular-nums;">{{ l.reunioes }}</div>
+                <div style="text-align:right;"><span class="ms" style="font-size:20px;color:var(--t3);">chevron_right</span></div>
+              </div>
+            </sc-for>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;">
+              <span style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);">Mostrando 10 de 412 leads</span>
+              <div style="display:flex;gap:4px;">
+                <button style="width:32px;height:32px;border:1px solid var(--s-default);border-radius:4px;background:var(--raised);color:var(--t2);cursor:pointer;"><span class="ms" style="font-size:20px;">chevron_left</span></button>
+                <button style="width:32px;height:32px;border:1px solid var(--brand);border-radius:4px;background:var(--brand);color:#fff;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;">1</button>
+                <button style="width:32px;height:32px;border:1px solid var(--s-default);border-radius:4px;background:var(--raised);color:var(--t2);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;">2</button>
+                <button style="width:32px;height:32px;border:1px solid var(--s-default);border-radius:4px;background:var(--raised);color:var(--t2);cursor:pointer;"><span class="ms" style="font-size:20px;">chevron_right</span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ─────── ROTA ─────── -->
+      <sc-if value="{{ ehRota }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;height:calc(100vh - 64px);">
+          <div style="flex:1;min-width:0;position:relative;background:#E5E3DF;overflow:hidden;">
+            <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent 79px,#D8D5D0 79px,#D8D5D0 81px,transparent 81px),linear-gradient(0deg,transparent 79px,#D8D5D0 79px,#D8D5D0 81px,transparent 81px);background-size:120px 120px;"></div>
+            <svg viewBox="0 0 600 700" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;">
+              <path d="M90 120 L200 180 L180 300 L320 340 L300 470 L430 520 L410 620" fill="none" stroke="#C8131B" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <sc-for list="{{ paradas }}" as="p" hint-placeholder-count="7">
+              <div style="position:absolute;left:{{ p.x }};top:{{ p.y }};transform:translate(-50%,-50%);">
+                <div style="width:36px;height:36px;border-radius:18px;background:{{ p.bg }};border:3px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 8px rgba(0,0,0,.24);">
+                  <span style="font-size:14px;line-height:20px;font-weight:700;color:#fff;">{{ p.n }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <aside style="width:420px;flex:0 0 420px;background:var(--raised);border-left:1px solid var(--s-subtle);display:flex;flex-direction:column;">
+            <div style="padding:24px;border-bottom:1px solid var(--s-subtle);">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+                <div>
+                  <div style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t3);text-transform:uppercase;">Rota do dia</div>
+                  <div style="font-size:18px;line-height:24px;font-weight:600;color:var(--t1);">Quinta, 27 de agosto</div>
+                </div>
+                <div style="display:flex;gap:4px;">
+                  <button style="width:32px;height:32px;border:1px solid var(--s-default);border-radius:4px;background:var(--raised);color:var(--t2);cursor:pointer;"><span class="ms" style="font-size:20px;">chevron_left</span></button>
+                  <button style="width:32px;height:32px;border:1px solid var(--s-default);border-radius:4px;background:var(--raised);color:var(--t2);cursor:pointer;"><span class="ms" style="font-size:20px;">chevron_right</span></button>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+                <sc-for list="{{ rotaKpis }}" as="k" hint-placeholder-count="3">
+                  <div style="padding:12px;border-radius:8px;background:var(--nested);">
+                    <div style="font-size:20px;line-height:28px;font-weight:600;color:var(--t1);font-variant-numeric:tabular-nums;">{{ k.valor }}</div>
+                    <div style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:500;color:var(--t3);">{{ k.label }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="flex:1;overflow-y:auto;padding:16px 24px;">
+              <sc-for list="{{ paradasLista }}" as="p" hint-placeholder-count="7">
+                <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--s-subtle);">
+                  <span style="width:28px;height:28px;flex:0 0 28px;border-radius:9999px;background:{{ p.bg }};color:{{ p.fg }};font-size:12px;line-height:28px;letter-spacing:.5px;font-weight:700;text-align:center;">{{ p.n }}</span>
+                  <div style="flex:1;min-width:0;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <span style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ p.nome }}</span>
+                      <sc-if value="{{ p.tag }}" hint-placeholder-val="{{ false }}">
+                        <span style="padding:2px 6px;border-radius:4px;background:{{ p.tagBg }};color:{{ p.tagFg }};font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;white-space:nowrap;">{{ p.tag }}</span>
+                      </sc-if>
+                    </div>
+                    <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);margin-top:2px;">{{ p.det }}</div>
+                  </div>
+                  <button style="width:32px;height:32px;flex:0 0 32px;border:0;border-radius:4px;background:transparent;color:var(--t3);cursor:pointer;" style-hover="background:var(--nested);"><span class="ms" style="font-size:20px;">drag_indicator</span></button>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="padding:24px;border-top:1px solid var(--s-subtle);display:flex;flex-direction:column;gap:8px;">
+              <button style="height:40px;border:0;border-radius:12px;background:var(--brand);color:#fff;font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:flex-start;gap:8px;padding:0 16px;" style-hover="background:var(--brand-dark);"><span class="ms" style="font-size:24px;">navigation</span>Iniciar navegação</button>
+              <button style="height:40px;border:1px solid var(--brand);border-radius:12px;background:transparent;color:var(--brand);font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:flex-start;gap:8px;padding:0 16px;" style-hover="background:var(--brand-tint);"><span class="ms" style="font-size:24px;">route</span>Otimizar paradas</button>
+            </div>
+          </aside>
+        </div>
+      </sc-if>
+
+      <!-- ─────── AGENDA ─────── -->
+      <sc-if value="{{ ehAgenda }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:24px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <button style="width:32px;height:32px;border:1px solid var(--s-default);border-radius:4px;background:var(--raised);color:var(--t2);cursor:pointer;"><span class="ms" style="font-size:20px;">chevron_left</span></button>
+              <span style="font-size:18px;line-height:24px;font-weight:600;color:var(--t1);">24 – 30 de agosto de 2026</span>
+              <button style="width:32px;height:32px;border:1px solid var(--s-default);border-radius:4px;background:var(--raised);color:var(--t2);cursor:pointer;"><span class="ms" style="font-size:20px;">chevron_right</span></button>
+              <button style="height:32px;padding:0 12px;border:1px solid var(--s-default);border-radius:4px;background:var(--raised);color:var(--t2);font-family:inherit;font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;cursor:pointer;">Hoje</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <sc-for list="{{ tiposAgenda }}" as="t" hint-placeholder-count="3">
+                <span style="display:flex;align-items:center;gap:6px;font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t2);"><span style="width:10px;height:10px;border-radius:2px;background:{{ t.cor }};"></span>{{ t.label }}</span>
+              </sc-for>
+              <button style="display:flex;align-items:center;gap:8px;height:40px;padding:0 16px;margin-left:8px;border:1px solid var(--teal-dark);border-radius:12px;background:transparent;color:var(--teal-dark);font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;"><span class="ms" style="font-size:24px;">download</span>Exportar JSON</button>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;">
+            <sc-for list="{{ semana }}" as="d" hint-placeholder-count="7">
+              <div style="background:var(--raised);border:1px solid {{ d.border }};border-radius:8px;min-height:520px;display:flex;flex-direction:column;overflow:hidden;">
+                <div style="padding:12px;border-bottom:1px solid var(--s-subtle);background:{{ d.headBg }};">
+                  <div style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;color:{{ d.headFg }};text-transform:uppercase;">{{ d.dia }}</div>
+                  <div style="font-size:20px;line-height:28px;font-weight:600;color:{{ d.numFg }};font-variant-numeric:tabular-nums;">{{ d.num }}</div>
+                </div>
+                <div style="flex:1;padding:8px;display:flex;flex-direction:column;gap:8px;">
+                  <sc-for list="{{ d.itens }}" as="i" hint-placeholder-count="2">
+                    <div style="padding:8px;border-radius:4px;background:{{ i.bg }};border-left:3px solid {{ i.cor }};cursor:pointer;">
+                      <div style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:700;color:{{ i.cor }};font-variant-numeric:tabular-nums;">{{ i.hora }}</div>
+                      <div style="font-size:12px;line-height:16px;letter-spacing:.4px;font-weight:600;color:var(--t1);margin-top:2px;">{{ i.titulo }}</div>
+                      <div style="font-size:11px;line-height:16px;letter-spacing:.5px;color:var(--t3);">{{ i.sub }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ─────── TAREFAS (kanban) ─────── -->
+      <sc-if value="{{ ehTarefas }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:24px;">
+          <div style="display:flex;gap:16px;align-items:flex-start;overflow-x:auto;padding-bottom:8px;">
+            <sc-for list="{{ colunasKanban }}" as="k" hint-placeholder-count="3">
+              <div style="width:380px;flex:0 0 380px;background:var(--raised);border:1px solid var(--s-subtle);border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.14),0 0 2px rgba(0,0,0,.12);">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid var(--s-subtle);">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="width:10px;height:10px;border-radius:5px;background:{{ k.cor }};"></span>
+                    <span style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--t1);">{{ k.titulo }}</span>
+                  </div>
+                  <span style="min-width:24px;height:24px;padding:0 8px;border-radius:9999px;background:{{ k.pillBg }};color:{{ k.pillFg }};font-size:12px;line-height:24px;letter-spacing:.5px;font-weight:700;text-align:center;box-sizing:border-box;">{{ k.n }}</span>
+                </div>
+                <div style="padding:12px;display:flex;flex-direction:column;gap:12px;">
+                  <sc-for list="{{ k.cards }}" as="c" hint-placeholder-count="3">
+                    <div style="padding:16px;border:1px solid var(--s-subtle);border-radius:8px;background:var(--raised);cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.14),0 0 2px rgba(0,0,0,.12);" style-hover="border-color:var(--s-strong);">
+                      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+                        <span style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--t1);">{{ c.lead }}</span>
+                        <span style="padding:2px 6px;border-radius:4px;background:{{ c.slaBg }};color:{{ c.slaFg }};font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;white-space:nowrap;flex:0 0 auto;">{{ c.sla }}</span>
+                      </div>
+                      <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t2);margin-top:6px;">{{ c.tarefa }}</div>
+                      <div style="display:flex;align-items:center;gap:12px;margin-top:12px;">
+                        <span style="display:flex;align-items:center;gap:4px;font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t3);"><span class="ms" style="font-size:16px;">schedule</span>{{ c.prazo }}</span>
+                        <span style="display:flex;align-items:center;gap:4px;font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t3);"><span class="ms" style="font-size:16px;">person</span>{{ c.vendedor }}</span>
+                      </div>
+                      <div style="display:flex;gap:8px;margin-top:12px;">
+                        <button onClick="{{ openAgendar }}" style="flex:1;height:32px;border:0;border-radius:8px;background:var(--brand-tint);color:var(--brand-dark);font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:flex-start;gap:8px;padding:0 12px;">Agendar</button>
+                        <button style="width:32px;height:32px;border:1px solid var(--s-default);border-radius:8px;background:transparent;color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Concluir"><span class="ms" style="font-size:20px;">check</span></button>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ─────── GESTOR ─────── -->
+      <sc-if value="{{ ehGestor }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:24px;display:flex;flex-direction:column;gap:24px;max-width:1600px;">
+          <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;">
+            <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+              <div style="padding:16px;background:var(--raised);border:1px solid var(--s-subtle);border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.14),0 0 2px rgba(0,0,0,.12);">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                  <span style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:500;color:var(--t2);">{{ k.label }}</span>
+                  <span class="ms" style="font-size:20px;color:{{ k.deltaFg }};">{{ k.icon }}</span>
+                </div>
+                <div style="font-size:28px;line-height:36px;font-weight:700;color:var(--t1);margin-top:8px;font-variant-numeric:tabular-nums;">{{ k.valor }}</div>
+                <div style="font-size:12px;line-height:16px;letter-spacing:.4px;font-weight:500;color:{{ k.deltaFg }};margin-top:4px;">{{ k.delta }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:grid;grid-template-columns:8fr 4fr;gap:24px;align-items:start;">
+            <div style="padding:24px;background:var(--raised);border:1px solid var(--s-subtle);border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.14),0 0 2px rgba(0,0,0,.12);">
+              <div style="font-size:16px;line-height:24px;letter-spacing:.15px;font-weight:700;color:var(--t1);margin-bottom:16px;">Funil comercial · agosto</div>
+              <div style="display:flex;flex-direction:column;gap:12px;">
+                <sc-for list="{{ funil }}" as="f" hint-placeholder-count="8">
+                  <div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                      <span style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t2);">{{ f.etapa }}</span>
+                      <span style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t3);font-variant-numeric:tabular-nums;">{{ f.n }} · {{ f.pct }}</span>
+                    </div>
+                    <div style="height:22px;border-radius:4px;background:var(--fill);overflow:hidden;">
+                      <div style="height:100%;width:{{ f.w }};background:{{ f.cor }};border-radius:4px;"></div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:24px;">
+              <div style="padding:24px;background:var(--raised);border:1px solid var(--s-subtle);border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.14),0 0 2px rgba(0,0,0,.12);">
+                <div style="font-size:16px;line-height:24px;letter-spacing:.15px;font-weight:700;color:var(--t1);margin-bottom:16px;">Visitas na semana</div>
+                <div style="display:grid;grid-template-columns:repeat(7,28px);gap:4px;">
+                  <sc-for list="{{ heat }}" as="h" hint-placeholder-count="28">
+                    <div title="{{ h.n }} visitas" style="width:28px;height:28px;border-radius:4px;background:{{ h.bg }};border:{{ h.border }};"></div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
+                  <span style="display:flex;align-items:center;gap:6px;font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t3);"><span style="width:12px;height:12px;border-radius:2px;background:var(--fill);"></span>0</span>
+                  <span style="display:flex;align-items:center;gap:6px;font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t3);"><span style="width:12px;height:12px;border-radius:2px;background:#8FE0D5;"></span>1–2</span>
+                  <span style="display:flex;align-items:center;gap:6px;font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t3);"><span style="width:12px;height:12px;border-radius:2px;background:#1D9688;"></span>3+</span>
+                </div>
+              </div>
+              <button style="height:40px;border:1px solid var(--teal-dark);border-radius:12px;background:transparent;color:var(--teal-dark);font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;padding:0 16px;"><span class="ms" style="font-size:24px;">download</span>Exportar relatório completo</button>
+            </div>
+          </div>
+
+          <div style="background:var(--raised);border:1px solid var(--s-subtle);border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,.14),0 0 2px rgba(0,0,0,.12);">
+            <div style="padding:16px;border-bottom:1px solid var(--s-subtle);font-size:16px;line-height:24px;letter-spacing:.15px;font-weight:700;color:var(--t1);">Time · agosto</div>
+            <div style="display:grid;grid-template-columns:minmax(180px,2fr) repeat(6,minmax(88px,1fr));gap:16px;padding:12px 16px;background:var(--nested);border-bottom:1px solid var(--s-default);">
+              <sc-for list="{{ colTime }}" as="c" hint-placeholder-count="7">
+                <span style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:var(--t2);text-align:{{ c.align }};white-space:nowrap;">{{ c.label }}</span>
+              </sc-for>
+            </div>
+            <sc-for list="{{ time }}" as="v" hint-placeholder-count="5">
+              <div style="display:grid;grid-template-columns:minmax(180px,2fr) repeat(6,minmax(88px,1fr));gap:16px;padding:12px 16px;border-bottom:1px solid var(--s-subtle);align-items:center;cursor:pointer;" style-hover="background:var(--nested);">
+                <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+                  <span style="width:32px;height:32px;flex:0 0 32px;border-radius:9999px;background:var(--nested);color:var(--t2);font-size:12px;line-height:32px;letter-spacing:.5px;font-weight:700;text-align:center;">{{ v.ini }}</span>
+                  <span style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ v.nome }}</span>
+                </div>
+                <span style="text-align:right;font-size:14px;line-height:20px;font-weight:600;color:var(--t2);font-variant-numeric:tabular-nums;">{{ v.visitas }}</span>
+                <span style="text-align:right;font-size:14px;line-height:20px;font-weight:600;color:var(--t2);font-variant-numeric:tabular-nums;">{{ v.demos }}</span>
+                <span style="text-align:right;font-size:14px;line-height:20px;font-weight:600;color:var(--t2);font-variant-numeric:tabular-nums;">{{ v.fechados }}</span>
+                <span style="text-align:right;font-size:14px;line-height:20px;font-weight:600;color:var(--green-dark);font-variant-numeric:tabular-nums;">{{ v.mrr }}</span>
+                <span style="text-align:right;font-size:14px;line-height:20px;font-weight:600;color:var(--t2);font-variant-numeric:tabular-nums;">{{ v.conv }}</span>
+                <span style="text-align:right;"><span style="display:inline-block;padding:4px 8px;border-radius:4px;background:{{ v.metaBg }};color:{{ v.metaFg }};font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;">{{ v.meta }}</span></span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ─────── MEU DESEMPENHO ─────── -->
+      <sc-if value="{{ ehMeu }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:24px;display:flex;flex-direction:column;gap:24px;max-width:1200px;">
+          <div style="padding:24px;border-radius:8px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:11px;line-height:16px;letter-spacing:.12em;font-weight:800;color:rgba(255,255,255,.75);text-transform:uppercase;">Meta de agosto</div>
+              <div style="font-size:28px;line-height:36px;font-weight:700;margin-top:4px;">8 de 12 fechamentos</div>
+              <div style="font-size:14px;line-height:20px;letter-spacing:.25px;font-weight:500;color:rgba(255,255,255,.85);margin-top:4px;">Faltam 4 em 3 dias úteis. Ritmo atual: 1,3/dia.</div>
+            </div>
+            <div style="display:flex;gap:32px;">
+              <div><div style="font-size:28px;line-height:36px;font-weight:700;font-variant-numeric:tabular-nums;">67%</div><div style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;color:rgba(255,255,255,.75);">da meta</div></div>
+              <div><div style="font-size:28px;line-height:36px;font-weight:700;font-variant-numeric:tabular-nums;">R$ 4,2k</div><div style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;color:rgba(255,255,255,.75);">MRR novo</div></div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;">
+            <sc-for list="{{ kpisMeu }}" as="k" hint-placeholder-count="4">
+              <div style="padding:16px;background:var(--raised);border:1px solid var(--s-subtle);border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.14),0 0 2px rgba(0,0,0,.12);">
+                <span style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:500;color:var(--t2);">{{ k.label }}</span>
+                <div style="font-size:24px;line-height:32px;font-weight:600;color:var(--t1);margin-top:8px;font-variant-numeric:tabular-nums;">{{ k.valor }}</div>
+                <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:{{ k.deltaFg }};margin-top:4px;">{{ k.delta }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ─────── LOGIN ─────── -->
+      <sc-if value="{{ ehLogin }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:1fr 1fr;height:100vh;">
+          <div style="background:var(--brand);padding:64px;display:flex;flex-direction:column;justify-content:space-between;">
+            <img src="assets/takeat-logo-white.svg" alt="Takeat" style="height:32px;width:auto;align-self:flex-start;">
+            <div>
+              <div style="font-size:11px;line-height:16px;letter-spacing:.12em;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;">Field Sales Outbound</div>
+              <div style="font-size:28px;line-height:36px;font-weight:700;color:#fff;margin-top:8px;max-width:22ch;text-wrap:pretty;">O campo inteiro numa tela: mapa, rota, agenda e funil.</div>
+            </div>
+            <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:rgba(255,255,255,.7);">Contas são criadas pelo administrador.</div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:center;padding:64px;background:var(--bg);">
+            <div style="width:100%;max-width:400px;display:flex;flex-direction:column;gap:16px;">
+              <div style="font-size:24px;line-height:32px;font-weight:700;color:var(--t1);">Entrar na conta</div>
+              <div>
+                <label style="display:block;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--t2);margin-bottom:8px;">E-mail</label>
+                <div style="display:flex;align-items:center;gap:8px;height:40px;padding:0 16px;border:1px solid var(--s-strong);border-radius:8px;background:var(--raised);">
+                  <span class="ms" style="font-size:20px;color:var(--t3);">mail</span>
+                  <input placeholder="voce@takeat.app" style="flex:1;border:0;outline:0;background:transparent;font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.25px;color:var(--t2);">
+                </div>
+              </div>
+              <div>
+                <label style="display:block;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--t2);margin-bottom:8px;">Senha</label>
+                <div style="display:flex;align-items:center;gap:8px;height:40px;padding:0 16px;border:1px solid var(--s-strong);border-radius:8px;background:var(--raised);">
+                  <span class="ms" style="font-size:20px;color:var(--t3);">lock</span>
+                  <input type="password" placeholder="••••••••" style="flex:1;border:0;outline:0;background:transparent;font-family:inherit;font-size:14px;line-height:20px;color:var(--t2);">
+                </div>
+              </div>
+              <button onClick="{{ goMapa }}" style="height:40px;margin-top:8px;border:0;border-radius:12px;background:var(--brand);color:#fff;font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;text-align:left;padding:0 24px;" style-hover="background:var(--brand-dark);">Entrar</button>
+              <a href="#" style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;">Esqueci minha senha</a>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </main>
+
+  <!-- ══════════ DRAWER: FICHA DO LEAD ══════════ -->
+  <sc-if value="{{ fichaAberta }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:60;display:flex;justify-content:flex-end;">
+      <div onClick="{{ closeAll }}" style="position:absolute;inset:0;background:rgba(0,0,0,.32);"></div>
+      <div style="position:relative;width:480px;max-width:100vw;background:var(--raised);box-shadow:-8px 0 16px rgba(0,0,0,.14);display:flex;flex-direction:column;">
+        <div style="padding:24px;border-bottom:1px solid var(--s-subtle);">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;">
+            <div style="min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                <span style="width:10px;height:10px;border-radius:5px;background:#C8131B;"></span>
+                <span style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t3);text-transform:uppercase;">Lead quente · 3ª visita</span>
+              </div>
+              <div style="font-size:18px;line-height:24px;font-weight:600;color:var(--t1);">Bar do Zé</div>
+              <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);margin-top:2px;">José Almeida · (11) 98812-4477</div>
+            </div>
+            <button onClick="{{ closeAll }}" style="width:40px;height:40px;flex:0 0 40px;border:0;border-radius:8px;background:transparent;color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;" style-hover="background:var(--nested);" title="Fechar"><span class="ms" style="font-size:24px;">close</span></button>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:16px;">
+            <button onClick="{{ openEtapa }}" style="flex:1;height:40px;border:0;border-radius:12px;background:var(--brand);color:#fff;font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;padding:0 16px;" style-hover="background:var(--brand-dark);"><span class="ms" style="font-size:24px;">trending_up</span>Mudar etapa</button>
+            <button onClick="{{ openAgendar }}" style="flex:1;height:40px;border:1px solid var(--brand);border-radius:12px;background:transparent;color:var(--brand);font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;padding:0 16px;" style-hover="background:var(--brand-tint);"><span class="ms" style="font-size:24px;">event</span>Agendar</button>
+            <button style="width:40px;height:40px;flex:0 0 40px;border:1px solid var(--s-default);border-radius:12px;background:transparent;color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Mais"><span class="ms" style="font-size:24px;">more_horiz</span></button>
+          </div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:24px;">
+          <div style="padding:16px;border:1px solid var(--s-subtle);border-radius:8px;background:var(--nested);">
+            <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:var(--t2);text-transform:uppercase;margin-bottom:12px;">Uso do produto</div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="width:10px;height:10px;border-radius:5px;background:#FFB32F;"></span>
+              <span style="font-size:14px;line-height:20px;letter-spacing:.25px;color:var(--t2);">Última comanda há 12 dias</span>
+            </div>
+            <div style="font-size:11px;line-height:16px;letter-spacing:.5px;color:var(--t3);margin-top:8px;">Sincronizado há 2 dias · 348 comandas</div>
+          </div>
+          <div>
+            <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:var(--t2);text-transform:uppercase;margin-bottom:12px;">Dados</div>
+            <sc-for list="{{ fichaCampos }}" as="f" hint-placeholder-count="6">
+              <div style="display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--s-subtle);">
+                <span style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t3);">{{ f.k }}</span>
+                <span style="font-size:14px;line-height:20px;letter-spacing:.25px;color:var(--t1);text-align:right;">{{ f.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div>
+            <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:var(--t2);text-transform:uppercase;margin-bottom:12px;">Timeline</div>
+            <sc-for list="{{ timeline }}" as="t" hint-placeholder-count="4">
+              <div style="display:flex;gap:12px;padding-bottom:16px;">
+                <span style="width:32px;height:32px;flex:0 0 32px;border-radius:9999px;background:{{ t.bg }};color:{{ t.fg }};display:flex;align-items:center;justify-content:center;"><span class="ms" style="font-size:20px;">{{ t.icon }}</span></span>
+                <div style="min-width:0;">
+                  <div style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--t1);">{{ t.titulo }}</div>
+                  <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);">{{ t.quando }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="padding:24px;border-top:1px solid var(--s-subtle);">
+          <button style="width:100%;height:40px;border:0;border-radius:12px;background:var(--green);color:#fff;font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px;padding:0 16px;"><span class="ms" style="font-size:24px;">where_to_vote</span>Marcar visita (check-in GPS)</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ══════════ MODAL: MUDANÇA DE ETAPA ══════════ -->
+  <sc-if value="{{ etapaAberta }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;padding:24px;">
+      <div onClick="{{ closeAll }}" style="position:absolute;inset:0;background:rgba(0,0,0,.32);"></div>
+      <div style="position:relative;width:560px;max-width:100%;max-height:88vh;overflow-y:auto;background:var(--raised);border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,.14),0 0 8px rgba(0,0,0,.2);">
+        <div style="padding:24px;border-bottom:1px solid var(--s-subtle);display:flex;align-items:flex-start;justify-content:space-between;gap:16px;">
+          <div>
+            <div style="font-size:18px;line-height:24px;font-weight:600;color:var(--t1);">Mudar etapa · Bar do Zé</div>
+            <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);margin-top:2px;">Hoje em Negociação · sincroniza no HubSpot</div>
+          </div>
+          <button onClick="{{ closeAll }}" style="width:40px;height:40px;border:0;border-radius:8px;background:transparent;color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;" style-hover="background:var(--nested);"><span class="ms" style="font-size:24px;">close</span></button>
+        </div>
+        <div style="padding:24px;display:flex;flex-direction:column;gap:24px;">
+          <div>
+            <div style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--t2);margin-bottom:8px;">Nova etapa</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <sc-for list="{{ etapasDestino }}" as="e" hint-placeholder-count="4">
+                <button style="display:flex;align-items:center;gap:12px;height:48px;padding:0 16px;border:1px solid {{ e.border }};border-radius:8px;background:{{ e.bg }};font-family:inherit;cursor:pointer;text-align:left;">
+                  <span style="width:20px;height:20px;flex:0 0 20px;border-radius:9999px;border:2px solid {{ e.radio }};display:flex;align-items:center;justify-content:center;"><span style="width:10px;height:10px;border-radius:5px;background:{{ e.dot }};"></span></span>
+                  <span style="flex:1;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:{{ e.fg }};">{{ e.label }}</span>
+                  <span style="width:10px;height:10px;border-radius:5px;background:{{ e.cor }};"></span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+          <div style="padding:16px;border-radius:8px;background:var(--nested);border-left:3px solid var(--yellow-dark);">
+            <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:var(--t2);text-transform:uppercase;margin-bottom:12px;">Campos obrigatórios em Ag. Pagamento</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+              <sc-for list="{{ camposEtapa }}" as="c" hint-placeholder-count="4">
+                <div>
+                  <label style="display:block;font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t2);margin-bottom:8px;">{{ c.label }}</label>
+                  <div style="height:40px;padding:0 16px;border:1px solid var(--s-strong);border-radius:8px;background:var(--raised);display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-size:14px;line-height:20px;letter-spacing:.25px;color:var(--t4);">{{ c.ph }}</span>
+                    <sc-if value="{{ c.select }}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size:20px;color:var(--t3);">expand_more</span></sc-if>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <div style="padding:24px;border-top:1px solid var(--s-subtle);display:flex;justify-content:flex-end;gap:8px;">
+          <button onClick="{{ closeAll }}" style="height:32px;padding:0 16px;border:1px solid var(--s-default);border-radius:8px;background:transparent;color:var(--t2);font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;">Cancelar</button>
+          <button style="height:40px;padding:0 16px;border:0;border-radius:12px;background:var(--brand);color:#fff;font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;" style-hover="background:var(--brand-dark);">Confirmar mudança</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ══════════ MODAL: AGENDAR ══════════ -->
+  <sc-if value="{{ agendarAberto }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;padding:24px;">
+      <div onClick="{{ closeAll }}" style="position:absolute;inset:0;background:rgba(0,0,0,.32);"></div>
+      <div style="position:relative;width:640px;max-width:100%;background:var(--raised);border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,.14),0 0 8px rgba(0,0,0,.2);">
+        <div style="padding:24px;border-bottom:1px solid var(--s-subtle);display:flex;align-items:flex-start;justify-content:space-between;">
+          <div>
+            <div style="font-size:18px;line-height:24px;font-weight:600;color:var(--t1);">Agendar · Bar do Zé</div>
+            <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);margin-top:2px;">Cria Meeting no HubSpot e evento no Google Calendar</div>
+          </div>
+          <button onClick="{{ closeAll }}" style="width:40px;height:40px;border:0;border-radius:8px;background:transparent;color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;" style-hover="background:var(--nested);"><span class="ms" style="font-size:24px;">close</span></button>
+        </div>
+        <div style="padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+          <div style="display:flex;flex-direction:column;gap:16px;">
+            <div>
+              <div style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--t2);margin-bottom:8px;">Tipo</div>
+              <div style="display:flex;gap:8px;">
+                <button style="flex:1;height:40px;border:1px solid var(--brand);border-radius:12px 0 0 12px;background:var(--brand);color:#fff;font-family:inherit;font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;cursor:pointer;">Demo</button>
+                <button style="flex:1;height:40px;border:1px solid var(--s-default);border-radius:0 12px 12px 0;background:transparent;color:var(--t2);font-family:inherit;font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;cursor:pointer;">Follow up</button>
+              </div>
+            </div>
+            <div>
+              <label style="display:block;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--t2);margin-bottom:8px;">Duração</label>
+              <div style="height:40px;padding:0 16px;border:1px solid var(--s-strong);border-radius:8px;background:var(--raised);display:flex;align-items:center;justify-content:space-between;">
+                <span style="font-size:14px;line-height:20px;letter-spacing:.25px;color:var(--t2);">45 minutos</span>
+                <span class="ms" style="font-size:20px;color:var(--t3);">expand_more</span>
+              </div>
+            </div>
+            <div>
+              <label style="display:block;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--t2);margin-bottom:8px;">Observações</label>
+              <div style="height:120px;padding:12px 16px;border:1px solid var(--s-strong);border-radius:8px;background:var(--raised);">
+                <span style="font-size:14px;line-height:20px;letter-spacing:.25px;color:var(--t4);">Contexto pro time e pro HubSpot…</span>
+              </div>
+            </div>
+          </div>
+          <div style="border:1px solid var(--s-subtle);border-radius:8px;overflow:hidden;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--s-subtle);">
+              <button style="width:32px;height:32px;border:0;background:transparent;color:var(--brand);cursor:pointer;"><span class="ms" style="font-size:20px;">chevron_left</span></button>
+              <span style="font-size:16px;line-height:24px;letter-spacing:.15px;font-weight:700;color:var(--brand);">Agosto 2026</span>
+              <button style="width:32px;height:32px;border:0;background:transparent;color:var(--brand);cursor:pointer;"><span class="ms" style="font-size:20px;">chevron_right</span></button>
+            </div>
+            <div style="padding:12px;">
+              <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px;">
+                <sc-for list="{{ diasSemana }}" as="d" hint-placeholder-count="7">
+                  <span style="text-align:center;font-size:14px;line-height:20px;font-weight:700;color:{{ d.cor }};">{{ d.l }}</span>
+                </sc-for>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">
+                <sc-for list="{{ diasMes }}" as="d" hint-placeholder-count="35">
+                  <span style="height:36px;display:flex;align-items:center;justify-content:center;border-radius:9999px;background:{{ d.bg }};color:{{ d.fg }};font-size:14px;line-height:20px;font-weight:500;cursor:pointer;font-variant-numeric:tabular-nums;">{{ d.n }}</span>
+                </sc-for>
+              </div>
+            </div>
+            <div style="padding:12px 16px;border-top:1px solid var(--s-subtle);display:flex;gap:8px;flex-wrap:wrap;">
+              <sc-for list="{{ horarios }}" as="h" hint-placeholder-count="6">
+                <button style="height:32px;padding:0 12px;border:1px solid {{ h.border }};border-radius:8px;background:{{ h.bg }};color:{{ h.fg }};font-family:inherit;font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;cursor:pointer;font-variant-numeric:tabular-nums;">{{ h.h }}</button>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <div style="padding:24px;border-top:1px solid var(--s-subtle);display:flex;justify-content:flex-end;gap:8px;">
+          <button onClick="{{ closeAll }}" style="height:32px;padding:0 16px;border:1px solid var(--s-default);border-radius:8px;background:transparent;color:var(--t2);font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;">Cancelar</button>
+          <button style="height:40px;padding:0 16px;border:0;border-radius:12px;background:var(--brand);color:#fff;font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;" style-hover="background:var(--brand-dark);">Agendar demo</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ══════════ MODAL: CADASTRO + CEP ══════════ -->
+  <sc-if value="{{ cadastroAberto }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;padding:24px;">
+      <div onClick="{{ closeAll }}" style="position:absolute;inset:0;background:rgba(0,0,0,.32);"></div>
+      <div style="position:relative;width:720px;max-width:100%;background:var(--raised);border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,.14),0 0 8px rgba(0,0,0,.2);">
+        <div style="padding:24px;border-bottom:1px solid var(--s-subtle);">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            <div style="font-size:18px;line-height:24px;font-weight:600;color:var(--t1);">Novo lead</div>
+            <button onClick="{{ closeAll }}" style="width:40px;height:40px;border:0;border-radius:8px;background:transparent;color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;" style-hover="background:var(--nested);"><span class="ms" style="font-size:24px;">close</span></button>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:16px;">
+            <sc-for list="{{ passos }}" as="p" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="width:24px;height:24px;border-radius:9999px;background:{{ p.bg }};color:{{ p.fg }};font-size:12px;line-height:24px;letter-spacing:.5px;font-weight:700;text-align:center;">{{ p.n }}</span>
+                <span style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;color:{{ p.labelFg }};white-space:nowrap;">{{ p.label }}</span>
+                <span style="width:24px;height:2px;background:var(--s-subtle);"></span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:16px 24px;">
+          <sc-for list="{{ camposCadastro }}" as="c" hint-placeholder-count="6">
+            <div style="grid-column:{{ c.span }};">
+              <label style="display:block;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--t2);margin-bottom:8px;">{{ c.label }}</label>
+              <div style="height:40px;padding:0 16px;border:1px solid var(--s-strong);border-radius:8px;background:var(--raised);display:flex;align-items:center;justify-content:space-between;">
+                <span style="font-size:14px;line-height:20px;letter-spacing:.25px;color:var(--t4);">{{ c.ph }}</span>
+                <sc-if value="{{ c.icon }}" hint-placeholder-val="{{ false }}"><span class="ms" style="font-size:20px;color:var(--t3);">{{ c.icon }}</span></sc-if>
+              </div>
+              <sc-if value="{{ c.info }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);margin-top:4px;">{{ c.info }}</div>
+              </sc-if>
+            </div>
+          </sc-for>
+          <div style="grid-column:span 2;height:200px;border-radius:8px;background:#E5E3DF;position:relative;overflow:hidden;border:1px solid var(--s-subtle);">
+            <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent 39px,#D8D5D0 39px,#D8D5D0 41px,transparent 41px),linear-gradient(0deg,transparent 39px,#D8D5D0 39px,#D8D5D0 41px,transparent 41px);background-size:80px 80px;"></div>
+            <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-100%);">
+              <div style="width:36px;height:36px;border-radius:18px;background:var(--brand);border:2px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 8px rgba(0,0,0,.24);"><img src="assets/takeat-icon-white.svg" alt="" style="width:18px;height:18px;"></div>
+              <div style="width:0;height:0;margin:-1px auto 0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid #C8131B;"></div>
+            </div>
+            <div style="position:absolute;left:16px;bottom:16px;padding:8px 12px;border-radius:8px;background:var(--raised);box-shadow:0 2px 4px rgba(0,0,0,.14);">
+              <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t2);">Arraste o mapa para ajustar o pin</div>
+              <div style="font-size:11px;line-height:16px;letter-spacing:.5px;color:var(--t3);font-variant-numeric:tabular-nums;">-23.55842, -46.63946</div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:24px;border-top:1px solid var(--s-subtle);display:flex;justify-content:space-between;gap:8px;">
+          <button onClick="{{ closeAll }}" style="height:32px;padding:0 16px;border:0;border-radius:8px;background:transparent;color:var(--t2);font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;">Cancelar</button>
+          <button style="height:40px;padding:0 16px;border:0;border-radius:12px;background:var(--brand);color:#fff;font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;" style-hover="background:var(--brand-dark);">Cadastrar e sincronizar</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900}}">
+const T = { hot:'#C8131B', warm:'#FFB32F', cold:'#0ea5e9', won:'#16a34a', lost:'#475569' };
+const ALVO = '#7c3aed';
+
+class Component extends DCLogic {
+  state = {
+    tela: 'mapa', theme: 'light', rail: false, heat: false,
+    overlay: null, statusSeg: 0, chipLista: 0,
+  };
+
+  go(tela) { return () => this.setState({ tela, overlay: null }); }
+
+  renderVals() {
+    const s = this.state;
+    const dark = s.theme === 'dark';
+
+    const navDef = [
+      { key:'mapa',    label:'Mapa',           icon:'location_on' },
+      { key:'lista',   label:'Lista',          icon:'format_list_bulleted' },
+      { key:'rota',    label:'Rota',           icon:'directions_car' },
+      { key:'agenda',  label:'Agenda',         icon:'calendar_month' },
+      { key:'tarefas', label:'Tarefas',        icon:'assignment_turned_in', badge:'14' },
+      { key:'gestor',  label:'Gestor',         icon:'insights' },
+      { key:'meu',     label:'Meu desempenho', icon:'person' },
+      { key:'login',   label:'Login',          icon:'login' },
+    ];
+    const nav = navDef.map(n => {
+      const on = s.tela === n.key;
+      return {
+        ...n,
+        go: this.go(n.key),
+        bg: on ? 'var(--brand-tint)' : 'transparent',
+        fg: on ? 'var(--brand-dark)' : 'var(--t2)',
+        weight: on ? 700 : 500,
+        badge: n.badge || false,
+        badgeLeft: s.rail ? '176px' : '34px',
+      };
+    });
+
+    const titulos = {
+      mapa:['Mapa comercial','412 leads na área visível · SP capital e ABC'],
+      lista:['Leads','412 resultados · 2 filtros ativos'],
+      rota:['Rota do dia','7 paradas · 38,4 km · início 08:30'],
+      agenda:['Agenda','Rotas, demos e follow-ups da semana'],
+      tarefas:['Tarefas','14 cobranças abertas · escalonamento D2 → D5'],
+      gestor:['Painel do gestor','Agosto 2026 · 5 vendedores'],
+      meu:['Meu desempenho','Agosto 2026 · Rafael Pereira'],
+      login:['Entrar','Takeat RPA · Field Sales'],
+    };
+    const [tituloTela, subtituloTela] = titulos[s.tela] || ['',''];
+
+    const seg = ['Leads','Clientes','Ex-clientes'].map((label,i) => ({
+      label, go: () => this.setState({ statusSeg: i }),
+      bg: s.statusSeg===i ? 'var(--brand)' : 'transparent',
+      fg: s.statusSeg===i ? '#fff' : 'var(--t2)',
+      border: s.statusSeg===i ? 'var(--brand)' : 'var(--s-default)',
+      radius: i===0 ? '12px 0 0 12px' : i===2 ? '0 12px 12px 0' : '0',
+    }));
+
+    const legenda = [
+      { cor:T.hot, rotulo:'Quente', n:'38' }, { cor:T.warm, rotulo:'Morno', n:'91' },
+      { cor:T.cold, rotulo:'Frio', n:'214' }, { cor:T.won, rotulo:'Fechado', n:'46' },
+      { cor:T.lost, rotulo:'Perdido', n:'17' }, { cor:ALVO, rotulo:'Conta Alvo', n:'6' },
+    ].map(g => ({ ...g, bg:'var(--raised)', fg:'var(--t2)', border:'var(--s-default)' }));
+
+    const base = [
+      { nome:'Bar do Zé', contato:'José Almeida', etapa:'Negociação', temp:'Quente', cidade:'São Paulo · SP', telefone:'(11) 98812-4477', cor:T.hot, status:'Lead · 3 visitas', visita:'há 4 dias', reunioes:'2' },
+      { nome:'Cantina Bella Napoli', contato:'Marina Rossi', etapa:'Demo/Proposta', temp:'Morno', cidade:'São Paulo · SP', telefone:'(11) 97744-1120', cor:T.warm, status:'Lead · 2 visitas', visita:'há 9 dias', reunioes:'1' },
+      { nome:'Hamburgueria Fogo Alto', contato:'Diego Matos', etapa:'Prospecção', temp:'Frio', cidade:'Guarulhos · SP', telefone:'(11) 96633-8890', cor:T.cold, status:'Lead', visita:'—', reunioes:'0' },
+      { nome:'Padaria Aurora', contato:'Cláudia Reis', etapa:'Visita', temp:'Frio', cidade:'Osasco · SP', telefone:'(11) 95522-3341', cor:T.cold, status:'Lead · 1 visita', visita:'há 2 dias', reunioes:'0' },
+      { nome:'Sushi Kaito', contato:'Yuri Tanaka', etapa:'Ag. Pagamento', temp:'Quente', cidade:'São Bernardo · SP', telefone:'(11) 94411-7723', cor:T.hot, status:'Lead · 4 visitas', visita:'ontem', reunioes:'3' },
+      { nome:'Boteco da Praça', contato:'Rita Nogueira', etapa:'Conversa com decisor', temp:'Morno', cidade:'Santo André · SP', telefone:'(11) 93300-6612', cor:T.warm, status:'Lead · 2 visitas', visita:'há 6 dias', reunioes:'1' },
+      { nome:'Empório Vila Rica', contato:'Paulo Cunha', etapa:'Enviado Onboarding', temp:'Fechado', cidade:'São Caetano · SP', telefone:'(11) 92299-5501', cor:T.won, status:'Cliente', visita:'há 12 dias', reunioes:'0' },
+      { nome:'Pizzaria Forno Velho', contato:'Adriana Melo', etapa:'Perdido', temp:'Perdido', cidade:'Diadema · SP', telefone:'(11) 91188-4490', cor:T.lost, status:'Lead', visita:'há 31 dias', reunioes:'0' },
+      { nome:'Café Central', contato:'Bruno Ferraz', etapa:'Prospecção', temp:'Frio', cidade:'Mauá · SP', telefone:'(11) 90077-3389', cor:T.cold, status:'Lead', visita:'—', reunioes:'0' },
+      { nome:'Restaurante Maré Alta', contato:'Sônia Dias', etapa:'Negócio Fechado', temp:'Fechado', cidade:'Santos · SP', telefone:'(11) 98866-2204', cor:T.won, status:'Cliente', visita:'há 3 dias', reunioes:'1' },
+    ];
+    const dists = ['0,8 km','1,4 km','2,1 km','2,9 km','3,6 km','4,2 km','5,0 km','6,3 km','7,1 km','9,4 km'];
+    const leads = base.slice(0,8).map((l,i) => ({ ...l, dist: dists[i] }));
+
+    const etapaTint = {
+      'Negociação': ['#FFF1E0','#8A4A0C'], 'Demo/Proposta': ['#FFF8EB','#99670F'],
+      'Prospecção': ['#E6F7FF','#016999'], 'Visita': ['#E6FBF8','#0F6B61'],
+      'Ag. Pagamento': ['#FAE8E9','#94090F'], 'Conversa com decisor': ['#F1EBFE','#5B32C4'],
+      'Enviado Onboarding': ['#EAF7EE','#167532'], 'Perdido': ['#EDEDED','#545454'],
+      'Negócio Fechado': ['#EAF7EE','#167532'],
+    };
+    const leadsTabela = base.map(l => {
+      const [bg,fg] = etapaTint[l.etapa] || ['#EDEDED','#545454'];
+      return { ...l, etapaBg: dark ? 'var(--nested)' : bg, etapaFg: dark ? 'var(--t1)' : fg,
+        visitaFg: l.visita === '—' ? 'var(--t4)' : l.visita.includes('31') ? '#94090F' : 'var(--t2)' };
+    });
+
+    const colunas = [
+      {label:'Restaurante',align:'left'},{label:'Contato',align:'left'},{label:'Etapa',align:'left'},
+      {label:'Temperatura',align:'left'},{label:'Cidade / UF',align:'left'},{label:'Última visita',align:'left'},
+      {label:'Reuniões',align:'center'},{label:'',align:'right'},
+    ];
+
+    const chipsLista = [
+      {label:'Todos · 412',cor:'#7A7A7A'},{label:'Quente · 38',cor:T.hot},{label:'Morno · 91',cor:T.warm},
+      {label:'Frio · 214',cor:T.cold},{label:'Conta Alvo · 6',cor:ALVO},
+    ].map((c,i) => ({ ...c, go: () => this.setState({ chipLista: i }),
+      bg: s.chipLista===i ? 'var(--brand-tint)' : 'var(--raised)',
+      fg: s.chipLista===i ? 'var(--brand-dark)' : 'var(--t2)',
+      border: s.chipLista===i ? 'var(--brand-tint)' : 'var(--s-default)' }));
+
+    const pins = [
+      {x:'18%',y:'26%',cor:T.cold},{x:'34%',y:'18%',cor:T.hot},{x:'52%',y:'32%',cor:T.warm},
+      {x:'68%',y:'22%',cor:T.won},{x:'26%',y:'52%',cor:ALVO},{x:'46%',y:'58%',cor:T.cold},
+      {x:'72%',y:'56%',cor:T.hot},{x:'38%',y:'78%',cor:T.lost},{x:'62%',y:'82%',cor:T.warm},
+    ];
+
+    const paradas = [
+      {n:'1',x:'15%',y:'17%',bg:'#167532'},{n:'2',x:'33%',y:'26%',bg:'#167532'},
+      {n:'3',x:'30%',y:'43%',bg:'#C8131B'},{n:'4',x:'53%',y:'49%',bg:'#7A7A7A'},
+      {n:'5',x:'50%',y:'67%',bg:'#7A7A7A'},{n:'6',x:'72%',y:'74%',bg:'#7A7A7A'},
+      {n:'7',x:'68%',y:'89%',bg:'#7A7A7A'},
+    ];
+    const paradasLista = [
+      {n:'1',nome:'Padaria Aurora',det:'08:30 · Osasco · check-in feito',tag:'Visitado',feito:true},
+      {n:'2',nome:'Café Central',det:'09:20 · Mauá · check-in feito',tag:'Visitado',feito:true},
+      {n:'3',nome:'Bar do Zé',det:'10:40 · São Paulo · 2,1 km daqui',tag:'Agora',agora:true},
+      {n:'4',nome:'Boteco da Praça',det:'11:50 · Santo André · SLA vence hoje',tag:'SLA',sla:true},
+      {n:'5',nome:'Hamburgueria Fogo Alto',det:'14:10 · Guarulhos',tag:false},
+      {n:'6',nome:'Sushi Kaito',det:'15:30 · São Bernardo · demo marcada',tag:'Demo',demo:true},
+      {n:'7',nome:'Empório Vila Rica',det:'16:40 · São Caetano · Conta Alvo',tag:'Alvo',alvo:true},
+    ].map(p => ({
+      ...p,
+      bg: p.feito ? '#EAF7EE' : p.agora ? 'var(--brand)' : 'var(--nested)',
+      fg: p.feito ? '#167532' : p.agora ? '#fff' : 'var(--t2)',
+      tagBg: p.feito ? '#EAF7EE' : p.agora ? 'var(--brand-tint)' : p.sla ? '#FFF8EB' : p.demo ? '#F1EBFE' : p.alvo ? '#F1EBFE' : 'var(--nested)',
+      tagFg: p.feito ? '#167532' : p.agora ? '#94090F' : p.sla ? '#99670F' : '#5B32C4',
+    }));
+    const rotaKpis = [
+      {valor:'7',label:'paradas'},{valor:'38,4 km',label:'distância'},{valor:'5h10',label:'em rota'},
+    ];
+
+    const tiposAgenda = [
+      {label:'Rota',cor:'#C8131B'},{label:'Demo',cor:'#7c3aed'},{label:'Follow-up',cor:'#01AFFF'},
+    ];
+    const itens = {
+      seg:[{hora:'08:30',titulo:'Rota · 6 paradas',sub:'Zona Leste',cor:'#C8131B'},{hora:'16:00',titulo:'Demo · Sushi Kaito',sub:'45 min · presencial',cor:'#7c3aed'}],
+      ter:[{hora:'09:00',titulo:'Rota · 7 paradas',sub:'ABC',cor:'#C8131B'}],
+      qua:[{hora:'10:00',titulo:'Follow-up · Bar do Zé',sub:'ligação',cor:'#01AFFF'},{hora:'14:30',titulo:'Demo · Bella Napoli',sub:'60 min · remoto',cor:'#7c3aed'}],
+      qui:[{hora:'08:30',titulo:'Rota · 7 paradas',sub:'SP centro + ABC',cor:'#C8131B'},{hora:'11:50',titulo:'Follow-up · Boteco',sub:'SLA vence hoje',cor:'#01AFFF'},{hora:'15:30',titulo:'Demo · Sushi Kaito',sub:'45 min',cor:'#7c3aed'}],
+      sex:[{hora:'09:00',titulo:'Rota · 5 paradas',sub:'Guarulhos',cor:'#C8131B'},{hora:'17:00',titulo:'Follow-up · Café Central',sub:'ligação',cor:'#01AFFF'}],
+      sab:[],dom:[],
+    };
+    const tint = { '#C8131B':'#FAE8E9', '#7c3aed':'#F1EBFE', '#01AFFF':'#E6F7FF' };
+    const semana = [
+      {dia:'seg',num:'24',k:'seg'},{dia:'ter',num:'25',k:'ter'},{dia:'qua',num:'26',k:'qua'},
+      {dia:'qui',num:'27',k:'qui',hoje:true},{dia:'sex',num:'28',k:'sex'},
+      {dia:'sáb',num:'29',k:'sab'},{dia:'dom',num:'30',k:'dom'},
+    ].map(d => ({
+      dia:d.dia, num:d.num,
+      border: d.hoje ? 'var(--brand)' : 'var(--s-subtle)',
+      headBg: d.hoje ? 'var(--brand-tint)' : 'transparent',
+      headFg: d.hoje ? 'var(--brand-dark)' : 'var(--t3)',
+      numFg: d.hoje ? 'var(--brand-dark)' : 'var(--t1)',
+      itens: (itens[d.k]||[]).map(i => ({ ...i, bg: dark ? 'var(--nested)' : tint[i.cor] })),
+    }));
+
+    const colunasKanban = [
+      { titulo:'Atrasadas', cor:'#C8131B', n:'4', pillBg:'#FAE8E9', pillFg:'#94090F', cards:[
+        {lead:'Boteco da Praça',tarefa:'Agendar Demo — escalonamento D5',sla:'D5',prazo:'venceu há 3 dias',vendedor:'Rafael'},
+        {lead:'Pizzaria Forno Velho',tarefa:'Retomar contato após 30 dias sem visita',sla:'D5',prazo:'venceu há 6 dias',vendedor:'Rafael'},
+        {lead:'Café Central',tarefa:'Agendar Demo — escalonamento D2',sla:'D2',prazo:'venceu ontem',vendedor:'Júlia'},
+      ]},
+      { titulo:'Hoje', cor:'#FFB32F', n:'6', pillBg:'#FFF8EB', pillFg:'#99670F', cards:[
+        {lead:'Bar do Zé',tarefa:'Enviar proposta revisada',sla:'D2',prazo:'até 18:00',vendedor:'Rafael'},
+        {lead:'Padaria Aurora',tarefa:'Agendar Demo após visita',sla:'D2',prazo:'até 18:00',vendedor:'Rafael'},
+        {lead:'Sushi Kaito',tarefa:'Confirmar CNPJ para Ag. Pagamento',sla:'—',prazo:'até 18:00',vendedor:'Marcos'},
+      ]},
+      { titulo:'Próximas', cor:'#0ea5e9', n:'4', pillBg:'#E6F7FF', pillFg:'#016999', cards:[
+        {lead:'Cantina Bella Napoli',tarefa:'Follow-up pós-demo',sla:'D2',prazo:'sex, 28',vendedor:'Rafael'},
+        {lead:'Hamburgueria Fogo Alto',tarefa:'Primeira visita',sla:'—',prazo:'seg, 31',vendedor:'Júlia'},
+      ]},
+    ].map(k => ({ ...k, cards: k.cards.map(c => ({
+      ...c,
+      slaBg: c.sla==='D5' ? '#FAE8E9' : c.sla==='D2' ? '#FFF8EB' : 'var(--nested)',
+      slaFg: c.sla==='D5' ? '#94090F' : c.sla==='D2' ? '#99670F' : 'var(--t3)',
+      openAgendar: () => this.setState({ overlay:'agendar' }),
+    })) }));
+
+    const kpis = [
+      {label:'Visitas',valor:'318',delta:'+12% vs julho',icon:'trending_up',deltaFg:'var(--green-dark)'},
+      {label:'Demos realizadas',valor:'74',delta:'+8% vs julho',icon:'trending_up',deltaFg:'var(--green-dark)'},
+      {label:'Fechamentos',valor:'31',delta:'−4% vs julho',icon:'trending_down',deltaFg:'#94090F'},
+      {label:'MRR novo',valor:'R$ 18,4k',delta:'+21% vs julho',icon:'trending_up',deltaFg:'var(--green-dark)'},
+    ];
+
+    const funilRaw = [
+      {etapa:'Prospecção',n:412,cor:'#0ea5e9'},{etapa:'Visita',n:268,cor:'#14b8a6'},
+      {etapa:'Conversa com decisor',n:164,cor:'#8B5CF6'},{etapa:'Demo/Proposta',n:98,cor:'#FFB32F'},
+      {etapa:'Negociação',n:61,cor:'#f97316'},{etapa:'Ag. Pagamento',n:44,cor:'#C8131B'},
+      {etapa:'Negócio Fechado',n:31,cor:'#16a34a'},{etapa:'Enviado Onboarding',n:28,cor:'#10b981'},
+    ];
+    const funil = funilRaw.map(f => ({
+      ...f, n: String(f.n), pct: Math.round(f.n/412*100)+'%', w: Math.round(f.n/412*100)+'%',
+    }));
+
+    const heatN = [0,2,3,1,4,0,0, 1,3,2,5,2,1,0, 0,1,4,3,3,0,0, 2,4,1,0,0,0,0];
+    const heat = heatN.map((n,i) => ({
+      n: String(n),
+      bg: n===0 ? 'var(--fill)' : n<3 ? '#8FE0D5' : '#1D9688',
+      border: (i===24 && n===0) ? '1.5px dashed #C8131B' : '0',
+    }));
+
+    const colTime = [
+      {label:'Vendedor',align:'left'},{label:'Visitas',align:'right'},{label:'Demos',align:'right'},
+      {label:'Fechados',align:'right'},{label:'MRR novo',align:'right'},{label:'Conversão',align:'right'},{label:'Meta',align:'right'},
+    ];
+    const time = [
+      {nome:'Rafael Pereira',ini:'RP',visitas:'92',demos:'24',fechados:'11',mrr:'R$ 6,4k',conv:'12%',meta:'92%',ok:true},
+      {nome:'Júlia Andrade',ini:'JA',visitas:'81',demos:'19',fechados:'8',mrr:'R$ 4,1k',conv:'10%',meta:'80%',ok:true},
+      {nome:'Marcos Vieira',ini:'MV',visitas:'64',demos:'15',fechados:'6',mrr:'R$ 3,4k',conv:'9%',meta:'60%',ok:false},
+      {nome:'Camila Souza',ini:'CS',visitas:'52',demos:'11',fechados:'4',mrr:'R$ 2,6k',conv:'8%',meta:'40%',ok:false},
+      {nome:'Tiago Lopes',ini:'TL',visitas:'29',demos:'5',fechados:'2',mrr:'R$ 1,9k',conv:'7%',meta:'20%',ok:false},
+    ].map(v => ({ ...v,
+      metaBg: v.ok ? '#EAF7EE' : '#FFF8EB', metaFg: v.ok ? '#167532' : '#99670F' }));
+
+    const kpisMeu = [
+      {label:'Visitas no mês',valor:'92',delta:'meta 80 · batida',deltaFg:'var(--green-dark)'},
+      {label:'Demos',valor:'24',delta:'+3 vs julho',deltaFg:'var(--green-dark)'},
+      {label:'Taxa de conversão',valor:'12%',delta:'melhor do time',deltaFg:'var(--green-dark)'},
+      {label:'Tarefas atrasadas',valor:'4',delta:'2 vencendo hoje',deltaFg:'#94090F'},
+    ];
+
+    const fichaCampos = [
+      {k:'Etapa',v:'Negociação'},{k:'Plano apresentado',v:'Pro'},{k:'MRR',v:'R$ 590,00'},
+      {k:'Endereço',v:'R. Aurora, 218 · Santa Cecília'},{k:'CEP',v:'01209-000'},
+      {k:'Origem do lead',v:'Rua'},{k:'Responsável',v:'Rafael Pereira'},
+    ];
+    const timeline = [
+      {icon:'where_to_vote',titulo:'Check-in de visita (3ª)',quando:'23 ago · 10:42 · 38 m do pin',bg:'#EAF7EE',fg:'#167532'},
+      {icon:'trending_up',titulo:'Demo/Proposta → Negociação',quando:'21 ago · 16:10',bg:'#FFF1E0',fg:'#8A4A0C'},
+      {icon:'event',titulo:'Demo realizada · 45 min',quando:'19 ago · 15:00',bg:'#F1EBFE',fg:'#5B32C4'},
+      {icon:'edit_note',titulo:'Nota: dono pediu proposta por e-mail',quando:'19 ago · 15:52',bg:'var(--nested)',fg:'var(--t2)'},
+    ];
+
+    const etapasDestino = [
+      {label:'Ag. Pagamento',cor:'#C8131B',sel:true},{label:'Negócio Fechado',cor:'#16a34a'},
+      {label:'Perdido',cor:'#475569'},{label:'Reciclagem',cor:'#a855f7'},
+    ].map(e => ({ ...e,
+      bg: e.sel ? 'var(--brand-tint)' : 'var(--raised)',
+      border: e.sel ? 'var(--brand)' : 'var(--s-default)',
+      radio: e.sel ? 'var(--brand)' : 'var(--s-strong)',
+      dot: e.sel ? 'var(--brand)' : 'transparent',
+      fg: e.sel ? 'var(--brand-dark)' : 'var(--t2)' }));
+    const camposEtapa = [
+      {label:'CNPJ / CPF',ph:'00.000.000/0000-00'},{label:'E-mail',ph:'contato@restaurante.com.br'},
+      {label:'Pacote contratado',ph:'Selecione',select:true},{label:'MRR (R$)',ph:'Ex.: 590,00'},
+    ];
+
+    const diasSemana = [
+      {l:'D',dom:true},{l:'S'},{l:'T'},{l:'Q'},{l:'Q'},{l:'S'},{l:'S'},
+    ].map(d => ({ ...d, cor: d.dom ? 'var(--t3)' : 'var(--t2)' }));
+    const diasMes = Array.from({length:35}, (_,i) => {
+      const n = i - 5;
+      const dentro = n >= 1 && n <= 31;
+      const sel = n === 27;
+      return { n: dentro ? String(n) : String(n<1 ? 31+n : n-31),
+        bg: sel ? 'var(--brand)' : 'transparent',
+        fg: sel ? '#fff' : dentro ? 'var(--t2)' : 'var(--t4)' };
+    });
+    const horarios = ['09:00','10:00','11:00','14:00','15:30','16:30'].map((h,i) => ({
+      h, bg: i===4 ? 'var(--brand-tint)' : 'var(--raised)',
+      fg: i===4 ? 'var(--brand-dark)' : 'var(--t2)',
+      border: i===4 ? 'var(--brand)' : 'var(--s-default)' }));
+
+    const passos = [
+      {n:'1',label:'CEP e endereço',ativo:true},{n:'2',label:'Restaurante',ativo:false},{n:'3',label:'Pin no mapa',ativo:false},
+    ].map(p => ({ ...p,
+      bg: p.ativo ? 'var(--brand)' : 'var(--fill)', fg: p.ativo ? '#fff' : 'var(--t3)',
+      labelFg: p.ativo ? 'var(--t1)' : 'var(--t3)' }));
+    const camposCadastro = [
+      {label:'CEP',ph:'00000-000',span:'span 1',icon:'search',info:'Busca endereço e coordenada automaticamente'},
+      {label:'Número',ph:'Ex.: 218',span:'span 1'},
+      {label:'Restaurante',ph:'Nome que aparece na fachada',span:'span 2'},
+      {label:'Contato',ph:'Quem decide',span:'span 1'},
+      {label:'Telefone',ph:'(00) 00000-0000',span:'span 1'},
+      {label:'Origem do lead',ph:'Rua',span:'span 1',icon:'expand_more'},
+      {label:'Etapa inicial',ph:'Prospecção',span:'span 1',icon:'expand_more'},
+    ];
+
+    return {
+      theme: s.theme, tituloTela, subtituloTela, nav,
+      railW: s.rail ? '240px' : '72px',
+      railShadow: s.rail ? '4px 0 16px rgba(0,0,0,.14)' : 'none',
+      labelOpacity: s.rail ? 1 : 0,
+      expandRail: () => this.setState({ rail: true }),
+      collapseRail: () => this.setState({ rail: false }),
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+      themeIcon: dark ? 'light_mode' : 'dark_mode',
+      themeLabel: dark ? 'Tema claro' : 'Tema escuro',
+
+      ehMapa: s.tela==='mapa', ehLista: s.tela==='lista', ehRota: s.tela==='rota',
+      ehAgenda: s.tela==='agenda', ehTarefas: s.tela==='tarefas',
+      ehGestor: s.tela==='gestor', ehMeu: s.tela==='meu', ehLogin: s.tela==='login',
+      mostraShell: s.tela !== 'login',
+      mainInset: s.tela === 'login' ? '0px' : '72px',
+      goMapa: this.go('mapa'),
+
+      fichaAberta: s.overlay==='ficha', etapaAberta: s.overlay==='etapa',
+      agendarAberto: s.overlay==='agendar', cadastroAberto: s.overlay==='cadastro',
+      openFicha: () => this.setState({ overlay:'ficha' }),
+      openEtapa: () => this.setState({ overlay:'etapa' }),
+      openAgendar: () => this.setState({ overlay:'agendar' }),
+      openCadastro: () => this.setState({ overlay:'cadastro' }),
+      closeAll: () => this.setState({ overlay: null }),
+
+      toggleHeat: () => this.setState({ heat: !s.heat }),
+      heatTrackBg: s.heat ? 'var(--brand)' : 'var(--s-default)',
+      heatJustify: s.heat ? 'flex-end' : 'flex-start',
+
+      segStatus: seg, legenda, leads, leadsTabela, colunas, chipsLista, pins,
+      paradas, paradasLista, rotaKpis, tiposAgenda, semana, colunasKanban,
+      kpis, funil, heat, colTime, time, kpisMeu,
+      fichaCampos, timeline, etapasDestino, camposEtapa,
+      diasSemana, diasMes, horarios, passos, camposCadastro,
+    };
+  }
+}
+</script>
+</body>
+</html>

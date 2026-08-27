@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=swap" rel="stylesheet">
+<style>
+/* Tokens copiados de public/index.html do repo — o mecanismo real de tema do app. */
+:root{
+  --bg:#F6F6F6;--surface:#FFFFFF;--surface-2:#F6F6F6;--surface-3:#EDEDED;
+  --text:#222222;--text-muted:#545454;--text-subtle:#6B6B6B;--text-faint:#7A7A7A;
+  --border:#EDEDED;--border-soft:#F6F6F6;
+  --tint-red:#FAE8E9;--tint-red-border:#E5A1A4;--tint-red-text:#94090F;
+  --tint-green:#EAF7EE;--tint-green-border:#A5C7AF;--tint-green-text:#167532;
+  --brand-text:#C8131B;--violet-text:#8B5CF6;
+  color-scheme:light;
+}
+[data-theme='dark']{
+  --bg:#121212;--surface:#1E1E1E;--surface-2:#262626;--surface-3:#2A2A2A;
+  --text:rgba(255,255,255,.92);--text-muted:rgba(255,255,255,.64);--text-subtle:rgba(255,255,255,.38);--text-faint:rgba(255,255,255,.30);
+  --border:rgba(255,255,255,.12);--border-soft:rgba(255,255,255,.08);
+  --tint-red:#3A1416;--tint-red-border:#7A2E32;--tint-red-text:#E5A1A4;
+  --tint-green:#14301D;--tint-green-border:#2E5C3C;--tint-green-text:#77BD8B;
+  --brand-text:#E5A1A4;--violet-text:#C4B5FD;
+  color-scheme:dark;
+}
+body{margin:0;background:#EAEAEA;font-family:Poppins,-apple-system,'Segoe UI',Roboto,sans-serif;}
+.ms{font-family:'Material Symbols Rounded';font-weight:400;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;direction:ltr;-webkit-font-feature-settings:'liga';-webkit-font-smoothing:antialiased;}
+a{color:#C8131B;text-decoration:none;}
+a:hover{color:#94090F;}
+</style>
+</helmet>
+
+<div style="min-height:100vh;padding:32px;box-sizing:border-box;display:flex;flex-direction:column;gap:24px;">
+
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;">
+    <div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#7A7A7A;">Takeat RPA · Field Sales Outbound</div>
+      <h1 style="margin:6px 0 0;font-size:28px;line-height:36px;font-weight:700;color:#222222;">Estado atual, recriado do código</h1>
+      <p style="margin:8px 0 0;max-width:64ch;font-size:14px;line-height:20px;color:#545454;text-wrap:pretty;">Valores lidos de <code>App.tsx</code>, <code>public/index.html</code>, <code>src/theme.ts</code>, <code>src/hooks/useLayout.ts</code> e <code>src/constants/stages.ts</code>. O desktop é o mesmo layout do celular com a barra de abas virada de lado (72px, rótulos de 8px) — é exatamente o problema apontado.</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button onClick="{{ setLight }}" style="height:40px;padding:0 16px;border-radius:8px;border:1px solid #C6C6C6;background:#FFFFFF;color:#545454;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;" style-hover="background:#F6F6F6;">Claro</button>
+      <button onClick="{{ setDark }}" style="height:40px;padding:0 16px;border-radius:8px;border:1px solid #C6C6C6;background:#FFFFFF;color:#545454;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;" style-hover="background:#F6F6F6;">Escuro</button>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 390px;gap:32px;align-items:start;">
+
+    <!-- ============ DESKTOP ATUAL ============ -->
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:#222222;">DESKTOP (1440px de referência)</span>
+        <span style="padding:4px 8px;border-radius:9999px;background:#FAE8E9;color:#94090F;font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;">layout.ehDesktop · paddingLeft 72</span>
+      </div>
+
+      <div data-theme="{{ theme }}" style="border:1px solid #C6C6C6;border-radius:8px;overflow:hidden;background:var(--surface);box-shadow:0 2px 4px rgba(0,0,0,.14),0 0 2px rgba(0,0,0,.12);">
+        <div style="position:relative;display:flex;height:660px;">
+
+          <!-- navLateral: LARGURA_LATERAL = 72 -->
+          <div style="width:72px;flex:0 0 72px;display:flex;flex-direction:column;justify-content:flex-start;padding:12px 0;gap:2px;border-right:1px solid var(--border);background:var(--surface);">
+            <sc-for list="{{ navAtual }}" as="n" hint-placeholder-count="7">
+              <div style="min-height:48px;padding:6px 2px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;border-radius:12px;margin:4px;background:{{ n.bg }};">
+                <span class="ms" style="font-size:20px;margin-bottom:2px;color:{{ n.icone }};">{{ n.glifo }}</span>
+                <span style="font-size:8px;line-height:12px;letter-spacing:0;font-weight:600;color:{{ n.cor }};">{{ n.rotulo }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--surface);">
+            <!-- header -->
+            <div style="display:flex;flex-direction:row;justify-content:space-between;align-items:center;padding:10px 16px;background:#C8131B;">
+              <div style="display:flex;flex-direction:row;align-items:center;gap:10px;">
+                <img src="assets/takeat-icon-white.svg" alt="Takeat" style="width:32px;height:32px;object-fit:contain;">
+                <span style="font-size:11px;color:rgba(255,255,255,0.8);margin-top:1px;">Rafael Pereira · vendedor</span>
+              </div>
+              <div style="display:flex;flex-direction:row;align-items:center;gap:8px;">
+                <div style="width:44px;height:44px;border-radius:10px;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+                  <span class="ms" style="font-size:20px;color:#fff;">settings</span>
+                </div>
+                <div style="padding:6px 12px;background:rgba(255,255,255,0.2);border-radius:6px;cursor:pointer;">
+                  <span style="color:#fff;font-size:13px;font-weight:600;">Sair</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- searchBar -->
+            <div style="display:flex;flex-direction:row;align-items:center;background:var(--surface-2);margin:8px 12px 0;padding:8px 12px;border-radius:10px;gap:8px;">
+              <span class="ms" style="font-size:18px;color:var(--text-muted);">search</span>
+              <span style="flex:1;min-height:44px;display:flex;align-items:center;color:var(--text-subtle);font-size:14px;">Buscar por nome, empresa ou cidade</span>
+            </div>
+
+            <!-- filterBar -->
+            <div style="background:var(--surface);border-bottom:1px solid var(--border-soft);">
+              <div style="display:flex;flex-direction:row;align-items:center;">
+                <div style="width:40px;height:36px;margin-left:8px;border-radius:10px;background:#222222;display:flex;align-items:center;justify-content:center;flex:0 0 auto;cursor:pointer;position:relative;">
+                  <span class="ms" style="font-size:20px;color:#fff;">filter_list</span>
+                </div>
+                <div style="display:flex;flex-direction:row;padding:8px 20px 8px 12px;gap:6px;overflow:hidden;">
+                  <sc-for list="{{ statusChips }}" as="c" hint-placeholder-count="4">
+                    <div style="display:flex;flex-direction:row;align-items:center;padding:6px 10px;border-radius:20px;background:{{ c.bg }};margin-right:6px;flex:0 0 auto;cursor:pointer;">
+                      <span style="width:8px;height:8px;border-radius:4px;margin-right:5px;background:{{ c.cor }};"></span>
+                      <span style="font-size:12px;font-weight:600;color:{{ c.texto }};">{{ c.rotulo }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+
+            <!-- listContent: padding 12, colunas = 3 no desktop, teto 1320 -->
+            <div style="flex:1;overflow:hidden;padding:12px;background:var(--surface);">
+              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-width:1320px;margin:0 auto;">
+                <sc-for list="{{ leads }}" as="l" hint-placeholder-count="9">
+                  <div style="background:var(--surface);border-radius:16px;padding:16px;border:1px solid var(--border-soft);border-left:4px solid {{ l.cor }};box-shadow:0 1px 2px rgba(0,0,0,.12);cursor:pointer;">
+                    <div style="display:flex;flex-direction:row;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;">
+                      <div style="display:flex;flex-direction:row;align-items:center;flex:1;min-width:0;">
+                        <span class="ms" style="font-size:18px;margin-right:8px;color:{{ l.cor }};">storefront</span>
+                        <span style="font-size:15px;font-weight:700;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ l.nome }}</span>
+                      </div>
+                      <div style="padding:3px 8px;border-radius:6px;background:{{ l.cor }};flex:0 0 auto;">
+                        <span style="color:#fff;font-size:10px;font-weight:700;">{{ l.status }}</span>
+                      </div>
+                    </div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Contato: {{ l.contato }}</div>
+                    <div style="font-size:12px;color:var(--brand-text);font-weight:700;margin-top:2px;">Etapa: {{ l.etapa }}</div>
+                    <div style="font-size:13px;color:var(--text-muted);margin-bottom:2px;">{{ l.cidade }}</div>
+                    <div style="font-size:13px;color:var(--text);">{{ l.telefone }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <!-- fab: 56x56, right 16 -->
+          <div style="position:absolute;right:16px;bottom:16px;width:56px;height:56px;border-radius:28px;background:#C8131B;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 8px rgba(0,0,0,.3);cursor:pointer;">
+            <span class="ms" style="font-size:26px;color:#fff;">add</span>
+          </div>
+        </div>
+      </div>
+
+      <p style="margin:0;font-size:12px;line-height:16px;letter-spacing:.4px;color:#7A7A7A;max-width:80ch;text-wrap:pretty;">O que o desktop herda do celular: header vermelho de 52px sem navegação, busca e chips full-bleed, cards de lead em três colunas com teto de 1320px, FAB flutuante e rótulos de nav em 8px. Nenhuma tabela, nenhum painel lateral, nenhum atalho de teclado.</p>
+    </div>
+
+    <!-- ============ MOBILE ATUAL ============ -->
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:#222222;">MOBILE PWA (390px)</span>
+      </div>
+
+      <div data-theme="{{ theme }}" style="width:390px;border:1px solid #C6C6C6;border-radius:12px;overflow:hidden;background:var(--surface);box-shadow:0 8px 16px rgba(0,0,0,.14),0 0 2px rgba(0,0,0,.12);">
+        <div style="position:relative;display:flex;flex-direction:column;height:780px;">
+          <div style="height:44px;background:#C8131B;"></div>
+
+          <div style="display:flex;flex-direction:row;justify-content:space-between;align-items:center;padding:10px 16px;background:#C8131B;">
+            <div style="display:flex;flex-direction:row;align-items:center;gap:10px;">
+              <img src="assets/takeat-icon-white.svg" alt="Takeat" style="width:32px;height:32px;object-fit:contain;">
+              <span style="font-size:11px;color:rgba(255,255,255,0.8);margin-top:1px;">Rafael Pereira</span>
+            </div>
+            <div style="display:flex;flex-direction:row;align-items:center;gap:8px;">
+              <div style="width:44px;height:44px;border-radius:10px;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;">
+                <span class="ms" style="font-size:20px;color:#fff;">settings</span>
+              </div>
+              <div style="padding:6px 12px;background:rgba(255,255,255,0.2);border-radius:6px;">
+                <span style="color:#fff;font-size:13px;font-weight:600;">Sair</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:row;align-items:center;background:var(--surface-2);margin:8px 12px 0;padding:8px 12px;border-radius:10px;gap:8px;">
+            <span class="ms" style="font-size:18px;color:var(--text-muted);">search</span>
+            <span style="flex:1;min-height:44px;display:flex;align-items:center;color:var(--text-subtle);font-size:14px;">Buscar por nome, empresa…</span>
+          </div>
+
+          <div style="background:var(--surface);border-bottom:1px solid var(--border-soft);">
+            <div style="display:flex;flex-direction:row;align-items:center;">
+              <div style="width:40px;height:36px;margin-left:8px;border-radius:10px;background:#222222;display:flex;align-items:center;justify-content:center;flex:0 0 auto;">
+                <span class="ms" style="font-size:20px;color:#fff;">filter_list</span>
+              </div>
+              <div style="display:flex;flex-direction:row;padding:8px 20px 8px 12px;gap:6px;overflow:hidden;">
+                <sc-for list="{{ statusChips }}" as="c" hint-placeholder-count="4">
+                  <div style="display:flex;flex-direction:row;align-items:center;padding:6px 10px;border-radius:20px;background:{{ c.bg }};margin-right:6px;flex:0 0 auto;">
+                    <span style="width:8px;height:8px;border-radius:4px;margin-right:5px;background:{{ c.cor }};"></span>
+                    <span style="font-size:12px;font-weight:600;color:{{ c.texto }};white-space:nowrap;">{{ c.rotulo }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <!-- mapa -->
+          <div style="flex:1;position:relative;background:#E5E3DF;overflow:hidden;">
+            <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent 39px,#D8D5D0 39px,#D8D5D0 41px,transparent 41px),linear-gradient(0deg,transparent 55px,#D8D5D0 55px,#D8D5D0 57px,transparent 57px);background-size:80px 80px;"></div>
+            <sc-for list="{{ pins }}" as="p" hint-placeholder-count="6">
+              <div style="position:absolute;left:{{ p.x }};top:{{ p.y }};transform:translate(-50%,-100%);">
+                <div style="width:36px;height:36px;border-radius:18px;background:{{ p.cor }};border:2px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 4px rgba(0,0,0,.3);">
+                  <img src="assets/takeat-icon-white.svg" alt="" style="width:18px;height:18px;">
+                </div>
+                <div style="width:0;height:0;margin:-1px auto 0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid {{ p.cor }};"></div>
+              </div>
+            </sc-for>
+
+            <!-- tempLegend: 2 colunas, rows de 104px, dot 10px -->
+            <div style="position:absolute;left:16px;bottom:16px;display:flex;flex-wrap:wrap;max-width:220px;gap:4px 8px;background:var(--surface-overlay,rgba(255,255,255,.94));padding:8px 10px;border-radius:10px;">
+              <sc-for list="{{ legenda }}" as="g" hint-placeholder-count="6">
+                <div style="display:flex;flex-direction:row;align-items:center;gap:6px;width:104px;">
+                  <span style="width:10px;height:10px;border-radius:5px;background:{{ g.cor }};flex:0 0 auto;"></span>
+                  <span style="font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;">{{ g.rotulo }}</span>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="position:absolute;right:16px;bottom:16px;width:56px;height:56px;border-radius:28px;background:#C8131B;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 8px rgba(0,0,0,.3);">
+              <span class="ms" style="font-size:26px;color:#fff;">add</span>
+            </div>
+          </div>
+
+          <!-- bottomNav: até 7 abas -->
+          <div style="display:flex;flex-direction:row;border-top:1px solid var(--border);background:var(--surface);padding-bottom:18px;">
+            <sc-for list="{{ navAtual }}" as="n" hint-placeholder-count="7">
+              <div style="flex:1;min-height:48px;padding:6px 2px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:12px;margin:4px;background:{{ n.bg }};">
+                <span class="ms" style="font-size:20px;margin-bottom:2px;color:{{ n.icone }};">{{ n.glifo }}</span>
+                <span style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;color:{{ n.cor }};">{{ n.rotulo }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <p style="margin:0;font-size:12px;line-height:16px;letter-spacing:.4px;color:#7A7A7A;text-wrap:pretty;">Sete abas dividindo 390px: cada alvo fica em ~53px de largura e o rótulo de 11px encosta no vizinho. Legenda de temperatura ocupa um quarto do mapa.</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { theme: 'light' };
+
+  renderVals() {
+    const T = { hot:'#C8131B', warm:'#FFB32F', cold:'#0ea5e9', won:'#16a34a', lost:'#475569' };
+    const CONTA_ALVO = '#7c3aed';
+
+    const nav = [
+      { rotulo:'Mapa',    glifo:'location_on',        ativo:true },
+      { rotulo:'Lista',   glifo:'list',               ativo:false },
+      { rotulo:'Rota',    glifo:'directions_car',     ativo:false },
+      { rotulo:'Agenda',  glifo:'calendar_month',     ativo:false },
+      { rotulo:'Tarefas', glifo:'assignment_turned_in', ativo:false },
+      { rotulo:'Gestor',  glifo:'bar_chart',          ativo:false },
+      { rotulo:'Meu',     glifo:'person',             ativo:false },
+    ].map(n => ({
+      ...n,
+      bg: n.ativo ? 'var(--tint-red)' : 'transparent',
+      cor: n.ativo ? 'var(--brand-text)' : 'var(--text-subtle)',
+      icone: n.ativo ? '#C8131B' : '#545454',
+    }));
+
+    const chips = [
+      { rotulo:'Lead (412)',     cor:'#0ea5e9', ativo:true },
+      { rotulo:'Cliente (86)',   cor:'#16a34a', ativo:false },
+      { rotulo:'Ex-Cliente (9)', cor:'#475569', ativo:false },
+      { rotulo:'Ganho - Field Sales (23)', cor:'#C8131B', ativo:false },
+    ].map(c => ({
+      ...c,
+      bg: c.ativo ? c.cor : 'var(--surface-2)',
+      texto: c.ativo ? '#fff' : 'var(--text-muted)',
+    }));
+
+    const leads = [
+      { nome:'Bar do Zé',              contato:'José Almeida',  etapa:'Negociação',           cidade:'São Paulo • SP',      telefone:'(11) 98812-4477', cor:T.hot },
+      { nome:'Cantina Bella Napoli',   contato:'Marina Rossi',  etapa:'Demo/Proposta',        cidade:'São Paulo • SP',      telefone:'(11) 97744-1120', cor:T.warm },
+      { nome:'Hamburgueria Fogo Alto', contato:'Diego Matos',   etapa:'Prospecção',           cidade:'Guarulhos • SP',      telefone:'(11) 96633-8890', cor:T.cold },
+      { nome:'Padaria Aurora',         contato:'Cláudia Reis',  etapa:'Visita',               cidade:'Osasco • SP',         telefone:'(11) 95522-3341', cor:T.cold },
+      { nome:'Sushi Kaito',            contato:'Yuri Tanaka',   etapa:'Ag. Pagamento',        cidade:'São Bernardo • SP',   telefone:'(11) 94411-7723', cor:T.hot },
+      { nome:'Boteco da Praça',        contato:'Rita Nogueira', etapa:'Conversa com decisor', cidade:'Santo André • SP',    telefone:'(11) 93300-6612', cor:T.warm },
+      { nome:'Empório Vila Rica',      contato:'Paulo Cunha',   etapa:'Enviado Onboarding',   cidade:'São Caetano • SP',    telefone:'(11) 92299-5501', cor:T.won },
+      { nome:'Pizzaria Forno Velho',   contato:'Adriana Melo',  etapa:'Perdido',              cidade:'Diadema • SP',        telefone:'(11) 91188-4490', cor:T.lost },
+      { nome:'Café Central',           contato:'Bruno Ferraz',  etapa:'Prospecção',           cidade:'Mauá • SP',           telefone:'(11) 90077-3389', cor:T.cold },
+    ];
+
+    const pins = [
+      { x:'22%', y:'30%', cor:T.cold }, { x:'58%', y:'22%', cor:T.hot },
+      { x:'40%', y:'52%', cor:T.warm }, { x:'74%', y:'46%', cor:T.won },
+      { x:'30%', y:'70%', cor:CONTA_ALVO }, { x:'66%', y:'72%', cor:T.lost },
+    ];
+
+    const legenda = [
+      { cor:T.hot, rotulo:'Quente' }, { cor:T.warm, rotulo:'Morno' },
+      { cor:T.cold, rotulo:'Frio' },  { cor:T.won, rotulo:'Fechado' },
+      { cor:T.lost, rotulo:'Perdido' }, { cor:CONTA_ALVO, rotulo:'Conta Alvo' },
+    ];
+
+    return {
+      theme: this.state.theme,
+      setLight: () => this.setState({ theme: 'light' }),
+      setDark: () => this.setState({ theme: 'dark' }),
+      navAtual: nav, statusChips: chips, leads, pins, legenda,
+    };
+  }
+}
+</script>
+</body>
+</html>
