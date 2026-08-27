@@ -16,6 +16,7 @@ import { Agenda } from './telas/Agenda';
 import { Prospeccao } from './telas/Prospeccao';
 import { Pessoas } from './telas/Pessoas';
 import { Semana } from './telas/Semana';
+import { Rotas } from './telas/Rotas';
 import './estilos/tokens.css';
 
 type Estado = 'carregando' | 'anonimo' | 'sem-permissao' | 'ok';
@@ -25,6 +26,7 @@ const ABAS = [
   { id: 'daily', rotulo: 'Daily', descricao: 'Quem cumpriu, quem está vazio?' },
   { id: 'semana', rotulo: 'Semana', descricao: 'O que mudou e o que eu faço?' },
   { id: 'agenda', rotulo: 'Agenda', descricao: 'A semana está planejada?' },
+  { id: 'rotas', rotulo: 'Rotas', descricao: 'Ver, editar e montar a rota de cada vendedor' },
   { id: 'prospeccao', rotulo: 'Prospecção', descricao: 'O que entra no topo do funil?' },
   { id: 'pessoas', rotulo: 'Pessoas', descricao: 'Quem precisa de mim no 1:1?' },
 ] as const;
@@ -145,6 +147,7 @@ export default function App() {
 
       {aba === 'daily' && <Daily />}
       {aba === 'agenda' && <Agenda />}
+      {aba === 'rotas' && <Rotas />}
       {aba === 'prospeccao' && <Prospeccao />}
       {aba === 'pessoas' && <Pessoas />}
       {aba === 'semana' && <Semana />}
