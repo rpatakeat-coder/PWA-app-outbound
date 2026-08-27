@@ -150,6 +150,49 @@ export interface LeadParaRota {
   cidade: string | null;
 }
 
+export interface PontoNoMapa {
+  id: string;
+  nome: string;
+  etapa: string | null;
+  lat: number;
+  lon: number;
+}
+
+/** A carteira do vendedor COM coordenadas — os pins clicaveis do editor. */
+export async function carteiraNoMapa(ownerId: string): Promise<PontoNoMapa[]> {
+  const { data } = await supabase
+    .from('clients')
+    .select('id, nome, empresa, etapa, latitude, longitude')
+    .eq('vendedor_id_hubspot', ownerId)
+    .in('etapa', ETAPAS_FUNIL as unknown as string[])
+    .not('latitude', 'is', null)
+    .limit(500);
+  return ((data ?? []) as any[]).map((c) => ({
+    id: c.id,
+    nome: (c.empresa || '').trim() || c.nome || 'Sem nome',
+    etapa: c.etapa,
+    lat: Number(c.latitude),
+    lon: Number(c.longitude),
+  }));
+}
+
+/** Coordenadas de clientes por id — pras paradas que vieram de fora da
+ *  carteira (busca por nome) tambem aparecerem no mapa. */
+export async function coordenadasPorId(ids: string[]): Promise<Map<string, { lat: number; lon: number }>> {
+  const mapa = new Map<string, { lat: number; lon: number }>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data } = await supabase
+      .from('clients')
+      .select('id, latitude, longitude')
+      .in('id', ids.slice(i, i + 200))
+      .not('latitude', 'is', null);
+    for (const c of (data ?? []) as any[]) {
+      mapa.set(c.id, { lat: Number(c.latitude), lon: Number(c.longitude) });
+    }
+  }
+  return mapa;
+}
+
 /** Busca leads pra adicionar, por nome/empresa. So' quem tem coordenada:
  *  parada sem pin nao vira visita. */
 export async function buscarLeads(termo: string): Promise<LeadParaRota[]> {

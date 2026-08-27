@@ -3,7 +3,7 @@
 // A grade responde "quem tem plano pra este dia?"; o drawer edita a rota de
 // UMA pessoa. Toda mudanca recarrega o quadro: sem estado otimista, porque o
 // vendedor pode estar mexendo na mesma rota pelo app agora.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   carregarQuadro,
   garantirRota,
@@ -16,8 +16,13 @@ import {
   type RotaDoVendedor,
   type LeadParaRota,
 } from '../dados/rotas';
+import {
+  carteiraNoMapa,
+  coordenadasPorId,
+  type PontoNoMapa,
+} from '../dados/rotas';
+import { carregarGoogleMaps, MAP_ID } from '../dados/mapa';
 import { diaBRT, ehDiaUtil } from '../dados/datas';
-import { Drawer } from '../componentes/Drawer';
 
 function somaDias(dia: string, n: number): string {
   const d = new Date(`${dia}T12:00:00Z`);
@@ -48,6 +53,12 @@ export function Rotas() {
   const [achados, setAchados] = useState<LeadParaRota[]>([]);
   const [ocupado, setOcupado] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [erroMapa, setErroMapa] = useState<string | null>(null);
+  const mapaDivRef = useRef<HTMLDivElement | null>(null);
+  const mapaRef = useRef<any>(null);
+  const marcadoresRef = useRef<any[]>([]);
+  const linhaRef = useRef<any>(null);
+  const ajustouEnquadreRef = useRef(false);
 
   const recarregar = (d = dia) =>
     carregarQuadro(d)
@@ -79,6 +90,123 @@ export function Rotas() {
     await recarregar();
     setOcupado(false);
   };
+
+  // ===== O MAPA DO EDITOR ====================================================
+  // Pin cinza = lead da carteira (clique ADICIONA a rota).
+  // Pin vermelho numerado = parada da rota (clique REMOVE).
+  // Linha vermelha liga as paradas na ordem — e' proposta comercial; quem
+  // otimiza por estrada e' o app do vendedor.
+  useEffect(() => {
+    if (!aberta) {
+      ajustouEnquadreRef.current = false;
+      mapaRef.current = null;
+      return;
+    }
+    let cancelado = false;
+    (async () => {
+      try {
+        const gm = await carregarGoogleMaps();
+        if (cancelado || !mapaDivRef.current) return;
+
+        if (!mapaRef.current) {
+          const escuro = document.documentElement.dataset.theme === 'dark' ||
+            (document.documentElement.dataset.theme == null &&
+             window.matchMedia('(prefers-color-scheme: dark)').matches);
+          mapaRef.current = new gm.Map(mapaDivRef.current, {
+            center: { lat: -20.32, lng: -40.34 },
+            zoom: 11,
+            mapId: MAP_ID,
+            colorScheme: escuro ? 'DARK' : 'LIGHT',
+            disableDefaultUI: true,
+            zoomControl: true,
+          });
+        }
+        const mapa = mapaRef.current;
+
+        const [carteira, coordsParadas] = await Promise.all([
+          aberta.membro.ownerId ? carteiraNoMapa(aberta.membro.ownerId) : Promise.resolve([] as PontoNoMapa[]),
+          coordenadasPorId(aberta.paradas.map((par) => par.clientId)),
+        ]);
+        if (cancelado) return;
+
+        // limpa a rodada anterior
+        for (const m of marcadoresRef.current) m.map = null;
+        marcadoresRef.current = [];
+        linhaRef.current?.setMap(null);
+
+        const naRota = new Map(aberta.paradas.map((par) => [par.clientId, par]));
+        const { AdvancedMarkerElement } = await gm.importLibrary('marker');
+
+        const pino = (cor: string, texto: string, borda: string) => {
+          const el = document.createElement('div');
+          el.style.cssText =
+            `width:26px;height:26px;border-radius:50%;background:${cor};color:#fff;` +
+            `display:flex;align-items:center;justify-content:center;font:700 12px Poppins,sans-serif;` +
+            `border:2px solid ${borda};box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer;`;
+          el.textContent = texto;
+          return el;
+        };
+
+        // paradas: vermelhas, numeradas, clique remove
+        const pontosDaLinha: any[] = [];
+        for (const par of aberta.paradas) {
+          const c = coordsParadas.get(par.clientId);
+          if (!c) continue;
+          pontosDaLinha.push({ lat: c.lat, lng: c.lon });
+          const m = new AdvancedMarkerElement({
+            map: mapa,
+            position: { lat: c.lat, lng: c.lon },
+            content: pino('#C8131B', String(par.posicao), '#fff'),
+            title: `${par.posicao}. ${par.nome} — clique para tirar da rota`,
+            gmpClickable: true,
+          });
+          m.addListener('gmp-click', () => executa(() => removerParada(par.id)));
+          marcadoresRef.current.push(m);
+        }
+
+        // carteira fora da rota: cinza, clique adiciona
+        for (const ponto of carteira) {
+          if (naRota.has(ponto.id)) continue;
+          const m = new AdvancedMarkerElement({
+            map: mapa,
+            position: { lat: ponto.lat, lng: ponto.lon },
+            content: pino('#7A7A7A', '+', 'rgba(255,255,255,.8)'),
+            title: `${ponto.nome} (${ponto.etapa ?? 'sem etapa'}) — clique para adicionar`,
+            gmpClickable: true,
+          });
+          m.addListener('gmp-click', () =>
+            adicionar({ id: ponto.id, nome: ponto.nome, etapa: ponto.etapa, cidade: null }),
+          );
+          marcadoresRef.current.push(m);
+        }
+
+        linhaRef.current = new gm.Polyline({
+          map: mapa,
+          path: pontosDaLinha,
+          strokeColor: '#C8131B',
+          strokeOpacity: 0.7,
+          strokeWeight: 3,
+        });
+
+        // enquadra UMA vez por vendedor — reenquadrar a cada clique faria o
+        // mapa pular embaixo do mouse
+        if (!ajustouEnquadreRef.current) {
+          const todos = [...pontosDaLinha, ...carteira.map((pt) => ({ lat: pt.lat, lng: pt.lon }))];
+          if (todos.length) {
+            const b = new gm.LatLngBounds();
+            todos.forEach((pt) => b.extend(pt));
+            mapa.fitBounds(b, 48);
+            ajustouEnquadreRef.current = true;
+          }
+        }
+        setErroMapa(null);
+      } catch (e: any) {
+        if (!cancelado) setErroMapa(e?.message ?? String(e));
+      }
+    })();
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aberta]);
 
   const adicionar = (lead: LeadParaRota) =>
     executa(async () => {
@@ -147,6 +275,7 @@ export function Rotas() {
         </div>
       </div>
 
+      {aberta == null && (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
         {quadro?.linhas.map((l) => (
           <button
@@ -183,13 +312,47 @@ export function Rotas() {
         ))}
       </div>
 
-      <Drawer
-        aberto={aberta != null}
-        titulo={aberta ? `Rota · ${aberta.membro.nome}` : ''}
-        subtitulo={`${rotuloDia(dia, hoje)} · ${aberta?.paradas.length ?? 0} paradas`}
-        aoFechar={() => setAberta(null)}
-      >
-        {aberta && (
+      )}
+
+      {aberta != null && (
+        <>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+            <button style={botaoSec} onClick={() => setAberta(null)}>‹ Todos os vendedores</button>
+            <span style={{ fontWeight: 800, fontSize: 16 }}>Rota · {aberta.membro.nome}</span>
+            <span style={{ color: 'var(--ter)', fontSize: 13 }}>
+              {rotuloDia(dia, hoje)} · {aberta.paradas.length} paradas
+            </span>
+          </div>
+
+          {/* Mapa a esquerda, controles a direita: montar rota E' olhar o mapa.
+              Pin cinza (+) adiciona; pin vermelho numerado remove; a linha
+              liga as paradas na ordem proposta. */}
+          <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {erroMapa ? (
+                <div className="cartao" style={{ borderColor: 'var(--red)' }}>
+                  <strong>O mapa não carregou.</strong>
+                  <div style={{ color: 'var(--muted)', marginTop: 6, fontSize: 13 }}>{erroMapa}</div>
+                </div>
+              ) : (
+                <div
+                  ref={mapaDivRef}
+                  style={{
+                    height: 'calc(100vh - 260px)',
+                    minHeight: 480,
+                    borderRadius: 12,
+                    overflow: 'hidden',
+                    border: '1px solid var(--line)',
+                  }}
+                />
+              )}
+              <div style={{ fontSize: 12, color: 'var(--ter)', marginTop: 6 }}>
+                Cinza = carteira dele (clique adiciona) · vermelho numerado = parada (clique tira) ·
+                a linha é a ordem proposta, não o trajeto por estradas.
+              </div>
+            </div>
+            <div style={{ width: 400, overflowY: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
+              {aberta && (
           <>
             {aviso && (
               <div style={{ background: 'var(--amber-soft)', color: 'var(--amber-ink)', border: '1px solid var(--line)', borderRadius: 8, padding: '9px 12px', fontSize: 13, marginBottom: 12 }}>
@@ -244,7 +407,11 @@ export function Rotas() {
             </div>
           </>
         )}
-      </Drawer>
+            </div>
+          </div>
+        </>
+      )}
+
     </>
   );
 }

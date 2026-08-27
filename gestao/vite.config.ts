@@ -11,6 +11,11 @@ export default defineConfig({
   // autenticado aqui, e vice-versa.
   base: '/gestao/',
 
+  // O cockpit reusa as MESMAS variaveis do app de campo (EXPO_PUBLIC_*): a
+  // chave do Google Maps ja' esta configurada na Vercel uma vez so'. Sem este
+  // prefixo o Vite so' exporia VITE_* e o mapa da aba Rotas nao carregaria.
+  envPrefix: ['VITE_', 'EXPO_PUBLIC_'],
+
   resolve: {
     alias: {
       // O design system publica dist/index.css mas NAO o declara no campo
