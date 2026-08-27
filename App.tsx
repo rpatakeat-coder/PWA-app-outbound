@@ -104,6 +104,7 @@ import {
 import { getShowOnlyMyAreaPref, setShowOnlyMyAreaPref } from './src/utils/userPrefs';
 import type { Client, ClientMeeting, ClientStatus, ClientTask, MeetingType } from './src/types/client';
 import { openMultiStopNavigation, openNavigation } from './src/utils/navigation';
+import { openWhatsapp, toWhatsappNumber } from './src/utils/whatsapp';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { CEPStep } from './src/screens/CEPStep';
@@ -117,6 +118,10 @@ import { useNomesDeClientes } from './src/hooks/useNomesDeClientes';
 import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
 import { useStages } from './src/hooks/useStages';
 import { GestorScreen } from './src/screens/GestorScreen';
+import { TarefasScreen } from './src/screens/TarefasScreen';
+import { RotaScreen } from './src/screens/RotaScreen';
+import { AgendaScreen } from './src/screens/AgendaScreen';
+import { ds, sharedStyles } from './src/screens/sharedStyles';
 import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
 import { reverseGeocode } from './src/utils/geocoding';
 import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingProvider } from './src/utils/routing';
@@ -293,29 +298,9 @@ const TASK_RULES: TaskRuleDoc[] = [
 // Limpa e normaliza telefone pra wa.me. Aceita "(27) 99618-3875" / "27996183875"
 // / "5527996183875" e devolve "5527996183875" (com DDI 55 default Brasil).
 // Retorna null se tiver < 10 digitos (DDD + numero base) — telefone invalido.
-function toWhatsappNumber(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const d = raw.replace(/\D/g, '');
-  if (d.length < 10) return null;
-  // Se ja tem DDI 55 (13 digitos) ou outro DDI longo, mantem; senao adiciona 55.
-  if (d.length >= 12 && d.startsWith('55')) return d;
-  return `55${d}`;
-}
 
 // Abre o WhatsApp no telefone do cliente. Em mobile, o link wa.me redireciona
 // pro app nativo via universal link (whatsapp://send). Em web cai no whatsapp web.
-function openWhatsapp(rawPhone: string | null | undefined): boolean {
-  const num = toWhatsappNumber(rawPhone);
-  if (!num) {
-    Alert.alert('Telefone invalido', 'O telefone do cliente nao tem formato valido pra abrir o WhatsApp.');
-    return false;
-  }
-  const url = `https://wa.me/${num}`;
-  Linking.openURL(url).catch(() =>
-    Alert.alert('Erro', 'Nao foi possivel abrir o WhatsApp. Verifique se o aplicativo esta instalado.'),
-  );
-  return true;
-}
 
 const getClientPrimaryName = (client: Client) => client.empresa?.trim() || client.nome;
 
@@ -330,11 +315,6 @@ const getClientPrimaryName = (client: Client) => client.empresa?.trim() || clien
 // (TEMP_COLORS.hot) e as outras posicoes tambem estao tomadas — ambar =
 // Morno, azul = Frio, verde = Fechado, cinza = Perdido. Pintar a Conta Alvo
 // de vermelho deixaria duas entradas identicas na legenda.
-// dataSet do react-native-web (vira data-* no DOM; o CSS de public/index.html
-// pendura hover/transicao/expansao da sidebar nesses atributos). Os tipos do
-// react-native nao conhecem a prop — o cast vive aqui, num lugar so.
-const ds = (d: Record<string, string>) => ({ dataSet: d } as Record<string, unknown>);
-
 const CONTA_ALVO_COLOR = '#7c3aed';
 
 // Tint da badge de etapa na tabela de leads (handoff desktop). No claro cada
@@ -994,13 +974,9 @@ function MainApp() {
   const [schedulingFor, setSchedulingFor] = useState<{ client: Client; type: MeetingType; reschedule?: ClientMeeting } | null>(null);
   // Passado da agenda começa fechado (igual lista). Hoje/futuro viram uma
   // timeline contínua agrupada por dia — não precisam de acordeão.
-  const [agendaPastOpen, setAgendaPastOpen] = useState(false);
   // Chip de tipo na aba Agenda (null = todos): 'reuniao' | 'follow_up' | 'rota'.
-  const [agendaTypeFilter, setAgendaTypeFilter] = useState<string | null>(null);
   // Semana exibida no calendario web: 0 = corrente, -1 = anterior, +1 = proxima.
-  const [calSemanaOffset, setCalSemanaOffset] = useState(0);
   // Exportação da agenda em andamento (botão "Exportar JSON" no topo da aba).
-  const [exportingAgenda, setExportingAgenda] = useState(false);
 
   // Cancelar (remover) uma reunião/follow up com confirmação. deleteMeeting já
   // apaga o evento no Google (demo — a Meeting no HubSpot acompanha via sync) /
@@ -2683,7 +2659,7 @@ function MainApp() {
         <View style={styles.cardHeader}>
           <View style={styles.cardNameRow}>
             <Image source={require('./assets/icon.png')} style={[styles.cardLogo, { tintColor: color }]} />
-            <Text style={styles.clientName} numberOfLines={1}>{primary}</Text>
+            <Text style={sharedStyles.clientName} numberOfLines={1}>{primary}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             {/* Visitas: so mostra a partir da 2a (revisita) — na 1a o proprio
@@ -2698,8 +2674,8 @@ function MainApp() {
                 <IconText Icone={IconCalendar} style={styles.cardMeetingBadgeText} tone="onSurface">{meetingCount}</IconText>
               </View>
             )}
-            <View style={[styles.statusBadge, { backgroundColor: color }]}>
-              <Text style={styles.statusBadgeText}>{label}</Text>
+            <View style={[sharedStyles.statusBadge, { backgroundColor: color }]}>
+              <Text style={sharedStyles.statusBadgeText}>{label}</Text>
             </View>
           </View>
         </View>
@@ -2719,7 +2695,7 @@ function MainApp() {
     }
     return (
       <TouchableOpacity
-        style={styles.stageAccordionHeader}
+        style={sharedStyles.stageAccordionHeader}
         onPress={() => {
           setExpandedStages(prev => {
             const next = new Set(prev);
@@ -2733,10 +2709,10 @@ function MainApp() {
         }}
       >
         <View style={{ flex: 1 }}>
-          <Text style={styles.stageAccordionTitle}>{item.title}</Text>
-          <Text style={styles.stageAccordionMeta}>{item.count} leads</Text>
+          <Text style={sharedStyles.stageAccordionTitle}>{item.title}</Text>
+          <Text style={sharedStyles.stageAccordionMeta}>{item.count} leads</Text>
         </View>
-        <Text style={styles.stageAccordionChevron}>{item.expanded ? '▲' : '▼'}</Text>
+        <Text style={sharedStyles.stageAccordionChevron}>{item.expanded ? '▲' : '▼'}</Text>
       </TouchableOpacity>
     );
   }, [renderClientItem]);
@@ -2747,11 +2723,11 @@ function MainApp() {
       <View key={client.id} style={[styles.clientCard, { borderLeftColor: color }]}>
         <View style={styles.cardHeader}>
           <View style={styles.cardNameRow}>
-            <Text style={styles.routePosition}>{index + 1}</Text>
-            <Text style={styles.clientName} numberOfLines={1}>{getClientPrimaryName(client)}</Text>
+            <Text style={sharedStyles.routePosition}>{index + 1}</Text>
+            <Text style={sharedStyles.clientName} numberOfLines={1}>{getClientPrimaryName(client)}</Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: color }]}>
-            <Text style={styles.statusBadgeText}>{statusConfig[client.status]?.label || client.status}</Text>
+          <View style={[sharedStyles.statusBadge, { backgroundColor: color }]}>
+            <Text style={sharedStyles.statusBadgeText}>{statusConfig[client.status]?.label || client.status}</Text>
           </View>
         </View>
         <Text style={styles.clientCity}>
@@ -2762,1282 +2738,8 @@ function MainApp() {
     );
   };
 
-  const renderRouteScreen = () => {
-    // Cada cartao vira uma constante pra tela poder COMPOR diferente por
-    // largura. No celular: a coluna unica de sempre, na mesma ordem. No
-    // desktop: duas colunas (o 6+6 do grid oficial) — planejamento a esquerda,
-    // a rota em construcao a direita. E' isso que separa "desktop de verdade"
-    // de "celular esticado": a composicao muda, nao so' a largura.
-    const cartaoDaily = (
-      <>
-      {/* A promessa do dia mora AQUI, e nao so' na aba "Meu".
-          Esta e' a tela onde o vendedor planeja o dia — perguntar "quantas
-          visitas hoje?" em qualquer outro lugar seria perguntar fora do
-          momento em que ele esta' decidindo isso. O mesmo cartao aparece em
-          "Meu" (e no Gestor, pra gestor que faz campo); os tres leem e
-          escrevem a mesma linha de `dailies`, entao nao ha' duas verdades.
-          O numero declarado aqui e' o que o cockpit de gestao cobra. */}
-      {!isMonitoringRoute && <MinhaDailyCard enabled={tab === 'route'} />}
-      </>
-    );
-    const cartaoRotaDoDia = (
-      <>
-      {/* Rota do dia (automática): monta as obrigatórias + completa a meta.
-          Fica no topo como CTA principal; o fluxo manual segue abaixo. */}
-      <View style={[styles.panelCard, { borderWidth: 1, borderColor: 'var(--tint-red-border)' }]}>
-        <IconText Icone={IconLocation} style={styles.panelTitle} tone="onSurface">Rota do dia</IconText>
-        <Text style={styles.panelHint}>
-          Monta as 3 visitas obrigatórias do dia (SLA estourado, Relacionamento +1000 comandas
-          e Conta Alvo) e completa até {routeConfig.meta_visitas_dia} paradas perto de você, já na ordem otimizada.
-          Parte da sua localização atual.
-        </Text>
-        <TouchableOpacity
-          style={[styles.submitButton, { marginTop: 12, backgroundColor: '#C8131B' }, isMonitoringRoute && { opacity: 0.4 }]}
-          onPress={generateDailyRoute}
-          disabled={fieldOps.saveRoute.isPending || isOptimizing || isMonitoringRoute}
-        >
-          {(fieldOps.saveRoute.isPending || isOptimizing)
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.submitButtonText}>Gerar Rota do dia</Text>}
-        </TouchableOpacity>
-      </View>
-      </>
-    );
-    const cartaoPersonalizada = (
-      <>
-      <View style={styles.panelCard}>
-        <Text style={styles.panelTitle}>Rota personalizada</Text>
-        <Text style={styles.panelHint}>
-          Monte você mesmo: escolha quantos leads, quais status e o responsável.
-          A ordem é otimizada por estradas reais. (Alternativa à "Rota do dia" acima.)
-        </Text>
 
-        <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Quantos leads visitar</Text>
-        <TextInput
-          style={[styles.input, { marginBottom: 0 }]}
-          value={routeLeadCount}
-          onChangeText={setRouteLeadCount}
-          keyboardType="number-pad"
-          placeholder="Ex.: 8"
-          placeholderTextColor="var(--text-subtle)"
-        />
 
-        {/* Ponto de partida da rota. Default: minha localizacao (GPS). O
-            vendedor pode escolher partir de um cliente especifico (ex.: comeca
-            o dia de um ponto que nao e' onde ele esta agora). */}
-        <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Ponto de partida</Text>
-        <View style={styles.routeStartRow}>
-          <TouchableOpacity
-            style={[styles.routeStartOption, !routeStartOverride && styles.routeStartOptionActive]}
-            onPress={() => setRouteStartOverride(null)}
-          >
-            <IconText Icone={IconLocation} style={[styles.routeStartText, !routeStartOverride && styles.routeStartTextActive]} tone="onSurface">Minha localização</IconText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.routeStartOption, !!routeStartOverride && styles.routeStartOptionActive]}
-            onPress={() => setIsPickingRouteStart(true)}
-          >
-            <Text style={[styles.routeStartText, !!routeStartOverride && styles.routeStartTextActive]} numberOfLines={1}>
-              {routeStartOverride ? routeStartOverride.label : 'Escolher local'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <Text style={[styles.fieldLabel, { marginTop: 12 }]}>
-          Status incluidos ({routeStatusSelection.size} selecionado{routeStatusSelection.size === 1 ? '' : 's'})
-        </Text>
-        <View style={styles.statusMultiRow}>
-          {statusOptions.map(opt => {
-            const selected = routeStatusSelection.has(opt.value);
-            return (
-              <TouchableOpacity
-                key={opt.value}
-                style={[
-                  styles.filterChip,
-                  selected && { backgroundColor: opt.color, borderColor: opt.color },
-                  !selected && { borderWidth: 1, borderColor: 'var(--border)' },
-                ]}
-                onPress={() => {
-                  setRouteStatusSelection(prev => {
-                    const next = new Set(prev);
-                    if (next.has(opt.value)) next.delete(opt.value);
-                    else next.add(opt.value);
-                    return next;
-                  });
-                }}
-              >
-                <View style={[styles.filterDot, { backgroundColor: opt.color }]} />
-                <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Responsavel</Text>
-        {isAdmin ? (
-          <TouchableOpacity
-            style={[
-              styles.dropdownButton,
-              routeVendorFilterHubspotId !== null && { borderColor: '#C8131B', backgroundColor: 'var(--tint-red)' },
-            ]}
-            onPress={() => setIsPickingRouteVendor(true)}
-          >
-            <Text style={[
-              styles.dropdownButtonText,
-              routeVendorFilterHubspotId === null && { color: 'var(--text-muted)' },
-            ]}>
-              {vendorLabel(routeVendorFilterHubspotId)}
-            </Text>
-            <Text style={styles.dropdownChevron}>▾</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[
-              styles.dropdownButton,
-              routeVendorFilterHubspotId !== null && { borderColor: '#C8131B', backgroundColor: 'var(--tint-red)' },
-            ]}
-            onPress={() => {
-              if (!myHubspotId) {
-                Alert.alert(
-                  'Sem id HubSpot',
-                  'Seu usuario nao tem id_hubspot configurado, entao nao da pra identificar quais leads sao seus.',
-                );
-                return;
-              }
-              setRouteVendorFilterHubspotId(prev => (prev === myHubspotId ? null : myHubspotId));
-            }}
-          >
-            <Text style={[
-              styles.dropdownButtonText,
-              routeVendorFilterHubspotId === null && { color: 'var(--text-muted)' },
-            ]}>
-              {routeVendorFilterHubspotId === myHubspotId ? 'Somente meus leads' : 'Todos os leads do recorte'}
-            </Text>
-            <Text style={[
-              styles.dropdownChevron,
-              routeVendorFilterHubspotId === myHubspotId && { color: 'var(--brand-text)' },
-            ]}>{routeVendorFilterHubspotId === myHubspotId ? '✓' : '○'}</Text>
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity
-          style={[styles.submitButton, { marginTop: 16 }, isMonitoringRoute && { opacity: 0.4 }]}
-          onPress={suggestRoute}
-          disabled={fieldOps.saveRoute.isPending || isOptimizing || isMonitoringRoute}
-        >
-          {(fieldOps.saveRoute.isPending || isOptimizing)
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.submitButtonText}>Gerar rota personalizada</Text>}
-        </TouchableOpacity>
-      </View>
-      </>
-    );
-    const cartaoAdicionar = (
-      <>
-      {/* Adicionar manualmente: busca em tempo real entre todos os leads.
-          Resultado mostra os 10 primeiros matches com botao "Adicionar".
-          Escondido no modo monitoramento (o gestor não edita a rota do vendedor). */}
-      {!isMonitoringRoute && (
-      <View style={styles.panelCard}>
-        <Text style={styles.panelTitle}>Adicionar lead manualmente</Text>
-        <Text style={styles.panelHint}>
-          Busque pelo nome do restaurante ou contato pra incluir na rota.
-        </Text>
-        <View style={[styles.searchBar, { marginHorizontal: 0, marginTop: 8 }]}>
-          <IconSearch width={16} height={16} fill={iconColors.muted} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar restaurante, contato, cidade..."
-            placeholderTextColor="var(--text-subtle)"
-            value={routeManualSearch}
-            onChangeText={setRouteManualSearch}
-            autoCorrect={false}
-            autoCapitalize="none"
-          />
-          {routeManualSearch.length > 0 && (
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setRouteManualSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <IconClose width={15} height={15} fill={iconColors.muted} />
-            </TouchableOpacity>
-          )}
-        </View>
-        {routeManualSearch.trim().length >= 2 && (() => {
-          const term = routeManualSearch
-            .normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase().trim();
-          const matches = clients.filter(c => {
-            if (routeStopClientIds.has(c.id)) return false;
-            const hay = `${c.empresa ?? ''} ${c.nome ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''}`
-              .normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase();
-            return hay.includes(term);
-          }).slice(0, 10);
-          if (matches.length === 0) {
-            return <Text style={[styles.emptyStateText, { marginTop: 10 }]}>Nenhum lead encontrado.</Text>;
-          }
-          return matches.map(c => {
-            const title = getClientPrimaryName(c);
-            const subtitle = [c.cidade, c.estado].filter(Boolean).join(' • ');
-            const noCoords = c.latitude == null || c.longitude == null;
-            return (
-              <View key={c.id} style={styles.manualRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.manualRowTitle} numberOfLines={1}>{title}</Text>
-                  {subtitle ? <Text style={styles.manualRowSubtitle}>{subtitle}</Text> : null}
-                  {noCoords && <Text style={styles.manualRowWarning}>Sem coordenadas</Text>}
-                </View>
-                <TouchableOpacity
-                  style={[styles.smallActionButton, noCoords && { opacity: 0.5 }]}
-                  disabled={noCoords}
-                  onPress={() => addClientToRoute(c)}
-                >
-                  <Text style={styles.smallActionButtonText}>+ Adicionar</Text>
-                </TouchableOpacity>
-              </View>
-            );
-          });
-        })()}
-        {routeManualSearch.trim().length > 0 && routeManualSearch.trim().length < 2 && (
-          <Text style={[styles.panelHint, { marginTop: 10 }]}>Digite pelo menos 2 caracteres.</Text>
-        )}
-      </View>
-      )}
-      </>
-    );
-    const cartaoLista = (
-      <>
-      <View style={styles.panelCard}>
-        <View style={styles.panelHeaderRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.panelTitle}>
-              {isMonitoringRoute ? `Rota de ${vendorLabel(routeVendorFilterHubspotId)}` : 'Rota de hoje'}
-            </Text>
-            <Text style={styles.panelHint}>
-              {routeDisplayClients.length} leads planejados
-              {routeGeometry.data && routeGeometry.data.coordinates.length > 1 && (
-                ` • ${(routeGeometry.data.distanceMeters / 1000).toFixed(1)} km`
-                + ` • ~${Math.round(routeGeometry.data.durationSeconds / 60)} min`
-              )}
-              {routeGeometry.isFetching && ' • calculando rota...'}
-            </Text>
-            {/* Badge admin: mostra qual provedor foi usado na ultima sugestao.
-                ORS = caminho feliz; OSRM = ORS caiu e o fallback rolou. */}
-            {isAdmin && lastProviderUsed && (
-              <View style={[styles.providerBadge, lastProviderUsed === 'osrm' && { backgroundColor: 'var(--tint-amber)', borderColor: 'var(--tint-amber-border)' }]}>
-                <Text style={[styles.providerBadgeText, lastProviderUsed === 'osrm' && { color: 'var(--tint-amber-text)' }]}>
-                  {lastProviderUsed === 'ors'
-                    ? 'Via OpenRouteService'
-                    : 'Via OSRM (ORS estava fora)'}
-                </Text>
-              </View>
-            )}
-          </View>
-          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {routeDisplayClients.length > 0 && (
-              <TouchableOpacity
-                style={[styles.secondaryButton, { backgroundColor: '#16a34a' }]}
-                onPress={startNavigation}
-              >
-                <IconText Icone={IconLocation} style={[styles.secondaryButtonText, { color: '#fff' }]} tone="onSurface">Navegar</IconText>
-              </TouchableOpacity>
-            )}
-            {routeDisplayClients.length > 0 ? (
-              <TouchableOpacity
-                style={[styles.secondaryButton, { backgroundColor: '#C8131B' }]}
-                onPress={viewRouteOnMap}
-              >
-                <Text style={[styles.secondaryButtonText, { color: '#fff' }]}>Ver no mapa</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => setTab('map')}>
-                <Text style={styles.secondaryButtonText}>Abrir mapa</Text>
-              </TouchableOpacity>
-            )}
-            {routeDisplayClients.length > 0 && !isMonitoringRoute && (
-              <TouchableOpacity
-                style={[styles.secondaryButton, { backgroundColor: 'var(--tint-red)', borderColor: 'var(--tint-red-border)' }]}
-                onPress={() => {
-                  Alert.alert(
-                    'Limpar rota',
-                    `Remover todos os ${routeDisplayClients.length} leads da rota de hoje?`,
-                    [
-                      { text: 'Cancelar', style: 'cancel' },
-                      {
-                        text: 'Limpar',
-                        style: 'destructive',
-                        onPress: () => {
-                          // Limpa tanto o draft local quanto as stops persistidas.
-                          setRouteDraft([]);
-                          routeStops.forEach(stop => fieldOps.removeStop.mutate(stop));
-                        },
-                      },
-                    ],
-                  );
-                }}
-              >
-                <Text style={[styles.secondaryButtonText, { color: 'var(--brand-text)' }]}>Limpar</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-        {routeDisplayClients.length === 0 ? (
-          <Text style={styles.emptyStateText}>Nenhum lead na rota. Use a sugestao ou abra um pin no mapa.</Text>
-        ) : (
-          routeDisplayClients.map((client, index) => {
-            const stop = routeStops.find(s => s.client_id === client.id);
-            const isLast = index === routeDisplayClients.length - 1;
-            const isDone = stop?.status === 'done';
-            const color = statusConfig[client.status]?.color || '#3b82f6';
-            const title = getClientPrimaryName(client);
-            const subtitle = [client.bairro, client.cidade, client.estado].filter(Boolean).join(' - ') || 'Localizacao nao informada';
-            return (
-              <View
-                key={client.id}
-                style={[
-                  styles.routeStopCard,
-                  { borderLeftColor: isDone ? '#16a34a' : color },
-                  isDone && { backgroundColor: 'var(--tint-green)' },
-                ]}
-              >
-                <View style={styles.routeStopHeader}>
-                  {/* Checkbox: toggle done/planned. Persiste via toggleStopDone */}
-                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Selecionado"
-                    style={[styles.checkbox, isDone && styles.checkboxChecked]}
-                    onPress={() => {
-                      if (stop) fieldOps.toggleStopDone.mutate(stop);
-                    }}
-                    disabled={!stop || isMonitoringRoute}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    {isDone && <IconCheck width={14} height={14} fill={iconColors.onBrand} />}
-                  </TouchableOpacity>
-                  <Text style={styles.routePosition}>{index + 1}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={[styles.clientName, isDone && { textDecorationLine: 'line-through', color: 'var(--text-muted)' }]}
-                      numberOfLines={1}
-                    >
-                      {title}
-                    </Text>
-                    <Text style={[styles.routeStopSubtitle, isDone && { textDecorationLine: 'line-through' }]} numberOfLines={1}>
-                      {subtitle}
-                    </Text>
-                    {(() => {
-                      const mreason = stop?.mandatory_reason as MandatoryReason | undefined;
-                      if (!mreason || !MANDATORY_BADGE[mreason]) return null;
-                      // Conta Alvo: acrescenta nota/avaliações do Google no badge.
-                      const rating = client.conta_alvo_place_id && client.conta_alvo_rating != null
-                        ? ` · ⭐ ${Number(client.conta_alvo_rating).toFixed(1)}${client.conta_alvo_reviews != null ? ` (${client.conta_alvo_reviews})` : ''}`
-                        : '';
-                      return <Text style={styles.mandatoryTag}>{MANDATORY_BADGE[mreason]}{rating}</Text>;
-                    })()}
-                  </View>
-                  <View style={[styles.statusBadge, { backgroundColor: isDone ? '#16a34a' : color }]}>
-                    <Text style={styles.statusBadgeText}>
-                      {isDone ? 'Visitado' : (statusConfig[client.status]?.label || client.status)}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.routeActionsRow}>
-                  {index > 0 && !isMonitoringRoute && (
-                    <TouchableOpacity
-                      style={styles.smallActionButton}
-                      onPress={() => {
-                        const nextStops = routeStops.slice();
-                        [nextStops[index - 1], nextStops[index]] = [nextStops[index], nextStops[index - 1]];
-                        if (nextStops.length) fieldOps.updateStops.mutate(nextStops);
-                      }}
-                    >
-                      <IconText Icone={IconArrowUp} style={styles.smallActionButtonText} tone="onSurface">Subir</IconText>
-                    </TouchableOpacity>
-                  )}
-                  {!isLast && !isMonitoringRoute && (
-                    <TouchableOpacity
-                      style={styles.smallActionButton}
-                      onPress={() => {
-                        const nextStops = routeStops.slice();
-                        [nextStops[index], nextStops[index + 1]] = [nextStops[index + 1], nextStops[index]];
-                        if (nextStops.length) fieldOps.updateStops.mutate(nextStops);
-                      }}
-                    >
-                      <IconText Icone={IconArrowDown} style={styles.smallActionButtonText} tone="onSurface">Descer</IconText>
-                    </TouchableOpacity>
-                  )}
-                  {stop && !isMonitoringRoute && (
-                    <TouchableOpacity style={styles.smallActionButton} onPress={() => fieldOps.removeStop.mutate(stop)}>
-                      <Text style={styles.smallActionButtonText}>Remover</Text>
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity
-                    style={styles.smallActionButton}
-                    onPress={() => openClientDetails(client)}
-                  >
-                    <Text style={styles.smallActionButtonText}>Abrir</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            );
-          })
-        )}
-      </View>
-      </>
-    );
-
-    // Gestor monitorando a rota de OUTRO vendedor: banner + tela read-only.
-    // Muda o "Responsável" pra "Todos" pra voltar a gerar a propria.
-    const bannerMonitor = isMonitoringRoute && (
-      <View style={styles.monitorBanner}>
-        <Text style={styles.monitorBannerText}>
-          <IconText Icone={IconEye} style={styles.monitorBannerText} tone="onSurface">Você está vendo a rota de</IconText> <Text style={{ fontWeight: '800' }}>{vendorLabel(routeVendorFilterHubspotId)}</Text> (somente leitura).
-          Para gerar/editar a sua, mude o "Responsável" para "Todos os vendedores".
-        </Text>
-      </View>
-    );
-
-    // Web: a sequencia de paradas e' o objeto de trabalho — mapa a' esquerda
-    // (o MESMO conteudoMapa, que ja desenha rota + polyline) e rail de 420px
-    // a' direita com os cartoes. Handoff, tela 3.
-    if (layout.ehLargo) {
-      return (
-        <View style={styles.mapaLinhaWeb}>
-          <View style={styles.mapaAreaWeb}>{conteudoMapa}</View>
-          <ScrollView style={styles.rotaRail} contentContainerStyle={styles.rotaRailConteudo}>
-            {bannerMonitor}
-            {cartaoDaily}
-            {cartaoRotaDoDia}
-            {cartaoPersonalizada}
-            {cartaoAdicionar}
-            {cartaoLista}
-          </ScrollView>
-        </View>
-      );
-    }
-
-    return (
-      <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom },
-      { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
-      {bannerMonitor}
-
-      {cartaoDaily}
-      {cartaoRotaDoDia}
-      {cartaoPersonalizada}
-      {cartaoAdicionar}
-      {cartaoLista}
-    </ScrollView>
-    );
-  };
-
-  const renderTasksScreen = () => {
-    // Recorte (gestor ve todas, vendedor ve so as suas) calculado uma vez em
-    // visibleTasks/tasksActiveVendor — compartilhado com o badge do rodape.
-    const activeVendor = tasksActiveVendor;
-
-    const sevColor = (s: string | null) => (s === 'D5' ? '#C8131B' : s === 'D2' ? '#FFB32F' : s === 'SLA' ? '#2563eb' : '#64748b');
-    // Peso da urgência — ordena chips, seções e a lista dentro de cada seção.
-    const sevRank = (s: string | null) => (s === 'D5' ? 3 : s === 'D2' ? 2 : s === 'SLA' ? 1 : 0);
-    // Severidade nula vira uma chave própria pra não sumir do agrupamento.
-    const SEM_SEV = 'Outras';
-    const sevKey = (s: string | null) => s ?? SEM_SEV;
-
-    // Mais urgente primeiro; dentro da severidade, os mais antigos na frente.
-    const sorted = [...visibleTasks].sort((a, b) => {
-      if (sevRank(b.severity) !== sevRank(a.severity)) return sevRank(b.severity) - sevRank(a.severity);
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-    });
-
-    // Contagem por severidade — alimenta os chips e os cabeçalhos de seção.
-    const contagem = new Map<string, number>();
-    for (const t of sorted) contagem.set(sevKey(t.severity), (contagem.get(sevKey(t.severity)) ?? 0) + 1);
-    const chips = [...contagem.entries()].sort((a, b) => sevRank(b[0]) - sevRank(a[0]));
-
-    // O chip filtra a lista; a seção que sobra continua com cabeçalho, pra
-    // deixar claro que é um recorte e não a lista inteira.
-    const secoes = chips
-      .filter(([sev]) => taskSevFilter === null || sev === taskSevFilter)
-      .map(([sev, total]) => ({
-        sev,
-        total,
-        itens: sorted.filter((t) => sevKey(t.severity) === sev),
-      }))
-      .filter((s) => s.itens.length > 0);
-
-    const renderTaskCard = (task: ClientTask) => {
-      const client = clients.find((c) => c.id === task.client_id) ?? null;
-      const leadNome = client
-        ? getClientPrimaryName(client)
-        : nomesTarefas.get(task.client_id) ?? 'Lead não encontrado';
-      const days = (task.meta as any)?.days_in_stage;
-      const etapaMeta = (task.meta as any)?.etapa as string | undefined;
-      const responsavel = task.vendedor_id_hubspot ? vendorLabel(task.vendedor_id_hubspot) : null;
-      // Convenção do time: vendedor desativado é marcado renomeando o profile
-      // com o sufixo "/ DESATIVADO". Vira tag — no meio do nome ele competia
-      // com a informação e ainda estourava a linha.
-      const inativoMatch = responsavel?.match(/^(.*?)\s*\/\s*DESATIVADO\s*$/i) ?? null;
-      const responsavelNome = inativoMatch ? inativoMatch[1].trim() : responsavel;
-      // O tipo da tarefa já vive na seção; no título o que importa é o LEAD.
-      // Tira o prefixo de severidade ("D5 Agendar Demo" -> "Agendar Demo") pra
-      // não repetir o que o badge e o cabeçalho da seção já dizem.
-      const tipo = task.title.replace(/^(D\d+|SLA)\s+/i, '');
-      // SLA mostra os dias na etapa (ex.: "3d"); D2/D5 mostram como estão.
-      const badgeText = task.severity === 'SLA'
-        ? (typeof days === 'number' ? `${days}d` : 'SLA')
-        : (task.severity ?? '•');
-
-      return (
-        <View key={task.id} style={[styles.taskCard, layout.ehLargo && styles.taskCardWeb]} {...ds({ hover: 'borda', trans: '1' })}>
-          <View style={styles.taskCardTop}>
-            <Text style={styles.taskLead} numberOfLines={2}>{leadNome}</Text>
-            <View style={[styles.taskBadge, { backgroundColor: sevColor(task.severity) }]}>
-              <Text style={styles.taskBadgeText}>{badgeText}</Text>
-            </View>
-          </View>
-
-          <Text style={styles.taskTipo}>{tipo}</Text>
-          {typeof days === 'number' ? (
-            <Text style={styles.taskMeta}>{days} dia(s) em {etapaMeta ?? 'etapa'}</Text>
-          ) : null}
-          {responsavel ? (
-            <View style={styles.taskRespRow}>
-              <Text style={[styles.taskMeta, { flexShrink: 1 }]} numberOfLines={1}>
-                {responsavelNome}
-              </Text>
-              {inativoMatch ? (
-                <View style={styles.taskInativoTag}>
-                  <Text style={styles.taskInativoTagText}>DESATIVADO</Text>
-                </View>
-              ) : null}
-            </View>
-          ) : null}
-
-          <View style={styles.taskActionsRow}>
-            {client && (
-              <TouchableOpacity
-                style={styles.smallActionButton}
-                onPress={() => { setTab('map'); openClientDetails(client); }}
-              >
-                <Text style={styles.smallActionButtonText}>Abrir lead</Text>
-              </TouchableOpacity>
-            )}
-            {client && task.task_type === 'agendar_demo' && (
-              <TouchableOpacity
-                style={[styles.smallActionButton, { backgroundColor: '#C8131B', borderColor: '#C8131B' }]}
-                onPress={() => setSchedulingFor({ client, type: 'reuniao' })}
-              >
-                <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Agendar demo</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={[styles.smallActionButton, { backgroundColor: '#16a34a', borderColor: '#16a34a' }]}
-              onPress={() => {
-                // Com o lead carregado, concluir abre o menu de destino
-                // (avançar / perdido / manter + próxima). Sem lead
-                // (raro: cliente deletado), cai na conclusão simples.
-                if (client) {
-                  setCompletingTask({ task, client });
-                } else {
-                  Alert.alert('Concluir tarefa', `Marcar "${task.title}" como concluída?`, [
-                    { text: 'Cancelar', style: 'cancel' },
-                    { text: 'Concluir', onPress: () => resolveTask.mutate({ id: task.id, status: 'concluida' }) },
-                  ]);
-                }
-              }}
-            >
-              <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Concluir</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      );
-    };
-
-    return (
-      <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom },
-      // Mesmo teto da lista de leads: sem ele o conteudo se espalha por
-      // toda a largura do monitor e a linha de texto fica ilegivel.
-      { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
-        {/* Cabeçalho enxuto: o texto explicativo que ficava aqui virou o modal
-            ⓘ, que já tinha as regras completas — ele ocupava um terço da tela
-            em toda visita, mesmo pra quem já conhece a mecânica. */}
-        <View style={styles.taskHeaderRow}>
-          <Text style={styles.panelTitle}>
-            Tarefas{sorted.length > 0 ? ` · ${sorted.length}` : ''}
-          </Text>
-          <TouchableOpacity
-            style={styles.taskInfoButton}
-            onPress={() => setIsTaskRulesOpen(true)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Text style={styles.taskInfoButtonText}>ⓘ</Text>
-          </TouchableOpacity>
-        </View>
-
-        {activeVendor !== null && activeVendor !== myHubspotId ? (
-          <Text style={styles.taskVendorHint}>
-            Filtro ativo: {vendorLabel(activeVendor)} — tire no modal de filtros.
-          </Text>
-        ) : null}
-
-        {/* Chips: quanto tem de cada urgência, e filtro de um toque. */}
-        {chips.length > 1 && (
-          <View style={styles.countChipsRow}>
-            {chips.map(([sev, total]) => {
-              const ativo = taskSevFilter === sev;
-              return (
-                <TouchableOpacity
-                  key={sev}
-                  style={[styles.countChip, ativo && { borderColor: sevColor(sev), backgroundColor: 'var(--surface)' }]}
-                  onPress={() => setTaskSevFilter(ativo ? null : sev)}
-                >
-                  <View style={[styles.countChipDot, { backgroundColor: sevColor(sev) }]} />
-                  <Text style={[styles.countChipText, ativo && { color: 'var(--text)' }]}>
-                    {sev} {total}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
-        {sorted.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>Nenhuma tarefa pendente.</Text>
-          </View>
-        ) : (
-          // KANBAN no desktop, com tres regras que o print pediu:
-          //   1. Coluna tem LARGURA PROPRIA (320-400px), nao flex:1 — com o
-          //      filtro de urgencia ativo sobrava uma coluna unica esticada na
-          //      tela inteira, o "mobile maior" de novo.
-          //   2. Coluna tem SCROLL INTERNO limitado a uma tela: o cabecalho do
-          //      quadro fica sempre visivel e SLA com 75 tarefas rola DENTRO
-          //      da coluna, nao a pagina inteira.
-          //   3. O quadro rola na horizontal se as colunas nao couberem.
-          // No celular continua a pilha de secoes de sempre.
-          layout.ehLargo ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
-                {secoes.map((secao) => {
-                  const tinta =
-                    secao.sev === 'D5'
-                      ? { bg: 'var(--tint-red)', fg: 'var(--tint-red-text)' }
-                      : secao.sev === 'D2'
-                        ? { bg: 'var(--tint-amber)', fg: 'var(--tint-amber-text)' }
-                        : { bg: 'var(--tint-blue)', fg: 'var(--tint-blue-text)' };
-                  return (
-                  <View key={secao.sev} style={styles.kanbanColuna}>
-                    <View style={styles.kanbanCabecalho}>
-                      <View style={[styles.countChipDot, { backgroundColor: sevColor(secao.sev) }]} />
-                      <Text style={styles.kanbanTitulo}>{secao.sev}</Text>
-                      <View style={[styles.kanbanContagem, { backgroundColor: tinta.bg }]}>
-                        <Text style={[styles.kanbanContagemTexto, { color: tinta.fg }]}>{secao.total}</Text>
-                      </View>
-                    </View>
-                    <ScrollView
-                      style={{ maxHeight: Math.max(360, layout.altura - 320) }}
-                      contentContainerStyle={{ padding: 12 }}
-                      showsVerticalScrollIndicator
-                    >
-                      {secao.itens.map(renderTaskCard)}
-                    </ScrollView>
-                  </View>
-                  );
-                })}
-              </View>
-            </ScrollView>
-          ) : (
-            secoes.map((secao) => (
-              <View key={secao.sev}>
-                <View style={styles.taskSectionHeader}>
-                  <View style={[styles.countChipDot, { backgroundColor: sevColor(secao.sev) }]} />
-                  <Text style={styles.taskSectionText}>
-                    {secao.sev} · {secao.total} {secao.total === 1 ? 'tarefa' : 'tarefas'}
-                  </Text>
-                </View>
-                {secao.itens.map(renderTaskCard)}
-              </View>
-            ))
-          )
-        )}
-      </ScrollView>
-    );
-  };
-
-  const renderAgendaScreen = () => {
-    const allAgendaItems = [
-      ...routeStops.map(stop => ({ kind: 'route' as const, at: stop.planned_at, stop, client: stop.client })),
-      ...meetings.map(meeting => ({
-        kind: 'meeting' as const,
-        at: meeting.scheduled_at,
-        meeting,
-        client: clients.find(c => c.id === meeting.client_id) ?? null,
-      })),
-    ].sort((a, b) => new Date(a.at ?? 0).getTime() - new Date(b.at ?? 0).getTime());
-
-    // Aplica o mesmo filtro de vendedor que o mapa/lista usam — se o admin
-    // escolheu um vendedor, agenda mostra so itens cujo cliente eh dele.
-    // Itens sem client carregado (raro) ficam fora quando ha filtro ativo.
-    const porVendedor = vendorFilterHubspotId === null
-      ? allAgendaItems
-      : vendorFilterHubspotId === '__none__'
-        ? allAgendaItems.filter(item => !item.client?.vendedor_id_hubspot)
-        : allAgendaItems.filter(item => item.client?.vendedor_id_hubspot === vendorFilterHubspotId);
-
-    // Tipo do compromisso — define a cor da barra do card e os chips do topo.
-    // Demo, follow up e parada de rota renderizavam idênticos; a cor é o que
-    // deixa varrer o dia sem ler o texto de cada um.
-    const tipoDoItem = (item: typeof allAgendaItems[number]) =>
-      item.kind === 'meeting'
-        ? (item.meeting.type === 'follow_up' ? 'follow_up' : 'reuniao')
-        : 'rota';
-    const TIPO_META: Record<string, { label: string; cor: string }> = {
-      reuniao: { label: 'Demos', cor: '#C8131B' },
-      follow_up: { label: 'Follow ups', cor: '#2563eb' },
-      rota: { label: 'Rotas', cor: '#16a34a' },
-    };
-    // Contagem vem de ANTES do filtro de tipo — senão o chip ativo zeraria os
-    // outros e não daria pra voltar sabendo o que tem em cada um.
-    const contagemTipo = (['reuniao', 'follow_up', 'rota'] as const)
-      .map((t) => ({ tipo: t, total: porVendedor.filter((i) => tipoDoItem(i) === t).length }))
-      .filter((c) => c.total > 0);
-
-    const agendaItems = agendaTypeFilter
-      ? porVendedor.filter((i) => tipoDoItem(i) === agendaTypeFilter)
-      : porVendedor;
-
-    // Divide em passado / hoje / futuro. "Hoje" fica sempre aberto no topo;
-    // passado e futuro viram acordeão fechado (mesmo padrão da aba Lista).
-    const now = Date.now();
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(todayStart);
-    todayEnd.setDate(todayEnd.getDate() + 1);
-
-    const pastItems: typeof agendaItems = [];
-    const todayItems: typeof agendaItems = [];
-    const futureItems: typeof agendaItems = [];
-    for (const item of agendaItems) {
-      const t = item.at ? new Date(item.at).getTime() : 0;
-      if (t >= todayStart.getTime() && t < todayEnd.getTime()) {
-        todayItems.push(item);
-      } else if (t < now) {
-        pastItems.push(item);
-      } else {
-        futureItems.push(item);
-      }
-    }
-    // Passado mais recente primeiro — o que acabou de passar é o mais relevante.
-    pastItems.reverse();
-
-    // Nome do lead do item, com a base inteira como fonte: primeiro o client
-    // carregado (area do mapa), senao o dicionario por id (reunioes fora do
-    // viewport). So' depois disso admite "nao encontrado".
-    const nomeDoItem = (item: typeof allAgendaItems[number]): string | null => {
-      if (item.client) return getClientPrimaryName(item.client);
-      if (item.kind === 'meeting') return nomesReunioes.get(item.meeting.client_id) ?? null;
-      return null;
-    };
-
-    const renderAgendaItem = (item: typeof agendaItems[number], index: number) => {
-          const date = item.at ? new Date(item.at) : null;
-          const time = date ? date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-          const client = item.client;
-          const title = nomeDoItem(item) ?? 'Lead nao encontrado';
-          const contact = client?.empresa?.trim() && client.nome && client.nome !== client.empresa ? client.nome : null;
-          const responsavel = client?.vendedor_id_hubspot
-            ? vendorLabel(client.vendedor_id_hubspot)
-            : null;
-
-          // Linha de contexto (como no card do mockup): "1ª visita · Bairro" ou
-          // "Revisita · Bairro". Reuniao/follow up dizem o tipo no lugar da
-          // contagem de visita — o que importa ali e' o compromisso, nao o pin.
-          const visitas = client ? (client.visit_count || (client.visited_at ? 1 : 0)) : 0;
-          const ocasiao = item.kind === 'meeting'
-            ? (item.meeting.type === 'follow_up' ? 'Follow up' : 'Reunião/demo')
-            : visitas > 0 ? 'Revisita' : '1ª visita';
-          const lugar = client?.bairro?.trim() || client?.cidade?.trim() || null;
-          const subtitle = [ocasiao, lugar].filter(Boolean).join(' · ');
-
-          // Pill de temperatura da etapa — mesma escala de cor dos pins do mapa.
-          const temp = stageTemperature(client?.etapa);
-
-          const tipo = tipoDoItem(item);
-          const corTipo = TIPO_META[tipo].cor;
-          // Duração só faz sentido em compromisso marcado; parada de rota não
-          // tem. Fica sob o horário, no trilho.
-          const duracao = item.kind === 'meeting' && item.meeting.duration_minutes
-            ? (item.meeting.duration_minutes >= 60
-                ? `${Math.floor(item.meeting.duration_minutes / 60)}h${item.meeting.duration_minutes % 60 ? `${item.meeting.duration_minutes % 60}` : ''}`
-                : `${item.meeting.duration_minutes}min`)
-            : null;
-
-          return (
-            <View
-              key={item.kind === 'meeting' ? `meeting-${item.meeting.id}` : `route-${item.stop.id ?? index}`}
-              style={styles.agendaRow}
-            >
-              {/* Trilho de horário: a hora é a âncora de leitura de uma agenda —
-                  antes vinha em texto menor no fim do nome do lead. */}
-              <View style={styles.agendaTimeRail}>
-                <Text style={styles.agendaTimeText}>{time}</Text>
-                {duracao ? <Text style={styles.agendaDurText}>{duracao}</Text> : null}
-              </View>
-
-              <View style={[styles.agendaCard, { borderLeftColor: corTipo }]}>
-                <Text style={styles.agendaTitle} numberOfLines={2}>{title}</Text>
-                <Text style={styles.agendaSubtitle}>{subtitle}</Text>
-                {contact ? <Text style={styles.agendaMeta}>Contato: {contact}</Text> : null}
-                {responsavel ? <Text style={styles.agendaMeta}>Responsável: {responsavel}</Text> : null}
-                {temp && (
-                  <View style={[styles.agendaTempPill, { backgroundColor: `${temp.color}1a`, borderColor: `${temp.color}59` }]}>
-                    <Text style={[styles.agendaTempPillText, { color: temp.color }]}>
-                      {temp.label} · {client?.etapa}
-                    </Text>
-                  </View>
-                )}
-                {client && (
-                  <>
-                    {/* Ações do dia a dia ficam como botões; as que mexem no
-                        compromisso descem pra linha de texto abaixo. Com cinco
-                        botões iguais, a linha quebrava em três. */}
-                    <View style={styles.routeActionsRow}>
-                      <TouchableOpacity
-                        style={styles.smallActionButton}
-                        onPress={() => openClientDetails(client)}
-                      >
-                        <Text style={styles.smallActionButtonText}>Abrir lead</Text>
-                      </TouchableOpacity>
-                      {client.latitude != null && client.longitude != null && (
-                        <TouchableOpacity
-                          style={styles.smallActionButton}
-                          onPress={() => openNavigation({ latitude: client.latitude as number, longitude: client.longitude as number, clientName: title, travelMode: 'driving' })}
-                        >
-                          <Text style={styles.smallActionButtonText}>Rota</Text>
-                        </TouchableOpacity>
-                      )}
-                      {toWhatsappNumber(client.telefone) && (
-                        <TouchableOpacity
-                          style={[styles.smallActionButton, { backgroundColor: '#25d366', borderColor: '#25d366' }]}
-                          onPress={() => openWhatsapp(client.telefone)}
-                        >
-                          <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>WhatsApp</Text>
-                        </TouchableOpacity>
-                      )}
-                      {item.kind === 'route' && (
-                        <TouchableOpacity style={styles.smallActionButton} onPress={() => fieldOps.markStopDone.mutate(item.stop)}>
-                          <Text style={styles.smallActionButtonText}>Realizada</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-
-                    {/* Reagendar/cancelar: só reunião e follow up (parada de rota
-                        não tem evento no Google Agenda pra mover). */}
-                    {item.kind === 'meeting' && !isViewer && (
-                      <View style={styles.agendaLinkRow}>
-                        <TouchableOpacity
-                          onPress={() => setSchedulingFor({
-                            client,
-                            type: item.meeting.type ?? 'reuniao',
-                            reschedule: item.meeting,
-                          })}
-                          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                        >
-                          <Text style={[styles.agendaLink, { color: '#ea580c' }]}>Reagendar</Text>
-                        </TouchableOpacity>
-                        <Text style={styles.agendaLinkSep}>·</Text>
-                        <TouchableOpacity
-                          onPress={() => confirmCancelMeeting(item.meeting)}
-                          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                        >
-                          <Text style={[styles.agendaLink, { color: 'var(--brand-text)' }]}>Cancelar</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </>
-                )}
-              </View>
-            </View>
-          );
-    };
-
-    // Agrupa por DIA. O cabecalho vermelho de cada grupo ("HOJE · TER, 11 AGO")
-    // e' o que da a leitura de calendario — em vez de uma lista corrida onde o
-    // vendedor tinha que ler a data item a item.
-    const groupByDay = (items: typeof agendaItems) => {
-      const groups: { key: string; date: Date | null; items: typeof agendaItems }[] = [];
-      for (const item of items) {
-        const d = item.at ? new Date(item.at) : null;
-        const key = d ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : 'sem-data';
-        const last = groups[groups.length - 1];
-        if (last && last.key === key) last.items.push(item);
-        else groups.push({ key, date: d, items: [item] });
-      }
-      return groups;
-    };
-
-    // "HOJE · TER, 11 AGO" / "AMANHÃ · QUA, 12 AGO" / "QUI, 13 AGO".
-    const dayHeaderLabel = (d: Date | null) => {
-      if (!d) return 'SEM DATA';
-      const dia = new Date(d);
-      dia.setHours(0, 0, 0, 0);
-      const diff = Math.round((dia.getTime() - todayStart.getTime()) / 86_400_000);
-      const weekday = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').toUpperCase();
-      const dayMonth = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
-        .replace('.', '')
-        .toUpperCase();
-      const base = `${weekday}, ${dayMonth}`;
-      if (diff === 0) return `HOJE · ${base}`;
-      if (diff === 1) return `AMANHÃ · ${base}`;
-      if (diff === -1) return `ONTEM · ${base}`;
-      return base;
-    };
-
-    // Um dia inteiro de compromissos: cabecalho + cards.
-    const renderDayGroup = (
-      group: { key: string; date: Date | null; items: typeof agendaItems },
-      opts?: { dimmed?: boolean },
-    ) => (
-      <View key={group.key} style={opts?.dimmed ? { opacity: 0.7 } : undefined}>
-        <View style={styles.agendaDayHeader}>
-          <Text style={styles.agendaDayHeaderText}>{dayHeaderLabel(group.date)}</Text>
-          <Text style={styles.agendaDayHeaderCount}>
-            {group.items.length} {group.items.length === 1 ? 'item' : 'itens'}
-          </Text>
-        </View>
-        {group.items.map((item, i) => renderAgendaItem(item, i))}
-      </View>
-    );
-
-    // Hoje + futuro entram na MESMA timeline continua (é o fluxo natural de
-    // "o que vem pela frente"); passado fica no acordeão fechado acima.
-    const proximosGroups = groupByDay([...todayItems, ...futureItems]);
-    const pastGroups = groupByDay(pastItems);
-
-    // Serializa UM item da agenda pro JSON (mesma leitura do card: cliente,
-    // responsavel, etapa/temperatura, local + campos especificos de
-    // reuniao/rota). `periodo` = passado|hoje|futuro conforme o grupo.
-    const serializeAgendaItem = (
-      item: typeof agendaItems[number],
-      periodo: 'passado' | 'hoje' | 'futuro',
-    ) => {
-      const client = item.client;
-      const temp = stageTemperature(client?.etapa);
-      const base = {
-        tipo: item.kind === 'meeting'
-          ? (item.meeting.type === 'follow_up' ? 'follow_up' : 'reuniao')
-          : 'rota',
-        periodo,
-        quando: item.at ?? null,
-        cliente: client ? getClientPrimaryName(client) : null,
-        client_id: client?.id ?? null,
-        empresa: client?.empresa ?? null,
-        contato: client?.nome ?? null,
-        telefone: client?.telefone ?? null,
-        email: client?.email ?? null,
-        responsavel: client?.vendedor_id_hubspot ? vendorLabel(client.vendedor_id_hubspot) : null,
-        vendedor_id_hubspot: client?.vendedor_id_hubspot ?? null,
-        etapa: client?.etapa ?? null,
-        temperatura: temp?.label ?? null,
-        status_lead: client?.status ?? null,
-        bairro: client?.bairro ?? null,
-        cidade: client?.cidade ?? null,
-        estado: client?.estado ?? null,
-        endereco: [client?.endereco, client?.numero].filter(Boolean).join(', ') || null,
-        latitude: client?.latitude ?? null,
-        longitude: client?.longitude ?? null,
-        visitas_total: client ? (client.visit_count || (client.visited_at ? 1 : 0)) : null,
-        url_hubspot: (client as any)?.url_hubspot ?? null,
-      };
-      if (item.kind === 'meeting') {
-        return {
-          ...base,
-          meeting_id: item.meeting.id,
-          duracao_minutos: item.meeting.duration_minutes ?? null,
-          observacoes: item.meeting.observacoes ?? null,
-          status_reuniao: item.meeting.status ?? null,
-        };
-      }
-      return {
-        ...base,
-        stop_id: item.stop.id ?? null,
-        posicao_rota: (item.stop as any).position ?? null,
-        status_parada: (item.stop as any).status ?? null,
-        minutos_deslocamento: (item.stop as any).estimated_drive_minutes ?? null,
-      };
-    };
-
-    const buildAgendaPayload = () => {
-      const itens = [
-        ...pastItems.map(i => serializeAgendaItem(i, 'passado')),
-        ...todayItems.map(i => serializeAgendaItem(i, 'hoje')),
-        ...futureItems.map(i => serializeAgendaItem(i, 'futuro')),
-      ];
-      return {
-        meta: {
-          tipo: 'agenda',
-          filtro_vendedor: vendorFilterHubspotId === null ? 'Todos' : vendorLabel(vendorFilterHubspotId),
-          gerado_em_app: new Date().toISOString(),
-          contagens: {
-            total: itens.length,
-            passado: pastItems.length,
-            hoje: todayItems.length,
-            futuro: futureItems.length,
-            reunioes: itens.filter(i => i.tipo === 'reuniao').length,
-            follow_ups: itens.filter(i => i.tipo === 'follow_up').length,
-            rotas: itens.filter(i => i.tipo === 'rota').length,
-          },
-        },
-        itens,
-      };
-    };
-
-    // Igual ao runExport do gestor: gera o JSON, abre o Alert e o link (baixa o
-    // .json no navegador). Bloqueia se a agenda estiver vazia.
-    const handleExportAgenda = async () => {
-      if (exportingAgenda) return;
-      if (agendaItems.length === 0) {
-        Alert.alert('Agenda vazia', 'Não há itens na agenda para exportar.');
-        return;
-      }
-      setExportingAgenda(true);
-      try {
-        const payload = buildAgendaPayload();
-        const filtro = vendorFilterHubspotId === null ? 'todos' : vendorLabel(vendorFilterHubspotId);
-        const res = await exportAgenda(payload, `agenda_${filtro}`);
-        Alert.alert(
-          'Exportação pronta',
-          `${payload.meta.contagens.total} itens (${payload.meta.contagens.reunioes} reuniões, ${payload.meta.contagens.follow_ups} follow-ups, ${payload.meta.contagens.rotas} rotas).\n\nToque em Abrir para baixar o .json (abre no navegador). Depois é só jogar na IA.`,
-          [
-            { text: 'Fechar', style: 'cancel' },
-            { text: 'Abrir', onPress: () => Linking.openURL(res.url) },
-          ],
-        );
-      } catch (err: any) {
-        Alert.alert('Erro ao exportar', err?.message ?? 'Tente novamente.');
-      } finally {
-        setExportingAgenda(false);
-      }
-    };
-
-    return (
-      <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom },
-      // Mesmo teto da lista de leads: sem ele o conteudo se espalha por
-      // toda a largura do monitor e a linha de texto fica ilegivel.
-      { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
-        {/* Cabeçalho enxuto: o parágrafo "rota planejada, demos e follow-ups em
-            ordem cronológica" descrevia o que a tela mostra sozinha. */}
-        <View style={styles.taskHeaderRow}>
-          <Text style={styles.panelTitle}>
-            Agenda{agendaItems.length > 0 ? ` · ${agendaItems.length}` : ''}
-          </Text>
-          {/* Exportar em JSON — só gestor, mesma regra da aba do Gestor.
-              Exporta o que está na tela, então respeita os filtros ativos. */}
-          {canViewGestor && (
-            <TouchableOpacity
-              style={[styles.agendaExportBtn, exportingAgenda && styles.agendaExportBtnDisabled]}
-              onPress={handleExportAgenda}
-              disabled={exportingAgenda}
-            >
-              {exportingAgenda
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <IconText Icone={IconDownload} style={styles.agendaExportBtnText} tone="onBrand">Exportar JSON</IconText>}
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {vendorFilterHubspotId !== null ? (
-          <Text style={styles.taskVendorHint}>
-            Filtro ativo: {vendorLabel(vendorFilterHubspotId)} — tire no modal de filtros.
-          </Text>
-        ) : null}
-
-        {/* Chips por tipo: contam e filtram num toque. */}
-        {contagemTipo.length > 1 && (
-          <View style={styles.countChipsRow}>
-            {contagemTipo.map(({ tipo, total }) => {
-              const ativo = agendaTypeFilter === tipo;
-              const meta = TIPO_META[tipo];
-              return (
-                <TouchableOpacity
-                  key={tipo}
-                  style={[styles.countChip, ativo && { borderColor: meta.cor, backgroundColor: 'var(--surface)' }]}
-                  onPress={() => setAgendaTypeFilter(ativo ? null : tipo)}
-                >
-                  <View style={[styles.countChipDot, { backgroundColor: meta.cor }]} />
-                  <Text style={[styles.countChipText, ativo && { color: 'var(--text)' }]}>
-                    {meta.label} {total}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
-        {layout.ehLargo ? (
-          // CALENDARIO SEMANAL — so' web. No celular a agenda segue lista:
-          // na rua a pergunta e' "o que e' agora"; na mesa, "como esta' minha
-          // semana". Sete colunas sempre (handoff, tela 4).
-          (() => {
-            const hojeCal = new Date();
-            const desloc = (hojeCal.getDay() + 6) % 7; // 0 = segunda
-            const seg = new Date(hojeCal);
-            seg.setDate(hojeCal.getDate() - desloc + calSemanaOffset * 7);
-            seg.setHours(0, 0, 0, 0);
-            const diasCal = Array.from({ length: 7 }, (_, k) => {
-              const d = new Date(seg);
-              d.setDate(seg.getDate() + k);
-              const itens = agendaItems
-                .filter((it) => {
-                  if (!it.at) return false;
-                  const t = new Date(it.at);
-                  return t.getFullYear() === d.getFullYear() && t.getMonth() === d.getMonth() && t.getDate() === d.getDate();
-                })
-                .sort((a, b) => String(a.at).localeCompare(String(b.at)));
-              return { d, itens };
-            });
-            const visiveis = diasCal;
-            const fimSemana = diasCal[6].d;
-            const rotuloJanela = `${seg.getDate()} ${seg.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')} – ${fimSemana.getDate()} ${fimSemana.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}`;
-            const totalDaSemana = diasCal.reduce((soma, dia) => soma + dia.itens.length, 0);
-            return (
-              <>
-                <View style={styles.calNav}>
-                  <TouchableOpacity style={styles.calNavBotao} onPress={() => setCalSemanaOffset((v) => v - 1)}>
-                    <Text style={styles.calNavSeta}>‹</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.calNavRotulo}>
-                    {rotuloJanela}
-                    <Text style={styles.calNavTotal}>  ·  {totalDaSemana} {totalDaSemana === 1 ? 'item' : 'itens'}</Text>
-                  </Text>
-                  {calSemanaOffset !== 0 && (
-                    <TouchableOpacity style={styles.calNavHoje} onPress={() => setCalSemanaOffset(0)}>
-                      <Text style={styles.calNavHojeTexto}>hoje</Text>
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity style={styles.calNavBotao} onPress={() => setCalSemanaOffset((v) => v + 1)}>
-                    <Text style={styles.calNavSeta}>›</Text>
-                  </TouchableOpacity>
-                  <View style={{ flex: 1 }} />
-                  {Object.entries(TIPO_META).map(([k, meta]) => (
-                    <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: meta.cor }} />
-                      <Text style={styles.calLegendaTexto}>{meta.label}</Text>
-                    </View>
-                  ))}
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Exportar JSON"
-                    style={[styles.ltwBotaoOutline, { borderColor: '#1D9688', height: 32, paddingHorizontal: 12 }]}
-                    {...ds({ trans: '1', hover: 'surface2' })}
-                    onPress={() => {
-                      if (typeof document === 'undefined') return;
-                      const dados = diasCal.map(({ d, itens }) => ({
-                        dia: d.toISOString().slice(0, 10),
-                        itens: itens.map(it => ({
-                          quando: it.at,
-                          tipo: TIPO_META[tipoDoItem(it)]?.label ?? tipoDoItem(it),
-                          quem: nomeDoItem(it),
-                        })),
-                      }));
-                      const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
-                      const a = document.createElement('a');
-                      a.href = URL.createObjectURL(blob);
-                      a.download = `agenda-${diasCal[0].d.toISOString().slice(0, 10)}.json`;
-                      a.click();
-                      URL.revokeObjectURL(a.href);
-                    }}
-                  >
-                    <IconDownload width={16} height={16} fill="#1D9688" />
-                    <Text style={[styles.ltwBotaoOutlineTexto, { color: '#1D9688', fontSize: 12 }]}>Exportar JSON</Text>
-                  </Pressable>
-                </View>
-                <View style={styles.calSemana}>
-                  {visiveis.map(({ d, itens }, k) => {
-                    const ehHojeCal = d.toDateString() === hojeCal.toDateString();
-                    return (
-                      <View key={k} style={[styles.calDia, ehHojeCal && styles.calDiaHoje]}>
-                        <View style={[styles.calDiaCabecalho, ehHojeCal && styles.calDiaCabecalhoHoje]}>
-                          <Text style={[styles.calDiaSemana, ehHojeCal && { color: 'var(--tint-red-text)' }]}>
-                            {d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
-                          </Text>
-                          <Text style={[styles.calDiaNumero, ehHojeCal && { color: 'var(--tint-red-text)' }]}>
-                            {d.getDate()}
-                          </Text>
-                        </View>
-                        <View style={styles.calDiaCorpo}>
-                        {itens.length === 0 ? (
-                          <Text style={styles.calVazio}>livre</Text>
-                        ) : (
-                          itens.map((it, ix) => {
-                            const meta = TIPO_META[tipoDoItem(it)];
-                            const hora = it.at
-                              ? new Date(it.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                              : '';
-                            const nomeChip = nomeDoItem(it) ?? meta?.label ?? 'Item';
-                            const idCliente = it.client?.id ?? (it.kind === 'meeting' ? it.meeting.client_id : null);
-                            return (
-                              <TouchableOpacity
-                                key={ix}
-                                style={[
-                                  styles.calChip,
-                                  { borderLeftColor: meta?.cor ?? 'var(--border)' },
-                                  tipoDoItem(it) === 'reuniao' && { backgroundColor: 'var(--tint-red)' },
-                                  tipoDoItem(it) === 'follow_up' && { backgroundColor: 'var(--tint-blue)' },
-                                  tipoDoItem(it) === 'rota' && { backgroundColor: 'var(--tint-green)' },
-                                ]}
-                                disabled={!idCliente}
-                                onPress={() => idCliente && openClientById(idCliente)}
-                              >
-                                <Text style={styles.calChipHora}>{hora} · {meta?.label}</Text>
-                                <Text style={styles.calChipTitulo} numberOfLines={2}>{nomeChip}</Text>
-                              </TouchableOpacity>
-                            );
-                          })
-                        )}
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              </>
-            );
-          })()
-        ) : agendaItems.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>Agenda vazia.</Text>
-          </View>
-        ) : (
-          <>
-            {/* PASSADO — acordeão fechado por padrão */}
-            {pastItems.length > 0 && (
-              <>
-                <TouchableOpacity
-                  style={styles.stageAccordionHeader}
-                  onPress={() => setAgendaPastOpen(v => !v)}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.stageAccordionTitle}>Passado</Text>
-                    <Text style={styles.stageAccordionMeta}>{pastItems.length} {pastItems.length === 1 ? 'item' : 'itens'}</Text>
-                  </View>
-                  <Text style={styles.stageAccordionChevron}>{agendaPastOpen ? '▲' : '▼'}</Text>
-                </TouchableOpacity>
-                {agendaPastOpen && pastGroups.map(g => renderDayGroup(g, { dimmed: true }))}
-              </>
-            )}
-
-            {/* HOJE + PRÓXIMOS DIAS — timeline contínua agrupada por data */}
-            {todayItems.length === 0 && (
-              <>
-                <View style={styles.agendaDayHeader}>
-                  <Text style={styles.agendaDayHeaderText}>{dayHeaderLabel(todayStart)}</Text>
-                </View>
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyStateText}>Nada agendado para hoje.</Text>
-                </View>
-              </>
-            )}
-            {proximosGroups.map(g => renderDayGroup(g))}
-          </>
-        )}
-      </ScrollView>
-    );
-  };
 
   if (!isAuthenticated && !loading) {
     return <LoginScreen />;
@@ -4998,12 +3700,12 @@ function MainApp() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Filtros"
-            style={styles.ltwBotaoOutline}
+            style={sharedStyles.ltwBotaoOutline}
             {...ds({ trans: '1', hover: 'surface2' })}
             onPress={() => setIsFiltersOpen(true)}
           >
             <IconFilterList width={24} height={24} fill={iconColors.muted} />
-            <Text style={styles.ltwBotaoOutlineTexto}>Filtros</Text>
+            <Text style={sharedStyles.ltwBotaoOutlineTexto}>Filtros</Text>
             {activeFilterCount > 0 && (
               <View style={styles.ltwBotaoBadge}>
                 <Text style={styles.sbBadgeTexto}>{activeFilterCount}</Text>
@@ -5013,12 +3715,12 @@ function MainApp() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Baixar planilha"
-            style={[styles.ltwBotaoOutline, { borderColor: '#1D9688' }]}
+            style={[sharedStyles.ltwBotaoOutline, { borderColor: 'var(--teal-text)' }]}
             {...ds({ trans: '1', hover: 'surface2' })}
             onPress={baixarPlanilha}
           >
-            <IconDownload width={24} height={24} fill="#1D9688" />
-            <Text style={[styles.ltwBotaoOutlineTexto, { color: '#1D9688' }]}>Baixar planilha</Text>
+            <IconDownload width={24} height={24} fill={iconColors.teal} />
+            <Text style={[sharedStyles.ltwBotaoOutlineTexto, { color: 'var(--teal-text)' }]}>Baixar planilha</Text>
           </Pressable>
         </View>
       </View>
@@ -5044,9 +3746,9 @@ function MainApp() {
           <View style={styles.ltwColSeta} />
         </View>
         {linhasDaPagina.length === 0 && (
-          <View style={styles.emptyState}>
+          <View style={sharedStyles.emptyState}>
             <IconClipboardCheck width={40} height={40} fill={iconColors.muted} style={{ marginBottom: 12 }} />
-            <Text style={styles.emptyStateText}>
+            <Text style={sharedStyles.emptyStateText}>
               {searchTerm || stateFilter || stageFilter || tempFilter || visitFilter
                 ? 'Nenhum cliente encontrado com esses filtros.'
                 : `Nenhum ${statusConfig[statusFilter]?.label?.toLowerCase() ?? statusFilter} encontrado`}
@@ -5105,7 +3807,7 @@ function MainApp() {
                     styles.ltwColVisita,
                     styles.ltwCelulaForte,
                     dias === null && { color: 'var(--text-disabled)' },
-                    dias !== null && dias > 30 && { color: '#94090F' },
+                    dias !== null && dias > 30 && { color: 'var(--tint-red-text)' },
                   ]}
                 >
                   {c.visited_at
@@ -5422,15 +4124,15 @@ function MainApp() {
                 <TouchableOpacity
                   key={opt.value}
                   style={[
-                    styles.filterChip,
+                    sharedStyles.filterChip,
                     active && { backgroundColor: opt.color },
                   ]}
                   onPress={() => toggleViewerStatus(opt.value)}
                 >
-                  <View style={[styles.filterDot, { backgroundColor: opt.color }]} />
+                  <View style={[sharedStyles.filterDot, { backgroundColor: opt.color }]} />
                   <Text style={[
-                    styles.filterChipText,
-                    active && styles.filterChipTextActive,
+                    sharedStyles.filterChipText,
+                    active && sharedStyles.filterChipTextActive,
                   ]}>
                     {opt.label} ({viewerStatusCounts[opt.value] ?? 0})
                   </Text>
@@ -5446,10 +4148,10 @@ function MainApp() {
         <>
           {/* Search bar: busca por nome, empresa, cidade ou bairro.
               Reflete em mapa, lista e contadores dos chips de status em tempo real. */}
-          <View style={styles.searchBar}>
+          <View style={sharedStyles.searchBar}>
             <IconSearch width={18} height={18} fill={iconColors.muted} />
             <TextInput
-              style={styles.searchInput}
+              style={sharedStyles.searchInput}
               placeholder="Buscar por nome, empresa ou cidade"
               placeholderTextColor="var(--text-subtle)"
               value={searchQuery}
@@ -5501,15 +4203,15 @@ function MainApp() {
                   <TouchableOpacity
                     key={opt.value}
                     style={[
-                      styles.filterChip,
+                      sharedStyles.filterChip,
                       statusFilter === opt.value && { backgroundColor: opt.color },
                     ]}
                     onPress={() => setStatusFilter(opt.value)}
                   >
-                    <View style={[styles.filterDot, { backgroundColor: opt.color }]} />
+                    <View style={[sharedStyles.filterDot, { backgroundColor: opt.color }]} />
                     <Text style={[
-                      styles.filterChipText,
-                      statusFilter === opt.value && styles.filterChipTextActive,
+                      sharedStyles.filterChipText,
+                      statusFilter === opt.value && sharedStyles.filterChipTextActive,
                     ]}>
                       {opt.label} ({statusCounts[opt.value]})
                     </Text>
@@ -5525,9 +4227,9 @@ function MainApp() {
         layout.ehLargo ? (
           /* Web: painel de trabalho fixo de 352px + mapa. O conteudo do mapa
              e' o MESMO JSX do celular (conteudoMapa) — so' a composicao muda. */
-          <View style={styles.mapaLinhaWeb}>
+          <View style={sharedStyles.mapaLinhaWeb}>
             {painelMapaWeb}
-            <View style={styles.mapaAreaWeb}>{conteudoMapa}</View>
+            <View style={sharedStyles.mapaAreaWeb}>{conteudoMapa}</View>
           </View>
         ) : (
           conteudoMapa
@@ -5551,7 +4253,7 @@ function MainApp() {
             // Por isso columnWrapper so' entra na lista plana.
             columnWrapperStyle={colunasDaLista > 1 ? { gap: 8 } : undefined}
             contentContainerStyle={[
-              styles.listContent,
+              sharedStyles.listContent,
               { paddingBottom: 80 + insets.bottom },
               // Teto de largura: sem ele, um card ocupa 2.5 mil pixels pra
               // exibir um nome e um endereco.
@@ -5565,9 +4267,9 @@ function MainApp() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             ListEmptyComponent={
-              <View style={styles.emptyState}>
+              <View style={sharedStyles.emptyState}>
                 <IconClipboardCheck width={40} height={40} fill={iconColors.muted} style={{ marginBottom: 12 }} />
-                <Text style={styles.emptyStateText}>
+                <Text style={sharedStyles.emptyStateText}>
                   {searchTerm || stateFilter || stageFilter || tempFilter || visitFilter
                     ? 'Nenhum cliente encontrado com esses filtros.'
                     : `Nenhum ${statusConfig[statusFilter]?.label?.toLowerCase() ?? statusFilter} encontrado`}
@@ -5589,15 +4291,84 @@ function MainApp() {
         </>
         )
       ) : tab === 'route' ? (
-        renderRouteScreen()
+        <RotaScreen
+          conteudoMapa={conteudoMapa}
+          clients={clients}
+          fieldOps={fieldOps}
+          routeStops={routeStops}
+          routeDisplayClients={routeDisplayClients}
+          routeStopClientIds={routeStopClientIds}
+          geometriaDaRota={routeGeometry.data}
+          geometriaCarregando={routeGeometry.isFetching}
+          routeLeadCount={routeLeadCount}
+          setRouteLeadCount={setRouteLeadCount}
+          routeStatusSelection={routeStatusSelection}
+          setRouteStatusSelection={setRouteStatusSelection}
+          routeVendorFilterHubspotId={routeVendorFilterHubspotId}
+          setRouteVendorFilterHubspotId={setRouteVendorFilterHubspotId}
+          routeManualSearch={routeManualSearch}
+          setRouteManualSearch={setRouteManualSearch}
+          routeStartOverride={routeStartOverride}
+          setRouteStartOverride={setRouteStartOverride}
+          setRouteDraft={setRouteDraft}
+          abrirEscolhaDePartida={() => setIsPickingRouteStart(true)}
+          abrirEscolhaDeVendedor={() => setIsPickingRouteVendor(true)}
+          isMonitoringRoute={isMonitoringRoute}
+          isOptimizing={isOptimizing}
+          lastProviderUsed={lastProviderUsed}
+          isAdmin={isAdmin}
+          myHubspotId={myHubspotId}
+          generateDailyRoute={generateDailyRoute}
+          startNavigation={startNavigation}
+          viewRouteOnMap={viewRouteOnMap}
+          addClientToRoute={addClientToRoute}
+          openClientDetails={openClientDetails}
+          vendorLabel={vendorLabel}
+          nomeDoLead={getClientPrimaryName}
+          statusConfig={statusConfig}
+          statusOptions={statusOptions}
+          irParaMapa={() => setTab('map')}
+          metaVisitasDia={routeConfig.meta_visitas_dia}
+          suggestRoute={suggestRoute}
+        />
       ) : tab === 'tasks' ? (
-        renderTasksScreen()
+        <TarefasScreen
+          visibleTasks={visibleTasks}
+          tasksActiveVendor={tasksActiveVendor}
+          filtroSev={taskSevFilter}
+          setFiltroSev={setTaskSevFilter}
+          clients={clients}
+          nomesTarefas={nomesTarefas}
+          nomeDoLead={getClientPrimaryName}
+          vendorLabel={vendorLabel}
+          abrirLeadNoMapa={(c) => { setTab('map'); openClientDetails(c); }}
+          agendarDemo={(c) => setSchedulingFor({ client: c, type: 'reuniao' })}
+          abrirRegras={() => setIsTaskRulesOpen(true)}
+          concluirTarefa={(vars) => resolveTask.mutate(vars)}
+          abrirMenuDeConclusao={setCompletingTask}
+          myHubspotId={myHubspotId}
+        />
       ) : tab === 'gestor' ? (
         <GestorScreen enabled={canViewGestor && tab === 'gestor'} onOpenClient={openClientById} />
       ) : tab === 'meu' ? (
         <MeuDesempenhoScreen enabled={tab === 'meu'} />
       ) : (
-        renderAgendaScreen()
+        <AgendaScreen
+          clients={clients}
+          meetings={meetings}
+          routeStops={routeStops}
+          nomesReunioes={nomesReunioes}
+          openClientById={openClientById}
+          openClientDetails={openClientDetails}
+          vendorLabel={vendorLabel}
+          canViewGestor={canViewGestor}
+          isViewer={isViewer}
+          confirmCancelMeeting={confirmCancelMeeting}
+          reagendar={(v) => setSchedulingFor(v)}
+          nomeDoLead={getClientPrimaryName}
+          fieldOps={fieldOps}
+          vendorFilterHubspotId={vendorFilterHubspotId}
+        />
       )}
 
       {selectedClientSheet}
@@ -5715,7 +4486,7 @@ function MainApp() {
               Escolha um cliente/lead como ponto de partida.
             </Text>
             <TextInput
-              style={styles.input}
+              style={sharedStyles.input}
               value={routeManualSearch}
               onChangeText={setRouteManualSearch}
               placeholder="Buscar por nome ou empresa..."
@@ -6007,7 +4778,7 @@ function MainApp() {
                   Digite uma nova senha. Mínimo de 6 caracteres.
                 </Text>
                 <TextInput
-                  style={styles.input}
+                  style={sharedStyles.input}
                   placeholder="Nova senha"
                   placeholderTextColor="var(--text-subtle)"
                   secureTextEntry
@@ -6016,7 +4787,7 @@ function MainApp() {
                   editable={!isSavingPassword}
                 />
                 <TextInput
-                  style={styles.input}
+                  style={sharedStyles.input}
                   placeholder="Confirmar nova senha"
                   placeholderTextColor="var(--text-subtle)"
                   secureTextEntry
@@ -6025,7 +4796,7 @@ function MainApp() {
                   editable={!isSavingPassword}
                 />
                 <TouchableOpacity
-                  style={[styles.submitButton, isSavingPassword && { opacity: 0.6 }]}
+                  style={[sharedStyles.submitButton, isSavingPassword && { opacity: 0.6 }]}
                   disabled={isSavingPassword}
                   onPress={async () => {
                     if (newPassword.length < 6) {
@@ -6053,7 +4824,7 @@ function MainApp() {
                   {isSavingPassword ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <Text style={styles.submitButtonText}>Salvar nova senha</Text>
+                    <Text style={sharedStyles.submitButtonText}>Salvar nova senha</Text>
                   )}
                 </TouchableOpacity>
 
@@ -6249,23 +5020,23 @@ function MainApp() {
                 {isAdmin ? (
                   <TouchableOpacity
                     style={[
-                      styles.dropdownButton,
+                      sharedStyles.dropdownButton,
                       vendorFilterHubspotId !== null && { borderColor: '#C8131B', backgroundColor: 'var(--tint-red)' },
                     ]}
                     onPress={() => setIsPickingVendor(true)}
                   >
                     <Text style={[
-                      styles.dropdownButtonText,
+                      sharedStyles.dropdownButtonText,
                       vendorFilterHubspotId === null && { color: 'var(--text-muted)' },
                     ]}>
                       {vendorLabel(vendorFilterHubspotId)}
                     </Text>
-                    <Text style={styles.dropdownChevron}>▾</Text>
+                    <Text style={sharedStyles.dropdownChevron}>▾</Text>
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
                     style={[
-                      styles.dropdownButton,
+                      sharedStyles.dropdownButton,
                       vendorFilterHubspotId !== null && { borderColor: '#C8131B', backgroundColor: 'var(--tint-red)' },
                     ]}
                     onPress={() => {
@@ -6280,13 +5051,13 @@ function MainApp() {
                     }}
                   >
                     <Text style={[
-                      styles.dropdownButtonText,
+                      sharedStyles.dropdownButtonText,
                       vendorFilterHubspotId === null && { color: 'var(--text-muted)' },
                     ]}>
                       {vendorFilterHubspotId === myHubspotId ? 'Somente meus leads' : 'Todos os leads visiveis'}
                     </Text>
                     <Text style={[
-                      styles.dropdownChevron,
+                      sharedStyles.dropdownChevron,
                       vendorFilterHubspotId === myHubspotId && { color: 'var(--brand-text)' },
                     ]}>{vendorFilterHubspotId === myHubspotId ? '✓' : '○'}</Text>
                   </TouchableOpacity>
@@ -6311,7 +5082,7 @@ function MainApp() {
                       <TouchableOpacity
                         key={op.texto}
                         style={[
-                          styles.filterChip,
+                          sharedStyles.filterChip,
                           { borderWidth: 1, borderColor: 'var(--border)', alignSelf: 'flex-start' },
                           selected && { backgroundColor: op.cor, borderColor: op.cor },
                         ]}
@@ -6326,7 +5097,7 @@ function MainApp() {
                               }}
                             />
                           )}
-                          <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>
+                          <Text style={[sharedStyles.filterChipText, selected && sharedStyles.filterChipTextActive]}>
                             {op.texto}
                           </Text>
                         </View>
@@ -6342,7 +5113,7 @@ function MainApp() {
                 </Text>
                 <TouchableOpacity
                   style={[
-                    styles.filterChip,
+                    sharedStyles.filterChip,
                     { borderWidth: 1, borderColor: 'var(--border)', alignSelf: 'flex-start', marginTop: 4 },
                     contaAlvoOnly && { backgroundColor: '#C8131B', borderColor: '#C8131B' },
                   ]}
@@ -6354,7 +5125,7 @@ function MainApp() {
                     return next;
                   })}
                 >
-                  <IconText Icone={IconStar} style={[styles.filterChipText, contaAlvoOnly && styles.filterChipTextActive]} tone="onSurface">Só Conta Alvo</IconText>
+                  <IconText Icone={IconStar} style={[sharedStyles.filterChipText, contaAlvoOnly && sharedStyles.filterChipTextActive]} tone="onSurface">Só Conta Alvo</IconText>
                 </TouchableOpacity>
 
                 <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Visita</Text>
@@ -6368,14 +5139,14 @@ function MainApp() {
                       <TouchableOpacity
                         key={label}
                         style={[
-                          styles.filterChip,
+                          sharedStyles.filterChip,
                           selected && { backgroundColor: '#C8131B', borderColor: '#C8131B' },
                           !selected && { borderWidth: 1, borderColor: 'var(--border)' },
                           { alignSelf: 'flex-start' },
                         ]}
                         onPress={() => setVisitFilter(v)}
                       >
-                        <Text style={[styles.filterChipText, selected && styles.filterChipTextActive]}>
+                        <Text style={[sharedStyles.filterChipText, selected && sharedStyles.filterChipTextActive]}>
                           {label}
                         </Text>
                       </TouchableOpacity>
@@ -6421,14 +5192,14 @@ function MainApp() {
                   Filtra os pinos pelo UF do endereco do cliente.
                 </Text>
                 <TouchableOpacity
-                  style={styles.dropdownButton}
+                  style={sharedStyles.dropdownButton}
                   onPress={() => setIsPickingUf(true)}
                   disabled={availableStates.length === 0}
                 >
-                  <Text style={[styles.dropdownButtonText, !stateFilter && { color: 'var(--text-muted)' }]}>
+                  <Text style={[sharedStyles.dropdownButtonText, !stateFilter && { color: 'var(--text-muted)' }]}>
                     {stateFilter ?? (availableStates.length === 0 ? 'Sem estados disponiveis' : 'Todos os estados')}
                   </Text>
-                  <Text style={styles.dropdownChevron}>▾</Text>
+                  <Text style={sharedStyles.dropdownChevron}>▾</Text>
                 </TouchableOpacity>
 
                 <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Etapa</Text>
@@ -6436,14 +5207,14 @@ function MainApp() {
                   Filtra os leads pela etapa comercial sincronizada.
                 </Text>
                 <TouchableOpacity
-                  style={styles.dropdownButton}
+                  style={sharedStyles.dropdownButton}
                   onPress={() => setIsPickingStage(true)}
                   disabled={availableStages.length === 0}
                 >
-                  <Text style={[styles.dropdownButtonText, !stageFilter && { color: 'var(--text-muted)' }]}>
+                  <Text style={[sharedStyles.dropdownButtonText, !stageFilter && { color: 'var(--text-muted)' }]}>
                     {stageFilter ?? (availableStages.length === 0 ? 'Sem etapas disponiveis' : 'Todas as etapas')}
                   </Text>
-                  <Text style={styles.dropdownChevron}>▾</Text>
+                  <Text style={sharedStyles.dropdownChevron}>▾</Text>
                 </TouchableOpacity>
                 </ScrollView>
 
@@ -6455,8 +5226,8 @@ function MainApp() {
                   >
                     <Text style={[styles.filtersSecondaryButtonText, activeFilterCount === 0 && { opacity: 0.4 }]}>Limpar tudo</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.submitButton, { flex: 1, marginTop: 0 }]} onPress={() => setIsFiltersOpen(false)}>
-                    <Text style={styles.submitButtonText}>Aplicar</Text>
+                  <TouchableOpacity style={[sharedStyles.submitButton, { flex: 1, marginTop: 0 }]} onPress={() => setIsFiltersOpen(false)}>
+                    <Text style={sharedStyles.submitButtonText}>Aplicar</Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -6610,7 +5381,7 @@ function MainApp() {
                   so existem via upgrade no fluxo de pos-venda). Na edicao,
                   bloqueia transitar de cliente/churn de volta pra lead —
                   espelho do trigger guard_client_status_transition no banco. */}
-              <Text style={styles.fieldLabel}>Status</Text>
+              <Text style={sharedStyles.fieldLabel}>Status</Text>
               <View style={styles.statusSelector}>
                 {statusOptions
                   .filter(opt => editingClient ? true : opt.value === 'lead')
@@ -6645,23 +5416,23 @@ function MainApp() {
                 </Text>
               )}
 
-              <Text style={styles.fieldLabel}>Informações</Text>
+              <Text style={sharedStyles.fieldLabel}>Informações</Text>
               <TextInput
-                style={styles.input}
+                style={sharedStyles.input}
                 placeholder="Nome do restaurante *"
                 placeholderTextColor="var(--text-subtle)"
                 value={form.empresa}
                 onChangeText={v => setForm(s => ({ ...s, empresa: v }))}
               />
               <TextInput
-                style={styles.input}
+                style={sharedStyles.input}
                 placeholder="Nome do contato *"
                 placeholderTextColor="var(--text-subtle)"
                 value={form.nome}
                 onChangeText={v => setForm(s => ({ ...s, nome: v }))}
               />
               <TextInput
-                style={styles.input}
+                style={sharedStyles.input}
                 placeholder="Telefone"
                 placeholderTextColor="var(--text-subtle)"
                 keyboardType="phone-pad"
@@ -6669,7 +5440,7 @@ function MainApp() {
                 onChangeText={v => setForm(s => ({ ...s, telefone: v }))}
               />
               <TextInput
-                style={styles.input}
+                style={sharedStyles.input}
                 placeholder="Email"
                 placeholderTextColor="var(--text-subtle)"
                 keyboardType="email-address"
@@ -6678,17 +5449,17 @@ function MainApp() {
                 onChangeText={v => setForm(s => ({ ...s, email: v }))}
               />
 
-              <Text style={styles.fieldLabel}>Localização</Text>
+              <Text style={sharedStyles.fieldLabel}>Localização</Text>
               <View style={styles.inputRow}>
                 <TextInput
-                  style={[styles.input, { flex: 1 }]}
+                  style={[sharedStyles.input, { flex: 1 }]}
                   placeholder="Cidade"
                   placeholderTextColor="var(--text-subtle)"
                   value={form.cidade}
                   onChangeText={v => setForm(s => ({ ...s, cidade: v }))}
                 />
                 <TextInput
-                  style={[styles.input, { width: 80, marginLeft: 8 }]}
+                  style={[sharedStyles.input, { width: 80, marginLeft: 8 }]}
                   placeholder="UF"
                   placeholderTextColor="var(--text-subtle)"
                   maxLength={2}
@@ -6699,14 +5470,14 @@ function MainApp() {
               </View>
               <View style={styles.inputRow}>
                 <TextInput
-                  style={[styles.input, { flex: 1 }]}
+                  style={[sharedStyles.input, { flex: 1 }]}
                   placeholder="Endereço (rua)"
                   placeholderTextColor="var(--text-subtle)"
                   value={form.endereco}
                   onChangeText={v => setForm(s => ({ ...s, endereco: v }))}
                 />
                 <TextInput
-                  style={[styles.input, { width: 90, marginLeft: 8 }]}
+                  style={[sharedStyles.input, { width: 90, marginLeft: 8 }]}
                   placeholder="Número"
                   placeholderTextColor="var(--text-subtle)"
                   keyboardType="default"
@@ -6716,9 +5487,9 @@ function MainApp() {
               </View>
               <IconText Icone={IconWarning} style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: -4, marginBottom: 8 }} tone="onSurface">Confira o número — pode ter sido auto-preenchido pelo mapa e estar impreciso.</IconText>
 
-              <Text style={styles.fieldLabel}>Observações</Text>
+              <Text style={sharedStyles.fieldLabel}>Observações</Text>
               <TextInput
-                style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+                style={[sharedStyles.input, { height: 80, textAlignVertical: 'top' }]}
                 placeholder="Anotações sobre este contato..."
                 placeholderTextColor="var(--text-subtle)"
                 multiline
@@ -6736,14 +5507,14 @@ function MainApp() {
               <View style={{ height: 16 }} />
                 </ScrollView>
                 <TouchableOpacity
-                  style={[styles.submitButton, (!form.nome.trim() || isSaving) && { opacity: 0.5 }]}
+                  style={[sharedStyles.submitButton, (!form.nome.trim() || isSaving) && { opacity: 0.5 }]}
                   onPress={editingClient ? saveEditClient : submitClient}
                   disabled={!form.nome.trim() || isSaving}
                 >
                   {isSaving ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <Text style={styles.submitButtonText}>Salvar</Text>
+                    <Text style={sharedStyles.submitButtonText}>Salvar</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -6839,18 +5610,18 @@ function ClientBottomSheet({
           <View style={styles.meetingChipActions}>
             {onRescheduleMeeting && (
               <TouchableOpacity
-                style={styles.smallActionButton}
+                style={sharedStyles.smallActionButton}
                 onPress={() => onRescheduleMeeting(m)}
               >
-                <Text style={styles.smallActionButtonText}>Reagendar</Text>
+                <Text style={sharedStyles.smallActionButtonText}>Reagendar</Text>
               </TouchableOpacity>
             )}
             {onCancelMeeting && (
               <TouchableOpacity
-                style={[styles.smallActionButton, { backgroundColor: 'var(--tint-red)', borderColor: 'var(--tint-red-border)' }]}
+                style={[sharedStyles.smallActionButton, { backgroundColor: 'var(--tint-red)', borderColor: 'var(--tint-red-border)' }]}
                 onPress={() => onCancelMeeting(m)}
               >
-                <Text style={[styles.smallActionButtonText, { color: 'var(--tint-red-text)' }]}>Cancelar</Text>
+                <Text style={[sharedStyles.smallActionButtonText, { color: 'var(--tint-red-text)' }]}>Cancelar</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -7175,7 +5946,7 @@ function ClientBottomSheet({
                 )}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <View style={[styles.statusBadgeLarge, { backgroundColor: statusColor }]}>
-                    <Text style={styles.statusBadgeText}>
+                    <Text style={sharedStyles.statusBadgeText}>
                       {statusLabel}
                     </Text>
                   </View>
@@ -7495,7 +6266,7 @@ function ClientBottomSheet({
                 ordem cronologica (mais recentes em cima). Mudancas de etapa
                 sao imutaveis; notas mantem editar/apagar pro autor. */}
             <View style={styles.notesSection}>
-              <Text style={styles.fieldLabel}>
+              <Text style={sharedStyles.fieldLabel}>
                 Histórico{timeline.length > 0 ? ` (${timeline.length})` : ''}
               </Text>
               {timeline.length === 0 ? (
@@ -7618,7 +6389,7 @@ function ClientBottomSheet({
                       {isEditing ? (
                         <>
                           <TextInput
-                            style={[styles.input, { marginTop: 8, marginBottom: 0, minHeight: 60 }]}
+                            style={[sharedStyles.input, { marginTop: 8, marginBottom: 0, minHeight: 60 }]}
                             value={editingBody}
                             onChangeText={setEditingBody}
                             multiline
@@ -7661,7 +6432,7 @@ function ClientBottomSheet({
               {canWriteNotes && (
                 <>
                   <TextInput
-                    style={[styles.input, { marginTop: 8, minHeight: 64 }]}
+                    style={[sharedStyles.input, { marginTop: 8, minHeight: 64 }]}
                     placeholder="Adicionar nova nota..."
                     placeholderTextColor="var(--text-subtle)"
                     value={newNote}
@@ -7670,7 +6441,7 @@ function ClientBottomSheet({
                     editable={!addNote.isPending}
                   />
                   <TouchableOpacity
-                    style={[styles.submitButton, (!newNote.trim() || addNote.isPending) && { opacity: 0.5 }]}
+                    style={[sharedStyles.submitButton, (!newNote.trim() || addNote.isPending) && { opacity: 0.5 }]}
                     disabled={!newNote.trim() || addNote.isPending}
                     onPress={() => {
                       addNote.mutate(newNote, {
@@ -7687,7 +6458,7 @@ function ClientBottomSheet({
                     {addNote.isPending ? (
                       <ActivityIndicator color="#fff" />
                     ) : (
-                      <Text style={styles.submitButtonText}>Adicionar nota</Text>
+                      <Text style={sharedStyles.submitButtonText}>Adicionar nota</Text>
                     )}
                   </TouchableOpacity>
                 </>
@@ -7705,7 +6476,7 @@ function ClientBottomSheet({
 
             {/* Navigation */}
             <View style={styles.navigationSection}>
-              <Text style={[styles.fieldLabel, { marginBottom: 8 }]}>Traçar Rota</Text>
+              <Text style={[sharedStyles.fieldLabel, { marginBottom: 8 }]}>Traçar Rota</Text>
               {client.latitude && client.longitude && (
                 <View style={[styles.navigationRow, { marginBottom: 8 }]}>
                   <TouchableOpacity
@@ -7760,7 +6531,7 @@ function ClientBottomSheet({
             {/* Reuniões agendadas */}
             <View style={styles.meetingsSection}>
               <View style={styles.meetingsHeader}>
-                <Text style={styles.fieldLabel}>
+                <Text style={sharedStyles.fieldLabel}>
                   Reuniões{reunioes.length > 0 ? ` (${reunioes.length})` : ''}
                 </Text>
               </View>
@@ -7789,7 +6560,7 @@ function ClientBottomSheet({
             {/* Follow ups — mesma mecânica de reunião, organização separada */}
             <View style={styles.meetingsSection}>
               <View style={styles.meetingsHeader}>
-                <Text style={styles.fieldLabel}>
+                <Text style={sharedStyles.fieldLabel}>
                   Follow ups{followUps.length > 0 ? ` (${followUps.length})` : ''}
                 </Text>
               </View>
@@ -8131,92 +6902,14 @@ const styles = StyleSheet.create({
   // fim, o ultimo chip fica com ar em vez de colado na borda da tela (antes
   // parecia cortado/quebrado, nao rolavel).
   filterScroll: { paddingLeft: 12, paddingRight: 20, paddingVertical: 8, gap: 6 },
-  filterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    // 12 -> 10: com ate 4 status ("Lead", "Cliente", "Ex-Cliente",
-    // "Ganho - Field Sales") cada pixel poupado adia o corte na borda.
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: 'var(--surface-2)',
-    marginRight: 6,
-  },
   filterChipActive: { backgroundColor: '#C8131B' },
-  filterChipText: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
-  filterChipTextActive: { color: '#fff' },
-  filterDot: { width: 8, height: 8, borderRadius: 4, marginRight: 5 },
   // Multi-select dos status na aba Rota (wrap, varios chips em ordem livre)
-  statusMultiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   // Resultado da busca manual: titulo + cidade + botao adicionar
-  manualRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'var(--border-soft)',
-    gap: 10,
-  },
-  manualRowTitle: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
-  manualRowSubtitle: { fontSize: 12, color: 'var(--text-muted)', marginTop: 1 },
-  manualRowWarning: { fontSize: 11, color: 'var(--brand-text)', fontWeight: '600', marginTop: 2 },
   // Badge admin: indica qual roteador foi usado pra otimizar a ultima rota.
-  providerBadge: {
-    alignSelf: 'flex-start',
-    marginTop: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: 'var(--tint-green)',
-    borderWidth: 1,
-    borderColor: 'var(--tint-green-border)',
-  },
-  providerBadgeText: { fontSize: 10, fontWeight: '700', color: 'var(--tint-green-text)' },
   // Card de stop da rota (com checkbox + linha de acoes)
-  routeStopCard: {
-    backgroundColor: 'var(--surface)',
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 8,
-    borderLeftWidth: 4,
-  },
-  routeStopHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
-  routeStopSubtitle: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
-  mandatoryTag: { fontSize: 11, fontWeight: '800', color: 'var(--brand-text)', marginTop: 3 },
   // Banner de monitoramento (gestor vendo a rota de outro vendedor).
-  monitorBanner: {
-    backgroundColor: 'var(--tint-blue)',
-    borderWidth: 1,
-    borderColor: 'var(--tint-blue-border)',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-  },
-  monitorBannerText: { fontSize: 13, color: 'var(--tint-blue-text)', fontWeight: '600', lineHeight: 18 },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: 'var(--border)',
-    backgroundColor: 'var(--surface)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxChecked: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
   checkboxCheckmark: { color: '#fff', fontSize: 14, fontWeight: '800' },
   // Search bar (busca por nome) — fica acima dos chips de status.
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'var(--surface-2)',
-    marginHorizontal: 12,
-    marginTop: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    gap: 8,
-  },
   // O icone de busca virou SVG do UI Kit (dimensionado por props), entao este
   // estilo so' serve pros pontos que ainda usam o emoji 🔍 em <Text>.
   searchIcon: { fontSize: 14, color: 'var(--text-muted)' },
@@ -8224,7 +6917,6 @@ const styles = StyleSheet.create({
   // medido na tela. O container tem padding, mas clicar no padding NAO foca o
   // campo (nao ha <label> associado), entao o alvo real de toque era a faixa
   // de 17px. Com 40 aqui + 8 de padding do container, a barra fica em 56.
-  searchInput: { flex: 1, minHeight: 44, color: 'var(--text)', fontSize: 14, padding: 0 },
   searchClear: { color: 'var(--text-muted)', fontSize: 14, paddingHorizontal: 4 },
   // Linha horizontal com o icone de filtros ancorado a esquerda + chips de status rolando.
   filterBarRow: { flexDirection: 'row', alignItems: 'center' },
@@ -8266,20 +6958,6 @@ const styles = StyleSheet.create({
     maxHeight: '80%',
   },
   // Botao de dropdown (estilo "menu suspenso") que abre a lista de UFs.
-  dropdownButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'var(--bg)',
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    marginTop: 8,
-  },
-  dropdownButtonText: { fontSize: 15, fontWeight: '600', color: 'var(--text)' },
-  dropdownChevron: { fontSize: 16, color: 'var(--text-muted)' },
   // Lista vertical do seletor de UF (modo "picker" dentro do mesmo sheet).
   ufPickerList: { maxHeight: 380, marginTop: 4 },
   ufPickerRow: {
@@ -8674,8 +7352,6 @@ const styles = StyleSheet.create({
   },
   hwCtaTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: '#FFFFFF' },
   // ---- Mapa web: linha painel + mapa ----
-  mapaLinhaWeb: { flex: 1, flexDirection: 'row' },
-  mapaAreaWeb: { flex: 1 },
   pmwContainer: {
     width: 352,
     backgroundColor: 'var(--surface)',
@@ -8705,7 +7381,7 @@ const styles = StyleSheet.create({
     color: 'var(--text-faint)',
     textTransform: 'uppercase',
   },
-  pmwLimpar: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: '#018CCC' },
+  pmwLimpar: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--info-text)' },
   pmwChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   pmwChip: {
     height: 32,
@@ -8810,18 +7486,6 @@ const styles = StyleSheet.create({
     gap: 16,
     marginBottom: 16,
   },
-  ltwBotaoOutline: {
-    height: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'var(--stroke-default)',
-    backgroundColor: 'var(--surface)',
-  },
-  ltwBotaoOutlineTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text-muted)' },
   ltwBotaoBadge: {
     minWidth: 18,
     height: 18,
@@ -8910,13 +7574,6 @@ const styles = StyleSheet.create({
   ltwPagBotaoAtivo: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
   ltwPagTexto: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: 'var(--text-muted)' },
   // ---- Rota web: rail de 420px a' direita do mapa ----
-  rotaRail: {
-    width: 420,
-    borderLeftWidth: 1,
-    borderLeftColor: 'var(--border)',
-    backgroundColor: 'var(--surface)',
-  },
-  rotaRailConteudo: { padding: 24 },
   bottomNav: {
     flexDirection: 'row',
     borderTopWidth: 1,
@@ -8959,57 +7616,6 @@ const styles = StyleSheet.create({
   navBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   navItemText: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-subtle)' },
   // ===== Calendario da Agenda (so' desktop) =====
-  calSemana: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
-  calDia: {
-    flex: 1,
-    minWidth: 0,
-    backgroundColor: 'var(--surface)',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-    minHeight: 520,
-    overflow: 'hidden',
-  },
-  calDiaHoje: { borderColor: '#C8131B' },
-  calDiaCabecalho: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'var(--border)',
-  },
-  calDiaCabecalhoHoje: { backgroundColor: 'var(--tint-red)' },
-  calDiaSemana: {
-    fontSize: 11,
-    lineHeight: 16,
-    letterSpacing: 0.5,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    color: 'var(--text-faint)',
-  },
-  calDiaNumero: { fontSize: 20, lineHeight: 28, fontWeight: '600', color: 'var(--text)' },
-  calDiaCorpo: { padding: 8, gap: 8, flex: 1 },
-  calLegendaTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
-  calVazio: { fontSize: 12, color: 'var(--text-faint)', textAlign: 'center', marginTop: 16 },
-  calNav: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  calNavBotao: {
-    width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface)',
-  },
-  calNavSeta: { fontSize: 16, lineHeight: 20, color: 'var(--text)', fontWeight: '600' },
-  calNavRotulo: { fontSize: 14, fontWeight: '600', color: 'var(--text)', letterSpacing: 0.1 },
-  calNavTotal: { fontSize: 12, fontWeight: '500', color: 'var(--text-subtle)' },
-  calNavHoje: {
-    paddingHorizontal: 12, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'var(--tint-red)',
-  },
-  calNavHojeTexto: { fontSize: 12, fontWeight: '700', color: 'var(--tint-red-text)' },
-  calChip: {
-    borderLeftWidth: 3,
-    backgroundColor: 'var(--surface-2)',
-    borderRadius: 4,
-    padding: 8,
-  },
-  calChipHora: { fontSize: 11, lineHeight: 14, fontWeight: '700', color: 'var(--text-muted)' },
-  calChipTitulo: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: 'var(--text)' },
   brandMark: {
     position: 'absolute',
     left: 0,
@@ -9023,7 +7629,6 @@ const styles = StyleSheet.create({
   },
   navItemTextActive: { color: 'var(--brand-text)' },
   // List
-  listContent: { padding: 12 },
   // Card Mobile do DS: radius 16, padding 16, sombra shadow/01 (key-light 14%).
   clientCard: {
     backgroundColor: 'var(--surface)',
@@ -9042,25 +7647,8 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   cardNameRow: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
   cardLogo: { width: 18, height: 18, resizeMode: 'contain', marginRight: 8 },
-  clientName: { fontSize: 15, fontWeight: '700', color: 'var(--text)', flex: 1 },
   clientContact: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
   clientStage: { fontSize: 12, color: 'var(--brand-text)', fontWeight: '700', marginTop: 2 },
-  stageAccordionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'var(--surface)',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-  },
-  stageAccordionTitle: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
-  stageAccordionMeta: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
-  stageAccordionChevron: { fontSize: 13, color: 'var(--text-muted)', fontWeight: '800', marginLeft: 10 },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  statusBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   cardMeetingBadge: {
     paddingHorizontal: 6,
     paddingVertical: 3,
@@ -9081,29 +7669,6 @@ const styles = StyleSheet.create({
   cardVisitBadgeText: { color: 'var(--tint-green-text)', fontSize: 10, fontWeight: '700' },
   clientCity: { fontSize: 13, color: 'var(--text-muted)', marginBottom: 2 },
   clientPhone: { fontSize: 13, color: 'var(--text)' },
-  emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 60 },
-  emptyStateText: { fontSize: 15, color: 'var(--text-subtle)' },
-  panelCard: {
-    backgroundColor: 'var(--surface)',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-  },
-  panelHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  panelTitle: { fontSize: 16, fontWeight: '800', color: 'var(--text)', marginBottom: 4 },
-  panelHint: { fontSize: 12, color: 'var(--text-muted)', lineHeight: 17 },
-  agendaExportBtn: {
-    marginTop: 12,
-    backgroundColor: '#222222',
-    borderRadius: 10,
-    paddingVertical: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  agendaExportBtnDisabled: { opacity: 0.6 },
-  agendaExportBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   segmentRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   segmentButton: {
     flex: 1,
@@ -9118,35 +7683,6 @@ const styles = StyleSheet.create({
   segmentButtonActive: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
   segmentButtonText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)', textAlign: 'center' },
   segmentButtonTextActive: { color: '#fff' },
-  routePosition: {
-    minWidth: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#222222',
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '800',
-    textAlign: 'center',
-    lineHeight: 26,
-    marginRight: 8,
-  },
-  routeActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-  smallActionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: 'var(--surface-2)',
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-  },
-  smallActionButtonText: { fontSize: 12, fontWeight: '700', color: 'var(--text)' },
-  secondaryButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: 'var(--surface-2)',
-  },
-  secondaryButtonText: { fontSize: 12, fontWeight: '800', color: 'var(--text)' },
   visitCountBox: {
     backgroundColor: 'var(--tint-green)',
     borderWidth: 1,
@@ -9205,159 +7741,22 @@ const styles = StyleSheet.create({
   agendaDate: { fontSize: 13, fontWeight: '800', color: 'var(--text)' },
   agendaWeekday: { fontSize: 10, color: 'var(--text-subtle)', fontWeight: '600', textTransform: 'capitalize' },
   agendaTime: { fontSize: 14, fontWeight: '800', color: 'var(--brand-text)', marginTop: 2 },
-  agendaTitle: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
-  agendaSubtitle: { fontSize: 13, color: 'var(--text-muted)', marginTop: 3 },
   // Linha da timeline: trilho de horário à esquerda + card com barra colorida
   // pelo tipo do compromisso (demo / follow up / rota).
-  agendaRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  agendaTimeRail: { width: 52, alignItems: 'flex-end', paddingTop: 12 },
-  agendaTimeText: { fontSize: 14, fontWeight: '800', color: 'var(--text)' },
-  agendaDurText: { fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 },
-  agendaCard: {
-    flex: 1,
-    backgroundColor: 'var(--surface)',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-    borderLeftWidth: 4,
-  },
-  agendaLinkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
-  agendaLink: { fontSize: 12, fontWeight: '800' },
-  agendaLinkSep: { fontSize: 12, color: 'var(--text-faint)' },
-  agendaMeta: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
   // Cabecalho de dia da timeline — vermelho, caixa alta, o marcador visual
   // que separa "HOJE" de "AMANHÃ" sem o vendedor ter que ler data por item.
-  agendaDayHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  agendaDayHeaderText: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: 'var(--brand-text)',
-    letterSpacing: 0.6,
-  },
-  agendaDayHeaderCount: { fontSize: 11, color: 'var(--text-subtle)', fontWeight: '700' },
   // Pill de temperatura da etapa (Quente/Morno/Frio) — cor vem de TEMP_COLORS
   // com alpha em hex (1a = ~10% fundo, 59 = ~35% borda).
-  agendaTempPill: {
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    marginTop: 8,
-  },
-  agendaTempPillText: { fontSize: 11, fontWeight: '800' },
   // Tarefas
-  taskMeta: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
   // ===== Kanban de tarefas (so' desktop) =====
-  kanbanColuna: {
-    width: 380,
-    backgroundColor: 'var(--surface)',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-  },
-  kanbanCabecalho: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'var(--border)',
-  },
-  kanbanTitulo: { flex: 1, fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text)' },
-  kanbanContagem: {
-    minWidth: 24,
-    height: 24,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  kanbanContagemTexto: { fontSize: 12, lineHeight: 24, letterSpacing: 0.5, fontWeight: '700' },
   // Densidade de QUADRO: o card compacta no web. No celular ele continua
   // grande porque e' lido a um braco de distancia, na rua.
-  taskCardWeb: { padding: 16, borderRadius: 8, marginBottom: 12 },
   // Card da tarefa: lead como título, badge de urgência à direita.
-  taskCard: {
-    backgroundColor: 'var(--surface)',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-  },
-  taskCardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  taskLead: { flex: 1, fontSize: 16, fontWeight: '800', color: 'var(--text)' },
-  taskBadge: {
-    minWidth: 34,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  taskBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  taskTipo: { fontSize: 13, fontWeight: '600', color: 'var(--text)', marginTop: 2 },
-  taskActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   // Chips de urgência (contam e filtram) + cabeçalho de cada seção.
   // Chips de contagem+filtro — compartilhados por Tarefas (severidade) e
   // Agenda (tipo de compromisso).
-  countChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  countChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: 'var(--surface-2)',
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-  },
-  countChipDot: { width: 8, height: 8, borderRadius: 4 },
-  countChipText: { fontSize: 13, fontWeight: '700', color: 'var(--text-muted)' },
-  taskSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
-    marginBottom: 8,
-    paddingHorizontal: 2,
-  },
-  taskSectionText: { fontSize: 12, fontWeight: '800', color: 'var(--text-muted)', letterSpacing: 0.4 },
-  taskVendorHint: { fontSize: 12, color: 'var(--tint-amber-text)', marginBottom: 10 },
   // Responsável + tag de vendedor desativado (sufixo "/ DESATIVADO" no nome).
-  taskRespRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
-  taskInativoTag: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
-    backgroundColor: 'var(--tint-red)',
-  },
-  taskInativoTagText: { fontSize: 9, fontWeight: '800', color: 'var(--tint-red-text)', letterSpacing: 0.3 },
   // Cabecalho da aba Tarefas com botao de info
-  taskHeaderRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  taskInfoButton: {
-    width: 30, height: 30, borderRadius: 15,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'var(--tint-blue)',
-  },
-  taskInfoButtonText: { fontSize: 18, color: 'var(--info-text)', fontWeight: '700' },
   // Modal de regras
   taskRulesCard: {
     backgroundColor: 'var(--surface)',
@@ -9412,14 +7811,6 @@ const styles = StyleSheet.create({
   taskDoneOptionText: { color: '#fff', fontSize: 15, fontWeight: '800' },
   taskDoneOptionHint: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 3, lineHeight: 16 },
   // Ponto de partida da rota
-  routeStartRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
-  routeStartOption: {
-    flex: 1, paddingVertical: 10, paddingHorizontal: 10, borderRadius: 10,
-    backgroundColor: 'var(--bg)', borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center',
-  },
-  routeStartOptionActive: { backgroundColor: 'var(--tint-blue)', borderColor: '#3b82f6' },
-  routeStartText: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
-  routeStartTextActive: { color: 'var(--info-text)' },
   routeStartPick: {
     paddingVertical: 11, paddingHorizontal: 4,
     borderBottomWidth: 1, borderBottomColor: 'var(--border-soft)',
@@ -9462,7 +7853,6 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   modalTitle: { fontSize: 20, fontWeight: '700', color: 'var(--text)' },
   closeButton: { fontSize: 22, color: 'var(--text-subtle)', padding: 4 },
-  fieldLabel: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)', marginBottom: 8, marginTop: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
   statusSelector: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   statusOption: {
     paddingHorizontal: 14,
@@ -9472,26 +7862,7 @@ const styles = StyleSheet.create({
     borderColor: 'var(--border)',
   },
   statusOptionText: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
-  input: {
-    backgroundColor: 'var(--bg)',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 10,
-    fontSize: 15,
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-    color: 'var(--text)',
-  },
   inputRow: { flexDirection: 'row' },
-  submitButton: {
-    backgroundColor: '#C8131B',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  submitButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   locationSummary: { backgroundColor: 'var(--tint-green)', borderRadius: 8, padding: 10, marginTop: 8, borderWidth: 1, borderColor: 'var(--tint-green-border)' },
   locationSummaryText: { fontSize: 12, color: '#16a34a', fontWeight: '500' },
   // Bottom Sheet

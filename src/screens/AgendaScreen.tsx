@@ -1,0 +1,756 @@
+import React, { useState } from 'react';
+import {
+  ActivityIndicator,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Alert } from '../components/Alert';
+import type { Client, ClientMeeting, FieldRouteStop } from '../types/client';
+import { useFieldOps } from '../hooks/useFieldOps';
+import { useLayout } from '../hooks/useLayout';
+import { exportAgenda } from '../utils/exportAgenda';
+import { openNavigation } from '../utils/navigation';
+import { openWhatsapp, toWhatsappNumber } from '../utils/whatsapp';
+import { stageTemperature } from '../constants/stages';
+import { IconDownload, IconText, useIconColors } from '../components/icons';
+import { ds, sharedStyles } from './sharedStyles';
+
+// Tela de Agenda, extraida do App.tsx (prompt 02 do handoff) — refactor puro.
+// Os estados que so' a agenda usava (semana visivel, filtro de tipo, acordeao
+// do passado, exportacao) migraram pra ca'; o resto chega por props.
+type FieldOps = ReturnType<typeof useFieldOps>;
+
+interface Props {
+  clients: Client[];
+  meetings: ClientMeeting[];
+  routeStops: FieldOps['stops'];
+  /** Nome por id pra reuniao de lead fora do viewport (useNomesDeClientes). */
+  nomesReunioes: Map<string, string>;
+  openClientById: (id: string) => void;
+  openClientDetails: (c: Client) => void;
+  vendorLabel: (idHubspot: string | null) => string;
+  canViewGestor: boolean;
+  isViewer: boolean;
+  confirmCancelMeeting: (m: ClientMeeting) => void;
+  nomeDoLead: (c: Client) => string;
+  fieldOps: FieldOps;
+  /** Mesmo filtro de vendedor do mapa/lista (estado compartilhado no App). */
+  vendorFilterHubspotId: string | null;
+  reagendar: (v: { client: Client; type: 'reuniao' | 'follow_up'; reschedule?: ClientMeeting }) => void;
+}
+
+export function AgendaScreen({
+  clients,
+  meetings,
+  routeStops,
+  nomesReunioes,
+  openClientById,
+  openClientDetails,
+  vendorLabel,
+  canViewGestor,
+  isViewer,
+  confirmCancelMeeting,
+  reagendar,
+  nomeDoLead,
+  fieldOps,
+  vendorFilterHubspotId,
+}: Props) {
+  const layout = useLayout();
+  const insets = useSafeAreaInsets();
+  const iconColors = useIconColors();
+  const [calSemanaOffset, setCalSemanaOffset] = useState(0);
+  const [agendaTypeFilter, setAgendaTypeFilter] = useState<string | null>(null);
+  const [agendaPastOpen, setAgendaPastOpen] = useState(false);
+  const [exportingAgenda, setExportingAgenda] = useState(false);
+  const allAgendaItems = [
+    ...routeStops.map(stop => ({ kind: 'route' as const, at: stop.planned_at, stop, client: stop.client })),
+    ...meetings.map(meeting => ({
+      kind: 'meeting' as const,
+      at: meeting.scheduled_at,
+      meeting,
+      client: clients.find(c => c.id === meeting.client_id) ?? null,
+    })),
+  ].sort((a, b) => new Date(a.at ?? 0).getTime() - new Date(b.at ?? 0).getTime());
+
+  // Aplica o mesmo filtro de vendedor que o mapa/lista usam — se o admin
+  // escolheu um vendedor, agenda mostra so itens cujo cliente eh dele.
+  // Itens sem client carregado (raro) ficam fora quando ha filtro ativo.
+  const porVendedor = vendorFilterHubspotId === null
+    ? allAgendaItems
+    : vendorFilterHubspotId === '__none__'
+      ? allAgendaItems.filter(item => !item.client?.vendedor_id_hubspot)
+      : allAgendaItems.filter(item => item.client?.vendedor_id_hubspot === vendorFilterHubspotId);
+
+  // Tipo do compromisso — define a cor da barra do card e os chips do topo.
+  // Demo, follow up e parada de rota renderizavam idênticos; a cor é o que
+  // deixa varrer o dia sem ler o texto de cada um.
+  const tipoDoItem = (item: typeof allAgendaItems[number]) =>
+    item.kind === 'meeting'
+      ? (item.meeting.type === 'follow_up' ? 'follow_up' : 'reuniao')
+      : 'rota';
+  const TIPO_META: Record<string, { label: string; cor: string }> = {
+    reuniao: { label: 'Demos', cor: '#C8131B' },
+    follow_up: { label: 'Follow ups', cor: '#2563eb' },
+    rota: { label: 'Rotas', cor: '#16a34a' },
+  };
+  // Contagem vem de ANTES do filtro de tipo — senão o chip ativo zeraria os
+  // outros e não daria pra voltar sabendo o que tem em cada um.
+  const contagemTipo = (['reuniao', 'follow_up', 'rota'] as const)
+    .map((t) => ({ tipo: t, total: porVendedor.filter((i) => tipoDoItem(i) === t).length }))
+    .filter((c) => c.total > 0);
+
+  const agendaItems = agendaTypeFilter
+    ? porVendedor.filter((i) => tipoDoItem(i) === agendaTypeFilter)
+    : porVendedor;
+
+  // Divide em passado / hoje / futuro. "Hoje" fica sempre aberto no topo;
+  // passado e futuro viram acordeão fechado (mesmo padrão da aba Lista).
+  const now = Date.now();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(todayStart);
+  todayEnd.setDate(todayEnd.getDate() + 1);
+
+  const pastItems: typeof agendaItems = [];
+  const todayItems: typeof agendaItems = [];
+  const futureItems: typeof agendaItems = [];
+  for (const item of agendaItems) {
+    const t = item.at ? new Date(item.at).getTime() : 0;
+    if (t >= todayStart.getTime() && t < todayEnd.getTime()) {
+      todayItems.push(item);
+    } else if (t < now) {
+      pastItems.push(item);
+    } else {
+      futureItems.push(item);
+    }
+  }
+  // Passado mais recente primeiro — o que acabou de passar é o mais relevante.
+  pastItems.reverse();
+
+  // Nome do lead do item, com a base inteira como fonte: primeiro o client
+  // carregado (area do mapa), senao o dicionario por id (reunioes fora do
+  // viewport). So' depois disso admite "nao encontrado".
+  const nomeDoItem = (item: typeof allAgendaItems[number]): string | null => {
+    if (item.client) return nomeDoLead(item.client);
+    if (item.kind === 'meeting') return nomesReunioes.get(item.meeting.client_id) ?? null;
+    return null;
+  };
+
+  const renderAgendaItem = (item: typeof agendaItems[number], index: number) => {
+        const date = item.at ? new Date(item.at) : null;
+        const time = date ? date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+        const client = item.client;
+        const title = nomeDoItem(item) ?? 'Lead nao encontrado';
+        const contact = client?.empresa?.trim() && client.nome && client.nome !== client.empresa ? client.nome : null;
+        const responsavel = client?.vendedor_id_hubspot
+          ? vendorLabel(client.vendedor_id_hubspot)
+          : null;
+
+        // Linha de contexto (como no card do mockup): "1ª visita · Bairro" ou
+        // "Revisita · Bairro". Reuniao/follow up dizem o tipo no lugar da
+        // contagem de visita — o que importa ali e' o compromisso, nao o pin.
+        const visitas = client ? (client.visit_count || (client.visited_at ? 1 : 0)) : 0;
+        const ocasiao = item.kind === 'meeting'
+          ? (item.meeting.type === 'follow_up' ? 'Follow up' : 'Reunião/demo')
+          : visitas > 0 ? 'Revisita' : '1ª visita';
+        const lugar = client?.bairro?.trim() || client?.cidade?.trim() || null;
+        const subtitle = [ocasiao, lugar].filter(Boolean).join(' · ');
+
+        // Pill de temperatura da etapa — mesma escala de cor dos pins do mapa.
+        const temp = stageTemperature(client?.etapa);
+
+        const tipo = tipoDoItem(item);
+        const corTipo = TIPO_META[tipo].cor;
+        // Duração só faz sentido em compromisso marcado; parada de rota não
+        // tem. Fica sob o horário, no trilho.
+        const duracao = item.kind === 'meeting' && item.meeting.duration_minutes
+          ? (item.meeting.duration_minutes >= 60
+              ? `${Math.floor(item.meeting.duration_minutes / 60)}h${item.meeting.duration_minutes % 60 ? `${item.meeting.duration_minutes % 60}` : ''}`
+              : `${item.meeting.duration_minutes}min`)
+          : null;
+
+        return (
+          <View
+            key={item.kind === 'meeting' ? `meeting-${item.meeting.id}` : `route-${item.stop.id ?? index}`}
+            style={styles.agendaRow}
+          >
+            {/* Trilho de horário: a hora é a âncora de leitura de uma agenda —
+                antes vinha em texto menor no fim do nome do lead. */}
+            <View style={styles.agendaTimeRail}>
+              <Text style={styles.agendaTimeText}>{time}</Text>
+              {duracao ? <Text style={styles.agendaDurText}>{duracao}</Text> : null}
+            </View>
+
+            <View style={[styles.agendaCard, { borderLeftColor: corTipo }]}>
+              <Text style={styles.agendaTitle} numberOfLines={2}>{title}</Text>
+              <Text style={styles.agendaSubtitle}>{subtitle}</Text>
+              {contact ? <Text style={styles.agendaMeta}>Contato: {contact}</Text> : null}
+              {responsavel ? <Text style={styles.agendaMeta}>Responsável: {responsavel}</Text> : null}
+              {temp && (
+                <View style={[styles.agendaTempPill, { backgroundColor: `${temp.color}1a`, borderColor: `${temp.color}59` }]}>
+                  <Text style={[styles.agendaTempPillText, { color: temp.color }]}>
+                    {temp.label} · {client?.etapa}
+                  </Text>
+                </View>
+              )}
+              {client && (
+                <>
+                  {/* Ações do dia a dia ficam como botões; as que mexem no
+                      compromisso descem pra linha de texto abaixo. Com cinco
+                      botões iguais, a linha quebrava em três. */}
+                  <View style={sharedStyles.routeActionsRow}>
+                    <TouchableOpacity
+                      style={sharedStyles.smallActionButton}
+                      onPress={() => openClientDetails(client)}
+                    >
+                      <Text style={sharedStyles.smallActionButtonText}>Abrir lead</Text>
+                    </TouchableOpacity>
+                    {client.latitude != null && client.longitude != null && (
+                      <TouchableOpacity
+                        style={sharedStyles.smallActionButton}
+                        onPress={() => openNavigation({ latitude: client.latitude as number, longitude: client.longitude as number, clientName: title, travelMode: 'driving' })}
+                      >
+                        <Text style={sharedStyles.smallActionButtonText}>Rota</Text>
+                      </TouchableOpacity>
+                    )}
+                    {toWhatsappNumber(client.telefone) && (
+                      <TouchableOpacity
+                        style={[sharedStyles.smallActionButton, { backgroundColor: '#25d366', borderColor: '#25d366' }]}
+                        onPress={() => openWhatsapp(client.telefone)}
+                      >
+                        <Text style={[sharedStyles.smallActionButtonText, { color: '#fff' }]}>WhatsApp</Text>
+                      </TouchableOpacity>
+                    )}
+                    {item.kind === 'route' && (
+                      <TouchableOpacity style={sharedStyles.smallActionButton} onPress={() => fieldOps.markStopDone.mutate(item.stop)}>
+                        <Text style={sharedStyles.smallActionButtonText}>Realizada</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {/* Reagendar/cancelar: só reunião e follow up (parada de rota
+                      não tem evento no Google Agenda pra mover). */}
+                  {item.kind === 'meeting' && !isViewer && (
+                    <View style={styles.agendaLinkRow}>
+                      <TouchableOpacity
+                        onPress={() => reagendar({
+                          client,
+                          type: item.meeting.type ?? 'reuniao',
+                          reschedule: item.meeting,
+                        })}
+                        hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                      >
+                        <Text style={[styles.agendaLink, { color: '#ea580c' }]}>Reagendar</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.agendaLinkSep}>·</Text>
+                      <TouchableOpacity
+                        onPress={() => confirmCancelMeeting(item.meeting)}
+                        hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                      >
+                        <Text style={[styles.agendaLink, { color: 'var(--brand-text)' }]}>Cancelar</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+          </View>
+        );
+  };
+
+  // Agrupa por DIA. O cabecalho vermelho de cada grupo ("HOJE · TER, 11 AGO")
+  // e' o que da a leitura de calendario — em vez de uma lista corrida onde o
+  // vendedor tinha que ler a data item a item.
+  const groupByDay = (items: typeof agendaItems) => {
+    const groups: { key: string; date: Date | null; items: typeof agendaItems }[] = [];
+    for (const item of items) {
+      const d = item.at ? new Date(item.at) : null;
+      const key = d ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : 'sem-data';
+      const last = groups[groups.length - 1];
+      if (last && last.key === key) last.items.push(item);
+      else groups.push({ key, date: d, items: [item] });
+    }
+    return groups;
+  };
+
+  // "HOJE · TER, 11 AGO" / "AMANHÃ · QUA, 12 AGO" / "QUI, 13 AGO".
+  const dayHeaderLabel = (d: Date | null) => {
+    if (!d) return 'SEM DATA';
+    const dia = new Date(d);
+    dia.setHours(0, 0, 0, 0);
+    const diff = Math.round((dia.getTime() - todayStart.getTime()) / 86_400_000);
+    const weekday = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').toUpperCase();
+    const dayMonth = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+      .replace('.', '')
+      .toUpperCase();
+    const base = `${weekday}, ${dayMonth}`;
+    if (diff === 0) return `HOJE · ${base}`;
+    if (diff === 1) return `AMANHÃ · ${base}`;
+    if (diff === -1) return `ONTEM · ${base}`;
+    return base;
+  };
+
+  // Um dia inteiro de compromissos: cabecalho + cards.
+  const renderDayGroup = (
+    group: { key: string; date: Date | null; items: typeof agendaItems },
+    opts?: { dimmed?: boolean },
+  ) => (
+    <View key={group.key} style={opts?.dimmed ? { opacity: 0.7 } : undefined}>
+      <View style={styles.agendaDayHeader}>
+        <Text style={styles.agendaDayHeaderText}>{dayHeaderLabel(group.date)}</Text>
+        <Text style={styles.agendaDayHeaderCount}>
+          {group.items.length} {group.items.length === 1 ? 'item' : 'itens'}
+        </Text>
+      </View>
+      {group.items.map((item, i) => renderAgendaItem(item, i))}
+    </View>
+  );
+
+  // Hoje + futuro entram na MESMA timeline continua (é o fluxo natural de
+  // "o que vem pela frente"); passado fica no acordeão fechado acima.
+  const proximosGroups = groupByDay([...todayItems, ...futureItems]);
+  const pastGroups = groupByDay(pastItems);
+
+  // Serializa UM item da agenda pro JSON (mesma leitura do card: cliente,
+  // responsavel, etapa/temperatura, local + campos especificos de
+  // reuniao/rota). `periodo` = passado|hoje|futuro conforme o grupo.
+  const serializeAgendaItem = (
+    item: typeof agendaItems[number],
+    periodo: 'passado' | 'hoje' | 'futuro',
+  ) => {
+    const client = item.client;
+    const temp = stageTemperature(client?.etapa);
+    const base = {
+      tipo: item.kind === 'meeting'
+        ? (item.meeting.type === 'follow_up' ? 'follow_up' : 'reuniao')
+        : 'rota',
+      periodo,
+      quando: item.at ?? null,
+      cliente: client ? nomeDoLead(client) : null,
+      client_id: client?.id ?? null,
+      empresa: client?.empresa ?? null,
+      contato: client?.nome ?? null,
+      telefone: client?.telefone ?? null,
+      email: client?.email ?? null,
+      responsavel: client?.vendedor_id_hubspot ? vendorLabel(client.vendedor_id_hubspot) : null,
+      vendedor_id_hubspot: client?.vendedor_id_hubspot ?? null,
+      etapa: client?.etapa ?? null,
+      temperatura: temp?.label ?? null,
+      status_lead: client?.status ?? null,
+      bairro: client?.bairro ?? null,
+      cidade: client?.cidade ?? null,
+      estado: client?.estado ?? null,
+      endereco: [client?.endereco, client?.numero].filter(Boolean).join(', ') || null,
+      latitude: client?.latitude ?? null,
+      longitude: client?.longitude ?? null,
+      visitas_total: client ? (client.visit_count || (client.visited_at ? 1 : 0)) : null,
+      url_hubspot: (client as any)?.url_hubspot ?? null,
+    };
+    if (item.kind === 'meeting') {
+      return {
+        ...base,
+        meeting_id: item.meeting.id,
+        duracao_minutos: item.meeting.duration_minutes ?? null,
+        observacoes: item.meeting.observacoes ?? null,
+        status_reuniao: item.meeting.status ?? null,
+      };
+    }
+    return {
+      ...base,
+      stop_id: item.stop.id ?? null,
+      posicao_rota: (item.stop as any).position ?? null,
+      status_parada: (item.stop as any).status ?? null,
+      minutos_deslocamento: (item.stop as any).estimated_drive_minutes ?? null,
+    };
+  };
+
+  const buildAgendaPayload = () => {
+    const itens = [
+      ...pastItems.map(i => serializeAgendaItem(i, 'passado')),
+      ...todayItems.map(i => serializeAgendaItem(i, 'hoje')),
+      ...futureItems.map(i => serializeAgendaItem(i, 'futuro')),
+    ];
+    return {
+      meta: {
+        tipo: 'agenda',
+        filtro_vendedor: vendorFilterHubspotId === null ? 'Todos' : vendorLabel(vendorFilterHubspotId),
+        gerado_em_app: new Date().toISOString(),
+        contagens: {
+          total: itens.length,
+          passado: pastItems.length,
+          hoje: todayItems.length,
+          futuro: futureItems.length,
+          reunioes: itens.filter(i => i.tipo === 'reuniao').length,
+          follow_ups: itens.filter(i => i.tipo === 'follow_up').length,
+          rotas: itens.filter(i => i.tipo === 'rota').length,
+        },
+      },
+      itens,
+    };
+  };
+
+  // Igual ao runExport do gestor: gera o JSON, abre o Alert e o link (baixa o
+  // .json no navegador). Bloqueia se a agenda estiver vazia.
+  const handleExportAgenda = async () => {
+    if (exportingAgenda) return;
+    if (agendaItems.length === 0) {
+      Alert.alert('Agenda vazia', 'Não há itens na agenda para exportar.');
+      return;
+    }
+    setExportingAgenda(true);
+    try {
+      const payload = buildAgendaPayload();
+      const filtro = vendorFilterHubspotId === null ? 'todos' : vendorLabel(vendorFilterHubspotId);
+      const res = await exportAgenda(payload, `agenda_${filtro}`);
+      Alert.alert(
+        'Exportação pronta',
+        `${payload.meta.contagens.total} itens (${payload.meta.contagens.reunioes} reuniões, ${payload.meta.contagens.follow_ups} follow-ups, ${payload.meta.contagens.rotas} rotas).\n\nToque em Abrir para baixar o .json (abre no navegador). Depois é só jogar na IA.`,
+        [
+          { text: 'Fechar', style: 'cancel' },
+          { text: 'Abrir', onPress: () => Linking.openURL(res.url) },
+        ],
+      );
+    } catch (err: any) {
+      Alert.alert('Erro ao exportar', err?.message ?? 'Tente novamente.');
+    } finally {
+      setExportingAgenda(false);
+    }
+  };
+
+  return (
+    <ScrollView contentContainerStyle={[sharedStyles.listContent, { paddingBottom: 90 + insets.bottom },
+    // Mesmo teto da lista de leads: sem ele o conteudo se espalha por
+    // toda a largura do monitor e a linha de texto fica ilegivel.
+    { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
+      {/* Cabeçalho enxuto: o parágrafo "rota planejada, demos e follow-ups em
+          ordem cronológica" descrevia o que a tela mostra sozinha. */}
+      <View style={sharedStyles.taskHeaderRow}>
+        <Text style={sharedStyles.panelTitle}>
+          Agenda{agendaItems.length > 0 ? ` · ${agendaItems.length}` : ''}
+        </Text>
+        {/* Exportar em JSON — só gestor, mesma regra da aba do Gestor.
+            Exporta o que está na tela, então respeita os filtros ativos. */}
+        {canViewGestor && (
+          <TouchableOpacity
+            style={[styles.agendaExportBtn, exportingAgenda && styles.agendaExportBtnDisabled]}
+            onPress={handleExportAgenda}
+            disabled={exportingAgenda}
+          >
+            {exportingAgenda
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <IconText Icone={IconDownload} style={styles.agendaExportBtnText} tone="onBrand">Exportar JSON</IconText>}
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {vendorFilterHubspotId !== null ? (
+        <Text style={sharedStyles.taskVendorHint}>
+          Filtro ativo: {vendorLabel(vendorFilterHubspotId)} — tire no modal de filtros.
+        </Text>
+      ) : null}
+
+      {/* Chips por tipo: contam e filtram num toque. */}
+      {contagemTipo.length > 1 && (
+        <View style={sharedStyles.countChipsRow}>
+          {contagemTipo.map(({ tipo, total }) => {
+            const ativo = agendaTypeFilter === tipo;
+            const meta = TIPO_META[tipo];
+            return (
+              <TouchableOpacity
+                key={tipo}
+                style={[sharedStyles.countChip, ativo && { borderColor: meta.cor, backgroundColor: 'var(--surface)' }]}
+                onPress={() => setAgendaTypeFilter(ativo ? null : tipo)}
+              >
+                <View style={[sharedStyles.countChipDot, { backgroundColor: meta.cor }]} />
+                <Text style={[sharedStyles.countChipText, ativo && { color: 'var(--text)' }]}>
+                  {meta.label} {total}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
+      {layout.ehLargo ? (
+        // CALENDARIO SEMANAL — so' web. No celular a agenda segue lista:
+        // na rua a pergunta e' "o que e' agora"; na mesa, "como esta' minha
+        // semana". Sete colunas sempre (handoff, tela 4).
+        (() => {
+          const hojeCal = new Date();
+          const desloc = (hojeCal.getDay() + 6) % 7; // 0 = segunda
+          const seg = new Date(hojeCal);
+          seg.setDate(hojeCal.getDate() - desloc + calSemanaOffset * 7);
+          seg.setHours(0, 0, 0, 0);
+          const diasCal = Array.from({ length: 7 }, (_, k) => {
+            const d = new Date(seg);
+            d.setDate(seg.getDate() + k);
+            const itens = agendaItems
+              .filter((it) => {
+                if (!it.at) return false;
+                const t = new Date(it.at);
+                return t.getFullYear() === d.getFullYear() && t.getMonth() === d.getMonth() && t.getDate() === d.getDate();
+              })
+              .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+            return { d, itens };
+          });
+          const visiveis = diasCal;
+          const fimSemana = diasCal[6].d;
+          const rotuloJanela = `${seg.getDate()} ${seg.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')} – ${fimSemana.getDate()} ${fimSemana.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}`;
+          const totalDaSemana = diasCal.reduce((soma, dia) => soma + dia.itens.length, 0);
+          return (
+            <>
+              <View style={styles.calNav}>
+                <TouchableOpacity style={styles.calNavBotao} onPress={() => setCalSemanaOffset((v) => v - 1)}>
+                  <Text style={styles.calNavSeta}>‹</Text>
+                </TouchableOpacity>
+                <Text style={styles.calNavRotulo}>
+                  {rotuloJanela}
+                  <Text style={styles.calNavTotal}>  ·  {totalDaSemana} {totalDaSemana === 1 ? 'item' : 'itens'}</Text>
+                </Text>
+                {calSemanaOffset !== 0 && (
+                  <TouchableOpacity style={styles.calNavHoje} onPress={() => setCalSemanaOffset(0)}>
+                    <Text style={styles.calNavHojeTexto}>hoje</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={styles.calNavBotao} onPress={() => setCalSemanaOffset((v) => v + 1)}>
+                  <Text style={styles.calNavSeta}>›</Text>
+                </TouchableOpacity>
+                <View style={{ flex: 1 }} />
+                {Object.entries(TIPO_META).map(([k, meta]) => (
+                  <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: meta.cor }} />
+                    <Text style={styles.calLegendaTexto}>{meta.label}</Text>
+                  </View>
+                ))}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Exportar JSON"
+                  style={[sharedStyles.ltwBotaoOutline, { borderColor: 'var(--teal-text)', height: 32, paddingHorizontal: 12 }]}
+                  {...ds({ trans: '1', hover: 'surface2' })}
+                  onPress={() => {
+                    if (typeof document === 'undefined') return;
+                    const dados = diasCal.map(({ d, itens }) => ({
+                      dia: d.toISOString().slice(0, 10),
+                      itens: itens.map(it => ({
+                        quando: it.at,
+                        tipo: TIPO_META[tipoDoItem(it)]?.label ?? tipoDoItem(it),
+                        quem: nomeDoItem(it),
+                      })),
+                    }));
+                    const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `agenda-${diasCal[0].d.toISOString().slice(0, 10)}.json`;
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                  }}
+                >
+                  <IconDownload width={16} height={16} fill={iconColors.teal} />
+                  <Text style={[sharedStyles.ltwBotaoOutlineTexto, { color: 'var(--teal-text)', fontSize: 12 }]}>Exportar JSON</Text>
+                </Pressable>
+              </View>
+              <View style={styles.calSemana}>
+                {visiveis.map(({ d, itens }, k) => {
+                  const ehHojeCal = d.toDateString() === hojeCal.toDateString();
+                  return (
+                    <View key={k} style={[styles.calDia, ehHojeCal && styles.calDiaHoje]}>
+                      <View style={[styles.calDiaCabecalho, ehHojeCal && styles.calDiaCabecalhoHoje]}>
+                        <Text style={[styles.calDiaSemana, ehHojeCal && { color: 'var(--tint-red-text)' }]}>
+                          {d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
+                        </Text>
+                        <Text style={[styles.calDiaNumero, ehHojeCal && { color: 'var(--tint-red-text)' }]}>
+                          {d.getDate()}
+                        </Text>
+                      </View>
+                      <View style={styles.calDiaCorpo}>
+                      {itens.length === 0 ? (
+                        <Text style={styles.calVazio}>livre</Text>
+                      ) : (
+                        itens.map((it, ix) => {
+                          const meta = TIPO_META[tipoDoItem(it)];
+                          const hora = it.at
+                            ? new Date(it.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                            : '';
+                          const nomeChip = nomeDoItem(it) ?? meta?.label ?? 'Item';
+                          const idCliente = it.client?.id ?? (it.kind === 'meeting' ? it.meeting.client_id : null);
+                          return (
+                            <TouchableOpacity
+                              key={ix}
+                              style={[
+                                styles.calChip,
+                                { borderLeftColor: meta?.cor ?? 'var(--border)' },
+                                tipoDoItem(it) === 'reuniao' && { backgroundColor: 'var(--tint-red)' },
+                                tipoDoItem(it) === 'follow_up' && { backgroundColor: 'var(--tint-blue)' },
+                                tipoDoItem(it) === 'rota' && { backgroundColor: 'var(--tint-green)' },
+                              ]}
+                              disabled={!idCliente}
+                              onPress={() => idCliente && openClientById(idCliente)}
+                            >
+                              <Text style={styles.calChipHora}>{hora} · {meta?.label}</Text>
+                              <Text style={styles.calChipTitulo} numberOfLines={2}>{nomeChip}</Text>
+                            </TouchableOpacity>
+                          );
+                        })
+                      )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </>
+          );
+        })()
+      ) : agendaItems.length === 0 ? (
+        <View style={sharedStyles.emptyState}>
+          <Text style={sharedStyles.emptyStateText}>Agenda vazia.</Text>
+        </View>
+      ) : (
+        <>
+          {/* PASSADO — acordeão fechado por padrão */}
+          {pastItems.length > 0 && (
+            <>
+              <TouchableOpacity
+                style={sharedStyles.stageAccordionHeader}
+                onPress={() => setAgendaPastOpen(v => !v)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={sharedStyles.stageAccordionTitle}>Passado</Text>
+                  <Text style={sharedStyles.stageAccordionMeta}>{pastItems.length} {pastItems.length === 1 ? 'item' : 'itens'}</Text>
+                </View>
+                <Text style={sharedStyles.stageAccordionChevron}>{agendaPastOpen ? '▲' : '▼'}</Text>
+              </TouchableOpacity>
+              {agendaPastOpen && pastGroups.map(g => renderDayGroup(g, { dimmed: true }))}
+            </>
+          )}
+
+          {/* HOJE + PRÓXIMOS DIAS — timeline contínua agrupada por data */}
+          {todayItems.length === 0 && (
+            <>
+              <View style={styles.agendaDayHeader}>
+                <Text style={styles.agendaDayHeaderText}>{dayHeaderLabel(todayStart)}</Text>
+              </View>
+              <View style={sharedStyles.emptyState}>
+                <Text style={sharedStyles.emptyStateText}>Nada agendado para hoje.</Text>
+              </View>
+            </>
+          )}
+          {proximosGroups.map(g => renderDayGroup(g))}
+        </>
+      )}
+    </ScrollView>
+  );
+}
+
+// Estilos exclusivos desta tela, movidos do App.tsx como estavam.
+const styles = StyleSheet.create({
+  agendaCard: {
+    flex: 1,
+    backgroundColor: 'var(--surface)',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    borderLeftWidth: 4,
+  },
+  agendaDayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  agendaDayHeaderCount: { fontSize: 11, color: 'var(--text-subtle)', fontWeight: '700' },
+  agendaDayHeaderText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: 'var(--brand-text)',
+    letterSpacing: 0.6,
+  },
+  agendaDurText: { fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 },
+  agendaExportBtn: {
+    marginTop: 12,
+    backgroundColor: '#222222',
+    borderRadius: 10,
+    paddingVertical: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  agendaExportBtnDisabled: { opacity: 0.6 },
+  agendaExportBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  agendaLink: { fontSize: 12, fontWeight: '800' },
+  agendaLinkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
+  agendaLinkSep: { fontSize: 12, color: 'var(--text-faint)' },
+  agendaMeta: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
+  agendaRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  agendaSubtitle: { fontSize: 13, color: 'var(--text-muted)', marginTop: 3 },
+  agendaTempPill: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginTop: 8,
+  },
+  agendaTempPillText: { fontSize: 11, fontWeight: '800' },
+  agendaTimeRail: { width: 52, alignItems: 'flex-end', paddingTop: 12 },
+  agendaTimeText: { fontSize: 14, fontWeight: '800', color: 'var(--text)' },
+  agendaTitle: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
+  calChip: {
+    borderLeftWidth: 3,
+    backgroundColor: 'var(--surface-2)',
+    borderRadius: 4,
+    padding: 8,
+  },
+  calChipHora: { fontSize: 11, lineHeight: 14, fontWeight: '700', color: 'var(--text-muted)' },
+  calChipTitulo: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: 'var(--text)' },
+  calDia: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: 'var(--surface)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    minHeight: 520,
+    overflow: 'hidden',
+  },
+  calDiaCabecalho: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+  },
+  calDiaCabecalhoHoje: { backgroundColor: 'var(--tint-red)' },
+  calDiaCorpo: { padding: 8, gap: 8, flex: 1 },
+  calDiaHoje: { borderColor: '#C8131B' },
+  calDiaNumero: { fontSize: 20, lineHeight: 28, fontWeight: '600', color: 'var(--text)' },
+  calDiaSemana: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    color: 'var(--text-faint)',
+  },
+  calLegendaTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
+  calNav: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  calNavBotao: {
+    width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface)',
+  },
+  calNavHoje: {
+    paddingHorizontal: 12, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'var(--tint-red)',
+  },
+  calNavHojeTexto: { fontSize: 12, fontWeight: '700', color: 'var(--tint-red-text)' },
+  calNavRotulo: { fontSize: 14, fontWeight: '600', color: 'var(--text)', letterSpacing: 0.1 },
+  calNavSeta: { fontSize: 16, lineHeight: 20, color: 'var(--text)', fontWeight: '600' },
+  calNavTotal: { fontSize: 12, fontWeight: '500', color: 'var(--text-subtle)' },
+  calSemana: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  calVazio: { fontSize: 12, color: 'var(--text-faint)', textAlign: 'center', marginTop: 16 },
+});
