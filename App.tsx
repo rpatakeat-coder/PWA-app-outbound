@@ -121,6 +121,7 @@ import { GestorScreen } from './src/screens/GestorScreen';
 import { TarefasScreen } from './src/screens/TarefasScreen';
 import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
+import { ConfiguracoesScreen } from './src/screens/ConfiguracoesScreen';
 import { ds, sharedStyles } from './src/screens/sharedStyles';
 import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
 import { reverseGeocode } from './src/utils/geocoding';
@@ -246,7 +247,7 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
   { value: 'ex_cliente', label: 'Ex-cliente', color: 'var(--brand-text)' },
 ];
 
-type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'tasks' | 'gestor' | 'meu';
+type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'tasks' | 'gestor' | 'meu' | 'config';
 
 // Documentacao das regras de geracao automatica de tarefas (motor
 // generate_client_tasks no Supabase). Isto e' so a explicacao mostrada no
@@ -625,16 +626,12 @@ function MainApp() {
   const [isPickingVendor, setIsPickingVendor] = useState(false);
   const [expandedStages, setExpandedStages] = useState<Set<string>>(() => new Set());
   const [editingClient, setEditingClient] = useState<Client | null>(null);
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   // Modal que explica as regras de geracao automatica de tarefas (botao "ⓘ"
   // no cabecalho da aba Tarefas).
   const [isTaskRulesOpen, setIsTaskRulesOpen] = useState(false);
   // Chip de severidade selecionado na aba Tarefas (null = todas). Tocar no
   // chip ativo limpa o filtro.
   const [taskSevFilter, setTaskSevFilter] = useState<string | null>(null);
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [showOnlyMyArea, setShowOnlyMyArea] = useState(true);
   const [locationPermission, setLocationPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
   const [routeDate] = useState(todayKey());
@@ -3912,6 +3909,8 @@ function MainApp() {
         return { titulo: 'Tarefas', sub: `${visibleTasksCount} ${visibleTasksCount === 1 ? 'cobrança aberta' : 'cobranças abertas'} · escalonamento D2 → D5` };
       case 'gestor':
         return { titulo: 'Painel do gestor', sub: mesAno };
+      case 'config':
+        return { titulo: 'Configurações', sub: 'Conta, aparência e administração' };
       default:
         return { titulo: 'Meu desempenho', sub: profile?.full_name ? `${mesAno} · ${profile.full_name}` : mesAno };
     }
@@ -3984,14 +3983,16 @@ function MainApp() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Configurações"
-          style={styles.sbItem}
+          style={[styles.sbItem, tab === 'config' && styles.sbItemAtivo]}
           {...ds({ trans: '1', hover: 'surface2' })}
-          onPress={() => { setNewPassword(''); setConfirmPassword(''); setIsPasswordModalOpen(true); }}
+          onPress={() => setTab('config')}
         >
           <View style={styles.sbItemIcone}>
-            <IconSettings width={24} height={24} fill={iconColors.muted} />
+            <IconSettings width={24} height={24} fill={tab === 'config' ? iconColors.tintRedText : iconColors.muted} />
           </View>
-          <Text style={styles.sbItemTexto} numberOfLines={1} {...ds({ rotulo: '1' })}>Configurações</Text>
+          <Text style={[styles.sbItemTexto, tab === 'config' && styles.sbItemTextoAtivo]} numberOfLines={1} {...ds({ rotulo: '1' })}>
+            Configurações
+          </Text>
         </Pressable>
         <View style={styles.sbUsuario}>
           <View style={styles.sbAvatar}>
@@ -4121,18 +4122,13 @@ function MainApp() {
           )}
         </View>
         <View style={styles.headerActions}>
+          {/* A engrenagem abre a TELA de Configuracoes (prompt 13a) — o
+              modal antigo morreu. "Sair" mora la' dentro (secao Sobre). */}
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Configuracoes"
             style={styles.headerIconButton}
-            onPress={() => {
-              setNewPassword('');
-              setConfirmPassword('');
-              setIsPasswordModalOpen(true);
-            }}
+            onPress={() => setTab('config')}
           >
             <IconSettings width={20} height={20} fill="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-            <Text style={styles.logoutButtonText}>Sair</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -4383,6 +4379,17 @@ function MainApp() {
         />
       ) : tab === 'gestor' ? (
         <GestorScreen enabled={canViewGestor && tab === 'gestor'} onOpenClient={openClientById} />
+      ) : tab === 'config' ? (
+        <ConfiguracoesScreen
+          profile={profile}
+          logout={logout}
+          updatePassword={updatePassword}
+          canViewGestor={canViewGestor}
+          isAdmin={isAdmin}
+          isViewer={isViewer}
+          showOnlyMyArea={showOnlyMyArea}
+          onToggleArea={handleToggleArea}
+        />
       ) : tab === 'meu' ? (
         <MeuDesempenhoScreen
           enabled={tab === 'meu'}
@@ -4706,220 +4713,6 @@ function MainApp() {
         </View>
       </Modal>
 
-      {/* Modal: Configurações (filtro de área + redefinir senha + admin) */}
-      <Modal
-        visible={isPasswordModalOpen}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setIsPasswordModalOpen(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-        >
-            {/* Sem TouchableWithoutFeedback+Keyboard.dismiss por volta do conteudo: em navegador touch o wrapper vira responder do toque, cancela o click sintetico e o TextInput nunca recebe foco (nao dava pra digitar no PWA do celular). */}
-            <View style={[styles.modalOverlay, layout.ehLargo && styles.modalOverlayWeb]}>
-              <View style={[styles.passwordModalCard, layout.ehLargo && [styles.modalCartaoWeb, { maxWidth: 520 }]]}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Configurações</Text>
-                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setIsPasswordModalOpen(false)}>
-                    <IconClose width={20} height={20} fill={iconColors.muted} />
-                  </TouchableOpacity>
-                </View>
-
-                {/* Atalho pro cockpit de gestão — só gestor.
-                    Fica no topo porque é o motivo mais provável de o gestor
-                    abrir as Configurações. O cockpit vive em /gestao, no mesmo
-                    domínio: a sessão do Supabase é a mesma, então ele entra
-                    direto, sem novo login. */}
-                {canViewGestor && (
-                  <>
-                    <TouchableOpacity
-                      style={[styles.gestaoButton, layout.ehLargo && styles.cfgGestaoWeb]}
-                      // Link de VERDADE, não window.open: o react-native-web
-                      // renderiza um <a> quando recebe `href`, e isso evita a
-                      // mesma armadilha que já corrigimos na navegação — o
-                      // bloqueador de pop-up mata window.open quando ele não
-                      // roda dentro do gesto do usuário, e a Pressability do
-                      // RNW pode adiar o handler o suficiente pra isso. De
-                      // quebra, um <a> é focável por teclado e abre no botão
-                      // direito.
-                      //
-                      // Aba nova porque o gestor consulta o cockpit e volta
-                      // pro mapa: trocar a página descarregaria o app de campo
-                      // e ele perderia a rota do dia já carregada.
-                      {...({ href: '/gestao/', hrefAttrs: { target: '_blank', rel: 'noopener' } } as any)}
-                      accessibilityRole="link"
-                    >
-                      <IconBarGraph width={20} height={20} fill="#fff" />
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.gestaoButtonText, layout.ehLargo && { color: 'var(--tint-red-text)' }]}>Abrir painel de gestão</Text>
-                        <Text style={[styles.gestaoButtonHint, layout.ehLargo && { color: 'var(--tint-red-text)', opacity: 0.8 }]}>
-                          Funil do time, travados e gargalo. Melhor no computador.
-                        </Text>
-                      </View>
-                      <Text style={styles.gestaoButtonArrow}>↗</Text>
-                    </TouchableOpacity>
-                    <View style={styles.adminDivider} />
-                  </>
-                )}
-
-                {/* Filtro de área */}
-                <View style={styles.settingsRow}>
-                  <View style={{ flex: 1, paddingRight: 12 }}>
-                    <Text style={styles.settingsLabel}>Carregar só a área do mapa</Text>
-                    <Text style={styles.settingsHint}>
-                      Traz os clientes da região visível e vai carregando conforme
-                      você move o mapa. Desligue para carregar a base inteira —
-                      é bem mais pesado.
-                      Atualiza quando você abrir o app de novo.
-                    </Text>
-                  </View>
-                  <Switch
-                    value={showOnlyMyArea}
-                    onValueChange={handleToggleArea}
-                  />
-                </View>
-
-                {/* Aparência */}
-                <View style={styles.adminDivider} />
-                <Text style={styles.adminSectionTitle}>Aparência</Text>
-                <Text style={styles.passwordModalHint}>
-                  "Automático" acompanha o ajuste do seu celular. O mapa acompanha
-                  o tema junto com o resto do app.
-                </Text>
-                <View style={[styles.themeRow, layout.ehLargo && { gap: 0 }]}>
-                  {([
-                    { valor: 'system', rotulo: 'Automático' },
-                    { valor: 'light', rotulo: 'Claro' },
-                    { valor: 'dark', rotulo: 'Escuro' },
-                  ] as const).map((opt, i) => {
-                    const ativo = themePref === opt.valor;
-                    return (
-                      <TouchableOpacity
-                        key={opt.valor}
-                        style={[
-                          styles.themeChip,
-                          layout.ehLargo && styles.cfgSegmento,
-                          layout.ehLargo && i === 0 && { borderTopLeftRadius: 12, borderBottomLeftRadius: 12 },
-                          layout.ehLargo && i === 2 && { borderTopRightRadius: 12, borderBottomRightRadius: 12 },
-                          layout.ehLargo && i > 0 && { borderLeftWidth: 0 },
-                          ativo && styles.themeChipActive,
-                        ]}
-                        onPress={() => setThemePref(opt.valor)}
-                      >
-                        <Text style={[styles.themeChipText, ativo && styles.themeChipTextActive]}>
-                          {opt.rotulo}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                <View style={styles.adminDivider} />
-                <Text style={styles.adminSectionTitle}>Trocar senha</Text>
-                <Text style={styles.passwordModalHint}>
-                  Digite uma nova senha. Mínimo de 6 caracteres.
-                </Text>
-                <TextInput
-                  style={[sharedStyles.input, layout.ehLargo && styles.cfgInputWeb]}
-                  placeholder="Nova senha"
-                  placeholderTextColor="var(--text-subtle)"
-                  secureTextEntry
-                  value={newPassword}
-                  onChangeText={setNewPassword}
-                  editable={!isSavingPassword}
-                />
-                <TextInput
-                  style={[sharedStyles.input, layout.ehLargo && styles.cfgInputWeb]}
-                  placeholder="Confirmar nova senha"
-                  placeholderTextColor="var(--text-subtle)"
-                  secureTextEntry
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  editable={!isSavingPassword}
-                />
-                <TouchableOpacity
-                  style={[sharedStyles.submitButton, layout.ehLargo && styles.cfgBotaoWeb, isSavingPassword && { opacity: 0.6 }]}
-                  disabled={isSavingPassword}
-                  onPress={async () => {
-                    if (newPassword.length < 6) {
-                      Alert.alert('Senha curta', 'A senha precisa ter pelo menos 6 caracteres.');
-                      return;
-                    }
-                    if (newPassword !== confirmPassword) {
-                      Alert.alert('Confirmação não confere', 'As duas senhas digitadas precisam ser iguais.');
-                      return;
-                    }
-                    try {
-                      setIsSavingPassword(true);
-                      await updatePassword(newPassword);
-                      setIsPasswordModalOpen(false);
-                      setNewPassword('');
-                      setConfirmPassword('');
-                      Alert.alert('Pronto', 'Senha redefinida com sucesso.');
-                    } catch (err: any) {
-                      Alert.alert('Erro ao redefinir senha', err?.message ?? 'Erro desconhecido');
-                    } finally {
-                      setIsSavingPassword(false);
-                    }
-                  }}
-                >
-                  {isSavingPassword ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={sharedStyles.submitButtonText}>Salvar nova senha</Text>
-                  )}
-                </TouchableOpacity>
-
-                {isAdmin && (
-                  <>
-                    <View style={styles.adminDivider} />
-                    <Text style={styles.adminSectionTitle}>Admin</Text>
-                    <Text style={styles.passwordModalHint}>
-                      Dispara um reload imediato em todos os apps abertos
-                      (puxa OTA novo do EAS antes). Use com cuidado — usuários
-                      no meio de um cadastro perdem o que não foi salvo.
-                    </Text>
-                    <TouchableOpacity
-                      style={[styles.adminButton, layout.ehLargo && styles.cfgAdminWeb]}
-                      onPress={() => {
-                        Alert.alert(
-                          'Forçar reload de todos',
-                          'Todos os apps abertos vão recarregar agora. Confirmar?',
-                          [
-                            { text: 'Cancelar', style: 'cancel' },
-                            {
-                              text: 'Sim, reload',
-                              style: 'destructive',
-                              onPress: async () => {
-                                const { error: err } = await supabase
-                                  .from('app_force_reload')
-                                  .update({
-                                    triggered_at: new Date().toISOString(),
-                                    triggered_by: profile?.id ?? null,
-                                    triggered_reason: 'manual-by-admin',
-                                  })
-                                  .eq('id', 1);
-                                if (err) {
-                                  Alert.alert('Erro', err.message);
-                                  return;
-                                }
-                                Alert.alert('Pronto', 'Sinal enviado. Seu próprio app vai recarregar em alguns segundos.');
-                              },
-                            },
-                          ]
-                        );
-                      }}
-                    >
-                      <IconText Icone={IconRefresh} style={[styles.adminButtonText, layout.ehLargo && { color: 'var(--brand-text)' }]} tone="onSurface">Forçar reload de todos</IconText>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
-            </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
       {/* Modal de filtros: UF + etapa comercial. */}
       <Modal
@@ -6866,56 +6659,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerIconText: { fontSize: 16 },
-  passwordModalCard: {
-    backgroundColor: 'var(--surface)',
-    borderRadius: 16,
-    padding: 20,
-    margin: 20,
-    marginBottom: 40,
-    alignSelf: 'stretch',
-  },
   passwordModalHint: { fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 },
-  adminDivider: { height: 1, backgroundColor: 'var(--surface-3)', marginVertical: 18 },
   // Atalho pro cockpit de gestão (/gestao). Vermelho da marca: é a ação
   // principal desta tela pra quem é gestor.
-  gestaoButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#C8131B',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    minHeight: 44,
-  },
-  gestaoButtonText: { color: '#fff', fontSize: 15, fontWeight: '800' },
-  gestaoButtonHint: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 2 },
-  gestaoButtonArrow: { color: '#fff', fontSize: 18, fontWeight: '700' },
   // Seletor de tema (Automático / Claro / Escuro).
-  themeRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  themeChip: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: 10,
-    alignItems: 'center',
-    backgroundColor: 'var(--surface-2)',
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-  },
-  themeChipActive: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
-  themeChipText: { fontSize: 13, fontWeight: '700', color: 'var(--text-muted)' },
-  themeChipTextActive: { color: '#fff' },
   adminSectionTitle: { fontSize: 12, fontWeight: '700', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
-  adminButton: {
-    backgroundColor: '#222222',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  adminButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  settingsRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
-  settingsLabel: { fontSize: 15, fontWeight: '600', color: 'var(--text)', marginBottom: 2 },
-  settingsHint: { fontSize: 12, color: 'var(--text-muted)' },
   skipLocationButton: { marginTop: 18, paddingHorizontal: 16, paddingVertical: 10 },
   skipLocationButtonText: { color: 'var(--text-muted)', fontSize: 14, fontWeight: '600', textDecorationLine: 'underline' },
   permissionTitle: { fontSize: 20, fontWeight: '700', color: 'var(--text)', marginBottom: 8, textAlign: 'center' },
@@ -7910,38 +7658,6 @@ const styles = StyleSheet.create({
     shadowRadius: 25,
   },
   // Configuracoes no web: mesmos tokens do resto do handoff.
-  cfgInputWeb: {
-    height: 40,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'var(--stroke-strong)',
-    backgroundColor: 'var(--surface)',
-    paddingVertical: 0,
-  },
-  cfgBotaoWeb: { height: 40, borderRadius: 12, paddingVertical: 0, justifyContent: 'center' },
-  cfgGestaoWeb: {
-    backgroundColor: 'var(--tint-red)',
-    borderRadius: 8,
-    minHeight: 48,
-    paddingVertical: 12,
-  },
-  cfgSegmento: {
-    height: 40,
-    borderRadius: 0,
-    justifyContent: 'center',
-    paddingVertical: 0,
-    backgroundColor: 'var(--surface)',
-    borderColor: 'var(--stroke-default)',
-  },
-  cfgAdminWeb: {
-    backgroundColor: 'var(--surface)',
-    borderWidth: 1,
-    borderColor: '#C8131B',
-    borderRadius: 12,
-    height: 40,
-    paddingVertical: 0,
-    justifyContent: 'center',
-  },
   modalCartaoWeb: {
     width: '100%',
     maxWidth: 720,
