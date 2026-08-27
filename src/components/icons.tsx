@@ -158,6 +158,8 @@ export function useIconColors() {
     brandText: isDark ? '#E5A1A4' : '#C8131B',
     /** Mesmo par do token --tint-red-text: titulos das secoes do Gestor. */
     tintRedText: isDark ? '#E5A1A4' : '#94090F',
+    /** Par do token --text-faint: icones de campo/metadado. */
+    faint: isDark ? 'rgba(255,255,255,0.42)' : '#7A7A7A',
     /** Par do token --teal-text: exportacoes ("Baixar planilha"). */
     teal: isDark ? '#5FD3C6' : '#1D9688',
     /** Par do token --info-text: links e acoes informativas. */

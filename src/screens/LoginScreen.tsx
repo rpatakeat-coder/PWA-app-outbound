@@ -20,6 +20,8 @@ import {
 } from '../components/icons';
 import { useAuth } from '../context/AuthContext';
 import { useLayout } from '../hooks/useLayout';
+import { Alert as AlertApp } from '../components/Alert';
+import { ds } from './sharedStyles';
 
 export function LoginScreen() {
   const iconColors = useIconColors();
@@ -67,7 +69,7 @@ export function LoginScreen() {
 
       {layout.ehDesktop && <Text style={styles.webRotulo}>E-mail</Text>}
       <View style={[styles.inputWrap, layout.ehDesktop && styles.webInputWrap, !!error && styles.inputWrapErro]}>
-        <IconMail width={layout.ehDesktop ? 20 : 16} height={layout.ehDesktop ? 20 : 16} fill={layout.ehDesktop ? iconColors.muted : iconColors.onSurface} />
+        <IconMail width={layout.ehDesktop ? 20 : 16} height={layout.ehDesktop ? 20 : 16} fill={layout.ehDesktop ? iconColors.faint : iconColors.onSurface} />
         <TextInput
           style={styles.input}
           placeholder={layout.ehDesktop ? 'voce@takeat.app' : 'Email'}
@@ -84,7 +86,7 @@ export function LoginScreen() {
 
       {layout.ehDesktop && <Text style={styles.webRotulo}>Senha</Text>}
       <View style={[styles.inputWrap, layout.ehDesktop && styles.webInputWrap, !!error && styles.inputWrapErro]}>
-        <IconLock width={layout.ehDesktop ? 20 : 16} height={layout.ehDesktop ? 20 : 16} fill={layout.ehDesktop ? iconColors.muted : iconColors.onSurface} />
+        <IconLock width={layout.ehDesktop ? 20 : 16} height={layout.ehDesktop ? 20 : 16} fill={layout.ehDesktop ? iconColors.faint : iconColors.onSurface} />
         <TextInput
           style={styles.input}
           placeholder={layout.ehDesktop ? '••••••••' : 'Senha'}
@@ -97,13 +99,14 @@ export function LoginScreen() {
         />
       </View>
 
-      {error && <Text style={styles.errorText}>{error}</Text>}
+      {error && <Text style={[styles.errorText, layout.ehDesktop && { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, textAlign: 'left', marginBottom: 0 }]}>{error}</Text>}
 
       <TouchableOpacity
         style={[styles.button, layout.ehDesktop && styles.webBotao, loading && styles.buttonDisabled]}
         onPress={handleLogin}
         disabled={loading}
         activeOpacity={0.8}
+        {...ds({ hover: 'darkred', trans: '1' })}
       >
         {loading ? (
           <ActivityIndicator color="#fff" />
@@ -111,6 +114,20 @@ export function LoginScreen() {
           <Text style={styles.buttonText}>Entrar</Text>
         )}
       </TouchableOpacity>
+
+      {layout.ehDesktop && (
+        <TouchableOpacity
+          accessibilityRole="button"
+          onPress={() =>
+            AlertApp.alert(
+              'Redefinir senha',
+              'As contas são administradas pela equipe: peça ao administrador para redefinir sua senha — ela pode ser trocada depois em Configurações.',
+            )
+          }
+        >
+          <Text style={styles.webEsqueci}>Esqueci minha senha</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -191,7 +208,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 64,
   },
-  webBloco: { width: '100%', maxWidth: 400, gap: 4 },
+  webBloco: { width: '100%', maxWidth: 400, gap: 16 },
+  webEsqueci: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--info-text)' },
   webFormTitle: { fontSize: 24, lineHeight: 32, fontWeight: '700', color: 'var(--text)', textAlign: 'left', marginBottom: 16 },
   webRotulo: {
     fontSize: 14,
@@ -200,7 +218,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: 'var(--text-muted)',
     marginBottom: 8,
-    marginTop: 8,
   },
   inputWrapErro: { borderWidth: 1, borderColor: '#C8131B' },
   webInputWrap: {
@@ -209,8 +226,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'var(--stroke-strong)',
     backgroundColor: 'var(--surface)',
-    paddingHorizontal: 12,
-    marginBottom: 8,
+    paddingHorizontal: 16,
+    marginBottom: 0,
   },
   webBotao: {
     height: 40,
@@ -218,7 +235,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'center',
     paddingHorizontal: 24,
-    marginTop: 16,
+    marginTop: 0,
   },
   container: {
     flex: 1,
