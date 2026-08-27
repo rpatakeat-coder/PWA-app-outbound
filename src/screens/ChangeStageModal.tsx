@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { Alert } from '../components/Alert';
+import { useLayout } from '../hooks/useLayout';
 import { IconClose, useIconColors } from '../components/icons';
 import type { Client } from '../types/client';
 import {
@@ -395,6 +396,7 @@ function PlainTextField({
 }
 
 export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCreateHubspotDeal }: Props) {
+  const layout = useLayout();
   const iconColors = useIconColors();
   const [selectedStageId, setSelectedStageId] = useState<string | null>(initialStageId ?? null);
   // Modo "etapa fixa" (ex.: mover pra Perdido a partir da tarefa): oculta o
@@ -820,14 +822,14 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
 
   return (
     <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, layout.ehLargo && styles.overlayWeb]}>
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={submitting ? undefined : onClose}
         />
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.sheet}
+          style={[styles.sheet, layout.ehLargo && styles.sheetWeb]}
         >
           <ScrollView
             contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
@@ -1017,6 +1019,18 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  // Web: cartao central de 560px (handoff, tela 10) em vez de bottom sheet.
+  overlayWeb: { justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.32)' },
+  sheetWeb: {
+    width: '100%',
+    maxWidth: 560,
+    borderRadius: 8,
+    maxHeight: '88%',
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 25,
+  },
   sheet: {
     backgroundColor: 'var(--surface)',
     borderTopLeftRadius: 20,

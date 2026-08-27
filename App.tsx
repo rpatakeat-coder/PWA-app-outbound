@@ -19,7 +19,6 @@ import {
   Image,
   Platform,
   Keyboard,
-  TouchableWithoutFeedback,
   Linking,
   Pressable,
   Animated,
@@ -68,6 +67,15 @@ import {
   IconStar,
   IconEye,
   IconCheckCircle,
+  IconBell,
+  IconLogout,
+  IconLightBulb,
+  IconChevronDown,
+  IconChevronLeft,
+  IconChevronRight,
+  IconMenu,
+  IconMenuCircles,
+  IconTrendingDown,
 } from './src/components/icons';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 // Camada de mapa web (Google Maps JS API) com a mesma API que o
@@ -322,13 +330,36 @@ const getClientPrimaryName = (client: Client) => client.empresa?.trim() || clien
 // (TEMP_COLORS.hot) e as outras posicoes tambem estao tomadas — ambar =
 // Morno, azul = Frio, verde = Fechado, cinza = Perdido. Pintar a Conta Alvo
 // de vermelho deixaria duas entradas identicas na legenda.
+// dataSet do react-native-web (vira data-* no DOM; o CSS de public/index.html
+// pendura hover/transicao/expansao da sidebar nesses atributos). Os tipos do
+// react-native nao conhecem a prop — o cast vive aqui, num lugar so.
+const ds = (d: Record<string, string>) => ({ dataSet: d } as Record<string, unknown>);
+
 const CONTA_ALVO_COLOR = '#7c3aed';
+
+// Tint da badge de etapa na tabela de leads (handoff desktop). No claro cada
+// etapa tem seu par bg/fg; no escuro o handoff manda cair pra superficie
+// aninhada com texto normal — tint clara sobre fundo escuro vira lama.
+function tintDaEtapa(etapa: string | null | undefined, escuro: boolean): { bg: string; fg: string } {
+  if (escuro) return { bg: 'var(--surface-2)', fg: 'var(--text)' };
+  const e = (etapa ?? '').toLowerCase();
+  if (e.includes('prospec')) return { bg: '#E6F7FF', fg: '#016999' };
+  if (e.includes('visita')) return { bg: '#E6FBF8', fg: '#0F6B61' };
+  if (e.includes('decisor')) return { bg: '#F1EBFE', fg: '#5B32C4' };
+  if (e.includes('demo') || e.includes('proposta')) return { bg: '#FFF8EB', fg: '#99670F' };
+  if (e.includes('negocia')) return { bg: '#FFF1E0', fg: '#8A4A0C' };
+  if (e.includes('pagamento')) return { bg: '#FAE8E9', fg: '#94090F' };
+  if (e.includes('ganho') || e.includes('onboarding') || e.includes('fechado')) return { bg: '#EAF7EE', fg: '#167532' };
+  return { bg: '#EDEDED', fg: '#545454' };
+}
 
 function CustomMarker({ color, meetingCount, isContaAlvo }: { color: string; meetingCount: number; isContaAlvo?: boolean }) {
   const iconColors = useIconColors();
   return (
     <View style={markerStyles.container}>
-      <View style={[markerStyles.pin, { backgroundColor: color }]}>
+      {/* data-pin: no web (>=768) o CSS de public/index.html sobe o pin de
+          36 pra 40px — mais alvo de clique, como manda o handoff. */}
+      <View style={[markerStyles.pin, { backgroundColor: color }]} {...ds({ pin: '1' })}>
         {/* Asset ja' BRANCO e ja' no tamanho de exibicao — nao usa tintColor.
             O react-native-web implementa tintColor criando um <svg> com um
             <filter> inline POR IMAGEM e aplicando `filter: url(#id)` no <img>.
@@ -522,7 +553,7 @@ function MainApp() {
   const insets = useSafeAreaInsets();
   // O tema em si e' aplicado por CSS no <html>; daqui so' sai o estado do
   // seletor nas configuracoes.
-  const { pref: themePref, setPref: setThemePref } = useTheme();
+  const { pref: themePref, setPref: setThemePref, isDark } = useTheme();
   // Icones recebem cor por prop; `var()` nao resolve em atributo SVG.
   const iconColors = useIconColors();
 
@@ -546,6 +577,19 @@ function MainApp() {
   const [form, setForm] = useState(initialFormState);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const layout = useLayout();
+  // Busca global do header web. Cmd+K / Ctrl+K foca o campo (handoff desktop).
+  const webSearchRef = useRef<TextInput>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const aoTeclar = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        webSearchRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', aoTeclar);
+    return () => window.removeEventListener('keydown', aoTeclar);
+  }, []);
   // Chao dos elementos flutuantes (FAB, legenda, botoes do mapa).
   // Os 90px eram a altura da barra inferior. No desktop ela virou coluna
   // lateral, entao esse espaco deixou de existir — sem isto os botoes ficariam
@@ -580,6 +624,11 @@ function MainApp() {
   // Mostra só os leads vindos de Conta Alvo (materializados pela Rota do dia).
   // Marcador: conta_alvo_place_id != null.
   const [contaAlvoOnly, setContaAlvoOnly] = useState(false);
+  // Tabela de leads do web: ordenacao por coluna + paginacao (o celular segue
+  // com FlatList infinita de cards).
+  const [ordemColuna, setOrdemColuna] = useState<'nome' | 'etapa' | 'temp' | 'cidade' | 'visita' | 'reunioes'>('nome');
+  const [ordemDir, setOrdemDir] = useState<'asc' | 'desc'>('asc');
+  const [paginaLista, setPaginaLista] = useState(0);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isPickingUf, setIsPickingUf] = useState(false);
   const [isPickingStage, setIsPickingStage] = useState(false);
@@ -1254,6 +1303,23 @@ function MainApp() {
   // A sugestao de rota NAO depende deles (poolBase = clients, a base inteira),
   // entao esconder aqui nao muda nenhum resultado.
   const ehAbaDeLeads = tab === 'map' || tab === 'list';
+
+  // Contagem por temperatura pros chips do painel web do mapa. Base: clientes
+  // da area visivel no recorte de status atual, ANTES do filtro de temperatura
+  // (senao selecionar um chip zeraria os outros).
+  const contagemTemp = useMemo(() => {
+    const base = clients.filter(c =>
+      isViewer ? viewerStatuses.has(c.status as ClientStatus) : c.status === statusFilter,
+    );
+    const m = new Map<string, number>();
+    let alvo = 0;
+    for (const c of base) {
+      const rotulo = stageTemperature(c.etapa)?.label;
+      if (rotulo) m.set(rotulo, (m.get(rotulo) ?? 0) + 1);
+      if (c.conta_alvo_place_id) alvo += 1;
+    }
+    return { porRotulo: m, contaAlvo: alvo };
+  }, [clients, isViewer, viewerStatuses, statusFilter]);
 
   const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0) + (vendorFilterHubspotId !== null ? 1 : 0) + (visitFilter !== null ? 1 : 0) + (tempFilter !== null ? 1 : 0) + (contaAlvoOnly ? 1 : 0);
 
@@ -3116,43 +3182,46 @@ function MainApp() {
       </>
     );
 
-    return (
-      <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom },
-      // Mesmo teto da lista de leads: sem ele o conteudo se espalha por
-      // toda a largura do monitor e a linha de texto fica ilegivel.
-      { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
-      {/* Gestor monitorando a rota de OUTRO vendedor: banner + tela read-only.
-          Muda o "Responsável" pra "Todos" pra voltar a gerar a propria. */}
-      {isMonitoringRoute && (
-        <View style={styles.monitorBanner}>
-          <Text style={styles.monitorBannerText}>
-            <IconText Icone={IconEye} style={styles.monitorBannerText} tone="onSurface">Você está vendo a rota de</IconText> <Text style={{ fontWeight: '800' }}>{vendorLabel(routeVendorFilterHubspotId)}</Text> (somente leitura).
-            Para gerar/editar a sua, mude o "Responsável" para "Todos os vendedores".
-          </Text>
-        </View>
-      )}
+    // Gestor monitorando a rota de OUTRO vendedor: banner + tela read-only.
+    // Muda o "Responsável" pra "Todos" pra voltar a gerar a propria.
+    const bannerMonitor = isMonitoringRoute && (
+      <View style={styles.monitorBanner}>
+        <Text style={styles.monitorBannerText}>
+          <IconText Icone={IconEye} style={styles.monitorBannerText} tone="onSurface">Você está vendo a rota de</IconText> <Text style={{ fontWeight: '800' }}>{vendorLabel(routeVendorFilterHubspotId)}</Text> (somente leitura).
+          Para gerar/editar a sua, mude o "Responsável" para "Todos os vendedores".
+        </Text>
+      </View>
+    );
 
-      {layout.ehDesktop ? (
-        <View style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
-          <View style={{ flex: 1, minWidth: 0 }}>
+    // Web: a sequencia de paradas e' o objeto de trabalho — mapa a' esquerda
+    // (o MESMO conteudoMapa, que ja desenha rota + polyline) e rail de 420px
+    // a' direita com os cartoes. Handoff, tela 3.
+    if (layout.ehLargo) {
+      return (
+        <View style={styles.mapaLinhaWeb}>
+          <View style={styles.mapaAreaWeb}>{conteudoMapa}</View>
+          <ScrollView style={styles.rotaRail} contentContainerStyle={styles.rotaRailConteudo}>
+            {bannerMonitor}
             {cartaoDaily}
             {cartaoRotaDoDia}
-            {cartaoAdicionar}
-          </View>
-          <View style={{ flex: 1.3, minWidth: 0 }}>
             {cartaoPersonalizada}
+            {cartaoAdicionar}
             {cartaoLista}
-          </View>
+          </ScrollView>
         </View>
-      ) : (
-        <>
-          {cartaoDaily}
-          {cartaoRotaDoDia}
-          {cartaoPersonalizada}
-          {cartaoAdicionar}
-          {cartaoLista}
-        </>
-      )}
+      );
+    }
+
+    return (
+      <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom },
+      { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
+      {bannerMonitor}
+
+      {cartaoDaily}
+      {cartaoRotaDoDia}
+      {cartaoPersonalizada}
+      {cartaoAdicionar}
+      {cartaoLista}
     </ScrollView>
     );
   };
@@ -3214,7 +3283,7 @@ function MainApp() {
         : (task.severity ?? '•');
 
       return (
-        <View key={task.id} style={[styles.taskCard, layout.ehDesktop && styles.taskCardWeb]}>
+        <View key={task.id} style={[styles.taskCard, layout.ehLargo && styles.taskCardWeb]} {...ds({ hover: 'borda', trans: '1' })}>
           <View style={styles.taskCardTop}>
             <Text style={styles.taskLead} numberOfLines={2}>{leadNome}</Text>
             <View style={[styles.taskBadge, { backgroundColor: sevColor(task.severity) }]}>
@@ -3341,26 +3410,35 @@ function MainApp() {
           //      da coluna, nao a pagina inteira.
           //   3. O quadro rola na horizontal se as colunas nao couberem.
           // No celular continua a pilha de secoes de sempre.
-          layout.ehDesktop ? (
+          layout.ehLargo ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
-                {secoes.map((secao) => (
+              <View style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
+                {secoes.map((secao) => {
+                  const tinta =
+                    secao.sev === 'D5'
+                      ? { bg: 'var(--tint-red)', fg: 'var(--tint-red-text)' }
+                      : secao.sev === 'D2'
+                        ? { bg: 'var(--tint-amber)', fg: 'var(--tint-amber-text)' }
+                        : { bg: 'var(--tint-blue)', fg: 'var(--tint-blue-text)' };
+                  return (
                   <View key={secao.sev} style={styles.kanbanColuna}>
-                    <View style={[styles.taskSectionHeader, styles.kanbanCabecalho]}>
+                    <View style={styles.kanbanCabecalho}>
                       <View style={[styles.countChipDot, { backgroundColor: sevColor(secao.sev) }]} />
-                      <Text style={styles.taskSectionText}>
-                        {secao.sev} · {secao.total} {secao.total === 1 ? 'tarefa' : 'tarefas'}
-                      </Text>
+                      <Text style={styles.kanbanTitulo}>{secao.sev}</Text>
+                      <View style={[styles.kanbanContagem, { backgroundColor: tinta.bg }]}>
+                        <Text style={[styles.kanbanContagemTexto, { color: tinta.fg }]}>{secao.total}</Text>
+                      </View>
                     </View>
                     <ScrollView
                       style={{ maxHeight: Math.max(360, layout.altura - 320) }}
-                      contentContainerStyle={{ padding: 8, paddingTop: 0 }}
+                      contentContainerStyle={{ padding: 12 }}
                       showsVerticalScrollIndicator
                     >
                       {secao.itens.map(renderTaskCard)}
                     </ScrollView>
                   </View>
-                ))}
+                  );
+                })}
               </View>
             </ScrollView>
           ) : (
@@ -3791,11 +3869,10 @@ function MainApp() {
           </View>
         )}
 
-        {layout.ehDesktop && agendaItems.length > 0 ? (
-          // CALENDARIO SEMANAL — so' desktop. No celular a agenda segue lista:
+        {layout.ehLargo ? (
+          // CALENDARIO SEMANAL — so' web. No celular a agenda segue lista:
           // na rua a pergunta e' "o que e' agora"; na mesa, "como esta' minha
-          // semana". Sabado e domingo so' aparecem quando tem compromisso —
-          // vazios, roubavam 2/7 da largura pra mostrar um travessao.
+          // semana". Sete colunas sempre (handoff, tela 4).
           (() => {
             const hojeCal = new Date();
             const desloc = (hojeCal.getDay() + 6) % 7; // 0 = segunda
@@ -3814,8 +3891,7 @@ function MainApp() {
                 .sort((a, b) => String(a.at).localeCompare(String(b.at)));
               return { d, itens };
             });
-            const semFimDeSemana = diasCal[5].itens.length === 0 && diasCal[6].itens.length === 0;
-            const visiveis = semFimDeSemana ? diasCal.slice(0, 5) : diasCal;
+            const visiveis = diasCal;
             const fimSemana = diasCal[6].d;
             const rotuloJanela = `${seg.getDate()} ${seg.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')} – ${fimSemana.getDate()} ${fimSemana.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}`;
             const totalDaSemana = diasCal.reduce((soma, dia) => soma + dia.itens.length, 0);
@@ -3837,15 +3913,54 @@ function MainApp() {
                   <TouchableOpacity style={styles.calNavBotao} onPress={() => setCalSemanaOffset((v) => v + 1)}>
                     <Text style={styles.calNavSeta}>›</Text>
                   </TouchableOpacity>
+                  <View style={{ flex: 1 }} />
+                  {Object.entries(TIPO_META).map(([k, meta]) => (
+                    <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: meta.cor }} />
+                      <Text style={styles.calLegendaTexto}>{meta.label}</Text>
+                    </View>
+                  ))}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Exportar JSON"
+                    style={[styles.ltwBotaoOutline, { borderColor: '#1D9688', height: 32, paddingHorizontal: 12 }]}
+                    {...ds({ trans: '1', hover: 'surface2' })}
+                    onPress={() => {
+                      if (typeof document === 'undefined') return;
+                      const dados = diasCal.map(({ d, itens }) => ({
+                        dia: d.toISOString().slice(0, 10),
+                        itens: itens.map(it => ({
+                          quando: it.at,
+                          tipo: TIPO_META[tipoDoItem(it)]?.label ?? tipoDoItem(it),
+                          quem: nomeDoItem(it),
+                        })),
+                      }));
+                      const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
+                      const a = document.createElement('a');
+                      a.href = URL.createObjectURL(blob);
+                      a.download = `agenda-${diasCal[0].d.toISOString().slice(0, 10)}.json`;
+                      a.click();
+                      URL.revokeObjectURL(a.href);
+                    }}
+                  >
+                    <IconDownload width={16} height={16} fill="#1D9688" />
+                    <Text style={[styles.ltwBotaoOutlineTexto, { color: '#1D9688', fontSize: 12 }]}>Exportar JSON</Text>
+                  </Pressable>
                 </View>
                 <View style={styles.calSemana}>
                   {visiveis.map(({ d, itens }, k) => {
                     const ehHojeCal = d.toDateString() === hojeCal.toDateString();
                     return (
                       <View key={k} style={[styles.calDia, ehHojeCal && styles.calDiaHoje]}>
-                        <Text style={[styles.calDiaTitulo, ehHojeCal && { color: 'var(--brand-text)' }]}>
-                          {d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')} {d.getDate()}
-                        </Text>
+                        <View style={[styles.calDiaCabecalho, ehHojeCal && styles.calDiaCabecalhoHoje]}>
+                          <Text style={[styles.calDiaSemana, ehHojeCal && { color: 'var(--tint-red-text)' }]}>
+                            {d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
+                          </Text>
+                          <Text style={[styles.calDiaNumero, ehHojeCal && { color: 'var(--tint-red-text)' }]}>
+                            {d.getDate()}
+                          </Text>
+                        </View>
+                        <View style={styles.calDiaCorpo}>
                         {itens.length === 0 ? (
                           <Text style={styles.calVazio}>livre</Text>
                         ) : (
@@ -3859,7 +3974,13 @@ function MainApp() {
                             return (
                               <TouchableOpacity
                                 key={ix}
-                                style={[styles.calChip, { borderLeftColor: meta?.cor ?? 'var(--border)' }]}
+                                style={[
+                                  styles.calChip,
+                                  { borderLeftColor: meta?.cor ?? 'var(--border)' },
+                                  tipoDoItem(it) === 'reuniao' && { backgroundColor: 'var(--tint-red)' },
+                                  tipoDoItem(it) === 'follow_up' && { backgroundColor: 'var(--tint-blue)' },
+                                  tipoDoItem(it) === 'rota' && { backgroundColor: 'var(--tint-green)' },
+                                ]}
                                 disabled={!idCliente}
                                 onPress={() => idCliente && openClientById(idCliente)}
                               >
@@ -3869,6 +3990,7 @@ function MainApp() {
                             );
                           })
                         )}
+                        </View>
                       </View>
                     );
                   })}
@@ -4245,6 +4367,997 @@ function MainApp() {
     />
   ) : null;
 
+  const conteudoMapa = (
+    <>
+      <MapView
+        mapRef={(ref) => { mapRef.current = ref as unknown as RNMapView; }}
+        style={styles.map}
+        // Mede a area real do mapa na tela pra ancorar o pin de criacao no
+        // centro do MAPA (nao da tela). Guarda x/y/width/height absolutos.
+        onLayout={(e) => {
+          const { x, y, width, height } = e.nativeEvent.layout;
+          setMapLayout({ x, y, width, height });
+        }}
+        initialRegion={mapCenter}
+        showsUserLocation={true}
+        followsUserLocation={isFollowingUser && !creationMode}
+        onPanDrag={handleMapInteraction}
+        // Atualiza o preview de coords continuamente enquanto arrasta...
+        onRegionChange={(region) => {
+          if (creationMode) {
+            setCreationCenter({ latitude: region.latitude, longitude: region.longitude });
+          }
+        }}
+        // ...mas o valor DEFINITIVO e' o do assentamento final (Complete).
+        // onRegionChange sozinho pode deixar um valor intermediario se o
+        // usuario confirmar logo apos soltar — Complete garante a posicao
+        // exata onde o mapa parou (a que o pin fixo esta apontando).
+        onRegionChangeComplete={(region) => {
+          if (creationMode) {
+            setCreationCenter({ latitude: region.latitude, longitude: region.longitude });
+          }
+          // Assentamento do mapa = hora de conferir se a área visível
+          // saiu do que já foi carregado. Só aqui, e não no onRegionChange
+          // (que dispara a cada quadro do arraste).
+          setMapRegion({
+            latitude: region.latitude,
+            longitude: region.longitude,
+            latitudeDelta: region.latitudeDelta,
+            longitudeDelta: region.longitudeDelta,
+          });
+        }}
+        showsBuildings={true}
+        // Clustering: agrupa pinos próximos numa bolha com contador.
+        //
+        // maxZoom = nivel ATE o qual se agrupa; acima dele todo pino vira
+        // elemento individual. Estava em 9, herdado do app nativo: como o
+        // uso normal e' zoom 13+, na pratica o agrupamento nunca acontecia
+        // e a tela desenhava um no de DOM por cliente. No nativo o pino era
+        // barato; no navegador cada um custa ~6 nos, e ai' o mapa engasga.
+        //
+        // 14 mantem pino individual do zoom de rua pra baixo (que e' onde o
+        // vendedor decide a visita) e agrupa no de bairro pra cima. Subir
+        // este numero = mais pinos soltos e mais peso; baixar = mais bolhas
+        // de contagem.
+        radius={50}
+        minPoints={3}
+        maxZoom={14}
+        clusterColor="#3b82f6"
+        clusterTextColor="#ffffff"
+        spiralEnabled={false}
+        // Bug conhecido da lib no iOS: o LayoutAnimation disparado a cada
+        // zoom anima os markers enquanto o native captura o snapshot do
+        // custom view — o snapshot sai vazio e o pin fica invisivel
+        // (sumindo "aleatoriamente" conforme o zoom). Desligar a animacao
+        // resolve; os pins apenas reposicionam sem transicao.
+        animationEnabled={false}
+      >
+        {/* Camada de calor (gestor): um círculo translúcido por célula da
+            grade, cor/raio conforme a densidade de visitas. Renderiza ANTES
+            dos markers pra os pins ficarem por cima. Funciona em Apple e
+            Google Maps (o <Heatmap> nativo só roda no Google). */}
+        {heatOn && heat.cells.map((cell) => {
+          const t = heatIntensity(cell.n, heat.max);
+          return (
+            <Circle
+              // key por coordenada: células removidas no filtro por vendedor
+              // desmontam de fato (com key por índice, o overlay nativo podia
+              // ficar "preso" mostrando dado antigo).
+              key={`heat-${cell.lat.toFixed(5)}-${cell.lon.toFixed(5)}`}
+              center={{ latitude: cell.lat, longitude: cell.lon }}
+              // Raio bem maior que a célula (180m) → as manchas se sobrepõem
+              // num "borrão" de calor contínuo, visível já no zoom de cidade.
+              radius={HEAT_CELL_M * (1.5 + 1.1 * t)}
+              fillColor={heatColor(t, 0.4 + 0.4 * t)}
+              strokeColor="rgba(0,0,0,0)"
+              strokeWidth={0}
+            />
+          );
+        })}
+        {/* Pins normais somem enquanto o calor está ligado: aí o mapa mostra
+            APENAS os lugares visitados (do vendedor filtrado ou de todos),
+            sem os leads engolirem as manchas. Voltam ao desligar o 🔥. */}
+        {!heatOn && filteredMapMarkers.map(client => (
+          <MarkerWithReady
+            key={client.id}
+            client={client}
+            coordinate={{
+              latitude: client.latitude as number,
+              longitude: client.longitude as number,
+            }}
+            // Conta Alvo (Rota do dia) tem cor própria (roxo) + badge 🎯 pra
+            // destacar. Senão, cor = temperatura da etapa; lead sem etapa
+            // conhecida (Backlog, sem etapa) cai na cor do status.
+            color={
+              client.conta_alvo_place_id
+                ? CONTA_ALVO_COLOR
+                : (stageTemperature(client.etapa)?.color ??
+                   statusConfig[client.status]?.color ??
+                   '#3b82f6')
+            }
+            meetingCount={upcomingByClient[client.id] ?? 0}
+            isContaAlvo={!!client.conta_alvo_place_id}
+            onPress={handleMarkerPress}
+          />
+        ))}
+        {/* Markers da rota com numero da ordem — renderizam acima dos
+            normais e ficam visiveis independente do filtro de status.
+            Também somem no modo calor pra não poluir. */}
+        {!heatOn && routeDisplayClients
+          .filter(c => c.latitude != null && c.longitude != null)
+          .map((client, index) => {
+            const stop = routeStops.find(s => s.client_id === client.id);
+            return (
+            <RouteMarker
+              key={`route-${client.id}`}
+              client={client}
+              position={index + 1}
+              done={stop?.status === 'done'}
+              onPress={handleMarkerPress}
+            />
+          );
+          })}
+        {/* Polyline da rota: usa geometria real (OSRM, segue ruas) quando
+            disponivel; cai pra linha reta tracejada enquanto carrega ou
+            se a API falhou. Oculta no modo calor. */}
+        {!heatOn && routeWaypoints.length >= 2 && (
+          <Polyline
+            coordinates={
+              routeGeometry.data && routeGeometry.data.coordinates.length > 1
+                ? routeGeometry.data.coordinates
+                : routeWaypoints
+            }
+            strokeColor="#C8131B"
+            strokeWidth={4}
+            lineDashPattern={
+              routeGeometry.data && routeGeometry.data.coordinates.length > 1
+                ? undefined
+                : [8, 4]
+            }
+          />
+        )}
+      </MapView>
+
+      {/* Estado do carregamento por área. Fica sobre o mapa, sem capturar
+          toque (pointerEvents none) pra não atrapalhar o arraste. */}
+      {showOnlyMyArea && (viewportTooWide || isLoading) && (
+        <View style={styles.areaStatusWrap} pointerEvents="none">
+          <View style={styles.areaStatusPill}>
+            {viewportTooWide ? (
+              <IconText Icone={IconSearch} style={styles.areaStatusText} tone="onSurface">Aproxime para carregar os clientes desta região</IconText>
+            ) : (
+              <>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={styles.areaStatusText}>Carregando esta região…</Text>
+              </>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* Pin de criacao ancorado no CENTRO DO MAPA (nao da tela). O
+          region.latitude/longitude que salvamos e' o centro do MapView;
+          como ha searchBar/filterBar acima e bottomNav abaixo, esse centro
+          fica deslocado do centro da tela. Usamos mapLayout pra desenhar o
+          pin exatamente sobre o centro do mapa — assim o que voce ve e' o
+          que salva. A ponta do pin e o dot ficam nesse ponto exato. */}
+      {creationMode && mapLayout && (() => {
+        const centerY = mapLayout.y + mapLayout.height / 2;
+        const centerX = mapLayout.x + mapLayout.width / 2;
+        return (
+          <>
+            {/* Pin: base (ponta) no centro. Altura total = 36 (corpo) - 1
+                (margin da seta) + 8 (seta) = 43; alignItems centraliza a
+                seta sob o corpo — sem isso ela encosta na borda esquerda
+                e a ponta aponta ~12px fora do ponto capturado. */}
+            <View
+              pointerEvents="none"
+              style={{ position: 'absolute', left: centerX - 18, top: centerY - 43, alignItems: 'center' }}
+            >
+              <View style={[markerStyles.pin, { backgroundColor: '#C8131B' }]}>
+                {/* Mesmo asset branco dos pinos do mapa: markerStyles.logo
+                    deixou de ter tintColor, então o icon.png original
+                    apareceria vermelho sobre o círculo vermelho. */}
+                <Image source={require('./assets/pin-logo.png')} style={markerStyles.logo} fadeDuration={0} />
+              </View>
+              <View style={[markerStyles.arrow, { borderTopColor: '#C8131B' }]} />
+            </View>
+            {/* Dot no centro EXATO do mapa = onde a coordenada e' capturada.
+                Dot tem 8px — offset de metade (4) centraliza no ponto. */}
+            <View
+              pointerEvents="none"
+              style={{ position: 'absolute', left: centerX - 4, top: centerY - 4 }}
+            >
+              <View style={styles.creationCenterDotInner} />
+            </View>
+          </>
+        );
+      })()}
+
+      {/* Legenda das cores dos pins. Como a temperatura virou COR (nao ha
+          mais a bandeirinha de emoji explicando), a legenda passa a ser
+          necessaria pra decifrar o mapa. Fica fora do modo de criacao.
+          Some enquanto o mapa de calor está ligado (a legenda dele assume). */}
+      {!creationMode && !heatOn && (
+        <View style={[styles.tempLegend, { bottom: baseInferior }, layout.ehLargo && styles.tempLegendaWeb]} pointerEvents="none">
+          {[
+            { c: TEMP_COLORS.hot, l: 'Quente' },
+            { c: TEMP_COLORS.warm, l: 'Morno' },
+            { c: TEMP_COLORS.cold, l: 'Frio' },
+            { c: TEMP_COLORS.won, l: 'Fechado' },
+            { c: TEMP_COLORS.lost, l: 'Perdido' },
+            { c: CONTA_ALVO_COLOR, l: 'Conta Alvo' },
+          ].map(item => (
+            <View key={item.l} style={[styles.tempLegendRow, layout.ehLargo && styles.tempLegendaLinhaWeb]}>
+              <View style={[styles.tempLegendDot, { backgroundColor: item.c }]} />
+              {/* numberOfLines={1}: sem isto "🎯 Conta Alvo" quebrava em
+                  duas linhas dentro da coluna e desalinhava a legenda. */}
+              <Text style={styles.tempLegendLabel} numberOfLines={1}>{item.l}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Map buttons. Recenter e FAB somem enquanto o calor está ligado
+          (o painel de calor ocupa a faixa de baixo). */}
+      {userLocation && !creationMode && !heatOn && (
+        <TouchableOpacity
+          style={[styles.mapButton, { bottom: baseInferior, left: 16 }, layout.ehLargo && styles.mapaControleWeb]}
+          onPress={centerOnUser}
+         accessibilityRole="button" accessibilityLabel="Centralizar no meu local">
+          {/* Cheio quando esta' seguindo o vendedor, vazado quando a
+              camera esta' livre — mesma leitura que o 📍/🧭 dava. */}
+          {isFollowingUser ? (
+            <IconLocationFilled width={22} height={22} fill={iconColors.brand} />
+          ) : (
+            <IconLocation width={22} height={22} fill={iconColors.onSurface} />
+          )}
+        </TouchableOpacity>
+      )}
+
+      {/* Toggle do mapa de calor — só gestor. Fica acima do FAB (à direita).
+          Quando ligado some (o painel embaixo, com seu ✕, é o controle de
+          desligar) — assim não sobrepõe o painel. */}
+      {canViewGestor && !creationMode && !heatOn && !layout.ehLargo && (
+        <TouchableOpacity
+          // Estilo proprio em vez de `{ left: undefined }` sobre o
+          // mapButton: no react-native-web o estilo base vira classe CSS e
+          // `undefined` nao emite regra nenhuma — ou seja, nao CANCELA o
+          // `left: 16` da base. O botao ficava com left E right ao mesmo
+          // tempo, ancorava a' esquerda e caia em cima da legenda de cores.
+          style={[styles.mapButtonRight, { bottom: baseInferior + 66 }]}
+          onPress={() => setHeatOn(true)}
+        >
+          <IconTrendingUp width={20} height={20} fill={iconColors.onSurface} />
+        </TouchableOpacity>
+      )}
+
+      {/* Cadastro outbound (📤) escondido: mandava só pro HubSpot sem
+          registrar no app. Fica apenas o FAB vermelho (+). */}
+      {!creationMode && !isViewer && !heatOn && (
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Adicionar lead"
+          style={[styles.fab, { bottom: baseInferior }]}
+          onPress={() => setShowCepStep(true)}
+        >
+          <IconPlus width={26} height={26} fill="#fff" />
+        </TouchableOpacity>
+      )}
+
+      {/* Painel do mapa de calor (gestor). Título + legenda gradiente +
+          chips de vendedor (Todos + um por vez). O ✕ e o próprio 🔥 desligam. */}
+      {heatOn && !creationMode && (
+        <View style={[styles.heatPanel, { bottom: baseInferior }, layout.ehLargo && styles.heatPanelWeb]}>
+          <View style={styles.heatPanelHeader}>
+            <IconText Icone={IconTrendingUp} style={styles.heatPanelTitle} tone="onSurface">Calor de visitas</IconText>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {heatLoading ? (
+                <ActivityIndicator size="small" color="#f97316" />
+              ) : (
+                <Text style={styles.heatPanelCount}>
+                  {heat.total} {heat.total === 1 ? 'visita' : 'visitas'}
+                  {heatCapped ? ' (amostra recente)' : ''}
+                </Text>
+              )}
+              <TouchableOpacity
+                style={[styles.heatExportBtn, (exportingHeat || heatLoading || heat.total === 0) && { opacity: 0.5 }]}
+                onPress={handleExportHeatmap}
+                disabled={exportingHeat || heatLoading || heat.total === 0}
+              >
+                {exportingHeat
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <IconText Icone={IconDownload} style={styles.heatExportBtnText} tone="onBrand">JSON</IconText>}
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Legenda: menos → mais visitas */}
+          <View style={styles.heatLegendRow}>
+            <Text style={styles.heatLegendLabel}>menos</Text>
+            <View style={styles.heatLegendBar}>
+              {HEAT_LEGEND_STOPS.map((c, i) => (
+                <View key={i} style={{ flex: 1, backgroundColor: c }} />
+              ))}
+            </View>
+            <Text style={styles.heatLegendLabel}>mais</Text>
+            <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Fechar" style={styles.heatCloseBtn} onPress={() => setHeatOn(false)}>
+              <IconClose width={16} height={16} fill={iconColors.muted} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Filtro por vendedor: Todos + um por vez */}
+          {heat.total === 0 && !heatLoading ? (
+            <Text style={styles.heatEmpty}>
+              {heatSeller ? 'Este vendedor não tem visitas com GPS.' : 'Nenhuma visita com GPS registrada.'}
+            </Text>
+          ) : null}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.heatChips}
+            keyboardShouldPersistTaps="handled"
+          >
+            <TouchableOpacity
+              style={[styles.heatChip, heatSeller === null && styles.heatChipActive]}
+              onPress={() => setHeatSeller(null)}
+            >
+              <Text style={[styles.heatChipText, heatSeller === null && styles.heatChipTextActive]}>
+                Todos ({heatPoints.length})
+              </Text>
+            </TouchableOpacity>
+            {heatSellers.map((s) => (
+              <TouchableOpacity
+                key={s.id}
+                style={[styles.heatChip, heatSeller === s.id && styles.heatChipActive]}
+                onPress={() => setHeatSeller((cur) => (cur === s.id ? null : s.id))}
+              >
+                <Text style={[styles.heatChipText, heatSeller === s.id && styles.heatChipTextActive]}>
+                  {s.name} ({s.count})
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {creationMode && creationCenter && (
+        <View style={[styles.creationBar, { bottom: baseInferior }]}>
+          <Text style={styles.creationBarTitle}>Selecione o local do cliente</Text>
+          <Text style={styles.creationBarHint}>
+            Arraste o mapa para posicionar o pin no local exato. Endereço, CEP e bairro serão preenchidos automaticamente.
+          </Text>
+          <Text style={styles.creationBarCoords}>
+            {creationCenter.latitude.toFixed(6)}, {creationCenter.longitude.toFixed(6)}
+          </Text>
+          <View style={styles.creationBarRow}>
+            <TouchableOpacity
+              style={styles.creationBarCancel}
+              onPress={cancelMapCreation}
+              disabled={resolvingPin}
+            >
+              <Text style={styles.creationBarCancelText}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.creationBarConfirm, resolvingPin && { opacity: 0.7 }]}
+              onPress={confirmMapCreation}
+              disabled={resolvingPin}
+            >
+              {resolvingPin ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.creationBarConfirmText}>Confirmar local</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+    </>
+  );
+
+  // Painel de trabalho do mapa no web (352px): status, temperatura, calor e a
+  // lista "nesta area". Substitui a busca/chips full-bleed do celular.
+  const painelMapaWeb = (
+    <View style={styles.pmwContainer}>
+      <View style={styles.pmwFiltros}>
+        <View style={styles.pmwSegmentos}>
+          {statusOptions.map((opt, i) => {
+            const ativo = isViewer ? viewerStatuses.has(opt.value) : statusFilter === opt.value;
+            const raio =
+              i === 0
+                ? { borderTopLeftRadius: 12, borderBottomLeftRadius: 12 }
+                : i === statusOptions.length - 1
+                  ? { borderTopRightRadius: 12, borderBottomRightRadius: 12, borderLeftWidth: 0 }
+                  : { borderLeftWidth: 0 };
+            return (
+              <Pressable
+                key={opt.value}
+                accessibilityRole="button"
+                accessibilityLabel={opt.label}
+                style={[styles.pmwSegmento, raio, ativo && styles.pmwSegmentoAtivo]}
+                {...ds({ trans: '1' })}
+                onPress={() => (isViewer ? toggleViewerStatus(opt.value) : setStatusFilter(opt.value))}
+              >
+                <Text style={[styles.pmwSegmentoTexto, ativo && styles.pmwSegmentoTextoAtivo]} numberOfLines={1}>
+                  {opt.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={{ gap: 8 }}>
+          <View style={styles.pmwTituloLinha}>
+            <Text style={styles.pmwTitulo}>Temperatura da etapa</Text>
+            {(tempFilter !== null || contaAlvoOnly) && (
+              <Pressable accessibilityRole="button" onPress={() => { setTempFilter(null); setContaAlvoOnly(false); }}>
+                <Text style={styles.pmwLimpar}>Limpar</Text>
+              </Pressable>
+            )}
+          </View>
+          <View style={styles.pmwChips}>
+            {[
+              { rotulo: 'Quente', cor: TEMP_COLORS.hot },
+              { rotulo: 'Morno', cor: TEMP_COLORS.warm },
+              { rotulo: 'Frio', cor: TEMP_COLORS.cold },
+              { rotulo: 'Fechado', cor: TEMP_COLORS.won },
+              { rotulo: 'Perdido', cor: TEMP_COLORS.lost },
+            ].map(c => {
+              const ativo = tempFilter === c.rotulo;
+              return (
+                <Pressable
+                  key={c.rotulo}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Filtrar ${c.rotulo}`}
+                  style={[styles.pmwChip, ativo && styles.pmwChipAtivo]}
+                  {...ds({ trans: '1', hover: ativo ? 'tintred' : 'surface2' })}
+                  onPress={() => setTempFilter(ativo ? null : c.rotulo)}
+                >
+                  <View style={[styles.pmwChipDot, { backgroundColor: c.cor }]} />
+                  <Text style={styles.pmwChipTexto}>{c.rotulo}</Text>
+                  <Text style={styles.pmwChipContagem}>{contagemTemp.porRotulo.get(c.rotulo) ?? 0}</Text>
+                </Pressable>
+              );
+            })}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Filtrar Conta Alvo"
+              style={[styles.pmwChip, contaAlvoOnly && styles.pmwChipAtivo]}
+              {...ds({ trans: '1', hover: contaAlvoOnly ? 'tintred' : 'surface2' })}
+              onPress={() => setContaAlvoOnly(v => !v)}
+            >
+              <View style={[styles.pmwChipDot, { backgroundColor: CONTA_ALVO_COLOR }]} />
+              <Text style={styles.pmwChipTexto}>Conta Alvo</Text>
+              <Text style={styles.pmwChipContagem}>{contagemTemp.contaAlvo}</Text>
+            </Pressable>
+          </View>
+        </View>
+        {canViewGestor && (
+          <View style={styles.pmwCalor}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.pmwCalorTitulo}>Calor de visitas</Text>
+              <Text style={styles.pmwCalorSub} numberOfLines={1}>
+                {heatOn
+                  ? heatLoading
+                    ? 'Carregando check-ins…'
+                    : `${heat.total} check-ins no mapa`
+                  : 'Densidade de check-ins com GPS'}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityLabel="Calor de visitas"
+              accessibilityState={{ checked: heatOn }}
+              style={[
+                styles.pmwSwitch,
+                { backgroundColor: heatOn ? '#C8131B' : 'var(--stroke-default)', alignItems: heatOn ? 'flex-end' : 'flex-start' },
+              ]}
+              {...ds({ trans: '1' })}
+              onPress={() => setHeatOn(v => !v)}
+            >
+              <View style={styles.pmwSwitchDot} />
+            </Pressable>
+          </View>
+        )}
+      </View>
+      <View style={styles.pmwListaCabecalho}>
+        <Text style={styles.pmwListaTitulo}>{`Nesta área · ${filteredMapMarkers.length}`}</Text>
+        <Text style={styles.pmwListaOrdem}>{userLocation ? 'por distância' : 'por nome'}</Text>
+      </View>
+      <ScrollView style={{ flex: 1 }}>
+        {(() => {
+          const linhas = filteredMapMarkers
+            .map(c => ({
+              c,
+              d:
+                userLocation && c.latitude !== null && c.longitude !== null
+                  ? distanceMeters(userLocation.latitude, userLocation.longitude, c.latitude, c.longitude)
+                  : null,
+            }))
+            .sort((a, b) =>
+              a.d !== null && b.d !== null ? a.d - b.d : (a.c.nome || '').localeCompare(b.c.nome || ''),
+            )
+            .slice(0, 80);
+          return linhas.map(({ c, d }) => {
+            const temp = stageTemperature(c.etapa);
+            const cor = c.conta_alvo_place_id ? CONTA_ALVO_COLOR : temp?.color ?? 'var(--stroke-default)';
+            return (
+              <Pressable
+                key={c.id}
+                accessibilityRole="button"
+                accessibilityLabel={c.nome ?? 'Lead'}
+                style={styles.pmwLinha}
+                {...ds({ hover: 'surface2', trans: '1' })}
+                onPress={() => setSelectedClient(c)}
+              >
+                <View style={[styles.pmwLinhaBarra, { backgroundColor: cor }]} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.pmwLinhaNome} numberOfLines={1}>{c.nome}</Text>
+                  <Text style={styles.pmwLinhaSub} numberOfLines={1}>
+                    {[c.etapa, c.cidade].filter(Boolean).join(' · ') || '—'}
+                  </Text>
+                </View>
+                {d !== null && (
+                  <Text style={styles.pmwLinhaDist}>
+                    {d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1).replace('.', ',')} km`}
+                  </Text>
+                )}
+              </Pressable>
+            );
+          });
+        })()}
+      </ScrollView>
+    </View>
+  );
+
+  // ---- Lista (web): tabela plana com ordenacao e paginacao ----
+  const POR_PAGINA = 50;
+  const ordemTemperatura: Record<string, number> = { Quente: 0, Morno: 1, Frio: 2, Fechado: 3, Perdido: 4 };
+  const linhasTabela = (() => {
+    const dir = ordemDir === 'asc' ? 1 : -1;
+    const valor = (c: Client): string | number => {
+      switch (ordemColuna) {
+        case 'etapa': return c.etapa ?? '';
+        case 'temp': return ordemTemperatura[stageTemperature(c.etapa)?.label ?? ''] ?? 9;
+        case 'cidade': return c.cidade ?? '';
+        case 'visita': return c.visited_at ?? '';
+        case 'reunioes': return meetingsByClient[c.id]?.length ?? 0;
+        default: return c.nome ?? '';
+      }
+    };
+    return [...filteredClients].sort((a, b) => {
+      const va = valor(a);
+      const vb = valor(b);
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+      return String(va).localeCompare(String(vb), 'pt-BR') * dir;
+    });
+  })();
+  const totalPaginas = Math.max(1, Math.ceil(linhasTabela.length / POR_PAGINA));
+  const paginaAtual = Math.min(paginaLista, totalPaginas - 1);
+  const linhasDaPagina = linhasTabela.slice(paginaAtual * POR_PAGINA, (paginaAtual + 1) * POR_PAGINA);
+
+  const ordenarPor = (col: typeof ordemColuna) => {
+    if (ordemColuna === col) setOrdemDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    else { setOrdemColuna(col); setOrdemDir('asc'); }
+  };
+
+  // Exportacao client-side: CSV (separador ;) da selecao filtrada inteira.
+  const baixarPlanilha = () => {
+    if (typeof document === 'undefined') return;
+    const cab = ['Nome', 'Contato', 'Telefone', 'Etapa', 'Temperatura', 'Status', 'Cidade', 'UF', 'Ultima visita', 'Visitas', 'Reunioes'];
+    const linhas = linhasTabela.map(c => [
+      c.nome, c.empresa, c.telefone, c.etapa, stageTemperature(c.etapa)?.label,
+      c.status, c.cidade, c.estado,
+      c.visited_at ? new Date(c.visited_at).toLocaleDateString('pt-BR') : '',
+      c.visit_count, meetingsByClient[c.id]?.length ?? 0,
+    ]);
+    const csv = [cab, ...linhas]
+      .map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';'))
+      .join('\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const cabecalhosTabela: Array<{ col: typeof ordemColuna | null; rotulo: string; estilo: object; soDesktop?: boolean; centro?: boolean }> = [
+    { col: 'nome', rotulo: 'Restaurante', estilo: styles.ltwColRestaurante },
+    { col: null, rotulo: 'Contato', estilo: styles.ltwColContato, soDesktop: true },
+    { col: 'etapa', rotulo: 'Etapa', estilo: styles.ltwColEtapa },
+    { col: 'temp', rotulo: 'Temperatura', estilo: styles.ltwColTemp, soDesktop: true },
+    { col: 'cidade', rotulo: 'Cidade / UF', estilo: styles.ltwColCidade },
+    { col: 'visita', rotulo: 'Última visita', estilo: styles.ltwColVisita, soDesktop: true },
+    { col: 'reunioes', rotulo: 'Reuniões', estilo: styles.ltwColReunioes, soDesktop: true, centro: true },
+  ];
+
+  const listaTabelaWeb = (
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.ltwPagina}>
+      <View style={styles.ltwFerramentas}>
+        <View style={styles.pmwChips}>
+          {[
+            { rotulo: 'Todos', cor: 'var(--stroke-default)', ativo: tempFilter === null && !contaAlvoOnly, aoTocar: () => { setTempFilter(null); setContaAlvoOnly(false); }, n: linhasTabela.length },
+            { rotulo: 'Quente', cor: TEMP_COLORS.hot, ativo: tempFilter === 'Quente', aoTocar: () => setTempFilter(tempFilter === 'Quente' ? null : 'Quente'), n: contagemTemp.porRotulo.get('Quente') ?? 0 },
+            { rotulo: 'Morno', cor: TEMP_COLORS.warm, ativo: tempFilter === 'Morno', aoTocar: () => setTempFilter(tempFilter === 'Morno' ? null : 'Morno'), n: contagemTemp.porRotulo.get('Morno') ?? 0 },
+            { rotulo: 'Frio', cor: TEMP_COLORS.cold, ativo: tempFilter === 'Frio', aoTocar: () => setTempFilter(tempFilter === 'Frio' ? null : 'Frio'), n: contagemTemp.porRotulo.get('Frio') ?? 0 },
+            { rotulo: 'Conta Alvo', cor: CONTA_ALVO_COLOR, ativo: contaAlvoOnly, aoTocar: () => setContaAlvoOnly(v => !v), n: contagemTemp.contaAlvo },
+          ].map(chip => (
+            <Pressable
+              key={chip.rotulo}
+              accessibilityRole="button"
+              accessibilityLabel={`Filtrar ${chip.rotulo}`}
+              style={[styles.pmwChip, chip.ativo && styles.pmwChipAtivo]}
+              {...ds({ trans: '1', hover: chip.ativo ? 'tintred' : 'surface2' })}
+              onPress={chip.aoTocar}
+            >
+              <View style={[styles.pmwChipDot, { backgroundColor: chip.cor }]} />
+              <Text style={styles.pmwChipTexto}>{`${chip.rotulo} · ${chip.n}`}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Filtros"
+            style={styles.ltwBotaoOutline}
+            {...ds({ trans: '1', hover: 'surface2' })}
+            onPress={() => setIsFiltersOpen(true)}
+          >
+            <IconFilterList width={24} height={24} fill={iconColors.muted} />
+            <Text style={styles.ltwBotaoOutlineTexto}>Filtros</Text>
+            {activeFilterCount > 0 && (
+              <View style={styles.ltwBotaoBadge}>
+                <Text style={styles.sbBadgeTexto}>{activeFilterCount}</Text>
+              </View>
+            )}
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Baixar planilha"
+            style={[styles.ltwBotaoOutline, { borderColor: '#1D9688' }]}
+            {...ds({ trans: '1', hover: 'surface2' })}
+            onPress={baixarPlanilha}
+          >
+            <IconDownload width={24} height={24} fill="#1D9688" />
+            <Text style={[styles.ltwBotaoOutlineTexto, { color: '#1D9688' }]}>Baixar planilha</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.ltwTabela}>
+        <View style={styles.ltwCabecalho}>
+          {cabecalhosTabela.filter(c => layout.ehDesktop || !c.soDesktop).map(c => (
+            <Pressable
+              key={c.rotulo}
+              accessibilityRole={c.col ? 'button' : undefined}
+              disabled={!c.col}
+              style={[c.estilo, { flexDirection: 'row', alignItems: 'center', gap: 4 }, c.centro && { justifyContent: 'center' }]}
+              onPress={c.col ? () => ordenarPor(c.col!) : undefined}
+            >
+              <Text style={styles.ltwCabecalhoTexto}>{c.rotulo}</Text>
+              {c.col && ordemColuna === c.col && (
+                ordemDir === 'asc'
+                  ? <IconArrowUp width={12} height={12} fill={iconColors.muted} />
+                  : <IconArrowDown width={12} height={12} fill={iconColors.muted} />
+              )}
+            </Pressable>
+          ))}
+          <View style={styles.ltwColSeta} />
+        </View>
+        {linhasDaPagina.length === 0 && (
+          <View style={styles.emptyState}>
+            <IconClipboardCheck width={40} height={40} fill={iconColors.muted} style={{ marginBottom: 12 }} />
+            <Text style={styles.emptyStateText}>
+              {searchTerm || stateFilter || stageFilter || tempFilter || visitFilter
+                ? 'Nenhum cliente encontrado com esses filtros.'
+                : `Nenhum ${statusConfig[statusFilter]?.label?.toLowerCase() ?? statusFilter} encontrado`}
+            </Text>
+          </View>
+        )}
+        {linhasDaPagina.map(c => {
+          const temp = stageTemperature(c.etapa);
+          const tint = tintDaEtapa(c.etapa, isDark);
+          const corBarra = c.conta_alvo_place_id ? CONTA_ALVO_COLOR : temp?.color ?? 'var(--stroke-default)';
+          const reunioes = meetingsByClient[c.id]?.length ?? 0;
+          const dias = c.visited_at ? Math.floor((Date.now() - new Date(c.visited_at).getTime()) / 86400000) : null;
+          return (
+            <Pressable
+              key={c.id}
+              accessibilityRole="button"
+              accessibilityLabel={c.nome ?? 'Lead'}
+              style={styles.ltwLinha}
+              {...ds({ hover: 'surface2', trans: '1' })}
+              onPress={() => setSelectedClient(c)}
+            >
+              <View style={[styles.ltwColRestaurante, { flexDirection: 'row', gap: 12, alignItems: 'center' }]}>
+                <View style={[styles.ltwBarraTemp, { backgroundColor: corBarra }]} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.ltwNome} numberOfLines={1}>{c.nome}</Text>
+                  <Text style={styles.ltwSub} numberOfLines={1}>
+                    {statusConfig[c.status]?.label ?? c.status}
+                    {c.visit_count > 0 ? ` · ${c.visit_count} ${c.visit_count === 1 ? 'visita' : 'visitas'}` : ''}
+                  </Text>
+                </View>
+              </View>
+              {layout.ehDesktop && (
+                <Text style={[styles.ltwColContato, styles.ltwCelula]} numberOfLines={1}>{c.empresa ?? c.telefone ?? '—'}</Text>
+              )}
+              <View style={styles.ltwColEtapa}>
+                {c.etapa ? (
+                  <View style={[styles.ltwBadgeEtapa, { backgroundColor: tint.bg }]}>
+                    <Text style={[styles.ltwBadgeEtapaTexto, { color: tint.fg }]} numberOfLines={1}>{c.etapa}</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.ltwCelulaFraca}>—</Text>
+                )}
+              </View>
+              {layout.ehDesktop && (
+                <View style={[styles.ltwColTemp, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+                  <View style={[styles.pmwChipDot, { backgroundColor: temp?.color ?? 'var(--stroke-default)' }]} />
+                  <Text style={styles.ltwCelulaForte}>{temp?.label ?? '—'}</Text>
+                </View>
+              )}
+              <Text style={[styles.ltwColCidade, styles.ltwCelula]} numberOfLines={1}>
+                {[c.cidade, c.estado].filter(Boolean).join(' / ') || '—'}
+              </Text>
+              {layout.ehDesktop && (
+                <Text
+                  style={[
+                    styles.ltwColVisita,
+                    styles.ltwCelulaForte,
+                    dias === null && { color: 'var(--text-disabled)' },
+                    dias !== null && dias > 30 && { color: '#94090F' },
+                  ]}
+                >
+                  {c.visited_at
+                    ? dias !== null && dias > 30
+                      ? `há ${dias} dias`
+                      : new Date(c.visited_at).toLocaleDateString('pt-BR')
+                    : '—'}
+                </Text>
+              )}
+              {layout.ehDesktop && (
+                <Text style={[styles.ltwColReunioes, styles.ltwCelulaForte, { textAlign: 'center' }]}>{reunioes}</Text>
+              )}
+              <View style={styles.ltwColSeta}>
+                <IconChevronRight width={20} height={20} fill={iconColors.muted} />
+              </View>
+            </Pressable>
+          );
+        })}
+        <View style={styles.ltwRodape}>
+          <Text style={styles.ltwRodapeTexto}>
+            {`Mostrando ${linhasDaPagina.length} de ${linhasTabela.length} leads`}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Página anterior"
+              style={[styles.ltwPagBotao, paginaAtual === 0 && { opacity: 0.4 }]}
+              disabled={paginaAtual === 0}
+              onPress={() => setPaginaLista(p => Math.max(0, p - 1))}
+            >
+              <IconChevronLeft width={16} height={16} fill={iconColors.muted} />
+            </Pressable>
+            {Array.from({ length: totalPaginas }, (_, i) => i)
+              .filter(i => Math.abs(i - paginaAtual) <= 2 || i === 0 || i === totalPaginas - 1)
+              .map((i, idx, arr) => (
+                <React.Fragment key={i}>
+                  {idx > 0 && arr[idx - 1] !== i - 1 && <Text style={styles.ltwRodapeTexto}>…</Text>}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Página ${i + 1}`}
+                    style={[styles.ltwPagBotao, i === paginaAtual && styles.ltwPagBotaoAtivo]}
+                    onPress={() => setPaginaLista(i)}
+                  >
+                    <Text style={[styles.ltwPagTexto, i === paginaAtual && { color: '#FFFFFF' }]}>{i + 1}</Text>
+                  </Pressable>
+                </React.Fragment>
+              ))}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Próxima página"
+              style={[styles.ltwPagBotao, paginaAtual >= totalPaginas - 1 && { opacity: 0.4 }]}
+              disabled={paginaAtual >= totalPaginas - 1}
+              onPress={() => setPaginaLista(p => Math.min(totalPaginas - 1, p + 1))}
+            >
+              <IconChevronRight width={16} height={16} fill={iconColors.muted} />
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </ScrollView>
+  );
+
+  // ---- Shell web (>= 768px): sidebar colapsavel + header neutro ----
+  // Recriacao do handoff em design_handoff_desktop_web/. No celular (< 768)
+  // nada disso monta: header vermelho + bottom nav seguem intactos.
+  const mesAno = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const cabecalhoWeb = (() => {
+    switch (tab) {
+      case 'map':
+        return { titulo: 'Mapa comercial', sub: `${filteredMapMarkers.length} leads na área visível` };
+      case 'list':
+        return { titulo: 'Leads', sub: `${filteredClients.length} resultados · ${activeFilterCount} ${activeFilterCount === 1 ? 'filtro ativo' : 'filtros ativos'}` };
+      case 'route':
+        return { titulo: 'Rota do dia', sub: `${routeDisplayClients.length} ${routeDisplayClients.length === 1 ? 'parada' : 'paradas'}` };
+      case 'agenda':
+        return { titulo: 'Agenda', sub: 'Rotas, demos e follow-ups da semana' };
+      case 'tasks':
+        return { titulo: 'Tarefas', sub: `${visibleTasksCount} ${visibleTasksCount === 1 ? 'cobrança aberta' : 'cobranças abertas'} · escalonamento D2 → D5` };
+      case 'gestor':
+        return { titulo: 'Painel do gestor', sub: mesAno };
+      default:
+        return { titulo: 'Meu desempenho', sub: profile?.full_name ? `${mesAno} · ${profile.full_name}` : mesAno };
+    }
+  })();
+
+  const itensNavWeb: Array<{ aba: AppTab; rotulo: string; Icone: typeof IconLocation; badge?: number; visivel: boolean }> = [
+    { aba: 'map', rotulo: 'Mapa', Icone: IconLocation, visivel: true },
+    { aba: 'list', rotulo: 'Lista', Icone: IconSquareMenu, visivel: true },
+    { aba: 'route', rotulo: 'Rota', Icone: IconCar, visivel: !isViewer },
+    { aba: 'agenda', rotulo: 'Agenda', Icone: IconCalendar, visivel: !isViewer },
+    { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: visibleTasksCount, visivel: !isViewer },
+    { aba: 'gestor', rotulo: 'Gestor', Icone: IconBarGraph, visivel: canViewGestor },
+    { aba: 'meu', rotulo: 'Meu desempenho', Icone: IconTrendingUp, visivel: !canViewGestor && !isViewer },
+  ];
+
+  const iniciaisWeb = (profile?.full_name || profile?.email || '?')
+    .trim().split(/\s+/).map(s => s[0]).slice(0, 2).join('').toUpperCase();
+
+  const sidebarWeb = (
+    <View style={styles.sbContainer} {...ds({ sidebar: '1' })}>
+      <View style={styles.sbTopo}>
+        <Image source={{ uri: '/marca/takeat-icon.svg' }} style={styles.sbMarcaIcone} />
+        <View style={styles.sbTopoTexto} {...ds({ rotulo: '1' })}>
+          <Text style={styles.sbMarcaTitulo} numberOfLines={1}>Field Sales</Text>
+          <Text style={styles.sbMarcaSub} numberOfLines={1}>Outbound</Text>
+        </View>
+      </View>
+      <View style={styles.sbItens}>
+        {itensNavWeb.filter(i => i.visivel).map(item => {
+          const ativo = tab === item.aba;
+          return (
+            <Pressable
+              key={item.aba}
+              accessibilityRole="button"
+              accessibilityLabel={item.rotulo}
+              style={[styles.sbItem, ativo && styles.sbItemAtivo]}
+              {...ds(ativo ? { trans: '1' } : { trans: '1', hover: 'surface2' })}
+              onPress={() => setTab(item.aba)}
+            >
+              <View style={styles.sbItemIcone}>
+                <item.Icone width={24} height={24} fill={ativo ? iconColors.tintRedText : iconColors.muted} />
+              </View>
+              <Text style={[styles.sbItemTexto, ativo && styles.sbItemTextoAtivo]} numberOfLines={1} {...ds({ rotulo: '1' })}>
+                {item.rotulo}
+              </Text>
+              {item.badge ? (
+                <View style={styles.sbBadge} {...ds({ navbadge: '1' })}>
+                  <Text style={styles.sbBadgeTexto}>{item.badge > 99 ? '99+' : item.badge}</Text>
+                </View>
+              ) : null}
+            </Pressable>
+          );
+        })}
+      </View>
+      <View style={styles.sbRodape}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={isDark ? 'Tema claro' : 'Tema escuro'}
+          style={styles.sbItem}
+          {...ds({ trans: '1', hover: 'surface2' })}
+          onPress={() => setThemePref(isDark ? 'light' : 'dark')}
+        >
+          <View style={styles.sbItemIcone}>
+            <IconLightBulb width={24} height={24} fill={iconColors.muted} />
+          </View>
+          <Text style={styles.sbItemTexto} numberOfLines={1} {...ds({ rotulo: '1' })}>
+            {isDark ? 'Tema claro' : 'Tema escuro'}
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Configurações"
+          style={styles.sbItem}
+          {...ds({ trans: '1', hover: 'surface2' })}
+          onPress={() => { setNewPassword(''); setConfirmPassword(''); setIsPasswordModalOpen(true); }}
+        >
+          <View style={styles.sbItemIcone}>
+            <IconSettings width={24} height={24} fill={iconColors.muted} />
+          </View>
+          <Text style={styles.sbItemTexto} numberOfLines={1} {...ds({ rotulo: '1' })}>Configurações</Text>
+        </Pressable>
+        <View style={styles.sbUsuario}>
+          <View style={styles.sbAvatar}>
+            <Text style={styles.sbAvatarTexto}>{iniciaisWeb}</Text>
+          </View>
+          <View style={styles.sbUsuarioTextos} {...ds({ rotulo: '1' })}>
+            <Text style={styles.sbUsuarioNome} numberOfLines={1}>{profile?.full_name || profile?.email}</Text>
+            <Text style={styles.sbUsuarioPapel} numberOfLines={1}>
+              {canViewGestor ? 'Gestor' : isViewer ? 'Visualização' : 'Vendedor'}
+            </Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Sair"
+            style={styles.sbSair}
+            {...ds({ rotulo: '1', hover: 'surface2', trans: '1' })}
+            onPress={logout}
+          >
+            <IconLogout width={20} height={20} fill={iconColors.muted} />
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+
+  const headerWeb = (
+    <View style={styles.hwContainer}>
+      <View style={styles.hwTitulos}>
+        <Text style={styles.hwTitulo} numberOfLines={1}>{cabecalhoWeb.titulo}</Text>
+        <Text style={styles.hwSubtitulo} numberOfLines={1}>{cabecalhoWeb.sub}</Text>
+      </View>
+      <View style={styles.hwAcoes}>
+        {!isViewer && (
+          <View style={styles.hwBusca}>
+            <IconSearch width={20} height={20} fill={iconColors.muted} />
+            <TextInput
+              ref={webSearchRef}
+              style={styles.hwBuscaInput}
+              placeholder="Buscar lead, cidade ou contato"
+              placeholderTextColor="var(--text-disabled)"
+              value={searchQuery}
+              onChangeText={(v) => {
+                setSearchQuery(v);
+                // Busca digitada fora de mapa/lista leva pra lista, onde o
+                // resultado e' visivel — a query varre a base no servidor.
+                if (v && tab !== 'map' && tab !== 'list') setTab('list');
+              }}
+              autoCorrect={false}
+              autoCapitalize="none"
+              accessibilityLabel="Buscar lead, cidade ou contato"
+            />
+            {buscando ? (
+              <ActivityIndicator size="small" color="#94a3b8" />
+            ) : searchQuery.length > 0 ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Limpar busca" onPress={() => setSearchQuery('')}>
+                <IconClose width={14} height={14} fill={iconColors.muted} />
+              </Pressable>
+            ) : (
+              <View style={styles.hwAtalho}>
+                <Text style={styles.hwAtalhoTexto}>⌘K</Text>
+              </View>
+            )}
+          </View>
+        )}
+        {!isViewer && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Tarefas pendentes"
+            style={styles.hwSino}
+            {...ds({ hover: 'surface2', trans: '1' })}
+            onPress={() => setTab('tasks')}
+          >
+            <IconBell width={20} height={20} fill={iconColors.muted} />
+            {visibleTasksCount > 0 && <View style={styles.hwSinoDot} />}
+          </Pressable>
+        )}
+        {!isViewer && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Novo lead"
+            style={styles.hwCta}
+            {...ds({ hover: 'darkred', trans: '1' })}
+            onPress={() => setShowCepStep(true)}
+          >
+            <IconPlus width={20} height={20} fill="#FFFFFF" />
+            <Text style={styles.hwCtaTexto}>Novo lead</Text>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+
   return (
     <View
       style={[
@@ -4255,12 +5368,18 @@ function MainApp() {
         // conteudo e barra sao irmaos —, ela e' posicionada por cima e o
         // conteudo recua. Mudanca contida em dois estilos, sem tocar no JSX
         // de nenhuma tela.
-        layout.ehDesktop && { paddingLeft: LARGURA_LATERAL },
+        layout.ehLargo && { paddingLeft: LARGURA_LATERAL },
       ]}
     >
       <StatusBar style="light" />
 
-      {/* Header */}
+      {/* Shell web: sidebar fixa + header neutro (>= 768px) */}
+      {layout.ehLargo && sidebarWeb}
+      {layout.ehLargo && headerWeb}
+
+      {/* Header vermelho — so' no celular. No web o vermelho vira o CTA
+          (handoff: "o vermelho sai do header"). */}
+      {!layout.ehLargo && (
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Image source={require('./assets/icon.png')} style={styles.headerLogo} />
@@ -4284,12 +5403,13 @@ function MainApp() {
           </TouchableOpacity>
         </View>
       </View>
+      )}
 
       {/* Viewer (somente leitura): sem busca nem filtros avancados, mas com
           chips de status em MULTI-selecao pra escolher ver leads, clientes ou
           ambos no mesmo mapa. Toque alterna cada status; nao da pra desmarcar
           todos (o mapa ficaria vazio). */}
-      {isViewer && ehAbaDeLeads && (
+      {isViewer && ehAbaDeLeads && !layout.ehLargo && (
         <View style={styles.filterBar}>
           <ScrollView
             horizontal
@@ -4322,7 +5442,7 @@ function MainApp() {
       )}
 
       {/* Vendedor/admin: search + chips de status (um por vez) + filtros. */}
-      {!isViewer && ehAbaDeLeads && (
+      {!isViewer && ehAbaDeLeads && !layout.ehLargo && (
         <>
           {/* Search bar: busca por nome, empresa, cidade ou bairro.
               Reflete em mapa, lista e contadores dos chips de status em tempo real. */}
@@ -4402,391 +5522,20 @@ function MainApp() {
       )}
 
       {tab === 'map' ? (
-        <>
-          <MapView
-            mapRef={(ref) => { mapRef.current = ref as unknown as RNMapView; }}
-            style={styles.map}
-            // Mede a area real do mapa na tela pra ancorar o pin de criacao no
-            // centro do MAPA (nao da tela). Guarda x/y/width/height absolutos.
-            onLayout={(e) => {
-              const { x, y, width, height } = e.nativeEvent.layout;
-              setMapLayout({ x, y, width, height });
-            }}
-            initialRegion={mapCenter}
-            showsUserLocation={true}
-            followsUserLocation={isFollowingUser && !creationMode}
-            onPanDrag={handleMapInteraction}
-            // Atualiza o preview de coords continuamente enquanto arrasta...
-            onRegionChange={(region) => {
-              if (creationMode) {
-                setCreationCenter({ latitude: region.latitude, longitude: region.longitude });
-              }
-            }}
-            // ...mas o valor DEFINITIVO e' o do assentamento final (Complete).
-            // onRegionChange sozinho pode deixar um valor intermediario se o
-            // usuario confirmar logo apos soltar — Complete garante a posicao
-            // exata onde o mapa parou (a que o pin fixo esta apontando).
-            onRegionChangeComplete={(region) => {
-              if (creationMode) {
-                setCreationCenter({ latitude: region.latitude, longitude: region.longitude });
-              }
-              // Assentamento do mapa = hora de conferir se a área visível
-              // saiu do que já foi carregado. Só aqui, e não no onRegionChange
-              // (que dispara a cada quadro do arraste).
-              setMapRegion({
-                latitude: region.latitude,
-                longitude: region.longitude,
-                latitudeDelta: region.latitudeDelta,
-                longitudeDelta: region.longitudeDelta,
-              });
-            }}
-            showsBuildings={true}
-            // Clustering: agrupa pinos próximos numa bolha com contador.
-            //
-            // maxZoom = nivel ATE o qual se agrupa; acima dele todo pino vira
-            // elemento individual. Estava em 9, herdado do app nativo: como o
-            // uso normal e' zoom 13+, na pratica o agrupamento nunca acontecia
-            // e a tela desenhava um no de DOM por cliente. No nativo o pino era
-            // barato; no navegador cada um custa ~6 nos, e ai' o mapa engasga.
-            //
-            // 14 mantem pino individual do zoom de rua pra baixo (que e' onde o
-            // vendedor decide a visita) e agrupa no de bairro pra cima. Subir
-            // este numero = mais pinos soltos e mais peso; baixar = mais bolhas
-            // de contagem.
-            radius={50}
-            minPoints={3}
-            maxZoom={14}
-            clusterColor="#3b82f6"
-            clusterTextColor="#ffffff"
-            spiralEnabled={false}
-            // Bug conhecido da lib no iOS: o LayoutAnimation disparado a cada
-            // zoom anima os markers enquanto o native captura o snapshot do
-            // custom view — o snapshot sai vazio e o pin fica invisivel
-            // (sumindo "aleatoriamente" conforme o zoom). Desligar a animacao
-            // resolve; os pins apenas reposicionam sem transicao.
-            animationEnabled={false}
-          >
-            {/* Camada de calor (gestor): um círculo translúcido por célula da
-                grade, cor/raio conforme a densidade de visitas. Renderiza ANTES
-                dos markers pra os pins ficarem por cima. Funciona em Apple e
-                Google Maps (o <Heatmap> nativo só roda no Google). */}
-            {heatOn && heat.cells.map((cell) => {
-              const t = heatIntensity(cell.n, heat.max);
-              return (
-                <Circle
-                  // key por coordenada: células removidas no filtro por vendedor
-                  // desmontam de fato (com key por índice, o overlay nativo podia
-                  // ficar "preso" mostrando dado antigo).
-                  key={`heat-${cell.lat.toFixed(5)}-${cell.lon.toFixed(5)}`}
-                  center={{ latitude: cell.lat, longitude: cell.lon }}
-                  // Raio bem maior que a célula (180m) → as manchas se sobrepõem
-                  // num "borrão" de calor contínuo, visível já no zoom de cidade.
-                  radius={HEAT_CELL_M * (1.5 + 1.1 * t)}
-                  fillColor={heatColor(t, 0.4 + 0.4 * t)}
-                  strokeColor="rgba(0,0,0,0)"
-                  strokeWidth={0}
-                />
-              );
-            })}
-            {/* Pins normais somem enquanto o calor está ligado: aí o mapa mostra
-                APENAS os lugares visitados (do vendedor filtrado ou de todos),
-                sem os leads engolirem as manchas. Voltam ao desligar o 🔥. */}
-            {!heatOn && filteredMapMarkers.map(client => (
-              <MarkerWithReady
-                key={client.id}
-                client={client}
-                coordinate={{
-                  latitude: client.latitude as number,
-                  longitude: client.longitude as number,
-                }}
-                // Conta Alvo (Rota do dia) tem cor própria (roxo) + badge 🎯 pra
-                // destacar. Senão, cor = temperatura da etapa; lead sem etapa
-                // conhecida (Backlog, sem etapa) cai na cor do status.
-                color={
-                  client.conta_alvo_place_id
-                    ? CONTA_ALVO_COLOR
-                    : (stageTemperature(client.etapa)?.color ??
-                       statusConfig[client.status]?.color ??
-                       '#3b82f6')
-                }
-                meetingCount={upcomingByClient[client.id] ?? 0}
-                isContaAlvo={!!client.conta_alvo_place_id}
-                onPress={handleMarkerPress}
-              />
-            ))}
-            {/* Markers da rota com numero da ordem — renderizam acima dos
-                normais e ficam visiveis independente do filtro de status.
-                Também somem no modo calor pra não poluir. */}
-            {!heatOn && routeDisplayClients
-              .filter(c => c.latitude != null && c.longitude != null)
-              .map((client, index) => {
-                const stop = routeStops.find(s => s.client_id === client.id);
-                return (
-                <RouteMarker
-                  key={`route-${client.id}`}
-                  client={client}
-                  position={index + 1}
-                  done={stop?.status === 'done'}
-                  onPress={handleMarkerPress}
-                />
-              );
-              })}
-            {/* Polyline da rota: usa geometria real (OSRM, segue ruas) quando
-                disponivel; cai pra linha reta tracejada enquanto carrega ou
-                se a API falhou. Oculta no modo calor. */}
-            {!heatOn && routeWaypoints.length >= 2 && (
-              <Polyline
-                coordinates={
-                  routeGeometry.data && routeGeometry.data.coordinates.length > 1
-                    ? routeGeometry.data.coordinates
-                    : routeWaypoints
-                }
-                strokeColor="#C8131B"
-                strokeWidth={4}
-                lineDashPattern={
-                  routeGeometry.data && routeGeometry.data.coordinates.length > 1
-                    ? undefined
-                    : [8, 4]
-                }
-              />
-            )}
-          </MapView>
-
-          {/* Estado do carregamento por área. Fica sobre o mapa, sem capturar
-              toque (pointerEvents none) pra não atrapalhar o arraste. */}
-          {showOnlyMyArea && (viewportTooWide || isLoading) && (
-            <View style={styles.areaStatusWrap} pointerEvents="none">
-              <View style={styles.areaStatusPill}>
-                {viewportTooWide ? (
-                  <IconText Icone={IconSearch} style={styles.areaStatusText} tone="onSurface">Aproxime para carregar os clientes desta região</IconText>
-                ) : (
-                  <>
-                    <ActivityIndicator size="small" color="#fff" />
-                    <Text style={styles.areaStatusText}>Carregando esta região…</Text>
-                  </>
-                )}
-              </View>
-            </View>
-          )}
-
-          {/* Pin de criacao ancorado no CENTRO DO MAPA (nao da tela). O
-              region.latitude/longitude que salvamos e' o centro do MapView;
-              como ha searchBar/filterBar acima e bottomNav abaixo, esse centro
-              fica deslocado do centro da tela. Usamos mapLayout pra desenhar o
-              pin exatamente sobre o centro do mapa — assim o que voce ve e' o
-              que salva. A ponta do pin e o dot ficam nesse ponto exato. */}
-          {creationMode && mapLayout && (() => {
-            const centerY = mapLayout.y + mapLayout.height / 2;
-            const centerX = mapLayout.x + mapLayout.width / 2;
-            return (
-              <>
-                {/* Pin: base (ponta) no centro. Altura total = 36 (corpo) - 1
-                    (margin da seta) + 8 (seta) = 43; alignItems centraliza a
-                    seta sob o corpo — sem isso ela encosta na borda esquerda
-                    e a ponta aponta ~12px fora do ponto capturado. */}
-                <View
-                  pointerEvents="none"
-                  style={{ position: 'absolute', left: centerX - 18, top: centerY - 43, alignItems: 'center' }}
-                >
-                  <View style={[markerStyles.pin, { backgroundColor: '#C8131B' }]}>
-                    {/* Mesmo asset branco dos pinos do mapa: markerStyles.logo
-                        deixou de ter tintColor, então o icon.png original
-                        apareceria vermelho sobre o círculo vermelho. */}
-                    <Image source={require('./assets/pin-logo.png')} style={markerStyles.logo} fadeDuration={0} />
-                  </View>
-                  <View style={[markerStyles.arrow, { borderTopColor: '#C8131B' }]} />
-                </View>
-                {/* Dot no centro EXATO do mapa = onde a coordenada e' capturada.
-                    Dot tem 8px — offset de metade (4) centraliza no ponto. */}
-                <View
-                  pointerEvents="none"
-                  style={{ position: 'absolute', left: centerX - 4, top: centerY - 4 }}
-                >
-                  <View style={styles.creationCenterDotInner} />
-                </View>
-              </>
-            );
-          })()}
-
-          {/* Legenda das cores dos pins. Como a temperatura virou COR (nao ha
-              mais a bandeirinha de emoji explicando), a legenda passa a ser
-              necessaria pra decifrar o mapa. Fica fora do modo de criacao.
-              Some enquanto o mapa de calor está ligado (a legenda dele assume). */}
-          {!creationMode && !heatOn && (
-            <View style={[styles.tempLegend, { bottom: baseInferior }]} pointerEvents="none">
-              {[
-                { c: TEMP_COLORS.hot, l: 'Quente' },
-                { c: TEMP_COLORS.warm, l: 'Morno' },
-                { c: TEMP_COLORS.cold, l: 'Frio' },
-                { c: TEMP_COLORS.won, l: 'Fechado' },
-                { c: TEMP_COLORS.lost, l: 'Perdido' },
-                { c: CONTA_ALVO_COLOR, l: 'Conta Alvo' },
-              ].map(item => (
-                <View key={item.l} style={styles.tempLegendRow}>
-                  <View style={[styles.tempLegendDot, { backgroundColor: item.c }]} />
-                  {/* numberOfLines={1}: sem isto "🎯 Conta Alvo" quebrava em
-                      duas linhas dentro da coluna e desalinhava a legenda. */}
-                  <Text style={styles.tempLegendLabel} numberOfLines={1}>{item.l}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {/* Map buttons. Recenter e FAB somem enquanto o calor está ligado
-              (o painel de calor ocupa a faixa de baixo). */}
-          {userLocation && !creationMode && !heatOn && (
-            <TouchableOpacity
-              style={[styles.mapButton, { bottom: baseInferior, left: 16 }]}
-              onPress={centerOnUser}
-             accessibilityRole="button" accessibilityLabel="Centralizar no meu local">
-              {/* Cheio quando esta' seguindo o vendedor, vazado quando a
-                  camera esta' livre — mesma leitura que o 📍/🧭 dava. */}
-              {isFollowingUser ? (
-                <IconLocationFilled width={22} height={22} fill={iconColors.brand} />
-              ) : (
-                <IconLocation width={22} height={22} fill={iconColors.onSurface} />
-              )}
-            </TouchableOpacity>
-          )}
-
-          {/* Toggle do mapa de calor — só gestor. Fica acima do FAB (à direita).
-              Quando ligado some (o painel embaixo, com seu ✕, é o controle de
-              desligar) — assim não sobrepõe o painel. */}
-          {canViewGestor && !creationMode && !heatOn && (
-            <TouchableOpacity
-              // Estilo proprio em vez de `{ left: undefined }` sobre o
-              // mapButton: no react-native-web o estilo base vira classe CSS e
-              // `undefined` nao emite regra nenhuma — ou seja, nao CANCELA o
-              // `left: 16` da base. O botao ficava com left E right ao mesmo
-              // tempo, ancorava a' esquerda e caia em cima da legenda de cores.
-              style={[styles.mapButtonRight, { bottom: baseInferior + 66 }]}
-              onPress={() => setHeatOn(true)}
-            >
-              <IconTrendingUp width={20} height={20} fill={iconColors.onSurface} />
-            </TouchableOpacity>
-          )}
-
-          {/* Cadastro outbound (📤) escondido: mandava só pro HubSpot sem
-              registrar no app. Fica apenas o FAB vermelho (+). */}
-          {!creationMode && !isViewer && !heatOn && (
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Adicionar lead"
-              style={[styles.fab, { bottom: baseInferior }]}
-              onPress={() => setShowCepStep(true)}
-            >
-              <IconPlus width={26} height={26} fill="#fff" />
-            </TouchableOpacity>
-          )}
-
-          {/* Painel do mapa de calor (gestor). Título + legenda gradiente +
-              chips de vendedor (Todos + um por vez). O ✕ e o próprio 🔥 desligam. */}
-          {heatOn && !creationMode && (
-            <View style={[styles.heatPanel, { bottom: baseInferior }]}>
-              <View style={styles.heatPanelHeader}>
-                <IconText Icone={IconTrendingUp} style={styles.heatPanelTitle} tone="onSurface">Calor de visitas</IconText>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  {heatLoading ? (
-                    <ActivityIndicator size="small" color="#f97316" />
-                  ) : (
-                    <Text style={styles.heatPanelCount}>
-                      {heat.total} {heat.total === 1 ? 'visita' : 'visitas'}
-                      {heatCapped ? ' (amostra recente)' : ''}
-                    </Text>
-                  )}
-                  <TouchableOpacity
-                    style={[styles.heatExportBtn, (exportingHeat || heatLoading || heat.total === 0) && { opacity: 0.5 }]}
-                    onPress={handleExportHeatmap}
-                    disabled={exportingHeat || heatLoading || heat.total === 0}
-                  >
-                    {exportingHeat
-                      ? <ActivityIndicator size="small" color="#fff" />
-                      : <IconText Icone={IconDownload} style={styles.heatExportBtnText} tone="onBrand">JSON</IconText>}
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Legenda: menos → mais visitas */}
-              <View style={styles.heatLegendRow}>
-                <Text style={styles.heatLegendLabel}>menos</Text>
-                <View style={styles.heatLegendBar}>
-                  {HEAT_LEGEND_STOPS.map((c, i) => (
-                    <View key={i} style={{ flex: 1, backgroundColor: c }} />
-                  ))}
-                </View>
-                <Text style={styles.heatLegendLabel}>mais</Text>
-                <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Fechar" style={styles.heatCloseBtn} onPress={() => setHeatOn(false)}>
-                  <IconClose width={16} height={16} fill={iconColors.muted} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Filtro por vendedor: Todos + um por vez */}
-              {heat.total === 0 && !heatLoading ? (
-                <Text style={styles.heatEmpty}>
-                  {heatSeller ? 'Este vendedor não tem visitas com GPS.' : 'Nenhuma visita com GPS registrada.'}
-                </Text>
-              ) : null}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.heatChips}
-                keyboardShouldPersistTaps="handled"
-              >
-                <TouchableOpacity
-                  style={[styles.heatChip, heatSeller === null && styles.heatChipActive]}
-                  onPress={() => setHeatSeller(null)}
-                >
-                  <Text style={[styles.heatChipText, heatSeller === null && styles.heatChipTextActive]}>
-                    Todos ({heatPoints.length})
-                  </Text>
-                </TouchableOpacity>
-                {heatSellers.map((s) => (
-                  <TouchableOpacity
-                    key={s.id}
-                    style={[styles.heatChip, heatSeller === s.id && styles.heatChipActive]}
-                    onPress={() => setHeatSeller((cur) => (cur === s.id ? null : s.id))}
-                  >
-                    <Text style={[styles.heatChipText, heatSeller === s.id && styles.heatChipTextActive]}>
-                      {s.name} ({s.count})
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          {creationMode && creationCenter && (
-            <View style={[styles.creationBar, { bottom: baseInferior }]}>
-              <Text style={styles.creationBarTitle}>Selecione o local do cliente</Text>
-              <Text style={styles.creationBarHint}>
-                Arraste o mapa para posicionar o pin no local exato. Endereço, CEP e bairro serão preenchidos automaticamente.
-              </Text>
-              <Text style={styles.creationBarCoords}>
-                {creationCenter.latitude.toFixed(6)}, {creationCenter.longitude.toFixed(6)}
-              </Text>
-              <View style={styles.creationBarRow}>
-                <TouchableOpacity
-                  style={styles.creationBarCancel}
-                  onPress={cancelMapCreation}
-                  disabled={resolvingPin}
-                >
-                  <Text style={styles.creationBarCancelText}>Cancelar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.creationBarConfirm, resolvingPin && { opacity: 0.7 }]}
-                  onPress={confirmMapCreation}
-                  disabled={resolvingPin}
-                >
-                  {resolvingPin ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.creationBarConfirmText}>Confirmar local</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-
-        </>
+        layout.ehLargo ? (
+          /* Web: painel de trabalho fixo de 352px + mapa. O conteudo do mapa
+             e' o MESMO JSX do celular (conteudoMapa) — so' a composicao muda. */
+          <View style={styles.mapaLinhaWeb}>
+            {painelMapaWeb}
+            <View style={styles.mapaAreaWeb}>{conteudoMapa}</View>
+          </View>
+        ) : (
+          conteudoMapa
+        )
       ) : tab === 'list' ? (
+        layout.ehLargo ? (
+          listaTabelaWeb
+        ) : (
         <>
           <FlatList
             data={shouldGroupListByStage ? listRows : filteredClients}
@@ -4828,7 +5577,7 @@ function MainApp() {
           />
 
           {/* Cadastro outbound (📤) escondido — só o FAB vermelho (+). */}
-          {!isViewer && (
+          {!isViewer && !layout.ehLargo && (
             <TouchableOpacity accessibilityRole="button" accessibilityLabel="Adicionar lead"
               style={[styles.fab, { bottom: baseInferior }]}
               onPress={() => setShowCepStep(true)}
@@ -4838,6 +5587,7 @@ function MainApp() {
           )}
 
         </>
+        )
       ) : tab === 'route' ? (
         renderRouteScreen()
       ) : tab === 'tasks' ? (
@@ -4859,11 +5609,11 @@ function MainApp() {
           vazio branco grande embaixo das abas.
           Reserva-se espaco proprio so' quando o aparelho nao tem area segura
           suficiente pra abrigar o texto. */}
+      {!layout.ehLargo && (
       <View
         style={[
           styles.bottomNav,
           { paddingBottom: navPaddingBottom },
-          layout.ehDesktop && styles.navLateral,
         ]}
       >
         <TouchableOpacity
@@ -4871,14 +5621,14 @@ function MainApp() {
           onPress={() => setTab('map')}
         >
           <NavIcon Icone={IconLocation} ativo={tab === 'map'} />
-          <Text style={[styles.navItemText, layout.ehDesktop && styles.navItemTextDesktop, tab === 'map' && styles.navItemTextActive]}>Mapa</Text>
+          <Text style={[styles.navItemText, tab === 'map' && styles.navItemTextActive]}>Mapa</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.navItem, tab === 'list' && styles.navItemActive]}
           onPress={() => setTab('list')}
         >
           <NavIcon Icone={IconSquareMenu} ativo={tab === 'list'} />
-          <Text style={[styles.navItemText, layout.ehDesktop && styles.navItemTextDesktop, tab === 'list' && styles.navItemTextActive]}>Lista</Text>
+          <Text style={[styles.navItemText, tab === 'list' && styles.navItemTextActive]}>Lista</Text>
         </TouchableOpacity>
         {!isViewer && (
           <>
@@ -4887,14 +5637,14 @@ function MainApp() {
               onPress={() => setTab('route')}
             >
               <NavIcon Icone={IconCar} ativo={tab === 'route'} />
-              <Text style={[styles.navItemText, layout.ehDesktop && styles.navItemTextDesktop, tab === 'route' && styles.navItemTextActive]}>Rota</Text>
+              <Text style={[styles.navItemText, tab === 'route' && styles.navItemTextActive]}>Rota</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.navItem, tab === 'agenda' && styles.navItemActive]}
               onPress={() => setTab('agenda')}
             >
               <NavIcon Icone={IconCalendar} ativo={tab === 'agenda'} />
-              <Text style={[styles.navItemText, layout.ehDesktop && styles.navItemTextDesktop, tab === 'agenda' && styles.navItemTextActive]}>Agenda</Text>
+              <Text style={[styles.navItemText, tab === 'agenda' && styles.navItemTextActive]}>Agenda</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.navItem, tab === 'tasks' && styles.navItemActive]}
@@ -4910,7 +5660,7 @@ function MainApp() {
                   </View>
                 )}
               </View>
-              <Text style={[styles.navItemText, layout.ehDesktop && styles.navItemTextDesktop, tab === 'tasks' && styles.navItemTextActive]}>Tarefas</Text>
+              <Text style={[styles.navItemText, tab === 'tasks' && styles.navItemTextActive]}>Tarefas</Text>
             </TouchableOpacity>
           </>
         )}
@@ -4920,7 +5670,7 @@ function MainApp() {
             onPress={() => setTab('gestor')}
           >
             <NavIcon Icone={IconBarGraph} ativo={tab === 'gestor'} />
-            <Text style={[styles.navItemText, layout.ehDesktop && styles.navItemTextDesktop, tab === 'gestor' && styles.navItemTextActive]}>Gestor</Text>
+            <Text style={[styles.navItemText, tab === 'gestor' && styles.navItemTextActive]}>Gestor</Text>
           </TouchableOpacity>
         ) : !isViewer && (
           // Vendedor comum (nao-gestor, nao-viewer): ve so o proprio desempenho.
@@ -4929,7 +5679,7 @@ function MainApp() {
             onPress={() => setTab('meu')}
           >
             <NavIcon Icone={IconTrendingUp} ativo={tab === 'meu'} />
-            <Text style={[styles.navItemText, layout.ehDesktop && styles.navItemTextDesktop, tab === 'meu' && styles.navItemTextActive]}>Meu</Text>
+            <Text style={[styles.navItemText, tab === 'meu' && styles.navItemTextActive]}>Meu</Text>
           </TouchableOpacity>
         )}
         <Text
@@ -4939,6 +5689,7 @@ function MainApp() {
           developed by RPA
         </Text>
       </View>
+      )}
 
       {/* Modal: escolher ponto de partida da rota (um cliente como base) */}
       <Modal
@@ -5158,9 +5909,9 @@ function MainApp() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={styles.modalOverlay}>
-              <View style={styles.passwordModalCard}>
+            {/* Sem TouchableWithoutFeedback+Keyboard.dismiss por volta do conteudo: em navegador touch o wrapper vira responder do toque, cancela o click sintetico e o TextInput nunca recebe foco (nao dava pra digitar no PWA do celular). */}
+            <View style={[styles.modalOverlay, layout.ehLargo && styles.modalOverlayWeb]}>
+              <View style={[styles.passwordModalCard, layout.ehLargo && [styles.modalCartaoWeb, { maxWidth: 520 }]]}>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Configurações</Text>
                   <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setIsPasswordModalOpen(false)}>
@@ -5352,7 +6103,6 @@ function MainApp() {
                 )}
               </View>
             </View>
-          </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -5843,9 +6593,9 @@ function MainApp() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={styles.modalOverlay}>
-              <View style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}>
+            {/* Sem TouchableWithoutFeedback+Keyboard.dismiss por volta do conteudo: em navegador touch o wrapper vira responder do toque, cancela o click sintetico e o TextInput nunca recebe foco (nao dava pra digitar no PWA do celular). */}
+            <View style={[styles.modalOverlay, layout.ehLargo && styles.modalOverlayWeb]}>
+              <View style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }, layout.ehLargo && styles.modalCartaoWeb]}>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>{editingClient ? 'Editar Cliente' : 'Novo Cadastro'}</Text>
                   <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => { setIsFormOpen(false); resetForm(); setEditingClient(null); }}>
@@ -5998,7 +6748,6 @@ function MainApp() {
                 </TouchableOpacity>
               </View>
             </View>
-          </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -6394,6 +7143,27 @@ function ClientBottomSheet({
             keyboardShouldPersistTaps="handled"
           >
             {/* Header */}
+            {layout.ehDesktop && (() => {
+              const temp = stageTemperature(client.etapa);
+              return (
+                <View style={styles.drawerKickerLinha}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                    {temp && <View style={[styles.pmwChipDot, { backgroundColor: temp.color }]} />}
+                    <Text style={styles.drawerKicker} numberOfLines={1}>
+                      {[temp ? `Lead ${temp.label}` : statusLabel, client.visit_count > 0 ? `${client.visit_count}ª visita` : 'sem visita'].join(' · ')}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Fechar"
+                    style={styles.drawerFechar}
+                    onPress={onClose}
+                  >
+                    <IconClose width={20} height={20} fill={iconColors.muted} />
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
             <View style={styles.bsHeader}>
               <View style={[styles.bsLogoWrap, { backgroundColor: statusColor }]}>
                 <Image source={require('./assets/icon.png')} style={styles.bsLogo} />
@@ -6503,7 +7273,7 @@ function ClientBottomSheet({
                 {onMarkVisited && (
                   <TouchableOpacity
                     disabled={isMarkingVisited}
-                    style={[styles.acaoPrimaria, { flex: 1 }, isMarkingVisited && { opacity: 0.6 }]}
+                    style={[styles.acaoPrimaria, { flex: 1 }, layout.ehDesktop && { backgroundColor: '#27A84C' }, isMarkingVisited && { opacity: 0.6 }]}
                     onPress={onMarkVisited}
                   >
                     {isMarkingVisited ? (
@@ -7737,22 +8507,416 @@ const styles = StyleSheet.create({
   // Coluna lateral do desktop. `absolute` colada nas quatro bordas da esquerda:
   // ocupa a altura toda, inclusive ao lado do header, e devolve a base — que
   // num notebook e' o espaco vertical mais escasso.
-  navLateral: {
+
+  // ---- Shell web (handoff desktop): sidebar + header ----
+  // A LARGURA da sidebar nao esta aqui de proposito: o CSS de
+  // public/index.html ([data-sidebar]) da' 72px e expande pra 240 no hover
+  // (>= 1024px). Os filhos tem largura fixa de 224 pra nao re-quebrar linha
+  // durante a transicao — o overflow:hidden do container corta.
+  sbContainer: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
-    width: LARGURA_LATERAL,
-    flexDirection: 'column',
-    justifyContent: 'flex-start',
-    paddingTop: 12,
-    paddingBottom: 12,
-    gap: 2,
-    borderTopWidth: 0,
+    zIndex: 40,
+    backgroundColor: 'var(--surface)',
     borderRightWidth: 1,
     borderRightColor: 'var(--border)',
-    zIndex: 5,
   },
+  sbTopo: {
+    height: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+    width: 224,
+  },
+  sbMarcaIcone: { width: 28, height: 28 },
+  sbTopoTexto: { minWidth: 0 },
+  sbMarcaTitulo: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '700', color: 'var(--text)' },
+  sbMarcaSub: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-faint)' },
+  sbItens: { flex: 1, paddingVertical: 12, paddingHorizontal: 8, gap: 2 },
+  sbItem: {
+    height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 16,
+    width: 224,
+  },
+  sbItemAtivo: { backgroundColor: 'var(--tint-red)' },
+  sbItemIcone: { width: 24, alignItems: 'center' },
+  sbItemTexto: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    letterSpacing: 0.1,
+    fontWeight: '500',
+    color: 'var(--text-muted)',
+  },
+  sbItemTextoAtivo: { fontWeight: '700', color: 'var(--tint-red-text)' },
+  sbBadge: {
+    position: 'absolute',
+    top: 6,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9,
+    backgroundColor: '#C8131B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sbBadgeTexto: { fontSize: 11, lineHeight: 18, fontWeight: '700', color: '#FFFFFF' },
+  sbRodape: {
+    borderTopWidth: 1,
+    borderTopColor: 'var(--border)',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    gap: 2,
+  },
+  sbUsuario: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    width: 224,
+  },
+  sbAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'var(--tint-red)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sbAvatarTexto: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, color: 'var(--tint-red-text)' },
+  sbUsuarioTextos: { flex: 1, minWidth: 0 },
+  sbUsuarioNome: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: 'var(--text)' },
+  sbUsuarioPapel: { fontSize: 11, lineHeight: 16, fontWeight: '500', color: 'var(--text-faint)' },
+  sbSair: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  hwContainer: {
+    height: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 16,
+    paddingHorizontal: 24,
+    backgroundColor: 'var(--surface)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+    zIndex: 20,
+  },
+  hwTitulos: { flexDirection: 'row', alignItems: 'baseline', gap: 12, flexShrink: 1, minWidth: 0 },
+  hwTitulo: { fontSize: 22, lineHeight: 28, fontWeight: '700', color: 'var(--text)' },
+  hwSubtitulo: {
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.4,
+    fontWeight: '500',
+    color: 'var(--text-faint)',
+    flexShrink: 1,
+  },
+  hwAcoes: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  hwBusca: {
+    height: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-strong)',
+    backgroundColor: 'var(--surface)',
+    minWidth: 280,
+  },
+  hwBuscaInput: { flex: 1, fontSize: 14, lineHeight: 20, letterSpacing: 0.25, color: 'var(--text)' },
+  hwAtalho: {
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  hwAtalhoTexto: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-disabled)' },
+  hwSino: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-default)',
+    backgroundColor: 'var(--surface)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hwSinoDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#C8131B',
+    borderWidth: 1.5,
+    borderColor: 'var(--surface)',
+  },
+  hwCta: {
+    height: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#C8131B',
+  },
+  hwCtaTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: '#FFFFFF' },
+  // ---- Mapa web: linha painel + mapa ----
+  mapaLinhaWeb: { flex: 1, flexDirection: 'row' },
+  mapaAreaWeb: { flex: 1 },
+  pmwContainer: {
+    width: 352,
+    backgroundColor: 'var(--surface)',
+    borderRightWidth: 1,
+    borderRightColor: 'var(--border)',
+  },
+  pmwFiltros: { padding: 16, gap: 16, borderBottomWidth: 1, borderBottomColor: 'var(--border)' },
+  pmwSegmentos: { flexDirection: 'row' },
+  pmwSegmento: {
+    flex: 1,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-default)',
+  },
+  pmwSegmentoAtivo: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
+  pmwSegmentoTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
+  pmwSegmentoTextoAtivo: { color: '#FFFFFF' },
+  pmwTituloLinha: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  pmwTitulo: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '600',
+    color: 'var(--text-faint)',
+    textTransform: 'uppercase',
+  },
+  pmwLimpar: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: '#018CCC' },
+  pmwChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pmwChip: {
+    height: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-default)',
+    backgroundColor: 'var(--surface)',
+  },
+  pmwChipAtivo: { backgroundColor: 'var(--tint-red)', borderColor: '#C8131B' },
+  pmwChipDot: { width: 10, height: 10, borderRadius: 5 },
+  pmwChipTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
+  pmwChipContagem: { fontSize: 12, lineHeight: 16, fontWeight: '500', color: 'var(--text-faint)' },
+  pmwCalor: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: 'var(--surface-2)',
+  },
+  pmwCalorTitulo: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text)' },
+  pmwCalorSub: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)' },
+  pmwSwitch: { width: 44, height: 24, borderRadius: 12, padding: 2, justifyContent: 'center' },
+  pmwSwitchDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 2,
+  },
+  pmwListaCabecalho: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  pmwListaTitulo: {
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '700',
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase',
+  },
+  pmwListaOrdem: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-faint)' },
+  pmwLinha: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+  },
+  pmwLinhaBarra: { width: 4, borderRadius: 2, alignSelf: 'stretch', minHeight: 40 },
+  pmwLinhaNome: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text)' },
+  pmwLinhaSub: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)' },
+  pmwLinhaDist: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)' },
+  // Legenda de temperatura vira barra horizontal com wrap no web
+  tempLegendaWeb: {
+    bottom: 16,
+    left: 16,
+    marginBottom: 0,
+    maxWidth: '92%',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    rowGap: 8,
+    columnGap: 16,
+    backgroundColor: 'var(--surface)',
+  },
+  tempLegendaLinhaWeb: { width: 'auto' },
+  // Controle do mapa (recentrar) no topo direito, 40x40 raio 8
+  mapaControleWeb: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    top: 16,
+    right: 16,
+    left: 'auto',
+    bottom: 'auto',
+  },
+  heatPanelWeb: { left: 16, right: 'auto', width: 400, maxWidth: '92%' },
+  // ---- Lista web (tabela) ----
+  ltwPagina: { padding: 24, maxWidth: 1600, width: '100%', alignSelf: 'center' },
+  ltwFerramentas: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: 16,
+    marginBottom: 16,
+  },
+  ltwBotaoOutline: {
+    height: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-default)',
+    backgroundColor: 'var(--surface)',
+  },
+  ltwBotaoOutlineTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text-muted)' },
+  ltwBotaoBadge: {
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 9,
+    backgroundColor: '#C8131B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ltwTabela: {
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    borderRadius: 8,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+  },
+  ltwCabecalho: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: 'var(--surface-2)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--stroke-default)',
+  },
+  ltwCabecalhoTexto: {
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '700',
+    color: 'var(--text-muted)',
+  },
+  ltwLinha: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+  },
+  ltwColRestaurante: { flexGrow: 2, flexShrink: 1, flexBasis: 240, minWidth: 0 },
+  ltwColContato: { flexGrow: 1, flexShrink: 1, flexBasis: 150, minWidth: 0 },
+  ltwColEtapa: { width: 160 },
+  ltwColTemp: { width: 120 },
+  ltwColCidade: { flexGrow: 1, flexShrink: 1, flexBasis: 140, minWidth: 0 },
+  ltwColVisita: { width: 110 },
+  ltwColReunioes: { width: 96 },
+  ltwColSeta: { width: 48, alignItems: 'flex-end' },
+  ltwBarraTemp: { width: 4, height: 32, borderRadius: 2 },
+  ltwNome: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text)' },
+  ltwSub: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)' },
+  ltwCelula: { fontSize: 14, lineHeight: 20, letterSpacing: 0.25, color: 'var(--text-muted)' },
+  ltwCelulaForte: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
+  ltwCelulaFraca: { fontSize: 12, lineHeight: 16, color: 'var(--text-disabled)' },
+  ltwBadgeEtapa: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    maxWidth: '100%',
+  },
+  ltwBadgeEtapaTexto: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600' },
+  ltwRodape: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  ltwRodapeTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)' },
+  ltwPagBotao: {
+    width: 32,
+    height: 32,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-default)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ltwPagBotaoAtivo: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
+  ltwPagTexto: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: 'var(--text-muted)' },
+  // ---- Rota web: rail de 420px a' direita do mapa ----
+  rotaRail: {
+    width: 420,
+    borderLeftWidth: 1,
+    borderLeftColor: 'var(--border)',
+    backgroundColor: 'var(--surface)',
+  },
+  rotaRailConteudo: { padding: 24 },
   bottomNav: {
     flexDirection: 'row',
     borderTopWidth: 1,
@@ -7800,17 +8964,30 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     backgroundColor: 'var(--surface)',
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'var(--border-soft)',
-    padding: 8,
-    minHeight: 160,
+    borderColor: 'var(--border)',
+    minHeight: 520,
+    overflow: 'hidden',
   },
-  calDiaHoje: { borderColor: 'var(--tint-red-border)', backgroundColor: 'var(--tint-red)' },
-  calDiaTitulo: {
-    fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '700',
-    textTransform: 'lowercase', color: 'var(--text-muted)', marginBottom: 6,
+  calDiaHoje: { borderColor: '#C8131B' },
+  calDiaCabecalho: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
   },
+  calDiaCabecalhoHoje: { backgroundColor: 'var(--tint-red)' },
+  calDiaSemana: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    color: 'var(--text-faint)',
+  },
+  calDiaNumero: { fontSize: 20, lineHeight: 28, fontWeight: '600', color: 'var(--text)' },
+  calDiaCorpo: { padding: 8, gap: 8, flex: 1 },
+  calLegendaTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
   calVazio: { fontSize: 12, color: 'var(--text-faint)', textAlign: 'center', marginTop: 16 },
   calNav: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   calNavBotao: {
@@ -7828,15 +9005,11 @@ const styles = StyleSheet.create({
   calChip: {
     borderLeftWidth: 3,
     backgroundColor: 'var(--surface-2)',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    marginBottom: 6,
+    borderRadius: 4,
+    padding: 8,
   },
   calChipHora: { fontSize: 11, lineHeight: 14, fontWeight: '700', color: 'var(--text-muted)' },
   calChipTitulo: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: 'var(--text)' },
-  // Details 8/600 do DS — rotulo de modulo de navegacao, so' desktop.
-  navItemTextDesktop: { fontSize: 8, lineHeight: 12, letterSpacing: 0 },
   brandMark: {
     position: 'absolute',
     left: 0,
@@ -8085,16 +9258,37 @@ const styles = StyleSheet.create({
   taskMeta: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
   // ===== Kanban de tarefas (so' desktop) =====
   kanbanColuna: {
-    width: 360,
-    backgroundColor: 'var(--surface-2)',
-    borderRadius: 12,
+    width: 380,
+    backgroundColor: 'var(--surface)',
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'var(--border-soft)',
+    borderColor: 'var(--border)',
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
   },
-  kanbanCabecalho: { paddingHorizontal: 12, paddingVertical: 10, marginBottom: 0 },
+  kanbanCabecalho: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+  },
+  kanbanTitulo: { flex: 1, fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text)' },
+  kanbanContagem: {
+    minWidth: 24,
+    height: 24,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  kanbanContagemTexto: { fontSize: 12, lineHeight: 24, letterSpacing: 0.5, fontWeight: '700' },
   // Densidade de QUADRO: o card compacta no web. No celular ele continua
   // grande porque e' lido a um braco de distancia, na rua.
-  taskCardWeb: { padding: 12, borderRadius: 12, marginBottom: 8 },
+  taskCardWeb: { padding: 16, borderRadius: 8, marginBottom: 12 },
   // Card da tarefa: lead como título, badge de urgência à direita.
   taskCard: {
     backgroundColor: 'var(--surface)',
@@ -8253,6 +9447,18 @@ const styles = StyleSheet.create({
   // Modal Form
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: 'var(--surface)', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '92%' },
+  // Web: modais viram cartao central (handoff, telas 10-12) em vez de sheet.
+  modalOverlayWeb: { justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.32)' },
+  modalCartaoWeb: {
+    width: '100%',
+    maxWidth: 720,
+    borderRadius: 8,
+    maxHeight: '88%',
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 25,
+  },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   modalTitle: { fontSize: 20, fontWeight: '700', color: 'var(--text)' },
   closeButton: { fontSize: 22, color: 'var(--text-subtle)', padding: 4 },
@@ -8293,9 +9499,13 @@ const styles = StyleSheet.create({
   // No desktop o lead abre em painel a DIREITA, e nao por baixo. O sheet
   // cobria metade do mapa exatamente quando o vendedor quer ver onde o pin
   // esta' — o gesto de abrir o lead escondia o motivo de te-lo aberto.
-  painelOverlay: { justifyContent: 'flex-start', alignItems: 'flex-end', backgroundColor: 'rgba(0,0,0,0.25)' },
+  painelOverlay: { justifyContent: 'flex-start', alignItems: 'flex-end', backgroundColor: 'rgba(0,0,0,0.32)' },
   painelLateral: {
-    width: 460,
+    width: 480,
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: -8, height: 0 },
+    shadowRadius: 16,
     maxWidth: '100%',
     height: '100%',
     maxHeight: '100%',
@@ -8310,6 +9520,16 @@ const styles = StyleSheet.create({
   bottomSheetHandle: { alignSelf: 'center', width: 40, height: 4, backgroundColor: 'var(--surface-3)', borderRadius: 2 },
   dragHandleArea: { width: '100%', paddingTop: 14, paddingBottom: 14, alignItems: 'center' },
   bottomSheetContent: { paddingHorizontal: 20 },
+  drawerKickerLinha: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  drawerKicker: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    color: 'var(--text-faint)',
+  },
+  drawerFechar: { width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   bsHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   bsLogoWrap: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   bsLogo: { width: 28, height: 28, tintColor: '#fff', resizeMode: 'contain' },

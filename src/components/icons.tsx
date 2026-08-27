@@ -38,6 +38,16 @@ import { IconBill } from 'takeat-design-system-ui-kit/icons/IconBill';
 import { IconLock } from 'takeat-design-system-ui-kit/icons/IconLock';
 import { IconWarning } from 'takeat-design-system-ui-kit/icons/IconWarning';
 import { IconUndo } from 'takeat-design-system-ui-kit/icons/IconUndo';
+import { IconArray } from 'takeat-design-system-ui-kit/icons/IconArray';
+import { IconLightBulb } from 'takeat-design-system-ui-kit/icons/IconLightBulb';
+import { IconBell } from 'takeat-design-system-ui-kit/icons/IconBell';
+import { IconChevronDown } from 'takeat-design-system-ui-kit/icons/IconChevronDown';
+import { IconChevronLeft } from 'takeat-design-system-ui-kit/icons/IconChevronLeft';
+import { IconChevronRight } from 'takeat-design-system-ui-kit/icons/IconChevronRight';
+import { IconLogout } from 'takeat-design-system-ui-kit/icons/IconLogout';
+import { IconMenu } from 'takeat-design-system-ui-kit/icons/IconMenu';
+import { IconMenuCircles } from 'takeat-design-system-ui-kit/icons/IconMenuCircles';
+import { IconTrendingDown } from 'takeat-design-system-ui-kit/icons/IconTrendingDown';
 import { IconRefresh } from 'takeat-design-system-ui-kit/icons/IconRefresh';
 import { IconArrowFoward } from 'takeat-design-system-ui-kit/icons/IconArrowFoward';
 import { IconPencil } from 'takeat-design-system-ui-kit/icons/IconPencil';
@@ -61,6 +71,16 @@ import { IconSquareMenu } from 'takeat-design-system-ui-kit/icons/IconSquareMenu
 import { IconTrendingUp } from 'takeat-design-system-ui-kit/icons/IconTrendingUp';
 
 export {
+  IconArray,
+  IconLightBulb,
+  IconBell,
+  IconChevronDown,
+  IconChevronLeft,
+  IconChevronRight,
+  IconLogout,
+  IconMenu,
+  IconMenuCircles,
+  IconTrendingDown,
   IconArrowBack,
   IconArrowDown,
   IconArrowFoward,

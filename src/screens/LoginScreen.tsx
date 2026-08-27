@@ -19,9 +19,11 @@ import {
   useIconColors,
 } from '../components/icons';
 import { useAuth } from '../context/AuthContext';
+import { useLayout } from '../hooks/useLayout';
 
 export function LoginScreen() {
   const iconColors = useIconColors();
+  const layout = useLayout();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -57,6 +59,77 @@ export function LoginScreen() {
     }
   };
 
+  // O MESMO formulario nas duas composicoes: cartao branco sobre vermelho no
+  // celular, bloco de 400px no painel direito no desktop (handoff, tela 8).
+  const formulario = (
+    <View style={layout.ehDesktop ? styles.webBloco : styles.card}>
+      <Text style={[styles.formTitle, layout.ehDesktop && styles.webFormTitle]}>Entrar na conta</Text>
+
+      {layout.ehDesktop && <Text style={styles.webRotulo}>E-mail</Text>}
+      <View style={[styles.inputWrap, layout.ehDesktop && styles.webInputWrap]}>
+        <IconMail width={layout.ehDesktop ? 20 : 16} height={layout.ehDesktop ? 20 : 16} fill={layout.ehDesktop ? iconColors.muted : iconColors.onSurface} />
+        <TextInput
+          style={styles.input}
+          placeholder={layout.ehDesktop ? 'voce@takeat.app' : 'Email'}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!loading}
+          value={email}
+          onChangeText={setEmail}
+          placeholderTextColor="var(--text-subtle)"
+          accessibilityLabel="E-mail"
+        />
+      </View>
+
+      {layout.ehDesktop && <Text style={styles.webRotulo}>Senha</Text>}
+      <View style={[styles.inputWrap, layout.ehDesktop && styles.webInputWrap]}>
+        <IconLock width={layout.ehDesktop ? 20 : 16} height={layout.ehDesktop ? 20 : 16} fill={layout.ehDesktop ? iconColors.muted : iconColors.onSurface} />
+        <TextInput
+          style={styles.input}
+          placeholder={layout.ehDesktop ? '••••••••' : 'Senha'}
+          secureTextEntry
+          editable={!loading}
+          value={password}
+          onChangeText={setPassword}
+          placeholderTextColor="var(--text-subtle)"
+          accessibilityLabel="Senha"
+        />
+      </View>
+
+      {error && <Text style={styles.errorText}>{error}</Text>}
+
+      <TouchableOpacity
+        style={[styles.button, layout.ehDesktop && styles.webBotao, loading && styles.buttonDisabled]}
+        onPress={handleLogin}
+        disabled={loading}
+        activeOpacity={0.8}
+      >
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Entrar</Text>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (layout.ehDesktop) {
+    return (
+      <View style={styles.webSplit}>
+        <View style={styles.webMarca}>
+          <Image source={{ uri: '/marca/takeat-logo-white.svg' }} style={styles.webLogo} />
+          <View style={{ gap: 12 }}>
+            <Text style={styles.webKicker}>Field Sales Outbound</Text>
+            <Text style={styles.webFrase}>O campo inteiro numa tela: mapa, rota, agenda e funil.</Text>
+          </View>
+          <Text style={styles.webNota}>Contas são criadas pelo administrador.</Text>
+        </View>
+        <View style={styles.webForm}>{formulario}</View>
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -80,52 +153,7 @@ export function LoginScreen() {
         </View>
 
         <View style={styles.formSection}>
-          <View style={styles.card}>
-            <Text style={styles.formTitle}>Entrar na conta</Text>
-
-            <View style={styles.inputWrap}>
-              <IconMail width={16} height={16} fill={iconColors.onSurface} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading}
-                value={email}
-                onChangeText={setEmail}
-                placeholderTextColor="var(--text-subtle)"
-              />
-            </View>
-
-            <View style={styles.inputWrap}>
-              <IconLock width={16} height={16} fill={iconColors.onSurface} />
-              <TextInput
-                style={styles.input}
-                placeholder="Senha"
-                secureTextEntry
-                editable={!loading}
-                value={password}
-                onChangeText={setPassword}
-                placeholderTextColor="var(--text-subtle)"
-              />
-            </View>
-
-            {error && <Text style={styles.errorText}>{error}</Text>}
-
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleLogin}
-              disabled={loading}
-              activeOpacity={0.8}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Entrar</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+          {formulario}
 
           <Text style={styles.infoText}>
             Contas são criadas pelo administrador
@@ -137,6 +165,60 @@ export function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  // ---- Login desktop: split panel (handoff, tela 8) ----
+  webSplit: { flex: 1, flexDirection: 'row' },
+  webMarca: {
+    flex: 1,
+    backgroundColor: '#C8131B',
+    padding: 64,
+    justifyContent: 'space-between',
+  },
+  webLogo: { width: 116, height: 32, resizeMode: 'contain', alignSelf: 'flex-start' },
+  webKicker: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 1.3,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.7)',
+  },
+  webFrase: { fontSize: 28, lineHeight: 36, fontWeight: '700', color: '#FFFFFF', maxWidth: 380 },
+  webNota: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'rgba(255,255,255,0.7)' },
+  webForm: {
+    flex: 1,
+    backgroundColor: 'var(--bg)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 64,
+  },
+  webBloco: { width: '100%', maxWidth: 400, gap: 4 },
+  webFormTitle: { fontSize: 24, lineHeight: 32, fontWeight: '700', color: 'var(--text)', textAlign: 'left', marginBottom: 16 },
+  webRotulo: {
+    fontSize: 14,
+    lineHeight: 20,
+    letterSpacing: 0.1,
+    fontWeight: '600',
+    color: 'var(--text-muted)',
+    marginBottom: 8,
+    marginTop: 8,
+  },
+  webInputWrap: {
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-strong)',
+    backgroundColor: 'var(--surface)',
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  webBotao: {
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    marginTop: 16,
+  },
   container: {
     flex: 1,
     backgroundColor: '#C8131B',

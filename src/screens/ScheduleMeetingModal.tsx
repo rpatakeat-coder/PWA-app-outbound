@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
+import { useLayout } from '../hooks/useLayout';
 import { Alert } from '../components/Alert';
 import { IconClose, useIconColors } from '../components/icons';
 import type { Client, ClientMeeting, MeetingType } from '../types/client';
@@ -242,6 +243,7 @@ function HourMinutePicker({
 }
 
 export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao', rescheduleOf }: ScheduleMeetingModalProps) {
+  const layout = useLayout();
   const iconColors = useIconColors();
   // Em modo reagendar o tipo vem da própria reunião (não do prop).
   const effectiveType: MeetingType = rescheduleOf ? (rescheduleOf.type ?? 'reuniao') : meetingType;
@@ -385,11 +387,11 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao',
 
   return (
     <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, layout.ehLargo && styles.overlayWeb]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.sheet}
+          style={[styles.sheet, layout.ehLargo && styles.sheetWeb]}
         >
           <ScrollView
             contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
@@ -559,6 +561,18 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao',
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  // Web: cartao central de 640px (handoff, tela 11) em vez de bottom sheet.
+  overlayWeb: { justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.32)' },
+  sheetWeb: {
+    width: '100%',
+    maxWidth: 640,
+    borderRadius: 8,
+    maxHeight: '88%',
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 25,
+  },
   sheet: {
     backgroundColor: 'var(--surface)',
     borderTopLeftRadius: 20,

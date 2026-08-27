@@ -54,7 +54,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
 
@@ -132,6 +132,9 @@
         --d-info-text: #66CFFF;
         --d-violet-text: #C4B5FD;
         --d-tint-blue-text: #99DFFF;
+        --d-stroke-default: rgba(255, 255, 255, 0.14);
+        --d-stroke-strong: rgba(255, 255, 255, 0.24);
+        --d-text-disabled: rgba(255, 255, 255, 0.28);
 
         --bg: #F6F6F6;
         --surface: #FFFFFF;
@@ -160,6 +163,9 @@
         --info-text: #016999;
         --violet-text: #8B5CF6;
         --tint-blue-text: #016999;
+        --stroke-default: #C6C6C6;
+        --stroke-strong: #7A7A7A;
+        --text-disabled: #C6C6C6;
         color-scheme: light;
       }
 
@@ -193,6 +199,9 @@
         --info-text: var(--d-info-text);
         --violet-text: var(--d-violet-text);
         --tint-blue-text: var(--d-tint-blue-text);
+        --stroke-default: var(--d-stroke-default);
+        --stroke-strong: var(--d-stroke-strong);
+        --text-disabled: var(--d-text-disabled);
           color-scheme: dark;
         }
       }
@@ -226,6 +235,9 @@
           --brand-text: var(--d-brand-text);
           --info-text: var(--d-info-text);
           --violet-text: var(--d-violet-text);
+        --stroke-default: var(--d-stroke-default);
+        --stroke-strong: var(--d-stroke-strong);
+        --text-disabled: var(--d-text-disabled);
           color-scheme: dark;
       }
 
@@ -242,6 +254,73 @@
 
       body {
         background-color: var(--bg);
+      }
+
+      /*
+        Interacao do shell desktop (handoff design_handoff_desktop_web).
+        O react-native-web nao expressa :hover/:focus-visible/transition nos
+        StyleSheets; os componentes marcam o DOM com dataSet (vira data-*) e
+        o comportamento vive aqui. Tudo condicionado a hover real + largura
+        >= 768 pra nao vazar pro touch/mobile.
+      */
+      #root :focus-visible {
+        outline: 2px solid #016999; /* azul de foco de components.md */
+        outline-offset: 2px;
+      }
+      [tabindex='-1']:focus {
+        outline: none; /* foco programatico de titulo ao trocar de aba */
+      }
+      [data-sidebar] {
+        width: 72px;
+        transition: width 0.16s cubic-bezier(0.2, 0.7, 0.3, 1);
+        overflow: hidden;
+      }
+      [data-sidebar] [data-rotulo] {
+        opacity: 0;
+        transition: opacity 0.16s;
+      }
+      [data-badge-nav] {
+        left: 34px;
+        transition: left 0.16s;
+      }
+      /* Hover expande so no desktop (>=1024): no tablet a sidebar e' fixa em 72. */
+      @media (hover: hover) and (min-width: 1024px) {
+        [data-sidebar]:hover {
+          width: 240px;
+          box-shadow: 4px 0 16px rgba(0, 0, 0, 0.14);
+        }
+        [data-sidebar]:hover [data-rotulo] {
+          opacity: 1;
+        }
+        [data-sidebar]:hover [data-badge-nav] {
+          left: 176px;
+        }
+      }
+      @media (hover: hover) and (min-width: 768px) {
+        [data-hover='surface2']:hover {
+          background-color: var(--surface-2) !important;
+        }
+        [data-hover='tintred']:hover {
+          background-color: var(--tint-red) !important;
+        }
+        [data-hover='darkred']:hover {
+          background-color: #94090f !important;
+        }
+        [data-hover='borda']:hover {
+          border-color: var(--stroke-strong) !important;
+        }
+      }
+      /* Pin do mapa: 36px no celular, 40px no web (alvo de clique melhor). */
+      @media (min-width: 768px) {
+        [data-pin] {
+          width: 40px !important;
+          height: 40px !important;
+          border-radius: 20px !important;
+        }
+      }
+      [data-trans] {
+        transition: background-color 0.15s ease, border-color 0.15s ease,
+          color 0.15s ease, box-shadow 0.15s ease;
       }
     </style>
 
