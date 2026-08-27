@@ -14,6 +14,7 @@ import { Alert } from '../components/Alert';
 import type { Client, ClientMeeting, FieldRouteStop } from '../types/client';
 import { useFieldOps } from '../hooks/useFieldOps';
 import { useLayout } from '../hooks/useLayout';
+import { useTheme } from '../theme';
 import { exportAgenda } from '../utils/exportAgenda';
 import { openNavigation } from '../utils/navigation';
 import { openWhatsapp, toWhatsappNumber } from '../utils/whatsapp';
@@ -64,6 +65,7 @@ export function AgendaScreen({
   const layout = useLayout();
   const insets = useSafeAreaInsets();
   const iconColors = useIconColors();
+  const { isDark } = useTheme();
   const [calSemanaOffset, setCalSemanaOffset] = useState(0);
   const [agendaTypeFilter, setAgendaTypeFilter] = useState<string | null>(null);
   const [agendaPastOpen, setAgendaPastOpen] = useState(false);
@@ -94,6 +96,15 @@ export function AgendaScreen({
     item.kind === 'meeting'
       ? (item.meeting.type === 'follow_up' ? 'follow_up' : 'reuniao')
       : 'rota';
+  // Cores FIXAS do calendario desktop (prompt 07b): Rota vermelho, Demo
+  // violeta, Follow-up azul-claro — com a tinta de fundo do modo claro.
+  // No escuro a tinta cai pra surface-2. O TIPO_META abaixo segue sendo o
+  // par da LISTA cronologica (celular), que nao muda.
+  const CORES_TIPO_WEB: Record<string, { cor: string; tinta: string; rotulo: string }> = {
+    rota: { cor: '#C8131B', tinta: '#FAE8E9', rotulo: 'Rota' },
+    reuniao: { cor: '#7c3aed', tinta: '#F1EBFE', rotulo: 'Demo' },
+    follow_up: { cor: '#01AFFF', tinta: '#E6F7FF', rotulo: 'Follow-up' },
+  };
   const TIPO_META: Record<string, { label: string; cor: string }> = {
     reuniao: { label: 'Demos', cor: '#C8131B' },
     follow_up: { label: 'Follow ups', cor: '#2563eb' },
@@ -526,7 +537,7 @@ export function AgendaScreen({
                 </TouchableOpacity>
                 {contagemTipo.length > 1 && contagemTipo.map(({ tipo, total }) => {
                   const ativo = agendaTypeFilter === tipo;
-                  const meta = TIPO_META[tipo];
+                  const meta = { ...TIPO_META[tipo], cor: CORES_TIPO_WEB[tipo]?.cor ?? TIPO_META[tipo].cor, label: CORES_TIPO_WEB[tipo]?.rotulo ?? TIPO_META[tipo].label };
                   return (
                     <TouchableOpacity
                       key={tipo}
@@ -541,25 +552,25 @@ export function AgendaScreen({
                   );
                 })}
                 <View style={{ flex: 1 }} />
-                {Object.entries(TIPO_META).map(([k, meta]) => (
+                {Object.entries(CORES_TIPO_WEB).map(([k, meta]) => (
                   <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: meta.cor }} />
-                    <Text style={styles.calLegendaTexto}>{meta.label}</Text>
+                    <Text style={styles.calLegendaTexto}>{meta.rotulo}</Text>
                   </View>
                 ))}
                 {canViewGestor && (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Exportar JSON"
-                  style={[sharedStyles.ltwBotaoOutline, { borderColor: 'var(--teal-text)', height: 32, paddingHorizontal: 12 }, exportingAgenda && { opacity: 0.6 }]}
+                  style={[sharedStyles.ltwBotaoOutline, { borderColor: 'var(--teal-text)' }, exportingAgenda && { opacity: 0.6 }]}
                   {...ds({ trans: '1', hover: 'surface2' })}
                   disabled={exportingAgenda}
                   onPress={handleExportAgenda}
                 >
                   {exportingAgenda
                     ? <ActivityIndicator size="small" color={iconColors.teal} />
-                    : <IconDownload width={16} height={16} fill={iconColors.teal} />}
-                  <Text style={[sharedStyles.ltwBotaoOutlineTexto, { color: 'var(--teal-text)', fontSize: 12 }]}>Exportar JSON</Text>
+                    : <IconDownload width={24} height={24} fill={iconColors.teal} />}
+                  <Text style={[sharedStyles.ltwBotaoOutlineTexto, { color: 'var(--teal-text)' }]}>Exportar JSON</Text>
                 </Pressable>
                 )}
               </View>
@@ -582,6 +593,7 @@ export function AgendaScreen({
                       ) : (
                         itens.map((it, ix) => {
                           const meta = TIPO_META[tipoDoItem(it)];
+                          const corWeb = CORES_TIPO_WEB[tipoDoItem(it)];
                           const hora = it.at
                             ? new Date(it.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
                             : '';
@@ -592,15 +604,13 @@ export function AgendaScreen({
                               key={ix}
                               style={[
                                 styles.calChip,
-                                { borderLeftColor: meta?.cor ?? 'var(--border)' },
-                                tipoDoItem(it) === 'reuniao' && { backgroundColor: 'var(--tint-red)' },
-                                tipoDoItem(it) === 'follow_up' && { backgroundColor: 'var(--tint-blue)' },
-                                tipoDoItem(it) === 'rota' && { backgroundColor: 'var(--tint-green)' },
+                                { borderLeftColor: corWeb?.cor ?? 'var(--border)' },
+                                { backgroundColor: isDark ? 'var(--surface-2)' : corWeb?.tinta ?? 'var(--surface-2)' },
                               ]}
                               disabled={!idCliente}
                               onPress={() => idCliente && openClientById(idCliente)}
                             >
-                              <Text style={styles.calChipHora}>{hora} · {meta?.label}</Text>
+                              <Text style={[styles.calChipHora, corWeb && { color: corWeb.cor }]}>{hora} · {corWeb?.rotulo ?? meta?.label}</Text>
                               <Text style={styles.calChipTitulo} numberOfLines={2}>{nomeChip}</Text>
                             </TouchableOpacity>
                           );
@@ -750,15 +760,15 @@ const styles = StyleSheet.create({
   calLegendaTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
   calNav: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   calNavBotao: {
-    width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface)',
+    width: 32, height: 32, borderRadius: 4, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'var(--stroke-default)', backgroundColor: 'var(--surface)',
   },
   calNavHoje: {
-    paddingHorizontal: 12, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'var(--tint-red)',
+    paddingHorizontal: 12, height: 32, borderRadius: 4, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'var(--stroke-default)', backgroundColor: 'var(--surface)',
   },
-  calNavHojeTexto: { fontSize: 12, fontWeight: '700', color: 'var(--tint-red-text)' },
-  calNavRotulo: { fontSize: 14, fontWeight: '600', color: 'var(--text)', letterSpacing: 0.1 },
+  calNavHojeTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
+  calNavRotulo: { fontSize: 18, lineHeight: 24, fontWeight: '600', color: 'var(--text)' },
   calNavSeta: { fontSize: 16, lineHeight: 20, color: 'var(--text)', fontWeight: '600' },
   calNavTotal: { fontSize: 12, fontWeight: '500', color: 'var(--text-subtle)' },
   calSemana: { flexDirection: 'row', gap: 8, alignItems: 'stretch' },

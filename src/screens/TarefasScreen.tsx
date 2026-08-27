@@ -6,7 +6,7 @@ import { useLayout } from '../hooks/useLayout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
 import { ds, sharedStyles } from './sharedStyles';
-import { IconCheck, useIconColors } from '../components/icons';
+import { IconCheck, IconClock, IconUser, useIconColors } from '../components/icons';
 
 // Tela de Tarefas, extraida do App.tsx (prompt 02 do handoff) — refactor puro,
 // nada mudou visualmente. O recorte visibleTasks/tasksActiveVendor continua
@@ -25,6 +25,8 @@ interface Props {
   abrirLeadNoMapa: (c: Client) => void;
   /** Abre a ficha por id — cobre lead fora do viewport do mapa. */
   abrirLeadPorId: (id: string) => void;
+  /** Limpa o filtro de vendedor compartilhado (gestor). */
+  limparFiltroVendedor?: () => void;
   agendarDemo: (c: Client) => void;
   abrirRegras: () => void;
   concluirTarefa: (vars: { id: string; status: 'concluida' | 'dispensada' }) => void;
@@ -44,6 +46,7 @@ export function TarefasScreen({
   vendorLabel,
   abrirLeadNoMapa,
   abrirLeadPorId,
+  limparFiltroVendedor,
   agendarDemo,
   abrirRegras,
   concluirTarefa,
@@ -57,7 +60,7 @@ export function TarefasScreen({
   // visibleTasks/tasksActiveVendor — compartilhado com o badge do rodape.
   const activeVendor = tasksActiveVendor;
 
-  const sevColor = (s: string | null) => (s === 'D5' ? '#C8131B' : s === 'D2' ? '#FFB32F' : s === 'SLA' ? '#2563eb' : '#64748b');
+  const sevColor = (s: string | null) => (s === 'D5' ? '#C8131B' : s === 'D2' ? '#FFB32F' : s === 'SLA' ? '#0ea5e9' : '#64748b');
   // Peso da urgência — ordena chips, seções e a lista dentro de cada seção.
   const sevRank = (s: string | null) => (s === 'D5' ? 3 : s === 'D2' ? 2 : s === 'SLA' ? 1 : 0);
   // Severidade nula vira uma chave própria pra não sumir do agrupamento.
@@ -112,17 +115,50 @@ export function TarefasScreen({
       <View key={task.id} style={[styles.taskCard, layout.ehDesktop && styles.taskCardWeb]} {...ds({ hover: 'borda', trans: '1' })}>
         <View style={styles.taskCardTop}>
           <Text style={[styles.taskLead, layout.ehDesktop && styles.taskLeadWeb]} numberOfLines={2}>{leadNome}</Text>
-          <View style={[styles.taskBadge, { backgroundColor: sevColor(task.severity) }]}>
-            <Text style={styles.taskBadgeText}>{badgeText}</Text>
+          <View
+            style={[
+              styles.taskBadge,
+              layout.ehDesktop
+                ? task.severity === 'D5'
+                  ? { backgroundColor: 'var(--tint-red)' }
+                  : task.severity === 'D2'
+                    ? { backgroundColor: 'var(--tint-amber)' }
+                    : task.severity === 'SLA'
+                      ? { backgroundColor: 'var(--tint-blue)' }
+                      : { backgroundColor: 'var(--surface-2)' }
+                : { backgroundColor: sevColor(task.severity) },
+            ]}
+          >
+            <Text
+              style={[
+                styles.taskBadgeText,
+                layout.ehDesktop && {
+                  color:
+                    task.severity === 'D5'
+                      ? 'var(--tint-red-text)'
+                      : task.severity === 'D2'
+                        ? 'var(--tint-amber-text)'
+                        : task.severity === 'SLA'
+                          ? 'var(--tint-blue-text)'
+                          : 'var(--text-faint)',
+                },
+              ]}
+            >
+              {badgeText}
+            </Text>
           </View>
         </View>
 
         <Text style={[styles.taskTipo, layout.ehDesktop && styles.taskTipoWeb]}>{tipo}</Text>
         {typeof days === 'number' ? (
-          <Text style={[styles.taskMeta, layout.ehDesktop && styles.taskMetaWeb]}>{days} dia(s) em {etapaMeta ?? 'etapa'}</Text>
+          <View style={layout.ehDesktop ? styles.metaLinhaWeb : undefined}>
+            {layout.ehDesktop && <IconClock width={16} height={16} fill={iconColors.muted} />}
+            <Text style={[styles.taskMeta, layout.ehDesktop && styles.taskMetaWeb]}>{days} dia(s) em {etapaMeta ?? 'etapa'}</Text>
+          </View>
         ) : null}
         {responsavel ? (
           <View style={styles.taskRespRow}>
+            {layout.ehDesktop && <IconUser width={16} height={16} fill={iconColors.muted} />}
             <Text style={[styles.taskMeta, layout.ehDesktop && styles.taskMetaWeb, { flexShrink: 1 }]} numberOfLines={1}>
               {responsavelNome}
             </Text>
@@ -229,9 +265,16 @@ export function TarefasScreen({
       )}
 
       {activeVendor !== null && activeVendor !== myHubspotId ? (
-        <Text style={sharedStyles.taskVendorHint}>
-          Filtro ativo: {vendorLabel(activeVendor)} — tire no modal de filtros.
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Text style={sharedStyles.taskVendorHint}>
+            Filtro ativo: {vendorLabel(activeVendor)}
+          </Text>
+          {limparFiltroVendedor && (
+            <TouchableOpacity accessibilityRole="button" onPress={limparFiltroVendedor}>
+              <Text style={[sharedStyles.taskVendorHint, { textDecorationLine: 'underline' }]}>limpar</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       ) : null}
 
       {/* Chips: quanto tem de cada urgência, e filtro de um toque. No desktop
@@ -389,6 +432,7 @@ const styles = StyleSheet.create({
   taskLeadWeb: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600' },
   taskTipoWeb: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4 },
   taskMetaWeb: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600' },
+  metaLinhaWeb: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
 
   taskCardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
 

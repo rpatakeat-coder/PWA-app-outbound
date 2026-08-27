@@ -4374,6 +4374,7 @@ function MainApp() {
           vendorLabel={vendorLabel}
           abrirLeadNoMapa={(c) => { setTab('map'); openClientDetails(c); }}
           abrirLeadPorId={openClientById}
+          limparFiltroVendedor={() => setVendorFilterHubspotId(null)}
           agendarDemo={(c) => setSchedulingFor({ client: c, type: 'reuniao' })}
           abrirRegras={() => setIsTaskRulesOpen(true)}
           concluirTarefa={(vars) => resolveTask.mutate(vars)}
