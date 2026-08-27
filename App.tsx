@@ -730,6 +730,13 @@ function MainApp() {
   // a geracao ao autenticar e le as pendentes. O badge do rodape usa a contagem
   // JA filtrada por vendedor (visibleTasksCount), nao o total global.
   const { tasks, resolveTask } = useClientTasks();
+  // Mesmo problema nas tarefas: task.client_id pode apontar pra lead fora da
+  // area carregada do mapa, e o card mostrava "Lead nao encontrado".
+  const idsClientesDasTarefas = useMemo(
+    () => [...new Set(tasks.map((t) => t.client_id).filter(Boolean))] as string[],
+    [tasks],
+  );
+  const nomesTarefas = useNomesDeClientes(idsClientesDasTarefas, tab === 'tasks');
   useForceReload(isAuthenticated);
   // Gestor = acesso total. Antes existiam dois tiers separados (admin por
   // e-mail hardcoded + uma lista de "so metricas"); agora e' um so, vindo do
@@ -3186,7 +3193,9 @@ function MainApp() {
 
     const renderTaskCard = (task: ClientTask) => {
       const client = clients.find((c) => c.id === task.client_id) ?? null;
-      const leadNome = client ? getClientPrimaryName(client) : 'Lead não encontrado';
+      const leadNome = client
+        ? getClientPrimaryName(client)
+        : nomesTarefas.get(task.client_id) ?? 'Lead não encontrado';
       const days = (task.meta as any)?.days_in_stage;
       const etapaMeta = (task.meta as any)?.etapa as string | undefined;
       const responsavel = task.vendedor_id_hubspot ? vendorLabel(task.vendedor_id_hubspot) : null;
@@ -3205,7 +3214,7 @@ function MainApp() {
         : (task.severity ?? '•');
 
       return (
-        <View key={task.id} style={styles.taskCard}>
+        <View key={task.id} style={[styles.taskCard, layout.ehDesktop && styles.taskCardWeb]}>
           <View style={styles.taskCardTop}>
             <Text style={styles.taskLead} numberOfLines={2}>{leadNome}</Text>
             <View style={[styles.taskBadge, { backgroundColor: sevColor(task.severity) }]}>
@@ -3323,18 +3332,40 @@ function MainApp() {
             <Text style={styles.emptyStateText}>Nenhuma tarefa pendente.</Text>
           </View>
         ) : (
-          // KANBAN no desktop: cada urgencia vira uma COLUNA lado a lado —
-          // D2 | D5 | ... — e o vendedor le o quadro inteiro sem rolar.
+          // KANBAN no desktop, com tres regras que o print pediu:
+          //   1. Coluna tem LARGURA PROPRIA (320-400px), nao flex:1 — com o
+          //      filtro de urgencia ativo sobrava uma coluna unica esticada na
+          //      tela inteira, o "mobile maior" de novo.
+          //   2. Coluna tem SCROLL INTERNO limitado a uma tela: o cabecalho do
+          //      quadro fica sempre visivel e SLA com 75 tarefas rola DENTRO
+          //      da coluna, nao a pagina inteira.
+          //   3. O quadro rola na horizontal se as colunas nao couberem.
           // No celular continua a pilha de secoes de sempre.
-          <View
-            style={
-              layout.ehDesktop
-                ? { flexDirection: 'row', gap: 12, alignItems: 'flex-start' }
-                : undefined
-            }
-          >
-            {secoes.map((secao) => (
-              <View key={secao.sev} style={layout.ehDesktop ? { flex: 1, minWidth: 0 } : undefined}>
+          layout.ehDesktop ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+                {secoes.map((secao) => (
+                  <View key={secao.sev} style={styles.kanbanColuna}>
+                    <View style={[styles.taskSectionHeader, styles.kanbanCabecalho]}>
+                      <View style={[styles.countChipDot, { backgroundColor: sevColor(secao.sev) }]} />
+                      <Text style={styles.taskSectionText}>
+                        {secao.sev} · {secao.total} {secao.total === 1 ? 'tarefa' : 'tarefas'}
+                      </Text>
+                    </View>
+                    <ScrollView
+                      style={{ maxHeight: Math.max(360, layout.altura - 320) }}
+                      contentContainerStyle={{ padding: 8, paddingTop: 0 }}
+                      showsVerticalScrollIndicator
+                    >
+                      {secao.itens.map(renderTaskCard)}
+                    </ScrollView>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          ) : (
+            secoes.map((secao) => (
+              <View key={secao.sev}>
                 <View style={styles.taskSectionHeader}>
                   <View style={[styles.countChipDot, { backgroundColor: sevColor(secao.sev) }]} />
                   <Text style={styles.taskSectionText}>
@@ -3343,8 +3374,8 @@ function MainApp() {
                 </View>
                 {secao.itens.map(renderTaskCard)}
               </View>
-            ))}
-          </View>
+            ))
+          )
         )}
       </ScrollView>
     );
@@ -8052,6 +8083,18 @@ const styles = StyleSheet.create({
   agendaTempPillText: { fontSize: 11, fontWeight: '800' },
   // Tarefas
   taskMeta: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
+  // ===== Kanban de tarefas (so' desktop) =====
+  kanbanColuna: {
+    width: 360,
+    backgroundColor: 'var(--surface-2)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'var(--border-soft)',
+  },
+  kanbanCabecalho: { paddingHorizontal: 12, paddingVertical: 10, marginBottom: 0 },
+  // Densidade de QUADRO: o card compacta no web. No celular ele continua
+  // grande porque e' lido a um braco de distancia, na rua.
+  taskCardWeb: { padding: 12, borderRadius: 12, marginBottom: 8 },
   // Card da tarefa: lead como título, badge de urgência à direita.
   taskCard: {
     backgroundColor: 'var(--surface)',

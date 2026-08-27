@@ -27,6 +27,8 @@ import { useWindowDimensions } from 'react-native';
 
 export interface Layout {
   largura: number;
+  /** Altura da janela — usada pra limitar colunas de kanban a uma tela. */
+  altura: number;
   /** < 768px — o celular de sempre. */
   ehCelular: boolean;
   /** 768px+ — ja' cabe mais de uma coluna. */
@@ -46,11 +48,12 @@ export interface Layout {
 const TETO = 1320;
 
 export function useLayout(): Layout {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const ehLargo = width >= 768;
   const ehDesktop = width >= 1024;
   return {
     largura: width,
+    altura: height,
     ehCelular: !ehLargo,
     ehLargo,
     ehDesktop,
