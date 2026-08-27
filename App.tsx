@@ -2679,22 +2679,14 @@ function MainApp() {
     );
   };
 
-  const renderRouteScreen = () => (
-    <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom },
-      // Mesmo teto da lista de leads: sem ele o conteudo se espalha por
-      // toda a largura do monitor e a linha de texto fica ilegivel.
-      { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
-      {/* Gestor monitorando a rota de OUTRO vendedor: banner + tela read-only.
-          Muda o "Responsável" pra "Todos" pra voltar a gerar a propria. */}
-      {isMonitoringRoute && (
-        <View style={styles.monitorBanner}>
-          <Text style={styles.monitorBannerText}>
-            <IconText Icone={IconEye} style={styles.monitorBannerText} tone="onSurface">Você está vendo a rota de</IconText> <Text style={{ fontWeight: '800' }}>{vendorLabel(routeVendorFilterHubspotId)}</Text> (somente leitura).
-            Para gerar/editar a sua, mude o "Responsável" para "Todos os vendedores".
-          </Text>
-        </View>
-      )}
-
+  const renderRouteScreen = () => {
+    // Cada cartao vira uma constante pra tela poder COMPOR diferente por
+    // largura. No celular: a coluna unica de sempre, na mesma ordem. No
+    // desktop: duas colunas (o 6+6 do grid oficial) — planejamento a esquerda,
+    // a rota em construcao a direita. E' isso que separa "desktop de verdade"
+    // de "celular esticado": a composicao muda, nao so' a largura.
+    const cartaoDaily = (
+      <>
       {/* A promessa do dia mora AQUI, e nao so' na aba "Meu".
           Esta e' a tela onde o vendedor planeja o dia — perguntar "quantas
           visitas hoje?" em qualquer outro lugar seria perguntar fora do
@@ -2703,7 +2695,10 @@ function MainApp() {
           escrevem a mesma linha de `dailies`, entao nao ha' duas verdades.
           O numero declarado aqui e' o que o cockpit de gestao cobra. */}
       {!isMonitoringRoute && <MinhaDailyCard enabled={tab === 'route'} />}
-
+      </>
+    );
+    const cartaoRotaDoDia = (
+      <>
       {/* Rota do dia (automática): monta as obrigatórias + completa a meta.
           Fica no topo como CTA principal; o fluxo manual segue abaixo. */}
       <View style={[styles.panelCard, { borderWidth: 1, borderColor: 'var(--tint-red-border)' }]}>
@@ -2723,7 +2718,10 @@ function MainApp() {
             : <Text style={styles.submitButtonText}>Gerar Rota do dia</Text>}
         </TouchableOpacity>
       </View>
-
+      </>
+    );
+    const cartaoPersonalizada = (
+      <>
       <View style={styles.panelCard}>
         <Text style={styles.panelTitle}>Rota personalizada</Text>
         <Text style={styles.panelHint}>
@@ -2851,7 +2849,10 @@ function MainApp() {
             : <Text style={styles.submitButtonText}>Gerar rota personalizada</Text>}
         </TouchableOpacity>
       </View>
-
+      </>
+    );
+    const cartaoAdicionar = (
+      <>
       {/* Adicionar manualmente: busca em tempo real entre todos os leads.
           Resultado mostra os 10 primeiros matches com botao "Adicionar".
           Escondido no modo monitoramento (o gestor não edita a rota do vendedor). */}
@@ -2917,7 +2918,10 @@ function MainApp() {
         )}
       </View>
       )}
-
+      </>
+    );
+    const cartaoLista = (
+      <>
       <View style={styles.panelCard}>
         <View style={styles.panelHeaderRow}>
           <View style={{ flex: 1 }}>
@@ -3092,8 +3096,49 @@ function MainApp() {
           })
         )}
       </View>
+      </>
+    );
+
+    return (
+      <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom },
+      // Mesmo teto da lista de leads: sem ele o conteudo se espalha por
+      // toda a largura do monitor e a linha de texto fica ilegivel.
+      { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
+      {/* Gestor monitorando a rota de OUTRO vendedor: banner + tela read-only.
+          Muda o "Responsável" pra "Todos" pra voltar a gerar a propria. */}
+      {isMonitoringRoute && (
+        <View style={styles.monitorBanner}>
+          <Text style={styles.monitorBannerText}>
+            <IconText Icone={IconEye} style={styles.monitorBannerText} tone="onSurface">Você está vendo a rota de</IconText> <Text style={{ fontWeight: '800' }}>{vendorLabel(routeVendorFilterHubspotId)}</Text> (somente leitura).
+            Para gerar/editar a sua, mude o "Responsável" para "Todos os vendedores".
+          </Text>
+        </View>
+      )}
+
+      {layout.ehDesktop ? (
+        <View style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            {cartaoDaily}
+            {cartaoRotaDoDia}
+            {cartaoAdicionar}
+          </View>
+          <View style={{ flex: 1.3, minWidth: 0 }}>
+            {cartaoPersonalizada}
+            {cartaoLista}
+          </View>
+        </View>
+      ) : (
+        <>
+          {cartaoDaily}
+          {cartaoRotaDoDia}
+          {cartaoPersonalizada}
+          {cartaoAdicionar}
+          {cartaoLista}
+        </>
+      )}
     </ScrollView>
-  );
+    );
+  };
 
   const renderTasksScreen = () => {
     // Recorte (gestor ve todas, vendedor ve so as suas) calculado uma vez em
@@ -3150,7 +3195,7 @@ function MainApp() {
         : (task.severity ?? '•');
 
       return (
-        <View key={task.id} style={styles.taskCard}>
+        <View key={task.id} style={[styles.taskCard, layout.ehDesktop && { width: '49%', marginBottom: 0 }]}>
           <View style={styles.taskCardTop}>
             <Text style={styles.taskLead} numberOfLines={2}>{leadNome}</Text>
             <View style={[styles.taskBadge, { backgroundColor: sevColor(task.severity) }]}>
@@ -3276,7 +3321,18 @@ function MainApp() {
                   {secao.sev} · {secao.total} {secao.total === 1 ? 'tarefa' : 'tarefas'}
                 </Text>
               </View>
-              {secao.itens.map(renderTaskCard)}
+              {/* No desktop os cards da secao fluem em grade de 2 colunas —
+                  tarefa e' item curto, e uma coluna unica de 1300px desperdica
+                  a tela e obriga rolagem que nao precisava existir. */}
+              <View
+                style={
+                  layout.ehDesktop
+                    ? { flexDirection: 'row', flexWrap: 'wrap', gap: 12 }
+                    : undefined
+                }
+              >
+                {secao.itens.map(renderTaskCard)}
+              </View>
             </View>
           ))
         )}
