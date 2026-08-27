@@ -721,44 +721,28 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
             : 'Período personalizado'}</IconText>
       </TouchableOpacity>
 
-      {/* A promessa do dia de QUEM ESTA OLHANDO.
-          A navegacao e' ou/ou: quem e' gestor ve a aba "Gestor" e nunca a aba
-          "Meu". Sem este cartao aqui, um gestor que faz campo — e existe pelo
-          menos um, com 9 rotas em 90 dias — apareceria no placar da Daily sendo
-          cobrado por uma palavra que o app nao deixava ele dar.
-          O cartao se esconde sozinho pra quem esta marcado como nao-vendedor. */}
-      {/* No desktop os cartoes de configuracao fluem em grade de duas
-          colunas — cada um e' auto-contido e curto, e a pilha unica era a
-          rolagem mais longa do app. No celular: a pilha de sempre. */}
-      <View
-        style={
-          layout.ehDesktop
-            ? { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }
-            : undefined
-        }
-      >
-      <View style={layout.ehDesktop ? { width: '49%' } : undefined}><MinhaDailyCard enabled={enabled} /></View>
-
-      {/* Quem é vendedor ativo / comum sem meta / não é vendedor. */}
-      <View style={layout.ehDesktop ? { width: '49%' } : undefined}><SellerClassificationCard /></View>
-
-      {/* Config da Rota do dia (raio/nota/avaliações Conta Alvo, meta/dia, SLAs). */}
-      <View style={layout.ehDesktop ? { width: '49%' } : undefined}><RouteConfigCard /></View>
-
-      {/* Meta diária de visitas por vendedor (usada no ranking). */}
-      <View style={layout.ehDesktop ? { width: '49%' } : undefined}><SellerGoalsCard /></View>
-
-      {/* Contas Alvo dispensadas ("Não interessa") — quem/quando + restaurar. */}
-      <View style={layout.ehDesktop ? { width: '49%' } : undefined}><DismissedContaAlvoCard /></View>
-
-      {/* Ranking + histórico de rotas (planejado + check-ins) no período. */}
-      </View>
-
-      <RouteHistorySection
-        range={periodRange(period)}
-        enabled={enabled}
-      />
-
+      {(() => {
+        // A MESMA tela, DOIS layouts de verdade:
+        //   celular  -> a pilha original, na ordem original, intocada;
+        //   desktop  -> dashboard: METRICAS na frente (sao a razao de ser da
+        //               tela e estavam ATRAS das configuracoes), ranking
+        //               embaixo, e um trilho lateral de 380px com Daily,
+        //               configuracoes e exportacao — o 8+4 do grid oficial.
+        // Os blocos sao os MESMOS nas duas composicoes: nada duplica.
+        const cartoesConfig = (
+          <>
+            <MinhaDailyCard enabled={enabled} />
+            <SellerClassificationCard />
+            <RouteConfigCard />
+            <SellerGoalsCard />
+            <DismissedContaAlvoCard />
+          </>
+        );
+        const ranking = (
+          <RouteHistorySection range={periodRange(period)} enabled={enabled} />
+        );
+        const exportar = (
+          <>
       {/* Exportacao de dados (CSV com atividade por vendedor). */}
       <View style={styles.exportCard}>
         <IconText Icone={IconBarGraph} style={styles.exportTitle} tone="onSurface">Exportar TUDO (JSON p/ IA)</IconText>
@@ -788,7 +772,10 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
           </TouchableOpacity>
         </View>
       </View>
-
+          </>
+        );
+        const metricas = (
+          <>
       {query.isLoading ? (
         <View style={styles.loadingBlock}>
           <ActivityIndicator size="large" color="var(--brand-text)" />
@@ -915,6 +902,28 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
           </Text>
         </>
       ) : null}
+          </>
+        );
+        return layout.ehDesktop ? (
+          <View style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              {metricas}
+              {ranking}
+            </View>
+            <View style={{ width: 380 }}>
+              {cartoesConfig}
+              {exportar}
+            </View>
+          </View>
+        ) : (
+          <>
+            {cartoesConfig}
+            {ranking}
+            {exportar}
+            {metricas}
+          </>
+        );
+      })()}
 
       <LeadListModal state={leadModal} onClose={() => setLeadModal(null)} onOpenClient={onOpenClient} />
       <TasksModal state={taskModal} period={period} onClose={() => setTaskModal(null)} onOpenClient={onOpenClient} />
