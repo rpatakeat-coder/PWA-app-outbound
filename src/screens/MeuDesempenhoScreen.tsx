@@ -143,7 +143,7 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas 
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, layout.ehLargo && estilosWeb.contentWeb]}
       refreshControl={<RefreshControl refreshing={query.isFetching && !query.isLoading} onRefresh={() => query.refetch()} />}
     >
       {/* A Daily fica SEPARADA do seletor de periodo de proposito: ela e'
@@ -218,23 +218,20 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas 
         </View>
       )}
 
-      <View
-        style={
-          layout.ehDesktop
-            ? { flexDirection: 'row', gap: 16, alignItems: 'flex-start' }
-            : undefined
-        }
-      >
-      <View style={layout.ehDesktop ? { flex: 1, minWidth: 0 } : undefined}>
+      {/* Coluna unica (prompt 10c): banner, KPIs, Daily como bloco, e as
+          metricas historicas abaixo. A composicao de duas colunas era o
+          layout antigo e brigava com o teto de 1200px. */}
+      <View>
+      <View>
         <MinhaDailyCard enabled={enabled} />
       </View>
-      <View style={layout.ehDesktop ? { flex: 1.5, minWidth: 0 } : undefined}>
+      <View>
 
-      <View style={styles.periodRow}>
+      <View style={[styles.periodRow, layout.ehLargo && estilosWeb.periodoLinha]}>
         {PERIOD_OPTIONS.map(opt => (
           <TouchableOpacity
             key={opt.value}
-            style={[styles.periodChip, preset === opt.value && styles.periodChipActive]}
+            style={[styles.periodChip, layout.ehLargo && estilosWeb.periodoChip, preset === opt.value && styles.periodChipActive]}
             onPress={() => setPreset(opt.value)}
           >
             <Text style={[styles.periodChipText, preset === opt.value && styles.periodChipTextActive]}>{opt.label}</Text>
@@ -342,6 +339,19 @@ const styles = StyleSheet.create({
 // Estilos da superficie web (handoff, tela 7). O banner e' o UNICO bloco
 // vermelho chapado da tela — nao repetir o padrao.
 const estilosWeb = StyleSheet.create({
+  contentWeb: { padding: 24, maxWidth: 1200, width: '100%', alignSelf: 'center' },
+  periodoLinha: { flexWrap: 'wrap', marginBottom: 12 },
+  periodoChip: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: 'auto',
+    width: 'auto',
+    height: 36,
+    justifyContent: 'center',
+    paddingVertical: 0,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
   banner: {
     flexDirection: 'row',
     justifyContent: 'space-between',

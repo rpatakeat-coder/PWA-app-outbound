@@ -112,7 +112,14 @@ export function TarefasScreen({
       : (task.severity ?? '•');
 
     return (
-      <View key={task.id} style={[styles.taskCard, layout.ehDesktop && styles.taskCardWeb]} {...ds({ hover: 'borda', trans: '1' })}>
+      <TouchableOpacity
+        key={task.id}
+        activeOpacity={0.9}
+        disabled={!layout.ehDesktop}
+        onPress={() => (client ? abrirLeadNoMapa(client) : abrirLeadPorId(task.client_id))}
+        style={[styles.taskCard, layout.ehDesktop && styles.taskCardWeb]}
+        {...ds({ hover: 'borda', trans: '1' })}
+      >
         <View style={styles.taskCardTop}>
           <Text style={[styles.taskLead, layout.ehDesktop && styles.taskLeadWeb]} numberOfLines={2}>{leadNome}</Text>
           <View
@@ -171,13 +178,15 @@ export function TarefasScreen({
         ) : null}
 
         <View style={styles.taskActionsRow}>
-          <TouchableOpacity
-            style={sharedStyles.smallActionButton}
-            onPress={() => (client ? abrirLeadNoMapa(client) : abrirLeadPorId(task.client_id))}
-          >
-            <Text style={sharedStyles.smallActionButtonText}>Abrir lead</Text>
-          </TouchableOpacity>
-          {client && task.task_type === 'agendar_demo' && (
+          {!layout.ehDesktop && (
+            <TouchableOpacity
+              style={sharedStyles.smallActionButton}
+              onPress={() => (client ? abrirLeadNoMapa(client) : abrirLeadPorId(task.client_id))}
+            >
+              <Text style={sharedStyles.smallActionButtonText}>Abrir lead</Text>
+            </TouchableOpacity>
+          )}
+          {client && (layout.ehDesktop || task.task_type === 'agendar_demo') && (
             <TouchableOpacity
               style={[
                 sharedStyles.smallActionButton,
@@ -193,7 +202,7 @@ export function TarefasScreen({
                   layout.ehDesktop ? { color: 'var(--tint-red-text)' } : { color: '#fff' },
                 ]}
               >
-                Agendar demo
+                {layout.ehDesktop ? 'Agendar' : 'Agendar demo'}
               </Text>
             </TouchableOpacity>
           )}
@@ -224,7 +233,7 @@ export function TarefasScreen({
             )}
           </TouchableOpacity>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
