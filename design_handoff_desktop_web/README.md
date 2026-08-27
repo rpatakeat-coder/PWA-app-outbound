@@ -14,6 +14,49 @@ A tarefa é **recriar esses designs no ambiente já existente do codebase**: Rea
 
 **Nota importante sobre o ambiente**: react-native-web não aceita `@media`, então os cortes de largura já vivem em `src/hooks/useLayout.ts`. Este redesign **muda os degraus desse hook** (ver *Responsive behavior*).
 
+## Onde cada tela vive no código — LEIA ANTES DE COMEÇAR
+
+`App.tsx` tem **8.445 linhas / 383 KB**. Quatro das telas deste redesign não são arquivos: são funções de render dentro dele. Uma passada única no `App.tsx` não alcança todas — **trabalhe tela por tela, na ordem abaixo, e confirme cada uma antes de seguir.**
+
+| # | Tela | Onde está hoje | Âncora |
+|---|---|---|---|
+| 1 | Casca (sidebar + header) | `App.tsx` | `return (` do componente principal, ~L4246; header ~L4260; nav lateral/inferior ~L4866–4945 |
+| 2 | Estilos da casca | `App.tsx` | `const styles = StyleSheet.create({` ~L7253; `header` ~L7256; `bottomNav`/`navLateral`/`navItem` ~L7740–7797 |
+| 3 | Mapa | `App.tsx` | bloco `tab === 'map'` ~L4403–4790; `styles.map`/`tempLegend`/`mapButton`/`fab` ~L7536–7700 |
+| 4 | Lista → tabela | `App.tsx` | `renderClientItem` ~L2604; `renderListRow` ~L2650; `FlatList` ~L4791; `styles.clientCard` ~L7855 |
+| 5 | **Rota** | `App.tsx` | `const renderRouteScreen = () => {` **~L2699–3160** |
+| 6 | **Tarefas** | `App.tsx` | `const renderTasksScreen = () => {` **~L3160–3384**; estilos do kanban ~L8086 |
+| 7 | **Agenda** | `App.tsx` | `const renderAgendaScreen = () => {` **~L3384–3984**; estilos do calendário ~L7797–7850 |
+| 8 | **Gestor** | `src/screens/GestorScreen.tsx` | arquivo inteiro (47 KB) + `src/hooks/useGestorMetrics.ts`, `useVisitsHeatmap.ts` |
+| 9 | Meu desempenho | `src/screens/MeuDesempenhoScreen.tsx` | arquivo inteiro |
+| 10 | Login | `src/screens/LoginScreen.tsx` | arquivo inteiro |
+| 11 | Ficha do lead | `App.tsx` | props do sheet ~L4180–4245; o componente do sheet é irmão no mesmo arquivo |
+| 12 | Mudança de etapa | `src/screens/ChangeStageModal.tsx` | arquivo inteiro (43 KB) |
+| 13 | Agendar | `src/screens/ScheduleMeetingModal.tsx` | arquivo inteiro |
+| 14 | Cadastro + CEP | `src/screens/CEPStep.tsx` + `src/screens/OutboundCadastroScreen.tsx` | arquivos inteiros |
+
+> Números de linha são de `main` no momento do handoff — **localize pelo nome da função**, não pela linha.
+
+### Recomendação: extrair antes de redesenhar
+
+Itens 5, 6 e 7 são ~1.300 linhas de JSX presas no meio do `App.tsx`. Antes de aplicar o design, extraia cada uma para `src/screens/RotaScreen.tsx`, `TarefasScreen.tsx` e `AgendaScreen.tsx` — recebendo por props o que hoje leem do escopo do componente (`clients`, `routeStops`, `fieldOps`, `visibleTasks`, `meetingsByClient`, `layout`, `insets`, os handlers). É refactor sem mudança de comportamento, e depois cada tela cabe numa passada.
+
+Se preferir não extrair, edite uma função por vez e rode `npm run typecheck` entre cada uma.
+
+### Ordem de trabalho
+
+1. Tokens — adicionar `--stroke-default`, `--stroke-strong`, `--text-disabled` e o peso 700 da Poppins em `public/index.html`; remapear `--green-dark`/`--teal-dark`/`--blue-dark` no bloco escuro (ver *Correção de contraste*)
+2. `src/hooks/useLayout.ts` — os degraus novos (ver *Responsive behavior*)
+3. Casca: sidebar colapsável + header neutro (itens 1 e 2)
+4. Mapa e Lista (itens 3 e 4)
+5. **Rota, Tarefas, Agenda** (itens 5, 6, 7) — extrair primeiro
+6. **Gestor** e Meu desempenho (itens 8 e 9)
+7. Ficha, modais, Login, Cadastro (itens 10–14)
+
+### Checklist de conclusão
+
+Uma tela só está pronta quando: não sobrou nenhum `#` hexadecimal fora da lista de literais permitidos (temperatura do funil, tints de etapa/estado, marca); nenhum spacing fora da escala 8pt; todo alvo tocável tem 40px no desktop; e o modo escuro foi conferido — é onde os problemas de contraste aparecem.
+
 ## Fidelity
 
 **Alta fidelidade (hifi).** Cores, tipografia, espaçamentos, raios, sombras, estados de hover e copy são finais e vêm do UI Kit oficial da Takeat (`takeat-design/UIKIT@main` — `foundations.md` e `components.md`). Recriar pixel-perfect usando os tokens abaixo.
@@ -74,6 +117,21 @@ Faltam três no repo hoje — **adicionar a `public/index.html`**:
 **Temperatura do funil** — literais, não invertem no dark (`src/constants/stages.ts`, `TEMP_COLORS`):
 
 `hot #C8131B` · `warm #FFB32F` · `cold #0ea5e9` · `won #16a34a` · `lost #475569` · Conta Alvo `#7c3aed`
+
+### ⚠ Correção de contraste no modo escuro
+
+`#94090F` (red/dark) e `#167532` (green/dark) dão ~2,6:1 sobre `#121212`/`#1E1E1E` — reprovam como cor de texto. No escuro trocar por:
+
+```
+#94090F → #E5A1A4   (primary.red.200 — já é --brand-text no dark)
+#167532 → #77BD8B   (já é --tint-green-text no dark)
+#1D9688 → #5FD3C6
+#018CCC → #66CFFF   (já é --info-text no dark)
+```
+
+Onde aparece: delta negativo de KPI, "última visita > 30 dias", MRR positivo na tabela do time, texto de exportação. **Usar os tokens (`--tint-red-text`, `--tint-green-text`, `--brand-text`, `--info-text`), que já fazem esse par no repo — não os hexes.**
+
+Badges com fundo tonal claro (`#FAE8E9`, `#FFF8EB`, `#EAF7EE`) mantêm texto escuro nos dois modos: são superfícies próprias, não herdam o fundo do tema.
 
 **Tints de etapa** (fundo de badge no modo claro; no dark usar `--surface-2` com texto `--text`):
 

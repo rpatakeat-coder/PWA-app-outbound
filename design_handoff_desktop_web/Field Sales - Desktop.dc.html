@@ -28,6 +28,8 @@
   --t1:rgba(255,255,255,.92);--t2:rgba(255,255,255,.64);--t3:rgba(255,255,255,.42);--t4:rgba(255,255,255,.28);
   --s-subtle:rgba(255,255,255,.08);--s-default:rgba(255,255,255,.14);--s-strong:rgba(255,255,255,.24);
   --brand:#C8131B;--brand-dark:#E5A1A4;--brand-tint:#3A1416;
+  /* #167532 e #1D9688 nao passam sobre a superficie escura */
+  --green-dark:#77BD8B;--teal-dark:#5FD3C6;--blue-dark:#66CFFF;
   color-scheme:dark;
 }
 body{margin:0;background:var(--bg);font-family:Poppins,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased;}
@@ -777,6 +779,10 @@ class Component extends DCLogic {
   renderVals() {
     const s = this.state;
     const dark = s.theme === 'dark';
+    // #94090F (red/dark) da 2.6:1 sobre a superficie escura — ilegivel.
+    // No escuro o par do token --brand-text e' primary.red.200.
+    const redInk = dark ? '#E5A1A4' : '#94090F';
+    const greenInk = dark ? '#77BD8B' : '#167532';
 
     const navDef = [
       { key:'mapa',    label:'Mapa',           icon:'location_on' },
@@ -852,7 +858,7 @@ class Component extends DCLogic {
     const leadsTabela = base.map(l => {
       const [bg,fg] = etapaTint[l.etapa] || ['#EDEDED','#545454'];
       return { ...l, etapaBg: dark ? 'var(--nested)' : bg, etapaFg: dark ? 'var(--t1)' : fg,
-        visitaFg: l.visita === '—' ? 'var(--t4)' : l.visita.includes('31') ? '#94090F' : 'var(--t2)' };
+        visitaFg: l.visita === '—' ? 'var(--t4)' : l.visita.includes('31') ? redInk : 'var(--t2)' };
     });
 
     const colunas = [
@@ -948,10 +954,10 @@ class Component extends DCLogic {
     })) }));
 
     const kpis = [
-      {label:'Visitas',valor:'318',delta:'+12% vs julho',icon:'trending_up',deltaFg:'var(--green-dark)'},
-      {label:'Demos realizadas',valor:'74',delta:'+8% vs julho',icon:'trending_up',deltaFg:'var(--green-dark)'},
-      {label:'Fechamentos',valor:'31',delta:'−4% vs julho',icon:'trending_down',deltaFg:'#94090F'},
-      {label:'MRR novo',valor:'R$ 18,4k',delta:'+21% vs julho',icon:'trending_up',deltaFg:'var(--green-dark)'},
+      {label:'Visitas',valor:'318',delta:'+12% vs julho',icon:'trending_up',deltaFg:greenInk},
+      {label:'Demos realizadas',valor:'74',delta:'+8% vs julho',icon:'trending_up',deltaFg:greenInk},
+      {label:'Fechamentos',valor:'31',delta:'−4% vs julho',icon:'trending_down',deltaFg:redInk},
+      {label:'MRR novo',valor:'R$ 18,4k',delta:'+21% vs julho',icon:'trending_up',deltaFg:greenInk},
     ];
 
     const funilRaw = [
@@ -985,10 +991,10 @@ class Component extends DCLogic {
       metaBg: v.ok ? '#EAF7EE' : '#FFF8EB', metaFg: v.ok ? '#167532' : '#99670F' }));
 
     const kpisMeu = [
-      {label:'Visitas no mês',valor:'92',delta:'meta 80 · batida',deltaFg:'var(--green-dark)'},
-      {label:'Demos',valor:'24',delta:'+3 vs julho',deltaFg:'var(--green-dark)'},
-      {label:'Taxa de conversão',valor:'12%',delta:'melhor do time',deltaFg:'var(--green-dark)'},
-      {label:'Tarefas atrasadas',valor:'4',delta:'2 vencendo hoje',deltaFg:'#94090F'},
+      {label:'Visitas no mês',valor:'92',delta:'meta 80 · batida',deltaFg:greenInk},
+      {label:'Demos',valor:'24',delta:'+3 vs julho',deltaFg:greenInk},
+      {label:'Taxa de conversão',valor:'12%',delta:'melhor do time',deltaFg:greenInk},
+      {label:'Tarefas atrasadas',valor:'4',delta:'2 vencendo hoje',deltaFg:redInk},
     ];
 
     const fichaCampos = [
