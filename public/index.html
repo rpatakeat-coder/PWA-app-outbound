@@ -229,6 +229,17 @@
           color-scheme: dark;
       }
 
+      /*
+        A FONTE OFICIAL NUNCA RENDERIZAVA. O react-native-web escreve a pilha
+        do SISTEMA como classe em cada <Text>, entao o Poppins declarado no
+        body era sobrescrito em todo texto do app. O seletor com #root tem
+        especificidade 1-0-1 e vence as classes 0-1-0 do RNW sem !important —
+        e sem quebrar estilos inline (o mapa define os proprios rotulos).
+      */
+      #root div, #root span, #root p, #root a, #root input, #root textarea, #root button {
+        font-family: Poppins, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+
       body {
         background-color: var(--bg);
       }

@@ -5899,18 +5899,18 @@ function ClientBottomSheet({
           <View style={styles.meetingChipActions}>
             {onRescheduleMeeting && (
               <TouchableOpacity
-                style={[styles.smallActionButton, { backgroundColor: '#f97316' }]}
+                style={styles.smallActionButton}
                 onPress={() => onRescheduleMeeting(m)}
               >
-                <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Reagendar</Text>
+                <Text style={styles.smallActionButtonText}>Reagendar</Text>
               </TouchableOpacity>
             )}
             {onCancelMeeting && (
               <TouchableOpacity
-                style={[styles.smallActionButton, { backgroundColor: '#C8131B' }]}
+                style={[styles.smallActionButton, { backgroundColor: 'var(--tint-red)', borderColor: 'var(--tint-red-border)' }]}
                 onPress={() => onCancelMeeting(m)}
               >
-                <Text style={[styles.smallActionButtonText, { color: '#fff' }]}>Cancelar</Text>
+                <Text style={[styles.smallActionButtonText, { color: 'var(--tint-red-text)' }]}>Cancelar</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -6312,20 +6312,13 @@ function ClientBottomSheet({
                 {onMarkVisited && (
                   <TouchableOpacity
                     disabled={isMarkingVisited}
-                    style={{
-                      flex: 1,
-                      backgroundColor: isMarkingVisited ? '#94d4a8' : '#16a34a',
-                      borderRadius: 10,
-                      paddingVertical: 13,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
+                    style={[styles.acaoPrimaria, { flex: 1 }, isMarkingVisited && { opacity: 0.6 }]}
                     onPress={onMarkVisited}
                   >
                     {isMarkingVisited ? (
                       <ActivityIndicator color="#fff" />
                     ) : (
-                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
+                      <Text style={styles.acaoPrimariaTexto}>
                         {client.visited_at ? 'Re-marcar visita' : 'Marcar como visitado'}
                       </Text>
                     )}
@@ -6333,17 +6326,10 @@ function ClientBottomSheet({
                 )}
                 {onEdit && (
                   <TouchableOpacity
-                    style={{
-                      paddingHorizontal: 18,
-                      backgroundColor: '#2563eb',
-                      borderRadius: 10,
-                      paddingVertical: 13,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
+                    style={[styles.acaoSecundaria, { marginTop: 0, paddingHorizontal: 18 }]}
                     onPress={onEdit}
                   >
-                    <IconText Icone={IconPencil} style={{ color: '#fff', fontWeight: '700', fontSize: 13 }} tone="onSurface">Editar</IconText>
+                    <IconText Icone={IconPencil} style={styles.acaoSecundariaTexto} tone="onSurface">Editar</IconText>
                   </TouchableOpacity>
                 )}
               </View>
@@ -6782,7 +6768,7 @@ function ClientBottomSheet({
                 </View>
               )}
               <TouchableOpacity
-                style={{ backgroundColor: '#4285f4', borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
+                style={styles.acaoSecundaria}
                 onPress={() => {
                   const addressParts = [client.endereco, client.numero, client.bairro, client.cidade, client.estado, client.cep]
                     .filter(Boolean)
@@ -6792,23 +6778,17 @@ function ClientBottomSheet({
                   Linking.openURL(url).catch(() => Alert.alert('Erro', 'Não foi possível abrir o Google Maps.'));
                 }}
               >
-                <IconText Icone={IconExternalLink} style={{ color: '#fff', fontWeight: '700', fontSize: 14 }} tone="onBrand">Abrir no Google Maps</IconText>
+                <IconText Icone={IconExternalLink} style={styles.acaoSecundariaTexto} tone="onSurface">Abrir no Google Maps</IconText>
               </TouchableOpacity>
               {(() => {
                 const waNum = toWhatsappNumber(client.telefone);
                 return (
                   <TouchableOpacity
-                    style={{
-                      backgroundColor: waNum ? '#25d366' : '#cbd5e1',
-                      borderRadius: 10,
-                      paddingVertical: 12,
-                      alignItems: 'center',
-                      marginTop: 8,
-                    }}
+                    style={[styles.acaoSecundaria, !waNum && { opacity: 0.5 }]}
                     disabled={!waNum}
                     onPress={() => openWhatsapp(client.telefone)}
                   >
-                    <IconText Icone={IconWhatsapp} style={{ color: '#fff', fontWeight: '700', fontSize: 14 }} tone="onBrand">
+                    <IconText Icone={IconWhatsapp} style={styles.acaoSecundariaTexto} tone="onSurface">
                       {waNum ? 'Abrir WhatsApp' : 'WhatsApp (sem telefone)'}
                     </IconText>
                   </TouchableOpacity>
@@ -6884,10 +6864,10 @@ function ClientBottomSheet({
             {/* Actions */}
             {onEditLocation && (
               <TouchableOpacity
-                style={{ paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#222222', marginBottom: 8, flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+                style={[styles.acaoSecundaria, { marginBottom: 8 }]}
                 onPress={onEditLocation}
               >
-                <IconText Icone={IconPencil} style={{ fontSize: 14, fontWeight: '700', color: '#fff' }} tone="onBrand">Editar localização (mover pin)</IconText>
+                <IconText Icone={IconPencil} style={styles.acaoSecundariaTexto} tone="onSurface">Editar localização (mover pin)</IconText>
               </TouchableOpacity>
             )}
             {onDelete && (
@@ -7602,7 +7582,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  navItemActive: { borderTopWidth: 2, borderTopColor: '#C8131B' },
+  navItemActive: { backgroundColor: 'var(--tint-red)', borderRadius: 12, marginHorizontal: 4, marginVertical: 4 },
   navIcon: { fontSize: 17, marginBottom: 2 },
   navIconActive: {},
   // Badge de notificacao de tarefas pendentes, sobreposto no icone da aba.
@@ -7621,7 +7601,7 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   navBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  navItemText: { fontSize: 10, fontWeight: '600', color: 'var(--text-subtle)' },
+  navItemText: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-subtle)' },
   brandMark: {
     position: 'absolute',
     left: 0,
@@ -7636,16 +7616,19 @@ const styles = StyleSheet.create({
   navItemTextActive: { color: 'var(--brand-text)' },
   // List
   listContent: { padding: 12 },
+  // Card Mobile do DS: radius 16, padding 16, sombra shadow/01 (key-light 14%).
   clientCard: {
     backgroundColor: 'var(--surface)',
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 8,
     borderLeftWidth: 4,
+    borderWidth: 1,
+    borderColor: 'var(--border-soft)',
     shadowColor: '#000',
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.12,
     shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 4,
+    shadowRadius: 2,
     elevation: 2,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
@@ -7741,8 +7724,8 @@ const styles = StyleSheet.create({
   },
   routeActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   smallActionButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: 'var(--surface-2)',
     borderWidth: 1,
@@ -8075,7 +8058,8 @@ const styles = StyleSheet.create({
     borderLeftColor: 'var(--border)',
     paddingTop: 16,
   },
-  bottomSheet: { backgroundColor: 'var(--surface)', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' },
+  // radius 16: o token de bottom sheet do DS (radius/16).
+  bottomSheet: { backgroundColor: 'var(--surface)', borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '80%' },
   bottomSheetHandle: { alignSelf: 'center', width: 40, height: 4, backgroundColor: 'var(--surface-3)', borderRadius: 2 },
   dragHandleArea: { width: '100%', paddingTop: 14, paddingBottom: 14, alignItems: 'center' },
   bottomSheetContent: { paddingHorizontal: 20 },
@@ -8117,10 +8101,12 @@ const styles = StyleSheet.create({
   noteEditSaveText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   navigationSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: 'var(--border-soft)', marginBottom: 16 },
   navigationRow: { flexDirection: 'row', gap: 10 },
-  navRouteButton: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1 },
-  navButtonDriving: { backgroundColor: 'var(--tint-blue)', borderColor: '#3b82f6' },
-  navButtonWalking: { backgroundColor: 'var(--tint-amber)', borderColor: '#eab308' },
-  navRouteButtonText: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
+  navRouteButton: { flex: 1, minHeight: 48, paddingVertical: 12, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface)' },
+  // O icone e o rotulo ja' distinguem carro de a-pe'; borda colorida por modo
+  // de transporte era vocabulario inventado fora da paleta.
+  navButtonDriving: {},
+  navButtonWalking: {},
+  navRouteButtonText: { fontSize: 16, fontWeight: '600', letterSpacing: 0.15, color: 'var(--text)' },
   addRouteButton: {
     backgroundColor: '#222222',
     borderRadius: 10,
@@ -8143,30 +8129,66 @@ const styles = StyleSheet.create({
   meetingChipDate: { fontSize: 13, fontWeight: '700', color: 'var(--tint-red-text)' },
   meetingChipObs: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
   meetingChipActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
-  scheduleButton: {
+  // ===== Botoes do design system (components.md) =====
+  // Mobile/Tablet: altura 48, radius 16, tipografia 16/600, icone 24.
+  // "No maximo dois estilos por tela": Filled pro CTA, o resto neutro.
+  acaoPrimaria: {
+    minHeight: 48,
+    borderRadius: 16,
     backgroundColor: '#C8131B',
-    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  acaoPrimariaTexto: { color: '#fff', fontSize: 16, fontWeight: '600', letterSpacing: 0.15 },
+  acaoSecundaria: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: 8,
+  },
+  acaoSecundariaTexto: { color: 'var(--text)', fontSize: 16, fontWeight: '600', letterSpacing: 0.15 },
+  scheduleButton: {
+    minHeight: 48,
+    backgroundColor: '#C8131B',
+    borderRadius: 16,
     paddingVertical: 12,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 6,
   },
-  scheduleButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  scheduleButtonText: { color: '#fff', fontSize: 16, fontWeight: '600', letterSpacing: 0.15 },
   followUpButton: {
-    backgroundColor: '#0891b2',
-    borderRadius: 10,
+    minHeight: 48,
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    borderRadius: 16,
     paddingVertical: 12,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 6,
   },
-  followUpButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  followUpButtonText: { color: 'var(--text)', fontSize: 16, fontWeight: '600', letterSpacing: 0.15 },
   changeStageButton: {
-    backgroundColor: '#222222',
-    borderRadius: 10,
-    paddingVertical: 14,
+    minHeight: 48,
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    borderRadius: 16,
+    paddingVertical: 12,
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 12,
   },
-  changeStageButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  changeStageButtonText: { color: 'var(--text)', fontSize: 16, fontWeight: '600', letterSpacing: 0.15 },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 8 },
   deleteButton: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: 'var(--tint-red)', borderWidth: 1, borderColor: 'var(--tint-red-border)' },
   deleteButtonText: { fontSize: 14, fontWeight: '700', color: 'var(--brand-text)' },
