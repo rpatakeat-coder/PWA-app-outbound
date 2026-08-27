@@ -111,19 +111,19 @@ export function TarefasScreen({
     return (
       <View key={task.id} style={[styles.taskCard, layout.ehDesktop && styles.taskCardWeb]} {...ds({ hover: 'borda', trans: '1' })}>
         <View style={styles.taskCardTop}>
-          <Text style={styles.taskLead} numberOfLines={2}>{leadNome}</Text>
+          <Text style={[styles.taskLead, layout.ehDesktop && styles.taskLeadWeb]} numberOfLines={2}>{leadNome}</Text>
           <View style={[styles.taskBadge, { backgroundColor: sevColor(task.severity) }]}>
             <Text style={styles.taskBadgeText}>{badgeText}</Text>
           </View>
         </View>
 
-        <Text style={styles.taskTipo}>{tipo}</Text>
+        <Text style={[styles.taskTipo, layout.ehDesktop && styles.taskTipoWeb]}>{tipo}</Text>
         {typeof days === 'number' ? (
-          <Text style={styles.taskMeta}>{days} dia(s) em {etapaMeta ?? 'etapa'}</Text>
+          <Text style={[styles.taskMeta, layout.ehDesktop && styles.taskMetaWeb]}>{days} dia(s) em {etapaMeta ?? 'etapa'}</Text>
         ) : null}
         {responsavel ? (
           <View style={styles.taskRespRow}>
-            <Text style={[styles.taskMeta, { flexShrink: 1 }]} numberOfLines={1}>
+            <Text style={[styles.taskMeta, layout.ehDesktop && styles.taskMetaWeb, { flexShrink: 1 }]} numberOfLines={1}>
               {responsavelNome}
             </Text>
             {inativoMatch ? (
@@ -194,9 +194,10 @@ export function TarefasScreen({
 
   return (
     <ScrollView contentContainerStyle={[sharedStyles.listContent, { paddingBottom: 90 + insets.bottom },
+    layout.ehDesktop && { padding: 24 },
     // Mesmo teto da lista de leads: sem ele o conteudo se espalha por
     // toda a largura do monitor e a linha de texto fica ilegivel.
-    { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
+    !layout.ehDesktop && { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
       {/* Cabeçalho enxuto: o texto explicativo que ficava aqui virou o modal
           ⓘ, que já tinha as regras completas — ele ocupava um terço da tela
           em toda visita, mesmo pra quem já conhece a mecânica. */}
@@ -385,6 +386,9 @@ const styles = StyleSheet.create({
   },
 
   taskCardWeb: { padding: 16, borderRadius: 8, marginBottom: 12 },
+  taskLeadWeb: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600' },
+  taskTipoWeb: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4 },
+  taskMetaWeb: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600' },
 
   taskCardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
 

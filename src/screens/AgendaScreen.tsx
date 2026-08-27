@@ -761,6 +761,6 @@ const styles = StyleSheet.create({
   calNavRotulo: { fontSize: 14, fontWeight: '600', color: 'var(--text)', letterSpacing: 0.1 },
   calNavSeta: { fontSize: 16, lineHeight: 20, color: 'var(--text)', fontWeight: '600' },
   calNavTotal: { fontSize: 12, fontWeight: '500', color: 'var(--text-subtle)' },
-  calSemana: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  calSemana: { flexDirection: 'row', gap: 8, alignItems: 'stretch' },
   calVazio: { fontSize: 12, color: 'var(--text-faint)', textAlign: 'center', marginTop: 16 },
 });

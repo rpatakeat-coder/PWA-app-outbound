@@ -952,7 +952,7 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
         ))}
       </View>
       <TouchableOpacity
-        style={[styles.customChip, layout.ehLargo && estilosWeb.periodoChip, preset === 'custom' && styles.periodChipActive]}
+        style={[styles.customChip, layout.ehLargo && estilosWeb.periodoChip, layout.ehLargo && estilosWeb.periodoCustom, preset === 'custom' && styles.periodChipActive]}
         onPress={() => setRangePickerOpen(true)}
       >
         <IconText Icone={IconCalendar} style={[styles.periodChipText, preset === 'custom' && styles.periodChipTextActive]} tone="onSurface">{preset === 'custom' && customStart && customEnd
@@ -1530,11 +1530,18 @@ const rangeStyles = StyleSheet.create({
 const estilosWeb = StyleSheet.create({
   bloco: { gap: 24, marginBottom: 24 },
   // Seletor de periodo compacto: chips de 36px em linha, nao lajes full-width.
-  periodoLinha: { flexWrap: 'wrap', marginBottom: 16 },
+  periodoLinha: { flexWrap: 'wrap', marginBottom: 12 },
+  periodoCustom: { alignSelf: 'flex-start', marginBottom: 16, marginTop: 0 },
+  // flexBasis explicito: o periodChip base tem flex:1 (basis 0) e a base 0
+  // sobrevivia ao override — era o chip colapsado com o texto na vertical.
   periodoChip: {
-    flex: 0,
     flexGrow: 0,
-    paddingVertical: 8,
+    flexShrink: 0,
+    flexBasis: 'auto',
+    width: 'auto',
+    height: 36,
+    justifyContent: 'center',
+    paddingVertical: 0,
     paddingHorizontal: 16,
     borderRadius: 8,
   },
