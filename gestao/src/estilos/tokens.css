@@ -33,10 +33,12 @@
      texto secundario (e que a paleta da marca chama de --cor-descricao): passa
      com 5.33 sobre o cartao. Vale levar pro time de design — falta esse degrau.
 
-  2. O modo escuro e' DERIVADO. O design system so' publica a escala clara.
-     Os valores escuros abaixo sao derivacao minha, marcados um a um; se o time
-     de design publicar uma escala oficial, e' so' trocar. Todos foram medidos:
-     o menor par fica em 4.79.
+  2. O modo escuro usa os TOKENS OFICIAIS de foundations.md §1: superficie em
+     #121212/#1E1E1E/#262626/#2A2A2A, e texto/traco como BRANCO COM OPACIDADE
+     (92/64/38%, e 12/16% pras linhas) — nao hex chapado. As tintas de estado
+     (red-soft escuro etc.) continuam derivadas: o DS nao define tint escuro.
+     Correcao: uma versao anterior dizia que o DS so' publicava a escala clara
+     e derivava tudo. Estava errado.
 */
 :root {
   /* Superficies — neutral */
@@ -77,7 +79,7 @@
 }
 
 /*
-  MODO ESCURO — derivado (ver divergencia 2 no topo).
+  MODO ESCURO — tokens oficiais de foundations.md §1 (ver divergencia 2).
 
   Os dois seletores espelham o mecanismo do app de campo: a preferencia do
   aparelho vale por padrao, e a escolha explicita do vendedor (data-theme no
@@ -86,18 +88,18 @@
 */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg: #1a1a1a;      /* derivado */
-    --panel: #242424;   /* derivado */
-    --panel2: #2c2c2c;  /* derivado */
-    --sunk: #303030;    /* derivado */
+    --bg: #121212; /* oficial */
+    --panel: #1e1e1e; /* oficial */
+    --panel2: #262626; /* oficial */
+    --sunk: #2a2a2a; /* oficial */
 
-    --ink: #f6f6f6;     /* neutral.50  — 14.36 sobre o cartao */
-    --muted: #c6c6c6;   /* neutral.200 —  9.09 */
-    --ter: #949494;     /* derivado    —  5.12 */
+    --ink: rgba(255, 255, 255, 0.92); /* oficial */
+    --muted: rgba(255, 255, 255, 0.64); /* oficial */
+    --ter: rgba(255, 255, 255, 0.38); /* oficial */
 
-    --line: #3a3a3a;      /* derivado */
-    --line-soft: #2e2e2e; /* derivado */
-    --line-btn: #4a4a4a;  /* derivado */
+    --line: rgba(255, 255, 255, 0.12); /* oficial */
+    --line-soft: rgba(255, 255, 255, 0.08); /* oficial */
+    --line-btn: rgba(255, 255, 255, 0.16); /* oficial */
 
     /* No escuro o texto colorido sobe na escala e a tinta de fundo desce.
        Manter o red.500 aqui daria 2.4 e sumiria. */
@@ -109,10 +111,9 @@
     --amber-soft: #33280f; /* derivado */
     --amber-ink: #ffd894;  /* primary.yellow.300 — 10.68 sobre a tinta */
 
-    --dark: #000000;     /* neutral.black: o banner precisa continuar sendo o
-                            bloco mais escuro da tela */
-    --dark-ink: #f6f6f6; /* neutral.50 */
-    --dark-mut: #949494; /* derivado */
+    --dark: #000000; /* oficial */
+    --dark-ink: rgba(255, 255, 255, 0.92); /* oficial */
+    --dark-mut: rgba(255, 255, 255, 0.64); /* oficial */
 
     --sombra-card: 0px 1px 2px 0px rgba(0, 0, 0, 0.4), 0px 0px 2px 0px rgba(0, 0, 0, 0.3);
 
@@ -122,18 +123,18 @@
 
 /* Escolha explicita do vendedor vence o padrao do aparelho. */
 :root[data-theme='dark'] {
-  --bg: #1a1a1a;
-  --panel: #242424;
-  --panel2: #2c2c2c;
-  --sunk: #303030;
+  --bg: #121212; /* oficial */
+  --panel: #1e1e1e; /* oficial */
+  --panel2: #262626; /* oficial */
+  --sunk: #2a2a2a; /* oficial */
 
-  --ink: #f6f6f6;
-  --muted: #c6c6c6;
-  --ter: #949494;
+  --ink: rgba(255, 255, 255, 0.92); /* oficial */
+  --muted: rgba(255, 255, 255, 0.64); /* oficial */
+  --ter: rgba(255, 255, 255, 0.38); /* oficial */
 
-  --line: #3a3a3a;
-  --line-soft: #2e2e2e;
-  --line-btn: #4a4a4a;
+  --line: rgba(255, 255, 255, 0.12); /* oficial */
+  --line-soft: rgba(255, 255, 255, 0.08); /* oficial */
+  --line-btn: rgba(255, 255, 255, 0.16); /* oficial */
 
   --red: #e5a1a4;
   --red-soft: #3a1416;
@@ -143,9 +144,9 @@
   --amber-soft: #33280f;
   --amber-ink: #ffd894;
 
-  --dark: #000000;
-  --dark-ink: #f6f6f6;
-  --dark-mut: #949494;
+  --dark: #000000; /* oficial */
+  --dark-ink: rgba(255, 255, 255, 0.92); /* oficial */
+  --dark-mut: rgba(255, 255, 255, 0.64); /* oficial */
 
   --sombra-card: 0px 1px 2px 0px rgba(0, 0, 0, 0.4), 0px 0px 2px 0px rgba(0, 0, 0, 0.3);
 

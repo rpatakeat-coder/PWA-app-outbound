@@ -84,8 +84,15 @@
         neutral.300 e o .400 falta um degrau, e o 300 reprova. Vale levar pro
         time de design.
 
-        O modo escuro (--d-*) e' derivado: o design system so' publica a escala
-        clara. Todos os pares foram medidos.
+        O modo escuro usa os TOKENS SEMANTICOS OFICIAIS de foundations.md §1
+        (surface/*, text/*, stroke/*). No escuro o texto e o traco sao BRANCO
+        COM OPACIDADE, e nao hex chapado — e' o que cria a hierarquia sobre
+        qualquer superficie escura e o que faz o mesmo token funcionar sobre
+        card e sobre fundo.
+
+        Correcao: uma versao anterior deste arquivo dizia que o design system
+        so' publicava a escala clara, e derivava valores proprios. Estava
+        errado — a escala escura existe e e' esta.
 
         O tema escuro é derivado dela — preto QUENTE, não cinza-azulado, para
         combinar com o creme e o vermelho — e o creme da marca vira a cor do
@@ -98,17 +105,17 @@
         (preferência do aparelho e escolha manual) apenas apontam pra eles.
       */
       :root {
-        --d-bg: #1A1A1A;
-        --d-surface: #242424;
-        --d-surface-2: #2C2C2C;
-        --d-surface-3: #303030;
-        --d-text: #F6F6F6;
-        --d-text-muted: #C6C6C6;
-        --d-text-subtle: #949494;
-        --d-text-faint: #6E6E6E;
-        --d-border: #3A3A3A;
-        --d-border-soft: #2E2E2E;
-        --d-surface-overlay: rgba(26, 26, 26, 0.93);
+        --d-bg: #121212;
+        --d-surface: #1E1E1E;
+        --d-surface-2: #262626;
+        --d-surface-3: #2A2A2A;
+        --d-text: rgba(255, 255, 255, 0.92);
+        --d-text-muted: rgba(255, 255, 255, 0.64);
+        --d-text-subtle: rgba(255, 255, 255, 0.38);
+        --d-text-faint: rgba(255, 255, 255, 0.30);
+        --d-border: rgba(255, 255, 255, 0.12);
+        --d-border-soft: rgba(255, 255, 255, 0.08);
+        --d-surface-overlay: rgba(18, 18, 18, 0.93);
         --d-surface-warn: #33280F;
         --d-tint-red: #3A1416;
         --d-tint-red-border: #7A2E32;

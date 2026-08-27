@@ -104,6 +104,7 @@ import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { ChangeStageModal } from './src/screens/ChangeStageModal';
 import { EditLocationModal } from './src/screens/EditLocationModal';
 import { MinhaDailyCard } from './src/screens/MinhaDailyCard';
+import { useLayout } from './src/hooks/useLayout';
 import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
 import { useStages } from './src/hooks/useStages';
 import { GestorScreen } from './src/screens/GestorScreen';
@@ -543,6 +544,12 @@ function MainApp() {
   const [showOutboundForm, setShowOutboundForm] = useState(false);
   const [form, setForm] = useState(initialFormState);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const layout = useLayout();
+  // Chao dos elementos flutuantes (FAB, legenda, botoes do mapa).
+  // Os 90px eram a altura da barra inferior. No desktop ela virou coluna
+  // lateral, entao esse espaco deixou de existir — sem isto os botoes ficariam
+  // pairando 90px acima do nada.
+  const baseInferior = layout.ehDesktop ? 24 : 90 + insets.bottom;
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isFollowingUser, setIsFollowingUser] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ClientStatus>('lead' as ClientStatus);
@@ -1183,6 +1190,9 @@ function MainApp() {
     !isViewer
     && listStageSections.length > 0
     && statusFilter === 'lead';
+  // Agrupado por etapa nao vira grade: as linhas sao cabecalho E cliente
+  // misturados, e o cabecalho viraria uma celula ao lado de um lead.
+  const colunasDaLista = shouldGroupListByStage ? 1 : layout.colunas;
 
   useEffect(() => {
     if (!stageFilter) return;
@@ -2670,7 +2680,10 @@ function MainApp() {
   };
 
   const renderRouteScreen = () => (
-    <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
+    <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom },
+      // Mesmo teto da lista de leads: sem ele o conteudo se espalha por
+      // toda a largura do monitor e a linha de texto fica ilegivel.
+      { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
       {/* Gestor monitorando a rota de OUTRO vendedor: banner + tela read-only.
           Muda o "Responsável" pra "Todos" pra voltar a gerar a propria. */}
       {isMonitoringRoute && (
@@ -3203,7 +3216,10 @@ function MainApp() {
     };
 
     return (
-      <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
+      <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom },
+      // Mesmo teto da lista de leads: sem ele o conteudo se espalha por
+      // toda a largura do monitor e a linha de texto fica ilegivel.
+      { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
         {/* Cabeçalho enxuto: o texto explicativo que ficava aqui virou o modal
             ⓘ, que já tinha as regras completas — ele ocupava um terço da tela
             em toda visita, mesmo pra quem já conhece a mecânica. */}
@@ -3616,7 +3632,10 @@ function MainApp() {
     };
 
     return (
-      <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom }]}>
+      <ScrollView contentContainerStyle={[styles.listContent, { paddingBottom: 90 + insets.bottom },
+      // Mesmo teto da lista de leads: sem ele o conteudo se espalha por
+      // toda a largura do monitor e a linha de texto fica ilegivel.
+      { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
         {/* Cabeçalho enxuto: o parágrafo "rota planejada, demos e follow-ups em
             ordem cronológica" descrevia o que a tela mostra sozinha. */}
         <View style={styles.taskHeaderRow}>
@@ -4036,7 +4055,18 @@ function MainApp() {
   ) : null;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View
+      style={[
+        styles.container,
+        { paddingTop: insets.top },
+        // No desktop a navegacao vira uma coluna FIXA a esquerda (ver
+        // styles.bottomNav). Em vez de reestruturar a arvore — header,
+        // conteudo e barra sao irmaos —, ela e' posicionada por cima e o
+        // conteudo recua. Mudanca contida em dois estilos, sem tocar no JSX
+        // de nenhuma tela.
+        layout.ehDesktop && { paddingLeft: LARGURA_LATERAL },
+      ]}
+    >
       <StatusBar style="light" />
 
       {/* Header */}
@@ -4392,7 +4422,7 @@ function MainApp() {
               necessaria pra decifrar o mapa. Fica fora do modo de criacao.
               Some enquanto o mapa de calor está ligado (a legenda dele assume). */}
           {!creationMode && !heatOn && (
-            <View style={[styles.tempLegend, { bottom: 90 + insets.bottom }]} pointerEvents="none">
+            <View style={[styles.tempLegend, { bottom: baseInferior }]} pointerEvents="none">
               {[
                 { c: TEMP_COLORS.hot, l: 'Quente' },
                 { c: TEMP_COLORS.warm, l: 'Morno' },
@@ -4415,7 +4445,7 @@ function MainApp() {
               (o painel de calor ocupa a faixa de baixo). */}
           {userLocation && !creationMode && !heatOn && (
             <TouchableOpacity
-              style={[styles.mapButton, { bottom: 90 + insets.bottom, left: 16 }]}
+              style={[styles.mapButton, { bottom: baseInferior, left: 16 }]}
               onPress={centerOnUser}
              accessibilityRole="button" accessibilityLabel="Centralizar no meu local">
               {/* Cheio quando esta' seguindo o vendedor, vazado quando a
@@ -4438,7 +4468,7 @@ function MainApp() {
               // `undefined` nao emite regra nenhuma — ou seja, nao CANCELA o
               // `left: 16` da base. O botao ficava com left E right ao mesmo
               // tempo, ancorava a' esquerda e caia em cima da legenda de cores.
-              style={[styles.mapButtonRight, { bottom: 90 + 66 + insets.bottom }]}
+              style={[styles.mapButtonRight, { bottom: baseInferior + 66 }]}
               onPress={() => setHeatOn(true)}
             >
               <IconTrendingUp width={20} height={20} fill={iconColors.onSurface} />
@@ -4449,7 +4479,7 @@ function MainApp() {
               registrar no app. Fica apenas o FAB vermelho (+). */}
           {!creationMode && !isViewer && !heatOn && (
             <TouchableOpacity accessibilityRole="button" accessibilityLabel="Adicionar lead"
-              style={[styles.fab, { bottom: 90 + insets.bottom }]}
+              style={[styles.fab, { bottom: baseInferior }]}
               onPress={() => setShowCepStep(true)}
             >
               <IconPlus width={26} height={26} fill="#fff" />
@@ -4459,7 +4489,7 @@ function MainApp() {
           {/* Painel do mapa de calor (gestor). Título + legenda gradiente +
               chips de vendedor (Todos + um por vez). O ✕ e o próprio 🔥 desligam. */}
           {heatOn && !creationMode && (
-            <View style={[styles.heatPanel, { bottom: 90 + insets.bottom }]}>
+            <View style={[styles.heatPanel, { bottom: baseInferior }]}>
               <View style={styles.heatPanelHeader}>
                 <IconText Icone={IconTrendingUp} style={styles.heatPanelTitle} tone="onSurface">Calor de visitas</IconText>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -4533,7 +4563,7 @@ function MainApp() {
           )}
 
           {creationMode && creationCenter && (
-            <View style={[styles.creationBar, { bottom: 90 + insets.bottom }]}>
+            <View style={[styles.creationBar, { bottom: baseInferior }]}>
               <Text style={styles.creationBarTitle}>Selecione o local do cliente</Text>
               <Text style={styles.creationBarHint}>
                 Arraste o mapa para posicionar o pin no local exato. Endereço, CEP e bairro serão preenchidos automaticamente.
@@ -4570,7 +4600,23 @@ function MainApp() {
           <FlatList
             data={shouldGroupListByStage ? listRows : filteredClients}
             keyExtractor={(item: any) => item.key ?? item.id}
-            contentContainerStyle={[styles.listContent, { paddingBottom: 80 + insets.bottom }]}
+            // O FlatList NAO aceita mudar numColumns em voo — o React Native
+            // lanca "Changing numColumns on the fly is not supported". A key
+            // forca remontagem quando a janela cruza um breakpoint, que e'
+            // raro (girar tablet, arrastar janela) e barato.
+            key={`col-${colunasDaLista}`}
+            numColumns={colunasDaLista}
+            // Agrupado por etapa as linhas sao cabecalho E cliente misturados;
+            // em grade o cabecalho viraria uma celula ao lado de um lead.
+            // Por isso columnWrapper so' entra na lista plana.
+            columnWrapperStyle={colunasDaLista > 1 ? { gap: 8 } : undefined}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: 80 + insets.bottom },
+              // Teto de largura: sem ele, um card ocupa 2.5 mil pixels pra
+              // exibir um nome e um endereco.
+              { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' },
+            ]}
             renderItem={shouldGroupListByStage ? (renderListRow as any) : (renderClientItem as any)}
             initialNumToRender={12}
             maxToRenderPerBatch={10}
@@ -4593,7 +4639,7 @@ function MainApp() {
           {/* Cadastro outbound (📤) escondido — só o FAB vermelho (+). */}
           {!isViewer && (
             <TouchableOpacity accessibilityRole="button" accessibilityLabel="Adicionar lead"
-              style={[styles.fab, { bottom: 90 + insets.bottom }]}
+              style={[styles.fab, { bottom: baseInferior }]}
               onPress={() => setShowCepStep(true)}
             >
               <IconPlus width={26} height={26} fill="#fff" />
@@ -4622,7 +4668,13 @@ function MainApp() {
           vazio branco grande embaixo das abas.
           Reserva-se espaco proprio so' quando o aparelho nao tem area segura
           suficiente pra abrigar o texto. */}
-      <View style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]}>
+      <View
+        style={[
+          styles.bottomNav,
+          { paddingBottom: navPaddingBottom },
+          layout.ehDesktop && styles.navLateral,
+        ]}
+      >
         <TouchableOpacity
           style={[styles.navItem, tab === 'map' && styles.navItemActive]}
           onPress={() => setTab('map')}
@@ -6090,6 +6142,7 @@ function ClientBottomSheet({
 
   // Gesture pra arrastar a aba pra baixo e fechar.
   // Threshold: 100px de drag aciona o fechamento.
+  const layout = useLayout();
   const translateY = useRef(new Animated.Value(0)).current;
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
@@ -6125,12 +6178,24 @@ function ClientBottomSheet({
 
   return (
     <Modal visible={true} animationType="fade" transparent onRequestClose={onClose}>
-      <View style={styles.bottomSheetOverlay}>
+      <View style={[styles.bottomSheetOverlay, layout.ehDesktop && styles.painelOverlay]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <Animated.View style={[styles.bottomSheet, { transform: [{ translateY }] }]}>
-          <View style={styles.dragHandleArea} {...panResponder.panHandlers}>
-            <View style={styles.bottomSheetHandle} />
-          </View>
+        <Animated.View
+          style={[
+            styles.bottomSheet,
+            layout.ehDesktop
+              ? styles.painelLateral
+              : { transform: [{ translateY }] },
+          ]}
+        >
+          {/* A alca de arrastar so' existe onde ha' gesto de arrastar. No
+              desktop o painel fecha no X, no fundo ou no Esc — uma alca ali
+              seria um affordance mentindo sobre o que da' pra fazer. */}
+          {!layout.ehDesktop && (
+            <View style={styles.dragHandleArea} {...panResponder.panHandlers}>
+              <View style={styles.bottomSheetHandle} />
+            </View>
+          )}
           <ScrollView
             style={styles.bottomSheetContent}
             contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
@@ -7009,6 +7074,10 @@ const navStyles = StyleSheet.create({
   bottomCardSecondaryText: { color: 'var(--text)', fontSize: 14, fontWeight: '700' },
 });
 
+// Largura da coluna de navegacao no desktop: cabe o icone de 22px e um
+// rotulo de 11px sem quebrar em duas linhas.
+const LARGURA_LATERAL = 96;
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'var(--surface)' },
   // Header
@@ -7493,6 +7562,25 @@ const styles = StyleSheet.create({
   creationBarConfirm: { flex: 2, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#16a34a' },
   creationBarConfirmText: { color: '#fff', fontWeight: '700' },
   // Bottom Nav
+  // Coluna lateral do desktop. `absolute` colada nas quatro bordas da esquerda:
+  // ocupa a altura toda, inclusive ao lado do header, e devolve a base — que
+  // num notebook e' o espaco vertical mais escasso.
+  navLateral: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: LARGURA_LATERAL,
+    flexDirection: 'column',
+    justifyContent: 'flex-start',
+    paddingTop: 12,
+    paddingBottom: 12,
+    gap: 2,
+    borderTopWidth: 0,
+    borderRightWidth: 1,
+    borderRightColor: 'var(--border)',
+    zIndex: 5,
+  },
   bottomNav: {
     flexDirection: 'row',
     borderTopWidth: 1,
@@ -7972,6 +8060,21 @@ const styles = StyleSheet.create({
   locationSummaryText: { fontSize: 12, color: '#16a34a', fontWeight: '500' },
   // Bottom Sheet
   bottomSheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  // No desktop o lead abre em painel a DIREITA, e nao por baixo. O sheet
+  // cobria metade do mapa exatamente quando o vendedor quer ver onde o pin
+  // esta' — o gesto de abrir o lead escondia o motivo de te-lo aberto.
+  painelOverlay: { justifyContent: 'flex-start', alignItems: 'flex-end', backgroundColor: 'rgba(0,0,0,0.25)' },
+  painelLateral: {
+    width: 460,
+    maxWidth: '100%',
+    height: '100%',
+    maxHeight: '100%',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderLeftWidth: 1,
+    borderLeftColor: 'var(--border)',
+    paddingTop: 16,
+  },
   bottomSheet: { backgroundColor: 'var(--surface)', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' },
   bottomSheetHandle: { alignSelf: 'center', width: 40, height: 4, backgroundColor: 'var(--surface-3)', borderRadius: 2 },
   dragHandleArea: { width: '100%', paddingTop: 14, paddingBottom: 14, alignItems: 'center' },
