@@ -477,8 +477,8 @@ export function AgendaScreen({
         </View>
       )}
 
-      {layout.ehLargo ? (
-        // CALENDARIO SEMANAL — so' web. No celular a agenda segue lista:
+      {layout.ehDesktop ? (
+        // CALENDARIO SEMANAL — so' desktop (>= 1024; prompt 07). No celular a agenda segue lista:
         // na rua a pergunta e' "o que e' agora"; na mesa, "como esta' minha
         // semana". Sete colunas sempre (handoff, tela 4).
         (() => {
@@ -568,7 +568,7 @@ export function AgendaScreen({
                           {d.getDate()}
                         </Text>
                       </View>
-                      <View style={styles.calDiaCorpo}>
+                      <ScrollView style={styles.calDiaCorpoRolagem} contentContainerStyle={styles.calDiaCorpo} showsVerticalScrollIndicator={false}>
                       {itens.length === 0 ? (
                         <Text style={styles.calVazio}>livre</Text>
                       ) : (
@@ -598,7 +598,7 @@ export function AgendaScreen({
                           );
                         })
                       )}
-                      </View>
+                      </ScrollView>
                     </View>
                   );
                 })}
@@ -726,7 +726,9 @@ const styles = StyleSheet.create({
     borderBottomColor: 'var(--border)',
   },
   calDiaCabecalhoHoje: { backgroundColor: 'var(--tint-red)' },
-  calDiaCorpo: { padding: 8, gap: 8, flex: 1 },
+  calDiaCorpo: { padding: 8, gap: 8 },
+  // 520 de coluna - ~61 do cabecalho: o dia cheio rola por dentro, nao vaza.
+  calDiaCorpoRolagem: { maxHeight: 459 },
   calDiaHoje: { borderColor: '#C8131B' },
   calDiaNumero: { fontSize: 20, lineHeight: 28, fontWeight: '600', color: 'var(--text)' },
   calDiaSemana: {

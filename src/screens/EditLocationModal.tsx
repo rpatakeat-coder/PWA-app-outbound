@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { Alert } from '../components/Alert';
+import { useLayout } from '../hooks/useLayout';
 import {
   IconClose,
   IconLocation,
@@ -44,6 +45,7 @@ function fmtDistance(m: number): string {
 }
 
 export function EditLocationModal({ client, onSave, onClose }: Props) {
+  const layout = useLayout();
   const iconColors = useIconColors();
   // Posicao ATUAL do cliente (pino cinza, fixo). Se por acaso nao tiver coords,
   // cai num default (centro do Brasil) so pra o mapa abrir.
@@ -111,8 +113,8 @@ export function EditLocationModal({ client, onSave, onClose }: Props) {
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <View style={styles.sheet}>
+      <View style={[styles.backdrop, layout.ehLargo && styles.overlayCentralWeb]}>
+        <View style={[styles.sheet, layout.ehLargo && styles.cartaoCentralWeb]}>
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
               <IconText Icone={IconLocation} style={styles.title} tone="onSurface">Editar localização</IconText>
@@ -200,6 +202,23 @@ const ARROW = 8;
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', justifyContent: 'flex-end' },
+  // Web: cartao central em vez de bottom sheet (mesma correcao do resto).
+  overlayCentralWeb: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: 'rgba(0,0,0,0.32)',
+  },
+  cartaoCentralWeb: {
+    width: '100%',
+    maxWidth: 560,
+    borderRadius: 8,
+    maxHeight: '88%',
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 25,
+  },
   sheet: {
     backgroundColor: 'var(--surface)', borderTopLeftRadius: 20, borderTopRightRadius: 20,
     paddingHorizontal: 16, paddingTop: 14, paddingBottom: 24, maxHeight: '90%',

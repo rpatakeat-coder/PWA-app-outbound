@@ -4351,7 +4351,11 @@ function MainApp() {
       ) : tab === 'gestor' ? (
         <GestorScreen enabled={canViewGestor && tab === 'gestor'} onOpenClient={openClientById} />
       ) : tab === 'meu' ? (
-        <MeuDesempenhoScreen enabled={tab === 'meu'} />
+        <MeuDesempenhoScreen
+          enabled={tab === 'meu'}
+          tarefasPendentes={visibleTasksCount}
+          aoAbrirTarefas={() => setTab('tasks')}
+        />
       ) : (
         <AgendaScreen
           clients={clients}
@@ -4469,8 +4473,8 @@ function MainApp() {
         transparent
         onRequestClose={() => setIsPickingRouteStart(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.taskRulesCard, { maxHeight: '80%' }]}>
+        <View style={[styles.modalOverlay, layout.ehLargo && styles.modalOverlayWeb]}>
+          <View style={[styles.taskRulesCard, layout.ehLargo && styles.modalCartaoMedioWeb, { maxHeight: '80%' }]}>
             <View style={styles.taskRulesHeader}>
               <Text style={styles.taskRulesTitle}>Partir de qual local?</Text>
               <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar"
@@ -4541,8 +4545,8 @@ function MainApp() {
         transparent
         onRequestClose={() => setIsTaskRulesOpen(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.taskRulesCard}>
+        <View style={[styles.modalOverlay, layout.ehLargo && styles.modalOverlayWeb]}>
+          <View style={[styles.taskRulesCard, layout.ehLargo && styles.modalCartaoMedioWeb]}>
             <View style={styles.taskRulesHeader}>
               <Text style={styles.taskRulesTitle}>Como as tarefas são geradas</Text>
               <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar"
@@ -4607,8 +4611,8 @@ function MainApp() {
         transparent
         onRequestClose={() => setCompletingTask(null)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.taskRulesCard}>
+        <View style={[styles.modalOverlay, layout.ehLargo && styles.modalOverlayWeb]}>
+          <View style={[styles.taskRulesCard, layout.ehLargo && styles.modalCartaoMedioWeb]}>
             {completingTask && (() => {
               const { task, client } = completingTask;
               return (
@@ -4884,7 +4888,7 @@ function MainApp() {
         transparent
         onRequestClose={() => setIsFiltersOpen(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, layout.ehLargo && styles.modalOverlayWeb]}>
           {/* Backdrop separado pra fechar ao tocar fora — assim o sheet
               em cima fica num View puro, sem Pressable competindo com o
               gesto de scroll do ScrollView dentro. */}
@@ -4892,7 +4896,7 @@ function MainApp() {
             style={StyleSheet.absoluteFill}
             onPress={() => { setIsPickingUf(false); setIsPickingStage(false); setIsPickingVendor(false); setIsFiltersOpen(false); }}
           />
-          <View style={styles.filtersSheet}>
+          <View style={[styles.filtersSheet, layout.ehLargo && styles.modalCartaoMedioWeb]}>
             {isPickingVendor ? (
               <>
                 <View style={styles.modalHeader}>
@@ -5243,8 +5247,8 @@ function MainApp() {
         transparent
         onRequestClose={() => setIsPickingRouteVendor(false)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setIsPickingRouteVendor(false)}>
-          <Pressable style={styles.filtersSheet} onPress={() => {}}>
+        <Pressable style={[styles.modalOverlay, layout.ehLargo && styles.modalOverlayWeb]} onPress={() => setIsPickingRouteVendor(false)}>
+          <Pressable style={[styles.filtersSheet, layout.ehLargo && styles.modalCartaoMedioWeb]} onPress={() => {}}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Selecione o vendedor</Text>
               <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setIsPickingRouteVendor(false)}>
@@ -7840,6 +7844,16 @@ const styles = StyleSheet.create({
   modalContent: { backgroundColor: 'var(--surface)', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '92%' },
   // Web: modais viram cartao central (handoff, telas 10-12) em vez de sheet.
   modalOverlayWeb: { justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.32)' },
+  // Cartao central menor (pickers, filtros, regras) — 520px.
+  modalCartaoMedioWeb: {
+    width: '100%',
+    maxWidth: 520,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 25,
+  },
   modalCartaoWeb: {
     width: '100%',
     maxWidth: 720,

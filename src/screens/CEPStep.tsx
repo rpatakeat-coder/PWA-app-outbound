@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { Alert } from '../components/Alert';
+import { useLayout } from '../hooks/useLayout';
 import {
   IconArrowBack,
   IconLocation,
@@ -52,6 +53,7 @@ interface CEPStepProps {
 type Mode = 'choose' | 'cep' | 'coords';
 
 export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
+  const layout = useLayout();
   const iconColors = useIconColors();
   const [mode, setMode] = useState<Mode>('choose');
   const [loading, setLoading] = useState(false);
@@ -190,8 +192,8 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
   // ---- Mode: Choose ----
   if (mode === 'choose') {
     return (
-      <View style={styles.overlay}>
-        <View style={styles.card}>
+      <View style={[styles.overlay, layout.ehLargo && styles.overlayWeb]}>
+        <View style={[styles.card, layout.ehLargo && styles.cardWeb]}>
           <Text style={styles.title}>Como deseja cadastrar?</Text>
           <Text style={styles.subtitle}>Escolha a forma de inserir a localização</Text>
 
@@ -240,17 +242,17 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
   // navegador touch o wrapper vira responder do toque, cancela o click
   // sintetico e o TextInput nunca recebe foco (nao dava pra digitar no PWA).
     return (
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, layout.ehLargo && styles.overlayWeb]}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardView}
+          style={[styles.keyboardView, layout.ehLargo && styles.centroWeb]}
         >
             <ScrollView
-              contentContainerStyle={styles.scrollContent}
+              contentContainerStyle={[styles.scrollContent, layout.ehLargo && styles.centroWeb]}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              <View style={styles.card}>
+              <View style={[styles.card, layout.ehLargo && styles.cardWeb]}>
                 <View style={styles.headerRow}>
                   <TouchableOpacity onPress={() => { setMode('choose'); setCepData(null); setCep(''); setNumero(''); setEnderecoManual(''); }}>
                     <IconText Icone={IconArrowBack} style={styles.backBtn} tone="brandText">Voltar</IconText>
@@ -360,17 +362,17 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
 
   // ---- Mode: Coords ----
   return (
-    <View style={styles.overlay}>
+    <View style={[styles.overlay, layout.ehLargo && styles.overlayWeb]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
+        style={[styles.keyboardView, layout.ehLargo && styles.centroWeb]}
       >
           <ScrollView
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[styles.scrollContent, layout.ehLargo && styles.centroWeb]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.card}>
+            <View style={[styles.card, layout.ehLargo && styles.cardWeb]}>
               <View style={styles.headerRow}>
                 <TouchableOpacity onPress={() => { setMode('choose'); setLatitude(''); setLongitude(''); }}>
                   <IconText Icone={IconArrowBack} style={styles.backBtn} tone="brandText">Voltar</IconText>
@@ -431,6 +433,27 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
+  },
+  // Web (>=768): o fluxo vira modal CENTRAL (handoff, tela 12). zIndex acima
+  // da sidebar (40) — o overlay absoluto do container passava por baixo dela
+  // e o conteudo full-bleed sumia atras da coluna de navegacao.
+  overlayWeb: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    zIndex: 60,
+    backgroundColor: 'rgba(0,0,0,0.32)',
+  },
+  centroWeb: { justifyContent: 'center', alignItems: 'center' },
+  cardWeb: {
+    width: '100%',
+    maxWidth: 640,
+    borderRadius: 8,
+    maxHeight: '88%',
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 25,
   },
   keyboardView: {
     flex: 1,

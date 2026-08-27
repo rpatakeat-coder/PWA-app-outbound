@@ -11,6 +11,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
+import { useLayout } from '../hooks/useLayout';
 import { Alert } from '../components/Alert';
 import {
   IconClose,
@@ -37,6 +38,7 @@ const formatCelular = (value: string) => {
 };
 
 export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScreenProps) {
+  const layout = useLayout();
   const iconColors = useIconColors();
   const [nomeCliente, setNomeCliente] = useState('');
   const [nomeEmpresa, setNomeEmpresa] = useState('');
@@ -119,7 +121,7 @@ export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScr
   // navegador touch o wrapper vira responder do toque, cancela o click
   // sintetico e o TextInput nunca recebe foco (nao dava pra digitar no PWA).
   return (
-    <View style={styles.overlay}>
+    <View style={[styles.overlay, layout.ehLargo && styles.overlayWeb]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
@@ -129,7 +131,7 @@ export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScr
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.card}>
+            <View style={[styles.card, layout.ehLargo && styles.cardWeb]}>
               <View style={styles.headerRow}>
                 <IconText Icone={IconDownload} style={styles.title} tone="onSurface">Cadastro Outbound</IconText>
                 <TouchableOpacity onPress={onClose} disabled={submitting} accessibilityRole="button" accessibilityLabel="Fechar">
@@ -227,6 +229,24 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
+  },
+  // Web: modal central acima da sidebar (mesma correcao do CEPStep).
+  overlayWeb: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    zIndex: 60,
+    backgroundColor: 'rgba(0,0,0,0.32)',
+  },
+  cardWeb: {
+    width: '100%',
+    maxWidth: 640,
+    borderRadius: 8,
+    maxHeight: '88%',
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 25,
   },
   keyboardView: {
     flex: 1,

@@ -24,6 +24,9 @@ import { useMinhaDaily } from '../hooks/useMinhaDaily';
 
 interface Props {
   enabled: boolean;
+  /** Pendencias do proprio vendedor — mesmo numero do badge da nav. */
+  tarefasPendentes?: number;
+  aoAbrirTarefas?: () => void;
 }
 
 const PERIOD_OPTIONS: { value: GestorPeriodPreset; label: string }[] = [
@@ -54,12 +57,13 @@ function LeadsModal({
   title, params, enabled, onClose,
 }: { title: string; params: MyMetricLeadsParams | null; enabled: boolean; onClose: () => void }) {
   const q = useMyMetricLeads(params, enabled);
+  const layoutModal = useLayout();
   const leads = q.data ?? [];
   return (
     <Modal visible={params !== null} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
-        <View style={styles.modalPanel}>
+        <View style={[styles.modalPanel, layoutModal.ehLargo && styles.modalPanelWeb]}>
           <View style={styles.modalHeader}>
             <View style={{ flex: 1 }}>
               <Text style={styles.modalTitle} numberOfLines={2}>{title}</Text>
@@ -114,7 +118,7 @@ function Stat({ value, label, color, onPress }: { value: number; label: string; 
   return <View style={styles.statCard}>{inner}</View>;
 }
 
-export function MeuDesempenhoScreen({ enabled }: Props) {
+export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas }: Props) {
   const layout = useLayout();
   const [preset, setPreset] = useState<GestorPeriodPreset>('30d');
   const [modal, setModal] = useState<{ title: string; params: MyMetricLeadsParams } | null>(null);
@@ -182,17 +186,35 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
 
       {layout.ehLargo && m && (
         <View style={estilosWeb.kpis}>
-          {[
-            { rotulo: 'Visitas', valor: m.visited, metric: 'visited' as const },
-            { rotulo: 'Demos agendadas', valor: m.meetings_scheduled, metric: 'meetings' as const },
-            { rotulo: 'Fechamentos', valor: m.won_in_period, metric: 'won' as const },
-            { rotulo: 'Follow-ups', valor: m.follow_ups_scheduled, metric: 'follow_ups' as const },
-          ].map(k => (
-            <TouchableOpacity key={k.rotulo} style={estilosWeb.kpiCartao} onPress={() => open(k.rotulo, k.metric)}>
-              <Text style={estilosWeb.kpiRotulo}>{`${k.rotulo} ${periodLabel}`}</Text>
-              <Text style={estilosWeb.kpiValor}>{k.valor.toLocaleString('pt-BR')}</Text>
-            </TouchableOpacity>
-          ))}
+          {/* Os quatro do prompt 10: Visitas, Demos, conversao (fechados /
+              visitados — dado real) e tarefas pendentes (mesmo numero do
+              badge da nav). Fechamentos continua acessivel no modal de
+              Visitas/na lista abaixo. */}
+          <TouchableOpacity style={estilosWeb.kpiCartao} onPress={() => open('Visitas', 'visited')}>
+            <Text style={estilosWeb.kpiRotulo}>{`Visitas ${periodLabel}`}</Text>
+            <Text style={estilosWeb.kpiValor}>{m.visited.toLocaleString('pt-BR')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={estilosWeb.kpiCartao} onPress={() => open('Demos agendadas', 'meetings')}>
+            <Text style={estilosWeb.kpiRotulo}>{`Demos ${periodLabel}`}</Text>
+            <Text style={estilosWeb.kpiValor}>{m.meetings_scheduled.toLocaleString('pt-BR')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={estilosWeb.kpiCartao} onPress={() => open('Fechamentos', 'won')}>
+            <Text style={estilosWeb.kpiRotulo}>{`Conversão ${periodLabel}`}</Text>
+            <Text style={estilosWeb.kpiValor}>
+              {m.visited > 0 ? `${Math.round((m.won_in_period / m.visited) * 100)}%` : '—'}
+            </Text>
+            <Text style={estilosWeb.kpiSub}>{`${m.won_in_period} ${m.won_in_period === 1 ? 'fechado' : 'fechados'} / ${m.visited} visitados`}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={estilosWeb.kpiCartao}
+            disabled={!aoAbrirTarefas}
+            onPress={aoAbrirTarefas}
+          >
+            <Text style={estilosWeb.kpiRotulo}>Tarefas pendentes</Text>
+            <Text style={[estilosWeb.kpiValor, (tarefasPendentes ?? 0) > 0 && { color: 'var(--tint-red-text)' }]}>
+              {(tarefasPendentes ?? 0).toLocaleString('pt-BR')}
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -301,6 +323,8 @@ const styles = StyleSheet.create({
   retryText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   footerHint: { marginTop: 20, textAlign: 'center', fontSize: 11, color: 'var(--text-subtle)', fontStyle: 'italic' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', justifyContent: 'flex-end' },
+  // Web: o sheet de leads vira painel de largura contida, nao full-bleed.
+  modalPanelWeb: { width: '100%', maxWidth: 640, alignSelf: 'center', borderTopLeftRadius: 8, borderTopRightRadius: 8 },
   modalPanel: { maxHeight: '75%', backgroundColor: 'var(--surface)', borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 },
   modalHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: 'var(--border-soft)' },
   modalTitle: { fontSize: 16, fontWeight: '800', color: 'var(--text)' },
@@ -365,4 +389,5 @@ const estilosWeb = StyleSheet.create({
   },
   kpiRotulo: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '500', color: 'var(--text-muted)' },
   kpiValor: { fontSize: 24, lineHeight: 32, fontWeight: '600', color: 'var(--text)', fontVariant: ['tabular-nums'] },
+  kpiSub: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, color: 'var(--text-faint)' },
 });

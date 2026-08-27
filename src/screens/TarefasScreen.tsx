@@ -6,6 +6,7 @@ import { useLayout } from '../hooks/useLayout';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
 import { ds, sharedStyles } from './sharedStyles';
+import { IconCheck, useIconColors } from '../components/icons';
 
 // Tela de Tarefas, extraida do App.tsx (prompt 02 do handoff) — refactor puro,
 // nada mudou visualmente. O recorte visibleTasks/tasksActiveVendor continua
@@ -48,6 +49,7 @@ export function TarefasScreen({
 }: Props) {
   const layout = useLayout();
   const insets = useSafeAreaInsets();
+  const iconColors = useIconColors();
   // Recorte (gestor ve todas, vendedor ve so as suas) calculado uma vez em
   // visibleTasks/tasksActiveVendor — compartilhado com o badge do rodape.
   const activeVendor = tasksActiveVendor;
@@ -104,7 +106,7 @@ export function TarefasScreen({
       : (task.severity ?? '•');
 
     return (
-      <View key={task.id} style={[styles.taskCard, layout.ehLargo && styles.taskCardWeb]} {...ds({ hover: 'borda', trans: '1' })}>
+      <View key={task.id} style={[styles.taskCard, layout.ehDesktop && styles.taskCardWeb]} {...ds({ hover: 'borda', trans: '1' })}>
         <View style={styles.taskCardTop}>
           <Text style={styles.taskLead} numberOfLines={2}>{leadNome}</Text>
           <View style={[styles.taskBadge, { backgroundColor: sevColor(task.severity) }]}>
@@ -140,14 +142,30 @@ export function TarefasScreen({
           )}
           {client && task.task_type === 'agendar_demo' && (
             <TouchableOpacity
-              style={[sharedStyles.smallActionButton, { backgroundColor: '#C8131B', borderColor: '#C8131B' }]}
+              style={[
+                sharedStyles.smallActionButton,
+                layout.ehDesktop
+                  ? styles.acaoAgendarWeb
+                  : { backgroundColor: '#C8131B', borderColor: '#C8131B' },
+              ]}
               onPress={() => agendarDemo(client)}
             >
-              <Text style={[sharedStyles.smallActionButtonText, { color: '#fff' }]}>Agendar demo</Text>
+              <Text
+                style={[
+                  sharedStyles.smallActionButtonText,
+                  layout.ehDesktop ? { color: 'var(--tint-red-text)' } : { color: '#fff' },
+                ]}
+              >
+                Agendar demo
+              </Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
-            style={[sharedStyles.smallActionButton, { backgroundColor: '#16a34a', borderColor: '#16a34a' }]}
+            accessibilityLabel="Concluir tarefa"
+            style={[
+              sharedStyles.smallActionButton,
+              layout.ehDesktop ? styles.acaoConcluirWeb : { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+            ]}
             onPress={() => {
               // Com o lead carregado, concluir abre o menu de destino
               // (avançar / perdido / manter + próxima). Sem lead
@@ -162,7 +180,11 @@ export function TarefasScreen({
               }
             }}
           >
-            <Text style={[sharedStyles.smallActionButtonText, { color: '#fff' }]}>Concluir</Text>
+            {layout.ehDesktop ? (
+              <IconCheck width={20} height={20} fill={iconColors.muted} />
+            ) : (
+              <Text style={[sharedStyles.smallActionButtonText, { color: '#fff' }]}>Concluir</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -231,7 +253,7 @@ export function TarefasScreen({
         //      da coluna, nao a pagina inteira.
         //   3. O quadro rola na horizontal se as colunas nao couberem.
         // No celular continua a pilha de secoes de sempre.
-        layout.ehLargo ? (
+        layout.ehDesktop ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
               {secoes.map((secao) => {
@@ -282,6 +304,27 @@ export function TarefasScreen({
 
 // Estilos exclusivos desta tela, movidos do App.tsx como estavam.
 const styles = StyleSheet.create({
+  // Acoes do card no desktop (prompt 08): Agendar tonal ocupa a linha,
+  // concluir vira quadrado 32x32 com check.
+  acaoAgendarWeb: {
+    flex: 1,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'var(--tint-red)',
+    borderColor: 'var(--tint-red)',
+    justifyContent: 'flex-start',
+  },
+  acaoConcluirWeb: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderColor: 'var(--stroke-default)',
+    backgroundColor: 'var(--surface)',
+  },
   kanbanColuna: {
     width: 380,
     backgroundColor: 'var(--surface)',

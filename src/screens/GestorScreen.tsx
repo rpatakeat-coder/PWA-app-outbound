@@ -258,13 +258,14 @@ function LeadListModal({ state, onClose, onOpenClient }: {
   // Busca a lista sob demanda a partir dos parâmetros do card tocado. A RPC
   // já devolve ordenado por data desc; enabled só quando o modal está aberto.
   const leadsQuery = useMetricLeads(state?.params ?? null, state !== null);
+  const layoutModal = useLayout();
   const leads = leadsQuery.data ?? [];
 
   return (
     <Modal visible={state !== null} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
-        <View style={styles.modalPanel}>
+        <View style={[styles.modalPanel, layoutModal.ehLargo && styles.modalPanelWeb]}>
           <View style={styles.modalHeader}>
             <View style={{ flex: 1 }}>
               <Text style={styles.modalTitle} numberOfLines={2}>{state?.title}</Text>
@@ -345,6 +346,7 @@ function TasksModal({ state, period, onClose, onOpenClient }: {
   onClose: () => void;
   onOpenClient?: (clientId: string) => void;
 }) {
+  const layoutModal = useLayout();
   const q = useGestorTasksList(
     state ? { hubspotId: state.hubspotId, status: state.status, period } : null,
     state !== null,
@@ -354,7 +356,7 @@ function TasksModal({ state, period, onClose, onOpenClient }: {
     <Modal visible={state !== null} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
-        <View style={styles.modalPanel}>
+        <View style={[styles.modalPanel, layoutModal.ehLargo && styles.modalPanelWeb]}>
           <View style={styles.modalHeader}>
             <View style={{ flex: 1 }}>
               <Text style={styles.modalTitle} numberOfLines={2}>{state?.title}</Text>
@@ -1392,6 +1394,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.55)',
     justifyContent: 'flex-end',
   },
+  modalPanelWeb: { width: '100%', maxWidth: 640, alignSelf: 'center', borderTopLeftRadius: 8, borderTopRightRadius: 8 },
   modalPanel: {
     maxHeight: '75%',
     backgroundColor: 'var(--surface)',
