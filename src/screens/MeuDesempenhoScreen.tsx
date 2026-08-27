@@ -19,6 +19,7 @@ import {
   type MyMetricLeadsParams,
 } from '../hooks/useGestorMetrics';
 import { MinhaDailyCard } from './MinhaDailyCard';
+import { useLayout } from '../hooks/useLayout';
 
 interface Props {
   enabled: boolean;
@@ -113,6 +114,7 @@ function Stat({ value, label, color, onPress }: { value: number; label: string; 
 }
 
 export function MeuDesempenhoScreen({ enabled }: Props) {
+  const layout = useLayout();
   const [preset, setPreset] = useState<GestorPeriodPreset>('30d');
   const [modal, setModal] = useState<{ title: string; params: MyMetricLeadsParams } | null>(null);
 
@@ -136,10 +138,21 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={query.isFetching && !query.isLoading} onRefresh={() => query.refetch()} />}
     >
-      {/* A Daily fica ACIMA do seletor de periodo de proposito: ela e' sempre
-          de HOJE, e ficaria mentindo se parecesse responder ao filtro de 7/30
-          dias que vem logo abaixo. */}
-      <MinhaDailyCard enabled={enabled} />
+      {/* A Daily fica SEPARADA do seletor de periodo de proposito: ela e'
+          sempre de HOJE, e ficaria mentindo se parecesse responder ao filtro
+          de 7/30 dias. No desktop ela ancora a coluna esquerda; as metricas
+          historicas ficam a direita. No celular: Daily em cima, como sempre. */}
+      <View
+        style={
+          layout.ehDesktop
+            ? { flexDirection: 'row', gap: 16, alignItems: 'flex-start' }
+            : undefined
+        }
+      >
+      <View style={layout.ehDesktop ? { flex: 1, minWidth: 0 } : undefined}>
+        <MinhaDailyCard enabled={enabled} />
+      </View>
+      <View style={layout.ehDesktop ? { flex: 1.5, minWidth: 0 } : undefined}>
 
       <View style={styles.periodRow}>
         {PERIOD_OPTIONS.map(opt => (
@@ -201,6 +214,8 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
         enabled={enabled}
         onClose={() => setModal(null)}
       />
+      </View>
+      </View>
     </ScrollView>
   );
 }

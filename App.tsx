@@ -3195,7 +3195,7 @@ function MainApp() {
         : (task.severity ?? '•');
 
       return (
-        <View key={task.id} style={[styles.taskCard, layout.ehDesktop && { width: '49%', marginBottom: 0 }]}>
+        <View key={task.id} style={styles.taskCard}>
           <View style={styles.taskCardTop}>
             <Text style={styles.taskLead} numberOfLines={2}>{leadNome}</Text>
             <View style={[styles.taskBadge, { backgroundColor: sevColor(task.severity) }]}>
@@ -3313,28 +3313,28 @@ function MainApp() {
             <Text style={styles.emptyStateText}>Nenhuma tarefa pendente.</Text>
           </View>
         ) : (
-          secoes.map((secao) => (
-            <View key={secao.sev}>
-              <View style={styles.taskSectionHeader}>
-                <View style={[styles.countChipDot, { backgroundColor: sevColor(secao.sev) }]} />
-                <Text style={styles.taskSectionText}>
-                  {secao.sev} · {secao.total} {secao.total === 1 ? 'tarefa' : 'tarefas'}
-                </Text>
-              </View>
-              {/* No desktop os cards da secao fluem em grade de 2 colunas —
-                  tarefa e' item curto, e uma coluna unica de 1300px desperdica
-                  a tela e obriga rolagem que nao precisava existir. */}
-              <View
-                style={
-                  layout.ehDesktop
-                    ? { flexDirection: 'row', flexWrap: 'wrap', gap: 12 }
-                    : undefined
-                }
-              >
+          // KANBAN no desktop: cada urgencia vira uma COLUNA lado a lado —
+          // D2 | D5 | ... — e o vendedor le o quadro inteiro sem rolar.
+          // No celular continua a pilha de secoes de sempre.
+          <View
+            style={
+              layout.ehDesktop
+                ? { flexDirection: 'row', gap: 12, alignItems: 'flex-start' }
+                : undefined
+            }
+          >
+            {secoes.map((secao) => (
+              <View key={secao.sev} style={layout.ehDesktop ? { flex: 1, minWidth: 0 } : undefined}>
+                <View style={styles.taskSectionHeader}>
+                  <View style={[styles.countChipDot, { backgroundColor: sevColor(secao.sev) }]} />
+                  <Text style={styles.taskSectionText}>
+                    {secao.sev} · {secao.total} {secao.total === 1 ? 'tarefa' : 'tarefas'}
+                  </Text>
+                </View>
                 {secao.itens.map(renderTaskCard)}
               </View>
-            </View>
-          ))
+            ))}
+          </View>
         )}
       </ScrollView>
     );
@@ -3741,7 +3741,61 @@ function MainApp() {
           </View>
         )}
 
-        {agendaItems.length === 0 ? (
+        {layout.ehDesktop && agendaItems.length > 0 ? (
+          // CALENDARIO SEMANAL — so' no desktop. No celular a agenda continua
+          // a lista cronologica: em pe' na rua a pergunta e' "o que e' agora",
+          // e lista responde melhor. Na mesa a pergunta vira "como esta' minha
+          // semana", e ai' o calendario responde melhor.
+          <View style={styles.calSemana}>
+            {(() => {
+              const hojeCal = new Date();
+              const desloc = (hojeCal.getDay() + 6) % 7; // 0 = segunda
+              const seg = new Date(hojeCal);
+              seg.setDate(hojeCal.getDate() - desloc);
+              seg.setHours(0, 0, 0, 0);
+              return Array.from({ length: 7 }, (_, k) => {
+                const d = new Date(seg);
+                d.setDate(seg.getDate() + k);
+                const doDia = agendaItems
+                  .filter((it) => {
+                    if (!it.at) return false;
+                    const t = new Date(it.at);
+                    return t.getFullYear() === d.getFullYear() && t.getMonth() === d.getMonth() && t.getDate() === d.getDate();
+                  })
+                  .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+                const ehHojeCal = d.toDateString() === hojeCal.toDateString();
+                return (
+                  <View key={k} style={[styles.calDia, ehHojeCal && styles.calDiaHoje]}>
+                    <Text style={[styles.calDiaTitulo, ehHojeCal && { color: 'var(--brand-text)' }]}>
+                      {d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')} {d.getDate()}
+                    </Text>
+                    {doDia.length === 0 ? (
+                      <Text style={styles.calVazio}>—</Text>
+                    ) : (
+                      doDia.map((it, ix) => {
+                        const meta = TIPO_META[tipoDoItem(it)];
+                        const hora = it.at
+                          ? new Date(it.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                          : '';
+                        const nomeChip = it.client ? getClientPrimaryName(it.client) : 'Lead';
+                        return (
+                          <TouchableOpacity
+                            key={ix}
+                            style={[styles.calChip, { borderLeftColor: meta?.cor ?? 'var(--border)' }]}
+                            onPress={() => it.client && openClientById(it.client.id)}
+                          >
+                            <Text style={styles.calChipHora}>{hora}</Text>
+                            <Text style={styles.calChipTitulo} numberOfLines={2}>{nomeChip}</Text>
+                          </TouchableOpacity>
+                        );
+                      })
+                    )}
+                  </View>
+                );
+              });
+            })()}
+          </View>
+        ) : agendaItems.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>Agenda vazia.</Text>
           </View>
@@ -4736,14 +4790,14 @@ function MainApp() {
           onPress={() => setTab('map')}
         >
           <NavIcon Icone={IconLocation} ativo={tab === 'map'} />
-          <Text style={[styles.navItemText, tab === 'map' && styles.navItemTextActive]}>Mapa</Text>
+          <Text style={[styles.navItemText, layout.ehDesktop && styles.navItemTextDesktop, tab === 'map' && styles.navItemTextActive]}>Mapa</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.navItem, tab === 'list' && styles.navItemActive]}
           onPress={() => setTab('list')}
         >
           <NavIcon Icone={IconSquareMenu} ativo={tab === 'list'} />
-          <Text style={[styles.navItemText, tab === 'list' && styles.navItemTextActive]}>Lista</Text>
+          <Text style={[styles.navItemText, layout.ehDesktop && styles.navItemTextDesktop, tab === 'list' && styles.navItemTextActive]}>Lista</Text>
         </TouchableOpacity>
         {!isViewer && (
           <>
@@ -4752,14 +4806,14 @@ function MainApp() {
               onPress={() => setTab('route')}
             >
               <NavIcon Icone={IconCar} ativo={tab === 'route'} />
-              <Text style={[styles.navItemText, tab === 'route' && styles.navItemTextActive]}>Rota</Text>
+              <Text style={[styles.navItemText, layout.ehDesktop && styles.navItemTextDesktop, tab === 'route' && styles.navItemTextActive]}>Rota</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.navItem, tab === 'agenda' && styles.navItemActive]}
               onPress={() => setTab('agenda')}
             >
               <NavIcon Icone={IconCalendar} ativo={tab === 'agenda'} />
-              <Text style={[styles.navItemText, tab === 'agenda' && styles.navItemTextActive]}>Agenda</Text>
+              <Text style={[styles.navItemText, layout.ehDesktop && styles.navItemTextDesktop, tab === 'agenda' && styles.navItemTextActive]}>Agenda</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.navItem, tab === 'tasks' && styles.navItemActive]}
@@ -4775,7 +4829,7 @@ function MainApp() {
                   </View>
                 )}
               </View>
-              <Text style={[styles.navItemText, tab === 'tasks' && styles.navItemTextActive]}>Tarefas</Text>
+              <Text style={[styles.navItemText, layout.ehDesktop && styles.navItemTextDesktop, tab === 'tasks' && styles.navItemTextActive]}>Tarefas</Text>
             </TouchableOpacity>
           </>
         )}
@@ -4785,7 +4839,7 @@ function MainApp() {
             onPress={() => setTab('gestor')}
           >
             <NavIcon Icone={IconBarGraph} ativo={tab === 'gestor'} />
-            <Text style={[styles.navItemText, tab === 'gestor' && styles.navItemTextActive]}>Gestor</Text>
+            <Text style={[styles.navItemText, layout.ehDesktop && styles.navItemTextDesktop, tab === 'gestor' && styles.navItemTextActive]}>Gestor</Text>
           </TouchableOpacity>
         ) : !isViewer && (
           // Vendedor comum (nao-gestor, nao-viewer): ve so o proprio desempenho.
@@ -4794,7 +4848,7 @@ function MainApp() {
             onPress={() => setTab('meu')}
           >
             <NavIcon Icone={IconTrendingUp} ativo={tab === 'meu'} />
-            <Text style={[styles.navItemText, tab === 'meu' && styles.navItemTextActive]}>Meu</Text>
+            <Text style={[styles.navItemText, layout.ehDesktop && styles.navItemTextDesktop, tab === 'meu' && styles.navItemTextActive]}>Meu</Text>
           </TouchableOpacity>
         )}
         <Text
@@ -7110,9 +7164,10 @@ const navStyles = StyleSheet.create({
   bottomCardSecondaryText: { color: 'var(--text)', fontSize: 14, fontWeight: '700' },
 });
 
-// Largura da coluna de navegacao no desktop: cabe o icone de 22px e um
-// rotulo de 11px sem quebrar em duas linhas.
-const LARGURA_LATERAL = 96;
+// Coluna de navegacao do desktop. 72px e' o rail compacto: icone + rotulo
+// Details (8px/600 — o token do DS pra "nav module labels below icons",
+// Desktop-only). 96px sobrava e roubava conteudo.
+const LARGURA_LATERAL = 72;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'var(--surface)' },
@@ -7658,6 +7713,36 @@ const styles = StyleSheet.create({
   },
   navBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   navItemText: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-subtle)' },
+  // ===== Calendario da Agenda (so' desktop) =====
+  calSemana: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  calDia: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: 'var(--surface)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'var(--border-soft)',
+    padding: 8,
+    minHeight: 160,
+  },
+  calDiaHoje: { borderColor: 'var(--tint-red-border)', backgroundColor: 'var(--tint-red)' },
+  calDiaTitulo: {
+    fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '700',
+    textTransform: 'lowercase', color: 'var(--text-muted)', marginBottom: 6,
+  },
+  calVazio: { fontSize: 12, color: 'var(--text-faint)', textAlign: 'center', marginTop: 12 },
+  calChip: {
+    borderLeftWidth: 3,
+    backgroundColor: 'var(--surface-2)',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginBottom: 6,
+  },
+  calChipHora: { fontSize: 11, lineHeight: 14, fontWeight: '700', color: 'var(--text-muted)' },
+  calChipTitulo: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: 'var(--text)' },
+  // Details 8/600 do DS — rotulo de modulo de navegacao, so' desktop.
+  navItemTextDesktop: { fontSize: 8, lineHeight: 12, letterSpacing: 0 },
   brandMark: {
     position: 'absolute',
     left: 0,

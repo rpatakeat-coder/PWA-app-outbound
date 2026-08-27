@@ -38,6 +38,7 @@ import { SellerGoalsCard } from './SellerGoalsCard';
 import { DismissedContaAlvoCard } from './DismissedContaAlvoCard';
 import { RouteHistorySection } from './RouteHistorySection';
 import { MinhaDailyCard } from './MinhaDailyCard';
+import { useLayout } from '../hooks/useLayout';
 
 interface Props {
   enabled: boolean;
@@ -595,6 +596,7 @@ function SellerCard({
 }
 
 export function GestorScreen({ enabled, onOpenClient }: Props) {
+  const layout = useLayout();
   const [preset, setPreset] = useState<GestorPeriodPreset>('30d');
   // Intervalo do período personalizado (dias locais, início/fim inclusivos).
   const [customStart, setCustomStart] = useState<Date | null>(null);
@@ -725,21 +727,33 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
           menos um, com 9 rotas em 90 dias — apareceria no placar da Daily sendo
           cobrado por uma palavra que o app nao deixava ele dar.
           O cartao se esconde sozinho pra quem esta marcado como nao-vendedor. */}
-      <MinhaDailyCard enabled={enabled} />
+      {/* No desktop os cartoes de configuracao fluem em grade de duas
+          colunas — cada um e' auto-contido e curto, e a pilha unica era a
+          rolagem mais longa do app. No celular: a pilha de sempre. */}
+      <View
+        style={
+          layout.ehDesktop
+            ? { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }
+            : undefined
+        }
+      >
+      <View style={layout.ehDesktop ? { width: '49%' } : undefined}><MinhaDailyCard enabled={enabled} /></View>
 
       {/* Quem é vendedor ativo / comum sem meta / não é vendedor. */}
-      <SellerClassificationCard />
+      <View style={layout.ehDesktop ? { width: '49%' } : undefined}><SellerClassificationCard /></View>
 
       {/* Config da Rota do dia (raio/nota/avaliações Conta Alvo, meta/dia, SLAs). */}
-      <RouteConfigCard />
+      <View style={layout.ehDesktop ? { width: '49%' } : undefined}><RouteConfigCard /></View>
 
       {/* Meta diária de visitas por vendedor (usada no ranking). */}
-      <SellerGoalsCard />
+      <View style={layout.ehDesktop ? { width: '49%' } : undefined}><SellerGoalsCard /></View>
 
       {/* Contas Alvo dispensadas ("Não interessa") — quem/quando + restaurar. */}
-      <DismissedContaAlvoCard />
+      <View style={layout.ehDesktop ? { width: '49%' } : undefined}><DismissedContaAlvoCard /></View>
 
       {/* Ranking + histórico de rotas (planejado + check-ins) no período. */}
+      </View>
+
       <RouteHistorySection
         range={periodRange(period)}
         enabled={enabled}
