@@ -9,7 +9,6 @@ import {
   ScrollView,
   Platform,
   Keyboard,
-  TouchableWithoutFeedback,
 } from 'react-native';
 import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { Alert } from '../components/Alert';
@@ -116,13 +115,15 @@ export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScr
     await sendPayload();
   };
 
+  // Sem TouchableWithoutFeedback+Keyboard.dismiss por volta do conteudo: em
+  // navegador touch o wrapper vira responder do toque, cancela o click
+  // sintetico e o TextInput nunca recebe foco (nao dava pra digitar no PWA).
   return (
     <View style={styles.overlay}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
@@ -216,7 +217,6 @@ export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScr
               </TouchableOpacity>
             </View>
           </ScrollView>
-        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </View>
   );

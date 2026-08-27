@@ -39,6 +39,12 @@ Dois produtos num repositório, mesmo domínio, mesma sessão Supabase:
 - **Datas: sempre Brasília** (`diaBRT`). `toISOString().slice(0,10)` vira o
   dia às 21h. Helpers testados em `gestao/src/dados/datas.ts`.
 - **FlatList não muda `numColumns` em voo** — troque a `key`.
+- **Nunca envolver `TextInput` em Touchable/Pressable** (inclusive o padrão
+  nativo `TouchableWithoutFeedback onPress={Keyboard.dismiss}` em volta de
+  formulário). Em navegador touch o wrapper vira responder, cancela o click
+  sintético e o campo nunca recebe foco — no PWA do celular não dá pra
+  digitar. Para fechar ao tocar fora, use `Pressable` de backdrop como
+  IRMÃO (`StyleSheet.absoluteFill`) atrás do conteúdo, nunca envolvendo.
 
 ## Verificação (rodar antes de qualquer commit)
 

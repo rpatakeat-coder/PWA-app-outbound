@@ -9,7 +9,6 @@ import {
   ScrollView,
   Platform,
   Keyboard,
-  TouchableWithoutFeedback,
 } from 'react-native';
 import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { Alert } from '../components/Alert';
@@ -237,13 +236,15 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
 
   // ---- Mode: CEP ----
   if (mode === 'cep') {
+  // Sem TouchableWithoutFeedback+Keyboard.dismiss por volta do conteudo: em
+  // navegador touch o wrapper vira responder do toque, cancela o click
+  // sintetico e o TextInput nunca recebe foco (nao dava pra digitar no PWA).
     return (
       <View style={styles.overlay}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardView}
         >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <ScrollView
               contentContainerStyle={styles.scrollContent}
               keyboardShouldPersistTaps="handled"
@@ -352,7 +353,6 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
                 )}
               </View>
             </ScrollView>
-          </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </View>
     );
@@ -365,7 +365,6 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <ScrollView
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
@@ -422,7 +421,6 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
               </TouchableOpacity>
             </View>
           </ScrollView>
-        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </View>
   );
