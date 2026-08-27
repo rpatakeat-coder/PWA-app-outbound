@@ -938,11 +938,11 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
         <RefreshControl refreshing={query.isFetching && !query.isLoading} onRefresh={() => query.refetch()} />
       }
     >
-      <View style={styles.periodRow}>
+      <View style={[styles.periodRow, layout.ehLargo && estilosWeb.periodoLinha]}>
         {PERIOD_OPTIONS.map(opt => (
           <TouchableOpacity
             key={opt.value}
-            style={[styles.periodChip, preset === opt.value && styles.periodChipActive]}
+            style={[styles.periodChip, layout.ehLargo && estilosWeb.periodoChip, preset === opt.value && styles.periodChipActive]}
             onPress={() => setPreset(opt.value)}
           >
             <Text style={[styles.periodChipText, preset === opt.value && styles.periodChipTextActive]}>
@@ -952,7 +952,7 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
         ))}
       </View>
       <TouchableOpacity
-        style={[styles.customChip, preset === 'custom' && styles.periodChipActive]}
+        style={[styles.customChip, layout.ehLargo && estilosWeb.periodoChip, preset === 'custom' && styles.periodChipActive]}
         onPress={() => setRangePickerOpen(true)}
       >
         <IconText Icone={IconCalendar} style={[styles.periodChipText, preset === 'custom' && styles.periodChipTextActive]} tone="onSurface">{preset === 'custom' && customStart && customEnd
@@ -982,9 +982,6 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
         );
         const exportar = (
           <>
-      {/* Painel web (handoff): KPIs, funil, heatmap e tabela do time. */}
-      {layout.ehLargo && painelWeb}
-
       {/* Exportacao de dados (CSV com atividade por vendedor). */}
       <View style={styles.exportCard}>
         <IconText Icone={IconBarGraph} style={styles.exportTitle} tone="onSurface">Exportar TUDO (JSON p/ IA)</IconText>
@@ -1150,16 +1147,23 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
           </>
         );
         return layout.ehDesktop ? (
-          <View style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              {metricas}
-              {ranking}
+          <>
+            {/* Faixa principal do handoff: KPIs, funil 8+4 com heatmap e a
+                tabela do time — em LARGURA CHEIA. Snapshot, ranking (o
+                drill-down por vendedor) e os cartoes de configuracao viram o
+                bloco de baixo, como o prompt 09f permite. */}
+            {painelWeb}
+            <View style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                {metricas}
+                {ranking}
+              </View>
+              <View style={{ width: 380 }}>
+                {cartoesConfig}
+                {exportar}
+              </View>
             </View>
-            <View style={{ width: 380 }}>
-              {cartoesConfig}
-              {exportar}
-            </View>
-          </View>
+          </>
         ) : (
           <>
             {cartoesConfig}
@@ -1525,6 +1529,15 @@ const rangeStyles = StyleSheet.create({
 // tela pra ficar claro o que pertence a' superficie desktop.
 const estilosWeb = StyleSheet.create({
   bloco: { gap: 24, marginBottom: 24 },
+  // Seletor de periodo compacto: chips de 36px em linha, nao lajes full-width.
+  periodoLinha: { flexWrap: 'wrap', marginBottom: 16 },
+  periodoChip: {
+    flex: 0,
+    flexGrow: 0,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
   kpis: { flexDirection: 'row', gap: 16, flexWrap: 'wrap' },
   kpiCartao: {
     flex: 1,

@@ -430,6 +430,7 @@ export function AgendaScreen({
     { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
       {/* Cabeçalho enxuto: o parágrafo "rota planejada, demos e follow-ups em
           ordem cronológica" descrevia o que a tela mostra sozinha. */}
+      {!layout.ehDesktop && (
       <View style={sharedStyles.taskHeaderRow}>
         <Text style={sharedStyles.panelTitle}>
           Agenda{agendaItems.length > 0 ? ` · ${agendaItems.length}` : ''}
@@ -448,6 +449,7 @@ export function AgendaScreen({
           </TouchableOpacity>
         )}
       </View>
+      )}
 
       {vendorFilterHubspotId !== null ? (
         <Text style={sharedStyles.taskVendorHint}>
@@ -455,8 +457,9 @@ export function AgendaScreen({
         </Text>
       ) : null}
 
-      {/* Chips por tipo: contam e filtram num toque. */}
-      {contagemTipo.length > 1 && (
+      {/* Chips por tipo: contam e filtram num toque. No desktop moram na
+          barra do calendario — aqui so' na lista do celular/tablet. */}
+      {!layout.ehDesktop && contagemTipo.length > 1 && (
         <View style={sharedStyles.countChipsRow}>
           {contagemTipo.map(({ tipo, total }) => {
             const ativo = agendaTypeFilter === tipo;
@@ -521,6 +524,22 @@ export function AgendaScreen({
                 <TouchableOpacity style={styles.calNavBotao} onPress={() => setCalSemanaOffset((v) => v + 1)}>
                   <Text style={styles.calNavSeta}>›</Text>
                 </TouchableOpacity>
+                {contagemTipo.length > 1 && contagemTipo.map(({ tipo, total }) => {
+                  const ativo = agendaTypeFilter === tipo;
+                  const meta = TIPO_META[tipo];
+                  return (
+                    <TouchableOpacity
+                      key={tipo}
+                      style={[sharedStyles.countChip, ativo && { borderColor: meta.cor, backgroundColor: 'var(--surface)' }]}
+                      onPress={() => setAgendaTypeFilter(ativo ? null : tipo)}
+                    >
+                      <View style={[sharedStyles.countChipDot, { backgroundColor: meta.cor }]} />
+                      <Text style={[sharedStyles.countChipText, ativo && { color: 'var(--text)' }]}>
+                        {meta.label} {total}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
                 <View style={{ flex: 1 }} />
                 {Object.entries(TIPO_META).map(([k, meta]) => (
                   <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -528,32 +547,21 @@ export function AgendaScreen({
                     <Text style={styles.calLegendaTexto}>{meta.label}</Text>
                   </View>
                 ))}
+                {canViewGestor && (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Exportar JSON"
-                  style={[sharedStyles.ltwBotaoOutline, { borderColor: 'var(--teal-text)', height: 32, paddingHorizontal: 12 }]}
+                  style={[sharedStyles.ltwBotaoOutline, { borderColor: 'var(--teal-text)', height: 32, paddingHorizontal: 12 }, exportingAgenda && { opacity: 0.6 }]}
                   {...ds({ trans: '1', hover: 'surface2' })}
-                  onPress={() => {
-                    if (typeof document === 'undefined') return;
-                    const dados = diasCal.map(({ d, itens }) => ({
-                      dia: d.toISOString().slice(0, 10),
-                      itens: itens.map(it => ({
-                        quando: it.at,
-                        tipo: TIPO_META[tipoDoItem(it)]?.label ?? tipoDoItem(it),
-                        quem: nomeDoItem(it),
-                      })),
-                    }));
-                    const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
-                    const a = document.createElement('a');
-                    a.href = URL.createObjectURL(blob);
-                    a.download = `agenda-${diasCal[0].d.toISOString().slice(0, 10)}.json`;
-                    a.click();
-                    URL.revokeObjectURL(a.href);
-                  }}
+                  disabled={exportingAgenda}
+                  onPress={handleExportAgenda}
                 >
-                  <IconDownload width={16} height={16} fill={iconColors.teal} />
+                  {exportingAgenda
+                    ? <ActivityIndicator size="small" color={iconColors.teal} />
+                    : <IconDownload width={16} height={16} fill={iconColors.teal} />}
                   <Text style={[sharedStyles.ltwBotaoOutlineTexto, { color: 'var(--teal-text)', fontSize: 12 }]}>Exportar JSON</Text>
                 </Pressable>
+                )}
               </View>
               <View style={styles.calSemana}>
                 {visiveis.map(({ d, itens }, k) => {

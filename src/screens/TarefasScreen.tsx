@@ -23,6 +23,8 @@ interface Props {
   nomeDoLead: (c: Client) => string;
   vendorLabel: (idHubspot: string | null) => string;
   abrirLeadNoMapa: (c: Client) => void;
+  /** Abre a ficha por id — cobre lead fora do viewport do mapa. */
+  abrirLeadPorId: (id: string) => void;
   agendarDemo: (c: Client) => void;
   abrirRegras: () => void;
   concluirTarefa: (vars: { id: string; status: 'concluida' | 'dispensada' }) => void;
@@ -41,6 +43,7 @@ export function TarefasScreen({
   nomeDoLead,
   vendorLabel,
   abrirLeadNoMapa,
+  abrirLeadPorId,
   agendarDemo,
   abrirRegras,
   concluirTarefa,
@@ -132,14 +135,12 @@ export function TarefasScreen({
         ) : null}
 
         <View style={styles.taskActionsRow}>
-          {client && (
-            <TouchableOpacity
-              style={sharedStyles.smallActionButton}
-              onPress={() => abrirLeadNoMapa(client)}
-            >
-              <Text style={sharedStyles.smallActionButtonText}>Abrir lead</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={sharedStyles.smallActionButton}
+            onPress={() => (client ? abrirLeadNoMapa(client) : abrirLeadPorId(task.client_id))}
+          >
+            <Text style={sharedStyles.smallActionButtonText}>Abrir lead</Text>
+          </TouchableOpacity>
           {client && task.task_type === 'agendar_demo' && (
             <TouchableOpacity
               style={[
@@ -199,6 +200,7 @@ export function TarefasScreen({
       {/* Cabeçalho enxuto: o texto explicativo que ficava aqui virou o modal
           ⓘ, que já tinha as regras completas — ele ocupava um terço da tela
           em toda visita, mesmo pra quem já conhece a mecânica. */}
+      {!layout.ehDesktop ? (
       <View style={sharedStyles.taskHeaderRow}>
         <Text style={sharedStyles.panelTitle}>
           Tarefas{sorted.length > 0 ? ` · ${sorted.length}` : ''}
@@ -211,6 +213,19 @@ export function TarefasScreen({
           <Text style={styles.taskInfoButtonText}>ⓘ</Text>
         </TouchableOpacity>
       </View>
+      ) : (
+        /* Desktop: o header do shell ja' diz "Tarefas" e as colunas contam —
+           sobra so' o acesso a's regras, discreto e a' direita (prompt 08). */
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            style={[sharedStyles.smallActionButton, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}
+            onPress={abrirRegras}
+          >
+            <Text style={sharedStyles.smallActionButtonText}>Como as tarefas são geradas</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {activeVendor !== null && activeVendor !== myHubspotId ? (
         <Text style={sharedStyles.taskVendorHint}>
@@ -218,8 +233,9 @@ export function TarefasScreen({
         </Text>
       ) : null}
 
-      {/* Chips: quanto tem de cada urgência, e filtro de um toque. */}
-      {chips.length > 1 && (
+      {/* Chips: quanto tem de cada urgência, e filtro de um toque. No desktop
+          as colunas do kanban ja' contam — os chips sao so' do celular. */}
+      {!layout.ehDesktop && chips.length > 1 && (
         <View style={sharedStyles.countChipsRow}>
           {chips.map(([sev, total]) => {
             const ativo = filtroSev === sev;

@@ -66,7 +66,7 @@ export function LoginScreen() {
       <Text style={[styles.formTitle, layout.ehDesktop && styles.webFormTitle]}>Entrar na conta</Text>
 
       {layout.ehDesktop && <Text style={styles.webRotulo}>E-mail</Text>}
-      <View style={[styles.inputWrap, layout.ehDesktop && styles.webInputWrap]}>
+      <View style={[styles.inputWrap, layout.ehDesktop && styles.webInputWrap, !!error && styles.inputWrapErro]}>
         <IconMail width={layout.ehDesktop ? 20 : 16} height={layout.ehDesktop ? 20 : 16} fill={layout.ehDesktop ? iconColors.muted : iconColors.onSurface} />
         <TextInput
           style={styles.input}
@@ -83,7 +83,7 @@ export function LoginScreen() {
       </View>
 
       {layout.ehDesktop && <Text style={styles.webRotulo}>Senha</Text>}
-      <View style={[styles.inputWrap, layout.ehDesktop && styles.webInputWrap]}>
+      <View style={[styles.inputWrap, layout.ehDesktop && styles.webInputWrap, !!error && styles.inputWrapErro]}>
         <IconLock width={layout.ehDesktop ? 20 : 16} height={layout.ehDesktop ? 20 : 16} fill={layout.ehDesktop ? iconColors.muted : iconColors.onSurface} />
         <TextInput
           style={styles.input}
@@ -202,6 +202,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 8,
   },
+  inputWrapErro: { borderWidth: 1, borderColor: '#C8131B' },
   webInputWrap: {
     height: 40,
     borderRadius: 8,

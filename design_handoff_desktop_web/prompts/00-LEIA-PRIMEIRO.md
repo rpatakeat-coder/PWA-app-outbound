@@ -1,34 +1,67 @@
 # Como aplicar este redesign com o Claude Code
 
-## Por que em prompts separados
+## Por que em prompts pequenos
 
-`App.tsx` tem **8.445 linhas / 383 KB**. Três das telas (Rota, Agenda, Tarefas) são funções de render dentro dele, de 200 a 600 linhas cada. Pedir "aplique o README" numa única conversa faz o Claude Code editar o que está à mão — casca, header, mapa, lista — e parar antes das telas grandes.
+`App.tsx` tem **8.445 linhas / 383 KB**. Três das telas (Rota, Agenda, Tarefas) são funções de render dentro dele, de 200 a 600 linhas cada; `GestorScreen.tsx` tem 47 KB. Pedir "aplique o README" faz o Claude Code editar o que está à mão e parar antes das telas grandes — e, mesmo quando chega nelas, pula detalhes.
 
-Cada arquivo desta pasta é uma tarefa **fechada e independente**, dimensionada para uma sessão. Rode na ordem, uma por vez, e confira antes de seguir.
+Cada arquivo aqui é **uma tarefa fechada**, do tamanho de um diff que dá para revisar. Rode um por vez, leia a resposta, confira na tela, siga.
 
-## Ordem
+## Estrutura
 
-Estes prompts cobrem o que **ainda não foi aplicado** — a base, o refactor que destrava, e as cinco telas que falharam nas tentativas anteriores.
+Cada tela tem prompts de **aplicação** (`a`, `b`, `c`…) e um de **revisão** (`R`).
 
-| Prompt | Tela | Onde |
+O prompt de revisão trabalha em duas fases: **audita primeiro** (responde OK / FALTA / DIVERGE item por item, sem editar) e só corrige depois que você confirma. É o que pega os detalhes pequenos que passaram.
+
+## Sequência
+
+### Pendente
+
+| Pasta | O que | Prompts |
 |---|---|---|
-`01-base.md` | tokens, contraste no escuro, fonte, breakpoints | `public/index.html`, `src/hooks/useLayout.ts` |
-`02-extrair-telas.md` | **refactor sem mudança visual — rode antes dos 06/07/08** | `App.tsx` → `src/screens/` |
-`06-rota.md` | Rota | `src/screens/RotaScreen.tsx` |
-`07-agenda.md` | Agenda | `src/screens/AgendaScreen.tsx` |
-`08-tarefas.md` | Tarefas | `src/screens/TarefasScreen.tsx` |
-`09-gestor.md` | Painel do gestor | `src/screens/GestorScreen.tsx` |
-`10-meu-desempenho.md` | Meu desempenho | `src/screens/MeuDesempenhoScreen.tsx` |
+`01-base/` | tokens, contraste no escuro, fonte | `01a` `01b` `01c` |
+`02-extrair/` | **refactor sem mudança visual** | `02a` `02b` `02c` |
+`06-rota/` | Rota | `06a`…`06e` + `06R` |
+`07-agenda/` | Agenda | `07a`…`07d` + `07R` |
+`08-tarefas/` | Tarefas | `08a`…`08d` + `08R` |
+`09-gestor/` | Painel do gestor | `09a`…`09f` + `09R` |
+`10-meu-desempenho/` | Meu desempenho | `10a` `10b` `10c` + `10R` |
 
-Casca (sidebar + header), Mapa, Lista, Ficha, modais e Login já saíram nas tentativas anteriores — as seções correspondentes do `README.md` seguem valendo como referência. Se você recomeçar do zero e quiser prompts fechados para essas também, peça.
+### Já aplicado — só revisão
 
-**O prompt 02 é o que destrava os cinco que falharam.** Ele não muda nada visualmente: só tira Rota, Agenda e Tarefas do `App.tsx` e põe em arquivos próprios. Depois disso cada uma cabe numa sessão e os prompts 06–08 funcionam.
+| Pasta | O que |
+|---|---|
+`03-casca/` | `03R` — sidebar colapsável e header |
+`04-mapa/` | `04R` — mapa com painel de trabalho |
+`05-lista/` | `05R` — lista em tabela |
+`11-ficha-e-modais/` | `11R` — drawer da ficha e os três modais |
+`12-login/` | `12R` — login fora da casca |
 
-Se você já tentou aplicar e ficou meio-feito, rode `git status` e decida: ou continue de onde parou, ou `git checkout` e comece pelo 01.
+Rode essas cinco revisões **antes** de seguir para as pendentes: elas dizem o que ficou incompleto nas tentativas anteriores, e algumas correções (a casca, principalmente) afetam todas as telas.
 
-## Como conferir cada tela
+## Dois prompts que não editam código
 
-1. `npm start` e abra a tela no navegador em 1440px de largura
-2. Compare com o screenshot correspondente em `design_handoff_desktop_web/screenshots/`
-3. Alterne o tema e confira o escuro
-4. `npm run typecheck`
+`09a-inventario.md` e `10a-inventario.md` só leem e relatam. **Não pule.** Sem eles, o redesign do Gestor e do Meu desempenho vira invenção de métrica — foi o que aconteceu antes.
+
+## O prompt que destrava
+
+`02-extrair/` não muda nada visualmente: tira Rota, Agenda e Tarefas do `App.tsx` para arquivos próprios. Depois disso cada tela cabe numa sessão e os prompts 06–08 funcionam. **Sem ele, eles vão falhar de novo.**
+
+## Regra em todos os prompts
+
+Cada um diz explicitamente: **não toque em outra região nem em outro arquivo**. Se o Claude Code encontrar algo errado fora do escopo, ele anota e segue — a revisão pega depois. É isso que impede uma tarefa de virar cinco meio-feitas.
+
+## Ao fim de cada prompt
+
+Ele responde em três linhas: o que mudou, o que ficou fora do escopo, e o que do README não deu para aplicar e por quê. **Leia a terceira linha** — é onde aparece divergência entre o design e o que o código permite.
+
+## Como conferir
+
+1. `npm start`, abra a tela em **1440px**
+2. Compare com o screenshot em `design_handoff_desktop_web/screenshots/`
+3. **1024px** e **900px** — nada corta nem sobrepõe
+4. Alterne o tema e repita no **escuro**
+5. `npm run typecheck`
+
+## Se você já aplicou parcialmente
+
+`git status` e decida: continuar de onde parou (rodando as revisões primeiro), ou `git checkout` e começar pelo `01a`.

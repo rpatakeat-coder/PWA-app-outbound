@@ -320,6 +320,16 @@
           width: 40px !important;
           height: 40px !important;
           border-radius: 20px !important;
+          border-width: 2.5px !important;
+        }
+      }
+      /* Modal de etapa no desktop: campos obrigatorios em duas colunas
+         (Ag. Pagamento tem 13 campos — uma coluna virava rolagem infinita). */
+      @media (min-width: 1024px) {
+        [data-campos] {
+          display: grid !important;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 4px 16px;
         }
       }
       [data-trans] {

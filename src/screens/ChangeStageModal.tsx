@@ -906,6 +906,7 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
                   {isSelected && stage.subFields && stage.subFields.length > 0 && (
                     <View
                       style={[styles.subOptionsWrap, { borderLeftColor: stage.color }]}
+                      {...({ dataSet: { campos: '1' } } as Record<string, unknown>)}
                     >
                       {stage.subFields.map((sf) => {
                         if (sf.kind === 'select') {

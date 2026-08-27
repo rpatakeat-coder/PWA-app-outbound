@@ -570,6 +570,14 @@ function MainApp() {
     window.addEventListener('keydown', aoTeclar);
     return () => window.removeEventListener('keydown', aoTeclar);
   }, []);
+  // Acessibilidade (03R item 22): ao trocar de aba, o foco vai pro titulo da
+  // tela — leitores de tela anunciam onde o usuario chegou. O outline azul e'
+  // suprimido so' nesse caso pelo CSS [tabindex="-1"].
+  const tituloWebRef = useRef<Text>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !layout.ehLargo) return;
+    (tituloWebRef.current as unknown as { focus?: () => void } | null)?.focus?.();
+  }, [tab, layout.ehLargo]);
   // Chao dos elementos flutuantes (FAB, legenda, botoes do mapa).
   // Os 90px eram a altura da barra inferior. No desktop ela virou coluna
   // lateral, entao esse espaco deixou de existir — sem isto os botoes ficariam
@@ -609,6 +617,8 @@ function MainApp() {
   const [ordemColuna, setOrdemColuna] = useState<'nome' | 'etapa' | 'temp' | 'cidade' | 'visita' | 'reunioes'>('nome');
   const [ordemDir, setOrdemDir] = useState<'asc' | 'desc'>('asc');
   const [paginaLista, setPaginaLista] = useState(0);
+  // Modo alternativo da tabela (prompt 05R item 19): agrupar por etapa.
+  const [agruparPorEtapa, setAgruparPorEtapa] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isPickingUf, setIsPickingUf] = useState(false);
   const [isPickingStage, setIsPickingStage] = useState(false);
@@ -3632,9 +3642,12 @@ function MainApp() {
       return String(va).localeCompare(String(vb), 'pt-BR') * dir;
     });
   })();
-  const totalPaginas = Math.max(1, Math.ceil(linhasTabela.length / POR_PAGINA));
+  const tabelaOrdenada = agruparPorEtapa
+    ? [...linhasTabela].sort((a, b) => (a.etapa ?? 'zz').localeCompare(b.etapa ?? 'zz', 'pt-BR'))
+    : linhasTabela;
+  const totalPaginas = Math.max(1, Math.ceil(tabelaOrdenada.length / POR_PAGINA));
   const paginaAtual = Math.min(paginaLista, totalPaginas - 1);
-  const linhasDaPagina = linhasTabela.slice(paginaAtual * POR_PAGINA, (paginaAtual + 1) * POR_PAGINA);
+  const linhasDaPagina = tabelaOrdenada.slice(paginaAtual * POR_PAGINA, (paginaAtual + 1) * POR_PAGINA);
 
   const ordenarPor = (col: typeof ordemColuna) => {
     if (ordemColuna === col) setOrdemDir(d => (d === 'asc' ? 'desc' : 'asc'));
@@ -3682,6 +3695,7 @@ function MainApp() {
             { rotulo: 'Morno', cor: TEMP_COLORS.warm, ativo: tempFilter === 'Morno', aoTocar: () => setTempFilter(tempFilter === 'Morno' ? null : 'Morno'), n: contagemTemp.porRotulo.get('Morno') ?? 0 },
             { rotulo: 'Frio', cor: TEMP_COLORS.cold, ativo: tempFilter === 'Frio', aoTocar: () => setTempFilter(tempFilter === 'Frio' ? null : 'Frio'), n: contagemTemp.porRotulo.get('Frio') ?? 0 },
             { rotulo: 'Conta Alvo', cor: CONTA_ALVO_COLOR, ativo: contaAlvoOnly, aoTocar: () => setContaAlvoOnly(v => !v), n: contagemTemp.contaAlvo },
+            { rotulo: 'Agrupar por etapa', cor: 'var(--stroke-strong)', ativo: agruparPorEtapa, aoTocar: () => setAgruparPorEtapa(v => !v), n: null },
           ].map(chip => (
             <Pressable
               key={chip.rotulo}
@@ -3692,7 +3706,7 @@ function MainApp() {
               onPress={chip.aoTocar}
             >
               <View style={[styles.pmwChipDot, { backgroundColor: chip.cor }]} />
-              <Text style={styles.pmwChipTexto}>{`${chip.rotulo} · ${chip.n}`}</Text>
+              <Text style={styles.pmwChipTexto}>{chip.n === null ? chip.rotulo : `${chip.rotulo} · ${chip.n}`}</Text>
             </Pressable>
           ))}
         </View>
@@ -3734,6 +3748,7 @@ function MainApp() {
               disabled={!c.col}
               style={[c.estilo, { flexDirection: 'row', alignItems: 'center', gap: 4 }, c.centro && { justifyContent: 'center' }]}
               onPress={c.col ? () => ordenarPor(c.col!) : undefined}
+              {...({ 'aria-sort': c.col ? (ordemColuna === c.col ? (ordemDir === 'asc' ? 'ascending' : 'descending') : 'none') : undefined } as Record<string, unknown>)}
             >
               <Text style={styles.ltwCabecalhoTexto}>{c.rotulo}</Text>
               {c.col && ordemColuna === c.col && (
@@ -3755,15 +3770,23 @@ function MainApp() {
             </Text>
           </View>
         )}
-        {linhasDaPagina.map(c => {
+        {linhasDaPagina.map((c, idx) => {
           const temp = stageTemperature(c.etapa);
+          const cabecalhoGrupo = agruparPorEtapa && (idx === 0 || (linhasDaPagina[idx - 1].etapa ?? '') !== (c.etapa ?? ''));
           const tint = tintDaEtapa(c.etapa, isDark);
           const corBarra = c.conta_alvo_place_id ? CONTA_ALVO_COLOR : temp?.color ?? 'var(--stroke-default)';
           const reunioes = meetingsByClient[c.id]?.length ?? 0;
           const dias = c.visited_at ? Math.floor((Date.now() - new Date(c.visited_at).getTime()) / 86400000) : null;
           return (
+            <React.Fragment key={c.id}>
+            {cabecalhoGrupo && (
+              <View style={styles.ltwGrupoLinha}>
+                <Text style={styles.ltwGrupoTexto}>
+                  {c.etapa ?? 'Sem etapa'} · {tabelaOrdenada.filter(x => (x.etapa ?? '') === (c.etapa ?? '')).length}
+                </Text>
+              </View>
+            )}
             <Pressable
-              key={c.id}
               accessibilityRole="button"
               accessibilityLabel={c.nome ?? 'Lead'}
               style={styles.ltwLinha}
@@ -3824,6 +3847,7 @@ function MainApp() {
                 <IconChevronRight width={20} height={20} fill={iconColors.muted} />
               </View>
             </Pressable>
+            </React.Fragment>
           );
         })}
         <View style={styles.ltwRodape}>
@@ -3996,7 +4020,14 @@ function MainApp() {
   const headerWeb = (
     <View style={styles.hwContainer}>
       <View style={styles.hwTitulos}>
-        <Text style={styles.hwTitulo} numberOfLines={1}>{cabecalhoWeb.titulo}</Text>
+        <Text
+          ref={tituloWebRef}
+          style={styles.hwTitulo}
+          numberOfLines={1}
+          {...({ tabIndex: -1 } as Record<string, unknown>)}
+        >
+          {cabecalhoWeb.titulo}
+        </Text>
         <Text style={styles.hwSubtitulo} numberOfLines={1}>{cabecalhoWeb.sub}</Text>
       </View>
       <View style={styles.hwAcoes}>
@@ -4342,6 +4373,7 @@ function MainApp() {
           nomeDoLead={getClientPrimaryName}
           vendorLabel={vendorLabel}
           abrirLeadNoMapa={(c) => { setTab('map'); openClientDetails(c); }}
+          abrirLeadPorId={openClientById}
           agendarDemo={(c) => setSchedulingFor({ client: c, type: 'reuniao' })}
           abrirRegras={() => setIsTaskRulesOpen(true)}
           concluirTarefa={(vars) => resolveTask.mutate(vars)}
@@ -7558,6 +7590,21 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
   },
   ltwBadgeEtapaTexto: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600' },
+  ltwGrupoLinha: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: 'var(--surface-2)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+  },
+  ltwGrupoTexto: {
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    color: 'var(--text-muted)',
+  },
   ltwRodape: {
     flexDirection: 'row',
     justifyContent: 'space-between',
