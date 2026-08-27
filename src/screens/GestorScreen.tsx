@@ -15,7 +15,13 @@ import { Alert } from '../components/Alert';
 import {
   IconBarGraph,
   IconText,
-  IconCalendar, IconUser} from '../components/icons';
+  IconCalendar,
+  IconUser,
+  IconTrendingUp,
+  IconTrendingDown,
+  IconDownload,
+  useIconColors,
+} from '../components/icons';
 import {
   useGestorMetrics,
   useMetricLeads,
@@ -39,6 +45,9 @@ import { DismissedContaAlvoCard } from './DismissedContaAlvoCard';
 import { RouteHistorySection } from './RouteHistorySection';
 import { MinhaDailyCard } from './MinhaDailyCard';
 import { useLayout } from '../hooks/useLayout';
+import { useFunilEtapas } from '../hooks/useFunilEtapas';
+import { useVisitsHeatmap } from '../hooks/useVisitsHeatmap';
+import { FUNNEL_STAGE_IDS, STAGES } from '../constants/stages';
 
 interface Props {
   enabled: boolean;
@@ -691,6 +700,234 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
     );
   }, [query.data, preset]);
 
+  // ---- Painel web (handoff v2): KPIs com delta REAL, funil, heatmap, tabela ----
+  const iconColors = useIconColors();
+  // Janela imediatamente anterior de MESMO comprimento: o delta dos KPIs vem
+  // de uma segunda consulta, nao de numero inventado. 'all' nao tem anterior.
+  const periodoAnterior = useMemo<GestorPeriod | null>(() => {
+    const r = periodRange(period);
+    if (!r.start) return null;
+    const ini = new Date(r.start).getTime();
+    const fim = r.end ? new Date(r.end).getTime() : Date.now();
+    const tamanho = Math.max(fim - ini, 1);
+    return {
+      preset: 'custom',
+      startISO: new Date(ini - tamanho).toISOString(),
+      endISO: new Date(ini).toISOString(),
+    };
+  }, [period]);
+  const anteriorQuery = useGestorMetrics(
+    periodoAnterior ?? { preset: '30d' },
+    enabled && layout.ehLargo && periodoAnterior !== null,
+  );
+  const funilQuery = useFunilEtapas(enabled && layout.ehLargo);
+  const visitasHeat = useVisitsHeatmap(enabled && layout.ehLargo);
+
+  const g = query.data?.global ?? null;
+  const gAnterior = periodoAnterior ? anteriorQuery.data?.global ?? null : null;
+
+  const kpisWeb: Array<{ rotulo: string; valor: number; anterior: number | null }> = g
+    ? [
+        { rotulo: 'Visitas', valor: g.visited_in_period, anterior: gAnterior?.visited_in_period ?? null },
+        { rotulo: 'Demos agendadas', valor: g.meetings_in_period, anterior: gAnterior?.meetings_in_period ?? null },
+        { rotulo: 'Fechamentos', valor: g.won_in_period, anterior: gAnterior?.won_in_period ?? null },
+        { rotulo: 'Leads criados', valor: g.created_in_period, anterior: gAnterior?.created_in_period ?? null },
+      ]
+    : [];
+
+  // Funil: etapas na ordem oficial do pipeline, contadas na base inteira.
+  const faixasFunil = (() => {
+    const contagem = funilQuery.data;
+    if (!contagem) return [];
+    const faixas = FUNNEL_STAGE_IDS.map(id => {
+      const etapa = STAGES.find(s => s.id === id);
+      return {
+        rotulo: etapa?.label ?? id,
+        cor: etapa?.color ?? 'var(--stroke-default)',
+        total: contagem.get(etapa?.label ?? '') ?? 0,
+      };
+    });
+    const teto = Math.max(...faixas.map(f => f.total), 1);
+    return faixas.map(f => ({ ...f, fracao: f.total / teto }));
+  })();
+
+  // Heatmap "visitas na semana": 5 semanas x 7 dias a partir dos check-ins
+  // com GPS (mesma fonte do calor do mapa — as datas ja' vem no ponto).
+  const gradeVisitas = (() => {
+    const porDia = new Map<string, number>();
+    for (const pt of visitasHeat.points) {
+      if (!pt.at) continue;
+      const d = new Date(pt.at);
+      const chave = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      porDia.set(chave, (porDia.get(chave) ?? 0) + 1);
+    }
+    const hoje = new Date();
+    const desloc = (hoje.getDay() + 6) % 7; // 0 = segunda
+    const segDestaSemana = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - desloc);
+    const semanas: Array<Array<{ n: number; ehHoje: boolean; futuro: boolean }>> = [];
+    for (let s = 4; s >= 0; s -= 1) {
+      const linha: Array<{ n: number; ehHoje: boolean; futuro: boolean }> = [];
+      for (let dia = 0; dia < 7; dia += 1) {
+        const d = new Date(segDestaSemana);
+        d.setDate(segDestaSemana.getDate() - s * 7 + dia);
+        const chave = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+        linha.push({
+          n: porDia.get(chave) ?? 0,
+          ehHoje: d.toDateString() === hoje.toDateString(),
+          futuro: d.getTime() > hoje.getTime(),
+        });
+      }
+      semanas.push(linha);
+    }
+    return semanas;
+  })();
+
+  const timeOrdenado = [...visibleSellers].sort((a, b) => b.visited - a.visited);
+
+  const painelWeb = (
+    <View style={estilosWeb.bloco}>
+      {/* Faixa de KPIs — 3+3+3+3 do grid */}
+      <View style={estilosWeb.kpis}>
+        {kpisWeb.map(k => {
+          const delta =
+            k.anterior === null || anteriorQuery.isLoading
+              ? null
+              : k.anterior === 0
+                ? (k.valor > 0 ? 100 : 0)
+                : Math.round(((k.valor - k.anterior) / k.anterior) * 100);
+          return (
+            <View key={k.rotulo} style={estilosWeb.kpiCartao}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={estilosWeb.kpiRotulo}>{k.rotulo}</Text>
+                {delta !== null && delta !== 0 && (
+                  delta > 0
+                    ? <IconTrendingUp width={20} height={20} fill={iconColors.teal} />
+                    : <IconTrendingDown width={20} height={20} fill={iconColors.tintRedText} />
+                )}
+              </View>
+              <Text style={estilosWeb.kpiValor}>{k.valor.toLocaleString('pt-BR')}</Text>
+              {delta !== null && (
+                <Text style={[estilosWeb.kpiDelta, { color: delta >= 0 ? 'var(--tint-green-text)' : 'var(--tint-red-text)' }]}>
+                  {`${delta >= 0 ? '+' : ''}${delta}% vs período anterior`}
+                </Text>
+              )}
+            </View>
+          );
+        })}
+      </View>
+
+      {/* Funil (8) + heatmap (4) */}
+      <View style={estilosWeb.duasColunas}>
+        <View style={[estilosWeb.cartao, { flex: 2 }]}>
+          <Text style={estilosWeb.cartaoTitulo}>Funil comercial · base inteira</Text>
+          {funilQuery.isLoading ? (
+            <ActivityIndicator style={{ marginVertical: 24 }} />
+          ) : (
+            faixasFunil.map(f => (
+              <View key={f.rotulo} style={{ marginBottom: 12 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <Text style={estilosWeb.funilRotulo}>{f.rotulo}</Text>
+                  <Text style={estilosWeb.funilNumero}>
+                    {`${f.total.toLocaleString('pt-BR')} · ${Math.round(f.fracao * 100)}%`}
+                  </Text>
+                </View>
+                <View style={estilosWeb.funilTrilha}>
+                  <View style={[estilosWeb.funilBarra, { width: `${Math.max(f.fracao * 100, 1)}%`, backgroundColor: f.cor }]} />
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+        <View style={[estilosWeb.cartao, { flex: 1 }]}>
+          <Text style={estilosWeb.cartaoTitulo}>Visitas na semana</Text>
+          <View style={{ gap: 4 }}>
+            {gradeVisitas.map((linha, i) => (
+              <View key={i} style={{ flexDirection: 'row', gap: 4 }}>
+                {linha.map((cel, j) => (
+                  <View
+                    key={j}
+                    style={[
+                      estilosWeb.heatCelula,
+                      { backgroundColor: cel.n === 0 ? 'var(--surface-3)' : cel.n <= 2 ? '#8FE0D5' : '#1D9688' },
+                      cel.futuro && { opacity: 0.35 },
+                      cel.ehHoje && cel.n === 0 && estilosWeb.heatHojeVazio,
+                    ]}
+                  />
+                ))}
+              </View>
+            ))}
+          </View>
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+            {[
+              { cor: 'var(--surface-3)', r: '0' },
+              { cor: '#8FE0D5', r: '1–2' },
+              { cor: '#1D9688', r: '3+' },
+            ].map(l => (
+              <View key={l.r} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: l.cor }} />
+                <Text style={estilosWeb.heatLegenda}>{l.r}</Text>
+              </View>
+            ))}
+            {visitasHeat.capped && <Text style={estilosWeb.heatLegenda}>amostra recente</Text>}
+          </View>
+          <TouchableOpacity
+            style={estilosWeb.exportarBotao}
+            onPress={() => runExport('period')}
+            disabled={exporting !== null}
+          >
+            {exporting === 'period' ? (
+              <ActivityIndicator size="small" color={iconColors.teal} />
+            ) : (
+              <IconDownload width={20} height={20} fill={iconColors.teal} />
+            )}
+            <Text style={estilosWeb.exportarTexto}>Exportar relatório completo</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Tabela do time */}
+      <View style={[estilosWeb.cartao, { padding: 0, overflow: 'hidden' }]}>
+        <Text style={[estilosWeb.cartaoTitulo, { padding: 16, marginBottom: 0 }]}>Time no período</Text>
+        <View style={estilosWeb.tabelaCabecalho}>
+          <Text style={[estilosWeb.tabelaTh, { flex: 2, textAlign: 'left' }]}>Vendedor</Text>
+          {['Visitas', 'Demos', 'Fechados', 'Conversão', 'Mudanças', 'Tarefas'].map(c => (
+            <Text key={c} style={estilosWeb.tabelaTh}>{c}</Text>
+          ))}
+        </View>
+        {timeOrdenado.map(s => {
+          const nome = s.full_name || s.email || '—';
+          const iniciais = nome.trim().split(/\s+/).map(x => x[0]).slice(0, 2).join('').toUpperCase();
+          const conversao = s.visited > 0 ? Math.round((s.won_in_period / s.visited) * 100) : null;
+          const tarefas = s.id_hubspot ? taskCountsByHubspot.get(s.id_hubspot) : undefined;
+          return (
+            <TouchableOpacity
+              key={s.seller_id}
+              style={estilosWeb.tabelaLinha}
+              onPress={() =>
+                openLeads(`Visitados — ${nome}`, { period, sellerId: s.seller_id, metric: 'visited' })
+              }
+            >
+              <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                <View style={estilosWeb.tabelaAvatar}>
+                  <Text style={estilosWeb.tabelaAvatarTexto}>{iniciais}</Text>
+                </View>
+                <Text style={estilosWeb.tabelaNome} numberOfLines={1}>{nome}</Text>
+              </View>
+              <Text style={estilosWeb.tabelaTd}>{s.visited}</Text>
+              <Text style={estilosWeb.tabelaTd}>{s.meetings_scheduled}</Text>
+              <Text style={[estilosWeb.tabelaTd, s.won_in_period > 0 && { color: 'var(--tint-green-text)', fontWeight: '700' }]}>
+                {s.won_in_period}
+              </Text>
+              <Text style={estilosWeb.tabelaTd}>{conversao === null ? '—' : `${conversao}%`}</Text>
+              <Text style={estilosWeb.tabelaTd}>{s.stage_changes}</Text>
+              <Text style={estilosWeb.tabelaTd}>{tarefas ? `${tarefas.pending} abertas` : '—'}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+
   return (
     <ScrollView
       style={styles.container}
@@ -743,6 +980,9 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
         );
         const exportar = (
           <>
+      {/* Painel web (handoff): KPIs, funil, heatmap e tabela do time. */}
+      {layout.ehLargo && painelWeb}
+
       {/* Exportacao de dados (CSV com atividade por vendedor). */}
       <View style={styles.exportCard}>
         <IconText Icone={IconBarGraph} style={styles.exportTitle} tone="onSurface">Exportar TUDO (JSON p/ IA)</IconText>
@@ -830,7 +1070,9 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
             />
           </View>
 
-          {/* Atividade no periodo selecionado. */}
+          {/* Atividade no periodo selecionado — no web a faixa de KPIs do
+              painel acima ja' responde isso; a grade fica so' no celular. */}
+          {!layout.ehLargo && (<>
           <Text style={styles.sectionTitle}>
             Atividade {periodLabel}
           </Text>
@@ -872,6 +1114,7 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
               onPress={() => openLeads('Notas no período', { metric: 'notes', period })}
             />
           </View>
+          </>)}
 
           {/* Ranking de vendedores. */}
           <Text style={styles.sectionTitle}>
@@ -1273,4 +1516,108 @@ const rangeStyles = StyleSheet.create({
   },
   applyBtnDisabled: { opacity: 0.5 },
   applyTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
+});
+
+// Estilos do painel web (handoff v2). Separados do StyleSheet historico da
+// tela pra ficar claro o que pertence a' superficie desktop.
+const estilosWeb = StyleSheet.create({
+  bloco: { gap: 24, marginBottom: 24 },
+  kpis: { flexDirection: 'row', gap: 16, flexWrap: 'wrap' },
+  kpiCartao: {
+    flex: 1,
+    minWidth: 180,
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    borderRadius: 8,
+    padding: 16,
+    gap: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+  },
+  kpiRotulo: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '500', color: 'var(--text-muted)' },
+  kpiValor: { fontSize: 28, lineHeight: 36, fontWeight: '700', color: 'var(--text)', fontVariant: ['tabular-nums'] },
+  kpiDelta: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, fontWeight: '500' },
+  duasColunas: { flexDirection: 'row', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' },
+  cartao: {
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    borderRadius: 8,
+    padding: 24,
+    minWidth: 280,
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+  },
+  cartaoTitulo: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '700', color: 'var(--text)', marginBottom: 16 },
+  funilRotulo: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
+  funilNumero: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, color: 'var(--text-faint)', fontVariant: ['tabular-nums'] },
+  funilTrilha: { height: 22, borderRadius: 4, backgroundColor: 'var(--surface-3)', overflow: 'hidden' },
+  funilBarra: { height: '100%', borderRadius: 4 },
+  heatCelula: { width: 28, height: 28, borderRadius: 4 },
+  heatHojeVazio: { borderWidth: 1.5, borderColor: '#C8131B', borderStyle: 'dashed' },
+  heatLegenda: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)' },
+  exportarBotao: {
+    marginTop: 16,
+    height: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'var(--teal-text)',
+  },
+  exportarTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--teal-text)' },
+  tabelaCabecalho: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: 'var(--surface-2)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--stroke-default)',
+  },
+  tabelaTh: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '700',
+    color: 'var(--text-muted)',
+    textAlign: 'right',
+  },
+  tabelaLinha: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+  },
+  tabelaAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'var(--surface-2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabelaAvatarTexto: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, color: 'var(--text-muted)' },
+  tabelaNome: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text)', flexShrink: 1 },
+  tabelaTd: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+    color: 'var(--text-muted)',
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
+  },
 });

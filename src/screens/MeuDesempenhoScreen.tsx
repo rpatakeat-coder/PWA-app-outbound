@@ -20,6 +20,7 @@ import {
 } from '../hooks/useGestorMetrics';
 import { MinhaDailyCard } from './MinhaDailyCard';
 import { useLayout } from '../hooks/useLayout';
+import { useMinhaDaily } from '../hooks/useMinhaDaily';
 
 interface Props {
   enabled: boolean;
@@ -121,6 +122,9 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
   const period = useMemo<GestorPeriod>(() => ({ preset: preset === 'custom' ? '30d' : preset }), [preset]);
   const query = useMyMetrics(period, enabled);
   const m = query.data;
+  // Banner web (handoff, tela 7): a promessa de HOJE em destaque — e' a
+  // pergunta que a aba responde. Mesmos dados do MinhaDailyCard.
+  const { daily } = useMinhaDaily(enabled && layout.ehLargo);
 
   const open = (title: string, metric: MyMetricLeadsParams['metric']) =>
     setModal({ title, params: { metric, period } });
@@ -142,6 +146,56 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
           sempre de HOJE, e ficaria mentindo se parecesse responder ao filtro
           de 7/30 dias. No desktop ela ancora a coluna esquerda; as metricas
           historicas ficam a direita. No celular: Daily em cima, como sempre. */}
+      {layout.ehLargo && daily?.souDeCampo && daily.hoje && (
+        <View style={estilosWeb.banner}>
+          <View style={{ flexShrink: 1, minWidth: 220, gap: 4 }}>
+            <Text style={estilosWeb.bannerKicker}>Promessa de hoje</Text>
+            <Text style={estilosWeb.bannerTitulo}>
+              {daily.hoje.prometido == null
+                ? `${daily.hoje.visitas} ${daily.hoje.visitas === 1 ? 'visita feita' : 'visitas feitas'} — sem promessa declarada`
+                : `${daily.hoje.visitas} de ${daily.hoje.prometido} visitas`}
+            </Text>
+            <Text style={estilosWeb.bannerSub}>
+              {daily.hoje.prometido == null
+                ? 'Declare a promessa do dia no cartão da Daily aqui embaixo.'
+                : daily.hoje.cumpriu
+                  ? 'Palavra cumprida. O que passar daqui é saldo.'
+                  : `Faltam ${Math.max(daily.hoje.prometido - daily.hoje.visitas, 0)} pra cumprir a palavra.`}
+            </Text>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 32 }}>
+            {daily.hoje.prometido != null && (
+              <View style={estilosWeb.bannerNumeroBloco}>
+                <Text style={estilosWeb.bannerNumero}>
+                  {`${Math.min(Math.round((daily.hoje.visitas / Math.max(daily.hoje.prometido, 1)) * 100), 999)}%`}
+                </Text>
+                <Text style={estilosWeb.bannerNumeroRotulo}>da promessa</Text>
+              </View>
+            )}
+            <View style={estilosWeb.bannerNumeroBloco}>
+              <Text style={estilosWeb.bannerNumero}>{daily.sequencia}</Text>
+              <Text style={estilosWeb.bannerNumeroRotulo}>{daily.sequencia === 1 ? 'dia seguido' : 'dias seguidos'}</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {layout.ehLargo && m && (
+        <View style={estilosWeb.kpis}>
+          {[
+            { rotulo: 'Visitas', valor: m.visited, metric: 'visited' as const },
+            { rotulo: 'Demos agendadas', valor: m.meetings_scheduled, metric: 'meetings' as const },
+            { rotulo: 'Fechamentos', valor: m.won_in_period, metric: 'won' as const },
+            { rotulo: 'Follow-ups', valor: m.follow_ups_scheduled, metric: 'follow_ups' as const },
+          ].map(k => (
+            <TouchableOpacity key={k.rotulo} style={estilosWeb.kpiCartao} onPress={() => open(k.rotulo, k.metric)}>
+              <Text style={estilosWeb.kpiRotulo}>{`${k.rotulo} ${periodLabel}`}</Text>
+              <Text style={estilosWeb.kpiValor}>{k.valor.toLocaleString('pt-BR')}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       <View
         style={
           layout.ehDesktop
@@ -259,4 +313,56 @@ const styles = StyleSheet.create({
   leadName: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   leadMeta: { fontSize: 11, color: 'var(--text-muted)', marginTop: 1 },
   leadNote: { fontSize: 13, color: 'var(--text)', marginTop: 6, lineHeight: 18, backgroundColor: 'var(--bg)', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, borderLeftWidth: 3, borderLeftColor: '#FFD966' },
+});
+
+// Estilos da superficie web (handoff, tela 7). O banner e' o UNICO bloco
+// vermelho chapado da tela — nao repetir o padrao.
+const estilosWeb = StyleSheet.create({
+  banner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 24,
+    padding: 24,
+    borderRadius: 8,
+    backgroundColor: '#C8131B',
+    marginBottom: 24,
+  },
+  bannerKicker: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 1.3,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.75)',
+  },
+  bannerTitulo: { fontSize: 28, lineHeight: 36, fontWeight: '700', color: '#FFFFFF' },
+  bannerSub: { fontSize: 14, lineHeight: 20, letterSpacing: 0.25, fontWeight: '500', color: 'rgba(255,255,255,0.85)' },
+  bannerNumeroBloco: { alignItems: 'flex-end', gap: 2 },
+  bannerNumero: { fontSize: 28, lineHeight: 36, fontWeight: '700', color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  bannerNumeroRotulo: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.75)',
+  },
+  kpis: { flexDirection: 'row', gap: 16, flexWrap: 'wrap', marginBottom: 24 },
+  kpiCartao: {
+    flex: 1,
+    minWidth: 170,
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    borderRadius: 8,
+    padding: 16,
+    gap: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+  },
+  kpiRotulo: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '500', color: 'var(--text-muted)' },
+  kpiValor: { fontSize: 24, lineHeight: 32, fontWeight: '600', color: 'var(--text)', fontVariant: ['tabular-nums'] },
 });
