@@ -4033,7 +4033,7 @@ function MainApp() {
       </View>
       <View style={styles.hwAcoes}>
         {!isViewer && (
-          <View style={styles.hwBusca}>
+          <View style={styles.hwBusca} {...ds({ campo: '1' })}>
             <IconSearch width={20} height={20} fill={iconColors.muted} />
             <TextInput
               ref={webSearchRef}

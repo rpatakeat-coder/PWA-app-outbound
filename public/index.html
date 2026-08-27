@@ -274,6 +274,23 @@
       [tabindex='-1']:focus {
         outline: none; /* foco programatico de titulo ao trocar de aba */
       }
+      /*
+        Campo COMPOSTO (borda no wrapper, <input> dentro): o anel de foco
+        global caia no input interno, desalinhado da caixa — o "quadrado
+        azul" do login. O anel passa pro wrapper via :focus-within e o input
+        interno fica sem outline. So' em tela larga: no celular o campo volta
+        ao visual de sempre (sem anel de toque).
+      */
+      [data-campo] input:focus,
+      [data-campo] input:focus-visible {
+        outline: none;
+      }
+      @media (min-width: 768px) {
+        [data-campo]:focus-within {
+          outline: 2px solid #016999;
+          outline-offset: 2px;
+        }
+      }
       [data-sidebar] {
         width: 72px;
         transition: width 0.16s cubic-bezier(0.2, 0.7, 0.3, 1);

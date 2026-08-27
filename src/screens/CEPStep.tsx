@@ -263,7 +263,7 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
 
                 {/* CEP Input */}
                 <Text style={styles.label}>CEP</Text>
-                <View style={styles.inputRow}>
+                <View style={styles.inputRow} {...({ dataSet: { campo: "1" } } as Record<string, unknown>)}>
                   <TextInput
                     style={[styles.input, { flex: 1 }]}
                     placeholder="00000-000"

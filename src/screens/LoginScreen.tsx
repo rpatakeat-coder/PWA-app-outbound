@@ -68,7 +68,7 @@ export function LoginScreen() {
       <Text style={[styles.formTitle, layout.ehDesktop && styles.webFormTitle]}>Entrar na conta</Text>
 
       {layout.ehDesktop && <Text style={styles.webRotulo}>E-mail</Text>}
-      <View style={[styles.inputWrap, layout.ehDesktop && styles.webInputWrap, !!error && styles.inputWrapErro]}>
+      <View style={[styles.inputWrap, layout.ehDesktop && styles.webInputWrap, !!error && styles.inputWrapErro]} {...ds({ campo: '1' })}>
         <IconMail width={layout.ehDesktop ? 20 : 16} height={layout.ehDesktop ? 20 : 16} fill={layout.ehDesktop ? iconColors.faint : iconColors.onSurface} />
         <TextInput
           style={styles.input}
@@ -85,7 +85,7 @@ export function LoginScreen() {
       </View>
 
       {layout.ehDesktop && <Text style={styles.webRotulo}>Senha</Text>}
-      <View style={[styles.inputWrap, layout.ehDesktop && styles.webInputWrap, !!error && styles.inputWrapErro]}>
+      <View style={[styles.inputWrap, layout.ehDesktop && styles.webInputWrap, !!error && styles.inputWrapErro]} {...ds({ campo: '1' })}>
         <IconLock width={layout.ehDesktop ? 20 : 16} height={layout.ehDesktop ? 20 : 16} fill={layout.ehDesktop ? iconColors.faint : iconColors.onSurface} />
         <TextInput
           style={styles.input}
