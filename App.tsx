@@ -4735,7 +4735,7 @@ function MainApp() {
                 {canViewGestor && (
                   <>
                     <TouchableOpacity
-                      style={styles.gestaoButton}
+                      style={[styles.gestaoButton, layout.ehLargo && styles.cfgGestaoWeb]}
                       // Link de VERDADE, não window.open: o react-native-web
                       // renderiza um <a> quando recebe `href`, e isso evita a
                       // mesma armadilha que já corrigimos na navegação — o
@@ -4753,8 +4753,8 @@ function MainApp() {
                     >
                       <IconBarGraph width={20} height={20} fill="#fff" />
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.gestaoButtonText}>Abrir painel de gestão</Text>
-                        <Text style={styles.gestaoButtonHint}>
+                        <Text style={[styles.gestaoButtonText, layout.ehLargo && { color: 'var(--tint-red-text)' }]}>Abrir painel de gestão</Text>
+                        <Text style={[styles.gestaoButtonHint, layout.ehLargo && { color: 'var(--tint-red-text)', opacity: 0.8 }]}>
                           Funil do time, travados e gargalo. Melhor no computador.
                         </Text>
                       </View>
@@ -4788,17 +4788,24 @@ function MainApp() {
                   "Automático" acompanha o ajuste do seu celular. O mapa acompanha
                   o tema junto com o resto do app.
                 </Text>
-                <View style={styles.themeRow}>
+                <View style={[styles.themeRow, layout.ehLargo && { gap: 0 }]}>
                   {([
                     { valor: 'system', rotulo: 'Automático' },
                     { valor: 'light', rotulo: 'Claro' },
                     { valor: 'dark', rotulo: 'Escuro' },
-                  ] as const).map((opt) => {
+                  ] as const).map((opt, i) => {
                     const ativo = themePref === opt.valor;
                     return (
                       <TouchableOpacity
                         key={opt.valor}
-                        style={[styles.themeChip, ativo && styles.themeChipActive]}
+                        style={[
+                          styles.themeChip,
+                          layout.ehLargo && styles.cfgSegmento,
+                          layout.ehLargo && i === 0 && { borderTopLeftRadius: 12, borderBottomLeftRadius: 12 },
+                          layout.ehLargo && i === 2 && { borderTopRightRadius: 12, borderBottomRightRadius: 12 },
+                          layout.ehLargo && i > 0 && { borderLeftWidth: 0 },
+                          ativo && styles.themeChipActive,
+                        ]}
                         onPress={() => setThemePref(opt.valor)}
                       >
                         <Text style={[styles.themeChipText, ativo && styles.themeChipTextActive]}>
@@ -4815,7 +4822,7 @@ function MainApp() {
                   Digite uma nova senha. Mínimo de 6 caracteres.
                 </Text>
                 <TextInput
-                  style={sharedStyles.input}
+                  style={[sharedStyles.input, layout.ehLargo && styles.cfgInputWeb]}
                   placeholder="Nova senha"
                   placeholderTextColor="var(--text-subtle)"
                   secureTextEntry
@@ -4824,7 +4831,7 @@ function MainApp() {
                   editable={!isSavingPassword}
                 />
                 <TextInput
-                  style={sharedStyles.input}
+                  style={[sharedStyles.input, layout.ehLargo && styles.cfgInputWeb]}
                   placeholder="Confirmar nova senha"
                   placeholderTextColor="var(--text-subtle)"
                   secureTextEntry
@@ -4833,7 +4840,7 @@ function MainApp() {
                   editable={!isSavingPassword}
                 />
                 <TouchableOpacity
-                  style={[sharedStyles.submitButton, isSavingPassword && { opacity: 0.6 }]}
+                  style={[sharedStyles.submitButton, layout.ehLargo && styles.cfgBotaoWeb, isSavingPassword && { opacity: 0.6 }]}
                   disabled={isSavingPassword}
                   onPress={async () => {
                     if (newPassword.length < 6) {
@@ -4875,7 +4882,7 @@ function MainApp() {
                       no meio de um cadastro perdem o que não foi salvo.
                     </Text>
                     <TouchableOpacity
-                      style={styles.adminButton}
+                      style={[styles.adminButton, layout.ehLargo && styles.cfgAdminWeb]}
                       onPress={() => {
                         Alert.alert(
                           'Forçar reload de todos',
@@ -4905,7 +4912,7 @@ function MainApp() {
                         );
                       }}
                     >
-                      <IconText Icone={IconRefresh} style={styles.adminButtonText} tone="onSurface">Forçar reload de todos</IconText>
+                      <IconText Icone={IconRefresh} style={[styles.adminButtonText, layout.ehLargo && { color: 'var(--brand-text)' }]} tone="onSurface">Forçar reload de todos</IconText>
                     </TouchableOpacity>
                   </>
                 )}
@@ -7901,6 +7908,39 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.14,
     shadowOffset: { width: 0, height: 10 },
     shadowRadius: 25,
+  },
+  // Configuracoes no web: mesmos tokens do resto do handoff.
+  cfgInputWeb: {
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-strong)',
+    backgroundColor: 'var(--surface)',
+    paddingVertical: 0,
+  },
+  cfgBotaoWeb: { height: 40, borderRadius: 12, paddingVertical: 0, justifyContent: 'center' },
+  cfgGestaoWeb: {
+    backgroundColor: 'var(--tint-red)',
+    borderRadius: 8,
+    minHeight: 48,
+    paddingVertical: 12,
+  },
+  cfgSegmento: {
+    height: 40,
+    borderRadius: 0,
+    justifyContent: 'center',
+    paddingVertical: 0,
+    backgroundColor: 'var(--surface)',
+    borderColor: 'var(--stroke-default)',
+  },
+  cfgAdminWeb: {
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: '#C8131B',
+    borderRadius: 12,
+    height: 40,
+    paddingVertical: 0,
+    justifyContent: 'center',
   },
   modalCartaoWeb: {
     width: '100%',
