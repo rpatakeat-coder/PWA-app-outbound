@@ -57,6 +57,35 @@ npm run lint                          # na raiz
 npx expo export --platform web --output-dir /tmp/b  # build real do app
 ```
 
+## Repositório e identidade dos commits
+
+- **Remote**: `origin` → `https://github.com/rpatakeat-coder/PWA-app-outbound.git`
+  (o `origin-antigo`, `arthurgothetakeat-maker/mapaOutbound-APP`, é o repo
+  anterior — nunca dar push nele).
+- **Commit e push sempre pela conta `rpatakeat-coder`**, e-mail
+  `rpa.takeat@gmail.com`. Já está no `.git/config` local do repo, e o local
+  vence o `--global` (que é a conta pessoal do Guilherme). Se por algum motivo
+  a identidade sair do lugar, restaurar com:
+
+  ```
+  git config user.name rpatakeat-coder
+  git config user.email rpa.takeat@gmail.com
+  ```
+
+  Conferir antes de commitar em máquina nova: `git config user.email`.
+- **Antes de qualquer push, `git pull`** — outras instâncias do Claude
+  trabalham neste mesmo repo.
+
+Setup completo, se um dia faltar remote ou identidade (cópia sem `.git`,
+máquina nova, clone limpo) — cola isto e está pronto para pull/push:
+
+```
+git remote add origin https://github.com/rpatakeat-coder/PWA-app-outbound.git
+git config user.name rpatakeat-coder
+git config user.email rpa.takeat@gmail.com
+git fetch origin && git branch -u origin/main main
+```
+
 ## Quem roda o quê
 
 O usuário (Guilherme) opera produção: migrations via SQL Editor,
