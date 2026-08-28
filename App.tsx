@@ -3111,6 +3111,106 @@ function MainApp() {
     />
   ) : null;
 
+  // ── Controle do calor de visitas (M2) ─────────────────────────────────
+  // O MESMO corpo serve os dois layouts: no desktop ele expande a linha do
+  // switch dentro do painel de 352px (nada flutua sobre o mapa, que e' o dado
+  // que o controle explica); no celular vira folha no rodape.
+  const corpoCalor = (() => {
+    // Linhas de 32px so' no desktop de verdade. Em tablet (768-1023) o alvo do
+    // design system continua 48px, e o painel de 352px ja' existe la'.
+    const compacto = layout.ehDesktop;
+    const alturaLinha = compacto ? 32 : 48;
+
+    const linhaVendedor = (
+      id: string | null,
+      nome: string,
+      contagem: number,
+    ) => {
+      const ativo = heatSeller === id;
+      return (
+        <TouchableOpacity
+          key={id ?? 'todos'}
+          accessibilityRole="radio"
+          accessibilityState={{ checked: ativo }}
+          style={[styles.calorLinha, { height: alturaLinha }]}
+          {...(compacto ? ds({ hover: 'surface2', trans: '1' }) : {})}
+          onPress={() => setHeatSeller(id)}
+        >
+          <View style={[styles.calorRadio, ativo && styles.calorRadioAtivo]}>
+            {ativo && <IconCheck width={12} height={12} fill="#FFFFFF" />}
+          </View>
+          <Text style={[styles.calorNome, ativo && styles.calorNomeAtivo]} numberOfLines={1}>
+            {nome}
+          </Text>
+          <Text style={styles.calorContagem}>{contagem}</Text>
+        </TouchableOpacity>
+      );
+    };
+
+    return (
+      <View style={{ gap: 12 }}>
+        {/* a · Escala. Uma familia de cor: mais escuro = mais visita. */}
+        <View>
+          <View style={styles.calorEscalaBarra}>
+            {HEAT_LEGEND_STOPS.map((c, i) => (
+              <View key={i} style={{ flex: 1, backgroundColor: c }} />
+            ))}
+          </View>
+          <View style={styles.calorEscalaRotulos}>
+            <Text style={styles.calorEscalaRotulo}>menos</Text>
+            <Text style={styles.calorEscalaRotulo}>mais</Text>
+          </View>
+        </View>
+
+        {/* b · Vendedores. Lista vertical: os 17 do time cabem rolando, o que a
+            fila horizontal de chips nao permitia (mostrava tres). */}
+        <View>
+          <View style={styles.calorListaCabecalho}>
+            <Text style={styles.calorListaTitulo}>POR VENDEDOR</Text>
+            <Text style={styles.calorListaTotal}>
+              {heatPoints.length} {heatPoints.length === 1 ? 'visita' : 'visitas'}
+            </Text>
+          </View>
+          {heat.total === 0 && !heatLoading ? (
+            <Text style={styles.heatEmpty}>
+              {heatSeller ? 'Este vendedor não tem visitas com GPS.' : 'Nenhuma visita com GPS registrada.'}
+            </Text>
+          ) : null}
+          <ScrollView
+            style={{ maxHeight: compacto ? 180 : 240 }}
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+          >
+            {linhaVendedor(null, 'Todos', heatPoints.length)}
+            {heatSellers.map((v) => linhaVendedor(v.id, v.name, v.count))}
+          </ScrollView>
+        </View>
+
+        {/* c · Exportacao: acao secundaria de consulta, nao CTA. Outline teal,
+            o mesmo de "Baixar planilha" e "Exportar relatorio". */}
+        <TouchableOpacity
+          accessibilityRole="button"
+          style={[
+            styles.calorExportar,
+            compacto ? styles.calorExportarDesktop : styles.calorExportarMobile,
+            (exportingHeat || heatLoading || heat.total === 0) && { opacity: 0.5 },
+          ]}
+          onPress={handleExportHeatmap}
+          disabled={exportingHeat || heatLoading || heat.total === 0}
+        >
+          {exportingHeat ? (
+            <ActivityIndicator size="small" color={iconColors.teal} />
+          ) : (
+            <>
+              <IconDownload width={20} height={20} fill={iconColors.teal} />
+              <Text style={styles.calorExportarTexto}>Exportar JSON</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  })();
+
   const conteudoMapa = (
     <>
       <MapView
@@ -3387,79 +3487,36 @@ function MainApp() {
         </TouchableOpacity>
       )}
 
-      {/* Painel do mapa de calor (gestor). Título + legenda gradiente +
-          chips de vendedor (Todos + um por vez). O ✕ e o próprio 🔥 desligam. */}
-      {heatOn && !creationMode && (
-        <View style={[styles.heatPanel, { bottom: baseInferior }, layout.ehLargo && styles.heatPanelWeb]}>
-          <View style={styles.heatPanelHeader}>
-            <IconText Icone={IconTrendingUp} style={styles.heatPanelTitle} tone="onSurface">Calor de visitas</IconText>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              {heatLoading ? (
-                <ActivityIndicator size="small" color="#f97316" />
-              ) : (
-                <Text style={styles.heatPanelCount}>
-                  {heat.total} {heat.total === 1 ? 'visita' : 'visitas'}
-                  {heatCapped ? ' (amostra recente)' : ''}
-                </Text>
-              )}
-              <TouchableOpacity
-                style={[styles.heatExportBtn, (exportingHeat || heatLoading || heat.total === 0) && { opacity: 0.5 }]}
-                onPress={handleExportHeatmap}
-                disabled={exportingHeat || heatLoading || heat.total === 0}
-              >
-                {exportingHeat
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <IconText Icone={IconDownload} style={styles.heatExportBtnText} tone="onBrand">JSON</IconText>}
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Legenda: menos → mais visitas */}
-          <View style={styles.heatLegendRow}>
-            <Text style={styles.heatLegendLabel}>menos</Text>
-            <View style={styles.heatLegendBar}>
-              {HEAT_LEGEND_STOPS.map((c, i) => (
-                <View key={i} style={{ flex: 1, backgroundColor: c }} />
-              ))}
-            </View>
-            <Text style={styles.heatLegendLabel}>mais</Text>
-            <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Fechar" style={styles.heatCloseBtn} onPress={() => setHeatOn(false)}>
-              <IconClose width={16} height={16} fill={iconColors.muted} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Filtro por vendedor: Todos + um por vez */}
-          {heat.total === 0 && !heatLoading ? (
-            <Text style={styles.heatEmpty}>
-              {heatSeller ? 'Este vendedor não tem visitas com GPS.' : 'Nenhuma visita com GPS registrada.'}
-            </Text>
-          ) : null}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.heatChips}
-            keyboardShouldPersistTaps="handled"
-          >
-            <TouchableOpacity
-              style={[styles.heatChip, heatSeller === null && styles.heatChipActive]}
-              onPress={() => setHeatSeller(null)}
-            >
-              <Text style={[styles.heatChipText, heatSeller === null && styles.heatChipTextActive]}>
-                Todos ({heatPoints.length})
+      {/* Calor de visitas no CELULAR (M2): folha no rodape, nao cartao
+          flutuante. No desktop o controle vive dentro do painel de 352px —
+          la' a linha do switch expande, e nada cobre o mapa. */}
+      {heatOn && !creationMode && !layout.ehLargo && (
+        // Ancorada ACIMA da barra de navegacao (baseInferior = 90 + safe area),
+        // nao no fundo da janela: em `bottom: 0` a barra cobria o "Exportar
+        // JSON". Os 40px de padding embaixo continuam de reserva do FAB — que
+        // aqui ate' some com o calor ligado, mas a folha nao depende disso.
+        <View style={[styles.calorFolha, { bottom: baseInferior }]}>
+          <View style={styles.calorFolhaAlca} />
+          <View style={styles.calorFolhaCabecalho}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.calorFolhaTitulo}>Calor de visitas</Text>
+              <Text style={styles.pmwCalorSub} numberOfLines={1}>
+                {heatLoading
+                  ? 'Carregando check-ins…'
+                  : `${heat.total} ${heat.total === 1 ? 'visita' : 'visitas'}${heatCapped ? ' (amostra recente)' : ''}`}
               </Text>
+            </View>
+            {/* Aqui o X faz sentido: no celular nao ha' switch visivel. */}
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Fechar"
+              style={styles.calorFolhaFechar}
+              onPress={() => setHeatOn(false)}
+            >
+              <IconClose width={24} height={24} fill={iconColors.muted} />
             </TouchableOpacity>
-            {heatSellers.map((s) => (
-              <TouchableOpacity
-                key={s.id}
-                style={[styles.heatChip, heatSeller === s.id && styles.heatChipActive]}
-                onPress={() => setHeatSeller((cur) => (cur === s.id ? null : s.id))}
-              >
-                <Text style={[styles.heatChipText, heatSeller === s.id && styles.heatChipTextActive]}>
-                  {s.name} ({s.count})
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          </View>
+          {corpoCalor}
         </View>
       )}
 
@@ -3659,30 +3716,36 @@ function MainApp() {
           </View>
         </View>
         {canViewGestor && (
-          <View style={styles.pmwCalor}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.pmwCalorTitulo}>Calor de visitas</Text>
-              <Text style={styles.pmwCalorSub} numberOfLines={1}>
-                {heatOn
-                  ? heatLoading
-                    ? 'Carregando check-ins…'
-                    : `${heat.total} check-ins no mapa`
-                  : 'Densidade de check-ins com GPS'}
-              </Text>
+          // Ligado, a propria linha EXPANDE e mostra escala e vendedores. Nada
+          // flutua sobre o mapa (o cartao antigo cobria o dado que explicava), e
+          // nao ha' X: desligar e' o mesmo switch que ligou.
+          <View style={styles.calorCaixa}>
+            <View style={styles.pmwCalor}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.pmwCalorTitulo}>Calor de visitas</Text>
+                <Text style={styles.pmwCalorSub} numberOfLines={1}>
+                  {heatOn
+                    ? heatLoading
+                      ? 'Carregando check-ins…'
+                      : `${heat.total} ${heat.total === 1 ? 'visita' : 'visitas'}${heatCapped ? ' (amostra recente)' : ''}`
+                    : 'Densidade de check-ins com GPS'}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="switch"
+                accessibilityLabel="Calor de visitas"
+                accessibilityState={{ checked: heatOn }}
+                style={[
+                  styles.pmwSwitch,
+                  { backgroundColor: heatOn ? '#C8131B' : 'var(--stroke-default)', alignItems: heatOn ? 'flex-end' : 'flex-start' },
+                ]}
+                {...ds({ trans: '1' })}
+                onPress={() => setHeatOn(v => !v)}
+              >
+                <View style={styles.pmwSwitchDot} />
+              </Pressable>
             </View>
-            <Pressable
-              accessibilityRole="switch"
-              accessibilityLabel="Calor de visitas"
-              accessibilityState={{ checked: heatOn }}
-              style={[
-                styles.pmwSwitch,
-                { backgroundColor: heatOn ? '#C8131B' : 'var(--stroke-default)', alignItems: heatOn ? 'flex-end' : 'flex-start' },
-              ]}
-              {...ds({ trans: '1' })}
-              onPress={() => setHeatOn(v => !v)}
-            >
-              <View style={styles.pmwSwitchDot} />
-            </Pressable>
+            {heatOn && <View style={styles.calorCorpo}>{corpoCalor}</View>}
           </View>
         )}
       </View>
@@ -7282,61 +7345,127 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   // ===== Painel do mapa de calor (gestor) =====
-  heatPanel: {
+  // ---- Calor de visitas (M2) ----
+  // Desktop: a linha do switch dentro do painel de 352px vira caixa expansivel.
+  calorCaixa: { borderRadius: 8, backgroundColor: 'var(--surface-2)', overflow: 'hidden' },
+  calorCorpo: { paddingHorizontal: 12, paddingBottom: 12 },
+  // Celular: folha no rodape. Os 40px de baixo nao sao decorativos — sao 16 de
+  // respiro + os 24 que o FAB central invade acima da barra de navegacao. Sem
+  // eles o circulo vermelho do FAB cai em cima do "Exportar JSON".
+  calorFolha: {
     position: 'absolute',
-    left: 12,
-    right: 12,
-    backgroundColor: 'var(--surface-overlay)',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 8,
+    left: 0,
+    right: 0,
+    paddingTop: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    backgroundColor: 'var(--surface)',
     shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowOffset: { width: 0, height: 3 },
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: -4 },
+    shadowRadius: 16,
+    elevation: 8,
   },
-  heatPanelHeader: {
-    flexDirection: 'row',
+  calorFolhaAlca: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'var(--stroke-default)',
+    marginBottom: 12,
+  },
+  calorFolhaCabecalho: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  calorFolhaTitulo: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: 'var(--text)' },
+  calorFolhaFechar: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: 'var(--surface-2)',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+    justifyContent: 'center',
   },
-  heatPanelTitle: { fontSize: 14, fontWeight: '800', color: 'var(--text)' },
-  heatPanelCount: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
-  heatExportBtn: { backgroundColor: '#C8131B', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 },
-  heatExportBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  heatLegendRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  heatLegendLabel: { fontSize: 10, fontWeight: '700', color: 'var(--text-subtle)' },
-  heatLegendBar: {
-    flex: 1,
+  // Escala: uma familia de cor, quatro degraus interpolados em 24 passos.
+  // A borda nao e' enfeite: o passo mais claro da rampa (#D6F2EC) da' 1,18:1
+  // sobre --surface-2 no tema claro, e sem ela a barra parece comecar no meio.
+  calorEscalaBarra: {
     height: 8,
     borderRadius: 4,
     overflow: 'hidden',
     flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
   },
-  heatCloseBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: 'var(--surface-2)',
-    justifyContent: 'center',
+  calorEscalaRotulos: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  calorEscalaRotulo: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '600',
+    color: 'var(--text-faint)',
+  },
+  calorListaCabecalho: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginLeft: 2,
+    marginBottom: 4,
   },
-  heatCloseText: { fontSize: 13, fontWeight: '800', color: 'var(--text-muted)' },
+  calorListaTitulo: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    color: 'var(--text-faint)',
+  },
+  calorListaTotal: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '600',
+    color: 'var(--text-faint)',
+    fontVariant: ['tabular-nums'],
+  },
+  calorLinha: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, borderRadius: 4 },
+  // Circulo, e nao quadrado: `heatSeller` e' selecao unica (Todos ou UM), e uma
+  // caixa de marcar prometeria escolher varios.
+  calorRadio: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: 'var(--stroke-strong)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calorRadioAtivo: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
+  calorNome: { flex: 1, fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-muted)' },
+  calorNomeAtivo: { fontWeight: '700', color: 'var(--tint-red-text)' },
+  calorContagem: {
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '600',
+    color: 'var(--text-faint)',
+    fontVariant: ['tabular-nums'],
+  },
+  // Exportacao e' consulta, nao CTA: outline teal, o mesmo de "Baixar
+  // planilha" e "Exportar relatorio". O vermelho e' do CTA primario do app.
+  calorExportar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'var(--teal-text)',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+  },
+  calorExportarDesktop: { height: 32, alignSelf: 'flex-start' },
+  calorExportarMobile: { height: 48, alignSelf: 'stretch' },
+  calorExportarTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--teal-text)' },
   heatEmpty: { fontSize: 12, color: 'var(--text-subtle)', fontStyle: 'italic', marginBottom: 6 },
-  heatChips: { gap: 6, paddingRight: 4 },
-  heatChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: 'var(--surface-2)',
-  },
-  heatChipActive: { backgroundColor: '#f97316' },
-  heatChipText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)' },
-  heatChipTextActive: { color: '#fff' },
   fab: {
     position: 'absolute',
     right: 16,
@@ -7698,7 +7827,6 @@ const styles = StyleSheet.create({
     left: 'auto',
     bottom: 'auto',
   },
-  heatPanelWeb: { left: 16, right: 'auto', width: 400, maxWidth: '92%' },
   // ---- Lista web (tabela) ----
   ltwPagina: { padding: 24, maxWidth: 1600, width: '100%', alignSelf: 'center' },
   ltwFerramentas: {

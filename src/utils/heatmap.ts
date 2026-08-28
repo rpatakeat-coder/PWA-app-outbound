@@ -73,13 +73,25 @@ export function heatIntensity(n: number, max: number): number {
   return Math.pow(n / max, 0.6);
 }
 
-// Escala verde -> amarelo -> laranja -> vermelho. t em [0,1].
+// Escala de densidade de visita: UMA familia de cor, quatro degraus. t em [0,1].
+//
+// POR QUE NAO O ARCO-IRIS QUE ESTAVA AQUI
+// Verde -> amarelo -> laranja -> vermelho e' a escala de TEMPERATURA DO FUNIL
+// (src/constants/stages.ts), onde vermelho quer dizer quente/urgente e verde,
+// frio. No mapa de calor vermelho significava MUITA visita, que e' bom, e verde
+// pouca, que e' ruim — a mesma paleta dizendo o contrario do que diz no resto
+// do app, sobre o mesmo mapa em que os pins usam a outra leitura. Quem aprendeu
+// que vermelho e' lead quente lia o calor invertido.
+//
+// O teal e' a mesma familia do heatmap do cockpit do gestor, entao densidade de
+// visita passa a ter uma cor so' no app inteiro, e nao colide com o funil.
+// Mais escuro = mais visita, sem ambiguidade.
 export function heatColor(t: number, alpha: number): string {
   const stops = [
-    [34, 197, 94], // verde  (poucas visitas)
-    [250, 204, 21], // amarelo
-    [249, 115, 22], // laranja
-    [239, 68, 68], // vermelho (muitas visitas)
+    [214, 242, 236], // #D6F2EC  (poucas visitas)
+    [143, 224, 213], // #8FE0D5
+    [63, 191, 173], // #3FBFAD
+    [29, 150, 136], // #1D9688  (muitas visitas)
   ];
   const clamped = Math.max(0, Math.min(1, t));
   const x = clamped * (stops.length - 1);
@@ -93,6 +105,11 @@ export function heatColor(t: number, alpha: number): string {
   return `rgba(${r},${g},${bl},${alpha})`;
 }
 
-// Cores fixas da legenda (menos -> mais), pra desenhar o gradiente sem depender
-// do MapView.
-export const HEAT_LEGEND_STOPS = [0, 0.25, 0.5, 0.75, 1].map((t) => heatColor(t, 0.9));
+// Cores fixas da legenda (menos -> mais), pra desenhar a barra sem depender do
+// MapView. Sao 24 passos, e nao os 4 degraus, porque o StyleSheet do RN nao tem
+// linear-gradient: a barra e' uma fila de <View> de cor solida, e com poucos
+// passos ela vira faixa listrada em vez de gradiente. Interpolar aqui mantem a
+// legenda descrevendo exatamente a mesma rampa que heatColor() pinta no mapa.
+export const HEAT_LEGEND_STOPS = Array.from({ length: 24 }, (_, i) =>
+  heatColor(i / 23, 1),
+);
