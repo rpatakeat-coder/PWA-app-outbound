@@ -63,7 +63,7 @@ function temaEscuroAgora(): boolean {
 // `teto`: tabela pede 1600, leitura pede 1200 — texto com medida de 1500px vira
 // linha de 250 caracteres, que ninguem le' sem perder a linha.
 const ABAS = [
-  { id: 'time', rotulo: 'Time', descricao: 'Onde eu ajo hoje?', Icone: IconUserGroup, teto: 1200 },
+  { id: 'time', rotulo: 'Time', descricao: 'Onde eu ajo hoje?', Icone: IconUserGroup, teto: 1600 },
   { id: 'daily', rotulo: 'Daily', descricao: 'Quem cumpriu, quem está vazio?', Icone: IconCalendarCheck, teto: 1600 },
   { id: 'semana', rotulo: 'Semana', descricao: 'O que mudou e o que eu faço?', Icone: IconCalendar, teto: 1200 },
   { id: 'agenda', rotulo: 'Agenda', descricao: 'A semana está planejada?', Icone: IconSchedule, teto: 1200 },

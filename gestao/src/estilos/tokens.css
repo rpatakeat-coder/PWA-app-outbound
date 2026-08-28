@@ -72,6 +72,10 @@
   --amber: #cc8c1d;      /* primary.yellow.600 — preenchimento/borda */
   --amber-soft: #fff8eb; /* primary.yellow.100 */
   --amber-ink: #99670f;  /* primary.yellow.700 — 4.88, o unico amarelo legivel */
+  /* Cor de ETAPA do funil (dado, nao cromo — src/constants/stages.ts do app de
+     campo). E' a unica que tem par de tema la'; as outras quatro sao hex
+     literais nos dois temas. Mesmo par do app: violet.500 / violet.300. */
+  --violet-text: #8b5cf6;
 
   /* Bloco escuro — um por tela, so' o banner */
   --dark: #222222;     /* neutral.500 */
@@ -115,6 +119,7 @@
     --amber: #ffd894;      /* primary.yellow.300 — 11.46 */
     --amber-soft: #33280f; /* derivado */
     --amber-ink: #ffd894;  /* primary.yellow.300 — 10.68 sobre a tinta */
+    --violet-text: #c4b5fd;
 
     --dark: #000000; /* oficial */
     --dark-ink: rgba(255, 255, 255, 0.92); /* oficial */
@@ -148,6 +153,7 @@
   --amber: #ffd894;
   --amber-soft: #33280f;
   --amber-ink: #ffd894;
+  --violet-text: #c4b5fd;
 
   --dark: #000000; /* oficial */
   --dark-ink: rgba(255, 255, 255, 0.92); /* oficial */
