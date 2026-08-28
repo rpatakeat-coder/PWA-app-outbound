@@ -978,7 +978,7 @@ function MainApp() {
   // Agendamento aberto: guarda o cliente + o tipo (reunião ou follow up).
   // Mesmo modal serve os dois; só muda o `type` salvo e os rótulos.
   // reschedule preenchido => o modal abre em modo "reagendar" daquela reunião.
-  const [schedulingFor, setSchedulingFor] = useState<{ client: Client; type: MeetingType; reschedule?: ClientMeeting } | null>(null);
+  const [schedulingFor, setSchedulingFor] = useState<{ client: Client; type: MeetingType; reschedule?: ClientMeeting; tarefa?: { id: string; titulo: string; severity: string | null; diasNaEtapa: number | null; etapa: string | null } } | null>(null);
   // Passado da agenda começa fechado (igual lista). Hoje/futuro viram uma
   // timeline contínua agrupada por dia — não precisam de acordeão.
   // Chip de tipo na aba Agenda (null = todos): 'reuniao' | 'follow_up' | 'rota'.
@@ -4371,7 +4371,25 @@ function MainApp() {
           abrirLeadNoMapa={(c) => { setTab('map'); openClientDetails(c); }}
           abrirLeadPorId={openClientById}
           limparFiltroVendedor={() => setVendorFilterHubspotId(null)}
-          agendarDemo={(c) => setSchedulingFor({ client: c, type: 'reuniao' })}
+          agendarDemo={(c, task) =>
+            setSchedulingFor({
+              client: c,
+              type: 'reuniao',
+              tarefa: task
+                ? {
+                    id: task.id,
+                    titulo: task.title.replace(/^(D\d+|SLA)\s+/i, ''),
+                    severity: task.severity,
+                    diasNaEtapa: typeof (task.meta as Record<string, unknown> | null)?.days_in_stage === 'number'
+                      ? ((task.meta as Record<string, unknown>).days_in_stage as number)
+                      : null,
+                    etapa: typeof (task.meta as Record<string, unknown> | null)?.etapa === 'string'
+                      ? ((task.meta as Record<string, unknown>).etapa as string)
+                      : null,
+                  }
+                : undefined,
+            })
+          }
           abrirRegras={() => setIsTaskRulesOpen(true)}
           concluirTarefa={(vars) => resolveTask.mutate(vars)}
           abrirMenuDeConclusao={setCompletingTask}
@@ -4409,6 +4427,7 @@ function MainApp() {
           isViewer={isViewer}
           confirmCancelMeeting={confirmCancelMeeting}
           reagendar={(v) => setSchedulingFor(v)}
+          abrirRota={() => setTab('route')}
           nomeDoLead={getClientPrimaryName}
           fieldOps={fieldOps}
           vendorFilterHubspotId={vendorFilterHubspotId}
@@ -5163,6 +5182,8 @@ function MainApp() {
           client={schedulingFor.client}
           meetingType={schedulingFor.type}
           rescheduleOf={schedulingFor.reschedule}
+          tarefa={schedulingFor.tarefa}
+          aoConcluirTarefa={(id) => resolveTask.mutate({ id, status: 'concluida' })}
           onClose={() => setSchedulingFor(null)}
         />
       )}
@@ -5410,6 +5431,17 @@ function ClientBottomSheet({
   const iconColors = useIconColors();
   const statusColor = statusConfig[client.status]?.color || '#3b82f6';
   const statusLabel = statusConfig[client.status]?.label || client.status;
+  // Peek sheet de dois estagios no celular (prompt M1): abre no peek — o
+  // mapa continua visivel e o vendedor sabe se o lead e' o da esquina ou o
+  // de dois bairros. Arrastar pra cima (ou tocar a linha) expande; arrastar
+  // pra baixo volta ao peek; de novo, fecha. Desktop abre completo direto.
+  const [estagio, setEstagio] = useState<'peek' | 'cheia'>('peek');
+  const estagioRef = useRef<'peek' | 'cheia'>('peek');
+  estagioRef.current = estagio;
+  useEffect(() => {
+    setEstagio('peek');
+  }, [client.id]);
+
   const primaryName = getClientPrimaryName(client);
   const { user } = useAuth();
 
@@ -5704,22 +5736,37 @@ function ClientBottomSheet({
         translateY.setValue(0);
       },
       onPanResponderMove: (_, g) => {
-        if (g.dy > 0) translateY.setValue(g.dy);
+        // Pra cima so' um respiro: o gesto de expandir troca de estagio no
+        // release, nao arrasta a folha inteira.
+        translateY.setValue(Math.max(g.dy, -32));
       },
       onPanResponderRelease: (_, g) => {
-        if (g.dy > 80 || g.vy > 0.4) {
+        const puxouPraBaixo = g.dy > 80 || g.vy > 0.4;
+        const puxouPraCima = g.dy < -48 || g.vy < -0.4;
+        if (puxouPraBaixo && estagioRef.current === 'cheia') {
+          // Cheia -> peek: volta ao estagio compacto, sem fechar.
+          translateY.setValue(0);
+          setEstagio('peek');
+          return;
+        }
+        if (puxouPraBaixo) {
           Animated.timing(translateY, {
             toValue: 800,
             duration: 200,
             useNativeDriver: true,
           }).start(() => onCloseRef.current());
-        } else {
-          Animated.spring(translateY, {
-            toValue: 0,
-            useNativeDriver: true,
-            bounciness: 0,
-          }).start();
+          return;
         }
+        if (puxouPraCima && estagioRef.current === 'peek') {
+          translateY.setValue(0);
+          setEstagio('cheia');
+          return;
+        }
+        Animated.spring(translateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          bounciness: 0,
+        }).start();
       },
     }),
   ).current;
@@ -5744,6 +5791,87 @@ function ClientBottomSheet({
               <View style={styles.bottomSheetHandle} />
             </View>
           )}
+
+          {/* Estagio 1 (celular): peek — linha do lead + tres acoes de 48px.
+              O restante da ficha so' monta no estagio 2. */}
+          {!layout.ehDesktop && estagio === 'peek' ? (
+            <View style={styles.peekCorpo} {...panResponder.panHandlers}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Abrir ficha completa"
+                style={styles.peekLinha}
+                onPress={() => setEstagio('cheia')}
+              >
+                <View
+                  style={[
+                    styles.peekBarraTemp,
+                    { backgroundColor: client.conta_alvo_place_id ? CONTA_ALVO_COLOR : stageTemperature(client.etapa)?.color ?? statusColor },
+                  ]}
+                />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.peekNome} numberOfLines={1}>{primaryName}</Text>
+                  <Text style={styles.peekSub} numberOfLines={1}>
+                    {[client.etapa ?? statusLabel, client.visit_count > 0 ? `${client.visit_count}ª visita` : 'sem visita']
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
+                </View>
+                {stageTemperature(client.etapa) && (
+                  <View style={[styles.peekBadge, { backgroundColor: 'var(--surface-2)' }]}>
+                    <View style={[sharedStyles.filterDot, { backgroundColor: stageTemperature(client.etapa)!.color }]} />
+                    <Text style={styles.peekBadgeTexto}>{stageTemperature(client.etapa)!.label}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {onMarkVisited && (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={[styles.peekCheckin, isMarkingVisited && { opacity: 0.6 }]}
+                    disabled={isMarkingVisited}
+                    onPress={onMarkVisited}
+                  >
+                    {isMarkingVisited ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <>
+                        <IconLocationFilled width={24} height={24} fill="#FFFFFF" />
+                        <Text style={styles.peekCheckinTexto}>{client.visited_at ? 'Re-marcar' : 'Check-in'}</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Navegar até o lead"
+                  style={[styles.peekQuadrado, client.latitude === null && { opacity: 0.4 }]}
+                  disabled={client.latitude === null}
+                  onPress={() =>
+                    openNavigation({
+                      latitude: client.latitude as number,
+                      longitude: client.longitude as number,
+                      clientName: primaryName,
+                      travelMode: 'driving',
+                    })
+                  }
+                >
+                  <IconCar width={24} height={24} fill={iconColors.muted} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Ligar para o lead"
+                  style={[styles.peekQuadrado, !client.telefone && { opacity: 0.4 }]}
+                  disabled={!client.telefone}
+                  onPress={() => client.telefone && Linking.openURL(`tel:${client.telefone.replace(/\D/g, '')}`)}
+                >
+                  <IconCall width={24} height={24} fill={iconColors.muted} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
+          {(layout.ehDesktop || estagio === 'cheia') && (
+          <>
           <ScrollView
             style={styles.bottomSheetContent}
             contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
@@ -5795,6 +5923,56 @@ function ClientBottomSheet({
                 </View>
               </View>
             </View>
+
+            {/* Acoes primarias do drawer no desktop (prompt M1/11R): Mudar
+                etapa filled + Agendar outline + menu de mais acoes. No
+                celular as acoes seguem no corpo, como sempre. */}
+            {layout.ehDesktop && (onChangeStage || onScheduleMeeting) && (
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+                {onChangeStage && (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.drawerAcaoCheia}
+                    {...ds({ hover: 'darkred', trans: '1' })}
+                    onPress={onChangeStage}
+                  >
+                    <IconTrendingUp width={20} height={20} fill="#FFFFFF" />
+                    <Text style={styles.drawerAcaoCheiaTexto}>Mudar etapa</Text>
+                  </TouchableOpacity>
+                )}
+                {onScheduleMeeting && (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.drawerAcaoVazada}
+                    {...ds({ hover: 'tintred', trans: '1' })}
+                    onPress={onScheduleMeeting}
+                  >
+                    <IconCalendar width={20} height={20} fill={iconColors.brandText} />
+                    <Text style={styles.drawerAcaoVazadaTexto}>Agendar</Text>
+                  </TouchableOpacity>
+                )}
+                {(onEdit || onEditLocation || onAddToRoute || onDelete) && (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Mais ações"
+                    style={styles.drawerAcaoMais}
+                    {...ds({ hover: 'surface2', trans: '1' })}
+                    onPress={() => {
+                      const botoes = [
+                        onEdit && { text: 'Editar', onPress: onEdit },
+                        onEditLocation && { text: 'Editar localização', onPress: onEditLocation },
+                        onAddToRoute && { text: 'Adicionar à rota', onPress: onAddToRoute },
+                        onDelete && { text: 'Excluir', style: 'destructive' as const, onPress: onDelete },
+                        { text: 'Cancelar', style: 'cancel' as const },
+                      ].filter(Boolean) as Array<{ text: string; onPress?: () => void; style?: 'cancel' | 'destructive' }>;
+                      Alert.alert(primaryName, 'Mais ações', botoes);
+                    }}
+                  >
+                    <IconMenuCircles width={20} height={20} fill={iconColors.muted} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
 
             {/* SLA: dias parado x limite da etapa (regra do MD). Só pra lead em
                 etapa com SLA. Vermelho = estourado, amarelo = perto, verde = ok. */}
@@ -6447,6 +6625,8 @@ function ClientBottomSheet({
               </View>
             )}
           </ScrollView>
+        </>
+          )}
         </Animated.View>
       </View>
     </Modal>
@@ -7709,6 +7889,82 @@ const styles = StyleSheet.create({
   bottomSheetHandle: { alignSelf: 'center', width: 40, height: 4, backgroundColor: 'var(--surface-3)', borderRadius: 2 },
   dragHandleArea: { width: '100%', paddingTop: 14, paddingBottom: 14, alignItems: 'center' },
   bottomSheetContent: { paddingHorizontal: 20 },
+  // ---- Peek sheet (prompt M1, celular) ----
+  peekCorpo: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    // 16 + os 24 que o FAB central invade acima da barra (spec M1): sem a
+    // reserva o circulo vermelho cai em cima do "Check-in".
+    paddingBottom: 40,
+    gap: 12,
+  },
+  peekLinha: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  peekBarraTemp: { width: 4, alignSelf: 'stretch', minHeight: 44, borderRadius: 2 },
+  peekNome: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: 'var(--text)' },
+  peekSub: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)' },
+  peekBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  peekBadgeTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
+  peekCheckin: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#27A84C',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  peekCheckinTexto: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: '#FFFFFF' },
+  peekQuadrado: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-default)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  drawerAcaoCheia: {
+    flex: 1,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#C8131B',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+  },
+  drawerAcaoCheiaTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: '#FFFFFF' },
+  drawerAcaoVazada: {
+    flex: 1,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#C8131B',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+  },
+  drawerAcaoVazadaTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--brand-text)' },
+  drawerAcaoMais: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-default)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   drawerKickerLinha: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   drawerKicker: {
     fontSize: 11,

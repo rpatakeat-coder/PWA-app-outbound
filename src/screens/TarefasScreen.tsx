@@ -27,7 +27,7 @@ interface Props {
   abrirLeadPorId: (id: string) => void;
   /** Limpa o filtro de vendedor compartilhado (gestor). */
   limparFiltroVendedor?: () => void;
-  agendarDemo: (c: Client) => void;
+  agendarDemo: (c: Client, task?: ClientTask) => void;
   abrirRegras: () => void;
   concluirTarefa: (vars: { id: string; status: 'concluida' | 'dispensada' }) => void;
   /** Abre o menu de destino (avancar / perdido / manter) ao concluir com lead. */
@@ -225,7 +225,7 @@ export function TarefasScreen({
                   ? styles.acaoAgendarWeb
                   : { backgroundColor: '#C8131B', borderColor: '#C8131B' },
               ]}
-              onPress={() => agendarDemo(client)}
+              onPress={() => agendarDemo(client, task)}
             >
               <Text
                 style={[

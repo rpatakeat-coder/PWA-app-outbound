@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,7 +20,13 @@ import { exportAgenda } from '../utils/exportAgenda';
 import { openNavigation } from '../utils/navigation';
 import { openWhatsapp, toWhatsappNumber } from '../utils/whatsapp';
 import { stageTemperature } from '../constants/stages';
-import { IconDownload, IconText, useIconColors } from '../components/icons';
+import {
+  IconChevronRight,
+  IconClose,
+  IconDownload,
+  IconText,
+  useIconColors,
+} from '../components/icons';
 import { ds, sharedStyles } from './sharedStyles';
 
 // Tela de Agenda, extraida do App.tsx (prompt 02 do handoff) — refactor puro.
@@ -44,6 +51,8 @@ interface Props {
   /** Mesmo filtro de vendedor do mapa/lista (estado compartilhado no App). */
   vendorFilterHubspotId: string | null;
   reagendar: (v: { client: Client; type: 'reuniao' | 'follow_up'; reschedule?: ClientMeeting }) => void;
+  /** Abre a aba Rota do dia (overlay de item de rota — prompt M3). */
+  abrirRota: () => void;
 }
 
 export function AgendaScreen({
@@ -58,6 +67,7 @@ export function AgendaScreen({
   isViewer,
   confirmCancelMeeting,
   reagendar,
+  abrirRota,
   nomeDoLead,
   fieldOps,
   vendorFilterHubspotId,
@@ -67,6 +77,8 @@ export function AgendaScreen({
   const iconColors = useIconColors();
   const { isDark } = useTheme();
   const [calSemanaOffset, setCalSemanaOffset] = useState(0);
+  // Overlay de detalhe do COMPROMISSO (prompt M3) — nao e' a ficha do lead.
+  const [compromisso, setCompromisso] = useState<(typeof allAgendaItems)[number] | null>(null);
   const [agendaTypeFilter, setAgendaTypeFilter] = useState<string | null>(null);
   const [agendaPastOpen, setAgendaPastOpen] = useState(false);
   const [exportingAgenda, setExportingAgenda] = useState(false);
@@ -434,7 +446,135 @@ export function AgendaScreen({
     }
   };
 
+  // ---- Overlay de detalhe do compromisso (prompt M3) ----
+  // NAO e' a ficha do lead: e' o compromisso. Drawer padrao de 480 no
+  // desktop; bottom sheet no celular. Le' o item ja carregado — sem query.
+  const overlayCompromisso = compromisso ? (() => {
+    const tipo = tipoDoItem(compromisso);
+    const corWeb = CORES_TIPO_WEB[tipo];
+    const meta = TIPO_META[tipo];
+    const nome = nomeDoItem(compromisso) ?? meta?.label ?? 'Compromisso';
+    const idCliente = compromisso.client?.id ?? (compromisso.kind === 'meeting' ? compromisso.meeting.client_id : null);
+    const quando = compromisso.at
+      ? new Date(compromisso.at).toLocaleString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+      : 'sem horário';
+    const duracao = compromisso.kind === 'meeting' && compromisso.meeting.duration_minutes
+      ? ` · ${compromisso.meeting.duration_minutes} min`
+      : '';
+    const ehRota = tipo === 'rota';
+    return (
+      <Modal visible transparent animationType={layout.ehDesktop ? 'fade' : 'slide'} onRequestClose={() => setCompromisso(null)}>
+        <View style={[ovl.fundo, layout.ehDesktop ? ovl.fundoDesktop : ovl.fundoMobile]}>
+          <Pressable
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            onPress={() => setCompromisso(null)}
+            accessibilityLabel="Fechar"
+          />
+          <View style={[ovl.painel, layout.ehDesktop ? ovl.painelDesktop : ovl.painelMobile]}>
+            {!layout.ehDesktop && <View style={ovl.alca} />}
+            <View style={ovl.topo}>
+              <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: corWeb?.cor ?? meta?.cor ?? 'var(--text-faint)' }} />
+                  <Text style={ovl.kicker}>{(corWeb?.rotulo ?? meta?.label ?? 'Compromisso').toUpperCase()}</Text>
+                </View>
+                <Text style={ovl.titulo} numberOfLines={2}>{nome}</Text>
+                <Text style={ovl.sublinha} numberOfLines={1}>{quando}{duracao}</Text>
+              </View>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Fechar"
+                style={[ovl.fechar, layout.ehDesktop && { width: 40, height: 40, borderRadius: 8 }]}
+                {...ds({ hover: 'surface2', trans: '1' })}
+                onPress={() => setCompromisso(null)}
+              >
+                <IconClose width={20} height={20} fill={iconColors.muted} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={[ovl.corpo, { gap: layout.ehDesktop ? 24 : 16 }]}>
+              {idCliente != null && (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Abrir ficha do lead"
+                  style={ovl.linhaLead}
+                  {...ds({ hover: 'surface2', trans: '1' })}
+                  onPress={() => openClientById(idCliente)}
+                >
+                  <View style={[ovl.barraTemp, { backgroundColor: corWeb?.cor ?? 'var(--stroke-default)' }]} />
+                  <Text style={ovl.linhaLeadNome} numberOfLines={1}>{nome}</Text>
+                  <IconChevronRight width={20} height={20} fill={iconColors.muted} />
+                </TouchableOpacity>
+              )}
+              {compromisso.kind === 'meeting' && compromisso.meeting.observacoes ? (
+                <View style={[ovl.observacoes, { borderRadius: layout.ehDesktop ? 8 : 16 }]}>
+                  <Text style={ovl.observacoesTexto}>{compromisso.meeting.observacoes}</Text>
+                </View>
+              ) : null}
+              {ehRota && (
+                <View style={{ gap: 8 }}>
+                  {routeStops.slice(0, 12).map((stop, i) => (
+                    <View key={`${stop.client_id}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                      <View style={ovl.indiceParada}>
+                        <Text style={ovl.indiceParadaTexto}>{i + 1}</Text>
+                      </View>
+                      <Text style={ovl.paradaNome} numberOfLines={1}>
+                        {stop.client ? nomeDoLead(stop.client) : 'Parada'}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+            <View style={[ovl.rodape, layout.ehDesktop ? { flexDirection: 'row', padding: 24 } : { flexDirection: 'column', padding: 16, paddingBottom: 32 }]}>
+              {ehRota ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  style={[ovl.ctaCheio, !layout.ehDesktop && { height: 48 }]}
+                  onPress={() => { setCompromisso(null); abrirRota(); }}
+                >
+                  <Text style={ovl.ctaCheioTexto}>Abrir rota do dia</Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={[ovl.ctaTonal, !layout.ehDesktop && { height: 48 }, !compromisso.client && { opacity: 0.4 }]}
+                    disabled={!compromisso.client}
+                    onPress={() => {
+                      if (compromisso.kind !== 'meeting' || !compromisso.client) return;
+                      setCompromisso(null);
+                      reagendar({
+                        client: compromisso.client,
+                        type: (compromisso.meeting.type ?? 'reuniao') as 'reuniao' | 'follow_up',
+                        reschedule: compromisso.meeting,
+                      });
+                    }}
+                  >
+                    <Text style={ovl.ctaTonalTexto}>Reagendar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={[ovl.ctaVazado, !layout.ehDesktop && { height: 48 }]}
+                    onPress={() => {
+                      if (compromisso.kind !== 'meeting') return;
+                      setCompromisso(null);
+                      confirmCancelMeeting(compromisso.meeting);
+                    }}
+                  >
+                    <Text style={ovl.ctaVazadoTexto}>Cancelar compromisso</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  })() : null;
+
+
   return (
+    <>
     <ScrollView contentContainerStyle={[sharedStyles.listContent, { paddingBottom: 90 + insets.bottom },
     // Mesmo teto da lista de leads: sem ele o conteudo se espalha por
     // toda a largura do monitor e a linha de texto fica ilegivel.
@@ -607,8 +747,7 @@ export function AgendaScreen({
                                 { borderLeftColor: corWeb?.cor ?? 'var(--border)' },
                                 { backgroundColor: isDark ? 'var(--surface-2)' : corWeb?.tinta ?? 'var(--surface-2)' },
                               ]}
-                              disabled={!idCliente}
-                              onPress={() => idCliente && openClientById(idCliente)}
+                              onPress={() => setCompromisso(it)}
                             >
                               <Text style={[styles.calChipHora, corWeb && { color: corWeb.cor }]}>{hora} · {corWeb?.rotulo ?? meta?.label}</Text>
                               <Text style={styles.calChipTitulo} numberOfLines={2}>{nomeChip}</Text>
@@ -662,6 +801,8 @@ export function AgendaScreen({
         </>
       )}
     </ScrollView>
+    {overlayCompromisso}
+    </>
   );
 }
 
@@ -773,4 +914,124 @@ const styles = StyleSheet.create({
   calNavTotal: { fontSize: 12, fontWeight: '500', color: 'var(--text-subtle)' },
   calSemana: { flexDirection: 'row', gap: 8, alignItems: 'stretch' },
   calVazio: { fontSize: 12, color: 'var(--text-faint)', textAlign: 'center', marginTop: 16 },
+});
+
+// Estilos do overlay de compromisso (prompt M3).
+const ovl = StyleSheet.create({
+  fundo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.32)' },
+  fundoDesktop: { alignItems: 'flex-end' },
+  fundoMobile: { justifyContent: 'flex-end' },
+  painel: { backgroundColor: 'var(--surface)', overflow: 'hidden' },
+  painelDesktop: {
+    width: 480,
+    maxWidth: '100%',
+    height: '100%',
+    borderLeftWidth: 1,
+    borderLeftColor: 'var(--border)',
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: -8, height: 0 },
+    shadowRadius: 16,
+  },
+  painelMobile: {
+    maxHeight: '92%',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: -4 },
+    shadowRadius: 16,
+  },
+  alca: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'var(--surface-3)',
+    marginTop: 12,
+  },
+  topo: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+  },
+  kicker: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    color: 'var(--text-faint)',
+  },
+  titulo: { fontSize: 18, lineHeight: 24, fontWeight: '600', color: 'var(--text)' },
+  sublinha: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)' },
+  fechar: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: 'var(--surface-2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  corpo: { padding: 24 },
+  linhaLead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+  },
+  barraTemp: { width: 4, alignSelf: 'stretch', minHeight: 24, borderRadius: 2 },
+  linhaLeadNome: { flex: 1, minWidth: 0, fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text)' },
+  observacoes: { padding: 16, backgroundColor: 'var(--surface-2)' },
+  observacoesTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.25, color: 'var(--text-muted)' },
+  indiceParada: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'var(--surface-2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  indiceParadaTexto: { fontSize: 12, lineHeight: 28, letterSpacing: 0.5, fontWeight: '700', color: 'var(--text-muted)' },
+  paradaNome: { flex: 1, minWidth: 0, fontSize: 14, lineHeight: 20, color: 'var(--text)' },
+  rodape: { gap: 8, borderTopWidth: 1, borderTopColor: 'var(--border)' },
+  ctaCheio: {
+    flex: 1,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#C8131B',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  ctaCheioTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: '#FFFFFF' },
+  ctaTonal: {
+    flex: 1,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'var(--tint-red)',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  ctaTonalTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--tint-red-text)' },
+  ctaVazado: {
+    flex: 1,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-default)',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  ctaVazadoTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text-muted)' },
 });

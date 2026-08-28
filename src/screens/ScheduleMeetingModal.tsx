@@ -20,6 +20,11 @@ import type { Client, ClientMeeting, MeetingType } from '../types/client';
 import { useMeetings } from '../hooks/useMeetings';
 
 interface ScheduleMeetingModalProps {
+  /** Contexto quando aberto a partir de um card de tarefa (prompt M2):
+      mostra a faixa de SLA e, ao confirmar, conclui a tarefa. */
+  tarefa?: { id: string; titulo: string; severity: string | null; diasNaEtapa: number | null; etapa: string | null };
+  /** Conclusao OTIMISTA da tarefa apos agendar (o card sai da coluna). */
+  aoConcluirTarefa?: (id: string) => void;
   client: Client;
   onClose: () => void;
   // Reunião (default) ou follow up. Mesmo fluxo; muda rótulos e o tipo salvo.
@@ -242,7 +247,7 @@ function HourMinutePicker({
   );
 }
 
-export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao', rescheduleOf }: ScheduleMeetingModalProps) {
+export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao', rescheduleOf, tarefa, aoConcluirTarefa }: ScheduleMeetingModalProps) {
   const layout = useLayout();
   const iconColors = useIconColors();
   // Em modo reagendar o tipo vem da própria reunião (não do prop).
@@ -330,6 +335,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao',
           invite: { enviar: enviarConvite, email: enviarConvite ? inviteEmailTrim : null },
           motivo: motivo.trim() || null,
         });
+        if (tarefa && aoConcluirTarefa) aoConcluirTarefa(tarefa.id);
         Alert.alert(
           copy.rescheduledAlert,
           'Novo horário salvo com sucesso.',
@@ -356,6 +362,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao',
       setObservacoes('');
       setEnviarConvite(!!client.email);
       setInviteEmail(client.email ?? '');
+      if (tarefa && aoConcluirTarefa) aoConcluirTarefa(tarefa.id);
       Alert.alert(
         copy.scheduledAlert,
         'Agendamento salvo com sucesso.',
@@ -406,6 +413,66 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao',
             <Text style={styles.subtitle} numberOfLines={2}>
               {client.nome}{client.empresa ? ` • ${client.empresa}` : ''}
             </Text>
+
+            {/* Faixa de contexto da tarefa (prompt M2): o vendedor nao perde
+                de vista o SLA que esta vencendo. Badge com fundo tonal claro
+                (texto escuro nos DOIS temas); a regua esquerda fica sobre
+                --surface e usa o PAR claro no escuro — variaveis diferentes
+                de proposito, regua com a mesma cor do badge some no escuro. */}
+            {tarefa && (
+              <View
+                style={[
+                  faixaTarefa.caixa,
+                  {
+                    borderLeftColor:
+                      tarefa.severity === 'D5'
+                        ? 'var(--tint-red-border)'
+                        : tarefa.severity === 'D2'
+                          ? 'var(--tint-amber-border)'
+                          : 'var(--stroke-default)',
+                  },
+                  layout.ehLargo ? { borderRadius: 8, borderLeftWidth: 3 } : { borderRadius: 16, borderLeftWidth: 4 },
+                ]}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <View
+                    style={[
+                      faixaTarefa.badge,
+                      {
+                        backgroundColor:
+                          tarefa.severity === 'D5'
+                            ? '#FAE8E9'
+                            : tarefa.severity === 'D2'
+                              ? '#FFF8EB'
+                              : 'var(--surface-2)',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        faixaTarefa.badgeTexto,
+                        {
+                          color:
+                            tarefa.severity === 'D5'
+                              ? '#94090F'
+                              : tarefa.severity === 'D2'
+                                ? '#99670F'
+                                : 'var(--text-faint)',
+                        },
+                      ]}
+                    >
+                      {tarefa.severity ?? '—'}
+                    </Text>
+                  </View>
+                  <Text style={faixaTarefa.descricao} numberOfLines={2}>{tarefa.titulo}</Text>
+                </View>
+                {tarefa.diasNaEtapa !== null && (
+                  <Text style={[faixaTarefa.prazo, { color: 'var(--tint-red-text)' }]}>
+                    {tarefa.diasNaEtapa} dia(s) em {tarefa.etapa ?? 'etapa'} — vencida
+                  </Text>
+                )}
+              </View>
+            )}
 
             {isReschedule && original && (
               <View style={styles.rescheduleBanner}>
@@ -766,4 +833,18 @@ const pickerStyles = StyleSheet.create({
   itemActive: { backgroundColor: '#C8131B' },
   itemTxt: { fontSize: 16, color: 'var(--text)', fontWeight: '600' },
   itemTxtActive: { color: '#fff', fontWeight: '700' },
+});
+
+// Faixa de contexto da tarefa (prompt M2).
+const faixaTarefa = StyleSheet.create({
+  caixa: {
+    padding: 16,
+    backgroundColor: 'var(--surface-2)',
+    gap: 6,
+    marginTop: 12,
+  },
+  badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
+  badgeTexto: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600' },
+  descricao: { flex: 1, minWidth: 0, fontSize: 14, lineHeight: 20, letterSpacing: 0.25, color: 'var(--text-muted)' },
+  prazo: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600' },
 });
