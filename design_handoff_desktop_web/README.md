@@ -30,6 +30,7 @@ A tarefa é **recriar esses designs no ambiente já existente do codebase**: Rea
 | 8 | **Gestor** | `src/screens/GestorScreen.tsx` | arquivo inteiro (47 KB) + `src/hooks/useGestorMetrics.ts`, `useVisitsHeatmap.ts` |
 | 9 | Meu desempenho | `src/screens/MeuDesempenhoScreen.tsx` | arquivo inteiro |
 | 10 | Login | `src/screens/LoginScreen.tsx` | arquivo inteiro |
+| 10b | **Configurações** | **não existe como tela** | hoje é o modal `isPasswordModalOpen` (JSX ~L5170–5340, `styles.passwordModalCard` ~L7284, `gestaoButton` ~L7296, `themeRow`/`themeChip` ~L7310). Criar `src/screens/ConfiguracoesScreen.tsx` |
 | 11 | Ficha do lead | `App.tsx` | props do sheet ~L4180–4245; o componente do sheet é irmão no mesmo arquivo |
 | 12 | Mudança de etapa | `src/screens/ChangeStageModal.tsx` | arquivo inteiro (43 KB) |
 | 13 | Agendar | `src/screens/ScheduleMeetingModal.tsx` | arquivo inteiro |
@@ -51,7 +52,9 @@ Se preferir não extrair, edite uma função por vez e rode `npm run typecheck` 
 4. Mapa e Lista (itens 3 e 4)
 5. **Rota, Tarefas, Agenda** (itens 5, 6, 7) — extrair primeiro
 6. **Gestor** e Meu desempenho (itens 8 e 9)
-7. Ficha, modais, Login, Cadastro (itens 10–14)
+7. Ficha, modais, Cadastro (itens 11–14)
+8. **Configurações** (item 10b) — precisa existir antes de o header perder a engrenagem e o "Sair"
+9. Login (item 10)
 
 ### Checklist de conclusão
 
@@ -381,16 +384,100 @@ Três colunas: **Atrasadas** `#C8131B` · **Hoje** `#FFB32F` · **Próximas** `#
 
 ### 6. Painel do gestor
 
-**Layout**: `padding:24px`, coluna gap 24, `max-width:1600px`.
+> **Esta seção foi refeita.** A primeira versão assumia funil comercial por etapa, heatmap de visitas, MRR novo e taxa de conversão. Lido o `useGestorMetrics.ts`, **nenhuma dessas métricas existe** — o RPC `gestor_metrics` devolve um snapshot de estados, seis contadores de atividade e os mesmos seis por vendedor. O que segue é desenhado sobre o que o banco entrega.
 
-1. **Faixa de KPIs** — `repeat(4,minmax(0,1fr))` gap 16 (o `3+3+3+3` do grid). Card `padding:16px`, `--surface`, borda 1px `--border`, raio 8, `shadow/02`. Rótulo 14/20/0.1 peso 500 `--text-muted` com ícone de tendência 20px à direita; valor 28/36 peso 700 `--text` tabular-nums; delta 12/16/0.4 peso 500 na cor do sinal (`#167532` positivo, `#94090F` negativo). **Visitas · Demos realizadas · Fechamentos · MRR novo**
+**O que o hook entrega**
 
-2. **Funil + rail** — `grid-template-columns:8fr 4fr` gap 24, `align-items:start` (o `8+4` do grid).
-   - **Funil** (`padding:24px`, card): título "Funil comercial · `{mês}`" 16/24/0.15 peso 700. Uma barra por etapa: rótulo 12/16/0.5 peso 600 `--text-muted` à esquerda, "`{n}` · `{pct}`" à direita em `--text-faint` tabular-nums, e barra de **22px de altura** raio 4, trilha `--surface-3`, preenchimento na cor da etapa. Clique na etapa abre o modal com os leads
-   - **Heatmap** (card): título 16/24/0.15 peso 700; grade `repeat(7,28px)` gap 4, células **28×28** raio 4 — `--surface-3` vazio, `#8FE0D5` 1–2, `#1D9688` 3+, e **hoje vazio = tracejado 1.5px `#C8131B`**. Legenda abaixo (quadrado 12px + rótulo 11/16/0.5 peso 600 `--text-faint`)
-   - Abaixo: "Exportar relatório completo" (Large outline `#1D9688`, ícone `download`; edge `export-report`)
+`global`, snapshot atual (independente do período): `total_clients` · `total_leads` · `total_visited` · `total_active_clients` · `total_churn`.
+`global`, atividade no período: `created_in_period` · `visited_in_period` · `meetings_in_period` · `follow_ups_in_period` · `stage_changes_in_period` · `notes_in_period` · `won_in_period`.
+`sellers[]`: `full_name` · `email` · `id_hubspot` · `sector` · `leads_assigned` · `status_breakdown` · `created` · `visited` · `meetings_scheduled` · `follow_ups_scheduled` · `stage_changes` · `notes_created` · `won_in_period` — já ordenados por `visited*3 + created*2 + meetings + follow_ups + stage_changes + notes`, com contas RPA filtradas fora.
+`useGestorTaskMetrics`: `pending` e `done` por `id_hubspot`. `useMetricLeads`: os leads por trás de um número, sob demanda.
 
-3. **Tabela do time** — card com `overflow:hidden`. Título `padding:16px` 16/24/0.15 peso 700. Grid `minmax(180px,2fr) repeat(6,minmax(88px,1fr))` gap 16, cabeçalho em `--surface-2` com borda inferior 1px `--stroke-default`. Colunas: Vendedor · Visitas · Demos · Fechados · MRR novo · Conversão · Meta. Numéricas alinhadas à direita, 14/20 peso 600, tabular-nums; MRR em `#167532`. Avatar 32px pill `--surface-2`/`--text-muted` com iniciais. Meta em badge (`padding:4px 8px`, raio 4) — `#EAF7EE`/`#167532` no alvo, `#FFF8EB`/`#99670F` abaixo. Linha clicável com hover `--surface-2` (drill-down do vendedor)
+**Layout**: `display:flex; align-items:flex-start; gap:24px; padding:24px` — coluna principal `flex:1` + rail de **320px**.
+
+#### Seletor de período
+
+Cinco botões Small (altura 32, `padding:0 12px`, raio 4, 12/16/0.5 peso 600, borda 1px `--stroke-default`), ativo `#C8131B`/branco: **Hoje · 7 dias · 30 dias · Tudo · Personalizado** — os `GestorPeriodPreset`. À direita da faixa, "Snapshot lido agora · atividade no período" 12/16/0.4 `--text-faint`.
+
+> A `queryKey` do hook **não pode** conter o range calculado com `Date.now()`: isso muda a cada render e joga o React Query em refetch infinito. O bug já aconteceu ("os botões de período não carregam, mas o intervalo personalizado sim") e está documentado no próprio hook. Não toque nela.
+
+#### 1 · Composição da base
+
+`total_leads + total_active_clients + total_churn = total_clients`. Não são cinco números soltos, é uma composição — e mostrada como tal, 31% de churn salta aos olhos de uma vez.
+
+Card `padding:24px`, `--surface`, borda 1px `--border`, raio 8, `shadow/02`.
+
+- **Cabeçalho** (`space-between`, `align-items:baseline`): "COMPOSIÇÃO DA BASE" 12/16/0.5 peso 700 uppercase `--text-muted` sobre "Snapshot atual, independente do período" 12/16/0.4 `--text-faint`; à direita, `total_clients` em 28/36 peso 700 `tabular-nums` com "registros" 11/16/0.5 peso 600 abaixo.
+- **Barra proporcional**: `display:flex; height:32px`, raio 4, `overflow:hidden`, trilha `--surface-3`. Três segmentos com `width` percentual — Leads `#0ea5e9` · Clientes `#16a34a` · Churn `#475569` — cada um com o percentual em 11/16/0.5 peso 700 branco, `padding-left:8px`. **Segmento abaixo de ~8% esconde o rótulo interno**, senão vaza para o vizinho. `title` para tooltip nativo.
+- **Legenda clicável** (`margin-top:16px`, gap 24): dot 10px + número 20/28 peso 600 `--text` `tabular-nums` + rótulo 12/16/0.5 peso 600 `--text-faint`. Cada item abre o drill-down.
+- **`total_visited` fica fora da barra**, depois de uma régua vertical 1px `--border`: ícone `where_to_vote` 20px + número + "já visitados". É marca de atividade, não estado da base.
+
+#### 2 · Atividade no período
+
+Cabeçalho "ATIVIDADE NO PERÍODO · `{n}` VENDEDORES" 12/16/0.5 peso 700 uppercase.
+
+Grid de **seis** cards `repeat(6,minmax(0,1fr))` gap 12. Cada um é um `<button>`: `padding:16px`, `--surface`, borda 1px `--border`, raio 8, `shadow/01`, hover `border-color:--stroke-strong`. Ícone 20px `--text-faint`; número 24/32 peso 600 `--text` `tabular-nums`; rótulo 12/16/0.5 peso 600 `--text-faint`.
+
+**Visitados** (`where_to_vote`) · **Criados** (`add_business`) · **Reuniões** (`event`) · **Follow-ups** (`phone_in_talk`) · **Mudanças** (`trending_up`) · **Notas** (`edit_note`) — cada um abrindo o drill-down com a `GlobalMetricKey` correspondente.
+
+`won_in_period` existe no hook, mas **não há `GlobalMetricKey` `'won'`** no `useMetricLeads` — se for exibido, fica sem drill-down. Mantenha se já existe; não acrescente.
+
+#### 3 · Ranking de vendedores
+
+Hoje cada vendedor é um bloco de ~500px com oito tiles. Com 17 ativos são ~8.500px de rolagem, e comparar o #1 com o #7 exige rolar de volta lembrando números. **O painel existe para comparar; comparação pede tabela.**
+
+Card `overflow:hidden`, `--surface`, borda 1px `--border`, raio 8, `shadow/02`. Cabeçalho `padding:16px`: "Vendedores" 16/24/0.15 peso 700 sobre "Ordenado por atividade ponderada · clique numa célula para ver os leads" 12/16/0.4; botão "Ordenar" Small outline com `swap_vert` à direita.
+
+Grid **idêntico** no cabeçalho e nas linhas:
+```
+32px minmax(200px,2fr) repeat(6,minmax(76px,1fr)) 96px 88px
+gap: 12px
+```
+
+Dez colunas: **# · Vendedor · Visitados · Criados · Reuniões · Follow-ups · Mudanças · Notas · Tarefas · Ações**.
+
+| Coluna | Tratamento |
+|---|---|
+**#** | "#1" 12/16/0.5 peso 700 `tabular-nums`; **`#C8131B` nos três primeiros**, `--text-faint` no resto |
+**Vendedor** | avatar 32px pill com iniciais (12/32/0.5 peso 700) + nome 14/20/0.1 peso 600 truncado sobre "`{sector}` · `{leads_assigned}` leads" 11/16/0.5 `--text-faint`. O próprio usuário ganha avatar `--tint-red`/`--tint-red-text` |
+**Visitados** | 14/20 peso 600 `tabular-nums`. **Única numérica com destaque de peso** — `--text` quando alta, `--text-muted` no resto. Reflete o peso 3× no score |
+**Criados … Notas** | 14/20 peso 600 `--text-muted` `tabular-nums`, à direita |
+**Tarefas** | "`{pending}` / `{done}`" 12/16/0.5 peso 600 `tabular-nums`; **pendentes ≥ 5 em `--tint-red-text`**, a barra em `--text-disabled`. De `useGestorTaskMetrics`, cruzado por `id_hubspot` — "—" quando ausente |
+**Ações** | barra 44×6 raio 3 (trilha `--surface-3`, preenchimento `#C8131B` no top-3, `--stroke-strong` no resto) + total 12/16/0.5 peso 600 `--text-faint` |
+
+Linha `padding:12px 16px`, borda inferior 1px `--border`, hover `--surface-2`. **Cada numérica abre o drill-down** daquele vendedor naquela `SellerMetricKey`; a coluna Vendedor abre `metric:'assigned'`.
+
+**A ordem vem do hook** — não reordene no componente. O filtro de contas RPA também é do hook.
+
+Rodapé `padding:12px 16px`: "`{n}` vendedores ativos no período · contas de automação (RPA) ficam fora do ranking" 12/16/0.4.
+
+#### 4 · Rail de administração
+
+Os cinco painéis acordeão de hoje viram quatro **cards-link** + o bloco de exportação. `padding:16px`, `--surface`, borda 1px `--border`, raio 8, `shadow/01`, hover `border-color:--stroke-strong`: ícone em quadrado 40×40 raio 8 (`--surface-2`/`--text-muted`) + título 14/20/0.1 peso 600 sobre descrição 12/16/0.4 + badge de contagem opcional (pill 24px) + `chevron_right` 20px `--text-disabled`.
+
+**Vendedores e usuários** (edge `criar-usuario`) · **Config Rota do dia** (`RouteConfigCard`) · **Metas por vendedor** (`SellerGoalsCard`) · **Contas Alvo dispensadas** (`DismissedContaAlvoCard`).
+
+Cada um abre no **drawer padrão de 480px** — o mesmo da ficha do lead. Acordeão em rail de 320px aperta o conteúdo e empurra os vizinhos; o drawer dá largura para editar.
+
+**Bloco de exportação** `padding:24px`: ícone `database` 20px `--color-teal-dark` + "Exportar tudo" 14/20/0.1 peso 600; descrição 12/16/0.4 com `text-wrap:pretty`; dois botões Large em coluna gap 8, rótulo flush-left — "Semana anterior" (filled `#C8131B`, `download`) e "Período selecionado" (outline neutro, `date_range`).
+
+> `exportReport` valida por **lista fixa de e-mails** (`GESTOR_EMAILS`) na edge `export-report`, não pelo `role` — está em `docs/DECISOES.md`. Payload e signed URL inalterados.
+
+#### 5 · Drill-down
+
+Todo número abre "quais leads compõem esse dado", no **drawer padrão de 480px**.
+
+- Topo: kicker "`{MÉTRICA}` · `{PERÍODO}`" ou "`{MÉTRICA}` · `{VENDEDOR}`" 11/16/0.5 peso 600 uppercase; título com o número e o rótulo 18/24 peso 600; X 40×40.
+- Linha por `MetricLead`: barra 4px da cor do status + nome (`empresa || nome`) 14/20/0.1 peso 600 truncado; sublinha 12/16/0.4 com a data (`at`, pt-BR) e `responsavel_nome`. **`actor_name` aparece quando difere do responsável** — é o que responde "quem fez o quê" e hoje se perde. Métrica Notas mostra o `note` em 2 linhas (`-webkit-line-clamp:2`).
+- Clique na linha abre a ficha do lead **empilhada**, não substituindo.
+- Carregando: skeleton `--surface-3` raio 4. Vazio: "Nenhum lead nesse recorte."
+- Tarefas usam `useGestorTasksList` com `hubspotId` + `status`: título da tarefa, lead, `severity` em badge e `days_in_stage` quando presente.
+
+**Carregamento sob demanda é essencial**: o painel antes baixava a tabela `clients` inteira (~4,7k linhas) e agregava em JS a cada troca de filtro. O RPC resolveu; não pré-carregue os drill-downs.
+
+**Responsivo**: abaixo de 1280px o rail desce para o fim da coluna, em grid de 2. Abaixo de 1024px a tabela reduz a # · Vendedor · Visitados · Ações.
+
+**Cor**: nenhum número é colorido. A cor entra em quatro lugares e só neles — rank do top-3, tarefas pendentes em risco, barra de score e os dots da composição. Milhares com `toLocaleString('pt-BR')`.
 
 ### 7. Meu desempenho
 
@@ -410,7 +497,34 @@ Três colunas: **Atrasadas** `#C8131B` · **Hoje** `#FFB32F` · **Próximas** `#
 
 **A tela de login atual** (`src/screens/LoginScreen.tsx`) é vertical com logo, título 32px e card branco sobre vermelho — desenhada para 390px. No desktop ela fica com um card no meio de um mar vermelho. Este split panel é a versão desktop; **manter o layout atual no mobile** e escolher por `layout.ehDesktop`.
 
-### 9. Ficha do lead (drawer)
+### 10. Configurações
+
+**Hoje isso não é uma tela.** É o modal aberto pela engrenagem do header (`isPasswordModalOpen`, `styles.passwordModalCard`), que empilha: atalho para o painel de gestão, seletor de tema, troca de senha e o gatilho de forçar atualização. No desktop a engrenagem sai do header — e com ela o botão "Sair" — e isso vira uma tela própria na navegação, entre "Meu desempenho" e o rodapé da sidebar.
+
+**Layout**: `padding:24px`, `display:flex; flex-direction:column; gap:32px`, `max-width:880px`. Seis seções, cada uma com um cabeçalho fora do card — 12/16/0.5 peso 700 `--text-muted`, uppercase, `margin-bottom:16px` — e um card na casca padrão (`--surface`, borda 1px `--border`, raio 8, `shadow/02`).
+
+**1 · CONTA** — card com `overflow:hidden` e linhas de leitura: `padding:12px 16px`, borda inferior 1px `--border`, `justify-content:space-between`. Chave 12/16/0.5 peso 600 `--text-faint` com `flex:0 0 auto; white-space:nowrap` (sem isso "E-mail" e "ID HubSpot" quebram em duas linhas); valor 14/20/0.25 `--text` à direita. Nome · E-mail · Papel · ID HubSpot. Fecha com uma nota 12/16/0.4 `--text-faint`: *"Nome, e-mail e papel são definidos pelo administrador."*
+
+**2 · SENHA** — card `padding:24px`. Hint 12/16/0.4 `--text-faint` com a copy atual — *"Digite uma nova senha. Mínimo de 6 caracteres."* — e `margin-bottom:16px`. Dois campos em `grid-template-columns:1fr 1fr` gap 16, `max-width:560px`: rótulo 14/20/0.1 peso 600 `--text-muted` com `margin-bottom:8px`, caixa altura 40, `padding:0 16px`, raio 8, borda 1px `--stroke-strong`. CTA "Salvar nova senha" Large filled `#C8131B` com ícone `lock_reset`, `margin-top:16px`, rótulo flush-left. Chama o `updatePassword` do `AuthContext` — inalterado.
+
+**3 · APARÊNCIA** — card `padding:24px`. Rótulo "Tema" 14/20/0.1 peso 600 `--text-muted`; explicação 12/16/0.4 `--text-faint`: *"Automático segue o aparelho. A escolha manual vence o aparelho e vale também no mapa."* Segmented **Automático · Claro · Escuro**: altura 40, `padding:0 16px`, 12/16/0.5 peso 600, raio 12 **só nas pontas**, `max-width:360px`. Selecionado `#C8131B`/branco; os outros transparentes com borda 1px `--stroke-default`.
+
+> O estado é o `ThemePref` de `src/theme.ts` (`'system' | 'light' | 'dark'`), que é **de módulo, não de componente** — por isso trocar aqui repinta a interface e o mapa juntos. O mapa lê o tema em JavaScript (o estilo vem do Google, não do CSS); se ele não re-renderizar, a interface fica clara e o mapa escuro. Esse bug já existiu no app.
+
+**4 · ÁREA DO GESTOR** (só `role === 'gestor'`) — dois cards-link em coluna gap 12. Cada um `padding:16px`, `display:flex; align-items:center; gap:16px`, `text-decoration:none`, hover `border-color:--stroke-strong`: ícone em quadrado 40×40 raio 8, título 14/20/0.1 peso 600 sobre descrição 12/16/0.4 `--text-faint`, e `open_in_new` ou `chevron_right` 20px `--text-faint` à direita.
+
+- **"Abrir painel de gestão"** — quadrado `--tint-red`/`--tint-red-text`, ícone `bar_chart`. *"Funil do time, travados e gargalo. Abre em nova aba."* Continua sendo um `<a href>` **de verdade** para `/gestao`, não `window.open` — o comentário no código atual explica o motivo.
+- **"Vendedores e usuários"** — quadrado `--surface-2`/`--text-muted`, ícone `group`. *"Criar conta, definir papel e associar id do HubSpot."* Edge `criar-usuario`.
+
+**5 · ADMINISTRAÇÃO** (só admin) — card `padding:24px` com **borda esquerda 3px `#CC8C1D`**. Título "Forçar atualização em todos os aparelhos" 14/20/0.1 peso 600 `--text`; explicação 12/16/0.4 `--text-faint`, `max-width:64ch`, `text-wrap:pretty`: *"Todo vendedor conectado recarrega o app em segundos. Use depois de um deploy que precisa chegar na hora — o cron das 2h já faz isso diariamente."* Botão "Forçar atualização" Large outline neutro (borda `--stroke-default`), ícone `refresh`, flush-left. Faz o `update` em `app_force_reload.triggered_at` — inalterado.
+
+**6 · SOBRE** — card `overflow:hidden` com linhas de leitura iguais às de Conta: versão do app, build do service worker, última sincronização de uso (`hs_uso_sincronizado_em`), valores com `tabular-nums`. Abaixo, `padding:16px` com **"Sair da conta"** Large outline `#C8131B`, ícone `logout`, hover fundo `--tint-red`.
+
+**Responsivo**: abaixo de 1024px os dois campos de senha empilham em coluna única; o resto já é uma coluna.
+
+**O que sai do header**: o botão de engrenagem 44×44 (`styles.headerIconButton`) e o `logoutButton`. O header desktop fica com título, subtítulo, busca global, sino de avisos e o CTA "Novo lead". Identidade e tema também aparecem no rodapé da sidebar — o atalho rápido —, e a tela é o lugar completo.
+
+### 11. Ficha do lead (drawer)
 
 **Um único padrão de painel no sistema** — avisos, rota, ficha e perfil usam a mesma estrutura. Não inventar um segundo jeito de abrir painel.
 
@@ -424,7 +538,7 @@ Três colunas: **Atrasadas** `#C8131B` · **Hoje** `#FFB32F` · **Próximas** `#
   - **Timeline** — por item: ícone em pill 32px com o tint do tipo (`where_to_vote` `#EAF7EE`/`#167532`, `trending_up` `#FFF1E0`/`#8A4A0C`, `event` `#F1EBFE`/`#5B32C4`, `edit_note` `--surface-2`/`--text-muted`), depois título 14/20/0.1 peso 600 `--text` sobre quando 12/16/0.4 `--text-faint`. `padding-bottom:16px`
 - **Rodapé** (`padding:24px`, borda superior 1px `--border`): "Marcar visita (check-in GPS)" — Large filled `#27A84C`, largura total, ícone `where_to_vote`, flush-left. Vira "Re-marcar visita" quando já houve check-in. Validação de distância (200m) e criação da Task concluída no HubSpot: comportamento atual, inalterado
 
-### 10. Mudança de etapa (modal)
+### 12. Mudança de etapa (modal)
 
 Overlay `rgba(0,0,0,.32)`, `z-index:70`. Card **560px**, `max-height:88vh`, `overflow-y:auto`, fundo `--surface`, raio 8, `shadow/05`.
 
@@ -437,7 +551,7 @@ Overlay `rgba(0,0,0,.32)`, `z-index:70`. Card **560px**, `max-height:88vh`, `ove
   - Os campos e suas máscaras (`cep`, `cnpj`, `currency`, `date`, `boolean`, `select` multi) vêm de `STAGE_FIELDS_BY_ID` em `src/constants/stages.ts` — **sem mudança de lógica**, só de forma. Duas colunas em vez de uma é o ganho: Ag. Pagamento tem 13 campos e hoje é uma coluna rolando
 - **Rodapé** (`padding:24px`, borda superior 1px `--border`, `justify-content:flex-end`, gap 8): "Cancelar" (Medium — altura 32, raio 8, borda 1px `--stroke-default`) e "Confirmar mudança" (Large filled `#C8131B`)
 
-### 11. Agendar (modal)
+### 13. Agendar (modal)
 
 Card **640px**, mesma casca do modal de etapa.
 
@@ -451,7 +565,7 @@ Card **640px**, mesma casca do modal de etapa.
     - Horários: chips altura 32, `padding:0 12px`, raio 8, borda 1px; selecionado fundo `--tint-red`, borda `#C8131B`, texto `--tint-red-text`
 - Rodapé: "Cancelar" (Medium outline) + "Agendar demo" (Large filled `#C8131B`)
 
-### 12. Cadastro de lead + CEP (modal)
+### 14. Cadastro de lead + CEP (modal)
 
 Card **720px**.
 
@@ -622,6 +736,12 @@ Capturados a ~914px de largura — abaixo do piso de 1024px do grid, então a ta
 `10-modal-mudanca-de-etapa.png` | Modal de 560px — radios de etapa + campos obrigatórios |
 `11-modal-agendar.png` | Modal de 640px — tipo/duração/obs + calendar popup do kit |
 `12-modal-cadastro-cep.png` | Modal de 720px — campos em 2 colunas + ajuste do pin |
+`17-gestor.png` | Painel do gestor — composição da base, atividade e rail |
+`18-gestor-ranking.png` | Painel do gestor — a tabela de vendedores |
+`13-configuracoes-conta-senha.png` | Configurações — seções Conta e Senha |
+`14-configuracoes-aparencia-gestor.png` | Configurações — Aparência e Área do gestor |
+`15-configuracoes-admin-sobre.png` | Configurações — Administração e Sobre |
+`16-dark-configuracoes.png` | Configurações no escuro |
 `13-dark-mapa.png` | Mapa no escuro |
 `14-dark-lista.png` | Tabela no escuro — badges de etapa caem para `--surface-2` |
 `15-dark-gestor.png` | Painel do gestor no escuro |

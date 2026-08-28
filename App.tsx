@@ -5513,6 +5513,9 @@ function ClientBottomSheet({
   // de dois bairros. Arrastar pra cima (ou tocar a linha) expande; arrastar
   // pra baixo volta ao peek; de novo, fecha. Desktop abre completo direto.
   const [estagio, setEstagio] = useState<'peek' | 'cheia'>('peek');
+  // M1d: timeline limitada a 6 — o painel passa de 1.800px e o rodape sai
+  // do alcance com historico longo.
+  const [historicoCompleto, setHistoricoCompleto] = useState(false);
   const estagioRef = useRef<'peek' | 'cheia'>('peek');
   estagioRef.current = estagio;
   useEffect(() => {
@@ -6051,6 +6054,35 @@ function ClientBottomSheet({
               </View>
             )}
 
+            {/* M1c (celular): duas acoes de 48px no topo da ficha cheia.
+                Rotulos CURTOS de proposito — "Mudar etapa" quebra em 390px. */}
+            {!layout.ehDesktop && (onChangeStage || onScheduleMeeting) && (
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+                {onChangeStage && (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Mudar etapa"
+                    style={styles.fichaAcaoMobileCheia}
+                    onPress={onChangeStage}
+                  >
+                    <IconTrendingUp width={20} height={20} fill="#FFFFFF" />
+                    <Text style={styles.fichaAcaoMobileCheiaTexto}>Etapa</Text>
+                  </TouchableOpacity>
+                )}
+                {onScheduleMeeting && (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Agendar"
+                    style={styles.fichaAcaoMobileVazada}
+                    onPress={onScheduleMeeting}
+                  >
+                    <IconCalendar width={20} height={20} fill={iconColors.brandText} />
+                    <Text style={styles.fichaAcaoMobileVazadaTexto}>Agendar</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
             {/* SLA: dias parado x limite da etapa (regra do MD). Só pra lead em
                 etapa com SLA. Vermelho = estourado, amarelo = perto, verde = ok. */}
             {(() => {
@@ -6362,9 +6394,9 @@ function ClientBottomSheet({
                 Histórico{timeline.length > 0 ? ` (${timeline.length})` : ''}
               </Text>
               {timeline.length === 0 ? (
-                <Text style={styles.meetingsEmpty}>Nenhum registro ainda.</Text>
+                <Text style={styles.meetingsEmpty}>Sem histórico ainda.</Text>
               ) : (
-                timeline.map((entry) => {
+                (historicoCompleto ? timeline : timeline.slice(0, 6)).map((entry) => {
                   const when = new Date(entry.createdAt).toLocaleString('pt-BR', {
                     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
                   });
@@ -6376,7 +6408,11 @@ function ClientBottomSheet({
                       ? `${change.from_stage} → ${change.to_stage}`
                       : `→ ${change.to_stage}`;
                     return (
-                      <View key={`stage-${change.id}`} style={styles.noteItem}>
+                      <View key={`stage-${change.id}`} style={[styles.noteItem, styles.timelineLinha]}>
+                        <View style={[styles.timelinePill, { backgroundColor: '#FFF1E0' }]}>
+                          <IconTrendingUp width={16} height={16} fill="#8A4A0C" />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
                         <View style={styles.noteHeaderRow}>
                           <View style={{ flex: 1 }}>
                             <IconText Icone={IconRefresh} size={13} style={styles.noteAuthor} tone="muted">
@@ -6388,6 +6424,7 @@ function ClientBottomSheet({
                         <Text style={[styles.noteBody, { fontWeight: '600' }]}>
                           Moveu etapa: {arrow}
                         </Text>
+                        </View>
                       </View>
                     );
                   }
@@ -6396,7 +6433,11 @@ function ClientBottomSheet({
                     const isFollowUp = m.type === 'follow_up';
                     const isPast = new Date(m.scheduled_at).getTime() < Date.now();
                     return (
-                      <View key={`meeting-${m.id}`} style={styles.noteItem}>
+                      <View key={`meeting-${m.id}`} style={[styles.noteItem, styles.timelineLinha]}>
+                        <View style={[styles.timelinePill, { backgroundColor: '#F1EBFE' }]}>
+                          <IconCalendar width={16} height={16} fill="#5B32C4" />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
                         <View style={styles.noteHeaderRow}>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.noteAuthor} numberOfLines={1}>
@@ -6409,12 +6450,17 @@ function ClientBottomSheet({
                         {m.observacoes ? (
                           <Text style={styles.noteBody}>{m.observacoes}</Text>
                         ) : null}
+                        </View>
                       </View>
                     );
                   }
                   if (entry.kind === 'visit') {
                     return (
-                      <View key={`visit-${entry.createdAt}`} style={styles.noteItem}>
+                      <View key={`visit-${entry.createdAt}`} style={[styles.noteItem, styles.timelineLinha]}>
+                        <View style={[styles.timelinePill, { backgroundColor: '#EAF7EE' }]}>
+                          <IconLocationFilled width={16} height={16} fill="#167532" />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
                         <View style={styles.noteHeaderRow}>
                           <View style={{ flex: 1 }}>
                             <IconText Icone={IconLocation} size={13} style={styles.noteAuthor} tone="muted">
@@ -6429,6 +6475,7 @@ function ClientBottomSheet({
                         <Text style={[styles.noteBody, { fontWeight: '600' }]}>
                           Cliente visitado no local
                         </Text>
+                        </View>
                       </View>
                     );
                   }
@@ -6438,7 +6485,11 @@ function ClientBottomSheet({
                   const wasEdited = new Date(note.updated_at).getTime() - new Date(note.created_at).getTime() > 2000;
                   const authorLabel = note.created_by_name || note.created_by_email || 'Autor desconhecido';
                   return (
-                    <View key={`note-${note.id}`} style={styles.noteItem}>
+                    <View key={`note-${note.id}`} style={[styles.noteItem, styles.timelineLinha]}>
+                      <View style={[styles.timelinePill, { backgroundColor: 'var(--surface-2)' }]}>
+                        <IconPencil width={16} height={16} fill={iconColors.muted} />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
                       <View style={styles.noteHeaderRow}>
                         <View style={{ flex: 1 }}>
                           <IconText Icone={IconUser} size={13} style={styles.noteAuthor} tone="muted">{authorLabel}</IconText>
@@ -6518,8 +6569,20 @@ function ClientBottomSheet({
                         <Text style={styles.noteBody}>{note.body}</Text>
                       )}
                     </View>
+                    </View>
                   );
                 })
+              )}
+              {timeline.length > 6 && (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={() => setHistoricoCompleto(v => !v)}
+                  style={{ paddingVertical: 8 }}
+                >
+                  <Text style={{ fontSize: 14, lineHeight: 20, fontWeight: '600', color: 'var(--info-text)' }}>
+                    {historicoCompleto ? 'Mostrar menos' : `Ver histórico completo (${timeline.length})`}
+                  </Text>
+                </TouchableOpacity>
               )}
               {canWriteNotes && (
                 <>
@@ -7975,6 +8038,40 @@ const styles = StyleSheet.create({
   dragHandleArea: { width: '100%', paddingTop: 14, paddingBottom: 14, alignItems: 'center' },
   bottomSheetContent: { paddingHorizontal: 20 },
   // ---- Peek sheet (prompt M1, celular) ----
+  // M1d: item da timeline com pill de tipo (tints claras — superficies
+  // proprias, o icone fica escuro nos dois temas).
+  fichaAcaoMobileCheia: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#C8131B',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  fichaAcaoMobileCheiaTexto: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: '#FFFFFF' },
+  fichaAcaoMobileVazada: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#C8131B',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  fichaAcaoMobileVazadaTexto: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: 'var(--brand-text)' },
+  timelineLinha: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+  timelinePill: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
   peekCorpo: {
     paddingHorizontal: 16,
     paddingTop: 4,

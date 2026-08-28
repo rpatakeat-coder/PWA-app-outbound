@@ -25,6 +25,8 @@ O prompt de revisão trabalha em duas fases: **audita primeiro** (responde OK / 
 `08-tarefas/` | Tarefas | `08a`…`08d` + `08R` |
 `09-gestor/` | Painel do gestor | `09a`…`09f` + `09R` |
 `10-meu-desempenho/` | Meu desempenho | `10a` `10b` `10c` + `10R` |
+`12-login/` | Login | `12a` `12b` + `12R` |
+`13-configuracoes/` | **Configurações** (tela nova) | `13a` `13b` + `13R` |
 
 ### Já aplicado — só revisão
 
@@ -34,9 +36,12 @@ O prompt de revisão trabalha em duas fases: **audita primeiro** (responde OK / 
 `04-mapa/` | `04R` — mapa com painel de trabalho |
 `05-lista/` | `05R` — lista em tabela |
 `11-ficha-e-modais/` | `11R` — drawer da ficha e os três modais |
-`12-login/` | `12R` — login fora da casca |
 
 Rode essas cinco revisões **antes** de seguir para as pendentes: elas dizem o que ficou incompleto nas tentativas anteriores, e algumas correções (a casca, principalmente) afetam todas as telas.
+
+## Configurações é tela nova
+
+`13-configuracoes/` cria uma tela que **não existe no app**: hoje é o modal da engrenagem do header. O `13a` faz o inventário do modal e monta a tela; o `13b` estiliza as seis seções. Rode antes do `12-login`, porque a engrenagem e o "Sair" só podem sair do header depois que a tela existir.
 
 ## Dois prompts que não editam código
 
