@@ -7558,7 +7558,11 @@ const styles = StyleSheet.create({
     borderBottomColor: 'var(--border)',
     width: 224,
   },
-  sbMarcaIcone: { width: 28, height: 28 },
+  // A marca e' RETRATO (273x343): a caixa tem que ter a mesma proporcao.
+  // Em 28x28 o Image esticava/cortava — 28 de altura pede 22 de largura.
+  // `contain` fica junto como garantia: se a arte mudar de proporcao, ela
+  // encolhe pra caber em vez de vazar ou distorcer.
+  sbMarcaIcone: { width: 22, height: 28, resizeMode: 'contain' },
   sbTopoTexto: { minWidth: 0 },
   sbMarcaTitulo: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '700', color: 'var(--text)' },
   sbMarcaSub: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-faint)' },

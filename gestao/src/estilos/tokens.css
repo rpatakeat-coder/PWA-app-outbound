@@ -287,6 +287,20 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
+/*
+  A marca precisa de slot proprio, como .sidebar__icone: em repouso o topo tem
+  72px com 20 de padding de cada lado, entao sobram 32px pro icone + gap 12 + o
+  bloco de texto. Sem flex-shrink 0 o flex esprememia o SVG de 28px pra 6,6 —
+  a altura ficava em 28 e a marca saia esmagada. So' aparecia COLAPSADA; com a
+  sidebar aberta sobra espaco e o defeito some.
+*/
+.sidebar__marca {
+  flex: 0 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .sidebar__marca-titulo {
   font-size: 14px;
   line-height: 20px;

@@ -33,7 +33,7 @@ import { IconLightBulb } from 'takeat-design-system-ui-kit/icons/IconLightBulb';
 // A marca vem do kit como COMPONENTE, e nao de /marca/takeat-icon.svg: aquele
 // arquivo mora no public/ do app de campo, e o caminho absoluto so' resolve em
 // producao, onde os dois produtos dividem o dominio. No dev do cockpit dava 404.
-import { IconTakeat } from 'takeat-design-system-ui-kit/icons/IconTakeat';
+import { IconTakeatFilled } from 'takeat-design-system-ui-kit/icons/IconTakeatFilled';
 import './estilos/tokens.css';
 
 type Estado = 'carregando' | 'anonimo' | 'sem-permissao' | 'ok';
@@ -179,7 +179,13 @@ export default function App() {
       */}
       <nav className="sidebar" aria-label="Navegação do cockpit">
         <div className="sidebar__topo">
-          <IconTakeat width={28} height={28} fill="var(--red)" />
+          {/* Filled, e nao IconTakeat: o outline do kit e' a marca VAZADA, e a
+              do app de campo e' solida — lado a lado pareceriam duas marcas.
+              22x28 e' a proporcao real (viewBox 359.94x455.49); forcar 28x28
+              deixaria 3px de vazio de cada lado dentro do slot. */}
+          <span className="sidebar__marca">
+            <IconTakeatFilled width={22} height={28} fill="var(--red)" />
+          </span>
           <div className="sidebar__rotulo">
             <div className="sidebar__marca-titulo">Gestão</div>
             <div className="sidebar__marca-sub">Cockpit</div>
