@@ -117,7 +117,7 @@ function LeituraDaSemana({
             </div>
           )}
           <div style={{ fontSize: 14, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{leitura.texto}</div>
-          <div style={{ color: 'var(--ter)', fontSize: 12, marginTop: 10 }}>
+          <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 10 }}>
             Escrito por IA a partir dos números desta tela · {leitura.modelo} ·{' '}
             {idadeEmHoras(leitura.geradoEm) < 1
               ? 'agora há pouco'
@@ -241,7 +241,6 @@ export function Semana() {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-          <div style={{ fontSize: 20, fontWeight: 800 }}>Semana</div>
           {/* Janela sempre visivel — regra do doc: rotule o periodo junto do
               numero, sempre. */}
           <div style={{ color: 'var(--dark-mut)', fontSize: 13, fontWeight: 700 }}>
@@ -383,13 +382,13 @@ export function Semana() {
           </div>
         )}
 
-        <div style={{ color: 'var(--ter)', fontSize: 12, marginTop: 12 }}>
+        <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 12 }}>
           Setas comparam com a semana civil anterior. Verde é melhora, vermelho é piora — em
           “Perdidos”, subir é vermelho.
         </div>
       </section>
 
-      <div style={{ color: 'var(--ter)', fontSize: 12, marginTop: 16 }}>
+      <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 16 }}>
         Semana civil de segunda a sexta, horário de Brasília ·{' '}
         {dados.atualizadoEm.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
       </div>

@@ -136,7 +136,6 @@ export function Cockpit() {
           marginBottom: 18,
         }}
       >
-        <div style={{ fontSize: 20, fontWeight: 800 }}>Time</div>
         <div style={{ color: 'var(--dark-mut)', marginTop: 4 }}>
           {kpis.travados > 0 ? (
             <>
@@ -315,7 +314,7 @@ export function Cockpit() {
         </section>
       </div>
 
-      <div style={{ color: 'var(--ter)', fontSize: 12, marginTop: 16 }}>
+      <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 16 }}>
         Dados lidos do Supabase ao vivo ·{' '}
         {dados.atualizadoEm.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
       </div>

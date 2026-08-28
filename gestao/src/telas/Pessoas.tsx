@@ -193,7 +193,7 @@ function SeletorDeDocumentos({
               </button>
             </div>
           ))}
-          <div style={{ fontSize: 12, color: 'var(--ter)', marginTop: 4 }}>
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
             Sobem ao registrar. Ficam na mesma área privada do áudio.
           </div>
         </div>
@@ -233,7 +233,7 @@ function ListaDeDocumentos({
             title="Tira o documento deste 1:1. O arquivo continua guardado."
             style={{
               border: 'none', background: 'none', padding: 0, cursor: 'pointer',
-              font: 'inherit', fontSize: 12, color: 'var(--ter)',
+              font: 'inherit', fontSize: 12, color: 'var(--muted)',
             }}
           >
             remover
@@ -469,7 +469,6 @@ export function Pessoas() {
           marginBottom: 18,
         }}
       >
-        <div style={{ fontSize: 20, fontWeight: 800 }}>Pessoas</div>
         <div style={{ color: 'var(--dark-mut)', marginTop: 4 }}>
           {pessoas.length === 0 ? (
             'Nenhum executivo ativo cadastrado.'
@@ -538,7 +537,7 @@ export function Pessoas() {
         </section>
       )}
 
-      <div style={{ color: 'var(--ter)', fontSize: 12, marginTop: 16 }}>
+      <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 16 }}>
         Semáforo por percentual da carteira acima do SLA: abaixo de 15% em dia, 15–35% atenção,
         35%+ crítico ·{' '}
         {dados.atualizadoEm.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}

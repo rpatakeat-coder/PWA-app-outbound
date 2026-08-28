@@ -121,7 +121,6 @@ export function Agenda() {
           marginBottom: 18,
         }}
       >
-        <div style={{ fontSize: 20, fontWeight: 800 }}>Agenda</div>
         <div style={{ color: 'var(--dark-mut)', marginTop: 4 }}>
           {semRotaHoje.length > 0 ? (
             <>
@@ -218,7 +217,7 @@ export function Agenda() {
           </div>
         )}
 
-        <div style={{ color: 'var(--ter)', fontSize: 12, marginTop: 12 }}>
+        <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 12 }}>
           O número é de paradas planejadas na rota do dia; ◆ marca reuniões com hora. Célula
           tracejada é hoje sem plano nenhum — o único buraco que ainda dá para preencher.
         </div>
@@ -275,7 +274,7 @@ export function Agenda() {
         )}
       </section>
 
-      <div style={{ color: 'var(--ter)', fontSize: 12, marginTop: 16 }}>
+      <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 16 }}>
         Semana civil (segunda a sexta), horário de Brasília ·{' '}
         {dados.atualizadoEm.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
       </div>
@@ -330,7 +329,7 @@ export function Agenda() {
               </div>
             )}
 
-            <div style={{ color: 'var(--ter)', fontSize: 12, marginTop: 18 }}>
+            <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 18 }}>
               A lista de paradas por nome fica no app de campo — é lá que a rota é montada e
               reordenada.
             </div>

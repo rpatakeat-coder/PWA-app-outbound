@@ -91,7 +91,6 @@ export function Prospeccao() {
           marginBottom: 18,
         }}
       >
-        <div style={{ fontSize: 20, fontWeight: 800 }}>Prospecção</div>
         <div style={{ color: 'var(--dark-mut)', marginTop: 4 }}>
           {noMapa === 0 ? (
             <>
@@ -138,7 +137,7 @@ export function Prospeccao() {
               </div>
             </div>
           ))}
-          <div style={{ color: 'var(--ter)', fontSize: 12 }}>
+          <div style={{ color: 'var(--muted)', fontSize: 12 }}>
             “Viraram lead” exclui quem ainda está em Prospecção ou Visita: estar no mapa não é o
             mesmo que ter conversado com o dono.
           </div>
@@ -285,7 +284,7 @@ export function Prospeccao() {
         )}
       </section>
 
-      <div style={{ color: 'var(--ter)', fontSize: 12, marginTop: 16 }}>
+      <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 16 }}>
         Descobertas vêm do Google via Serper; entram no mapa pela Rota do dia ·{' '}
         {dados.atualizadoEm.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
       </div>

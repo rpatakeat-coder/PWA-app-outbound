@@ -25,13 +25,18 @@
     green.500    #2EC9B7  2.07  (o verde primario e' de PREENCHIMENTO, nao texto)
     yellow.500   #FFB32F  1.79  (idem; so' o yellow.700 passa, com 4.88)
 
-  DUAS DIVERGENCIAS, as duas declaradas:
+  UMA DIVERGENCIA, declarada:
 
-  1. --ter usa #6B6B6B, que nao esta no design system. O degrau natural seria o
-     neutral.300, mas ele da' 4.29 e reprova. Entre 300 e 400 nao existe passo
-     intermediario, entao usei o mesmo cinza que o app de campo ja' usa pra
-     texto secundario (e que a paleta da marca chama de --cor-descricao): passa
-     com 5.33 sobre o cartao. Vale levar pro time de design — falta esse degrau.
+  1. (RESOLVIDA no G1) --ter usava #6B6B6B, fora do design system, porque o
+     degrau natural (neutral.300 #7A7A7A) da' 4.29 e reprova o AA. O raciocinio
+     estava certo, mas o app de campo usa #7A7A7A como --text-faint — e o
+     resultado era terciario de tons diferentes nos dois produtos, lado a lado.
+
+     Agora --ter e' #7A7A7A, o degrau oficial, e o problema de contraste se
+     resolve pelo USO e nao pelo tom: --ter fica reservado ao que NAO e' texto
+     de leitura — rotulo de eixo, contagem ao lado de um numero, caption de
+     11px. Frase que precisa ser lida usa --muted (#545454, 7.57). O terciario
+     estava fazendo o trabalho do secundario; era esse o defeito.
 
   2. O modo escuro usa os TOKENS OFICIAIS de foundations.md §1: superficie em
      #121212/#1E1E1E/#262626/#2A2A2A, e texto/traco como BRANCO COM OPACIDADE
@@ -50,7 +55,7 @@
   /* Texto */
   --ink: #222222;   /* neutral.500 — 15.91 sobre o cartao */
   --muted: #545454; /* neutral.400 —  7.57 */
-  --ter: #6b6b6b;   /* fora do DS, ver divergencia 1 —  5.33 */
+  --ter: #7a7a7a;   /* neutral.300 — ver a nota de --ter abaixo */
 
   /* Linhas */
   --line: #ededed;     /* neutral.100 */
@@ -178,18 +183,35 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* O cockpit e' ferramenta de mesa: densidade alta, largura util grande. */
+/*
+  O cockpit e' ferramenta de mesa: densidade alta, largura util grande.
+
+  NAO CENTRALIZA. Com a sidebar fixa a' esquerda, `margin: 0 auto` deixava um
+  vao entre a barra e o conteudo que lia como defeito de layout, nao como
+  respiro. O teto agora e' por TELA (--teto), porque tabela e leitura pedem
+  larguras diferentes: 1600 pra grade, 1200 pra texto.
+
+  O padding-bottom caiu de 48 pra 24: os 48 eram compensacao por nao haver
+  casca — sem rodape nenhum, a pagina terminava no vazio.
+*/
 .envoltorio {
-  max-width: 1320px;
-  margin: 0 auto;
-  /* spacing.5 / spacing.6 */
-  padding: 20px 24px 48px;
+  max-width: var(--teto, 1600px);
+  padding: 24px;
+}
+
+/*
+  As telas de aviso (carregando / anonimo / sem-permissao) aparecem ANTES de
+  haver navegacao, entao nao recebem casca: ficam centralizadas, como estavam.
+*/
+.envoltorio--aviso {
+  max-width: 480px;
+  margin: 48px auto;
 }
 
 .cartao {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 12px; /* borderRadius.lg */
+  border-radius: 8px; /* borderRadius.md — o mesmo de todo card do app de campo */
   box-shadow: var(--sombra-card);
   padding: 16px 20px; /* spacing.4 / spacing.5 */
 }
@@ -203,4 +225,225 @@ body {
   text-transform: uppercase;
   color: var(--muted);
   margin: 0 0 12px; /* spacing.3 */
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   CASCA (G1) — sidebar colapsavel + header, espelhando o app de campo.
+
+   Aqui o hover e' CSS de verdade: o cockpit e' React DOM puro, entao nao
+   precisa do truque de `data-*` que o app usa (o react-native-web nao escreve
+   :hover num StyleSheet). Mesmo comportamento, metade do codigo.
+   ───────────────────────────────────────────────────────────────────────── */
+
+.sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  /*
+    30, e nao os 40 que a especificacao pede: o Drawer do cockpit
+    (componentes/Drawer.tsx) usa 40 no backdrop e 41 no painel. Em 40 os dois
+    empatam, e a sidebar so' fica atras do backdrop por vir antes no DOM —
+    ordem de irmao decidindo empilhamento e' o tipo de coisa que quebra na
+    primeira vez que alguem move um bloco de lugar.
+  */
+  z-index: 30;
+  width: 72px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  transition: width 0.16s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* Expande so' onde ha' ponteiro e largura: em tablet a barra fica em 72. */
+@media (hover: hover) and (min-width: 1024px) {
+  .sidebar:hover {
+    width: 240px;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.14);
+  }
+  .sidebar:hover .sidebar__rotulo {
+    opacity: 1;
+  }
+}
+
+/* O corte de texto e' do overflow:hidden do container — NAO animar largura de
+   texto, que causaria reflow a cada quadro. So' a opacidade transiciona. */
+.sidebar__rotulo {
+  opacity: 0;
+  transition: opacity 0.16s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar__topo {
+  flex: 0 0 64px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sidebar__marca-titulo {
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: 0.1px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.sidebar__marca-sub {
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+  color: var(--ter);
+}
+
+.sidebar__itens {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px;
+  overflow-y: auto;
+}
+
+.sidebar__item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: 0.1px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  width: 100%;
+  text-align: left;
+  transition: background-color 0.16s;
+}
+
+.sidebar__item:hover {
+  background: var(--panel2);
+}
+
+.sidebar__item--ativo {
+  background: var(--red-soft);
+  color: var(--red);
+  font-weight: 700;
+}
+
+/* O icone nao encolhe quando a barra esta' em 72 e o rotulo ainda ocupa slot. */
+.sidebar__icone {
+  flex: 0 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar__rodape {
+  border-top: 1px solid var(--line);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar__usuario {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 44px;
+  padding: 0 12px;
+}
+
+.sidebar__avatar {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--red-soft);
+  color: var(--red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+}
+
+.sidebar__usuario-nome {
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.sidebar__usuario-papel {
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+  color: var(--ter);
+}
+
+/* A sidebar e' `fixed`: o recuo do conteudo e' a largura EM REPOUSO, entao
+   expandir no hover passa por cima e nao empurra a pagina. */
+.conteudo {
+  margin-left: 72px;
+  min-height: 100%;
+}
+
+.cabecalho {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 24px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.cabecalho__esquerda {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cabecalho__titulo {
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+}
+
+/* A pergunta que a tela responde. Vinha do `title` do link e so' aparecia no
+   hover; agora e' parte do cabecalho. */
+.cabecalho__pergunta {
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.4px;
+  font-weight: 500;
+  color: var(--ter);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

@@ -4,6 +4,8 @@
 // UMA pessoa. Toda mudanca recarrega o quadro: sem estado otimista, porque o
 // vendedor pode estar mexendo na mesma rota pelo app agora.
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { SLOT_CABECALHO } from '../App';
 import {
   carregarQuadro,
   garantirRota,
@@ -254,18 +256,24 @@ export function Rotas() {
   const comRota = quadro?.linhas.filter((l) => l.paradas.length > 0).length ?? 0;
   const total = quadro?.linhas.length ?? 0;
 
+  const slot = typeof document === 'undefined' ? null : document.getElementById(SLOT_CABECALHO);
+
   return (
     <>
-      <div style={{ background: 'var(--dark)', color: 'var(--dark-ink)', borderRadius: 14, padding: '20px 22px', marginBottom: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 20, fontWeight: 800, flex: 1 }}>Rotas do time</div>
+      {/* O navegador de dia e' filtro global de periodo: por isso vive no
+          cabecalho da casca, e nao dentro do banner da tela. O estado continua
+          aqui — o portal so' muda onde ele aparece no DOM. */}
+      {slot &&
+        createPortal(
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button style={botaoSec} onClick={() => setDia(somaDias(dia, -1))}>‹</button>
+            <button style={botaoSec} onClick={() => setDia(somaDias(dia, -1))} aria-label="Dia anterior">‹</button>
             <span style={{ fontWeight: 700, minWidth: 90, textAlign: 'center' }}>{rotuloDia(dia, hoje)}</span>
-            <button style={botaoSec} onClick={() => setDia(somaDias(dia, 1))}>›</button>
+            <button style={botaoSec} onClick={() => setDia(somaDias(dia, 1))} aria-label="Próximo dia">›</button>
             {dia !== hoje && <button style={botaoSec} onClick={() => setDia(hoje)}>hoje</button>}
-          </div>
-        </div>
+          </div>,
+          slot,
+        )}
+      <div style={{ background: 'var(--dark)', color: 'var(--dark-ink)', borderRadius: 14, padding: '20px 22px', marginBottom: 18 }}>
         <div style={{ color: 'var(--dark-mut)', marginTop: 4 }}>
           {quadro == null
             ? 'Carregando…'
@@ -305,7 +313,7 @@ export function Rotas() {
                 <div style={{ fontSize: 12, color: 'var(--ter)' }}>+ {l.paradas.length - 4} paradas</div>
               )}
               {l.paradas.length === 0 && (
-                <div style={{ fontSize: 12.5, color: 'var(--ter)' }}>Montar rota →</div>
+                <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>Montar rota →</div>
               )}
             </div>
           </button>
@@ -338,7 +346,8 @@ export function Rotas() {
                 <div
                   ref={mapaDivRef}
                   style={{
-                    height: 'calc(100vh - 260px)',
+                    // 64 do cabecalho + 24+24 de padding do envoltorio + o banner escuro.
+                    height: 'calc(100vh - 300px)',
                     minHeight: 480,
                     borderRadius: 12,
                     overflow: 'hidden',
@@ -346,12 +355,12 @@ export function Rotas() {
                   }}
                 />
               )}
-              <div style={{ fontSize: 12, color: 'var(--ter)', marginTop: 6 }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
                 Cinza = carteira dele (clique adiciona) · vermelho numerado = parada (clique tira) ·
                 a linha é a ordem proposta, não o trajeto por estradas.
               </div>
             </div>
-            <div style={{ width: 400, overflowY: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
+            <div style={{ flex: '0 0 400px', overflowY: 'auto', maxHeight: 'calc(100vh - 300px)' }}>
               {aberta && (
           <>
             {aviso && (
@@ -391,7 +400,7 @@ export function Rotas() {
                 <button key={a.id} disabled={ocupado} onClick={() => adicionar(a)}
                   style={{ display: 'block', width: '100%', textAlign: 'left', font: 'inherit', border: 'none', background: 'none', cursor: 'pointer', color: 'inherit', padding: '7px 2px', borderTop: '1px solid var(--line-soft)' }}>
                   <span style={{ fontWeight: 700, fontSize: 13.5 }}>+ {a.nome}</span>
-                  <span style={{ color: 'var(--ter)', fontSize: 12 }}> · {[a.etapa, a.cidade].filter(Boolean).join(' · ')}</span>
+                  <span style={{ color: 'var(--muted)', fontSize: 12 }}> · {[a.etapa, a.cidade].filter(Boolean).join(' · ')}</span>
                 </button>
               ))}
             </div>

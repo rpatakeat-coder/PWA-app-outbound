@@ -163,7 +163,7 @@ export function GravadorDeAudio({
         <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 6 }}>{erro}</div>
       )}
 
-      <div style={{ fontSize: 12, color: 'var(--ter)', marginTop: 6 }}>
+      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
         A gravação fica em área privada, visível só para gestores. Avise a pessoa antes de
         gravar.
       </div>

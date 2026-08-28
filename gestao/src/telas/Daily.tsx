@@ -211,7 +211,6 @@ export function Daily() {
           marginBottom: 18,
         }}
       >
-        <div style={{ fontSize: 20, fontWeight: 800 }}>Daily</div>
         <div style={{ color: 'var(--dark-mut)', marginTop: 4 }}>
           {!dados.ehDiaUtil ? (
             <>
@@ -362,7 +361,7 @@ export function Daily() {
           </div>
         )}
 
-        <div style={{ color: 'var(--ter)', fontSize: 12, marginTop: 12 }}>
+        <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 12 }}>
           Pontos: visita 10 · avanço 25 · proposta 40 · fechamento 100. Tudo derivado do que foi
           registrado no app — ninguém digita nada aqui. Quando há “/ N” nas visitas, N são as
           paradas que a pessoa planejou na Rota do dia: aí o placar cobra a promessa dela, não a
