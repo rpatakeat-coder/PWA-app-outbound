@@ -749,12 +749,15 @@ a:hover{color:#016999;text-decoration:underline;}
           </div>
           <div>
             <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:var(--t2);text-transform:uppercase;margin-bottom:12px;">Dados</div>
-            <sc-for list="{{ fichaCampos }}" as="f" hint-placeholder-count="6">
+            <sc-for list="{{ fichaCampos }}" as="f" hint-placeholder-count="9">
               <div style="display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--s-subtle);">
-                <span style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t3);">{{ f.k }}</span>
+                <span style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:600;color:var(--t3);flex:0 0 auto;">{{ f.k }}</span>
                 <span style="font-size:14px;line-height:20px;letter-spacing:.25px;color:var(--t1);text-align:right;">{{ f.v }}</span>
               </div>
             </sc-for>
+            <a href="#" style="display:flex;align-items:center;gap:8px;padding:12px 0;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--blue-dark);text-decoration:none;">
+              <span class="ms" style="font-size:20px;">open_in_new</span>Abrir no HubSpot
+            </a>
           </div>
           <div>
             <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:var(--t2);text-transform:uppercase;margin-bottom:12px;">Timeline</div>
@@ -1225,9 +1228,15 @@ class Component extends DCLogic {
     ];
 
     const fichaCampos = [
-      {k:'Etapa',v:'Negociação'},{k:'Plano apresentado',v:'Pro'},{k:'MRR',v:'R$ 590,00'},
-      {k:'Endereço',v:'R. Aurora, 218 · Santa Cecília'},{k:'CEP',v:'01209-000'},
-      {k:'Origem do lead',v:'Rua'},{k:'Responsável',v:'Rafael Pereira'},
+      {k:'Contato',v:'José Almeida'},
+      {k:'Telefone',v:'(11) 98812-4477'},
+      {k:'Etapa',v:'Negociação'},
+      {k:'Plano apresentado',v:'Pro'},
+      {k:'Endereço',v:'R. Aurora, 218 · Santa Cecília'},
+      {k:'CEP',v:'01209-000'},
+      {k:'Origem do lead',v:'Rua'},
+      {k:'Responsável',v:'Rafael Pereira'},
+      {k:'ID HubSpot',v:'62404717070'},
     ];
     const timeline = [
       {icon:'where_to_vote',titulo:'Check-in de visita (3ª)',quando:'23 ago · 10:42 · 38 m do pin',bg:'#EAF7EE',fg:'#167532'},
