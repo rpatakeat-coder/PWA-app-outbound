@@ -621,8 +621,6 @@ function MainApp() {
   // Modo alternativo da tabela (prompt 05R item 19): agrupar por etapa.
   const [agruparPorEtapa, setAgruparPorEtapa] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [isPickingUf, setIsPickingUf] = useState(false);
-  const [isPickingStage, setIsPickingStage] = useState(false);
   const [isPickingVendor, setIsPickingVendor] = useState(false);
   const [expandedStages, setExpandedStages] = useState<Set<string>>(() => new Set());
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -3287,7 +3285,7 @@ function MainApp() {
           mais a bandeirinha de emoji explicando), a legenda passa a ser
           necessaria pra decifrar o mapa. Fica fora do modo de criacao.
           Some enquanto o mapa de calor está ligado (a legenda dele assume). */}
-      {!creationMode && !heatOn && (
+      {!creationMode && !heatOn && layout.ehLargo && (
         <View style={[styles.tempLegend, { bottom: baseInferior }, layout.ehLargo && styles.tempLegendaWeb]} pointerEvents="none">
           {[
             { c: TEMP_COLORS.hot, l: 'Quente' },
@@ -3465,8 +3463,92 @@ function MainApp() {
 
   // Painel de trabalho do mapa no web (352px): status, temperatura, calor e a
   // lista "nesta area". Substitui a busca/chips full-bleed do celular.
+  // M4: o contador numerico vira lista de chips removiveis — o badge diz
+  // QUANTOS, os chips dizem QUAIS. "Limpar tudo" NAO toca em showOnlyMyArea
+  // (escopo de carregamento nao e' filtro).
+  const rotuloVisita = (v: string): string =>
+    v === 'never' ? 'Nunca visitado'
+    : v === 'visited' ? 'Já visitado'
+    : v === 'visited:7' ? 'Visitado há menos de 7 dias'
+    : v === 'visited:30' ? 'Visitado há menos de 30 dias'
+    : v === 'not_visited:30' ? 'Sem visita há 30+ dias'
+    : v === 'not_visited:60' ? 'Sem visita há 60+ dias'
+    : v === 'not_visited:90' ? 'Sem visita há 90+ dias'
+    : v;
+  const filtrosAtivos: Array<{ chave: string; rotulo: string; limpar: () => void }> = [
+    searchQuery ? { chave: 'busca', rotulo: `Busca: ${searchQuery}`, limpar: () => setSearchQuery('') } : null,
+    stageFilter ? { chave: 'etapa', rotulo: `Etapa: ${stageFilter}`, limpar: () => setStageFilter(null) } : null,
+    stateFilter ? { chave: 'uf', rotulo: `UF: ${stateFilter}`, limpar: () => setStateFilter(null) } : null,
+    visitFilter ? { chave: 'visita', rotulo: rotuloVisita(visitFilter), limpar: () => setVisitFilter(null) } : null,
+    vendorFilterHubspotId !== null
+      ? {
+          chave: 'vendedor',
+          rotulo:
+            vendorFilterHubspotId === '__none__'
+              ? 'Sem responsável'
+              : vendorFilterHubspotId === myHubspotId
+                ? 'Meus leads'
+                : `Vendedor: ${vendorLabel(vendorFilterHubspotId)}`,
+          limpar: () => setVendorFilterHubspotId(null),
+        }
+      : null,
+    contaAlvoOnly ? { chave: 'alvo', rotulo: 'Conta Alvo', limpar: () => setContaAlvoOnly(false) } : null,
+  ].filter(Boolean) as Array<{ chave: string; rotulo: string; limpar: () => void }>;
+
+  const linhaFiltrosAtivos = filtrosAtivos.length > 0 && (
+    <View style={styles.faChips}>
+      {filtrosAtivos.map(f => (
+        <View key={f.chave} style={styles.faChip}>
+          <Text style={styles.faChipTexto} numberOfLines={1}>{f.rotulo}</Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={`Remover filtro ${f.rotulo}`}
+            hitSlop={{ top: 16, bottom: 16, left: 8, right: 12 }}
+            onPress={f.limpar}
+          >
+            <IconClose width={14} height={14} fill={iconColors.muted} />
+          </TouchableOpacity>
+        </View>
+      ))}
+      {filtrosAtivos.length >= 2 && (
+        <TouchableOpacity
+          accessibilityRole="button"
+          style={[styles.faChip, { backgroundColor: 'var(--tint-red)', borderColor: 'var(--tint-red)' }]}
+          onPress={() => filtrosAtivos.forEach(f => f.limpar())}
+        >
+          <Text style={[styles.faChipTexto, { color: 'var(--tint-red-text)' }]}>Limpar tudo</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
   const painelMapaWeb = (
     <View style={styles.pmwContainer}>
+      {/* M4: escopo de CARREGAMENTO, separado dos filtros — decide o que a
+          query busca, nao o que recorta. Fora do "Limpar tudo" de proposito. */}
+      <View style={styles.pmwEscopo}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.pmwCalorTitulo}>Só minha área</Text>
+          <Text style={styles.pmwCalorSub} numberOfLines={2}>
+            {showOnlyMyArea
+              ? 'Carrega apenas os leads da região visível no mapa.'
+              : 'Buscando em todo o país. Pode ficar lento.'}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="switch"
+          accessibilityLabel="Só minha área"
+          accessibilityState={{ checked: showOnlyMyArea }}
+          style={[
+            styles.pmwSwitch,
+            { backgroundColor: showOnlyMyArea ? '#C8131B' : 'var(--stroke-default)', alignItems: showOnlyMyArea ? 'flex-end' : 'flex-start' },
+          ]}
+          {...ds({ trans: '1' })}
+          onPress={() => handleToggleArea(!showOnlyMyArea)}
+        >
+          <View style={styles.pmwSwitchDot} />
+        </Pressable>
+      </View>
       <View style={styles.pmwFiltros}>
         <View style={styles.pmwSegmentos}>
           {statusOptions.map((opt, i) => {
@@ -3567,6 +3649,7 @@ function MainApp() {
           </View>
         )}
       </View>
+      {linhaFiltrosAtivos && <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>{linhaFiltrosAtivos}</View>}
       <View style={styles.pmwListaCabecalho}>
         <Text style={styles.pmwListaTitulo}>{`Nesta área · ${filteredMapMarkers.length}`}</Text>
         <Text style={styles.pmwListaOrdem}>{userLocation ? 'por distância' : 'por nome'}</Text>
@@ -3736,6 +3819,7 @@ function MainApp() {
         </View>
       </View>
 
+      {linhaFiltrosAtivos && <View style={{ marginBottom: 16 }}>{linhaFiltrosAtivos}</View>}
       <View style={styles.ltwTabela}>
         <View style={styles.ltwCabecalho}>
           {cabecalhosTabela.filter(c => layout.ehDesktop || !c.soDesktop).map(c => (
@@ -4200,10 +4284,61 @@ function MainApp() {
             )}
           </View>
 
-          {/* Linha de chips de status com botão de filtros (UF) ancorado à esquerda.
-              Removido o chip "Todos" propositalmente: trazia todos os ~2k+ pinos
-              de uma vez no mapa, travando o app. */}
+          {/* M4, nivel 1 no celular: segmented de status + chips de
+              temperatura sempre visiveis (substituem a legenda que cobria um
+              quarto do mapa). Sem chip "Todos" de status: trazia ~2k pinos de
+              uma vez e travava o app. */}
           <View style={styles.filterBar}>
+            <View style={styles.segMobileLinha}>
+              {statusOptions.map((opt, i) => {
+                const ativo = statusFilter === opt.value;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    accessibilityRole="button"
+                    style={[
+                      styles.segMobile,
+                      i === 0 && { borderTopLeftRadius: 12, borderBottomLeftRadius: 12 },
+                      i === statusOptions.length - 1 && { borderTopRightRadius: 12, borderBottomRightRadius: 12 },
+                      i > 0 && { borderLeftWidth: 0 },
+                      ativo && { backgroundColor: '#C8131B', borderColor: '#C8131B' },
+                    ]}
+                    onPress={() => setStatusFilter(opt.value)}
+                  >
+                    <Text style={[styles.segMobileTexto, ativo && { color: '#FFFFFF' }]} numberOfLines={1}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8, paddingVertical: 8 }}
+              keyboardShouldPersistTaps="handled"
+            >
+              {[
+                { rotulo: 'Todos', cor: 'var(--stroke-default)', ativo: tempFilter === null && !contaAlvoOnly, aoTocar: () => { setTempFilter(null); setContaAlvoOnly(false); } },
+                { rotulo: 'Quente', cor: TEMP_COLORS.hot, ativo: tempFilter === 'Quente', aoTocar: () => setTempFilter(tempFilter === 'Quente' ? null : 'Quente') },
+                { rotulo: 'Morno', cor: TEMP_COLORS.warm, ativo: tempFilter === 'Morno', aoTocar: () => setTempFilter(tempFilter === 'Morno' ? null : 'Morno') },
+                { rotulo: 'Frio', cor: TEMP_COLORS.cold, ativo: tempFilter === 'Frio', aoTocar: () => setTempFilter(tempFilter === 'Frio' ? null : 'Frio') },
+                { rotulo: 'Fechado', cor: TEMP_COLORS.won, ativo: tempFilter === 'Fechado', aoTocar: () => setTempFilter(tempFilter === 'Fechado' ? null : 'Fechado') },
+                { rotulo: 'Perdido', cor: TEMP_COLORS.lost, ativo: tempFilter === 'Perdido', aoTocar: () => setTempFilter(tempFilter === 'Perdido' ? null : 'Perdido') },
+                { rotulo: 'Conta Alvo', cor: CONTA_ALVO_COLOR, ativo: contaAlvoOnly, aoTocar: () => setContaAlvoOnly(v => !v) },
+              ].map(chip => (
+                <TouchableOpacity
+                  key={chip.rotulo}
+                  accessibilityRole="button"
+                  style={[styles.tempChipMobile, chip.ativo && styles.tempChipMobileAtivo]}
+                  onPress={chip.aoTocar}
+                >
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: chip.cor }} />
+                  <Text style={[styles.tempChipMobileTexto, chip.ativo && { color: 'var(--tint-red-text)' }]}>{chip.rotulo}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            {linhaFiltrosAtivos && <View style={{ paddingBottom: 8 }}>{linhaFiltrosAtivos}</View>}
             <View style={styles.filterBarRow}>
               {(availableStates.length > 0 || availableStages.length > 0) && (
                 <TouchableOpacity
@@ -4220,31 +4355,9 @@ function MainApp() {
                   )}
                 </TouchableOpacity>
               )}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filterScroll}
-                keyboardShouldPersistTaps="handled"
-              >
-                {statusOptions.map(opt => (
-                  <TouchableOpacity
-                    key={opt.value}
-                    style={[
-                      sharedStyles.filterChip,
-                      statusFilter === opt.value && { backgroundColor: opt.color },
-                    ]}
-                    onPress={() => setStatusFilter(opt.value)}
-                  >
-                    <View style={[sharedStyles.filterDot, { backgroundColor: opt.color }]} />
-                    <Text style={[
-                      sharedStyles.filterChipText,
-                      statusFilter === opt.value && sharedStyles.filterChipTextActive,
-                    ]}>
-                      {opt.label} ({statusCounts[opt.value]})
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+              <Text style={[styles.tempChipMobileTexto, { alignSelf: 'center' }]}>
+                {`${filteredClients.length} ${filteredClients.length === 1 ? 'lead' : 'leads'} no recorte`}
+              </Text>
             </View>
           </View>
         </>
@@ -4746,7 +4859,7 @@ function MainApp() {
               gesto de scroll do ScrollView dentro. */}
           <Pressable
             style={StyleSheet.absoluteFill}
-            onPress={() => { setIsPickingUf(false); setIsPickingStage(false); setIsPickingVendor(false); setIsFiltersOpen(false); }}
+            onPress={() => { setIsPickingVendor(false); setIsFiltersOpen(false); }}
           />
           <View style={[styles.filtersSheet, layout.ehLargo && styles.modalCartaoMedioWeb]}>
             {isPickingVendor ? (
@@ -4792,64 +4905,6 @@ function MainApp() {
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
-              </>
-            ) : isPickingUf ? (
-              <>
-                <View style={styles.modalHeader}>
-                  <TouchableOpacity onPress={() => setIsPickingUf(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Text style={styles.backButton}>‹ Voltar</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.modalTitle}>Selecione o estado</Text>
-                  <View style={{ width: 60 }} />
-                </View>
-                <ScrollView style={styles.ufPickerList} contentContainerStyle={{ paddingBottom: 12 }}>
-                  <TouchableOpacity
-                    style={styles.ufPickerRow}
-                    onPress={() => { setStateFilter(null); setIsPickingUf(false); }}
-                  >
-                    <Text style={[styles.ufPickerRowText, !stateFilter && styles.ufPickerRowTextActive]}>Todos os estados</Text>
-                    {!stateFilter && <IconCheck width={16} height={16} fill={iconColors.brandText} />}
-                  </TouchableOpacity>
-                  {availableStates.map(uf => (
-                    <TouchableOpacity
-                      key={uf}
-                      style={styles.ufPickerRow}
-                      onPress={() => { setStateFilter(uf); setIsPickingUf(false); }}
-                    >
-                      <Text style={[styles.ufPickerRowText, stateFilter === uf && styles.ufPickerRowTextActive]}>{uf}</Text>
-                      {stateFilter === uf && <IconCheck width={16} height={16} fill={iconColors.brandText} />}
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </>
-            ) : isPickingStage ? (
-              <>
-                <View style={styles.modalHeader}>
-                  <TouchableOpacity onPress={() => setIsPickingStage(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Text style={styles.backButton}>‹ Voltar</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.modalTitle}>Selecione a etapa</Text>
-                  <View style={{ width: 60 }} />
-                </View>
-                <ScrollView style={styles.ufPickerList} contentContainerStyle={{ paddingBottom: 12 }}>
-                  <TouchableOpacity
-                    style={styles.ufPickerRow}
-                    onPress={() => { setStageFilter(null); setIsPickingStage(false); }}
-                  >
-                    <Text style={[styles.ufPickerRowText, !stageFilter && styles.ufPickerRowTextActive]}>Todas as etapas</Text>
-                    {!stageFilter && <IconCheck width={16} height={16} fill={iconColors.brandText} />}
-                  </TouchableOpacity>
-                  {availableStages.map(stage => (
-                    <TouchableOpacity
-                      key={stage}
-                      style={styles.ufPickerRow}
-                      onPress={() => { setStageFilter(stage); setIsPickingStage(false); }}
-                    >
-                      <Text style={[styles.ufPickerRowText, stageFilter === stage && styles.ufPickerRowTextActive]}>{stage}</Text>
-                      {stageFilter === stage && <IconCheck width={16} height={16} fill={iconColors.brandText} />}
-                    </TouchableOpacity>
-                  ))}
                 </ScrollView>
               </>
             ) : (
@@ -5043,35 +5098,55 @@ function MainApp() {
                   );
                 })()}
 
-                <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Estado</Text>
-                <Text style={styles.passwordModalHint}>
-                  Filtra os pinos pelo UF do endereco do cliente.
-                </Text>
-                <TouchableOpacity
-                  style={sharedStyles.dropdownButton}
-                  onPress={() => setIsPickingUf(true)}
-                  disabled={availableStates.length === 0}
-                >
-                  <Text style={[sharedStyles.dropdownButtonText, !stateFilter && { color: 'var(--text-muted)' }]}>
-                    {stateFilter ?? (availableStates.length === 0 ? 'Sem estados disponiveis' : 'Todos os estados')}
-                  </Text>
-                  <Text style={sharedStyles.dropdownChevron}>▾</Text>
-                </TouchableOpacity>
-
+                {/* M4: fim do dropdown-dentro-de-modal — etapa e UF sao
+                    listas INLINE. isPickingUf/isPickingStage morreram. */}
                 <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Etapa</Text>
-                <Text style={styles.passwordModalHint}>
-                  Filtra os leads pela etapa comercial sincronizada.
-                </Text>
-                <TouchableOpacity
-                  style={sharedStyles.dropdownButton}
-                  onPress={() => setIsPickingStage(true)}
-                  disabled={availableStages.length === 0}
-                >
-                  <Text style={[sharedStyles.dropdownButtonText, !stageFilter && { color: 'var(--text-muted)' }]}>
-                    {stageFilter ?? (availableStages.length === 0 ? 'Sem etapas disponiveis' : 'Todas as etapas')}
-                  </Text>
-                  <Text style={sharedStyles.dropdownChevron}>▾</Text>
-                </TouchableOpacity>
+                {availableStages.length === 0 ? (
+                  <Text style={styles.passwordModalHint}>Sem etapas disponiveis.</Text>
+                ) : (
+                  <View style={{ gap: 8 }}>
+                    {[null, ...availableStages].map(etapa => {
+                      const ativo = stageFilter === etapa;
+                      const cor = etapa ? STAGES.find(s => s.label === etapa)?.color ?? 'var(--stroke-default)' : null;
+                      return (
+                        <TouchableOpacity
+                          key={etapa ?? '__todas'}
+                          accessibilityRole="button"
+                          style={[styles.filtroLinha, { minHeight: layout.ehDesktop ? 40 : 56, borderRadius: layout.ehDesktop ? 8 : 16 }, ativo && styles.filtroLinhaAtiva]}
+                          onPress={() => setStageFilter(ativo ? null : etapa)}
+                        >
+                          {cor && <View style={[sharedStyles.filterDot, { backgroundColor: cor }]} />}
+                          <Text style={[styles.filtroLinhaTexto, !layout.ehDesktop && { fontSize: 16, lineHeight: 24, letterSpacing: 0.15 }, ativo && { color: 'var(--tint-red-text)' }]} numberOfLines={1}>
+                            {etapa ?? 'Todas as etapas'}
+                          </Text>
+                          {ativo && <IconCheck width={16} height={16} fill={iconColors.tintRedText} />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+
+                <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Estado</Text>
+                {availableStates.length === 0 ? (
+                  <Text style={styles.passwordModalHint}>Sem estados disponiveis.</Text>
+                ) : (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {[null, ...availableStates].map(uf => {
+                      const ativo = stateFilter === uf;
+                      return (
+                        <TouchableOpacity
+                          key={uf ?? '__todos'}
+                          accessibilityRole="button"
+                          style={[styles.filtroLinha, { minHeight: layout.ehDesktop ? 40 : 48, borderRadius: layout.ehDesktop ? 8 : 16, paddingHorizontal: 14 }, ativo && styles.filtroLinhaAtiva]}
+                          onPress={() => setStateFilter(ativo ? null : uf)}
+                        >
+                          <Text style={[styles.filtroLinhaTexto, ativo && { color: 'var(--tint-red-text)' }]}>{uf ?? 'Todos'}</Text>
+                          {ativo && <IconCheck width={16} height={16} fill={iconColors.tintRedText} />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
                 </ScrollView>
 
                 <View style={styles.filtersFooter}>
@@ -5083,7 +5158,9 @@ function MainApp() {
                     <Text style={[styles.filtersSecondaryButtonText, activeFilterCount === 0 && { opacity: 0.4 }]}>Limpar tudo</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[sharedStyles.submitButton, { flex: 1, marginTop: 0 }]} onPress={() => setIsFiltersOpen(false)}>
-                    <Text style={sharedStyles.submitButtonText}>Aplicar</Text>
+                    <Text style={sharedStyles.submitButtonText}>
+                      {`Ver ${filteredClients.length} ${filteredClients.length === 1 ? 'lead' : 'leads'}`}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -7330,6 +7407,14 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderRightColor: 'var(--border)',
   },
+  pmwEscopo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+  },
   pmwFiltros: { padding: 16, gap: 16, borderBottomWidth: 1, borderBottomColor: 'var(--border)' },
   pmwSegmentos: { flexDirection: 'row' },
   pmwSegmento: {
@@ -7930,6 +8015,63 @@ const styles = StyleSheet.create({
     borderColor: 'var(--stroke-default)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  segMobileLinha: { flexDirection: 'row', paddingTop: 8 },
+  segMobile: {
+    flex: 1,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-default)',
+    backgroundColor: 'var(--surface)',
+  },
+  segMobileTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
+  tempChipMobile: {
+    height: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-default)',
+    backgroundColor: 'var(--surface)',
+  },
+  tempChipMobileAtivo: { backgroundColor: 'var(--tint-red)', borderColor: '#C8131B' },
+  tempChipMobileTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
+  faChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
+  faChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 28,
+    paddingLeft: 12,
+    paddingRight: 8,
+    borderRadius: 14,
+    backgroundColor: 'var(--surface-2)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+  },
+  faChipTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)', maxWidth: 220 },
+  filtroLinha: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-default)',
+    backgroundColor: 'var(--surface)',
+  },
+  filtroLinhaAtiva: { backgroundColor: 'var(--tint-red)', borderColor: '#C8131B' },
+  filtroLinhaTexto: {
+    flexShrink: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    letterSpacing: 0.1,
+    fontWeight: '600',
+    color: 'var(--text-muted)',
   },
   drawerAcaoCheia: {
     flex: 1,
