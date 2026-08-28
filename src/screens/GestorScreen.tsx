@@ -10,6 +10,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Pressable,
 } from 'react-native';
 import { Alert } from '../components/Alert';
 import {
@@ -20,6 +21,13 @@ import {
   IconTrendingUp,
   IconTrendingDown,
   IconDownload,
+  IconLocationFilled,
+  IconStore,
+  IconCall,
+  IconPencil,
+  IconSettings,
+  IconClose,
+  IconChevronRight,
   useIconColors,
 } from '../components/icons';
 import {
@@ -34,6 +42,7 @@ import {
   type MetricLead,
   type MetricLeadsParams,
   type SellerMetrics,
+  type SellerMetricKey,
   type SellerTaskCounts,
   type GestorTaskItem,
   type GestorTaskStatus,
@@ -45,9 +54,7 @@ import { DismissedContaAlvoCard } from './DismissedContaAlvoCard';
 import { RouteHistorySection } from './RouteHistorySection';
 import { MinhaDailyCard } from './MinhaDailyCard';
 import { useLayout } from '../hooks/useLayout';
-import { useFunilEtapas } from '../hooks/useFunilEtapas';
-import { useVisitsHeatmap } from '../hooks/useVisitsHeatmap';
-import { FUNNEL_STAGE_IDS, STAGES } from '../constants/stages';
+import { useAuth } from '../context/AuthContext';
 
 interface Props {
   enabled: boolean;
@@ -263,7 +270,7 @@ function LeadListModal({ state, onClose, onOpenClient }: {
 
   return (
     <Modal visible={state !== null} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
+      <View style={[styles.modalBackdrop, layoutModal.ehLargo && styles.modalBackdropWeb]}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
         <View style={[styles.modalPanel, layoutModal.ehLargo && styles.modalPanelWeb]}>
           <View style={styles.modalHeader}>
@@ -354,7 +361,7 @@ function TasksModal({ state, period, onClose, onOpenClient }: {
   const tasks = q.data ?? [];
   return (
     <Modal visible={state !== null} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
+      <View style={[styles.modalBackdrop, layoutModal.ehLargo && styles.modalBackdropWeb]}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
         <View style={[styles.modalPanel, layoutModal.ehLargo && styles.modalPanelWeb]}>
           <View style={styles.modalHeader}>
@@ -616,6 +623,10 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
   const [leadModal, setLeadModal] = useState<LeadModalState | null>(null);
   const [taskModal, setTaskModal] = useState<TaskModalState | null>(null);
   const [exporting, setExporting] = useState<null | 'last_week' | 'period'>(null);
+  // 09e: qual card do rail esta aberto no drawer de 480px.
+  const [railAberto, setRailAberto] = useState<null | 'usuarios' | 'rota' | 'metas' | 'contas' | 'historico'>(null);
+  const { profile: meuPerfil } = useAuth();
+  const iconColors = useIconColors();
 
   const period = useMemo<GestorPeriod>(() => {
     if (preset === 'custom' && customStart && customEnd) {
@@ -702,234 +713,6 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
     );
   }, [query.data, preset]);
 
-  // ---- Painel web (handoff v2): KPIs com delta REAL, funil, heatmap, tabela ----
-  const iconColors = useIconColors();
-  // Janela imediatamente anterior de MESMO comprimento: o delta dos KPIs vem
-  // de uma segunda consulta, nao de numero inventado. 'all' nao tem anterior.
-  const periodoAnterior = useMemo<GestorPeriod | null>(() => {
-    const r = periodRange(period);
-    if (!r.start) return null;
-    const ini = new Date(r.start).getTime();
-    const fim = r.end ? new Date(r.end).getTime() : Date.now();
-    const tamanho = Math.max(fim - ini, 1);
-    return {
-      preset: 'custom',
-      startISO: new Date(ini - tamanho).toISOString(),
-      endISO: new Date(ini).toISOString(),
-    };
-  }, [period]);
-  const anteriorQuery = useGestorMetrics(
-    periodoAnterior ?? { preset: '30d' },
-    enabled && layout.ehLargo && periodoAnterior !== null,
-  );
-  const funilQuery = useFunilEtapas(enabled && layout.ehLargo);
-  const visitasHeat = useVisitsHeatmap(enabled && layout.ehLargo);
-
-  const g = query.data?.global ?? null;
-  const gAnterior = periodoAnterior ? anteriorQuery.data?.global ?? null : null;
-
-  const kpisWeb: Array<{ rotulo: string; valor: number; anterior: number | null }> = g
-    ? [
-        { rotulo: 'Visitas', valor: g.visited_in_period, anterior: gAnterior?.visited_in_period ?? null },
-        { rotulo: 'Demos agendadas', valor: g.meetings_in_period, anterior: gAnterior?.meetings_in_period ?? null },
-        { rotulo: 'Fechamentos', valor: g.won_in_period, anterior: gAnterior?.won_in_period ?? null },
-        { rotulo: 'Leads criados', valor: g.created_in_period, anterior: gAnterior?.created_in_period ?? null },
-      ]
-    : [];
-
-  // Funil: etapas na ordem oficial do pipeline, contadas na base inteira.
-  const faixasFunil = (() => {
-    const contagem = funilQuery.data;
-    if (!contagem) return [];
-    const faixas = FUNNEL_STAGE_IDS.map(id => {
-      const etapa = STAGES.find(s => s.id === id);
-      return {
-        rotulo: etapa?.label ?? id,
-        cor: etapa?.color ?? 'var(--stroke-default)',
-        total: contagem.get(etapa?.label ?? '') ?? 0,
-      };
-    });
-    const teto = Math.max(...faixas.map(f => f.total), 1);
-    return faixas.map(f => ({ ...f, fracao: f.total / teto }));
-  })();
-
-  // Heatmap "visitas na semana": 5 semanas x 7 dias a partir dos check-ins
-  // com GPS (mesma fonte do calor do mapa — as datas ja' vem no ponto).
-  const gradeVisitas = (() => {
-    const porDia = new Map<string, number>();
-    for (const pt of visitasHeat.points) {
-      if (!pt.at) continue;
-      const d = new Date(pt.at);
-      const chave = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-      porDia.set(chave, (porDia.get(chave) ?? 0) + 1);
-    }
-    const hoje = new Date();
-    const desloc = (hoje.getDay() + 6) % 7; // 0 = segunda
-    const segDestaSemana = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - desloc);
-    const semanas: Array<Array<{ n: number; ehHoje: boolean; futuro: boolean }>> = [];
-    for (let s = 4; s >= 0; s -= 1) {
-      const linha: Array<{ n: number; ehHoje: boolean; futuro: boolean }> = [];
-      for (let dia = 0; dia < 7; dia += 1) {
-        const d = new Date(segDestaSemana);
-        d.setDate(segDestaSemana.getDate() - s * 7 + dia);
-        const chave = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-        linha.push({
-          n: porDia.get(chave) ?? 0,
-          ehHoje: d.toDateString() === hoje.toDateString(),
-          futuro: d.getTime() > hoje.getTime(),
-        });
-      }
-      semanas.push(linha);
-    }
-    return semanas;
-  })();
-
-  const timeOrdenado = [...visibleSellers].sort((a, b) => b.visited - a.visited);
-
-  const painelWeb = (
-    <View style={estilosWeb.bloco}>
-      {/* Faixa de KPIs — 3+3+3+3 do grid */}
-      <View style={estilosWeb.kpis}>
-        {kpisWeb.map(k => {
-          const delta =
-            k.anterior === null || anteriorQuery.isLoading
-              ? null
-              : k.anterior === 0
-                ? (k.valor > 0 ? 100 : 0)
-                : Math.round(((k.valor - k.anterior) / k.anterior) * 100);
-          return (
-            <View key={k.rotulo} style={estilosWeb.kpiCartao}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Text style={estilosWeb.kpiRotulo}>{k.rotulo}</Text>
-                {delta !== null && delta !== 0 && (
-                  delta > 0
-                    ? <IconTrendingUp width={20} height={20} fill={iconColors.teal} />
-                    : <IconTrendingDown width={20} height={20} fill={iconColors.tintRedText} />
-                )}
-              </View>
-              <Text style={estilosWeb.kpiValor}>{k.valor.toLocaleString('pt-BR')}</Text>
-              {delta !== null && (
-                <Text style={[estilosWeb.kpiDelta, { color: delta >= 0 ? 'var(--tint-green-text)' : 'var(--tint-red-text)' }]}>
-                  {`${delta >= 0 ? '+' : ''}${delta}% vs período anterior`}
-                </Text>
-              )}
-            </View>
-          );
-        })}
-      </View>
-
-      {/* Funil (8) + heatmap (4) */}
-      <View style={estilosWeb.duasColunas}>
-        <View style={[estilosWeb.cartao, { flex: 2 }]}>
-          <Text style={estilosWeb.cartaoTitulo}>Funil comercial · base inteira</Text>
-          {funilQuery.isLoading ? (
-            <ActivityIndicator style={{ marginVertical: 24 }} />
-          ) : (
-            faixasFunil.map(f => (
-              <View key={f.rotulo} style={{ marginBottom: 12 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text style={estilosWeb.funilRotulo}>{f.rotulo}</Text>
-                  <Text style={estilosWeb.funilNumero}>
-                    {`${f.total.toLocaleString('pt-BR')} · ${Math.round(f.fracao * 100)}%`}
-                  </Text>
-                </View>
-                <View style={estilosWeb.funilTrilha}>
-                  <View style={[estilosWeb.funilBarra, { width: `${Math.max(f.fracao * 100, 1)}%`, backgroundColor: f.cor }]} />
-                </View>
-              </View>
-            ))
-          )}
-        </View>
-        <View style={[estilosWeb.cartao, { flex: 1 }]}>
-          <Text style={estilosWeb.cartaoTitulo}>Visitas na semana</Text>
-          <View style={{ gap: 4 }}>
-            {gradeVisitas.map((linha, i) => (
-              <View key={i} style={{ flexDirection: 'row', gap: 4 }}>
-                {linha.map((cel, j) => (
-                  <View
-                    key={j}
-                    style={[
-                      estilosWeb.heatCelula,
-                      { backgroundColor: cel.n === 0 ? 'var(--surface-3)' : cel.n <= 2 ? '#8FE0D5' : '#1D9688' },
-                      cel.futuro && { opacity: 0.35 },
-                      cel.ehHoje && cel.n === 0 && estilosWeb.heatHojeVazio,
-                    ]}
-                  />
-                ))}
-              </View>
-            ))}
-          </View>
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-            {[
-              { cor: 'var(--surface-3)', r: '0' },
-              { cor: '#8FE0D5', r: '1–2' },
-              { cor: '#1D9688', r: '3+' },
-            ].map(l => (
-              <View key={l.r} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <View style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: l.cor }} />
-                <Text style={estilosWeb.heatLegenda}>{l.r}</Text>
-              </View>
-            ))}
-            {visitasHeat.capped && <Text style={estilosWeb.heatLegenda}>amostra recente</Text>}
-          </View>
-          <TouchableOpacity
-            style={estilosWeb.exportarBotao}
-            onPress={() => runExport('period')}
-            disabled={exporting !== null}
-          >
-            {exporting === 'period' ? (
-              <ActivityIndicator size="small" color={iconColors.teal} />
-            ) : (
-              <IconDownload width={20} height={20} fill={iconColors.teal} />
-            )}
-            <Text style={estilosWeb.exportarTexto}>Exportar relatório completo</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Tabela do time */}
-      <View style={[estilosWeb.cartao, { padding: 0, overflow: 'hidden' }]}>
-        <Text style={[estilosWeb.cartaoTitulo, { padding: 16, marginBottom: 0 }]}>Time no período</Text>
-        <View style={estilosWeb.tabelaCabecalho}>
-          <Text style={[estilosWeb.tabelaTh, { flex: 2, textAlign: 'left' }]}>Vendedor</Text>
-          {['Visitas', 'Demos', 'Fechados', 'Conversão', 'Mudanças', 'Tarefas'].map(c => (
-            <Text key={c} style={estilosWeb.tabelaTh}>{c}</Text>
-          ))}
-        </View>
-        {timeOrdenado.map(s => {
-          const nome = s.full_name || s.email || '—';
-          const iniciais = nome.trim().split(/\s+/).map(x => x[0]).slice(0, 2).join('').toUpperCase();
-          const conversao = s.visited > 0 ? Math.round((s.won_in_period / s.visited) * 100) : null;
-          const tarefas = s.id_hubspot ? taskCountsByHubspot.get(s.id_hubspot) : undefined;
-          return (
-            <TouchableOpacity
-              key={s.seller_id}
-              style={estilosWeb.tabelaLinha}
-              onPress={() =>
-                openLeads(`Visitados — ${nome}`, { period, sellerId: s.seller_id, metric: 'visited' })
-              }
-            >
-              <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                <View style={estilosWeb.tabelaAvatar}>
-                  <Text style={estilosWeb.tabelaAvatarTexto}>{iniciais}</Text>
-                </View>
-                <Text style={estilosWeb.tabelaNome} numberOfLines={1}>{nome}</Text>
-              </View>
-              <Text style={estilosWeb.tabelaTd}>{s.visited}</Text>
-              <Text style={estilosWeb.tabelaTd}>{s.meetings_scheduled}</Text>
-              <Text style={[estilosWeb.tabelaTd, s.won_in_period > 0 && { color: 'var(--tint-green-text)', fontWeight: '700' }]}>
-                {s.won_in_period}
-              </Text>
-              <Text style={estilosWeb.tabelaTd}>{conversao === null ? '—' : `${conversao}%`}</Text>
-              <Text style={estilosWeb.tabelaTd}>{s.stage_changes}</Text>
-              <Text style={estilosWeb.tabelaTd}>{tarefas ? `${tarefas.pending} abertas` : '—'}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
-  );
-
   return (
     <ScrollView
       style={styles.container}
@@ -1013,6 +796,281 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
       </View>
           </>
         );
+        const g = query.data?.global ?? null;
+        const carregandoOuErro = query.isLoading ? (
+          <View style={styles.loadingBlock}>
+            <ActivityIndicator size="large" color="var(--brand-text)" />
+            <Text style={styles.loadingText}>Carregando métricas...</Text>
+          </View>
+        ) : query.isError ? (
+          <View style={styles.loadingBlock}>
+            <Text style={styles.errorText}>Erro ao carregar métricas.</Text>
+            <Text style={styles.errorSub}>{(query.error as Error)?.message ?? 'Tente novamente.'}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={() => query.refetch()}>
+              <Text style={styles.retryButtonText}>Tentar novamente</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null;
+
+        // ---- 09b: barra de composicao da base (um card, nao cinco) ----
+        const barraComposicao = g && (() => {
+          const partes = [
+            { chave: 'lead', rotulo: 'Leads', n: g.total_leads, cor: '#0ea5e9' },
+            { chave: 'cliente', rotulo: 'Clientes', n: g.total_active_clients, cor: '#16a34a' },
+            { chave: 'churn', rotulo: 'Churn', n: g.total_churn, cor: '#475569' },
+          ];
+          const total = Math.max(g.total_clients, 1);
+          return (
+            <View style={nw.card}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16, gap: 16 }}>
+                <View style={{ flexShrink: 1, minWidth: 0 }}>
+                  <Text style={nw.kicker}>Composição da base</Text>
+                  <Text style={nw.notinha}>Snapshot atual, independente do período</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={nw.numeroGrande}>{g.total_clients.toLocaleString('pt-BR')}</Text>
+                  <Text style={nw.rotulinho}>registros</Text>
+                </View>
+              </View>
+              <View style={nw.barraTrilha}>
+                {partes.map(pt => {
+                  const pct = (pt.n / total) * 100;
+                  return (
+                    <View key={pt.chave} style={[nw.barraSegmento, { width: `${pct}%`, backgroundColor: pt.cor }]}>
+                      {pct >= 8 && (
+                        <Text style={nw.barraPct} numberOfLines={1}>{`${Math.round(pct)}%`}</Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+              <View style={{ flexDirection: 'row', gap: 24, flexWrap: 'wrap', marginTop: 16, alignItems: 'center' }}>
+                {partes.map(pt => (
+                  <TouchableOpacity
+                    key={pt.chave}
+                    accessibilityRole="button"
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                    onPress={() => openLeads(pt.rotulo, { metric: 'status', period, status: pt.chave })}
+                  >
+                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: pt.cor }} />
+                    <Text style={nw.numeroMedio}>{pt.n.toLocaleString('pt-BR')}</Text>
+                    <Text style={nw.rotulinho}>{pt.rotulo}</Text>
+                  </TouchableOpacity>
+                ))}
+                <View style={{ width: 1, alignSelf: 'stretch', backgroundColor: 'var(--border)' }} />
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                  onPress={() => openLeads('Visitados', { metric: 'visited', period: { preset: 'all' } })}
+                >
+                  <IconLocationFilled width={20} height={20} fill={iconColors.muted} />
+                  <Text style={nw.numeroMedio}>{g.total_visited.toLocaleString('pt-BR')}</Text>
+                  <Text style={nw.rotulinho}>já visitados</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        })();
+
+        // ---- 09c: atividade no periodo (6 cards clicaveis) ----
+        const CARDS_ATIVIDADE = g
+          ? ([
+              { rotulo: 'Visitados', n: g.visited_in_period, metric: 'visited' as const, Icone: IconLocationFilled },
+              { rotulo: 'Criados', n: g.created_in_period, metric: 'created' as const, Icone: IconStore },
+              { rotulo: 'Reuniões', n: g.meetings_in_period, metric: 'meetings' as const, Icone: IconCalendar },
+              { rotulo: 'Follow-ups', n: g.follow_ups_in_period, metric: 'follow_ups' as const, Icone: IconCall },
+              { rotulo: 'Mudanças', n: g.stage_changes_in_period, metric: 'stage_changes' as const, Icone: IconTrendingUp },
+              { rotulo: 'Notas', n: g.notes_in_period, metric: 'notes' as const, Icone: IconPencil },
+            ])
+          : [];
+        const faixaAtividade = g && (
+          <View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12, gap: 16 }}>
+              <Text style={nw.kicker}>{`Atividade no período · ${visibleSellers.length} vendedores`}</Text>
+              <Text style={nw.notinha}>Snapshot lido agora · atividade no período</Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              {CARDS_ATIVIDADE.map(c => (
+                <TouchableOpacity
+                  key={c.metric}
+                  accessibilityRole="button"
+                  style={nw.cardAtividade}
+                  onPress={() => openLeads(`${c.rotulo} no período`, { metric: c.metric, period })}
+                >
+                  <c.Icone width={20} height={20} fill={iconColors.muted} />
+                  <Text style={nw.numeroCard}>{c.n.toLocaleString('pt-BR')}</Text>
+                  <Text style={nw.rotulinho}>{c.rotulo}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        );
+
+        // ---- 09d: ranking em TABELA (era ~500px por vendedor) ----
+        const pontuacao = (s: SellerMetrics) =>
+          s.visited * 3 + s.created * 2 + s.meetings_scheduled + s.follow_ups_scheduled + s.stage_changes + s.notes_created;
+        const maiorPontuacao = Math.max(...visibleSellers.map(pontuacao), 1);
+        const COLS_VEND: Array<{ rotulo: string; metric: SellerMetricKey; campo: (s: SellerMetrics) => number }> = [
+          { rotulo: 'Visitados', metric: 'visited', campo: s => s.visited },
+          { rotulo: 'Criados', metric: 'created', campo: s => s.created },
+          { rotulo: 'Reuniões', metric: 'meetings', campo: s => s.meetings_scheduled },
+          { rotulo: 'Follow-ups', metric: 'follow_ups', campo: s => s.follow_ups_scheduled },
+          { rotulo: 'Mudanças', metric: 'stage_changes', campo: s => s.stage_changes },
+          { rotulo: 'Notas', metric: 'notes', campo: s => s.notes_created },
+        ];
+        const tabelaVendedores = g && (
+          <View style={[nw.card, { padding: 0, overflow: 'hidden' }]}>
+            <View style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: 'var(--border)' }}>
+              <Text style={nw.tituloCard}>Vendedores</Text>
+              <Text style={nw.notinha}>Ordenado por atividade ponderada · clique numa célula para ver os leads</Text>
+            </View>
+            <View style={nw.thLinha}>
+              <Text style={[nw.th, { width: 32, flex: 0, textAlign: 'left' }]}>#</Text>
+              <Text style={[nw.th, { flexGrow: 2, flexBasis: 200, textAlign: 'left' }]}>Vendedor</Text>
+              {COLS_VEND.map(c => (
+                <Text key={c.metric} style={nw.th}>{c.rotulo}</Text>
+              ))}
+              <Text style={[nw.th, { width: 96, flex: 0 }]}>Tarefas</Text>
+              <Text style={[nw.th, { width: 88, flex: 0 }]}>Ações</Text>
+            </View>
+            {visibleSellers.map((s, idx) => {
+              const nome = s.full_name || s.email || '—';
+              const iniciais = nome.trim().split(/\s+/).map(x => x[0]).slice(0, 2).join('').toUpperCase();
+              const souEu = meuPerfil?.id === s.seller_id;
+              const tarefas = s.id_hubspot ? taskCountsByHubspot.get(s.id_hubspot) : undefined;
+              const score = pontuacao(s);
+              const top3 = idx < 3;
+              return (
+                <View key={s.seller_id} style={nw.tdLinha} {...({ dataSet: { hover: 'surface2', trans: '1' } } as Record<string, unknown>)}>
+                  <Text style={[nw.tdRank, top3 && { color: '#C8131B' }]}>{`#${idx + 1}`}</Text>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={{ flexGrow: 2, flexBasis: 200, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 }}
+                    onPress={() => openLeads(`Leads atribuídos — ${nome}`, { metric: 'assigned', period, hubspotId: s.id_hubspot, sellerId: null })}
+                  >
+                    <View style={[nw.avatar, souEu && { backgroundColor: 'var(--tint-red)' }]}>
+                      <Text style={[nw.avatarTexto, souEu && { color: 'var(--tint-red-text)' }]}>{iniciais}</Text>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={nw.tdNome} numberOfLines={1}>{nome}</Text>
+                      <Text style={nw.notinha} numberOfLines={1}>
+                        {[s.sector, `${s.leads_assigned.toLocaleString('pt-BR')} leads`].filter(Boolean).join(' · ')}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                  {COLS_VEND.map(c => (
+                    <TouchableOpacity
+                      key={c.metric}
+                      accessibilityRole="button"
+                      style={{ flex: 1, minWidth: 76 }}
+                      onPress={() => openLeads(`${c.rotulo} — ${nome}`, { metric: c.metric, period, sellerId: s.seller_id })}
+                    >
+                      <Text style={[nw.td, c.metric === 'visited' && s.visited > 0 && { color: 'var(--text)' }]}>
+                        {c.campo(s).toLocaleString('pt-BR')}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={{ width: 96 }}
+                    disabled={!s.id_hubspot}
+                    onPress={() => s.id_hubspot && openTasks(`Tarefas — ${nome}`, s.id_hubspot, 'pendente')}
+                  >
+                    {tarefas ? (
+                      <Text style={[nw.td, { fontSize: 12 }]}>
+                        <Text style={(tarefas.pending >= 5 && { color: 'var(--tint-red-text)' }) || undefined}>
+                          {tarefas.pending}
+                        </Text>
+                        <Text style={{ color: 'var(--text-disabled)' }}> / </Text>
+                        {tarefas.done}
+                      </Text>
+                    ) : (
+                      <Text style={[nw.td, { color: 'var(--text-disabled)' }]}>—</Text>
+                    )}
+                  </TouchableOpacity>
+                  <View style={{ width: 88, alignItems: 'flex-end', gap: 4 }}>
+                    <View style={nw.scoreTrilha}>
+                      <View
+                        style={[
+                          nw.scoreBarra,
+                          { width: `${Math.max((score / maiorPontuacao) * 100, 4)}%`, backgroundColor: top3 ? '#C8131B' : 'var(--stroke-strong)' },
+                        ]}
+                      />
+                    </View>
+                    <Text style={nw.rotulinho}>{score.toLocaleString('pt-BR')}</Text>
+                  </View>
+                </View>
+              );
+            })}
+            <View style={{ padding: 12, paddingHorizontal: 16 }}>
+              <Text style={nw.notinha}>
+                {`${visibleSellers.length} vendedores ativos no período · contas de automação (RPA) ficam fora do ranking`}
+              </Text>
+            </View>
+          </View>
+        );
+
+        // ---- 09e: rail de 320px — cards-link que abrem o drawer de 480 ----
+        const CARDS_RAIL: Array<{ chave: typeof railAberto & string; titulo: string; desc: string; badge: string | null }> = [
+          { chave: 'usuarios', titulo: 'Vendedores e usuários', desc: 'Criar conta, papel e id do HubSpot', badge: String(visibleSellers.length) },
+          { chave: 'rota', titulo: 'Config Rota do dia', desc: 'Raio, nota mínima e avaliações', badge: null },
+          { chave: 'metas', titulo: 'Metas por vendedor', desc: 'Alvo mensal de cada um', badge: null },
+          { chave: 'contas', titulo: 'Contas Alvo dispensadas', desc: 'Descartadas pelos vendedores', badge: null },
+          { chave: 'historico', titulo: 'Histórico de rotas', desc: 'Rotas geradas no período', badge: null },
+        ];
+        const railNovo = (
+          <View style={{ width: layout.largura >= 1280 ? 320 : undefined, gap: 12 }}>
+            <MinhaDailyCard enabled={enabled} />
+            {CARDS_RAIL.map(c => (
+              <TouchableOpacity
+                key={c.chave}
+                accessibilityRole="button"
+                style={nw.cardLink}
+                {...({ dataSet: { hover: 'borda', trans: '1' } } as Record<string, unknown>)}
+                onPress={() => setRailAberto(c.chave)}
+              >
+                <View style={nw.quadroIcone}>
+                  <IconSettings width={20} height={20} fill={iconColors.muted} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={nw.tdNome} numberOfLines={1}>{c.titulo}</Text>
+                  <Text style={nw.notinha} numberOfLines={1}>{c.desc}</Text>
+                </View>
+                {c.badge && (
+                  <View style={nw.badgeRail}>
+                    <Text style={nw.badgeRailTexto}>{c.badge}</Text>
+                  </View>
+                )}
+                <IconChevronRight width={20} height={20} fill="var(--text-disabled)" />
+              </TouchableOpacity>
+            ))}
+            {exportar}
+          </View>
+        );
+
+        const drawerRail = railAberto && (
+          <Modal visible transparent animationType="fade" onRequestClose={() => setRailAberto(null)}>
+            <View style={nw.drawerFundo}>
+              <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={() => setRailAberto(null)} accessibilityLabel="Fechar" />
+              <View style={nw.drawerPainel}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: 'var(--border)' }}>
+                  <Text style={nw.tituloCard}>{CARDS_RAIL.find(c => c.chave === railAberto)?.titulo}</Text>
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" style={nw.drawerFechar} onPress={() => setRailAberto(null)}>
+                    <IconClose width={20} height={20} fill={iconColors.muted} />
+                  </TouchableOpacity>
+                </View>
+                <ScrollView contentContainerStyle={{ padding: 16 }}>
+                  {railAberto === 'usuarios' && <SellerClassificationCard />}
+                  {railAberto === 'rota' && <RouteConfigCard />}
+                  {railAberto === 'metas' && <SellerGoalsCard />}
+                  {railAberto === 'contas' && <DismissedContaAlvoCard />}
+                  {railAberto === 'historico' && <RouteHistorySection range={periodRange(period)} enabled={enabled} />}
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
+        );
+
         const metricas = (
           <>
       {query.isLoading ? (
@@ -1147,23 +1205,28 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
           </>
         );
         return layout.ehDesktop ? (
-          <>
-            {/* Faixa principal do handoff: KPIs, funil 8+4 com heatmap e a
-                tabela do time — em LARGURA CHEIA. Snapshot, ranking (o
-                drill-down por vendedor) e os cartoes de configuracao viram o
-                bloco de baixo, como o prompt 09f permite. */}
-            {painelWeb}
-            <View style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                {metricas}
-                {ranking}
+          /* Layout novo do Gestor (09b-09e): composicao da base, atividade,
+             tabela de vendedores na coluna principal; rail de 320 com
+             cards-link que abrem o drawer. Abaixo de 1280 o rail desce. */
+          carregandoOuErro ?? (
+            <>
+              <View
+                style={
+                  layout.largura >= 1280
+                    ? { flexDirection: 'row', gap: 24, alignItems: 'flex-start' }
+                    : { gap: 24 }
+                }
+              >
+                <View style={{ flex: 1, minWidth: 0, gap: 24 }}>
+                  {barraComposicao}
+                  {faixaAtividade}
+                  {tabelaVendedores}
+                </View>
+                {railNovo}
               </View>
-              <View style={{ width: 380 }}>
-                {cartoesConfig}
-                {exportar}
-              </View>
-            </View>
-          </>
+              {drawerRail}
+            </>
+          )
         ) : (
           <>
             {cartoesConfig}
@@ -1398,7 +1461,22 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.55)',
     justifyContent: 'flex-end',
   },
-  modalPanelWeb: { width: '100%', maxWidth: 640, alignSelf: 'center', borderTopLeftRadius: 8, borderTopRightRadius: 8 },
+  // 09f: drill-down no drawer padrao de 480 a' direita (mesma casca da ficha).
+  modalBackdropWeb: { flexDirection: 'row', justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.32)' },
+  modalPanelWeb: {
+    width: 480,
+    maxWidth: '100%',
+    height: '100%',
+    maxHeight: '100%',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderLeftWidth: 1,
+    borderLeftColor: 'var(--border)',
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: -8, height: 0 },
+    shadowRadius: 16,
+  },
   modalPanel: {
     maxHeight: '75%',
     backgroundColor: 'var(--surface)',
@@ -1643,4 +1721,151 @@ const estilosWeb = StyleSheet.create({
     textAlign: 'right',
     fontVariant: ['tabular-nums'],
   },
+});
+
+// Estilos do layout novo do Gestor (prompts 09b-09f).
+const nw = StyleSheet.create({
+  card: {
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    borderRadius: 8,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+  },
+  kicker: {
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    color: 'var(--text-muted)',
+  },
+  notinha: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)' },
+  rotulinho: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)' },
+  numeroGrande: { fontSize: 28, lineHeight: 36, fontWeight: '700', color: 'var(--text)', fontVariant: ['tabular-nums'] },
+  numeroMedio: { fontSize: 20, lineHeight: 28, fontWeight: '600', color: 'var(--text)', fontVariant: ['tabular-nums'] },
+  numeroCard: { fontSize: 24, lineHeight: 32, fontWeight: '600', color: 'var(--text)', fontVariant: ['tabular-nums'], marginTop: 8 },
+  tituloCard: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '700', color: 'var(--text)' },
+  barraTrilha: {
+    flexDirection: 'row',
+    height: 32,
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: 'var(--surface-3)',
+  },
+  barraSegmento: { justifyContent: 'center' },
+  barraPct: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '700', color: '#FFFFFF', paddingLeft: 8 },
+  cardAtividade: {
+    flex: 1,
+    minWidth: 0,
+    padding: 16,
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 2,
+  },
+  thLinha: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: 'var(--surface-2)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--stroke-default)',
+  },
+  th: {
+    flex: 1,
+    minWidth: 76,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '700',
+    color: 'var(--text-muted)',
+    textAlign: 'right',
+  },
+  tdLinha: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+  },
+  tdRank: { width: 32, fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '700', color: 'var(--text-faint)', fontVariant: ['tabular-nums'] },
+  td: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+    color: 'var(--text-muted)',
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
+  },
+  tdNome: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text)' },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'var(--surface-2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarTexto: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, color: 'var(--text-muted)' },
+  scoreTrilha: { width: 44, height: 6, borderRadius: 3, backgroundColor: 'var(--surface-3)', overflow: 'hidden' },
+  scoreBarra: { height: '100%', borderRadius: 3 },
+  cardLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 2,
+  },
+  quadroIcone: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: 'var(--surface-2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeRail: {
+    minWidth: 24,
+    height: 24,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: 'var(--surface-2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeRailTexto: { fontSize: 12, lineHeight: 24, letterSpacing: 0.5, fontWeight: '700', color: 'var(--text-muted)' },
+  drawerFundo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.32)', alignItems: 'flex-end' },
+  drawerPainel: {
+    width: 480,
+    maxWidth: '100%',
+    height: '100%',
+    backgroundColor: 'var(--surface)',
+    borderLeftWidth: 1,
+    borderLeftColor: 'var(--border)',
+    shadowColor: '#000',
+    shadowOpacity: 0.14,
+    shadowOffset: { width: -8, height: 0 },
+    shadowRadius: 16,
+  },
+  drawerFechar: { width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
 });
