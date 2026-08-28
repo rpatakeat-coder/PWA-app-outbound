@@ -69,6 +69,11 @@ import { IconSearch } from 'takeat-design-system-ui-kit/icons/IconSearch';
 import { IconSettings } from 'takeat-design-system-ui-kit/icons/IconSettings';
 import { IconSquareMenu } from 'takeat-design-system-ui-kit/icons/IconSquareMenu';
 import { IconTrendingUp } from 'takeat-design-system-ui-kit/icons/IconTrendingUp';
+// M1-DECISOES-2: existiam no kit, faltavam aqui. IconIdCard tira o emoji do
+// ID HubSpot; IconTrash e' o 'delete' do menu; IconManager, o responsavel.
+import { IconIdCard } from 'takeat-design-system-ui-kit/icons/IconIdCard';
+import { IconManager } from 'takeat-design-system-ui-kit/icons/IconManager';
+import { IconTrash } from 'takeat-design-system-ui-kit/icons/IconTrash';
 
 export {
   IconArray,
@@ -105,10 +110,12 @@ export {
   IconEye,
   IconFilterList,
   IconHome,
+  IconIdCard,
   IconLocation,
   IconLocationFilled,
   IconLock,
   IconMail,
+  IconManager,
   IconMedal,
   IconPencil,
   IconPlus,
@@ -118,6 +125,7 @@ export {
   IconSquareMenu,
   IconStar,
   IconStore,
+  IconTrash,
   IconTrendingUp,
   IconTrophy,
   IconUndo,

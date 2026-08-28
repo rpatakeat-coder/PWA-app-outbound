@@ -21,13 +21,12 @@ import {
   Keyboard,
   Linking,
   Pressable,
-  Animated,
-  PanResponder,
   Switch,
   AppState,
 } from 'react-native';
 import { KeyboardAvoidingView } from './src/components/KeyboardAvoidingView';
 import { Alert, AlertHost } from './src/components/Alert';
+import { Painel } from './src/components/Painel';
 import { useTheme } from './src/theme';
 import {
   IconArrowDown,
@@ -58,6 +57,9 @@ import {
   IconTrendingUp,
   IconUndo,
   IconWarning,
+  IconBill,
+  IconIdCard,
+  IconManager,
   NavIcon,
   useIconColors,
   IconUser,
@@ -304,6 +306,36 @@ const TASK_RULES: TaskRuleDoc[] = [
 // pro app nativo via universal link (whatsapp://send). Em web cai no whatsapp web.
 
 const getClientPrimaryName = (client: Client) => client.empresa?.trim() || client.nome;
+
+// Cor de texto legivel sobre um fundo qualquer (decisao M1-DECISOES-3 §2).
+// O badge de status usa a cor cadastrada em `client_statuses`, que e' hex
+// arbitrario digitado na interface: nao da' pra escolher o texto de antemao.
+// Luminancia relativa da WCAG; acima de 0.45 o fundo e' claro e pede texto
+// escuro. Vive aqui, ao lado do unico uso, em vez de virar utilitario.
+const textoSobre = (fundo: string): string => {
+  const hex = fundo.trim().replace('#', '');
+  const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex;
+  if (full.length !== 6 || /[^0-9a-f]/i.test(full)) return '#FFFFFF';
+  const canal = (i: number) => {
+    const v = parseInt(full.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const l = 0.2126 * canal(0) + 0.7152 * canal(2) + 0.0722 * canal(4);
+  return l > 0.45 ? '#222222' : '#FFFFFF';
+};
+
+// Telefone brasileiro legivel na sublinha do topo do painel (M1c pede
+// "telefone formatado"). Fora dos dois formatos conhecidos — 10 digitos (fixo)
+// e 11 (celular) — devolve o que veio: e' melhor mostrar o numero cru do que
+// mutilar um internacional ou um ramal.
+const formatarTelefone = (raw: string | null | undefined): string | null => {
+  const t = (raw ?? '').trim();
+  if (!t) return null;
+  const d = t.replace(/\D/g, '');
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return t;
+};
 
 // A COR do pin comunica a temperatura da etapa (quente/morno/frio/fechado/
 // perdido) — antes era uma bandeirinha de emoji no canto, pequena demais pra
@@ -3071,6 +3103,11 @@ function MainApp() {
       isMarkingVisited={isVisiting || markAsVisited.isPending}
       onAddToRoute={!isViewer && isAdmin ? () => addClientToRoute(selectedClient) : undefined}
       canWriteNotes={!isViewer}
+      responsavelNome={
+        selectedClient.vendedor_id_hubspot
+          ? vendorById.get(selectedClient.vendedor_id_hubspot)?.full_name ?? null
+          : null
+      }
     />
   ) : null;
 
@@ -5482,6 +5519,7 @@ function ClientBottomSheet({
   onAddToRoute,
   canWriteNotes = true,
   onSavePhone,
+  responsavelNome,
 }: {
   client: Client;
   insets: { bottom: number };
@@ -5504,6 +5542,13 @@ function ClientBottomSheet({
   onAddToRoute?: () => void;
   canWriteNotes?: boolean;
   onSavePhone?: (telefone: string) => Promise<void>;
+  /**
+   * Nome do vendedor dono do lead. Vem de fora porque o `Client` so' guarda
+   * `vendedor_id_hubspot` — o nome vive em `vendorById`, no App. Pode chegar
+   * null: o RLS de `profiles` devolve so' o proprio perfil pra nao-gestor, e
+   * ai' a linha simplesmente nao renderiza. NUNCA exibir o id cru.
+   */
+  responsavelNome?: string | null;
 }) {
   const iconColors = useIconColors();
   const statusColor = statusConfig[client.status]?.color || '#3b82f6';
@@ -5516,8 +5561,14 @@ function ClientBottomSheet({
   // M1d: timeline limitada a 6 — o painel passa de 1.800px e o rodape sai
   // do alcance com historico longo.
   const [historicoCompleto, setHistoricoCompleto] = useState(false);
-  const estagioRef = useRef<'peek' | 'cheia'>('peek');
-  estagioRef.current = estagio;
+  // Aba ativa do corpo (M1d). Volta pra Dados a cada lead: abrir um lead novo
+  // na aba Agenda do anterior seria memoria de estado sem sentido pro vendedor.
+  const [aba, setAba] = useState<'dados' | 'historico' | 'agenda'>('dados');
+  useEffect(() => {
+    setAba('dados');
+  }, [client.id]);
+  // O "por que?" do alerta de localizacao: em repouso a faixa diz uma linha.
+  const [porQueLocal, setPorQueLocal] = useState(false);
   useEffect(() => {
     setEstagio('peek');
   }, [client.id]);
@@ -5740,13 +5791,15 @@ function ClientBottomSheet({
 
     // Fora do churn, a cor é a recência da última comanda — e nenhuma comanda
     // é o pior caso, não ausência de informação.
-    const tom = saiu
-      ? VERMELHO
-      : dias === null || dias > 30
-      ? VERMELHO
-      : dias > 7
-      ? AMBAR
-      : VERDE;
+    // `nivel` existe pra faixa de alertas do M1d saber POSICIONAR esta linha
+    // (vermelho vai pro topo da faixa; ambar e verde vao depois da localizacao).
+    // As constantes de tom sao locais, entao comparar por referencia de fora nao
+    // daria — o nivel viaja junto. NAO recalcule o semaforo la' fora: `saiu`
+    // (churn no HubSpot) e' um quarto estado que a regra de "dias desde a ultima
+    // comanda" nao expressa, e reimplementar reintroduz o bug dos 56 retidos.
+    const nivel: 'vermelho' | 'ambar' | 'verde' =
+      saiu || dias === null || dias > 30 ? 'vermelho' : dias > 7 ? 'ambar' : 'verde';
+    const tom = nivel === 'vermelho' ? VERMELHO : nivel === 'ambar' ? AMBAR : VERDE;
 
     const sincronizado = new Date(client.hs_uso_sincronizado_em);
     const horas = Math.floor((Date.now() - sincronizado.getTime()) / 3_600_000);
@@ -5783,6 +5836,7 @@ function ClientBottomSheet({
 
     return {
       tom,
+      nivel,
       titulo: saiu
         ? cancelamento
           ? `Cancelamento solicitado em ${label(cancelamento)}`
@@ -5800,82 +5854,426 @@ function ClientBottomSheet({
     client.hs_qtd_comandas,
   ]);
 
-  // Gesture pra arrastar a aba pra baixo e fechar.
-  // Threshold: 100px de drag aciona o fechamento.
+  // A forma do painel, o fechamento (X, fundo, Esc, voltar do sistema,
+  // arraste) e a acessibilidade vivem no <Painel> — a casca unica do app
+  // (M1b). Aqui fica so' o conteudo das faixas.
   const layout = useLayout();
-  const translateY = useRef(new Animated.Value(0)).current;
-  const onCloseRef = useRef(onClose);
-  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, g) =>
-        Math.abs(g.dy) > 2 && Math.abs(g.dy) > Math.abs(g.dx),
-      onPanResponderGrant: () => {
-        translateY.setValue(0);
-      },
-      onPanResponderMove: (_, g) => {
-        // Pra cima so' um respiro: o gesto de expandir troca de estagio no
-        // release, nao arrasta a folha inteira.
-        translateY.setValue(Math.max(g.dy, -32));
-      },
-      onPanResponderRelease: (_, g) => {
-        const puxouPraBaixo = g.dy > 80 || g.vy > 0.4;
-        const puxouPraCima = g.dy < -48 || g.vy < -0.4;
-        if (puxouPraBaixo && estagioRef.current === 'cheia') {
-          // Cheia -> peek: volta ao estagio compacto, sem fechar.
-          translateY.setValue(0);
-          setEstagio('peek');
-          return;
-        }
-        if (puxouPraBaixo) {
-          Animated.timing(translateY, {
-            toValue: 800,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(() => onCloseRef.current());
-          return;
-        }
-        if (puxouPraCima && estagioRef.current === 'peek') {
-          translateY.setValue(0);
-          setEstagio('cheia');
-          return;
-        }
-        Animated.spring(translateY, {
-          toValue: 0,
-          useNativeDriver: true,
-          bounciness: 0,
-        }).start();
-      },
-    }),
-  ).current;
+  // ── Faixa de topo (M1c) ───────────────────────────────────────────────
+  // Identificacao + as acoes principais, fixas: nao rolam com a ficha. No
+  // desktop era reforma (o kicker e o X ja' existiam); no celular e' criacao
+  // — a ficha cheia comecava no avatar, sem kicker e sem X.
+  const faixaTopo = (() => {
+    const temp = stageTemperature(client.etapa);
+    const kicker = [
+      temp ? `Lead ${temp.label}` : statusLabel,
+      client.visit_count > 0 ? `${client.visit_count}ª visita` : 'sem visita',
+    ].join(' · ');
+    // Sublinha: contato · telefone. O contato so' aparece quando ha' empresa e
+    // ela difere do nome — sem empresa, o titulo JA' e' o nome do contato e a
+    // linha seria eco (decisao (d) do M1-DECISOES-2).
+    const contato =
+      client.empresa?.trim() && client.nome && client.nome !== client.empresa ? client.nome : null;
+    const telefone = formatarTelefone(client.telefone);
+    const sublinha = [contato, telefone].filter(Boolean).join(' · ');
 
-  return (
-    <Modal visible={true} animationType="fade" transparent onRequestClose={onClose}>
-      <View style={[styles.bottomSheetOverlay, layout.ehDesktop && styles.painelOverlay]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <Animated.View
+    return (
+      <View style={[styles.fichaTopo, layout.ehDesktop ? styles.fichaTopoDesktop : styles.fichaTopoMobile]}>
+        <View style={styles.fichaTopoLinha}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <View style={styles.fichaKickerLinha}>
+              {temp && (
+                <View
+                  style={[
+                    styles.fichaKickerDot,
+                    layout.ehDesktop ? null : styles.fichaKickerDotMobile,
+                    { backgroundColor: temp.color },
+                  ]}
+                />
+              )}
+              <Text style={styles.fichaKicker} numberOfLines={1}>{kicker}</Text>
+              <View style={[styles.fichaBadgeStatus, { backgroundColor: statusColor }]}>
+                <Text style={[styles.fichaBadgeStatusTexto, { color: textoSobre(statusColor) }]}>
+                  {statusLabel}
+                </Text>
+              </View>
+              {/* "Aprox." e' icone, nao badge de texto: o detalhe completo ja'
+                  esta' na faixa de alertas, e dizer duas vezes na mesma tela e'
+                  ruido (M1-DECISOES-3 §2). */}
+              {isApprox && (
+                <IconLocation
+                  width={16}
+                  height={16}
+                  fill="#FFB32F"
+                  {...({ title: 'Localização aproximada' } as Record<string, unknown>)}
+                />
+              )}
+            </View>
+            <Text style={styles.fichaNome} numberOfLines={1}>{primaryName}</Text>
+            {sublinha ? (
+              <Text style={styles.fichaSublinha} numberOfLines={1}>{sublinha}</Text>
+            ) : null}
+          </View>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Fechar"
+            style={layout.ehDesktop ? styles.fichaFecharDesktop : styles.fichaFecharMobile}
+            {...(layout.ehDesktop ? ds({ hover: 'surface2', trans: '1' }) : {})}
+            onPress={onClose}
+          >
+            <IconClose width={24} height={24} fill={iconColors.muted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Desktop: tres acoes com rotulo flush-left. Celular: duas de 48px em
+            grade, com rotulos CURTOS — "Mudar etapa" quebra em 390px. */}
+        <View style={styles.fichaAcoes}>
+          {onChangeStage && (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Mudar etapa"
+              style={layout.ehDesktop ? styles.drawerAcaoCheia : styles.fichaAcaoMobileCheia}
+              {...(layout.ehDesktop ? ds({ hover: 'darkred', trans: '1' }) : {})}
+              onPress={onChangeStage}
+            >
+              <IconTrendingUp width={24} height={24} fill="#FFFFFF" />
+              <Text style={layout.ehDesktop ? styles.drawerAcaoCheiaTexto : styles.fichaAcaoMobileCheiaTexto}>
+                {layout.ehDesktop ? 'Mudar etapa' : 'Etapa'}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {onScheduleMeeting && (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Agendar"
+              style={layout.ehDesktop ? styles.drawerAcaoVazada : styles.fichaAcaoMobileVazada}
+              {...(layout.ehDesktop ? ds({ hover: 'tintred', trans: '1' }) : {})}
+              onPress={onScheduleMeeting}
+            >
+              <IconCalendar width={24} height={24} fill={iconColors.brandText} />
+              <Text style={layout.ehDesktop ? styles.drawerAcaoVazadaTexto : styles.fichaAcaoMobileVazadaTexto}>
+                Agendar
+              </Text>
+            </TouchableOpacity>
+          )}
+          {/* O "Mais" fica FORA do condicional das duas acoes: onChangeStage so'
+              existe pra status 'lead', e num cliente o menu ficava inalcancavel. */}
+          {layout.ehDesktop && (onEdit || onEditLocation || onAddToRoute || onDelete) && (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Mais ações"
+              style={styles.drawerAcaoMais}
+              {...ds({ hover: 'surface2', trans: '1' })}
+              onPress={() => {
+                const botoes = [
+                  onEdit && { text: 'Editar', onPress: onEdit },
+                  onEditLocation && { text: 'Editar localização', onPress: onEditLocation },
+                  onAddToRoute && { text: 'Adicionar à rota', onPress: onAddToRoute },
+                  onDelete && { text: 'Excluir', style: 'destructive' as const, onPress: onDelete },
+                  { text: 'Cancelar', style: 'cancel' as const },
+                ].filter(Boolean) as Array<{ text: string; onPress?: () => void; style?: 'cancel' | 'destructive' }>;
+                Alert.alert(primaryName, 'Mais ações', botoes);
+              }}
+            >
+              <IconMenuCircles width={24} height={24} fill={iconColors.muted} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  })();
+
+  // ── Aba Dados: par chave/valor (M1d) ──────────────────────────────────
+  // Campo vazio NAO renderiza a linha: sete linhas de "—" nao sao dado.
+  // `empilha` e' pro valor longo no celular (endereco, coordenadas) — chave em
+  // cima, valor embaixo em 16/24/0.5, sem numberOfLines.
+  const campo = (
+    chave: string,
+    Icone: typeof IconUser,
+    presente: unknown,
+    valor: React.ReactNode,
+    opcoes?: { tabular?: boolean; empilha?: boolean },
+  ) => {
+    if (!presente) return null;
+    const empilhado = !layout.ehDesktop && opcoes?.empilha;
+    return (
+      <View style={[styles.dadoLinha, empilhado && styles.dadoLinhaEmpilhada]}>
+        <View style={styles.dadoChave}>
+          <Icone width={16} height={16} fill={iconColors.faint} />
+          <Text style={styles.dadoChaveTexto}>{chave}</Text>
+        </View>
+        <Text
           style={[
-            styles.bottomSheet,
-            layout.ehDesktop
-              ? styles.painelLateral
-              : { transform: [{ translateY }] },
+            empilhado ? styles.dadoValorEmpilhado : styles.dadoValor,
+            opcoes?.tabular && styles.tabular,
           ]}
         >
-          {/* A alca de arrastar so' existe onde ha' gesto de arrastar. No
-              desktop o painel fecha no X, no fundo ou no Esc — uma alca ali
-              seria um affordance mentindo sobre o que da' pra fazer. */}
-          {!layout.ehDesktop && (
-            <View style={styles.dragHandleArea} {...panResponder.panHandlers}>
-              <View style={styles.bottomSheetHandle} />
-            </View>
-          )}
+          {valor}
+        </Text>
+      </View>
+    );
+  };
 
-          {/* Estagio 1 (celular): peek — linha do lead + tres acoes de 48px.
-              O restante da ficha so' monta no estagio 2. */}
-          {!layout.ehDesktop && estagio === 'peek' ? (
-            <View style={styles.peekCorpo} {...panResponder.panHandlers}>
+  // Contato so' vira campo quando ha' empresa e ela difere do nome — sem
+  // empresa, o titulo do painel JA' e' o nome do contato.
+  const contatoDoLead =
+    client.empresa?.trim() && client.nome && client.nome !== client.empresa ? client.nome : null;
+
+  // SLA aparece na aba Dados so' no estado "em dia". Estourado e ambar vao pra
+  // faixa de alertas; `applies: false` nao tem o que informar em lugar nenhum.
+  const slaEmDia = (() => {
+    const s = slaStatus(client, slaDays);
+    if (!s.applies || s.breach || s.ratio >= 0.7) return null;
+    return `${s.diasParado}/${s.sla} dias parado`;
+  })();
+
+  // Telefone e' linha ESPECIAL: com onSavePhone e' campo editavel (grava pelo
+  // mesmo updateClient do formulario, entao sincroniza HubSpot); sem ele
+  // (viewer) volta a ser par chave/valor comum.
+  // O campo ocupa a coluna do valor, mas o TEXTO fica a ESQUERDA dentro dele:
+  // alinhado a direita, o caret corre enquanto se digita (M1-DECISOES-2 (g)).
+  // Nada de Touchable em volta do TextInput — regra do CLAUDE.md.
+  const linhaTelefone = onSavePhone ? (
+    <View style={[styles.dadoLinha, styles.dadoLinhaEmpilhada]}>
+      <View style={styles.dadoChave}>
+        <IconCall width={16} height={16} fill={iconColors.faint} />
+        <Text style={styles.dadoChaveTexto}>Telefone</Text>
+      </View>
+      <View style={styles.telefoneCaixa}>
+        <TextInput
+          style={[styles.telefoneCampo, layout.ehDesktop ? styles.telefoneCampoDesktop : styles.telefoneCampoMobile]}
+          value={phoneDraft}
+          onChangeText={setPhoneDraft}
+          placeholder="(00) 00000-0000"
+          placeholderTextColor="var(--text-subtle)"
+          keyboardType="phone-pad"
+          editable={!savingPhone}
+        />
+        {phoneDirty && (
+          <TouchableOpacity
+            onPress={handleSavePhone}
+            disabled={savingPhone}
+            style={[styles.telefoneSalvar, layout.ehDesktop ? styles.telefoneSalvarDesktop : styles.telefoneSalvarMobile]}
+          >
+            {savingPhone ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.telefoneSalvarTexto}>Salvar</Text>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  ) : (
+    campo('Telefone', IconCall, client.telefone, formatarTelefone(client.telefone))
+  );
+
+  // ── Faixa de alertas (M1-MAPEAMENTO + decisoes 1 e 3) ─────────────────
+  // Ordem POR TIPO, nao por severidade: quem perde dinheiro primeiro fica em
+  // cima. O uso do produto aparece em DUAS posicoes conforme o tom — vermelho
+  // antes do SLA, ambar/verde depois da localizacao.
+  // Sem nenhum alerta, a faixa nao existe (nao renderiza caixa vazia).
+  const faixaAlertas = (() => {
+    const sla = slaStatus(client, slaDays);
+    const slaNaFaixa = sla.applies && (sla.breach || sla.ratio >= 0.7);
+
+    const linha = (
+      chave: string,
+      cor: string,
+      fundo: string,
+      corTexto: string,
+      Icone: typeof IconWarning,
+      principal: string,
+      detalhes: React.ReactNode,
+    ) => (
+      <View
+        key={chave}
+        style={[
+          styles.alerta,
+          layout.ehDesktop ? styles.alertaDesktop : null,
+          { borderLeftColor: cor, backgroundColor: fundo },
+        ]}
+      >
+        <Icone width={20} height={20} fill={cor} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[styles.alertaTexto, { color: corTexto }]}>{principal}</Text>
+          {detalhes}
+        </View>
+      </View>
+    );
+
+    const usoLinha = (
+      <>
+        {uso?.linhas.map((l) => (
+          <Text key={l} style={[styles.alertaDetalhe, { color: uso.tom.fg }]}>{l}</Text>
+        ))}
+        {uso?.rodape ? (
+          <Text style={[styles.alertaDetalhe, { color: uso.tom.fg }]}>{uso.rodape}</Text>
+        ) : null}
+      </>
+    );
+
+    const linhas: React.ReactNode[] = [];
+
+    // 1 · uso do produto no vermelho
+    if (uso && uso.nivel === 'vermelho') {
+      linhas.push(linha('uso', '#C8131B', 'var(--tint-red)', 'var(--tint-red-text)', IconBill, uso.titulo, usoLinha));
+    }
+
+    // 2 · SLA estourado, depois ambar
+    if (slaNaFaixa) {
+      const cor = sla.breach ? '#C8131B' : '#FFB32F';
+      const texto = sla.breach
+        ? `SLA estourado — ${sla.diasParado} ${sla.diasParado === 1 ? 'dia' : 'dias'} parado (limite ${sla.sla})`
+        : `${sla.diasParado}/${sla.sla} dias parado`;
+      linhas.push(
+        linha(
+          'sla',
+          cor,
+          sla.breach ? 'var(--tint-red)' : 'var(--tint-amber)',
+          sla.breach ? 'var(--tint-red-text)' : 'var(--tint-amber-text)',
+          IconWarning,
+          texto,
+          null,
+        ),
+      );
+    }
+
+    // 3 · localizacao aproximada — colapsada. Em producao ocupava quatro linhas
+    // pra dizer uma coisa; o detalhe fica atras do "por que?".
+    if (isApprox) {
+      linhas.push(
+        linha(
+          'geo',
+          '#FFB32F',
+          'var(--tint-amber)',
+          'var(--tint-amber-text)',
+          IconLocation,
+          'Localização aproximada',
+          <>
+            {porQueLocal ? (
+              <>
+                <Text style={[styles.alertaDetalhe, { color: 'var(--tint-amber-text)' }]}>{sourceLabel}</Text>
+                {approxReasons.map((r) => (
+                  <Text key={r} style={[styles.alertaDetalhe, { color: 'var(--tint-amber-text)' }]}>• {r}</Text>
+                ))}
+              </>
+            ) : null}
+            <TouchableOpacity
+              accessibilityRole="button"
+              onPress={() => setPorQueLocal((v) => !v)}
+              style={styles.alertaPorQue}
+            >
+              <Text style={[styles.alertaPorQueTexto, { color: 'var(--tint-amber-text)' }]}>
+                {porQueLocal ? 'ocultar' : 'por quê?'}
+              </Text>
+            </TouchableOpacity>
+          </>,
+        ),
+      );
+    }
+
+    // 4 · uso do produto no ambar/verde
+    if (uso && uso.nivel !== 'vermelho') {
+      const cor = uso.nivel === 'ambar' ? '#FFB32F' : '#167532';
+      linhas.push(
+        linha(
+          'uso',
+          cor,
+          uso.nivel === 'ambar' ? 'var(--tint-amber)' : 'var(--tint-green)',
+          uso.nivel === 'ambar' ? 'var(--tint-amber-text)' : 'var(--tint-green-text)',
+          IconBill,
+          uso.titulo,
+          usoLinha,
+        ),
+      );
+    }
+
+    // 5 · visita realizada — confirmacao, nao urgencia: fecha a faixa.
+    if (visitCount > 0) {
+      linhas.push(
+        linha(
+          'visita',
+          '#167532',
+          'var(--tint-green)',
+          'var(--tint-green-text)',
+          IconLocationFilled,
+          `${visitCount} ${visitCount === 1 ? 'visita realizada' : 'visitas realizadas'}`,
+          client.visited_at ? (
+            <Text style={[styles.alertaDetalhe, { color: 'var(--tint-green-text)' }]}>
+              Última: {new Date(client.visited_at).toLocaleString('pt-BR', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+              })}
+            </Text>
+          ) : null,
+        ),
+      );
+    }
+
+    if (linhas.length === 0) return null;
+    return (
+      <View style={[styles.faixaAlertas, layout.ehDesktop ? null : styles.faixaAlertasMobile]}>
+        {linhas}
+      </View>
+    );
+  })();
+
+  // ── Barra de abas (M1-MAPEAMENTO) ─────────────────────────────────────
+  // Gruda no topo do corpo: no celular a folha e' 92% e a aba Historico rola
+  // varios viewports — sem grudar, trocar de aba obriga a rolar de volta.
+  // Ela PRECISA pintar o proprio fundo: o wrapper sticky do RNW nao tem cor.
+  const barraDeAbas = (() => {
+    const abas: Array<{ id: 'dados' | 'historico' | 'agenda'; rotulo: string }> = [
+      { id: 'dados', rotulo: 'Dados' },
+      { id: 'historico', rotulo: `Histórico${timeline.length > 0 ? ` (${timeline.length})` : ''}` },
+      {
+        id: 'agenda',
+        rotulo: `Agenda${reunioes.length + followUps.length > 0 ? ` (${reunioes.length + followUps.length})` : ''}`,
+      },
+    ];
+    return (
+      <View style={[styles.abasBarra, layout.ehDesktop ? styles.abasBarraDesktop : styles.abasBarraMobile]}>
+        {abas.map((a) => {
+          const ativa = aba === a.id;
+          return (
+            <TouchableOpacity
+              key={a.id}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: ativa }}
+              style={[
+                styles.abaItem,
+                layout.ehDesktop ? styles.abaItemDesktop : styles.abaItemMobile,
+                ativa && styles.abaItemAtiva,
+              ]}
+              onPress={() => setAba(a.id)}
+            >
+              <Text style={[styles.abaTexto, ativa && styles.abaTextoAtiva]} numberOfLines={1}>
+                {a.rotulo}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    );
+  })();
+
+  return (
+    <Painel
+      visivel
+      aoFechar={onClose}
+      rotulo={primaryName}
+      topo={faixaTopo}
+      estagio={estagio}
+      aoTrocarEstagio={setEstagio}
+      estiloCorpo={layout.ehDesktop ? styles.corpoDesktop : styles.corpoMobile}
+      estiloConteudoCorpo={{ paddingBottom: insets.bottom + 24 }}
+      // A barra de abas e' o filho de indice 1 do corpo.
+      indicesGrudados={[1]}
+      // Estagio 1 (celular): peek — linha do lead + tres acoes de 48px.
+      // O restante da ficha so' monta no estagio 2.
+      peek={
+            <View style={styles.peekCorpo}>
               <TouchableOpacity
                 accessibilityRole="button"
                 accessibilityLabel="Abrir ficha completa"
@@ -5948,828 +6346,533 @@ function ClientBottomSheet({
                 </TouchableOpacity>
               </View>
             </View>
-          ) : null}
+      }
+    >
+      {/* Filhos do corpo como ARRAY EXPLICITO de tres posicoes: a barra de
+          abas gruda pelo indice 1, e um `{cond && ...}` solto como irmao
+          deslocaria esse indice em silencio conforme o lead tem ou nao
+          alerta. Por isso a faixa vazia vira <View /> em vez de sumir. */}
+      {[
+        faixaAlertas ?? <View key="sem-alertas" />,
+        barraDeAbas,
+        <View key="conteudo" style={styles.abaConteudo}>
 
-          {(layout.ehDesktop || estagio === 'cheia') && (
+        {/* ─────────────────────────── ABA DADOS ─────────────────────────── */}
+        {aba === 'dados' && (
           <>
-          <ScrollView
-            style={styles.bottomSheetContent}
-            contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-            showsVerticalScrollIndicator={true}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* Header */}
-            {layout.ehDesktop && (() => {
-              const temp = stageTemperature(client.etapa);
-              return (
-                <View style={styles.drawerKickerLinha}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                    {temp && <View style={[styles.pmwChipDot, { backgroundColor: temp.color }]} />}
-                    <Text style={styles.drawerKicker} numberOfLines={1}>
-                      {[temp ? `Lead ${temp.label}` : statusLabel, client.visit_count > 0 ? `${client.visit_count}ª visita` : 'sem visita'].join(' · ')}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    accessibilityRole="button"
-                    accessibilityLabel="Fechar"
-                    style={styles.drawerFechar}
-                    onPress={onClose}
-                  >
-                    <IconClose width={20} height={20} fill={iconColors.muted} />
-                  </TouchableOpacity>
-                </View>
-              );
-            })()}
-            <View style={styles.bsHeader}>
-              <View style={[styles.bsLogoWrap, { backgroundColor: statusColor }]}>
-                <Image source={require('./assets/icon.png')} style={styles.bsLogo} />
-              </View>
-              <View style={styles.bsHeaderInfo}>
-                <Text style={styles.clientDetailsName}>{primaryName}</Text>
-                {client.empresa?.trim() && client.nome && client.nome !== client.empresa && (
-                  <Text style={styles.bsContactSubtitle} numberOfLines={1}>Contato: {client.nome}</Text>
-                )}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <View style={[styles.statusBadgeLarge, { backgroundColor: statusColor }]}>
-                    <Text style={sharedStyles.statusBadgeText}>
-                      {statusLabel}
-                    </Text>
-                  </View>
-                  {isApprox && (
-                    <View style={{ backgroundColor: 'var(--tint-amber)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                      <Text style={{ fontSize: 9, color: 'var(--tint-amber-text)', fontWeight: '600' }}>≈ Aprox.</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </View>
-
-            {/* Acoes primarias do drawer no desktop (prompt M1/11R): Mudar
-                etapa filled + Agendar outline + menu de mais acoes. No
-                celular as acoes seguem no corpo, como sempre. */}
-            {layout.ehDesktop && (onChangeStage || onScheduleMeeting) && (
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-                {onChangeStage && (
-                  <TouchableOpacity
-                    accessibilityRole="button"
-                    style={styles.drawerAcaoCheia}
-                    {...ds({ hover: 'darkred', trans: '1' })}
-                    onPress={onChangeStage}
-                  >
-                    <IconTrendingUp width={20} height={20} fill="#FFFFFF" />
-                    <Text style={styles.drawerAcaoCheiaTexto}>Mudar etapa</Text>
-                  </TouchableOpacity>
-                )}
-                {onScheduleMeeting && (
-                  <TouchableOpacity
-                    accessibilityRole="button"
-                    style={styles.drawerAcaoVazada}
-                    {...ds({ hover: 'tintred', trans: '1' })}
-                    onPress={onScheduleMeeting}
-                  >
-                    <IconCalendar width={20} height={20} fill={iconColors.brandText} />
-                    <Text style={styles.drawerAcaoVazadaTexto}>Agendar</Text>
-                  </TouchableOpacity>
-                )}
-                {(onEdit || onEditLocation || onAddToRoute || onDelete) && (
-                  <TouchableOpacity
-                    accessibilityRole="button"
-                    accessibilityLabel="Mais ações"
-                    style={styles.drawerAcaoMais}
-                    {...ds({ hover: 'surface2', trans: '1' })}
-                    onPress={() => {
-                      const botoes = [
-                        onEdit && { text: 'Editar', onPress: onEdit },
-                        onEditLocation && { text: 'Editar localização', onPress: onEditLocation },
-                        onAddToRoute && { text: 'Adicionar à rota', onPress: onAddToRoute },
-                        onDelete && { text: 'Excluir', style: 'destructive' as const, onPress: onDelete },
-                        { text: 'Cancelar', style: 'cancel' as const },
-                      ].filter(Boolean) as Array<{ text: string; onPress?: () => void; style?: 'cancel' | 'destructive' }>;
-                      Alert.alert(primaryName, 'Mais ações', botoes);
-                    }}
-                  >
-                    <IconMenuCircles width={20} height={20} fill={iconColors.muted} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-
-            {/* M1c (celular): duas acoes de 48px no topo da ficha cheia.
-                Rotulos CURTOS de proposito — "Mudar etapa" quebra em 390px. */}
-            {!layout.ehDesktop && (onChangeStage || onScheduleMeeting) && (
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-                {onChangeStage && (
-                  <TouchableOpacity
-                    accessibilityRole="button"
-                    accessibilityLabel="Mudar etapa"
-                    style={styles.fichaAcaoMobileCheia}
-                    onPress={onChangeStage}
-                  >
-                    <IconTrendingUp width={20} height={20} fill="#FFFFFF" />
-                    <Text style={styles.fichaAcaoMobileCheiaTexto}>Etapa</Text>
-                  </TouchableOpacity>
-                )}
-                {onScheduleMeeting && (
-                  <TouchableOpacity
-                    accessibilityRole="button"
-                    accessibilityLabel="Agendar"
-                    style={styles.fichaAcaoMobileVazada}
-                    onPress={onScheduleMeeting}
-                  >
-                    <IconCalendar width={20} height={20} fill={iconColors.brandText} />
-                    <Text style={styles.fichaAcaoMobileVazadaTexto}>Agendar</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-
-            {/* SLA: dias parado x limite da etapa (regra do MD). Só pra lead em
-                etapa com SLA. Vermelho = estourado, amarelo = perto, verde = ok. */}
-            {(() => {
-              const s = slaStatus(client, slaDays);
-              if (!s.applies) return null;
-              const color = s.breach ? '#C8131B' : s.ratio >= 0.7 ? '#FFB32F' : '#16a34a';
-              const txt = s.breach
-                ? `SLA estourado — ${s.diasParado} ${s.diasParado === 1 ? 'dia' : 'dias'} parado (limite ${s.sla})`
-                : `${s.diasParado}/${s.sla} dias parado`;
-              return (
-                <View style={[styles.slaBadge, { backgroundColor: `${color}14`, borderColor: `${color}59` }]}>
-                  <Text style={[styles.slaBadgeText, { color }]}>{txt}</Text>
-                </View>
-              );
-            })()}
-
-            {/* Conta Alvo: nota + avaliações do Google (via Serper) + "Não
-                interessa". Só nos leads trazidos pela Rota do dia. */}
-            {client.conta_alvo_place_id && (
-              <View style={styles.contaAlvoBox}>
-                <IconText Icone={IconStar} style={styles.contaAlvoBoxTitle} tone="onSurface">Conta Alvo</IconText>
-                {client.conta_alvo_rating != null && (
-                  <Text style={styles.contaAlvoBoxText}>
-                    {Number(client.conta_alvo_rating).toFixed(1)}★
-                    {client.conta_alvo_reviews != null
-                      ? ` · ${client.conta_alvo_reviews.toLocaleString('pt-BR')} avaliações`
-                      : ''}
-                    {' '}no Google
-                  </Text>
-                )}
-                {/* "Não interessa": só faz sentido enquanto não virou deal. */}
-                {onDismissContaAlvo && !client.id_hubspot && (
-                  <TouchableOpacity style={styles.contaAlvoDismissBtn} onPress={onDismissContaAlvo}>
-                    <IconText Icone={IconCloseCircle} style={styles.contaAlvoDismissText} tone="onSurface">Não interessa (descartar)</IconText>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-
-            {/* Uso do produto (HubSpot). Vem antes das visitas de proposito:
-                pra cliente/ex-cliente, "usa ou nao usa" e' a primeira coisa
-                que o vendedor precisa ver ao abrir o pin. */}
-            {uso && (
-              <View
-                style={[
-                  styles.usoBox,
-                  { backgroundColor: uso.tom.bg, borderColor: uso.tom.border },
-                ]}
-              >
-                <Text style={[styles.usoTitulo, { color: uso.tom.fg }]}>{uso.titulo}</Text>
-                {uso.linhas.map((linha) => (
-                  <Text key={linha} style={[styles.usoDetalhe, { color: uso.tom.sub }]}>
-                    {linha}
-                  </Text>
-                ))}
-                {uso.rodape && (
-                  <Text style={[styles.usoRodape, { color: uso.tom.sub }]}>{uso.rodape}</Text>
-                )}
-              </View>
-            )}
-
-            {/* Contador de visitas: o lead pode ser visitado varias vezes; o
-                numero vem do historico (client_visits) com fallback pro
-                visit_count do proprio lead. */}
-            {visitCount > 0 && (
-              <View style={styles.visitCountBox}>
-                <IconText Icone={IconLocation} style={styles.visitCountText} tone="onSurface">{visitCount} {visitCount === 1 ? 'visita realizada' : 'visitas realizadas'}</IconText>
-                {client.visited_at ? (
-                  <Text style={styles.visitCountHint}>
-                    Última: {new Date(client.visited_at).toLocaleString('pt-BR', {
-                      day: '2-digit', month: '2-digit', year: 'numeric',
-                      hour: '2-digit', minute: '2-digit',
-                    })}
-                  </Text>
-                ) : null}
-              </View>
-            )}
-
-            {/* Acoes rapidas no topo: visita (acao mais usada em campo) e
-                editar — antes ficavam no fim do sheet, exigindo rolar tudo. */}
-            {(onMarkVisited || onEdit) && (
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-                {onMarkVisited && (
-                  <TouchableOpacity
-                    disabled={isMarkingVisited}
-                    style={[styles.acaoPrimaria, { flex: 1 }, layout.ehDesktop && { backgroundColor: '#27A84C' }, isMarkingVisited && { opacity: 0.6 }]}
-                    onPress={onMarkVisited}
-                  >
-                    {isMarkingVisited ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text style={styles.acaoPrimariaTexto}>
-                        {client.visited_at ? 'Re-marcar visita' : 'Marcar como visitado'}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                )}
-                {onEdit && (
-                  <TouchableOpacity
-                    style={[styles.acaoSecundaria, { marginTop: 0, paddingHorizontal: 18 }]}
-                    onPress={onEdit}
-                  >
-                    <IconText Icone={IconPencil} style={styles.acaoSecundariaTexto} tone="onSurface">Editar</IconText>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-
-            {/* Geo quality indicator */}
-            <View style={{ backgroundColor: isApprox ? '#fefce8' : '#f0fdf4', borderRadius: 8, padding: 10, marginBottom: 12, flexDirection: 'row', gap: 8 }}>
-              {isApprox
-                    ? <IconWarning width={14} height={14} fill={iconColors.muted} />
-                    : <IconCheckCircle width={14} height={14} fill={iconColors.muted} />}
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 12, color: isApprox ? '#92400e' : '#166534', fontWeight: '700' }}>
-                  {isApprox ? 'Localização aproximada' : 'Localização precisa'}
+{/* Conta Alvo: nota + avaliações do Google (via Serper) + "Não
+              interessa". Só nos leads trazidos pela Rota do dia. */}
+          {client.conta_alvo_place_id && (
+            <View style={styles.contaAlvoBox}>
+              <IconText Icone={IconStar} style={styles.contaAlvoBoxTitle} tone="onSurface">Conta Alvo</IconText>
+              {client.conta_alvo_rating != null && (
+                <Text style={styles.contaAlvoBoxText}>
+                  {Number(client.conta_alvo_rating).toFixed(1)}★
+                  {client.conta_alvo_reviews != null
+                    ? ` · ${client.conta_alvo_reviews.toLocaleString('pt-BR')} avaliações`
+                    : ''}
+                  {' '}no Google
                 </Text>
-                <Text style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{sourceLabel}</Text>
-                {isApprox && approxReasons.length > 0 && (
-                  <View style={{ marginTop: 4 }}>
-                    {approxReasons.map((reason, idx) => (
-                      <Text key={idx} style={{ fontSize: 11, color: 'var(--tint-amber-text)' }}>• {reason}</Text>
-                    ))}
-                  </View>
-                )}
-              </View>
+              )}
+              {/* "Não interessa": só faz sentido enquanto não virou deal. */}
+              {onDismissContaAlvo && !client.id_hubspot && (
+                <TouchableOpacity style={styles.contaAlvoDismissBtn} onPress={onDismissContaAlvo}>
+                  <IconText Icone={IconCloseCircle} style={styles.contaAlvoDismissText} tone="onSurface">Não interessa (descartar)</IconText>
+                </TouchableOpacity>
+              )}
             </View>
+          )}
 
-            {/* Info Grid */}
-            <View style={styles.infoGrid}>
-              {client.empresa && (
-                <View style={styles.infoItem}>
-                  <IconStore width={16} height={16} fill={iconColors.onSurface} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.detailLabel}>Empresa</Text>
-                    <Text style={styles.detailValue}>{client.empresa}</Text>
-                  </View>
-                </View>
-              )}
-              {/* Telefone: editavel direto aqui (sem abrir o form completo).
-                  O Salvar so aparece quando o valor muda; grava via
-                  updateClient (mesmo fluxo do form — sincroniza HubSpot). */}
-              {onSavePhone ? (
-                <View style={styles.infoItem}>
-                  <IconCall width={16} height={16} fill={iconColors.onSurface} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.detailLabel}>Telefone</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                      <TextInput
-                        style={{
-                          flex: 1,
-                          borderWidth: 1,
-                          borderColor: phoneDirty ? '#2563eb' : '#e2e8f0',
-                          borderRadius: 8,
-                          paddingHorizontal: 10,
-                          paddingVertical: 7,
-                          fontSize: 14,
-                          color: 'var(--text)',
-                          backgroundColor: 'var(--bg)',
-                        }}
-                        value={phoneDraft}
-                        onChangeText={setPhoneDraft}
-                        placeholder="(00) 00000-0000"
-                        placeholderTextColor="var(--text-subtle)"
-                        keyboardType="phone-pad"
-                        editable={!savingPhone}
-                      />
-                      {phoneDirty && (
-                        <TouchableOpacity
-                          onPress={handleSavePhone}
-                          disabled={savingPhone}
-                          style={{
-                            backgroundColor: '#16a34a',
-                            borderRadius: 8,
-                            paddingHorizontal: 14,
-                            paddingVertical: 9,
-                          }}
-                        >
-                          {savingPhone ? (
-                            <ActivityIndicator color="#fff" size="small" />
-                          ) : (
-                            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Salvar</Text>
-                          )}
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  </View>
-                </View>
-              ) : client.telefone ? (
-                <View style={styles.infoItem}>
-                  <IconCall width={16} height={16} fill={iconColors.onSurface} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.detailLabel}>Telefone</Text>
-                    <Text style={styles.detailValue}>{client.telefone}</Text>
-                  </View>
-                </View>
-              ) : null}
-              {client.email && (
-                <View style={styles.infoItem}>
-                  <IconMail width={16} height={16} fill={iconColors.onSurface} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.detailLabel}>Email</Text>
-                    <Text style={styles.detailValue}>{client.email}</Text>
-                  </View>
-                </View>
-              )}
-              <View style={styles.infoItem}>
-                <IconHome width={16} height={16} fill={iconColors.onSurface} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.detailLabel}>Endereço</Text>
-                  <Text style={styles.detailValue}>
-                    {client.endereco || 'Não informado'}
-                    {client.numero ? `, ${client.numero}` : (client.endereco ? ' (sem número)' : '')}
-                  </Text>
-                </View>
+            {/* Observacao principal: card no topo da aba, nao paragrafo solto
+                no meio do painel. */}
+            {client.observacoes ? (
+              <View style={[styles.cartaoDado, layout.ehDesktop ? styles.cartaoDadoDesktop : styles.cartaoDadoMobile]}>
+                <Text style={styles.cartaoDadoTitulo}>OBSERVAÇÃO PRINCIPAL</Text>
+                <Text style={styles.cartaoDadoTexto}>{client.observacoes}</Text>
               </View>
-              {client.bairro && (
-                <View style={styles.infoItem}>
-                  <IconStore width={16} height={16} fill={iconColors.onSurface} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.detailLabel}>Bairro</Text>
-                    <Text style={styles.detailValue}>{client.bairro}</Text>
-                  </View>
-                </View>
+            ) : null}
+
+            {/* Pares chave/valor. Campo vazio NAO renderiza a linha — sete
+                linhas de "—" nao sao dado, sao ruido. */}
+            <View style={styles.dadosGrade}>
+              {campo('Contato', IconUser, contatoDoLead, contatoDoLead)}
+              {linhaTelefone}
+              {campo('Email', IconMail, client.email, client.email)}
+              {campo('Etapa', IconTrendingUp, client.etapa, client.etapa)}
+              {campo('SLA', IconClock, slaEmDia, slaEmDia, { tabular: true })}
+              {campo(
+                'Endereço',
+                IconHome,
+                client.endereco,
+                `${client.endereco}${client.numero ? `, ${client.numero}` : ' (sem número)'}`,
+                { empilha: true },
               )}
-              {(client.cidade || client.estado) && (
-                <View style={styles.infoItem}>
-                  <IconLocation width={16} height={16} fill={iconColors.onSurface} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.detailLabel}>Cidade / UF</Text>
-                    <Text style={styles.detailValue}>
-                      {client.cidade || ''}{client.estado ? ` • ${client.estado}` : ''}
-                    </Text>
-                  </View>
-                </View>
+              {campo('Bairro', IconStore, client.bairro, client.bairro)}
+              {campo(
+                'Cidade / UF',
+                IconLocation,
+                client.cidade || client.estado,
+                `${client.cidade || ''}${client.estado ? ` • ${client.estado}` : ''}`,
               )}
-              {client.cep && (
-                <View style={styles.infoItem}>
-                  <IconMail width={16} height={16} fill={iconColors.onSurface} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.detailLabel}>CEP</Text>
-                    <Text style={styles.detailValue}>{client.cep}</Text>
-                  </View>
-                </View>
+              {campo('CEP', IconMail, client.cep, client.cep, { tabular: true })}
+              {campo(
+                'Coordenadas',
+                IconLocation,
+                client.latitude !== null && client.longitude !== null,
+                `${Number(client.latitude).toFixed(6)}, ${Number(client.longitude).toFixed(6)}`,
+                { tabular: true, empilha: true },
               )}
-              {client.latitude !== null && client.longitude !== null && (
-                <View style={styles.infoItem}>
-                  <IconLocation width={16} height={16} fill={iconColors.onSurface} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.detailLabel}>Coordenadas</Text>
-                    <Text style={styles.detailValue}>
-                      {Number(client.latitude).toFixed(6)}, {Number(client.longitude).toFixed(6)}
-                    </Text>
-                  </View>
-                </View>
-              )}
-              {client.etapa && (
-                <View style={styles.infoItem}>
-                  <IconUndo width={16} height={16} fill={iconColors.onSurface} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.detailLabel}>Etapa</Text>
-                    <Text style={styles.detailValue}>{client.etapa}</Text>
-                  </View>
-                </View>
-              )}
-              {client.id_hubspot && (
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoIcon}>🆔</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.detailLabel}>ID HubSpot</Text>
-                    <Text style={styles.detailValue}>{client.id_hubspot}</Text>
-                  </View>
-                </View>
-              )}
-              {(createdAt || updatedAt) && (
-                <View style={styles.infoItem}>
-                  <IconClock width={16} height={16} fill={iconColors.onSurface} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.detailLabel}>Criado / atualizado</Text>
-                    <Text style={styles.detailValue}>
-                      {createdAt ?? '—'}{updatedAt && updatedAt !== createdAt ? ` → ${updatedAt}` : ''}
-                    </Text>
-                  </View>
-                </View>
+              {campo('Empresa', IconStore, client.empresa, client.empresa)}
+              {campo('Responsável', IconManager, responsavelNome, responsavelNome)}
+              {campo('ID HubSpot', IconIdCard, client.id_hubspot, client.id_hubspot, { tabular: true })}
+              {campo(
+                'Criado / atualizado',
+                IconClock,
+                createdAt || updatedAt,
+                `${createdAt ?? '—'}${updatedAt && updatedAt !== createdAt ? ` → ${updatedAt}` : ''}`,
               )}
             </View>
 
-            {client.url_hubspot && (
+            {/* Caminho pro registro completo. E' o url_hubspot que manda, nao o
+                id: lead pode ter id sem url, e link pra lugar nenhum e' pior
+                que nenhum link. */}
+            {client.url_hubspot ? (
               <TouchableOpacity
-                style={{ backgroundColor: '#ff7a59', borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginBottom: 12 }}
+                accessibilityRole="link"
+                style={styles.linhaLink}
                 onPress={() => Linking.openURL(client.url_hubspot!).catch(() => Alert.alert('Erro', 'Não foi possível abrir o link.'))}
               >
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Abrir no HubSpot ↗</Text>
+                <IconExternalLink width={20} height={20} fill="#018CCC" />
+                <Text style={styles.linhaLinkTexto}>Abrir no HubSpot</Text>
               </TouchableOpacity>
-            )}
+            ) : null}
 
-            {client.observacoes && (
-              <View style={styles.observationsSection}>
-                <Text style={styles.detailLabel}>Observação principal</Text>
-                <Text style={styles.detailValue}>{client.observacoes}</Text>
-              </View>
-            )}
+            {/* TEMPORARIO — estas nove acoes saem daqui: o check-in vai pro
+                rodape fixo (M1e) e as outras oito viram itens do menu (M1c2).
+                Ficam aqui, sem mudanca de estilo nem de copy, pra nenhuma
+                funcionalidade sumir no meio do caminho. */}
+            <View style={styles.acoesTemporarias}>
+  {/* Acoes rapidas no topo: visita (acao mais usada em campo) e
+                  editar — antes ficavam no fim do sheet, exigindo rolar tudo. */}
+              {(onMarkVisited || onEdit) && (
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                  {onMarkVisited && (
+                    <TouchableOpacity
+                      disabled={isMarkingVisited}
+                      style={[styles.acaoPrimaria, { flex: 1 }, layout.ehDesktop && { backgroundColor: '#27A84C' }, isMarkingVisited && { opacity: 0.6 }]}
+                      onPress={onMarkVisited}
+                    >
+                      {isMarkingVisited ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.acaoPrimariaTexto}>
+                          {client.visited_at ? 'Re-marcar visita' : 'Marcar como visitado'}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                  {onEdit && (
+                    <TouchableOpacity
+                      style={[styles.acaoSecundaria, { marginTop: 0, paddingHorizontal: 18 }]}
+                      onPress={onEdit}
+                    >
+                      <IconText Icone={IconPencil} style={styles.acaoSecundariaTexto} tone="onSurface">Editar</IconText>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
 
-            {/* Timeline unificada: notas de campo + mudancas de etapa, em
-                ordem cronologica (mais recentes em cima). Mudancas de etapa
-                sao imutaveis; notas mantem editar/apagar pro autor. */}
-            <View style={styles.notesSection}>
-              <Text style={sharedStyles.fieldLabel}>
-                Histórico{timeline.length > 0 ? ` (${timeline.length})` : ''}
-              </Text>
-              {timeline.length === 0 ? (
-                <Text style={styles.meetingsEmpty}>Sem histórico ainda.</Text>
-              ) : (
-                (historicoCompleto ? timeline : timeline.slice(0, 6)).map((entry) => {
-                  const when = new Date(entry.createdAt).toLocaleString('pt-BR', {
-                    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-                  });
-                  if (entry.kind === 'stage') {
-                    const change = entry.change;
-                    const authorLabel =
-                      change.created_by_name || change.created_by_email || 'Autor desconhecido';
-                    const arrow = change.from_stage
-                      ? `${change.from_stage} → ${change.to_stage}`
-                      : `→ ${change.to_stage}`;
-                    return (
-                      <View key={`stage-${change.id}`} style={[styles.noteItem, styles.timelineLinha]}>
-                        <View style={[styles.timelinePill, { backgroundColor: '#FFF1E0' }]}>
-                          <IconTrendingUp width={16} height={16} fill="#8A4A0C" />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                        <View style={styles.noteHeaderRow}>
-                          <View style={{ flex: 1 }}>
-                            <IconText Icone={IconRefresh} size={13} style={styles.noteAuthor} tone="muted">
-                              {authorLabel}
-                            </IconText>
-                            <Text style={styles.noteDate}>{when}</Text>
-                          </View>
-                        </View>
-                        <Text style={[styles.noteBody, { fontWeight: '600' }]}>
-                          Moveu etapa: {arrow}
-                        </Text>
-                        </View>
-                      </View>
-                    );
-                  }
-                  if (entry.kind === 'meeting') {
-                    const m = entry.meeting;
-                    const isFollowUp = m.type === 'follow_up';
-                    const isPast = new Date(m.scheduled_at).getTime() < Date.now();
-                    return (
-                      <View key={`meeting-${m.id}`} style={[styles.noteItem, styles.timelineLinha]}>
-                        <View style={[styles.timelinePill, { backgroundColor: '#F1EBFE' }]}>
-                          <IconCalendar width={16} height={16} fill="#5B32C4" />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                        <View style={styles.noteHeaderRow}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.noteAuthor} numberOfLines={1}>
-                              {isFollowUp ? 'Follow up' : 'Reunião/demo'}
-                              {isPast ? ' (realizada/passada)' : ' (agendada)'}
-                            </Text>
-                            <Text style={styles.noteDate}>{when}</Text>
-                          </View>
-                        </View>
-                        {m.observacoes ? (
-                          <Text style={styles.noteBody}>{m.observacoes}</Text>
-                        ) : null}
-                        </View>
-                      </View>
-                    );
-                  }
-                  if (entry.kind === 'visit') {
-                    return (
-                      <View key={`visit-${entry.createdAt}`} style={[styles.noteItem, styles.timelineLinha]}>
-                        <View style={[styles.timelinePill, { backgroundColor: '#EAF7EE' }]}>
-                          <IconLocationFilled width={16} height={16} fill="#167532" />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                        <View style={styles.noteHeaderRow}>
-                          <View style={{ flex: 1 }}>
-                            <IconText Icone={IconLocation} size={13} style={styles.noteAuthor} tone="muted">
-                              Check-in de visita
-                              {entry.visitNumber ? ` — ${entry.visitNumber}ª` : ''}
-                            </IconText>
-                            <Text style={styles.noteDate}>
-                              {when}{entry.visitedByName ? ` • ${entry.visitedByName}` : ''}
-                            </Text>
-                          </View>
-                        </View>
-                        <Text style={[styles.noteBody, { fontWeight: '600' }]}>
-                          Cliente visitado no local
-                        </Text>
-                        </View>
-                      </View>
-                    );
-                  }
-                  const note = entry.note;
-                  const isMine = !!user?.id && note.created_by === user.id;
-                  const isEditing = editingNoteId === note.id;
-                  const wasEdited = new Date(note.updated_at).getTime() - new Date(note.created_at).getTime() > 2000;
-                  const authorLabel = note.created_by_name || note.created_by_email || 'Autor desconhecido';
+  {onAddToRoute && (
+                <TouchableOpacity
+                  style={styles.addRouteButton}
+                  onPress={onAddToRoute}
+                >
+                  <Text style={styles.addRouteButtonText}>Adicionar a rota de hoje</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Navigation */}
+              <View style={styles.navigationSection}>
+                <Text style={[sharedStyles.fieldLabel, { marginBottom: 8 }]}>Traçar Rota</Text>
+                {client.latitude && client.longitude && (
+                  <View style={[styles.navigationRow, { marginBottom: 8 }]}>
+                    <TouchableOpacity
+                      style={[styles.navRouteButton, styles.navButtonDriving]}
+                      onPress={() => {
+                        openNavigation({ latitude: client.latitude as number, longitude: client.longitude as number, clientName: primaryName, travelMode: 'driving' });
+                        onClose();
+                      }}
+                    >
+                      <IconText Icone={IconCar} style={styles.navRouteButtonText} tone="onSurface">Carro</IconText>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.navRouteButton, styles.navButtonWalking]}
+                      onPress={() => {
+                        openNavigation({ latitude: client.latitude as number, longitude: client.longitude as number, clientName: primaryName, travelMode: 'walking' });
+                        onClose();
+                      }}
+                    >
+                      <IconText Icone={IconUser} style={styles.navRouteButtonText} tone="onSurface">A pé</IconText>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.acaoSecundaria}
+                  onPress={() => {
+                    const addressParts = [client.endereco, client.numero, client.bairro, client.cidade, client.estado, client.cep]
+                      .filter(Boolean)
+                      .join(', ');
+                    const query = addressParts ? `${addressParts}, Brasil` : primaryName;
+                    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+                    Linking.openURL(url).catch(() => Alert.alert('Erro', 'Não foi possível abrir o Google Maps.'));
+                  }}
+                >
+                  <IconText Icone={IconExternalLink} style={styles.acaoSecundariaTexto} tone="onSurface">Abrir no Google Maps</IconText>
+                </TouchableOpacity>
+                {(() => {
+                  const waNum = toWhatsappNumber(client.telefone);
                   return (
-                    <View key={`note-${note.id}`} style={[styles.noteItem, styles.timelineLinha]}>
-                      <View style={[styles.timelinePill, { backgroundColor: 'var(--surface-2)' }]}>
-                        <IconPencil width={16} height={16} fill={iconColors.muted} />
+                    <TouchableOpacity
+                      style={[styles.acaoSecundaria, !waNum && { opacity: 0.5 }]}
+                      disabled={!waNum}
+                      onPress={() => openWhatsapp(client.telefone)}
+                    >
+                      <IconText Icone={IconWhatsapp} style={styles.acaoSecundariaTexto} tone="onSurface">
+                        {waNum ? 'Abrir WhatsApp' : 'WhatsApp (sem telefone)'}
+                      </IconText>
+                    </TouchableOpacity>
+                  );
+                })()}
+              </View>
+
+  {/* Mover para etapa: admin-only durante testes. Dispara webhook change_stage.
+                  Se o cliente não tiver id_hubspot, o modal alerta. */}
+              {onChangeStage && (
+                <TouchableOpacity
+                  style={styles.changeStageButton}
+                  onPress={onChangeStage}
+                >
+                  <IconText Icone={IconRefresh} style={styles.changeStageButtonText} tone="onSurface">Mover para etapa</IconText>
+                </TouchableOpacity>
+              )}
+
+              {/* Marcar como visitado + Editar migraram pro TOPO do sheet
+                  (acoes mais usadas em campo — sem precisar rolar ate aqui). */}
+
+              {/* Actions */}
+              {onEditLocation && (
+                <TouchableOpacity
+                  style={[styles.acaoSecundaria, { marginBottom: 8 }]}
+                  onPress={onEditLocation}
+                >
+                  <IconText Icone={IconPencil} style={styles.acaoSecundariaTexto} tone="onSurface">Editar localização (mover pin)</IconText>
+                </TouchableOpacity>
+              )}
+              {onDelete && (
+                <View style={styles.actionRow}>
+                  <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
+                    <Text style={styles.deleteButtonText}>Remover</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </>
+        )}
+
+        {/* ────────────────────────── ABA HISTORICO ──────────────────────── */}
+        {/* Timeline unificada: notas de campo + mudancas de etapa + reunioes +
+            check-ins, mais recentes em cima. Mudancas de etapa sao imutaveis;
+            notas mantem editar/apagar pro autor. O cabecalho saiu: o rotulo da
+            aba ja' diz "Histórico (n)". */}
+        {aba === 'historico' && (
+          <View style={styles.notesSection}>
+            {timeline.length === 0 ? (
+              <Text style={styles.meetingsEmpty}>Sem histórico ainda.</Text>
+            ) : (
+              (historicoCompleto ? timeline : timeline.slice(0, 6)).map((entry) => {
+                const when = new Date(entry.createdAt).toLocaleString('pt-BR', {
+                  day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+                });
+                if (entry.kind === 'stage') {
+                  const change = entry.change;
+                  const authorLabel =
+                    change.created_by_name || change.created_by_email || 'Autor desconhecido';
+                  const arrow = change.from_stage
+                    ? `${change.from_stage} → ${change.to_stage}`
+                    : `→ ${change.to_stage}`;
+                  return (
+                    <View key={`stage-${change.id}`} style={[styles.noteItem, styles.timelineLinha]}>
+                      <View style={[styles.timelinePill, { backgroundColor: '#FFF1E0' }]}>
+                        <IconTrendingUp width={16} height={16} fill="#8A4A0C" />
                       </View>
                       <View style={{ flex: 1, minWidth: 0 }}>
                       <View style={styles.noteHeaderRow}>
                         <View style={{ flex: 1 }}>
-                          <IconText Icone={IconUser} size={13} style={styles.noteAuthor} tone="muted">{authorLabel}</IconText>
-                          <Text style={styles.noteDate}>
-                            {when}{wasEdited ? ' • editado' : ''}
-                          </Text>
+                          <IconText Icone={IconRefresh} size={13} style={styles.noteAuthor} tone="muted">
+                            {authorLabel}
+                          </IconText>
+                          <Text style={styles.noteDate}>{when}</Text>
                         </View>
-                        {canWriteNotes && isMine && !isEditing && (
-                          <View style={styles.noteActions}>
-                            <TouchableOpacity
-                              onPress={() => { setEditingNoteId(note.id); setEditingBody(note.body); }}
-                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                            >
-                              <Text style={styles.noteAction}>Editar</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={() => {
-                                Alert.alert(
-                                  'Remover nota',
-                                  'Apagar essa nota? Nao pode ser desfeito.',
-                                  [
-                                    { text: 'Cancelar', style: 'cancel' },
-                                    {
-                                      text: 'Apagar',
-                                      style: 'destructive',
-                                      onPress: () => deleteNote.mutate(note.id, {
-                                        onError: (err: any) => Alert.alert('Erro', err?.message ?? 'Falhou'),
-                                      }),
-                                    },
-                                  ],
-                                );
-                              }}
-                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                            >
-                              <Text style={[styles.noteAction, { color: 'var(--brand-text)' }]}>Apagar</Text>
-                            </TouchableOpacity>
-                          </View>
-                        )}
                       </View>
-                      {isEditing ? (
-                        <>
-                          <TextInput
-                            style={[sharedStyles.input, { marginTop: 8, marginBottom: 0, minHeight: 60 }]}
-                            value={editingBody}
-                            onChangeText={setEditingBody}
-                            multiline
-                            autoFocus
-                            editable={!updateNote.isPending}
-                          />
-                          <View style={styles.noteEditActions}>
-                            <TouchableOpacity
-                              style={styles.noteEditCancel}
-                              onPress={() => { setEditingNoteId(null); setEditingBody(''); }}
-                              disabled={updateNote.isPending}
-                            >
-                              <Text style={styles.noteEditCancelText}>Cancelar</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={[styles.noteEditSave, (!editingBody.trim() || updateNote.isPending) && { opacity: 0.5 }]}
-                              disabled={!editingBody.trim() || updateNote.isPending}
-                              onPress={() => {
-                                updateNote.mutate({ id: note.id, body: editingBody }, {
-                                  onSuccess: () => { setEditingNoteId(null); setEditingBody(''); },
-                                  onError: (err: any) => Alert.alert('Erro', err?.message ?? 'Falhou'),
-                                });
-                              }}
-                            >
-                              {updateNote.isPending ? (
-                                <ActivityIndicator color="#fff" />
-                              ) : (
-                                <Text style={styles.noteEditSaveText}>Salvar</Text>
-                              )}
-                            </TouchableOpacity>
-                          </View>
-                        </>
-                      ) : (
-                        <Text style={styles.noteBody}>{note.body}</Text>
-                      )}
-                    </View>
+                      <Text style={[styles.noteBody, { fontWeight: '600' }]}>
+                        Moveu etapa: {arrow}
+                      </Text>
+                      </View>
                     </View>
                   );
-                })
-              )}
-              {timeline.length > 6 && (
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  onPress={() => setHistoricoCompleto(v => !v)}
-                  style={{ paddingVertical: 8 }}
-                >
-                  <Text style={{ fontSize: 14, lineHeight: 20, fontWeight: '600', color: 'var(--info-text)' }}>
-                    {historicoCompleto ? 'Mostrar menos' : `Ver histórico completo (${timeline.length})`}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              {canWriteNotes && (
-                <>
-                  <TextInput
-                    style={[sharedStyles.input, { marginTop: 8, minHeight: 64 }]}
-                    placeholder="Adicionar nova nota..."
-                    placeholderTextColor="var(--text-subtle)"
-                    value={newNote}
-                    onChangeText={setNewNote}
-                    multiline
-                    editable={!addNote.isPending}
-                  />
-                  <TouchableOpacity
-                    style={[sharedStyles.submitButton, (!newNote.trim() || addNote.isPending) && { opacity: 0.5 }]}
-                    disabled={!newNote.trim() || addNote.isPending}
-                    onPress={() => {
-                      addNote.mutate(newNote, {
-                        onSuccess: () => setNewNote(''),
-                        onError: (err: any) => {
-                          const msg = /relation .* does not exist/i.test(err?.message ?? '')
-                            ? 'A tabela client_notes ainda nao foi criada no Supabase. Aplique a migration 20260617_client_notes.sql.'
-                            : (err?.message ?? 'Falhou ao salvar nota');
-                          Alert.alert('Erro', msg);
-                        },
-                      });
-                    }}
-                  >
-                    {addNote.isPending ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text style={sharedStyles.submitButtonText}>Adicionar nota</Text>
-                    )}
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-
-            {onAddToRoute && (
-              <TouchableOpacity
-                style={styles.addRouteButton}
-                onPress={onAddToRoute}
-              >
-                <Text style={styles.addRouteButtonText}>Adicionar a rota de hoje</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Navigation */}
-            <View style={styles.navigationSection}>
-              <Text style={[sharedStyles.fieldLabel, { marginBottom: 8 }]}>Traçar Rota</Text>
-              {client.latitude && client.longitude && (
-                <View style={[styles.navigationRow, { marginBottom: 8 }]}>
-                  <TouchableOpacity
-                    style={[styles.navRouteButton, styles.navButtonDriving]}
-                    onPress={() => {
-                      openNavigation({ latitude: client.latitude as number, longitude: client.longitude as number, clientName: primaryName, travelMode: 'driving' });
-                      onClose();
-                    }}
-                  >
-                    <IconText Icone={IconCar} style={styles.navRouteButtonText} tone="onSurface">Carro</IconText>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.navRouteButton, styles.navButtonWalking]}
-                    onPress={() => {
-                      openNavigation({ latitude: client.latitude as number, longitude: client.longitude as number, clientName: primaryName, travelMode: 'walking' });
-                      onClose();
-                    }}
-                  >
-                    <IconText Icone={IconUser} style={styles.navRouteButtonText} tone="onSurface">A pé</IconText>
-                  </TouchableOpacity>
-                </View>
-              )}
-              <TouchableOpacity
-                style={styles.acaoSecundaria}
-                onPress={() => {
-                  const addressParts = [client.endereco, client.numero, client.bairro, client.cidade, client.estado, client.cep]
-                    .filter(Boolean)
-                    .join(', ');
-                  const query = addressParts ? `${addressParts}, Brasil` : primaryName;
-                  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
-                  Linking.openURL(url).catch(() => Alert.alert('Erro', 'Não foi possível abrir o Google Maps.'));
-                }}
-              >
-                <IconText Icone={IconExternalLink} style={styles.acaoSecundariaTexto} tone="onSurface">Abrir no Google Maps</IconText>
-              </TouchableOpacity>
-              {(() => {
-                const waNum = toWhatsappNumber(client.telefone);
+                }
+                if (entry.kind === 'meeting') {
+                  const m = entry.meeting;
+                  const isFollowUp = m.type === 'follow_up';
+                  const isPast = new Date(m.scheduled_at).getTime() < Date.now();
+                  return (
+                    <View key={`meeting-${m.id}`} style={[styles.noteItem, styles.timelineLinha]}>
+                      <View style={[styles.timelinePill, { backgroundColor: '#F1EBFE' }]}>
+                        <IconCalendar width={16} height={16} fill="#5B32C4" />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                      <View style={styles.noteHeaderRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.noteAuthor} numberOfLines={1}>
+                            {isFollowUp ? 'Follow up' : 'Reunião/demo'}
+                            {isPast ? ' (realizada/passada)' : ' (agendada)'}
+                          </Text>
+                          <Text style={styles.noteDate}>{when}</Text>
+                        </View>
+                      </View>
+                      {m.observacoes ? (
+                        <Text style={styles.noteBody}>{m.observacoes}</Text>
+                      ) : null}
+                      </View>
+                    </View>
+                  );
+                }
+                if (entry.kind === 'visit') {
+                  return (
+                    <View key={`visit-${entry.createdAt}`} style={[styles.noteItem, styles.timelineLinha]}>
+                      <View style={[styles.timelinePill, { backgroundColor: '#EAF7EE' }]}>
+                        <IconLocationFilled width={16} height={16} fill="#167532" />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                      <View style={styles.noteHeaderRow}>
+                        <View style={{ flex: 1 }}>
+                          <IconText Icone={IconLocation} size={13} style={styles.noteAuthor} tone="muted">
+                            Check-in de visita
+                            {entry.visitNumber ? ` — ${entry.visitNumber}ª` : ''}
+                          </IconText>
+                          <Text style={styles.noteDate}>
+                            {when}{entry.visitedByName ? ` • ${entry.visitedByName}` : ''}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.noteBody, { fontWeight: '600' }]}>
+                        Cliente visitado no local
+                      </Text>
+                      </View>
+                    </View>
+                  );
+                }
+                const note = entry.note;
+                const isMine = !!user?.id && note.created_by === user.id;
+                const isEditing = editingNoteId === note.id;
+                const wasEdited = new Date(note.updated_at).getTime() - new Date(note.created_at).getTime() > 2000;
+                const authorLabel = note.created_by_name || note.created_by_email || 'Autor desconhecido';
                 return (
-                  <TouchableOpacity
-                    style={[styles.acaoSecundaria, !waNum && { opacity: 0.5 }]}
-                    disabled={!waNum}
-                    onPress={() => openWhatsapp(client.telefone)}
-                  >
-                    <IconText Icone={IconWhatsapp} style={styles.acaoSecundariaTexto} tone="onSurface">
-                      {waNum ? 'Abrir WhatsApp' : 'WhatsApp (sem telefone)'}
-                    </IconText>
-                  </TouchableOpacity>
+                  <View key={`note-${note.id}`} style={[styles.noteItem, styles.timelineLinha]}>
+                    <View style={[styles.timelinePill, { backgroundColor: 'var(--surface-2)' }]}>
+                      <IconPencil width={16} height={16} fill={iconColors.muted} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                    <View style={styles.noteHeaderRow}>
+                      <View style={{ flex: 1 }}>
+                        <IconText Icone={IconUser} size={13} style={styles.noteAuthor} tone="muted">{authorLabel}</IconText>
+                        <Text style={styles.noteDate}>
+                          {when}{wasEdited ? ' • editado' : ''}
+                        </Text>
+                      </View>
+                      {canWriteNotes && isMine && !isEditing && (
+                        <View style={styles.noteActions}>
+                          <TouchableOpacity
+                            onPress={() => { setEditingNoteId(note.id); setEditingBody(note.body); }}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                          >
+                            <Text style={styles.noteAction}>Editar</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => {
+                              Alert.alert(
+                                'Remover nota',
+                                'Apagar essa nota? Nao pode ser desfeito.',
+                                [
+                                  { text: 'Cancelar', style: 'cancel' },
+                                  {
+                                    text: 'Apagar',
+                                    style: 'destructive',
+                                    onPress: () => deleteNote.mutate(note.id, {
+                                      onError: (err: any) => Alert.alert('Erro', err?.message ?? 'Falhou'),
+                                    }),
+                                  },
+                                ],
+                              );
+                            }}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                          >
+                            <Text style={[styles.noteAction, { color: 'var(--brand-text)' }]}>Apagar</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                    {isEditing ? (
+                      <>
+                        <TextInput
+                          style={[sharedStyles.input, { marginTop: 8, marginBottom: 0, minHeight: 60 }]}
+                          value={editingBody}
+                          onChangeText={setEditingBody}
+                          multiline
+                          autoFocus
+                          editable={!updateNote.isPending}
+                        />
+                        <View style={styles.noteEditActions}>
+                          <TouchableOpacity
+                            style={styles.noteEditCancel}
+                            onPress={() => { setEditingNoteId(null); setEditingBody(''); }}
+                            disabled={updateNote.isPending}
+                          >
+                            <Text style={styles.noteEditCancelText}>Cancelar</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.noteEditSave, (!editingBody.trim() || updateNote.isPending) && { opacity: 0.5 }]}
+                            disabled={!editingBody.trim() || updateNote.isPending}
+                            onPress={() => {
+                              updateNote.mutate({ id: note.id, body: editingBody }, {
+                                onSuccess: () => { setEditingNoteId(null); setEditingBody(''); },
+                                onError: (err: any) => Alert.alert('Erro', err?.message ?? 'Falhou'),
+                              });
+                            }}
+                          >
+                            {updateNote.isPending ? (
+                              <ActivityIndicator color="#fff" />
+                            ) : (
+                              <Text style={styles.noteEditSaveText}>Salvar</Text>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    ) : (
+                      <Text style={styles.noteBody}>{note.body}</Text>
+                    )}
+                  </View>
+                  </View>
                 );
-              })()}
-            </View>
-
-            {/* Reuniões agendadas */}
-            <View style={styles.meetingsSection}>
-              <View style={styles.meetingsHeader}>
-                <Text style={sharedStyles.fieldLabel}>
-                  Reuniões{reunioes.length > 0 ? ` (${reunioes.length})` : ''}
-                </Text>
-              </View>
-              {reunioes.length === 0 ? (
-                <Text style={styles.meetingsEmpty}>Nenhuma reunião agendada.</Text>
-              ) : (
-                reunioes.map((m) => renderMeetingChip(m, IconCalendar))
-              )}
-              {/* Agendar reuniao: so de "Conversa com decisor" em diante no
-                  funil — antes disso a cadencia ainda nao pede demo. */}
-              {onScheduleMeeting && canScheduleMeeting && (
-                <TouchableOpacity
-                  style={styles.scheduleButton}
-                  onPress={onScheduleMeeting}
-                >
-                  <IconText Icone={IconCalendar} style={styles.scheduleButtonText} tone="onSurface">Agendar reunião</IconText>
-                </TouchableOpacity>
-              )}
-              {onScheduleMeeting && !canScheduleMeeting && (
-                <Text style={[styles.meetingsEmpty, { fontStyle: 'italic' }]}>
-                  Agendamento libera na etapa "Conversa com decisor".
-                </Text>
-              )}
-            </View>
-
-            {/* Follow ups — mesma mecânica de reunião, organização separada */}
-            <View style={styles.meetingsSection}>
-              <View style={styles.meetingsHeader}>
-                <Text style={sharedStyles.fieldLabel}>
-                  Follow ups{followUps.length > 0 ? ` (${followUps.length})` : ''}
-                </Text>
-              </View>
-              {followUps.length === 0 ? (
-                <Text style={styles.meetingsEmpty}>Nenhum follow up marcado.</Text>
-              ) : (
-                followUps.map((m) => renderMeetingChip(m, IconRefresh))
-              )}
-              {onFollowUp && (
-                <TouchableOpacity
-                  style={styles.followUpButton}
-                  onPress={onFollowUp}
-                >
-                  <IconText Icone={IconRefresh} style={styles.followUpButtonText} tone="onSurface">Marcar Follow Up</IconText>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Mover para etapa: admin-only durante testes. Dispara webhook change_stage.
-                Se o cliente não tiver id_hubspot, o modal alerta. */}
-            {onChangeStage && (
+              })
+            )}
+            {timeline.length > 6 && (
               <TouchableOpacity
-                style={styles.changeStageButton}
-                onPress={onChangeStage}
+                accessibilityRole="button"
+                onPress={() => setHistoricoCompleto(v => !v)}
+                style={{ paddingVertical: 8 }}
               >
-                <IconText Icone={IconRefresh} style={styles.changeStageButtonText} tone="onSurface">Mover para etapa</IconText>
+                <Text style={{ fontSize: 14, lineHeight: 20, fontWeight: '600', color: 'var(--info-text)' }}>
+                  {historicoCompleto ? 'Mostrar menos' : `Ver histórico completo (${timeline.length})`}
+                </Text>
               </TouchableOpacity>
             )}
+            {canWriteNotes && (
+              <>
+                <TextInput
+                  style={[sharedStyles.input, { marginTop: 8, minHeight: 64 }]}
+                  placeholder="Adicionar nova nota..."
+                  placeholderTextColor="var(--text-subtle)"
+                  value={newNote}
+                  onChangeText={setNewNote}
+                  multiline
+                  editable={!addNote.isPending}
+                />
+                <TouchableOpacity
+                  style={[sharedStyles.submitButton, (!newNote.trim() || addNote.isPending) && { opacity: 0.5 }]}
+                  disabled={!newNote.trim() || addNote.isPending}
+                  onPress={() => {
+                    addNote.mutate(newNote, {
+                      onSuccess: () => setNewNote(''),
+                      onError: (err: any) => {
+                        const msg = /relation .* does not exist/i.test(err?.message ?? '')
+                          ? 'A tabela client_notes ainda nao foi criada no Supabase. Aplique a migration 20260617_client_notes.sql.'
+                          : (err?.message ?? 'Falhou ao salvar nota');
+                        Alert.alert('Erro', msg);
+                      },
+                    });
+                  }}
+                >
+                  {addNote.isPending ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={sharedStyles.submitButtonText}>Adicionar nota</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        )}
 
-            {/* Marcar como visitado + Editar migraram pro TOPO do sheet
-                (acoes mais usadas em campo — sem precisar rolar ate aqui). */}
-
-            {/* Actions */}
-            {onEditLocation && (
+        {/* ─────────────────────────── ABA AGENDA ────────────────────────── */}
+        {aba === 'agenda' && (
+          <>
+{/* Reuniões agendadas */}
+          <View style={styles.meetingsSection}>
+            <View style={styles.meetingsHeader}>
+              <Text style={sharedStyles.fieldLabel}>
+                Reuniões
+              </Text>
+            </View>
+            {reunioes.length === 0 ? (
+              <Text style={styles.meetingsEmpty}>Nenhuma reunião agendada.</Text>
+            ) : (
+              reunioes.map((m) => renderMeetingChip(m, IconCalendar))
+            )}
+            {/* Agendar reuniao: so de "Conversa com decisor" em diante no
+                funil — antes disso a cadencia ainda nao pede demo. */}
+            {onScheduleMeeting && canScheduleMeeting && (
               <TouchableOpacity
-                style={[styles.acaoSecundaria, { marginBottom: 8 }]}
-                onPress={onEditLocation}
+                style={styles.scheduleButton}
+                onPress={onScheduleMeeting}
               >
-                <IconText Icone={IconPencil} style={styles.acaoSecundariaTexto} tone="onSurface">Editar localização (mover pin)</IconText>
+                <IconText Icone={IconCalendar} style={styles.scheduleButtonText} tone="onSurface">Agendar reunião</IconText>
               </TouchableOpacity>
             )}
-            {onDelete && (
-              <View style={styles.actionRow}>
-                <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
-                  <Text style={styles.deleteButtonText}>Remover</Text>
-                </TouchableOpacity>
-              </View>
+            {onScheduleMeeting && !canScheduleMeeting && (
+              <Text style={[styles.meetingsEmpty, { fontStyle: 'italic' }]}>
+                Agendamento libera na etapa "Conversa com decisor".
+              </Text>
             )}
-          </ScrollView>
-        </>
-          )}
-        </Animated.View>
-      </View>
-    </Modal>
+          </View>
+
+          {/* Follow ups — mesma mecânica de reunião, organização separada */}
+          <View style={styles.meetingsSection}>
+            <View style={styles.meetingsHeader}>
+              <Text style={sharedStyles.fieldLabel}>
+                Follow ups
+              </Text>
+            </View>
+            {followUps.length === 0 ? (
+              <Text style={styles.meetingsEmpty}>Nenhum follow up marcado.</Text>
+            ) : (
+              followUps.map((m) => renderMeetingChip(m, IconRefresh))
+            )}
+            {onFollowUp && (
+              <TouchableOpacity
+                style={styles.followUpButton}
+                onPress={onFollowUp}
+              >
+                <IconText Icone={IconRefresh} style={styles.followUpButtonText} tone="onSurface">Marcar Follow Up</IconText>
+              </TouchableOpacity>
+            )}
+          </View>
+          </>
+        )}
+
+        </View>,
+      ]}
+    </Painel>
   );
 }
 
@@ -7818,28 +7921,7 @@ const styles = StyleSheet.create({
   segmentButtonActive: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
   segmentButtonText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)', textAlign: 'center' },
   segmentButtonTextActive: { color: '#fff' },
-  visitCountBox: {
-    backgroundColor: 'var(--tint-green)',
-    borderWidth: 1,
-    borderColor: 'var(--tint-green-border)',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    marginBottom: 10,
-  },
-  visitCountText: { fontSize: 14, fontWeight: '800', color: 'var(--tint-green-text)' },
-  visitCountHint: { fontSize: 12, color: '#16a34a', marginTop: 2 },
   // Uso do produto (HubSpot) — cores vem do estado, so' o layout fica aqui.
-  usoBox: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    marginBottom: 10,
-  },
-  usoTitulo: { fontSize: 14, fontWeight: '800' },
-  usoDetalhe: { fontSize: 12, fontWeight: '600', marginTop: 3 },
-  usoRodape: { fontSize: 11, marginTop: 4 },
   // Caixa da Conta Alvo no sheet — roxo, combinando com o pin/badge.
   contaAlvoBox: {
     borderWidth: 1,
@@ -7850,8 +7932,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'var(--tint-red)',
     borderColor: 'var(--tint-red-border)',
   },
-  slaBadge: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10 },
-  slaBadgeText: { fontSize: 13, fontWeight: '800' },
   contaAlvoBoxTitle: { fontSize: 14, fontWeight: '800', color: 'var(--tint-red-text)' },
   contaAlvoBoxText: { fontSize: 13, fontWeight: '700', color: 'var(--tint-red-text)', marginTop: 3 },
   contaAlvoDismissBtn: { marginTop: 8, alignSelf: 'flex-start', backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--tint-red-border)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
@@ -8011,32 +8091,10 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: 'row' },
   locationSummary: { backgroundColor: 'var(--tint-green)', borderRadius: 8, padding: 10, marginTop: 8, borderWidth: 1, borderColor: 'var(--tint-green-border)' },
   locationSummaryText: { fontSize: 12, color: '#16a34a', fontWeight: '500' },
-  // Bottom Sheet
-  bottomSheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  // No desktop o lead abre em painel a DIREITA, e nao por baixo. O sheet
-  // cobria metade do mapa exatamente quando o vendedor quer ver onde o pin
-  // esta' — o gesto de abrir o lead escondia o motivo de te-lo aberto.
-  painelOverlay: { justifyContent: 'flex-start', alignItems: 'flex-end', backgroundColor: 'rgba(0,0,0,0.32)' },
-  painelLateral: {
-    width: 480,
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowOffset: { width: -8, height: 0 },
-    shadowRadius: 16,
-    maxWidth: '100%',
-    height: '100%',
-    maxHeight: '100%',
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    borderLeftWidth: 1,
-    borderLeftColor: 'var(--border)',
-    paddingTop: 16,
-  },
-  // radius 16: o token de bottom sheet do DS (radius/16).
-  bottomSheet: { backgroundColor: 'var(--surface)', borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '80%' },
-  bottomSheetHandle: { alignSelf: 'center', width: 40, height: 4, backgroundColor: 'var(--surface-3)', borderRadius: 2 },
-  dragHandleArea: { width: '100%', paddingTop: 14, paddingBottom: 14, alignItems: 'center' },
-  bottomSheetContent: { paddingHorizontal: 20 },
+  // A forma da folha/drawer, a alca e o overlay vivem no <Painel>
+  // (src/components/Painel.tsx). Aqui fica so' o padding do corpo da ficha.
+  corpoDesktop: { paddingHorizontal: 24 },
+  corpoMobile: { paddingHorizontal: 16 },
   // ---- Peek sheet (prompt M1, celular) ----
   // M1d: item da timeline com pill de tipo (tints claras — superficies
   // proprias, o icone fica escuro nos dois temas).
@@ -8177,9 +8235,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#C8131B',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     gap: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
   },
   drawerAcaoCheiaTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: '#FFFFFF' },
   drawerAcaoVazada: {
@@ -8190,9 +8248,9 @@ const styles = StyleSheet.create({
     borderColor: '#C8131B',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     gap: 8,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
   },
   drawerAcaoVazadaTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--brand-text)' },
   drawerAcaoMais: {
@@ -8204,8 +8262,123 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  drawerKickerLinha: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  drawerKicker: {
+  // ---- Corpo em abas (M1d) ----
+  abaConteudo: { paddingTop: 16 },
+  // Cards de contexto (Conta Alvo, Observacao principal): ficam FORA do grid de
+  // pares — sao bloco, nao dado.
+  cartaoDado: { backgroundColor: 'var(--surface-2)', padding: 16, marginBottom: 16 },
+  cartaoDadoDesktop: { borderRadius: 8 },
+  cartaoDadoMobile: { borderRadius: 16 },
+  cartaoDadoTitulo: {
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    color: 'var(--text-muted)',
+    marginBottom: 8,
+  },
+  cartaoDadoTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.25, color: 'var(--text)' },
+  dadosGrade: { marginBottom: 16 },
+  dadoLinha: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+  },
+  // Valor longo no celular: chave em cima, valor embaixo, em corpo maior.
+  dadoLinhaEmpilhada: { flexDirection: 'column', alignItems: 'stretch', gap: 4 },
+  dadoChave: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
+  dadoChaveTexto: {
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    color: 'var(--text-faint)',
+  },
+  dadoValor: { flexShrink: 1, fontSize: 14, lineHeight: 20, letterSpacing: 0.25, color: 'var(--text)', textAlign: 'right' },
+  dadoValorEmpilhado: { fontSize: 16, lineHeight: 24, letterSpacing: 0.5, color: 'var(--text)' },
+  tabular: { fontVariant: ['tabular-nums'] },
+  // Linha de link que fecha a aba Dados. Alvo de 48px no celular.
+  linhaLink: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, marginBottom: 16 },
+  linhaLinkTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: '#018CCC' },
+  // Telefone editavel: campo na coluna do valor, texto a ESQUERDA dentro dele.
+  telefoneCaixa: { alignItems: 'flex-end', gap: 8 },
+  telefoneCampo: {
+    minWidth: 200,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-strong)',
+    backgroundColor: 'var(--surface)',
+    color: 'var(--text)',
+    paddingHorizontal: 12,
+  },
+  telefoneCampoDesktop: { height: 40, borderRadius: 8, fontSize: 14, lineHeight: 20 },
+  telefoneCampoMobile: { height: 48, borderRadius: 16, fontSize: 16, lineHeight: 24 },
+  telefoneSalvar: { backgroundColor: '#C8131B', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  telefoneSalvarDesktop: { height: 32, borderRadius: 8 },
+  telefoneSalvarMobile: { height: 48, borderRadius: 12 },
+  telefoneSalvarTexto: { color: '#FFFFFF', fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600' },
+  // TEMPORARIO: some quando o M1e levar o check-in pro rodape e o M1c2 levar as
+  // outras oito acoes pro menu.
+  acoesTemporarias: { marginTop: 8 },
+
+  // ---- Faixa de alertas (M1d) ----
+  // Faixas de largura total, NAO cards: sem sombra, sem borda em volta, sem
+  // raio no celular. So' a regua esquerda de 3px carrega a cor.
+  faixaAlertas: { gap: 1 },
+  faixaAlertasMobile: { marginHorizontal: -16 },
+  alerta: { flexDirection: 'row', gap: 12, paddingVertical: 12, paddingHorizontal: 16, borderLeftWidth: 3 },
+  alertaDesktop: { borderRadius: 8, marginTop: 16 },
+  alertaTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.25, fontWeight: '600' },
+  // O detalhe e' a mesma cor a 80% — em RNW nao ha' alfa sobre var().
+  alertaDetalhe: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, opacity: 0.8, marginTop: 2 },
+  alertaPorQue: { alignSelf: 'flex-start', paddingVertical: 4, minHeight: 24 },
+  // Azul de link dentro de faixa ambar brigaria com o tom; o text button usa a
+  // propria cor da faixa, com peso pra se distinguir do detalhe.
+  alertaPorQueTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, fontWeight: '600', textDecorationLine: 'underline' },
+
+  // ---- Barra de abas (M1d) ----
+  // backgroundColor obrigatorio: o wrapper `position:sticky` que o RNW cria
+  // nao tem fundo, e sem isto o conteudo rola por tras e aparece.
+  // marginHorizontal -20 desfaz o paddingHorizontal:20 da scroller, pra borda
+  // inferior encostar nas duas paredes do painel.
+  abasBarra: {
+    flexDirection: 'row',
+    backgroundColor: 'var(--surface)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+  },
+  abasBarraDesktop: { marginHorizontal: -24, paddingHorizontal: 24 },
+  abasBarraMobile: { marginHorizontal: -16, paddingHorizontal: 16 },
+  abaItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  abaItemDesktop: { height: 40 },
+  abaItemMobile: { height: 48 },
+  abaItemAtiva: { borderBottomColor: '#C8131B' },
+  abaTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text-muted)' },
+  abaTextoAtiva: { color: 'var(--tint-red-text)' },
+
+  // ---- Faixa de topo da ficha do lead (M1c) ----
+  // Padding 24 no desktop; 12/16/16 no celular — o extra embaixo compensa a
+  // alca de arraste, que come o respiro de cima.
+  fichaTopo: { borderBottomWidth: 1, borderBottomColor: 'var(--border)' },
+  fichaTopoDesktop: { padding: 24 },
+  fichaTopoMobile: { paddingTop: 12, paddingHorizontal: 16, paddingBottom: 16 },
+  fichaTopoLinha: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
+  fichaKickerLinha: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
+  fichaKickerDot: { width: 10, height: 10, borderRadius: 5 },
+  fichaKickerDotMobile: { width: 8, height: 8, borderRadius: 4 },
+  fichaKicker: {
+    flexShrink: 1,
     fontSize: 11,
     lineHeight: 16,
     letterSpacing: 0.5,
@@ -8213,30 +8386,25 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: 'var(--text-faint)',
   },
-  drawerFechar: { width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  bsHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  bsLogoWrap: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  bsLogo: { width: 28, height: 28, tintColor: '#fff', resizeMode: 'contain' },
-  bsHeaderInfo: { flex: 1 },
-  clientDetailsName: { fontSize: 20, fontWeight: '700', color: 'var(--text)', marginBottom: 2 },
-  bsContactSubtitle: { fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 },
-  statusBadgeLarge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start' },
-  infoGrid: { gap: 12, marginBottom: 16 },
-  infoItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  infoIcon: { fontSize: 16, marginTop: 2 },
-  detailLabel: { fontSize: 11, fontWeight: '600', color: 'var(--text-subtle)', marginBottom: 2, textTransform: 'uppercase' },
-  detailValue: { fontSize: 14, color: 'var(--text)' },
-  observationsSection: { marginBottom: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
+  fichaBadgeStatus: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
+  fichaBadgeStatusTexto: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600' },
+  fichaNome: { fontSize: 18, lineHeight: 24, fontWeight: '600', color: 'var(--text)' },
+  fichaSublinha: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)' },
+  fichaFecharDesktop: { width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  fichaFecharMobile: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: 'var(--surface-2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fichaAcoes: { flexDirection: 'row', gap: 8, marginTop: 16 },
   // Historico de notas: cada entrada vira card cronologico no bottom sheet.
   notesSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: 'var(--border-soft)', marginBottom: 16 },
-  noteItem: {
-    backgroundColor: 'var(--bg)',
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#3b82f6',
-  },
+  // Sem regua colorida a esquerda: o pill 32px do icone ja' carrega a cor do
+  // tipo, e duas marcas pro mesmo dado e' redundancia (M1-MAPEAMENTO).
+  noteItem: { paddingBottom: 16, marginTop: 8 },
   noteHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6, gap: 8 },
   noteAuthor: { fontSize: 12, fontWeight: '700', color: 'var(--text)', marginBottom: 1 },
   noteDate: { fontSize: 11, color: 'var(--text-muted)' },
