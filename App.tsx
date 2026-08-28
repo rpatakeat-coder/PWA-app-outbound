@@ -6097,7 +6097,7 @@ function ClientBottomSheet({
   // alinhado a direita, o caret corre enquanto se digita (M1-DECISOES-2 (g)).
   // Nada de Touchable em volta do TextInput — regra do CLAUDE.md.
   const linhaTelefone = onSavePhone ? (
-    <View style={[styles.dadoLinha, styles.dadoLinhaEmpilhada]}>
+    <View style={[styles.dadoLinha, !layout.ehDesktop && styles.dadoLinhaEmpilhada]}>
       <View style={styles.dadoChave}>
         <IconCall width={16} height={16} fill={iconColors.faint} />
         <Text style={styles.dadoChaveTexto}>Telefone</Text>
@@ -6180,12 +6180,12 @@ function ClientBottomSheet({
 
     // 1 · uso do produto no vermelho
     if (uso && uso.nivel === 'vermelho') {
-      linhas.push(linha('uso', '#C8131B', 'var(--tint-red)', 'var(--tint-red-text)', IconBill, uso.titulo, usoLinha));
+      linhas.push(linha('uso', iconColors.tintRedText, 'var(--tint-red)', 'var(--tint-red-text)', IconBill, uso.titulo, usoLinha));
     }
 
     // 2 · SLA estourado, depois ambar
     if (slaNaFaixa) {
-      const cor = sla.breach ? '#C8131B' : '#FFB32F';
+      const cor = sla.breach ? iconColors.tintRedText : '#FFB32F';
       const texto = sla.breach
         ? `SLA estourado — ${sla.diasParado} ${sla.diasParado === 1 ? 'dia' : 'dias'} parado (limite ${sla.sla})`
         : `${sla.diasParado}/${sla.sla} dias parado`;
@@ -6224,6 +6224,9 @@ function ClientBottomSheet({
             ) : null}
             <TouchableOpacity
               accessibilityRole="button"
+              // A caixa visual e' de 24px (uma linha de 12/16 com 4 de folga);
+              // o hitSlop leva o ALVO a 48, sem inchar a faixa.
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
               onPress={() => setPorQueLocal((v) => !v)}
               style={styles.alertaPorQue}
             >
@@ -6238,7 +6241,7 @@ function ClientBottomSheet({
 
     // 4 · uso do produto no ambar/verde
     if (uso && uso.nivel !== 'vermelho') {
-      const cor = uso.nivel === 'ambar' ? '#FFB32F' : '#167532';
+      const cor = uso.nivel === 'ambar' ? '#FFB32F' : iconColors.tintGreenText;
       linhas.push(
         linha(
           'uso',
@@ -6257,7 +6260,7 @@ function ClientBottomSheet({
       linhas.push(
         linha(
           'visita',
-          '#167532',
+          iconColors.tintGreenText,
           'var(--tint-green)',
           'var(--tint-green-text)',
           IconLocationFilled,
@@ -6505,7 +6508,7 @@ function ClientBottomSheet({
                 style={styles.linhaLink}
                 onPress={() => Linking.openURL(client.url_hubspot!).catch(() => Alert.alert('Erro', 'Não foi possível abrir o link.'))}
               >
-                <IconExternalLink width={20} height={20} fill="#018CCC" />
+                <IconExternalLink width={20} height={20} fill={iconColors.info} />
                 <Text style={styles.linhaLinkTexto}>Abrir no HubSpot</Text>
               </TouchableOpacity>
             ) : null}
@@ -8433,7 +8436,7 @@ const styles = StyleSheet.create({
   tabular: { fontVariant: ['tabular-nums'] },
   // Linha de link que fecha a aba Dados. Alvo de 48px no celular.
   linhaLink: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, marginBottom: 16 },
-  linhaLinkTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: '#018CCC' },
+  linhaLinkTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--info-text)' },
   // Telefone editavel: campo na coluna do valor, texto a ESQUERDA dentro dele.
   telefoneCaixa: { alignItems: 'flex-end', gap: 8 },
   telefoneCampo: {
