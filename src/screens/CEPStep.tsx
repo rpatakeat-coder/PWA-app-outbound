@@ -15,6 +15,7 @@ import { Alert } from '../components/Alert';
 import { useLayout } from '../hooks/useLayout';
 import {
   IconArrowBack,
+  IconChevronRight,
   IconLocation,
   IconMail,
   IconText,
@@ -198,33 +199,33 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
           <Text style={styles.subtitle}>Escolha a forma de inserir a localização</Text>
 
           <TouchableOpacity style={styles.optionCard} onPress={() => setMode('cep')}>
-            <IconMail width={16} height={16} fill={iconColors.onSurface} />
+            <IconMail width={20} height={20} fill={iconColors.onSurface} />
             <View style={styles.optionInfo}>
               <Text style={styles.optionTitle}>Cadastrar via CEP</Text>
               <Text style={styles.optionDesc}>Informe o CEP e o endereço será preenchido automaticamente</Text>
             </View>
-            <Text style={styles.optionArrow}>›</Text>
+            <IconChevronRight width={20} height={20} fill={iconColors.faint} />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.optionCard} onPress={() => setMode('coords')}>
-            <IconLocation width={16} height={16} fill={iconColors.onSurface} />
+            <IconLocation width={20} height={20} fill={iconColors.onSurface} />
             <View style={styles.optionInfo}>
               <Text style={styles.optionTitle}>Cadastrar via Coordenadas</Text>
               <Text style={styles.optionDesc}>Informe latitude e longitude diretamente</Text>
             </View>
-            <Text style={styles.optionArrow}>›</Text>
+            <IconChevronRight width={20} height={20} fill={iconColors.faint} />
           </TouchableOpacity>
 
           {onPickOnMap && (
             <TouchableOpacity style={styles.optionCard} onPress={onPickOnMap}>
-              <IconLocation width={16} height={16} fill={iconColors.onSurface} />
+              <IconLocation width={20} height={20} fill={iconColors.onSurface} />
               <View style={styles.optionInfo}>
                 <Text style={styles.optionTitle}>Colocar pelo pin no mapa</Text>
                 <Text style={styles.optionDesc}>
                   Arraste o mapa até o local exato. Endereço/CEP/bairro são preenchidos automaticamente.
                 </Text>
               </View>
-              <Text style={styles.optionArrow}>›</Text>
+              <IconChevronRight width={20} height={20} fill={iconColors.faint} />
             </TouchableOpacity>
           )}
 
@@ -448,7 +449,14 @@ const styles = StyleSheet.create({
   cardWeb: {
     width: '100%',
     maxWidth: 640,
-    borderRadius: 8,
+    // Canto a canto de proposito: `card` declara borderTopLeftRadius/Right 20
+    // (o raio da folha do celular), que e' mais especifico que `borderRadius` e
+    // vencia aqui — o modal do desktop nascia com 20/20/8/8.
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    padding: 24,
     maxHeight: '88%',
     shadowColor: '#000',
     shadowOpacity: 0.14,
@@ -494,7 +502,8 @@ const styles = StyleSheet.create({
   optionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'var(--bg)',
+    gap: 12,
+    backgroundColor: 'var(--surface-2)',
     borderRadius: 12,
     padding: 16,
     marginBottom: 10,
@@ -518,11 +527,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'var(--text-muted)',
     lineHeight: 16,
-  },
-  optionArrow: {
-    fontSize: 24,
-    color: 'var(--text-subtle)',
-    fontWeight: '300',
   },
   // Form
   label: {
