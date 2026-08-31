@@ -1473,6 +1473,21 @@ function MainApp() {
   // header (que e' desta casca) e o corpo vive na AgendaScreen, entao o dia
   // selecionado precisa morar no ancestral comum — mesmo arranjo do
   // `configRotaAberta` do M3.
+  // Menu do perfil (M7): a folha que o avatar abre. E' aqui que vivem o
+  // logout, o tema e — finalmente — a entrada pro Gestor e pro Meu desempenho,
+  // que desde o M1 nao tinham como ser alcancados no celular.
+  const [perfilAberto, setPerfilAberto] = useState(false);
+  // Aba de onde a pessoa veio antes de entrar em gestor/meu/config. Sem isso o
+  // `arrow_back` dessas telas cai sempre no Mapa (divida aberta no M6).
+  const [abaAnterior, setAbaAnterior] = useState<AppTab>('map');
+
+  // Leva pra uma tela sem barra guardando de onde veio, e fecha a folha.
+  const irParaTelaDePerfil = (destino: AppTab) => {
+    setAbaAnterior(tab);
+    setPerfilAberto(false);
+    setTab(destino);
+  };
+
   const [diaSelecionado, setDiaSelecionado] = useState<Date>(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -4508,21 +4523,30 @@ function MainApp() {
             /* A Agenda nao tem busca, mas tambem nao pode ter uma faixa de
                48px vazia: o titulo ocupa o lugar dela. */
             <Text style={styles.headerTitulo}>Agenda</Text>
-          ) : tab === 'gestor' || tab === 'meu' ? (
-            /* Estas duas nao sao abas da barra: chegam pelo menu do perfil.
-               Sem o arrow_back a tela fica sem saida — e' a unica volta. */
+          ) : tab === 'gestor' || tab === 'meu' || tab === 'config' ? (
+            /* Estas tres nao sao abas da barra: chegam pelo menu do perfil.
+               Sem o arrow_back a tela fica sem saida — e' a unica volta.
+               Configuracoes reabre o MENU (foi de la' que veio); Gestor e Meu
+               voltam pra aba de origem. */
             <View style={styles.headerLinha}>
               <TouchableOpacity
                 accessibilityRole="button"
                 accessibilityLabel="Voltar"
                 style={styles.headerVoltar}
-                onPress={() => setTab('map')}
+                onPress={() => {
+                  if (tab === 'config') {
+                    setTab(abaAnterior);
+                    setPerfilAberto(true);
+                    return;
+                  }
+                  setTab(abaAnterior);
+                }}
               >
                 <IconArrowBack width={24} height={24} fill="#FFFFFF" />
               </TouchableOpacity>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.headerTitulo} numberOfLines={1}>
-                  {tab === 'gestor' ? 'Painel do gestor' : 'Meu desempenho'}
+                  {tab === 'gestor' ? 'Painel do gestor' : tab === 'meu' ? 'Meu desempenho' : 'Configurações'}
                 </Text>
               </View>
             </View>
@@ -4557,7 +4581,7 @@ function MainApp() {
             accessibilityRole="button"
             accessibilityLabel="Perfil e configurações"
             style={styles.headerAvatar}
-            onPress={() => setTab('config')}
+            onPress={() => setPerfilAberto(true)}
           >
             <Text style={styles.headerAvatarTexto}>{iniciaisWeb}</Text>
           </TouchableOpacity>
@@ -5020,10 +5044,76 @@ function MainApp() {
           vazio branco grande embaixo das abas.
           Reserva-se espaco proprio so' quando o aparelho nao tem area segura
           suficiente pra abrigar o texto. */}
+      {/* Menu do perfil (M7). Reusa o `Painel` do M1b: ja' fecha no X, no
+          fundo, no Esc e no voltar-do-sistema, e ja' e' folha no celular. */}
+      {!layout.ehLargo && (
+        <Painel
+          visivel={perfilAberto}
+          aoFechar={() => setPerfilAberto(false)}
+          rotulo="Perfil"
+          estiloConteudoCorpo={styles.perfilCorpo}
+        >
+          <View style={styles.perfilIdentidade}>
+            <View style={styles.perfilAvatar}>
+              <Text style={styles.perfilAvatarTexto}>{iniciaisWeb}</Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.perfilNome} numberOfLines={1}>
+                {profile?.full_name || profile?.email || 'Sem nome'}
+              </Text>
+              <Text style={styles.perfilSub} numberOfLines={1}>
+                {`${canViewGestor ? 'Gestor' : isViewer ? 'Visualização' : 'Vendedor'} · ${profile?.email ?? ''}`}
+              </Text>
+            </View>
+          </View>
+
+          {([
+            // "Painel do gestor" e "Meu desempenho" sao a entrada que faltava:
+            // ate' aqui nada chamava setTab('gestor') / setTab('meu') no
+            // celular, e as duas telas do M6 eram inalcancaveis.
+            canViewGestor
+              ? { chave: 'gestor', Icone: IconBarGraph, rotulo: 'Painel do gestor', aoTocar: () => irParaTelaDePerfil('gestor') }
+              : null,
+            // Escondido pro viewer, que o guard de papel ja' redireciona.
+            !isViewer
+              ? { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu desempenho', aoTocar: () => irParaTelaDePerfil('meu') }
+              : null,
+            { chave: 'config', Icone: IconSettings, rotulo: 'Configurações', aoTocar: () => irParaTelaDePerfil('config') },
+            { chave: 'sair', Icone: IconLogout, rotulo: 'Sair', perigo: true, aoTocar: () => { setPerfilAberto(false); logout(); } },
+          ].filter(Boolean) as Array<{
+            chave: string;
+            Icone: typeof IconSettings;
+            rotulo: string;
+            perigo?: boolean;
+            aoTocar: () => void;
+          }>).map(item => (
+            <TouchableOpacity
+              key={item.chave}
+              accessibilityRole="button"
+              accessibilityLabel={item.rotulo}
+              style={styles.perfilItem}
+              onPress={item.aoTocar}
+            >
+              <item.Icone
+                width={24}
+                height={24}
+                fill={item.perigo ? '#C8131B' : iconColors.onSurface}
+              />
+              <Text style={[styles.perfilItemTexto, item.perigo && styles.perfilItemTextoPerigo]}>
+                {item.rotulo}
+              </Text>
+              {!item.perigo && (
+                <IconChevronRight width={24} height={24} fill={iconColors.faint} />
+              )}
+            </TouchableOpacity>
+          ))}
+        </Painel>
+      )}
+
       {/* Gestor e Meu desempenho nao tem barra: nao sao abas, chegam pelo menu
           do perfil, e o arrow_back do header e' a volta. Com a barra elas
           teriam dois caminhos de saida dizendo coisas diferentes. */}
-      {!layout.ehLargo && tab !== 'gestor' && tab !== 'meu' && (
+      {!layout.ehLargo && tab !== 'gestor' && tab !== 'meu' && tab !== 'config' && (
       <View style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]}>
         <TouchableOpacity
           accessibilityRole="button"
@@ -7529,6 +7619,37 @@ const styles = StyleSheet.create({
   rotaKpiRotulo: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'rgba(255,255,255,0.75)' },
   headerTitulo: { flex: 1, minWidth: 0, fontSize: 18, lineHeight: 24, fontWeight: '600', color: '#FFFFFF' },
   headerSublinha: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'rgba(255,255,255,0.8)' },
+  // ---- Menu do perfil (M7) ----
+  perfilCorpo: { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 32 },
+  perfilIdentidade: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+  },
+  perfilAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'var(--tint-red)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  perfilAvatarTexto: { fontSize: 16, lineHeight: 48, letterSpacing: 0.15, fontWeight: '700', color: 'var(--tint-red-text)' },
+  perfilNome: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: 'var(--text)' },
+  perfilSub: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)' },
+  perfilItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    minHeight: 56,
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+  },
+  perfilItemTexto: { flex: 1, minWidth: 0, fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '500', color: 'var(--text)' },
+  perfilItemTextoPerigo: { color: '#C8131B' },
   headerVoltar: {
     width: 48,
     height: 48,
@@ -7622,21 +7743,7 @@ const styles = StyleSheet.create({
   headerLogo: { width: 32, height: 32, tintColor: '#fff', resizeMode: 'contain' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
   headerSubtitle: { fontSize: 11, color: 'rgba(255,255,255,0.8)', marginTop: 1 },
-  logoutButton: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 6 },
-  logoutButtonText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerIconButton: {
-    // 44x44 em vez de 32x32, com TAMANHO REAL e nao hitSlop: testado no
-    // navegador, o react-native-web ignora hitSlop no TouchableOpacity —
-    // clique 5px fora da caixa nao dispara nada. Fica no canto superior, onde
-    // o polegar ja' alcanca mal.
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   headerIconText: { fontSize: 16 },
   passwordModalHint: { fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 },
   // Atalho pro cockpit de gestão (/gestao). Vermelho da marca: é a ação

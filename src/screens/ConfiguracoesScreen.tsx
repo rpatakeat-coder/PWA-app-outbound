@@ -141,20 +141,20 @@ export function ConfiguracoesScreen({
   const papel = canViewGestor ? 'Gestor' : isViewer ? 'Visualização' : 'Vendedor';
 
   const linhaLeitura = (chave: string, valor: string | null | undefined, tabular = false) => (
-    <View style={styles.linha} key={chave}>
+    <View style={[styles.linha, !layout.ehDesktop && styles.linhaMovel]} key={chave}>
       <Text style={styles.linhaChave} numberOfLines={1}>{chave}</Text>
-      <Text style={[styles.linhaValor, tabular && { fontVariant: ['tabular-nums'] }]} numberOfLines={1}>
+      <Text style={[styles.linhaValor, !layout.ehDesktop && styles.linhaValorMovel, tabular && { fontVariant: ['tabular-nums'] }]} numberOfLines={1}>
         {valor || '—'}
       </Text>
     </View>
   );
 
   return (
-    <ScrollView contentContainerStyle={styles.pagina}>
+    <ScrollView contentContainerStyle={[styles.pagina, !layout.ehDesktop && styles.paginaMovel]}>
       {/* 1. CONTA */}
       <View>
         <Text style={styles.tituloSecao}>Conta</Text>
-        <View style={[styles.card, { padding: 0, overflow: 'hidden' }]}>
+        <View style={[styles.card, !layout.ehDesktop && styles.cardMovel, { padding: 0, overflow: 'hidden' }]}>
           {linhaLeitura('Nome', profile?.full_name)}
           {linhaLeitura('E-mail', profile?.email)}
           {linhaLeitura('Papel', papel)}
@@ -166,13 +166,13 @@ export function ConfiguracoesScreen({
       {/* 2. SENHA */}
       <View>
         <Text style={styles.tituloSecao}>Senha</Text>
-        <View style={styles.card}>
+        <View style={[styles.card, !layout.ehDesktop && styles.cardMovel]}>
           <Text style={styles.hint}>Digite uma nova senha. Mínimo de 6 caracteres.</Text>
           <View style={[styles.gradeSenha, !layout.ehDesktop && { flexDirection: 'column' }]}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.rotuloCampo}>Nova senha</Text>
               <TextInput
-                style={styles.campo}
+                style={[styles.campo, !layout.ehDesktop && styles.campoMovel]}
                 secureTextEntry
                 value={novaSenha}
                 onChangeText={setNovaSenha}
@@ -185,7 +185,7 @@ export function ConfiguracoesScreen({
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.rotuloCampo}>Confirmar nova senha</Text>
               <TextInput
-                style={styles.campo}
+                style={[styles.campo, !layout.ehDesktop && styles.campoMovel]}
                 secureTextEntry
                 value={confirmaSenha}
                 onChangeText={setConfirmaSenha}
@@ -198,7 +198,7 @@ export function ConfiguracoesScreen({
           </View>
           <TouchableOpacity
             accessibilityRole="button"
-            style={[styles.ctaCheio, salvandoSenha && { opacity: 0.6 }]}
+            style={[styles.ctaCheio, !layout.ehDesktop && styles.ctaMovel, salvandoSenha && { opacity: 0.6 }]}
             disabled={salvandoSenha}
             onPress={salvarSenha}
           >
@@ -217,7 +217,7 @@ export function ConfiguracoesScreen({
       {/* 3. APARENCIA */}
       <View>
         <Text style={styles.tituloSecao}>Aparência</Text>
-        <View style={styles.card}>
+        <View style={[styles.card, !layout.ehDesktop && styles.cardMovel]}>
           <Text style={styles.rotuloCampo}>Tema</Text>
           <Text style={styles.hint}>
             Automático segue o aparelho. A escolha manual vence o aparelho e vale também no mapa.
@@ -232,6 +232,8 @@ export function ConfiguracoesScreen({
                   accessibilityLabel={opt.rotulo}
                   style={[
                     styles.segmento,
+                    !layout.ehDesktop && styles.segmentoMovel,
+                    !layout.ehDesktop && (i === 0 ? styles.segmentoEsq : i === OPCOES_TEMA.length - 1 ? styles.segmentoDir : null),
                     i === 0 && { borderTopLeftRadius: 12, borderBottomLeftRadius: 12 },
                     i === OPCOES_TEMA.length - 1 && { borderTopRightRadius: 12, borderBottomRightRadius: 12 },
                     i > 0 && { borderLeftWidth: 0 },
@@ -239,7 +241,7 @@ export function ConfiguracoesScreen({
                   ]}
                   onPress={() => setThemePref(opt.valor)}
                 >
-                  <Text style={[styles.segmentoTexto, ativo && { color: '#FFFFFF' }]}>{opt.rotulo}</Text>
+                  <Text style={[styles.segmentoTexto, !layout.ehDesktop && styles.segmentoTextoMovel, ativo && { color: '#FFFFFF' }]}>{opt.rotulo}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -250,7 +252,7 @@ export function ConfiguracoesScreen({
       {/* 4. MAPA — item que o modal tinha e a spec nao listou; vem junto. */}
       <View>
         <Text style={styles.tituloSecao}>Mapa</Text>
-        <View style={[styles.card, { flexDirection: 'row', alignItems: 'center', gap: 16 }]}>
+        <View style={[styles.card, !layout.ehDesktop && styles.cardMovel, { flexDirection: 'row', alignItems: 'center', gap: 16 }]}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.rotuloCampo}>Carregar só a área do mapa</Text>
             <Text style={styles.hint}>
@@ -270,30 +272,30 @@ export function ConfiguracoesScreen({
           <View style={{ gap: 12 }}>
             <TouchableOpacity
               accessibilityRole="link"
-              style={styles.cardLink}
+              style={[styles.cardLink, !layout.ehDesktop && styles.cardLinkMovel]}
               {...ds({ hover: 'borda', trans: '1' })}
               {...({ href: '/gestao/', hrefAttrs: { target: '_blank', rel: 'noopener' } } as Record<string, unknown>)}
             >
-              <View style={[styles.quadroIcone, { backgroundColor: 'var(--tint-red)' }]}>
+              <View style={[styles.quadroIcone, !layout.ehDesktop && styles.quadroIconeMovel, { backgroundColor: 'var(--tint-red)' }]}>
                 <IconBarGraph width={20} height={20} fill={iconColors.tintRedText} />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.cardLinkTitulo}>Abrir painel de gestão</Text>
+                <Text style={[styles.cardLinkTitulo, !layout.ehDesktop && styles.cardLinkTituloMovel]}>Abrir painel de gestão</Text>
                 <Text style={styles.hint}>Funil do time, travados e gargalo. Melhor no computador.</Text>
               </View>
               <IconExternalLink width={20} height={20} fill={iconColors.muted} />
             </TouchableOpacity>
             <TouchableOpacity
               accessibilityRole="link"
-              style={styles.cardLink}
+              style={[styles.cardLink, !layout.ehDesktop && styles.cardLinkMovel]}
               {...ds({ hover: 'borda', trans: '1' })}
               {...({ href: '/gestao/#/time', hrefAttrs: { target: '_blank', rel: 'noopener' } } as Record<string, unknown>)}
             >
-              <View style={[styles.quadroIcone, { backgroundColor: 'var(--surface-2)' }]}>
+              <View style={[styles.quadroIcone, !layout.ehDesktop && styles.quadroIconeMovel, { backgroundColor: 'var(--surface-2)' }]}>
                 <IconUserGroup width={20} height={20} fill={iconColors.muted} />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.cardLinkTitulo}>Vendedores e usuários</Text>
+                <Text style={[styles.cardLinkTitulo, !layout.ehDesktop && styles.cardLinkTituloMovel]}>Vendedores e usuários</Text>
                 <Text style={styles.hint}>Metas, classificação e atividade por vendedor, no cockpit.</Text>
               </View>
               <IconExternalLink width={20} height={20} fill={iconColors.muted} />
@@ -306,7 +308,7 @@ export function ConfiguracoesScreen({
       {isAdmin && (
         <View>
           <Text style={styles.tituloSecao}>Administração</Text>
-          <View style={[styles.card, styles.cardAdmin]}>
+          <View style={[styles.card, !layout.ehDesktop && styles.cardMovel, styles.cardAdmin, !layout.ehDesktop && styles.cardAdminMovel]}>
             <Text style={styles.rotuloCampo}>Forçar atualização</Text>
             <Text style={[styles.hint, { maxWidth: 560 }]}>
               Dispara um reload imediato em todos os apps abertos (puxa OTA novo do EAS antes).
@@ -327,12 +329,12 @@ export function ConfiguracoesScreen({
       {/* 7. SOBRE */}
       <View>
         <Text style={styles.tituloSecao}>Sobre</Text>
-        <View style={[styles.card, { padding: 0, overflow: 'hidden' }]}>
+        <View style={[styles.card, !layout.ehDesktop && styles.cardMovel, { padding: 0, overflow: 'hidden' }]}>
           {linhaLeitura('Build do service worker', buildSw, true)}
           <View style={{ padding: 16 }}>
             <TouchableOpacity
               accessibilityRole="button"
-              style={styles.ctaSair}
+              style={[styles.ctaSair, !layout.ehDesktop && styles.ctaMovel]}
               {...ds({ hover: 'tintred', trans: '1' })}
               onPress={logout}
             >
@@ -347,6 +349,33 @@ export function ConfiguracoesScreen({
 }
 
 const styles = StyleSheet.create({
+  // ---- Variantes do CELULAR (M7) ----
+  // A tela nasceu com valores de desktop (card raio 8 padding 24, campo 40,
+  // CTA 40, linhas em duas colunas). Aqui ela COMPOE diferente por largura,
+  // como o resto do app — sem duplicar JSX.
+  paginaMovel: { padding: 16, paddingBottom: 32, gap: 24, maxWidth: undefined },
+  cardMovel: { borderRadius: 16, padding: 16 },
+  // Conta empilhada: em 390px o par chave-a-esquerda/valor-a-direita quebrava
+  // "Rafael Pereira" em duas linhas na coluna estreita.
+  linhaMovel: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+    gap: 2,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  linhaValorMovel: { fontSize: 16, lineHeight: 24, letterSpacing: 0.5, textAlign: 'left' },
+  campoMovel: { height: 48, borderRadius: 16, fontSize: 16, lineHeight: 24 },
+  ctaMovel: { height: 48, alignSelf: 'stretch', justifyContent: 'center', minWidth: 0 },
+  segmentoMovel: { height: 48, borderRadius: 0 },
+  segmentoEsq: { borderTopLeftRadius: 12, borderBottomLeftRadius: 12 },
+  segmentoDir: { borderTopRightRadius: 12, borderBottomRightRadius: 12 },
+  segmentoTextoMovel: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1 },
+  cardLinkMovel: { borderRadius: 16, gap: 12 },
+  quadroIconeMovel: { borderRadius: 12 },
+  cardLinkTituloMovel: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15 },
+  cardAdminMovel: { borderLeftWidth: 4 },
   pagina: {
     padding: 24,
     gap: 32,
