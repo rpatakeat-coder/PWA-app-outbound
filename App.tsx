@@ -120,7 +120,7 @@ import { useNomesDeClientes } from './src/hooks/useNomesDeClientes';
 import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
 import { useStages } from './src/hooks/useStages';
 import { GestorScreen } from './src/screens/GestorScreen';
-import { TarefasScreen } from './src/screens/TarefasScreen';
+import { TarefasScreen, baldeDeVencimento } from './src/screens/TarefasScreen';
 import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
 import { ConfiguracoesScreen } from './src/screens/ConfiguracoesScreen';
@@ -1199,6 +1199,20 @@ function MainApp() {
     [tasks, tasksActiveVendor],
   );
   const visibleTasksCount = visibleTasks.length;
+
+  // Sublinha do header de Tarefas. Sai do MESMO `baldeDeVencimento` das abas
+  // (importado da tela, nao recopiado): duas regras acabariam divergindo e a
+  // sublinha contradiria a contagem das abas logo abaixo dela.
+  const tarefasPorBalde = useMemo(() => {
+    let atrasadas = 0;
+    let hoje = 0;
+    for (const t of visibleTasks) {
+      const balde = baldeDeVencimento(t);
+      if (balde === 'atrasadas') atrasadas++;
+      else if (balde === 'hoje') hoje++;
+    }
+    return { atrasadas, hoje };
+  }, [visibleTasks]);
 
   // Avalia o filtro temporal de visita pra um cliente.
   // - null: sem filtro
@@ -4493,8 +4507,32 @@ function MainApp() {
             /* A Agenda nao tem busca, mas tambem nao pode ter uma faixa de
                48px vazia: o titulo ocupa o lugar dela. */
             <Text style={styles.headerTitulo}>Agenda</Text>
+          ) : tab === 'tasks' ? (
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.headerTitulo}>Tarefas</Text>
+              {/* A sublinha responde a pergunta da tela antes de qualquer
+                  toque: o que venceu e o que vence hoje. */}
+              <Text style={styles.headerSublinha} numberOfLines={1}>
+                {`${tarefasPorBalde.atrasadas} atrasadas · ${tarefasPorBalde.hoje} para hoje`}
+              </Text>
+            </View>
           ) : (
             <View style={{ flex: 1 }} />
+          )}
+          {/* As regras de geracao das tarefas saem do corpo e viram um alvo de
+              48 no header. O `taskInfoButton` que fazia isso tinha 30px.
+              Nao ha' icone de "info"/"ajuda" no kit — IconLightBulb e' o mais
+              proximo do que o modal diz ("como as tarefas sao geradas") e nao
+              exigiu desenhar SVG novo. */}
+          {tab === 'tasks' && !isViewer && (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Como as tarefas são geradas"
+              style={styles.headerAjuda}
+              onPress={() => setIsTaskRulesOpen(true)}
+            >
+              <IconLightBulb width={24} height={24} fill="#FFFFFF" />
+            </TouchableOpacity>
           )}
           <TouchableOpacity
             accessibilityRole="button"
@@ -7468,6 +7506,15 @@ const styles = StyleSheet.create({
   rotaKpiValor: { fontSize: 16, lineHeight: 24, fontWeight: '700', color: '#FFFFFF', fontVariant: ['tabular-nums'] },
   rotaKpiRotulo: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'rgba(255,255,255,0.75)' },
   headerTitulo: { flex: 1, minWidth: 0, fontSize: 18, lineHeight: 24, fontWeight: '600', color: '#FFFFFF' },
+  headerSublinha: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'rgba(255,255,255,0.8)' },
+  headerAjuda: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // Tira da semana (M4). gap 6 e sete botoes flex:1 — em 390px cada dia fica
   // com ~46px, e o alvo vem da altura de 48.
   tiraSemana: { flexDirection: 'row', gap: 6 },
