@@ -27,6 +27,7 @@ import {
   IconClose,
   IconEye,
   IconLocation,
+  IconTrash,
   IconLocationFilled,
   IconMenu,
   IconRefresh,
@@ -433,24 +434,36 @@ export function RotaScreen({
   const cartaoLista = (
     <>
     <View style={styles.panelCard}>
-      <View style={styles.panelHeaderRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={sharedStyles.panelTitle}>
+      {/* Empilhado no celular: em `row`, a coluna de texto (flex:1) disputava a
+          linha com tres botoes de largura natural que nao encolhem, era
+          comprimida ABAIXO do min-content e cada palavra virava uma linha
+          ("Rota / de / hoje"). Em desktop a linha cabe — por isso so' quebrava
+          no aparelho. O desktop segue como estava. */}
+      <View style={[styles.panelHeaderRow, !layout.ehDesktop && styles.panelHeaderRowMovel]}>
+        {/* minWidth:0 e' o que segura o bug: sem ele, `flex:1` ainda deixa a
+            coluna encolher abaixo do conteudo em qualquer largura. */}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[sharedStyles.panelTitle, !layout.ehDesktop && styles.tituloCartao]} numberOfLines={1}>
             {isMonitoringRoute ? `Rota de ${vendorLabel(routeVendorFilterHubspotId)}` : 'Rota de hoje'}
           </Text>
-          <Text style={styles.panelHint}>
+          <Text style={[styles.panelHint, !layout.ehDesktop && styles.sublinhaCartao]} numberOfLines={2}>
             {routeDisplayClients.length} leads planejados
             {geometriaDaRota && geometriaDaRota.coordinates.length > 1 && (
-              ` • ${(geometriaDaRota!.distanceMeters / 1000).toFixed(1)} km`
-              + ` • ~${Math.round(geometriaDaRota!.durationSeconds / 60)} min`
+              ` · ${(geometriaDaRota!.distanceMeters / 1000).toFixed(1)} km`
+              + ` · ~${Math.round(geometriaDaRota!.durationSeconds / 60)} min`
             )}
-            {geometriaCarregando && ' • calculando rota...'}
+            {geometriaCarregando && ' · calculando rota...'}
           </Text>
           {/* Badge admin: mostra qual provedor foi usado na ultima sugestao.
-              ORS = caminho feliz; OSRM = ORS caiu e o fallback rolou. */}
+              ORS = caminho feliz; OSRM = ORS caiu e o fallback rolou.
+              `alignSelf:flex-start` + `flexShrink:0`: ele nao empurra nem e'
+              empurrado — era o outro texto que quebrava palavra por palavra. */}
           {isAdmin && lastProviderUsed && (
             <View style={[styles.providerBadge, lastProviderUsed === 'osrm' && { backgroundColor: 'var(--tint-amber)', borderColor: 'var(--tint-amber-border)' }]}>
-              <Text style={[styles.providerBadgeText, lastProviderUsed === 'osrm' && { color: 'var(--tint-amber-text)' }]}>
+              <Text
+                style={[styles.providerBadgeText, lastProviderUsed === 'osrm' && { color: 'var(--tint-amber-text)' }]}
+                numberOfLines={1}
+              >
                 {lastProviderUsed === 'ors'
                   ? 'Via OpenRouteService'
                   : 'Via OSRM (ORS estava fora)'}
@@ -458,30 +471,76 @@ export function RotaScreen({
             </View>
           )}
         </View>
-        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        {/* No celular vira faixa de largura total. Sem `flexWrap`: com botoes
+            de flex:1 nao ha' o que envolver. */}
+        <View style={[
+          { flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' },
+          !layout.ehDesktop && styles.faixaAcoes,
+        ]}>
           {routeDisplayClients.length > 0 && (
             <TouchableOpacity
-              style={[styles.secondaryButton, { backgroundColor: '#16a34a' }]}
+              style={[
+                styles.secondaryButton,
+                { backgroundColor: '#16a34a' },
+                !layout.ehDesktop && styles.acaoMovel,
+              ]}
               onPress={startNavigation}
             >
-              <IconText Icone={IconLocation} style={[styles.secondaryButtonText, { color: '#fff' }]} tone="onSurface">Navegar</IconText>
+              {layout.ehDesktop ? (
+                <IconText
+                  Icone={IconLocation}
+                  style={[styles.secondaryButtonText, { color: '#fff' }]}
+                  tone="onSurface"
+                >Navegar</IconText>
+              ) : (
+                /* `IconText` nao repassa `numberOfLines`; no celular o rotulo
+                   PRECISA de uma linha so', entao icone e texto vao soltos. */
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <IconLocation width={20} height={20} fill="#FFFFFF" />
+                  <Text
+                    style={[styles.secondaryButtonText, styles.acaoMovelTexto, { color: '#fff' }]}
+                    numberOfLines={1}
+                  >Navegar</Text>
+                </View>
+              )}
             </TouchableOpacity>
           )}
           {routeDisplayClients.length > 0 ? (
             <TouchableOpacity
-              style={[styles.secondaryButton, { backgroundColor: '#C8131B' }]}
+              style={[
+                styles.secondaryButton,
+                { backgroundColor: '#C8131B' },
+                !layout.ehDesktop && styles.acaoMovel,
+              ]}
               onPress={viewRouteOnMap}
             >
-              <Text style={[styles.secondaryButtonText, { color: '#fff' }]}>Ver no mapa</Text>
+              <Text
+                style={[styles.secondaryButtonText, !layout.ehDesktop && styles.acaoMovelTexto, { color: '#fff' }]}
+                numberOfLines={1}
+              >Ver no mapa</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.secondaryButton} onPress={() => irParaMapa()}>
-              <Text style={styles.secondaryButtonText}>Abrir mapa</Text>
+            <TouchableOpacity
+              style={[styles.secondaryButton, !layout.ehDesktop && styles.acaoMovel]}
+              onPress={() => irParaMapa()}
+            >
+              <Text
+                style={[styles.secondaryButtonText, !layout.ehDesktop && styles.acaoMovelTexto]}
+                numberOfLines={1}
+              >Abrir mapa</Text>
             </TouchableOpacity>
           )}
           {routeDisplayClients.length > 0 && !isMonitoringRoute && (
             <TouchableOpacity
-              style={[styles.secondaryButton, { backgroundColor: 'var(--tint-red)', borderColor: 'var(--tint-red-border)' }]}
+              accessibilityRole="button"
+              accessibilityLabel="Limpar rota"
+              style={[
+                styles.secondaryButton,
+                { backgroundColor: 'var(--tint-red)', borderColor: 'var(--tint-red-border)' },
+                // No celular vira so' o icone: com os tres rotulados, "Navegar"
+                // e "Ver no mapa" ja' ocupam a faixa inteira em 390px.
+                !layout.ehDesktop && styles.acaoIcone,
+              ]}
               onPress={() => {
                 Alert.alert(
                   'Limpar rota',
@@ -501,7 +560,11 @@ export function RotaScreen({
                 );
               }}
             >
-              <Text style={[styles.secondaryButtonText, { color: 'var(--brand-text)' }]}>Limpar</Text>
+              {layout.ehDesktop ? (
+                <Text style={[styles.secondaryButtonText, { color: 'var(--tint-red-text)' }]}>Limpar</Text>
+              ) : (
+                <IconTrash width={20} height={20} fill={iconColors.tintRedText} />
+              )}
             </TouchableOpacity>
           )}
         </View>
@@ -1100,10 +1163,37 @@ const styles = StyleSheet.create({
     borderColor: 'var(--border)',
   },
   panelHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  // ---- M3b: o cartao "Rota de hoje" em 390px ----
+  panelHeaderRowMovel: { flexDirection: 'column', alignItems: 'stretch', gap: 12 },
+  tituloCartao: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', marginBottom: 0 },
+  sublinhaCartao: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)', marginTop: 4 },
+  faixaAcoes: { flexDirection: 'row', flexWrap: 'nowrap', gap: 8, justifyContent: 'flex-start' },
+  acaoMovel: {
+    flex: 1,
+    minWidth: 0,
+    height: 48,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  acaoMovelTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600' },
+  acaoIcone: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: 48,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    paddingHorizontal: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   panelHint: { fontSize: 12, color: 'var(--text-muted)', lineHeight: 17 },
   providerBadge: {
     alignSelf: 'flex-start',
-    marginTop: 6,
+    flexShrink: 0,
+    marginTop: 8,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
