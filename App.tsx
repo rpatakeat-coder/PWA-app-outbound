@@ -1165,6 +1165,26 @@ function MainApp() {
   // - 'visited': visited_at IS NOT NULL (qualquer momento)
   // - 'visited:<N>': visitado nos ultimos N dias
   // - 'not_visited:<N>': nunca visitado OU visitado ha mais de N dias
+  // Mesma regra, com o valor por parametro — o `matchesVisitFilter` abaixo
+  // continua existindo e apenas delega, pra nao mudar nenhum chamador.
+  const matchesVisitFilterCom = (visitedAt: string | null, filtro: string | null): boolean => {
+    if (filtro === null) return true;
+    if (filtro === 'never') return visitedAt === null;
+    if (filtro === 'visited') return visitedAt !== null;
+    const days = Number(filtro.split(':')[1]);
+    if (!Number.isFinite(days)) return true;
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    if (filtro.startsWith('visited:')) {
+      if (!visitedAt) return false;
+      return new Date(visitedAt).getTime() >= cutoff;
+    }
+    if (filtro.startsWith('not_visited:')) {
+      if (!visitedAt) return true;
+      return new Date(visitedAt).getTime() < cutoff;
+    }
+    return true;
+  };
+
   const matchesVisitFilter = (visitedAt: string | null): boolean => {
     if (visitFilter === null) return true;
     if (visitFilter === 'never') return visitedAt === null;
@@ -1183,30 +1203,52 @@ function MainApp() {
     return true;
   };
 
+  // Recorte de filtros como VALOR, pra que a previa do sheet ("Ver {n} leads")
+  // possa medir um conjunto PENDENTE sem tocar no que esta' aplicado.
+  type RecorteDeFiltros = {
+    stateFilter: string | null;
+    stageFilter: string | null;
+    tempFilter: string | null;
+    contaAlvoOnly: boolean;
+    vendorFilterHubspotId: string | null;
+    visitFilter: string | null;
+  };
+
+  // O MESMO teste que o `clientsForCount` sempre fez — so' que agora recebe o
+  // recorte em vez de ler o state. A logica nao mudou uma linha; ela virou
+  // parametro pra poder ser aplicada duas vezes: no recorte vigente e no
+  // rascunho do sheet.
+  const passaNoRecorte = useCallback((c: Client, f: RecorteDeFiltros): boolean => {
+    if (f.stateFilter && normalizeUf(c.estado) !== f.stateFilter) return false;
+    if (f.stageFilter && normalizeStage(c.etapa) !== f.stageFilter) return false;
+    // Etapa desconhecida não tem temperatura — fica de fora de qualquer
+    // recorte térmico (é o mesmo critério do pin, que cai na cor do status).
+    if (f.tempFilter && stageTemperature(c.etapa)?.label !== f.tempFilter) return false;
+    // Conta Alvo descartada ("Não interessa") some do mapa/lista.
+    if (c.conta_alvo_dismissed) return false;
+    if (f.contaAlvoOnly && !c.conta_alvo_place_id) return false;
+    if (f.vendorFilterHubspotId === '__none__') {
+      if (c.vendedor_id_hubspot) return false;
+    } else if (f.vendorFilterHubspotId !== null && c.vendedor_id_hubspot !== f.vendorFilterHubspotId) {
+      return false;
+    }
+    if (!matchesVisitFilterCom(c.visited_at, f.visitFilter)) return false;
+    if (searchTerm) {
+      const haystack = `${c.nome ?? ''} ${c.empresa ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''} ${c.etapa ?? ''}`
+        .normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase();
+      if (!haystack.includes(searchTerm)) return false;
+    }
+    return true;
+  }, [searchTerm]);
+
+  const recorteAplicado = useMemo<RecorteDeFiltros>(
+    () => ({ stateFilter, stageFilter, tempFilter, contaAlvoOnly, vendorFilterHubspotId, visitFilter }),
+    [stateFilter, stageFilter, tempFilter, contaAlvoOnly, vendorFilterHubspotId, visitFilter],
+  );
+
   const clientsForCount = useMemo(
-    () => clients.filter(c => {
-      if (stateFilter && normalizeUf(c.estado) !== stateFilter) return false;
-      if (stageFilter && normalizeStage(c.etapa) !== stageFilter) return false;
-      // Etapa desconhecida não tem temperatura — fica de fora de qualquer
-      // recorte térmico (é o mesmo critério do pin, que cai na cor do status).
-      if (tempFilter && stageTemperature(c.etapa)?.label !== tempFilter) return false;
-      // Conta Alvo descartada ("Não interessa") some do mapa/lista.
-      if (c.conta_alvo_dismissed) return false;
-      if (contaAlvoOnly && !c.conta_alvo_place_id) return false;
-      if (vendorFilterHubspotId === '__none__') {
-        if (c.vendedor_id_hubspot) return false;
-      } else if (vendorFilterHubspotId !== null && c.vendedor_id_hubspot !== vendorFilterHubspotId) {
-        return false;
-      }
-      if (!matchesVisitFilter(c.visited_at)) return false;
-      if (searchTerm) {
-        const haystack = `${c.nome ?? ''} ${c.empresa ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''} ${c.etapa ?? ''}`
-          .normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase();
-        if (!haystack.includes(searchTerm)) return false;
-      }
-      return true;
-    }),
-    [clients, stateFilter, stageFilter, searchTerm, vendorFilterHubspotId, visitFilter, tempFilter, contaAlvoOnly],
+    () => clients.filter(c => passaNoRecorte(c, recorteAplicado)),
+    [clients, passaNoRecorte, recorteAplicado],
   );
 
   // Viewer filtra pela multi-selecao (leads + clientes etc.); vendedor/admin
@@ -3704,10 +3746,14 @@ function MainApp() {
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel={`Remover filtro ${f.rotulo}`}
-            hitSlop={{ top: 16, bottom: 16, left: 8, right: 12 }}
+            // Alvo de 48 por PADDING, com margens negativas pra nao engordar o
+            // chip: o react-native-web nao implementa `hitSlop`, entao o
+            // hitSlop de antes nao aumentava area nenhuma — o toque real era
+            // o do icone de 14px.
+            style={styles.faChipFechar}
             onPress={f.limpar}
           >
-            <IconClose width={14} height={14} fill={iconColors.muted} />
+            <IconClose width={16} height={16} fill={iconColors.muted} />
           </TouchableOpacity>
         </View>
       ))}
@@ -4824,16 +4870,31 @@ function MainApp() {
             removeClippedSubviews
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
-            ListEmptyComponent={
-              <View style={sharedStyles.emptyState}>
-                <IconClipboardCheck width={40} height={40} fill={iconColors.muted} style={{ marginBottom: 12 }} />
-                <Text style={sharedStyles.emptyStateText}>
-                  {searchTerm || stateFilter || stageFilter || tempFilter || visitFilter
-                    ? 'Nenhum cliente encontrado com esses filtros.'
-                    : `Nenhum ${statusConfig[statusFilter]?.label?.toLowerCase() ?? statusFilter} encontrado`}
-                </Text>
-              </View>
-            }
+            ListEmptyComponent={(() => {
+              const porFiltro = filtrosAtivos.length > 0;
+              return (
+                <View style={sharedStyles.emptyState}>
+                  <IconClipboardCheck width={40} height={40} fill={iconColors.faint} style={{ marginBottom: 12 }} />
+                  <Text style={styles.vazioTexto}>
+                    {porFiltro
+                      ? 'Nenhum cliente encontrado com esses filtros.'
+                      : `Nenhum ${statusConfig[statusFilter]?.label?.toLowerCase() ?? statusFilter} encontrado`}
+                  </Text>
+                  {/* A saida que faltava: sem ela, um recorte que zera deixa a
+                      tela vazia e o unico caminho de volta e' reabrir o sheet e
+                      desfazer filtro por filtro. */}
+                  {porFiltro && (
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      style={styles.vazioLimpar}
+                      onPress={() => filtrosAtivos.forEach(f => f.limpar())}
+                    >
+                      <Text style={styles.vazioLimparTexto}>Limpar filtros</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })()}
           />
 
         </>
@@ -8911,6 +8972,32 @@ const styles = StyleSheet.create({
     borderColor: 'var(--border)',
   },
   faChipTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)', maxWidth: 220 },
+  vazioTexto: {
+    fontSize: 14,
+    lineHeight: 20,
+    letterSpacing: 0.25,
+    color: 'var(--text-muted)',
+    textAlign: 'center',
+  },
+  vazioLimpar: {
+    marginTop: 16,
+    height: 48,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#C8131B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vazioLimparTexto: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: 'var(--brand-text)' },
+  faChipFechar: {
+    width: 48,
+    height: 48,
+    marginVertical: -16,
+    marginRight: -12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   filtroLinha: {
     flexDirection: 'row',
     alignItems: 'center',
