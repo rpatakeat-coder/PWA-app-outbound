@@ -246,12 +246,15 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas 
           metricas historicas abaixo. A composicao de duas colunas era o
           layout antigo e brigava com o teto de 1200px. */}
       <View>
-      <View style={{ gap: 16 }}>
-        <MinhaDailyCard enabled={enabled} />
-        {/* O M6 traz o SellerGoalsCard pra ca' tambem: a meta e' do vendedor,
-            e ate' agora so' o Gestor a via. Nenhum auxiliar sai de cena. */}
-        {!layout.ehLargo && <SellerGoalsCard />}
-      </View>
+      {/* No DESKTOP a Daily ancora o topo (e' a promessa de hoje, e a coluna
+          esquerda existe pra ela). No CELULAR ela desce pra depois do
+          heatmap: em cima, empurrava os KPIs e o calor — que sao a resposta
+          da tela — pra fora da primeira dobra. */}
+      {layout.ehLargo && (
+        <View style={{ gap: 16 }}>
+          <MinhaDailyCard enabled={enabled} />
+        </View>
+      )}
       <View>
 
       <View style={[styles.periodRow, layout.ehLargo && estilosWeb.periodoLinha]}>
@@ -288,37 +291,81 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas 
         </View>
       )}
 
-      {!layout.ehLargo && daily?.souDeCampo && daily.semana.length > 0 && (
-        <View style={styles.calorCartao}>
-          <Text style={styles.calorTitulo}>Visitas na semana</Text>
-          {/* Celulas FLUIDAS (aspect-ratio 1), nao os 28px fixos do desktop.
-              A serie e' `daily.semana`: os ultimos dias UTEIS, entao sao 5 e
-              nao 7 — nao ha' dado de fim de semana pra preencher. */}
-          <View style={styles.calorGrade}>
-            {daily.semana.map((d) => {
-              const ehHoje = d.dia === daily.hoje.dia;
-              const cor = d.visitas === 0 ? 'var(--surface-3)' : d.visitas <= 2 ? '#8FE0D5' : '#1D9688';
-              return (
-                <View
-                  key={d.dia}
-                  style={[
-                    styles.calorCelula,
-                    { backgroundColor: cor },
-                    // Hoje ainda sem visita: tracejado, pra distinguir "dia que
-                    // nao teve" de "dia que ainda pode ter".
-                    ehHoje && d.visitas === 0 && styles.calorCelulaHoje,
-                  ]}
-                />
-              );
-            })}
+      {!layout.ehLargo && daily?.souDeCampo && daily.semana.length > 0 && (() => {
+        const total = daily.semana.reduce((n, d) => n + d.visitas, 0);
+        return (
+          <View style={styles.calorCartao}>
+            <View style={styles.calorCabecalho}>
+              <Text style={styles.calorTitulo}>VISITAS NA SEMANA</Text>
+              <Text style={styles.calorTotal}>{total}</Text>
+            </View>
+            {/* Celulas FLUIDAS (aspect-ratio 1), nao os 28px fixos do desktop.
+                A serie e' `daily.semana`: os ultimos dias UTEIS, entao sao 5 e
+                nao os 7 do desenho — nao ha' dado de fim de semana, e desenhar
+                sabado e domingo vazios faria "nao medido" parecer "zero". */}
+            <View style={styles.calorGrade}>
+              {daily.semana.map((d) => {
+                const ehHoje = d.dia === daily.hoje.dia;
+                const vazio = d.visitas === 0;
+                const claro = d.visitas >= 1 && d.visitas <= 2;
+                const cor = vazio ? 'var(--surface-3)' : claro ? '#8FE0D5' : '#1D9688';
+                return (
+                  <View
+                    key={d.dia}
+                    style={[
+                      styles.calorCelula,
+                      { backgroundColor: cor },
+                      // Hoje ainda sem visita: tracejado, pra distinguir "dia
+                      // que nao teve" de "dia que ainda pode ter".
+                      ehHoje && vazio && styles.calorCelulaHoje,
+                    ]}
+                  >
+                    {/* O numero dentro da celula: a cor sozinha diz "muito ou
+                        pouco", nao "quantas". Escuro sobre o teal claro,
+                        branco sobre o escuro. */}
+                    {!vazio && (
+                      <Text style={[styles.calorCelulaNumero, { color: claro ? '#0C3B36' : '#FFFFFF' }]}>
+                        {d.visitas}
+                      </Text>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+            <View style={styles.calorLegenda}>
+              {daily.semana.map((d) => {
+                const ehHoje = d.dia === daily.hoje.dia;
+                return (
+                  <Text key={d.dia} style={[styles.calorDia, ehHoje && styles.calorDiaHoje]}>
+                    {new Date(`${d.dia}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
+                  </Text>
+                );
+              })}
+            </View>
+            {/* Sem a legenda os dois tons de teal nao se explicam. */}
+            <View style={styles.calorEscala}>
+              {[
+                { cor: 'var(--surface-3)', rotulo: 'nenhuma' },
+                { cor: '#8FE0D5', rotulo: '1–2' },
+                { cor: '#1D9688', rotulo: '3+' },
+              ].map((degrau) => (
+                <View key={degrau.rotulo} style={styles.calorEscalaItem}>
+                  <View style={[styles.calorEscalaAmostra, { backgroundColor: degrau.cor }]} />
+                  <Text style={styles.calorEscalaTexto}>{degrau.rotulo}</Text>
+                </View>
+              ))}
+            </View>
           </View>
-          <View style={styles.calorLegenda}>
-            {daily.semana.map((d) => (
-              <Text key={d.dia} style={styles.calorDia}>
-                {new Date(`${d.dia}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
-              </Text>
-            ))}
-          </View>
+        );
+      })()}
+
+      {/* F · auxiliares, DEPOIS do heatmap. Nenhum sai de cena: a Daily e' a
+          promessa do dia e o SellerGoalsCard traz a meta — que ate' o M6 so'
+          o Gestor via. */}
+      {!layout.ehLargo && (
+        <View style={{ gap: 16 }}>
+          <MinhaDailyCard enabled={enabled} />
+          <SellerGoalsCard />
         </View>
       )}
 
@@ -414,14 +461,22 @@ const styles = StyleSheet.create({
     borderColor: 'var(--border)',
     gap: 8,
   },
-  calorTitulo: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)' },
+  calorTitulo: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '700', color: 'var(--text-muted)' },
+  calorCabecalho: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  calorTotal: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)', fontVariant: ['tabular-nums'] },
   calorGrade: { flexDirection: 'row', gap: 4 },
+  calorCelulaNumero: { fontSize: 12, lineHeight: 16, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  calorDiaHoje: { color: 'var(--tint-red-text)', fontWeight: '700' },
+  calorEscala: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
+  calorEscalaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  calorEscalaAmostra: { width: 12, height: 12, borderRadius: 4 },
+  calorEscalaTexto: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, color: 'var(--text-faint)' },
   // `aspectRatio: 1` com `flex: 1`: a celula acompanha a largura da tela em
   // vez dos 28px fixos do desktop.
-  calorCelula: { flex: 1, aspectRatio: 1, borderRadius: 4 },
+  calorCelula: { flex: 1, aspectRatio: 1, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
   calorCelulaHoje: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#C8131B' },
   calorLegenda: { flexDirection: 'row', gap: 4 },
-  calorDia: { flex: 1, textAlign: 'center', fontSize: 11, lineHeight: 16, letterSpacing: 0.5, color: 'var(--text-faint)' },
+  calorDia: { flex: 1, textAlign: 'center', fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)' },
   container: { flex: 1, backgroundColor: 'var(--bg)' },
   // Sem barra inferior nesta tela (nao e' aba; chega pelo menu do perfil e
   // sai pelo arrow_back), entao nao ha' o que reservar: 16, nao 120.
