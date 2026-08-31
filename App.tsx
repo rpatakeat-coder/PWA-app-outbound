@@ -29,6 +29,7 @@ import { Alert, AlertHost } from './src/components/Alert';
 import { Painel } from './src/components/Painel';
 import { useTheme } from './src/theme';
 import {
+  IconArrowBack,
   IconArrowDown,
   IconArrowFoward,
   IconArrowUp,
@@ -4507,6 +4508,24 @@ function MainApp() {
             /* A Agenda nao tem busca, mas tambem nao pode ter uma faixa de
                48px vazia: o titulo ocupa o lugar dela. */
             <Text style={styles.headerTitulo}>Agenda</Text>
+          ) : tab === 'gestor' || tab === 'meu' ? (
+            /* Estas duas nao sao abas da barra: chegam pelo menu do perfil.
+               Sem o arrow_back a tela fica sem saida — e' a unica volta. */
+            <View style={styles.headerLinha}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Voltar"
+                style={styles.headerVoltar}
+                onPress={() => setTab('map')}
+              >
+                <IconArrowBack width={24} height={24} fill="#FFFFFF" />
+              </TouchableOpacity>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.headerTitulo} numberOfLines={1}>
+                  {tab === 'gestor' ? 'Painel do gestor' : 'Meu desempenho'}
+                </Text>
+              </View>
+            </View>
           ) : tab === 'tasks' ? (
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.headerTitulo}>Tarefas</Text>
@@ -5001,7 +5020,10 @@ function MainApp() {
           vazio branco grande embaixo das abas.
           Reserva-se espaco proprio so' quando o aparelho nao tem area segura
           suficiente pra abrigar o texto. */}
-      {!layout.ehLargo && (
+      {/* Gestor e Meu desempenho nao tem barra: nao sao abas, chegam pelo menu
+          do perfil, e o arrow_back do header e' a volta. Com a barra elas
+          teriam dois caminhos de saida dizendo coisas diferentes. */}
+      {!layout.ehLargo && tab !== 'gestor' && tab !== 'meu' && (
       <View style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]}>
         <TouchableOpacity
           accessibilityRole="button"
@@ -7507,6 +7529,14 @@ const styles = StyleSheet.create({
   rotaKpiRotulo: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'rgba(255,255,255,0.75)' },
   headerTitulo: { flex: 1, minWidth: 0, fontSize: 18, lineHeight: 24, fontWeight: '600', color: '#FFFFFF' },
   headerSublinha: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'rgba(255,255,255,0.8)' },
+  headerVoltar: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerAjuda: {
     width: 48,
     height: 48,

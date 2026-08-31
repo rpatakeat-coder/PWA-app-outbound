@@ -19,6 +19,7 @@ import {
   type MyMetricLeadsParams,
 } from '../hooks/useGestorMetrics';
 import { MinhaDailyCard } from './MinhaDailyCard';
+import { SellerGoalsCard } from './SellerGoalsCard';
 import { useLayout } from '../hooks/useLayout';
 import { useMinhaDaily } from '../hooks/useMinhaDaily';
 
@@ -105,6 +106,27 @@ function LeadsModal({
   );
 }
 
+// Anatomia de KPI do M6, compartilhada com o Gestor: rotulo 12/16/0.5 peso
+// 600 --text-faint sobre valor 18/24 peso 700 tabular-nums. O 28/36 do
+// desktop nao cabe em meia largura de 390.
+function Kpi({ rotulo, valor, sub, corValor, onPress }: {
+  rotulo: string; valor: string; sub?: string; corValor?: string; onPress?: () => void;
+}) {
+  const corpo = (
+    <>
+      <Text style={styles.kpiRotulo}>{rotulo}</Text>
+      <Text style={[styles.kpiValor, corValor ? { color: corValor } : null]}>{valor}</Text>
+      {sub ? <Text style={styles.kpiSub}>{sub}</Text> : null}
+    </>
+  );
+  if (!onPress) return <View style={styles.kpiCartao}>{corpo}</View>;
+  return (
+    <TouchableOpacity accessibilityRole="button" style={styles.kpiCartao} onPress={onPress} activeOpacity={0.85}>
+      {corpo}
+    </TouchableOpacity>
+  );
+}
+
 function Stat({ value, label, color, onPress }: { value: number; label: string; color: string; onPress?: () => void }) {
   const inner = (
     <>
@@ -128,7 +150,9 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas 
   const m = query.data;
   // Banner web (handoff, tela 7): a promessa de HOJE em destaque — e' a
   // pergunta que a aba responde. Mesmos dados do MinhaDailyCard.
-  const { daily } = useMinhaDaily(enabled && layout.ehLargo);
+  // Antes so' carregava no desktop (pro banner). O heatmap da semana do
+  // celular sai do mesmo `daily.semana`, entao passa a carregar sempre.
+  const { daily } = useMinhaDaily(enabled);
 
   const open = (title: string, metric: MyMetricLeadsParams['metric']) =>
     setModal({ title, params: { metric, period } });
@@ -222,8 +246,11 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas 
           metricas historicas abaixo. A composicao de duas colunas era o
           layout antigo e brigava com o teto de 1200px. */}
       <View>
-      <View>
+      <View style={{ gap: 16 }}>
         <MinhaDailyCard enabled={enabled} />
+        {/* O M6 traz o SellerGoalsCard pra ca' tambem: a meta e' do vendedor,
+            e ate' agora so' o Gestor a via. Nenhum auxiliar sai de cena. */}
+        {!layout.ehLargo && <SellerGoalsCard />}
       </View>
       <View>
 
@@ -238,6 +265,62 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas 
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* ---- M6: KPIs 2x2 + heatmap da semana (so' no celular) ---- */}
+      {!layout.ehLargo && m && (
+        <View style={styles.kpiGrade}>
+          <Kpi rotulo={`Visitas ${periodLabel}`} valor={m.visited.toLocaleString('pt-BR')} onPress={() => open('Minhas visitas', 'visited')} />
+          <Kpi rotulo={`Demos ${periodLabel}`} valor={m.meetings_scheduled.toLocaleString('pt-BR')} onPress={() => open('Minhas reuniões', 'meetings')} />
+          <Kpi
+            rotulo={`Conversão ${periodLabel}`}
+            valor={m.visited > 0 ? `${Math.round((m.won_in_period / m.visited) * 100)}%` : '—'}
+            sub={`${m.won_in_period} / ${m.visited} visitados`}
+            onPress={() => open('Clientes que fechei', 'won')}
+          />
+          {/* O numero e' o de tarefas PENDENTES (o mesmo do badge da barra) —
+              "atrasadas" nao existe como campo separado; ver relatorio. */}
+          <Kpi
+            rotulo="Tarefas pendentes"
+            valor={(tarefasPendentes ?? 0).toLocaleString('pt-BR')}
+            corValor={(tarefasPendentes ?? 0) > 0 ? 'var(--tint-red-text)' : undefined}
+            onPress={aoAbrirTarefas}
+          />
+        </View>
+      )}
+
+      {!layout.ehLargo && daily?.souDeCampo && daily.semana.length > 0 && (
+        <View style={styles.calorCartao}>
+          <Text style={styles.calorTitulo}>Visitas na semana</Text>
+          {/* Celulas FLUIDAS (aspect-ratio 1), nao os 28px fixos do desktop.
+              A serie e' `daily.semana`: os ultimos dias UTEIS, entao sao 5 e
+              nao 7 — nao ha' dado de fim de semana pra preencher. */}
+          <View style={styles.calorGrade}>
+            {daily.semana.map((d) => {
+              const ehHoje = d.dia === daily.hoje.dia;
+              const cor = d.visitas === 0 ? 'var(--surface-3)' : d.visitas <= 2 ? '#8FE0D5' : '#1D9688';
+              return (
+                <View
+                  key={d.dia}
+                  style={[
+                    styles.calorCelula,
+                    { backgroundColor: cor },
+                    // Hoje ainda sem visita: tracejado, pra distinguir "dia que
+                    // nao teve" de "dia que ainda pode ter".
+                    ehHoje && d.visitas === 0 && styles.calorCelulaHoje,
+                  ]}
+                />
+              );
+            })}
+          </View>
+          <View style={styles.calorLegenda}>
+            {daily.semana.map((d) => (
+              <Text key={d.dia} style={styles.calorDia}>
+                {new Date(`${d.dia}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
+              </Text>
+            ))}
+          </View>
+        </View>
+      )}
 
       {query.isLoading ? (
         <View style={styles.loadingBlock}><ActivityIndicator size="large" color="var(--brand-text)" /><Text style={styles.loadingText}>Carregando...</Text></View>
@@ -294,10 +377,67 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas 
 }
 
 const styles = StyleSheet.create({
+  // ---- KPI e heatmap (M6) ----
+  kpiGrade: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  kpiCartao: {
+    // 1fr 1fr com gap 12: em 390 (menos 32 de padding) cada um fica com ~173.
+    flexBasis: '47%',
+    flexGrow: 1,
+    minWidth: 0,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  kpiRotulo: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)' },
+  // 18/24 e' o maior tipo do celular. 28/36 e' desktop.
+  kpiValor: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '700',
+    color: 'var(--text)',
+    fontVariant: ['tabular-nums'],
+    marginTop: 4,
+  },
+  kpiSub: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)', marginTop: 2 },
+  calorCartao: {
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    gap: 8,
+  },
+  calorTitulo: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)' },
+  calorGrade: { flexDirection: 'row', gap: 4 },
+  // `aspectRatio: 1` com `flex: 1`: a celula acompanha a largura da tela em
+  // vez dos 28px fixos do desktop.
+  calorCelula: { flex: 1, aspectRatio: 1, borderRadius: 4 },
+  calorCelulaHoje: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#C8131B' },
+  calorLegenda: { flexDirection: 'row', gap: 4 },
+  calorDia: { flex: 1, textAlign: 'center', fontSize: 11, lineHeight: 16, letterSpacing: 0.5, color: 'var(--text-faint)' },
   container: { flex: 1, backgroundColor: 'var(--bg)' },
-  content: { padding: 16, paddingBottom: 120 },
+  // Sem barra inferior nesta tela (nao e' aba; chega pelo menu do perfil e
+  // sai pelo arrow_back), entao nao ha' o que reservar: 16, nao 120.
+  content: { padding: 16, paddingBottom: 16, gap: 16 },
   periodRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  periodChip: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: 'var(--surface)', alignItems: 'center', borderWidth: 1, borderColor: 'var(--border)' },
+  // 48 de altura e raio 12: era ~36 com raio 10, os dois fora da escala.
+  periodChip: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: 'var(--surface)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+  },
   periodChipActive: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
   periodChipText: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
   periodChipTextActive: { color: '#fff' },

@@ -50,6 +50,7 @@ import {
 import { RouteConfigCard } from './RouteConfigCard';
 import { SellerClassificationCard } from './SellerClassificationCard';
 import { SellerGoalsCard } from './SellerGoalsCard';
+import { useSellerGoals } from '../hooks/useSellerGoals';
 import { DismissedContaAlvoCard } from './DismissedContaAlvoCard';
 import { RouteHistorySection } from './RouteHistorySection';
 import { MinhaDailyCard } from './MinhaDailyCard';
@@ -498,6 +499,9 @@ function SellerCard({
   onOpenLeads,
   taskCounts,
   onOpenTasks,
+  metaDia,
+  aberto = false,
+  aoAlternar,
 }: {
   seller: SellerMetrics;
   rank: number;
@@ -505,7 +509,12 @@ function SellerCard({
   onOpenLeads: (title: string, params: MetricLeadsParams) => void;
   taskCounts: { pending: number; done: number };
   onOpenTasks: (title: string, hubspotId: string | null, status: GestorTaskStatus) => void;
+  /** Meta DIARIA de visitas (seller_visit_goals). Nao ha' meta mensal. */
+  metaDia?: number;
+  aberto?: boolean;
+  aoAlternar?: () => void;
 }) {
+  const layout = useLayout();
   const displayName = seller.full_name?.trim() || seller.email || 'Sem nome';
   const initials = (seller.full_name?.trim() || seller.email || '?')
     .split(/\s+/)
@@ -521,6 +530,17 @@ function SellerCard({
   // Distribuicao de status apenas dos leads sob responsabilidade.
   const statusEntries = Object.entries(seller.status_breakdown).sort((a, b) => b[1] - a[1]);
 
+  // Badge de meta. O que existe e' `meta_visitas_dia` — meta DIARIA. Nao ha'
+  // meta mensal nem % de atingimento em lugar nenhum, entao o badge diz o
+  // alvo do dia em vez de fingir uma porcentagem.
+  const metaBadge = metaDia != null && metaDia > 0 ? (
+    <View style={[styles.metaBadge, seller.visited >= metaDia ? styles.metaBadgeOk : styles.metaBadgeAbaixo]}>
+      <Text style={[styles.metaBadgeTexto, seller.visited >= metaDia ? styles.metaBadgeTextoOk : styles.metaBadgeTextoAbaixo]}>
+        {`meta ${metaDia}/dia`}
+      </Text>
+    </View>
+  ) : null;
+
   // Abre o modal pedindo os leads da métrica desse vendedor (filtra por seller_id).
   const open = (metricLabel: string, params: Partial<MetricLeadsParams> & { metric: MetricLeadsParams['metric'] }) =>
     onOpenLeads(`${metricLabel} — ${displayName}`, {
@@ -528,6 +548,73 @@ function SellerCard({
       sellerId: seller.seller_id,
       ...params,
     });
+
+  // No celular a tabela de 7 colunas do desktop nao cabe em 390px: cada
+  // vendedor vira uma LINHA de duas alturas com as duas metricas que importam
+  // (visitas e fechados) e a meta. O detalhe — com TODOS os drill-downs por
+  // metrica — continua existindo: a linha inteira e' o alvo e abre o resto.
+  if (!layout.ehLargo) {
+    return (
+      <View style={styles.timeLinhaCasca}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityState={{ expanded: aberto }}
+          accessibilityLabel={`${displayName}, ${seller.visited} visitas, ${seller.won_in_period} fechados`}
+          style={styles.timeLinha}
+          onPress={() => aoAlternar?.()}
+          activeOpacity={0.85}
+        >
+          <View style={styles.timeAvatar}>
+            <Text style={styles.timeAvatarTexto}>{initials}</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.timeNome} numberOfLines={1}>{displayName}</Text>
+            <Text style={styles.timeMetricas} numberOfLines={1}>
+              {`${seller.visited} ${seller.visited === 1 ? 'visita' : 'visitas'} · ${seller.won_in_period} ${seller.won_in_period === 1 ? 'fechado' : 'fechados'}`}
+            </Text>
+          </View>
+          {metaBadge}
+        </TouchableOpacity>
+        {aberto && (
+          <View style={styles.timeDetalhe}>
+            <View style={styles.metricsRow}>
+              <MetricBox value={seller.visited} label="Visitados" color="#a855f7" onPress={() => open('Visitados', { metric: 'visited' })} />
+              <MetricBox value={seller.created} label="Criados" color="#3b82f6" onPress={() => open('Criados', { metric: 'created' })} />
+              <MetricBox value={seller.meetings_scheduled} label="Reuniões" color="#f97316" onPress={() => open('Reuniões', { metric: 'meetings' })} />
+            </View>
+            <View style={styles.metricsRow}>
+              <MetricBox value={seller.follow_ups_scheduled} label="Follow ups" color="#0891b2" onPress={() => open('Follow ups', { metric: 'follow_ups' })} />
+              <MetricBox value={seller.stage_changes} label="Mudanças" color="#0ea5e9" onPress={() => open('Mudanças de etapa', { metric: 'stage_changes' })} />
+              <MetricBox value={seller.notes_created} label="Notas" color="#FFD966" onPress={() => open('Notas', { metric: 'notes' })} />
+            </View>
+            <View style={styles.metricsRow}>
+              <MetricBox
+                value={taskCounts.pending}
+                label="Tarefas pendentes"
+                color="var(--brand-text)"
+                onPress={() => onOpenTasks(`Tarefas pendentes — ${displayName}`, seller.id_hubspot, 'pendente')}
+              />
+              <MetricBox
+                value={taskCounts.done}
+                label="Tarefas concluídas"
+                color="#16a34a"
+                onPress={() => onOpenTasks(`Tarefas concluídas — ${displayName}`, seller.id_hubspot, 'concluida')}
+              />
+            </View>
+            <TouchableOpacity
+              accessibilityRole="button"
+              disabled={seller.leads_assigned === 0}
+              onPress={() => open('Leads atribuídos', { metric: 'assigned', hubspotId: seller.id_hubspot, sellerId: null })}
+            >
+              <Text style={[styles.assignedLabel, seller.leads_assigned > 0 && styles.assignedLabelLink]}>
+                {seller.leads_assigned} {seller.leads_assigned === 1 ? 'lead atribuído' : 'leads atribuídos'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.sellerCard}>
@@ -625,6 +712,11 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
   const [exporting, setExporting] = useState<null | 'last_week' | 'period'>(null);
   // 09e: qual card do rail esta aberto no drawer de 480px.
   const [railAberto, setRailAberto] = useState<null | 'usuarios' | 'rota' | 'metas' | 'contas' | 'historico'>(null);
+  // Qual vendedor esta' expandido na lista do celular. A linha compacta e' o
+  // resumo; o detalhe guarda os drill-downs por metrica que ja' existiam.
+  const [vendedorAberto, setVendedorAberto] = useState<string | null>(null);
+  // Meta DIARIA de visitas por vendedor. E' a unica meta que existe.
+  const { goals: metasPorVendedor } = useSellerGoals(enabled);
   const { profile: meuPerfil } = useAuth();
   const iconColors = useIconColors();
 
@@ -1127,74 +1219,59 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
             />
           </View>
 
-          {/* Atividade no periodo selecionado — no web a faixa de KPIs do
-              painel acima ja' responde isso; a grade fica so' no celular. */}
-          {!layout.ehLargo && (<>
-          <Text style={styles.sectionTitle}>
-            Atividade {periodLabel}
-          </Text>
-          <View style={styles.statsGrid}>
-            <StatCard
-              label="Visitados"
-              value={query.data.global.visited_in_period}
-              color="#a855f7"
-              onPress={() => openLeads('Visitados no período', { metric: 'visited', period })}
-            />
-            <StatCard
-              label="Criados"
-              value={query.data.global.created_in_period}
-              color="#3b82f6"
-              onPress={() => openLeads('Criados no período', { metric: 'created', period })}
-            />
-            <StatCard
-              label="Reuniões"
-              value={query.data.global.meetings_in_period}
-              color="#f97316"
-              onPress={() => openLeads('Reuniões no período', { metric: 'meetings', period })}
-            />
-            <StatCard
-              label="Follow ups"
-              value={query.data.global.follow_ups_in_period}
-              color="#0891b2"
-              onPress={() => openLeads('Follow ups no período', { metric: 'follow_ups', period })}
-            />
-            <StatCard
-              label="Mudanças etapa"
-              value={query.data.global.stage_changes_in_period}
-              color="#0ea5e9"
-              onPress={() => openLeads('Mudanças de etapa no período', { metric: 'stage_changes', period })}
-            />
-            <StatCard
-              label="Notas"
-              value={query.data.global.notes_in_period}
-              color="#FFD966"
-              onPress={() => openLeads('Notas no período', { metric: 'notes', period })}
-            />
-          </View>
-          </>)}
+          {/* CELULAR (M6): quatro KPIs 2x2 com o que a fase 1 confirmou —
+              visitas, demos, fechamentos e criados. "MRR novo" nao existe em
+              hook nenhum e "contagem por etapa do funil" tambem nao
+              (status_breakdown e' por STATUS, nao por etapa): os dois blocos
+              ficaram de fora em vez de virar numero inventado. */}
+          {!layout.ehLargo && (
+            <View style={styles.kpiGrade}>
+              <TouchableOpacity style={styles.kpiCartao} onPress={() => openLeads('Visitados no período', { metric: 'visited', period })}>
+                <Text style={styles.kpiRotulo}>{`Visitas ${periodLabel}`}</Text>
+                <Text style={styles.kpiValor}>{query.data.global.visited_in_period.toLocaleString('pt-BR')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.kpiCartao} onPress={() => openLeads('Reuniões no período', { metric: 'meetings', period })}>
+                <Text style={styles.kpiRotulo}>{`Demos ${periodLabel}`}</Text>
+                <Text style={styles.kpiValor}>{query.data.global.meetings_in_period.toLocaleString('pt-BR')}</Text>
+              </TouchableOpacity>
+              <View style={styles.kpiCartao}>
+                <Text style={styles.kpiRotulo}>{`Fechamentos ${periodLabel}`}</Text>
+                <Text style={styles.kpiValor}>{query.data.global.won_in_period.toLocaleString('pt-BR')}</Text>
+              </View>
+              <TouchableOpacity style={styles.kpiCartao} onPress={() => openLeads('Criados no período', { metric: 'created', period })}>
+                <Text style={styles.kpiRotulo}>{`Criados ${periodLabel}`}</Text>
+                <Text style={styles.kpiValor}>{query.data.global.created_in_period.toLocaleString('pt-BR')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Ranking de vendedores. */}
           <Text style={styles.sectionTitle}>
-            Vendedores ({visibleSellers.length}) {preset !== 'all' ? '— ativos no período' : ''}
+            {layout.ehLargo ? 'Vendedores' : 'Time'} ({visibleSellers.length}) {preset !== 'all' ? '— ativos no período' : ''}
           </Text>
           {visibleSellers.length === 0 ? (
             <View style={styles.emptyBlock}>
               <Text style={styles.emptyText}>Nenhuma atividade registrada no período.</Text>
             </View>
           ) : (
-            visibleSellers.map((seller, idx) => (
-              <SellerCard
-                key={seller.seller_id}
-                seller={seller}
-                rank={idx + 1}
-                period={period}
-                onOpenLeads={openLeads}
-                taskCounts={
-                  (seller.id_hubspot && taskCountsByHubspot.get(seller.id_hubspot)) || { pending: 0, done: 0 }
-                }
-                onOpenTasks={openTasks}
-              />
-            ))
+            <View style={!layout.ehLargo ? styles.timeCartao : undefined}>
+              {visibleSellers.map((seller, idx) => (
+                <SellerCard
+                  key={seller.seller_id}
+                  seller={seller}
+                  rank={idx + 1}
+                  period={period}
+                  onOpenLeads={openLeads}
+                  taskCounts={
+                    (seller.id_hubspot && taskCountsByHubspot.get(seller.id_hubspot)) || { pending: 0, done: 0 }
+                  }
+                  onOpenTasks={openTasks}
+                  metaDia={metasPorVendedor.get(seller.seller_id)}
+                  aberto={vendedorAberto === seller.seller_id}
+                  aoAlternar={() => setVendedorAberto(v => (v === seller.seller_id ? null : seller.seller_id))}
+                />
+              ))}
+            </View>
           )}
 
           <Text style={styles.footerHint}>
@@ -1258,8 +1335,68 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
 }
 
 const styles = StyleSheet.create({
+  // ---- Time, no celular (M6) ----
+  // A tabela de 7 colunas do desktop nao cabe em 390px: cada vendedor e' uma
+  // linha de duas alturas. A linha INTEIRA e' o alvo e abre o detalhe, onde
+  // vivem todos os drill-downs por metrica que ja' existiam.
+  timeLinhaCasca: { borderBottomWidth: 1, borderBottomColor: 'var(--border)' },
+  timeLinha: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, minHeight: 48 },
+  timeAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'var(--surface-2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeAvatarTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '700', color: 'var(--text-muted)' },
+  timeNome: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text)' },
+  timeMetricas: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, color: 'var(--text-faint)' },
+  timeDetalhe: { gap: 8, paddingBottom: 12 },
+  metaBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
+  // Tinta clara nos dois temas: e' superficie propria, nao herda o tema.
+  metaBadgeOk: { backgroundColor: '#EAF7EE' },
+  metaBadgeAbaixo: { backgroundColor: '#FFF8EB' },
+  metaBadgeTexto: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600' },
+  metaBadgeTextoOk: { color: '#167532' },
+  metaBadgeTextoAbaixo: { color: '#99670F' },
+  timeCartao: {
+    borderRadius: 16,
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    paddingHorizontal: 16,
+  },
+  // ---- KPI 2x2 (M6) ----
+  kpiGrade: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  kpiCartao: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    minWidth: 0,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  kpiRotulo: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)' },
+  kpiValor: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '700',
+    color: 'var(--text)',
+    fontVariant: ['tabular-nums'],
+    marginTop: 4,
+  },
   container: { flex: 1, backgroundColor: 'var(--bg)' },
-  content: { padding: 16, paddingBottom: 120 },
+  // Sem barra inferior aqui (nao e' aba; chega pelo menu do perfil e sai pelo
+  // arrow_back), entao nao ha' o que reservar: 16, nao 120.
+  content: { padding: 16, paddingBottom: 16 },
   periodRow: {
     flexDirection: 'row',
     gap: 8,
@@ -1289,8 +1426,10 @@ const styles = StyleSheet.create({
   exportBtnDisabled: { opacity: 0.6 },
   periodChip: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
+    // 48 e raio 12: era ~36 com raio 10, os dois fora da escala do celular.
+    height: 48,
+    justifyContent: 'center',
+    borderRadius: 12,
     backgroundColor: 'var(--surface)',
     alignItems: 'center',
     borderWidth: 1,
@@ -1555,7 +1694,8 @@ const rangeStyles = StyleSheet.create({
     marginBottom: 8,
   },
   navBtn: {
-    width: 36, height: 36, borderRadius: 18,
+    // 48: era 36, abaixo do alvo minimo do celular.
+    width: 48, height: 48, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'var(--bg)', borderWidth: 1, borderColor: 'var(--border)',
   },
