@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import {
+  Modal,
   ActivityIndicator,
   Animated,
   PanResponder,
@@ -18,12 +19,15 @@ import { useFieldOps } from '../hooks/useFieldOps';
 import { useLayout } from '../hooks/useLayout';
 import type { RouteGeometry, RoutingProvider } from '../utils/routing';
 import {
+  IconArrowBack,
   IconArrowDown,
+  IconArrowFoward,
   IconArrowUp,
   IconCheck,
   IconClose,
   IconEye,
   IconLocation,
+  IconLocationFilled,
   IconMenu,
   IconRefresh,
   IconSearch,
@@ -129,6 +133,12 @@ interface Props {
   irParaMapa: () => void;
   metaVisitasDia: number;
   suggestRoute: () => Promise<void> | void;
+  /** Check-in de verdade: valida os 200m e conclui a Task no HubSpot. E' o
+   *  mesmo `handleMarkAsVisited` da ficha do lead — nao ha' segunda regra. */
+  onMarkVisited?: (client: Client, onDone?: () => void) => void;
+  /** Sheet de configuracao: o botao vive no header (App), o conteudo aqui. */
+  configAberta: boolean;
+  aoFecharConfig: () => void;
 }
 
 export function RotaScreen({
@@ -170,6 +180,9 @@ export function RotaScreen({
   irParaMapa,
   metaVisitasDia,
   suggestRoute,
+  onMarkVisited,
+  configAberta,
+  aoFecharConfig,
 }: Props) {
   const layout = useLayout();
   const insets = useSafeAreaInsets();
@@ -500,95 +513,136 @@ export function RotaScreen({
           const stop = routeStops.find(s => s.client_id === client.id);
           const isLast = index === routeDisplayClients.length - 1;
           const isDone = stop?.status === 'done';
-          const color = statusConfig[client.status]?.color || '#3b82f6';
+          // A parada ATUAL e' a primeira ainda nao feita: e' a proxima que ele
+          // vai atacar, e a unica que ganha acao.
+          const idxAtual = routeDisplayClients.findIndex(
+            (c) => routeStops.find(st => st.client_id === c.id)?.status !== 'done',
+          );
+          const ehAtual = index === idxAtual && !isMonitoringRoute;
           const title = nomeDoLead(client);
-          const subtitle = [client.bairro, client.cidade, client.estado].filter(Boolean).join(' - ') || 'Localizacao nao informada';
+          const detalhe = [client.bairro, client.cidade, client.estado].filter(Boolean).join(' · ')
+            || 'Localização não informada';
+          const mreason = stop?.mandatory_reason as MandatoryReason | undefined;
+          // Tag: uma so', na ordem de quem manda mais na decisao.
+          const tag = isDone
+            ? { t: 'Visitado', bg: '#EAF7EE', fg: '#167532' }
+            : ehAtual
+              ? { t: 'Agora', bg: 'var(--tint-red)', fg: 'var(--tint-red-text)' }
+              : mreason === 'sla'
+                ? { t: 'SLA', bg: '#FFF8EB', fg: '#99670F' }
+                : mreason === 'conta_alvo'
+                  ? { t: 'Alvo', bg: '#F1EBFE', fg: '#5B32C4' }
+                  : mreason === 'relacionamento'
+                    ? { t: 'Demo', bg: '#F1EBFE', fg: '#5B32C4' }
+                    : null;
+          const indiceCor = isDone
+            ? { bg: '#EAF7EE', fg: '#167532' }
+            : ehAtual
+              ? { bg: '#C8131B', fg: '#FFFFFF' }
+              : { bg: 'var(--surface-2)', fg: 'var(--text-muted)' };
           return (
-            <View
+            <TouchableOpacity
               key={client.id}
-              style={[
-                styles.routeStopCard,
-                { borderLeftColor: isDone ? '#16a34a' : color },
-                isDone && { backgroundColor: 'var(--tint-green)' },
-              ]}
+              // O toque no card abre o lead — por isso "Abrir" saiu como botao.
+              accessibilityRole="button"
+              activeOpacity={0.9}
+              onPress={() => openClientDetails(client)}
+              style={[styles.paradaCard, ehAtual && styles.paradaCardAtual]}
             >
-              <View style={styles.routeStopHeader}>
-                {/* Checkbox: toggle done/planned. Persiste via toggleStopDone */}
-                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Selecionado"
-                  style={[styles.checkbox, isDone && styles.checkboxChecked]}
-                  onPress={() => {
-                    if (stop) fieldOps.toggleStopDone.mutate(stop);
-                  }}
-                  disabled={!stop || isMonitoringRoute}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  {isDone && <IconCheck width={14} height={14} fill={iconColors.onBrand} />}
-                </TouchableOpacity>
-                <Text style={sharedStyles.routePosition}>{index + 1}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[sharedStyles.clientName, isDone && { textDecorationLine: 'line-through', color: 'var(--text-muted)' }]}
-                    numberOfLines={1}
-                  >
-                    {title}
-                  </Text>
-                  <Text style={[styles.routeStopSubtitle, isDone && { textDecorationLine: 'line-through' }]} numberOfLines={1}>
-                    {subtitle}
-                  </Text>
-                  {(() => {
-                    const mreason = stop?.mandatory_reason as MandatoryReason | undefined;
-                    if (!mreason || !MANDATORY_BADGE[mreason]) return null;
-                    // Conta Alvo: acrescenta nota/avaliações do Google no badge.
-                    const rating = client.conta_alvo_place_id && client.conta_alvo_rating != null
-                      ? ` · ⭐ ${Number(client.conta_alvo_rating).toFixed(1)}${client.conta_alvo_reviews != null ? ` (${client.conta_alvo_reviews})` : ''}`
-                      : '';
-                    return <Text style={styles.mandatoryTag}>{MANDATORY_BADGE[mreason]}{rating}</Text>;
-                  })()}
-                </View>
-                <View style={[sharedStyles.statusBadge, { backgroundColor: isDone ? '#16a34a' : color }]}>
-                  <Text style={sharedStyles.statusBadgeText}>
-                    {isDone ? 'Visitado' : (statusConfig[client.status]?.label || client.status)}
-                  </Text>
-                </View>
-              </View>
-              <View style={sharedStyles.routeActionsRow}>
-                {index > 0 && !isMonitoringRoute && (
+              <View style={styles.paradaTopo}>
+                {/* O checkbox fica nas OUTRAS paradas: e' o caminho manual de
+                    consertar a lista (visitou antes, pulou), sem GPS. Na atual
+                    quem manda e' o Check-in, pra nao haver dois estados de
+                    "feita". Alvo de 48 pelo padding, quadrado visual em 24. */}
+                {!ehAtual && (
                   <TouchableOpacity
-                    style={sharedStyles.smallActionButton}
-                    onPress={() => {
-                      const nextStops = routeStops.slice();
-                      [nextStops[index - 1], nextStops[index]] = [nextStops[index], nextStops[index - 1]];
-                      if (nextStops.length) fieldOps.updateStops.mutate(nextStops);
-                    }}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: isDone }}
+                    accessibilityLabel={isDone ? 'Desmarcar parada' : 'Marcar parada como feita'}
+                    style={styles.paradaCheckAlvo}
+                    onPress={() => { if (stop) fieldOps.toggleStopDone.mutate(stop); }}
+                    disabled={!stop || isMonitoringRoute}
                   >
-                    <IconText Icone={IconArrowUp} style={sharedStyles.smallActionButtonText} tone="onSurface">Subir</IconText>
+                    <View style={[styles.checkbox, isDone && styles.checkboxChecked]}>
+                      {isDone && <IconCheck width={14} height={14} fill={iconColors.onBrand} />}
+                    </View>
                   </TouchableOpacity>
                 )}
-                {!isLast && !isMonitoringRoute && (
-                  <TouchableOpacity
-                    style={sharedStyles.smallActionButton}
-                    onPress={() => {
-                      const nextStops = routeStops.slice();
-                      [nextStops[index], nextStops[index + 1]] = [nextStops[index + 1], nextStops[index]];
-                      if (nextStops.length) fieldOps.updateStops.mutate(nextStops);
-                    }}
-                  >
-                    <IconText Icone={IconArrowDown} style={sharedStyles.smallActionButtonText} tone="onSurface">Descer</IconText>
-                  </TouchableOpacity>
+                <View style={[styles.paradaIndice, { backgroundColor: indiceCor.bg }]}>
+                  <Text style={[styles.paradaIndiceTexto, { color: indiceCor.fg }]}>{index + 1}</Text>
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={styles.paradaNomeLinha}>
+                    <Text
+                      style={[styles.paradaNome, isDone && { color: 'var(--text-muted)' }]}
+                      numberOfLines={1}
+                    >
+                      {title}
+                    </Text>
+                    {tag && (
+                      <View style={[styles.paradaTag, { backgroundColor: tag.bg }]}>
+                        <Text style={[styles.paradaTagTexto, { color: tag.fg }]}>{tag.t}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.paradaDetalhe} numberOfLines={1}>{detalhe}</Text>
+                </View>
+                {/* Subir/Descer ficam: reordenar e' acao de rua, e dois toques
+                    a mais custam caro em movimento. */}
+                {!isMonitoringRoute && (
+                  <View style={styles.paradaMover}>
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel="Subir parada"
+                      style={[styles.paradaMoverBotao, index === 0 && { opacity: 0.3 }]}
+                      disabled={index === 0}
+                      onPress={() => moverParada(index, index - 1)}
+                    >
+                      <IconArrowUp width={20} height={20} fill={iconColors.muted} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel="Descer parada"
+                      style={[styles.paradaMoverBotao, isLast && { opacity: 0.3 }]}
+                      disabled={isLast}
+                      onPress={() => moverParada(index, index + 1)}
+                    >
+                      <IconArrowDown width={20} height={20} fill={iconColors.muted} />
+                    </TouchableOpacity>
+                  </View>
                 )}
-                {stop && !isMonitoringRoute && (
-                  <TouchableOpacity style={sharedStyles.smallActionButton} onPress={() => fieldOps.removeStop.mutate(stop)}>
-                    <Text style={sharedStyles.smallActionButtonText}>Remover</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  style={sharedStyles.smallActionButton}
-                  onPress={() => openClientDetails(client)}
-                >
-                  <Text style={sharedStyles.smallActionButtonText}>Abrir</Text>
-                </TouchableOpacity>
               </View>
-            </View>
+
+              {ehAtual && (
+                <View style={styles.paradaAcoes}>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.paradaCheckin}
+                    onPress={() => {
+                      // No sucesso marca a parada como feita: um estado so'.
+                      onMarkVisited?.(client, () => {
+                        if (stop) fieldOps.markStopDone.mutate(stop);
+                      });
+                    }}
+                    disabled={!onMarkVisited}
+                  >
+                    <IconLocationFilled width={24} height={24} fill="#FFFFFF" />
+                    <Text style={styles.paradaCheckinTexto}>Check-in</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Navegar até a parada"
+                    style={styles.paradaNavegar}
+                    // Sem argumento de proposito: `startNavigation` entra no
+                    // modo de navegacao da ROTA, que comeca justamente na
+                    // parada atual. Nao ha' segunda rota pra um stop so'.
+                    onPress={startNavigation}
+                  >
+                    <IconArrowFoward width={24} height={24} fill={iconColors.onSurface} />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </TouchableOpacity>
           );
         })
       )}
@@ -802,23 +856,196 @@ export function RotaScreen({
   }
 
   return (
-    <ScrollView contentContainerStyle={[sharedStyles.listContent, // +24: o FAB central da barra protrai 24px e cairia em cima do
-      // ultimo card. So' aparece quando se rola ate' o fim.
-      { paddingBottom: 90 + 24 + insets.bottom },
-    { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
-    {bannerMonitor}
+    <>
+      {/* Mapa em FAIXA de 180px, nao tela cheia: em rota o objeto de trabalho
+          e' a sequencia; o mapa orienta. */}
+      <View style={styles.mapaFaixa}>{conteudoMapa}</View>
 
-    {cartaoDaily}
-    {cartaoRotaDoDia}
-    {cartaoPersonalizada}
-    {cartaoAdicionar}
-    {cartaoLista}
-  </ScrollView>
+      <ScrollView
+        contentContainerStyle={[
+          sharedStyles.listContent,
+          // +24: o FAB central da barra protrai 24px e cairia em cima do
+          // ultimo card. So' aparece quando se rola ate' o fim.
+          { paddingBottom: 90 + 24 + insets.bottom },
+          { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' },
+        ]}
+      >
+        {bannerMonitor}
+        {/* A promessa do dia NAO foi pro sheet: nao e' configuracao, e esta e'
+            a tela onde ele decide o dia. Perguntar "quantas visitas hoje?"
+            atras de uma engrenagem seria perguntar fora do momento. */}
+        {cartaoDaily}
+        {/* A sequencia sobe pro topo: era o ultimo de cinco cartoes, e ficava
+            enterrada sob a configuracao que so' se usa uma vez por dia. */}
+        {cartaoLista}
+      </ScrollView>
+
+      {/* Os TRES auxiliares que de fato moram nesta tela. RouteConfigCard,
+          RouteHistorySection e DismissedContaAlvoCard, que o M3 lista, nao
+          estao aqui — sao do GestorScreen. Nao foram tocados. */}
+      <Modal
+        visible={configAberta}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={aoFecharConfig}
+      >
+        <View style={styles.configSheet}>
+          <View style={styles.configCabecalho}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Voltar"
+              style={styles.configVoltar}
+              onPress={aoFecharConfig}
+            >
+              <IconArrowBack width={24} height={24} fill={iconColors.onSurface} />
+            </TouchableOpacity>
+            <Text style={styles.configTitulo}>Configurar rota</Text>
+          </View>
+          <ScrollView contentContainerStyle={styles.configCorpo}>
+            {cartaoRotaDoDia}
+            {cartaoPersonalizada}
+            {cartaoAdicionar}
+
+            {/* Remover parada e' destrutivo, entao saiu do card e veio pra ca'.
+                Alvo 40: aqui e' ferramenta de configuracao, parado, com as duas
+                maos — nao a rua. */}
+            {routeDisplayClients.length > 0 && !isMonitoringRoute && (
+              <View style={styles.panelCard}>
+                <Text style={sharedStyles.panelTitle}>Reordenar / remover paradas</Text>
+                <Text style={styles.panelHint}>
+                  Subir e descer também ficam no card de cada parada. Remover mora só aqui.
+                </Text>
+                {routeDisplayClients.map((client, index) => {
+                  const stop = routeStops.find(st => st.client_id === client.id);
+                  return (
+                    <View key={client.id} style={styles.configParadaLinha}>
+                      <Text style={styles.configParadaIndice}>{index + 1}</Text>
+                      <Text style={styles.configParadaNome} numberOfLines={1}>{nomeDoLead(client)}</Text>
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel={`Subir ${nomeDoLead(client)}`}
+                        style={[styles.configParadaBotao, index === 0 && { opacity: 0.3 }]}
+                        disabled={index === 0}
+                        onPress={() => moverParada(index, index - 1)}
+                      >
+                        <IconArrowUp width={20} height={20} fill={iconColors.muted} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel={`Descer ${nomeDoLead(client)}`}
+                        style={[
+                          styles.configParadaBotao,
+                          index === routeDisplayClients.length - 1 && { opacity: 0.3 },
+                        ]}
+                        disabled={index === routeDisplayClients.length - 1}
+                        onPress={() => moverParada(index, index + 1)}
+                      >
+                        <IconArrowDown width={20} height={20} fill={iconColors.muted} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remover ${nomeDoLead(client)}`}
+                        style={styles.configParadaBotao}
+                        disabled={!stop}
+                        onPress={() => { if (stop) fieldOps.removeStop.mutate(stop); }}
+                      >
+                        <IconClose width={20} height={20} fill={iconColors.tintRedText} />
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
+    </>
   );
 }
 
 // Estilos exclusivos desta tela, movidos do App.tsx como estavam.
 const styles = StyleSheet.create({
+  // Faixa do mapa: 180px fixos. `flex: 0 0 180px` no RN e' flexGrow/Shrink 0.
+  mapaFaixa: { flexGrow: 0, flexShrink: 0, height: 180 },
+  configSheet: { flex: 1, backgroundColor: 'var(--bg)' },
+  configCabecalho: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'var(--surface)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border)',
+  },
+  configVoltar: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  configTitulo: { fontSize: 18, lineHeight: 24, fontWeight: '600', color: 'var(--text)' },
+  configCorpo: { padding: 16, gap: 24 },
+  paradaCard: {
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  paradaCardAtual: { borderColor: '#C8131B' },
+  paradaTopo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  // Alvo de 48 sem engordar o quadrado de 24: o padding e' que cresce.
+  paradaCheckAlvo: { padding: 12, marginLeft: -12, marginVertical: -12 },
+  paradaIndice: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  paradaIndiceTexto: { fontSize: 14, lineHeight: 32, letterSpacing: 0.1, fontWeight: '700' },
+  paradaNomeLinha: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
+  paradaNome: { flexShrink: 1, fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: 'var(--text)' },
+  paradaTag: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  paradaTagTexto: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600' },
+  paradaDetalhe: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)', marginTop: 2 },
+  paradaMover: { flexDirection: 'row', gap: 4 },
+  paradaMoverBotao: { width: 32, height: 48, alignItems: 'center', justifyContent: 'center' },
+  paradaAcoes: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  paradaCheckin: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#27A84C',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  paradaCheckinTexto: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: '#FFFFFF' },
+  paradaNavegar: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-default)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  configParadaLinha: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--border-soft)',
+  },
+  configParadaIndice: {
+    width: 24,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    color: 'var(--text-faint)',
+    fontVariant: ['tabular-nums'],
+  },
+  configParadaNome: { flex: 1, minWidth: 0, fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text)' },
+  configParadaBotao: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   checkbox: {
     width: 24,
     height: 24,
