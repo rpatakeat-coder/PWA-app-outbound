@@ -622,11 +622,23 @@ function MainApp() {
     if (Platform.OS !== 'web' || !layout.ehLargo) return;
     (tituloWebRef.current as unknown as { focus?: () => void } | null)?.focus?.();
   }, [tab, layout.ehLargo]);
+  // Mapa expandido da Rota (M3c/D): o mapa toma a tela, header e barra somem.
+  // `useState` de proposito — nao persiste entre sessoes, e o efeito abaixo
+  // devolve a tela ao normal assim que ele troca de aba.
+  const [mapaExpandido, setMapaExpandido] = useState(false);
+  const rotaMapaExpandido = mapaExpandido && tab === 'route' && !layout.ehLargo;
+  useEffect(() => {
+    if (tab !== 'route') setMapaExpandido(false);
+  }, [tab]);
   // Chao dos elementos flutuantes (FAB, legenda, botoes do mapa).
   // Os 90px eram a altura da barra inferior. No desktop ela virou coluna
   // lateral, entao esse espaco deixou de existir — sem isto os botoes ficariam
-  // pairando 90px acima do nada.
-  const baseInferior = layout.ehDesktop ? 24 : 90 + insets.bottom;
+  // pairando 90px acima do nada. Na Rota expandida a barra tambem some, entao
+  // o chao desce pra area de gestos — senao a folha de calor pairaria 90px
+  // acima de nada, de novo.
+  const baseInferior = layout.ehDesktop
+    ? 24
+    : (rotaMapaExpandido ? 12 + insets.bottom : 90 + insets.bottom);
   // Mapa e Lista sao a MESMA base vista de dois jeitos, entao alternam dentro
   // da tela em vez de serem duas abas. Estado local: se virasse aba de novo, a
   // barra de quatro do M1 se desfaz.
@@ -3323,6 +3335,15 @@ function MainApp() {
     );
   })();
 
+  // Na Rota os controles do mapa mudam de casa (M3c/D). Na faixa de 180px nao
+  // ha' o que explorar: recentrar e calor caiam ali por cima da sequencia sem
+  // nada pra fazer — era o vazamento anotado no M2b. Eles passam a viver no
+  // mapa GRANDE desta aba: recentrar tambem no estado vazio (que e' o caminho
+  // de "abrir um pin"), calor so' no expandido.
+  const rotaMovel = tab === 'route' && !layout.ehLargo;
+  const rotaMapaGrande = rotaMovel && (mapaExpandido || routeDisplayClients.length === 0);
+  const rotaFaixaDeMapa = rotaMovel && !rotaMapaGrande;
+
   const conteudoMapa = (
     <>
       <MapView
@@ -3576,20 +3597,27 @@ function MainApp() {
 
       {/* Map buttons. Recenter e FAB somem enquanto o calor está ligado
           (o painel de calor ocupa a faixa de baixo). */}
-      {userLocation && !creationMode && !heatOn && (
+      {userLocation && !creationMode && !heatOn && !rotaFaixaDeMapa && (
         <TouchableOpacity
-          style={[
-            styles.mapButton,
-            // No rodape ele disputava espaco com a barra e o FAB, entao subiu
-            // pro topo. O `top` e' contado a partir do Y REAL do mapa
-            // (mapLayout, ja' medido pro pin de criacao): estes overlays sao
-            // absolutos contra a raiz da tela, e um `top: 16` cru punha o
-            // botao em cima da busca do header.
-            layout.ehLargo
-              ? { bottom: baseInferior, left: 16 }
-              : { top: (mapLayout?.y ?? 0) + 16, left: 16 },
-            layout.ehLargo && styles.mapaControleWeb,
-          ]}
+          style={
+            rotaMapaGrande
+              // Rota (M3c): pill de 48. No expandido ele desce pro canto
+              // inferior esquerdo — a casa definitiva dele e do calor — e no
+              // estado vazio fica no topo, oposto ao botao de expandir.
+              ? [styles.mapaControleRota, mapaExpandido ? { bottom: 68, left: 12 } : { top: 12, left: 12 }]
+              : [
+                  styles.mapButton,
+                  // No rodape ele disputava espaco com a barra e o FAB, entao
+                  // subiu pro topo. O `top` e' contado a partir do Y REAL do
+                  // mapa (mapLayout, ja' medido pro pin de criacao): estes
+                  // overlays sao absolutos contra a raiz da tela, e um
+                  // `top: 16` cru punha o botao em cima da busca do header.
+                  layout.ehLargo
+                    ? { bottom: baseInferior, left: 16 }
+                    : { top: (mapLayout?.y ?? 0) + 16, left: 16 },
+                  layout.ehLargo && styles.mapaControleWeb,
+                ]
+          }
           onPress={centerOnUser}
          accessibilityRole="button" accessibilityLabel="Centralizar no meu local">
           {/* Cheio quando esta' seguindo o vendedor, vazado quando a
@@ -3605,7 +3633,7 @@ function MainApp() {
       {/* Toggle do mapa de calor — só gestor. Fica acima do FAB (à direita).
           Quando ligado some (o painel embaixo, com seu ✕, é o controle de
           desligar) — assim não sobrepõe o painel. */}
-      {canViewGestor && !creationMode && !heatOn && !layout.ehLargo && (
+      {canViewGestor && !creationMode && !heatOn && !layout.ehLargo && (rotaMovel ? mapaExpandido : true) && (
         <TouchableOpacity
           // Estilo proprio em vez de `{ left: undefined }` sobre o
           // mapButton: no react-native-web o estilo base vira classe CSS e
@@ -3615,7 +3643,14 @@ function MainApp() {
           // Sobe pro topo, espelhando o de localizacao: em baixo ele empilhava
           // com o recentrar e o FAB e sobrava um terceiro botao solto no
           // canto. Mesmo `top` do outro, contado do Y REAL do mapa.
-          style={[styles.mapButtonRight, { top: (mapLayout?.y ?? 0) + 16 }]}
+          //
+          // Na Rota expandida (M3c/D) ele muda de canto: embaixo a' esquerda,
+          // sob o recentrar, que e' onde os dois passam a morar.
+          style={
+            rotaMovel
+              ? [styles.mapaControleRota, { bottom: 12, left: 12 }]
+              : [styles.mapButtonRight, { top: (mapLayout?.y ?? 0) + 16 }]
+          }
           onPress={() => setHeatOn(true)}
           accessibilityRole="button"
           accessibilityLabel="Mapa de calor de visitas"
@@ -4449,8 +4484,9 @@ function MainApp() {
       {layout.ehLargo && headerWeb}
 
       {/* Header vermelho — so' no celular. No web o vermelho vira o CTA
-          (handoff: "o vermelho sai do header"). */}
-      {!layout.ehLargo && (
+          (handoff: "o vermelho sai do header"). No mapa expandido da Rota ele
+          some junto com a barra: o mapa e' a tela. */}
+      {!layout.ehLargo && !rotaMapaExpandido && (
       <View style={[styles.header, isDark && styles.headerEscuro]}>
         {/* Linha 1 — busca + avatar. A busca subiu pro header: ela e' o
             caminho pro lead que NAO esta' na area carregada, e ficava abaixo
@@ -4575,33 +4611,29 @@ function MainApp() {
                   })()}
                 </Text>
               </View>
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel="Configurar rota"
-                style={styles.rotaConfigBotao}
-                onPress={() => setConfigRotaAberta(true)}
-              >
-                <IconSettings width={24} height={24} fill="#FFFFFF" />
-              </TouchableOpacity>
             </View>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              {[
-                { v: String(routeDisplayClients.length), r: routeDisplayClients.length === 1 ? 'PARADA' : 'PARADAS' },
-                {
-                  v: routeGeometry.data ? `${(routeGeometry.data.distanceMeters / 1000).toFixed(1)} km` : '—',
-                  r: 'DISTÂNCIA',
-                },
-                {
-                  v: routeGeometry.data ? `${Math.round(routeGeometry.data.durationSeconds / 60)} min` : '—',
-                  r: 'EM ROTA',
-                },
-              ].map((k) => (
-                <View key={k.r} style={styles.rotaKpi}>
-                  <Text style={styles.rotaKpiValor}>{k.v}</Text>
-                  <Text style={styles.rotaKpiRotulo}>{k.r}</Text>
-                </View>
-              ))}
-            </View>
+            {/* Sem rota, tres "—" nao informam nada: a faixa inteira sai e o
+                header fica so' com o kicker, a data e o avatar (M3c/A). */}
+            {routeDisplayClients.length > 0 && (
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {[
+                  { v: String(routeDisplayClients.length), r: routeDisplayClients.length === 1 ? 'PARADA' : 'PARADAS' },
+                  {
+                    v: routeGeometry.data ? `${(routeGeometry.data.distanceMeters / 1000).toFixed(1)} km` : '—',
+                    r: 'DISTÂNCIA',
+                  },
+                  {
+                    v: routeGeometry.data ? `${Math.round(routeGeometry.data.durationSeconds / 60)} min` : '—',
+                    r: 'EM ROTA',
+                  },
+                ].map((k) => (
+                  <View key={k.r} style={styles.rotaKpi}>
+                    <Text style={styles.rotaKpiValor}>{k.v}</Text>
+                    <Text style={styles.rotaKpiRotulo}>{k.r}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
@@ -4910,7 +4942,13 @@ function MainApp() {
           geometriaDaRota={routeGeometry.data}
           onMarkVisited={isViewer ? undefined : handleMarkAsVisited}
           configAberta={configRotaAberta}
+          aoAbrirConfig={() => setConfigRotaAberta(true)}
           aoFecharConfig={() => setConfigRotaAberta(false)}
+          mapaExpandido={mapaExpandido}
+          // Recolher desliga o calor junto: o toggle dele so' existe no mapa
+          // expandido, e a folha do calor sobre a faixa de 180px cobriria a
+          // sequencia com um controle que a tela nao tem mais como fechar.
+          setMapaExpandido={(v) => { setMapaExpandido(v); if (!v) setHeatOn(false); }}
           geometriaCarregando={routeGeometry.isFetching}
           routeLeadCount={routeLeadCount}
           setRouteLeadCount={setRouteLeadCount}
@@ -5097,7 +5135,7 @@ function MainApp() {
       {/* Gestor e Meu desempenho nao tem barra: nao sao abas, chegam pelo menu
           do perfil, e o arrow_back do header e' a volta. Com a barra elas
           teriam dois caminhos de saida dizendo coisas diferentes. */}
-      {!layout.ehLargo && tab !== 'gestor' && tab !== 'meu' && tab !== 'config' && (
+      {!layout.ehLargo && tab !== 'gestor' && tab !== 'meu' && tab !== 'config' && !rotaMapaExpandido && (
       <View style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]}>
         <TouchableOpacity
           accessibilityRole="button"
@@ -7590,14 +7628,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.75)',
   },
   rotaData: { fontSize: 18, lineHeight: 24, fontWeight: '600', color: '#FFFFFF' },
-  rotaConfigBotao: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   rotaKpi: { flex: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.14)' },
   rotaKpiValor: { fontSize: 16, lineHeight: 24, fontWeight: '700', color: '#FFFFFF', fontVariant: ['tabular-nums'] },
   rotaKpiRotulo: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'rgba(255,255,255,0.75)' },
@@ -7942,6 +7972,27 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 8,
     elevation: 4,
+  },
+  // Controles do mapa da Rota (M3c/D): pill de 48, superficie com traco fino e
+  // sombra baixa — o desenho dos quadros 1a e 1d. Estilo PROPRIO, e nao um
+  // override do mapButton: no react-native-web o valor `undefined` nao emite
+  // regra (mesma armadilha do comentario acima), entao trocar `top` por
+  // `bottom` no mesmo objeto deixaria os dois valendo.
+  mapaControleRota: {
+    position: 'absolute',
+    width: 48,
+    height: 48,
+    borderRadius: 9999,
+    backgroundColor: 'var(--surface)',
+    borderWidth: 1,
+    borderColor: 'var(--stroke-default)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 3,
+    elevation: 2,
   },
   // Mesma pilula, ancorada a' DIREITA. Existe como estilo proprio porque
   // sobrescrever `left` com `undefined` nao funciona no react-native-web

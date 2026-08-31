@@ -69,6 +69,14 @@ import { IconSearch } from 'takeat-design-system-ui-kit/icons/IconSearch';
 import { IconSettings } from 'takeat-design-system-ui-kit/icons/IconSettings';
 import { IconSquareMenu } from 'takeat-design-system-ui-kit/icons/IconSquareMenu';
 import { IconTrendingUp } from 'takeat-design-system-ui-kit/icons/IconTrendingUp';
+// M3c: existiam no kit, faltavam aqui. IconExpand/IconShrink sao o
+// open_in_full/close_fullscreen do handoff; IconSparkle entra no lugar do
+// `bolt` (que o kit nao tem) como marca do caminho automatico; IconUserAdd e'
+// o person_add do card de adicionar lead.
+import { IconExpand } from 'takeat-design-system-ui-kit/icons/IconExpand';
+import { IconShrink } from 'takeat-design-system-ui-kit/icons/IconShrink';
+import { IconSparkle } from 'takeat-design-system-ui-kit/icons/IconSparkle';
+import { IconUserAdd } from 'takeat-design-system-ui-kit/icons/IconUserAdd';
 // M1-DECISOES-2: existiam no kit, faltavam aqui. IconIdCard tira o emoji do
 // ID HubSpot; IconTrash e' o 'delete' do menu; IconManager, o responsavel.
 import { IconIdCard } from 'takeat-design-system-ui-kit/icons/IconIdCard';
@@ -106,6 +114,7 @@ export {
   IconClose,
   IconCloseCircle,
   IconDownload,
+  IconExpand,
   IconExternalLink,
   IconEye,
   IconFilterList,
@@ -122,6 +131,8 @@ export {
   IconRefresh,
   IconSearch,
   IconSettings,
+  IconShrink,
+  IconSparkle,
   IconSquareMenu,
   IconStar,
   IconStore,
@@ -130,6 +141,7 @@ export {
   IconTrophy,
   IconUndo,
   IconUser,
+  IconUserAdd,
   IconUserGroup,
   IconWarning,
   IconWhatsapp,

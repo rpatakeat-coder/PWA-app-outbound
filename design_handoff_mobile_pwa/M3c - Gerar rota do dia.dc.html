@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F6F6F6;--raised:#FFFFFF;--nested:#F6F6F6;--fill:#EDEDED;
+  --t1:#222222;--t2:#545454;--t3:#7A7A7A;--t4:#C6C6C6;
+  --s-subtle:#EDEDED;--s-default:#C6C6C6;--s-strong:#7A7A7A;
+  --brand:#C8131B;--brand-dark:#94090F;--brand-tint:#FAE8E9;
+  color-scheme:light;
+}
+[data-theme='dark']{
+  --bg:#121212;--raised:#1E1E1E;--nested:#262626;--fill:#2A2A2A;
+  --t1:rgba(255,255,255,.92);--t2:rgba(255,255,255,.64);--t3:rgba(255,255,255,.42);--t4:rgba(255,255,255,.28);
+  --s-subtle:rgba(255,255,255,.08);--s-default:rgba(255,255,255,.14);--s-strong:rgba(255,255,255,.24);
+  --brand-dark:#E5A1A4;--brand-tint:#3A1416;
+  color-scheme:dark;
+}
+body{margin:0;background:#E4E4E4;font-family:Poppins,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased;}
+.ms{font-family:'Material Symbols Rounded';font-weight:400;font-style:normal;line-height:1;letter-spacing:normal;display:inline-block;white-space:nowrap;direction:ltr;-webkit-font-feature-settings:'liga';}
+a{color:#018CCC;text-decoration:none;}
+a:hover{color:#016999;}
+</style>
+</helmet>
+
+<section style="padding:32px;background:#E4E4E4;min-height:100vh;box-sizing:border-box;">
+  <div style="max-width:1400px;margin:0 auto;">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:11px;line-height:16px;letter-spacing:1.2px;font-weight:800;color:#7A7A7A;text-transform:uppercase;">M3c · Rota</div>
+        <h1 style="margin:4px 0 0;font-size:24px;line-height:32px;font-weight:700;color:#222222;">Gerar Rota do dia volta para a tela</h1>
+        <div style="margin-top:4px;font-size:14px;line-height:20px;color:#545454;max-width:640px;">O M3 mandou os três auxiliares para o sheet e o CTA foi junto — o primeiro gesto do dia ficou a dois toques e sem pista. Sem paradas, a tela é o CTA; com paradas, ele volta para o sheet, onde não compete com a sequência.</div>
+      </div>
+      <button onClick="{{ toggleTheme }}" style="height:40px;padding:0 16px;border-radius:8px;border:1px solid #C6C6C6;background:#FFFFFF;color:#545454;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;" style-hover="border-color:#7A7A7A;">{{ rotuloTema }}</button>
+    </div>
+
+    <div style="display:flex;gap:32px;flex-wrap:wrap;margin-top:28px;align-items:flex-start;">
+
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div id="1a" style="display:flex;align-items:center;gap:8px;">
+          <span style="display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:4px;background:#C8131B;color:#fff;font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:700;">1a</span>
+          <span style="font-size:14px;line-height:20px;font-weight:600;color:#222222;">Sem paradas — a tela é o CTA</span>
+        </div>
+        <div data-theme="{{ tema }}" data-screen-label="Rota vazia" style="width:390px;height:844px;background:var(--bg);border:1px solid #C6C6C6;overflow:hidden;display:flex;flex-direction:column;">
+          <div style="padding:12px 16px;background:var(--brand);color:#fff;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+              <div style="min-width:0;">
+                <div style="font-size:11px;line-height:16px;letter-spacing:1.32px;font-weight:800;color:rgba(255,255,255,.75);text-transform:uppercase;">Rota de hoje</div>
+                <div style="font-size:18px;line-height:24px;font-weight:600;">Segunda, 31 de agosto</div>
+              </div>
+              <div style="width:48px;height:48px;flex:0 0 48px;border-radius:9999px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;">GB</div>
+            </div>
+          </div>
+
+          <div style="flex:1;min-height:0;position:relative;background:var(--fill);display:flex;flex-direction:column;">
+            <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative;">
+              <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);">Mapa · placeholder</div>
+              <div style="position:absolute;left:12px;top:12px;display:flex;flex-direction:column;gap:8px;">
+                <div style="width:48px;height:48px;border-radius:9999px;background:var(--raised);border:1px solid var(--s-default);display:flex;align-items:center;justify-content:center;color:var(--t2);box-shadow:0 1px 3px rgba(0,0,0,.12);"><span class="ms" style="font-size:22px;">my_location</span></div>
+                <div style="width:48px;height:48px;border-radius:9999px;background:var(--raised);border:1px solid var(--s-default);display:flex;align-items:center;justify-content:center;color:var(--t2);box-shadow:0 1px 3px rgba(0,0,0,.12);"><span class="ms" style="font-size:22px;">open_in_full</span></div>
+              </div>
+            </div>
+            <div style="background:var(--raised);border-radius:16px 16px 0 0;border-top:1px solid var(--s-subtle);box-shadow:0 -2px 12px rgba(0,0,0,.10);padding:12px 16px 40px;">
+              <div style="width:36px;height:4px;border-radius:2px;background:var(--s-default);margin:0 auto 16px;"></div>
+              <div style="font-size:18px;line-height:24px;font-weight:600;color:var(--t1);">Nenhuma parada hoje</div>
+              <div style="margin-top:4px;font-size:14px;line-height:20px;letter-spacing:.25px;color:var(--t2);">Monta as obrigatórias e completa até a meta de 8, partindo de onde você está.</div>
+              <button style="width:100%;height:48px;margin-top:16px;border:0;border-radius:12px;background:var(--brand);color:#fff;font-family:inherit;font-size:16px;line-height:24px;letter-spacing:.15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;" style-hover="background:#A80F16;"><span class="ms" style="font-size:22px;">bolt</span>Gerar Rota do dia</button>
+              <div style="display:flex;gap:8px;margin-top:8px;">
+                <button onClick="{{ abrirSheet }}" style="flex:1;height:48px;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--s-default);border-radius:12px;background:transparent;color:var(--t2);font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;white-space:nowrap;" style-hover="border-color:var(--s-strong);"><span class="ms" style="font-size:20px;">tune</span>Montar eu mesmo</button>
+                <button style="flex:1;height:48px;display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--s-default);border-radius:12px;background:transparent;color:var(--t2);font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;white-space:nowrap;" style-hover="border-color:var(--s-strong);"><span class="ms" style="font-size:20px;">touch_app</span>Abrir um pin</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="border-top:1px solid var(--s-subtle);background:var(--raised);position:relative;">
+            <div style="position:absolute;left:50%;top:-30px;transform:translateX(-50%);width:60px;height:60px;border-radius:9999px;background:var(--brand);border:4px solid var(--raised);display:flex;align-items:center;justify-content:center;color:#fff;"><span class="ms" style="font-size:28px;">add</span></div>
+            <div style="display:flex;">
+              <sc-for list="{{ nav }}" as="n" hint-placeholder-count="5">
+                <sc-if value="{{ n.gap }}" hint-placeholder-val="{{ false }}"><div style="width:72px;flex:0 0 72px;"></div></sc-if>
+                <sc-if value="{{ n.item }}" hint-placeholder-val="{{ true }}">
+                  <div style="flex:1;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;">
+                    <span class="ms" style="font-size:24px;color:{{ n.cor }};">{{ n.icon }}</span>
+                    <span style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:{{ n.peso }};color:{{ n.cor }};">{{ n.label }}</span>
+                  </div>
+                </sc-if>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <ul style="margin:0;padding-left:18px;width:390px;box-sizing:border-box;font-size:12px;line-height:18px;color:#545454;">
+          <li>Um toque, não dois</li>
+          <li>Sem KPIs em "—" — o header perde a faixa quando não há rota</li>
+          <li>O mapa continua: é o caminho de "abrir um pin"</li>
+        </ul>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div id="1b" style="display:flex;align-items:center;gap:8px;">
+          <span style="display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:4px;background:#C8131B;color:#fff;font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:700;">1b</span>
+          <span style="font-size:14px;line-height:20px;font-weight:600;color:#222222;">Com paradas — CTA no cabeçalho da sequência</span>
+        </div>
+        <div data-theme="{{ tema }}" data-screen-label="Rota com paradas" style="width:390px;height:844px;background:var(--bg);border:1px solid #C6C6C6;overflow:hidden;display:flex;flex-direction:column;">
+          <div style="padding:12px 16px;background:var(--brand);color:#fff;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+              <div style="min-width:0;">
+                <div style="font-size:11px;line-height:16px;letter-spacing:1.32px;font-weight:800;color:rgba(255,255,255,.75);text-transform:uppercase;">Rota de hoje</div>
+                <div style="font-size:18px;line-height:24px;font-weight:600;">Segunda, 31 de agosto</div>
+              </div>
+              <div style="width:48px;height:48px;flex:0 0 48px;border-radius:9999px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;">GB</div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px;">
+              <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="3">
+                <div style="flex:1;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,.14);">
+                  <div style="font-size:18px;line-height:24px;font-weight:700;font-variant-numeric:tabular-nums;">{{ k.valor }}</div>
+                  <div style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:600;color:rgba(255,255,255,.8);text-transform:uppercase;">{{ k.rotulo }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="height:180px;flex:0 0 180px;background:var(--fill);border-bottom:1px solid var(--s-subtle);display:flex;align-items:center;justify-content:center;position:relative;">
+            <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);">Mapa · placeholder</div>
+            <button style="position:absolute;right:12px;top:12px;width:48px;height:48px;border-radius:9999px;background:var(--raised);border:1px solid var(--s-default);display:flex;align-items:center;justify-content:center;color:var(--t2);box-shadow:0 1px 3px rgba(0,0,0,.12);cursor:pointer;font-family:inherit;" style-hover="border-color:var(--s-strong);"><span class="ms" style="font-size:22px;">open_in_full</span></button>
+          </div>
+
+          <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 16px 40px;display:flex;flex-direction:column;gap:12px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="flex:1;min-width:0;font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:var(--t2);text-transform:uppercase;">Sequência · 5 paradas</div>
+              <button onClick="{{ abrirSheet }}" style="display:flex;align-items:center;gap:6px;height:48px;padding:0 12px;border:0;background:transparent;color:#018CCC;font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;cursor:pointer;white-space:nowrap;" style-hover="color:#016999;"><span class="ms" style="font-size:20px;">tune</span>Refazer rota</button>
+            </div>
+
+            <sc-for list="{{ paradas }}" as="p" hint-placeholder-count="3">
+              <div style="padding:16px;border-radius:16px;background:var(--raised);border:1px solid {{ p.borda }};display:flex;gap:12px;">
+                <div style="width:32px;height:32px;flex:0 0 32px;border-radius:9999px;background:{{ p.pinoBg }};color:{{ p.pinoFg }};display:flex;align-items:center;justify-content:center;font-size:14px;line-height:20px;font-weight:700;font-variant-numeric:tabular-nums;">{{ p.n }}</div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:16px;line-height:24px;letter-spacing:.15px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ p.nome }}</div>
+                  <div style="margin-top:2px;font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ p.sub }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="border-top:1px solid var(--s-subtle);background:var(--raised);position:relative;">
+            <div style="position:absolute;left:50%;top:-30px;transform:translateX(-50%);width:60px;height:60px;border-radius:9999px;background:var(--brand);border:4px solid var(--raised);display:flex;align-items:center;justify-content:center;color:#fff;"><span class="ms" style="font-size:28px;">add</span></div>
+            <div style="display:flex;">
+              <sc-for list="{{ nav }}" as="n" hint-placeholder-count="5">
+                <sc-if value="{{ n.gap }}" hint-placeholder-val="{{ false }}"><div style="width:72px;flex:0 0 72px;"></div></sc-if>
+                <sc-if value="{{ n.item }}" hint-placeholder-val="{{ true }}">
+                  <div style="flex:1;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;">
+                    <span class="ms" style="font-size:24px;color:{{ n.cor }};">{{ n.icon }}</span>
+                    <span style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:{{ n.peso }};color:{{ n.cor }};">{{ n.label }}</span>
+                  </div>
+                </sc-if>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <ul style="margin:0;padding-left:18px;width:390px;box-sizing:border-box;font-size:12px;line-height:18px;color:#545454;">
+          <li>"Refazer rota" no cabeçalho da sequência — visível, sem competir</li>
+          <li>A sequência continua sendo o objeto de trabalho</li>
+        </ul>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div id="1c" style="display:flex;align-items:center;gap:8px;">
+          <span style="display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:4px;background:#7A7A7A;color:#fff;font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:700;">1c</span>
+          <span style="font-size:14px;line-height:20px;font-weight:600;color:#222222;">O sheet — os três caminhos</span>
+        </div>
+        <div data-theme="{{ tema }}" data-screen-label="Sheet de montagem" style="width:390px;height:844px;background:rgba(0,0,0,.4);border:1px solid #C6C6C6;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;">
+          <div style="background:var(--surface, var(--raised));border-radius:16px 16px 0 0;padding:12px 16px 32px;display:flex;flex-direction:column;">
+            <div style="width:36px;height:4px;border-radius:2px;background:var(--s-default);align-self:center;margin-bottom:16px;"></div>
+            <div style="font-size:18px;line-height:24px;font-weight:600;color:var(--t1);">Montar a rota</div>
+            <div style="margin-top:2px;font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);">Três caminhos. O primeiro é o do dia a dia.</div>
+
+            <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px;">
+              <div style="padding:16px;border-radius:16px;background:var(--brand-tint);border:1px solid var(--brand);">
+                <div style="display:flex;align-items:flex-start;gap:12px;">
+                  <span class="ms" style="font-size:24px;color:var(--brand-dark);">bolt</span>
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-size:16px;line-height:24px;letter-spacing:.15px;font-weight:600;color:var(--t1);">Rota do dia</div>
+                    <div style="margin-top:2px;font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t2);">Monta as obrigatórias — SLA estourado, Relacionamento +1000 comandas, Conta Alvo — e completa até a meta de 8. Ordem otimizada por estradas reais.</div>
+                  </div>
+                </div>
+                <button style="width:100%;height:48px;margin-top:12px;border:0;border-radius:12px;background:var(--brand);color:#fff;font-family:inherit;font-size:16px;line-height:24px;letter-spacing:.15px;font-weight:600;cursor:pointer;" style-hover="background:#A80F16;">Gerar Rota do dia</button>
+              </div>
+
+              <sc-for list="{{ auxiliares }}" as="a" hint-placeholder-count="2">
+                <button style="display:flex;align-items:flex-start;gap:12px;padding:16px;border:1px solid var(--s-subtle);border-radius:16px;background:var(--raised);font-family:inherit;cursor:pointer;text-align:left;" style-hover="border-color:var(--s-strong);">
+                  <span class="ms" style="font-size:24px;color:var(--t2);">{{ a.icone }}</span>
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-size:16px;line-height:24px;letter-spacing:.15px;font-weight:600;color:var(--t1);">{{ a.titulo }}</div>
+                    <div style="margin-top:2px;font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);">{{ a.sub }}</div>
+                  </div>
+                  <span class="ms" style="font-size:24px;color:var(--t4);">chevron_right</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <ul style="margin:0;padding-left:18px;width:390px;box-sizing:border-box;font-size:12px;line-height:18px;color:#545454;">
+          <li>Hierarquia declarada: automático em destaque, manual abaixo</li>
+          <li>Os três auxiliares do M3 continuam aqui — nada desapareceu</li>
+        </ul>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div id="1d" style="display:flex;align-items:center;gap:8px;">
+          <span style="display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:4px;background:#C8131B;color:#fff;font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:700;">1d</span>
+          <span style="font-size:14px;line-height:20px;font-weight:600;color:#222222;">Mapa expandido — a sequência vira peek</span>
+        </div>
+        <div data-theme="{{ tema }}" data-screen-label="Rota com mapa expandido" style="width:390px;height:844px;background:var(--fill);border:1px solid #C6C6C6;overflow:hidden;display:flex;flex-direction:column;position:relative;">
+          <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative;">
+            <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);">Mapa · placeholder</div>
+
+            <div style="position:absolute;left:12px;top:12px;right:12px;display:flex;align-items:flex-start;gap:8px;">
+              <div style="flex:1;min-width:0;display:flex;align-items:center;gap:10px;height:48px;padding:0 14px;border-radius:16px;background:var(--raised);border:1px solid var(--s-default);box-shadow:0 1px 3px rgba(0,0,0,.12);">
+                <span style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:700;color:var(--t1);font-variant-numeric:tabular-nums;">5</span>
+                <span style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);">paradas · 5,1 km · 9 min</span>
+              </div>
+              <button style="width:48px;height:48px;flex:0 0 48px;border-radius:9999px;background:var(--raised);border:1px solid var(--s-default);display:flex;align-items:center;justify-content:center;color:var(--brand-dark);box-shadow:0 1px 3px rgba(0,0,0,.12);cursor:pointer;font-family:inherit;" style-hover="border-color:var(--brand);"><span class="ms" style="font-size:22px;">close_fullscreen</span></button>
+            </div>
+
+            <div style="position:absolute;left:12px;bottom:12px;display:flex;flex-direction:column;gap:8px;">
+              <div style="width:48px;height:48px;border-radius:9999px;background:var(--raised);border:1px solid var(--s-default);display:flex;align-items:center;justify-content:center;color:var(--t2);box-shadow:0 1px 3px rgba(0,0,0,.12);"><span class="ms" style="font-size:22px;">my_location</span></div>
+              <div style="width:48px;height:48px;border-radius:9999px;background:var(--raised);border:1px solid var(--s-default);display:flex;align-items:center;justify-content:center;color:var(--t2);box-shadow:0 1px 3px rgba(0,0,0,.12);"><span class="ms" style="font-size:22px;">local_fire_department</span></div>
+            </div>
+          </div>
+
+          <div style="background:var(--raised);border-radius:16px 16px 0 0;border-top:1px solid var(--s-subtle);box-shadow:0 -2px 12px rgba(0,0,0,.10);padding:12px 16px 40px;">
+            <div style="width:36px;height:4px;border-radius:2px;background:var(--s-default);margin:0 auto 12px;"></div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div style="width:32px;height:32px;flex:0 0 32px;border-radius:9999px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:20px;font-weight:700;">2</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:16px;line-height:24px;letter-spacing:.15px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Golden Tulip Porto Vitória</div>
+                <div style="margin-top:2px;font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Próxima parada · 1,2 km · SLA D+2</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px;">
+              <button style="flex:1;height:48px;display:flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:12px;background:#16a34a;color:#fff;font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;white-space:nowrap;cursor:pointer;" style-hover="background:#128038;"><span class="ms" style="font-size:20px;">place</span>Navegar</button>
+              <button style="flex:1;height:48px;display:flex;align-items:center;justify-content:center;border:1px solid var(--s-default);border-radius:12px;background:transparent;color:var(--t2);font-family:inherit;font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;white-space:nowrap;cursor:pointer;" style-hover="border-color:var(--s-strong);">Ver as 5 paradas</button>
+            </div>
+          </div>
+        </div>
+        <ul style="margin:0;padding-left:18px;width:390px;box-sizing:border-box;font-size:12px;line-height:18px;color:#545454;">
+          <li>Header e barra somem; os KPIs viram uma pílula sobre o mapa</li>
+          <li>Peek mostra só a próxima parada — arrastar para cima traz a sequência</li>
+          <li>Calor e recentrar vivem aqui, não vazam para o estado normal</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { tema: 'light' };
+  renderVals() {
+    const dark = this.state.tema === 'dark';
+    const t1 = dark ? 'rgba(255,255,255,.92)' : '#222222';
+    const t3 = dark ? 'rgba(255,255,255,.42)' : '#7A7A7A';
+    return {
+      tema: this.state.tema,
+      rotuloTema: dark ? 'Tema claro' : 'Tema escuro',
+      toggleTheme: () => this.setState(s => ({ tema: s.tema === 'dark' ? 'light' : 'dark' })),
+      abrirSheet: () => {},
+      kpis: [
+        { valor: '5', rotulo: 'Paradas' },
+        { valor: '5,1 km', rotulo: 'Distância' },
+        { valor: '9 min', rotulo: 'Em rota' },
+      ],
+      paradas: [
+        { n: '1', nome: 'Restaurante Bento Ferreira', sub: 'Av. Cezar Hilal, 1200 · Relacionamento', borda: 'var(--s-subtle)', pinoBg: 'var(--fill)', pinoFg: t3 },
+        { n: '2', nome: 'Golden Tulip Porto Vitória', sub: 'Av. N. Sra. dos Navegantes, 635 · SLA D+2', borda: 'var(--brand)', pinoBg: 'var(--brand)', pinoFg: '#fff' },
+        { n: '3', nome: 'Atacadão São Paulo — Enseada', sub: 'R. Pereira Pinto, 88 · Conta Alvo', borda: 'var(--s-subtle)', pinoBg: 'var(--fill)', pinoFg: t1 },
+        { n: '4', nome: 'Pizzaria Terceira Ponte', sub: 'Av. Fernando Ferrari, 2020 · Follow-up', borda: 'var(--s-subtle)', pinoBg: 'var(--fill)', pinoFg: t1 },
+      ],
+      auxiliares: [
+        { icone: 'tune', titulo: 'Rota personalizada', sub: 'Escolha quantos leads, quais status e o responsável.' },
+        { icone: 'person_add', titulo: 'Adicionar lead manualmente', sub: 'Busque pelo nome e inclua na sequência.' },
+      ],
+      nav: [
+        { item: true, gap: false, icon: 'place', label: 'Mapa', cor: t3, peso: 500 },
+        { item: true, gap: false, icon: 'directions_car', label: 'Rota', cor: '#C8131B', peso: 700 },
+        { item: false, gap: true },
+        { item: true, gap: false, icon: 'calendar_month', label: 'Agenda', cor: t3, peso: 500 },
+        { item: true, gap: false, icon: 'checklist', label: 'Tarefas', cor: t3, peso: 500 },
+      ],
+    };
+  }
+}
+
+</script>
+</body>
+</html>
