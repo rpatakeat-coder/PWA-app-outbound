@@ -530,13 +530,26 @@ function RouteMarker({
   client,
   position,
   done = false,
+  atual = false,
   onPress,
 }: {
   client: Client;
   position: number;
   done?: boolean;
+  /** Parada "de agora" — a primeira ainda nao concluida. */
+  atual?: boolean;
   onPress: (client: Client) => void;
 }) {
+  // Tres estados, a mesma regra do pill de indice da lista: verde = feita,
+  // vermelho = a de agora, neutro = ainda pela frente. Antes TODA parada era
+  // vermelha e so' a concluida mudava de cor — o mapa nao dizia qual era a
+  // proxima, que e' justamente o que se olha na faixa de 180px.
+  //
+  // O neutro e' o literal #545454 (o valor claro de --text-muted) e nao
+  // `var(--text-muted)` de proposito: no escuro o token vira branco a 64%, e
+  // um pino quase branco com borda branca some sobre o mapa. Pino e' cromo de
+  // mapa, nao superficie de tema — mesma disciplina de TEMP_COLORS.
+  const cor = done ? '#16a34a' : atual ? '#C8131B' : '#545454';
   return (
     <Marker
       coordinate={{ latitude: client.latitude as number, longitude: client.longitude as number }}
@@ -551,10 +564,10 @@ function RouteMarker({
       cluster={false}
     >
       <View style={markerStyles.container}>
-        <View style={[markerStyles.routePin, done && { backgroundColor: '#16a34a' }]}>
+        <View style={[markerStyles.routePin, { backgroundColor: cor }]}>
           <Text style={markerStyles.routePinNumber}>{done ? '✓' : position}</Text>
         </View>
-        <View style={[markerStyles.routeArrow, done && { borderTopColor: '#16a34a' }]} />
+        <View style={[markerStyles.routeArrow, { borderTopColor: cor }]} />
       </View>
     </Marker>
   );
@@ -1440,6 +1453,16 @@ function MainApp() {
   );
 
   const routeDisplayClients = routeClients.length > 0 ? routeClients : routeDraft;
+
+  // A parada "de agora": a primeira ainda nao concluida. Mesma regra do
+  // `idxAtual` da RotaScreen — se as duas divergissem, o pino vermelho do
+  // mapa apontaria uma parada e a tag "Agora" do card apontaria outra.
+  const idClienteParadaAtual = useMemo(() => {
+    const atual = routeDisplayClients.find(
+      c => routeStops.find(s => s.client_id === c.id)?.status !== 'done',
+    );
+    return atual?.id ?? null;
+  }, [routeDisplayClients, routeStops]);
 
   const [isOptimizing, setIsOptimizing] = useState(false);
   // Provider usado na ultima sugestao bem-sucedida. Persistido em memoria
@@ -3004,6 +3027,7 @@ function MainApp() {
               client={client}
               position={currentStopIndex + idx + 1}
               done={routeStops.find(s => s.client_id === client.id)?.status === 'done'}
+              atual={client.id === idClienteParadaAtual}
               onPress={() => {}}
             />
           ))}
@@ -3405,6 +3429,7 @@ function MainApp() {
               client={client}
               position={index + 1}
               done={stop?.status === 'done'}
+              atual={client.id === idClienteParadaAtual}
               onPress={handleMarkerPress}
             />
           );
