@@ -32,6 +32,35 @@
     <link rel="icon" type="image/png" href="/icons/icon-192.png" />
 
     <!--
+      Marca o <html> quando o app roda instalado (fora do navegador).
+
+      O `@media (display-mode: standalone)` sozinho nao serve no iOS: no web
+      app adicionado a' tela de inicio ele e' historicamente inconstante, e
+      quem responde por la' e' o `navigator.standalone` — proprietario da
+      Apple, e o unico sinal confiavel nesse ambiente. Le os dois e marca o
+      atributo antes do primeiro paint, pra a regra do #root (mais abaixo) nao
+      depender de um so'.
+    -->
+    <script>
+      (function () {
+        try {
+          var casa = function (q) {
+            return window.matchMedia ? window.matchMedia(q).matches : false;
+          };
+          if (
+            window.navigator.standalone === true ||
+            casa('(display-mode: standalone)') ||
+            casa('(display-mode: fullscreen)')
+          ) {
+            document.documentElement.setAttribute('data-standalone', '');
+          }
+        } catch (e) {
+          /* Sem sinal, fica o comportamento de navegador — que ja' funciona. */
+        }
+      })();
+    </script>
+
+    <!--
       Paleta em variáveis CSS.
 
       Isto existe porque o app roda em react-native-web: os estilos viram
@@ -399,14 +428,17 @@
         layout inclui a area da barra — la' o `100dvh` e' que esta' certo, e
         fixar tudo poria as abas embaixo do toolbar.
 
+        O gatilho e' o `data-standalone` que o script do <head> marca, e nao
+        um `@media (display-mode: standalone)` puro: no iPhone essa media
+        query nao e' confiavel no app da tela de inicio, e e' a explicacao de
+        a primeira tentativa nao ter mudado nada na tela.
+
         A reserva da area segura continua onde estava (o `paddingBottom:
         insets.bottom` da barra): o que muda e' so' onde o app termina.
       */
-      @media (display-mode: standalone), (display-mode: fullscreen) {
-        #root {
-          position: fixed;
-          inset: 0;
-        }
+      html[data-standalone] #root {
+        position: fixed;
+        inset: 0;
       }
 
       /* Segura o "puxa pra atualizar" do Chrome Android: num app de mapa o
