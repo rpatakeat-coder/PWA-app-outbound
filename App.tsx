@@ -3454,7 +3454,10 @@ function MainApp() {
             )}
           </View>
         )}
-        {!layout.ehLargo && !creationMode && (
+        {/* So' nas abas de leads: `renderMap` tambem alimenta a FAIXA de mapa
+            da Rota, e la' a contagem do recorte nao quer dizer nada — o que
+            esta' na tela e' a sequencia, nao o resultado de um filtro. */}
+        {!layout.ehLargo && !creationMode && ehAbaDeLeads && (
           <View style={styles.recortePill}>
             <Text style={styles.recorteTexto}>
               {`${filteredClients.length} ${filteredClients.length === 1 ? 'lead' : 'leads'} no recorte`}
