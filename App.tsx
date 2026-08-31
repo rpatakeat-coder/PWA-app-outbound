@@ -616,6 +616,14 @@ function MainApp() {
   // lateral, entao esse espaco deixou de existir — sem isto os botoes ficariam
   // pairando 90px acima do nada.
   const baseInferior = layout.ehDesktop ? 24 : 90 + insets.bottom;
+  // Mapa e Lista sao a MESMA base vista de dois jeitos, entao alternam dentro
+  // da tela em vez de serem duas abas. Estado local: se virasse aba de novo, a
+  // barra de quatro do M1 se desfaz.
+  const [vistaMapa, setVistaMapa] = useState<'mapa' | 'lista'>('mapa');
+  // Sheet de configuracao da Rota. O botao vive no header (App) e o conteudo
+  // no RotaScreen, que e' onde os seis cartoes ja' moram — por isso o estado
+  // sobe pra ca' e desce por prop.
+  const [configRotaAberta, setConfigRotaAberta] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isFollowingUser, setIsFollowingUser] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ClientStatus>('lead' as ClientStatus);
@@ -2687,7 +2695,37 @@ function MainApp() {
     // Restaurante (empresa) eh o titulo principal. Fallback pro nome do
     // contato em leads antigos que ainda nao tem empresa preenchida.
     const primary = getClientPrimaryName(item);
-    const secondary = item.empresa?.trim() ? item.nome : null;
+    // Distancia so' existe com GPS e com o lead posicionado; sem um dos dois a
+    // linha simplesmente nao aparece, em vez de mostrar "—".
+    const distancia =
+      userLocation && item.latitude != null && item.longitude != null
+        ? (() => {
+            const m = haversineMeters(
+              userLocation.latitude,
+              userLocation.longitude,
+              item.latitude as number,
+              item.longitude as number,
+            );
+            return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
+          })()
+        : null;
+    // Tints do badge: fundo tonal claro com texto escuro. Sao superficies
+    // proprias, entao os hexes sao literais como os de TEMP_COLORS.
+    const t = stageTemperature(item.etapa);
+    const temp = t
+      ? ({
+          Quente: { rotulo: 'Quente', bg: '#FAE8E9', fg: '#94090F' },
+          Morno: { rotulo: 'Morno', bg: '#FFF8EB', fg: '#99670F' },
+          Frio: { rotulo: 'Frio', bg: '#E6F7FF', fg: '#016999' },
+          Fechado: { rotulo: 'Fechado', bg: '#EAF7EE', fg: '#167532' },
+          Perdido: { rotulo: 'Perdido', bg: '#EDEDED', fg: '#545454' },
+        } as const)[t.label as 'Quente' | 'Morno' | 'Frio' | 'Fechado' | 'Perdido']
+      : null;
+    const ultimaVisita = (() => {
+      if (!item.visited_at) return 'nunca visitado';
+      const dias = Math.floor((Date.now() - new Date(item.visited_at).getTime()) / 86_400_000);
+      return dias <= 0 ? 'visitado hoje' : dias === 1 ? 'há 1 dia' : `há ${dias} dias`;
+    })();
     return (
       <TouchableOpacity
         style={[styles.clientCard, { borderLeftColor: color }]}
@@ -2711,20 +2749,52 @@ function MainApp() {
                 <IconText Icone={IconCalendar} style={styles.cardMeetingBadgeText} tone="onSurface">{meetingCount}</IconText>
               </View>
             )}
-            <View style={[sharedStyles.statusBadge, { backgroundColor: color }]}>
-              <Text style={sharedStyles.statusBadgeText}>{label}</Text>
-            </View>
+            {/* Badge de TEMPERATURA, nao de status: e' ela que diz o quao
+                perto do fechamento o lead esta'. Tint claro e' superficie
+                propria e nao inverte — por isso no escuro cai pra --surface-2
+                com texto --text, senao seria texto escuro sobre fundo escuro.
+                Sem temperatura conhecida, o status assume. */}
+            {temp ? (
+              <View style={[styles.cardTempBadge, isDark ? styles.cardTempBadgeEscuro : { backgroundColor: temp.bg }]}>
+                <Text style={[styles.cardTempBadgeTexto, { color: isDark ? 'var(--text)' : temp.fg }]}>
+                  {temp.rotulo}
+                </Text>
+              </View>
+            ) : (
+              <View style={[sharedStyles.statusBadge, { backgroundColor: color }]}>
+                <Text style={sharedStyles.statusBadgeText}>{label}</Text>
+              </View>
+            )}
           </View>
         </View>
-        {secondary && <Text style={styles.clientContact} numberOfLines={1}>Contato: {secondary}</Text>}
-        {item.etapa && <Text style={styles.clientStage} numberOfLines={1}>Etapa: {item.etapa}</Text>}
-        <Text style={styles.clientCity}>
-          {item.cidade ?? 'Cidade não informada'}{item.estado ? ` • ${item.estado}` : ''}
-        </Text>
-        {item.telefone && <Text style={styles.clientPhone}>{item.telefone}</Text>}
+        {/* Sublinha: etapa e cidade numa linha so'. Antes eram quatro linhas
+            soltas — "Contato: X", "Etapa: Y", cidade e telefone. */}
+        {(item.etapa || item.cidade) && (
+          <Text style={styles.cardSublinha} numberOfLines={1}>
+            {[item.etapa, item.cidade].filter(Boolean).join(' · ')}
+          </Text>
+        )}
+        {/* Distancia e ultima visita sao o que decide a proxima visita — por
+            isso ocupam o lugar do telefone e da cidade repetida. */}
+        {(distancia || ultimaVisita) && (
+          <View style={styles.cardMeta}>
+            {distancia && (
+              <View style={styles.cardMetaItem}>
+                <IconLocationFilled width={16} height={16} fill={iconColors.faint} />
+                <Text style={styles.cardMetaTexto}>{distancia}</Text>
+              </View>
+            )}
+            {ultimaVisita && (
+              <View style={styles.cardMetaItem}>
+                <IconClock width={16} height={16} fill={iconColors.faint} />
+                <Text style={styles.cardMetaTexto}>{ultimaVisita}</Text>
+              </View>
+            )}
+          </View>
+        )}
       </TouchableOpacity>
     );
-  }, [openClientDetails, statusConfig, upcomingByClient]);
+  }, [openClientDetails, statusConfig, upcomingByClient, userLocation, iconColors, isDark]);
 
   const renderListRow = useCallback(({ item }: { item: typeof listRows[number] }) => {
     if (item.type === 'client') {
@@ -3446,15 +3516,26 @@ function MainApp() {
           (o painel de calor ocupa a faixa de baixo). */}
       {userLocation && !creationMode && !heatOn && (
         <TouchableOpacity
-          style={[styles.mapButton, { bottom: baseInferior, left: 16 }, layout.ehLargo && styles.mapaControleWeb]}
+          style={[
+            styles.mapButton,
+            // No rodape ele disputava espaco com a barra e o FAB, entao subiu
+            // pro topo. O `top` e' contado a partir do Y REAL do mapa
+            // (mapLayout, ja' medido pro pin de criacao): estes overlays sao
+            // absolutos contra a raiz da tela, e um `top: 16` cru punha o
+            // botao em cima da busca do header.
+            layout.ehLargo
+              ? { bottom: baseInferior, left: 16 }
+              : { top: (mapLayout?.y ?? 0) + 16, left: 16 },
+            layout.ehLargo && styles.mapaControleWeb,
+          ]}
           onPress={centerOnUser}
          accessibilityRole="button" accessibilityLabel="Centralizar no meu local">
           {/* Cheio quando esta' seguindo o vendedor, vazado quando a
               camera esta' livre — mesma leitura que o 📍/🧭 dava. */}
           {isFollowingUser ? (
-            <IconLocationFilled width={22} height={22} fill={iconColors.brand} />
+            <IconLocationFilled width={24} height={24} fill="#C8131B" />
           ) : (
-            <IconLocation width={22} height={22} fill={iconColors.onSurface} />
+            <IconLocation width={24} height={24} fill={iconColors.muted} />
           )}
         </TouchableOpacity>
       )}
@@ -4300,26 +4381,134 @@ function MainApp() {
           (handoff: "o vermelho sai do header"). */}
       {!layout.ehLargo && (
       <View style={[styles.header, isDark && styles.headerEscuro]}>
-        {/* Esqueleto: fundo, padding e o avatar a' direita. A composicao do
-            meio varia por tela e e' definida no prompt de cada uma.
+        {/* Linha 1 — busca + avatar. A busca subiu pro header: ela e' o
+            caminho pro lead que NAO esta' na area carregada, e ficava abaixo
+            dos filtros, onde parecia filtro do recorte. */}
+        <View style={styles.headerLinha}>
+          {/* data-campo: o CSS de public/index.html tira o anel de foco do
+              <input> interno — dentro do vermelho da marca ele fica ilegivel —
+              e devolve o anel ao wrapper em tela larga. */}
+          {!isViewer && ehAbaDeLeads ? (
+            <View style={styles.headerBusca} {...ds({ campo: '1' })}>
+              <IconSearch width={20} height={20} fill="#FFFFFF" />
+              <TextInput
+                style={styles.headerBuscaCampo}
+                placeholder="Buscar por nome, empresa ou cidade"
+                placeholderTextColor="rgba(255,255,255,0.7)"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                returnKeyType="search"
+                autoCorrect={false}
+                autoCapitalize="none"
+                onSubmitEditing={Keyboard.dismiss}
+              />
+              {/* A busca varre a base inteira no servidor, nao so' a area
+                  carregada. Sem indicador, procurar um lead distante mostraria
+                  "nenhum encontrado" ate' a resposta chegar. */}
+              {buscando && <ActivityIndicator size="small" color="#FFFFFF" />}
+              {searchQuery.length > 0 && (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Limpar busca"
+                  onPress={() => setSearchQuery('')}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <IconClose width={20} height={20} fill="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <View style={{ flex: 1 }} />
+          )}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Perfil e configurações"
+            style={styles.headerAvatar}
+            onPress={() => setTab('config')}
+          >
+            <Text style={styles.headerAvatarTexto}>{iniciaisWeb}</Text>
+          </TouchableOpacity>
+        </View>
 
-            Sairam daqui o logo de 32px, o nome do vendedor e a engrenagem de
-            44x44 — todos vao pro menu do perfil (M10).
+        {/* Rota: kicker, data e os tres KPIs. A sequencia e' o objeto de
+            trabalho da tela, entao o cabecalho responde "quanto tem pela
+            frente" antes de o vendedor rolar. */}
+        {tab === 'route' && (
+          <View style={{ gap: 12 }}>
+            <View style={styles.headerLinha}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.rotaKicker}>ROTA DE HOJE</Text>
+                <Text style={styles.rotaData} numberOfLines={1}>
+                  {(() => {
+                    // `capitalize` do CSS subiria TODA palavra ("Segunda-Feira,
+                    // 31 De Agosto"). Em pt-BR so' a primeira sobe.
+                    const d = new Date().toLocaleDateString('pt-BR', {
+                      weekday: 'long', day: '2-digit', month: 'long',
+                    });
+                    return d.charAt(0).toUpperCase() + d.slice(1);
+                  })()}
+                </Text>
+              </View>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Configurar rota"
+                style={styles.rotaConfigBotao}
+                onPress={() => setConfigRotaAberta(true)}
+              >
+                <IconSettings width={24} height={24} fill="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              {[
+                { v: String(routeDisplayClients.length), r: routeDisplayClients.length === 1 ? 'PARADA' : 'PARADAS' },
+                {
+                  v: routeGeometry.data ? `${(routeGeometry.data.distanceMeters / 1000).toFixed(1)} km` : '—',
+                  r: 'DISTÂNCIA',
+                },
+                {
+                  v: routeGeometry.data ? `${Math.round(routeGeometry.data.durationSeconds / 60)} min` : '—',
+                  r: 'EM ROTA',
+                },
+              ].map((k) => (
+                <View key={k.r} style={styles.rotaKpi}>
+                  <Text style={styles.rotaKpiValor}>{k.v}</Text>
+                  <Text style={styles.rotaKpiRotulo}>{k.r}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
-            O avatar ainda NAO abre o menu, que so' nasce no M10: por ora ele
-            leva pra tela de Configuracoes, onde "Sair" mora. Sem isso o app
-            ficaria sem logout no celular, porque a engrenagem era o unico
-            caminho (o outro setTab('config') vive na sidebar, que so' existe
-            no web). No M10 troca-se uma linha. */}
-        <View style={styles.headerLeft} />
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel="Perfil e configurações"
-          style={styles.headerAvatar}
-          onPress={() => setTab('config')}
-        >
-          <Text style={styles.headerAvatarTexto}>{iniciaisWeb}</Text>
-        </TouchableOpacity>
+        {/* Linha 2 — Mapa / Lista. Raio 12 so' nas pontas: e' um controle, nao
+            dois botoes. */}
+        {ehAbaDeLeads && (
+          <View style={styles.headerSegmento}>
+            {([
+              { id: 'mapa' as const, rotulo: 'Mapa', Icone: IconLocation },
+              { id: 'lista' as const, rotulo: 'Lista', Icone: IconSquareMenu },
+            ]).map((v, i) => {
+              const ativo = vistaMapa === v.id;
+              return (
+                <TouchableOpacity
+                  key={v.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: ativo }}
+                  style={[
+                    styles.headerSegmentoItem,
+                    i === 0 ? styles.headerSegmentoEsq : styles.headerSegmentoDir,
+                    ativo && (isDark ? styles.headerSegmentoAtivoEscuro : styles.headerSegmentoAtivo),
+                  ]}
+                  onPress={() => setVistaMapa(v.id)}
+                >
+                  <v.Icone width={20} height={20} fill={ativo ? '#C8131B' : '#FFFFFF'} />
+                  <Text style={[styles.headerSegmentoTexto, ativo && styles.headerSegmentoTextoAtivo]}>
+                    {v.rotulo}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
       </View>
       )}
 
@@ -4362,33 +4551,6 @@ function MainApp() {
       {/* Vendedor/admin: search + chips de status (um por vez) + filtros. */}
       {!isViewer && ehAbaDeLeads && !layout.ehLargo && (
         <>
-          {/* Search bar: busca por nome, empresa, cidade ou bairro.
-              Reflete em mapa, lista e contadores dos chips de status em tempo real. */}
-          <View style={sharedStyles.searchBar}>
-            <IconSearch width={18} height={18} fill={iconColors.muted} />
-            <TextInput
-              style={sharedStyles.searchInput}
-              placeholder="Buscar por nome, empresa ou cidade"
-              placeholderTextColor="var(--text-subtle)"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              returnKeyType="search"
-              autoCorrect={false}
-              autoCapitalize="none"
-              onSubmitEditing={Keyboard.dismiss}
-            />
-            {/* A busca varre a base inteira no servidor, não só a área
-                carregada. Sem este indicador, procurar um cliente distante
-                mostraria "nenhum encontrado" no intervalo até a resposta
-                chegar — e o vendedor concluiria que ele não existe. */}
-            {buscando && <ActivityIndicator size="small" color="#94a3b8" />}
-            {searchQuery.length > 0 && (
-              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <IconClose width={15} height={15} fill={iconColors.muted} />
-              </TouchableOpacity>
-            )}
-          </View>
-
           {/* M4, nivel 1 no celular: segmented de status + chips de
               temperatura sempre visiveis (substituem a legenda que cobria um
               quarto do mapa). Sem chip "Todos" de status: trazia ~2k pinos de
@@ -4468,7 +4630,10 @@ function MainApp() {
         </>
       )}
 
-      {tab === 'map' ? (
+      {/* No celular Mapa e Lista sao a mesma aba: quem escolhe e' o segmented
+          do header (`vistaMapa`). No desktop a Lista continua sendo destino
+          proprio da sidebar, entao `tab === 'list'` segue valendo la'. */}
+      {tab === 'map' && !(!layout.ehLargo && vistaMapa === 'lista') ? (
         layout.ehLargo ? (
           /* Web: painel de trabalho fixo de 352px + mapa. O conteudo do mapa
              e' o MESMO JSX do celular (conteudoMapa) — so' a composicao muda. */
@@ -4479,7 +4644,7 @@ function MainApp() {
         ) : (
           conteudoMapa
         )
-      ) : tab === 'list' ? (
+      ) : tab === 'list' || (tab === 'map' && vistaMapa === 'lista') ? (
         layout.ehLargo ? (
           listaTabelaWeb
         ) : (
@@ -4536,6 +4701,9 @@ function MainApp() {
           routeDisplayClients={routeDisplayClients}
           routeStopClientIds={routeStopClientIds}
           geometriaDaRota={routeGeometry.data}
+          onMarkVisited={isViewer ? undefined : handleMarkAsVisited}
+          configAberta={configRotaAberta}
+          aoFecharConfig={() => setConfigRotaAberta(false)}
           geometriaCarregando={routeGeometry.isFetching}
           routeLeadCount={routeLeadCount}
           setRouteLeadCount={setRouteLeadCount}
@@ -7115,13 +7283,74 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'var(--surface)' },
   // Header
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
+    gap: 12,
     backgroundColor: '#C8131B',
   },
+  headerLinha: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerBusca: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 48,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  headerBuscaCampo: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 16,
+    lineHeight: 24,
+    letterSpacing: 0.5,
+    color: '#FFFFFF',
+  },
+  rotaKicker: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 1.32,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.75)',
+  },
+  rotaData: { fontSize: 18, lineHeight: 24, fontWeight: '600', color: '#FFFFFF' },
+  rotaConfigBotao: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rotaKpi: { flex: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.14)' },
+  rotaKpiValor: { fontSize: 16, lineHeight: 24, fontWeight: '700', color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  rotaKpiRotulo: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'rgba(255,255,255,0.75)' },
+  headerSegmento: { flexDirection: 'row' },
+  headerSegmentoItem: {
+    flex: 1,
+    height: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  headerSegmentoEsq: { borderTopLeftRadius: 12, borderBottomLeftRadius: 12 },
+  headerSegmentoDir: { borderTopRightRadius: 12, borderBottomRightRadius: 12 },
+  headerSegmentoAtivo: { backgroundColor: '#FFFFFF' },
+  // No escuro o header ja' e' --surface: o ativo branco sumiria nele.
+  headerSegmentoAtivoEscuro: { backgroundColor: '#1E1E1E' },
+  headerSegmentoTexto: {
+    fontSize: 14,
+    lineHeight: 20,
+    letterSpacing: 0.1,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  headerSegmentoTextoAtivo: { color: '#C8131B' },
   // No escuro o vermelho chapado no topo cansa e briga com a superficie.
   headerEscuro: { backgroundColor: 'var(--surface)' },
   headerAvatar: {
@@ -7329,15 +7558,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     backgroundColor: 'var(--surface)',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    // 48 e raio 16: os 44/22 anteriores nao sao degraus do kit, e 44 fica
+    // abaixo do alvo minimo do celular.
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOpacity: 0.15,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
     elevation: 4,
   },
   // Mesma pilula, ancorada a' DIREITA. Existe como estilo proprio porque
@@ -8056,8 +8287,6 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   cardNameRow: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 },
   cardLogo: { width: 18, height: 18, resizeMode: 'contain', marginRight: 8 },
-  clientContact: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
-  clientStage: { fontSize: 12, color: 'var(--brand-text)', fontWeight: '700', marginTop: 2 },
   cardMeetingBadge: {
     paddingHorizontal: 6,
     paddingVertical: 3,
@@ -8076,8 +8305,14 @@ const styles = StyleSheet.create({
     borderColor: 'var(--tint-green-border)',
   },
   cardVisitBadgeText: { color: 'var(--tint-green-text)', fontSize: 10, fontWeight: '700' },
+  cardTempBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
+  cardTempBadgeEscuro: { backgroundColor: 'var(--surface-2)' },
+  cardTempBadgeTexto: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600' },
+  cardSublinha: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)', marginTop: 2 },
+  cardMeta: { flexDirection: 'row', gap: 16, marginTop: 12 },
+  cardMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  cardMetaTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)' },
   clientCity: { fontSize: 13, color: 'var(--text-muted)', marginBottom: 2 },
-  clientPhone: { fontSize: 13, color: 'var(--text)' },
   segmentRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   segmentButton: {
     flex: 1,
