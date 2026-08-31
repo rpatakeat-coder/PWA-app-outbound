@@ -548,8 +548,6 @@ function RouteMarker({
       // (lib/helpers.js linha 10). Sem isso, route markers proximos viravam
       // cluster azul com contagem e sumiam visualmente — o bug que o usuario
       // viu ao adicionar pin via mapa.
-      // @ts-ignore — prop nao tipada na assinatura padrao do react-native-maps,
-      // mas reconhecida pelo wrapper de clustering.
       cluster={false}
     >
       <View style={markerStyles.container}>
@@ -571,14 +569,14 @@ function MainApp() {
   const iconColors = useIconColors();
 
   // Altura da linha "developed by RPA" (fonte 10 + folga).
-  const BRAND_H = 16;
   // Num iPhone a area segura de baixo (barra de gestos) ja' tem ~34px de sobra
   // — a assinatura mora DENTRO dela e nao custa altura nenhuma. Reserva-se
   // espaco proprio so' em aparelho sem essa area, senao a faixa branca abaixo
   // das abas fica grande a' toa.
-  const navPaddingBottom = Math.max(insets.bottom, BRAND_H);
+  // A assinatura saiu do rodape (vai pra secao SOBRE em Configuracoes, M10),
+  // entao a barra reserva so' a area segura — nao mais a altura do texto.
+  const navPaddingBottom = insets.bottom;
   // 4px de respiro entre os rotulos das abas e a assinatura.
-  const brandMarkBottom = Math.max(navPaddingBottom - BRAND_H + 2, 2);
   const { isAuthenticated, loading, logout, profile, updatePassword } = useAuth();
   const [tab, setTab] = useState<AppTab>('map');
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -3432,10 +3430,19 @@ function MainApp() {
         )}
       </MapView>
 
-      {/* Estado do carregamento por área. Fica sobre o mapa, sem capturar
-          toque (pointerEvents none) pra não atrapalhar o arraste. */}
-      {showOnlyMyArea && (viewportTooWide || isLoading) && (
-        <View style={styles.areaStatusWrap} pointerEvents="none">
+      {/* Estado do carregamento por área + contagem do recorte. Ambos sobre o
+          mapa, empilhados com gap 8, sem capturar toque (pointerEvents none)
+          pra não atrapalhar o arraste. A contagem saiu da faixa de filtro:
+          era uma linha de 32px de chrome dizendo um numero que muda a cada
+          arraste — informacao do mapa, nao do formulario de filtro. */}
+      <View
+        // `top` contado do Y REAL do mapa, igual aos botoes: este overlay e'
+        // absoluto contra a RAIZ DA TELA, e o `top: 8` cru punha a pill em
+        // cima da busca do header (valia ja' pra de carregamento).
+        style={[styles.areaStatusWrap, { top: (mapLayout?.y ?? 0) + 8 }]}
+        pointerEvents="none"
+      >
+        {showOnlyMyArea && (viewportTooWide || isLoading) && (
           <View style={styles.areaStatusPill}>
             {viewportTooWide ? (
               <IconText Icone={IconSearch} style={styles.areaStatusText} tone="onSurface">Aproxime para carregar os clientes desta região</IconText>
@@ -3446,8 +3453,15 @@ function MainApp() {
               </>
             )}
           </View>
-        </View>
-      )}
+        )}
+        {!layout.ehLargo && !creationMode && (
+          <View style={styles.recortePill}>
+            <Text style={styles.recorteTexto}>
+              {`${filteredClients.length} ${filteredClients.length === 1 ? 'lead' : 'leads'} no recorte`}
+            </Text>
+          </View>
+        )}
+      </View>
 
       {/* Pin de criacao ancorado no CENTRO DO MAPA (nao da tela). O
           region.latitude/longitude que salvamos e' o centro do MapView;
@@ -3550,10 +3564,15 @@ function MainApp() {
           // `undefined` nao emite regra nenhuma — ou seja, nao CANCELA o
           // `left: 16` da base. O botao ficava com left E right ao mesmo
           // tempo, ancorava a' esquerda e caia em cima da legenda de cores.
-          style={[styles.mapButtonRight, { bottom: baseInferior + 66 }]}
+          // Sobe pro topo, espelhando o de localizacao: em baixo ele empilhava
+          // com o recentrar e o FAB e sobrava um terceiro botao solto no
+          // canto. Mesmo `top` do outro, contado do Y REAL do mapa.
+          style={[styles.mapButtonRight, { top: (mapLayout?.y ?? 0) + 16 }]}
           onPress={() => setHeatOn(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Mapa de calor de visitas"
         >
-          <IconTrendingUp width={20} height={20} fill={iconColors.onSurface} />
+          <IconTrendingUp width={24} height={24} fill={iconColors.onSurface} />
         </TouchableOpacity>
       )}
 
@@ -4496,12 +4515,27 @@ function MainApp() {
                   style={[
                     styles.headerSegmentoItem,
                     i === 0 ? styles.headerSegmentoEsq : styles.headerSegmentoDir,
+                    isDark && !ativo && styles.headerSegmentoItemEscuro,
                     ativo && (isDark ? styles.headerSegmentoAtivoEscuro : styles.headerSegmentoAtivo),
                   ]}
                   onPress={() => setVistaMapa(v.id)}
                 >
-                  <v.Icone width={20} height={20} fill={ativo ? '#C8131B' : '#FFFFFF'} />
-                  <Text style={[styles.headerSegmentoTexto, ativo && styles.headerSegmentoTextoAtivo]}>
+                  <v.Icone
+                    width={20}
+                    height={20}
+                    fill={
+                      ativo
+                        ? (isDark ? iconColors.brandText : '#C8131B')
+                        : (isDark ? 'rgba(255,255,255,0.64)' : '#FFFFFF')
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.headerSegmentoTexto,
+                      isDark && !ativo && styles.headerSegmentoTextoEscuro,
+                      ativo && (isDark ? styles.headerSegmentoTextoAtivoEscuro : styles.headerSegmentoTextoAtivo),
+                    ]}
+                  >
                     {v.rotulo}
                   </Text>
                 </TouchableOpacity>
@@ -4551,47 +4585,53 @@ function MainApp() {
       {/* Vendedor/admin: search + chips de status (um por vez) + filtros. */}
       {!isViewer && ehAbaDeLeads && !layout.ehLargo && (
         <>
-          {/* M4, nivel 1 no celular: segmented de status + chips de
-              temperatura sempre visiveis (substituem a legenda que cobria um
-              quarto do mapa). Sem chip "Todos" de status: trazia ~2k pinos de
-              uma vez e travava o app. */}
+          {/* UMA faixa de filtro, nao tres. O status virou chip removivel na
+              mesma linha dos de temperatura: `Lead / Cliente / Ex-Cliente /
+              Ganho` e' recorte de sessao, nao alternancia de segundo a
+              segundo — ocupava 48px inteiros e o quarto rotulo ja' cortava em
+              "Ganho - Fi…". O sheet que o recebe e' o M4. */}
           <View style={styles.filterBar}>
-            <View style={styles.segMobileLinha}>
-              {statusOptions.map((opt, i) => {
-                const ativo = statusFilter === opt.value;
-                return (
-                  <TouchableOpacity
-                    key={opt.value}
-                    accessibilityRole="button"
-                    style={[
-                      styles.segMobile,
-                      i === 0 && { borderTopLeftRadius: 12, borderBottomLeftRadius: 12 },
-                      i === statusOptions.length - 1 && { borderTopRightRadius: 12, borderBottomRightRadius: 12 },
-                      i > 0 && { borderLeftWidth: 0 },
-                      ativo && { backgroundColor: '#C8131B', borderColor: '#C8131B' },
-                    ]}
-                    onPress={() => setStatusFilter(opt.value)}
-                  >
-                    <Text style={[styles.segMobileTexto, ativo && { color: '#FFFFFF' }]} numberOfLines={1}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 8, paddingVertical: 8 }}
+              contentContainerStyle={styles.filtroBarraLinha}
               keyboardShouldPersistTaps="handled"
             >
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Filtros"
+                style={styles.filtroBotao}
+                onPress={() => { Keyboard.dismiss(); setIsFiltersOpen(true); }}
+              >
+                <IconFilterList width={20} height={20} fill={iconColors.muted} />
+                {activeFilterCount > 0 && (
+                  <View style={styles.filterIconBadge}>
+                    <Text style={styles.filterIconBadgeText}>{activeFilterCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              {/* So' o status ATIVO aparece, como chip removivel. Remover volta
+                  pro padrao ('lead'), que e' o recorte que o mapa aguenta. */}
+              {statusFilter !== 'lead' && (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remover filtro ${statusConfig[statusFilter]?.label ?? statusFilter}`}
+                  style={[styles.tempChipMobile, styles.tempChipMobileAtivo]}
+                  onPress={() => setStatusFilter('lead' as ClientStatus)}
+                >
+                  <Text style={[styles.tempChipMobileTexto, { color: 'var(--tint-red-text)' }]}>
+                    {statusConfig[statusFilter]?.label ?? statusFilter}
+                  </Text>
+                  <IconClose width={14} height={14} fill={iconColors.tintRedText} />
+                </TouchableOpacity>
+              )}
+
               {[
                 { rotulo: 'Todos', cor: 'var(--stroke-default)', ativo: tempFilter === null && !contaAlvoOnly, aoTocar: () => { setTempFilter(null); setContaAlvoOnly(false); } },
                 { rotulo: 'Quente', cor: TEMP_COLORS.hot, ativo: tempFilter === 'Quente', aoTocar: () => setTempFilter(tempFilter === 'Quente' ? null : 'Quente') },
                 { rotulo: 'Morno', cor: TEMP_COLORS.warm, ativo: tempFilter === 'Morno', aoTocar: () => setTempFilter(tempFilter === 'Morno' ? null : 'Morno') },
                 { rotulo: 'Frio', cor: TEMP_COLORS.cold, ativo: tempFilter === 'Frio', aoTocar: () => setTempFilter(tempFilter === 'Frio' ? null : 'Frio') },
-                { rotulo: 'Fechado', cor: TEMP_COLORS.won, ativo: tempFilter === 'Fechado', aoTocar: () => setTempFilter(tempFilter === 'Fechado' ? null : 'Fechado') },
-                { rotulo: 'Perdido', cor: TEMP_COLORS.lost, ativo: tempFilter === 'Perdido', aoTocar: () => setTempFilter(tempFilter === 'Perdido' ? null : 'Perdido') },
                 { rotulo: 'Conta Alvo', cor: CONTA_ALVO_COLOR, ativo: contaAlvoOnly, aoTocar: () => setContaAlvoOnly(v => !v) },
               ].map(chip => (
                 <TouchableOpacity
@@ -4605,27 +4645,7 @@ function MainApp() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            {linhaFiltrosAtivos && <View style={{ paddingBottom: 8 }}>{linhaFiltrosAtivos}</View>}
-            <View style={styles.filterBarRow}>
-              {(availableStates.length > 0 || availableStages.length > 0) && (
-                <TouchableOpacity
-                  style={styles.filterIconButton}
-                  onPress={() => { Keyboard.dismiss(); setIsFiltersOpen(true); }}
-                >
-                  {/* Antes era um funil desenhado a mao com tres <View> de
-                      larguras decrescentes; agora e' o icone do UI Kit. */}
-                  <IconFilterList width={20} height={20} fill="#fff" />
-                  {activeFilterCount > 0 && (
-                    <View style={styles.filterIconBadge}>
-                      <Text style={styles.filterIconBadgeText}>{activeFilterCount}</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              )}
-              <Text style={[styles.tempChipMobileTexto, { alignSelf: 'center' }]}>
-                {`${filteredClients.length} ${filteredClients.length === 1 ? 'lead' : 'leads'} no recorte`}
-              </Text>
-            </View>
+            {linhaFiltrosAtivos && <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>{linhaFiltrosAtivos}</View>}
           </View>
         </>
       )}
@@ -4886,7 +4906,7 @@ function MainApp() {
               accessibilityRole="button"
               accessibilityLabel="Adicionar lead"
               activeOpacity={0.94}
-              style={styles.navFab}
+              style={[styles.navFab, isDark && styles.navFabEscuro]}
               onPress={() => setShowCepStep(true)}
             >
               <IconPlus width={32} height={32} fill="#FFFFFF" />
@@ -4894,9 +4914,6 @@ function MainApp() {
           </>
         )}
 
-        <Text style={[styles.brandMark, { bottom: brandMarkBottom }]} pointerEvents="none">
-          developed by RPA
-        </Text>
       </View>
       )}
 
@@ -7341,8 +7358,13 @@ const styles = StyleSheet.create({
   headerSegmentoEsq: { borderTopLeftRadius: 12, borderBottomLeftRadius: 12 },
   headerSegmentoDir: { borderTopRightRadius: 12, borderBottomRightRadius: 12 },
   headerSegmentoAtivo: { backgroundColor: '#FFFFFF' },
-  // No escuro o header ja' e' --surface: o ativo branco sumiria nele.
-  headerSegmentoAtivoEscuro: { backgroundColor: '#1E1E1E' },
+  // No escuro o ativo nao pode ser um hex de superficie: `--surface-2`
+  // (#262626) fica MAIS ESCURO que o inativo translucido (.18 sobre #1E1E1E
+  // resolve pra ~#414141), e a leitura invertia — o inativo e' que parecia o
+  // botao. Aqui o degrau e' de opacidade: o ativo fica com a translucidez
+  // cheia e o inativo cai pra .06.
+  headerSegmentoAtivoEscuro: { backgroundColor: 'rgba(255,255,255,0.18)' },
+  headerSegmentoItemEscuro: { backgroundColor: 'rgba(255,255,255,0.06)' },
   headerSegmentoTexto: {
     fontSize: 14,
     lineHeight: 20,
@@ -7350,7 +7372,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
+  // Branco cheio no inativo escuro competia com o ativo; .64 recua sem perder
+  // legibilidade (6.7:1 sobre o fundo do proprio chip).
+  headerSegmentoTextoEscuro: { color: 'rgba(255,255,255,0.64)' },
   headerSegmentoTextoAtivo: { color: '#C8131B' },
+  headerSegmentoTextoAtivoEscuro: { color: 'var(--brand-text)' },
   // No escuro o vermelho chapado no topo cansa e briga com a superficie.
   headerEscuro: { backgroundColor: 'var(--surface)' },
   headerAvatar: {
@@ -7418,7 +7444,24 @@ const styles = StyleSheet.create({
   },
   permissionSecondaryButtonText: { color: 'var(--text-muted)', fontSize: 14, fontWeight: '600' },
   // Filter Bar
-  filterBar: { backgroundColor: 'var(--surface)', borderBottomWidth: 1, borderBottomColor: 'var(--border-soft)' },
+  // Borda inferior em --border (nao --border-soft): sem divisor visivel, o
+  // slab do header e o mapa se encostavam.
+  filterBar: { backgroundColor: 'var(--surface)', borderBottomWidth: 1, borderBottomColor: 'var(--border)' },
+  filtroBarraLinha: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
+  // 36x36 pill com borda, e nao o quadrado preto de antes: e' um controle
+  // entre chips de 36, e o preto chapado lia como bloco solto.
+  filtroBotao: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'var(--stroke-default)',
+    backgroundColor: 'var(--surface)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   // paddingRight maior que o esquerdo de proposito: quando a lista chega ao
   // fim, o ultimo chip fica com ar em vez de colado na borda da tela (antes
   // parecia cortado/quebrado, nao rolavel).
@@ -7507,10 +7550,10 @@ const styles = StyleSheet.create({
   // de temperatura, o botao de localizacao e a barra de navegacao.
   areaStatusWrap: {
     position: 'absolute',
-    top: 8,
     left: 0,
     right: 0,
     alignItems: 'center',
+    gap: 8,
   },
   areaStatusPill: {
     flexDirection: 'row',
@@ -7523,6 +7566,20 @@ const styles = StyleSheet.create({
     maxWidth: '92%',
   },
   areaStatusText: { color: '#fff', fontSize: 12.5, fontWeight: '700' },
+  // Contagem do recorte: pill clara sobre o mapa, com sombra pra sobreviver
+  // tanto ao mapa claro quanto ao escuro (nao ha' fundo garantido embaixo).
+  recortePill: {
+    backgroundColor: 'var(--surface)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    shadowColor: '#000000',
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  recorteTexto: { color: 'var(--text-muted)', fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600' },
   // Legenda de temperatura: fica ACIMA do botao de localizacao (que ocupa
   // left:16 / bottom:90+insets), por isso o offset extra de 56px.
   // Em DUAS COLUNAS: em pe' as 6 linhas comiam um terco da altura do mapa no
@@ -7578,15 +7635,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 16,
     backgroundColor: 'var(--surface)',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    // 48/16 igual ao mapButton: eram dois botoes do mesmo peso desenhados
+    // diferente (44/22 redondo contra 48/16 arredondado), e o redondo escuro
+    // lia como um terceiro tipo de controle.
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOpacity: 0.15,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
     elevation: 4,
   },
   // ===== Painel do mapa de calor (gestor) =====
@@ -8216,12 +8276,19 @@ const styles = StyleSheet.create({
     // A borda em --surface e' o que recorta o FAB da barra.
     borderWidth: 4,
     borderColor: 'var(--surface)',
-    // A unica sombra tingida da marca no app.
+    // A unica sombra tingida da marca no app — mas so' no claro.
     shadowColor: '#C8131B',
     shadowOpacity: 0.32,
     shadowOffset: { width: 0, height: 8 },
     shadowRadius: 16,
     elevation: 8,
+  },
+  // No escuro a sombra tingida nao separa o FAB do fundo: vira halo difuso.
+  navFabEscuro: {
+    shadowColor: '#000000',
+    shadowOpacity: 0.32,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
   },
   // Sao ate 6 abas (Mapa/Lista/Rota/Agenda/Tarefas/Gestor). Num celular
   // estreito o rotulo de 11px encostava no do vizinho; icone e texto um ponto
@@ -8256,17 +8323,6 @@ const styles = StyleSheet.create({
   navBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   navItemText: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-faint)' },
   // ===== Calendario da Agenda (so' desktop) =====
-  brandMark: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    fontSize: 10,
-    fontWeight: '500',
-    fontStyle: 'italic',
-    letterSpacing: 0.5,
-    color: 'var(--text-faint)',
-  },
   navItemTextActive: { fontWeight: '700', color: '#C8131B' },
   // List
   // Card Mobile do DS: radius 16, padding 16, sombra shadow/01 (key-light 14%).
