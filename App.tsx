@@ -1454,6 +1454,31 @@ function MainApp() {
 
   const routeDisplayClients = routeClients.length > 0 ? routeClients : routeDraft;
 
+  // Dia que a Agenda mostra. Unico estado novo do M4: a tira da semana vive no
+  // header (que e' desta casca) e o corpo vive na AgendaScreen, entao o dia
+  // selecionado precisa morar no ancestral comum — mesmo arranjo do
+  // `configRotaAberta` do M3.
+  const [diaSelecionado, setDiaSelecionado] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+
+  // Chave de dia em hora LOCAL. `toISOString().slice(0,10)` viraria o dia as
+  // 21h em Brasilia — o mesmo tropeco que o cockpit ja' levou.
+  const chaveDoDia = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+
+  // Quais dias tem ALGO marcado — so' pro dot de 4px da tira. Nao e' o
+  // `allAgendaItems` (esse continua sendo montado, ordenado e filtrado dentro
+  // da AgendaScreen): aqui basta saber "tem ou nao tem" a partir das mesmas
+  // duas fontes.
+  const diasComCompromisso = useMemo(() => {
+    const dias = new Set<string>();
+    for (const st of routeStops) if (st.planned_at) dias.add(chaveDoDia(new Date(st.planned_at)));
+    for (const m of meetings) if (m.scheduled_at) dias.add(chaveDoDia(new Date(m.scheduled_at)));
+    return dias;
+  }, [routeStops, meetings]);
+
   // A parada "de agora": a primeira ainda nao concluida. Mesma regra do
   // `idxAtual` da RotaScreen — se as duas divergissem, o pino vermelho do
   // mapa apontaria uma parada e a tag "Agora" do card apontaria outra.
@@ -4464,6 +4489,10 @@ function MainApp() {
                 </TouchableOpacity>
               )}
             </View>
+          ) : tab === 'agenda' ? (
+            /* A Agenda nao tem busca, mas tambem nao pode ter uma faixa de
+               48px vazia: o titulo ocupa o lugar dela. */
+            <Text style={styles.headerTitulo}>Agenda</Text>
           ) : (
             <View style={{ flex: 1 }} />
           )}
@@ -4525,6 +4554,71 @@ function MainApp() {
             </View>
           </View>
         )}
+
+        {/* Tira da semana. O calendario de 7 colunas do desktop nao cabe em
+            390px: a tira da a visao da semana e o corpo mostra UM dia. Ela
+            mora no header porque depende do vermelho da marca — o "hoje" e'
+            branco e os outros dias sao brancos translucidos. */}
+        {tab === 'agenda' && (() => {
+          // Semana de segunda a domingo que CONTEM o dia selecionado.
+          const desloc = (diaSelecionado.getDay() + 6) % 7;
+          const segunda = new Date(diaSelecionado);
+          segunda.setDate(diaSelecionado.getDate() - desloc);
+          segunda.setHours(0, 0, 0, 0);
+          const hoje = new Date();
+          hoje.setHours(0, 0, 0, 0);
+          return (
+            <View style={styles.tiraSemana}>
+              {Array.from({ length: 7 }, (_, i) => {
+                const d = new Date(segunda);
+                d.setDate(segunda.getDate() + i);
+                const ativo = chaveDoDia(d) === chaveDoDia(diaSelecionado);
+                const temItem = diasComCompromisso.has(chaveDoDia(d));
+                const ehHoje = chaveDoDia(d) === chaveDoDia(hoje);
+                // "seg." -> "seg"
+                const rotulo = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
+                const corTexto = ativo
+                  ? (isDark ? 'var(--brand-text)' : '#C8131B')
+                  : '#FFFFFF';
+                return (
+                  <TouchableOpacity
+                    key={i}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: ativo }}
+                    accessibilityLabel={`${rotulo} ${d.getDate()}${temItem ? ', com compromisso' : ''}`}
+                    style={[
+                      styles.tiraDia,
+                      isDark ? styles.tiraDiaEscuro : styles.tiraDiaClaro,
+                      ativo && (isDark ? styles.tiraDiaAtivoEscuro : styles.tiraDiaAtivo),
+                    ]}
+                    onPress={() => setDiaSelecionado(d)}
+                  >
+                    <Text style={[styles.tiraDiaSemana, { color: corTexto }]}>{rotulo}</Text>
+                    <Text style={[styles.tiraDiaNumero, { color: corTexto }]}>{d.getDate()}</Text>
+                    {/* O dot sempre ocupa os 4px, mesmo vazio: se so' aparecesse
+                        nos dias com item, os numeros dancariam de linha. */}
+                    <View
+                      style={[
+                        styles.tiraDot,
+                        {
+                          backgroundColor: !temItem
+                            ? 'transparent'
+                            : ativo
+                              ? (isDark ? 'var(--brand-text)' : '#C8131B')
+                              : 'rgba(255,255,255,0.6)',
+                        },
+                        // Hoje sem ser o dia aberto ainda precisa se achar na
+                        // tira; a borda e' o unico sinal que sobra sem inventar
+                        // um segundo estado de fundo.
+                        ehHoje && !ativo && styles.tiraDotHoje,
+                      ]}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          );
+        })()}
 
         {/* Linha 2 — Mapa / Lista. Raio 12 so' nas pontas: e' um controle, nao
             dois botoes. */}
@@ -4847,7 +4941,6 @@ function MainApp() {
           routeStops={routeStops}
           nomesReunioes={nomesReunioes}
           openClientById={openClientById}
-          openClientDetails={openClientDetails}
           vendorLabel={vendorLabel}
           canViewGestor={canViewGestor}
           isViewer={isViewer}
@@ -4857,6 +4950,7 @@ function MainApp() {
           nomeDoLead={getClientPrimaryName}
           fieldOps={fieldOps}
           vendorFilterHubspotId={vendorFilterHubspotId}
+          diaSelecionado={diaSelecionado}
         />
       )}
 
@@ -7373,6 +7467,31 @@ const styles = StyleSheet.create({
   rotaKpi: { flex: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.14)' },
   rotaKpiValor: { fontSize: 16, lineHeight: 24, fontWeight: '700', color: '#FFFFFF', fontVariant: ['tabular-nums'] },
   rotaKpiRotulo: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'rgba(255,255,255,0.75)' },
+  headerTitulo: { flex: 1, minWidth: 0, fontSize: 18, lineHeight: 24, fontWeight: '600', color: '#FFFFFF' },
+  // Tira da semana (M4). gap 6 e sete botoes flex:1 — em 390px cada dia fica
+  // com ~46px, e o alvo vem da altura de 48.
+  tiraSemana: { flexDirection: 'row', gap: 6 },
+  tiraDia: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    paddingVertical: 6,
+  },
+  // O degrau e' de OPACIDADE, nao de hex de superficie: foi o defeito do
+  // segmented do Mapa, onde `--surface-2` no escuro ficava mais escuro que o
+  // inativo translucido e a leitura invertia.
+  tiraDiaClaro: { backgroundColor: 'rgba(255,255,255,0.14)' },
+  tiraDiaEscuro: { backgroundColor: 'rgba(255,255,255,0.06)' },
+  tiraDiaAtivo: { backgroundColor: '#FFFFFF' },
+  tiraDiaAtivoEscuro: { backgroundColor: 'rgba(255,255,255,0.18)' },
+  tiraDiaSemana: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', opacity: 0.8 },
+  tiraDiaNumero: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  tiraDot: { width: 4, height: 4, borderRadius: 2 },
+  tiraDotHoje: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.9)' },
   headerSegmento: { flexDirection: 'row' },
   headerSegmentoItem: {
     flex: 1,
