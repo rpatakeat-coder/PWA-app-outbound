@@ -864,9 +864,13 @@ export function RotaScreen({
       <ScrollView
         contentContainerStyle={[
           sharedStyles.listContent,
-          // +24: o FAB central da barra protrai 24px e cairia em cima do
-          // ultimo card. So' aparece quando se rola ate' o fim.
-          { paddingBottom: 90 + 24 + insets.bottom },
+          // 40 = os 24px que o FAB central protrai acima da barra + folga.
+          // Nao ha' 90 de barra a reservar: a barra e o `insets` vivem FORA
+          // deste scroll (sao irmaos na coluna da tela), e reserva-los aqui
+          // deixava ~114px mortos no fim de uma lista cujo M3 inteiro foi
+          // sobre devolver altura. Tarefas e Agenda carregam a mesma conta —
+          // anotado pros prompts delas.
+          { paddingBottom: 40 },
           { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' },
         ]}
       >
@@ -901,7 +905,10 @@ export function RotaScreen({
             </TouchableOpacity>
             <Text style={styles.configTitulo}>Configurar rota</Text>
           </View>
-          <ScrollView contentContainerStyle={styles.configCorpo}>
+          {/* O sheet e' de tela cheia: sem o inset o ultimo cartao fica sob o
+              indicador de home. E' o unico lugar da tela que ainda precisa
+              dele — o scroll da sequencia para acima da barra. */}
+          <ScrollView contentContainerStyle={[styles.configCorpo, { paddingBottom: 16 + insets.bottom }]}>
             {cartaoRotaDoDia}
             {cartaoPersonalizada}
             {cartaoAdicionar}
@@ -1006,6 +1013,12 @@ const styles = StyleSheet.create({
   paradaTagTexto: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600' },
   paradaDetalhe: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)', marginTop: 2 },
   paradaMover: { flexDirection: 'row', gap: 4 },
+  // EXCECAO DOCUMENTADA a' regra de alvo >= 48 (auditoria M3, item 15): 48 de
+  // ALTURA, 32 de largura. Levar a largura a 48 tiraria 28px do nome do lead
+  // (de ~154 pra ~134 num card de 390) — pior troca, porque o nome e' o
+  // conteudo e a seta e' o acessorio. Os dois botoes sao adjacentes e
+  // empilhados na horizontal, entao a faixa tocavel continua com 68x48
+  // contigua; errar a seta acerta a vizinha, nao o vazio.
   paradaMoverBotao: { width: 32, height: 48, alignItems: 'center', justifyContent: 'center' },
   paradaAcoes: { flexDirection: 'row', gap: 8, marginTop: 12 },
   paradaCheckin: {
