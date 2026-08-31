@@ -26,7 +26,28 @@
     <!-- iOS nao le o manifest pra tudo: precisa destas tags pra abrir em tela
          cheia (sem barra do Safari) quando adicionado a tela de inicio. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!--
+      `default`, e NAO `black-translucent`.
+
+      Com `black-translucent` o iOS DIMENSIONA a web view como se a barra de
+      status fosse opaca (844 - 47 = 797 num iPhone 13) mas POSICIONA como se
+      fosse translucida, em y=0. Ela termina em 797 numa tela de 844, e sobram
+      47 pontos no rodape que nao pertencem a web view — a barra de abas
+      flutuava acima do fim da tela e aparecia uma faixa embaixo dela.
+
+      Medido no aparelho, PWA instalado (iPhone 13):
+        env(safe-area-inset-top) 47 · innerHeight 797 · screen.height 844
+      e um elemento em `bottom: -47px` NAO renderiza — a superficie termina em
+      797 mesmo. Nenhum CSS alcanca aquela faixa; por isso o
+      `position: fixed; inset: 0` do #root, que esta' correto, nao resolvia.
+
+      Com `default` o iOS dimensiona e posiciona de forma coerente: a web view
+      vai de 47 ate' 844, `env(safe-area-inset-top)` passa a 0 e
+      `env(safe-area-inset-bottom)` continua 34 pro indicador de home. O app
+      nao precisa de ajuste: ele ja' le os insets — o `paddingTop: insets.top`
+      do container zera sozinho e o `paddingBottom` da barra segue valendo.
+    -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Takeat RPA" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
     <link rel="icon" type="image/png" href="/icons/icon-192.png" />
