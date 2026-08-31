@@ -149,11 +149,9 @@ const COR: Record<Delta['tom'], string> = {
 function Seta({ d }: { d: Delta }) {
   if (d.diferenca === 0) return <span style={{ color: 'var(--ter)' }}>=</span>;
   return (
-    <span style={{ color: COR[d.tom], fontWeight: 800 }}>
+    <span style={{ color: COR[d.tom], fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
       {d.diferenca > 0 ? '▲' : '▼'} {Math.abs(d.diferenca)}
-      {d.pct != null && (
-        <span style={{ fontWeight: 700, fontSize: '0.85em' }}> ({Math.abs(d.pct)}%)</span>
-      )}
+      {d.pct != null && <span> ({Math.abs(d.pct)}%)</span>}
     </span>
   );
 }
@@ -169,14 +167,50 @@ function CartaoMetrica({ m, aoAbrir }: { m: MetricaSemanal; aoAbrir: () => void 
         font: 'inherit',
         color: 'inherit',
         cursor: m.leads.length ? 'pointer' : 'default',
-        padding: '14px 16px',
       }}
     >
-      <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 700 }}>{m.rotulo}</div>
-      <div style={{ fontSize: 28, fontWeight: 800, marginTop: 2 }}>{m.delta.atual}</div>
-      <div style={{ fontSize: 13, marginTop: 2 }}>
+      {/* Tres linhas: rotulo, valor, qualificador. O valor e' SEMPRE --ink —
+          aqui verde e vermelho significam MELHOROU e PIOROU, nao bom e ruim, e
+          quem carrega esse juizo e' o qualificador. O `tom` do delta ja' vem
+          invertido no dado pra "perdidos": mais perdas nao pinta de verde. */}
+      <div
+        style={{
+          fontSize: 12,
+          lineHeight: '16px',
+          letterSpacing: '0.5px',
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          color: 'var(--muted)',
+        }}
+      >
+        {m.rotulo}
+      </div>
+      <div
+        style={{
+          fontSize: 28,
+          lineHeight: '36px',
+          fontWeight: 700,
+          marginTop: 8,
+          color: 'var(--ink)',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {m.delta.atual}
+      </div>
+      <div
+        style={{
+          fontSize: 12,
+          lineHeight: '16px',
+          letterSpacing: '0.4px',
+          marginTop: 2,
+          color: COR[m.delta.tom],
+        }}
+      >
         <Seta d={m.delta} />
-        <span style={{ color: 'var(--ter)' }}> vs {m.delta.anterior} na anterior</span>
+        {/* A base fica, mas curta: "vs 153 na anterior" quebrava em duas linhas
+            num cartao de um quinto da largura, e o valor de cima desalinhava
+            dos vizinhos. Sem a base, o delta perde contra o que comparar. */}
+        <span style={{ color: 'var(--ter)' }}> · antes {m.delta.anterior}</span>
       </div>
     </button>
   );
@@ -225,47 +259,10 @@ export function Semana() {
 
   const { janela, janelaAnterior, metricas, linhas, comparacaoCompleta, diasDecorridos, foraDaLista } =
     dados;
-  const ganhos = metricas.find((m) => m.chave === 'ganhos')!;
-  const perdidos = metricas.find((m) => m.chave === 'perdidos')!;
   const piorando = linhas.filter((l) => l.piora >= 2);
 
   return (
     <>
-      <div
-        style={{
-          background: 'var(--dark)',
-          color: 'var(--dark-ink)',
-          borderRadius: 14,
-          padding: '20px 22px',
-          marginBottom: 18,
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-          {/* Janela sempre visivel — regra do doc: rotule o periodo junto do
-              numero, sempre. */}
-          <div style={{ color: 'var(--dark-mut)', fontSize: 13, fontWeight: 700 }}>
-            janela: {dm(janela.inicio)}–{dm(janela.fim)} · anterior:{' '}
-            {dm(janelaAnterior.inicio)}–{dm(janelaAnterior.fim)}
-          </div>
-        </div>
-        <div style={{ color: 'var(--dark-mut)', marginTop: 4 }}>
-          {ganhos.delta.atual > 0 ? (
-            <>
-              <strong style={{ color: 'var(--dark-ink)' }}>
-                {ganhos.delta.atual} {ganhos.delta.atual === 1 ? 'fechamento' : 'fechamentos'}
-              </strong>{' '}
-              nesta semana contra {ganhos.delta.anterior} na anterior
-              {perdidos.delta.atual > 0 && `, com ${perdidos.delta.atual} perdidos`}.
-            </>
-          ) : (
-            <>
-              Nenhum fechamento registrado nesta semana ({ganhos.delta.anterior} na anterior)
-              {perdidos.delta.atual > 0 && ` · ${perdidos.delta.atual} perdidos`}.
-            </>
-          )}
-        </div>
-      </div>
-
       <LeituraDaSemana
         leitura={leitura}
         dados={dados}
@@ -296,9 +293,12 @@ export function Semana() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-          gap: 12,
-          marginBottom: 18,
+          // Cinco colunas fixas, e nao auto-fit: sao cinco metricas, e com
+          // auto-fit elas remontavam em duas fileiras desiguais conforme a
+          // largura. O G4 pede quatro porque desenhou quatro KPIs.
+          gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+          gap: 16,
+          marginBottom: 16,
         }}
       >
         {metricas.map((m) => (
@@ -307,15 +307,41 @@ export function Semana() {
       </div>
 
       <section className="cartao">
-        <h2 className="titulo-secao">
-          Leitura por executivo
-          {piorando.length > 0 && (
-            <span style={{ color: 'var(--red)', textTransform: 'none', letterSpacing: 0 }}>
-              {' '}
-              · {piorando.length} caindo em duas frentes ou mais
-            </span>
-          )}
-        </h2>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
+          <h2 className="titulo-secao" style={{ margin: 0 }}>
+            Leitura por executivo
+            {piorando.length > 0 && (
+              <span style={{ color: 'var(--red)', textTransform: 'none', letterSpacing: 0 }}>
+                {' '}
+                · {piorando.length} caindo em duas frentes ou mais
+              </span>
+            )}
+          </h2>
+          {/* A janela perdeu a faixa preta e veio pro cabecalho do cartao, que
+              e' onde o G4 poe a nota de periodo. A regra do doc — rotular a
+              janela junto do numero — continua valendo. */}
+          <span
+            style={{
+              fontSize: 11,
+              lineHeight: '16px',
+              letterSpacing: '0.5px',
+              fontWeight: 500,
+              color: 'var(--ter)',
+              whiteSpace: 'nowrap',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {dm(janela.inicio)}–{dm(janela.fim)} · anterior {dm(janelaAnterior.inicio)}–
+            {dm(janelaAnterior.fim)}
+          </span>
+        </div>
         {linhas.length === 0 ? (
           <div style={{ color: 'var(--muted)' }}>Nenhum executivo ativo cadastrado.</div>
         ) : (
