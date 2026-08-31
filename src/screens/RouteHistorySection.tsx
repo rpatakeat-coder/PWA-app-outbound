@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
-  IconDownload,
   IconLocation,
   IconText, IconCheckbox, IconCheckboxChecked} from '../components/icons';
 import { Alert } from '../components/Alert';
@@ -9,7 +8,6 @@ import { useAllSellers } from '../hooks/useAllSellers';
 import { useRouteHistory, useRouteRanking } from '../hooks/useRouteHistory';
 import { useSellerGoals } from '../hooks/useSellerGoals';
 import { useRouteConfig } from '../hooks/useRouteConfig';
-import { exportAgenda } from '../utils/exportAgenda';
 
 // Dias úteis (seg–sex) no intervalo — base da meta do período (meta/dia × úteis).
 function workdaysBetween(startISO: string | null, endISO: string | null): number {
@@ -108,7 +106,6 @@ export function RouteHistorySection({ range, enabled }: Props) {
   const nameById = useMemo(() => new Map(sellers.map((s) => [s.id, s])), [sellers]);
 
   const [sortBy, setSortBy] = useState<'pct' | 'checkins'>('pct');
-  const [exportingRank, setExportingRank] = useState(false);
 
   // Meta diária por vendedor (fallback pra meta global). meta do período =
   // meta/dia × dias úteis; % = check-ins / meta do período.
@@ -136,53 +133,6 @@ export function RouteHistorySection({ range, enabled }: Props) {
     );
   }, [ranking.data, sortBy]);
 
-  const handleExportRanking = async () => {
-    if (exportingRank || rows.length === 0) return;
-    setExportingRank(true);
-    try {
-      const payload = {
-        meta: {
-          tipo: 'ranking_rotas',
-          gerado_em: new Date().toISOString(),
-          periodo: { de: range.start, ate: range.end },
-          ordenado_por: sortBy === 'checkins' ? 'check-ins' : '% conclusão',
-          vendedores: rows.length,
-        },
-        ranking: rows.map((r, idx) => {
-          const s = nameById.get(r.sellerId);
-          const m = metaOf(r.sellerId, r.checkins);
-          return {
-            posicao: idx + 1,
-            vendedor: s?.name ?? 'Vendedor',
-            desativado: !!s?.deactivated,
-            pct_conclusao: r.pct,
-            rotas: r.rotas,
-            paradas: r.paradas,
-            concluidas: r.concluidas,
-            check_ins: r.checkins,
-            meta_dia: m.metaDia,
-            meta_periodo: m.metaPeriodo,
-            pct_meta: m.pctMeta,
-            km: Number(r.km.toFixed(1)),
-            min: Math.round(r.min),
-          };
-        }),
-      };
-      const res = await exportAgenda(payload, `ranking-rotas_${sortBy}`);
-      Alert.alert(
-        'Ranking exportado',
-        `${rows.length} vendedores.\n\nToque em Abrir pra baixar o .json (abre no navegador).`,
-        [
-          { text: 'Fechar', style: 'cancel' },
-          { text: 'Abrir', onPress: () => Linking.openURL(res.url) },
-        ],
-      );
-    } catch (err: any) {
-      Alert.alert('Erro ao exportar', err?.message ?? 'Tente de novo.');
-    } finally {
-      setExportingRank(false);
-    }
-  };
 
   const [hideDeactivated, setHideDeactivated] = useState(false);
   const visibleSellers = hideDeactivated ? sellers.filter((s) => !s.deactivated) : sellers;
@@ -282,15 +232,6 @@ export function RouteHistorySection({ range, enabled }: Props) {
                     <Text style={[styles.sortChipText, sortBy === 'checkins' && styles.sortChipTextActive]}>Check-ins</Text>
                   </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={[styles.exportBtn, exportingRank && { opacity: 0.5 }]}
-                  onPress={handleExportRanking}
-                  disabled={exportingRank}
-                >
-                  {exportingRank
-                    ? <ActivityIndicator size="small" color="#fff" />
-                    : <IconText Icone={IconDownload} style={styles.exportBtnText} tone="onBrand">JSON</IconText>}
-                </TouchableOpacity>
               </View>
               {rows.map((r, idx) => {
                 const s = nameById.get(r.sellerId);
@@ -353,8 +294,6 @@ const styles = StyleSheet.create({
   sortChipActive: { backgroundColor: '#222222' },
   sortChipText: { fontSize: 11, fontWeight: '700', color: 'var(--text-muted)' },
   sortChipTextActive: { color: '#fff' },
-  exportBtn: { backgroundColor: '#C8131B', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
-  exportBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   rankRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
   rankRowOpen: { backgroundColor: 'var(--tint-red)' },
   rankPos: { fontSize: 13, fontWeight: '800', color: 'var(--brand-text)', width: 28 },

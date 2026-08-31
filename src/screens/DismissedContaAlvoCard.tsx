@@ -2,12 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
   IconCloseCircle,
-  IconDownload,
   IconText,
 } from '../components/icons';
 import { Alert } from '../components/Alert';
 import { useDismissedContaAlvo } from '../hooks/useDismissedContaAlvo';
-import { exportAgenda } from '../utils/exportAgenda';
 
 // "🚫 Contas Alvo dispensadas" (aba Gestor): lista as conta-alvo que os
 // vendedores marcaram "Não interessa" (quem/quando), com FILTRO por período e
@@ -35,7 +33,6 @@ export function DismissedContaAlvoCard() {
   const { data, isLoading, restore } = useDismissedContaAlvo(open);
   const [periodDays, setPeriodDays] = useState<number | null>(null);
   const [filterBy, setFilterBy] = useState<string | null>(null); // dismissedById | null = todos
-  const [exporting, setExporting] = useState(false);
 
   // Quem já dispensou (pra montar os chips de filtro).
   const dismissers = useMemo(() => {
@@ -60,37 +57,6 @@ export function DismissedContaAlvoCard() {
       { text: 'Restaurar', onPress: () => restore.mutate(id) },
     ]);
 
-  const onExport = async () => {
-    if (exporting || filtered.length === 0) return;
-    setExporting(true);
-    try {
-      const payload = {
-        meta: {
-          tipo: 'contas_alvo_dispensadas',
-          gerado_em: new Date().toISOString(),
-          filtro_vendedor: filterBy ? dismissers.find((x) => x.id === filterBy)?.name ?? filterBy : 'Todos',
-          periodo: periodDays ? `últimos ${periodDays} dias` : 'tudo',
-          total: filtered.length,
-        },
-        dispensadas: filtered.map((d) => ({
-          conta_alvo: d.nome,
-          cidade: d.cidade,
-          dispensado_por: d.dismissedByName,
-          dispensado_em: d.dismissedAt,
-          vendedor_atribuido_id_hubspot: d.vendedorHubspotId,
-        })),
-      };
-      const res = await exportAgenda(payload, 'contas-alvo-dispensadas');
-      Alert.alert('Exportado', `${filtered.length} contas-alvo dispensadas.\n\nToque em Abrir pra baixar o .json.`, [
-        { text: 'Fechar', style: 'cancel' },
-        { text: 'Abrir', onPress: () => Linking.openURL(res.url) },
-      ]);
-    } catch (err: any) {
-      Alert.alert('Erro ao exportar', err?.message ?? 'Tente de novo.');
-    } finally {
-      setExporting(false);
-    }
-  };
 
   return (
     <View style={styles.card}>
@@ -120,13 +86,6 @@ export function DismissedContaAlvoCard() {
                     </TouchableOpacity>
                   ))}
                 </View>
-                <TouchableOpacity
-                  style={[styles.exportBtn, (exporting || filtered.length === 0) && { opacity: 0.5 }]}
-                  onPress={onExport}
-                  disabled={exporting || filtered.length === 0}
-                >
-                  {exporting ? <ActivityIndicator size="small" color="#fff" /> : <IconText Icone={IconDownload} style={styles.exportBtnText} tone="onBrand">JSON</IconText>}
-                </TouchableOpacity>
               </View>
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
@@ -181,8 +140,6 @@ const styles = StyleSheet.create({
   pchipActive: { backgroundColor: '#222222' },
   pchipText: { fontSize: 11, fontWeight: '700', color: 'var(--text-muted)' },
   pchipTextActive: { color: '#fff' },
-  exportBtn: { backgroundColor: '#C8131B', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
-  exportBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   chips: { gap: 6, paddingBottom: 6 },
   chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: 'var(--surface-2)', maxWidth: 190 },
   chipActive: { backgroundColor: '#C8131B' },

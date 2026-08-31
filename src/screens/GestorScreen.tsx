@@ -20,7 +20,6 @@ import {
   IconUser,
   IconTrendingUp,
   IconTrendingDown,
-  IconDownload,
   IconLocationFilled,
   IconStore,
   IconCall,
@@ -709,7 +708,6 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
   const [rangePickerOpen, setRangePickerOpen] = useState(false);
   const [leadModal, setLeadModal] = useState<LeadModalState | null>(null);
   const [taskModal, setTaskModal] = useState<TaskModalState | null>(null);
-  const [exporting, setExporting] = useState<null | 'last_week' | 'period'>(null);
   // 09e: qual card do rail esta aberto no drawer de 480px.
   const [railAberto, setRailAberto] = useState<null | 'usuarios' | 'rota' | 'metas' | 'contas' | 'historico'>(null);
   // Qual vendedor esta' expandido na lista do celular. A linha compacta e' o
@@ -750,36 +748,6 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
     setTaskModal({ title, hubspotId, status });
 
   // Gera o CSV (semana anterior ou o periodo atual da tela) e abre o link.
-  const runExport = async (which: 'last_week' | 'period') => {
-    if (exporting) return;
-    setExporting(which);
-    try {
-      // 'period' usa o range atual da tela; 'last_week' manda vazio (a function
-      // resolve a semana anterior seg-dom). Presets relativos viram range aqui.
-      let range: { start: string; end: string } | null = null;
-      if (which === 'period') {
-        const r = periodRange(period);
-        range = { start: r.start ?? new Date(0).toISOString(), end: r.end ?? new Date().toISOString() };
-      }
-      const res = await exportReport(range);
-      const c = res.rows;
-      const resumo = c
-        ? `${c.leads} leads · ${c.tarefas} tarefas · ${c.visitas} visitas · ${c.reunioes} reuniões · ${c.follow_ups} follow-ups · ${c.mudancas_etapa} etapas · ${c.notas} notas`
-        : '';
-      Alert.alert(
-        'Exportação pronta',
-        `Período ${res.period.label.replace(/_/g, ' ')}.\n${resumo}\n\nToque em Abrir para baixar o .json (abre no navegador). Depois é só jogar na IA.`,
-        [
-          { text: 'Fechar', style: 'cancel' },
-          { text: 'Abrir', onPress: () => Linking.openURL(res.url) },
-        ],
-      );
-    } catch (err: any) {
-      Alert.alert('Erro ao exportar', err?.message ?? 'Tente novamente.');
-    } finally {
-      setExporting(null);
-    }
-  };
 
   const periodLabel =
     preset === 'all' ? 'total'
@@ -854,39 +822,6 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
         );
         const ranking = (
           <RouteHistorySection range={periodRange(period)} enabled={enabled} />
-        );
-        const exportar = (
-          <>
-      {/* Exportacao de dados (CSV com atividade por vendedor). */}
-      <View style={styles.exportCard}>
-        <IconText Icone={IconBarGraph} style={styles.exportTitle} tone="onSurface">Exportar TUDO (JSON p/ IA)</IconText>
-        <Text style={styles.exportHint}>
-          Exporta tudo do período — leads (dados completos), tarefas, visitas, reuniões,
-          follow-ups, mudanças de etapa (com motivos) e notas, cada um com o vendedor.
-          Um único arquivo .json pra jogar numa IA analisar.
-        </Text>
-        <View style={styles.exportRow}>
-          <TouchableOpacity
-            style={[styles.exportBtn, styles.exportBtnPrimary, exporting && styles.exportBtnDisabled]}
-            onPress={() => runExport('last_week')}
-            disabled={!!exporting}
-          >
-            {exporting === 'last_week'
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.exportBtnPrimaryText}>Semana anterior</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.exportBtn, styles.exportBtnGhost, exporting && styles.exportBtnDisabled]}
-            onPress={() => runExport('period')}
-            disabled={!!exporting}
-          >
-            {exporting === 'period'
-              ? <ActivityIndicator color="var(--text)" />
-              : <Text style={styles.exportBtnGhostText}>Período selecionado</Text>}
-          </TouchableOpacity>
-        </View>
-      </View>
-          </>
         );
         const g = query.data?.global ?? null;
         const carregandoOuErro = query.isLoading ? (
@@ -1136,7 +1071,6 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
                 <IconChevronRight width={20} height={20} fill="var(--text-disabled)" />
               </TouchableOpacity>
             ))}
-            {exportar}
           </View>
         );
 
@@ -1308,7 +1242,6 @@ export function GestorScreen({ enabled, onOpenClient }: Props) {
           <>
             {cartoesConfig}
             {ranking}
-            {exportar}
             {metricas}
           </>
         );
@@ -1411,19 +1344,6 @@ const styles = StyleSheet.create({
     borderColor: 'var(--border)',
     marginBottom: 16,
   },
-  exportCard: {
-    backgroundColor: 'var(--surface)', borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: 'var(--border)', marginBottom: 16,
-  },
-  exportTitle: { fontSize: 14, fontWeight: '800', color: 'var(--text)' },
-  exportHint: { fontSize: 11, color: 'var(--text-muted)', marginTop: 4, marginBottom: 10, lineHeight: 15 },
-  exportRow: { flexDirection: 'row', gap: 8 },
-  exportBtn: { flex: 1, paddingVertical: 11, borderRadius: 10, alignItems: 'center' },
-  exportBtnPrimary: { backgroundColor: '#222222' },
-  exportBtnPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  exportBtnGhost: { backgroundColor: 'var(--surface-2)', borderWidth: 1, borderColor: 'var(--border)' },
-  exportBtnGhostText: { color: 'var(--text)', fontSize: 13, fontWeight: '700' },
-  exportBtnDisabled: { opacity: 0.6 },
   periodChip: {
     flex: 1,
     // 48 e raio 12: era ~36 com raio 10, os dois fora da escala do celular.
@@ -1802,18 +1722,6 @@ const estilosWeb = StyleSheet.create({
   heatCelula: { width: 28, height: 28, borderRadius: 4 },
   heatHojeVazio: { borderWidth: 1.5, borderColor: '#C8131B', borderStyle: 'dashed' },
   heatLegenda: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)' },
-  exportarBotao: {
-    marginTop: 16,
-    height: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'var(--teal-text)',
-  },
-  exportarTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--teal-text)' },
   tabelaCabecalho: {
     flexDirection: 'row',
     alignItems: 'center',

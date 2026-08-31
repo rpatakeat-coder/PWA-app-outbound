@@ -129,7 +129,6 @@ import { ds, sharedStyles } from './src/screens/sharedStyles';
 import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
 import { reverseGeocode } from './src/utils/geocoding';
 import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingProvider } from './src/utils/routing';
-import { exportAgenda } from './src/utils/exportAgenda';
 import { useVisitsHeatmap } from './src/hooks/useVisitsHeatmap';
 import { buildHeatCells, heatColor, heatIntensity, HEAT_CELL_M, HEAT_LEGEND_STOPS } from './src/utils/heatmap';
 import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type MandatoryReason } from './src/utils/dailyRoute';
@@ -843,7 +842,6 @@ function MainApp() {
   // Só o gestor vê o botão; a busca dos pontos só dispara quando ligado.
   const [heatOn, setHeatOn] = useState(false);
   const [heatSeller, setHeatSeller] = useState<string | null>(null); // null = Todos
-  const [exportingHeat, setExportingHeat] = useState(false);
   const {
     points: heatPoints,
     sellers: heatSellers,
@@ -862,59 +860,6 @@ function MainApp() {
   // Exporta o mapa de calor (visitas) em JSON — mesmo mecanismo do export da
   // agenda (sobe no bucket 'exports', devolve signed URL de 7 dias). Respeita o
   // filtro de vendedor ativo (Todos ou um). Só gestor (o painel é gestor-only).
-  const handleExportHeatmap = async () => {
-    if (exportingHeat) return;
-    const pts = heatSeller ? heatPoints.filter((p) => p.sellerId === heatSeller) : heatPoints;
-    if (pts.length === 0) {
-      Alert.alert('Sem dados', 'Não há visitas com GPS para exportar.');
-      return;
-    }
-    setExportingHeat(true);
-    try {
-      const sellerName = heatSeller
-        ? (heatSellers.find((s) => s.id === heatSeller)?.name ?? heatSeller)
-        : 'Todos os vendedores';
-      const { cells } = buildHeatCells(pts);
-      const payload = {
-        meta: {
-          tipo: 'mapa_de_calor',
-          gerado_em: new Date().toISOString(),
-          filtro: sellerName,
-          total_visitas: pts.length,
-          amostra_recente: heatCapped,
-          celulas: cells.length,
-          celula_metros: HEAT_CELL_M,
-        },
-        vendedores: heatSellers.map((s) => ({ id: s.id, nome: s.name, visitas: s.count })),
-        // Agregado da grade (o "calor" de fato): lat/lon do centro + contagem.
-        celulas: cells.map((c) => ({ lat: c.lat, lon: c.lon, visitas: c.n })),
-        // Pontos crus (cada check-in): lat/lon + vendedor + data/hora + cidade/bairro.
-        pontos: pts.map((p) => ({
-          lat: p.lat,
-          lon: p.lon,
-          vendedor_id: p.sellerId,
-          vendedor: p.sellerName,
-          data_hora: p.at,
-          cidade: p.cidade,
-          bairro: p.bairro,
-        })),
-      };
-      const res = await exportAgenda(payload, `mapa-calor_${sellerName}`);
-      Alert.alert(
-        'Exportação pronta',
-        `${payload.meta.total_visitas} visitas • ${payload.meta.celulas} células (${sellerName}).\n\nToque em Abrir pra baixar o .json (abre no navegador).`,
-        [
-          { text: 'Fechar', style: 'cancel' },
-          { text: 'Abrir', onPress: () => Linking.openURL(res.url) },
-        ],
-      );
-    } catch (err: any) {
-      Alert.alert('Erro ao exportar', err?.message ?? 'Tente novamente.');
-    } finally {
-      setExportingHeat(false);
-    }
-  };
-
   // Se o usuario viewer entrou em uma aba que nao existe pra ele (rota/agenda)
   // via state preservado entre sessoes, joga de volta pro mapa.
   // Mesma protecao pra aba gestor: so admin pode ver, qualquer outro perfil
@@ -1033,7 +978,6 @@ function MainApp() {
   // timeline contínua agrupada por dia — não precisam de acordeão.
   // Chip de tipo na aba Agenda (null = todos): 'reuniao' | 'follow_up' | 'rota'.
   // Semana exibida no calendario web: 0 = corrente, -1 = anterior, +1 = proxima.
-  // Exportação da agenda em andamento (botão "Exportar JSON" no topo da aba).
 
   // Cancelar (remover) uma reunião/follow up com confirmação. deleteMeeting já
   // apaga o evento no Google (demo — a Meeting no HubSpot acompanha via sync) /
@@ -3333,27 +3277,6 @@ function MainApp() {
           </ScrollView>
         </View>
 
-        {/* c · Exportacao: acao secundaria de consulta, nao CTA. Outline teal,
-            o mesmo de "Baixar planilha" e "Exportar relatorio". */}
-        <TouchableOpacity
-          accessibilityRole="button"
-          style={[
-            styles.calorExportar,
-            compacto ? styles.calorExportarDesktop : styles.calorExportarMobile,
-            (exportingHeat || heatLoading || heat.total === 0) && { opacity: 0.5 },
-          ]}
-          onPress={handleExportHeatmap}
-          disabled={exportingHeat || heatLoading || heat.total === 0}
-        >
-          {exportingHeat ? (
-            <ActivityIndicator size="small" color={iconColors.teal} />
-          ) : (
-            <>
-              <IconDownload width={20} height={20} fill={iconColors.teal} />
-              <Text style={styles.calorExportarTexto}>Exportar JSON</Text>
-            </>
-          )}
-        </TouchableOpacity>
       </View>
     );
   })();
@@ -3676,8 +3599,8 @@ function MainApp() {
           la' a linha do switch expande, e nada cobre o mapa. */}
       {heatOn && !creationMode && !layout.ehLargo && (
         // Ancorada ACIMA da barra de navegacao (baseInferior = 90 + safe area),
-        // nao no fundo da janela: em `bottom: 0` a barra cobria o "Exportar
-        // JSON". Os 40px de padding embaixo continuam de reserva do FAB — que
+        // nao no fundo da janela: em `bottom: 0` a barra cobria o rodape da
+        // folha. Os 40px de padding embaixo continuam de reserva do FAB — que
         // aqui ate' some com o calor ligado, mas a folha nao depende disso.
         <View style={[styles.calorFolha, { bottom: baseInferior }]}>
           <View style={styles.calorFolhaAlca} />
@@ -7987,7 +7910,7 @@ const styles = StyleSheet.create({
   calorCorpo: { paddingHorizontal: 12, paddingBottom: 12 },
   // Celular: folha no rodape. Os 40px de baixo nao sao decorativos — sao 16 de
   // respiro + os 24 que o FAB central invade acima da barra de navegacao. Sem
-  // eles o circulo vermelho do FAB cai em cima do "Exportar JSON".
+  // eles o circulo vermelho do FAB cai em cima do rodape da folha.
   calorFolha: {
     position: 'absolute',
     left: 0,
@@ -8086,21 +8009,6 @@ const styles = StyleSheet.create({
     color: 'var(--text-faint)',
     fontVariant: ['tabular-nums'],
   },
-  // Exportacao e' consulta, nao CTA: outline teal, o mesmo de "Baixar
-  // planilha" e "Exportar relatorio". O vermelho e' do CTA primario do app.
-  calorExportar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: 'var(--teal-text)',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-  },
-  calorExportarDesktop: { height: 32, alignSelf: 'flex-start' },
-  calorExportarMobile: { height: 48, alignSelf: 'stretch' },
-  calorExportarTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--teal-text)' },
   heatEmpty: { fontSize: 12, color: 'var(--text-subtle)', fontStyle: 'italic', marginBottom: 6 },
   fab: {
     position: 'absolute',

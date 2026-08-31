@@ -16,15 +16,12 @@ import type { Client, ClientMeeting, FieldRouteStop } from '../types/client';
 import { useFieldOps } from '../hooks/useFieldOps';
 import { useLayout } from '../hooks/useLayout';
 import { useTheme } from '../theme';
-import { exportAgenda } from '../utils/exportAgenda';
-import { stageTemperature } from '../constants/stages';
 import {
   IconCalendar,
   IconCall,
   IconCar,
   IconChevronRight,
   IconClose,
-  IconDownload,
   IconText,
   useIconColors,
 } from '../components/icons';
@@ -82,7 +79,6 @@ export function AgendaScreen({
   // Overlay de detalhe do COMPROMISSO (prompt M3) — nao e' a ficha do lead.
   const [compromisso, setCompromisso] = useState<(typeof allAgendaItems)[number] | null>(null);
   const [agendaTypeFilter, setAgendaTypeFilter] = useState<string | null>(null);
-  const [exportingAgenda, setExportingAgenda] = useState(false);
   const allAgendaItems = [
     ...routeStops.map(stop => ({ kind: 'route' as const, at: stop.planned_at, stop, client: stop.client })),
     ...meetings.map(meeting => ({
@@ -148,25 +144,6 @@ export function AgendaScreen({
     const t = new Date(item.at).getTime();
     return t >= inicioDoDia.getTime() && t < fimDoDia.getTime();
   });
-
-  // Passado / hoje / futuro sobrevive SO' pro export JSON do gestor, que
-  // agrupa por essas tres faixas. A tela nao usa mais — quem navega no tempo
-  // agora e' a tira da semana.
-  const now = Date.now();
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(todayStart);
-  todayEnd.setDate(todayEnd.getDate() + 1);
-  const pastItems: typeof agendaItems = [];
-  const todayItems: typeof agendaItems = [];
-  const futureItems: typeof agendaItems = [];
-  for (const item of agendaItems) {
-    const t = item.at ? new Date(item.at).getTime() : 0;
-    if (t >= todayStart.getTime() && t < todayEnd.getTime()) todayItems.push(item);
-    else if (t < now) pastItems.push(item);
-    else futureItems.push(item);
-  }
-  pastItems.reverse();
 
   // Nome do lead do item, com a base inteira como fonte: primeiro o client
   // carregado (area do mapa), senao o dicionario por id (reunioes fora do
@@ -262,113 +239,6 @@ export function AgendaScreen({
     );
   };
 
-  // Serializa UM item da agenda pro JSON (mesma leitura do card: cliente,
-  // responsavel, etapa/temperatura, local + campos especificos de
-  // reuniao/rota). `periodo` = passado|hoje|futuro conforme o grupo.
-  const serializeAgendaItem = (
-    item: typeof agendaItems[number],
-    periodo: 'passado' | 'hoje' | 'futuro',
-  ) => {
-    const client = item.client;
-    const temp = stageTemperature(client?.etapa);
-    const base = {
-      tipo: item.kind === 'meeting'
-        ? (item.meeting.type === 'follow_up' ? 'follow_up' : 'reuniao')
-        : 'rota',
-      periodo,
-      quando: item.at ?? null,
-      cliente: client ? nomeDoLead(client) : null,
-      client_id: client?.id ?? null,
-      empresa: client?.empresa ?? null,
-      contato: client?.nome ?? null,
-      telefone: client?.telefone ?? null,
-      email: client?.email ?? null,
-      responsavel: client?.vendedor_id_hubspot ? vendorLabel(client.vendedor_id_hubspot) : null,
-      vendedor_id_hubspot: client?.vendedor_id_hubspot ?? null,
-      etapa: client?.etapa ?? null,
-      temperatura: temp?.label ?? null,
-      status_lead: client?.status ?? null,
-      bairro: client?.bairro ?? null,
-      cidade: client?.cidade ?? null,
-      estado: client?.estado ?? null,
-      endereco: [client?.endereco, client?.numero].filter(Boolean).join(', ') || null,
-      latitude: client?.latitude ?? null,
-      longitude: client?.longitude ?? null,
-      visitas_total: client ? (client.visit_count || (client.visited_at ? 1 : 0)) : null,
-      url_hubspot: (client as any)?.url_hubspot ?? null,
-    };
-    if (item.kind === 'meeting') {
-      return {
-        ...base,
-        meeting_id: item.meeting.id,
-        duracao_minutos: item.meeting.duration_minutes ?? null,
-        observacoes: item.meeting.observacoes ?? null,
-        status_reuniao: item.meeting.status ?? null,
-      };
-    }
-    return {
-      ...base,
-      stop_id: item.stop.id ?? null,
-      posicao_rota: (item.stop as any).position ?? null,
-      status_parada: (item.stop as any).status ?? null,
-      minutos_deslocamento: (item.stop as any).estimated_drive_minutes ?? null,
-    };
-  };
-
-  const buildAgendaPayload = () => {
-    const itens = [
-      ...pastItems.map(i => serializeAgendaItem(i, 'passado')),
-      ...todayItems.map(i => serializeAgendaItem(i, 'hoje')),
-      ...futureItems.map(i => serializeAgendaItem(i, 'futuro')),
-    ];
-    return {
-      meta: {
-        tipo: 'agenda',
-        filtro_vendedor: vendorFilterHubspotId === null ? 'Todos' : vendorLabel(vendorFilterHubspotId),
-        gerado_em_app: new Date().toISOString(),
-        contagens: {
-          total: itens.length,
-          passado: pastItems.length,
-          hoje: todayItems.length,
-          futuro: futureItems.length,
-          reunioes: itens.filter(i => i.tipo === 'reuniao').length,
-          follow_ups: itens.filter(i => i.tipo === 'follow_up').length,
-          rotas: itens.filter(i => i.tipo === 'rota').length,
-        },
-      },
-      itens,
-    };
-  };
-
-  // Igual ao runExport do gestor: gera o JSON, abre o Alert e o link (baixa o
-  // .json no navegador). Bloqueia se a agenda estiver vazia.
-  const handleExportAgenda = async () => {
-    if (exportingAgenda) return;
-    if (agendaItems.length === 0) {
-      Alert.alert('Agenda vazia', 'Não há itens na agenda para exportar.');
-      return;
-    }
-    setExportingAgenda(true);
-    try {
-      const payload = buildAgendaPayload();
-      const filtro = vendorFilterHubspotId === null ? 'todos' : vendorLabel(vendorFilterHubspotId);
-      const res = await exportAgenda(payload, `agenda_${filtro}`);
-      Alert.alert(
-        'Exportação pronta',
-        `${payload.meta.contagens.total} itens (${payload.meta.contagens.reunioes} reuniões, ${payload.meta.contagens.follow_ups} follow-ups, ${payload.meta.contagens.rotas} rotas).\n\nToque em Abrir para baixar o .json (abre no navegador). Depois é só jogar na IA.`,
-        [
-          { text: 'Fechar', style: 'cancel' },
-          { text: 'Abrir', onPress: () => Linking.openURL(res.url) },
-        ],
-      );
-    } catch (err: any) {
-      Alert.alert('Erro ao exportar', err?.message ?? 'Tente novamente.');
-    } finally {
-      setExportingAgenda(false);
-    }
-  };
-
-  // ---- Overlay de detalhe do compromisso (prompt M3) ----
   // NAO e' a ficha do lead: e' o compromisso. Drawer padrao de 480 no
   // desktop; bottom sheet no celular. Le' o item ja carregado — sem query.
   const overlayCompromisso = compromisso ? (() => {
@@ -508,28 +378,6 @@ export function AgendaScreen({
     { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
       {/* Cabeçalho enxuto: o parágrafo "rota planejada, demos e follow-ups em
           ordem cronológica" descrevia o que a tela mostra sozinha. */}
-      {!layout.ehDesktop && canViewGestor && (
-      <View style={sharedStyles.taskHeaderRow}>
-        {/* O titulo "Agenda" saiu daqui: ele agora vive no header vermelho da
-            casca, junto do avatar (M4 secao 1). Manter os dois punha a palavra
-            duas vezes na mesma tela, uma sobre a outra. */}
-        <View style={{ flex: 1 }} />
-        {/* Exportar em JSON — só gestor, mesma regra da aba do Gestor.
-            Exporta o que está na tela, então respeita os filtros ativos. */}
-        {canViewGestor && (
-          <TouchableOpacity
-            style={[styles.agendaExportBtn, exportingAgenda && styles.agendaExportBtnDisabled]}
-            onPress={handleExportAgenda}
-            disabled={exportingAgenda}
-          >
-            {exportingAgenda
-              ? <ActivityIndicator color="#fff" size="small" />
-              : <IconText Icone={IconDownload} style={styles.agendaExportBtnText} tone="onBrand">Exportar JSON</IconText>}
-          </TouchableOpacity>
-        )}
-      </View>
-      )}
-
       {vendorFilterHubspotId !== null ? (
         <Text style={sharedStyles.taskVendorHint}>
           Filtro ativo: {vendorLabel(vendorFilterHubspotId)} — tire no modal de filtros.
@@ -626,21 +474,6 @@ export function AgendaScreen({
                     <Text style={styles.calLegendaTexto}>{meta.rotulo}</Text>
                   </View>
                 ))}
-                {canViewGestor && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Exportar JSON"
-                  style={[sharedStyles.ltwBotaoOutline, { borderColor: 'var(--teal-text)' }, exportingAgenda && { opacity: 0.6 }]}
-                  {...ds({ trans: '1', hover: 'surface2' })}
-                  disabled={exportingAgenda}
-                  onPress={handleExportAgenda}
-                >
-                  {exportingAgenda
-                    ? <ActivityIndicator size="small" color={iconColors.teal} />
-                    : <IconDownload width={24} height={24} fill={iconColors.teal} />}
-                  <Text style={[sharedStyles.ltwBotaoOutlineTexto, { color: 'var(--teal-text)' }]}>Exportar JSON</Text>
-                </Pressable>
-                )}
               </View>
               <View style={styles.calSemana}>
                 {visiveis.map(({ d, itens }, k) => {
@@ -798,21 +631,6 @@ const styles = StyleSheet.create({
     color: 'var(--text-muted)',
     textAlign: 'center',
   },
-  agendaExportBtn: {
-    marginTop: 12,
-    backgroundColor: '#222222',
-    borderRadius: 10,
-    paddingVertical: 11,
-    // Sem padding horizontal o rotulo encostava nas duas bordas e lia como
-    // texto cortado. Ficou visivel agora que o botao dimensiona pelo proprio
-    // conteudo — antes o titulo "Agenda · N" o espremia. A altura de 42 e o
-    // raio 10 seguem fora da escala; ficam pro passe de limpeza.
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  agendaExportBtnDisabled: { opacity: 0.6 },
-  agendaExportBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   calChip: {
     borderLeftWidth: 3,
     backgroundColor: 'var(--surface-2)',
