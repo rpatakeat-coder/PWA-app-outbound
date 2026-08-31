@@ -575,7 +575,9 @@ export function AgendaScreen({
 
   return (
     <>
-    <ScrollView contentContainerStyle={[sharedStyles.listContent, { paddingBottom: 90 + insets.bottom },
+    <ScrollView contentContainerStyle={[sharedStyles.listContent, // +24: o FAB central da barra protrai 24px e cairia em cima do
+      // ultimo card. So' aparece quando se rola ate' o fim.
+      { paddingBottom: 90 + 24 + insets.bottom },
     // Mesmo teto da lista de leads: sem ele o conteudo se espalha por
     // toda a largura do monitor e a linha de texto fica ilegivel.
     { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>

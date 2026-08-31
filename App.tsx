@@ -3476,9 +3476,10 @@ function MainApp() {
         </TouchableOpacity>
       )}
 
-      {/* Cadastro outbound (📤) escondido: mandava só pro HubSpot sem
-          registrar no app. Fica apenas o FAB vermelho (+). */}
-      {!creationMode && !isViewer && !heatOn && (
+      {/* FAB flutuante SO' NO DESKTOP. No celular quem cria lead e' o FAB
+          central da barra inferior — manter os dois daria dois caminhos pra
+          mesma acao, e o solto cobria o conteudo do mapa. */}
+      {!creationMode && !isViewer && !heatOn && layout.ehLargo && (
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Adicionar lead"
           style={[styles.fab, { bottom: baseInferior }]}
           onPress={() => setShowCepStep(true)}
@@ -4298,23 +4299,27 @@ function MainApp() {
       {/* Header vermelho — so' no celular. No web o vermelho vira o CTA
           (handoff: "o vermelho sai do header"). */}
       {!layout.ehLargo && (
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Image source={require('./assets/icon.png')} style={styles.headerLogo} />
-          {profile && (
-            <Text style={styles.headerSubtitle}>{profile.full_name || profile.email}</Text>
-          )}
-        </View>
-        <View style={styles.headerActions}>
-          {/* A engrenagem abre a TELA de Configuracoes (prompt 13a) — o
-              modal antigo morreu. "Sair" mora la' dentro (secao Sobre). */}
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Configuracoes"
-            style={styles.headerIconButton}
-            onPress={() => setTab('config')}
-          >
-            <IconSettings width={20} height={20} fill="#fff" />
-          </TouchableOpacity>
-        </View>
+      <View style={[styles.header, isDark && styles.headerEscuro]}>
+        {/* Esqueleto: fundo, padding e o avatar a' direita. A composicao do
+            meio varia por tela e e' definida no prompt de cada uma.
+
+            Sairam daqui o logo de 32px, o nome do vendedor e a engrenagem de
+            44x44 — todos vao pro menu do perfil (M10).
+
+            O avatar ainda NAO abre o menu, que so' nasce no M10: por ora ele
+            leva pra tela de Configuracoes, onde "Sair" mora. Sem isso o app
+            ficaria sem logout no celular, porque a engrenagem era o unico
+            caminho (o outro setTab('config') vive na sidebar, que so' existe
+            no web). No M10 troca-se uma linha. */}
+        <View style={styles.headerLeft} />
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Perfil e configurações"
+          style={styles.headerAvatar}
+          onPress={() => setTab('config')}
+        >
+          <Text style={styles.headerAvatarTexto}>{iniciaisWeb}</Text>
+        </TouchableOpacity>
       </View>
       )}
 
@@ -4494,7 +4499,9 @@ function MainApp() {
             columnWrapperStyle={colunasDaLista > 1 ? { gap: 8 } : undefined}
             contentContainerStyle={[
               sharedStyles.listContent,
-              { paddingBottom: 80 + insets.bottom },
+              // +24: o FAB central protrai 24px acima da barra e cairia em
+              // cima do ultimo card — so' aparece ao rolar ate' o fim.
+              { paddingBottom: 80 + 24 + insets.bottom },
               // Teto de largura: sem ele, um card ocupa 2.5 mil pixels pra
               // exibir um nome e um endereco.
               { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' },
@@ -4517,16 +4524,6 @@ function MainApp() {
               </View>
             }
           />
-
-          {/* Cadastro outbound (📤) escondido — só o FAB vermelho (+). */}
-          {!isViewer && !layout.ehLargo && (
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Adicionar lead"
-              style={[styles.fab, { bottom: baseInferior }]}
-              onPress={() => setShowCepStep(true)}
-            >
-              <IconPlus width={26} height={26} fill="#fff" />
-            </TouchableOpacity>
-          )}
 
         </>
         )
@@ -4657,47 +4654,52 @@ function MainApp() {
           Reserva-se espaco proprio so' quando o aparelho nao tem area segura
           suficiente pra abrigar o texto. */}
       {!layout.ehLargo && (
-      <View
-        style={[
-          styles.bottomNav,
-          { paddingBottom: navPaddingBottom },
-        ]}
-      >
+      <View style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]}>
         <TouchableOpacity
-          style={[styles.navItem, tab === 'map' && styles.navItemActive]}
+          accessibilityRole="button"
+          style={styles.navItem}
           onPress={() => setTab('map')}
         >
-          <NavIcon Icone={IconLocation} ativo={tab === 'map'} />
+          <NavIcon Icone={tab === 'map' ? IconLocationFilled : IconLocation} ativo={tab === 'map'} />
           <Text style={[styles.navItemText, tab === 'map' && styles.navItemTextActive]}>Mapa</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.navItem, tab === 'list' && styles.navItemActive]}
-          onPress={() => setTab('list')}
-        >
-          <NavIcon Icone={IconSquareMenu} ativo={tab === 'list'} />
-          <Text style={[styles.navItemText, tab === 'list' && styles.navItemTextActive]}>Lista</Text>
-        </TouchableOpacity>
-        {!isViewer && (
+
+        {isViewer ? (
+          // Viewer fica so' com o Mapa — sem Rota, Agenda, Tarefas nem FAB.
+          // O vao do meio some junto: sem FAB, ele seria um buraco.
+          null
+        ) : (
           <>
             <TouchableOpacity
-              style={[styles.navItem, tab === 'route' && styles.navItemActive]}
+              accessibilityRole="button"
+              style={styles.navItem}
               onPress={() => setTab('route')}
             >
               <NavIcon Icone={IconCar} ativo={tab === 'route'} />
               <Text style={[styles.navItemText, tab === 'route' && styles.navItemTextActive]}>Rota</Text>
             </TouchableOpacity>
+
+            {/* O vao que o FAB ocupa. E' um espacador, nao um alvo. */}
+            <View style={styles.navVaoFab} />
+
             <TouchableOpacity
-              style={[styles.navItem, tab === 'agenda' && styles.navItemActive]}
+              accessibilityRole="button"
+              style={styles.navItem}
               onPress={() => setTab('agenda')}
             >
               <NavIcon Icone={IconCalendar} ativo={tab === 'agenda'} />
               <Text style={[styles.navItemText, tab === 'agenda' && styles.navItemTextActive]}>Agenda</Text>
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={[styles.navItem, tab === 'tasks' && styles.navItemActive]}
+              accessibilityRole="button"
+              style={styles.navItem}
               onPress={() => setTab('tasks')}
             >
-              <View>
+              {/* O badge pendura no ICONE, e nao no botao: ancorado no botao de
+                  ~73px o `right` cai perto do centro e cobre a prancheta
+                  inteira — e piora quando o numero vira "99+". */}
+              <View style={styles.navIconeAncora}>
                 <NavIcon Icone={IconClipboardCheck} ativo={tab === 'tasks'} />
                 {visibleTasksCount > 0 && (
                   <View style={styles.navBadge}>
@@ -4709,30 +4711,22 @@ function MainApp() {
               </View>
               <Text style={[styles.navItemText, tab === 'tasks' && styles.navItemTextActive]}>Tarefas</Text>
             </TouchableOpacity>
+
+            {/* FAB central. A borda de 4px em --surface e' o que o recorta da
+                barra; sem ela ele encosta nas abas vizinhas. */}
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Adicionar lead"
+              activeOpacity={0.94}
+              style={styles.navFab}
+              onPress={() => setShowCepStep(true)}
+            >
+              <IconPlus width={32} height={32} fill="#FFFFFF" />
+            </TouchableOpacity>
           </>
         )}
-        {canViewGestor ? (
-          <TouchableOpacity
-            style={[styles.navItem, tab === 'gestor' && styles.navItemActive]}
-            onPress={() => setTab('gestor')}
-          >
-            <NavIcon Icone={IconBarGraph} ativo={tab === 'gestor'} />
-            <Text style={[styles.navItemText, tab === 'gestor' && styles.navItemTextActive]}>Gestor</Text>
-          </TouchableOpacity>
-        ) : !isViewer && (
-          // Vendedor comum (nao-gestor, nao-viewer): ve so o proprio desempenho.
-          <TouchableOpacity
-            style={[styles.navItem, tab === 'meu' && styles.navItemActive]}
-            onPress={() => setTab('meu')}
-          >
-            <NavIcon Icone={IconTrendingUp} ativo={tab === 'meu'} />
-            <Text style={[styles.navItemText, tab === 'meu' && styles.navItemTextActive]}>Meu</Text>
-          </TouchableOpacity>
-        )}
-        <Text
-          style={[styles.brandMark, { bottom: brandMarkBottom }]}
-          pointerEvents="none"
-        >
+
+        <Text style={[styles.brandMark, { bottom: brandMarkBottom }]} pointerEvents="none">
           developed by RPA
         </Text>
       </View>
@@ -7125,8 +7119,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
     backgroundColor: '#C8131B',
+  },
+  // No escuro o vermelho chapado no topo cansa e briga com a superficie.
+  headerEscuro: { backgroundColor: 'var(--surface)' },
+  headerAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerAvatarTexto: {
+    fontSize: 14,
+    lineHeight: 20,
+    letterSpacing: 0.1,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerLogo: { width: 32, height: 32, tintColor: '#fff', resizeMode: 'contain' },
@@ -7952,23 +7963,47 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'var(--border)',
     backgroundColor: 'var(--surface)',
+    // O FAB e' filho absoluto desta barra e protrai 24px acima dela.
+    position: 'relative',
+  },
+  // Espacador do FAB: 72px de vao no meio das quatro abas.
+  navVaoFab: { flex: 0, flexBasis: 72, width: 72 },
+  // Ancora do badge. `position:relative` implicito no RN; o que importa e' o
+  // badge pendurar no ICONE e nao no botao de ~73px.
+  navIconeAncora: { position: 'relative' },
+  navFab: {
+    position: 'absolute',
+    left: '50%',
+    top: -24,
+    transform: [{ translateX: -30 }],
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#C8131B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    // A borda em --surface e' o que recorta o FAB da barra.
+    borderWidth: 4,
+    borderColor: 'var(--surface)',
+    // A unica sombra tingida da marca no app.
+    shadowColor: '#C8131B',
+    shadowOpacity: 0.32,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 16,
+    elevation: 8,
   },
   // Sao ate 6 abas (Mapa/Lista/Rota/Agenda/Tarefas/Gestor). Num celular
   // estreito o rotulo de 11px encostava no do vizinho; icone e texto um ponto
   // menores, com folga horizontal, deixam os seis respirarem.
   navItem: {
     flex: 1,
-    // minHeight 48: e' o controle mais tocado do app, com o polegar, em pe' na
-    // rua. Estava em ~30px de altura efetiva (padding 6 + icone 17 + rotulo
-    // 10) — abaixo dos 44px que iOS e Android recomendam como alvo minimo, o
-    // que se traduz em toque errado de aba no meio da visita.
-    minHeight: 48,
-    paddingVertical: 6,
-    paddingHorizontal: 2,
+    // 56: e' o controle mais tocado do app, com o polegar, em pe' na rua.
+    minHeight: 56,
+    paddingVertical: 8,
+    gap: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  navItemActive: { backgroundColor: 'var(--tint-red)', borderRadius: 12, marginHorizontal: 4, marginVertical: 4 },
   navIcon: { fontSize: 17, marginBottom: 2 },
   navIconActive: {},
   // Badge de notificacao de tarefas pendentes, sobreposto no icone da aba.
@@ -7980,14 +8015,15 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     minWidth: 18,
     height: 18,
-    paddingHorizontal: 4,
+    paddingHorizontal: 5,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#fff',
+    borderColor: 'var(--surface)',
+    boxSizing: 'content-box',
   },
   navBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  navItemText: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-subtle)' },
+  navItemText: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-faint)' },
   // ===== Calendario da Agenda (so' desktop) =====
   brandMark: {
     position: 'absolute',
@@ -8000,7 +8036,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     color: 'var(--text-faint)',
   },
-  navItemTextActive: { color: 'var(--brand-text)' },
+  navItemTextActive: { fontWeight: '700', color: '#C8131B' },
   // List
   // Card Mobile do DS: radius 16, padding 16, sombra shadow/01 (key-light 14%).
   clientCard: {
