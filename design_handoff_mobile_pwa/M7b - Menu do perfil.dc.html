@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F6F6F6;--raised:#FFFFFF;--nested:#F6F6F6;--fill:#EDEDED;
+  --t1:#222222;--t2:#545454;--t3:#7A7A7A;--t4:#C6C6C6;
+  --s-subtle:#EDEDED;--s-default:#C6C6C6;--s-strong:#7A7A7A;
+  --brand:#C8131B;--brand-dark:#94090F;--brand-tint:#FAE8E9;
+  color-scheme:light;
+}
+[data-theme='dark']{
+  --bg:#121212;--raised:#1E1E1E;--nested:#262626;--fill:#2A2A2A;
+  --t1:rgba(255,255,255,.92);--t2:rgba(255,255,255,.64);--t3:rgba(255,255,255,.42);--t4:rgba(255,255,255,.28);
+  --s-subtle:rgba(255,255,255,.08);--s-default:rgba(255,255,255,.14);--s-strong:rgba(255,255,255,.24);
+  --brand-dark:#E5A1A4;--brand-tint:#3A1416;
+  color-scheme:dark;
+}
+body{margin:0;background:#E4E4E4;font-family:Poppins,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased;}
+.ms{font-family:'Material Symbols Rounded';font-weight:400;font-style:normal;line-height:1;letter-spacing:normal;display:inline-block;white-space:nowrap;direction:ltr;-webkit-font-feature-settings:'liga';}
+a{color:#018CCC;text-decoration:none;}
+a:hover{color:#016999;}
+</style>
+</helmet>
+
+<section style="padding:32px;background:#E4E4E4;min-height:100vh;box-sizing:border-box;">
+  <div style="max-width:1800px;margin:0 auto;">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:11px;line-height:16px;letter-spacing:1.2px;font-weight:800;color:#7A7A7A;text-transform:uppercase;">M7b · Menu do perfil</div>
+        <h1 style="margin:4px 0 0;font-size:24px;line-height:32px;font-weight:700;color:#222222;">Quem sou eu aqui, e por onde saio</h1>
+        <div style="margin-top:4px;font-size:14px;line-height:20px;color:#545454;max-width:640px;text-wrap:pretty;">O avatar do header abre uma folha com identidade e cinco destinos. É a entrada que falta para Gestor e Meu desempenho no celular, e é onde a engrenagem e o botão "Sair" do header vão morar. Cada papel vê uma lista diferente.</div>
+      </div>
+      <button onClick="{{ toggleTheme }}" style="height:40px;padding:0 16px;border-radius:8px;border:1px solid #C6C6C6;background:#FFFFFF;color:#545454;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;" style-hover="border-color:#7A7A7A;">{{ rotuloTema }}</button>
+    </div>
+
+    <div style="display:flex;gap:32px;flex-wrap:wrap;margin-top:28px;align-items:flex-start;">
+      <sc-for list="{{ quadros }}" as="q" hint-placeholder-count="4">
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div id="{{ q.id }}" style="display:flex;align-items:center;gap:8px;">
+            <span style="display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:4px;background:#C8131B;color:#fff;font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:700;">{{ q.id }}</span>
+            <span style="font-size:14px;line-height:20px;font-weight:600;color:#222222;">{{ q.titulo }}</span>
+          </div>
+
+          <div data-theme="{{ tema }}" data-screen-label="{{ q.titulo }}" style="width:390px;height:844px;background:var(--bg);border:1px solid #C6C6C6;overflow:hidden;display:flex;flex-direction:column;position:relative;">
+
+            <div style="padding:12px 16px;background:{{ q.headerBg }};color:#fff;display:flex;align-items:center;gap:12px;">
+              <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:48px;padding:0 16px;border-radius:16px;background:rgba(255,255,255,.18);">
+                <span class="ms" style="font-size:22px;color:rgba(255,255,255,.75);">search</span>
+                <span style="font-size:16px;line-height:24px;letter-spacing:.5px;color:rgba(255,255,255,.7);">Buscar lead</span>
+              </div>
+              <div style="width:48px;height:48px;flex:0 0 48px;border-radius:9999px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:14px;line-height:24px;letter-spacing:.15px;font-weight:700;">{{ q.iniciais }}</div>
+            </div>
+
+            <div style="flex:1;min-height:0;position:relative;background:var(--fill);display:flex;align-items:center;justify-content:center;">
+              <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);">Mapa · placeholder</div>
+              <sc-if value="{{ q.callout }}" hint-placeholder-val="{{ false }}">
+                <div style="position:absolute;left:16px;right:16px;top:16px;padding:12px 16px;border-radius:12px;background:var(--raised);border:1px solid var(--s-default);box-shadow:0 1px 3px rgba(0,0,0,.12);">
+                  <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:var(--brand-dark);text-transform:uppercase;">O que sai do header</div>
+                  <div style="margin-top:4px;font-size:12px;line-height:18px;letter-spacing:.4px;color:var(--t2);text-wrap:pretty;">A engrenagem (<code>styles.headerIconButton</code>) e o botão "Sair" (<code>styles.logoutButton</code>) somem. O avatar de 48px é o único controle à direita, nas quatro telas com barra.</div>
+                </div>
+              </sc-if>
+            </div>
+
+            <div style="border-top:1px solid var(--s-subtle);background:var(--raised);position:relative;">
+              <div style="position:absolute;left:50%;top:-30px;transform:translateX(-50%);width:60px;height:60px;border-radius:9999px;background:var(--brand);border:4px solid var(--raised);display:flex;align-items:center;justify-content:center;color:#fff;"><span class="ms" style="font-size:28px;">add</span></div>
+              <div style="display:flex;">
+                <sc-for list="{{ nav }}" as="n" hint-placeholder-count="5">
+                  <sc-if value="{{ n.gap }}" hint-placeholder-val="{{ false }}"><div style="width:72px;flex:0 0 72px;"></div></sc-if>
+                  <sc-if value="{{ n.item }}" hint-placeholder-val="{{ true }}">
+                    <div style="flex:1;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;">
+                      <span class="ms" style="font-size:24px;color:{{ n.cor }};">{{ n.icon }}</span>
+                      <span style="font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:{{ n.peso }};color:{{ n.cor }};">{{ n.label }}</span>
+                    </div>
+                  </sc-if>
+                </sc-for>
+              </div>
+            </div>
+
+            <sc-if value="{{ q.sheet }}" hint-placeholder-val="{{ true }}">
+              <div style="position:absolute;inset:0;z-index:55;display:flex;flex-direction:column;justify-content:flex-end;">
+                <div style="position:absolute;inset:0;background:rgba(0,0,0,.4);"></div>
+                <div style="position:relative;border-radius:16px 16px 0 0;background:var(--raised);padding:12px 16px 32px;">
+                  <div style="width:36px;height:4px;border-radius:2px;background:var(--s-default);margin:0 auto 16px;"></div>
+                  <div style="display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--s-subtle);">
+                    <span style="width:48px;height:48px;flex:0 0 48px;border-radius:9999px;background:var(--brand-tint);color:var(--brand-dark);font-size:16px;line-height:48px;letter-spacing:.15px;font-weight:700;text-align:center;">{{ q.iniciais }}</span>
+                    <div style="min-width:0;">
+                      <div style="font-size:16px;line-height:24px;letter-spacing:.15px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ q.nome }}</div>
+                      <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ q.sub }}</div>
+                    </div>
+                  </div>
+                  <sc-for list="{{ q.itens }}" as="m" hint-placeholder-count="5">
+                    <div style="width:100%;min-height:56px;display:flex;align-items:center;gap:16px;padding:0 4px;border-bottom:1px solid var(--s-subtle);box-sizing:border-box;">
+                      <span class="ms" style="font-size:24px;color:{{ m.cor }};">{{ m.icon }}</span>
+                      <span style="flex:1;min-width:0;font-size:16px;line-height:24px;letter-spacing:.15px;font-weight:500;color:{{ m.cor }};">{{ m.label }}</span>
+                      <span class="ms" style="font-size:24px;color:var(--t4);">{{ m.trailing }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+
+          <ul style="margin:0;padding-left:18px;width:390px;box-sizing:border-box;font-size:12px;line-height:18px;color:#545454;">
+            <sc-for list="{{ q.notas }}" as="nota" hint-placeholder-count="3">
+              <li>{{ nota }}</li>
+            </sc-for>
+          </ul>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="margin-top:40px;padding-top:24px;border-top:2px solid #C6C6C6;display:flex;gap:40px;flex-wrap:wrap;">
+      <div style="max-width:420px;">
+        <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:#7A7A7A;text-transform:uppercase;">Anatomia</div>
+        <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;line-height:20px;color:#222222;">
+          <li>Folha: raio <code>16px 16px 0 0</code>, <code>padding:12px 16px 32px</code>, handle 36×4 raio 2</li>
+          <li>Identidade: avatar 48px pill <code>--brand-tint</code>/<code>--brand-dark</code>, iniciais 16/48 peso 700</li>
+          <li>Item: <code>min-height:56px</code>, gap 16, ícone 24px, rótulo 16/24/0.15 peso 500, <code>chevron_right</code> 24px</li>
+          <li>Sair: ícone e rótulo <code>#C8131B</code>, <code>logout</code> no lugar do chevron</li>
+          <li>Overlay <code>rgba(0,0,0,.4)</code>; toque fora fecha</li>
+        </ul>
+      </div>
+      <div style="max-width:420px;">
+        <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:#7A7A7A;text-transform:uppercase;">O que o menu resolve</div>
+        <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;line-height:20px;color:#222222;">
+          <li>Nada no celular chama <code>setTab('gestor')</code> nem <code>setTab('meu')</code> — o menu passa a chamar</li>
+          <li>O <code>arrow_back</code> dessas telas volta para a aba de origem, não para o Mapa</li>
+          <li>Logout deixa de ocupar um botão permanente do header</li>
+        </ul>
+      </div>
+      <div style="max-width:420px;">
+        <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:#7A7A7A;text-transform:uppercase;">Papéis</div>
+        <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;line-height:20px;color:#222222;">
+          <li>Gestor (<code>canViewGestor</code>): cinco itens</li>
+          <li>Vendedor: sem Painel do gestor e sem Exportar dados</li>
+          <li><code>isViewer</code>: só Configurações e Sair — Meu desempenho já é redirecionado pelo guard</li>
+          <li>O menu esconde; o <code>useEffect</code> de papel continua sendo a rede</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1800,&quot;height&quot;:1200}}">
+class Component extends DCLogic {
+  state = { tema: 'light' };
+
+  renderVals() {
+    const dark = this.state.tema === 'dark';
+    const headerBg = dark ? '#1E1E1E' : '#C8131B';
+
+    const item = (label, icon, opt) => ({
+      label, icon,
+      cor: (opt && opt.sair) ? '#C8131B' : 'var(--t2)',
+      trailing: (opt && opt.sair) ? 'logout' : 'chevron_right',
+    });
+
+    const gestor = [
+      item('Painel do gestor', 'insights'),
+      item('Meu desempenho', 'person'),
+      item('Exportar dados', 'download'),
+      item('Configurações', 'settings'),
+      item('Sair', 'logout', { sair: true }),
+    ];
+    const vendedor = [
+      item('Meu desempenho', 'person'),
+      item('Configurações', 'settings'),
+      item('Sair', 'logout', { sair: true }),
+    ];
+    const viewer = [
+      item('Configurações', 'settings'),
+      item('Sair', 'logout', { sair: true }),
+    ];
+
+    const quadros = [
+      { id: '1a', titulo: 'Header — fechado', headerBg, iniciais: 'RP', sheet: false, callout: true,
+        notas: [
+          'Avatar 48px pill, iniciais do profile, alvo cheio',
+          'Engrenagem e "Sair" saem daqui de vez',
+          'Mesmo avatar nas quatro telas com barra',
+        ] },
+      { id: '1b', titulo: 'Folha aberta — gestor', headerBg, iniciais: 'RP', sheet: true,
+        nome: 'Rafael Pereira', sub: 'Gestor · rafael@takeat.app', itens: gestor,
+        notas: [
+          'Cinco itens; "Painel do gestor" e "Meu desempenho" chamam setTab',
+          '"Exportar dados" só se já existir export — não inventar',
+          'Sair em #C8131B, sempre por último',
+        ] },
+      { id: '1c', titulo: 'Folha — vendedor', headerBg, iniciais: 'JS', sheet: true,
+        nome: 'Júlia Santos', sub: 'Vendedora · julia@takeat.app', itens: vendedor,
+        notas: [
+          'Sem Painel do gestor (canViewGestor falso)',
+          'Sem Exportar dados — hoje os exports são só do gestor',
+          'A folha encurta; nada de item desabilitado',
+        ] },
+      { id: '1d', titulo: 'Folha — somente leitura', headerBg, iniciais: 'MC', sheet: true,
+        nome: 'Marcos Costa', sub: 'Somente leitura · marcos@takeat.app', itens: viewer,
+        notas: [
+          'isViewer: só Configurações e Sair',
+          'Meu desempenho fica fora — o guard já redireciona',
+          'O papel aparece na sublinha, sem badge extra',
+        ] },
+    ];
+
+    const nav = [
+      { item: true, icon: 'map', label: 'Mapa', cor: 'var(--brand)', peso: '600' },
+      { item: true, icon: 'route', label: 'Rota', cor: 'var(--t3)', peso: '500' },
+      { gap: true },
+      { item: true, icon: 'event', label: 'Agenda', cor: 'var(--t3)', peso: '500' },
+      { item: true, icon: 'task_alt', label: 'Tarefas', cor: 'var(--t3)', peso: '500' },
+    ];
+
+    return {
+      tema: this.state.tema,
+      rotuloTema: dark ? 'Tema claro' : 'Tema escuro',
+      toggleTheme: () => this.setState({ tema: dark ? 'light' : 'dark' }),
+      quadros, nav,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

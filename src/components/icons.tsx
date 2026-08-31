@@ -185,6 +185,9 @@ export function useIconColors() {
     tintGreenText: isDark ? '#77BD8B' : '#167532',
     /** Par do token --text-faint: icones de campo/metadado. */
     faint: isDark ? 'rgba(255,255,255,0.42)' : '#7A7A7A',
+    /** Par do token --text-disabled: o chevron de fim de linha, que e' pista
+     *  de affordance e nao conteudo. */
+    disabled: isDark ? 'rgba(255,255,255,0.28)' : '#C6C6C6',
     /** Par do token --teal-text: exportacoes ("Baixar planilha"). */
     teal: isDark ? '#5FD3C6' : '#1D9688',
     /** Par do token --info-text: links e acoes informativas. */

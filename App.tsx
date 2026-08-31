@@ -4301,6 +4301,34 @@ function MainApp() {
   const iniciaisWeb = (profile?.full_name || profile?.email || '?')
     .trim().split(/\s+/).map(s => s[0]).slice(0, 2).join('').toUpperCase();
 
+  // ---- Identidade do menu do perfil (M7b) ----
+  // Constante separada do `iniciaisWeb` de proposito: a sidebar do desktop
+  // continua com o '?' de sempre, e aqui, SEM `profile`, o avatar fica com o
+  // mesmo diametro e fundo e nenhuma inicial — um '?' diria que carregou.
+  const iniciais = profile
+    ? (profile.full_name || profile.email || '')
+        .trim().split(/\s+/).map(t => t[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
+    : '';
+  // `user` e a ausencia de role caem em "Vendedor": e' o que o CHECK do banco
+  // chama de vendedor comum (`user | view | gestor`). Um role fora desse trio
+  // aparece CRU — melhor um valor estranho na tela do que chamar de vendedor
+  // quem o app nao sabe classificar.
+  const papelDoPerfil = canViewGestor
+    ? 'Gestor'
+    : isViewer
+      ? 'Visualização'
+      : (profile?.role == null || profile.role === 'user')
+        ? 'Vendedor'
+        : String(profile.role);
+  // Com nome: nome em cima, "papel · e-mail" embaixo. Sem nome, o PAPEL sobe
+  // pra linha de cima e a sublinha fica so' com o e-mail — que e' o que o
+  // handoff pede. Repetir o e-mail nas duas linhas nao informaria nada, e um
+  // " · " sem o segundo lado fica solto.
+  const nomeDoPerfil = profile?.full_name || papelDoPerfil;
+  const subDoPerfil = profile?.full_name
+    ? [papelDoPerfil, profile.email].filter(Boolean).join(' · ')
+    : (profile?.email ?? '');
+
   const sidebarWeb = (
     <View style={styles.sbContainer} {...ds({ sidebar: '1' })}>
       <View style={styles.sbTopo}>
@@ -4582,14 +4610,21 @@ function MainApp() {
               <IconLightBulb width={24} height={24} fill="#FFFFFF" />
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Perfil e configurações"
-            style={styles.headerAvatar}
-            onPress={() => setPerfilAberto(true)}
-          >
-            <Text style={styles.headerAvatarTexto}>{iniciaisWeb}</Text>
-          </TouchableOpacity>
+          {/* Unico controle permanente a' direita do header — a engrenagem e o
+              botao "Sair" que dividiam este canto sairam no M7. So' nas QUATRO
+              telas com barra: Gestor, Meu desempenho e Configuracoes ja' tem o
+              arrow_back, e um segundo caminho no mesmo cabecalho diria coisas
+              diferentes sobre como sair da tela. */}
+          {tab !== 'gestor' && tab !== 'meu' && tab !== 'config' && (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Abrir menu do perfil"
+              style={styles.headerAvatar}
+              onPress={() => setPerfilAberto(true)}
+            >
+              <Text style={styles.headerAvatarTexto}>{iniciais}</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Rota: kicker, data e os tres KPIs. A sequencia e' o objeto de
@@ -5070,22 +5105,20 @@ function MainApp() {
           fundo, no Esc e no voltar-do-sistema, e ja' e' folha no celular. */}
       {!layout.ehLargo && (
         <Painel
-          visivel={perfilAberto}
+          // Sem `profile` a folha nao abre: ela e' inteira sobre quem esta'
+          // logado, e abriria com nome, papel e iniciais em branco.
+          visivel={perfilAberto && !!profile}
           aoFechar={() => setPerfilAberto(false)}
           rotulo="Perfil"
-          estiloConteudoCorpo={styles.perfilCorpo}
+          estiloConteudoCorpo={[styles.perfilCorpo, { paddingBottom: 32 + insets.bottom }]}
         >
           <View style={styles.perfilIdentidade}>
             <View style={styles.perfilAvatar}>
-              <Text style={styles.perfilAvatarTexto}>{iniciaisWeb}</Text>
+              <Text style={styles.perfilAvatarTexto}>{iniciais}</Text>
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.perfilNome} numberOfLines={1}>
-                {profile?.full_name || profile?.email || 'Sem nome'}
-              </Text>
-              <Text style={styles.perfilSub} numberOfLines={1}>
-                {`${canViewGestor ? 'Gestor' : isViewer ? 'Visualização' : 'Vendedor'} · ${profile?.email ?? ''}`}
-              </Text>
+              <Text style={styles.perfilNome} numberOfLines={1}>{nomeDoPerfil}</Text>
+              <Text style={styles.perfilSub} numberOfLines={1}>{subDoPerfil}</Text>
             </View>
           </View>
 
@@ -5101,7 +5134,26 @@ function MainApp() {
               ? { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu desempenho', aoTocar: () => irParaTelaDePerfil('meu') }
               : null,
             { chave: 'config', Icone: IconSettings, rotulo: 'Configurações', aoTocar: () => irParaTelaDePerfil('config') },
-            { chave: 'sair', Icone: IconLogout, rotulo: 'Sair', perigo: true, aoTocar: () => { setPerfilAberto(false); logout(); } },
+            // O logout disparava a UM toque, sem rede — e sem conexao pra
+            // refazer o login o estrago demora a desfazer. Passa a confirmar.
+            {
+              chave: 'sair',
+              Icone: IconLogout,
+              rotulo: 'Sair',
+              perigo: true,
+              aoTocar: () => Alert.alert(
+                'Sair da conta?',
+                'Você precisará entrar de novo com e-mail e senha.',
+                [
+                  { text: 'Cancelar', style: 'cancel' },
+                  {
+                    text: 'Sair',
+                    style: 'destructive',
+                    onPress: () => { setPerfilAberto(false); logout(); },
+                  },
+                ],
+              ),
+            },
           ].filter(Boolean) as Array<{
             chave: string;
             Icone: typeof IconSettings;
@@ -5124,8 +5176,14 @@ function MainApp() {
               <Text style={[styles.perfilItemTexto, item.perigo && styles.perfilItemTextoPerigo]}>
                 {item.rotulo}
               </Text>
+              {/* O chevron e' promessa de "isto leva a outra tela", em
+                  --text-disabled: pista de affordance, nao conteudo. O Sair
+                  nao leva a lugar nenhum — ele age —, entao termina sem
+                  trailing. O handoff pede `logout` ali, mas o leading do item
+                  ja' e' o `logout`: seguir a letra poria o mesmo glifo duas
+                  vezes na mesma linha. */}
               {!item.perigo && (
-                <IconChevronRight width={24} height={24} fill={iconColors.faint} />
+                <IconChevronRight width={24} height={24} fill={iconColors.disabled} />
               )}
             </TouchableOpacity>
           ))}
@@ -7634,6 +7692,8 @@ const styles = StyleSheet.create({
   headerTitulo: { flex: 1, minWidth: 0, fontSize: 18, lineHeight: 24, fontWeight: '600', color: '#FFFFFF' },
   headerSublinha: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'rgba(255,255,255,0.8)' },
   // ---- Menu do perfil (M7) ----
+  // O 32 e' o rodape da folha; a area segura entra por cima dele no JSX, pra
+  // a ultima linha nao ficar sob a barra de gestos no PWA instalado.
   perfilCorpo: { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 32 },
   perfilIdentidade: {
     flexDirection: 'row',
@@ -7659,6 +7719,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
     minHeight: 56,
+    paddingHorizontal: 4,
     borderBottomWidth: 1,
     borderBottomColor: 'var(--border)',
   },
@@ -7748,8 +7809,8 @@ const styles = StyleSheet.create({
   },
   headerAvatarTexto: {
     fontSize: 14,
-    lineHeight: 20,
-    letterSpacing: 0.1,
+    lineHeight: 24,
+    letterSpacing: 0.15,
     fontWeight: '700',
     color: '#FFFFFF',
   },
