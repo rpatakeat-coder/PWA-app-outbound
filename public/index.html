@@ -386,6 +386,29 @@
         flex: 1;
       }
 
+      /*
+        O `100dvh` acima nao fechou o caso no PWA INSTALADO do iOS: ele ainda
+        reporta a altura de antes da faixa da barra de gestos, o app termina
+        acima dela e sobra o fundo do body (--bg, cinza) embaixo das abas — a
+        barra inteira parece empurrada pra cima. E' o mesmo sintoma do
+        8512fc5, com um vao menor.
+
+        `position: fixed; inset: 0` nao depende de unidade de viewport
+        nenhuma: ancora o app nas quatro bordas da janela. So' no modo
+        instalado, porque no Safari com a barra flutuante a viewport de
+        layout inclui a area da barra — la' o `100dvh` e' que esta' certo, e
+        fixar tudo poria as abas embaixo do toolbar.
+
+        A reserva da area segura continua onde estava (o `paddingBottom:
+        insets.bottom` da barra): o que muda e' so' onde o app termina.
+      */
+      @media (display-mode: standalone), (display-mode: fullscreen) {
+        #root {
+          position: fixed;
+          inset: 0;
+        }
+      }
+
       /* Segura o "puxa pra atualizar" do Chrome Android: num app de mapa o
          gesto de arrastar pra baixo e' pan, nao refresh. */
       body {
