@@ -440,6 +440,14 @@ export function TarefasScreen({
 
       {/* Chips: quanto tem de cada urgência, e filtro de um toque. No desktop
           as colunas do kanban ja' contam — os chips sao so' do celular. */}
+      {/* Os chips contam a base INTEIRA, nao a aba selecionada — de proposito:
+          trocar de aba nao pode zerar as outras urgencias e esconder que elas
+          existem. Mas sem rotulo os numeros mentem por omissao: "D5 13" sob
+          uma aba "Atrasadas · 86" parecia dizer 13 atrasadas, e a soma dos
+          chips (89) nem fechava com a aba. O kicker resolve dizendo o escopo. */}
+      {!layout.ehDesktop && chips.length > 1 && (
+        <Text style={styles.rotuloContagem}>TOTAL POR URGÊNCIA, TODAS AS ABAS</Text>
+      )}
       {!layout.ehDesktop && chips.length > 1 && (
         <View style={sharedStyles.countChipsRow}>
           {chips.map(([sev, total]) => {
@@ -546,6 +554,15 @@ export function TarefasScreen({
 
 // Estilos exclusivos desta tela, movidos do App.tsx como estavam.
 const styles = StyleSheet.create({
+  rotuloContagem: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 1,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    color: 'var(--text-faint)',
+    marginBottom: 8,
+  },
   // ---- Abas de estado (M5) ----
   // Fora do padding de 16 do scroll: a faixa vai de borda a borda e leva a
   // propria borda inferior, como um cabecalho fixo de secao.

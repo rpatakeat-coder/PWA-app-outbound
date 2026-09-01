@@ -386,6 +386,12 @@ export function AgendaScreen({
 
       {/* Chips por tipo: contam e filtram num toque. No desktop moram na
           barra do calendario — aqui so' na lista do celular/tablet. */}
+      {/* Mesma regra do Tarefas: a contagem ignora o filtro de tipo (senao o
+          chip ativo zeraria os outros) E a data selecionada. Sem rotulo,
+          "Demos 217" ao lado de um dia com 2 demos nao quer dizer nada. */}
+      {!layout.ehDesktop && contagemTipo.length > 1 && (
+        <Text style={styles.rotuloContagem}>TOTAL EM TODAS AS DATAS</Text>
+      )}
       {!layout.ehDesktop && contagemTipo.length > 1 && (
         <View style={sharedStyles.countChipsRow}>
           {contagemTipo.map(({ tipo, total }) => {
@@ -541,6 +547,15 @@ export function AgendaScreen({
 
 // Estilos exclusivos desta tela, movidos do App.tsx como estavam.
 const styles = StyleSheet.create({
+  rotuloContagem: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 1,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    color: 'var(--text-faint)',
+    marginBottom: 8,
+  },
   // ---- Timeline do dia (M4) ----
   timeline: { gap: 16 },
   linhaAgenda: { flexDirection: 'row', gap: 12 },

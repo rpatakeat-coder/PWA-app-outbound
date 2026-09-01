@@ -130,6 +130,7 @@ import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
 import { reverseGeocode } from './src/utils/geocoding';
 import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingProvider } from './src/utils/routing';
 import { useVisitsHeatmap } from './src/hooks/useVisitsHeatmap';
+import { useSellerClassification } from './src/hooks/useSellerClassification';
 import { buildHeatCells, heatColor, heatIntensity, HEAT_CELL_M, HEAT_LEGEND_STOPS } from './src/utils/heatmap';
 import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type MandatoryReason } from './src/utils/dailyRoute';
 import { fetchContaAlvo } from './src/utils/contaAlvo';
@@ -1172,6 +1173,18 @@ function MainApp() {
   // novo nasce sem o id (o AuthContext cria assim), entao qualquer vendedor
   // recem-provisionado caia nisso ate' alguem preencher o campo.
   const semIdHubspot = !canViewGestor && !myHubspotId;
+  // Aviso do gestor: quem trabalha e ainda nao tem id do HubSpot. Sem o id a
+  // pessoa nao recebe lead nem tarefa, e isso nao aparecia em lugar nenhum — a
+  // conta ficava meses parecendo normal e so' se descobria pela reclamacao.
+  // Reusa o hook que ja' le `profiles`: nenhuma query nova, e so' pra gestor.
+  const { users: pessoasDoTime } = useSellerClassification(canViewGestor);
+  const semIdNoTime = useMemo(
+    () => pessoasDoTime.filter((u) => !u.idHubspot && !u.deactivated && u.role !== 'view'),
+    [pessoasDoTime],
+  );
+  // Dispensavel por SESSAO: some no X e volta na proxima abertura. Nao
+  // persiste de proposito — o problema continua la' ate' alguem resolver.
+  const [avisoIdDispensado, setAvisoIdDispensado] = useState(false);
   const visibleTasks = useMemo(
     () =>
       semIdHubspot
@@ -4796,6 +4809,34 @@ function MainApp() {
       </View>
       )}
 
+      {/* Gestor: aviso na ABERTURA, nao escondido dentro do painel. Quem esta'
+          sem id do HubSpot nao recebe lead nem tarefa, e o sintoma que chega e'
+          "nao cai nada pra mim" — meses depois. Um toque leva pro lugar de
+          resolver. */}
+      {canViewGestor && semIdNoTime.length > 0 && !avisoIdDispensado && (
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Vendedores sem ID do HubSpot"
+          style={styles.avisoTopo}
+          onPress={() => irParaTelaDePerfil('gestor')}
+        >
+          <IconWarning width={20} height={20} fill={iconColors.tintAmberText} />
+          <Text style={styles.avisoTopoTexto} numberOfLines={2}>
+            {semIdNoTime.length === 1
+              ? `${semIdNoTime[0].name} está sem ID do HubSpot e não recebe lead nem tarefa.`
+              : `${semIdNoTime.length} pessoas estão sem ID do HubSpot e não recebem lead nem tarefa.`}
+          </Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Dispensar aviso"
+            style={styles.avisoTopoFechar}
+            onPress={() => setAvisoIdDispensado(true)}
+          >
+            <IconClose width={18} height={18} fill={iconColors.tintAmberText} />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      )}
+
       {/* Viewer (somente leitura): sem busca nem filtros avancados, mas com
           chips de status em MULTI-selecao pra escolher ver leads, clientes ou
           ambos no mesmo mapa. Toque alterna cada status; nao da pra desmarcar
@@ -7840,6 +7881,19 @@ const styles = StyleSheet.create({
   headerSegmentoTextoAtivoEscuro: { color: 'var(--brand-text)' },
   // No escuro o vermelho chapado no topo cansa e briga com a superficie.
   headerEscuro: { backgroundColor: 'var(--surface)' },
+  avisoTopo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'var(--tint-amber)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'var(--tint-amber-border)',
+  },
+  avisoTopoTexto: { flex: 1, minWidth: 0, fontSize: 12, lineHeight: 18, color: 'var(--tint-amber-text)' },
+  avisoTopoFechar: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   headerAvatar: {
     width: 48,
     height: 48,
