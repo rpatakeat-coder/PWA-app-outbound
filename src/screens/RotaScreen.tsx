@@ -1303,7 +1303,9 @@ export function RotaScreen({
             onPress={() => setSequenciaAberta(true)}
           >
             <Text style={styles.botaoSecundarioTexto} numberOfLines={1}>
-              {`Ver as ${routeDisplayClients.length} paradas`}
+              {routeDisplayClients.length === 1
+                ? 'Ver a parada'
+                : `Ver as ${routeDisplayClients.length} paradas`}
             </Text>
           </TouchableOpacity>
         </View>
