@@ -34,6 +34,15 @@ Dois produtos num repositório, mesmo domínio, mesma sessão Supabase:
   em `gestao/src/dados/`). Sintoma clássico: "Lead não encontrado".
 - **PostgREST corta em 1000 linhas sem erro.** Paginação em
   `gestao/src/dados/paginar.ts` (`buscarTudo`). Não consultar tabela grande sem.
+- **`sector_visibility` corta `clients` por status, por setor.** Quem não é
+  `view` só enxerga os status liberados pro setor dele — e **só `Outbound` e
+  `RPA` têm `lead`**. Uma feature que filtre por status aparece vazia pra quase
+  todo mundo, e o sintoma é "não tem dado", não "sem permissão".
+- **Os status reais vêm do banco, não do `STATUS_OPTIONS`.** Ativos em
+  `client_statuses`: `lead`, `cliente`, `churn`, `ganho_fs`. O `'ativo'` do
+  array hardcoded do `App.tsx` é fallback morto — zero linhas. E fechamento
+  real é `status = 'cliente'` (2.869), não `won_at` (2). Medido em 01/09/2026;
+  ver `design_handoff_mobile_pwa/M10-inventario-do-calor.md`.
 - **Hook dentro de callback derruba o app** (tela preta). ESLint só tem
   `react-hooks/rules-of-hooks` — rode `npm run lint`; não adicionar preset.
 - **Datas: sempre Brasília** (`diaBRT`). `toISOString().slice(0,10)` vira o
