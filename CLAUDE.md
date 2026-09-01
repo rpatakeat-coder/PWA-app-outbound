@@ -57,6 +57,38 @@ npm run lint                          # na raiz
 npx expo export --platform web --output-dir /tmp/b  # build real do app
 ```
 
+## Validação visual do mobile — pelo simulador do iOS
+
+Typecheck, lint e build **não pegam layout**. Em 01/09/2026 o "Montar eu mesmo"
+da Rota renderizava "Montar eu mes…" e passou pelos três: o cálculo de largura
+subestimou a Poppins em 14/600. Toda mudança de tela mobile precisa ser **vista**.
+
+O simulador é o padrão, porque é o que o Guilherme consegue olhar junto:
+
+```
+open -a Simulator
+xcrun simctl boot "iPhone 17"                    # ignora erro se ja' estiver ligado
+npx expo export --platform web --output-dir /tmp/appweb
+cd /tmp/appweb && python3 -m http.server 4173 &
+xcrun simctl openurl booted "http://localhost:4173/"
+xcrun simctl io booted screenshot /tmp/tela.png  # e ler a imagem
+```
+
+- **Isso abre o Safari do simulador, não o PWA.** `display-mode: standalone` fica
+  falso e a área segura de baixo se comporta como aba. Para bug de PWA instalado,
+  dentro do simulador: Compartilhar → Adicionar à Tela de Início, e abrir pelo ícone.
+- O runtime do iOS **já está instalado** (iOS 26.5). Se `xcrun simctl list runtimes`
+  vier vazio numa máquina nova, é `xcodebuild -downloadPlatform iOS` — 8,5 GB.
+- Para percorrer fluxo sozinho (digitar, medir, forçar erro de rede), dá pra dirigir
+  o Chromium que já está em cache com `playwright-core`. Mas ele **não** tem área
+  segura nem `standalone` — serve pra lógica e medida, não pra decidir layout de PWA.
+- Conferir sempre em **390×844** e **nos dois temas**.
+
+**Cuidado com escrita**: cadastrar lead dispara a Edge `hubspot-sync`, que cria
+contato e deal no HubSpot — apagar a linha do Supabase não desfaz. E
+`generateDailyRoute` pode materializar uma Conta Alvo. Validar até a borda do
+`INSERT`; escrever só com autorização explícita.
+
 ## Repositório e identidade dos commits
 
 - **Remote**: `origin` → `https://github.com/rpatakeat-coder/PWA-app-outbound.git`

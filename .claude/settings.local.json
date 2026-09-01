@@ -19,8 +19,12 @@
       "Bash(eas branch:*)",
       "Bash(eas whoami)",
       "Bash(npm run publish:update)",
-      "Bash(npm run publish:update -- *)"
-      
+      "Bash(npm run publish:update -- *)",
+      "Bash(open -a Simulator)",
+      "Bash(xcrun simctl:*)",
+      "Bash(xcodebuild -downloadPlatform:*)",
+      "Bash(npx expo export:*)",
+      "Bash(python3 -m http.server:*)"
     ]
   }
 }
