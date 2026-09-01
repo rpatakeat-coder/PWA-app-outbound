@@ -1166,14 +1166,22 @@ function MainApp() {
   // Compartilhado entre a tela de Tarefas e o badge do rodape — antes o badge
   // usava a contagem GLOBAL (tasks.length) e mostrava 99+ pra todo mundo.
   const tasksActiveVendor = vendorFilterHubspotId ?? (canViewGestor ? null : myHubspotId);
+  // Vendedor SEM id_hubspot nao pode cair no mesmo `null` do gestor: ali `null`
+  // quer dizer "sem filtro", e ele passava a ver a carteira inteira do time —
+  // nome do lead, etapa, dias de atraso e o responsavel de cada tarefa. Perfil
+  // novo nasce sem o id (o AuthContext cria assim), entao qualquer vendedor
+  // recem-provisionado caia nisso ate' alguem preencher o campo.
+  const semIdHubspot = !canViewGestor && !myHubspotId;
   const visibleTasks = useMemo(
     () =>
-      tasks.filter((t) => {
-        if (tasksActiveVendor === null) return true;
-        if (tasksActiveVendor === '__none__') return !t.vendedor_id_hubspot;
-        return t.vendedor_id_hubspot === tasksActiveVendor;
-      }),
-    [tasks, tasksActiveVendor],
+      semIdHubspot
+        ? []
+        : tasks.filter((t) => {
+            if (tasksActiveVendor === null) return true;
+            if (tasksActiveVendor === '__none__') return !t.vendedor_id_hubspot;
+            return t.vendedor_id_hubspot === tasksActiveVendor;
+          }),
+    [tasks, tasksActiveVendor, semIdHubspot],
   );
   const visibleTasksCount = visibleTasks.length;
 
@@ -5019,6 +5027,7 @@ function MainApp() {
       ) : tab === 'tasks' ? (
         <TarefasScreen
           visibleTasks={visibleTasks}
+          semIdHubspot={semIdHubspot}
           tasksActiveVendor={tasksActiveVendor}
           filtroSev={taskSevFilter}
           setFiltroSev={setTaskSevFilter}

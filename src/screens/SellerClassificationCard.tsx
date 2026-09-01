@@ -41,6 +41,10 @@ export function SellerClassificationCard() {
     });
   };
 
+  // Quem trabalha e nao tem id do HubSpot. Desativado fica de fora: ele nao
+  // recebe nada de proposito.
+  const semId = visible.filter((u) => !u.idHubspot && !u.deactivated);
+
   return (
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
@@ -69,6 +73,19 @@ export function SellerClassificationCard() {
               </Text>
             </TouchableOpacity>
           )}
+          {/* Vendedor sem id_hubspot nao recebe lead nem tarefa — e o app nao
+              tinha onde dizer isso. Sem o aviso, a conta fica meses parecendo
+              normal e o gestor so' descobre pela reclamacao ("nao chega nada
+              pra mim"). Aparece so' quando ha' alguem nessa situacao. */}
+          {!isLoading && semId.length > 0 && (
+            <View style={styles.avisoSemId}>
+              <Text style={styles.avisoSemIdTexto}>
+                {semId.length === 1
+                  ? `${semId[0].name} está sem ID do HubSpot — não recebe lead nem tarefa. Configure em Vendedores e usuários.`
+                  : `${semId.length} pessoas estão sem ID do HubSpot e não recebem lead nem tarefa: ${semId.map(u => u.name).join(', ')}.`}
+              </Text>
+            </View>
+          )}
           {isLoading ? (
             <ActivityIndicator color="var(--brand-text)" style={{ marginVertical: 12 }} />
           ) : (
@@ -78,7 +95,7 @@ export function SellerClassificationCard() {
                 return (
                   <View key={u.id} style={styles.row}>
                     <Text style={styles.name} numberOfLines={1}>
-                      {u.name}{u.deactivated ? ' • desativado' : ''}
+                      {u.name}{u.deactivated ? ' • desativado' : ''}{!u.idHubspot && !u.deactivated ? ' • sem ID HubSpot' : ''}
                     </Text>
                     <View style={styles.seg}>
                       {OPTIONS.map((o) => {
@@ -113,6 +130,15 @@ export function SellerClassificationCard() {
 }
 
 const styles = StyleSheet.create({
+  avisoSemId: {
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    backgroundColor: 'var(--tint-amber)',
+    borderWidth: 1,
+    borderColor: 'var(--tint-amber-border)',
+  },
+  avisoSemIdTexto: { fontSize: 12, lineHeight: 18, color: 'var(--tint-amber-text)' },
   card: { backgroundColor: 'var(--surface)', borderRadius: 14, borderWidth: 1, borderColor: 'var(--tint-red-border)', padding: 14, marginBottom: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 15, fontWeight: '800', color: 'var(--tint-red-text)' },

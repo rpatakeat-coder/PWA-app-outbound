@@ -100,6 +100,10 @@ interface Props {
   visibleTasks: ClientTask[];
   tasksActiveVendor: string | null;
   filtroSev: string | null;
+  /** Vendedor sem id_hubspot: a lista fica vazia de proposito (ele nao tem
+   *  tarefa atribuida), e o vazio precisa dizer o porque em vez de mentir
+   *  "nenhuma tarefa pendente". */
+  semIdHubspot?: boolean;
   setFiltroSev: (sev: string | null) => void;
   clients: Client[];
   /** Nome por id pra lead fora do viewport do mapa (useNomesDeClientes). */
@@ -123,6 +127,7 @@ export function TarefasScreen({
   visibleTasks,
   tasksActiveVendor,
   filtroSev,
+  semIdHubspot = false,
   setFiltroSev,
   clients,
   nomesTarefas,
@@ -513,7 +518,9 @@ export function TarefasScreen({
               // sendo quando o chip esta' ativo. Sem chip, o rotulo da aba nao
               // cabe na frase — "Nenhuma proximas encontrada" nao e' portugues
               // — entao a terceira forma e' a mesma frase no singular.
-              const texto = sorted.length === 0
+              const texto = semIdHubspot
+                ? 'Seu usuário ainda não tem ID do HubSpot. Peça ao gestor para configurar — sem ele nenhuma tarefa é atribuída a você.'
+                : sorted.length === 0
                 ? 'Nenhuma tarefa pendente.'
                 : filtroSev
                   ? `Nenhuma ${filtroSev} encontrada`

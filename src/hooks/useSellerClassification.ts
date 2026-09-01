@@ -11,6 +11,9 @@ export interface ClassifiableUser {
   name: string;
   email: string | null;
   role: string | null;
+  /** null = ninguem atribuiu o id do HubSpot; sem ele o vendedor nao recebe
+   *  lead nem tarefa. O painel do gestor sinaliza pra alguem preencher. */
+  idHubspot?: string | null;
   deactivated: boolean;
   status: SellerStatus;
 }
@@ -23,7 +26,7 @@ export function useSellerClassification(enabled: boolean) {
     queryKey: ['seller_classification_all'],
     queryFn: async () => {
       const [{ data: profs, error }, cls] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, email, role').neq('role', 'view').order('full_name', { ascending: true }),
+        supabase.from('profiles').select('id, full_name, email, role, id_hubspot').neq('role', 'view').order('full_name', { ascending: true }),
         supabase.from('seller_classification').select('seller_id, status'),
       ]);
       if (error) throw error;
@@ -38,6 +41,7 @@ export function useSellerClassification(enabled: boolean) {
           name,
           email: p.email ?? null,
           role: p.role ?? null,
+          idHubspot: (p.id_hubspot ?? null) as string | null,
           deactivated,
           status: (statusById.get(p.id) ?? 'ativo') as SellerStatus,
         };
