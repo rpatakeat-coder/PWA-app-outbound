@@ -1168,12 +1168,15 @@ export function RotaScreen({
         )}
       </TouchableOpacity>
       <View style={styles.folhaSecundarios}>
+        {/* Sem icone nos dois: em 390px o par nao cabe — "Montar eu mesmo"
+            truncava pra "Montar eu mes...". E o `location_on` aqui seria a
+            mesma ambiguidade do botao de mapa do M9: ele diz "este e' o
+            endereco", nao "va' abrir um pin". Os rotulos sozinhos cabem. */}
         <TouchableOpacity
           accessibilityRole="button"
           style={styles.botaoSecundario}
           onPress={abrirMontagem}
         >
-          <IconSettings width={20} height={20} fill={iconColors.muted} />
           <Text style={styles.botaoSecundarioTexto} numberOfLines={1}>Montar eu mesmo</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -1181,7 +1184,6 @@ export function RotaScreen({
           style={styles.botaoSecundario}
           onPress={() => irParaMapa()}
         >
-          <IconLocation width={20} height={20} fill={iconColors.muted} />
           <Text style={styles.botaoSecundarioTexto} numberOfLines={1}>Abrir um pin</Text>
         </TouchableOpacity>
       </View>
