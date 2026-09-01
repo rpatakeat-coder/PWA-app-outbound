@@ -22,10 +22,20 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
+// CORS: sem isto o navegador barra a chamada ANTES de ela sair. O preflight
+// OPTIONS caia no `405` do handler, que respondia sem `Access-Control-Allow-
+// Origin`, e o browser bloqueava tudo — de qualquer origem, inclusive a de
+// producao. Mesmo bloco das functions que ja' funcionavam (export-report).
+const cors = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...cors, 'Content-Type': 'application/json' },
   });
 
 const TIMEOUT_MS = 9000;
@@ -240,6 +250,7 @@ async function runBatch(body: any, apiKey: string) {
 }
 
 Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json(405, { error: 'Use POST' });
 
   let body: any = null;

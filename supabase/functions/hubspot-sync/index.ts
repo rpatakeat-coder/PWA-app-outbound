@@ -65,10 +65,20 @@ const ASSOC_NOTE_TO_DEAL = 214;
 const ASSOC_MEETING_TO_DEAL = 212;
 const ASSOC_TASK_TO_DEAL = 216;
 
+// CORS: sem isto o navegador barra a chamada ANTES de ela sair. O preflight
+// OPTIONS caia no `405` do handler, que respondia sem `Access-Control-Allow-
+// Origin`, e o browser bloqueava tudo — de qualquer origem, inclusive a de
+// producao. Mesmo bloco das functions que ja' funcionavam (export-report).
+const cors = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...cors, 'Content-Type': 'application/json' },
   });
 
 const trimOrNull = (v: unknown): string | null => {
@@ -642,6 +652,7 @@ async function handleUpdateMeeting(token: string, body: Record<string, unknown>)
 }
 
 Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') {
     return json(405, { error: 'Method Not Allowed' });
   }
