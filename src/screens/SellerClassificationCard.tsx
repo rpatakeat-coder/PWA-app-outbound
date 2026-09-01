@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { IconText, IconUserGroup, IconCheckbox, IconCheckboxChecked} from '../components/icons';
 import { Alert } from '../components/Alert';
-import { useSellerClassification } from '../hooks/useSellerClassification';
+import { useSellerClassification, precisaDeIdHubspot } from '../hooks/useSellerClassification';
 import type { SellerStatus } from '../hooks/useAllSellers';
 
 // "👥 Vendedores & usuários" (aba Gestor): o gestor define quem é vendedor
@@ -41,9 +41,7 @@ export function SellerClassificationCard() {
     });
   };
 
-  // Quem trabalha e nao tem id do HubSpot. Desativado fica de fora: ele nao
-  // recebe nada de proposito.
-  const semId = visible.filter((u) => !u.idHubspot && !u.deactivated);
+  const semId = visible.filter(precisaDeIdHubspot);
 
   return (
     <View style={styles.card}>
@@ -95,7 +93,7 @@ export function SellerClassificationCard() {
                 return (
                   <View key={u.id} style={styles.row}>
                     <Text style={styles.name} numberOfLines={1}>
-                      {u.name}{u.deactivated ? ' • desativado' : ''}{!u.idHubspot && !u.deactivated ? ' • sem ID HubSpot' : ''}
+                      {u.name}{u.deactivated ? ' • desativado' : ''}{precisaDeIdHubspot(u) ? ' • sem ID HubSpot' : ''}
                     </Text>
                     <View style={styles.seg}>
                       {OPTIONS.map((o) => {

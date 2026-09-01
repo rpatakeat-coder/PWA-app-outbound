@@ -14,8 +14,40 @@ export interface ClassifiableUser {
   /** null = ninguem atribuiu o id do HubSpot; sem ele o vendedor nao recebe
    *  lead nem tarefa. O painel do gestor sinaliza pra alguem preencher. */
   idHubspot?: string | null;
+  /** Setor do perfil — decide se a pessoa trabalha carteira. */
+  sector?: string | null;
   deactivated: boolean;
   status: SellerStatus;
+}
+
+// Setores que de fato recebem carteira. Fora deles, id do HubSpot nao faz
+// falta: gestor ja' enxerga tudo e nao e' responsavel por lead; viewer e' so'
+// leitura; e os demais setores (Sucesso, Marketing, Onboarding...) nao
+// trabalham lead no app.
+//
+// "Field Sales" nao existe hoje em `profiles` — os setores reais sao Geral,
+// Inbound, Marketing, Onboarding, Outbound, RPA e Sucesso. Fica na lista
+// porque e' o nome que o time usa; se o setor for criado, o aviso ja' passa a
+// valer sem ninguem lembrar de voltar aqui.
+const SETORES_COM_CARTEIRA = ['outbound', 'field sales'];
+
+/**
+ * Quem PRECISA de id do HubSpot: vendedor ativo de um setor que trabalha lead.
+ * Sem o id essa pessoa nao recebe lead nem tarefa — e ate' o db0cae2 ela ainda
+ * enxergava a carteira do time inteiro. Um predicado so', usado pelo aviso da
+ * abertura e pelo card do painel, pra os dois nunca divergirem.
+ */
+export function precisaDeIdHubspot(u: {
+  role: string | null;
+  sector?: string | null;
+  idHubspot?: string | null;
+  deactivated?: boolean;
+}): boolean {
+  if (u.role !== 'user') return false;
+  if (u.deactivated) return false;
+  if (u.idHubspot) return false;
+  const setor = (u.sector ?? '').trim().toLowerCase();
+  return SETORES_COM_CARTEIRA.includes(setor);
 }
 
 export function useSellerClassification(enabled: boolean) {
@@ -26,7 +58,7 @@ export function useSellerClassification(enabled: boolean) {
     queryKey: ['seller_classification_all'],
     queryFn: async () => {
       const [{ data: profs, error }, cls] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, email, role, id_hubspot').neq('role', 'view').order('full_name', { ascending: true }),
+        supabase.from('profiles').select('id, full_name, email, role, id_hubspot, sector').neq('role', 'view').order('full_name', { ascending: true }),
         supabase.from('seller_classification').select('seller_id, status'),
       ]);
       if (error) throw error;
@@ -42,6 +74,7 @@ export function useSellerClassification(enabled: boolean) {
           email: p.email ?? null,
           role: p.role ?? null,
           idHubspot: (p.id_hubspot ?? null) as string | null,
+          sector: (p.sector ?? null) as string | null,
           deactivated,
           status: (statusById.get(p.id) ?? 'ativo') as SellerStatus,
         };

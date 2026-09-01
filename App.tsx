@@ -130,7 +130,7 @@ import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
 import { reverseGeocode } from './src/utils/geocoding';
 import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingProvider } from './src/utils/routing';
 import { useVisitsHeatmap } from './src/hooks/useVisitsHeatmap';
-import { useSellerClassification } from './src/hooks/useSellerClassification';
+import { useSellerClassification, precisaDeIdHubspot } from './src/hooks/useSellerClassification';
 import { buildHeatCells, heatColor, heatIntensity, HEAT_CELL_M, HEAT_LEGEND_STOPS } from './src/utils/heatmap';
 import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type MandatoryReason } from './src/utils/dailyRoute';
 import { fetchContaAlvo } from './src/utils/contaAlvo';
@@ -1178,10 +1178,7 @@ function MainApp() {
   // conta ficava meses parecendo normal e so' se descobria pela reclamacao.
   // Reusa o hook que ja' le `profiles`: nenhuma query nova, e so' pra gestor.
   const { users: pessoasDoTime } = useSellerClassification(canViewGestor);
-  const semIdNoTime = useMemo(
-    () => pessoasDoTime.filter((u) => !u.idHubspot && !u.deactivated && u.role !== 'view'),
-    [pessoasDoTime],
-  );
+  const semIdNoTime = useMemo(() => pessoasDoTime.filter(precisaDeIdHubspot), [pessoasDoTime]);
   // Dispensavel por SESSAO: some no X e volta na proxima abertura. Nao
   // persiste de proposito — o problema continua la' ate' alguem resolver.
   const [avisoIdDispensado, setAvisoIdDispensado] = useState(false);
