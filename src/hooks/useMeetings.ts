@@ -136,8 +136,28 @@ export function useMeetings() {
           }
         }
       } else {
-        // Demo -> evento no Google Calendar. O Meeting no HubSpot vem da sync
-        // nativa HubSpot<->Google (nao criamos Meeting via API pra nao duplicar).
+        // Demo -> evento no Google Calendar, e SO' isso. Nao ha' Meeting no
+        // HubSpot, de propósito.
+        //
+        // O comentario antigo dizia que o Meeting "vem da sync nativa
+        // HubSpot<->Google". Nao vem, e nunca veio: a sync nativa espelha a
+        // agenda de cada USUARIO conectado (a principal dele), e a edge
+        // `google-calendar` escreve numa agenda COMPARTILHADA de time
+        // (`...@group.calendar.google.com`, "Comercial - Outbound") com uma
+        // credencial unica. Nenhum usuario do HubSpot tem aquela agenda como
+        // principal, entao o evento nao e' espelhado. Verificado em 01/09/2026:
+        // os ~350 Meetings do portal sao todos `CRM_UI` ou `BIDIRECTIONAL_SYNC`
+        // de agendas pessoais — nenhum com o titulo `Reunião - {lead}` que este
+        // codigo gera.
+        //
+        // E esta' tudo bem, porque nada do produto depende disso: as metricas
+        // do gestor (`meetings_scheduled`), o cockpit e a Agenda leem
+        // `public.client_meetings` no Supabase, nao o CRM. So' quem abre o deal
+        // no HubSpot esperando ver a demo na timeline sente falta.
+        //
+        // Se um dia isso passar a importar, o caminho e' chamar a edge
+        // `hubspot-sync` com `create_meeting` (o tipo JA' existe la'), como o
+        // follow up acima ja' faz com `create_note` — e nao mexer na agenda.
         try {
           const eventId = await createGoogleEvent({
             titulo,
