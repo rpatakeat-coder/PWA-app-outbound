@@ -643,6 +643,13 @@ function MainApp() {
   useEffect(() => {
     if (tab !== 'route') setMapaExpandido(false);
   }, [tab]);
+  // O calor e' de DESKTOP: o toggle e a folha do celular sairam. Como `heatOn`
+  // esconde os pins, uma janela que estreita com ele ligado deixaria o mapa do
+  // celular sem pin e sem controle nenhum pra desligar — o painel de 352px que
+  // tem o switch nao existe nessa largura. Desliga junto com o layout.
+  useEffect(() => {
+    if (!layout.ehLargo) setHeatOn(false);
+  }, [layout.ehLargo]);
   // Chao dos elementos flutuantes (FAB, legenda, botoes do mapa).
   // Os 90px eram a altura da barra inferior. No desktop ela virou coluna
   // lateral, entao esse espaco deixou de existir — sem isto os botoes ficariam
@@ -3688,35 +3695,6 @@ function MainApp() {
         </TouchableOpacity>
       )}
 
-      {/* Toggle do mapa de calor — só gestor. Fica acima do FAB (à direita).
-          Quando ligado some (o painel embaixo, com seu ✕, é o controle de
-          desligar) — assim não sobrepõe o painel. */}
-      {canViewGestor && !creationMode && !heatOn && !layout.ehLargo && (rotaMovel ? mapaExpandido : true) && (
-        <TouchableOpacity
-          // Estilo proprio em vez de `{ left: undefined }` sobre o
-          // mapButton: no react-native-web o estilo base vira classe CSS e
-          // `undefined` nao emite regra nenhuma — ou seja, nao CANCELA o
-          // `left: 16` da base. O botao ficava com left E right ao mesmo
-          // tempo, ancorava a' esquerda e caia em cima da legenda de cores.
-          // Sobe pro topo, espelhando o de localizacao: em baixo ele empilhava
-          // com o recentrar e o FAB e sobrava um terceiro botao solto no
-          // canto. Mesmo `top` do outro, contado do Y REAL do mapa.
-          //
-          // Na Rota expandida (M3c/D) ele muda de canto: embaixo a' esquerda,
-          // sob o recentrar, que e' onde os dois passam a morar.
-          style={
-            rotaMovel
-              ? [styles.mapaControleRota, { bottom: 12, left: 12 }]
-              : [styles.mapButtonRight, { top: (mapLayout?.y ?? 0) + 16 }]
-          }
-          onPress={() => setHeatOn(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Mapa de calor de visitas"
-        >
-          <IconTrendingUp width={24} height={24} fill={iconColors.onSurface} />
-        </TouchableOpacity>
-      )}
-
       {/* FAB flutuante SO' NO DESKTOP. No celular quem cria lead e' o FAB
           central da barra inferior — manter os dois daria dois caminhos pra
           mesma acao, e o solto cobria o conteudo do mapa. */}
@@ -3727,39 +3705,6 @@ function MainApp() {
         >
           <IconPlus width={26} height={26} fill="#fff" />
         </TouchableOpacity>
-      )}
-
-      {/* Calor de visitas no CELULAR (M2): folha no rodape, nao cartao
-          flutuante. No desktop o controle vive dentro do painel de 352px —
-          la' a linha do switch expande, e nada cobre o mapa. */}
-      {heatOn && !creationMode && !layout.ehLargo && (
-        // Ancorada ACIMA da barra de navegacao (baseInferior = 90 + safe area),
-        // nao no fundo da janela: em `bottom: 0` a barra cobria o rodape da
-        // folha. Os 40px de padding embaixo continuam de reserva do FAB — que
-        // aqui ate' some com o calor ligado, mas a folha nao depende disso.
-        <View style={[styles.calorFolha, { bottom: baseInferior }]}>
-          <View style={styles.calorFolhaAlca} />
-          <View style={styles.calorFolhaCabecalho}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.calorFolhaTitulo}>Calor de visitas</Text>
-              <Text style={styles.pmwCalorSub} numberOfLines={1}>
-                {heatLoading
-                  ? 'Carregando check-ins…'
-                  : `${heat.total} ${heat.total === 1 ? 'visita' : 'visitas'}${heatCapped ? ' (amostra recente)' : ''}`}
-              </Text>
-            </View>
-            {/* Aqui o X faz sentido: no celular nao ha' switch visivel. */}
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="Fechar"
-              style={styles.calorFolhaFechar}
-              onPress={() => setHeatOn(false)}
-            >
-              <IconClose width={24} height={24} fill={iconColors.muted} />
-            </TouchableOpacity>
-          </View>
-          {corpoCalor}
-        </View>
       )}
 
       {creationMode && creationCenter && (
@@ -5038,10 +4983,7 @@ function MainApp() {
           aoAbrirConfig={() => setConfigRotaAberta(true)}
           aoFecharConfig={() => setConfigRotaAberta(false)}
           mapaExpandido={mapaExpandido}
-          // Recolher desliga o calor junto: o toggle dele so' existe no mapa
-          // expandido, e a folha do calor sobre a faixa de 180px cobriria a
-          // sequencia com um controle que a tela nao tem mais como fechar.
-          setMapaExpandido={(v) => { setMapaExpandido(v); if (!v) setHeatOn(false); }}
+          setMapaExpandido={setMapaExpandido}
           geometriaCarregando={routeGeometry.isFetching}
           routeLeadCount={routeLeadCount}
           setRouteLeadCount={setRouteLeadCount}
@@ -8171,43 +8113,6 @@ const styles = StyleSheet.create({
   // Desktop: a linha do switch dentro do painel de 352px vira caixa expansivel.
   calorCaixa: { borderRadius: 8, backgroundColor: 'var(--surface-2)', overflow: 'hidden' },
   calorCorpo: { paddingHorizontal: 12, paddingBottom: 12 },
-  // Celular: folha no rodape. Os 40px de baixo nao sao decorativos — sao 16 de
-  // respiro + os 24 que o FAB central invade acima da barra de navegacao. Sem
-  // eles o circulo vermelho do FAB cai em cima do rodape da folha.
-  calorFolha: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    paddingTop: 8,
-    paddingHorizontal: 16,
-    paddingBottom: 40,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    backgroundColor: 'var(--surface)',
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowOffset: { width: 0, height: -4 },
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  calorFolhaAlca: {
-    alignSelf: 'center',
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'var(--stroke-default)',
-    marginBottom: 12,
-  },
-  calorFolhaCabecalho: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  calorFolhaTitulo: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: 'var(--text)' },
-  calorFolhaFechar: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: 'var(--surface-2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   // Escala: uma familia de cor, quatro degraus interpolados em 24 passos.
   // A borda nao e' enfeite: o passo mais claro da rampa (#D6F2EC) da' 1,18:1
   // sobre --surface-2 no tema claro, e sem ela a barra parece comecar no meio.
