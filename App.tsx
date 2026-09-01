@@ -594,6 +594,19 @@ function MainApp() {
   const [tab, setTab] = useState<AppTab>('map');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [showCepStep, setShowCepStep] = useState(false);
+  // Snapshot do passo 1 (M9/B): o `arrow_back` do passo 2 reabre a CEPStep com
+  // o CEP e o endereco JA' resolvidos, sem refazer a busca. Montado a partir
+  // dos campos que o `onNext` ja' entrega — o contrato dele nao mudou.
+  const [cepResolvido, setCepResolvido] = useState<{
+    cep: string;
+    dados: { logradouro: string; bairro: string; cidade: string; estado: string; isGeneric: boolean };
+    numero: string;
+  } | null>(null);
+  // Endereco no passo 2 e' cartao, nao formulario. "Editar endereco" abre os
+  // campos — e zera o flag de aproximado, como os outros fluxos de edicao.
+  const [enderecoEditavel, setEnderecoEditavel] = useState(false);
+  // Duplicado (23505) passa a viver DENTRO da folha, no lugar do Alert seco.
+  const [erroDuplicado, setErroDuplicado] = useState<string | null>(null);
   // Guarda o flag de geocoding aproximado vindo do CEPStep ate o submit do
   // formulario, pra persistir em clients.geo_approximate.
   const [pendingGeoApproximate, setPendingGeoApproximate] = useState(false);
@@ -2344,7 +2357,47 @@ function MainApp() {
     setCreationCenter(null);
   }, [creationCenter, statusOptions]);
 
-  const resetForm = () => { setForm(initialFormState); setPendingGeoApproximate(false); };
+  const resetForm = () => {
+    setForm(initialFormState);
+    setPendingGeoApproximate(false);
+    setCepResolvido(null);
+    setEnderecoEditavel(false);
+    setErroDuplicado(null);
+  };
+
+  // Restaurante E contato. `submitClient` e `saveEditClient` ja' barravam os
+  // dois com Alert; o `disabled` do CTA olhava so' `nome`, entao o botao ficava
+  // ativo e o vendedor levava o aviso DEPOIS do toque. Agora os tres concordam.
+  const podeSalvar = form.empresa.trim().length > 0 && form.nome.trim().length > 0;
+
+  // Campo padrao do M9: rotulo PERMANENTE em cima, valor embaixo. Substitui os
+  // dez TextInput que traziam o nome do campo so' no placeholder — que some no
+  // primeiro caractere e deixa dez caixas iguais sem dizer o que e' cada uma.
+  const campoM9 = (
+    rotulo: string,
+    valor: string,
+    aoMudar: (v: string) => void,
+    opcoes?: {
+      keyboardType?: 'default' | 'phone-pad' | 'email-address';
+      autoCapitalize?: 'none' | 'characters' | 'sentences';
+      maxLength?: number;
+      multiline?: boolean;
+    },
+  ) => (
+    <View style={styles.m9Campo}>
+      <Text style={styles.m9CampoRotulo}>{rotulo}</Text>
+      <TextInput
+        style={[styles.m9CampoValor, opcoes?.multiline && styles.m9CampoValorAlto]}
+        value={valor}
+        onChangeText={aoMudar}
+        keyboardType={opcoes?.keyboardType ?? 'default'}
+        autoCapitalize={opcoes?.autoCapitalize}
+        maxLength={opcoes?.maxLength}
+        multiline={opcoes?.multiline}
+        placeholderTextColor="var(--text-subtle)"
+      />
+    </View>
+  );
 
   const submitClient = async () => {
     if (submittingRef.current) return;
@@ -2387,6 +2440,7 @@ function MainApp() {
     };
 
     submittingRef.current = true;
+    setErroDuplicado(null);
     try {
       const created = await addClient.mutateAsync(newClient);
       resetForm();
@@ -2401,12 +2455,16 @@ function MainApp() {
       );
     } catch (err: any) {
       const isDuplicate = err?.code === '23505' || /duplicate|unique/i.test(err?.message || '');
-      Alert.alert(
-        isDuplicate ? 'Cliente já existe' : 'Erro ao cadastrar',
-        isDuplicate
-          ? 'Já existe um cliente com esse nome nesta localização.'
-          : (err?.message || 'Tente novamente'),
-      );
+      if (isDuplicate) {
+        // O erro do Postgres nao devolve o id do registro existente (o indice
+        // e' `clients_unique_nome_geo` sobre nome+lat/lon arredondados), entao
+        // nao ha' ficha pra abrir — a mensagem fica na propria folha, com o
+        // formulario preenchido, em vez de um Alert que joga o vendedor de
+        // volta sem saida.
+        setErroDuplicado('Já existe um cliente com esse nome nesta localização.');
+      } else {
+        Alert.alert('Erro ao cadastrar', err?.message || 'Tente novamente');
+      }
     } finally {
       submittingRef.current = false;
     }
@@ -5916,11 +5974,33 @@ function MainApp() {
             // Guarda se o geocoding ficou aproximado (centroide da rua) pra
             // persistir em geo_approximate no submit.
             setPendingGeoApproximate(cepData.geoApproximate ?? false);
+            // Snapshot pro `arrow_back` do passo 2 voltar sem refazer a busca.
+            // So' o caminho do CEP tem passo 1 pra onde voltar: `geoApproximate`
+            // e' a assinatura dele (o fluxo de coordenadas nunca manda essa
+            // chave). Sem isso, cadastrar por lat/lon fazia aparecer um voltar
+            // que levava a uma tela de CEP que a pessoa nunca viu.
+            setCepResolvido(
+              cepData.geoApproximate === undefined
+                ? null
+                : {
+                    cep: cepData.cep || '',
+                    dados: {
+                      logradouro: cepData.endereco || '',
+                      bairro: cepData.bairro || '',
+                      cidade: cepData.cidade || '',
+                      estado: cepData.estado || '',
+                      isGeneric: false,
+                    },
+                    numero: cepData.numero || '',
+                  },
+            );
+            setEnderecoEditavel(false);
             setShowCepStep(false);
             setIsFormOpen(true);
           }}
-          onCancel={() => setShowCepStep(false)}
+          onCancel={() => { setShowCepStep(false); setCepResolvido(null); }}
           onPickOnMap={startMapCreation}
+          valorInicial={cepResolvido}
         />
       )}
 
@@ -5934,7 +6014,23 @@ function MainApp() {
             <View style={[styles.modalOverlay, layout.ehLargo && styles.modalOverlayWeb]}>
               <View style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }, layout.ehLargo && styles.modalCartaoWeb]}>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{editingClient ? 'Editar Cliente' : 'Novo Cadastro'}</Text>
+                  {/* Volta pro passo 1 com o CEP e o endereco ja' resolvidos —
+                      a CEPStep rehidrata pelo `valorInicial`, sem refazer a
+                      busca. So' na criacao via CEP: a edicao nao tem passo 1. */}
+                  {!editingClient && cepResolvido && (
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel="Voltar ao passo 1"
+                      style={styles.m9Voltar}
+                      onPress={() => { setIsFormOpen(false); setShowCepStep(true); }}
+                    >
+                      <IconArrowBack width={24} height={24} fill={iconColors.onSurface} />
+                    </TouchableOpacity>
+                  )}
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.modalTitle}>{editingClient ? 'Editar Cliente' : 'Novo lead'}</Text>
+                    {!editingClient && <Text style={styles.m9Subtitulo}>Passo 2 de 2</Text>}
+                  </View>
                   <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => { setIsFormOpen(false); resetForm(); setEditingClient(null); }}>
                     <IconClose width={20} height={20} fill={iconColors.muted} />
                   </TouchableOpacity>
@@ -5943,146 +6039,140 @@ function MainApp() {
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
                 >
-              {/* Status Selector — na criacao so libera 'lead' (cliente/churn
-                  so existem via upgrade no fluxo de pos-venda). Na edicao,
-                  bloqueia transitar de cliente/churn de volta pra lead —
-                  espelho do trigger guard_client_status_transition no banco. */}
-              <Text style={sharedStyles.fieldLabel}>Status</Text>
-              <View style={styles.statusSelector}>
-                {statusOptions
-                  .filter(opt => editingClient ? true : opt.value === 'lead')
-                  .map(opt => {
-                    const lockedFromClient = !!editingClient
-                      && (editingClient.status === 'cliente' || editingClient.status === 'churn')
-                      && opt.value === 'lead';
-                    return (
-                      <TouchableOpacity
-                        key={opt.value}
-                        disabled={lockedFromClient}
-                        style={[
-                          styles.statusOption,
-                          form.status === opt.value && { backgroundColor: opt.color, borderColor: opt.color },
-                          lockedFromClient && { opacity: 0.35 },
-                        ]}
-                        onPress={() => setForm(s => ({ ...s, status: opt.value }))}
-                      >
-                        <Text style={[
-                          styles.statusOptionText,
-                          form.status === opt.value && { color: '#fff' },
-                        ]}>
-                          {opt.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-              </View>
-              {editingClient && (editingClient.status === 'cliente' || editingClient.status === 'churn') && (
-                <Text style={{ fontSize: 12, color: 'var(--brand-text)', marginTop: -4, marginBottom: 6 }}>
-                  Cliente atual / ex-cliente nao pode voltar pra "lead".
-                </Text>
+              {/* Status. Na CRIACAO o seletor saiu: ele renderizava um botao de
+                  escolha com um valor possivel so'. Vira pill mais nota. Na
+                  EDICAO fica exatamente como estava, guard incluido — espelho
+                  do trigger guard_client_status_transition no banco. */}
+              {editingClient ? (
+                <>
+                  <Text style={sharedStyles.fieldLabel}>Status</Text>
+                  <View style={styles.statusSelector}>
+                    {statusOptions.map(opt => {
+                      const lockedFromClient = (editingClient.status === 'cliente' || editingClient.status === 'churn')
+                        && opt.value === 'lead';
+                      return (
+                        <TouchableOpacity
+                          key={opt.value}
+                          disabled={lockedFromClient}
+                          style={[
+                            styles.statusOption,
+                            form.status === opt.value && { backgroundColor: opt.color, borderColor: opt.color },
+                            lockedFromClient && { opacity: 0.35 },
+                          ]}
+                          onPress={() => setForm(s => ({ ...s, status: opt.value }))}
+                        >
+                          <Text style={[
+                            styles.statusOptionText,
+                            form.status === opt.value && { color: '#fff' },
+                          ]}>
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  {(editingClient.status === 'cliente' || editingClient.status === 'churn') && (
+                    <Text style={{ fontSize: 12, color: 'var(--brand-text)', marginTop: -4, marginBottom: 6 }}>
+                      Cliente atual / ex-cliente nao pode voltar pra "lead".
+                    </Text>
+                  )}
+                </>
+              ) : (
+                <View style={styles.m9StatusLinha}>
+                  <View style={styles.m9Pill}>
+                    <Text style={styles.m9PillTexto}>Lead</Text>
+                  </View>
+                  <Text style={styles.m9Nota}>Todo cadastro novo entra como lead</Text>
+                </View>
               )}
 
-              <Text style={sharedStyles.fieldLabel}>Informações</Text>
-              <TextInput
-                style={sharedStyles.input}
-                placeholder="Nome do restaurante *"
-                placeholderTextColor="var(--text-subtle)"
-                value={form.empresa}
-                onChangeText={v => setForm(s => ({ ...s, empresa: v }))}
-              />
-              <TextInput
-                style={sharedStyles.input}
-                placeholder="Nome do contato *"
-                placeholderTextColor="var(--text-subtle)"
-                value={form.nome}
-                onChangeText={v => setForm(s => ({ ...s, nome: v }))}
-              />
-              <TextInput
-                style={sharedStyles.input}
-                placeholder="Telefone"
-                placeholderTextColor="var(--text-subtle)"
-                keyboardType="phone-pad"
-                value={form.telefone}
-                onChangeText={v => setForm(s => ({ ...s, telefone: v }))}
-              />
-              <TextInput
-                style={sharedStyles.input}
-                placeholder="Email"
-                placeholderTextColor="var(--text-subtle)"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                value={form.email}
-                onChangeText={v => setForm(s => ({ ...s, email: v }))}
-              />
+              <Text style={styles.m9Secao}>Restaurante</Text>
+              {campoM9('Nome do restaurante *', form.empresa, v => setForm(s => ({ ...s, empresa: v })))}
 
-              <Text style={sharedStyles.fieldLabel}>Localização</Text>
-              <View style={styles.inputRow}>
-                <TextInput
-                  style={[sharedStyles.input, { flex: 1 }]}
-                  placeholder="Cidade"
-                  placeholderTextColor="var(--text-subtle)"
-                  value={form.cidade}
-                  onChangeText={v => setForm(s => ({ ...s, cidade: v }))}
-                />
-                <TextInput
-                  style={[sharedStyles.input, { width: 80, marginLeft: 8 }]}
-                  placeholder="UF"
-                  placeholderTextColor="var(--text-subtle)"
-                  maxLength={2}
-                  autoCapitalize="characters"
-                  value={form.estado}
-                  onChangeText={v => setForm(s => ({ ...s, estado: v }))}
-                />
-              </View>
-              <View style={styles.inputRow}>
-                <TextInput
-                  style={[sharedStyles.input, { flex: 1 }]}
-                  placeholder="Endereço (rua)"
-                  placeholderTextColor="var(--text-subtle)"
-                  value={form.endereco}
-                  onChangeText={v => setForm(s => ({ ...s, endereco: v }))}
-                />
-                <TextInput
-                  style={[sharedStyles.input, { width: 90, marginLeft: 8 }]}
-                  placeholder="Número"
-                  placeholderTextColor="var(--text-subtle)"
-                  keyboardType="default"
-                  value={form.numero}
-                  onChangeText={v => setForm(s => ({ ...s, numero: v }))}
-                />
-              </View>
-              <IconText Icone={IconWarning} style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: -4, marginBottom: 8 }} tone="onSurface">Confira o número — pode ter sido auto-preenchido pelo mapa e estar impreciso.</IconText>
+              <Text style={styles.m9Secao}>Contato</Text>
+              {campoM9('Nome do contato *', form.nome, v => setForm(s => ({ ...s, nome: v })))}
+              {campoM9('Telefone', form.telefone, v => setForm(s => ({ ...s, telefone: v })), { keyboardType: 'phone-pad' })}
+              {campoM9('E-mail', form.email, v => setForm(s => ({ ...s, email: v })), { keyboardType: 'email-address', autoCapitalize: 'none' })}
 
-              <Text style={sharedStyles.fieldLabel}>Observações</Text>
-              <TextInput
-                style={[sharedStyles.input, { height: 80, textAlignVertical: 'top' }]}
-                placeholder="Anotações sobre este contato..."
-                placeholderTextColor="var(--text-subtle)"
-                multiline
-                value={form.observacoes}
-                onChangeText={v => setForm(s => ({ ...s, observacoes: v }))}
-              />
+              <Text style={styles.m9Secao}>Endereço</Text>
+              {enderecoEditavel ? (
+                <>
+                  {campoM9('Cidade', form.cidade, v => setForm(s => ({ ...s, cidade: v })))}
+                  {campoM9('UF', form.estado, v => setForm(s => ({ ...s, estado: v })), { maxLength: 2, autoCapitalize: 'characters' })}
+                  {campoM9('Endereço (rua)', form.endereco, v => setForm(s => ({ ...s, endereco: v })))}
+                  {campoM9('Número', form.numero, v => setForm(s => ({ ...s, numero: v })))}
+                </>
+              ) : (
+                /* O endereco ja' veio resolvido: e' cartao, nao quatro caixas
+                   abertas. O ESTADO dele segue `pendingGeoApproximate` — o
+                   mesmo flag que vai pro banco —, e nao a ausencia do numero:
+                   as duas coisas coincidem quase sempre, mas quem manda em
+                   `clients.geo_approximate` e' o geocoder. */
+                <View style={[styles.m9CartaoEndereco, pendingGeoApproximate && styles.m9CartaoAviso]}>
+                  <View style={styles.m9CartaoLinha}>
+                    {pendingGeoApproximate
+                      ? <IconLocationFilled width={24} height={24} fill={iconColors.tintAmberText} />
+                      : <IconLocation width={24} height={24} fill={iconColors.muted} />}
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[styles.m9CartaoKicker, pendingGeoApproximate && styles.m9CartaoKickerAviso]}>
+                        {pendingGeoApproximate ? 'LOCALIZAÇÃO APROXIMADA' : 'VINDO DO CEP'}
+                      </Text>
+                      <Text style={styles.m9CartaoRua} numberOfLines={2}>
+                        {[form.endereco, form.numero].filter(Boolean).join(', ') || 'Endereço não informado'}
+                      </Text>
+                      <Text style={styles.m9CartaoDetalhe} numberOfLines={2}>
+                        {[
+                          form.cep,
+                          form.cidade,
+                          form.estado,
+                          form.numero.trim() ? null : 'sem número',
+                        ].filter(Boolean).join(' · ')}
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.m9CartaoRodape}
+                    onPress={() => { setEnderecoEditavel(true); setPendingGeoApproximate(false); }}
+                  >
+                    <Text style={styles.m9CartaoRodapeTexto}>Editar endereço</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
-              {/* Location summary if filled by CEP/coords */}
-              {(form.latitude || form.longitude) && (
-                <View style={styles.locationSummary}>
-                  <IconText Icone={IconLocation} style={styles.locationSummaryText} tone="onSurface">Localização definida ({form.latitude}, {form.longitude})</IconText>
+              <Text style={styles.m9Secao}>Observações</Text>
+              {campoM9('Anotações', form.observacoes, v => setForm(s => ({ ...s, observacoes: v })), { multiline: true })}
+
+              {/* Duplicado: dentro da folha, com o formulario preenchido. */}
+              {erroDuplicado && (
+                <View style={styles.m9FaixaAviso}>
+                  <Text style={styles.m9FaixaAvisoTexto}>{erroDuplicado}</Text>
                 </View>
               )}
 
               <View style={{ height: 16 }} />
                 </ScrollView>
                 <TouchableOpacity
-                  style={[sharedStyles.submitButton, (!form.nome.trim() || isSaving) && { opacity: 0.5 }]}
+                  style={[sharedStyles.submitButton, styles.m9Cta, (!podeSalvar || isSaving) && { opacity: 0.5 }]}
                   onPress={editingClient ? saveEditClient : submitClient}
-                  disabled={!form.nome.trim() || isSaving}
+                  disabled={!podeSalvar || isSaving}
                 >
                   {isSaving ? (
-                    <ActivityIndicator color="#fff" />
+                    /* Rotulo + spinner: trocar o botao inteiro por um
+                       ActivityIndicator apaga o que estava acontecendo. */
+                    <View style={styles.m9CtaLinha}>
+                      <ActivityIndicator color="#fff" size="small" />
+                      <Text style={[sharedStyles.submitButtonText, { opacity: 0.7 }]}>Salvando…</Text>
+                    </View>
                   ) : (
-                    <Text style={sharedStyles.submitButtonText}>Salvar</Text>
+                    <Text style={sharedStyles.submitButtonText}>
+                      {editingClient ? 'Salvar' : 'Salvar lead'}
+                    </Text>
                   )}
                 </TouchableOpacity>
+                {!podeSalvar && (
+                  <Text style={styles.m9NotaCta}>Restaurante e contato são obrigatórios</Text>
+                )}
               </View>
             </View>
         </KeyboardAvoidingView>
@@ -8950,8 +9040,91 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     shadowRadius: 25,
   },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16 },
   modalTitle: { fontSize: 20, fontWeight: '700', color: 'var(--text)' },
+
+  // ---- M9: passo 2 (cadastro) ----
+  // Os nomes de token do handoff (--surface-nested, --surface-sunken,
+  // --text-secondary, --success, --warn, --tint-warn) nao existem no kit da
+  // Takeat. Mapeados pros equivalentes reais: --surface-2, --surface-3,
+  // --text-muted, --tint-green-text, --tint-amber-text e --tint-amber.
+  m9Voltar: { width: 48, height: 48, marginLeft: -12, alignItems: 'center', justifyContent: 'center' },
+  m9Subtitulo: { marginTop: 2, fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)' },
+  m9StatusLinha: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  m9Pill: {
+    height: 32,
+    borderRadius: 9999,
+    paddingHorizontal: 12,
+    backgroundColor: '#C8131B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  m9PillTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, fontWeight: '600', color: '#FFFFFF' },
+  m9Nota: { flex: 1, minWidth: 0, fontSize: 12, lineHeight: 18, color: 'var(--text-faint)' },
+  m9Secao: {
+    marginTop: 16,
+    marginBottom: 8,
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 1,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    color: 'var(--text-faint)',
+  },
+  m9Campo: {
+    minHeight: 56,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'var(--surface-2)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    marginBottom: 8,
+  },
+  m9CampoRotulo: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, color: 'var(--text-faint)' },
+  m9CampoValor: {
+    fontSize: 16,
+    lineHeight: 24,
+    letterSpacing: 0.15,
+    fontWeight: '500',
+    color: 'var(--text)',
+    padding: 0,
+    minHeight: 24,
+  },
+  m9CampoValorAlto: { minHeight: 64, textAlignVertical: 'top' },
+  m9CartaoEndereco: {
+    borderRadius: 16,
+    backgroundColor: 'var(--surface-2)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    marginBottom: 8,
+  },
+  m9CartaoAviso: { backgroundColor: 'var(--tint-amber)', borderColor: 'var(--tint-amber-border)' },
+  m9CartaoLinha: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 16 },
+  m9CartaoKicker: { fontSize: 11, lineHeight: 16, letterSpacing: 1, fontWeight: '700', color: 'var(--text-faint)' },
+  m9CartaoKickerAviso: { color: 'var(--tint-amber-text)' },
+  m9CartaoRua: { marginTop: 4, fontSize: 16, lineHeight: 24, fontWeight: '600', color: 'var(--text)' },
+  m9CartaoDetalhe: { marginTop: 2, fontSize: 12, lineHeight: 18, letterSpacing: 0.4, color: 'var(--text-muted)' },
+  m9CartaoRodape: {
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'var(--border)',
+  },
+  m9CartaoRodapeTexto: { fontSize: 12, lineHeight: 18, fontWeight: '600', color: 'var(--tint-red-text)' },
+  m9FaixaAviso: {
+    marginTop: 16,
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: 'var(--tint-amber)',
+    borderWidth: 1,
+    borderColor: 'var(--tint-amber-border)',
+  },
+  m9FaixaAvisoTexto: { fontSize: 12, lineHeight: 18, color: 'var(--tint-amber-text)' },
+  m9Cta: { height: 48, borderRadius: 12, justifyContent: 'center', paddingVertical: 0 },
+  m9CtaLinha: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  m9NotaCta: { marginTop: 8, fontSize: 12, lineHeight: 18, color: 'var(--text-faint)', textAlign: 'center' },
   closeButton: { fontSize: 22, color: 'var(--text-subtle)', padding: 4 },
   statusSelector: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   statusOption: {
@@ -8963,8 +9136,6 @@ const styles = StyleSheet.create({
   },
   statusOptionText: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
   inputRow: { flexDirection: 'row' },
-  locationSummary: { backgroundColor: 'var(--tint-green)', borderRadius: 8, padding: 10, marginTop: 8, borderWidth: 1, borderColor: 'var(--tint-green-border)' },
-  locationSummaryText: { fontSize: 12, color: '#16a34a', fontWeight: '500' },
   // A forma da folha/drawer, a alca e o overlay vivem no <Painel>
   // (src/components/Painel.tsx). Aqui fica so' o padding do corpo da ficha.
   corpoDesktop: { paddingHorizontal: 24 },

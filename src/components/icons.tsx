@@ -183,6 +183,8 @@ export function useIconColors() {
      * escuro (#14301D) — abaixo dos 3:1 de elemento grafico.
      */
     tintGreenText: isDark ? '#77BD8B' : '#167532',
+    /** Par do token --tint-amber-text: avisos (localizacao aproximada). */
+    tintAmberText: isDark ? '#FFD894' : '#99670F',
     /** Par do token --text-faint: icones de campo/metadado. */
     faint: isDark ? 'rgba(255,255,255,0.42)' : '#7A7A7A',
     /** Par do token --text-disabled: o chevron de fim de linha, que e' pista

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F6F6F6;--raised:#FFFFFF;--nested:#F6F6F6;--fill:#EDEDED;
+  --t1:#222222;--t2:#545454;--t3:#7A7A7A;--t4:#C6C6C6;
+  --s-subtle:#EDEDED;--s-default:#C6C6C6;--s-strong:#7A7A7A;
+  --brand:#C8131B;--brand-dark:#94090F;--brand-tint:#FAE8E9;
+  --warn:#8A5A00;--warn-tint:#FDF3E0;--ok:#1E6B3A;--ok-tint:#E7F4EC;
+  color-scheme:light;
+}
+[data-theme='dark']{
+  --bg:#121212;--raised:#1E1E1E;--nested:#262626;--fill:#2A2A2A;
+  --t1:rgba(255,255,255,.92);--t2:rgba(255,255,255,.64);--t3:rgba(255,255,255,.42);--t4:rgba(255,255,255,.28);
+  --s-subtle:rgba(255,255,255,.08);--s-default:rgba(255,255,255,.14);--s-strong:rgba(255,255,255,.24);
+  --brand-dark:#E5A1A4;--brand-tint:#3A1416;
+  --warn:#E8C07A;--warn-tint:#2E2417;--ok:#8FD6A6;--ok-tint:#17281D;
+  color-scheme:dark;
+}
+body{margin:0;background:#E4E4E4;font-family:Poppins,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased;}
+.ms{font-family:'Material Symbols Rounded';font-weight:400;font-style:normal;line-height:1;letter-spacing:normal;display:inline-block;white-space:nowrap;direction:ltr;-webkit-font-feature-settings:'liga';}
+a{color:#018CCC;text-decoration:none;}
+a:hover{color:#016999;}
+</style>
+</helmet>
+
+<section style="padding:32px;background:#E4E4E4;min-height:100vh;box-sizing:border-box;">
+  <div style="max-width:2200px;margin:0 auto;">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:11px;line-height:16px;letter-spacing:1.2px;font-weight:800;color:#7A7A7A;text-transform:uppercase;">M9 · Cadastro e CEP</div>
+        <h1 style="margin:4px 0 0;font-size:24px;line-height:32px;font-weight:700;color:#222222;">Dois passos, e o segundo já vem preenchido</h1>
+        <div style="margin-top:4px;font-size:14px;line-height:20px;color:#545454;max-width:720px;text-wrap:pretty;">O FAB abre o <code>CEPStep</code>; o que ele resolve cai no formulário. Hoje o passo do CEP não mostra o que encontrou antes de avançar, e o formulário é uma pilha de dez inputs iguais com o endereço já resolvido no meio. Aqui o CEP confirma o endereço na própria tela, e o formulário separa o que o vendedor digita do que o CEP já trouxe.</div>
+      </div>
+      <button onClick="{{ toggleTheme }}" style="height:40px;padding:0 16px;border-radius:8px;border:1px solid #C6C6C6;background:#FFFFFF;color:#545454;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;" style-hover="border-color:#7A7A7A;">{{ rotuloTema }}</button>
+    </div>
+
+    <div style="display:flex;gap:32px;flex-wrap:wrap;margin-top:28px;align-items:flex-start;">
+      <sc-for list="{{ quadros }}" as="q" hint-placeholder-count="6">
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div id="{{ q.id }}" style="display:flex;align-items:center;gap:8px;">
+            <span style="display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:4px;background:#C8131B;color:#fff;font-size:11px;line-height:16px;letter-spacing:.5px;font-weight:700;">{{ q.id }}</span>
+            <span style="font-size:14px;line-height:20px;font-weight:600;color:#222222;">{{ q.titulo }}</span>
+          </div>
+
+          <div data-theme="{{ tema }}" data-screen-label="{{ q.titulo }}" style="width:390px;height:844px;background:var(--bg);overflow:hidden;border:1px solid #C6C6C6;display:flex;flex-direction:column;position:relative;">
+
+            <div style="flex:1;min-height:0;background:var(--fill);display:flex;align-items:center;justify-content:center;">
+              <div style="font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);">Mapa · placeholder</div>
+            </div>
+
+            <div style="position:absolute;inset:0;background:rgba(0,0,0,.4);"></div>
+
+            <div style="position:absolute;left:0;right:0;bottom:0;border-radius:16px 16px 0 0;background:var(--raised);display:flex;flex-direction:column;max-height:100%;">
+              <div style="padding:12px 16px 0;">
+                <div style="width:36px;height:4px;border-radius:2px;background:var(--s-default);margin:0 auto;"></div>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:12px;padding:16px;">
+                <sc-if value="{{ q.voltar }}" hint-placeholder-val="{{ false }}">
+                  <span class="ms" style="font-size:24px;color:var(--t2);width:24px;">arrow_back</span>
+                </sc-if>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:18px;line-height:24px;letter-spacing:.15px;font-weight:600;color:var(--t1);">{{ q.tituloTela }}</div>
+                  <div style="margin-top:2px;font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);">{{ q.passo }}</div>
+                </div>
+                <span class="ms" style="font-size:20px;color:var(--t3);">close</span>
+              </div>
+
+              <div style="flex:1;min-height:0;overflow:hidden;padding:0 16px;">
+                <sc-for list="{{ q.blocos }}" as="b" hint-placeholder-count="4">
+
+                  <sc-if value="{{ b.eSecao }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin:16px 0 8px;font-size:11px;line-height:16px;letter-spacing:1px;font-weight:700;color:var(--t3);text-transform:uppercase;">{{ b.texto }}</div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.eCampo }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin-bottom:8px;display:flex;gap:8px;">
+                      <sc-for list="{{ b.campos }}" as="c" hint-placeholder-count="1">
+                        <div style="flex:{{ c.flex }};min-width:0;">
+                          <div style="min-height:56px;box-sizing:border-box;padding:8px 16px;border-radius:16px;background:var(--nested);border:1px solid {{ c.borda }};display:flex;align-items:center;gap:12px;">
+                            <div style="flex:1;min-width:0;">
+                              <div style="font-size:11px;line-height:16px;letter-spacing:.5px;color:var(--t3);">{{ c.rotulo }}</div>
+                              <div style="font-size:16px;line-height:24px;letter-spacing:.15px;font-weight:{{ c.peso }};color:{{ c.cor }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.valor }}</div>
+                            </div>
+                            <sc-if value="{{ c.icon }}" hint-placeholder-val="{{ false }}">
+                              <span class="ms" style="font-size:20px;color:{{ c.iconCor }};">{{ c.icon }}</span>
+                            </sc-if>
+                          </div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.eResolvido }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin:8px 0;padding:16px;border-radius:16px;background:var(--nested);border:1px solid var(--s-subtle);">
+                      <div style="display:flex;align-items:flex-start;gap:12px;">
+                        <span class="ms" style="font-size:24px;color:{{ b.tomCor }};">{{ b.tomIcon }}</span>
+                        <div style="flex:1;min-width:0;">
+                          <div style="font-size:11px;line-height:16px;letter-spacing:1px;font-weight:700;color:{{ b.tomCor }};text-transform:uppercase;">{{ b.tomTexto }}</div>
+                          <div style="margin-top:4px;font-size:16px;line-height:24px;letter-spacing:.15px;font-weight:600;color:var(--t1);text-wrap:pretty;">{{ b.linha1 }}</div>
+                          <div style="margin-top:2px;font-size:12px;line-height:18px;letter-spacing:.4px;color:var(--t2);">{{ b.linha2 }}</div>
+                        </div>
+                      </div>
+                      <sc-if value="{{ b.rodape }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--s-subtle);font-size:12px;line-height:18px;letter-spacing:.4px;color:var(--t2);text-wrap:pretty;">{{ b.rodape }}</div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.eAviso }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin:8px 0;padding:12px 16px;border-radius:12px;background:{{ b.fundo }};display:flex;align-items:flex-start;gap:12px;">
+                      <span class="ms" style="font-size:20px;color:{{ b.cor }};">{{ b.icon }}</span>
+                      <div style="flex:1;min-width:0;font-size:12px;line-height:18px;letter-spacing:.4px;color:{{ b.cor }};text-wrap:pretty;">{{ b.texto }}</div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.eStatus }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                      <span style="display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:9999px;background:var(--brand);color:#fff;font-size:12px;line-height:16px;letter-spacing:.4px;font-weight:600;">Lead</span>
+                      <span style="font-size:12px;line-height:18px;letter-spacing:.4px;color:var(--t3);text-wrap:pretty;">Todo cadastro novo entra como lead</span>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.eLink }}" hint-placeholder-val="{{ false }}">
+                    <div style="min-height:48px;display:flex;align-items:center;justify-content:center;gap:8px;margin:4px 0 8px;">
+                      <span class="ms" style="font-size:20px;color:var(--brand-dark);">{{ b.icon }}</span>
+                      <span style="font-size:14px;line-height:20px;letter-spacing:.1px;font-weight:600;color:var(--brand-dark);">{{ b.texto }}</span>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.eTeclado }}" hint-placeholder-val="{{ false }}">
+                    <div style="margin-top:8px;height:{{ b.altura }};border-radius:12px;background:var(--fill);display:flex;align-items:center;justify-content:center;font-size:12px;line-height:16px;letter-spacing:.4px;color:var(--t3);">{{ b.texto }}</div>
+                  </sc-if>
+
+                </sc-for>
+              </div>
+
+              <div style="padding:16px 16px 32px;display:flex;flex-direction:column;gap:8px;">
+                <div style="min-height:48px;border-radius:12px;background:{{ q.ctaFundo }};display:flex;align-items:center;justify-content:center;gap:8px;">
+                  <span style="font-size:16px;line-height:24px;letter-spacing:.15px;font-weight:600;color:{{ q.ctaCor }};">{{ q.cta }}</span>
+                  <sc-if value="{{ q.ctaIcon }}" hint-placeholder-val="{{ false }}">
+                    <span class="ms" style="font-size:20px;color:{{ q.ctaCor }};">{{ q.ctaIcon }}</span>
+                  </sc-if>
+                </div>
+                <sc-if value="{{ q.ctaNota }}" hint-placeholder-val="{{ false }}">
+                  <div style="text-align:center;font-size:12px;line-height:18px;letter-spacing:.4px;color:var(--t3);">{{ q.ctaNota }}</div>
+                </sc-if>
+              </div>
+            </div>
+          </div>
+
+          <ul style="margin:0;padding-left:18px;width:390px;box-sizing:border-box;font-size:12px;line-height:18px;color:#545454;">
+            <sc-for list="{{ q.notas }}" as="nota" hint-placeholder-count="3">
+              <li>{{ nota }}</li>
+            </sc-for>
+          </ul>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="margin-top:40px;padding-top:24px;border-top:2px solid #C6C6C6;display:flex;gap:40px;flex-wrap:wrap;">
+      <div style="max-width:440px;">
+        <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:#7A7A7A;text-transform:uppercase;">Anatomia</div>
+        <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;line-height:20px;color:#222222;">
+          <li>Folha raio <code>16px 16px 0 0</code>, handle 36×4, header 18/24 peso 600 + contador de passo 12/16</li>
+          <li>Campo: <code>min-height:56px</code>, raio 16, fundo <code>--nested</code>, rótulo 11/16 acima do valor 16/24 — rótulo permanente, não placeholder</li>
+          <li>Cartão de endereço resolvido: raio 16, ícone 24px, tom em <code>--ok</code> ou <code>--warn</code></li>
+          <li>CTA 48px raio 12, largura cheia, rodapé <code>padding-bottom:32</code></li>
+          <li>Erro no campo: borda <code>#C8131B</code> 1px, mensagem 12/18 abaixo</li>
+        </ul>
+      </div>
+      <div style="max-width:440px;">
+        <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:#7A7A7A;text-transform:uppercase;">O que muda de comportamento</div>
+        <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;line-height:20px;color:#222222;">
+          <li>O CEP resolve e <strong>mostra</strong> o endereço antes de avançar — hoje vai direto pro formulário</li>
+          <li>Número no passo do CEP, não no formulário: é ele que decide <code>geoApproximate</code></li>
+          <li>Rótulos permanentes em vez de placeholder — placeholder desaparece ao digitar e o campo perde nome</li>
+          <li>Endereço vindo do CEP entra no formulário como resumo com "Editar", não como quatro inputs abertos</li>
+          <li>Status "Lead" vira pill informativo: na criação só existe um valor</li>
+        </ul>
+      </div>
+      <div style="max-width:440px;">
+        <div style="font-size:12px;line-height:16px;letter-spacing:.5px;font-weight:700;color:#7A7A7A;text-transform:uppercase;">Contrato preservado</div>
+        <ul style="margin:8px 0 0;padding-left:18px;font-size:13px;line-height:20px;color:#222222;">
+          <li><code>onNext({cep, endereco, numero, cidade, estado, latitude, longitude, geoApproximate})</code> — mesmos campos</li>
+          <li><code>onCancel</code> e <code>onPickOnMap</code> (→ <code>startMapCreation</code>) intactos</li>
+          <li><code>pendingGeoApproximate</code> → <code>clients.geo_approximate</code> no submit</li>
+          <li>Obrigatórios continuam <code>empresa</code> e <code>nome</code>; <code>disabled</code> continua em <code>!form.nome.trim()</code></li>
+          <li><code>status: 'lead'</code> na criação; o guard do banco segue mandando</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:2200,&quot;height&quot;:1300}}">
+class Component extends DCLogic {
+  state = { tema: 'light' };
+
+  renderVals() {
+    const dark = this.state.tema === 'dark';
+
+    const secao = (texto) => ({ eSecao: true, texto });
+    const campo = (campos) => ({ eCampo: true, campos: campos.map(c => ({
+      flex: c.flex || 1, rotulo: c.rotulo, valor: c.valor,
+      peso: c.vazio ? '400' : '500',
+      cor: c.vazio ? 'var(--t4)' : 'var(--t1)',
+      borda: c.erro ? '#C8131B' : (c.foco ? 'var(--s-strong)' : 'var(--s-subtle)'),
+      icon: c.icon, iconCor: c.iconCor || 'var(--t3)',
+    })) });
+    const aviso = (texto, tom) => ({ eAviso: true, texto, icon: tom === 'warn' ? 'warning' : 'info',
+      cor: tom === 'warn' ? 'var(--warn)' : 'var(--t2)',
+      fundo: tom === 'warn' ? 'var(--warn-tint)' : 'var(--nested)' });
+    const link = (texto, icon) => ({ eLink: true, texto, icon });
+    const teclado = (texto, altura) => ({ eTeclado: true, texto, altura: altura || '180px' });
+
+    const quadros = [
+      {
+        id: '1a', titulo: 'CEP — vazio', tituloTela: 'Onde fica o restaurante?', passo: 'Passo 1 de 2',
+        cta: 'Buscar CEP', ctaFundo: 'var(--fill)', ctaCor: 'var(--t4)',
+        blocos: [
+          campo([{ rotulo: 'CEP', valor: '00000-000', vazio: true, foco: true }]),
+          link('Selecionar no mapa', 'map'),
+          teclado('Teclado numérico', '300px'),
+        ],
+        notas: [
+          'Um campo só; teclado numérico e máscara 00000-000',
+          'CTA desabilitado até oito dígitos',
+          '"Selecionar no mapa" chama onPickOnMap — mesma função de hoje',
+        ],
+      },
+      {
+        id: '1b', titulo: 'CEP — resolvido', tituloTela: 'Onde fica o restaurante?', passo: 'Passo 1 de 2', voltar: false,
+        cta: 'Continuar', ctaFundo: 'var(--brand)', ctaCor: '#fff', ctaIcon: 'arrow_forward',
+        blocos: [
+          campo([{ rotulo: 'CEP', valor: '04538-133', icon: 'check', iconCor: 'var(--ok)' }]),
+          { eResolvido: true, tomIcon: 'location_on', tomCor: 'var(--ok)', tomTexto: 'Endereço encontrado',
+            linha1: 'Av. Brigadeiro Faria Lima', linha2: 'Itaim Bibi · São Paulo · SP',
+            rodape: 'Não é aqui? Selecione no mapa.' },
+          campo([{ rotulo: 'Número', valor: '3477', flex: 2, foco: true }, { rotulo: 'Complemento', valor: 'opcional', vazio: true, flex: 3 }]),
+          teclado('Teclado numérico', '200px'),
+        ],
+        notas: [
+          'O endereço aparece aqui — hoje o passo avança sem mostrar nada',
+          'Número neste passo: é ele que define geoApproximate',
+          'Sem número, o CTA continua ativo e o lead vai como aproximado',
+        ],
+      },
+      {
+        id: '1c', titulo: 'CEP — não encontrado', tituloTela: 'Onde fica o restaurante?', passo: 'Passo 1 de 2',
+        cta: 'Selecionar no mapa', ctaFundo: 'var(--brand)', ctaCor: '#fff', ctaIcon: 'map',
+        ctaNota: 'Você posiciona o pin e o endereço vem do mapa',
+        blocos: [
+          campo([{ rotulo: 'CEP', valor: '99999-999', erro: true, icon: 'error', iconCor: '#C8131B' }]),
+          aviso('CEP não encontrado. Confira os oito dígitos ou marque o ponto no mapa.', 'warn'),
+          teclado('Teclado numérico', '280px'),
+        ],
+        notas: [
+          'Vale para os três casos: CEP inexistente, sem rede e timeout do geocoder — texto diferente, layout igual',
+          'O mapa passa a ser a saída principal quando a busca falha',
+          'O CEP digitado fica no campo; nada é limpo',
+        ],
+      },
+      {
+        id: '2a', titulo: 'Cadastro — dados', tituloTela: 'Novo lead', passo: 'Passo 2 de 2', voltar: true,
+        cta: 'Salvar lead', ctaFundo: 'var(--fill)', ctaCor: 'var(--t4)',
+        ctaNota: 'Restaurante e contato são obrigatórios',
+        blocos: [
+          { eStatus: true },
+          secao('Restaurante'),
+          campo([{ rotulo: 'Nome do restaurante *', valor: 'Obrigatório', vazio: true, foco: true }]),
+          secao('Contato'),
+          campo([{ rotulo: 'Nome do contato *', valor: 'Obrigatório', vazio: true }]),
+          campo([{ rotulo: 'Telefone', valor: '(11) 90000-0000', vazio: true }]),
+          campo([{ rotulo: 'E-mail', valor: 'opcional', vazio: true }]),
+        ],
+        notas: [
+          'Rótulo permanente acima do valor — o placeholder de hoje some ao digitar',
+          'Status vira pill: na criação só existe "lead"',
+          'arrow_back volta ao passo do CEP com o que já foi resolvido',
+        ],
+      },
+      {
+        id: '2b', titulo: 'Cadastro — endereço e salvar', tituloTela: 'Novo lead', passo: 'Passo 2 de 2', voltar: true,
+        cta: 'Salvar lead', ctaFundo: 'var(--brand)', ctaCor: '#fff',
+        blocos: [
+          secao('Endereço'),
+          { eResolvido: true, tomIcon: 'location_on', tomCor: 'var(--ok)', tomTexto: 'Vindo do CEP',
+            linha1: 'Av. Brigadeiro Faria Lima, 3477', linha2: '04538-133 · São Paulo · SP',
+            rodape: 'Editar endereço' },
+          secao('Observações'),
+          campo([{ rotulo: 'Anotações sobre este contato', valor: 'opcional', vazio: true }]),
+          teclado('Espaço de rolagem', '120px'),
+        ],
+        notas: [
+          'Quatro inputs de endereço viram um resumo com "Editar" — só abre se o vendedor pedir',
+          'Sem número resolvido, o tom vira --warn e o texto diz "Localização aproximada"',
+          'CTA ativo quando restaurante e contato estão preenchidos',
+        ],
+      },
+      {
+        id: '2c', titulo: 'Cadastro — salvando e duplicado', tituloTela: 'Novo lead', passo: 'Passo 2 de 2', voltar: true,
+        cta: 'Salvando…', ctaFundo: 'var(--brand)', ctaCor: 'rgba(255,255,255,.7)',
+        blocos: [
+          secao('Endereço'),
+          { eResolvido: true, tomIcon: 'my_location', tomCor: 'var(--warn)', tomTexto: 'Localização aproximada',
+            linha1: 'Av. Brigadeiro Faria Lima', linha2: '04538-133 · São Paulo · SP · sem número',
+            rodape: 'Editar endereço' },
+          aviso('Já existe um cliente com esse nome nesta localização. Abrir o cadastro existente?', 'warn'),
+          teclado('Espaço de rolagem', '160px'),
+        ],
+        notas: [
+          'Salvando: CTA mantém o rótulo e ganha spinner; nada de botão vazio',
+          'Duplicado (23505): hoje é um Alert seco — aqui vira um caminho para o registro existente',
+          'Aproximado é estado visível, não um aviso escondido no fim do formulário',
+        ],
+      },
+    ];
+
+    return {
+      tema: this.state.tema,
+      rotuloTema: dark ? 'Tema claro' : 'Tema escuro',
+      toggleTheme: () => this.setState({ tema: dark ? 'light' : 'dark' }),
+      quadros,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

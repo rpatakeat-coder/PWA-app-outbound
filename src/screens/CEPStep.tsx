@@ -15,15 +15,23 @@ import { Alert } from '../components/Alert';
 import { useLayout } from '../hooks/useLayout';
 import {
   IconArrowBack,
-  IconChevronRight,
+  IconArrowFoward,
+  IconCheck,
+  IconClose,
   IconLocation,
-  IconMail,
   IconText,
+  IconWarning,
   useIconColors,
 } from '../components/icons';
 import { fetchCepData, geocodeStructured, reverseGeocode, GeocodingError } from '../utils/geocoding';
 import type { ClientFormData } from '../types/client';
 
+/**
+ * Os textos de falha do passo 1 (quadro 1c). Sao os MESMOS de antes, por
+ * `kind` do GeocodingError — nao inventei copy nova: o que mudou e' que eles
+ * deixaram de sair em `Alert.alert` e passaram a viver na faixa de aviso, com
+ * o CEP digitado preservado no campo.
+ */
 function geocodingErrorMessage(err: unknown): string {
   if (err instanceof GeocodingError) {
     switch (err.kind) {
@@ -37,6 +45,14 @@ function geocodingErrorMessage(err: unknown): string {
   return 'Erro inesperado. Tente novamente.';
 }
 
+type DadosCep = {
+  logradouro: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  isGeneric: boolean;
+};
+
 interface CEPStepProps {
   onNext: (data: Partial<ClientFormData> & {
     latitude?: number | null;
@@ -49,27 +65,33 @@ interface CEPStepProps {
   }) => void;
   onCancel: () => void;
   onPickOnMap?: () => void;
+  /**
+   * Rehidratacao do passo 1 (M9/B): o `arrow_back` do passo 2 reabre esta tela
+   * com o CEP e o endereco JA' resolvidos, sem refazer a busca. Nao mexe no
+   * contrato do `onNext` — o App monta isto com os campos que ja' recebe.
+   */
+  valorInicial?: { cep: string; dados: DadosCep; numero: string } | null;
 }
 
-type Mode = 'choose' | 'cep' | 'coords';
+type Mode = 'cep' | 'coords';
 
-export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
+export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial }: CEPStepProps) {
   const layout = useLayout();
   const iconColors = useIconColors();
-  const [mode, setMode] = useState<Mode>('choose');
+  // O passo 1 do M9 E' o CEP: a antiga tela "Como deseja cadastrar?" deixou de
+  // ser a porta de entrada (ela tornava "Passo 1 de 2" mentira). Os outros dois
+  // caminhos continuam alcancaveis daqui — mapa e coordenadas, abaixo do CTA.
+  const [mode, setMode] = useState<Mode>('cep');
   const [loading, setLoading] = useState(false);
 
   // CEP mode state
-  const [cep, setCep] = useState('');
-  const [cepData, setCepData] = useState<{
-    logradouro: string;
-    bairro: string;
-    cidade: string;
-    estado: string;
-    isGeneric: boolean;
-  } | null>(null);
-  const [numero, setNumero] = useState('');
+  const [cep, setCep] = useState(valorInicial?.cep ?? '');
+  const [cepData, setCepData] = useState<DadosCep | null>(valorInicial?.dados ?? null);
+  const [numero, setNumero] = useState(valorInicial?.numero ?? '');
   const [enderecoManual, setEnderecoManual] = useState('');
+  // Erro do passo 1 na TELA, nao em Alert (quadro 1c).
+  const [erroCep, setErroCep] = useState<string | null>(null);
+  const [campoFocado, setCampoFocado] = useState<string | null>(null);
 
   // Coords mode state
   const [latitude, setLatitude] = useState('');
@@ -81,25 +103,28 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
     return cleaned;
   };
 
+  const cepCompleto = cep.replace(/\D/g, '').length === 8;
+
   // ---- CEP Flow ----
   const searchCEP = async () => {
     const clean = cep.replace(/\D/g, '');
-    if (clean.length !== 8) {
-      Alert.alert('CEP inválido', 'Digite um CEP válido com 8 dígitos');
-      return;
-    }
+    if (clean.length !== 8) return;
 
     Keyboard.dismiss();
+    setErroCep(null);
     setLoading(true);
     try {
       const result = await fetchCepData(clean);
       if (!result) {
-        Alert.alert('CEP não encontrado', 'Verifique o CEP e tente novamente');
+        // Nem ViaCEP nem BrasilAPI acharam.
+        setErroCep('CEP não encontrado. Confira os números ou selecione o local no mapa.');
         return;
       }
       setCepData(result);
     } catch (err) {
-      Alert.alert('Erro ao buscar CEP', geocodingErrorMessage(err));
+      // Falha tecnica: rede, timeout, rate limit. Texto por `kind`, o mesmo de
+      // antes — so' o lugar mudou.
+      setErroCep(geocodingErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -109,7 +134,7 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
     if (!cepData) return;
 
     if (cepData.isGeneric && !enderecoManual.trim()) {
-      Alert.alert('Endereço necessário', 'Por favor, informe o endereço completo');
+      setErroCep('CEP genérico: informe o endereço completo abaixo.');
       return;
     }
 
@@ -133,7 +158,7 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
       if (!coords) {
         Alert.alert(
           'Endereço não localizado',
-          'Não conseguimos obter coordenadas para esse endereço. Você pode cadastrar via coordenadas no passo anterior.',
+          'Não conseguimos obter coordenadas para esse endereço. Você pode selecionar o local no mapa.',
         );
         return;
       }
@@ -190,184 +215,42 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
     }
   };
 
-  // ---- Mode: Choose ----
-  if (mode === 'choose') {
-    return (
-      <View style={[styles.overlay, layout.ehLargo && styles.overlayWeb]}>
-        <View style={[styles.card, layout.ehLargo && styles.cardWeb]}>
-          <Text style={styles.title}>Como deseja cadastrar?</Text>
-          <Text style={styles.subtitle}>Escolha a forma de inserir a localização</Text>
-
-          <TouchableOpacity style={styles.optionCard} onPress={() => setMode('cep')}>
-            <IconMail width={20} height={20} fill={iconColors.onSurface} />
-            <View style={styles.optionInfo}>
-              <Text style={styles.optionTitle}>Cadastrar via CEP</Text>
-              <Text style={styles.optionDesc}>Informe o CEP e o endereço será preenchido automaticamente</Text>
-            </View>
-            <IconChevronRight width={20} height={20} fill={iconColors.faint} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.optionCard} onPress={() => setMode('coords')}>
-            <IconLocation width={20} height={20} fill={iconColors.onSurface} />
-            <View style={styles.optionInfo}>
-              <Text style={styles.optionTitle}>Cadastrar via Coordenadas</Text>
-              <Text style={styles.optionDesc}>Informe latitude e longitude diretamente</Text>
-            </View>
-            <IconChevronRight width={20} height={20} fill={iconColors.faint} />
-          </TouchableOpacity>
-
-          {onPickOnMap && (
-            <TouchableOpacity style={styles.optionCard} onPress={onPickOnMap}>
-              <IconLocation width={20} height={20} fill={iconColors.onSurface} />
-              <View style={styles.optionInfo}>
-                <Text style={styles.optionTitle}>Colocar pelo pin no mapa</Text>
-                <Text style={styles.optionDesc}>
-                  Arraste o mapa até o local exato. Endereço/CEP/bairro são preenchidos automaticamente.
-                </Text>
-              </View>
-              <IconChevronRight width={20} height={20} fill={iconColors.faint} />
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
-            <Text style={styles.cancelBtnText}>Cancelar</Text>
-          </TouchableOpacity>
-        </View>
+  // Campo padrao do M9: rotulo PERMANENTE em cima, valor embaixo. O
+  // placeholder-como-nome sai de vez — ele desaparecia no primeiro caractere e
+  // deixava dez caixas iguais sem dizer o que era cada uma.
+  const campo = (
+    chave: string,
+    rotulo: string,
+    filho: React.ReactNode,
+    opcoes?: { erro?: boolean; direita?: React.ReactNode; estilo?: object },
+  ) => (
+    <View
+      style={[
+        estilos.campo,
+        campoFocado === chave && estilos.campoFocado,
+        opcoes?.erro && estilos.campoErro,
+        opcoes?.estilo,
+      ]}
+    >
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={estilos.campoRotulo}>{rotulo}</Text>
+        {filho}
       </View>
-    );
-  }
+      {opcoes?.direita}
+    </View>
+  );
 
-  // ---- Mode: CEP ----
-  if (mode === 'cep') {
-  // Sem TouchableWithoutFeedback+Keyboard.dismiss por volta do conteudo: em
-  // navegador touch o wrapper vira responder do toque, cancela o click
-  // sintetico e o TextInput nunca recebe foco (nao dava pra digitar no PWA).
+  // ---- Mode: Coords ----
+  // Fora dos quadros do M9 (o handoff desenhou so' o caminho do CEP), entao
+  // segue como estava — so' o "Voltar" muda de destino, ja' que a tela de
+  // escolha deixou de existir.
+  if (mode === 'coords') {
     return (
       <View style={[styles.overlay, layout.ehLargo && styles.overlayWeb]}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={[styles.keyboardView, layout.ehLargo && styles.centroWeb]}
         >
-            <ScrollView
-              contentContainerStyle={[styles.scrollContent, layout.ehLargo && styles.centroWeb]}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={[styles.card, layout.ehLargo && styles.cardWeb]}>
-                <View style={styles.headerRow}>
-                  <TouchableOpacity onPress={() => { setMode('choose'); setCepData(null); setCep(''); setNumero(''); setEnderecoManual(''); }}>
-                    <IconText Icone={IconArrowBack} style={styles.backBtn} tone="brandText">Voltar</IconText>
-                  </TouchableOpacity>
-                </View>
-
-                <IconText Icone={IconMail} style={styles.title} tone="onSurface">Cadastro via CEP</IconText>
-
-                {/* CEP Input */}
-                <Text style={styles.label}>CEP</Text>
-                <View style={styles.inputRow} {...({ dataSet: { campo: "1" } } as Record<string, unknown>)}>
-                  <TextInput
-                    style={[styles.input, { flex: 1 }]}
-                    placeholder="00000-000"
-                    placeholderTextColor="var(--text-subtle)"
-                    keyboardType="numeric"
-                    value={cep}
-                    onChangeText={v => setCep(formatCEP(v))}
-                    editable={!loading}
-                    returnKeyType="search"
-                    onSubmitEditing={searchCEP}
-                  />
-                  <TouchableOpacity
-                    style={[styles.searchBtn, loading && styles.disabled]}
-                    onPress={searchCEP}
-                    disabled={loading}
-                  >
-                    {loading && !cepData ? (
-                      <ActivityIndicator color="#fff" size="small" />
-                    ) : (
-                      <Text style={styles.searchBtnText}>Buscar</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-
-                {/* CEP Result */}
-                {cepData && (
-                  <View style={styles.resultBox}>
-                    <View style={styles.resultHeader}>
-                      <Text style={styles.resultHeaderText}>Endereço encontrado</Text>
-                    </View>
-
-                    {!cepData.isGeneric && (
-                      <Text style={styles.resultAddress}>
-                        {cepData.logradouro}{cepData.bairro ? `, ${cepData.bairro}` : ''}
-                      </Text>
-                    )}
-                    <Text style={styles.resultCity}>
-                      {cepData.cidade} - {cepData.estado}
-                    </Text>
-
-                    {cepData.isGeneric && (
-                      <>
-                        <View style={styles.warningBox}>
-                          <Text style={styles.warningText}>
-                            CEP genérico — informe o endereço completo
-                          </Text>
-                        </View>
-                        <Text style={styles.label}>Endereço completo *</Text>
-                        <TextInput
-                          style={styles.input}
-                          placeholder="Rua, Avenida..."
-                          placeholderTextColor="var(--text-subtle)"
-                          value={enderecoManual}
-                          onChangeText={setEnderecoManual}
-                          editable={!loading}
-                        />
-                      </>
-                    )}
-
-                    <Text style={styles.label}>Número</Text>
-                    <TextInput
-                      style={[styles.input, { width: 120 }]}
-                      placeholder="Nº"
-                      placeholderTextColor="var(--text-subtle)"
-                      keyboardType="default"
-                      value={numero}
-                      onChangeText={setNumero}
-                      editable={!loading}
-                    />
-
-                    <TouchableOpacity
-                      style={[styles.submitBtn, loading && styles.disabled]}
-                      onPress={submitCEP}
-                      disabled={loading}
-                    >
-                      {loading ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <Text style={styles.submitBtnText}>Continuar</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {!cepData && (
-                  <TouchableOpacity style={styles.cancelBtn} onPress={() => { setMode('choose'); setCep(''); }}>
-                    <Text style={styles.cancelBtnText}>Cancelar</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </ScrollView>
-        </KeyboardAvoidingView>
-      </View>
-    );
-  }
-
-  // ---- Mode: Coords ----
-  return (
-    <View style={[styles.overlay, layout.ehLargo && styles.overlayWeb]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={[styles.keyboardView, layout.ehLargo && styles.centroWeb]}
-      >
           <ScrollView
             contentContainerStyle={[styles.scrollContent, layout.ehLargo && styles.centroWeb]}
             keyboardShouldPersistTaps="handled"
@@ -375,7 +258,7 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
           >
             <View style={[styles.card, layout.ehLargo && styles.cardWeb]}>
               <View style={styles.headerRow}>
-                <TouchableOpacity onPress={() => { setMode('choose'); setLatitude(''); setLongitude(''); }}>
+                <TouchableOpacity onPress={() => { setMode('cep'); setLatitude(''); setLongitude(''); }}>
                   <IconText Icone={IconArrowBack} style={styles.backBtn} tone="brandText">Voltar</IconText>
                 </TouchableOpacity>
               </View>
@@ -419,15 +302,349 @@ export function CEPStep({ onNext, onCancel, onPickOnMap }: CEPStepProps) {
                 )}
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => { setMode('choose'); setLatitude(''); setLongitude(''); }}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
                 <Text style={styles.cancelBtnText}>Cancelar</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
+    );
+  }
+
+  // ---- Mode: CEP (passo 1 do M9 — quadros 1a, 1b, 1c) ----
+  // Sem TouchableWithoutFeedback+Keyboard.dismiss por volta do conteudo: em
+  // navegador touch o wrapper vira responder do toque, cancela o click
+  // sintetico e o TextInput nunca recebe foco (nao dava pra digitar no PWA).
+  const enderecoResolvido = cepData && !cepData.isGeneric;
+
+  return (
+    <View style={[styles.overlay, layout.ehLargo && styles.overlayWeb]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={[styles.keyboardView, layout.ehLargo && styles.centroWeb]}
+      >
+        <ScrollView
+          contentContainerStyle={[styles.scrollContent, layout.ehLargo && styles.centroWeb]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={[estilos.folha, layout.ehLargo && styles.cardWeb]}>
+            {!layout.ehLargo && <View style={estilos.alca} />}
+
+            <View style={estilos.cabecalho}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={estilos.titulo}>Onde fica o restaurante?</Text>
+                <Text style={estilos.subtitulo}>Passo 1 de 2</Text>
+              </View>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Fechar"
+                style={estilos.fechar}
+                onPress={onCancel}
+              >
+                <IconClose width={20} height={20} fill={iconColors.muted} />
+              </TouchableOpacity>
+            </View>
+
+            {/* --- Campo CEP --- */}
+            {campo(
+              'cep',
+              'CEP',
+              <TextInput
+                style={estilos.campoValor}
+                placeholder="00000-000"
+                placeholderTextColor="var(--text-subtle)"
+                keyboardType="numeric"
+                value={cep}
+                onChangeText={v => { setCep(formatCEP(v)); setErroCep(null); }}
+                onFocus={() => setCampoFocado('cep')}
+                onBlur={() => setCampoFocado(null)}
+                editable={!loading}
+                returnKeyType="search"
+                onSubmitEditing={searchCEP}
+              />,
+              {
+                erro: !!erroCep,
+                direita: cepData
+                  ? <IconCheck width={20} height={20} fill={iconColors.tintGreenText} />
+                  : erroCep
+                    ? <IconWarning width={20} height={20} fill={iconColors.tintRedText} />
+                    : undefined,
+              },
+            )}
+
+            {/* --- 1c: faixa de aviso. Mesmo layout pros tres casos; so' o
+                    texto muda, e o CEP digitado fica no campo. --- */}
+            {erroCep && (
+              <View style={estilos.faixaAviso}>
+                <Text style={estilos.faixaAvisoTexto}>{erroCep}</Text>
+              </View>
+            )}
+
+            {/* --- 1b: cartao do endereco resolvido --- */}
+            {cepData && (
+              <View style={estilos.cartaoEndereco}>
+                <View style={estilos.cartaoLinha}>
+                  <IconLocation width={24} height={24} fill={iconColors.tintGreenText} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={estilos.cartaoKicker}>ENDEREÇO ENCONTRADO</Text>
+                    {enderecoResolvido && (
+                      <Text style={estilos.cartaoRua} numberOfLines={2}>{cepData.logradouro}</Text>
+                    )}
+                    <Text style={estilos.cartaoDetalhe} numberOfLines={2}>
+                      {[cepData.bairro, cepData.cidade, cepData.estado].filter(Boolean).join(' · ')}
+                    </Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  style={estilos.cartaoRodape}
+                  onPress={onPickOnMap}
+                  disabled={!onPickOnMap}
+                >
+                  <Text style={estilos.cartaoRodapeTexto}>Não é aqui? Selecione no mapa.</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* CEP generico (sem logradouro nas duas bases): a rua vem a mao. */}
+            {cepData?.isGeneric && campo(
+              'enderecoManual',
+              'Endereço completo *',
+              <TextInput
+                style={estilos.campoValor}
+                placeholder="Rua, Avenida..."
+                placeholderTextColor="var(--text-subtle)"
+                value={enderecoManual}
+                onChangeText={v => { setEnderecoManual(v); setErroCep(null); }}
+                onFocus={() => setCampoFocado('enderecoManual')}
+                onBlur={() => setCampoFocado(null)}
+                editable={!loading}
+              />,
+            )}
+
+            {/* Numero. Sem ele o CTA continua ativo — o lead entra e o flag de
+                aproximado, que vem do geocoder, decide o resto. */}
+            {cepData && campo(
+              'numero',
+              'Número',
+              <TextInput
+                style={estilos.campoValor}
+                placeholder="Ex.: 1086"
+                placeholderTextColor="var(--text-subtle)"
+                keyboardType="default"
+                value={numero}
+                onChangeText={setNumero}
+                onFocus={() => setCampoFocado('numero')}
+                onBlur={() => setCampoFocado(null)}
+                editable={!loading}
+              />,
+            )}
+
+            {/* --- CTA: o estado da tela decide qual --- */}
+            {cepData ? (
+              <TouchableOpacity
+                accessibilityRole="button"
+                style={[estilos.ctaPrimario, loading && styles.disabled]}
+                onPress={submitCEP}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <View style={estilos.ctaLinha}>
+                    <Text style={estilos.ctaPrimarioTexto}>Continuar</Text>
+                    <IconArrowFoward width={20} height={20} fill="#FFFFFF" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            ) : erroCep && onPickOnMap ? (
+              <>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  style={estilos.ctaPrimario}
+                  onPress={onPickOnMap}
+                >
+                  {/* Sem icone de proposito: o kit nao tem `map`, e reusar o
+                      `location_on` do cartao de endereco aqui faria o mesmo
+                      desenho dizer "este e' o endereco" e "va' pro mapa". O
+                      rotulo sozinho nao tem essa ambiguidade. */}
+                  <Text style={estilos.ctaPrimarioTexto}>Selecionar no mapa</Text>
+                </TouchableOpacity>
+                <Text style={estilos.notaCta}>
+                  Arraste o mapa até o local exato. Endereço e CEP são preenchidos automaticamente.
+                </Text>
+              </>
+            ) : (
+              <TouchableOpacity
+                accessibilityRole="button"
+                style={[estilos.ctaPrimario, !cepCompleto && estilos.ctaDesabilitado]}
+                onPress={searchCEP}
+                disabled={!cepCompleto || loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={[estilos.ctaPrimarioTexto, !cepCompleto && estilos.ctaTextoDesabilitado]}>
+                    Buscar CEP
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Os outros dois caminhos de cadastro. A tela de escolha saiu, mas
+                nenhum deles ficou inalcancavel. */}
+            {!cepData && (
+              <View style={estilos.alternativas}>
+                {onPickOnMap && !erroCep && (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={estilos.alternativa}
+                    onPress={onPickOnMap}
+                  >
+                    <Text style={estilos.alternativaTexto}>Selecionar no mapa</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  style={estilos.alternativa}
+                  onPress={() => setMode('coords')}
+                >
+                  <Text style={estilos.alternativaTexto}>Usar coordenadas</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );
 }
+
+// ===== Estilos do M9 (passo 1) =====
+const estilos = StyleSheet.create({
+  folha: {
+    backgroundColor: 'var(--surface)',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 32,
+    maxHeight: '92%',
+  },
+  alca: {
+    width: 36,
+    height: 4,
+    borderRadius: 4,
+    backgroundColor: 'var(--stroke-default)',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  cabecalho: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 16 },
+  titulo: { fontSize: 18, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: 'var(--text)' },
+  subtitulo: { marginTop: 2, fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)' },
+  fechar: { width: 48, height: 48, marginTop: -12, marginRight: -12, alignItems: 'center', justifyContent: 'center' },
+
+  // Campo padrao do M9: rotulo permanente + valor. `--surface-2` e' o
+  // "nested" do desenho; o kit nao tem `--surface-nested`.
+  campo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 56,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'var(--surface-2)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    marginBottom: 8,
+  },
+  campoFocado: { borderColor: 'var(--stroke-strong)' },
+  campoErro: { borderColor: '#C8131B' },
+  campoRotulo: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, color: 'var(--text-faint)' },
+  campoValor: {
+    fontSize: 16,
+    lineHeight: 24,
+    letterSpacing: 0.15,
+    fontWeight: '500',
+    color: 'var(--text)',
+    padding: 0,
+    // O RNW da' altura de linha propria ao input; sem isto o campo pula de 56.
+    minHeight: 24,
+  },
+
+  // 1c — faixa de aviso. `--tint-amber` e' o `--tint-warn` do desenho.
+  faixaAviso: {
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    backgroundColor: 'var(--tint-amber)',
+    borderWidth: 1,
+    borderColor: 'var(--tint-amber-border)',
+  },
+  faixaAvisoTexto: { fontSize: 12, lineHeight: 18, color: 'var(--tint-amber-text)' },
+
+  // 1b — cartao do endereco resolvido.
+  cartaoEndereco: {
+    borderRadius: 16,
+    backgroundColor: 'var(--surface-2)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    marginBottom: 8,
+  },
+  cartaoLinha: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 16 },
+  cartaoKicker: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 1,
+    fontWeight: '700',
+    color: 'var(--tint-green-text)',
+  },
+  cartaoRua: { marginTop: 4, fontSize: 16, lineHeight: 24, fontWeight: '600', color: 'var(--text)' },
+  cartaoDetalhe: { marginTop: 2, fontSize: 12, lineHeight: 18, letterSpacing: 0.4, color: 'var(--text-muted)' },
+  cartaoRodape: {
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'var(--border)',
+  },
+  cartaoRodapeTexto: { fontSize: 12, lineHeight: 18, fontWeight: '600', color: 'var(--tint-red-text)' },
+
+  // CTA
+  ctaPrimario: {
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#C8131B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  ctaLinha: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  ctaPrimarioTexto: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: '#FFFFFF' },
+  // `--surface-3` e' o "sunken" do desenho.
+  ctaDesabilitado: { backgroundColor: 'var(--surface-3)' },
+  ctaTextoDesabilitado: { color: 'var(--text-disabled)' },
+  notaCta: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 18,
+    color: 'var(--text-faint)',
+    textAlign: 'center',
+  },
+
+  alternativas: { marginTop: 8 },
+  alternativa: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  alternativaTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--tint-red-text)' },
+});
 
 const styles = StyleSheet.create({
   overlay: {
@@ -498,37 +715,6 @@ const styles = StyleSheet.create({
     color: 'var(--text-muted)',
     marginBottom: 16,
   },
-  // Options
-  optionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: 'var(--surface-2)',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-  },
-  optionIcon: {
-    fontSize: 28,
-    marginRight: 12,
-  },
-  optionInfo: {
-    flex: 1,
-  },
-  optionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: 'var(--text)',
-    marginBottom: 2,
-  },
-  optionDesc: {
-    fontSize: 12,
-    color: 'var(--text-muted)',
-    lineHeight: 16,
-  },
-  // Form
   label: {
     fontSize: 12,
     fontWeight: '700',
@@ -548,66 +734,6 @@ const styles = StyleSheet.create({
     borderColor: 'var(--border)',
     color: 'var(--text)',
   },
-  inputRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  searchBtn: {
-    backgroundColor: '#C8131B',
-    borderRadius: 10,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  searchBtnText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  // Result
-  resultBox: {
-    marginTop: 16,
-    backgroundColor: 'var(--tint-green)',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'var(--tint-green-border)',
-  },
-  resultHeader: {
-    marginBottom: 8,
-  },
-  resultHeaderText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#16a34a',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  resultAddress: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: 'var(--text)',
-    marginBottom: 2,
-  },
-  resultCity: {
-    fontSize: 14,
-    color: 'var(--text-muted)',
-    marginBottom: 8,
-  },
-  warningBox: {
-    backgroundColor: 'var(--tint-amber)',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 4,
-    borderWidth: 1,
-    borderColor: 'var(--tint-amber-border)',
-  },
-  warningText: {
-    fontSize: 13,
-    color: 'var(--tint-amber-text)',
-    fontWeight: '500',
-  },
-  // Buttons
   submitBtn: {
     backgroundColor: '#C8131B',
     borderRadius: 12,
