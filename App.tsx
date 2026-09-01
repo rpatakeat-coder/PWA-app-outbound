@@ -1404,7 +1404,8 @@ function MainApp() {
     return { porRotulo: m, contaAlvo: alvo };
   }, [clients, isViewer, viewerStatuses, statusFilter]);
 
-  const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0) + (vendorFilterHubspotId !== null ? 1 : 0) + (visitFilter !== null ? 1 : 0) + (tempFilter !== null ? 1 : 0) + (contaAlvoOnly ? 1 : 0);
+  const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0) + (vendorFilterHubspotId !== null ? 1 : 0) + (visitFilter !== null ? 1 : 0) + (tempFilter !== null ? 1 : 0) + (contaAlvoOnly ? 1 : 0)
+    + (!isViewer && statusFilter !== 'lead' ? 1 : 0);
 
   const filteredWithCoords = useMemo(
     () => filteredClients.filter(c => c.latitude !== null && c.longitude !== null),
@@ -3792,6 +3793,16 @@ function MainApp() {
         }
       : null,
     contaAlvoOnly ? { chave: 'alvo', rotulo: 'Conta Alvo', limpar: () => setContaAlvoOnly(false) } : null,
+    // Status so' vira chip quando NAO e' o padrao: 'lead' e' o dia a dia do
+    // vendedor e nao merece um chip permanente, mas quem foi ver cliente ou
+    // ex-cliente precisa enxergar que saiu do padrao — e voltar num toque.
+    !isViewer && statusFilter !== 'lead'
+      ? {
+          chave: 'status',
+          rotulo: `Status: ${statusConfig[statusFilter]?.label ?? statusFilter}`,
+          limpar: () => setStatusFilter('lead' as ClientStatus),
+        }
+      : null,
   ].filter(Boolean) as Array<{ chave: string; rotulo: string; limpar: () => void }>;
 
   const linhaFiltrosAtivos = filtrosAtivos.length > 0 && (
@@ -5650,6 +5661,49 @@ function MainApp() {
                       vendorFilterHubspotId === myHubspotId && { color: 'var(--brand-text)' },
                     ]}>{vendorFilterHubspotId === myHubspotId ? '✓' : '○'}</Text>
                   </TouchableOpacity>
+                )}
+
+                {/* Status. Some do celular no 548bfab (redesign do desktop): a
+                    faixa de chips que existia pra todo mundo passou a ser so'
+                    do viewer, e o segmented novo ficou no painel de 352px, que
+                    nao existe em 390px. Com `statusFilter` nascendo em 'lead' e
+                    ninguem podendo mexer, vendedor e gestor ficaram travados em
+                    lead — sem ver cliente nem ex-cliente. Volta AQUI, junto dos
+                    outros filtros, em vez da faixa antiga: o redesign moveu
+                    essas faixas pro sheet de proposito.
+                    Os status listados vem de `sector_visibility` — em Outbound
+                    sao lead, cliente e churn. */}
+                {!isViewer && statusOptions.length > 1 && (
+                  <>
+                    <Text style={styles.adminSectionTitle}>Status</Text>
+                    <Text style={styles.passwordModalHint}>
+                      Um por vez. O mapa e a lista mostram só o status escolhido.
+                    </Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                      {statusOptions.map(opt => {
+                        const selecionado = statusFilter === opt.value;
+                        return (
+                          <TouchableOpacity
+                            key={opt.value}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: selecionado }}
+                            style={[
+                              sharedStyles.filterChip,
+                              selecionado
+                                ? { backgroundColor: opt.color, borderColor: opt.color }
+                                : { borderWidth: 1, borderColor: 'var(--border)' },
+                            ]}
+                            onPress={() => setStatusFilter(opt.value)}
+                          >
+                            <View style={[sharedStyles.filterDot, { backgroundColor: opt.color }]} />
+                            <Text style={[sharedStyles.filterChipText, selecionado && sharedStyles.filterChipTextActive]}>
+                              {opt.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
                 )}
 
                 <Text style={[styles.adminSectionTitle, { marginTop: 18 }]}>Temperatura</Text>
