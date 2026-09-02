@@ -148,6 +148,11 @@ function LinhaDeConta({ c }: { c: ContaDeAcesso }) {
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         {c.desativado && <Etiqueta tom="neutro" texto="Desativado" />}
+        {/* Explica a AUSENCIA de alarme: sem isto, um vendedor em setor sem
+            lead que nao aparece na faixa vermelha parece esquecimento. */}
+        {!c.desativado && c.papel === 'user' && c.classificacao === 'nao_vendedor' && (
+          <Etiqueta tom="neutro" texto="Não é de campo" />
+        )}
         {/* O texto diz o SINTOMA, nao o campo: "sem id_hubspot" nao ajuda
             ninguem a reconhecer o chamado que vai receber. */}
         {c.semIdHubspot && <Etiqueta tom="erro" texto="Sem carteira — some do placar" />}
@@ -297,6 +302,13 @@ export function Acessos() {
                 .
               </div>
             ))}
+          </div>
+          {/* Duas saidas, e a segunda e' a que faltava: nem todo alarme se
+              resolve mudando o setor. Quem saiu do campo tem que sair da
+              curadoria — e isso conserta o ranking junto. */}
+          <div style={{ fontSize: 12.5, color: 'var(--red)', marginTop: 8, opacity: 0.9 }}>
+            Ou corrija o cadastro, ou marque a pessoa como <code>nao_vendedor</code> em{' '}
+            <code>seller_classification</code> — quem saiu do campo também precisa sair do ranking.
           </div>
         </div>
       )}

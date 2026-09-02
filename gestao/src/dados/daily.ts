@@ -239,10 +239,13 @@ export async function carregarDaily(): Promise<DadosDaily> {
 
   // Quem entra no placar.
   //
-  // `seller_classification` e' a curadoria oficial, mas ela esta' vazia hoje —
-  // e "sem linha" significa 'ativo'. Sozinha, ela colocaria gestores que nao
-  // vendem no topo da lista, marcados como "sem registro hoje": exatamente o
-  // ruido que a reuniao das 9h nao pode ter.
+  // `seller_classification` e' a curadoria oficial. Ela ESTAVA vazia quando
+  // este filtro foi escrito; em 02/09/2026 tem 24 linhas (18 ativos, 6
+  // nao_vendedor), entao o filtro extra abaixo virou o caso previsto no fim
+  // deste comentario: redundante, nao errado. "Sem linha" continua
+  // significando 'ativo' — e sem curadoria alguma, gestores que nao vendem
+  // apareceriam no topo marcados como "sem registro hoje", que e' exatamente
+  // o ruido que a reuniao das 9h nao pode ter.
   //
   // Entao pedimos um sinal de que a pessoa e' de campo: ter carteira no HubSpot
   // OU ter registrado alguma coisa na janela. O segundo criterio existe pra que

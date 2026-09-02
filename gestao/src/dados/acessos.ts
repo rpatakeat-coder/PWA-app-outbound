@@ -25,6 +25,10 @@ const SETORES_COM_CARTEIRA = ['outbound', 'field sales'];
 
 export type PapelDeAcesso = 'user' | 'gestor' | 'view' | null;
 
+/** Curadoria de `seller_classification` — sem linha significa 'ativo'
+ *  (default declarado em 20260807_seller_classification.sql). */
+export type ClassificacaoVendedor = 'ativo' | 'sem_meta' | 'nao_vendedor';
+
 export interface ContaDeAcesso {
   id: string;
   nome: string;
@@ -36,8 +40,9 @@ export interface ContaDeAcesso {
   desativado: boolean;
   /** Vendedor de carteira sem owner do CRM: some dos rankings. */
   semIdHubspot: boolean;
-  /** Setor que o RLS nao deixa ver lead: abre o mapa vazio. */
+  /** Setor que o RLS nao deixa ver lead E a pessoa e' de campo: mapa vazio. */
   setorSemLead: boolean;
+  classificacao: ClassificacaoVendedor;
   criadoEm: string | null;
 }
 
@@ -54,7 +59,7 @@ export interface DadosDeAcesso {
 }
 
 export async function carregarAcessos(): Promise<DadosDeAcesso> {
-  const [perfis, visibilidade] = await Promise.all([
+  const [perfis, visibilidade, classificacao] = await Promise.all([
     // TODOS os papeis, ao contrario de `equipe.ts` (que tira 'view' porque
     // viewer nao e' campo). Aqui a pergunta e' "quem tem acesso", e viewer
     // tem — esconder seria mentir sobre a superficie de acesso.
@@ -63,10 +68,20 @@ export async function carregarAcessos(): Promise<DadosDeAcesso> {
       .select('id, full_name, email, role, sector, id_hubspot, created_at')
       .order('created_at', { ascending: false }),
     supabase.from('sector_visibility').select('sector, status_slug'),
+    // Quem AINDA e' de campo. Sem esta curadoria, "setor nao ve lead" acusa
+    // tambem quem saiu do campo de proposito — e ai' o alarme fica vermelho
+    // pra sempre, que e' o mesmo que nao ter alarme.
+    supabase.from('seller_classification').select('seller_id, status'),
   ]);
 
   if (perfis.error) throw perfis.error;
   if (visibilidade.error) throw visibilidade.error;
+  // Curadoria e' OPCIONAL de proposito, igual em equipe.ts: se a leitura
+  // falhar, a tela abre com o default ('ativo') em vez de virar mensagem de
+  // erro por causa de uma tabela auxiliar.
+  const classePor = new Map<string, ClassificacaoVendedor>(
+    ((classificacao.data ?? []) as any[]).map((c) => [c.seller_id, c.status]),
+  );
 
   const statusPorSetor = new Map<string, string[]>();
   for (const r of (visibilidade.data ?? []) as any[]) {
@@ -90,6 +105,8 @@ export async function carregarAcessos(): Promise<DadosDeAcesso> {
       const status = setor ? statusPorSetor.get(setor) ?? [] : [];
       const ehVendedor = p.role === 'user' && !desativado;
       const setorDeCarteira = SETORES_COM_CARTEIRA.includes((setor ?? '').trim().toLowerCase());
+      const classe = classePor.get(p.id) ?? 'ativo';
+      const ehDeCampo = ehVendedor && classe !== 'nao_vendedor';
       return {
         id: p.id,
         nome: bruto.replace(/\s*\/\s*DESATIVADO\s*$/i, '').trim() || p.email || 'Sem nome',
@@ -98,10 +115,15 @@ export async function carregarAcessos(): Promise<DadosDeAcesso> {
         setor,
         idHubspot: p.id_hubspot ?? null,
         desativado,
-        semIdHubspot: ehVendedor && setorDeCarteira && !p.id_hubspot,
-        // Vale pra QUALQUER vendedor, nao so' os de setor de carteira: o mapa
-        // vazio nao depende de ter carteira, depende do RLS do setor.
-        setorSemLead: ehVendedor && !status.includes('lead'),
+        semIdHubspot: ehDeCampo && setorDeCarteira && !p.id_hubspot,
+        // Precisa das DUAS coisas: setor que nao ve lead E pessoa que ainda
+        // trabalha o mapa. So' a primeira acusava a Amanda, que mudou pra
+        // Inside Sales — pra ela o setor sem lead esta' certo, e um alarme
+        // permanente sobre alguem que esta' no lugar certo treina o gestor a
+        // ignorar a faixa inteira. O sinal de "ainda e' de campo" e'
+        // `seller_classification`, a mesma curadoria que decide o ranking.
+        setorSemLead: ehDeCampo && !status.includes('lead'),
+        classificacao: classe,
         criadoEm: p.created_at ?? null,
       };
     })
