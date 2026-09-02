@@ -747,6 +747,11 @@ export function useClients(
   return {
     clients: query.data ?? [],
     statuses: statusesQuery.data ?? [],
+    // Status que o SETOR da pessoa libera (sector_visibility). A tela precisa
+    // disso pra explicar um recorte vazio: sem ele, "0 leads" tem a mesma cara
+    // de "regiao sem lead" e de "seu setor nao ve lead".
+    // `undefined` enquanto carrega; viewer nao usa (ve tudo).
+    allowedStatuses,
     // Viewer nao depende do visibilityQuery (fica desabilitado, logo "pending"
     // pra sempre); so o loading da query principal conta pra ele.
     isLoading: (query.isLoading && query.fetchStatus !== 'idle') || (!isViewer && visibilityQuery.isLoading),

@@ -803,7 +803,7 @@ function MainApp() {
   const waitingForLocation = showOnlyMyArea && !userLocation && locationPermission === 'pending';
   const areaPermissionDenied = showOnlyMyArea && locationPermission === 'denied';
 
-  const { clients: clientsNaArea, statuses: dynamicStatuses, isLoading, jaCarregouAlgumaVez, error, deleteClient, addClient, updateClient, markAsVisited, ensureHubspotDeal, dismissContaAlvo } = useClients({
+  const { clients: clientsNaArea, statuses: dynamicStatuses, allowedStatuses, isLoading, jaCarregouAlgumaVez, error, deleteClient, addClient, updateClient, markAsVisited, ensureHubspotDeal, dismissContaAlvo } = useClients({
     // Filtro ligado: só a área visível. Desligado: base inteira (é o modo do
     // gestor olhando o país todo — pesado por natureza, e agora é escolha
     // explícita em vez de padrão).
@@ -1403,6 +1403,27 @@ function MainApp() {
     }
     return { porRotulo: m, contaAlvo: alvo };
   }, [clients, isViewer, viewerStatuses, statusFilter]);
+
+  // O status escolhido esta' FORA do que o setor libera? Entao o recorte vai dar
+  // zero por permissao, nao por falta de lead na regiao — e a tela precisa
+  // dizer isso. Foi o chamado da Renata (setor "Geral", que so' ve cliente e
+  // churn) com o app abrindo em 'lead': mapa vazio, sem explicacao, e ela
+  // nem tinha como trocar o status antes do cae4f46.
+  const statusBloqueadoPeloSetor =
+    !isViewer
+    && Array.isArray(allowedStatuses)
+    && allowedStatuses.length > 0
+    && !allowedStatuses.includes(statusFilter);
+
+  // Nome do status barrado e a lista do que sobrou: a tela precisa dizer
+  // "Lead", nao o slug, e oferecer a saida em vez de so' avisar.
+  const rotuloStatusFiltrado = statusConfig[statusFilter]?.label ?? statusFilter;
+  const statusLiberados = useMemo(
+    () => (Array.isArray(allowedStatuses) && allowedStatuses.length > 0
+      ? statusOptions.filter(o => allowedStatuses.includes(o.value))
+      : statusOptions),
+    [statusOptions, allowedStatuses],
+  );
 
   const activeFilterCount = (searchQuery ? 1 : 0) + (stateFilter ? 1 : 0) + (stageFilter ? 1 : 0) + (vendorFilterHubspotId !== null ? 1 : 0) + (visitFilter !== null ? 1 : 0) + (tempFilter !== null ? 1 : 0) + (contaAlvoOnly ? 1 : 0)
     + (!isViewer && statusFilter !== 'lead' ? 1 : 0);
@@ -3608,9 +3629,13 @@ function MainApp() {
             da Rota, e la' a contagem do recorte nao quer dizer nada — o que
             esta' na tela e' a sequencia, nao o resultado de um filtro. */}
         {!layout.ehLargo && !creationMode && ehAbaDeLeads && (
-          <View style={styles.recortePill}>
-            <Text style={styles.recorteTexto}>
-              {`${filteredClients.length} ${filteredClients.length === 1 ? 'lead' : 'leads'} no recorte`}
+          <View style={[styles.recortePill, statusBloqueadoPeloSetor && styles.recortePillAviso]}>
+            <Text style={[styles.recorteTexto, statusBloqueadoPeloSetor && styles.recorteTextoAviso]}>
+              {/* Zero por PERMISSAO tem a mesma cara de zero por regiao vazia.
+                  Aqui a pill troca de assunto: nao adianta arrastar o mapa. */}
+              {statusBloqueadoPeloSetor
+                ? `Seu setor não vê "${rotuloStatusFiltrado}"`
+                : `${filteredClients.length} ${filteredClients.length === 1 ? 'lead' : 'leads'} no recorte`}
             </Text>
           </View>
         )}
@@ -5003,10 +5028,36 @@ function MainApp() {
                 <View style={sharedStyles.emptyState}>
                   <IconClipboardCheck width={40} height={40} fill={iconColors.faint} style={{ marginBottom: 12 }} />
                   <Text style={styles.vazioTexto}>
-                    {porFiltro
-                      ? 'Nenhum cliente encontrado com esses filtros.'
-                      : `Nenhum ${statusConfig[statusFilter]?.label?.toLowerCase() ?? statusFilter} encontrado`}
+                    {statusBloqueadoPeloSetor
+                      ? `O seu setor não tem acesso ao status "${rotuloStatusFiltrado}".`
+                      : porFiltro
+                        ? 'Nenhum cliente encontrado com esses filtros.'
+                        : `Nenhum ${statusConfig[statusFilter]?.label?.toLowerCase() ?? statusFilter} encontrado`}
                   </Text>
+                  {/* Permissao, nao falta de dado. Sem esta explicacao a tela
+                      vazia e' indistinguivel de "nao existe lead na regiao" —
+                      foi exatamente o chamado que chegou. Alem do porque, a
+                      saida: os status que o setor libera, em um toque. */}
+                  {statusBloqueadoPeloSetor && (
+                    <>
+                      <Text style={styles.vazioMotivo}>
+                        {`Não é falta de cadastro: o setor "${profile?.sector?.trim() || 'sem setor'}" não enxerga esse status. Peça ao gestor para liberar, ou veja um destes:`}
+                      </Text>
+                      <View style={styles.vazioSaidas}>
+                        {statusLiberados.map(opt => (
+                          <TouchableOpacity
+                            key={opt.value}
+                            accessibilityRole="button"
+                            style={[sharedStyles.filterChip, { borderWidth: 1, borderColor: 'var(--border)' }]}
+                            onPress={() => setStatusFilter(opt.value)}
+                          >
+                            <View style={[sharedStyles.filterDot, { backgroundColor: opt.color }]} />
+                            <Text style={sharedStyles.filterChipText}>{opt.label}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </>
+                  )}
                   {/* A saida que faltava: sem ela, um recorte que zera deixa a
                       tela vazia e o unico caminho de volta e' reabrir o sheet e
                       desfazer filtro por filtro. */}
@@ -5671,33 +5722,44 @@ function MainApp() {
                     lead — sem ver cliente nem ex-cliente. Volta AQUI, junto dos
                     outros filtros, em vez da faixa antiga: o redesign moveu
                     essas faixas pro sheet de proposito.
-                    Os status listados vem de `sector_visibility` — em Outbound
-                    sao lead, cliente e churn. */}
+                    ATENCAO: a lista vem de `client_statuses` (todos os ativos),
+                    NAO de `sector_visibility` — os dois nao se cruzam em lugar
+                    nenhum. Por isso um status que o setor nao ve aparece aqui
+                    e devolve zero; abaixo ele vem marcado como sem acesso. */}
                 {!isViewer && statusOptions.length > 1 && (
                   <>
                     <Text style={styles.adminSectionTitle}>Status</Text>
                     <Text style={styles.passwordModalHint}>
                       Um por vez. O mapa e a lista mostram só o status escolhido.
+                      {statusOptions.length !== statusLiberados.length
+                        ? ' Os marcados como sem acesso não são liberados para o seu setor.'
+                        : ''}
                     </Text>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
                       {statusOptions.map(opt => {
                         const selecionado = statusFilter === opt.value;
+                        // Continua tocavel de proposito: se a regra do setor
+                        // mudar no banco e o cache local estiver velho, um chip
+                        // morto seria pior que um chip que explica.
+                        const barrado = !statusLiberados.some(o => o.value === opt.value);
                         return (
                           <TouchableOpacity
                             key={opt.value}
                             accessibilityRole="button"
                             accessibilityState={{ selected: selecionado }}
+                            accessibilityLabel={barrado ? `${opt.label} — sem acesso no seu setor` : opt.label}
                             style={[
                               sharedStyles.filterChip,
                               selecionado
                                 ? { backgroundColor: opt.color, borderColor: opt.color }
                                 : { borderWidth: 1, borderColor: 'var(--border)' },
+                              barrado && !selecionado && styles.chipStatusBarrado,
                             ]}
                             onPress={() => setStatusFilter(opt.value)}
                           >
                             <View style={[sharedStyles.filterDot, { backgroundColor: opt.color }]} />
                             <Text style={[sharedStyles.filterChipText, selecionado && sharedStyles.filterChipTextActive]}>
-                              {opt.label}
+                              {barrado ? `${opt.label} · sem acesso` : opt.label}
                             </Text>
                           </TouchableOpacity>
                         );
@@ -8132,6 +8194,20 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   recorteTexto: { color: 'var(--text-muted)', fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600' },
+  // Objetos SEPARADOS (nao props undefined no mesmo objeto): no RNW um
+  // `undefined` nao cancela a regra da classe base.
+  recortePillAviso: { backgroundColor: 'var(--tint-amber)' },
+  recorteTextoAviso: { color: 'var(--tint-amber-text)' },
+  chipStatusBarrado: { opacity: 0.45 },
+  vazioMotivo: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'var(--text-muted)',
+    textAlign: 'center',
+    maxWidth: 300,
+  },
+  vazioSaidas: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 12 },
   // Legenda de temperatura: fica ACIMA do botao de localizacao (que ocupa
   // left:16 / bottom:90+insets), por isso o offset extra de 56px.
   // Em DUAS COLUNAS: em pe' as 6 linhas comiam um terco da altura do mapa no
