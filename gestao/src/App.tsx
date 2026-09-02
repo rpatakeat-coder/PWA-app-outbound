@@ -18,6 +18,7 @@ import { Pessoas } from './telas/Pessoas';
 import { Semana } from './telas/Semana';
 import { Rotas } from './telas/Rotas';
 import { Acessos } from './telas/Acessos';
+import { DesativarAcesso } from './telas/DesativarAcesso';
 // Icones oficiais do kit. Named import, um arquivo por icone: o pacote NAO tem
 // export default nem barril em './icons' — o README e o llms.txt do proprio kit
 // erram os dois, e o import default volta undefined.
@@ -30,6 +31,11 @@ import { IconCar } from 'takeat-design-system-ui-kit/icons/IconCar';
 import { IconSearch } from 'takeat-design-system-ui-kit/icons/IconSearch';
 import { IconIdCard } from 'takeat-design-system-ui-kit/icons/IconIdCard';
 import { IconUserAdd } from 'takeat-design-system-ui-kit/icons/IconUserAdd';
+// O desenho pede `person_off`. O UI Kit nao tem esse glifo — a familia de
+// pessoa tem User, UserAdd, UserGroup, UserRefresh, UserError e UserCircle.
+// IconUserError e' o unico que diz "pessoa com pendencia"; IconLogout diria
+// "sair", e numa barra de navegacao isso e' lido como sair do cockpit.
+import { IconUserError } from 'takeat-design-system-ui-kit/icons/IconUserError';
 import { IconArrowFoward } from 'takeat-design-system-ui-kit/icons/IconArrowFoward';
 import { IconLightBulb } from 'takeat-design-system-ui-kit/icons/IconLightBulb';
 // A marca vem do kit como COMPONENTE, e nao de /marca/takeat-icon.svg: aquele
@@ -75,6 +81,10 @@ const ABAS = [
   // Ultima de proposito: e' a aba que menos se usa e a que mais custa errar.
   // `teto` 1600 porque a lista de contas e' tabela, nao leitura corrida.
   { id: 'acessos', rotulo: 'Acessos', descricao: 'Quem entra no app, e consegue trabalhar?', Icone: IconUserAdd, teto: 1600 },
+  // Nona e ultima. Vizinha da Acessos de proposito: criar e encerrar sao a
+  // mesma pergunta vista dos dois lados. `teto` 1600 porque sao duas colunas
+  // (lista de 420 + painel) e a 1200 o painel apertaria.
+  { id: 'desativar-acesso', rotulo: 'Desativar acesso', descricao: 'Quem sai, e quem fica com a carteira?', Icone: IconUserError, teto: 1600 },
 ] as const;
 
 type AbaId = (typeof ABAS)[number]['id'];
@@ -274,6 +284,7 @@ export default function App() {
           {aba === 'semana' && <Semana />}
           {aba === 'time' && <Cockpit />}
           {aba === 'acessos' && <Acessos />}
+          {aba === 'desativar-acesso' && <DesativarAcesso />}
         </div>
       </div>
     </>

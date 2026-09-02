@@ -230,3 +230,115 @@ export function criarUsuario(d: DadosNovoUsuario): Promise<RespostaCriacao> {
     senha: d.senha?.trim() ? d.senha : undefined,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Desativar acesso (G10). O que a aba nova precisa, e nada mais.
+// ---------------------------------------------------------------------------
+
+/** Quantos leads cada owner do HubSpot tem em mao.
+ *
+ *  Sem RPC nem view: sao ~1.100 linhas de UMA coluna, duas paginas do
+ *  PostgREST, ~1,3s. Trazer `clients` inteiro seria 5.800 linhas com 30
+ *  colunas — a diferenca que faz isto caber na lista, antes do clique.
+ *
+ *  RECORTE: so' `status = 'lead'`. E' o que o desenho conta, e e' o dano que
+ *  a tela existe pra evitar (lead sem dono some do mapa de todo mundo).
+ *  Cliente e churn com owner sao 4 linhas na base inteira e continuam
+ *  visiveis pra qualquer setor — ficam onde estao. */
+export async function carregarCarteiras(): Promise<Map<string, number>> {
+  const porOwner = new Map<string, number>();
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await supabase
+      .from('clients')
+      .select('vendedor_id_hubspot')
+      .eq('status', 'lead')
+      .not('vendedor_id_hubspot', 'is', null)
+      .range(de, de + 999);
+    if (error) throw error;
+    for (const c of data as any[]) {
+      const o = String(c.vendedor_id_hubspot);
+      porOwner.set(o, (porOwner.get(o) ?? 0) + 1);
+    }
+    if (data.length < 1000) break;
+  }
+  return porOwner;
+}
+
+export interface PedidoDeDesativacao {
+  /** profiles.id — a chave estavel, a mesma de auth.users. */
+  perfilId: string;
+  /** Owner de quem sai. null quando a pessoa nao tem id_hubspot. */
+  ownerDe: string | null;
+  /** Owner de quem assume. null quando nao ha' carteira a passar. */
+  ownerPara: string | null;
+}
+
+export interface ResultadoDesativacao {
+  ok: boolean;
+  /** Onde parou, quando nao deu ok. */
+  etapa?: 'transferencia' | 'revogacao' | 'classificacao';
+  erro?: string;
+  leadsMovidos: number;
+  revogado: boolean;
+  classificado: boolean;
+}
+
+/** As tres escritas, na ordem que o desenho exige: transferir → revogar →
+ *  classificar. Para na primeira falha.
+ *
+ *  A ORDEM NAO E' ARBITRARIA. Revogar antes de transferir produz exatamente o
+ *  estado que esta tela existe pra evitar: pessoa fora, carteira apontando pra
+ *  ela. Se a transferencia falha, nada mais acontece e a carteira continua
+ *  inteira com quem ainda tem acesso — reversivel por definicao.
+ *
+ *  A Edge internamente ja' faz ban → rename, pelo mesmo raciocinio invertido:
+ *  se o rename falhar, o pior caso e' alguem SEM acesso aparecendo ativo, e
+ *  nao alguem marcado como desativado ainda entrando. */
+export async function desativarAcesso(p: PedidoDeDesativacao): Promise<ResultadoDesativacao> {
+  const r: ResultadoDesativacao = { ok: false, leadsMovidos: 0, revogado: false, classificado: false };
+
+  // --- 1. transferir -------------------------------------------------------
+  if (p.ownerDe && p.ownerPara) {
+    const { data, error } = await supabase
+      .from('clients')
+      .update({ vendedor_id_hubspot: p.ownerPara })
+      .eq('vendedor_id_hubspot', p.ownerDe)
+      .eq('status', 'lead')
+      .select('id');
+    if (error) return { ...r, etapa: 'transferencia', erro: error.message };
+    r.leadsMovidos = data?.length ?? 0;
+  }
+
+  // --- 2. revogar (bane E renomeia; a Edge nao separa) ----------------------
+  const { data: dRev, error: eRev } = await supabase.functions.invoke('revogar-usuario', {
+    body: { id: p.perfilId },
+  });
+  if (eRev) {
+    let detalhe = eRev.message;
+    try {
+      const c = await (eRev as any).context?.json?.();
+      if (c?.error) detalhe = c.error;
+    } catch {
+      /* mantem a mensagem generica */
+    }
+    return { ...r, etapa: 'revogacao', erro: detalhe };
+  }
+  if ((dRev as any)?.error) return { ...r, etapa: 'revogacao', erro: (dRev as any).error };
+  r.revogado = true;
+
+  // --- 3. tirar do filtro de vendedor do app de campo -----------------------
+  // UPSERT, nao UPDATE: "sem linha" significa 'ativo', entao quem foi criado
+  // pela Acessos pode nao ter linha nenhuma — e ai' um UPDATE afetaria zero
+  // linhas EM SILENCIO, que e' a falha que nao parece falha.
+  const { error: eCls } = await supabase
+    .from('seller_classification')
+    .upsert({ seller_id: p.perfilId, status: 'nao_vendedor' }, { onConflict: 'seller_id' });
+  if (eCls) {
+    // Nao repete a Edge: ela ja' passou, e o estado dela esta' correto. Falta
+    // so' esta parte, e a tela diz qual e'.
+    return { ...r, etapa: 'classificacao', erro: eCls.message };
+  }
+  r.classificado = true;
+
+  return { ...r, ok: true };
+}
