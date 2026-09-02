@@ -9,10 +9,19 @@
 //   3. id_hubspot        — o owner do CRM. Sem ele o vendedor nao tem carteira:
 //                          `clients.vendedor_id_hubspot` nao casa com ninguem e
 //                          ele aparece com zero leads em todas as telas.
+//   4. sector            — o que a pessoa PODE VER. `sector_visibility` corta
+//                          `clients` por status, por setor: quem cai num setor
+//                          sem 'lead' abre o mapa e nao ve pin nenhum.
 //
-// O passo 3 e' o que mais some quando alguem cria usuario "na mao" pelo painel
-// do Supabase — e o sintoma (vendedor invisivel nos rankings) nao parece um
-// cadastro incompleto. Por isso ele e' um campo de primeira classe aqui.
+// Os passos 3 e 4 sao os que somem quando alguem cria usuario "na mao" pelo
+// painel do Supabase, e os dois sintomas nao parecem cadastro incompleto:
+// "vendedor invisivel nos rankings" e "o mapa nao carrega". Por isso os dois
+// sao campos de primeira classe aqui.
+//
+// O setor virou OBRIGATORIO em 02/09/2026, depois de uma vendedora ficar duas
+// semanas com o mapa vazio por ter nascido no setor default. Antes, a funcao
+// simplesmente nao escrevia a coluna e deixava o default do banco decidir —
+// que e' o pior lugar possivel pra essa decisao.
 //
 // POR QUE UMA EDGE FUNCTION, E NAO UMA TELA QUE CHAMA O BANCO
 // Criar login exige a service role key. Ela NAO pode ir pro navegador — quem a
@@ -31,10 +40,11 @@
 //   { "email": "joao@takeat.app",
 //     "nome": "João Silva",
 //     "id_hubspot": "12345678",  // obrigatorio — ver "CONFIGURACAO POR PESSOA"
+//     "setor": "Outbound",       // obrigatorio — precisa existir em sector_visibility
 //     "senha": "opcional",       // sem ela, uma temporaria e' gerada
 //     "dry_run": false }         // true valida tudo e NAO cria nada
 //
-//   201 -> { id, email, nome, role: "user", id_hubspot, senha?, aviso? }
+//   201 -> { id, email, nome, role: "user", id_hubspot, setor, senha?, aviso? }
 //   200 -> { id, ..., ja_existia: true }  — o e-mail ja tinha conta
 //   200 -> { ..., dry_run: true, pode_criar, problemas[] }
 //   400 -> dado faltando ou invalido, com a mensagem do que consertar
@@ -60,7 +70,7 @@
 //   curl -X POST https://<ref>.supabase.co/functions/v1/criar-usuario \
 //     -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
 //     -H "Content-Type: application/json" \
-//     -d '{"email":"joao@takeat.app","nome":"João Silva","id_hubspot":"12345678"}'
+//     -d '{"email":"joao@takeat.app","nome":"João Silva","id_hubspot":"12345678","setor":"Outbound"}'
 //
 // O id_hubspot voce pega no HubSpot em Settings -> Users & Teams, ou pela API
 // de owners (/crm/v3/owners).
@@ -140,6 +150,7 @@ Deno.serve(async (req) => {
   const email = String(corpo?.email ?? '').trim().toLowerCase();
   const nome = String(corpo?.nome ?? '').trim();
   const idHubspot = corpo?.id_hubspot ? String(corpo.id_hubspot).trim() : null;
+  const setor = corpo?.setor ? String(corpo.setor).trim() : null;
   const senhaInformada = corpo?.senha ? String(corpo.senha) : null;
   const dryRun = corpo?.dry_run === true;
 
@@ -165,13 +176,45 @@ Deno.serve(async (req) => {
         'mas aparece com zero leads em todas as telas — e o sintoma não parece cadastro incompleto.',
     });
   }
+  if (!setor) {
+    return json(400, {
+      error:
+        'Vendedor precisa do setor. Ele decide o que a pessoa enxerga: sector_visibility ' +
+        'corta clients por status, e quem cai num setor sem "lead" abre o mapa vazio. ' +
+        'Deixar o default do banco decidir isso já custou duas semanas de uma vendedora.',
+    });
+  }
+
+  // --- o setor existe, e libera lead? ---------------------------------------
+  // Setor inexistente e' erro de dado: RLS nao devolveria status NENHUM e a
+  // pessoa abriria o app sem nada. Setor que existe mas nao tem 'lead' e'
+  // legitimo (marketing, financeiro) — vira AVISO, nao bloqueio, porque nem
+  // toda conta e' de vendedor de rua.
+  const { data: regrasDoSetor } = await svc
+    .from('sector_visibility')
+    .select('status_slug')
+    .eq('sector', setor);
+  const statusDoSetor = (regrasDoSetor ?? []).map((r: any) => r.status_slug);
+  if (statusDoSetor.length === 0) {
+    const { data: todos } = await svc.from('sector_visibility').select('sector');
+    const conhecidos = [...new Set((todos ?? []).map((r: any) => r.sector))].sort();
+    return json(400, {
+      error: `O setor "${setor}" não existe em sector_visibility.`,
+      setores_validos: conhecidos,
+    });
+  }
+  const setorVeLead = statusDoSetor.includes('lead');
+  const avisoSetor = setorVeLead
+    ? undefined
+    : `O setor "${setor}" não enxerga leads (só ${statusDoSetor.join(', ')}). ` +
+      'Se a pessoa for vendedor de rua, ela vai abrir o mapa vazio.';
 
   // --- o e-mail ja tem conta? -----------------------------------------------
   // Precisa vir ANTES de qualquer escrita, e serve pros dois modos: no dry_run
   // e' o aviso, na criacao e' a idempotencia.
   const { data: perfilExistente } = await svc
     .from('profiles')
-    .select('id, email, full_name, role, id_hubspot')
+    .select('id, email, full_name, role, id_hubspot, sector')
     .eq('email', email)
     .maybeSingle();
 
@@ -221,7 +264,12 @@ Deno.serve(async (req) => {
       dry_run: true,
       pode_criar: problemas.length === 0,
       problemas,
-      aviso: owner.ok ? owner.motivo : undefined,
+      // Os dois avisos sao independentes e podem valer juntos: HubSpot fora do
+      // ar E setor sem lead. Somar num campo so' esconderia um deles.
+      aviso: [owner.ok ? owner.motivo : undefined, avisoSetor].filter(Boolean).join(' ') || undefined,
+      setor,
+      setor_ve_lead: setorVeLead,
+      setor_status: statusDoSetor,
       // Devolve o id de quem ja' existe: quem integra consegue gravar o
       // vinculo sem precisar de uma segunda chamada.
       id: (perfilExistente as any)?.id,
@@ -246,6 +294,7 @@ Deno.serve(async (req) => {
       nome: (perfilExistente as any).full_name,
       role: (perfilExistente as any).role,
       id_hubspot: (perfilExistente as any).id_hubspot,
+      setor: (perfilExistente as any).sector,
       ja_existia: true,
       aviso: 'Conta já existia; nada foi alterado. A senha não é recuperável — use recuperação de senha se preciso.',
     });
@@ -270,7 +319,7 @@ Deno.serve(async (req) => {
       // Corrida: alguem criou entre a consulta acima e este insert. Resolve
       // como idempotencia, e nao como erro — o resultado desejado aconteceu.
       const { data: agora } = await svc
-        .from('profiles').select('id, email, full_name, role, id_hubspot').eq('email', email).maybeSingle();
+        .from('profiles').select('id, email, full_name, role, id_hubspot, sector').eq('email', email).maybeSingle();
       return json(200, {
         id: (agora as any)?.id, email, nome: (agora as any)?.full_name ?? nome,
         role: (agora as any)?.role ?? PAPEL_FIXO, id_hubspot: (agora as any)?.id_hubspot ?? idHubspot,
@@ -289,7 +338,7 @@ Deno.serve(async (req) => {
   const { error: erroPerfil } = await svc
     .from('profiles')
     .upsert(
-      { id, email, full_name: nome, role: PAPEL_FIXO, id_hubspot: idHubspot },
+      { id, email, full_name: nome, role: PAPEL_FIXO, id_hubspot: idHubspot, sector: setor },
       { onConflict: 'id' },
     );
 
@@ -308,6 +357,8 @@ Deno.serve(async (req) => {
     nome,
     role: PAPEL_FIXO,
     id_hubspot: idHubspot,
+    setor,
+    setor_ve_lead: setorVeLead,
     // A senha aparece UMA vez, na resposta. Nao ha' SMTP neste projeto pra
     // mandar convite, entao o gestor precisa entregar a senha pra pessoa. Ela
     // nao fica guardada em lugar nenhum legivel: o banco so' tem o hash.
@@ -319,6 +370,7 @@ Deno.serve(async (req) => {
         ? null
         : 'Senha temporária gerada. Ela aparece só nesta resposta — copie agora e peça para a pessoa trocar no primeiro acesso.',
       owner.motivo,
+      avisoSetor,
     ].filter(Boolean).join(' ') || undefined,
   });
 });

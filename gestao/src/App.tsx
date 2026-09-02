@@ -17,6 +17,7 @@ import { Prospeccao } from './telas/Prospeccao';
 import { Pessoas } from './telas/Pessoas';
 import { Semana } from './telas/Semana';
 import { Rotas } from './telas/Rotas';
+import { Acessos } from './telas/Acessos';
 // Icones oficiais do kit. Named import, um arquivo por icone: o pacote NAO tem
 // export default nem barril em './icons' — o README e o llms.txt do proprio kit
 // erram os dois, e o import default volta undefined.
@@ -28,6 +29,7 @@ import { IconSchedule } from 'takeat-design-system-ui-kit/icons/IconSchedule';
 import { IconCar } from 'takeat-design-system-ui-kit/icons/IconCar';
 import { IconSearch } from 'takeat-design-system-ui-kit/icons/IconSearch';
 import { IconIdCard } from 'takeat-design-system-ui-kit/icons/IconIdCard';
+import { IconUserAdd } from 'takeat-design-system-ui-kit/icons/IconUserAdd';
 import { IconArrowFoward } from 'takeat-design-system-ui-kit/icons/IconArrowFoward';
 import { IconLightBulb } from 'takeat-design-system-ui-kit/icons/IconLightBulb';
 // A marca vem do kit como COMPONENTE, e nao de /marca/takeat-icon.svg: aquele
@@ -70,6 +72,9 @@ const ABAS = [
   { id: 'rotas', rotulo: 'Rotas', descricao: 'Ver, editar e montar a rota de cada vendedor', Icone: IconCar, teto: 1600 },
   { id: 'prospeccao', rotulo: 'Prospecção', descricao: 'O que entra no topo do funil?', Icone: IconSearch, teto: 1200 },
   { id: 'pessoas', rotulo: 'Pessoas', descricao: 'Quem precisa de mim no 1:1?', Icone: IconIdCard, teto: 1200 },
+  // Ultima de proposito: e' a aba que menos se usa e a que mais custa errar.
+  // `teto` 1600 porque a lista de contas e' tabela, nao leitura corrida.
+  { id: 'acessos', rotulo: 'Acessos', descricao: 'Quem entra no app, e consegue trabalhar?', Icone: IconUserAdd, teto: 1600 },
 ] as const;
 
 type AbaId = (typeof ABAS)[number]['id'];
@@ -268,6 +273,7 @@ export default function App() {
           {aba === 'pessoas' && <Pessoas />}
           {aba === 'semana' && <Semana />}
           {aba === 'time' && <Cockpit />}
+          {aba === 'acessos' && <Acessos />}
         </div>
       </div>
     </>
