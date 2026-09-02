@@ -77,11 +77,24 @@ O simulador é o padrão, porque é o que o Guilherme consegue olhar junto:
 ```
 open -a Simulator
 xcrun simctl boot "iPhone 17"                    # ignora erro se ja' estiver ligado
+pkill -f "http.server 4173"                      # SEMPRE antes de reexportar (ver abaixo)
 npx expo export --platform web --output-dir /tmp/appweb
 cd /tmp/appweb && python3 -m http.server 4173 &
 xcrun simctl openurl booted "http://localhost:4173/"
 xcrun simctl io booted screenshot /tmp/tela.png  # e ler a imagem
 ```
+
+- **Reexportar por cima do servidor ligado serve o build ANTIGO.** O `expo export`
+  apaga e recria `/tmp/appweb`; o `http.server` continua no diretório apagado e
+  entrega o bundle velho, com 200 em tudo. Em 02/09/2026 isso custou uma hora
+  caçando um bug que não existia: a tela mostrava o comportamento de antes da
+  correção. **É falso negativo — a validação "reprova" código que está certo.**
+  Mate o servidor antes de exportar, e confirme com:
+
+  ```
+  curl -s http://localhost:4173/ | grep -o 'index-[a-f0-9]*\.js'
+  ls /tmp/appweb/_expo/static/js/web/          # os dois hashes têm que bater
+  ```
 
 - **Isso abre o Safari do simulador, não o PWA.** `display-mode: standalone` fica
   falso e a área segura de baixo se comporta como aba. Para bug de PWA instalado,
