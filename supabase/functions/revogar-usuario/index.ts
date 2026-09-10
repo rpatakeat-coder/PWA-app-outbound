@@ -59,6 +59,33 @@ const json = (status: number, body: unknown) =>
     },
   });
 
+/** A credencial tem poder de service role?
+ *
+ *  COMPARAR STRING NAO BASTA. O env `SUPABASE_SERVICE_ROLE_KEY` guarda a chave
+ *  LEGADA (JWT `eyJ...`), mas o painel do Supabase hoje mostra o formato novo
+ *  (`sb_secret_...`) por padrao — as duas dao o mesmo poder e sao strings
+ *  diferentes. Quem copiava a do painel recebia "Credencial invalida" com a
+ *  chave certa na mao (aconteceu em 03/09/2026, na status-usuario).
+ *
+ *  E NAO da' pra resolver decodificando o JWT e olhando `role: service_role`:
+ *  sem verificar a assinatura, qualquer um forja esse claim. Entao a checagem
+ *  e' de CAPACIDADE — usamos a credencial numa rota que so' service role abre
+ *  (`auth.admin`), e quem valida a assinatura e' o GoTrue, nao nos.
+ *
+ *  O caminho caro so' roda quando a comparacao direta falha. */
+async function temPoderDeServico(cred: string): Promise<boolean> {
+  if (cred === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) return true;
+  try {
+    const teste = createClient(Deno.env.get('SUPABASE_URL')!, cred, {
+      auth: { persistSession: false },
+    });
+    const { error } = await teste.auth.admin.listUsers({ page: 1, perPage: 1 });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 function serviceClient() {
   return createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -75,11 +102,18 @@ Deno.serve(async (req) => {
   if (!credencial) return json(401, { error: 'Sem credencial' });
 
   const svc = serviceClient();
-  const ehServiceRole = credencial === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const ehServiceRole = await temPoderDeServico(credencial);
 
   if (!ehServiceRole) {
     const { data: userData, error: erroUser } = await svc.auth.getUser(credencial);
-    if (erroUser || !userData?.user) return json(401, { error: 'Credencial inválida' });
+    if (erroUser || !userData?.user) {
+      // Diz O QUE tentar: "Credencial invalida" mandava quem estava com a
+      // chave certa procurar problema no lugar errado.
+      return json(401, {
+        error: 'Credencial inválida — não é service role nem JWT de usuário.',
+        dica: 'Se for chave de painel, use a service_role em Settings → API. JWT de usuário expira em 1h.',
+      });
+    }
     const { data: perfil } = await svc
       .from('profiles').select('role').eq('id', userData.user.id).maybeSingle();
     if (perfil?.role !== 'gestor') return json(403, { error: 'Só gestor revoga acesso' });
