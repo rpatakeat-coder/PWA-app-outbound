@@ -70,7 +70,7 @@ Troque `SUA_CHAVE` pela service role key. Base:
 ```bash
 BASE=https://mxyjvijclhlxrlafqcrz.supabase.co/functions/v1
 
-# consultar
+# consultar (e-mail e' o padrao)
 curl -s "$BASE/status-usuario?email=joao@takeat.app" \
   -H "Authorization: Bearer SUA_CHAVE"
 
@@ -268,15 +268,21 @@ o vínculo sem uma segunda chamada.
 
 ## 3. Consultar — `GET /status-usuario`
 
-Só leitura, em todos os caminhos. Responde por `id` (preferido) ou `email`:
+Só leitura, em todos os caminhos. **O padrão é consultar por e-mail** — quem
+integra costuma ter o e-mail em mãos, não o uuid:
 
 ```
-GET /status-usuario?id=8f14e45f-...
 GET /status-usuario?email=joao@takeat.app
+GET /status-usuario?id=8f14e45f-...        # forma exata, quando você já tem o uuid
 ```
 
-`POST` com `{ "id" }` ou `{ "email" }` faz a mesma coisa — alguns clientes de
-fila só sabem mandar POST.
+`POST` com `{ "email" }` ou `{ "id" }` faz a mesma coisa — alguns clientes de
+fila só sabem mandar POST. Mandando os dois, o `id` vence.
+
+Repare no contraste com a revogação, logo abaixo: **consultar por e-mail é
+barato de errar, revogar não é.** Ler com o identificador errado custa uma
+resposta inútil; revogar com o identificador errado tira o acesso da pessoa
+errada, e isso não tem desfazer.
 
 ### O campo que vale a chamada: `pode_trabalhar.impedimentos`
 

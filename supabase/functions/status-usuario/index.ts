@@ -18,10 +18,17 @@
 // reimplementar a regra.
 //
 // GET https://<ref>.supabase.co/functions/v1/status-usuario?email=joao@takeat.app
-// GET .../status-usuario?id=<uuid>
 //   Authorization: Bearer <service role key ou JWT de um gestor>
 //
-// POST com { "id" } ou { "email" } faz a mesma coisa — alguns clientes de fila
+// E-MAIL E' O PADRAO. Quem integra costuma ter o e-mail em mãos, nao o uuid, e
+// exigir o uuid so' empurra pra quem chama um trabalho de traducao que esta
+// rota ja' faz. `?id=<uuid>` continua valendo como forma exata.
+//
+// Mandando os DOIS, o `id` vence: ele e' a chave de verdade, e discordancia
+// entre os dois e' bug de quem chama — resolver pelo mais preciso e' o que
+// erra menos.
+//
+// POST com { "email" } ou { "id" } faz a mesma coisa — alguns clientes de fila
 // so' sabem mandar POST.
 //
 //   200 -> o objeto de status (abaixo)
@@ -144,14 +151,16 @@ Deno.serve(async (req) => {
     if (quemChamou?.role !== 'gestor') return json(403, { error: 'Só gestor consulta status' });
   }
 
-  // --- id ou email, de query string (GET) ou corpo (POST) -------------------
+  // --- email (padrao) ou id, de query string (GET) ou corpo (POST) ----------
+  // A ordem de leitura nao decide precedencia: quem decide e' o `id ? ... : ...`
+  // da consulta abaixo. Mandar os dois resolve pelo id.
   const url = new URL(req.url);
   const corpo = req.method === 'POST' ? await req.json().catch(() => null) : null;
   const id = (url.searchParams.get('id') ?? corpo?.id ?? '').toString().trim() || null;
   const email = (url.searchParams.get('email') ?? corpo?.email ?? '').toString().trim().toLowerCase() || null;
 
   if (!id && !email) {
-    return json(400, { error: 'Informe `id` (preferido) ou `email`.' });
+    return json(400, { error: 'Informe `email` (padrão) ou `id`.' });
   }
 
   // --- o perfil -------------------------------------------------------------
@@ -167,6 +176,9 @@ Deno.serve(async (req) => {
     // 404 com `existe: false` explicito: quem integra fecha como "nao ha' conta"
     // e NAO gasta retry.
     return json(404, {
+      // Nomeia o identificador que a CONSULTA usou, nao o "padrao". Mandando
+      // os dois, a busca foi pelo id — dizer "nenhum usuario com e-mail X"
+      // mandaria quem chama conferir o campo errado.
       error: id ? `Nenhum usuário com id ${id}.` : `Nenhum usuário com e-mail ${email}.`,
       existe: false,
     });
