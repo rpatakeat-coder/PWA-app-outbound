@@ -53,10 +53,24 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 const HS = 'https://api.hubapi.com';
 const FETCH_TIMEOUT_MS = 12_000;
 
-// IDs herdados do workflow do n8n — manter sincronizados com o HubSpot.
-const CREATE_PIN_PIPELINE_ID = '118032977';
-const CREATE_PIN_STAGE_ID = '1319906944';
-const GET_STAGES_PIPELINE_ID = '916011864';
+// Pipeline e etapas do HubSpot. LER e ESCREVER no mesmo pipeline: ate
+// 10/09/2026 o create_pin criava no 118032977 enquanto o get_stages lia do
+// 916011864 (Field Sales) — duas verdades sobre onde o lead do app vive.
+//
+// O QUE ACONTECEU: os ids antigos eram herdados do workflow do n8n, com o
+// comentario "manter sincronizados com o HubSpot". Em 10/09/2026, entre
+// 17:55 do dia anterior (ultimo sucesso) e 10:56, o 118032977 deixou de
+// existir no portal. A partir dali TODO cadastro de lead falhou: o HubSpot
+// respondeu 400 "1319906944 is not a valid pipeline stage ID" em cada
+// chamada, e o app continuou dizendo "Cliente cadastrado" por cima — o erro
+// cai num console.warn de bloco em background.
+//
+// Agora os dois apontam pro mesmo lugar, e a etapa de entrada e' a MESMA
+// que `FUNNEL_STAGE_IDS[0]` declara em src/constants/stages.ts. Se o funil
+// mudar no HubSpot, os dois arquivos mudam juntos.
+const CREATE_PIN_PIPELINE_ID = '916011864';  // Field Sales
+const CREATE_PIN_STAGE_ID = '1395880469';    // Prospecção — 1a etapa do funil
+const GET_STAGES_PIPELINE_ID = '916011864';  // o mesmo, de proposito
 const HUBSPOT_PORTAL_ID = '24373118';
 // Associacoes HUBSPOT_DEFINED: 3 = deal -> contact, 214 = note -> deal,
 // 212 = meeting -> deal, 216 = task -> deal (ids default do HubSpot).
