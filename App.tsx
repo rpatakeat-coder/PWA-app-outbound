@@ -803,7 +803,7 @@ function MainApp() {
   const waitingForLocation = showOnlyMyArea && !userLocation && locationPermission === 'pending';
   const areaPermissionDenied = showOnlyMyArea && locationPermission === 'denied';
 
-  const { clients: clientsNaArea, statuses: dynamicStatuses, allowedStatuses, isLoading, jaCarregouAlgumaVez, error, deleteClient, addClient, updateClient, markAsVisited, ensureHubspotDeal, dismissContaAlvo } = useClients({
+  const { clients: clientsNaArea, statuses: dynamicStatuses, allowedStatuses, reenviarParaHubspot, isLoading, jaCarregouAlgumaVez, error, deleteClient, addClient, updateClient, markAsVisited, ensureHubspotDeal, dismissContaAlvo } = useClients({
     // Filtro ligado: só a área visível. Desligado: base inteira (é o modo do
     // gestor olhando o país todo — pesado por natureza, e agora é escolha
     // explícita em vez de padrão).
@@ -3357,6 +3357,29 @@ function MainApp() {
         selectedClient.vendedor_id_hubspot
           ? vendorById.get(selectedClient.vendedor_id_hubspot)?.full_name ?? null
           : null
+      }
+      onReenviarHubspot={
+        isViewer
+          ? undefined
+          : async () => {
+              const c = selectedClient;
+              const dono = c.vendedor_id_hubspot
+                ? vendorById.get(c.vendedor_id_hubspot)?.full_name ?? ''
+                : '';
+              const r = await reenviarParaHubspot(c, dono);
+              if (r.ok) {
+                // Atualiza o snapshot aberto: sem isto o alerta continuaria na
+                // tela mesmo depois de resolvido, ate fechar e reabrir a ficha.
+                const { data } = await supabase
+                  .from('clients').select('id_hubspot, url_hubspot').eq('id', c.id).maybeSingle();
+                setSelectedClient({
+                  ...c,
+                  id_hubspot: (data as any)?.id_hubspot ?? c.id_hubspot,
+                  url_hubspot: (data as any)?.url_hubspot ?? c.url_hubspot,
+                });
+              }
+              return r;
+            }
       }
     />
   ) : null;
@@ -6309,6 +6332,7 @@ function ClientBottomSheet({
   canWriteNotes = true,
   onSavePhone,
   responsavelNome,
+  onReenviarHubspot,
 }: {
   client: Client;
   insets: { bottom: number };
@@ -6327,6 +6351,8 @@ function ClientBottomSheet({
   onChangeStage?: () => void;
   onRescheduleMeeting?: (m: ClientMeeting) => void;
   onCancelMeeting?: (m: ClientMeeting) => void;
+  /** Reenvia o lead pro HubSpot. Devolve se deu certo, pra a faixa dizer. */
+  onReenviarHubspot?: () => Promise<{ ok: boolean; erro?: string }>;
   isMarkingVisited: boolean;
   onAddToRoute?: () => void;
   canWriteNotes?: boolean;
@@ -6496,6 +6522,24 @@ function ClientBottomSheet({
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
   }, [notes, stageChanges, meetings, client.visited_at, visits]);
+
+  // ── Nao chegou ao HubSpot ────────────────────────────────────────────────
+  // `id_hubspot` vazio E' o sinal — nao precisa de coluna nova. A criacao do
+  // deal roda em BACKGROUND depois do insert, e ate 10/09/2026 falhar ali era
+  // invisivel: o erro caia num console.warn e a tela dizia "Cliente
+  // cadastrado" do mesmo jeito. Foi assim que 31 leads ficaram fora do CRM sem
+  // ninguem perceber por dois dias.
+  //
+  // A CARENCIA de 2 minutos existe porque o enriquecimento normal leva de 1 a
+  // 3 segundos: sem ela, todo lead recem-criado abriria a ficha acusando um
+  // problema que ainda nem teve tempo de acontecer.
+  const [reenviando, setReenviando] = useState(false);
+  const [reenvioErro, setReenvioErro] = useState<string | null>(null);
+  const CARENCIA_MS = 2 * 60_000;
+  const semHubspot =
+    !client.id_hubspot &&
+    !!client.created_at &&
+    Date.now() - new Date(client.created_at).getTime() > CARENCIA_MS;
 
   const approxReasons: string[] = [];
   if (!client.numero) approxReasons.push('Endereço sem número');
@@ -6924,6 +6968,59 @@ function ClientBottomSheet({
           IconWarning,
           texto,
           null,
+        ),
+      );
+    }
+
+    // 2.5 · nao chegou ao HubSpot — antes de tudo que vem depois. Sem deal o
+    // lead nao existe pro CRM: falar de SLA ou de geocodificacao de um lead
+    // que o time nao enxerga e' discutir o acabamento de uma casa sem parede.
+    if (semHubspot) {
+      linhas.push(
+        linha(
+          'sem-hubspot',
+          'var(--tint-red-text)',
+          'var(--tint-red)',
+          'var(--tint-red-text)',
+          IconWarning,
+          'Não chegou ao HubSpot',
+          <>
+            <Text style={[styles.alertaDetalhe, { color: 'var(--tint-red-text)' }]}>
+              O lead está salvo aqui, mas não virou negócio no CRM — ninguém vê no funil.
+            </Text>
+            {reenvioErro ? (
+              <Text style={[styles.alertaDetalhe, { color: 'var(--tint-red-text)' }]}>
+                {reenvioErro}
+              </Text>
+            ) : null}
+            {onReenviarHubspot ? (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Enviar este lead para o HubSpot de novo"
+                // Mesmo hitSlop do "por quê?": a caixa e' de uma linha, o alvo
+                // precisa ser de 48.
+                hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                disabled={reenviando}
+                onPress={async () => {
+                  setReenviando(true);
+                  setReenvioErro(null);
+                  const r = await onReenviarHubspot();
+                  // Sem setReenviando(false) no sucesso de proposito: a ficha
+                  // vai re-renderizar sem a faixa, e piscar "tentar de novo"
+                  // antes disso sugeriria que nao funcionou.
+                  if (!r.ok) {
+                    setReenviando(false);
+                    setReenvioErro(r.erro ?? 'Não consegui. Tente de novo em instantes.');
+                  }
+                }}
+                style={styles.alertaPorQue}
+              >
+                <Text style={[styles.alertaPorQueTexto, { color: 'var(--tint-red-text)' }]}>
+                  {reenviando ? 'enviando…' : 'tentar de novo'}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </>,
         ),
       );
     }

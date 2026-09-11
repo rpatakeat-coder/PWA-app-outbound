@@ -90,6 +90,39 @@ export function useClientSearch(term: string) {
   });
 }
 
+/** Corpo do `create_pin`. Extraido pra o REENVIO usar exatamente o mesmo que o
+ *  cadastro — dois formatos divergindo seria a proxima surpresa silenciosa.
+ *
+ *  `ownerId` e' parametro em vez de sair do profile: no cadastro o dono e' quem
+ *  esta criando; no reenvio o lead ja' tem dono, e recriar o deal em nome de
+ *  quem clicou "tentar de novo" roubaria o lead (foi o incidente "Acaraje da
+ *  Pri", 29/07/2026). */
+function payloadCreatePin(c: Client, ownerId: string, ownerNome: string): Record<string, unknown> {
+  return {
+    type: 'create_pin',
+    // uuid do pin no app — a edge grava como id_pin_app_outbound e DEDUPLICA
+    // por ele. E' o que torna o reenvio seguro: nao nasce um segundo deal.
+    id: c.id,
+    bairro: c.bairro,
+    celular: c.telefone,
+    cep: c.cep,
+    cidade: c.cidade,
+    dealname: c.empresa ?? c.nome,
+    email: c.email,
+    estado_uf: c.estado,
+    id_hubspot: c.id_hubspot,
+    latitude: c.latitude !== null ? String(c.latitude) : null,
+    logradouro: c.endereco,
+    longitude: c.longitude !== null ? String(c.longitude) : null,
+    nome: c.nome,
+    numero_do_local: c.numero,
+    observacoes: c.observacoes,
+    url: c.url_hubspot,
+    vendedor_id: ownerId,
+    vendedor_nome: ownerNome,
+  };
+}
+
 export function useClients(
   opts: {
     areaFilter?: AreaFilter | null;
@@ -311,29 +344,10 @@ export function useClients(
         };
 
         try {
-          const body = await sendHubspotEvent({
-            type: 'create_pin',
-            // uuid do pin no app — a edge function usa pra gravar o
-            // id_pin_app_outbound no deal, o id_hubspot em clients e dedupe.
-            id: client.id,
-            bairro: client.bairro,
-            celular: client.telefone,
-            cep: client.cep,
-            cidade: client.cidade,
-            dealname,
-            email: client.email,
-            estado_uf: client.estado,
-            id_hubspot: client.id_hubspot,
-            latitude: client.latitude !== null ? String(client.latitude) : null,
-            logradouro: client.endereco,
-            longitude: client.longitude !== null ? String(client.longitude) : null,
-            nome: client.nome,
-            numero_do_local: client.numero,
-            observacoes: client.observacoes,
-            url: client.url_hubspot,
-            vendedor_id: profile?.id_hubspot ?? '',
-            vendedor_nome: profile?.full_name ?? '',
-          });
+          const body = await sendHubspotEvent(
+            // No cadastro o dono e' quem esta criando o pin.
+            payloadCreatePin(client, profile?.id_hubspot ?? '', profile?.full_name ?? ''),
+          );
 
           const applied = await applyIdFromResponse(body);
           if (!applied) {
@@ -744,8 +758,42 @@ export function useClients(
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
   });
 
+  /** Reenvia um lead que nao chegou ao HubSpot.
+   *
+   *  SEGURO DE REPETIR: a edge deduplica pelo uuid do pin, entao um lead que
+   *  na verdade JA' tem deal recebe de volta o mesmo id, nao um segundo.
+   *
+   *  Em erro NAO desiste na hora: a edge pode ter criado o deal e gravado o id
+   *  server-side com a resposta se perdendo no caminho. Quem decide se deu
+   *  certo e' o BANCO, nao o retorno HTTP — mesmo raciocinio do cadastro. */
+  async function reenviarParaHubspot(
+    client: Client,
+    ownerNome: string,
+  ): Promise<{ ok: boolean; erro?: string }> {
+    let erro: string | undefined;
+    try {
+      await sendHubspotEvent(
+        // O dono e' o do LEAD, nunca quem clicou: reenviar nao pode reatribuir.
+        payloadCreatePin(client, client.vendedor_id_hubspot ?? '', ownerNome),
+      );
+    } catch (err) {
+      erro = err instanceof Error ? err.message : String(err);
+    }
+
+    const { data } = await supabase
+      .from('clients')
+      .select('id_hubspot')
+      .eq('id', client.id)
+      .maybeSingle();
+    queryClient.invalidateQueries({ queryKey: ['clients'] });
+
+    if ((data as any)?.id_hubspot) return { ok: true };
+    return { ok: false, erro: erro ?? 'O HubSpot não devolveu o negócio.' };
+  }
+
   return {
     clients: query.data ?? [],
+    reenviarParaHubspot,
     statuses: statusesQuery.data ?? [],
     // Status que o SETOR da pessoa libera (sector_visibility). A tela precisa
     // disso pra explicar um recorte vazio: sem ele, "0 leads" tem a mesma cara
