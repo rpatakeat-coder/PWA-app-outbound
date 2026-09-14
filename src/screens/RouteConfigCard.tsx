@@ -107,7 +107,7 @@ export function RouteConfigCard() {
               <View style={styles.row}>
                 <Field label="Demo/Proposta" k="sla_demo" />
                 <Field label="Negociação" k="sla_negociacao" />
-                <Field label="Ag. Pagamento" k="sla_ag_pagamento" />
+                <Field label="Pagamento" k="sla_ag_pagamento" />
               </View>
 
               <TouchableOpacity

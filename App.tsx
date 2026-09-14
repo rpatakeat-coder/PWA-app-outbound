@@ -200,8 +200,8 @@ const PIPE_ANTIGO_LABEL = 'Pipe Antigo';
 // e dos chips de filtro (igual ao HubSpot).
 const NEW_PIPELINE_STAGE_LABELS = [
   'Backlog', 'Reciclagem', 'Prospecção', 'Visita', 'Conversa com decisor',
-  'Demo/Proposta', 'Negociação', 'Ag. Pagamento', 'Negócio Fechado',
-  'Enviado Onboarding', 'Perdido',
+  'Demo/Proposta', 'Negociação', 'Pagamento', 'Ganho',
+  'Onboarding', 'Perdido',
 ];
 const foldLabel = (s: string) =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();

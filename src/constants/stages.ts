@@ -128,7 +128,7 @@ export const WON_STAGE_IDS = ['1396006162', '1396006163'];
 // Backlog/Reciclagem (ou sem etapa) reentra pela 1a etapa do funil (Prospecção).
 //
 // FUNNEL_STAGE_IDS: sequencia de progressao (avancar 1 por vez). A ordem aqui
-// e' a ordem canonica do funil comercial. Enviado Onboarding e' o fim do
+// e' a ordem canonica do funil comercial. Onboarding e' o fim do
 // funil ganho.
 export const FUNNEL_STAGE_IDS = [
   '1395880469', // Prospecção
@@ -136,9 +136,9 @@ export const FUNNEL_STAGE_IDS = [
   '1395880470', // Conversa com decisor (ex-Diagnóstico)
   '1395880471', // Demo/Proposta
   '1395880472', // Negociação
-  '1395880473', // Ag. Pagamento
-  '1396006162', // Negócio Fechado
-  '1396006163', // Enviado Onboarding
+  '1395880473', // Pagamento
+  '1396006162', // Ganho
+  '1396006163', // Onboarding
 ];
 
 // Saida sempre disponivel como destino no app (a qualquer momento do funil).
@@ -290,7 +290,7 @@ export const STAGES: Stage[] = [
   },
   {
     id: '1395880473',
-    label: 'Ag. Pagamento',
+    label: 'Pagamento',
     color: '#0ea5e9',
     subFields: [
       {
@@ -409,10 +409,10 @@ export const STAGES: Stage[] = [
   // Negócio Fechado. Etapa de fechamento-ganho; sem sub-campos proprios.
   // Existe no fallback pra o funil ficar completo mesmo sem o get_stages
   // ter carregado.
-  { id: '1396006162', label: 'Negócio Fechado', color: '#16a34a' },
+  { id: '1396006162', label: 'Ganho', color: '#16a34a' },
   {
     id: '1396006163',
-    label: 'Enviado Onboarding',
+    label: 'Onboarding',
     color: '#10b981',
     subFields: [
       {

@@ -39,7 +39,7 @@ const COR_DA_ETAPA: Record<string, string> = {
   'Conversa com decisor': 'var(--violet-text)',
   'Demo/Proposta': '#FFB32F',
   'Negociação': '#f97316',
-  'Ag. Pagamento': '#0ea5e9',
+  'Pagamento': '#0ea5e9',
 };
 
 /**

@@ -56,7 +56,7 @@ const ordem = new Map([
   ['Conversa com decisor', 1],
   ['Demo/Proposta', 2],
   ['Negociação', 3],
-  ['Ag. Pagamento', 4],
+  ['Pagamento', 4],
 ]);
 ok('subiu uma etapa', ehAvanco('Prospecção', 'Conversa com decisor', ordem), true);
 ok('pulou etapas ainda e avanco', ehAvanco('Prospecção', 'Negociação', ordem), true);

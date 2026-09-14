@@ -21,7 +21,7 @@ export const ETAPAS_FUNIL = [
   'Conversa com decisor',
   'Demo/Proposta',
   'Negociação',
-  'Ag. Pagamento',
+  'Pagamento',
 ] as const;
 
 export interface RegraSla {
