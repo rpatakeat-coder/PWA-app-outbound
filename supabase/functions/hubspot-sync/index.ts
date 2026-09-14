@@ -416,6 +416,77 @@ async function handleQualificar(token: string, body: Record<string, unknown>) {
   return json(200, { ok: true, id_hubspot: idHubspot, gravadas: Object.keys(properties) });
 }
 
+// ===== list_tasks =====
+// As tarefas do vendedor que vivem NO CRM.
+//
+// O app tem tarefas proprias (`client_tasks`, geradas por regra no banco), mas
+// o Cockpit de gestao cria Task no HubSpot -- visita posta no planejamento da
+// semana, follow up do funil -- e o vendedor nunca as via. Em 14/09/2026 havia
+// 78 pendentes so' para um executivo.
+//
+// SO' LEITURA, e so' do PROPRIO dono: `owner_id` vem do perfil de quem chama,
+// e a rota nao aceita pedir a lista de outro. O recorte por pessoa e' o mesmo
+// do resto do app.
+//
+// A interpretacao do corpo (o marcador COCKPIT:PLANO:...) NAO acontece aqui:
+// fica em src/utils/tarefasDoCrm.ts, que e' modulo puro e tem teste. Aqui so'
+// buscamos e devolvemos cru -- regra em Deno nao da' pra testar nesta casa.
+async function handleListTasks(token: string, body: Record<string, unknown>) {
+  const ownerId = trimOrNull(body.owner_id);
+  if (!ownerId) return json(400, { error: 'owner_id e obrigatorio' });
+
+  const de = toIso(body.de);
+  const ate = toIso(body.ate);
+  if (!de || !ate) return json(400, { error: 'de e ate sao obrigatorios (ISO)' });
+
+  const busca = await hsFetch(token, 'POST', '/crm/v3/objects/tasks/search', {
+    filterGroups: [
+      {
+        filters: [
+          { propertyName: 'hubspot_owner_id', operator: 'EQ', value: ownerId },
+          // Só o que ainda está em aberto: tarefa concluída é histórico, e o
+          // vendedor está perguntando o que fazer agora.
+          { propertyName: 'hs_task_status', operator: 'EQ', value: 'NOT_STARTED' },
+          {
+            propertyName: 'hs_timestamp',
+            operator: 'BETWEEN',
+            value: String(new Date(de).getTime()),
+            highValue: String(new Date(ate).getTime()),
+          },
+        ],
+      },
+    ],
+    properties: [
+      'hs_task_subject',
+      'hs_task_body',
+      'hs_task_status',
+      'hs_timestamp',
+      'hs_task_type',
+    ],
+    sorts: [{ propertyName: 'hs_timestamp', direction: 'ASCENDING' }],
+    limit: 100,
+  });
+
+  if (!busca.ok) {
+    return json(502, {
+      error: 'HubSpot recusou a busca de tarefas',
+      detail: busca.body?.message ?? `status ${busca.status}`,
+    });
+  }
+
+  const tarefas = (busca.body?.results ?? []).map((t: any) => ({
+    id: String(t.id),
+    assunto: t.properties?.hs_task_subject ?? '',
+    corpo: t.properties?.hs_task_body ?? '',
+    vence_em: t.properties?.hs_timestamp ?? null,
+    status: t.properties?.hs_task_status ?? null,
+  }));
+
+  // `total` vem separado de proposito: 100 e' o teto de uma pagina, e uma tela
+  // que mostra 100 de 178 sem dizer que ha' mais mente por omissao.
+  return json(200, { tarefas, total: busca.body?.total ?? tarefas.length });
+}
+
 // ===== create_pin =====
 // Ramo "Pin Criado" do n8n: cria contato (ou acha o existente via mensagem de
 // conflito), cria o deal no pipeline/etapa de entrada, associa os dois e
@@ -757,6 +828,8 @@ Deno.serve(async (req: Request) => {
         return await handleUpdate(token, body);
       case 'qualificar':
         return await handleQualificar(token, body);
+      case 'list_tasks':
+        return await handleListTasks(token, body);
       case 'create_pin':
         return await handleCreatePin(token, body);
       case 'get_stages':
