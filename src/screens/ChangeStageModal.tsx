@@ -27,6 +27,7 @@ import {
   STAGES,
   type Stage,
   type StageSubField,
+  camposQueSeAplicam,
 } from '../constants/stages';
 import { useStages } from '../hooks/useStages';
 import { useStagePropertyOptions } from '../hooks/useStagePropertyOptions';
@@ -550,7 +551,15 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
 
   const selectedStage: Stage | null =
     visibleStages.find((s) => s.id === selectedStageId) ?? null;
-  const subFields = selectedStage?.subFields ?? [];
+  // Campo condicional (hoje so' o `adquirente`) so' entra quando o campo de
+  // que ele depende ja' tem o valor que o justifica. Fica FORA da lista quando
+  // nao se aplica, entao nao aparece na tela E nao entra no `allFilled` —
+  // exigir preenchimento de um campo invisivel travaria o botao sem dizer por
+  // que, que e' a familia de defeito que travou uma vendedora hoje.
+  const subFields = camposQueSeAplicam(selectedStage?.subFields ?? [], {
+    ...subValues,
+    ...subValuesMulti,
+  });
 
   // Libera submit quando todos os obrigatorios estao preenchidos e validos.
   // Optionals podem estar vazios; se preenchidos tambem precisam ser validos.

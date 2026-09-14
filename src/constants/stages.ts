@@ -14,6 +14,22 @@ type SubFieldBase = {
   field: string;
   fieldLabel: string;
   optional?: boolean;
+  /**
+   * Campo CONDICIONAL: so' aparece (e so' e' exigido) quando outro campo desta
+   * mesma etapa contem um dos valores listados.
+   *
+   * Existe por causa do `adquirente`: ele so' faz sentido quando o cliente
+   * leva Maquininha POS, porque e' a maquininha que integra com a adquirente.
+   * Medido no HubSpot em 14/09/2026: dos negocios do Field Sales, ZERO tem
+   * `adquirente` preenchido sem "Maquininha POS" no `adicional` — e 107 tem a
+   * maquininha SEM a adquirente, que sao justamente os que passaram pelo app,
+   * onde o campo nem existia.
+   *
+   * Pedir sempre seria pior: obrigaria a responder "Sem adquirente" em toda
+   * venda sem maquininha, e um campo que a pessoa aprende a despachar no
+   * automatico deixa de ser resposta.
+   */
+  dependeDe?: { field: string; contemAlgum: string[] };
 };
 
 export type StageSubField =
@@ -316,6 +332,26 @@ export const STAGES: Stage[] = [
         multi: true,
       },
       {
+        // Condicional: ver `dependeDe` em SubFieldBase. As opcoes vem do
+        // banco como as outras; se `stage_property_options` ainda nao tiver
+        // `adquirente`, este fallback segura — sao os 8 valores que o HubSpot
+        // declara hoje.
+        field: 'adquirente',
+        fieldLabel: 'Adquirente da maquininha',
+        kind: 'select',
+        options: [
+          'Sem adquirente',
+          'Stone',
+          'Getnet',
+          'Rede',
+          'Cielo',
+          'Picpay',
+          'Pagbank',
+          'Maquinona Ifood',
+        ],
+        dependeDe: { field: 'adicional', contemAlgum: ['Maquininha POS'] },
+      },
+      {
         field: 'tipo_de_pagamento',
         fieldLabel: 'Tipo de pagamento',
         kind: 'select',
@@ -509,4 +545,29 @@ export function hubspotStageToStage(raw: HubSpotStageRaw, cycleIndex: number): S
     isClosed,
     probability,
   };
+}
+
+/**
+ * Quais campos da etapa realmente se aplicam, dados os valores escolhidos até
+ * agora. Campo condicional que não se aplica fica de FORA da lista — então não
+ * aparece na tela e não entra na checagem de "tudo preenchido".
+ *
+ * Essa segunda parte é a que importa: exigir preenchimento de um campo
+ * invisível travaria o botão sem dizer por quê, que é a mesma família de
+ * defeito que travou uma vendedora em 14/09/2026 (o app mandava um valor que o
+ * HubSpot recusava, e a mensagem falava em conexão).
+ *
+ * `valores` aceita string ou array porque multi-select guarda array — o
+ * `adicional`, de que o `adquirente` depende, é multi.
+ */
+export function camposQueSeAplicam(
+  subFields: readonly StageSubField[],
+  valores: Record<string, string | string[] | undefined>,
+): StageSubField[] {
+  return subFields.filter((sf) => {
+    if (!sf.dependeDe) return true;
+    const bruto = valores[sf.dependeDe.field];
+    const escolhidos = Array.isArray(bruto) ? bruto : bruto ? [bruto] : [];
+    return sf.dependeDe.contemAlgum.some((v) => escolhidos.includes(v));
+  });
 }

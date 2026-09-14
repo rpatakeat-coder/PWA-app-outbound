@@ -17,7 +17,7 @@
 // Ela é uma CÓPIA, e cópia diverge: se uma propriedade virar enum lá e ninguém
 // atualizar aqui, esta guarda não pega. O que ela garante é o contrário —
 // que ninguém transforme de volta em texto o que já sabemos ser enum.
-import { STAGES, type StageSubField } from './stages';
+import { STAGES, camposQueSeAplicam, type StageSubField } from './stages';
 
 /** Propriedades que o HubSpot declara como `enumeration`. */
 const ENUM_NO_HUBSPOT = new Set([
@@ -29,6 +29,7 @@ const ENUM_NO_HUBSPOT = new Set([
   'deseja_criar_perfil_no_asaas_',
   'origem_do_lead',
   'gargalo_operacional',
+  'adquirente',
   'plano_apresentado',
   'motivo_do_perdido',
 ]);
@@ -85,6 +86,43 @@ for (const obrigatorio of [
 ]) {
   ok(`  coleta ${obrigatorio}`, campos.includes(obrigatorio), true);
 }
+
+console.log('\n--- adquirente so aparece com Maquininha POS ---');
+// Medido no HubSpot em 14/09/2026: ZERO negocios do Field Sales tem
+// `adquirente` sem "Maquininha POS" no `adicional`, e 107 tem a maquininha SEM
+// a adquirente — os que passaram pelo app, onde o campo nem existia.
+const daEtapa = (pagamento?.subFields ?? []) as StageSubField[];
+const nomes = (vs: Record<string, string | string[] | undefined>) =>
+  camposQueSeAplicam(daEtapa, vs).map((c) => c.field);
+
+ok('sem adicional escolhido, nao pede', nomes({}).includes('adquirente'), false);
+ok(
+  'com "Sem adicionais", nao pede',
+  nomes({ adicional: ['Sem adicionais'] }).includes('adquirente'),
+  false,
+);
+ok(
+  'com Maquininha POS, PEDE',
+  nomes({ adicional: ['Maquininha POS'] }).includes('adquirente'),
+  true,
+);
+ok(
+  'multi: maquininha junto de outro adicional, PEDE',
+  nomes({ adicional: ['Multilojas', 'Maquininha POS'] }).includes('adquirente'),
+  true,
+);
+ok(
+  'outro adicional sozinho nao pede',
+  nomes({ adicional: ['Tablet', 'Dark Kitchen'] }).includes('adquirente'),
+  false,
+);
+ok(
+  'os campos incondicionais nao somem nunca',
+  nomes({}).includes('cnpj_cpf') && nomes({ adicional: ['Maquininha POS'] }).includes('cnpj_cpf'),
+  true,
+);
+// Se o campo sair da etapa, estes testes passariam em branco.
+ok('o adquirente existe na etapa', daEtapa.some((c) => c.field === 'adquirente'), true);
 
 console.log(falhas === 0 ? '\nTODOS PASSARAM' : `\n${falhas} FALHARAM`);
 if (falhas) throw new Error(`${falhas} verificacao(oes) de etapa falharam`);
