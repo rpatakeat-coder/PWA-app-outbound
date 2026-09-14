@@ -8,7 +8,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
 import { ds, sharedStyles } from './sharedStyles';
 import { IconCheck, IconClipboardCheck, IconClock, IconUser, useIconColors } from '../components/icons';
-import { TarefasDoCrmSecao } from './TarefasDoCrmSecao';
 
 export type BaldeDeTarefa = 'atrasadas' | 'hoje' | 'proximas';
 
@@ -378,20 +377,6 @@ export function TarefasScreen({
     // Mesmo teto da lista de leads: sem ele o conteudo se espalha por
     // toda a largura do monitor e a linha de texto fica ilegivel.
     !layout.ehDesktop && { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
-      {/* As tarefas do CRM vêm PRIMEIRO: são compromisso que a gestão pôs na
-          semana desta pessoa, enquanto as de baixo são sugestão do próprio
-          app. Quem abre a aba está perguntando "o que eu tenho que fazer", e
-          o que foi combinado com alguém pesa mais que o que o sistema propôs. */}
-      <TarefasDoCrmSecao
-        enabled
-        // A seção só conhece o id do lead (veio do marcador da Task); quem tem
-        // o objeto do cliente é esta tela. Se o lead não está na área
-        // carregada, o toque não faz nada — e a própria seção avisa isso.
-        abrirLeadNoMapa={(id) => {
-          const alvo = clients.find((c) => c.id === id);
-          if (alvo) abrirLeadNoMapa(alvo);
-        }}
-      />
 
       {/* Cabeçalho enxuto: o texto explicativo que ficava aqui virou o modal
           ⓘ, que já tinha as regras completas — ele ocupava um terço da tela

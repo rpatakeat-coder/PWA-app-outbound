@@ -27,7 +27,6 @@ import {
 } from '../components/icons';
 import { ds, sharedStyles } from './sharedStyles';
 import { PlanoDaSemanaCard } from './PlanoDaSemanaCard';
-import { TarefasDoCrmSecao } from './TarefasDoCrmSecao';
 
 // Tela de Agenda, extraida do App.tsx (prompt 02 do handoff) — refactor puro.
 // Os estados que so' a agenda usava (semana visivel, filtro de tipo, acordeao
@@ -386,17 +385,6 @@ export function AgendaScreen({
           depois o que já está marcado dentro dela. */}
       <PlanoDaSemanaCard enabled />
 
-      {/* As mesmas tarefas da aba Tarefas, aqui pela data: a Agenda responde
-          "o que tem marcado", e visita posta pela gestão É coisa marcada. Sem
-          isto, a semana do vendedor no app não bate com a que o gestor montou. */}
-      <TarefasDoCrmSecao
-        enabled
-        apenasDia={diaSelecionado}
-        abrirLeadNoMapa={(id) => {
-          const alvo = clients.find((c) => c.id === id);
-          if (alvo) openClientById?.(alvo.id);
-        }}
-      />
 
       {/* Cabeçalho enxuto: o parágrafo "rota planejada, demos e follow-ups em
           ordem cronológica" descrevia o que a tela mostra sozinha. */}
