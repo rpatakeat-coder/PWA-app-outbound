@@ -537,7 +537,19 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
         const { data } = await supabase.functions.invoke('hubspot-sync', {
           body: { type: 'deal_stage', id_hubspot: client.id_hubspot, id: client.id },
         });
-        if (!cancelado && data?.dealstage) setEtapaDoCrm(String(data.dealstage));
+        const idDoCrm = data?.dealstage ? String(data.dealstage) : null;
+        if (cancelado || !idDoCrm) return;
+        setEtapaDoCrm(idDoCrm);
+
+        // Grava a etapa com o rotulo DO APP, nunca o do HubSpot. Os dois
+        // divergem ("Ganho" x "Negocio Fechado", "Pagamento" x "Ag. Pagamento")
+        // e o app agrupa/filtra/colore por rotulo: um nome que ele nao conhece
+        // joga o lead no balde "Pipe Antigo" da lista, longe de onde deveria.
+        const rotuloDoApp = STAGES.find((st) => st.id === idDoCrm)?.label;
+        if (rotuloDoApp && rotuloDoApp !== client.etapa) {
+          await supabase.from('clients').update({ etapa: rotuloDoApp }).eq('id', client.id);
+          queryClient.invalidateQueries({ queryKey: ['clients'] });
+        }
       } catch {
         // Falhar aqui so' custa a atualizacao: seguimos com a etapa local, que
         // e' o comportamento de antes. Nunca pior que estava.

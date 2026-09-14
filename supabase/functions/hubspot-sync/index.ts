@@ -279,13 +279,24 @@ async function reconcileStageChange(token: string, idHubspot: string, clientId: 
       'GET',
       `/crm/v3/pipelines/deals/${pipeline}/stages/${dealstage}`,
     );
+    // Le' a etapa so' pra confirmar que ela existe no pipeline; o rotulo em si
+    // nao e' mais gravado — ver o comentario abaixo.
     const label = trimOrNull(stage.body?.label);
     if (!label) return;
 
-    const update: Record<string, unknown> = {
-      etapa: label,
-      atualizacao_diaria: true,
-    };
+    // NAO escreve `etapa` aqui (correcao de 14/09/2026).
+    //
+    // Escrevia o rotulo DO HUBSPOT por cima do que o app tinha acabado de
+    // gravar — e o app usa o rotulo DELE. Nos tres em que os dois divergem
+    // ("Ganho" x "Negocio Fechado", "Pagamento" x "Ag. Pagamento",
+    // "Onboarding" x "Enviado Onboarding") o resultado era o lead sumir da
+    // etapa certa na lista e aparecer no balde "Pipe Antigo", 10 segundos
+    // depois de uma mudanca que tinha dado certo.
+    //
+    // O app ja' grava a etapa de forma otimista ANTES de chamar esta rota, com
+    // o rotulo que ele entende, e reverte sozinho se o HubSpot recusar. Aqui
+    // sobra o que so' o CRM sabe: o dono e a data do ganho.
+    const update: Record<string, unknown> = { atualizacao_diaria: true };
     if (ownerId) update.vendedor_id_hubspot = ownerId;
 
     // Carimba a data do ganho quando o deal esta' numa etapa de fechamento.
@@ -567,18 +578,16 @@ async function handleDealStage(token: string, body: Record<string, unknown>) {
   );
   const label = trimOrNull(stage.body?.label);
 
-  // O app guarda o LABEL em `clients.etapa`, e e' por ele que a tela resolve a
-  // etapa atual. Gravar o rotulo QUE O HUBSPOT USA evita a divergencia que ja'
-  // existe entre os dois lados ("Pagamento" x "Ag. Pagamento", "Ganho" x
-  // "Negocio Fechado"): label que nao bate faz o app nao reconhecer a etapa.
-  const clientId = trimOrNull(body.id);
-  if (clientId && label) {
-    const { error } = await serviceClient()
-      .from('clients')
-      .update({ etapa: label })
-      .eq('id', clientId);
-    if (error) console.warn('[hubspot-sync] gravar etapa atual falhou', error.message);
-  }
+  // NAO grava `clients.etapa` aqui, e isso e' correcao de 14/09/2026.
+  //
+  // Gravava o rotulo DO HUBSPOT ("Ganho"), e o app resolve etapa pelo rotulo
+  // DELE ("Negocio Fechado"). Rotulo que nao bate nao cai em etapa nenhuma
+  // conhecida: o lead ia parar no balde "Pipe Antigo" da lista. Os dois lados
+  // divergem em pelo menos tres ("Pagamento" x "Ag. Pagamento", "Ganho" x
+  // "Negocio Fechado", "Onboarding" x "Enviado Onboarding").
+  //
+  // Quem grava agora e' o APP, que tem o vocabulario dele e ja' traduz id ->
+  // rotulo em src/constants/stages.ts. Daqui sai o ID, que e' o que nao muda.
 
   return json(200, { dealstage, pipeline, label });
 }
