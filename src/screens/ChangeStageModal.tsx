@@ -764,9 +764,20 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
         queryClient.invalidateQueries({ queryKey: ['client_tasks'] });
         // Nao chama onDone: a tarefa que originou continua pendente pro
         // vendedor tentar de novo.
+        // O MOTIVO, quando existe, vem do HubSpot pela edge ("Property values
+        // were not valid", com a lista do que faltou). Dizer "sem conexão?"
+        // quando o problema é um campo inválido manda a pessoa conferir o
+        // sinal do celular e tentar de novo para sempre — foi o que aconteceu
+        // em 14/09/2026 numa passagem para Ag. Pagamento.
+        const motivo = (lastErr as Error)?.message?.trim();
+        const pareceRede =
+          !motivo ||
+          /failed to fetch|network|timeout|load failed|aborted/i.test(motivo);
         Alert.alert(
-          'Falha ao sincronizar etapa',
-          `Não consegui enviar ${client.nome} para ${newEtapa} (sem conexão?). A etapa foi revertida — tente novamente.`,
+          'Não consegui mover a etapa',
+          pareceRede
+            ? `${client.nome} continua em ${previousEtapa}: não consegui falar com o servidor. Confira a conexão e tente de novo.`
+            : `${client.nome} continua em ${previousEtapa}. O HubSpot recusou:\n\n${motivo}\n\nCorrija o que falta e tente de novo.`,
         );
         return;
       }

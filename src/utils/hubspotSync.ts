@@ -17,6 +17,21 @@ const EDGE_TYPES = new Set(['change_stage', 'update', 'create_pin', 'get_stages'
 // criado o recurso e a resposta se perdeu).
 const NON_IDEMPOTENT = new Set(['create_pin', 'create_note']);
 
+// Extrai o motivo REAL de dentro do erro da edge. A edge responde
+// { error, detail } — `detail` e' a mensagem do proprio HubSpot ("Property
+// values were not valid", a lista de campos que faltou). Sem isso o app so'
+// tem o texto generico do invoke, e quem esta' na rua nao descobre o que
+// corrigir.
+async function motivoDaEdge(error: any): Promise<string | null> {
+  try {
+    const corpo = await error?.context?.json?.();
+    if (!corpo?.error) return null;
+    return corpo.detail ? `${corpo.error}: ${corpo.detail}` : corpo.error;
+  } catch {
+    return null;
+  }
+}
+
 // A edge devolve 503 quando HUBSPOT_TOKEN nao esta setado e a plataforma
 // devolve 404 quando a function nem existe. Nesses casos ela comprovadamente
 // nao tocou o HubSpot, entao o fallback pro n8n e' seguro mesmo pros tipos
@@ -54,13 +69,19 @@ export async function sendHubspotEvent(payload: Record<string, unknown>): Promis
     const { data, error } = await supabase.functions.invoke('hubspot-sync', { body: payload });
     if (!error) return data;
 
-    // Edge retornou erro. Decide se e' seguro cair pro n8n.
-    if (NON_IDEMPOTENT.has(type) && !edgeDefinitelyDidNotRun(error)) {
-      // Erro ambiguo num tipo que duplica se reexecutado (create_pin/create_note):
-      // NAO reenvia pro n8n — a edge pode ter criado o recurso. Propaga o erro;
-      // quem chama trata (no create_pin o app re-consulta o id_hubspot que a
-      // edge grava server-side).
-      throw new Error(`hubspot-sync falhou (${type}): ${error.message ?? error}`);
+    // A edge RODOU e o HubSpot recusou? Entao o n8n nao resolve: ele fala com o
+    // mesmo HubSpot, que vai recusar igual — e no caminho o motivo se perde e
+    // vira "sem conexao?" na cara de quem esta' na rua.
+    //
+    // Em 14/09/2026 isso custou caro: uma vendedora tentou mover um negocio pra
+    // Ag. Pagamento, o HubSpot recusou por propriedade invalida, o app disse
+    // "sem conexao?" e ela ficou conferindo o sinal do celular.
+    //
+    // So' caimos pro n8n quando a edge COMPROVADAMENTE nao executou nada (404 =
+    // function ausente, 503 = sem HUBSPOT_TOKEN).
+    if (!edgeDefinitelyDidNotRun(error)) {
+      const motivo = await motivoDaEdge(error);
+      throw new Error(motivo ?? `hubspot-sync falhou (${type}): ${error.message ?? error}`);
     }
     console.warn(`[hubspot-sync] edge indisponivel (${type}), caindo pro n8n:`, error.message ?? error);
     return postToN8n(payload);
