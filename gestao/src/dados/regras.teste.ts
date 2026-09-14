@@ -7,7 +7,7 @@
 // inteiro como "sem meta" enquanto todos rodavam pela meta global. E' um erro
 // que nao levanta excecao, nao aparece em log e so' e' visivel pra quem conhece
 // a operacao. Fica travado por teste.
-import { resolverMeta, pontosDoDia, ehAvanco, calcularDelta, META_PADRAO, modoSugerido } from './regras';
+import { resolverMeta, pontosDoDia, ehAvanco, calcularDelta, META_PADRAO, modoSugerido, estadoDoCompromisso } from './regras';
 
 let falhas = 0;
 const ok = (nome: string, real: unknown, esperado: unknown) => {
@@ -107,6 +107,29 @@ ok(
   'sem registro de dias nao inventa campo',
   modoSugerido({ ...base, diasSemVisitar: null }),
   'reconhecer',
+);
+
+console.log('\n--- estado do compromisso do PDI: derivado, nunca guardado ---');
+const T1 = '2026-09-10T10:00:00Z', T2 = '2026-09-11T10:00:00Z';
+const vazio = { feitoEm: null, validadoEm: null, devolvidoEm: null };
+ok('ninguem tocou', estadoDoCompromisso(vazio), 'aberto');
+ok('vendedor marcou', estadoDoCompromisso({ ...vazio, feitoEm: T1 }), 'feito');
+ok('gestor validou', estadoDoCompromisso({ feitoEm: T1, validadoEm: T2, devolvidoEm: null }), 'validado');
+ok('gestor devolveu', estadoDoCompromisso({ feitoEm: T1, validadoEm: null, devolvidoEm: T2 }), 'devolvido');
+ok(
+  'devolveu DEPOIS de validar: a ultima palavra vale',
+  estadoDoCompromisso({ feitoEm: T1, validadoEm: T1, devolvidoEm: T2 }),
+  'devolvido',
+);
+ok(
+  'validou DEPOIS de devolver: idem',
+  estadoDoCompromisso({ feitoEm: T1, validadoEm: T2, devolvidoEm: T1 }),
+  'validado',
+);
+ok(
+  'gestor valida sem o vendedor ter marcado (nao deveria, mas nao mente)',
+  estadoDoCompromisso({ feitoEm: null, validadoEm: T1, devolvidoEm: null }),
+  'validado',
 );
 
 console.log(falhas === 0 ? '\nTODOS PASSARAM' : `\n${falhas} FALHARAM`);

@@ -141,3 +141,34 @@ export function modoSugerido(p: {
   if (p.semaforo === 'atencao') return 'acompanhar';
   return 'reconhecer';
 }
+
+// ============================================================================
+// PDI — o estado de um compromisso.
+// ============================================================================
+
+export type EstadoDoCompromisso =
+  | 'aberto'       // ninguém tocou
+  | 'feito'        // o vendedor marcou, o gestor ainda não olhou
+  | 'validado'     // o gestor confirmou
+  | 'devolvido';   // o gestor recusou, com motivo
+
+
+/**
+ * O estado é DERIVADO dos três carimbos, nunca guardado numa coluna própria.
+ * Uma coluna `status` ao lado dos timestamps daria dois lugares para a mesma
+ * verdade, e eles divergiriam no primeiro update que esquecesse um dos dois.
+ *
+ * A ordem importa: devolvido vence validado vence feito. Devolver depois de
+ * validar é o gestor mudando de ideia, e é a última palavra que vale.
+ */
+export function estadoDoCompromisso(c: {
+  feitoEm: string | null;
+  validadoEm: string | null;
+  devolvidoEm: string | null;
+}): EstadoDoCompromisso {
+  if (c.devolvidoEm && (!c.validadoEm || c.devolvidoEm > c.validadoEm)) return 'devolvido';
+  if (c.validadoEm) return 'validado';
+  if (c.feitoEm) return 'feito';
+  return 'aberto';
+}
+

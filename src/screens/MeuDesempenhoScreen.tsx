@@ -19,6 +19,7 @@ import {
   type MyMetricLeadsParams,
 } from '../hooks/useGestorMetrics';
 import { MinhaDailyCard } from './MinhaDailyCard';
+import { useMeuPdi } from '../hooks/useMeuPdi';
 import { SellerGoalsCard } from './SellerGoalsCard';
 import { useLayout } from '../hooks/useLayout';
 import { useMinhaDaily } from '../hooks/useMinhaDaily';
@@ -141,6 +142,7 @@ function Stat({ value, label, color, onPress }: { value: number; label: string; 
 }
 
 export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas }: Props) {
+  const { pdi, marcar: marcarPdi } = useMeuPdi(enabled);
   const layout = useLayout();
   const [preset, setPreset] = useState<GestorPeriodPreset>('30d');
   const [modal, setModal] = useState<{ title: string; params: MyMetricLeadsParams } | null>(null);
@@ -358,6 +360,71 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas 
           </View>
         );
       })()}
+
+      {/* O meu plano de desenvolvimento. Só aparece se existir: uma seção
+          "Plano" vazia em toda tela cobraria algo que o gestor ainda não
+          escreveu. Quem marca "feito" sou eu — o gestor valida ou devolve, e
+          o botão dele não existe aqui. */}
+      {pdi && pdi.compromissos.length > 0 && (
+        <View style={{ marginTop: 8 }}>
+          <Text style={styles.sectionTitle}>Meu plano de desenvolvimento</Text>
+          <View style={styles.assignedCard}>
+            {pdi.compromissos.map((c) => (
+              <TouchableOpacity
+                key={c.id}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: c.feito }}
+                disabled={c.estado === 'validado' || marcarPdi.isPending}
+                onPress={() => marcarPdi.mutate({ id: c.id, feito: !c.feito })}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'flex-start',
+                  gap: 10,
+                  paddingVertical: 10,
+                  opacity: c.estado === 'validado' ? 0.65 : 1,
+                }}
+              >
+                <View
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: 5,
+                    borderWidth: 1.5,
+                    marginTop: 1,
+                    borderColor: c.feito ? '#C8131B' : 'var(--border)',
+                    backgroundColor: c.feito ? '#C8131B' : 'transparent',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {c.feito && <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>✓</Text>}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, color: 'var(--text)', lineHeight: 20 }}>{c.texto}</Text>
+                  {c.estado === 'validado' && (
+                    <Text style={{ fontSize: 12, color: 'var(--tint-green-text)', marginTop: 2 }}>
+                      Validado pela gestão.
+                    </Text>
+                  )}
+                  {c.estado === 'devolvido' && (
+                    <Text style={{ fontSize: 12, color: 'var(--tint-amber-text)', marginTop: 2, lineHeight: 16 }}>
+                      Devolvido: {c.devolvidoMotivo}
+                    </Text>
+                  )}
+                  {c.estado === 'feito' && (
+                    <Text style={{ fontSize: 12, color: 'var(--text-subtle)', marginTop: 2 }}>
+                      Marcado — aguardando a gestão olhar.
+                    </Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+            <Text style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 8, lineHeight: 15 }}>
+              Só você marca aqui. A gestão valida ou devolve dizendo o que falta.
+            </Text>
+          </View>
+        </View>
+      )}
 
       {/* F · auxiliares, DEPOIS do heatmap. Nenhum sai de cena: a Daily e' a
           promessa do dia e o SellerGoalsCard traz a meta — que ate' o M6 so'

@@ -29,6 +29,14 @@ import {
   type ModoRegistrado,
 } from '../dados/decisoes';
 import { MODOS, modoSugerido, type ModoDeAgir } from '../dados/regras';
+import {
+  carregarPdi,
+  criarPdi,
+  validarCompromisso,
+  devolverCompromisso,
+  type Pdi,
+  type PdiIndisponivel,
+} from '../dados/pdi';
 import { Drawer } from '../componentes/Drawer';
 import { Frescor } from '../componentes/Frescor';
 import { GravadorDeAudio } from '../componentes/GravadorDeAudio';
@@ -369,6 +377,30 @@ export function Pessoas() {
   const modoDe = (perfilId: string): ModoRegistrado | null =>
     modos && !('indisponivel' in modos) ? modos[perfilId] ?? null : null;
 
+  // PDI da pessoa aberta. Carrega ao abrir o dossiê — é por pessoa, não faz
+  // sentido buscar os onze de uma vez para mostrar um.
+  const [pdi, setPdi] = useState<Pdi | null | PdiIndisponivel>(null);
+  const [carregandoPdi, setCarregandoPdi] = useState(false);
+  const [novoPdi, setNovoPdi] = useState('');
+  const relerPdi = async (perfilId: string) => {
+    setCarregandoPdi(true);
+    try {
+      setPdi(await carregarPdi(perfilId));
+    } catch {
+      setPdi(null);
+    } finally {
+      setCarregandoPdi(false);
+    }
+  };
+  useEffect(() => {
+    if (!aberta) {
+      setPdi(null);
+      setNovoPdi('');
+      return;
+    }
+    void relerPdi(aberta.perfilId);
+  }, [aberta]);
+
   const escolherModo = async (modo: ModoDeAgir) => {
     if (!aberta) return;
     const sugerido = modoSugerido(aberta);
@@ -665,6 +697,167 @@ export function Pessoas() {
                     </>
                   );
                 })()
+              )}
+            </div>
+
+            {/* O PDI. O gestor escreve o plano e VALIDA ou DEVOLVE; quem marca
+                "feito" é a própria pessoa, no app de campo. Não há botão aqui
+                para marcar por ela, e isso é garantido no banco: a função
+                `pdi_marcar_feito` filtra por `seller_id = auth.uid()`. */}
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted)', marginBottom: 6 }}>
+                Plano de desenvolvimento
+              </div>
+
+              {carregandoPdi ? (
+                <div style={{ fontSize: 13, color: 'var(--muted)' }}>Carregando…</div>
+              ) : pdi && 'indisponivel' in pdi ? (
+                <div style={{ fontSize: 13, color: 'var(--muted)' }}>{pdi.motivo}</div>
+              ) : pdi == null ? (
+                <>
+                  <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
+                    Ainda não há plano. Escreva um compromisso por linha — eles aparecem no app
+                    dela, para marcar conforme fizer.
+                  </div>
+                  <textarea
+                    value={novoPdi}
+                    onChange={(e) => setNovoPdi(e.target.value)}
+                    placeholder={'Levar o pitch de fila para 3 visitas\nFechar a rota da semana até segunda 9h'}
+                    style={{
+                      width: '100%',
+                      minHeight: 78,
+                      border: '1px solid var(--line)',
+                      borderRadius: 8,
+                      padding: '10px 12px',
+                      font: 'inherit',
+                      fontSize: 14,
+                      color: 'var(--ink)',
+                      background: 'var(--panel)',
+                      boxSizing: 'border-box',
+                      resize: 'vertical',
+                    }}
+                  />
+                  <button
+                    disabled={!novoPdi.trim()}
+                    onClick={async () => {
+                      const r = await criarPdi({
+                        perfilId: aberta.perfilId,
+                        titulo: `Plano de ${aberta.nome}`,
+                        compromissos: novoPdi.split('\n'),
+                      });
+                      if (!r.ok) {
+                        setAviso(r.erro ?? 'Não consegui criar o plano.');
+                        return;
+                      }
+                      setNovoPdi('');
+                      await relerPdi(aberta.perfilId);
+                    }}
+                    style={{
+                      marginTop: 8,
+                      border: '1px solid var(--line-btn)',
+                      background: 'transparent',
+                      color: 'var(--ink)',
+                      borderRadius: 6,
+                      padding: '7px 12px',
+                      font: 'inherit',
+                      fontWeight: 700,
+                      fontSize: 13,
+                      cursor: novoPdi.trim() ? 'pointer' : 'default',
+                      opacity: novoPdi.trim() ? 1 : 0.5,
+                    }}
+                  >
+                    Criar o plano
+                  </button>
+                </>
+              ) : (
+                <>
+                  {pdi.compromissos.length === 0 && (
+                    <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+                      O plano existe, mas está sem compromissos.
+                    </div>
+                  )}
+                  {pdi.compromissos.map((c) => (
+                    <div
+                      key={c.id}
+                      style={{
+                        borderLeft: `3px solid ${
+                          c.estado === 'validado'
+                            ? 'var(--green)'
+                            : c.estado === 'devolvido'
+                              ? 'var(--red)'
+                              : c.estado === 'feito'
+                                ? 'var(--amber)'
+                                : 'var(--line)'
+                        }`,
+                        paddingLeft: 10,
+                        marginBottom: 10,
+                      }}
+                    >
+                      <div style={{ fontSize: 14, color: 'var(--ink)' }}>{c.texto}</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                        {c.estado === 'aberto'
+                          ? 'ela ainda não marcou'
+                          : c.estado === 'feito'
+                            ? 'ela marcou como feito — falta você olhar'
+                            : c.estado === 'validado'
+                              ? 'validado por você'
+                              : `devolvido: ${c.devolvidoMotivo}`}
+                      </div>
+                      {/* Só faz sentido julgar o que ela marcou. Validar algo
+                          que ninguém fez seria dar por cumprido no escuro. */}
+                      {c.estado === 'feito' && (
+                        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                          <button
+                            onClick={async () => {
+                              await validarCompromisso(c.id);
+                              await relerPdi(aberta.perfilId);
+                            }}
+                            style={{
+                              border: '1px solid var(--line-btn)',
+                              background: 'transparent',
+                              color: 'var(--ink)',
+                              borderRadius: 14,
+                              padding: '4px 10px',
+                              font: 'inherit',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Validar
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const motivo = window.prompt(
+                                'O que precisa ser refeito? (devolver sem motivo não ajuda)',
+                              );
+                              if (motivo == null) return;
+                              const r = await devolverCompromisso(c.id, motivo);
+                              if (!r.ok) {
+                                setAviso(r.erro ?? 'Não consegui devolver.');
+                                return;
+                              }
+                              await relerPdi(aberta.perfilId);
+                            }}
+                            style={{
+                              border: '1px solid var(--red)',
+                              background: 'transparent',
+                              color: 'var(--red)',
+                              borderRadius: 14,
+                              padding: '4px 10px',
+                              font: 'inherit',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Devolver
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </>
               )}
             </div>
 
