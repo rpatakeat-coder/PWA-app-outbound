@@ -173,3 +173,99 @@ export async function alternarItemDaPauta(entrada: {
   });
   return error ? { ok: false, erro: error.message } : { ok: true, ligado: true };
 }
+
+// ===== combinado da semana =====
+//
+// O gargalo nº 1 da semana vira UM combinado, escrito, com prazo. Sem isso a
+// leitura semanal termina em "precisamos melhorar Negociação" e a semana
+// seguinte encontra o mesmo gargalo intacto.
+//
+// `justificativa` guarda os NÚMEROS que motivaram ("21 de 26 passaram do prazo
+// de 5 dias"). É o que permite, na semana seguinte, dizer se mudou — um
+// combinado sem a medida de origem não tem como ser avaliado, só lembrado.
+
+export type CombinadoDaSemana = {
+  id: string;
+  dataSegunda: string;
+  titulo: string;
+  justificativa: string | null;
+  origemGargalo: string | null;
+  prazo: string | null;
+  status: 'aberto' | 'cumprido' | 'nao_cumprido';
+  /** Quantas pessoas foram marcadas como tendo cumprido. */
+  cumpriram: number;
+};
+
+export async function carregarCombinado(
+  segunda = segundaDaSemana(diaBRT(new Date())),
+): Promise<CombinadoDaSemana | null | Indisponivel> {
+  const { data, error } = await supabase
+    .from('combinados_semana')
+    .select('id, data_segunda, titulo, justificativa, origem_gargalo, prazo, status')
+    .eq('data_segunda', segunda)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    if (ehTabelaAusente(error)) return naoConfigurado('combinados_semana');
+    throw error;
+  }
+  if (!data) return null;
+
+  const { count } = await supabase
+    .from('combinados_cumprimento')
+    .select('*', { count: 'exact', head: true })
+    .eq('combinado_id', data.id);
+
+  return {
+    id: data.id as string,
+    dataSegunda: data.data_segunda as string,
+    titulo: data.titulo as string,
+    justificativa: (data.justificativa as string | null) ?? null,
+    origemGargalo: (data.origem_gargalo as string | null) ?? null,
+    prazo: (data.prazo as string | null) ?? null,
+    status: data.status as CombinadoDaSemana['status'],
+    cumpriram: count ?? 0,
+  };
+}
+
+export async function criarCombinado(entrada: {
+  titulo: string;
+  justificativa: string;
+  origemGargalo: string;
+  prazo: string;
+  segunda?: string;
+}): Promise<{ ok: boolean; erro?: string }> {
+  const { data: sessao } = await supabase.auth.getUser();
+  const { error } = await supabase.from('combinados_semana').insert({
+    data_segunda: entrada.segunda ?? segundaDaSemana(diaBRT(new Date())),
+    titulo: entrada.titulo,
+    justificativa: entrada.justificativa,
+    origem_gargalo: entrada.origemGargalo,
+    prazo: entrada.prazo,
+    created_by: sessao?.user?.id ?? null,
+    created_by_name: (sessao?.user?.user_metadata?.full_name as string | undefined) ?? null,
+  });
+  if (error) {
+    // O unique (data_segunda, titulo) é a trava: o mesmo combinado criado duas
+    // vezes é UM combinado. Duplicata não é erro para o gestor — é um clique
+    // repetido, e a tela já vai mostrar o que existe.
+    if (error.code === '23505') return { ok: true };
+    return {
+      ok: false,
+      erro: ehTabelaAusente(error) ? naoConfigurado('combinados_semana').motivo : error.message,
+    };
+  }
+  return { ok: true };
+}
+
+export async function definirStatusDoCombinado(
+  id: string,
+  status: CombinadoDaSemana['status'],
+): Promise<{ ok: boolean; erro?: string }> {
+  const { error } = await supabase
+    .from('combinados_semana')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  return error ? { ok: false, erro: error.message } : { ok: true };
+}

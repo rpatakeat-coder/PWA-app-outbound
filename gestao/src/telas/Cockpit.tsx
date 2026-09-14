@@ -10,9 +10,17 @@
 //  - Vermelho so' pra acao e alerta; estado usa cor no texto, nao fundo inteiro.
 //  - Janela de tempo sempre rotulada junto do numero.
 //  - Numero nunca chumbado: sem dado, estado vazio honesto.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { carregarCockpit, type Executivo, type LeadAberto } from '../dados/cockpit';
 import { useVivo } from '../dados/vivo';
+import {
+  carregarCombinado,
+  criarCombinado,
+  definirStatusDoCombinado,
+  type CombinadoDaSemana,
+  type Indisponivel,
+} from '../dados/decisoes';
+import { diaBRT, diasDaSemana } from '../dados/datas';
 import { Drawer } from '../componentes/Drawer';
 import { Frescor } from '../componentes/Frescor';
 
@@ -220,6 +228,15 @@ function ListaDeLeads({ leads }: { leads: LeadAberto[] }) {
 
 export function Cockpit() {
   const { dados, erro, desatualizado, recarregar } = useVivo(carregarCockpit);
+
+  // O combinado da semana. Fora do `useVivo` porque é outra pergunta, com
+  // outro ritmo: o funil muda o dia todo, o combinado muda uma vez por semana.
+  const [combinado, setCombinado] = useState<CombinadoDaSemana | null | Indisponivel>(null);
+  const [salvandoCombinado, setSalvandoCombinado] = useState(false);
+  const relerCombinado = () => carregarCombinado().then(setCombinado).catch(() => setCombinado(null));
+  useEffect(() => {
+    void relerCombinado();
+  }, []);
   const [etapaAberta, setEtapaAberta] = useState<string | null>(null);
   const [execAberto, setExecAberto] = useState<Executivo | null>(null);
   const [semDonoAberto, setSemDonoAberto] = useState(false);
@@ -427,6 +444,108 @@ export function Cockpit() {
             >
               Gargalo em <strong>{gargalo.etapa}</strong>: {gargalo.travados} de {gargalo.total}{' '}
               passaram do prazo de {gargalo.sla} dias.
+            </div>
+          )}
+
+          {/* O gargalo vira COMBINADO. Sem este passo a leitura semanal termina
+              em "precisamos melhorar Negociação" e a semana seguinte encontra
+              o mesmo gargalo intacto. O texto nasce com os NÚMEROS de origem
+              justamente para que, na semana que vem, dê para dizer se mudou —
+              combinado sem a medida que o motivou não se avalia, só se lembra. */}
+          {gargalo && gargalo.travados > 0 && combinado != null && 'indisponivel' in combinado && (
+            <div style={{ fontSize: 12, color: 'var(--ter)', marginTop: 8 }}>
+              {(combinado as Indisponivel).motivo}
+            </div>
+          )}
+
+          {gargalo && gargalo.travados > 0 && (combinado == null || !('indisponivel' in combinado)) && (
+            <div style={{ marginTop: 10 }}>
+              {combinado == null ? (
+                <button
+                  disabled={salvandoCombinado}
+                  onClick={async () => {
+                    setSalvandoCombinado(true);
+                    const sexta = diasDaSemana(diaBRT(new Date()))[4];
+                    const r = await criarCombinado({
+                      titulo: `Destravar ${gargalo.etapa}`,
+                      justificativa:
+                        `${gargalo.travados} de ${gargalo.total} negócios em ${gargalo.etapa} ` +
+                        `passaram do prazo de ${gargalo.sla} dias.`,
+                      origemGargalo: gargalo.etapa,
+                      prazo: sexta,
+                    });
+                    if (r.ok) await relerCombinado();
+                    setSalvandoCombinado(false);
+                  }}
+                  style={{
+                    border: '1px solid var(--line-btn)',
+                    background: 'transparent',
+                    color: 'var(--ink)',
+                    borderRadius: 6,
+                    padding: '7px 12px',
+                    font: 'inherit',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {salvandoCombinado ? 'Gravando…' : 'Virar o combinado da semana'}
+                </button>
+              ) : (
+                <div
+                  style={{
+                    border: '1px solid var(--line-soft)',
+                    borderRadius: 8,
+                    padding: '10px 12px',
+                    fontSize: 13,
+                    lineHeight: '18px',
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: 'var(--ink)' }}>
+                    Combinado da semana: {combinado.titulo}
+                  </div>
+                  <div style={{ color: 'var(--muted)', marginTop: 2 }}>
+                    {combinado.justificativa}
+                    {combinado.prazo
+                      ? ` Prazo: ${combinado.prazo.split('-').reverse().join('/')}.`
+                      : ''}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                    {(['cumprido', 'nao_cumprido'] as const).map((st) => (
+                      <button
+                        key={st}
+                        onClick={async () => {
+                          const r = await definirStatusDoCombinado(
+                            combinado.id,
+                            combinado.status === st ? 'aberto' : st,
+                          );
+                          if (r.ok) await relerCombinado();
+                        }}
+                        style={{
+                          border: `1.5px solid ${combinado.status === st ? 'var(--red)' : 'var(--line-btn)'}`,
+                          background: combinado.status === st ? 'var(--red-soft)' : 'transparent',
+                          color: combinado.status === st ? 'var(--red)' : 'var(--ink)',
+                          borderRadius: 14,
+                          padding: '4px 10px',
+                          font: 'inherit',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {st === 'cumprido' ? 'Cumprido' : 'Não cumprido'}
+                      </button>
+                    ))}
+                    <span style={{ color: 'var(--ter)', fontSize: 12, alignSelf: 'center' }}>
+                      {/* Zero aqui é VERDADE, não ausência: a linha de cumprimento
+                          só nasce por marcação explícita do gestor. */}
+                      {combinado.cumpriram === 0
+                        ? 'ninguém marcado ainda'
+                        : `${combinado.cumpriram} marcado${combinado.cumpriram > 1 ? 's' : ''}`}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </section>
