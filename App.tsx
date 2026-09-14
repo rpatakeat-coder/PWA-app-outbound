@@ -1136,11 +1136,30 @@ function MainApp() {
     return Array.from(set).sort();
   }, [clients]);
 
+  // As etapas oferecidas no filtro.
+  //
+  // Ate' 14/09/2026 saiam SO' dos leads carregados — e `clients` e' apenas a
+  // area visivel do mapa. O efeito: etapa sem ninguem no recorte simplesmente
+  // nao existia no filtro, e o vendedor concluia que o app nao tinha aquela
+  // etapa. Pior com `clients.etapa` desatualizada (nada trazia a etapa do
+  // HubSpot de volta ate' a rota `deal_stage`): etapa gravada errada sumia da
+  // lista tambem.
+  //
+  // Agora a lista e' a do FUNIL, sempre inteira, mais o que aparecer de
+  // etapa lateral nos leads carregados (Perdido, Reciclagem, Pipe Antigo) —
+  // essas nao sao destino no app, mas existem na carteira e filtrar por elas
+  // e' legitimo.
   const availableStages = useMemo(() => {
     const set = new Set<string>();
     for (const c of clients) {
       const stage = normalizeStage(c.etapa);
       if (stage) set.add(stage);
+    }
+    // O funil inteiro entra mesmo sem nenhum lead na etapa: uma etapa que
+    // some do filtro parece etapa que o app nao tem.
+    for (const id of FUNNEL_STAGE_IDS) {
+      const label = STAGES.find((st) => st.id === id)?.label;
+      if (label) set.add(label);
     }
     // Chips na ordem do funil (HubSpot); Pipe Antigo por ultimo.
     return Array.from(set).sort((a, b) => stageOrderIndex(a) - stageOrderIndex(b));

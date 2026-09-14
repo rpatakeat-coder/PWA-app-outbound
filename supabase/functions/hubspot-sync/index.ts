@@ -525,6 +525,64 @@ async function handleDealNames(token: string, body: Record<string, unknown>) {
   return json(200, { nomes });
 }
 
+// ===== deal_stage =====
+// A etapa ATUAL do negocio, direto do HubSpot, e o rotulo dela.
+//
+// Existe porque a sincronizacao so' andava num sentido: `reconcileStageChange`
+// roda DEPOIS de uma mudanca feita pelo app, e nada trazia de volta o que
+// mudou no CRM. Quem movesse o negocio direto no HubSpot deixava o app com a
+// etapa velha — e o app calcula o PROXIMO destino a partir dela, entao o
+// vendedor via a etapa errada e nao conseguia avancar.
+//
+// Caso real (14/09/2026): negocio movido pra Ganho no HubSpot; no app ele
+// continuava em Negociacao, e o modal so' oferecia Ag. Pagamento. Onboarding
+// nunca aparecia, porque da Demo/Proposta em diante o avanco e' um por vez.
+//
+// Tambem grava em `clients` quando recebe o id do pin: a etapa certa serve pro
+// mapa, pros chips de filtro e pro proximo destino, nao so' pra tela que
+// perguntou.
+async function handleDealStage(token: string, body: Record<string, unknown>) {
+  const idHubspot = trimOrNull(body.id_hubspot);
+  if (!idHubspot) return json(400, { error: 'id_hubspot e obrigatorio' });
+
+  const deal = await hsFetch(
+    token,
+    'GET',
+    `/crm/v3/objects/deals/${idHubspot}?properties=dealstage,pipeline`,
+  );
+  if (!deal.ok) {
+    return json(502, {
+      error: 'HubSpot nao devolveu o negocio',
+      detail: deal.body?.message ?? `status ${deal.status}`,
+    });
+  }
+  const dealstage = trimOrNull(deal.body?.properties?.dealstage);
+  const pipeline = trimOrNull(deal.body?.properties?.pipeline);
+  if (!dealstage || !pipeline) return json(200, { dealstage: null, label: null });
+
+  const stage = await hsFetch(
+    token,
+    'GET',
+    `/crm/v3/pipelines/deals/${pipeline}/stages/${dealstage}`,
+  );
+  const label = trimOrNull(stage.body?.label);
+
+  // O app guarda o LABEL em `clients.etapa`, e e' por ele que a tela resolve a
+  // etapa atual. Gravar o rotulo QUE O HUBSPOT USA evita a divergencia que ja'
+  // existe entre os dois lados ("Pagamento" x "Ag. Pagamento", "Ganho" x
+  // "Negocio Fechado"): label que nao bate faz o app nao reconhecer a etapa.
+  const clientId = trimOrNull(body.id);
+  if (clientId && label) {
+    const { error } = await serviceClient()
+      .from('clients')
+      .update({ etapa: label })
+      .eq('id', clientId);
+    if (error) console.warn('[hubspot-sync] gravar etapa atual falhou', error.message);
+  }
+
+  return json(200, { dealstage, pipeline, label });
+}
+
 // ===== create_pin =====
 // Ramo "Pin Criado" do n8n: cria contato (ou acha o existente via mensagem de
 // conflito), cria o deal no pipeline/etapa de entrada, associa os dois e
@@ -870,6 +928,8 @@ Deno.serve(async (req: Request) => {
         return await handleListTasks(token, body);
       case 'deal_names':
         return await handleDealNames(token, body);
+      case 'deal_stage':
+        return await handleDealStage(token, body);
       case 'create_pin':
         return await handleCreatePin(token, body);
       case 'get_stages':

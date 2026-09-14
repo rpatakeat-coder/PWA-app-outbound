@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   useQueryClient } from '@tanstack/react-query';
 import {
@@ -515,7 +515,41 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
   // (client.etapa e' LABEL) e montar os cards a partir do funil.
   const stageById = new Map(allStages.map((s) => [s.id, s]));
   const idByLabel = new Map(allStages.map((s) => [s.label, s.id]));
-  const currentStageId = client.etapa ? idByLabel.get(client.etapa) ?? null : null;
+  // A etapa que o APP tem gravada — pode estar velha. Ver `etapaDoCrm` abaixo.
+  const currentStageIdLocal = client.etapa ? idByLabel.get(client.etapa) ?? null : null;
+
+  // A etapa DE VERDADE, lida do HubSpot ao abrir o modal.
+  //
+  // A sincronizacao so' andava num sentido: a reconciliacao roda depois de uma
+  // mudanca feita pelo app, e nada trazia de volta o que mudou no CRM. Quem
+  // movesse o negocio direto no HubSpot deixava o app com a etapa velha — e o
+  // proximo destino sai DELA, entao o vendedor ficava travado oferecendo o
+  // passo errado. Em 14/09/2026 um negocio ja' em Ganho so' oferecia
+  // "Ag. Pagamento", e Onboarding nunca aparecia.
+  const [etapaDoCrm, setEtapaDoCrm] = useState<string | null>(null);
+  const [lendoEtapa, setLendoEtapa] = useState(false);
+  useEffect(() => {
+    if (!client.id_hubspot) return;
+    let cancelado = false;
+    setLendoEtapa(true);
+    (async () => {
+      try {
+        const { data } = await supabase.functions.invoke('hubspot-sync', {
+          body: { type: 'deal_stage', id_hubspot: client.id_hubspot, id: client.id },
+        });
+        if (!cancelado && data?.dealstage) setEtapaDoCrm(String(data.dealstage));
+      } catch {
+        // Falhar aqui so' custa a atualizacao: seguimos com a etapa local, que
+        // e' o comportamento de antes. Nunca pior que estava.
+      } finally {
+        if (!cancelado) setLendoEtapa(false);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [client.id_hubspot, client.id]);
+
+  // O CRM manda quando responde; senao vale o que o app tem.
+  const currentStageId = etapaDoCrm ?? currentStageIdLocal;
 
   // Posicao da etapa atual DENTRO do funil (-1 se lead sem etapa ou em lateral).
   const currentFunnelIdx = currentStageId ? FUNNEL_STAGE_IDS.indexOf(currentStageId) : -1;
