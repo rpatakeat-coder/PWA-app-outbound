@@ -15,6 +15,7 @@ import { Daily } from './telas/Daily';
 import { Agenda } from './telas/Agenda';
 import { Prospeccao } from './telas/Prospeccao';
 import { Pessoas } from './telas/Pessoas';
+import { Comunicados } from './telas/Comunicados';
 import { Semana } from './telas/Semana';
 import { Rotas } from './telas/Rotas';
 import { Acessos } from './telas/Acessos';
@@ -38,6 +39,9 @@ import { IconUserAdd } from 'takeat-design-system-ui-kit/icons/IconUserAdd';
 import { IconUserError } from 'takeat-design-system-ui-kit/icons/IconUserError';
 import { IconArrowFoward } from 'takeat-design-system-ui-kit/icons/IconArrowFoward';
 import { IconLightBulb } from 'takeat-design-system-ui-kit/icons/IconLightBulb';
+// Megafone, nao lampada: a lampada ja' e' o alternador de tema no rodape da
+// barra, e dois iconos iguais na mesma coluna viram duvida a cada olhada.
+import { IconBullhorn } from 'takeat-design-system-ui-kit/icons/IconBullhorn';
 // A marca vem do kit como COMPONENTE, e nao de /marca/takeat-icon.svg: aquele
 // arquivo mora no public/ do app de campo, e o caminho absoluto so' resolve em
 // producao, onde os dois produtos dividem o dominio. No dev do cockpit dava 404.
@@ -78,6 +82,10 @@ const ABAS = [
   { id: 'rotas', rotulo: 'Rotas', descricao: 'Ver, editar e montar a rota de cada vendedor', Icone: IconCar, teto: 1600 },
   { id: 'prospeccao', rotulo: 'Prospecção', descricao: 'O que entra no topo do funil?', Icone: IconSearch, teto: 1200 },
   { id: 'pessoas', rotulo: 'Pessoas', descricao: 'Quem precisa de mim no 1:1?', Icone: IconIdCard, teto: 1200 },
+  // Depois de Pessoas porque e' o mesmo assunto visto de outro angulo: no 1:1
+  // o gestor fala com UMA pessoa, aqui com o time. `teto` 1200 porque e'
+  // leitura corrida — recado com medida de 1600px vira linha que ninguem le'.
+  { id: 'comunicados', rotulo: 'Comunicados', descricao: 'O que eu avisei, e quem soube?', Icone: IconBullhorn, teto: 1200 },
   // Ultima de proposito: e' a aba que menos se usa e a que mais custa errar.
   // `teto` 1600 porque a lista de contas e' tabela, nao leitura corrida.
   { id: 'acessos', rotulo: 'Acessos', descricao: 'Quem entra no app, e consegue trabalhar?', Icone: IconUserAdd, teto: 1600 },
@@ -281,6 +289,7 @@ export default function App() {
           {aba === 'rotas' && <Rotas />}
           {aba === 'prospeccao' && <Prospeccao />}
           {aba === 'pessoas' && <Pessoas />}
+          {aba === 'comunicados' && <Comunicados />}
           {aba === 'semana' && <Semana />}
           {aba === 'time' && <Cockpit />}
           {aba === 'acessos' && <Acessos />}

@@ -115,8 +115,10 @@ import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { ChangeStageModal } from './src/screens/ChangeStageModal';
 import { DesfechoVisitaSheet } from './src/screens/DesfechoVisitaSheet';
+import { ComunicadoSheet } from './src/screens/ComunicadoSheet';
 import { EditLocationModal } from './src/screens/EditLocationModal';
 import { MinhaDailyCard } from './src/screens/MinhaDailyCard';
+import { useComunicadosNaoLidos } from './src/hooks/useComunicados';
 import { useLayout } from './src/hooks/useLayout';
 import { useNomesDeClientes } from './src/hooks/useNomesDeClientes';
 import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
@@ -7795,6 +7797,28 @@ function ClientBottomSheet({
   );
 }
 
+/**
+ * O recado do gestor, montado na RAIZ e nao dentro do MainApp.
+ *
+ * O MainApp tem early returns — localizacao negada, area sem permissao — e
+ * abaixo deles nada renderiza. A folha de desfecho pode viver la' (sem
+ * localizacao nao ha' check-in), mas recado NAO: ele tem que chegar em quem
+ * esta' com a permissao desligada tambem. E' a mesma razao pela qual o
+ * AlertHost mora aqui.
+ */
+function AvisoDeComunicado() {
+  const { profile } = useAuth();
+  const { naoLidos, confirmar } = useComunicadosNaoLidos(!!profile);
+  if (naoLidos.length === 0) return null;
+  return (
+    <ComunicadoSheet
+      comunicado={naoLidos[0]}
+      restantes={naoLidos.length - 1}
+      aoConfirmar={(id) => confirmar.mutateAsync(id)}
+    />
+  );
+}
+
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -7804,6 +7828,7 @@ export default function App() {
           {/* Host dos Alert.alert. Fica no topo da arvore e FORA do MainApp
               pra continuar montado mesmo quando a tela que disparou o alerta
               desmonta (ex.: erro ao salvar que fecha o modal). */}
+          <AvisoDeComunicado />
           <AlertHost />
         </QueryClientProvider>
       </AuthProvider>
