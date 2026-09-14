@@ -9,9 +9,11 @@
 //  - Detalhe (nivel 3) em drawer, nunca inline.
 //  - Janela de tempo rotulada junto do numero.
 //  - Sem dado, estado vazio honesto — nunca zero disfarcado de resultado.
-import { useEffect, useMemo, useState } from 'react';
-import { carregarDaily, type DadosDaily, type ExecutivoDaily, type DiaDoExecutivo } from '../dados/daily';
+import { useMemo, useState } from 'react';
+import { carregarDaily, type ExecutivoDaily, type DiaDoExecutivo } from '../dados/daily';
+import { useVivo } from '../dados/vivo';
 import { Drawer } from '../componentes/Drawer';
+import { Frescor } from '../componentes/Frescor';
 
 const DIA_CURTO = new Intl.DateTimeFormat('pt-BR', { weekday: 'short', timeZone: 'UTC' });
 
@@ -230,13 +232,8 @@ function ListaNomes({ titulo, nomes }: { titulo: string; nomes: string[] }) {
 }
 
 export function Daily() {
-  const [dados, setDados] = useState<DadosDaily | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
+  const { dados, erro, desatualizado, recarregar } = useVivo(carregarDaily);
   const [aberto, setAberto] = useState<ExecutivoDaily | null>(null);
-
-  useEffect(() => {
-    carregarDaily().then(setDados).catch((e) => setErro(e.message ?? String(e)));
-  }, []);
 
   const semRegistro = useMemo(
     () => dados?.executivos.filter((e) => e.hoje.pontos === 0).length ?? 0,
@@ -567,6 +564,13 @@ export function Daily() {
           registrado no app — ninguém digita nada aqui.
         </div>
       </section>
+
+      <Frescor
+        atualizadoEm={dados.atualizadoEm}
+        desatualizado={desatualizado}
+        aoTentarDeNovo={recarregar}
+        prefixo="Placar de hoje, horário de Brasília"
+      />
 
       <Drawer
         aberto={aberto != null}

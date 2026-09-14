@@ -10,9 +10,11 @@
 //  - Vermelho so' pra acao e alerta; estado usa cor no texto, nao fundo inteiro.
 //  - Janela de tempo sempre rotulada junto do numero.
 //  - Numero nunca chumbado: sem dado, estado vazio honesto.
-import { useEffect, useMemo, useState } from 'react';
-import { carregarCockpit, type DadosCockpit, type Executivo, type LeadAberto } from '../dados/cockpit';
+import { useMemo, useState } from 'react';
+import { carregarCockpit, type Executivo, type LeadAberto } from '../dados/cockpit';
+import { useVivo } from '../dados/vivo';
 import { Drawer } from '../componentes/Drawer';
+import { Frescor } from '../componentes/Frescor';
 
 /**
  * Cor de cada etapa do funil. E' DADO, e nao decoracao: a fonte e'
@@ -217,16 +219,11 @@ function ListaDeLeads({ leads }: { leads: LeadAberto[] }) {
 }
 
 export function Cockpit() {
-  const [dados, setDados] = useState<DadosCockpit | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
+  const { dados, erro, desatualizado, recarregar } = useVivo(carregarCockpit);
   const [etapaAberta, setEtapaAberta] = useState<string | null>(null);
   const [execAberto, setExecAberto] = useState<Executivo | null>(null);
   const [semDonoAberto, setSemDonoAberto] = useState(false);
   const [mostrarSemAtividade, setMostrarSemAtividade] = useState(false);
-
-  useEffect(() => {
-    carregarCockpit().then(setDados).catch((e) => setErro(e.message ?? String(e)));
-  }, []);
 
   const leadsDaEtapa = useMemo(
     () => (etapaAberta && dados ? dados.leads.filter((l) => l.etapa === etapaAberta) : []),
@@ -569,10 +566,11 @@ export function Cockpit() {
         </section>
       </div>
 
-      <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 16 }}>
-        Dados lidos do Supabase ao vivo ·{' '}
-        {dados.atualizadoEm.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
-      </div>
+      <Frescor
+        atualizadoEm={dados.atualizadoEm}
+        desatualizado={desatualizado}
+        aoTentarDeNovo={recarregar}
+      />
 
       <Drawer
         aberto={etapaAberta != null}

@@ -14,10 +14,11 @@ import {
   trocarPosicao,
   buscarLeads,
   sugerirParadas,
-  type QuadroDeRotas,
   type RotaDoVendedor,
   type LeadParaRota,
 } from '../dados/rotas';
+import { useVivo } from '../dados/vivo';
+import { Frescor } from '../componentes/Frescor';
 import {
   carteiraNoMapa,
   coordenadasPorId,
@@ -48,8 +49,6 @@ const botaoSec = {
 export function Rotas() {
   const hoje = diaBRT(new Date());
   const [dia, setDia] = useState(hoje);
-  const [quadro, setQuadro] = useState<QuadroDeRotas | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
   const [aberta, setAberta] = useState<RotaDoVendedor | null>(null);
   const [busca, setBusca] = useState('');
   const [achados, setAchados] = useState<LeadParaRota[]>([]);
@@ -62,16 +61,19 @@ export function Rotas() {
   const linhaRef = useRef<any>(null);
   const ajustouEnquadreRef = useRef(false);
 
-  const recarregar = (d = dia) =>
-    carregarQuadro(d)
-      .then((q) => {
-        setQuadro(q);
-        // mantem o drawer sincronizado com o que acabou de vir do banco
-        setAberta((atual) => (atual ? q.linhas.find((l) => l.membro.perfilId === atual.membro.perfilId) ?? null : null));
-      })
-      .catch((e) => setErro(e.message ?? String(e)));
-
-  useEffect(() => { setQuadro(null); recarregar(dia); }, [dia]);
+  // `chave: dia` faz a troca de dia voltar pro estado de carregando — trocar de
+  // dia e' navegacao, e mostrar a rota do dia anterior enquanto a nova vem
+  // seria mentira. Uma revalidacao, ao contrario, nunca esvazia a tela.
+  const { dados: quadro, erro, desatualizado, recarregar } = useVivo(() => carregarQuadro(dia), {
+    chave: dia,
+    // Editor de rota aberto, ou uma escrita em curso: nao repintar por baixo.
+    pausado: aberta != null || ocupado,
+    // Mantem o drawer sincronizado com o que acabou de vir do banco.
+    aoReceber: (q) =>
+      setAberta((atual) =>
+        atual ? q.linhas.find((l) => l.membro.perfilId === atual.membro.perfilId) ?? null : null,
+      ),
+  });
 
   // busca com atraso curto: digitou, esperou 300ms, buscou
   useEffect(() => {
@@ -421,6 +423,14 @@ export function Rotas() {
         </>
       )}
 
+      {quadro && (
+        <Frescor
+          atualizadoEm={quadro.atualizadoEm}
+          desatualizado={desatualizado}
+          aoTentarDeNovo={recarregar}
+          prefixo={`Rotas de ${dia.split('-').reverse().join('/')}, horário de Brasília`}
+        />
+      )}
     </>
   );
 }

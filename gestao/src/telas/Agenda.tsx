@@ -13,9 +13,11 @@
 //  - Detalhe em drawer, nunca inline.
 //  - Hoje-vazio recebe tracejado vermelho (o unico buraco acionavel agora).
 //  - Dia passado nao vira alarme: cobrar plano de terca passada nao muda nada.
-import { useEffect, useState } from 'react';
-import { carregarAgenda, type DadosAgenda, type DiaDaAgenda, type LinhaAgenda } from '../dados/agenda';
+import { useState } from 'react';
+import { carregarAgenda, type DiaDaAgenda, type LinhaAgenda } from '../dados/agenda';
+import { useVivo } from '../dados/vivo';
 import { Drawer } from '../componentes/Drawer';
+import { Frescor } from '../componentes/Frescor';
 
 const SEMANA_CURTA = new Intl.DateTimeFormat('pt-BR', { weekday: 'short', timeZone: 'UTC' });
 const HORA = new Intl.DateTimeFormat('pt-BR', {
@@ -86,13 +88,8 @@ function Celula({ d, aoAbrir }: { d: DiaDaAgenda; aoAbrir: () => void }) {
 }
 
 export function Agenda() {
-  const [dados, setDados] = useState<DadosAgenda | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
+  const { dados, erro, desatualizado, recarregar } = useVivo(carregarAgenda);
   const [celula, setCelula] = useState<{ linha: LinhaAgenda; dia: DiaDaAgenda } | null>(null);
-
-  useEffect(() => {
-    carregarAgenda().then(setDados).catch((e) => setErro(e.message ?? String(e)));
-  }, []);
 
   if (erro) {
     return (
@@ -274,10 +271,12 @@ export function Agenda() {
         )}
       </section>
 
-      <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 16 }}>
-        Semana civil (segunda a sexta), horário de Brasília ·{' '}
-        {dados.atualizadoEm.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
-      </div>
+      <Frescor
+        atualizadoEm={dados.atualizadoEm}
+        desatualizado={desatualizado}
+        aoTentarDeNovo={recarregar}
+        prefixo="Semana civil (segunda a sexta), horário de Brasília"
+      />
 
       <Drawer
         aberto={celula != null}

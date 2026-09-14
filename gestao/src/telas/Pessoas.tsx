@@ -5,7 +5,7 @@
 // precisa produzir e' uma conversa boa. Por isso cada pessoa aparece com o
 // gargalo E com a boa pratica, e o roteiro so' traz item que tem numero por
 // tras — pauta sem evidencia vira opiniao.
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   carregarPessoas,
   registrar1a1,
@@ -18,11 +18,12 @@ import {
   LIMITE_DOC_BYTES,
   type Registro1a1,
   type DocumentoDe1a1,
-  type DadosPessoas,
   type Pessoa,
   type Semaforo,
 } from '../dados/pessoas';
+import { useVivo } from '../dados/vivo';
 import { Drawer } from '../componentes/Drawer';
+import { Frescor } from '../componentes/Frescor';
 import { GravadorDeAudio } from '../componentes/GravadorDeAudio';
 
 const DATA = new Intl.DateTimeFormat('pt-BR', {
@@ -332,8 +333,6 @@ function ItemDeAudio({
 }
 
 export function Pessoas() {
-  const [dados, setDados] = useState<DadosPessoas | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
   const [aberta, setAberta] = useState<Pessoa | null>(null);
   const [pauta, setPauta] = useState('');
   const [combinado, setCombinado] = useState('');
@@ -343,14 +342,12 @@ export function Pessoas() {
   const [docs, setDocs] = useState<File[]>([]);
   const [transcrevendo, setTranscrevendo] = useState<string | null>(null);
 
-  const recarregar = () =>
-    carregarPessoas()
-      .then(setDados)
-      .catch((e) => setErro(e.message ?? String(e)));
-
-  useEffect(() => {
-    recarregar();
-  }, []);
+  // Pausado com o dossie aberto: ali dentro ha' textarea de pauta, gravacao de
+  // audio e anexos. Repintar por baixo de quem esta' escrevendo o 1:1 e' pior
+  // que mostrar dado de um minuto atras.
+  const { dados, erro, desatualizado, recarregar } = useVivo(carregarPessoas, {
+    pausado: aberta != null,
+  });
 
   const historico = useMemo(
     () => (aberta && dados?.registros ? dados.registros.filter((r) => r.perfilId === aberta.perfilId) : []),
@@ -550,11 +547,12 @@ export function Pessoas() {
         </section>
       )}
 
-      <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 16 }}>
-        Semáforo por percentual da carteira acima do SLA: abaixo de 15% em dia, 15–35% atenção,
-        35%+ crítico ·{' '}
-        {dados.atualizadoEm.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
-      </div>
+      <Frescor
+        atualizadoEm={dados.atualizadoEm}
+        desatualizado={desatualizado}
+        aoTentarDeNovo={recarregar}
+        prefixo="Semáforo por percentual da carteira acima do SLA: abaixo de 15% em dia, 15–35% atenção, 35%+ crítico"
+      />
 
       <Drawer
         aberto={aberta != null}

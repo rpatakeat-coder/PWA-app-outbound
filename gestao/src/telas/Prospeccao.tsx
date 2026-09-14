@@ -8,9 +8,11 @@
 // O bloco mais importante daqui e' o do DESCARTE. Ele e' a unica coisa nesta
 // tela que o gestor nao consegue ver em lugar nenhum hoje: o vendedor descarta
 // pelo app e a conta some, sem deixar rastro visivel pra gestao.
-import { useEffect, useMemo, useState } from 'react';
-import { carregarProspeccao, type DadosProspeccao, type ContaAlvo } from '../dados/prospeccao';
+import { useMemo, useState } from 'react';
+import { carregarProspeccao, type ContaAlvo } from '../dados/prospeccao';
+import { useVivo } from '../dados/vivo';
 import { Drawer } from '../componentes/Drawer';
+import { Frescor } from '../componentes/Frescor';
 
 const DATA_CURTA = new Intl.DateTimeFormat('pt-BR', {
   day: '2-digit',
@@ -49,14 +51,9 @@ function LinhaConta({ c }: { c: ContaAlvo }) {
 }
 
 export function Prospeccao() {
-  const [dados, setDados] = useState<DadosProspeccao | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
+  const { dados, erro, desatualizado, recarregar } = useVivo(carregarProspeccao);
   const [praca, setPraca] = useState<string | null>(null);
   const [verDispensadas, setVerDispensadas] = useState(false);
-
-  useEffect(() => {
-    carregarProspeccao().then(setDados).catch((e) => setErro(e.message ?? String(e)));
-  }, []);
 
   const contasDaPraca = useMemo(() => {
     if (!dados || !praca) return [];
@@ -284,10 +281,12 @@ export function Prospeccao() {
         )}
       </section>
 
-      <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 16 }}>
-        Descobertas vêm do Google via Serper; entram no mapa pela Rota do dia ·{' '}
-        {dados.atualizadoEm.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
-      </div>
+      <Frescor
+        atualizadoEm={dados.atualizadoEm}
+        desatualizado={desatualizado}
+        aoTentarDeNovo={recarregar}
+        prefixo="Descobertas vêm do Google via Serper; entram no mapa pela Rota do dia"
+      />
 
       <Drawer
         aberto={praca != null}

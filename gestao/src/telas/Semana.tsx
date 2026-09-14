@@ -18,8 +18,10 @@ import {
   type LeituraIA,
   type MetricaSemanal,
 } from '../dados/semana';
+import { useVivo } from '../dados/vivo';
 import type { Delta } from '../dados/regras';
 import { Drawer } from '../componentes/Drawer';
+import { Frescor } from '../componentes/Frescor';
 
 /** Idade do texto em horas. O doc pede que a idade do dado seja rotulada e que
  *  o sistema avise quando estiver velha — o incidente que motivou a regra foi
@@ -217,15 +219,13 @@ function CartaoMetrica({ m, aoAbrir }: { m: MetricaSemanal; aoAbrir: () => void 
 }
 
 export function Semana() {
-  const [dados, setDados] = useState<DadosSemana | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
+  const { dados, erro, desatualizado, recarregar } = useVivo(carregarSemana);
   const [aberta, setAberta] = useState<MetricaSemanal | null>(null);
   const [leitura, setLeitura] = useState<LeituraIA | null>(null);
   const [gerando, setGerando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
 
   useEffect(() => {
-    carregarSemana().then(setDados).catch((e) => setErro(e.message ?? String(e)));
     carregarLeituraIA().then(setLeitura);
   }, []);
 
@@ -414,10 +414,12 @@ export function Semana() {
         </div>
       </section>
 
-      <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 16 }}>
-        Semana civil de segunda a sexta, horário de Brasília ·{' '}
-        {dados.atualizadoEm.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
-      </div>
+      <Frescor
+        atualizadoEm={dados.atualizadoEm}
+        desatualizado={desatualizado}
+        aoTentarDeNovo={recarregar}
+        prefixo="Semana civil de segunda a sexta, horário de Brasília"
+      />
 
       <Drawer
         aberto={aberta != null}
