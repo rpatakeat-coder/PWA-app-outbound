@@ -114,6 +114,7 @@ import { CEPStep } from './src/screens/CEPStep';
 import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { ChangeStageModal } from './src/screens/ChangeStageModal';
+import { DesfechoVisitaSheet } from './src/screens/DesfechoVisitaSheet';
 import { EditLocationModal } from './src/screens/EditLocationModal';
 import { MinhaDailyCard } from './src/screens/MinhaDailyCard';
 import { useLayout } from './src/hooks/useLayout';
@@ -2690,6 +2691,13 @@ function MainApp() {
 
   const visitingRef = useRef(false);
   const [isVisiting, setIsVisiting] = useState(false);
+  // Sobe logo depois do check-in bem-sucedido: o que aconteceu DENTRO da visita
+  // (ver DesfechoVisitaSheet). Puravel — o check-in ja' gravou.
+  const [desfechoPendente, setDesfechoPendente] = useState<{
+    idHubspot: string;
+    cliente: string;
+    visitadoEm: string;
+  } | null>(null);
 
   const handleMarkAsVisited = useCallback(async (client: Client, onDone?: () => void) => {
     if (visitingRef.current) return;
@@ -2783,7 +2791,7 @@ function MainApp() {
         return;
       }
 
-      await markAsVisited.mutateAsync({ clientId: client.id, latitude: userLat, longitude: userLon });
+      const visitado = await markAsVisited.mutateAsync({ clientId: client.id, latitude: userLat, longitude: userLon });
       // Auto-conclui a parada da rota do dia correspondente: o check-in É a
       // conclusão da visita, então a parada não deveria ficar "pendente" só
       // porque o vendedor não tocou o checkbox (senão o ranking subestima).
@@ -2794,7 +2802,19 @@ function MainApp() {
           try { await fieldOps.markStopDone.mutateAsync(stop); } catch { /* não bloqueia o check-in */ }
         }
       }
-      Alert.alert('Pronto', 'Lead marcado como visitado.');
+      // O desfecho so' faz sentido pra LEAD com deal: visitar cliente/churn e'
+      // pos-venda (o proprio check-in ja' nao toca o funil deles), e visita sem
+      // deal_id vira "visita nao confirmada" do lado do Cockpit — fica fora do
+      // ciclo fechado em vez de entrar torta.
+      if (visitado.status === 'lead' && visitado.id_hubspot) {
+        setDesfechoPendente({
+          idHubspot: visitado.id_hubspot,
+          cliente: visitado.empresa?.trim() || visitado.nome,
+          visitadoEm: visitado.visited_at ?? new Date().toISOString(),
+        });
+      } else {
+        Alert.alert('Pronto', 'Lead marcado como visitado.');
+      }
       onDone?.();
     } catch (err: any) {
       Alert.alert('Não foi possível marcar como visitado', err?.message ?? 'Erro desconhecido');
@@ -6060,6 +6080,16 @@ function MainApp() {
           }
           onClose={() => setChangingStageFor(null)}
           onCreateHubspotDeal={ensureHubspotDeal}
+        />
+      )}
+
+      {desfechoPendente && (
+        <DesfechoVisitaSheet
+          idHubspot={desfechoPendente.idHubspot}
+          cliente={desfechoPendente.cliente}
+          visitadoEm={desfechoPendente.visitadoEm}
+          ownerId={profile?.id_hubspot ?? null}
+          aoFechar={() => setDesfechoPendente(null)}
         />
       )}
 

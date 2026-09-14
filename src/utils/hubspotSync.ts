@@ -222,3 +222,123 @@ export async function cancelAgendaEngagement(input: {
     : { type: 'update_meeting', engagement_id: input.engagement_id, cancelar: true };
   await invokeHubspotSync(body);
 }
+
+// ============================================================================
+// Desfecho da visita -> tres escritas no HubSpot.
+//
+// O check-in ja' registrava que a visita ACONTECEU (Task concluida). Isto
+// registra o que aconteceu NELA, nos tres lugares que o Cockpit le':
+//
+//   1. propriedades de qualificacao no deal  (rota `qualificar`)
+//   2. nota com o bloco DESFECHO_VISITA v1   (rota `create_note`)
+//   3. tarefa do proximo passo               (rota `create_task`)
+//
+// AS TRES SAO INDEPENDENTES, E FALHAM SEPARADO. A visita ja' esta' gravada no
+// Supabase antes de qualquer uma delas — nenhuma falha aqui desfaz visita. E
+// uma falhar nao pode cancelar as outras duas: se o HubSpot recusar o gargalo,
+// a nota com a dor do cliente continua valendo. Por isso o retorno diz o que
+// entrou e o que nao entrou, em vez de lancar no primeiro erro.
+// ============================================================================
+import {
+  montarBlocoDesfecho,
+  vencimentoDoDia,
+  tituloDoProximoPasso,
+  decisorDoDesfecho,
+  type Desfecho,
+  type Gargalo,
+  type ProximoPasso,
+} from './desfechoVisita';
+
+export type ResultadoDesfecho = {
+  qualificacao: 'gravada' | 'nada_a_gravar' | 'falhou';
+  nota: 'gravada' | 'falhou';
+  tarefa: 'criada' | 'sem_proximo_passo' | 'falhou';
+  /** Mensagens legiveis, uma por escrita que falhou. Vazio = tudo entrou. */
+  erros: string[];
+};
+
+export type EntradaDesfechoVisita = {
+  id_hubspot: string;
+  cliente: string;
+  /** ISO do check-in — a nota e' datada no momento da visita, nao no do envio. */
+  ocorridoEm: string;
+  desfecho: Desfecho;
+  nomeDoSistema: string | null;
+  gargalo: Gargalo | null;
+  proximoPasso: ProximoPasso | null;
+  observacao: string | null;
+  ownerId: string | null;
+};
+
+export async function enviarDesfechoDaVisita(
+  e: EntradaDesfechoVisita,
+): Promise<ResultadoDesfecho> {
+  const erros: string[] = [];
+  const motivo = (err: unknown) => (err as Error)?.message ?? String(err);
+
+  // 1) Qualificacao. Campo em branco nao vai: a rota `qualificar` ignora vazio
+  //    de proposito, mas nem vale a viagem se os dois estiverem em branco.
+  let qualificacao: ResultadoDesfecho['qualificacao'] = 'nada_a_gravar';
+  const propriedades: Record<string, string> = {};
+  if (e.nomeDoSistema?.trim()) propriedades.nome_do_sistema = e.nomeDoSistema.trim();
+  if (e.gargalo) propriedades.gargalo_operacional = e.gargalo;
+  if (Object.keys(propriedades).length > 0) {
+    try {
+      await invokeHubspotSync({ type: 'qualificar', id_hubspot: e.id_hubspot, propriedades });
+      qualificacao = 'gravada';
+    } catch (err) {
+      qualificacao = 'falhou';
+      erros.push(`Qualificação: ${motivo(err)}`);
+    }
+  }
+
+  // 2) A nota. SEM `autor_nome` de proposito: a edge anexa "— Fulano (via App
+  //    Outbound)" depois do corpo, e o bloco precisa ser o corpo INTEIRO —
+  //    linha solta depois dele nao e' `chave: valor` e confunde o parser. Quem
+  //    visitou ja' esta' na Task de check-in e no dono do negocio.
+  let nota: ResultadoDesfecho['nota'] = 'gravada';
+  try {
+    await invokeHubspotSync({
+      type: 'create_note',
+      id_hubspot: e.id_hubspot,
+      body: montarBlocoDesfecho({
+        cliente: e.cliente,
+        ocorridoEm: e.ocorridoEm,
+        canal: 'visita',
+        desfecho: e.desfecho,
+        decisorAlcancado: decisorDoDesfecho(e.desfecho),
+        observacao: e.observacao,
+        proximoPasso: e.proximoPasso,
+      }),
+      criado_em: e.ocorridoEm,
+    });
+  } catch (err) {
+    nota = 'falhou';
+    erros.push(`Nota do desfecho: ${motivo(err)}`);
+  }
+
+  // 3) A tarefa do proximo passo. So' existe se o vendedor PROMETEU alguma
+  //    coisa — tarefa auto-gerada enche o CRM de item que ninguem assumiu, e
+  //    o Cockpit mede tarefa do HubSpot como pendencia real da pessoa.
+  //    `concluida: false`: esta e' pendencia, diferente da Task do check-in.
+  let tarefa: ResultadoDesfecho['tarefa'] = 'sem_proximo_passo';
+  if (e.proximoPasso && e.proximoPasso.acao.trim()) {
+    try {
+      await invokeHubspotSync({
+        type: 'create_task',
+        id_hubspot: e.id_hubspot,
+        titulo: tituloDoProximoPasso(e.proximoPasso.canal, e.cliente),
+        descricao: e.proximoPasso.acao.trim(),
+        due_at: vencimentoDoDia(e.proximoPasso.dia),
+        owner_id: e.ownerId,
+        concluida: false,
+      });
+      tarefa = 'criada';
+    } catch (err) {
+      tarefa = 'falhou';
+      erros.push(`Tarefa do próximo passo: ${motivo(err)}`);
+    }
+  }
+
+  return { qualificacao, nota, tarefa, erros };
+}

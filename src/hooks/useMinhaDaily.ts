@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
+// Dia util mora em utils/desfechoVisita.ts — a mesma conta servia aqui e no
+// prazo do proximo passo, e duas copias de "e' dia util" divergem sozinhas.
+import { ehDiaUtil } from '../utils/desfechoVisita';
 
 // Minha Daily: a promessa do dia e o que ela virou.
 //
@@ -21,11 +24,6 @@ const fmtDia = new Intl.DateTimeFormat('en-CA', {
 });
 
 export const diaBRT = (quando: string | Date = new Date()) => fmtDia.format(new Date(quando));
-
-const ehDiaUtil = (dia: string) => {
-  const d = new Date(`${dia}T12:00:00Z`).getUTCDay();
-  return d >= 1 && d <= 5;
-};
 
 /** Dias uteis de `hoje` pra tras, hoje primeiro. */
 function diasUteisAte(hoje: string, quantos: number): string[] {

@@ -353,6 +353,69 @@ async function handleUpdate(token: string, body: Record<string, unknown>) {
   return json(200, { ok: true, id_hubspot: idHubspot, contact_id: contactId });
 }
 
+// ===== qualificar =====
+// Escrita ESTREITA: so' as duas propriedades de qualificacao da visita, e so'
+// quando vem com valor.
+//
+// NAO reusa `update` de proposito. `update` monta o corpo com
+// `dealPropertiesFromBody`, que usa `str()` — e `str()` devolve '' pro que nao
+// veio. PATCH com '' APAGA a propriedade no HubSpot, entao uma chamada parcial
+// por aquela rota limparia dealname, celular, cep e endereco do negocio. A
+// rota de la' so' e' segura porque quem chama manda o cadastro inteiro.
+const QUALIFICACAO_PERMITIDA = new Set(['nome_do_sistema', 'gargalo_operacional']);
+
+// Enumeracao do HubSpot. Valor fora da lista volta como erro cru da API, que o
+// vendedor na rua leria como "deu erro" sem saber o que corrigir.
+const GARGALOS_VALIDOS = new Set([
+  'Fila',
+  'Falta de Gar\u00e7om',
+  'Falta de Gest\u00e3o',
+  'Sem fideliza\u00e7\u00e3o',
+  'Demora na divis\u00e3o de contas',
+  'Estoque',
+]);
+
+async function handleQualificar(token: string, body: Record<string, unknown>) {
+  const idHubspot = trimOrNull(body.id_hubspot);
+  if (!idHubspot) return json(400, { error: 'id_hubspot e obrigatorio' });
+
+  const cru =
+    body.propriedades && typeof body.propriedades === 'object' && !Array.isArray(body.propriedades)
+      ? (body.propriedades as Record<string, unknown>)
+      : {};
+
+  const properties: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(normalizeProperties(cru))) {
+    if (!QUALIFICACAO_PERMITIDA.has(k)) continue;
+    const valor = trimOrNull(v);
+    // Vazio NAO entra: nao existe "apagar a qualificacao". Se o vendedor pulou
+    // o campo, o que estava la' antes continua valendo.
+    if (valor) properties[k] = valor;
+  }
+
+  const gargalo = properties.gargalo_operacional;
+  if (typeof gargalo === 'string' && !GARGALOS_VALIDOS.has(gargalo)) {
+    return json(400, {
+      error: 'gargalo_operacional invalido',
+      detail: `aceitos: ${[...GARGALOS_VALIDOS].join(', ')}`,
+    });
+  }
+
+  if (Object.keys(properties).length === 0) {
+    return json(400, { error: 'nenhuma propriedade de qualificacao enviada' });
+  }
+
+  const patch = await hsFetch(token, 'PATCH', `/crm/v3/objects/deals/${idHubspot}`, { properties });
+  if (!patch.ok) {
+    return json(502, {
+      error: 'HubSpot recusou a qualificacao',
+      detail: patch.body?.message ?? `status ${patch.status}`,
+    });
+  }
+
+  return json(200, { ok: true, id_hubspot: idHubspot, gravadas: Object.keys(properties) });
+}
+
 // ===== create_pin =====
 // Ramo "Pin Criado" do n8n: cria contato (ou acha o existente via mensagem de
 // conflito), cria o deal no pipeline/etapa de entrada, associa os dois e
@@ -692,6 +755,8 @@ Deno.serve(async (req: Request) => {
         return await handleChangeStage(token, body);
       case 'update':
         return await handleUpdate(token, body);
+      case 'qualificar':
+        return await handleQualificar(token, body);
       case 'create_pin':
         return await handleCreatePin(token, body);
       case 'get_stages':
