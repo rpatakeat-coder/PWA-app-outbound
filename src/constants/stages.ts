@@ -346,11 +346,21 @@ export const STAGES: Stage[] = [
         kind: 'boolean',
       },
       {
-        // TODO: virar 'select' quando voce me passar as opcoes fixas, ou deixar text livre
+        // ENUMERACAO no HubSpot, com 8 valores fixos — nao texto livre.
+        //
+        // Ficou `kind: 'text'` com um TODO ("virar select quando me passarem as
+        // opcoes") desde que a etapa foi escrita, e as opcoes JA' estavam em
+        // `stage_property_options` o tempo todo. O efeito: o app mandava texto
+        // digitado pra um campo que so' aceita os 8 valores, e o HubSpot
+        // recusava a passagem INTEIRA pra Ag. Pagamento — nao so' este campo.
+        //
+        // Em 14/09/2026 isso travou uma vendedora, e a mensagem do app ainda
+        // dizia "(sem conexao?)", entao ela ficou conferindo o sinal do
+        // celular. As opcoes vem do banco, como as outras quatro desta etapa.
         field: 'qual_maior_desafio_',
         fieldLabel: 'Qual o maior desafio',
-        kind: 'text',
-        placeholder: 'Ex.: gestão de fluxo, controle de estoque...',
+        kind: 'select',
+        options: [],
       },
       {
         field: 'informacoes_sobre_o_maior_desafio',
