@@ -391,6 +391,7 @@ export function AgendaScreen({
           isto, a semana do vendedor no app não bate com a que o gestor montou. */}
       <TarefasDoCrmSecao
         enabled
+        apenasDia={diaSelecionado}
         abrirLeadNoMapa={(id) => {
           const alvo = clients.find((c) => c.id === id);
           if (alvo) openClientById?.(alvo.id);

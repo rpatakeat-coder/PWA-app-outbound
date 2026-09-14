@@ -103,17 +103,37 @@ export function useTarefasDoCrm(enabled: boolean, diasAFrente = 14) {
         }
       }
 
+      // Os negócios que NÃO estão em `clients` — nasceram no CRM e nunca
+      // viraram pin. Sem isto o vendedor via seis follow ups idênticos
+      // ("Identificar o nome e o horário do decisor") sem saber de qual
+      // cliente era nenhum: o assunto do follow up é a AÇÃO, não o cliente, e
+      // o corpo só tem o marcador.
+      const faltando = dealIds.filter((id) => !porDeal.has(id));
+      const nomesDoCrm: Record<string, string> = {};
+      if (faltando.length > 0) {
+        try {
+          const { data: resp } = await supabase.functions.invoke('hubspot-sync', {
+            body: { type: 'deal_names', ids: faltando },
+          });
+          Object.assign(nomesDoCrm, (resp?.nomes ?? {}) as Record<string, string>);
+        } catch {
+          // Falhar aqui só custa o nome; a tarefa continua na tela com a data
+          // e a ação, que é o mínimo para a pessoa se guiar.
+        }
+      }
+
       return {
         total: (data?.total as number) ?? tarefas.length,
         semMedicao: null,
         tarefas: tarefas.map((t) => {
           const achado = t.marcador ? porDeal.get(t.marcador.dealId) : undefined;
+          const doCrm = t.marcador ? nomesDoCrm[t.marcador.dealId] : undefined;
           return {
             ...t,
             clientId: achado?.id ?? null,
-            // Sem o lead no app, o nome do assunto ainda serve pra pessoa saber
-            // de quem se trata — só não dá pra abrir no mapa.
-            nomeDoCliente: achado?.nome ?? clienteDoAssunto(t.assunto),
+            // Ordem: o nome do app, depois o do CRM, depois o que dá pra tirar
+            // do assunto (vale para visita, que vem "Visita - <cliente>").
+            nomeDoCliente: achado?.nome ?? doCrm ?? clienteDoAssunto(t.assunto),
           };
         }),
       };

@@ -487,6 +487,44 @@ async function handleListTasks(token: string, body: Record<string, unknown>) {
   return json(200, { tarefas, total: busca.body?.total ?? tarefas.length });
 }
 
+// ===== deal_names =====
+// Nome do negocio a partir do id. SO' LEITURA, e so' o nome.
+//
+// Existe porque a tarefa do Cockpit aponta pro negocio por id, e muitos desses
+// negocios NAO estao em `clients` (nasceram no CRM, nunca viraram pin no app).
+// Sem o nome, o vendedor via seis follow ups identicos -- "Identificar o nome
+// e o horario do decisor" -- sem saber de qual cliente era nenhum deles.
+//
+// Nao devolve mais nada do negocio de proposito: a tela so' precisa do nome
+// pra dizer de quem e' a tarefa, e uma rota que devolve o deal inteiro vira,
+// com o tempo, o jeito de ler carteira alheia.
+async function handleDealNames(token: string, body: Record<string, unknown>) {
+  const ids = Array.isArray(body.ids) ? body.ids.map((x) => trimOrNull(x)).filter(Boolean) : [];
+  if (ids.length === 0) return json(200, { nomes: {} });
+  // Teto do batch read do HubSpot.
+  const lote = ids.slice(0, 100) as string[];
+
+  const res = await hsFetch(token, 'POST', '/crm/v3/objects/deals/batch/read', {
+    properties: ['dealname'],
+    // `inputs` com id que nao existe nao derruba o lote: o HubSpot devolve o
+    // resto e reporta o que faltou. Entao nao pre-validamos nada aqui.
+    inputs: lote.map((id) => ({ id })),
+  });
+  if (!res.ok) {
+    return json(502, {
+      error: 'HubSpot recusou a leitura dos negocios',
+      detail: res.body?.message ?? `status ${res.status}`,
+    });
+  }
+
+  const nomes: Record<string, string> = {};
+  for (const d of res.body?.results ?? []) {
+    const nome = trimOrNull(d?.properties?.dealname);
+    if (d?.id && nome) nomes[String(d.id)] = nome;
+  }
+  return json(200, { nomes });
+}
+
 // ===== create_pin =====
 // Ramo "Pin Criado" do n8n: cria contato (ou acha o existente via mensagem de
 // conflito), cria o deal no pipeline/etapa de entrada, associa os dois e
@@ -830,6 +868,8 @@ Deno.serve(async (req: Request) => {
         return await handleQualificar(token, body);
       case 'list_tasks':
         return await handleListTasks(token, body);
+      case 'deal_names':
+        return await handleDealNames(token, body);
       case 'create_pin':
         return await handleCreatePin(token, body);
       case 'get_stages':
