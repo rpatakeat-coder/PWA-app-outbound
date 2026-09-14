@@ -7,7 +7,7 @@
 // inteiro como "sem meta" enquanto todos rodavam pela meta global. E' um erro
 // que nao levanta excecao, nao aparece em log e so' e' visivel pra quem conhece
 // a operacao. Fica travado por teste.
-import { resolverMeta, pontosDoDia, ehAvanco, calcularDelta, META_PADRAO } from './regras';
+import { resolverMeta, pontosDoDia, ehAvanco, calcularDelta, META_PADRAO, modoSugerido } from './regras';
 
 let falhas = 0;
 const ok = (nome: string, real: unknown, esperado: unknown) => {
@@ -86,6 +86,28 @@ ok('zero a zero e neutro', calcularDelta(0, 0), {
   tom: 'neutro',
 });
 ok('diferenca absoluta', calcularDelta(7, 3).diferenca, 4);
+
+console.log('\n--- modo sugerido: a ordem das perguntas E a regra ---');
+const base = { semOwner: false, semaforo: 'ok' as const, visitasNaJanela: 10, diasSemVisitar: 1 };
+ok('sem owner nao tem o que propor', modoSugerido({ ...base, semOwner: true }), null);
+ok('nao medido tambem nao', modoSugerido({ ...base, semaforo: 'nao_medido' }), null);
+ok('funil travado => destravar', modoSugerido({ ...base, semaforo: 'critico' }), 'destravar');
+ok(
+  'travado vence ausencia de campo',
+  modoSugerido({ ...base, semaforo: 'critico', visitasNaJanela: 0 }),
+  'destravar',
+);
+ok('zero visita => campo', modoSugerido({ ...base, visitasNaJanela: 0 }), 'campo');
+ok('mais de 3 dias sem ir a rua => campo', modoSugerido({ ...base, diasSemVisitar: 5 }), 'campo');
+ok('3 dias ainda nao e campo', modoSugerido({ ...base, diasSemVisitar: 3 }), 'reconhecer');
+ok('campo vence amarelo', modoSugerido({ ...base, semaforo: 'atencao', visitasNaJanela: 0 }), 'campo');
+ok('amarelo => acompanhar', modoSugerido({ ...base, semaforo: 'atencao' }), 'acompanhar');
+ok('tudo em dia => reconhecer', modoSugerido(base), 'reconhecer');
+ok(
+  'sem registro de dias nao inventa campo',
+  modoSugerido({ ...base, diasSemVisitar: null }),
+  'reconhecer',
+);
 
 console.log(falhas === 0 ? '\nTODOS PASSARAM' : `\n${falhas} FALHARAM`);
 if (falhas) throw new Error(`${falhas} teste(s) de regra falharam`);

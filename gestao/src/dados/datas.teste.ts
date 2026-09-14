@@ -85,6 +85,15 @@ ok('semana que atravessa o mes', diasDaSemana('2026-09-02'), [
 ]);
 ok('todo dia da semana e util', diasDaSemana('2026-08-14').every(ehDiaUtil), true);
 
+console.log('\n--- segunda da semana: domingo fecha, nao abre ---');
+// 14/09/2026 e' segunda; 13 domingo; 12 sabado; 18 sexta.
+ok('segunda e ela mesma', segundaDaSemana('2026-09-14'), '2026-09-14');
+ok('sexta volta pra segunda', segundaDaSemana('2026-09-18'), '2026-09-14');
+ok('sabado ainda e a semana que passou', segundaDaSemana('2026-09-12'), '2026-09-07');
+ok('DOMINGO fecha a semana, nao abre a seguinte', segundaDaSemana('2026-09-13'), '2026-09-07');
+ok('virada de mes', segundaDaSemana('2026-10-01'), '2026-09-28');
+ok('virada de ano', segundaDaSemana('2027-01-01'), '2026-12-28');
+
 console.log(falhas === 0 ? '\nTODOS PASSARAM' : `\n${falhas} FALHARAM`);
 // throw em vez de process.exit: o tsconfig deste app e' de browser e nao tem
 // @types/node, entao `process` nao existe pro compilador. O throw tambem sai

@@ -5,7 +5,7 @@
 // precisa produzir e' uma conversa boa. Por isso cada pessoa aparece com o
 // gargalo E com a boa pratica, e o roteiro so' traz item que tem numero por
 // tras — pauta sem evidencia vira opiniao.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   carregarPessoas,
   registrar1a1,
@@ -22,6 +22,13 @@ import {
   type Semaforo,
 } from '../dados/pessoas';
 import { useVivo } from '../dados/vivo';
+import {
+  carregarModosDaSemana,
+  definirModoDeAgir,
+  type Indisponivel,
+  type ModoRegistrado,
+} from '../dados/decisoes';
+import { MODOS, modoSugerido, type ModoDeAgir } from '../dados/regras';
 import { Drawer } from '../componentes/Drawer';
 import { Frescor } from '../componentes/Frescor';
 import { GravadorDeAudio } from '../componentes/GravadorDeAudio';
@@ -349,6 +356,36 @@ export function Pessoas() {
     pausado: aberta != null,
   });
 
+  // O que o gestor decidiu nesta semana. Fica FORA do `useVivo` de proposito:
+  // `modos_de_agir` pode nem existir ainda (as migrations 20260914 sao
+  // aplicadas fora deste codigo), e uma tabela ausente nao pode derrubar a
+  // tela inteira de Pessoas — ela e' util sem isto.
+  const [modos, setModos] = useState<Record<string, ModoRegistrado> | Indisponivel | null>(null);
+  useEffect(() => {
+    carregarModosDaSemana().then(setModos).catch(() => setModos(null));
+  }, []);
+  const modosIndisponiveis =
+    modos != null && 'indisponivel' in modos ? (modos as Indisponivel).motivo : null;
+  const modoDe = (perfilId: string): ModoRegistrado | null =>
+    modos && !('indisponivel' in modos) ? modos[perfilId] ?? null : null;
+
+  const escolherModo = async (modo: ModoDeAgir) => {
+    if (!aberta) return;
+    const sugerido = modoSugerido(aberta);
+    const anterior = modos;
+    // Otimista: o chip acende na hora. Se o banco recusar, volta e diz por que.
+    setModos((m) =>
+      m && !('indisponivel' in m)
+        ? { ...m, [aberta.perfilId]: { modo, sugeridoNaEpoca: sugerido } }
+        : m,
+    );
+    const r = await definirModoDeAgir({ perfilId: aberta.perfilId, modo, sugerido });
+    if (!r.ok) {
+      setModos(anterior);
+      setAviso(r.erro ?? 'Não consegui salvar o modo de agir.');
+    }
+  };
+
   const historico = useMemo(
     () => (aberta && dados?.registros ? dados.registros.filter((r) => r.perfilId === aberta.perfilId) : []),
     [aberta, dados],
@@ -570,6 +607,67 @@ export function Pessoas() {
       >
         {aberta && (
           <>
+            {/* O que eu vou FAZER com essa pessoa nesta semana. Vem antes do
+                roteiro de propósito: o roteiro é insumo da conversa, isto é a
+                decisão — e o cockpit inteiro existia sem lugar para ela. */}
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted)', marginBottom: 6 }}>
+                Meu modo de agir nesta semana
+              </div>
+
+              {modosIndisponiveis ? (
+                <div style={{ fontSize: 13, color: 'var(--muted)' }}>{modosIndisponiveis}</div>
+              ) : (
+                (() => {
+                  const registrado = modoDe(aberta.perfilId);
+                  const sugerido = modoSugerido(aberta);
+                  return (
+                    <>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {MODOS.map((m) => {
+                          const ativo = registrado?.modo === m.valor;
+                          const ehSugerido = sugerido === m.valor;
+                          return (
+                            <button
+                              key={m.valor}
+                              onClick={() => escolherModo(m.valor)}
+                              title={m.explica}
+                              style={{
+                                border: `1.5px solid ${ativo ? 'var(--red)' : 'var(--line-btn)'}`,
+                                background: ativo ? 'var(--red-soft)' : 'transparent',
+                                color: ativo ? 'var(--red)' : 'var(--ink)',
+                                borderRadius: 16,
+                                padding: '6px 12px',
+                                font: 'inherit',
+                                fontSize: 13,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {m.rotulo}
+                              {ehSugerido && !ativo ? (
+                                <span style={{ color: 'var(--muted)', fontWeight: 500 }}>
+                                  {' '}· sugerido
+                                </span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div style={{ fontSize: 12, color: 'var(--ter)', marginTop: 8, lineHeight: '16px' }}>
+                        {sugerido == null
+                          ? 'Sem base para sugerir: esta pessoa não tem carteira medida. Escolher aqui continua valendo.'
+                          : registrado && registrado.sugeridoNaEpoca && registrado.modo !== registrado.sugeridoNaEpoca
+                            ? `O sistema sugeria "${MODOS.find((m) => m.valor === registrado.sugeridoNaEpoca)?.rotulo}". A discordância fica registrada — é assim que dá para saber se o semáforo está calibrado.`
+                            : MODOS.find((m) => m.valor === sugerido)?.explica}
+                      </div>
+                    </>
+                  );
+                })()
+              )}
+            </div>
+
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted)', marginBottom: 6 }}>
                 Roteiro sugerido

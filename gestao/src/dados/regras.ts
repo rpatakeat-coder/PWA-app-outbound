@@ -94,3 +94,50 @@ export function ehAvanco(
   const j = ordem.get(para);
   return i != null && j != null && j > i;
 }
+
+// ============================================================================
+// Modo de agir — o que o sistema PROPOE que o gestor faca com cada pessoa.
+// ============================================================================
+//
+// Cinco modos, de doc-cockpit/03-banco-supabase.md. Isto e' SUGESTAO, nunca
+// decisao: o gestor escolhe, e quando ele escolhe diferente a tabela
+// `modos_de_agir` guarda as duas (`modo` e `modo_sugerido`).
+//
+// Guardar a divergencia e' o ponto. Um semaforo que o gestor contraria toda
+// semana esta' errado, e sem o registro da discordancia isso nunca aparece —
+// a ferramenta seguiria sugerindo e sendo ignorada em silencio.
+//
+// A ORDEM DAS PERGUNTAS E' A REGRA. Funil travado vem antes de ausencia de
+// campo porque destravar negocio parado rende mais que visita nova; e os dois
+// vem antes do semaforo amarelo, que e' o caso menos urgente.
+
+export type ModoDeAgir = 'cobrar' | 'destravar' | 'campo' | 'acompanhar' | 'reconhecer';
+
+export const MODOS: { valor: ModoDeAgir; rotulo: string; explica: string }[] = [
+  { valor: 'destravar', rotulo: 'Destravar', explica: 'sentar junto nos negócios parados' },
+  { valor: 'campo', rotulo: 'Ir a campo', explica: 'acompanhar na rua' },
+  { valor: 'cobrar', rotulo: 'Cobrar', explica: 'pedir o que ficou combinado' },
+  { valor: 'acompanhar', rotulo: 'Acompanhar', explica: 'olhar de novo na semana que vem' },
+  { valor: 'reconhecer', rotulo: 'Reconhecer', explica: 'dizer o que foi bem feito' },
+];
+
+/**
+ * Devolve `null` quando NAO HA' base pra sugerir — pessoa sem `ownerId` nao
+ * tem carteira nem travados medidos, e sugerir "reconhecer" pra quem nao foi
+ * medido seria elogiar no escuro. Null nao e' "nenhum modo": e' "nao tenho o
+ * que propor", e a tela diz isso.
+ */
+export function modoSugerido(p: {
+  semOwner: boolean;
+  semaforo: 'ok' | 'atencao' | 'critico' | 'nao_medido';
+  visitasNaJanela: number;
+  diasSemVisitar: number | null;
+}): ModoDeAgir | null {
+  if (p.semOwner || p.semaforo === 'nao_medido') return null;
+  if (p.semaforo === 'critico') return 'destravar';
+  // Sem nenhuma visita na janela, ou mais de tres dias sem ir a' rua: o
+  // problema nao esta' no funil, esta' na rua — e isso se resolve indo junto.
+  if (p.visitasNaJanela === 0 || (p.diasSemVisitar != null && p.diasSemVisitar > 3)) return 'campo';
+  if (p.semaforo === 'atencao') return 'acompanhar';
+  return 'reconhecer';
+}
