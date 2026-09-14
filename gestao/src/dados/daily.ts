@@ -51,8 +51,16 @@ export interface DiaDoExecutivo {
   visitas: number;
   avancos: number;
   propostas: number;
-  fechamentos: number;
+  /** null quando a pessoa nao tem `id_hubspot`: fechamento se conta por
+   *  `clients.won_at` + owner do CRM, e sem owner nao ha' o que contar. Zero
+   *  aqui diria "nao fechou nada" na tela que o gestor le' EM VOZ ALTA na
+   *  reuniao das 9h. */
+  fechamentos: number | null;
   pontos: number;
+  /** Os pontos sairam de um conjunto incompleto de medidas (hoje: sem owner,
+   *  fechamento fora da conta). O numero continua util pra ordenar, mas a tela
+   *  precisa dizer que ele nao e' comparavel com o dos colegas. */
+  pontosParciais: boolean;
   /** Paradas planejadas na rota daquele dia. null = nao montou rota. */
   prometido: number | null;
   /** Contra o que estamos medindo, em ordem de precedencia:
@@ -265,14 +273,18 @@ export async function carregarDaily(): Promise<DadosDaily> {
 
       const doDia = (dia: string): DiaDoExecutivo => {
         const b = porPessoaDia.get(chave(p.perfilId, dia)) ?? vazio();
-        const fech = p.ownerId
-          ? fechamentosPorOwnerDia.get(chave(p.ownerId, dia)) ?? []
-          : [];
+        // Sem owner do CRM o fechamento nao e' zero: e' NAO MEDIDO. A conta
+        // de pontos segue com o que da' pra medir (mesma ideia da temperatura
+        // parcial do pacote de replicacao: o fator que falta sai da conta em
+        // vez de entrar como zero), e a tela avisa que o numero nao e'
+        // comparavel com o dos colegas.
+        const semOwner = !p.ownerId;
+        const fech = semOwner ? [] : fechamentosPorOwnerDia.get(chave(p.ownerId!, dia)) ?? [];
         const bruto = {
           visitas: b.visitas.length,
           avancos: b.avancos.length,
           propostas: b.propostas.length,
-          fechamentos: fech.length,
+          fechamentos: semOwner ? 0 : fech.length,
         };
         // A promessa do dia vence a meta permanente. Se ele montou rota, e' a
         // rota dele que vale — cobrar contra a meta padrao quando ele planejou
@@ -286,7 +298,9 @@ export async function carregarDaily(): Promise<DadosDaily> {
         return {
           dia,
           ...bruto,
+          fechamentos: semOwner ? null : bruto.fechamentos,
           pontos: pontosDoDia(bruto),
+          pontosParciais: semOwner,
           prometido: declarada ?? promessa?.paradas ?? null,
           medidoPor,
           rotaManual: promessa?.manual ?? false,
@@ -338,7 +352,7 @@ export async function carregarDaily(): Promise<DadosDaily> {
       visitas: s.visitas + e.hoje.visitas,
       avancos: s.avancos + e.hoje.avancos,
       propostas: s.propostas + e.hoje.propostas,
-      fechamentos: s.fechamentos + e.hoje.fechamentos,
+      fechamentos: s.fechamentos + (e.hoje.fechamentos ?? 0),
       pontos: s.pontos + e.hoje.pontos,
     }),
     { visitas: 0, avancos: 0, propostas: 0, fechamentos: 0, pontos: 0 },

@@ -34,7 +34,13 @@ const CORES: Record<Semaforo, { cor: string; fundo: string; rotulo: string }> = 
   critico: { cor: 'var(--red)', fundo: 'var(--red-soft)', rotulo: 'Preparar 1:1' },
   atencao: { cor: 'var(--amber-ink)', fundo: 'var(--amber-soft)', rotulo: 'Acompanhar' },
   ok: { cor: 'var(--green)', fundo: 'var(--green-soft)', rotulo: 'Em dia' },
+  // Neutro de proposito: "nao medido" nao e' bom nem ruim, e pintar de verde
+  // ou vermelho seria afirmar o que nao se sabe.
+  nao_medido: { cor: 'var(--muted)', fundo: 'var(--panel2)', rotulo: 'Não medido' },
 };
+
+/** Numero que pode nao ter sido medido. `null` nunca vira 0 na tela. */
+const med = (n: number | null, sufixo = '') => (n == null ? '—' : `${n}${sufixo}`);
 
 function Metrica({ r, v, tom }: { r: string; v: string; tom?: string }) {
   return (
@@ -81,7 +87,7 @@ function Cartao({ p, aoAbrir }: { p: Pessoa; aoAbrir: () => void }) {
       </div>
 
       <div style={{ display: 'flex', gap: 20, marginTop: 10 }}>
-        <Metrica r="Carteira" v={String(p.carteira)} />
+        <Metrica r="Carteira" v={med(p.carteira)} />
         <Metrica
           r="Travados"
           v={p.travadosPct != null ? `${p.travados} · ${p.travadosPct}%` : '–'}
@@ -94,12 +100,19 @@ function Cartao({ p, aoAbrir }: { p: Pessoa; aoAbrir: () => void }) {
         />
         <Metrica
           r="Fechou"
-          v={String(p.fechadosNoMes)}
+          v={med(p.fechadosNoMes)}
           tom={p.fechadosNoMes ? 'var(--green)' : undefined}
         />
       </div>
 
-      {p.gargalo && p.gargalo.travados > 0 ? (
+      {/* O motivo vem ANTES do gargalo: sem medicao nao ha' gargalo pra
+          mostrar, e um traco sem explicacao vira "o sistema esta' quebrado"
+          em vez de "falta um cadastro". */}
+      {p.semOwner ? (
+        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 9 }}>
+          {p.motivoSemMedicao}
+        </div>
+      ) : p.gargalo && p.gargalo.travados > 0 ? (
         <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 9 }}>
           Gargalo em <strong style={{ color: 'var(--ink)' }}>{p.gargalo.etapa}</strong> ·{' '}
           {p.gargalo.travados} de {p.gargalo.total} passaram do prazo
@@ -530,7 +543,7 @@ export function Pessoas() {
             >
               <span style={{ fontWeight: 700 }}>{p.nome}</span>
               <span style={{ fontSize: 12, color: 'var(--green)' }}>
-                {p.destaque ?? `${p.carteira} em carteira`}
+                {p.destaque ?? (p.carteira == null ? 'sem medição' : `${p.carteira} em carteira`)}
               </span>
             </div>
           ))}
@@ -548,7 +561,7 @@ export function Pessoas() {
         titulo={aberta?.nome ?? ''}
         subtitulo={
           aberta
-            ? `${aberta.carteira} em carteira · ${aberta.travados} travados` +
+            ? `${med(aberta.carteira)} em carteira · ${med(aberta.travados)} travados` +
               (aberta.aderencia != null ? ` · ${aberta.aderencia}% da meta de visitas` : '')
             : ''
         }

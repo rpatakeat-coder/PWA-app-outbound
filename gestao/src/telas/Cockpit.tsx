@@ -542,6 +542,30 @@ export function Cockpit() {
               tabela. Ver quais →
             </button>
           )}
+          {/* Mesma logica da linha acima, do outro lado da conta: la' sao
+              leads sem dono; aqui sao pessoas sem medicao. As duas existem pra
+              que o que sumiu da tabela nao suma da tela. */}
+          {dados.semOwner.total > 0 && (
+            <div
+              style={{
+                marginTop: 12,
+                background: 'var(--panel2)',
+                color: 'var(--muted)',
+                border: '1px solid var(--line)',
+                borderRadius: 8,
+                padding: '9px 12px',
+                fontSize: 13,
+              }}
+            >
+              <strong style={{ color: 'var(--ink)' }}>
+                {dados.semOwner.total === 1
+                  ? '1 pessoa fora deste quadro'
+                  : `${dados.semOwner.total} pessoas fora deste quadro`}
+              </strong>{' '}
+              — {dados.semOwner.nomes.join(', ')}. Sem ID do HubSpot não há carteira nem
+              fechamento para medir. Corrigir em Acessos.
+            </div>
+          )}
         </section>
       </div>
 

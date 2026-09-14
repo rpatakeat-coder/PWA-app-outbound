@@ -65,6 +65,15 @@ export interface DadosCockpit {
    *  aberto" e nao aparecem em nenhuma linha da tabela; sem este numero
    *  explicito, somar a coluna nao bate com o card e ninguem vai atras deles. */
   semDonoAtivo: { total: number; leads: LeadAberto[] };
+  /** Gente de campo que ficou FORA da tabela por nao ter `id_hubspot`. Nao da'
+   *  pra medi-la — carteira e fechamento saem do owner do CRM — e mostra-la
+   *  com zeros seria acusa-la de nao trabalhar.
+   *
+   *  Mas sumir em silencio tambem nao serve: a tela responde "onde eu ajo
+   *  hoje?", e um cadastro incompleto E' onde agir. O pacote do Cockpit conta
+   *  o defeito equivalente do lado deles (07/09: cinco reps novos nunca
+   *  entraram na lista do robo, e ninguem viu). */
+  semOwner: { total: number; nomes: string[] };
   kpis: {
     emAberto: number;
     travados: number;
@@ -198,6 +207,9 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
   // Quem resolve a meta efetiva e' equipe.ts — inclusive o fallback pra meta
   // global de route_config, que esta camada ignorava e por isso mostrava o time
   // inteiro como "sem meta".
+  // Fora da tabela, mas NAO fora da tela: viram uma linha de aviso embaixo.
+  const semOwner = ativos(equipe).filter((p: MembroEquipe) => !p.ownerId);
+
   const executivos: Executivo[] = ativos(equipe)
     .filter((p: MembroEquipe) => p.ownerId)
     .map((p: MembroEquipe) => {
@@ -238,6 +250,10 @@ export async function carregarCockpit(): Promise<DadosCockpit> {
     funil,
     executivos,
     semDonoAtivo: { total: orfaos.length, leads: orfaos },
+    semOwner: {
+      total: semOwner.length,
+      nomes: semOwner.map((p: MembroEquipe) => p.nome),
+    },
     kpis: {
       emAberto: leads.length,
       travados: leads.filter((l) => l.travado).length,

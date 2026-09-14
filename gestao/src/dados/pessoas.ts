@@ -28,7 +28,7 @@ const DIAS_UTEIS_DA_JANELA = 10;
 /** Dias uteis seguidos sem NENHUMA visita que ja' justificam conversa sozinhos. */
 const SILENCIO_URGENTE = 3;
 
-export type Semaforo = 'ok' | 'atencao' | 'critico';
+export type Semaforo = 'ok' | 'atencao' | 'critico' | 'nao_medido';
 
 export interface ItemDeRoteiro {
   tema: string;
@@ -41,8 +41,20 @@ export interface Pessoa {
   perfilId: string;
   ownerId: string | null;
   nome: string;
-  carteira: number;
-  travados: number;
+  /** Sem `ownerId` no HubSpot nao ha' como MEDIR esta pessoa: carteira,
+   *  travados e fechados saem de `clients.vendedor_id_hubspot`, que nao casa
+   *  com ninguem. Os numeros vem `null`, e a tela diz "nao medido".
+   *
+   *  Dizer 0 aqui seria afirmar que a pessoa nao tem carteira e nao fechou
+   *  nada — uma acusacao, feita na tela que o gestor abre pra conversar com
+   *  ela. E' a lei zero do pacote de replicacao: ausencia de dado nunca vira
+   *  zero. */
+  semOwner: boolean;
+  motivoSemMedicao: string | null;
+  /** null quando `semOwner`. */
+  carteira: number | null;
+  /** null quando `semOwner`. */
+  travados: number | null;
   /** Percentual da carteira acima do SLA. null com carteira vazia. */
   travadosPct: number | null;
   semaforo: Semaforo;
@@ -55,7 +67,8 @@ export interface Pessoa {
   /** Dias uteis desde a ultima visita registrada. null se nunca visitou. */
   diasSemVisitar: number | null;
   avancosNaJanela: number;
-  fechadosNoMes: number;
+  /** null quando `semOwner` — fechamento se conta pelo owner do CRM. */
+  fechadosNoMes: number | null;
   /** O que esta' indo bem — a "boa pratica" que o doc pede ao lado do gargalo. */
   destaque: string | null;
   roteiro: ItemDeRoteiro[];
@@ -197,16 +210,24 @@ export async function carregarPessoas(): Promise<DadosPessoas> {
   }
 
   const pessoas: Pessoa[] = ativos(equipe).map((p: MembroEquipe) => {
+    // Sem owner do CRM nao da' pra medir NADA desta pessoa — e carteira vazia
+    // e' indistinguivel de carteira nao medida se os dois derem 0.
+    const semOwner = !p.ownerId;
     const meus = p.ownerId ? leads.filter((l) => l.dono === p.ownerId) : [];
-    const travados = meus.filter((l) => l.travado).length;
-    const travadosPct = meus.length ? Math.round((travados / meus.length) * 100) : null;
+    const travados = semOwner ? null : meus.filter((l) => l.travado).length;
+    const travadosPct =
+      semOwner || !meus.length ? null : Math.round((travados! / meus.length) * 100);
 
-    const semaforo: Semaforo =
-      travadosPct == null ? 'ok' : travadosPct >= 35 ? 'critico' : travadosPct >= 15 ? 'atencao' : 'ok';
+    // 'ok' significa "medi e esta bom". Quem nao foi medido tem estado
+    // proprio: sem ele, a pessoa invisivel ao CRM aparecia verde, escrito
+    // "Em dia", e descia pro fim da fila do 1:1.
+    const semaforo: Semaforo = semOwner
+      ? 'nao_medido'
+      : travadosPct == null ? 'ok' : travadosPct >= 35 ? 'critico' : travadosPct >= 15 ? 'atencao' : 'ok';
 
     // Gargalo: a etapa que mais concentra travados dessa pessoa.
     let gargalo: Pessoa['gargalo'] = null;
-    for (const etapa of ETAPAS_FUNIL) {
+    for (const etapa of semOwner ? [] : ETAPAS_FUNIL) {
       const naEtapa = meus.filter((l) => l.etapa === etapa);
       const tr = naEtapa.filter((l) => l.travado).length;
       if (tr > (gargalo?.travados ?? 0)) gargalo = { etapa, travados: tr, total: naEtapa.length };
@@ -223,8 +244,9 @@ export async function carregarPessoas(): Promise<DadosPessoas> {
       ? diasUteisAte(hoje, 60).findIndex((d) => d <= ultimaVisita)
       : null;
 
+    // Avancos saem de client_meetings por perfilId — medem sem depender do CRM.
     const avancos = avancosPorPessoa.get(p.perfilId) ?? 0;
-    const fechados = p.ownerId ? fechadosPorOwner.get(p.ownerId) ?? 0 : 0;
+    const fechados = p.ownerId ? fechadosPorOwner.get(p.ownerId) ?? 0 : null;
 
     // --- roteiro: so' entra item com evidencia numerica ---------------------
     const roteiro: ItemDeRoteiro[] = [];
@@ -255,7 +277,7 @@ export async function carregarPessoas(): Promise<DadosPessoas> {
         pergunta: 'O app está sendo usado em campo? Antes de cobrar resultado, confirme a ferramenta.',
       });
     }
-    if (meus.length > 0 && avancos === 0) {
+    if (!semOwner && meus.length > 0 && avancos === 0) {
       roteiro.push({
         tema: 'Carteira parada',
         evidencia: `${meus.length} leads em aberto e nenhum avanço de etapa em ${janela.length} dias úteis`,
@@ -265,15 +287,17 @@ export async function carregarPessoas(): Promise<DadosPessoas> {
 
     // --- destaque: a boa pratica, quando existe -----------------------------
     let destaque: string | null = null;
-    if (fechados > 0) destaque = `${fechados} ${fechados === 1 ? 'fechamento' : 'fechamentos'} no mês`;
+    if (fechados != null && fechados > 0) destaque = `${fechados} ${fechados === 1 ? 'fechamento' : 'fechamentos'} no mês`;
     else if (aderencia != null && aderencia >= 100)
       destaque = `${aderencia}% da meta de visitas na janela`;
     else if (avancos >= 3) destaque = `${avancos} avanços de etapa em ${janela.length} dias úteis`;
     else if (travadosPct != null && travadosPct < 15 && meus.length >= 5)
       destaque = `carteira limpa — só ${travadosPct}% acima do SLA`;
 
+    // `nao_medido` pesa como 'atencao': nao e' alarme de desempenho, e' um
+    // cadastro pra consertar — e some da conversa se ficar no fim da fila.
     const urgencia =
-      (semaforo === 'critico' ? 100 : semaforo === 'atencao' ? 50 : 0) +
+      (semaforo === 'critico' ? 100 : semaforo === 'atencao' || semaforo === 'nao_medido' ? 50 : 0) +
       (diasSemVisitar != null && diasSemVisitar >= SILENCIO_URGENTE ? 60 : 0) +
       (diasSemVisitar == null ? 80 : 0) +
       (aderencia != null && aderencia < 70 ? 30 : 0) +
@@ -283,7 +307,11 @@ export async function carregarPessoas(): Promise<DadosPessoas> {
       perfilId: p.perfilId,
       ownerId: p.ownerId,
       nome: p.nome,
-      carteira: meus.length,
+      semOwner,
+      motivoSemMedicao: semOwner
+        ? 'Sem ID do HubSpot: carteira, travados e fechamentos não podem ser medidos.'
+        : null,
+      carteira: semOwner ? null : meus.length,
       travados,
       travadosPct,
       semaforo,

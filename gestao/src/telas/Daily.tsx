@@ -136,7 +136,11 @@ const celulaNumero: React.CSSProperties = {
   borderBottom: '1px solid var(--line-soft)',
 };
 
-function Numero({ valor }: { valor: number }) {
+/** `0` e `null` desenham o mesmo traco DE PROPOSITO: numa grade de numeros, o
+ *  zero vira ruido visual. A diferenca entre "fez zero" e "nao deu pra medir"
+ *  e' dita na LINHA (o selo ao lado do nome), nao na celula — assim o gestor
+ *  le' a pessoa, nao decifra um glifo. */
+function Numero({ valor }: { valor: number | null }) {
   return (
     <td style={{ ...celulaNumero, color: valor ? 'var(--muted)' : 'var(--ter)' }}>
       {valor || '—'}
@@ -341,6 +345,25 @@ export function Daily() {
           >
             {e.nome}
           </span>
+          {/* Sem owner do CRM, fechamento sai da conta e os pontos ficam
+              incomparaveis com os dos colegas. A Daily e' lida em voz alta:
+              quem ouve precisa saber disso ANTES do numero. */}
+          {e.hoje.pontosParciais && (
+            <span
+              title="Sem ID do HubSpot: fechamentos não entram na conta"
+              style={{
+                background: 'var(--panel2)',
+                color: 'var(--muted)',
+                borderRadius: 999,
+                padding: '1px 8px',
+                fontSize: 11,
+                fontWeight: 700,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              parcial
+            </span>
+          )}
         </div>
       </td>
       <CelulaVisitas d={e.hoje} />
