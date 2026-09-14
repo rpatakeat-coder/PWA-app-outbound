@@ -1169,13 +1169,28 @@ function MainApp() {
   // Se um gestor escolheu um vendedor no filtro do mapa, respeita esse recorte.
   // Compartilhado entre a tela de Tarefas e o badge do rodape — antes o badge
   // usava a contagem GLOBAL (tasks.length) e mostrava 99+ pra todo mundo.
-  const tasksActiveVendor = vendorFilterHubspotId ?? (canViewGestor ? null : myHubspotId);
+  //
+  // 14/09/2026: passou a ser SEMPRE o proprio. Antes era
+  // `vendorFilterHubspotId ?? (canViewGestor ? null : myHubspotId)`, e ali o
+  // `null` do gestor queria dizer "sem filtro" — ele abria a Tarefas com a fila
+  // do time inteiro. A Tarefas responde "o que EU tenho que fazer hoje"; a
+  // visao do time e' o cockpit de gestao, que existe pra isso.
+  //
+  // Tambem deixou de seguir o `vendorFilterHubspotId`: aquele filtro e' do
+  // MAPA (explorar territorio de outro vendedor), e arrastar ele pra ca fazia
+  // a fila pessoal mudar por causa de um filtro posto em outra tela.
+  const tasksActiveVendor = myHubspotId;
   // Vendedor SEM id_hubspot nao pode cair no mesmo `null` do gestor: ali `null`
   // quer dizer "sem filtro", e ele passava a ver a carteira inteira do time —
   // nome do lead, etapa, dias de atraso e o responsavel de cada tarefa. Perfil
   // novo nasce sem o id (o AuthContext cria assim), entao qualquer vendedor
   // recem-provisionado caia nisso ate' alguem preencher o campo.
-  const semIdHubspot = !canViewGestor && !myHubspotId;
+  // Vale pra TODO MUNDO agora, nao so' pro vendedor: sem `id_hubspot` nao ha'
+  // como saber de quem e' a tarefa, e antes esse caso caia no mesmo `null` do
+  // gestor — "sem filtro" — e a pessoa passava a ver a carteira inteira do
+  // time: nome do lead, etapa, dias de atraso e o responsavel de cada tarefa.
+  // Perfil novo nasce sem o id (o AuthContext cria assim).
+  const semIdHubspot = !myHubspotId;
   // Aviso do gestor: quem trabalha e ainda nao tem id do HubSpot. Sem o id a
   // pessoa nao recebe lead nem tarefa, e isso nao aparecia em lugar nenhum — a
   // conta ficava meses parecendo normal e so' se descobria pela reclamacao.

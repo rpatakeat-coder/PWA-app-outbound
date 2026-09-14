@@ -50,8 +50,14 @@ export function useTarefasDoCrm(enabled: boolean, diasAFrente = 14) {
     staleTime: 3 * 60_000,
     queryFn: async () => {
       if (!ownerId) {
+        // A mensagem muda com o papel: mandar o gestor "pedir para a gestão
+        // corrigir" é mandá-lo falar consigo mesmo, e quem lê uma instrução
+        // que não se aplica passa a ignorar as que se aplicam.
+        const ehGestor = (profile as { role?: string } | null)?.role === 'gestor';
         return VAZIO(
-          'Seu usuário está sem ID do HubSpot, então não dá para buscar as tarefas do CRM. Peça para a gestão corrigir em Acessos.',
+          ehGestor
+            ? 'Sua conta não tem carteira no HubSpot, então não há tarefas suas aqui. A visão do time fica no cockpit de gestão.'
+            : 'Seu usuário está sem ID do HubSpot, então não dá para buscar as tarefas do CRM. Peça para a gestão corrigir em Acessos.',
         );
       }
 

@@ -32,14 +32,22 @@ export function useMeetings() {
   // Carrega reuniões agendadas pelo proprio usuario (a policy do banco ja
   // filtra; o .eq aqui eh defensivo + ajuda performance). Gestor (role no
   // banco) faz bypass: pega tudo, igual o RLS permite.
-  const isGestor = profile?.role === 'gestor';
   const query = useQuery<ClientMeeting[]>({
-    queryKey: ['client_meetings', isGestor ? 'all' : user?.id],
+    // A chave nao tem mais o ramo 'all' do gestor: a query e' sempre a
+    // pessoal, entao o cache e' por usuario e ponto.
+    queryKey: ['client_meetings', user?.id],
     queryFn: async () => {
-      let q = supabase.from('client_meetings').select('*');
-      if (!isGestor && user?.id) {
-        q = q.eq('created_by', user.id);
-      }
+      // SEMPRE os proprios compromissos, inclusive pro gestor. Ate' 14/09/2026
+      // o gestor pulava este filtro e a Agenda dele abria com a semana do time
+      // inteiro misturada a' dele — impossivel de usar pra se guiar, que e' pra
+      // isso que a tela serve. A visao do time e' o cockpit de gestao.
+      //
+      // Sem `user.id` nao filtra por nada: melhor nao trazer do que trazer o
+      // que nao e' seu, entao a query cai num id impossivel.
+      const q = supabase
+        .from('client_meetings')
+        .select('*')
+        .eq('created_by', user?.id ?? '00000000-0000-0000-0000-000000000000');
       const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as ClientMeeting[];

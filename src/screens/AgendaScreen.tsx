@@ -91,14 +91,18 @@ export function AgendaScreen({
     })),
   ].sort((a, b) => new Date(a.at ?? 0).getTime() - new Date(b.at ?? 0).getTime());
 
-  // Aplica o mesmo filtro de vendedor que o mapa/lista usam — se o admin
-  // escolheu um vendedor, agenda mostra so itens cujo cliente eh dele.
-  // Itens sem client carregado (raro) ficam fora quando ha filtro ativo.
-  const porVendedor = vendorFilterHubspotId === null
-    ? allAgendaItems
-    : vendorFilterHubspotId === '__none__'
-      ? allAgendaItems.filter(item => !item.client?.vendedor_id_hubspot)
-      : allAgendaItems.filter(item => item.client?.vendedor_id_hubspot === vendorFilterHubspotId);
+  // A Agenda NAO segue mais o filtro de vendedor do mapa (14/09/2026).
+  //
+  // Aquele filtro serve pra explorar o territorio de outro vendedor no mapa;
+  // arrastar ele pra ca fazia a agenda pessoal mudar por causa de algo posto
+  // em outra tela. E pro gestor era pior: ele pulava o recorte por dono no
+  // `useMeetings` e abria a semana do time inteiro misturada a' dele —
+  // impossivel de usar pra se guiar, que e' pra isso que a tela serve.
+  //
+  // Agora o recorte vem da FONTE: `client_meetings` ja' chega so' com os
+  // compromissos de quem esta' logado, e as paradas vem da rota dele. A visao
+  // do time e' o cockpit de gestao.
+  const porVendedor = allAgendaItems;
 
   // Tipo do compromisso — define a cor da barra do card e os chips do topo.
   // Demo, follow up e parada de rota renderizavam idênticos; a cor é o que
@@ -395,20 +399,7 @@ export function AgendaScreen({
 
       {/* Cabeçalho enxuto: o parágrafo "rota planejada, demos e follow-ups em
           ordem cronológica" descrevia o que a tela mostra sozinha. */}
-      {vendorFilterHubspotId !== null ? (
-        <Text style={sharedStyles.taskVendorHint}>
-          Filtro ativo: {vendorLabel(vendorFilterHubspotId)} — tire no modal de filtros.
-        </Text>
-      ) : null}
 
-      {/* Chips por tipo: contam e filtram num toque. No desktop moram na
-          barra do calendario — aqui so' na lista do celular/tablet. */}
-      {/* Mesma regra do Tarefas: a contagem ignora o filtro de tipo (senao o
-          chip ativo zeraria os outros) E a data selecionada. Sem rotulo,
-          "Demos 217" ao lado de um dia com 2 demos nao quer dizer nada. */}
-      {!layout.ehDesktop && contagemTipo.length > 1 && (
-        <Text style={styles.rotuloContagem}>TOTAL EM TODAS AS DATAS</Text>
-      )}
       {!layout.ehDesktop && contagemTipo.length > 1 && (
         <View style={sharedStyles.countChipsRow}>
           {contagemTipo.map(({ tipo, total }) => {
