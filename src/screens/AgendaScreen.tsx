@@ -27,7 +27,7 @@ import {
 } from '../components/icons';
 import { ds, sharedStyles } from './sharedStyles';
 import { PlanoDaSemanaCard } from './PlanoDaSemanaCard';
-import { TarefasDoCrmSecao } from './TarefasDoCrmSecao';
+import { useTarefasDoCrm } from '../hooks/useTarefasDoCrm';
 
 // Tela de Agenda, extraida do App.tsx (prompt 02 do handoff) — refactor puro.
 // Os estados que so' a agenda usava (semana visivel, filtro de tipo, acordeao
@@ -81,8 +81,21 @@ export function AgendaScreen({
   // Overlay de detalhe do COMPROMISSO (prompt M3) — nao e' a ficha do lead.
   const [compromisso, setCompromisso] = useState<(typeof allAgendaItems)[number] | null>(null);
   const [agendaTypeFilter, setAgendaTypeFilter] = useState<string | null>(null);
+  // As tarefas que a gestao pos no HubSpot entram como ITENS da agenda, nao
+  // como um cartao a' parte. Elas SAO compromisso marcado — visita posta no
+  // planejamento da semana, follow up do funil — e a Agenda responde "o que
+  // tem marcado". Ficavam fora da grade: a semana dizia "0 itens" e todos os
+  // dias "livre" com duas visitas marcadas pra hoje.
+  const { tarefas: tarefasDoCrm } = useTarefasDoCrm(true);
+
   const allAgendaItems = [
     ...routeStops.map(stop => ({ kind: 'route' as const, at: stop.planned_at, stop, client: stop.client })),
+    ...tarefasDoCrm.map(tarefa => ({
+      kind: 'crm' as const,
+      at: tarefa.venceEm,
+      tarefa,
+      client: tarefa.clientId ? clients.find(c => c.id === tarefa.clientId) ?? null : null,
+    })),
     ...meetings.map(meeting => ({
       kind: 'meeting' as const,
       at: meeting.scheduled_at,
@@ -110,7 +123,13 @@ export function AgendaScreen({
   const tipoDoItem = (item: typeof allAgendaItems[number]) =>
     item.kind === 'meeting'
       ? (item.meeting.type === 'follow_up' ? 'follow_up' : 'reuniao')
-      : 'rota';
+      // A do CRM usa o MESMO vocabulario de cor do resto: visita le' como
+      // rota, follow up como follow up. De onde ela veio fica na sublinha —
+      // inventar uma quarta cor so' pra origem faria a semana deixar de ser
+      // varrida pelo tipo, que e' o que a cor serve pra dizer.
+      : item.kind === 'crm'
+        ? (item.tarefa.tipo === 'follow_up' ? 'follow_up' : 'rota')
+        : 'rota';
   // UMA tabela de tipo pra tela inteira. Antes havia duas — `CORES_TIPO_WEB`
   // (calendario do desktop) e `TIPO_META` (lista e chips do celular) — com
   // cores DIFERENTES pro mesmo tipo: uma Demo era violeta no calendario e
@@ -157,6 +176,9 @@ export function AgendaScreen({
   const nomeDoItem = (item: typeof allAgendaItems[number]): string | null => {
     if (item.client) return nomeDoLead(item.client);
     if (item.kind === 'meeting') return nomesReunioes.get(item.meeting.client_id) ?? null;
+    // A do CRM ja' vem com o nome resolvido (pelo id do negocio, ou pelo
+    // assunto quando o lead nao esta' no app).
+    if (item.kind === 'crm') return item.tarefa.nomeDoCliente;
     return null;
   };
 
@@ -176,7 +198,11 @@ export function AgendaScreen({
     const visitas = client ? (client.visit_count || (client.visited_at ? 1 : 0)) : 0;
     const ocasiao = item.kind === 'meeting'
       ? (item.meeting.type === 'follow_up' ? 'Follow up' : 'Reunião/demo')
-      : visitas > 0 ? 'Revisita' : '1ª visita';
+      // Dizer a ORIGEM importa: e' a diferenca entre o que o vendedor marcou e
+      // o que a gestao pos na semana dele.
+      : item.kind === 'crm'
+        ? 'Da gestão'
+        : visitas > 0 ? 'Revisita' : '1ª visita';
     const lugar = client?.bairro?.trim() || client?.cidade?.trim() || null;
     const sublinha = [ocasiao, lugar].filter(Boolean).join(' · ');
 
@@ -191,7 +217,13 @@ export function AgendaScreen({
 
     return (
       <View
-        key={item.kind === 'meeting' ? `meeting-${item.meeting.id}` : `route-${item.stop.id ?? index}`}
+        key={
+          item.kind === 'meeting'
+            ? `meeting-${item.meeting.id}`
+            : item.kind === 'crm'
+              ? `crm-${item.tarefa.id}`
+              : `route-${item.stop.id ?? index}`
+        }
         style={styles.linhaAgenda}
       >
         {/* Coluna de hora com 52px FIXOS. Fluida, as horas desalinhavam entre
@@ -386,16 +418,6 @@ export function AgendaScreen({
           depois o que já está marcado dentro dela. */}
       <PlanoDaSemanaCard enabled />
 
-      {/* Aqui não há Kanban, e a Agenda responde "o que tem marcado": visita
-          posta pela gestão É coisa marcada. Só o dia escolhido no seletor. */}
-      <TarefasDoCrmSecao
-        enabled
-        apenasDia={diaSelecionado}
-        abrirLeadNoMapa={(id) => {
-          const alvo = clients.find((c) => c.id === id);
-          if (alvo) openClientById?.(alvo.id);
-        }}
-      />
 
 
       {/* Cabeçalho enxuto: o parágrafo "rota planejada, demos e follow-ups em

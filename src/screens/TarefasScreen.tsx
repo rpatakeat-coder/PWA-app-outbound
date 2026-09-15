@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
 import { ds, sharedStyles } from './sharedStyles';
 import { IconCheck, IconClipboardCheck, IconClock, IconUser, useIconColors } from '../components/icons';
-import { TarefasDoCrmSecao } from './TarefasDoCrmSecao';
+import { useTarefasDoCrm, type TarefaDoCrmNaTela } from '../hooks/useTarefasDoCrm';
 
 export type BaldeDeTarefa = 'atrasadas' | 'hoje' | 'proximas';
 
@@ -177,9 +177,26 @@ export function TarefasScreen({
     { chave: 'hoje' as const, titulo: 'Hoje', cor: '#FFB32F', tintaBg: 'var(--tint-amber)', tintaFg: 'var(--tint-amber-text)' },
     { chave: 'proximas' as const, titulo: 'Próximas', cor: '#0ea5e9', tintaBg: 'var(--tint-blue)', tintaFg: 'var(--tint-blue-text)' },
   ];
+  // As tarefas que a gestao pos no HubSpot entram nas MESMAS colunas, pelo
+  // mesmo criterio de vencimento. Ficavam num bloco a' parte embaixo do
+  // kanban, e ali ninguem via: quem abre esta tela olha as tres colunas.
+  //
+  // Nao viram `ClientTask`: aquela e' linha de `client_tasks`, com fluxo de
+  // concluir que escreve no banco. Forjar uma quebraria esse fluxo. Entao vao
+  // numa lista irma, com cartao proprio e sem botao de concluir — quem fecha
+  // tarefa do CRM e' o HubSpot.
+  const { tarefas: tarefasDoCrm } = useTarefasDoCrm(true);
+  const baldeDaTarefaDoCrm = (t: TarefaDoCrmNaTela): BaldeDeTarefa => {
+    if (!t.venceEm) return 'hoje';
+    const dia = new Date(t.venceEm);
+    const diaStr = `${dia.getFullYear()}-${String(dia.getMonth() + 1).padStart(2, '0')}-${String(dia.getDate()).padStart(2, '0')}`;
+    const hoje = hojeEmBRT();
+    return diaStr < hoje ? 'atrasadas' : diaStr === hoje ? 'hoje' : 'proximas';
+  };
   const colunasVencimento = COLUNAS_VENCIMENTO.map(c => ({
     ...c,
     itens: sorted.filter(task => baldeDeVencimento(task) === c.chave),
+    itensCrm: tarefasDoCrm.filter(t => baldeDaTarefaDoCrm(t) === c.chave),
   }));
 
   // Com o lead carregado, concluir abre o menu de destino (avancar / perdido /
@@ -194,6 +211,39 @@ export function TarefasScreen({
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Concluir', onPress: () => concluirTarefa({ id: task.id, status: 'concluida' }) },
     ]);
+  };
+
+  // Cartao da tarefa do CRM. Sem botao de concluir de proposito: quem fecha
+  // tarefa do HubSpot e' o HubSpot, e um botao que nao fecha nada seria pior
+  // que a ausencia dele.
+  const renderCrmCard = (t: TarefaDoCrmNaTela) => {
+    const quando = t.venceEm
+      ? new Date(t.venceEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      : 'sem horário';
+    const alvo = t.clientId ? clients.find((c) => c.id === t.clientId) ?? null : null;
+    return (
+      <TouchableOpacity
+        key={`crm-${t.id}`}
+        disabled={!alvo}
+        onPress={() => alvo && abrirLeadNoMapa(alvo)}
+        accessibilityRole={alvo ? 'button' : undefined}
+        style={[
+          styles.taskCard,
+          layout.ehDesktop && styles.taskCardWeb,
+          { borderLeftWidth: 3, borderLeftColor: 'var(--text-subtle)' },
+        ]}
+      >
+        <Text style={[styles.taskLead, layout.ehDesktop && styles.taskLeadWeb]} numberOfLines={1}>
+          {t.nomeDoCliente ?? 'Cliente não identificado'}
+        </Text>
+        <Text style={[styles.taskTipo, layout.ehDesktop && styles.taskTipoWeb]} numberOfLines={2}>
+          {t.assunto.replace(/^(?:visita|follow.?up)\s*[-–—]\s*/i, '')}
+        </Text>
+        <Text style={[styles.taskTipo, layout.ehDesktop && styles.taskTipoWeb]}>
+          {quando} · {t.tipo === 'visita' ? 'visita' : t.tipo === 'follow_up' ? 'follow up' : 'tarefa'} · da gestão
+        </Text>
+      </TouchableOpacity>
+    );
   };
 
   const renderTaskCard = (task: ClientTask) => {
@@ -409,7 +459,8 @@ export function TarefasScreen({
         <View style={styles.faixaAbas}>
           {ABAS.map((aba) => {
             const ativo = tabTarefa === aba.chave;
-            const total = colunasVencimento.find((c) => c.chave === aba.chave)?.itens.length ?? 0;
+            const coluna = colunasVencimento.find((c) => c.chave === aba.chave);
+            const total = (coluna?.itens.length ?? 0) + (coluna?.itensCrm.length ?? 0);
             return (
               <TouchableOpacity
                 key={aba.chave}
@@ -495,7 +546,7 @@ export function TarefasScreen({
                     <View style={[sharedStyles.countChipDot, { backgroundColor: col.cor }]} />
                     <Text style={styles.kanbanTitulo}>{col.titulo}</Text>
                     <View style={[styles.kanbanContagem, { backgroundColor: col.tintaBg }]}>
-                      <Text style={[styles.kanbanContagemTexto, { color: col.tintaFg }]}>{col.itens.length}</Text>
+                      <Text style={[styles.kanbanContagemTexto, { color: col.tintaFg }]}>{col.itens.length + col.itensCrm.length}</Text>
                     </View>
                   </View>
                   <ScrollView
@@ -503,12 +554,15 @@ export function TarefasScreen({
                     contentContainerStyle={{ padding: 12 }}
                     showsVerticalScrollIndicator
                   >
-                    {col.itens.length === 0 ? (
+                    {col.itens.length + col.itensCrm.length === 0 ? (
                       <Text style={[sharedStyles.emptyStateText, { fontSize: 12, textAlign: 'center', paddingVertical: 16 }]}>
                         Nenhuma tarefa pendente.
                       </Text>
                     ) : (
-                      col.itens.map(renderTaskCard)
+                      <>
+                        {col.itens.map(renderTaskCard)}
+                        {col.itensCrm.map(renderCrmCard)}
+                      </>
                     )}
                   </ScrollView>
                 </View>
@@ -551,19 +605,6 @@ export function TarefasScreen({
         )
       )}
 
-      {/* As tarefas do CRM vêm DEPOIS do Kanban, e recolhidas. Elas importam —
-          são o que a gestão pôs na semana desta pessoa — mas o Kanban é a
-          visão principal da tela, e esta seção no topo, aberta, empurrava as
-          três colunas para fora do alcance da vista. */}
-      <View style={{ marginTop: 16 }}>
-        <TarefasDoCrmSecao
-          enabled
-          abrirLeadNoMapa={(id) => {
-            const alvo = clients.find((c) => c.id === id);
-            if (alvo) abrirLeadNoMapa(alvo);
-          }}
-        />
-      </View>
     </ScrollView>
   );
 }
