@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Linking, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Alert } from '../components/Alert';
 import type { Client, ClientTask } from '../types/client';
 import { useLayout } from '../hooks/useLayout';
@@ -221,13 +221,35 @@ export function TarefasScreen({
       ? new Date(t.venceEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
       : 'sem horário';
     const alvo = t.clientId ? clients.find((c) => c.id === t.clientId) ?? null : null;
+
+    // O toque SEMPRE leva a algum lugar. Antes so' abria se o lead estivesse
+    // carregado no mapa — e `clients` e' apenas a area visivel; alem disso a
+    // maioria desses negocios nem esta' em `clients` (nasceram no CRM e nunca
+    // viraram pin). Na pratica o cartao era um bloco morto: o vendedor tocava
+    // e nada acontecia, sem explicacao.
+    //
+    // Com o lead no app, abre o lead. Sem ele, abre o NEGOCIO no HubSpot pelo
+    // id que veio no marcador — de la' a pessoa consegue agir, que e' o ponto.
+    const dealId = t.marcador?.dealId ?? null;
+    const abrir = alvo
+      ? () => abrirLeadNoMapa(alvo)
+      : dealId
+        ? () => {
+            void Linking.openURL(
+              `https://app.hubspot.com/contacts/24373118/record/0-3/${dealId}`,
+            );
+          }
+        : null;
     const acao = t.assunto.replace(/^(?:visita|follow.?up)\s*[-–—]\s*/i, '').trim();
     return (
       <TouchableOpacity
         key={`crm-${t.id}`}
-        disabled={!alvo}
-        onPress={() => alvo && abrirLeadNoMapa(alvo)}
-        accessibilityRole={alvo ? 'button' : undefined}
+        disabled={!abrir}
+        onPress={() => abrir?.()}
+        accessibilityRole={abrir ? 'button' : undefined}
+        accessibilityLabel={
+          alvo ? `Abrir ${t.nomeDoCliente ?? 'lead'}` : 'Abrir o negócio no HubSpot'
+        }
         style={[
           styles.taskCard,
           layout.ehDesktop && styles.taskCardWeb,
@@ -247,6 +269,7 @@ export function TarefasScreen({
         ) : null}
         <Text style={[styles.taskTipo, layout.ehDesktop && styles.taskTipoWeb]}>
           {quando} · {t.tipo === 'visita' ? 'visita' : t.tipo === 'follow_up' ? 'follow up' : 'tarefa'} · da gestão
+          {!alvo && dealId ? ' · abre no HubSpot' : ''}
         </Text>
       </TouchableOpacity>
     );

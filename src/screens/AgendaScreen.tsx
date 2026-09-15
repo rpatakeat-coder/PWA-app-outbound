@@ -240,7 +240,19 @@ export function AgendaScreen({
           accessibilityRole="button"
           accessibilityLabel={`${titulo}, ${time}`}
           activeOpacity={0.9}
-          onPress={() => setCompromisso(item)}
+          onPress={() => {
+            // Item do CRM sem lead no app nao tem drawer util: o painel vive
+            // de cliente, reagendar e cancelar, e nada disso existe pra uma
+            // Task do HubSpot. Manda direto pro negocio la', que e' onde a
+            // pessoa consegue agir. Com o lead no app, segue pro drawer.
+            if (item.kind === 'crm' && !item.client && item.tarefa.marcador?.dealId) {
+              void Linking.openURL(
+                `https://app.hubspot.com/contacts/24373118/record/0-3/${item.tarefa.marcador.dealId}`,
+              );
+              return;
+            }
+            setCompromisso(item);
+          }}
           style={[styles.cardAgenda, { borderLeftColor: meta.cor }]}
         >
           <View style={styles.cardTopo}>
