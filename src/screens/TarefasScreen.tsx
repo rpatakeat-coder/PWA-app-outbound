@@ -9,6 +9,7 @@ import { StyleSheet } from 'react-native';
 import { ds, sharedStyles } from './sharedStyles';
 import { IconCheck, IconClipboardCheck, IconClock, IconUser, useIconColors } from '../components/icons';
 import { useTarefasDoCrm, type TarefaDoCrmNaTela } from '../hooks/useTarefasDoCrm';
+import { TarefaSemLeadSheet } from './TarefaSemLeadSheet';
 
 export type BaldeDeTarefa = 'atrasadas' | 'hoje' | 'proximas';
 
@@ -186,6 +187,9 @@ export function TarefasScreen({
   // numa lista irma, com cartao proprio e sem botao de concluir — quem fecha
   // tarefa do CRM e' o HubSpot.
   const { tarefas: tarefasDoCrm } = useTarefasDoCrm(true);
+  // Tarefa do CRM cujo lead nao existe no app: abre uma ficha propria em vez
+  // de virar cartao inerte. Ver TarefaSemLeadSheet.
+  const [tarefaSemLead, setTarefaSemLead] = useState<TarefaDoCrmNaTela | null>(null);
   const baldeDaTarefaDoCrm = (t: TarefaDoCrmNaTela): BaldeDeTarefa => {
     if (!t.venceEm) return 'hoje';
     const dia = new Date(t.venceEm);
@@ -229,7 +233,11 @@ export function TarefasScreen({
     // `abrirLeadPorId` resolve o que `clients` nao resolve: aquele array e' so'
     // a area VISIVEL do mapa, e a tarefa costuma apontar pra um lead fora dela.
     // Ele tenta o local e, se nao achar, busca a linha no banco por id.
-    const abrir = t.clientId ? () => abrirLeadPorId(t.clientId!) : null;
+    const abrir = t.clientId
+      ? () => abrirLeadPorId(t.clientId!)
+      // Sem lead no app, abre a ficha da TAREFA — com o que o HubSpot mandou e
+      // o botao de colocar o lead no mapa.
+      : () => setTarefaSemLead(t);
     const acao = t.assunto.replace(/^(?:visita|follow.?up)\s*[-–—]\s*/i, '').trim();
     return (
       <TouchableOpacity
@@ -258,11 +266,9 @@ export function TarefasScreen({
         <Text style={[styles.taskTipo, layout.ehDesktop && styles.taskTipoWeb]}>
           {quando} · {t.tipo === 'visita' ? 'visita' : t.tipo === 'follow_up' ? 'follow up' : 'tarefa'} · da gestão
         </Text>
-        {/* Sem lead no app o toque nao tem pra onde ir. Dizer isso e' melhor
-            que um cartao que nao responde e nao explica. */}
         {!t.clientId ? (
           <Text style={[styles.taskTipo, layout.ehDesktop && styles.taskTipoWeb]}>
-            Este lead não está no app.
+            Não está no mapa · toque para ver
           </Text>
         ) : null}
       </TouchableOpacity>
@@ -644,6 +650,17 @@ export function TarefasScreen({
         )
       )}
 
+
+      {/* Ficha da tarefa cujo lead nao existe no app. Fica aqui, no fim do
+          scroll, porque e' Modal: a posicao no JSX nao muda onde ele aparece. */}
+      {tarefaSemLead && (
+        <TarefaSemLeadSheet
+          tarefa={tarefaSemLead}
+          ownerIdHubspot={myHubspotId}
+          aoFechar={() => setTarefaSemLead(null)}
+          aoCadastrar={(id) => abrirLeadPorId(id)}
+        />
+      )}
     </ScrollView>
   );
 }
