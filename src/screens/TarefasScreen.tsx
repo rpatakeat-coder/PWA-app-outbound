@@ -220,26 +220,16 @@ export function TarefasScreen({
     const quando = t.venceEm
       ? new Date(t.venceEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
       : 'sem horário';
-    const alvo = t.clientId ? clients.find((c) => c.id === t.clientId) ?? null : null;
 
-    // O toque SEMPRE leva a algum lugar. Antes so' abria se o lead estivesse
-    // carregado no mapa — e `clients` e' apenas a area visivel; alem disso a
-    // maioria desses negocios nem esta' em `clients` (nasceram no CRM e nunca
-    // viraram pin). Na pratica o cartao era um bloco morto: o vendedor tocava
-    // e nada acontecia, sem explicacao.
+    // O toque abre a FICHA DO LEAD, como qualquer outra tarefa. Nao manda pro
+    // HubSpot: tirar a pessoa do app no meio da rua pra ver um negocio e' trocar
+    // a ferramenta de trabalho por um site, e de la' ela nao marca visita nem
+    // traca rota.
     //
-    // Com o lead no app, abre o lead. Sem ele, abre o NEGOCIO no HubSpot pelo
-    // id que veio no marcador — de la' a pessoa consegue agir, que e' o ponto.
-    const dealId = t.marcador?.dealId ?? null;
-    const abrir = alvo
-      ? () => abrirLeadNoMapa(alvo)
-      : dealId
-        ? () => {
-            void Linking.openURL(
-              `https://app.hubspot.com/contacts/24373118/record/0-3/${dealId}`,
-            );
-          }
-        : null;
+    // `abrirLeadPorId` resolve o que `clients` nao resolve: aquele array e' so'
+    // a area VISIVEL do mapa, e a tarefa costuma apontar pra um lead fora dela.
+    // Ele tenta o local e, se nao achar, busca a linha no banco por id.
+    const abrir = t.clientId ? () => abrirLeadPorId(t.clientId!) : null;
     const acao = t.assunto.replace(/^(?:visita|follow.?up)\s*[-–—]\s*/i, '').trim();
     return (
       <TouchableOpacity
@@ -247,9 +237,7 @@ export function TarefasScreen({
         disabled={!abrir}
         onPress={() => abrir?.()}
         accessibilityRole={abrir ? 'button' : undefined}
-        accessibilityLabel={
-          alvo ? `Abrir ${t.nomeDoCliente ?? 'lead'}` : 'Abrir o negócio no HubSpot'
-        }
+        accessibilityLabel={`Abrir ${t.nomeDoCliente ?? 'lead'}`}
         style={[
           styles.taskCard,
           layout.ehDesktop && styles.taskCardWeb,
@@ -269,8 +257,14 @@ export function TarefasScreen({
         ) : null}
         <Text style={[styles.taskTipo, layout.ehDesktop && styles.taskTipoWeb]}>
           {quando} · {t.tipo === 'visita' ? 'visita' : t.tipo === 'follow_up' ? 'follow up' : 'tarefa'} · da gestão
-          {!alvo && dealId ? ' · abre no HubSpot' : ''}
         </Text>
+        {/* Sem lead no app o toque nao tem pra onde ir. Dizer isso e' melhor
+            que um cartao que nao responde e nao explica. */}
+        {!t.clientId ? (
+          <Text style={[styles.taskTipo, layout.ehDesktop && styles.taskTipoWeb]}>
+            Este lead não está no app.
+          </Text>
+        ) : null}
       </TouchableOpacity>
     );
   };

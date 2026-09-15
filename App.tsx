@@ -5215,7 +5215,10 @@ function MainApp() {
           nomeDoLead={getClientPrimaryName}
           vendorLabel={vendorLabel}
           abrirLeadNoMapa={(c) => { setTab('map'); openClientDetails(c); }}
-          abrirLeadPorId={openClientById}
+          // Troca pra aba do mapa antes de abrir, como o `abrirLeadNoMapa` acima:
+          // a ficha do lead so' renderiza sobre o mapa, entao sem isso o toque
+          // setava o lead selecionado e nada aparecia na tela.
+          abrirLeadPorId={(id) => { setTab('map'); void openClientById(id); }}
           limparFiltroVendedor={() => setVendorFilterHubspotId(null)}
           agendarDemo={(c, task) =>
             setSchedulingFor({
