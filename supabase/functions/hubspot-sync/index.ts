@@ -446,56 +446,81 @@ async function handleListTasks(token: string, body: Record<string, unknown>) {
   const ownerId = trimOrNull(body.owner_id);
   if (!ownerId) return json(400, { error: 'owner_id e obrigatorio' });
 
+  // SEM JANELA DE DATA (14/09/2026). Antes exigia `de`/`ate` e so' trazia o que
+  // caisse entre eles — o vendedor via 35 de 78, e as vencidas mais antigas,
+  // que sao as mais urgentes, ficavam de fora sem ninguem saber. A tela agrupa
+  // por dia e recolhe o passado; quem decide o que mostrar e' ela, nao esta
+  // rota. Filtro opcional continua aceito, pra quem quiser recortar.
   const de = toIso(body.de);
   const ate = toIso(body.ate);
-  if (!de || !ate) return json(400, { error: 'de e ate sao obrigatorios (ISO)' });
 
-  const busca = await hsFetch(token, 'POST', '/crm/v3/objects/tasks/search', {
-    filterGroups: [
-      {
-        filters: [
-          { propertyName: 'hubspot_owner_id', operator: 'EQ', value: ownerId },
-          // Só o que ainda está em aberto: tarefa concluída é histórico, e o
-          // vendedor está perguntando o que fazer agora.
-          { propertyName: 'hs_task_status', operator: 'EQ', value: 'NOT_STARTED' },
-          {
-            propertyName: 'hs_timestamp',
-            operator: 'BETWEEN',
-            value: String(new Date(de).getTime()),
-            highValue: String(new Date(ate).getTime()),
-          },
-        ],
-      },
-    ],
-    properties: [
-      'hs_task_subject',
-      'hs_task_body',
-      'hs_task_status',
-      'hs_timestamp',
-      'hs_task_type',
-    ],
-    sorts: [{ propertyName: 'hs_timestamp', direction: 'ASCENDING' }],
-    limit: 100,
-  });
-
-  if (!busca.ok) {
-    return json(502, {
-      error: 'HubSpot recusou a busca de tarefas',
-      detail: busca.body?.message ?? `status ${busca.status}`,
+  const filtros: Record<string, unknown>[] = [
+    { propertyName: 'hubspot_owner_id', operator: 'EQ', value: ownerId },
+    // Só o que ainda está em aberto: tarefa concluída é histórico, e o
+    // vendedor está perguntando o que fazer agora.
+    { propertyName: 'hs_task_status', operator: 'EQ', value: 'NOT_STARTED' },
+  ];
+  if (de && ate) {
+    filtros.push({
+      propertyName: 'hs_timestamp',
+      operator: 'BETWEEN',
+      value: String(new Date(de).getTime()),
+      highValue: String(new Date(ate).getTime()),
     });
   }
 
-  const tarefas = (busca.body?.results ?? []).map((t: any) => ({
-    id: String(t.id),
-    assunto: t.properties?.hs_task_subject ?? '',
-    corpo: t.properties?.hs_task_body ?? '',
-    vence_em: t.properties?.hs_timestamp ?? null,
-    status: t.properties?.hs_task_status ?? null,
-  }));
+  // PAGINA ate' o fim. Uma pagina do HubSpot tem 100; parar ali era mostrar
+  // "100 de 178" na melhor hipotese, e silenciosamente 100 de 178 na pior.
+  // Teto de 10 paginas (1.000 tarefas) como para-quedas: fila maior que isso
+  // nao e' fila de vendedor, e' defeito de quem gera.
+  const TETO_PAGINAS = 10;
+  const tarefas: unknown[] = [];
+  let after: string | undefined;
+  let total = 0;
 
-  // `total` vem separado de proposito: 100 e' o teto de uma pagina, e uma tela
-  // que mostra 100 de 178 sem dizer que ha' mais mente por omissao.
-  return json(200, { tarefas, total: busca.body?.total ?? tarefas.length });
+  for (let pagina = 0; pagina < TETO_PAGINAS; pagina++) {
+    const busca = await hsFetch(token, 'POST', '/crm/v3/objects/tasks/search', {
+      filterGroups: [{ filters: filtros }],
+      properties: [
+        'hs_task_subject',
+        'hs_task_body',
+        'hs_task_status',
+        'hs_timestamp',
+        'hs_task_type',
+      ],
+      sorts: [{ propertyName: 'hs_timestamp', direction: 'ASCENDING' }],
+      limit: 100,
+      ...(after ? { after } : {}),
+    });
+
+    if (!busca.ok) {
+      // Se ja' trouxemos alguma pagina, devolve o que tem em vez de perder
+      // tudo: meia fila e' melhor que nenhuma, e o `total` denuncia a falta.
+      if (tarefas.length > 0) break;
+      return json(502, {
+        error: 'HubSpot recusou a busca de tarefas',
+        detail: busca.body?.message ?? `status ${busca.status}`,
+      });
+    }
+
+    total = busca.body?.total ?? total;
+    for (const t of busca.body?.results ?? []) {
+      tarefas.push({
+        id: String(t.id),
+        assunto: t.properties?.hs_task_subject ?? '',
+        corpo: t.properties?.hs_task_body ?? '',
+        vence_em: t.properties?.hs_timestamp ?? null,
+        status: t.properties?.hs_task_status ?? null,
+      });
+    }
+
+    after = busca.body?.paging?.next?.after;
+    if (!after) break;
+  }
+
+  // `total` continua vindo separado: se o teto de paginas cortar, a tela diz
+  // quantas ficaram de fora em vez de fingir que trouxe tudo.
+  return json(200, { tarefas, total: total || tarefas.length });
 }
 
 // ===== deal_names =====

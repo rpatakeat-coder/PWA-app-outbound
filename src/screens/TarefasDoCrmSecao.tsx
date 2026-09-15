@@ -35,13 +35,14 @@ function agrupar(tarefas: TarefaDoCrmNaTela[], hoje: Date): Grupo[] {
   const chaveAmanha = diaLocal(amanha);
 
   const vencidas: TarefaDoCrmNaTela[] = [];
+  // Sem data não é atraso: é tarefa que ninguém agendou. Chamar de vencida
+  // seria afirmar um prazo que não existe.
+  const semData: TarefaDoCrmNaTela[] = [];
   const porDia = new Map<string, TarefaDoCrmNaTela[]>();
 
   for (const t of tarefas) {
     if (!t.venceEm) {
-      // Sem data não dá para agendar. Vai com as vencidas em vez de sumir:
-      // tarefa sem prazo continua sendo trabalho de alguém.
-      vencidas.push(t);
+      semData.push(t);
       continue;
     }
     const dia = diaLocal(new Date(t.venceEm));
@@ -56,6 +57,14 @@ function agrupar(tarefas: TarefaDoCrmNaTela[], hoje: Date): Grupo[] {
       titulo: `Vencidas · ${vencidas.length}`,
       atrasado: true,
       itens: vencidas.sort((a, b) => (a.venceEm ?? '').localeCompare(b.venceEm ?? '')),
+    });
+  }
+  if (semData.length > 0) {
+    grupos.push({
+      chave: 'sem_data',
+      titulo: `Sem data · ${semData.length}`,
+      atrasado: false,
+      itens: semData,
     });
   }
   for (const dia of [...porDia.keys()].sort()) {

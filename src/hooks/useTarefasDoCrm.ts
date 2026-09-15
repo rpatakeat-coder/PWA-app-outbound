@@ -36,16 +36,19 @@ const VAZIO = (semMedicao: string | null = null): ResultadoTarefasDoCrm => ({
 });
 
 /**
- * @param diasAFrente quantos dias adiante olhar. O passado entra inteiro do dia
- *   de hoje para trás em 7 dias: tarefa vencida ontem é a mais urgente que
- *   existe, e escondê-la seria esconder atraso.
+ * TODAS as tarefas em aberto da pessoa, sem recorte de data.
+ *
+ * Até 14/09/2026 pedia uma janela (7 dias atrás, 14 à frente) e o vendedor via
+ * 35 de 78 — as vencidas mais antigas, que são as mais urgentes, ficavam de
+ * fora sem ninguém saber. Quem decide o que mostrar é a tela, que agrupa por
+ * dia e recolhe o passado; a busca traz tudo.
  */
-export function useTarefasDoCrm(enabled: boolean, diasAFrente = 14) {
+export function useTarefasDoCrm(enabled: boolean) {
   const { profile } = useAuth();
   const ownerId = (profile as { id_hubspot?: string | null } | null)?.id_hubspot ?? null;
 
   const query = useQuery<ResultadoTarefasDoCrm>({
-    queryKey: ['tarefas_crm', ownerId, diasAFrente],
+    queryKey: ['tarefas_crm', ownerId],
     enabled: enabled && !!profile,
     staleTime: 3 * 60_000,
     queryFn: async () => {
@@ -61,19 +64,9 @@ export function useTarefasDoCrm(enabled: boolean, diasAFrente = 14) {
         );
       }
 
-      const agora = new Date();
-      const de = new Date(agora);
-      de.setDate(de.getDate() - 7);
-      const ate = new Date(agora);
-      ate.setDate(ate.getDate() + diasAFrente);
-
+      // Sem `de`/`ate`: a rota entende a ausência como "tudo em aberto".
       const { data, error } = await supabase.functions.invoke('hubspot-sync', {
-        body: {
-          type: 'list_tasks',
-          owner_id: ownerId,
-          de: de.toISOString(),
-          ate: ate.toISOString(),
-        },
+        body: { type: 'list_tasks', owner_id: ownerId },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.detail ?? data.error);
