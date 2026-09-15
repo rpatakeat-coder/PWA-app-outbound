@@ -25,7 +25,9 @@ import {
   useIconColors,
 } from '../components/icons';
 import { ds, sharedStyles } from './sharedStyles';
-import { useTarefasDoCrm } from '../hooks/useTarefasDoCrm';
+import { useTarefasDoCrm, type TarefaDoCrmNaTela } from '../hooks/useTarefasDoCrm';
+import { TarefaSemLeadSheet } from './TarefaSemLeadSheet';
+import { useAuth } from '../context/AuthContext';
 
 // Tela de Agenda, extraida do App.tsx (prompt 02 do handoff) — refactor puro.
 // Os estados que so' a agenda usava (semana visivel, filtro de tipo, acordeao
@@ -85,6 +87,12 @@ export function AgendaScreen({
   // tem marcado". Ficavam fora da grade: a semana dizia "0 itens" e todos os
   // dias "livre" com duas visitas marcadas pra hoje.
   const { tarefas: tarefasDoCrm } = useTarefasDoCrm(true);
+  const { profile } = useAuth();
+  // Tarefa do CRM sem lead no app: mesma ficha da tela de Tarefas, com a
+  // descricao que veio do HubSpot e o botao de colocar o lead no mapa. O
+  // drawer de compromisso nao serve — ele vive de reagendar e cancelar, e
+  // abria VAZIO pra esses itens.
+  const [tarefaSemLead, setTarefaSemLead] = useState<TarefaDoCrmNaTela | null>(null);
 
   const allAgendaItems = [
     ...routeStops.map(stop => ({ kind: 'route' as const, at: stop.planned_at, stop, client: stop.client })),
@@ -246,6 +254,7 @@ export function AgendaScreen({
             // area carregada do mapa, que e' o caso comum aqui.
             if (item.kind === 'crm') {
               if (item.tarefa.clientId) openClientById?.(item.tarefa.clientId);
+              else setTarefaSemLead(item.tarefa);
               return;
             }
             setCompromisso(item);
@@ -574,6 +583,15 @@ export function AgendaScreen({
         <View style={styles.timeline}>
           {itensDoDia.map(renderAgendaItem)}
         </View>
+      )}
+
+      {tarefaSemLead && (
+        <TarefaSemLeadSheet
+          tarefa={tarefaSemLead}
+          ownerIdHubspot={(profile as { id_hubspot?: string | null } | null)?.id_hubspot ?? null}
+          aoFechar={() => setTarefaSemLead(null)}
+          aoCadastrar={(id) => openClientById?.(id)}
+        />
       )}
     </ScrollView>
     {overlayCompromisso}
