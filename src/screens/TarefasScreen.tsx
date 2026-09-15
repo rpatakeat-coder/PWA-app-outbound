@@ -221,6 +221,7 @@ export function TarefasScreen({
       ? new Date(t.venceEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
       : 'sem horário';
     const alvo = t.clientId ? clients.find((c) => c.id === t.clientId) ?? null : null;
+    const acao = t.assunto.replace(/^(?:visita|follow.?up)\s*[-–—]\s*/i, '').trim();
     return (
       <TouchableOpacity
         key={`crm-${t.id}`}
@@ -236,9 +237,14 @@ export function TarefasScreen({
         <Text style={[styles.taskLead, layout.ehDesktop && styles.taskLeadWeb]} numberOfLines={1}>
           {t.nomeDoCliente ?? 'Cliente não identificado'}
         </Text>
-        <Text style={[styles.taskTipo, layout.ehDesktop && styles.taskTipoWeb]} numberOfLines={2}>
-          {t.assunto.replace(/^(?:visita|follow.?up)\s*[-–—]\s*/i, '')}
-        </Text>
+        {/* Nas visitas o assunto e' "Visita - <cliente>", entao tirar o
+            prefixo devolve o proprio nome — que ja' e' o titulo acao. So'
+            mostra a segunda linha quando ela diz algo diferente. */}
+        {acao && acao !== t.nomeDoCliente ? (
+          <Text style={[styles.taskTipo, layout.ehDesktop && styles.taskTipoWeb]} numberOfLines={2}>
+            {acao}
+          </Text>
+        ) : null}
         <Text style={[styles.taskTipo, layout.ehDesktop && styles.taskTipoWeb]}>
           {quando} · {t.tipo === 'visita' ? 'visita' : t.tipo === 'follow_up' ? 'follow up' : 'tarefa'} · da gestão
         </Text>
@@ -574,9 +580,20 @@ export function TarefasScreen({
             // Lista PLANA da aba escolhida — o agrupamento por severidade saiu:
             // ele respondia "que tipo de cobranca", e a pergunta da tela e' "o
             // que venceu". O chip de severidade segue filtrando por cima.
-            const itens = (colunasVencimento.find((c) => c.chave === tabTarefa)?.itens ?? [])
+            const colunaAtiva = colunasVencimento.find((c) => c.chave === tabTarefa);
+            const itens = (colunaAtiva?.itens ?? [])
               .filter((t) => filtroSev === null || sevKey(t.severity) === filtroSev);
-            if (itens.length === 0) {
+            // As do CRM entram na lista do celular tambem. A contagem da aba ja'
+            // as somava e a lista nao as mostrava: o vendedor via "Hoje · 2" e
+            // "Nenhuma tarefa para hoje" na mesma tela.
+            //
+            // O chip de severidade (D5/D2/SLA) e' do motor de regras do app;
+            // tarefa do HubSpot nao tem severidade, entao com o chip ativo ela
+            // sai — filtrar por um atributo que ela nao tem seria fingir que
+            // tem, e mostra-la ignorando o filtro seria fingir que o filtro
+            // nao existe.
+            const itensCrm = filtroSev === null ? (colunaAtiva?.itensCrm ?? []) : [];
+            if (itens.length + itensCrm.length === 0) {
               // As duas copies originais ficam. O `{status}` do "Nenhuma
               // {status} encontrada" era a SEVERIDADE (D5/D2/SLA) e continua
               // sendo quando o chip esta' ativo. Sem chip, o rotulo da aba nao
@@ -600,7 +617,12 @@ export function TarefasScreen({
                 </View>
               );
             }
-            return <View style={styles.listaTarefas}>{itens.map(renderTaskCard)}</View>;
+            return (
+              <View style={styles.listaTarefas}>
+                {itens.map(renderTaskCard)}
+                {itensCrm.map(renderCrmCard)}
+              </View>
+            );
           })()
         )
       )}
