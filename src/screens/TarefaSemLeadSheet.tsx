@@ -27,6 +27,7 @@ import * as Location from 'expo-location';
 import { KeyboardAvoidingView } from '../components/KeyboardAvoidingView';
 import { Alert } from '../components/Alert';
 import { supabase } from '../integrations/supabase/client';
+import { useAuth } from '../context/AuthContext';
 import { useLayout } from '../hooks/useLayout';
 import type { TarefaDoCrmNaTela } from '../hooks/useTarefasDoCrm';
 
@@ -44,6 +45,8 @@ export function TarefaSemLeadSheet({
   aoCadastrar: (clientId: string) => void;
 }) {
   const layout = useLayout();
+  const { user, profile } = useAuth();
+  const ehSomenteLeitura = (profile as { role?: string | null } | null)?.role === 'view';
   const [salvando, setSalvando] = useState(false);
 
   const quando = tarefa.venceEm
@@ -67,6 +70,19 @@ export function TarefaSemLeadSheet({
 
       // Vincula ao negócio que JÁ existe: `id_hubspot` vai preenchido e não há
       // chamada de create_pin. Ver o comentário do topo.
+      //
+      // `created_by` NÃO é opcional. A policy "Non-view users can create
+      // clients" tem três condições, conferidas no banco em 15/09/2026:
+      //
+      //   auth.role() = 'authenticated'
+      //   AND created_by = auth.uid()
+      //   AND NOT is_view_only_user()
+      //
+      // Sem o campo a linha nasce com NULL, a segunda condição dá falso e o
+      // PostgREST devolve "new row violates row-level security policy for table
+      // clients" — foi assim que isto quebrou na tarefa do Tchê Churrasco. Todo
+      // INSERT em `clients` no app manda este campo (ver `addClient` em
+      // src/hooks/useClients.ts); este era o único que não mandava.
       const { data, error } = await supabase
         .from('clients')
         .insert({
@@ -76,7 +92,9 @@ export function TarefaSemLeadSheet({
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
           id_hubspot: tarefa.marcador?.dealId ?? null,
+          created_by: user?.id ?? null,
           vendedor_id_hubspot: ownerIdHubspot,
+          geo_source: 'coords',
           // A posição é a DO VENDEDOR, não a do estabelecimento conferida.
           // Marcar como aproximada faz a ficha avisar isso em vez de afirmar
           // uma coordenada que ninguém validou.
@@ -86,6 +104,16 @@ export function TarefaSemLeadSheet({
         .single();
 
       if (error || !data) {
+        // O lead JÁ está no app, cadastrado por outra pessoa (ou por você, de
+        // outro jeito): `clients.id_hubspot` é único. Insistir aqui só repete o
+        // erro — o caminho é achar o pin que já existe.
+        if (error?.code === '23505') {
+          Alert.alert(
+            'Esse lead já está no mapa',
+            'Alguém já colocou este negócio no app. Procure por ele na busca do mapa — a tarefa passa a abrir a ficha dele assim que o app recarregar a lista.',
+          );
+          return;
+        }
         Alert.alert('Não consegui cadastrar', error?.message ?? 'Erro desconhecido.');
         return;
       }
@@ -155,20 +183,36 @@ export function TarefaSemLeadSheet({
               </>
             )}
 
-            <TouchableOpacity
-              onPress={marcarAqui}
-              disabled={salvando}
-              accessibilityRole="button"
-              style={[estilos.botao, { minHeight: layout.alvo }, salvando && { opacity: 0.5 }]}
-            >
-              <Text style={estilos.botaoTexto}>
-                {salvando ? 'Cadastrando…' : 'Estou no local — colocar no mapa'}
-              </Text>
-            </TouchableOpacity>
-            <Text style={estilos.ajuda}>
-              Usa a sua posição atual. O negócio no HubSpot continua o mesmo — o lead entra
-              no app ligado a ele, sem criar um segundo.
-            </Text>
+            {/* A policy tem três condições, e a terceira é `NOT
+                is_view_only_user()`: quem é `view` não cria lead, por desenho.
+                Dizer isso aqui é melhor do que deixar a pessoa tocar o botão e
+                receber "violates row-level security policy" — que não é frase
+                que se leia no meio da rua. */}
+            {ehSomenteLeitura ? (
+              <View style={estilos.aviso}>
+                <Text style={estilos.avisoTexto}>
+                  Sua conta é de visualização, então não dá para cadastrar o lead. Peça para
+                  quem atende este negócio colocá-lo no mapa.
+                </Text>
+              </View>
+            ) : (
+              <>
+                <TouchableOpacity
+                  onPress={marcarAqui}
+                  disabled={salvando}
+                  accessibilityRole="button"
+                  style={[estilos.botao, { minHeight: layout.alvo }, salvando && { opacity: 0.5 }]}
+                >
+                  <Text style={estilos.botaoTexto}>
+                    {salvando ? 'Cadastrando…' : 'Estou no local — colocar no mapa'}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={estilos.ajuda}>
+                  Usa a sua posição atual. O negócio no HubSpot continua o mesmo — o lead entra
+                  no app ligado a ele, sem criar um segundo.
+                </Text>
+              </>
+            )}
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
