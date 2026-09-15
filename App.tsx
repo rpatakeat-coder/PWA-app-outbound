@@ -119,6 +119,7 @@ import { ComunicadoSheet } from './src/screens/ComunicadoSheet';
 import { EditLocationModal } from './src/screens/EditLocationModal';
 import { MinhaDailyCard } from './src/screens/MinhaDailyCard';
 import { useComunicadosNaoLidos } from './src/hooks/useComunicados';
+import { useTarefasDoCrm } from './src/hooks/useTarefasDoCrm';
 import { useLayout } from './src/hooks/useLayout';
 import { useNomesDeClientes } from './src/hooks/useNomesDeClientes';
 import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
@@ -1230,7 +1231,15 @@ function MainApp() {
           }),
     [tasks, tasksActiveVendor, semIdHubspot],
   );
-  const visibleTasksCount = visibleTasks.length;
+  // O contador do rodape soma as DUAS filas: as do app (`client_tasks`) e as
+  // que a gestao pos no HubSpot. Ele contava so' as primeiras, entao a conta do
+  // Marco mostrava 13 com 92 tarefas na tela — e um numero que nao bate com o
+  // que se ve' ensina a pessoa a ignorar o numero.
+  //
+  // O hook e' o MESMO da tela de Tarefas, com a mesma `queryKey`: o react-query
+  // divide o cache, entao nao ha' segunda ida ao HubSpot.
+  const { tarefas: tarefasDoCrmParaContagem } = useTarefasDoCrm(!!profile);
+  const visibleTasksCount = visibleTasks.length + tarefasDoCrmParaContagem.length;
 
   // Sublinha do header de Tarefas. Sai do MESMO `baldeDeVencimento` das abas
   // (importado da tela, nao recopiado): duas regras acabariam divergindo e a
