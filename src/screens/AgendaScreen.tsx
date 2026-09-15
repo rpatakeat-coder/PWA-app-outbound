@@ -26,7 +26,6 @@ import {
   useIconColors,
 } from '../components/icons';
 import { ds, sharedStyles } from './sharedStyles';
-import { PlanoDaSemanaCard } from './PlanoDaSemanaCard';
 import { useTarefasDoCrm } from '../hooks/useTarefasDoCrm';
 
 // Tela de Agenda, extraida do App.tsx (prompt 02 do handoff) — refactor puro.
@@ -414,9 +413,6 @@ export function AgendaScreen({
     // Mesmo teto da lista de leads: sem ele o conteudo se espalha por
     // toda a largura do monitor e a linha de texto fica ilegivel.
     { maxWidth: layout.larguraMaxima, width: '100%', alignSelf: 'center' }]}>
-      {/* O plano vem ANTES da agenda: primeiro onde eu vou estar na semana,
-          depois o que já está marcado dentro dela. */}
-      <PlanoDaSemanaCard enabled />
 
 
 
