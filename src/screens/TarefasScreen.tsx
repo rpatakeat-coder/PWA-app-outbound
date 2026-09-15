@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
 import { ds, sharedStyles } from './sharedStyles';
 import { IconCheck, IconClipboardCheck, IconClock, IconUser, useIconColors } from '../components/icons';
+import { TarefasDoCrmSecao } from './TarefasDoCrmSecao';
 
 export type BaldeDeTarefa = 'atrasadas' | 'hoje' | 'proximas';
 
@@ -549,6 +550,20 @@ export function TarefasScreen({
           })()
         )
       )}
+
+      {/* As tarefas do CRM vêm DEPOIS do Kanban, e recolhidas. Elas importam —
+          são o que a gestão pôs na semana desta pessoa — mas o Kanban é a
+          visão principal da tela, e esta seção no topo, aberta, empurrava as
+          três colunas para fora do alcance da vista. */}
+      <View style={{ marginTop: 16 }}>
+        <TarefasDoCrmSecao
+          enabled
+          abrirLeadNoMapa={(id) => {
+            const alvo = clients.find((c) => c.id === id);
+            if (alvo) abrirLeadNoMapa(alvo);
+          }}
+        />
+      </View>
     </ScrollView>
   );
 }
