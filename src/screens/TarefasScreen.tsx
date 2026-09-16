@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
 import { ds, sharedStyles } from './sharedStyles';
 import { IconCheck, IconClipboardCheck, IconClock, IconUser, useIconColors } from '../components/icons';
-import { useTarefasDoCrm, type TarefaDoCrmNaTela } from '../hooks/useTarefasDoCrm';
+import { useTarefasDoCrm, type TarefaDoCrmNaTela, type TarefaParaAFicha } from '../hooks/useTarefasDoCrm';
 import { TarefaSemLeadSheet } from './TarefaSemLeadSheet';
 
 export type BaldeDeTarefa = 'atrasadas' | 'hoje' | 'proximas';
@@ -125,8 +125,10 @@ interface Props {
   nomeDoLead: (c: Client) => string;
   vendorLabel: (idHubspot: string | null) => string;
   abrirLeadNoMapa: (c: Client) => void;
-  /** Abre a ficha por id — cobre lead fora do viewport do mapa. */
-  abrirLeadPorId: (id: string) => void;
+  /** Abre a ficha por id — cobre lead fora do viewport do mapa. A tarefa vai
+   *  junto pra a ficha mostrar o recado da gestao; sem ela a instrucao que fez
+   *  a pessoa ir ate' la' sumiria na troca de tela. */
+  abrirLeadPorId: (id: string, tarefa?: TarefaParaAFicha) => void;
   /** Limpa o filtro de vendedor compartilhado (gestor). */
   limparFiltroVendedor?: () => void;
   agendarDemo: (c: Client, task?: ClientTask) => void;
@@ -244,7 +246,7 @@ export function TarefasScreen({
     // a area VISIVEL do mapa, e a tarefa costuma apontar pra um lead fora dela.
     // Ele tenta o local e, se nao achar, busca a linha no banco por id.
     const abrir = t.clientId
-      ? () => abrirLeadPorId(t.clientId!)
+      ? () => abrirLeadPorId(t.clientId!, { assunto: t.assunto, corpo: t.corpo, venceEm: t.venceEm })
       // Sem lead no app, abre a ficha da TAREFA — com o que o HubSpot mandou e
       // o botao de colocar o lead no mapa.
       : () => setTarefaSemLead(t);
@@ -273,6 +275,16 @@ export function TarefasScreen({
             {acao}
           </Text>
         ) : null}
+        {/* O recado da gestao, no proprio cartao. Ele so' existia dentro da
+            ficha da tarefa SEM lead; com o lead no mapa o toque abre a ficha do
+            LEAD e a instrucao sumia. Aqui ela e' lida varrendo a lista, antes
+            de qualquer toque. Duas linhas: cabe o essencial e nao vira parede
+            de texto numa fila de 78. */}
+        {!!t.corpo && (
+          <Text style={[styles.taskTipo, layout.ehDesktop && styles.taskTipoWeb]} numberOfLines={2}>
+            {t.corpo}
+          </Text>
+        )}
         <Text style={[styles.taskTipo, layout.ehDesktop && styles.taskTipoWeb]}>
           {quando} · {t.tipo === 'visita' ? 'visita' : t.tipo === 'follow_up' ? 'follow up' : 'tarefa'} · da gestão
         </Text>

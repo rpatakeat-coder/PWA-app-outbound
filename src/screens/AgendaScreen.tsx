@@ -25,7 +25,7 @@ import {
   useIconColors,
 } from '../components/icons';
 import { ds, sharedStyles } from './sharedStyles';
-import { useTarefasDoCrm, type TarefaDoCrmNaTela } from '../hooks/useTarefasDoCrm';
+import { useTarefasDoCrm, type TarefaDoCrmNaTela, type TarefaParaAFicha } from '../hooks/useTarefasDoCrm';
 import { TarefaSemLeadSheet } from './TarefaSemLeadSheet';
 import { useAuth } from '../context/AuthContext';
 
@@ -40,7 +40,7 @@ interface Props {
   routeStops: FieldOps['stops'];
   /** Nome por id pra reuniao de lead fora do viewport (useNomesDeClientes). */
   nomesReunioes: Map<string, string>;
-  openClientById: (id: string) => void;
+  openClientById: (id: string, tarefa?: TarefaParaAFicha) => void;
   vendorLabel: (idHubspot: string | null) => string;
   canViewGestor: boolean;
   isViewer: boolean;
@@ -257,7 +257,13 @@ export function AgendaScreen({
             // pra uma Task do HubSpot. `openClientById` resolve lead fora da
             // area carregada do mapa, que e' o caso comum aqui.
             if (item.kind === 'crm') {
-              if (item.tarefa.clientId) openClientById?.(item.tarefa.clientId);
+              if (item.tarefa.clientId) {
+                openClientById?.(item.tarefa.clientId, {
+                  assunto: item.tarefa.assunto,
+                  corpo: item.tarefa.corpo,
+                  venceEm: item.tarefa.venceEm,
+                });
+              }
               else setTarefaSemLead(item.tarefa);
               return;
             }
@@ -270,6 +276,13 @@ export function AgendaScreen({
             <Text style={styles.cardTitulo} numberOfLines={2}>{titulo}</Text>
           </View>
           {sublinha ? <Text style={styles.cardSublinha} numberOfLines={1}>{sublinha}</Text> : null}
+          {/* O recado que a gestao escreveu na Task. Estava so' na ficha da
+              tarefa SEM lead; com o lead no mapa o toque abre a ficha do LEAD
+              e a instrucao sumia no caminho. Na grade ela e' lida de relance,
+              que e' como se olha a agenda do dia. */}
+          {item.kind === 'crm' && !!item.tarefa.corpo ? (
+            <Text style={styles.cardSublinha} numberOfLines={2}>{item.tarefa.corpo}</Text>
+          ) : null}
 
           {agendavel && (
             <View style={styles.cardAcoes}>

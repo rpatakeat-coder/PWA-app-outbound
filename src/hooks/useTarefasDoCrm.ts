@@ -21,6 +21,9 @@ export type TarefaDoCrmNaTela = TarefaDoCrm & {
   nomeDoCliente: string | null;
 };
 
+/** O que a ficha do lead precisa saber da tarefa que levou ate' ela. */
+export type TarefaParaAFicha = { assunto: string; corpo: string; venceEm: string | null };
+
 export type ResultadoTarefasDoCrm = {
   tarefas: TarefaDoCrmNaTela[];
   /** Quantas o HubSpot disse existir — pode ser maior que a página trazida. */

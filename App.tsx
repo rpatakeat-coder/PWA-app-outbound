@@ -2392,6 +2392,20 @@ function MainApp() {
   // Abre o detalhe de um lead a partir do painel do Gestor (so tem o clientId).
   // Tenta achar na lista local; se nao estiver (recorte de setor/area do
   // useClients nao cobre o painel), busca a linha sob demanda no Supabase.
+  // A tarefa do CRM que ORIGINOU a abertura da ficha.
+  //
+  // Quando o lead JA' tem pin, tocar no cartao abre a ficha normal — e ali o
+  // recado da gestao ("Falar com Marcelo - Gerente") desaparecia: a ficha fala
+  // do LEAD, nao da tarefa. O vendedor chegava na porta sem a instrucao que o
+  // fez ir ate' la'.
+  //
+  // Vive aqui, e nao dentro da ficha, porque quem sabe de qual tarefa se trata
+  // e' quem tocou no cartao — a ficha e' a mesma que abre pelo mapa, pela busca
+  // e pela rota, e nesses casos nao ha' tarefa nenhuma.
+  const [tarefaDaFicha, setTarefaDaFicha] = useState<{
+    assunto: string; corpo: string; venceEm: string | null;
+  } | null>(null);
+
   const openClientById = useCallback(async (clientId: string) => {
     const local = clients.find((c) => c.id === clientId);
     if (local) { setSelectedClient(local); return; }
@@ -3386,7 +3400,8 @@ function MainApp() {
       slaDays={routeSlaDays}
       meetings={meetingsByClient[selectedClient.id] ?? []}
       coordCollision={hasCoordCollision(selectedClient)}
-      onClose={() => setSelectedClient(null)}
+      tarefaDaGestao={tarefaDaFicha}
+      onClose={() => { setTarefaDaFicha(null); setSelectedClient(null); }}
       onDelete={isViewer ? undefined : () => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
       onEdit={isViewer ? undefined : () => openEditClient(selectedClient)}
       onSavePhone={isViewer ? undefined : async (tel) => {
@@ -5237,7 +5252,11 @@ function MainApp() {
           // Troca pra aba do mapa antes de abrir, como o `abrirLeadNoMapa` acima:
           // a ficha do lead so' renderiza sobre o mapa, entao sem isso o toque
           // setava o lead selecionado e nada aparecia na tela.
-          abrirLeadPorId={(id) => { setTab('map'); void openClientById(id); }}
+          abrirLeadPorId={(id, tarefa) => {
+            setTarefaDaFicha(tarefa ?? null);
+            setTab('map');
+            void openClientById(id);
+          }}
           limparFiltroVendedor={() => setVendorFilterHubspotId(null)}
           agendarDemo={(c, task) =>
             setSchedulingFor({
@@ -5288,7 +5307,10 @@ function MainApp() {
           meetings={meetings}
           routeStops={routeStops}
           nomesReunioes={nomesReunioes}
-          openClientById={openClientById}
+          openClientById={(id, tarefa) => {
+            setTarefaDaFicha(tarefa ?? null);
+            void openClientById(id);
+          }}
           vendorLabel={vendorLabel}
           canViewGestor={canViewGestor}
           isViewer={isViewer}
@@ -6404,6 +6426,7 @@ function ClientBottomSheet({
   slaDays,
   meetings,
   coordCollision,
+  tarefaDaGestao,
   onClose,
   onDelete,
   onEdit,
@@ -6428,6 +6451,9 @@ function ClientBottomSheet({
   slaDays?: SlaDays;
   meetings: ClientMeeting[];
   coordCollision: boolean;
+  /** Tarefa do CRM que levou ate' esta ficha. null quando a ficha foi aberta
+   *  pelo mapa, pela busca ou pela rota — ali nao ha' tarefa nenhuma. */
+  tarefaDaGestao?: { assunto: string; corpo: string; venceEm: string | null } | null;
   onClose: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
@@ -6833,6 +6859,33 @@ function ClientBottomSheet({
             <Text style={styles.fichaNome} numberOfLines={1}>{primaryName}</Text>
             {sublinha ? (
               <Text style={styles.fichaSublinha} numberOfLines={1}>{sublinha}</Text>
+            ) : null}
+            {/* O RECADO DA TAREFA QUE TROUXE A PESSOA ATE' AQUI.
+                Com o lead ja' no mapa, tocar no cartao abre esta ficha — que
+                fala do LEAD — e a instrucao da gestao ("Falar com Marcelo -
+                Gerente") sumia no caminho. O vendedor chegava na porta sem
+                saber por que tinha ido.
+                Vai no CABECALHO, e nao na faixa de alertas: a ficha abre
+                RECOLHIDA, e a faixa so' aparece depois de expandir. O que tem
+                hora marcada precisa ser lido sem gesto nenhum. */}
+            {tarefaDaGestao ? (
+              <View style={styles.fichaTarefa}>
+                <Text style={styles.fichaTarefaTitulo} numberOfLines={2}>
+                  {tarefaDaGestao.assunto
+                    .replace(/^(?:visita|follow.?up)\s*[-\u2013\u2014]\s*/i, '')
+                    .trim() || 'Tarefa da gestão'}
+                </Text>
+                {!!tarefaDaGestao.corpo && (
+                  <Text style={styles.fichaTarefaCorpo} numberOfLines={3}>
+                    {tarefaDaGestao.corpo}
+                  </Text>
+                )}
+                <Text style={styles.fichaTarefaRodape}>
+                  {tarefaDaGestao.venceEm
+                    ? `${new Date(tarefaDaGestao.venceEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · da gestão`
+                    : 'da gestão'}
+                </Text>
+              </View>
             ) : null}
           </View>
           <TouchableOpacity
@@ -7251,6 +7304,31 @@ function ClientBottomSheet({
       // O restante da ficha so' monta no estagio 2.
       peek={
             <View style={styles.peekCorpo}>
+              {/* O RECADO DA TAREFA QUE TROUXE A PESSOA ATE' AQUI.
+                  Vai no PEEK, e nao no `topo`: no celular a ficha abre neste
+                  estagio, e o resto so' monta quando se expande. Um recado que
+                  exige gesto pra aparecer e' um recado que ninguem le' na rua.
+                  Fica ACIMA da linha do lead porque e' o que tem hora marcada:
+                  o nome do lead a pessoa ja' sabe, foi ele que ela tocou. */}
+              {tarefaDaGestao ? (
+                <View style={styles.fichaTarefa}>
+                  <Text style={styles.fichaTarefaTitulo} numberOfLines={2}>
+                    {tarefaDaGestao.assunto
+                      .replace(/^(?:visita|follow.?up)\s*[-\u2013\u2014]\s*/i, '')
+                      .trim() || 'Tarefa da gestão'}
+                  </Text>
+                  {!!tarefaDaGestao.corpo && (
+                    <Text style={styles.fichaTarefaCorpo} numberOfLines={3}>
+                      {tarefaDaGestao.corpo}
+                    </Text>
+                  )}
+                  <Text style={styles.fichaTarefaRodape}>
+                    {tarefaDaGestao.venceEm
+                      ? `${new Date(tarefaDaGestao.venceEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · da gestão`
+                      : 'da gestão'}
+                  </Text>
+                </View>
+              ) : null}
               <TouchableOpacity
                 accessibilityRole="button"
                 accessibilityLabel="Abrir ficha completa"
@@ -9703,6 +9781,19 @@ const styles = StyleSheet.create({
   // ---- Faixa de alertas (M1d) ----
   // Faixas de largura total, NAO cards: sem sombra, sem borda em volta, sem
   // raio no celular. So' a regua esquerda de 3px carrega a cor.
+  fichaTarefa: {
+    backgroundColor: 'var(--tint-blue)',
+    borderLeftWidth: 3,
+    borderLeftColor: 'var(--tint-blue-text)',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginTop: 8,
+    gap: 2,
+  },
+  fichaTarefaTitulo: { fontSize: 13, fontWeight: '700', color: 'var(--tint-blue-text)', lineHeight: 18 },
+  fichaTarefaCorpo: { fontSize: 13, color: 'var(--tint-blue-text)', lineHeight: 18 },
+  fichaTarefaRodape: { fontSize: 11, color: 'var(--tint-blue-text)', opacity: 0.85 },
   faixaAlertas: { gap: 1 },
   faixaAlertasMobile: { marginHorizontal: -16 },
   alerta: { flexDirection: 'row', gap: 12, paddingVertical: 12, paddingHorizontal: 16, borderLeftWidth: 3 },
