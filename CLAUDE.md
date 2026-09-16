@@ -145,8 +145,16 @@ git fetch origin && git branch -u origin/main main
 O usuário (Guilherme) opera produção: migrations via SQL Editor,
 `supabase functions deploy`, `secrets set`. Agentes escrevem código e SQL,
 mas não têm CLI do Supabase nem as chaves — entregar o comando pronto e dizer
-o resultado esperado. Commits/push só quando ele pede; mensagens em português,
-corpo explicando o porquê.
+o resultado esperado.
+
+**Commit e push ao fim de cada alteração, sem perguntar** — `git pull --ff-only`
+antes, sempre, porque outras instâncias trabalham neste mesmo repositório. Só
+commite depois da verificação passar (a seção acima), e um commit por ajuste em
+vez de um commit-balaio. Mensagens em português, corpo explicando o porquê.
+
+Isso vale para o CÓDIGO, que é reversível. **Escrever em produção continua
+pedindo autorização explícita**: migration aplicada, `functions deploy`, lead ou
+tarefa no HubSpot, comunicado publicado — nada disso se desfaz com um revert.
 
 ## Domínio (o que os números significam)
 
