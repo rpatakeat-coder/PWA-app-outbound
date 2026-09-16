@@ -88,6 +88,18 @@ const SLA_REGUA: Record<string, { claro: string; escuro: string }> = {
 };
 const SLA_REGUA_PADRAO = 'var(--border)';
 
+// Mesmo papel do `baldeDeVencimento` acima, para a tarefa que vive no HubSpot:
+// vive no MODULO e e' exportado porque a sublinha do header (App.tsx) precisa
+// do mesmo criterio. Enquanto so' a tela usava, o header dizia "0 atrasadas"
+// com a aba ao lado marcando "Atrasadas · 2".
+export const baldeDaTarefaDoCrm = (t: { venceEm: string | null }): BaldeDeTarefa => {
+  if (!t.venceEm) return 'hoje';
+  const diaStr = diaBRTde(t.venceEm);
+  if (!diaStr) return 'hoje';
+  const hoje = hojeEmBRT();
+  return diaStr < hoje ? 'atrasadas' : diaStr === hoje ? 'hoje' : 'proximas';
+};
+
 const ABAS: Array<{ chave: BaldeDeTarefa; rotulo: string }> = [
   { chave: 'atrasadas', rotulo: 'Atrasadas' },
   { chave: 'hoje', rotulo: 'Hoje' },
@@ -186,17 +198,15 @@ export function TarefasScreen({
   // concluir que escreve no banco. Forjar uma quebraria esse fluxo. Entao vao
   // numa lista irma, com cartao proprio e sem botao de concluir — quem fecha
   // tarefa do CRM e' o HubSpot.
-  const { tarefas: tarefasDoCrm } = useTarefasDoCrm(true);
+  const { tarefas: tarefasDoCrm, erro: erroDoCrm, semMedicao } = useTarefasDoCrm(true);
+  // "Nao consegui buscar" e "voce nao tem tarefa" viram a MESMA tela vazia se a
+  // gente descartar o erro — e a pessoa vai embora achando que esta' em dia.
+  // E' o mesmo defeito que a onda 1 corrigiu no cockpit, aqui pelo outro lado.
+  const avisoDoCrm = semMedicao
+    ?? (erroDoCrm ? 'Não consegui buscar as tarefas do HubSpot agora. O que aparece aqui são só as do app.' : null);
   // Tarefa do CRM cujo lead nao existe no app: abre uma ficha propria em vez
   // de virar cartao inerte. Ver TarefaSemLeadSheet.
   const [tarefaSemLead, setTarefaSemLead] = useState<TarefaDoCrmNaTela | null>(null);
-  const baldeDaTarefaDoCrm = (t: TarefaDoCrmNaTela): BaldeDeTarefa => {
-    if (!t.venceEm) return 'hoje';
-    const dia = new Date(t.venceEm);
-    const diaStr = `${dia.getFullYear()}-${String(dia.getMonth() + 1).padStart(2, '0')}-${String(dia.getDate()).padStart(2, '0')}`;
-    const hoje = hojeEmBRT();
-    return diaStr < hoje ? 'atrasadas' : diaStr === hoje ? 'hoje' : 'proximas';
-  };
   const colunasVencimento = COLUNAS_VENCIMENTO.map(c => ({
     ...c,
     itens: sorted.filter(task => baldeDeVencimento(task) === c.chave),
@@ -550,9 +560,25 @@ export function TarefasScreen({
         </View>
       )}
 
-      {sorted.length === 0 && layout.ehDesktop ? (
+      {/* Quando ha' tarefa na tela mas a busca do CRM falhou, a lista esta'
+          INCOMPLETA. Sem esta linha a pessoa le' uma fila curta como se fosse
+          a fila inteira. */}
+      {!!avisoDoCrm && sorted.length > 0 && (
+        <View style={styles.avisoCrm}>
+          <Text style={styles.avisoCrmTexto}>{avisoDoCrm}</Text>
+        </View>
+      )}
+
+      {/* O quadro inteiro so' desaparece quando NAO HA' NADA — e "nada" sao as
+          duas filas. Este teste olhava so' `sorted` (as de `client_tasks`):
+          quem concluia a ultima tarefa do app via o kanban sumir levando junto
+          as dezenas vindas do HubSpot, que continuavam pendentes. A tela dizia
+          "Nenhuma tarefa pendente" com 79 esperando. */}
+      {sorted.length + tarefasDoCrm.length === 0 && layout.ehDesktop ? (
         <View style={sharedStyles.emptyState}>
-          <Text style={sharedStyles.emptyStateText}>Nenhuma tarefa pendente.</Text>
+          <Text style={sharedStyles.emptyStateText}>
+            {avisoDoCrm ?? 'Nenhuma tarefa pendente.'}
+          </Text>
         </View>
       ) : (
         // KANBAN no desktop, com tres regras que o print pediu:
@@ -624,6 +650,8 @@ export function TarefasScreen({
               // — entao a terceira forma e' a mesma frase no singular.
               const texto = semIdHubspot
                 ? 'Seu usuário ainda não tem ID do HubSpot. Peça ao gestor para configurar — sem ele nenhuma tarefa é atribuída a você.'
+                : avisoDoCrm && sorted.length === 0
+                ? avisoDoCrm
                 : sorted.length === 0
                 ? 'Nenhuma tarefa pendente.'
                 : filtroSev
@@ -667,6 +695,17 @@ export function TarefasScreen({
 
 // Estilos exclusivos desta tela, movidos do App.tsx como estavam.
 const styles = StyleSheet.create({
+  avisoCrm: {
+    backgroundColor: 'var(--tint-amber)',
+    borderLeftWidth: 3,
+    borderLeftColor: 'var(--tint-amber-text)',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  avisoCrmTexto: { fontSize: 13, lineHeight: 18, color: 'var(--tint-amber-text)' },
   rotuloContagem: {
     fontSize: 11,
     lineHeight: 16,

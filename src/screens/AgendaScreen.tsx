@@ -86,7 +86,11 @@ export function AgendaScreen({
   // planejamento da semana, follow up do funil — e a Agenda responde "o que
   // tem marcado". Ficavam fora da grade: a semana dizia "0 itens" e todos os
   // dias "livre" com duas visitas marcadas pra hoje.
-  const { tarefas: tarefasDoCrm } = useTarefasDoCrm(true);
+  const { tarefas: tarefasDoCrm, erro: erroDoCrm, semMedicao } = useTarefasDoCrm(true);
+  // "Agenda vazia" e "nao consegui buscar" nao sao a mesma coisa, e aqui a
+  // diferenca e' o dia inteiro de alguem: quem le' "livre" nao vai a' rua.
+  const avisoDoCrm = semMedicao
+    ?? (erroDoCrm ? 'Não consegui buscar as tarefas do HubSpot agora. O que aparece aqui são só os compromissos do app.' : null);
   const { profile } = useAuth();
   // Tarefa do CRM sem lead no app: mesma ficha da tela de Tarefas, com a
   // descricao que veio do HubSpot e o botao de colocar o lead no mapa. O
@@ -577,10 +581,18 @@ export function AgendaScreen({
       ) : itensDoDia.length === 0 ? (
         <View style={styles.vazio}>
           <IconCalendar width={40} height={40} fill={iconColors.faint} />
-          <Text style={styles.vazioTexto}>Agenda vazia.</Text>
+          <Text style={styles.vazioTexto}>{avisoDoCrm ?? 'Agenda vazia.'}</Text>
         </View>
       ) : (
         <View style={styles.timeline}>
+          {/* Dia com compromisso na tela E busca do CRM falhando: a grade esta'
+              incompleta, e dizer isso e' o que impede a pessoa de tratar o que
+              sobrou como se fosse o dia todo. */}
+          {!!avisoDoCrm && (
+            <View style={styles.avisoCrm}>
+              <Text style={styles.avisoCrmTexto}>{avisoDoCrm}</Text>
+            </View>
+          )}
           {itensDoDia.map(renderAgendaItem)}
         </View>
       )}
@@ -692,6 +704,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: 'var(--text)',
   },
+  avisoCrm: {
+    backgroundColor: 'var(--tint-amber)',
+    borderLeftWidth: 3,
+    borderLeftColor: 'var(--tint-amber-text)',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  avisoCrmTexto: { fontSize: 13, lineHeight: 18, color: 'var(--tint-amber-text)' },
   vazio: { alignItems: 'center', justifyContent: 'center', marginTop: 24, gap: 12 },
   vazioTexto: {
     fontSize: 14,

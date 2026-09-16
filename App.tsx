@@ -125,7 +125,7 @@ import { useNomesDeClientes } from './src/hooks/useNomesDeClientes';
 import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
 import { useStages } from './src/hooks/useStages';
 import { GestorScreen } from './src/screens/GestorScreen';
-import { TarefasScreen, baldeDeVencimento } from './src/screens/TarefasScreen';
+import { TarefasScreen, baldeDeVencimento, baldeDaTarefaDoCrm } from './src/screens/TarefasScreen';
 import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
 import { ConfiguracoesScreen } from './src/screens/ConfiguracoesScreen';
@@ -1244,6 +1244,11 @@ function MainApp() {
   // Sublinha do header de Tarefas. Sai do MESMO `baldeDeVencimento` das abas
   // (importado da tela, nao recopiado): duas regras acabariam divergindo e a
   // sublinha contradiria a contagem das abas logo abaixo dela.
+  //
+  // Soma as DUAS filas, como o badge do rodape. Contava so' `client_tasks`, e a
+  // tela ficava se contradizendo sozinha: "0 atrasadas · 0 para hoje" logo em
+  // cima das abas "Atrasadas · 2" e "Hoje · 2". Numero que nao bate com o que
+  // se ve' ensina a pessoa a ignorar o numero.
   const tarefasPorBalde = useMemo(() => {
     let atrasadas = 0;
     let hoje = 0;
@@ -1252,8 +1257,13 @@ function MainApp() {
       if (balde === 'atrasadas') atrasadas++;
       else if (balde === 'hoje') hoje++;
     }
+    for (const t of tarefasDoCrmParaContagem) {
+      const balde = baldeDaTarefaDoCrm(t);
+      if (balde === 'atrasadas') atrasadas++;
+      else if (balde === 'hoje') hoje++;
+    }
     return { atrasadas, hoje };
-  }, [visibleTasks]);
+  }, [visibleTasks, tarefasDoCrmParaContagem]);
 
   // Avalia o filtro temporal de visita pra um cliente.
   // - null: sem filtro

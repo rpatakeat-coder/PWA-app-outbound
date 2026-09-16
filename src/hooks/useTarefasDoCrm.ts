@@ -51,6 +51,13 @@ export function useTarefasDoCrm(enabled: boolean) {
     queryKey: ['tarefas_crm', ownerId],
     enabled: enabled && !!profile,
     staleTime: 3 * 60_000,
+    // A `queryKey` carrega o `ownerId`, que sai do `profile`. Toda vez que o
+    // AuthContext recarrega o perfil a chave troca, e sem isto o react-query
+    // entrega `undefined` para a chave nova — a tela pisca com ZERO tarefas e
+    // volta segundos depois. Mantendo a lista anterior, falhar em atualizar
+    // nunca apaga o que ja' estava certo (mesma regra do cockpit, em
+    // gestao/src/dados/vivo.ts).
+    placeholderData: (anterior: ResultadoTarefasDoCrm | undefined) => anterior,
     queryFn: async () => {
       if (!ownerId) {
         // A mensagem muda com o papel: mandar o gestor "pedir para a gestão
