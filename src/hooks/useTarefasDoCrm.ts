@@ -83,12 +83,15 @@ export function useTarefasDoCrm(enabled: boolean) {
         assunto: string;
         corpo: string;
         vence_em: string | null;
+        deal_id?: string | null;
       }>;
       const tarefas = brutas.map(interpretarTarefa);
 
       // Liga cada tarefa ao lead no app pelo id do negócio. Uma consulta só
       // para todas — uma por tarefa seriam 78 idas ao banco.
-      const dealIds = [...new Set(tarefas.map((t) => t.marcador?.dealId).filter(Boolean))] as string[];
+      // `dealId` ja' vem resolvido: marcador do Cockpit quando ha', associacao
+      // da Task no HubSpot quando nao ha'. Ver tarefasDoCrm.ts.
+      const dealIds = [...new Set(tarefas.map((t) => t.dealId).filter(Boolean))] as string[];
       const porDeal = new Map<string, { id: string; nome: string }>();
       if (dealIds.length > 0) {
         const { data: linhas } = await supabase
@@ -126,8 +129,8 @@ export function useTarefasDoCrm(enabled: boolean) {
         total: (data?.total as number) ?? tarefas.length,
         semMedicao: null,
         tarefas: tarefas.map((t) => {
-          const achado = t.marcador ? porDeal.get(t.marcador.dealId) : undefined;
-          const doCrm = t.marcador ? nomesDoCrm[t.marcador.dealId] : undefined;
+          const achado = t.dealId ? porDeal.get(t.dealId) : undefined;
+          const doCrm = t.dealId ? nomesDoCrm[t.dealId] : undefined;
           return {
             ...t,
             clientId: achado?.id ?? null,

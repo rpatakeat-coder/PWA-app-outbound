@@ -518,6 +518,43 @@ async function handleListTasks(token: string, body: Record<string, unknown>) {
     if (!after) break;
   }
 
+  // ===== o negocio de cada tarefa, pela ASSOCIACAO =====
+  //
+  // O app achava o lead pelo marcador COCKPIT:PLANO que o Cockpit escreve no
+  // corpo. Tarefa criada A' MAO no HubSpot nao tem marcador nenhum, e caia na
+  // tela como "Cliente nao identificado" — com o negocio ali, associado, no
+  // proprio CRM. Foi o que aconteceu com a Task 116966894658 ("Visita", deal
+  // 64926992815 "Teste rpa") em 16/09/2026.
+  //
+  // A busca acima NAO devolve associacoes: o /search do HubSpot so' traz
+  // properties. Entao lemos em lote, depois. Uma chamada por 100 tarefas.
+  //
+  // FALHAR AQUI NAO DERRUBA A LISTA. Sem a associacao a tarefa volta ao que
+  // era — aparece com assunto e data, sem link pro lead. Perder as 78 por
+  // causa do nome de uma seria trocar um defeito por outro pior.
+  const porTarefa = new Map<string, string>();
+  for (let i = 0; i < tarefas.length; i += 100) {
+    const lote = tarefas.slice(i, i + 100) as { id: string }[];
+    const assoc = await hsFetch(token, 'POST', '/crm/v4/associations/tasks/deals/batch/read', {
+      inputs: lote.map((t) => ({ id: t.id })),
+    });
+    if (!assoc.ok) {
+      console.warn('[list_tasks] associacoes falharam, seguindo sem elas');
+      break;
+    }
+    for (const r of assoc.body?.results ?? []) {
+      // Uma Task pode estar associada a mais de um negocio. Ficamos com o
+      // PRIMEIRO e nao inventamos criterio de desempate: escolher errado em
+      // silencio abriria a ficha do lead errado, que e' pior que nao abrir.
+      const primeiro = (r?.to ?? [])[0]?.toObjectId;
+      const idDaTarefa = r?.from?.id ?? r?._from?.id;
+      if (idDaTarefa && primeiro) porTarefa.set(String(idDaTarefa), String(primeiro));
+    }
+  }
+  for (const t of tarefas as { id: string; deal_id?: string | null }[]) {
+    t.deal_id = porTarefa.get(t.id) ?? null;
+  }
+
   // `total` continua vindo separado: se o teto de paginas cortar, a tela diz
   // quantas ficaram de fora em vez de fingir que trouxe tudo.
   return json(200, { tarefas, total: total || tarefas.length });

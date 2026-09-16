@@ -91,7 +91,7 @@ export function TarefaSemLeadSheet({
           status: 'lead',
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
-          id_hubspot: tarefa.marcador?.dealId ?? null,
+          id_hubspot: tarefa.dealId,
           created_by: user?.id ?? null,
           vendedor_id_hubspot: ownerIdHubspot,
           geo_source: 'coords',
@@ -176,10 +176,10 @@ export function TarefaSemLeadSheet({
               {tarefa.tipo === 'visita' ? ' · visita' : tarefa.tipo === 'follow_up' ? ' · follow up' : ''}
             </Text>
 
-            {!!tarefa.marcador?.dealId && (
+            {!!tarefa.dealId && (
               <>
                 <Text style={estilos.rotulo}>ID HubSpot</Text>
-                <Text style={estilos.valor}>{tarefa.marcador.dealId}</Text>
+                <Text style={estilos.valor}>{tarefa.dealId}</Text>
               </>
             )}
 

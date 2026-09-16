@@ -11,6 +11,7 @@ import {
   corpoLimpo,
   interpretarTarefa,
   clienteDoAssunto,
+  textoDoCorpo,
 } from './tarefasDoCrm';
 
 let falhas = 0;
@@ -76,6 +77,57 @@ ok('visita', clienteDoAssunto('Visita - FRANGUINHO DO PRENHA'), 'FRANGUINHO DO P
 ok('follow-up com hifen', clienteDoAssunto('Follow-up - Dunas'), 'Dunas');
 ok('travessao', clienteDoAssunto('Visita — Bar do Zé'), 'Bar do Zé');
 ok('assunto livre nao inventa cliente', clienteDoAssunto('Ligar para o contador'), null);
+
+console.log('\n--- corpo em HTML (tarefa criada pela tela do HubSpot) ---');
+// Copiado da Task 116966894658 do portal, 16/09/2026 — a que apareceu no app
+// mostrando a marcacao crua no lugar do recado.
+const HTML =
+  '<div style="" dir="auto" data-top-level="true"><p style="margin:0;">Falar com Marcelo - Gerente</p></div>';
+ok('a marcacao sai e sobra o recado', textoDoCorpo(HTML), 'Falar com Marcelo - Gerente');
+
+const html = interpretarTarefa({ id: '9', assunto: 'Visita ', corpo: HTML, vence_em: null });
+ok('e chega limpa na ficha', html.corpo, 'Falar com Marcelo - Gerente');
+ok('assunto com espaco sobrando e aparado', html.assunto, 'Visita');
+
+ok(
+  'dois paragrafos nao colam',
+  textoDoCorpo('<p>Falar com Marcelo</p><p>Gerente</p>'),
+  'Falar com Marcelo\nGerente',
+);
+ok('<br> vira quebra', textoDoCorpo('linha um<br>linha dois'), 'linha um\nlinha dois');
+ok('entidade vira caractere', textoDoCorpo('<p>Casa &amp; Cia</p>'), 'Casa & Cia');
+ok('texto puro passa inteiro', textoDoCorpo('Falar com Marcelo - Gerente'), 'Falar com Marcelo - Gerente');
+ok('"a < b" nao e tag e sobrevive', textoDoCorpo('se a < b entao liga'), 'se a < b entao liga');
+
+// O caso que justifica normalizar ANTES de ler o marcador: tarefa do Cockpit
+// editada no portal volta embrulhada em HTML, com o marcador dentro do <p>.
+const embrulhada = interpretarTarefa({
+  id: '10',
+  assunto: 'Visita - Bar do Ze',
+  corpo: '<div><p>Origem: planejamento.</p><p>COCKPIT:PLANO:v1:86100505:2026-09-14:17:00:visita:planejamento:65042434372</p></div>',
+  vence_em: null,
+});
+ok('o marcador sobrevive ao HTML', embrulhada.marcador?.dealId, '65042434372');
+ok('e o corpo fica sem ele', embrulhada.corpo, 'Origem: planejamento.');
+
+console.log('\n--- o negocio: marcador OU associacao ---');
+const semMarcador = interpretarTarefa({
+  id: '11', assunto: 'Visita ', corpo: HTML, vence_em: null, deal_id: '64926992815',
+});
+ok('sem marcador, vale a associacao', semMarcador.dealId, '64926992815');
+ok('e nao inventa marcador', semMarcador.marcador, null);
+
+const comAmbos = interpretarTarefa({
+  id: '12',
+  assunto: 'Visita - X',
+  corpo: 'COCKPIT:PLANO:v1:86100505:2026-09-14:17:00:visita:planejamento:65042434372',
+  vence_em: null,
+  deal_id: '999',
+});
+ok('com os dois, o marcador manda', comAmbos.dealId, '65042434372');
+
+const nenhum = interpretarTarefa({ id: '13', assunto: 'Ligar para o contador', corpo: '', vence_em: null });
+ok('sem os dois, fica null (e a tela avisa)', nenhum.dealId, null);
 
 console.log(falhas === 0 ? '\nTODOS PASSARAM' : `\n${falhas} FALHARAM`);
 if (falhas) throw new Error(`${falhas} teste(s) do marcador falharam`);

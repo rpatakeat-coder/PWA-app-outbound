@@ -45,11 +45,68 @@ export type TarefaDoCrm = {
   tipo: TipoDeTarefa;
   /** null quando não havia marcador legível. A tarefa continua valendo. */
   marcador: MarcadorDoCockpit | null;
+  /**
+   * O negócio a que esta tarefa se refere, venha de onde vier.
+   *
+   * O marcador do Cockpit é uma das fontes; a outra é a ASSOCIAÇÃO da Task
+   * com o deal, que é como o HubSpot liga as duas coisas quando alguém cria a
+   * tarefa pela tela dele. Tarefa feita à mão não tem marcador nenhum, e sem
+   * esta segunda fonte ela virava "Cliente não identificado" — com o negócio
+   * ali do lado, associado, no próprio CRM.
+   */
+  dealId: string | null;
   /** Versão do marcador que não sabemos ler. A tela avisa em vez de adivinhar. */
   versaoDesconhecida: string | null;
 };
 
 const PREFIXO = 'COCKPIT:PLANO:';
+
+// O corpo da Task nem sempre e' texto. Quando alguem cria ou edita a tarefa
+// PELA TELA DO HUBSPOT, o editor salva HTML:
+//
+//   <div style="" dir="auto" data-top-level="true"><p style="margin:0;">Falar
+//   com Marcelo - Gerente</p></div>
+//
+// O Cockpit escreve texto puro, entao isso nunca tinha aparecido — ate' o
+// Guilherme criar uma tarefa a' mao em 16/09/2026 e o app mostrar a marcacao
+// crua na ficha, no lugar do recado.
+//
+// Roda ANTES de ler o marcador: se a tarefa do Cockpit for editada no portal,
+// o HubSpot embrulha o corpo inteiro em HTML e a linha COCKPIT:PLANO passa a
+// morar dentro de um <p>. Sem normalizar primeiro, o marcador sumiria e a
+// tarefa perderia o link com o lead.
+const ENTIDADES: Record<string, string> = {
+  '&nbsp;': ' ', '&amp;': '&', '&lt;': '<', '&gt;': '>',
+  '&quot;': '"', '&#39;': "'", '&apos;': "'",
+};
+
+export function textoDoCorpo(bruto: string): string {
+  return bruto
+    // Tags que SAO quebra de linha viram quebra de linha; o resto some. Sem
+    // isto, "<p>a</p><p>b</p>" viraria "ab" — duas frases coladas.
+    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+    .replace(/<\/\s*(?:p|div|li|tr|h[1-6])\s*>/gi, '\n')
+    // So' o que PARECE tag de verdade: um "a < b" solto no texto sobrevive.
+    .replace(/<\/?[a-zA-Z][^>]*>/g, '')
+    // Entidades depois de tirar as tags — na ordem inversa, um "&lt;b&gt;"
+    // escrito pela pessoa viraria tag e seria apagado.
+    .replace(/&[a-zA-Z#0-9]+;/g, (e) => {
+      const conhecida = ENTIDADES[e.toLowerCase()];
+      if (conhecida !== undefined) return conhecida;
+      const num = e.match(/^&#(x?)([0-9a-fA-F]+);$/);
+      if (num) {
+        const cod = parseInt(num[2], num[1] ? 16 : 10);
+        return Number.isFinite(cod) ? String.fromCodePoint(cod) : e;
+      }
+      return e;
+    })
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .join('\n')
+    // O HTML do editor gera linha vazia a cada </p></div>; tres viram uma.
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
 /** `visita` e `follow_up` são os dois que o Cockpit emite hoje. */
 function normalizarTipo(bruto: string): TipoDeTarefa {
@@ -112,12 +169,15 @@ export function interpretarTarefa(bruta: {
   assunto: string;
   corpo: string;
   vence_em: string | null;
+  /** Deal associado à Task no HubSpot, quando a rota conseguiu trazer. */
+  deal_id?: string | null;
 }): TarefaDoCrm {
-  const { marcador, versaoDesconhecida } = lerMarcador(bruta.corpo ?? '');
+  const texto = textoDoCorpo(bruta.corpo ?? '');
+  const { marcador, versaoDesconhecida } = lerMarcador(texto);
   return {
     id: bruta.id,
-    assunto: bruta.assunto ?? '',
-    corpo: corpoLimpo(bruta.corpo ?? ''),
+    assunto: (bruta.assunto ?? '').trim(),
+    corpo: corpoLimpo(texto),
     venceEm: bruta.vence_em ?? null,
     // Sem marcador, o assunto ainda diz o tipo: o Cockpit escreve
     // "Visita - <cliente>" e "Follow-up - <coisa>".
@@ -129,6 +189,10 @@ export function interpretarTarefa(bruta: {
           ? 'follow_up'
           : 'outro'),
     marcador,
+    // O marcador MANDA quando existe: ele diz de qual negócio a gestão estava
+    // falando ao planejar. A associação é o plano B — e na prática são o mesmo
+    // deal, porque o Cockpit associa a Task ao criar.
+    dealId: marcador?.dealId ?? (bruta.deal_id ? String(bruta.deal_id) : null),
     versaoDesconhecida,
   };
 }
