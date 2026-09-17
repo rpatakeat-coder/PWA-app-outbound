@@ -44,7 +44,7 @@ ok('desconhecido cai em jpg', extensaoDe('image/tiff'), 'jpg');
 
 console.log('\n--- caminho no bucket ---');
 // A POLICY do storage le' a primeira pasta como dono. Se este formato mudar,
-// a amarra da migration 20260917 deixa de valer.
+// a amarra da migration 0076_foto_do_perfil.sql deixa de valer.
 ok(
   'a primeira pasta e o uid',
   caminhoDaFoto('8e0a1b2c-3d4e-5f60-7182-93a4b5c6d7e8', 'jpg'),

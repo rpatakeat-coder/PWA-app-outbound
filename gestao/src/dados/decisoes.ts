@@ -24,7 +24,7 @@ const ehTabelaAusente = (erro: { code?: string } | null) => erro?.code === TABEL
 
 const naoConfigurado = (tabela: string): Indisponivel => ({
   indisponivel: true,
-  motivo: `A tabela ${tabela} ainda não foi criada no banco. Rode a migration 20260914.`,
+  motivo: `A tabela ${tabela} ainda não foi criada no banco. Rode as migrations 0066-0073.`,
 });
 
 // ===== modos de agir =====

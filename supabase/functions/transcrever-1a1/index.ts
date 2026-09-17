@@ -14,7 +14,7 @@
 //
 // Deploy:
 //   supabase functions deploy transcrever-1a1
-// Depende de: migration 20260814_um_a_um_audio.sql e do secret OPENAI_API_KEY
+// Depende de: migration 0063_um_a_um_audio.sql e do secret OPENAI_API_KEY
 // (o mesmo que a resumo-semanal ja' usa).
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';

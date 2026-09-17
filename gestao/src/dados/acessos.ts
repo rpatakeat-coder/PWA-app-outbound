@@ -26,7 +26,7 @@ const SETORES_COM_CARTEIRA = ['outbound', 'field sales'];
 export type PapelDeAcesso = 'user' | 'gestor' | 'view' | null;
 
 /** Curadoria de `seller_classification` — sem linha significa 'ativo'
- *  (default declarado em 20260807_seller_classification.sql). */
+ *  (default declarado em 0058_seller_classification.sql). */
 export type ClassificacaoVendedor = 'ativo' | 'sem_meta' | 'nao_vendedor';
 
 export interface ContaDeAcesso {

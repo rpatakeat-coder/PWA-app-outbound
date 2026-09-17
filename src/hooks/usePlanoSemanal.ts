@@ -1,6 +1,6 @@
 // O plano da semana — a INTENÇÃO, que é coisa diferente da rota.
 //
-// A divisão, decidida na migration 20260914_planos_semanais e que vale repetir
+// A divisão, decidida na migration 0072_planos_semanais.sql e que vale repetir
 // porque é o eixo inteiro desta tela:
 //
 //   planos_semanais = INTENÇÃO (que região em cada dia, que leads pretendo)

@@ -19,7 +19,7 @@
 // metas" para um gestor que ja' as configurou — no lugar errado.
 //
 // Sem linha em seller_classification = 'ativo' (default declarado na migration
-// 20260807_seller_classification.sql, pra preservar o comportamento ate o
+// 0058_seller_classification.sql, pra preservar o comportamento ate o
 // gestor curar a lista).
 import { supabase } from '../supabase';
 import { resolverMeta, META_PADRAO, type StatusVendedor } from './regras';

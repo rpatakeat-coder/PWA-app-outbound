@@ -138,7 +138,7 @@ Deno.serve(async (req) => {
     // Visitas do periodo: agora vem do historico (client_visits), uma linha
     // por check-in. Antes eram derivadas de clients.visited_at, que so guarda
     // a ULTIMA visita — revisita do mesmo lead sumia do relatorio.
-    // A tabela pode nao existir ainda (migration 20260727): degrada pra [].
+    // A tabela pode nao existir ainda (migration 0041_client_visits_history.sql): degrada pra [].
     let visitRows: any[] = [];
     try {
       visitRows = await fetchAll(
@@ -173,7 +173,7 @@ Deno.serve(async (req) => {
     const CHUNK = 100;
     const chunks: string[][] = [];
     for (let i = 0; i < idList.length; i += CHUNK) chunks.push(idList.slice(i, i + CHUNK));
-    // visit_count so existe depois da migration 20260727. Se a coluna nao
+    // visit_count so existe depois da migration 0041_client_visits_history.sql. Se a coluna nao
     // estiver la, o PostgREST rejeita o select inteiro (42703) — nesse caso
     // repete o lote sem ela em vez de derrubar a exportacao toda.
     const LEAD_COLS_LEGACY = LEAD_COLS.replace(', visit_count', '');

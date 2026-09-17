@@ -17,7 +17,8 @@
 // `profiles.avatar_url` resolve em um lugar so': quem exibe nao precisa saber
 // que existe cache.
 
-/** Tipos que o bucket aceita (`allowed_mime_types` da migration 20260917). */
+/** Tipos que o bucket aceita (`allowed_mime_types` da migration
+ *  0076_foto_do_perfil.sql). */
 const TIPOS_ACEITOS = ['image/jpeg', 'image/png', 'image/webp'] as const;
 
 export const LADO_MAXIMO = 512;

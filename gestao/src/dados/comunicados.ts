@@ -48,7 +48,7 @@ export async function carregarComunicados(): Promise<DadosComunicados> {
         atualizadoEm: new Date(),
         itens: [],
         indisponivel:
-          'A tabela comunicados ainda não foi criada no banco. Rode a migration 20260914.',
+          'A tabela comunicados ainda não foi criada no banco. Rode a migration 0067_comunicados.sql.',
       };
     }
     throw error;
@@ -124,7 +124,7 @@ export async function criarComunicado(entrada: {
     return {
       ok: false,
       erro: ehTabelaAusente(error)
-        ? 'A tabela comunicados ainda não foi criada no banco. Rode a migration 20260914.'
+        ? 'A tabela comunicados ainda não foi criada no banco. Rode a migration 0067_comunicados.sql.'
         : error.message,
     };
   }

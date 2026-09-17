@@ -31,7 +31,7 @@
 // Opcional:
 //   supabase secrets set OPENAI_MODEL=gpt-4o-mini
 //
-// Depende da migration 20260814_resumos_ia.sql.
+// Depende da migration 0061_resumos_ia.sql.
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';

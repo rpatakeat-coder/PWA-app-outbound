@@ -365,7 +365,7 @@ export function Pessoas() {
   });
 
   // O que o gestor decidiu nesta semana. Fica FORA do `useVivo` de proposito:
-  // `modos_de_agir` pode nem existir ainda (as migrations 20260914 sao
+  // `modos_de_agir` pode nem existir ainda (as migrations 0066-0073 sao
   // aplicadas fora deste codigo), e uma tabela ausente nao pode derrubar a
   // tela inteira de Pessoas — ela e' util sem isto.
   const [modos, setModos] = useState<Record<string, ModoRegistrado> | Indisponivel | null>(null);
@@ -432,7 +432,7 @@ export function Pessoas() {
       setSalvando(false);
       setAviso(
         /relation .* does not exist|schema cache/i.test(r.erro ?? '')
-          ? 'A tabela um_a_um ainda não existe. Rode a migration 20260814_um_a_um.sql.'
+          ? 'A tabela um_a_um ainda não existe. Rode a migration 0062_um_a_um.sql.'
           : `Não consegui salvar: ${r.erro}`,
       );
       return;
@@ -457,7 +457,7 @@ export function Pessoas() {
         setSalvando(false);
         setAviso(
           /bucket|not found/i.test(up.erro ?? '')
-            ? 'O 1:1 foi salvo, mas o áudio não subiu: falta rodar a migration 20260814_um_a_um_audio.sql.'
+            ? 'O 1:1 foi salvo, mas o áudio não subiu: falta rodar a migration 0063_um_a_um_audio.sql.'
             : `O 1:1 foi salvo, mas o áudio não subiu: ${up.erro}`,
         );
         setPauta(''); setCombinado(''); setAudio(null);
@@ -482,7 +482,7 @@ export function Pessoas() {
     if (falhasDoc.length) {
       setAviso(
         /relation .* does not exist|schema cache/i.test(falhasDoc.join(' '))
-          ? 'Salvo, mas os documentos não subiram: falta rodar a migration 20260814_um_a_um_documentos.sql.'
+          ? 'Salvo, mas os documentos não subiram: falta rodar a migration 0064_um_a_um_documentos.sql.'
           : `Salvo, mas ${falhasDoc.length} documento(s) falharam: ${falhasDoc[0]}`,
       );
     }
@@ -921,7 +921,7 @@ export function Pessoas() {
                   }}
                 >
                   O histórico de 1:1 precisa da migration{' '}
-                  <strong style={{ color: 'var(--ink)' }}>20260814_um_a_um.sql</strong>. O resto
+                  <strong style={{ color: 'var(--ink)' }}>0062_um_a_um.sql</strong>. O resto
                   desta tela funciona sem ela.
                 </div>
               ) : (

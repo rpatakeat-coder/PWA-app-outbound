@@ -13,8 +13,9 @@
 // arquivo que não existe deixaria o avatar quebrado para o time inteiro.
 //
 // A escrita é SÓ a própria: `.eq('id', user.id)` aqui e a policy do storage
-// amarrando a pasta ao `auth.uid()` na migration 20260917. Duas voltas na mesma
-// tranca, porque essa é a que apareceria na cara de todo mundo se soltasse.
+// amarrando a pasta ao `auth.uid()` na migration 0076_foto_do_perfil.sql. Duas
+// voltas na mesma tranca, porque essa é a que apareceria na cara de todo mundo
+// se soltasse.
 import { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
@@ -104,7 +105,8 @@ export function useFotoDePerfil() {
 }
 
 /** Traduz o erro do storage. O "Bucket not found" é o sintoma exato de a
- *  migration 20260917 não ter rodado, e dizer isso poupa meia hora de caça. */
+ *  migration 0076_foto_do_perfil.sql não ter rodado, e dizer isso poupa meia
+ *  hora de caça. */
 function mensagemDeUpload(bruto: string): string {
   if (/bucket not found/i.test(bruto)) {
     return 'O espaço das fotos ainda não existe no servidor. Avise a gestão (falta rodar a migration das fotos).';

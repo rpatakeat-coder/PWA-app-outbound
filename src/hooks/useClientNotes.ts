@@ -4,7 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import type { ClientNote } from '../types/client';
 import { sendHubspotEvent } from '../utils/hubspotSync';
 
-// Postgres code 42P01 = relation does not exist. Antes da migration 20260617
+// Postgres code 42P01 = relation does not exist. Antes da migration
+// 0013_client_notes.sql
 // rodar, a tabela client_notes nao existe — tratamos como "sem notas" pra
 // nao quebrar o bottom sheet em prod nesse intervalo.
 const isMissingTableError = (err: any) =>

@@ -211,7 +211,7 @@ Deno.serve(async (req) => {
   const setorVe = ((visibilidade as any).data ?? []).map((r: any) => r.status_slug).sort();
   const veLeads = setorVe.includes('lead');
   // "Sem linha" significa 'ativo' — default declarado em
-  // 20260807_seller_classification.sql.
+  // 0058_seller_classification.sql.
   const classe = ((classificacao as any).data?.status ?? 'ativo') as string;
   const banidoAte = (authUser as any)?.data?.user?.banned_until ?? null;
   // O ban do Supabase e' uma JANELA, nao um estado: a funcao de revogar usa 100

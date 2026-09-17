@@ -55,7 +55,7 @@ export async function carregarPdi(perfilId: string): Promise<Pdi | null | PdiInd
     if (ehTabelaAusente(doc.error)) {
       return {
         indisponivel: true,
-        motivo: 'A tabela pdi_documentos ainda não foi criada. Rode a migration 20260914.',
+        motivo: 'A tabela pdi_documentos ainda não foi criada. Rode a migration 0071_pdi.sql.',
       };
     }
     throw doc.error;
@@ -113,7 +113,7 @@ export async function criarPdi(entrada: {
     return {
       ok: false,
       erro: ehTabelaAusente(doc.error)
-        ? 'A tabela pdi_documentos ainda não foi criada. Rode a migration 20260914.'
+        ? 'A tabela pdi_documentos ainda não foi criada. Rode a migration 0071_pdi.sql.'
         : doc.error.message,
     };
   }

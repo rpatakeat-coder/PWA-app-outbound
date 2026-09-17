@@ -15,7 +15,8 @@ export type BaldeDeTarefa = 'atrasadas' | 'hoje' | 'proximas';
 
 // ---- Vencimento ----
 // Campo real: meta.due_date (gerado pelo cron de SLA como entrada na etapa +
-// sla_days em dias uteis — migration 20260725). D2/D5 nao gravam o campo, mas
+// sla_days em dias uteis — migration 0040_revert_task_followup_generation.sql).
+// D2/D5 nao gravam o campo, mas
 // o vencimento e' a MESMA aritmetica do gerador: a tarefa vence quando
 // days_in_stage cruza o limite (2 ou 5). Nada aqui inventa criterio — e' o
 // calculo que o SQL usa, feito no cliente.

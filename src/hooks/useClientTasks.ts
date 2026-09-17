@@ -4,7 +4,8 @@ import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import type { ClientTask } from '../types/client';
 
-// Mesma defesa do useClientStageChanges: antes da migration 20260708 rodar a
+// Mesma defesa do useClientStageChanges: antes da migration
+// 0026_client_tasks.sql rodar a
 // tabela/funcao nao existe — tratamos como "sem tarefas" em vez de quebrar.
 const isMissingTableError = (err: any) =>
   err?.code === '42P01' ||

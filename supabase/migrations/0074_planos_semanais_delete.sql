@@ -2,7 +2,7 @@
 -- planos_semanais: a policy de DELETE que faltou
 -- ============================================================================
 --
--- A migration 20260914_planos_semanais.sql criou select, insert e update e
+-- A migration 0072_planos_semanais.sql criou select, insert e update e
 -- esqueceu o delete. O efeito nao e' um erro visivel: sem policy, o PostgREST
 -- afeta ZERO linhas e responde 204 assim mesmo. Quem apaga recebe "sucesso" e
 -- a linha continua la'.

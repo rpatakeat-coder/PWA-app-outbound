@@ -143,6 +143,13 @@ git fetch origin && git branch -u origin/main main
 
 ## Quem roda o quê
 
+**Migrations têm nome sequencial**: `NNNN_descricao_curta.sql`, 4 dígitos com zero
+à esquerda (`0077_proxima_coisa.sql`). O próximo número sai de
+`ls supabase/migrations/ | grep -oE '^[0-9]{4}' | sort -n | tail -1` + 1. Os 76
+arquivos antigos usavam `AAAAMMDD_` e foram renomeados para `0001`–`0076` em
+17/09/2026, na ordem cronológica — a data vive no `git log`. Escreva idempotente
+(`if not exists`, `create or replace`, `drop ... if exists` antes de recriar).
+
 O usuário (Guilherme) opera produção: migrations via SQL Editor,
 `supabase functions deploy`, `secrets set`. Agentes escrevem código e SQL,
 mas não têm CLI do Supabase nem as chaves — entregar o comando pronto e dizer

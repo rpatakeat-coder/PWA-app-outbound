@@ -7911,7 +7911,7 @@ function ClientBottomSheet({
                       onSuccess: () => setNewNote(''),
                       onError: (err: any) => {
                         const msg = /relation .* does not exist/i.test(err?.message ?? '')
-                          ? 'A tabela client_notes ainda nao foi criada no Supabase. Aplique a migration 20260617_client_notes.sql.'
+                          ? 'A tabela client_notes ainda nao foi criada no Supabase. Aplique a migration 0013_client_notes.sql.'
                           : (err?.message ?? 'Falhou ao salvar nota');
                         Alert.alert('Erro', msg);
                       },

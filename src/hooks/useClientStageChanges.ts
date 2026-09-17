@@ -3,7 +3,8 @@ import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import type { ClientStageChange } from '../types/client';
 
-// Mesma defesa do useClientNotes: antes da migration 20260620 rodar a tabela
+// Mesma defesa do useClientNotes: antes da migration
+// 0020_client_stage_changes.sql rodar a tabela
 // nao existe — tratamos como historico vazio em vez de quebrar o bottom sheet.
 const isMissingTableError = (err: any) =>
   err?.code === '42P01' ||
