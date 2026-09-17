@@ -10,6 +10,12 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
+  /** Reflete a foto nova no perfil em memoria depois do upload.
+   *
+   *  Estreito de proposito: quem escreve em `profiles` e' o hook da foto, e
+   *  aqui so' entra o que a tela precisa redesenhar. Um `setProfile` aberto no
+   *  contexto convidaria qualquer tela a inventar um perfil. */
+  definirFotoDoPerfil: (url: string | null) => void;
   isAuthenticated: boolean;
 }
 
@@ -153,6 +159,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       updatePassword,
+      definirFotoDoPerfil: (url) =>
+        setProfile((atual) => (atual ? { ...atual, avatar_url: url } : atual)),
       isAuthenticated: !!user,
     }}>
       {children}

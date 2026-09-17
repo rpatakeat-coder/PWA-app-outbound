@@ -80,6 +80,8 @@ import {
   IconMenuCircles,
   IconTrendingDown,
 } from './src/components/icons';
+import { Avatar } from './src/components/Avatar';
+import { useFotoDePerfil } from './src/hooks/useFotoDePerfil';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 // Camada de mapa web (Google Maps JS API) com a mesma API que o
 // react-native-maps + react-native-map-clustering expunham. O clustering
@@ -1591,6 +1593,27 @@ function MainApp() {
   // logout, o tema e — finalmente — a entrada pro Gestor e pro Meu desempenho,
   // que desde o M1 nao tinham como ser alcancados no celular.
   const [perfilAberto, setPerfilAberto] = useState(false);
+  // A foto do perfil: trocar e remover. Vive aqui porque o avatar da folha do
+  // perfil e' o botao, e a folha e' montada neste componente.
+  const { foto, trocar: trocarFotoBruto, remover: removerFotoBruto, enviando: enviandoFoto } =
+    useFotoDePerfil();
+  const trocarFoto = async () => {
+    const erro = await trocarFotoBruto();
+    if (erro) Alert.alert('Não consegui trocar a foto', erro);
+  };
+  const removerFoto = () => {
+    Alert.alert('Remover sua foto?', 'Você volta a aparecer com as iniciais.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Remover',
+        style: 'destructive',
+        onPress: async () => {
+          const erro = await removerFotoBruto();
+          if (erro) Alert.alert('Não consegui remover a foto', erro);
+        },
+      },
+    ]);
+  };
   // Aba de onde a pessoa veio antes de entrar em gestor/meu/config. Sem isso o
   // `arrow_back` dessas telas cai sempre no Mapa (divida aberta no M6).
   const [abaAnterior, setAbaAnterior] = useState<AppTab>('map');
@@ -4468,17 +4491,12 @@ function MainApp() {
     { aba: 'meu', rotulo: 'Meu desempenho', Icone: IconTrendingUp, visivel: !canViewGestor && !isViewer },
   ];
 
-  const iniciaisWeb = (profile?.full_name || profile?.email || '?')
-    .trim().split(/\s+/).map(s => s[0]).slice(0, 2).join('').toUpperCase();
-
-  // ---- Identidade do menu do perfil (M7b) ----
-  // Constante separada do `iniciaisWeb` de proposito: a sidebar do desktop
-  // continua com o '?' de sempre, e aqui, SEM `profile`, o avatar fica com o
-  // mesmo diametro e fundo e nenhuma inicial — um '?' diria que carregou.
-  const iniciais = profile
-    ? (profile.full_name || profile.email || '')
-        .trim().split(/\s+/).map(t => t[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
-    : '';
+  // As duas constantes de iniciais que viviam aqui (`iniciaisWeb` da sidebar e
+  // `iniciais` da folha do perfil) sairam com a foto de perfil: quem calcula
+  // agora e' o `iniciaisDe` do src/components/Avatar.tsx, um lugar so' para os
+  // cinco pontos que desenham gente. A diferenca que justificava as duas — a
+  // sidebar mostrava '?' sem perfil, a folha mostrava vazio — deixou de
+  // existir junto: '?' diz "carregou e nao tem nome", e nao era isso.
   // `user` e a ausencia de role caem em "Vendedor": e' o que o CHECK do banco
   // chama de vendedor comum (`user | view | gestor`). Um role fora desse trio
   // aparece CRU — melhor um valor estranho na tela do que chamar de vendedor
@@ -4565,9 +4583,14 @@ function MainApp() {
           </Text>
         </Pressable>
         <View style={styles.sbUsuario}>
-          <View style={styles.sbAvatar}>
-            <Text style={styles.sbAvatarTexto}>{iniciaisWeb}</Text>
-          </View>
+          <Avatar
+            url={profile?.avatar_url}
+            nome={profile?.full_name}
+            email={profile?.email}
+            tamanho={32}
+            estilo={styles.sbAvatar}
+            estiloTexto={styles.sbAvatarTexto}
+          />
           <View style={styles.sbUsuarioTextos} {...ds({ rotulo: '1' })}>
             <Text style={styles.sbUsuarioNome} numberOfLines={1}>{profile?.full_name || profile?.email}</Text>
             <Text style={styles.sbUsuarioPapel} numberOfLines={1}>
@@ -4789,10 +4812,16 @@ function MainApp() {
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="Abrir menu do perfil"
-              style={styles.headerAvatar}
               onPress={() => setPerfilAberto(true)}
             >
-              <Text style={styles.headerAvatarTexto}>{iniciais}</Text>
+              <Avatar
+                url={profile?.avatar_url}
+                nome={profile?.full_name}
+                email={profile?.email}
+                tamanho={48}
+                estilo={styles.headerAvatar}
+                estiloTexto={styles.headerAvatarTexto}
+              />
             </TouchableOpacity>
           )}
         </View>
@@ -5345,12 +5374,43 @@ function MainApp() {
           estiloConteudoCorpo={[styles.perfilCorpo, { paddingBottom: 32 + insets.bottom }]}
         >
           <View style={styles.perfilIdentidade}>
-            <View style={styles.perfilAvatar}>
-              <Text style={styles.perfilAvatarTexto}>{iniciais}</Text>
-            </View>
+            {/* O AVATAR E' O BOTAO. Nao ha' tela de "editar perfil" no app, e
+                criar uma pra um campo so' seria esconder a funcao. Tocar na
+                propria foto pra trocar e' o gesto que todo mundo ja' conhece;
+                o rotulo abaixo diz que da', porque o gesto sozinho nao se
+                anuncia. */}
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={foto ? 'Trocar sua foto de perfil' : 'Adicionar uma foto de perfil'}
+              disabled={enviandoFoto}
+              onPress={trocarFoto}
+              style={{ alignItems: 'center', gap: 4 }}
+            >
+              <Avatar
+                url={foto}
+                nome={profile?.full_name}
+                email={profile?.email}
+                tamanho={48}
+                estilo={[styles.perfilAvatar, enviandoFoto && { opacity: 0.5 }]}
+                estiloTexto={styles.perfilAvatarTexto}
+              />
+              <Text style={styles.perfilTrocarFoto}>
+                {enviandoFoto ? 'Enviando…' : foto ? 'Trocar' : 'Adicionar foto'}
+              </Text>
+            </TouchableOpacity>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.perfilNome} numberOfLines={1}>{nomeDoPerfil}</Text>
               <Text style={styles.perfilSub} numberOfLines={1}>{subDoPerfil}</Text>
+              {!!foto && (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  disabled={enviandoFoto}
+                  onPress={removerFoto}
+                  style={{ alignSelf: 'flex-start', paddingVertical: 4 }}
+                >
+                  <Text style={styles.perfilRemoverFoto}>Remover foto</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -8193,6 +8253,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   perfilAvatarTexto: { fontSize: 16, lineHeight: 48, letterSpacing: 0.15, fontWeight: '700', color: 'var(--tint-red-text)' },
+  perfilTrocarFoto: { fontSize: 11, fontWeight: '600', color: 'var(--brand-text)' },
+  perfilRemoverFoto: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
   perfilNome: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: 'var(--text)' },
   perfilSub: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)' },
   perfilItem: {

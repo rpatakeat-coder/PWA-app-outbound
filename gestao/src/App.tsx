@@ -120,6 +120,7 @@ function Aviso({ titulo, children }: { titulo: string; children: React.ReactNode
 export default function App() {
   const [estado, setEstado] = useState<Estado>('carregando');
   const [nome, setNome] = useState('');
+  const [foto, setFoto] = useState<string | null>(null);
   const [aba, setAba] = useState<AbaId>(abaDoHash);
   const [escuro, setEscuro] = useState(temaEscuroAgora);
 
@@ -147,10 +148,14 @@ export default function App() {
       if (!session) return setEstado('anonimo');
       const { data: perfil } = await supabase
         .from('profiles')
-        .select('full_name, role')
+        .select('full_name, role, avatar_url')
         .eq('id', session.user.id)
         .maybeSingle();
       setNome(perfil?.full_name ?? session.user.email ?? '');
+      // A foto e' a MESMA que a pessoa poe no app de campo: um perfil, uma
+      // foto. O cockpit nao tem tela de trocar — quem quiser trocar faz no
+      // app, e aqui aparece na proxima abertura.
+      setFoto((perfil as { avatar_url?: string | null } | null)?.avatar_url ?? null);
       setEstado(perfil?.role === 'gestor' ? 'ok' : 'sem-permissao');
     })();
   }, []);
@@ -254,7 +259,21 @@ export default function App() {
             <span className="sidebar__rotulo">{escuro ? 'Tema claro' : 'Tema escuro'}</span>
           </button>
           <div className="sidebar__usuario">
-            <div className="sidebar__avatar">{iniciais}</div>
+            <div className="sidebar__avatar">
+              {foto ? (
+                /* `onError` volta pras iniciais: a URL vive em
+                   `profiles.avatar_url`, e um arquivo apagado do bucket a' mao
+                   deixaria um quadrado vazio no lugar da identidade. */
+                <img
+                  className="sidebar__avatar-foto"
+                  src={foto}
+                  alt={`Foto de ${nome}`}
+                  onError={() => setFoto(null)}
+                />
+              ) : (
+                iniciais
+              )}
+            </div>
             <div className="sidebar__rotulo" style={{ flex: 1, minWidth: 0 }}>
               <div className="sidebar__usuario-nome">{nome}</div>
               <div className="sidebar__usuario-papel">Gestor</div>

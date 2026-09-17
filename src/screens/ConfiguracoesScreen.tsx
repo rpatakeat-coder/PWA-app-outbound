@@ -12,6 +12,8 @@ import {
 import { Alert } from '../components/Alert';
 import { supabase } from '../integrations/supabase/client';
 import { useLayout } from '../hooks/useLayout';
+import { useFotoDePerfil } from '../hooks/useFotoDePerfil';
+import { Avatar } from '../components/Avatar';
 import { useTheme, type ThemePref } from '../theme';
 import {
   IconBarGraph,
@@ -63,6 +65,26 @@ export function ConfiguracoesScreen({
   const layout = useLayout();
   const iconColors = useIconColors();
   const { pref: themePref, setPref: setThemePref } = useTheme();
+
+  // A mesma foto do avatar do cabecalho — um perfil, uma foto, um hook.
+  const { foto, trocar, remover, enviando: enviandoFoto } = useFotoDePerfil();
+  const aoTrocarFoto = async () => {
+    const erro = await trocar();
+    if (erro) Alert.alert('Não consegui trocar a foto', erro);
+  };
+  const aoRemoverFoto = () => {
+    Alert.alert('Remover sua foto?', 'Você volta a aparecer com as iniciais.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Remover',
+        style: 'destructive',
+        onPress: async () => {
+          const erro = await remover();
+          if (erro) Alert.alert('Não consegui remover a foto', erro);
+        },
+      },
+    ]);
+  };
 
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmaSenha, setConfirmaSenha] = useState('');
@@ -154,6 +176,52 @@ export function ConfiguracoesScreen({
       {/* 1. CONTA */}
       <View>
         <Text style={styles.tituloSecao}>Conta</Text>
+
+        {/* A FOTO TAMBEM VIVE AQUI, e nao so' no toque do avatar.
+            No celular da' pra tocar a propria foto no cabecalho e trocar; no
+            DESKTOP a folha do perfil nem e' montada (`!layout.ehLargo` no
+            App.tsx), e a barra lateral nao abre menu — quem trabalha no
+            navegador nao teria nenhum caminho. Configuracoes e' alcancavel nas
+            duas larguras, e e' onde se procura por "meus dados". */}
+        <View style={[styles.card, !layout.ehDesktop && styles.cardMovel, styles.linhaFoto]}>
+          <Avatar
+            url={foto}
+            nome={profile?.full_name}
+            email={profile?.email}
+            tamanho={64}
+            estilo={[styles.fotoAvatar, enviandoFoto && { opacity: 0.5 }]}
+            estiloTexto={styles.fotoAvatarTexto}
+          />
+          <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+            <Text style={styles.rotuloCampo}>Sua foto</Text>
+            <Text style={styles.hint}>
+              Aparece no cabeçalho do app e para o time. Sem foto, ficam as suas iniciais.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                disabled={enviandoFoto}
+                onPress={aoTrocarFoto}
+                style={[styles.botaoFoto, enviandoFoto && { opacity: 0.6 }]}
+              >
+                <Text style={styles.botaoFotoTexto}>
+                  {enviandoFoto ? 'Enviando…' : foto ? 'Trocar foto' : 'Adicionar foto'}
+                </Text>
+              </TouchableOpacity>
+              {!!foto && (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  disabled={enviandoFoto}
+                  onPress={aoRemoverFoto}
+                  style={styles.botaoFotoVazio}
+                >
+                  <Text style={styles.botaoFotoVazioTexto}>Remover</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+
         <View style={[styles.card, !layout.ehDesktop && styles.cardMovel, { padding: 0, overflow: 'hidden' }]}>
           {linhaLeitura('Nome', profile?.full_name)}
           {linhaLeitura('E-mail', profile?.email)}
@@ -355,6 +423,32 @@ const styles = StyleSheet.create({
   // como o resto do app — sem duplicar JSX.
   paginaMovel: { padding: 16, paddingBottom: 32, gap: 24, maxWidth: undefined },
   cardMovel: { borderRadius: 16, padding: 16 },
+  linhaFoto: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  fotoAvatar: {
+    backgroundColor: 'var(--tint-red)',
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+  },
+  fotoAvatarTexto: { fontSize: 20, fontWeight: '700', color: 'var(--tint-red-text)' },
+  botaoFoto: {
+    backgroundColor: '#C8131B',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  botaoFotoTexto: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  botaoFotoVazio: {
+    borderWidth: 1,
+    borderColor: 'var(--border)',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  botaoFotoVazioTexto: { color: 'var(--text-muted)', fontSize: 13, fontWeight: '600' },
   // Conta empilhada: em 390px o par chave-a-esquerda/valor-a-direita quebrava
   // "Rafael Pereira" em duas linhas na coluna estreita.
   linhaMovel: {

@@ -60,6 +60,7 @@ Dois produtos num repositório, mesmo domínio, mesma sessão Supabase:
 ```
 npx tsc --noEmit                      # raiz
 cd gestao && npx tsc -b && npx vite build
+npx tsx src/utils/fotoDePerfil.teste.ts  # na raiz
 npx tsx src/dados/datas.teste.ts      # em gestao/
 npx tsx src/dados/regras.teste.ts
 npm run lint                          # na raiz
