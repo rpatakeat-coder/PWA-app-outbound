@@ -21,6 +21,12 @@
  *  0076_foto_do_perfil.sql). */
 const TIPOS_ACEITOS = ['image/jpeg', 'image/png', 'image/webp'] as const;
 
+/** HEIC/HEIF é o padrão da câmera do iPhone, e NENHUM navegador decodifica:
+ *  medido em 17/09/2026 — `createImageBitmap` devolve `InvalidStateError` e o
+ *  `<img>` cai no `onerror`. Merece caso próprio porque "escolha JPG, PNG ou
+ *  WEBP" não diz o que fazer quando o celular só produz HEIC. */
+const TIPOS_HEIC = ['image/heic', 'image/heif', 'image/heic-sequence'];
+
 export const LADO_MAXIMO = 512;
 /** Teto do bucket, repetido aqui pra recusar ANTES de gastar upload. */
 export const BYTES_MAXIMOS = 2 * 1024 * 1024;
@@ -70,7 +76,20 @@ export function medidaDestino(
 
 /** Mensagem de recusa, ou null quando o arquivo serve. Texto de tela: quem le'
  *  esta' na rua e precisa saber o que fazer, nao o codigo do erro. */
-export function porQueNaoServe(arquivo: { type?: string; size?: number }): string | null {
+export function porQueNaoServe(arquivo: {
+  type?: string;
+  size?: number;
+  name?: string;
+}): string | null {
+  // O `type` vem vazio em vários sistemas, então a extensão do nome também
+  // conta — senão o HEIC cai no texto genérico, que não resolve o problema
+  // de quem fotografou com iPhone.
+  const ehHeic =
+    TIPOS_HEIC.includes((arquivo.type ?? '').toLowerCase()) ||
+    /\.hei[cf]$/i.test(arquivo.name ?? '');
+  if (ehHeic) {
+    return 'Fotos do iPhone vêm em HEIC, que o navegador não abre. No iPhone: Ajustes → Câmera → Formatos → "Mais compatível". Ou tire um print da foto e envie o print.';
+  }
   if (!tipoAceito(arquivo.type)) return 'Escolha uma imagem JPG, PNG ou WEBP.';
   if ((arquivo.size ?? 0) > BYTES_MAXIMOS) return 'Essa imagem passa de 2 MB. Escolha uma menor.';
   return null;
@@ -113,9 +132,24 @@ export function escolherImagem(): Promise<File | null> {
     // Cancelar o seletor NAO dispara `change` em todo navegador; sem isto a
     // promise ficaria pendurada pra sempre e o botao preso em "Enviando...".
     input.addEventListener('cancel', () => responder(null));
+
+    // O `focus` e' o detector de cancelamento de ultimo recurso, e ele tem uma
+    // armadilha: em alguns navegadores o proprio `input.click()` ja' dispara
+    // focus na janela, ANTES de o dialogo abrir. Resolvendo ali, a promise
+    // voltava null e o `change` real que vinha depois era ignorado — a pessoa
+    // escolhia a foto e nada acontecia, sem erro nenhum.
+    //
+    // A guarda: so' vale focus que venha DEPOIS de um blur de verdade (o
+    // dialogo roubando o foco da janela), e ainda com folga pro `change`
+    // chegar primeiro.
+    let perdeuFoco = false;
+    window.addEventListener('blur', () => { perdeuFoco = true; }, { once: true });
     window.addEventListener(
       'focus',
-      () => setTimeout(() => responder(input.files?.[0] ?? null), 500),
+      () => {
+        if (!perdeuFoco) return;
+        setTimeout(() => responder(input.files?.[0] ?? null), 800);
+      },
       { once: true },
     );
 

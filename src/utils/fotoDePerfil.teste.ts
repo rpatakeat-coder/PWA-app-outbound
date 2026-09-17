@@ -75,6 +75,17 @@ ok('zero nao divide por zero', medidaDestino(0, 0, 512), { largura: 0, altura: 0
 
 console.log('\n--- recusa com texto de gente ---');
 ok('imagem boa passa', porQueNaoServe({ type: 'image/jpeg', size: 100_000 }), null);
+
+// HEIC tem texto PROPRIO porque "escolha JPG, PNG ou WEBP" nao diz o que fazer
+// pra quem fotografou com iPhone — e nenhum navegador decodifica HEIC (medido
+// em 17/09/2026: createImageBitmap da InvalidStateError e o <img> tambem falha).
+const HEIC = 'Fotos do iPhone vêm em HEIC, que o navegador não abre. No iPhone: Ajustes → Câmera → Formatos → "Mais compatível". Ou tire um print da foto e envie o print.';
+ok('heic pelo type', porQueNaoServe({ type: 'image/heic', size: 500_000 }), HEIC);
+ok('heif tambem', porQueNaoServe({ type: 'image/heif', size: 500_000 }), HEIC);
+// O `type` vem VAZIO em varios sistemas; sem olhar a extensao o HEIC cairia no
+// texto genérico.
+ok('heic com type vazio, pela extensao', porQueNaoServe({ type: '', name: 'IMG_4231.HEIC', size: 500_000 }), HEIC);
+ok('jpg nao e confundido com heic', porQueNaoServe({ type: 'image/jpeg', name: 'foto.jpg', size: 10 }), null);
 ok(
   'tipo errado explica o que fazer',
   porQueNaoServe({ type: 'application/pdf', size: 10 }),

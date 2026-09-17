@@ -112,7 +112,11 @@ function mensagemDeUpload(bruto: string): string {
     return 'O espaço das fotos ainda não existe no servidor. Avise a gestão (falta rodar a migration das fotos).';
   }
   if (/row-level security|violates/i.test(bruto)) {
-    return 'Sem permissão para salvar a foto. Avise a gestão.';
+    // Aconteceu de verdade em 17/09/2026: a 0076 criou insert/update/delete e
+    // esqueceu o select, e o `upsert` (que é INSERT ... ON CONFLICT DO UPDATE)
+    // precisa LER a linha em conflito. "Avise a gestão" mandava a pessoa pedir
+    // ajuda sem dizer o que pedir.
+    return 'O servidor recusou salvar a foto (permissão do espaço de fotos). Avise a gestão: falta rodar a migration 0077_foto_do_perfil_select.sql.';
   }
   if (/exceeded|too large|payload/i.test(bruto)) {
     return 'A imagem ficou grande demais depois do envio. Tente outra foto.';

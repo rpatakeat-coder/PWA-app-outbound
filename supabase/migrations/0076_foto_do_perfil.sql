@@ -56,9 +56,13 @@ on conflict (id) do update set
 -- amarra qualquer pessoa logada poderia sobrescrever a foto de qualquer outra
 -- — e o estrago seria a cara de alguem no cabecalho do app do time.
 --
--- Nao ha' policy de SELECT: o bucket e' publico, a leitura sai pela rota
--- `/storage/v1/object/public/...` e nao passa por RLS. Escrever uma daria a
--- impressao falsa de que a leitura esta' fechada.
+-- A policy de SELECT veio na 0077, e a ausencia dela aqui foi ERRO MEU. O
+-- raciocinio escrito nesta linha era: "o bucket e' publico, a leitura sai pela
+-- rota /storage/v1/object/public/... e nao passa por RLS". Verdade para o
+-- DOWNLOAD, falso para o UPLOAD — `upsert: true` vira
+-- `INSERT ... ON CONFLICT DO UPDATE`, que precisa LER a linha em conflito, e
+-- ler exige policy de select. O upload morria com "violates row-level security
+-- policy". Ver 0077_foto_do_perfil_select.sql.
 
 drop policy if exists avatares_insere_o_proprio on storage.objects;
 create policy avatares_insere_o_proprio on storage.objects
