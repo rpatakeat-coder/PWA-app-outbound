@@ -20,12 +20,14 @@ import { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import {
+  abrirImagem,
   caminhoDaFoto,
-  encolherQuadrado,
   escolherImagem,
   extensaoDe,
   porQueNaoServe,
+  recortarParaBlob,
   urlComVersao,
+  type Recorte,
 } from '../utils/fotoDePerfil';
 
 const BUCKET = 'avatares';
@@ -34,9 +36,32 @@ export function useFotoDePerfil() {
   const { user, profile, definirFotoDoPerfil } = useAuth();
   const [enviando, setEnviando] = useState(false);
 
-  /** Abre o seletor e deixa a foto no ar. Devolve a mensagem de erro para a
-   *  tela mostrar, ou null quando deu certo (ou quando a pessoa desistiu). */
-  const trocar = async (): Promise<string | null> => {
+  // A imagem escolhida, esperando enquadramento. Enquanto não for null, quem
+  // chama renderiza a folha de ajuste.
+  //
+  // O upload virou DOIS PASSOS por causa do enquadramento: escolher o arquivo e
+  // subir deixaram de ser a mesma ação, porque no meio a pessoa decide o que
+  // aparece no círculo. O estado vive no hook e não na tela para que os dois
+  // pontos de entrada (o avatar do cabeçalho e Configurações) usem o mesmo
+  // caminho — duas cópias divergiriam no primeiro ajuste.
+  const [emEdicao, setEmEdicao] = useState<{
+    arquivo: File;
+    bitmap: ImageBitmap | HTMLImageElement;
+    largura: number;
+    altura: number;
+    url: string;
+  } | null>(null);
+
+  const fecharEdicao = () => {
+    // A object URL segura a imagem inteira na memória; sem revogar, trocar de
+    // foto cinco vezes numa sessão deixa cinco fotos presas.
+    if (emEdicao) URL.revokeObjectURL(emEdicao.url);
+    setEmEdicao(null);
+  };
+
+  /** Passo 1: escolhe o arquivo e abre o ajuste. Devolve mensagem de erro, ou
+   *  null quando abriu (ou quando a pessoa desistiu do seletor). */
+  const escolher = async (): Promise<string | null> => {
     if (!user?.id) return 'Você precisa estar logado.';
     const arquivo = await escolherImagem();
     if (!arquivo) return null; // desistiu — não é erro
@@ -44,12 +69,26 @@ export function useFotoDePerfil() {
     const recusa = porQueNaoServe(arquivo);
     if (recusa) return recusa;
 
+    try {
+      const aberta = await abrirImagem(arquivo);
+      setEmEdicao({ arquivo, ...aberta });
+      return null;
+    } catch (err) {
+      return (err as Error)?.message ?? 'Não consegui abrir a imagem.';
+    }
+  };
+
+  /** Passo 2: recorta no enquadramento escolhido e sobe. */
+  const enviar = async (recorte: Recorte): Promise<string | null> => {
+    if (!user?.id) return 'Você precisa estar logado.';
+    if (!emEdicao) return 'Nenhuma foto selecionada.';
+
     setEnviando(true);
     try {
-      // O encolhimento sempre sai em JPEG, então a extensão é fixa aqui. O
+      // O recorte sempre sai em JPEG, então a extensão é fixa aqui. O
       // `extensaoDe` continua sendo a fonte da regra, para o dia em que houver
       // um caminho que suba o original.
-      const menor = await encolherQuadrado(arquivo);
+      const menor = await recortarParaBlob(emEdicao.bitmap, recorte);
       const caminho = caminhoDaFoto(user.id, extensaoDe('image/jpeg'));
 
       const { error: erroUpload } = await supabase.storage
@@ -70,6 +109,7 @@ export function useFotoDePerfil() {
       if (erroPerfil) return mensagemDePerfil(erroPerfil.message);
 
       definirFotoDoPerfil(url);
+      fecharEdicao();
       return null;
     } catch (err) {
       return (err as Error)?.message ?? 'Não consegui enviar a foto.';
@@ -101,7 +141,15 @@ export function useFotoDePerfil() {
     }
   };
 
-  return { foto: profile?.avatar_url ?? null, trocar, remover, enviando };
+  return {
+    foto: profile?.avatar_url ?? null,
+    escolher,
+    enviar,
+    emEdicao,
+    fecharEdicao,
+    remover,
+    enviando,
+  };
 }
 
 /** Traduz o erro do storage. O "Bucket not found" é o sintoma exato de a

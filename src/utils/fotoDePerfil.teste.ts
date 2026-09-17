@@ -14,6 +14,10 @@ import {
   medidaDestino,
   porQueNaoServe,
   BYTES_MAXIMOS,
+  escalaBase,
+  limitesDoOffset,
+  limitar,
+  recorteDoEnquadramento,
 } from './fotoDePerfil';
 
 let falhas = 0;
@@ -103,6 +107,67 @@ ok(
   'tipo vem antes do tamanho',
   porQueNaoServe({ type: 'application/pdf', size: BYTES_MAXIMOS + 1 }),
   'Escolha uma imagem JPG, PNG ou WEBP.',
+);
+
+console.log('\n--- enquadramento: escala que cobre o quadrado ---');
+ok('quadrada 1000 em viewport 300', escalaBase(1000, 1000, 300), 0.3);
+// Deitada: quem manda e' a ALTURA (o menor lado), senao sobraria vazio em cima.
+ok('deitada 1000x500 usa a altura', escalaBase(1000, 500, 300), 0.6);
+ok('em pe 500x1000 usa a largura', escalaBase(500, 1000, 300), 0.6);
+ok('imagem menor que o quadrado AMPLIA', escalaBase(100, 100, 300), 3);
+
+console.log('\n--- quanto da pra arrastar ---');
+// Quadrada em escala 1: nao ha' folga em nenhum eixo. Deixar arrastar aqui
+// mostraria vazio dentro do circulo.
+ok('quadrada, escala 1: nada', limitesDoOffset(1000, 1000, 300, 1), { x: 0, y: 0 });
+// Deitada em escala 1: sobra na horizontal, nada na vertical.
+ok('deitada, escala 1: so na horizontal', limitesDoOffset(1000, 500, 300, 1), { x: 150, y: 0 });
+ok('quadrada, escala 2: folga nos dois', limitesDoOffset(1000, 1000, 300, 2), { x: 150, y: 150 });
+
+ok('limitar prende no teto', limitar(999, 150), 150);
+ok('limitar prende no piso', limitar(-999, 150), -150);
+ok('limitar deixa passar o que cabe', limitar(-40, 150), -40);
+
+console.log('\n--- o recorte que vai pro canvas ---');
+// Sem arrastar nem ampliar, quadrada: a imagem inteira.
+ok(
+  'quadrada centralizada = tudo',
+  recorteDoEnquadramento({ largura: 1000, altura: 1000, viewport: 300, escala: 1, deslocX: 0, deslocY: 0 }),
+  { x: 0, y: 0, lado: 1000 },
+);
+// Deitada centralizada: quadrado do meio (o mesmo que o recorte central fazia).
+ok(
+  'deitada centralizada = quadrado do meio',
+  recorteDoEnquadramento({ largura: 1000, altura: 500, viewport: 300, escala: 1, deslocX: 0, deslocY: 0 }),
+  { x: 250, y: 0, lado: 500 },
+);
+// SINAL: arrastar pra DIREITA mostra o que estava a' esquerda, entao o x do
+// recorte DIMINUI. Invertido, o rosto sai do circulo e nada no tsc reclama.
+const paraDireita = recorteDoEnquadramento({
+  largura: 1000, altura: 500, viewport: 300, escala: 1, deslocX: 60, deslocY: 0,
+});
+ok('arrastar pra direita move o recorte pra ESQUERDA', paraDireita.x, 150);
+const paraEsquerda = recorteDoEnquadramento({
+  largura: 1000, altura: 500, viewport: 300, escala: 1, deslocX: -60, deslocY: 0,
+});
+ok('e pra esquerda move pra direita', paraEsquerda.x, 350);
+// Nunca sai da imagem, mesmo com arrasto absurdo.
+ok(
+  'arrasto exagerado gruda na borda, nao vaza',
+  recorteDoEnquadramento({ largura: 1000, altura: 500, viewport: 300, escala: 1, deslocX: 99999, deslocY: 0 }),
+  { x: 0, y: 0, lado: 500 },
+);
+// Zoom 2 pega METADE do lado: e' o que "ampliar o dobro" significa.
+ok(
+  'escala 2 recorta a metade',
+  recorteDoEnquadramento({ largura: 1000, altura: 1000, viewport: 300, escala: 2, deslocX: 0, deslocY: 0 }),
+  { x: 250, y: 250, lado: 500 },
+);
+// Imagem MENOR que o quadrado: o recorte nao pode pedir mais pixel do que existe.
+ok(
+  'imagem pequena nao inventa pixel',
+  recorteDoEnquadramento({ largura: 100, altura: 100, viewport: 300, escala: 1, deslocX: 0, deslocY: 0 }),
+  { x: 0, y: 0, lado: 100 },
 );
 
 console.log(falhas === 0 ? '\nTODOS PASSARAM' : `\n${falhas} FALHARAM`);

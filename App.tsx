@@ -82,6 +82,7 @@ import {
 } from './src/components/icons';
 import { Avatar } from './src/components/Avatar';
 import { useFotoDePerfil } from './src/hooks/useFotoDePerfil';
+import { AjustarFotoSheet } from './src/screens/AjustarFotoSheet';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 // Camada de mapa web (Google Maps JS API) com a mesma API que o
 // react-native-maps + react-native-map-clustering expunham. O clustering
@@ -1595,11 +1596,18 @@ function MainApp() {
   const [perfilAberto, setPerfilAberto] = useState(false);
   // A foto do perfil: trocar e remover. Vive aqui porque o avatar da folha do
   // perfil e' o botao, e a folha e' montada neste componente.
-  const { foto, trocar: trocarFotoBruto, remover: removerFotoBruto, enviando: enviandoFoto } =
-    useFotoDePerfil();
+  const {
+    foto,
+    escolher: escolherFoto,
+    enviar: enviarFoto,
+    emEdicao: fotoEmEdicao,
+    fecharEdicao: fecharAjusteDaFoto,
+    remover: removerFotoBruto,
+    enviando: enviandoFoto,
+  } = useFotoDePerfil();
   const trocarFoto = async () => {
-    const erro = await trocarFotoBruto();
-    if (erro) Alert.alert('Não consegui trocar a foto', erro);
+    const erro = await escolherFoto();
+    if (erro) Alert.alert('Não consegui abrir a foto', erro);
   };
   const removerFoto = () => {
     Alert.alert('Remover sua foto?', 'Você volta a aparecer com as iniciais.', [
@@ -5323,6 +5331,10 @@ function MainApp() {
           isViewer={isViewer}
           showOnlyMyArea={showOnlyMyArea}
           onToggleArea={handleToggleArea}
+          foto={foto}
+          aoTrocarFoto={trocarFoto}
+          aoRemoverFoto={removerFoto}
+          enviandoFoto={enviandoFoto}
         />
       ) : tab === 'meu' ? (
         <MeuDesempenhoScreen
@@ -5354,6 +5366,23 @@ function MainApp() {
       )}
 
       {selectedClientSheet}
+
+      {/* Enquadramento da foto de perfil. Fica NESTE nivel, e nao dentro da
+          folha do perfil: no desktop aquela folha nem e' montada, e o ajuste
+          tem que aparecer igual pra quem entrou por Configuracoes. */}
+      {fotoEmEdicao && (
+        <AjustarFotoSheet
+          url={fotoEmEdicao.url}
+          largura={fotoEmEdicao.largura}
+          altura={fotoEmEdicao.altura}
+          enviando={enviandoFoto}
+          aoCancelar={fecharAjusteDaFoto}
+          aoConfirmar={async (recorte) => {
+            const erro = await enviarFoto(recorte);
+            if (erro) Alert.alert('Não consegui salvar a foto', erro);
+          }}
+        />
+      )}
 
       {/* Bottom Navigation */}
       {/* A assinatura "developed by RPA" cabe DENTRO da area segura — nao soma

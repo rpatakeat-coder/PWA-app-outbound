@@ -96,6 +96,90 @@ export function porQueNaoServe(arquivo: {
 }
 
 // ---------------------------------------------------------------------------
+// ENQUADRAMENTO
+//
+// A pessoa arrasta e amplia dentro de um quadrado; o que estiver dentro dele
+// vira a foto. Tudo abaixo é aritmética pura, sem canvas e sem React, porque é
+// exatamente aqui que editor de foto sai torto: um sinal invertido põe o rosto
+// fora do círculo e nada no typecheck reclama.
+//
+// VOCABULÁRIO
+//   `viewport`  lado do quadrado na tela, em px
+//   `base`      escala que faz a imagem COBRIR o quadrado (escala 1 do usuário)
+//   `escala`    o zoom que a pessoa escolheu, de 1 (cobrindo) até ZOOM_MAXIMO
+//   `desloc`    arrasto em px de TELA, 0 = centralizado
+// ---------------------------------------------------------------------------
+
+export const ZOOM_MAXIMO = 4;
+
+/** Escala que faz o menor lado da imagem caber exatamente no quadrado. É o
+ *  "cobrir": em escala 1 não existe borda vazia em lugar nenhum. */
+export function escalaBase(largura: number, altura: number, viewport: number): number {
+  const menor = Math.min(largura, altura);
+  return menor > 0 ? viewport / menor : 1;
+}
+
+/** Quanto se pode arrastar em cada eixo antes de aparecer vazio. Em escala 1 e
+ *  imagem quadrada, os dois são 0 — não há para onde arrastar, e a tela não
+ *  deve fingir que há. */
+export function limitesDoOffset(
+  largura: number,
+  altura: number,
+  viewport: number,
+  escala: number,
+): { x: number; y: number } {
+  const fator = escalaBase(largura, altura, viewport) * escala;
+  return {
+    x: Math.max(0, (largura * fator - viewport) / 2),
+    y: Math.max(0, (altura * fator - viewport) / 2),
+  };
+}
+
+export function limitar(valor: number, limite: number): number {
+  return Math.max(-limite, Math.min(limite, valor));
+}
+
+/** O retângulo da IMAGEM ORIGINAL que está dentro do quadrado.
+ *
+ *  Sinal do desloc: arrastar para a DIREITA (desloc positivo) mostra o que
+ *  estava à ESQUERDA, então a origem do recorte DIMINUI. É o sinal que se
+ *  inverte sem ninguém notar até ver o rosto cortado. */
+export function recorteDoEnquadramento({
+  largura,
+  altura,
+  viewport,
+  escala,
+  deslocX,
+  deslocY,
+}: {
+  largura: number;
+  altura: number;
+  viewport: number;
+  escala: number;
+  deslocX: number;
+  deslocY: number;
+}): { x: number; y: number; lado: number } {
+  const fator = escalaBase(largura, altura, viewport) * escala;
+  // Nunca maior que a imagem: com escala 1 o lado é o menor lado dela.
+  const lado = Math.min(largura, altura, viewport / fator);
+  const x = (largura - lado) / 2 - deslocX / fator;
+  const y = (altura - lado) / 2 - deslocY / fator;
+  return {
+    x: Math.max(0, Math.min(largura - lado, x)),
+    y: Math.max(0, Math.min(altura - lado, y)),
+    lado,
+  };
+}
+
+/** Distância entre dois toques — o pinça de zoom. */
+export function distanciaEntre(
+  a: { pageX: number; pageY: number },
+  b: { pageX: number; pageY: number },
+): number {
+  return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
+}
+
+// ---------------------------------------------------------------------------
 // Daqui pra baixo depende do NAVEGADOR (input de arquivo, canvas).
 //
 // O app de campo roda em react-native-web e e' servido como PWA — nao ha' build
@@ -157,28 +241,53 @@ export function escolherImagem(): Promise<File | null> {
   });
 }
 
-/** Encolhe e recorta no centro, devolvendo JPEG quadrado.
- *
- *  Quadrado porque o destino e' sempre um circulo: recortar aqui evita que uma
- *  foto deitada apareca espremida em todo lugar que a desenha. */
-export async function encolherQuadrado(arquivo: File, lado = LADO_MAXIMO): Promise<Blob> {
+export type Recorte = { x: number; y: number; lado: number };
+
+/** Abre a imagem e devolve o que a tela de ajuste precisa: o próprio bitmap
+ *  (para desenhar a prévia) e as medidas originais (para a geometria). */
+export async function abrirImagem(
+  arquivo: File,
+): Promise<{ bitmap: ImageBitmap | HTMLImageElement; largura: number; altura: number; url: string }> {
   const bitmap = await criarBitmap(arquivo);
-  const origem = Math.min(bitmap.width, bitmap.height);
-  const destino = Math.min(lado, origem);
+  return {
+    bitmap,
+    largura: bitmap.width,
+    altura: bitmap.height,
+    // A prévia é desenhada com <Image> do react-native-web, que precisa de uma
+    // URL — não sabe desenhar ImageBitmap.
+    url: URL.createObjectURL(arquivo),
+  };
+}
+
+/** Recorta o retângulo escolhido e devolve JPEG quadrado de até 512px.
+ *
+ *  Quadrado porque o destino é sempre um círculo. O recorte vem de
+ *  `recorteDoEnquadramento`, que é testado — aqui é só o desenho. */
+export async function recortarParaBlob(
+  bitmap: ImageBitmap | HTMLImageElement,
+  recorte: Recorte,
+  lado = LADO_MAXIMO,
+): Promise<Blob> {
+  // Nunca AMPLIA na exportação: foto de 200px sai com 200px em vez de virar um
+  // borrão de 512. Ampliar é escolha de quem enquadra, não do exportador.
+  const destino = Math.max(1, Math.round(Math.min(lado, recorte.lado)));
 
   const canvas = document.createElement('canvas');
   canvas.width = destino;
   canvas.height = destino;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Não consegui processar a imagem neste navegador.');
+  // Sem isto o Chrome usa vizinho-mais-próximo ao reduzir muito, e a foto sai
+  // serrilhada justamente no tamanho em que ela é vista (32px).
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 
   ctx.drawImage(
     bitmap as CanvasImageSource,
-    // Recorte centralizado na origem.
-    (bitmap.width - origem) / 2,
-    (bitmap.height - origem) / 2,
-    origem,
-    origem,
+    recorte.x,
+    recorte.y,
+    recorte.lado,
+    recorte.lado,
     0,
     0,
     destino,

@@ -12,7 +12,6 @@ import {
 import { Alert } from '../components/Alert';
 import { supabase } from '../integrations/supabase/client';
 import { useLayout } from '../hooks/useLayout';
-import { useFotoDePerfil } from '../hooks/useFotoDePerfil';
 import { Avatar } from '../components/Avatar';
 import { useTheme, type ThemePref } from '../theme';
 import {
@@ -44,6 +43,15 @@ interface Props {
   /** Switch "Carregar so a area do mapa" — estado compartilhado com o mapa. */
   showOnlyMyArea: boolean;
   onToggleArea: (valor: boolean) => void;
+  // ---- Foto de perfil ----
+  // Chega por PROPS, e nao de um `useFotoDePerfil()` daqui, porque o hook
+  // guarda a imagem em enquadramento: duas instancias teriam dois estados, e o
+  // ajuste aberto por esta tela nunca apareceria (a folha e' renderizada no
+  // App.tsx). Mesma razao de `logout` e `updatePassword` virem prontos.
+  foto: string | null;
+  aoTrocarFoto: () => void;
+  aoRemoverFoto: () => void;
+  enviandoFoto: boolean;
 }
 
 const OPCOES_TEMA: Array<{ valor: ThemePref; rotulo: string }> = [
@@ -61,30 +69,14 @@ export function ConfiguracoesScreen({
   isViewer,
   showOnlyMyArea,
   onToggleArea,
+  foto,
+  aoTrocarFoto,
+  aoRemoverFoto,
+  enviandoFoto,
 }: Props) {
   const layout = useLayout();
   const iconColors = useIconColors();
   const { pref: themePref, setPref: setThemePref } = useTheme();
-
-  // A mesma foto do avatar do cabecalho — um perfil, uma foto, um hook.
-  const { foto, trocar, remover, enviando: enviandoFoto } = useFotoDePerfil();
-  const aoTrocarFoto = async () => {
-    const erro = await trocar();
-    if (erro) Alert.alert('Não consegui trocar a foto', erro);
-  };
-  const aoRemoverFoto = () => {
-    Alert.alert('Remover sua foto?', 'Você volta a aparecer com as iniciais.', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Remover',
-        style: 'destructive',
-        onPress: async () => {
-          const erro = await remover();
-          if (erro) Alert.alert('Não consegui remover a foto', erro);
-        },
-      },
-    ]);
-  };
 
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmaSenha, setConfirmaSenha] = useState('');
