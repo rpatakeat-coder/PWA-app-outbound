@@ -25,6 +25,15 @@ export type Comunicado = {
   criadoEm: string;
   /** Quem confirmou a leitura. Nomes, para a tela não ter de cruzar de novo. */
   leram: string[];
+  /** Quem NÃO confirmou — a lista de quem cobrar, que é a pergunta da tela.
+   *
+   *  Sai da MESMA consulta de `profiles` que produz o `alcance`: os nomes já
+   *  estavam na mão, e só a subtração era exposta. Zero consulta a mais.
+   *
+   *  Contém exatamente as pessoas que compõem o `alcance` — inclusive gestor e
+   *  quem é `view`. Mudar quem entra mudaria o número que a tela já mostra há
+   *  meses, e isso é regra de negócio, não apresentação. */
+  naoLeram: string[];
   /** Quantas pessoas de campo ativas existiam quando a tela leu. */
   alcance: number;
 };
@@ -72,12 +81,15 @@ export async function carregarComunicados(): Promise<DadosComunicados> {
   const perfis = await supabase.from('profiles').select('id, full_name, role');
   if (perfis.error) throw perfis.error;
   const nomePorId = new Map<string, string>();
-  let alcance = 0;
+  // Os nomes que COMPÕEM o alcance. A contagem sozinha respondia "quantos
+  // faltam"; o gestor precisa de "quem eu cobro", e a resposta já estava aqui.
+  const doAlcance: string[] = [];
   for (const p of perfis.data ?? []) {
     const nome = (p.full_name as string | null) ?? '';
     nomePorId.set(p.id as string, nome);
-    if (!/\/\s*DESATIVADO/i.test(nome) && nome.trim()) alcance++;
+    if (!/\/\s*DESATIVADO/i.test(nome) && nome.trim()) doAlcance.push(nome);
   }
+  const alcance = doAlcance.length;
 
   const leramPorComunicado = new Map<string, string[]>();
   for (const l of leituras.data ?? []) {
@@ -99,6 +111,11 @@ export async function carregarComunicados(): Promise<DadosComunicados> {
       criadoPor: (c.created_by_name as string | null) ?? null,
       criadoEm: c.created_at as string,
       leram: leramPorComunicado.get(c.id as string) ?? [],
+      // Por NOME, e não por id, porque é assim que `leram` já vem. Dois perfis
+      // homônimos fariam um deles sumir da lista de cobrança — mas o mesmo já
+      // valia para `leram` antes disto, e trocar a chave mudaria o que a tela
+      // mostra hoje.
+      naoLeram: doAlcance.filter((n) => !(leramPorComunicado.get(c.id as string) ?? []).includes(n)),
       alcance,
     })),
   };
