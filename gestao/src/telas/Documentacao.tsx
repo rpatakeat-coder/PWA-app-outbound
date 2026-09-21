@@ -984,10 +984,36 @@ async function mensagemDoErro(error: unknown): Promise<string> {
   if (ctx && typeof ctx.json === 'function') {
     try {
       const corpo = await ctx.json();
-      if (corpo?.error) return String(corpo.error);
+      if (corpo?.error) return traduzir(String(corpo.error));
     } catch {
       // corpo não era JSON — cai na mensagem crua
     }
   }
-  return (error as Error)?.message ?? 'Falha ao chamar o chat.';
+  return traduzir((error as Error)?.message ?? 'Falha ao chamar o chat.');
+}
+
+/** As falhas que têm dono conhecido viram frase acionável.
+ *
+ *  Aconteceu na primeira chamada de verdade, em 21/09/2026: a resposta trouxe o
+ *  JSON cru da OpenAI — `{"error":{"message":"You have no credits remaining"…}}`
+ *  — e isso apareceu inteiro na tela. Um gestor lendo aquilo não sabe se o
+ *  problema é dele, do sistema ou da pergunta.
+ *
+ *  Traduzido aqui, no cliente, e não na Edge, para não pedir mais um deploy por
+ *  causa de um texto. */
+function traduzir(bruto: string): string {
+  if (/insufficient_quota|no credits remaining|credit_balance_exhausted/i.test(bruto)) {
+    return 'A conta da OpenAI está sem créditos, então o chat não consegue responder. Isso derruba junto a "Leitura da semana" do cockpit e a transcrição dos 1:1 — as três usam a mesma chave.';
+  }
+  if (/rate limit|429/i.test(bruto)) {
+    return 'A OpenAI recusou por excesso de chamadas no momento. Tente de novo em um minuto.';
+  }
+  if (/OPENAI_API_KEY não configurada/i.test(bruto)) {
+    return bruto; // já é acionável: diz o comando a rodar
+  }
+  if (/não encontrada|not found|404/i.test(bruto)) {
+    return 'A função documentacao-chat ainda não está no ar. Rode: supabase functions deploy documentacao-chat.';
+  }
+  if (/demorou demais/i.test(bruto)) return bruto;
+  return bruto;
 }
