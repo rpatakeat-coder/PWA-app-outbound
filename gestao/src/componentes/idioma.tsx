@@ -56,11 +56,16 @@ export function Faixa({
   tom,
   titulo,
   children,
+  acao,
   style,
 }: {
   tom: Tom;
   titulo?: string;
   children?: ReactNode;
+  /** Um link ou botão embaixo, separado por régua. Nasceu da `DesativarAcesso`,
+   *  onde a faixa que avisa "o HubSpot reescreve o dono" precisa levar ao lugar
+   *  onde se reatribui — aviso sem caminho é aviso que a pessoa lê e arquiva. */
+  acao?: ReactNode;
   style?: CSSProperties;
 }) {
   const c = TONS[tom];
@@ -79,6 +84,12 @@ export function Faixa({
     >
       {titulo && <div style={{ fontWeight: 700 }}>{titulo}</div>}
       {children}
+      {acao && (
+        <>
+          <div style={{ height: 1, background: c.borda, margin: '10px 0', opacity: 0.5 }} />
+          {acao}
+        </>
+      )}
     </div>
   );
 }
@@ -124,7 +135,14 @@ export function Avatar({ nome, tom = 'neutro' }: { nome: string; tom?: 'neutro' 
  *
  *  `primaria` é fundo vermelho, e vale **uma por bloco, no máximo** — duas
  *  primárias lado a lado é o mesmo que nenhuma: a pessoa deixa de saber qual é
- *  a ação esperada. */
+ *  a ação esperada.
+ *
+ *  O TEXTO DA PRIMÁRIA É `--panel`, NÃO `#fff`, e isso é medição, não gosto.
+ *  `--red` troca de papel entre os temas: no claro é `#c8131b` (fundo forte),
+ *  no escuro é `#e5a1a4` — um rosa claro pensado para TEXTO sobre fundo
+ *  escuro. Branco sobre ele dá 2,11:1, abaixo de qualquer mínimo legível.
+ *  `--panel` é branco no claro e quase-preto no escuro, então dá 5,89:1 e
+ *  7,91:1 — o mesmo resultado que o handoff queria, nos dois temas. */
 export function Acao({
   children,
   onClick,
@@ -154,7 +172,7 @@ export function Acao({
     borderRadius: 8,
     border: primaria ? 'none' : '1px solid var(--line-btn)',
     background: primaria ? 'var(--red)' : 'var(--panel2)',
-    color: primaria ? '#fff' : 'var(--ink)',
+    color: primaria ? 'var(--panel)' : 'var(--ink)',
     font: 'inherit',
     fontSize: tamanho === 'linha' ? 12 : 13,
     fontWeight: 700,
@@ -208,6 +226,12 @@ export function LinhaDePessoa({
       style={{
         display: 'flex',
         alignItems: 'center',
+        // `wrap` + piso de largura no nome: numa coluna estreita com duas
+        // etiquetas, o nome era espremido ate' virar "A…" — as etiquetas tem
+        // `nowrap` e nao cedem espaco. Agora as etiquetas e a acao descem pra
+        // uma segunda linha antes de o nome encolher. Nome truncado a uma letra
+        // e' pior que linha mais alta: a lista existe pra achar a pessoa.
+        flexWrap: 'wrap',
         gap: 12,
         padding: '11px 0',
         borderTop: primeira ? 'none' : '1px solid var(--line-soft)',
@@ -216,7 +240,7 @@ export function LinhaDePessoa({
     >
       <Avatar nome={nome} tom={tomDoAvatar} />
 
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: '1 1 150px', minWidth: 150 }}>
         <div
           style={{
             fontWeight: 700,
@@ -290,7 +314,7 @@ export function Passo({
 }) {
   const bolha = {
     cumprido: { fundo: 'var(--green-soft)', texto: 'var(--green)' },
-    atual: { fundo: 'var(--red)', texto: '#fff' },
+    atual: { fundo: 'var(--red)', texto: 'var(--panel)' },  // ver o porquê em `Acao`
     bloqueado: { fundo: 'var(--panel2)', texto: 'var(--muted)' },
   }[estado];
 

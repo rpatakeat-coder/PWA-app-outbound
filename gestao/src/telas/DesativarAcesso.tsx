@@ -37,6 +37,13 @@ import {
   type DadosDeAcesso,
   type ResultadoDesativacao,
 } from '../dados/acessos';
+import {
+  Acao,
+  Etiqueta,
+  Faixa,
+  LinhaDePessoa,
+  Passo,
+} from '../componentes/idioma';
 import { IconSearch } from 'takeat-design-system-ui-kit/icons/IconSearch';
 import { IconCheck } from 'takeat-design-system-ui-kit/icons/IconCheck';
 import { IconClock } from 'takeat-design-system-ui-kit/icons/IconClock';
@@ -97,82 +104,6 @@ const rotuloFato = {
   color: 'var(--muted)',
 };
 
-function Etiqueta({ tom, texto }: { tom: 'aviso' | 'neutro'; texto: string }) {
-  const c =
-    tom === 'aviso'
-      ? { fundo: 'var(--amber-soft)', cor: 'var(--amber-ink)' }
-      : { fundo: 'var(--panel2)', cor: 'var(--muted)' };
-  return (
-    <span
-      style={{
-        background: c.fundo,
-        color: c.cor,
-        borderRadius: 999,
-        padding: '2px 9px',
-        fontSize: 11.5,
-        fontWeight: 700,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {texto}
-    </span>
-  );
-}
-
-function Faixa({
-  tom,
-  titulo,
-  children,
-  acao,
-}: {
-  tom: 'aviso' | 'ok' | 'erro';
-  titulo: string;
-  children: React.ReactNode;
-  acao?: boolean;
-}) {
-  const c = {
-    aviso: { fundo: 'var(--amber-soft)', borda: 'var(--amber)', cor: 'var(--amber-ink)' },
-    ok: { fundo: 'var(--green-soft)', borda: 'var(--green)', cor: 'var(--green)' },
-    erro: { fundo: 'var(--red-soft)', borda: 'var(--red)', cor: 'var(--red)' },
-  }[tom];
-  return (
-    <div
-      style={{
-        background: c.fundo,
-        border: `1px solid ${c.borda}`,
-        color: c.cor,
-        borderRadius: 8,
-        padding: '12px 14px',
-      }}
-    >
-      <div style={{ fontSize: 13, lineHeight: '19px', fontWeight: 700 }}>{titulo}</div>
-      <div style={{ fontSize: 12.5, lineHeight: '18px', marginTop: 4 }}>{children}</div>
-      {acao && (
-        <>
-          <div style={{ height: 1, background: 'var(--amber)', margin: '10px 0', opacity: 0.5 }} />
-          <a
-            href={HUBSPOT_NEGOCIOS}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              color: c.cor,
-              fontSize: 12.5,
-              lineHeight: '17px',
-              fontWeight: 700,
-            }}
-          >
-            <IconExternalLink width={16} height={16} fill={c.cor} />
-            Reatribuir no HubSpot
-          </a>
-        </>
-      )}
-    </div>
-  );
-}
-
 function Fato({ rotulo, valor, alerta }: { rotulo: string; valor: string; alerta?: boolean }) {
   return (
     <div>
@@ -193,7 +124,7 @@ function Fato({ rotulo, valor, alerta }: { rotulo: string; valor: string; alerta
   );
 }
 
-function Passo({ texto, pendente }: { texto: string; pendente?: boolean }) {
+function Consequencia({ texto, pendente }: { texto: string; pendente?: boolean }) {
   const cor = pendente ? 'var(--amber-ink)' : 'var(--green)';
   const Glifo = pendente ? IconClock : IconCheck;
   return (
@@ -291,6 +222,16 @@ export function DesativarAcesso() {
   const precisaDestino = carteira > 0;
   const podeDesativar = !!selecionado && emailBate && (!precisaDestino || !!destino) && !ocupado;
 
+  const destinoEscolhido = destinos.find((d) => d.idHubspot === destino) ?? null;
+
+  /** O que falta pro passo 3. Uma frase, na ORDEM em que se resolve — listar
+   *  as duas pendências juntas não ajuda a dar o próximo passo. */
+  const oQueFaltaParaEncerrar = (): string => {
+    if (precisaDestino && !destino) return 'Falta escolher quem fica com a carteira — é o passo 1.';
+    if (!emailBate) return 'Digite o e-mail no passo 2 para habilitar.';
+    return 'Irreversível por esta tela.';
+  };
+
   function escolher(c: ContaDeAcesso) {
     setSelecionadoId(c.id);
     setDestino('');
@@ -344,7 +285,30 @@ export function DesativarAcesso() {
     : `${ativas.length} contas ativas · carteira à direita`;
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '420px minmax(0, 1fr)', gap: 24, alignItems: 'start' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* ================= A FAIXA DO TOPO =================
+          O handoff pedia aqui um aviso de que `/ DESATIVADO` no nome nao impede
+          o login, "porque a Edge `revogar-usuario` esta' citada no codigo e nada
+          a chama".
+          ISSO NAO E' MAIS VERDADE, e o proprio handoff manda trocar a faixa
+          pelo que o codigo faz em vez de deixar o aviso desatualizado:
+          `desativarAcesso` CHAMA a Edge, e ela bane o login com `ban_duration`
+          de 100 anos E renomeia, numa chamada so'.
+          O que sobra pra dizer aqui e' o que continua sendo verdade e ninguem
+          ve' acontecer: sao TRES escritas, em ordem, e a primeira falha para
+          tudo. Ambar e nao vermelho porque nao ha' defeito — ha' consequencia. */}
+      <Faixa
+        tom="aviso"
+        titulo="Encerrar aqui faz três coisas, e não tem desfazer por esta tela."
+      >
+        Na ordem: a carteira passa para quem você escolher, o login é bloqueado
+        na hora (a Edge <code>revogar-usuario</code> bane e marca{' '}
+        <code>/ DESATIVADO</code> numa chamada só) e a pessoa sai do filtro de
+        vendedor do app de campo. Se a primeira falhar, nada depois acontece — e
+        a carteira continua inteira com quem ainda tem acesso.
+      </Faixa>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '420px minmax(0, 1fr)', gap: 24, alignItems: 'start' }}>
       {/* ================= LISTA ================= */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ position: 'relative' }}>
@@ -370,76 +334,49 @@ export function DesativarAcesso() {
           >
             {cabecaLista}
           </div>
-          {filtradas.map((c) => {
-            const sel = c.id === selecionadoId;
-            const n = carteiraDe(c);
-            return (
-              <button
-                key={c.id}
-                onClick={() => escolher(c)}
-                style={{
-                  display: 'flex',
-                  width: '100%',
-                  textAlign: 'left',
-                  alignItems: 'center',
-                  gap: 10,
-                  font: 'inherit',
-                  cursor: 'pointer',
-                  padding: '10px 14px',
-                  // Faixa de 3px a esquerda na selecionada; transparente nas
-                  // outras pra o texto nao dancar 3px ao selecionar.
-                  borderLeft: `3px solid ${sel ? 'var(--red)' : 'transparent'}`,
-                  borderRight: 'none',
-                  borderTop: 'none',
-                  borderBottom: '1px solid var(--line-soft)',
-                  background: sel ? 'var(--panel2)' : 'transparent',
-                  color: 'inherit',
-                }}
-              >
-                <span style={{ minWidth: 0, flex: 1 }}>
-                  <span
-                    style={{
-                      display: 'block',
-                      fontSize: 13.5,
-                      lineHeight: '20px',
-                      fontWeight: 700,
-                      color: 'var(--ink)',
-                    }}
-                  >
-                    {c.nome}
-                  </span>
-                  <span
-                    style={{
-                      display: 'block',
-                      fontSize: 12,
-                      lineHeight: '16px',
-                      color: 'var(--muted)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {c.email} · {c.setor ?? 'sem setor'}
-                  </span>
-                </span>
-                {/* Etiquetas herdadas da Acessos, como estao la'. */}
-                {c.papel === 'user' && c.classificacao === 'nao_vendedor' && (
-                  <Etiqueta tom="neutro" texto="Não é de campo" />
-                )}
-                {c.setorSemLead && <Etiqueta tom="aviso" texto="Setor sem lead" />}
-                <span
-                  style={{
-                    fontSize: 12.5,
-                    color: 'var(--ter)',
-                    fontVariantNumeric: 'tabular-nums',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {n > 0 ? leads(n) : '—'}
-                </span>
-              </button>
-            );
-          })}
+          <div style={{ padding: '0 14px' }}>
+            {filtradas.map((c, idx) => {
+              const sel = c.id === selecionadoId;
+              const n = carteiraDe(c);
+              return (
+                <LinhaDePessoa
+                  key={c.id}
+                  primeira={idx === 0}
+                  nome={c.nome}
+                  // `setor · papel · desde {data}` — o e-mail saiu daqui porque
+                  // ele e' o que se DIGITA na confirmacao, e te-lo a' vista ao
+                  // lado do campo transforma a trava numa copia.
+                  sublinha={[
+                    c.setor ?? 'sem setor',
+                    PAPEL[c.papel ?? ''] ?? '—',
+                    c.criadoEm ? `desde ${DATA.format(new Date(c.criadoEm))}` : 'sem data',
+                  ].join(' · ')}
+                  etiquetas={
+                    <>
+                      {c.papel === 'user' && c.classificacao === 'nao_vendedor' && (
+                        <Etiqueta tom="neutro" texto="Não é de campo" />
+                      )}
+                      {c.setorSemLead && <Etiqueta tom="aviso" texto="Setor sem lead" />}
+                      {/* A carteira e' ETIQUETA, e nao numero solto: ela e' o
+                          que decide se esta linha precisa de destino. Zero vira
+                          "Sem transferir" em neutro — dizer "0 leads" faria o
+                          olho procurar o problema que nao existe. */}
+                      {n > 0 ? (
+                        <Etiqueta tom="aviso" texto={leads(n)} />
+                      ) : (
+                        <Etiqueta tom="neutro" texto="Sem transferir" />
+                      )}
+                    </>
+                  }
+                  acoes={
+                    <Acao primaria={sel} onClick={() => escolher(c)}>
+                      {sel ? 'Selecionado' : 'Encerrar'}
+                    </Acao>
+                  }
+                />
+              );
+            })}
+          </div>
           {filtradas.length === 0 && (
             <div style={{ padding: '14px', fontSize: 13, color: 'var(--muted)' }}>
               Ninguém com esse nome ou e-mail entre as contas ativas.
@@ -513,55 +450,176 @@ export function DesativarAcesso() {
                     : `Nenhum lead apontava para ${feito.conta.nome}.`}
                 </div>
               </div>
-            ) : precisaDestino ? (
-              <div style={cartao}>
-                <div style={{ fontSize: 14, lineHeight: '20px', fontWeight: 700, color: 'var(--ink)' }}>
-                  Passar a carteira antes de desativar
-                </div>
-                <div style={{ fontSize: 12.5, lineHeight: '17px', color: 'var(--ter)', marginTop: 4 }}>
-                  Sem alguém assumindo, {carteira === 1 ? 'ele some' : `os ${carteira} somem`} do mapa de todo mundo.
-                </div>
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginBottom: 5 }}>
-                    Quem assume {leads(carteira)}
-                  </div>
-                  <select
-                    value={destino}
-                    onChange={(e) => setDestino(e.target.value)}
-                    style={campo}
-                  >
-                    <option value="">Escolha quem assume…</option>
-                    {destinos.map((d) => (
-                      <option key={d.id} value={d.idHubspot!}>
-                        {d.nome} · {d.setor ?? 'sem setor'} · {leads(carteiraDe(d))} hoje
-                      </option>
-                    ))}
-                  </select>
-                  <div style={{ fontSize: 11.5, lineHeight: '16px', color: 'var(--ter)', marginTop: 4 }}>
-                    Só vendedores ativos com ID do HubSpot aparecem aqui.
-                  </div>
-                </div>
-              </div>
             ) : (
-              /* 1c — sem carteira o bloco vira explicacao, e nao um campo cinza. */
               <div style={cartao}>
-                <div style={{ fontSize: 14, lineHeight: '20px', fontWeight: 700, color: 'var(--ink)' }}>
-                  Nada a transferir
+                {/* A NOTA DO PAINEL, com o nome da coluna: o efeito que ninguem
+                    ve' acontecer e' exatamente este, e "some da carteira" sem
+                    dizer de onde nao da' pra conferir depois. */}
+                <div style={{ fontSize: 13, lineHeight: '19px', color: 'var(--ter)' }}>
+                  {precisaDestino ? (
+                    <>
+                      {leads(carteira)} {carteira === 1 ? 'aponta' : 'apontam'} para o id do HubSpot
+                      {' '}de {primeiroNome(emFoco.nome)} em <code>clients.vendedor_id_hubspot</code>.
+                      Sem transferir, {carteira === 1 ? 'ele some' : 'somem'} da carteira de todo
+                      mundo — inclusive da rota do dia.
+                    </>
+                  ) : (
+                    <>
+                      Nenhum lead aponta para {primeiroNome(emFoco.nome)} em{' '}
+                      <code>clients.vendedor_id_hubspot</code>, então não há carteira a passar.
+                    </>
+                  )}
                 </div>
-                <div style={{ fontSize: 12.5, lineHeight: '17px', color: 'var(--ter)', marginTop: 4 }}>
-                  {emFoco.nome} não tem leads em mão, então o passo da carteira não existe.
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+                  {/* ---- PASSO 1 · destino ---- */}
+                  <Passo
+                    numero={1}
+                    titulo={
+                      precisaDestino
+                        ? 'Escolher quem fica com a carteira'
+                        : 'Sem carteira a transferir'
+                    }
+                    // Carteira zero: o passo nasce CUMPRIDO. Deixar um campo
+                    // cinza esperando escolha seria pedir uma decisao que nao
+                    // existe.
+                    estado={!precisaDestino || destino ? 'cumprido' : 'atual'}
+                  >
+                    {!precisaDestino ? (
+                      `${emFoco.nome} não tem leads em mão.`
+                    ) : (
+                      <>
+                        <select
+                          value={destino}
+                          onChange={(e) => setDestino(e.target.value)}
+                          style={{ ...campo, marginTop: 6 }}
+                        >
+                          <option value="">Escolha quem assume…</option>
+                          {destinos.map((d) => (
+                            // O SALDO ANTES E DEPOIS na propria opcao: passar
+                            // 128 leads pra quem ja' tem 451 e' uma decisao, e
+                            // sem o "depois" ela vira autocomplete.
+                            <option key={d.id} value={d.idHubspot!}>
+                              {d.nome} · {carteiraDe(d)} hoje → {carteiraDe(d) + carteira} depois
+                            </option>
+                          ))}
+                        </select>
+                        <div style={{ marginTop: 6, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          {destinoEscolhido ? (
+                            <>
+                              <span>
+                                {destinoEscolhido.nome} · {carteiraDe(destinoEscolhido)} hoje →{' '}
+                                {carteiraDe(destinoEscolhido) + carteira} depois
+                              </span>
+                              <Etiqueta tom="ok" texto="Escolhido" />
+                            </>
+                          ) : (
+                            <span>Só vendedores ativos com ID do HubSpot aparecem aqui.</span>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </Passo>
+
+{/* ---- faixa âmbar: entre a carteira e a confirmação (1b) ---- */}
+                  {!feito && precisaDestino && (
+                    <Faixa
+                      tom="aviso"
+                      titulo="A transferência no Supabase não é definitiva."
+                      acao={
+                        <a
+                          href={HUBSPOT_NEGOCIOS}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            color: 'var(--amber-ink)',
+                            fontSize: 12.5,
+                            fontWeight: 700,
+                          }}
+                        >
+                          <IconExternalLink width={16} height={16} fill="var(--amber-ink)" />
+                          Reatribuir no HubSpot
+                        </a>
+                      }
+                    >
+                      Quem manda no dono é o HubSpot: na próxima mudança de etapa de cada lead, o{' '}
+                      <code>hubspot-sync</code> reescreve <code>vendedor_id_hubspot</code> com o owner
+                      de lá. Troque o dono no HubSpot também, senão {carteira === 1 ? 'ele volta' : `os ${carteira} voltam`} para{' '}
+                      {primeiroNome(emFoco.nome)} um a um.
+                    </Faixa>
+                  )}
+
+                  {/* ---- PASSO 2 · o e-mail, DEPOIS do destino ---- */}
+                  <Passo
+                    numero={2}
+                    titulo="Confirmar digitando o e-mail"
+                    estado={emailBate ? 'cumprido' : !precisaDestino || destino ? 'atual' : 'bloqueado'}
+                  >
+                    <div>Digite {emFoco.email} — a lista tem nomes parecidos.</div>
+                    <input
+                      value={confirmacao}
+                      onChange={(e) => setConfirmacao(e.target.value)}
+                      placeholder={emFoco.email}
+                      autoComplete="off"
+                      style={{
+                        ...campo,
+                        marginTop: 6,
+                        border: `1px solid ${emailBate ? 'var(--green)' : 'var(--line-btn)'}`,
+                      }}
+                    />
+                  </Passo>
+
+                  {/* ---- PASSO 3 · encerrar ---- */}
+                  <Passo
+                    numero={3}
+                    titulo="Encerrar acesso"
+                    estado={podeDesativar ? 'atual' : 'bloqueado'}
+                    acao={
+                      <Acao
+                        tamanho="rodape"
+                        primaria={podeDesativar}
+                        desabilitada={!podeDesativar}
+                        onClick={() => void aoDesativar()}
+                      >
+                        {ocupado ? 'Desativando…' : `Encerrar acesso de ${primeiroNome(emFoco.nome)}`}
+                      </Acao>
+                    }
+                  >
+                    {podeDesativar ? 'Irreversível por esta tela.' : oQueFaltaParaEncerrar()}
+                  </Passo>
+                </div>
+
+                <div style={{ height: 1, background: 'var(--line-soft)', margin: '14px 0' }} />
+                <div style={rotuloFato}>O que vai acontecer</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                  {precisaDestino && (
+                    <Consequencia
+                      texto={`${leads(carteira)} ${carteira === 1 ? 'passa' : 'passam'} para ${
+                        destinoEscolhido?.nome ?? 'quem você escolher'
+                      } no Supabase`}
+                    />
+                  )}
+                  <Consequencia texto={`O login é bloqueado na hora — ${primeiroNome(emFoco.nome)} não entra mais`} />
+                  <Consequencia texto={'O nome ganha "/ DESATIVADO" e sai dos rankings'} />
+                  {precisaDestino ? (
+                    <Consequencia
+                      pendente
+                      texto="Falta trocar o dono no HubSpot: sem isso o dono volta na próxima mudança de etapa de cada lead"
+                    />
+                  ) : (
+                    <Consequencia texto={`Nada a transferir: nenhum lead aponta para ${primeiroNome(emFoco.nome)}`} />
+                  )}
+                </div>
+
+                <div style={{ marginTop: 14 }}>
+                  <button style={botaoSec} onClick={cancelar} disabled={ocupado}>
+                    Cancelar
+                  </button>
                 </div>
               </div>
-            )}
-
-            {/* ---- faixa âmbar: entre a carteira e a confirmação (1b) ---- */}
-            {!feito && precisaDestino && (
-              <Faixa tom="aviso" titulo="A transferência no Supabase não é definitiva." acao>
-                Quem manda no dono é o HubSpot: na próxima mudança de etapa de cada lead, o{' '}
-                <code>hubspot-sync</code> reescreve <code>vendedor_id_hubspot</code> com o owner
-                de lá. Troque o dono no HubSpot também, senão {carteira === 1 ? 'ele volta' : `os ${carteira} voltam`} para{' '}
-                {primeiroNome(emFoco.nome)} um a um.
-              </Faixa>
             )}
 
             {/* ---- 3. confirmação, ou o resultado ---- */}
@@ -621,77 +679,10 @@ export function DesativarAcesso() {
                   </button>
                 </div>
               </>
-            ) : (
-              <div style={cartao}>
-                <div style={{ fontSize: 14, lineHeight: '20px', fontWeight: 700, color: 'var(--ink)' }}>
-                  Confirmar digitando o e-mail
-                </div>
-                <div style={{ fontSize: 12.5, lineHeight: '17px', color: 'var(--ter)', marginTop: 4 }}>
-                  Digite {emFoco.email} — a lista tem nomes parecidos.
-                </div>
-                <input
-                  value={confirmacao}
-                  onChange={(e) => setConfirmacao(e.target.value)}
-                  placeholder={emFoco.email}
-                  autoComplete="off"
-                  style={{
-                    ...campo,
-                    marginTop: 10,
-                    border: `1px solid ${emailBate ? 'var(--green)' : 'var(--line-btn)'}`,
-                  }}
-                />
-
-                <div style={{ height: 1, background: 'var(--line-soft)', margin: '14px 0' }} />
-                <div style={rotuloFato}>O que vai acontecer</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                  {precisaDestino && (
-                    <Passo
-                      texto={`${leads(carteira)} ${carteira === 1 ? 'passa' : 'passam'} para ${
-                        destinos.find((d) => d.idHubspot === destino)?.nome ?? 'quem você escolher'
-                      } no Supabase`}
-                    />
-                  )}
-                  <Passo texto={`O login é bloqueado na hora — ${primeiroNome(emFoco.nome)} não entra mais`} />
-                  <Passo texto={'O nome ganha "/ DESATIVADO" e sai dos rankings'} />
-                  {precisaDestino ? (
-                    <Passo
-                      pendente
-                      texto="Falta trocar o dono no HubSpot: sem isso o dono volta na próxima mudança de etapa de cada lead"
-                    />
-                  ) : (
-                    <Passo texto={`Nada a transferir: nenhum lead aponta para ${primeiroNome(emFoco.nome)}`} />
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 16, flexWrap: 'wrap' }}>
-                  <button
-                    onClick={aoDesativar}
-                    disabled={!podeDesativar}
-                    style={{
-                      ...botaoSec,
-                      background: podeDesativar ? 'var(--red)' : 'var(--panel2)',
-                      color: podeDesativar ? '#fff' : 'var(--muted)',
-                      border: podeDesativar ? 'none' : '1px solid var(--line-btn)',
-                      cursor: podeDesativar ? 'pointer' : 'not-allowed',
-                    }}
-                  >
-                    {ocupado ? 'Desativando…' : `Desativar acesso de ${primeiroNome(emFoco.nome)}`}
-                  </button>
-                  <button style={botaoSec} onClick={cancelar} disabled={ocupado}>
-                    Cancelar
-                  </button>
-                  {!podeDesativar && !ocupado && (
-                    <span style={{ fontSize: 12, lineHeight: '18px', color: 'var(--ter)' }}>
-                      {!emailBate
-                        ? 'O e-mail ainda não bate.'
-                        : 'Escolha quem assume a carteira.'}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
+            ) : null}
           </>
         )}
+      </div>
       </div>
     </div>
   );
