@@ -209,6 +209,7 @@ export function LinhaDePessoa({
   acoes,
   esmaecida = false,
   primeira = false,
+  semAvatar = false,
 }: {
   nome: string;
   sublinha?: ReactNode;
@@ -220,6 +221,10 @@ export function LinhaDePessoa({
   esmaecida?: boolean;
   /** Sem régua no topo quando é a primeira da lista. */
   primeira?: boolean;
+  /** A linha também serve para o que NÃO é pessoa — um compromisso de PDI, por
+   *  exemplo. Ali a inicial não significa nada: "Fa" de "Fazer três demos" só
+   *  ocupa espaço e sugere gente onde não há. */
+  semAvatar?: boolean;
 }) {
   return (
     <div
@@ -238,7 +243,7 @@ export function LinhaDePessoa({
         opacity: esmaecida ? 0.55 : 1,
       }}
     >
-      <Avatar nome={nome} tom={tomDoAvatar} />
+      {!semAvatar && <Avatar nome={nome} tom={tomDoAvatar} />}
 
       <div style={{ flex: '1 1 150px', minWidth: 150 }}>
         <div
@@ -247,9 +252,12 @@ export function LinhaDePessoa({
             fontSize: 13.5,
             lineHeight: '20px',
             color: 'var(--ink)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            // Nome de pessoa cabe numa linha e trunca; texto de compromisso
+            // ("Fazer três demos por semana até o fim do mês") não cabe, e
+            // truncá-lo esconderia justamente o que se vai validar.
+            ...(semAvatar
+              ? {}
+              : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }),
           }}
         >
           {nome}
@@ -260,9 +268,13 @@ export function LinhaDePessoa({
               fontSize: 12,
               lineHeight: '17px',
               color: 'var(--muted)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
+              // Mesma razão do nome: em pessoa a sublinha é métrica e trunca
+              // sem perda; num compromisso ela é o estado ("ela marcou como
+              // feito — falta você olhar"), e cortar em "falta vo…" esconde o
+              // que o botão ao lado vai fazer.
+              ...(semAvatar
+                ? {}
+                : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }),
             }}
           >
             {sublinha}

@@ -22,6 +22,7 @@ import {
   type Semaforo,
 } from '../dados/pessoas';
 import { useVivo } from '../dados/vivo';
+import { Acao, Etiqueta, LinhaDePessoa, type Tom } from '../componentes/idioma';
 import {
   carregarModosDaSemana,
   definirModoDeAgir,
@@ -55,92 +56,76 @@ const CORES: Record<Semaforo, { cor: string; fundo: string; rotulo: string }> = 
   nao_medido: { cor: 'var(--muted)', fundo: 'var(--panel2)', rotulo: 'Não medido' },
 };
 
+/** Cada semaforo no tom do idioma comum (quadro 1f). Os ROTULOS continuam
+ *  saindo de `CORES` — sao eles que a tela mostra ha' meses, e trocar a palavra
+ *  mudaria o que o gestor aprendeu a procurar. */
+const TOM_DO_SEMAFORO: Record<Semaforo, Tom> = {
+  critico: 'erro',
+  atencao: 'aviso',
+  ok: 'ok',
+  nao_medido: 'neutro',
+};
+
 /** Numero que pode nao ter sido medido. `null` nunca vira 0 na tela. */
 const med = (n: number | null, sufixo = '') => (n == null ? '—' : `${n}${sufixo}`);
 
-function Metrica({ r, v, tom }: { r: string; v: string; tom?: string }) {
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700 }}>{r}</div>
-      <div style={{ fontSize: 17, fontWeight: 800, color: tom ?? 'var(--ink)' }}>{v}</div>
-    </div>
-  );
-}
-
-function Cartao({ p, aoAbrir }: { p: Pessoa; aoAbrir: () => void }) {
-  const c = CORES[p.semaforo];
-  return (
-    <button
-      onClick={aoAbrir}
-      style={{
-        display: 'block',
-        width: '100%',
-        textAlign: 'left',
-        background: p.semaforo === 'critico' ? c.fundo : 'var(--panel)',
-        border: `1px solid ${p.semaforo === 'critico' ? 'var(--red)' : 'var(--line)'}`,
-        borderRadius: 10,
-        padding: '13px 15px',
-        font: 'inherit',
-        color: 'inherit',
-        cursor: 'pointer',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
-        <span style={{ fontWeight: 800, fontSize: 15 }}>{p.nome}</span>
-        <span
-          style={{
-            color: c.cor,
-            background: p.semaforo === 'critico' ? 'transparent' : c.fundo,
-            borderRadius: 999,
-            padding: p.semaforo === 'critico' ? 0 : '2px 9px',
-            fontSize: 11,
-            fontWeight: 800,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {c.rotulo} →
-        </span>
-      </div>
-
-      <div style={{ display: 'flex', gap: 20, marginTop: 10 }}>
-        <Metrica r="Carteira" v={med(p.carteira)} />
-        <Metrica
-          r="Travados"
-          v={p.travadosPct != null ? `${p.travados} · ${p.travadosPct}%` : '–'}
-          tom={p.semaforo === 'ok' ? undefined : c.cor}
-        />
-        <Metrica
-          r="Visitas"
-          v={p.metaNaJanela != null ? `${p.visitasNaJanela}/${p.metaNaJanela}` : String(p.visitasNaJanela)}
-          tom={p.aderencia != null && p.aderencia < 70 ? 'var(--amber-ink)' : undefined}
-        />
-        <Metrica
-          r="Fechou"
-          v={med(p.fechadosNoMes)}
-          tom={p.fechadosNoMes ? 'var(--green)' : undefined}
-        />
-      </div>
-
-      {/* O motivo vem ANTES do gargalo: sem medicao nao ha' gargalo pra
-          mostrar, e um traco sem explicacao vira "o sistema esta' quebrado"
-          em vez de "falta um cadastro". */}
-      {p.semOwner ? (
-        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 9 }}>
-          {p.motivoSemMedicao}
-        </div>
-      ) : p.gargalo && p.gargalo.travados > 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 9 }}>
-          Gargalo em <strong style={{ color: 'var(--ink)' }}>{p.gargalo.etapa}</strong> ·{' '}
-          {p.gargalo.travados} de {p.gargalo.total} passaram do prazo
-        </div>
-      ) : p.destaque ? (
-        <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 9 }}>✓ {p.destaque}</div>
-      ) : null}
-    </button>
-  );
-}
-
+// O `Metrica` saiu com o cartao de 330px: as quatro metricas em destaque
+// viraram a sublinha da linha de pessoa.
 const KB = 1024;
+
+/** A linha de uma pessoa na lista.
+ *
+ *  Era um cartao de 330px em grid, com quatro metricas em destaque e nenhuma
+ *  acao visivel — o gestor lia os numeros e nao sabia o que fazer com eles. As
+ *  quatro metricas viraram a SUBLINHA, e a acao passou a ter nome.
+ *
+ *  A ORDEM DA SUBLINHA e' fixa e vem do handoff: carteira, travados, %, e por
+ *  fim o gargalo (ou o destaque, ou o motivo de nao ter medicao). As tres
+ *  primeiras dizem o tamanho do problema; a ultima diz onde ele esta'. */
+function LinhaDaPessoa({ p, aoAbrir, primeira }: { p: Pessoa; aoAbrir: () => void; primeira: boolean }) {
+  const c = CORES[p.semaforo];
+  const semMedicao = p.semaforo === 'nao_medido';
+
+  // `med()` guarda a lei zero: ausencia de dado vira '—', nunca 0. Dizer "0 em
+  // carteira" na tela que o gestor abre pra conversar com a pessoa seria uma
+  // acusacao feita por falta de dado.
+  const sublinha = semMedicao
+    ? p.motivoSemMedicao ?? 'sem medição'
+    : [
+        `${med(p.carteira)} em carteira`,
+        `${med(p.travados)} travados`,
+        med(p.travadosPct, '%'),
+        p.gargalo
+          ? `Gargalo em ${p.gargalo.etapa}: ${p.gargalo.travados} de ${p.gargalo.total} passaram do prazo`
+          : p.destaque ?? null,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+
+  return (
+    <LinhaDePessoa
+      primeira={primeira}
+      nome={p.nome}
+      tomDoAvatar={p.semaforo === 'critico' ? 'erro' : 'neutro'}
+      sublinha={sublinha}
+      etiquetas={<Etiqueta tom={TOM_DO_SEMAFORO[p.semaforo]} texto={c.rotulo} />}
+      acoes={
+        semMedicao ? (
+          // Sem ID do HubSpot nao ha' o que discutir no dossie': os numeros nao
+          // existem. A acao leva pro lugar onde o cadastro se conserta.
+          <Acao href="#/acessos" titulo="Perfil sem ID do HubSpot">
+            Ver em Acessos
+          </Acao>
+        ) : (
+          <Acao primaria={p.semaforo === 'critico'} onClick={aoAbrir}>
+            Abrir dossiê
+          </Acao>
+        )
+      }
+    />
+  );
+}
+
 function tamanho(bytes: number | null): string {
   if (!bytes) return '';
   return bytes >= KB * KB ? `${(bytes / KB / KB).toFixed(1)} MB` : `${Math.round(bytes / KB)} KB`;
@@ -363,6 +348,8 @@ export function Pessoas() {
   const { dados, erro, desatualizado, recarregar } = useVivo(carregarPessoas, {
     pausado: aberta != null,
   });
+  // "Em dia" nasce recolhido: sao 9 de 17 e nao pedem acao nenhuma.
+  const [verEmDia, setVerEmDia] = useState(false);
 
   // O que o gestor decidiu nesta semana. Fica FORA do `useVivo` de proposito:
   // `modos_de_agir` pode nem existir ainda (as migrations 0066-0073 sao
@@ -543,7 +530,9 @@ export function Pessoas() {
         style={{
           background: 'var(--dark)',
           color: 'var(--dark-ink)',
-          borderRadius: 14,
+          // Raio 8 em tudo (quadro 1f). Era 14 aqui — a Pessoas era a unica
+          // tela do cockpit com raio proprio. Os chips de modo continuam 16.
+          borderRadius: 8,
           padding: '20px 22px',
           marginBottom: 18,
         }}
@@ -570,49 +559,71 @@ export function Pessoas() {
       </div>
 
       {criticos.length > 0 && (
-        <section style={{ marginBottom: 18 }}>
-          <h2 className="titulo-secao">Conversar primeiro</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 12 }}>
-            {criticos.map((p) => (
-              <Cartao key={p.perfilId} p={p} aoAbrir={() => setAberta(p)} />
+        <section className="cartao" style={{ marginBottom: 18 }}>
+          <h2 className="titulo-secao" style={{ marginTop: 0 }}>
+            Conversar primeiro · {criticos.length}
+          </h2>
+          {/* A nota que explica a ORDEM. Sem ela, uma lista de gente ordenada
+              de cima pra baixo le' como ranking de desempenho — e esta tela
+              ordena por urgencia de conversa, que e' quase o contrario. */}
+          <div style={{ fontSize: 12.5, lineHeight: '17px', color: 'var(--ter)', marginTop: 6 }}>
+            Ordenada por urgência de conversa, nunca por desempenho. A ação à direita diz o que
+            fazer com a pessoa, não o quanto ela vendeu.
+          </div>
+          <div style={{ marginTop: 8 }}>
+            {criticos.map((p, i) => (
+              <LinhaDaPessoa key={p.perfilId} p={p} aoAbrir={() => setAberta(p)} primeira={i === 0} />
             ))}
           </div>
         </section>
       )}
 
       {resto.length > 0 && (
-        <section style={{ marginBottom: 18 }}>
-          <h2 className="titulo-secao">Acompanhar</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))', gap: 12 }}>
-            {resto.map((p) => (
-              <Cartao key={p.perfilId} p={p} aoAbrir={() => setAberta(p)} />
+        <section className="cartao" style={{ marginBottom: 18 }}>
+          <h2 className="titulo-secao" style={{ marginTop: 0 }}>
+            Acompanhar · {resto.length}
+          </h2>
+          <div style={{ marginTop: 8 }}>
+            {resto.map((p, i) => (
+              <LinhaDaPessoa key={p.perfilId} p={p} aoAbrir={() => setAberta(p)} primeira={i === 0} />
             ))}
           </div>
         </section>
       )}
 
       {emDia.length > 0 && (
-        <section className="cartao">
-          <h2 className="titulo-secao">Em dia · {emDia.length}</h2>
-          {emDia.map((p) => (
-            <div
-              key={p.perfilId}
-              onClick={() => setAberta(p)}
+        <section className="cartao" style={{ marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+            <h2 className="titulo-secao" style={{ marginTop: 0 }}>
+              Em dia · {emDia.length}
+            </h2>
+            {/* RECOLHIDO POR PADRAO: sao a maioria e nao pedem nada. Abertos,
+                empurram pra fora da tela justamente quem pede. */}
+            <button
+              type="button"
+              onClick={() => setVerEmDia((v) => !v)}
               style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: 12,
-                padding: '8px 0',
-                borderTop: '1px solid var(--line-soft)',
+                border: '1px solid var(--line-btn)',
+                background: 'var(--panel2)',
+                color: 'var(--ink)',
+                borderRadius: 8,
+                padding: '5px 11px',
+                font: 'inherit',
+                fontSize: 12,
+                fontWeight: 700,
                 cursor: 'pointer',
               }}
             >
-              <span style={{ fontWeight: 700 }}>{p.nome}</span>
-              <span style={{ fontSize: 12, color: 'var(--green)' }}>
-                {p.destaque ?? (p.carteira == null ? 'sem medição' : `${p.carteira} em carteira`)}
-              </span>
+              {verEmDia ? 'Recolher' : 'Mostrar'}
+            </button>
+          </div>
+          {verEmDia && (
+            <div style={{ marginTop: 8 }}>
+              {emDia.map((p, i) => (
+                <LinhaDaPessoa key={p.perfilId} p={p} aoAbrir={() => setAberta(p)} primeira={i === 0} />
+              ))}
             </div>
-          ))}
+          )}
         </section>
       )}
 
@@ -705,8 +716,18 @@ export function Pessoas() {
                 para marcar por ela, e isso é garantido no banco: a função
                 `pdi_marcar_feito` filtra por `seller_id = auth.uid()`. */}
             <div style={{ marginBottom: 18 }}>
+              {/* O TITULO CONTA O QUE ESPERA. Sem isso o gestor so' descobre
+                  que ha' algo pra validar depois de rolar a secao inteira — e
+                  compromisso marcado como feito que ninguem olha ensina a
+                  pessoa a parar de marcar. O sufixo some quando nao ha' nenhum.
+                  Este numero SO' existe aqui, dentro do dossie', porque o PDI e'
+                  carregado por pessoa; na lista ele nao existe — ver a nota da
+                  fase 1 no commit. */}
               <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted)', marginBottom: 6 }}>
                 Plano de desenvolvimento
+                {pdi && !('indisponivel' in pdi) && pdi.compromissos.some((c) => c.estado === 'feito')
+                  ? ` · ${pdi.compromissos.filter((c) => c.estado === 'feito').length} esperando você`
+                  : ''}
               </div>
 
               {carregandoPdi ? (
@@ -776,86 +797,77 @@ export function Pessoas() {
                       O plano existe, mas está sem compromissos.
                     </div>
                   )}
-                  {pdi.compromissos.map((c) => (
-                    <div
+                  {pdi.compromissos.map((c, idx) => (
+                    <LinhaDePessoa
                       key={c.id}
-                      style={{
-                        borderLeft: `3px solid ${
-                          c.estado === 'validado'
-                            ? 'var(--green)'
-                            : c.estado === 'devolvido'
-                              ? 'var(--red)'
-                              : c.estado === 'feito'
-                                ? 'var(--amber)'
-                                : 'var(--line)'
-                        }`,
-                        paddingLeft: 10,
-                        marginBottom: 10,
-                      }}
-                    >
-                      <div style={{ fontSize: 14, color: 'var(--ink)' }}>{c.texto}</div>
-                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                        {c.estado === 'aberto'
+                      primeira={idx === 0}
+                      semAvatar
+                      nome={c.texto}
+                      sublinha={
+                        c.estado === 'aberto'
                           ? 'ela ainda não marcou'
                           : c.estado === 'feito'
                             ? 'ela marcou como feito — falta você olhar'
                             : c.estado === 'validado'
                               ? 'validado por você'
-                              : `devolvido: ${c.devolvidoMotivo}`}
-                      </div>
-                      {/* Só faz sentido julgar o que ela marcou. Validar algo
-                          que ninguém fez seria dar por cumprido no escuro. */}
-                      {c.estado === 'feito' && (
-                        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                          <button
-                            onClick={async () => {
-                              await validarCompromisso(c.id);
-                              await relerPdi(aberta.perfilId);
-                            }}
-                            style={{
-                              border: '1px solid var(--line-btn)',
-                              background: 'transparent',
-                              color: 'var(--ink)',
-                              borderRadius: 14,
-                              padding: '4px 10px',
-                              font: 'inherit',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Validar
-                          </button>
-                          <button
-                            onClick={async () => {
-                              const motivo = window.prompt(
-                                'O que precisa ser refeito? (devolver sem motivo não ajuda)',
-                              );
-                              if (motivo == null) return;
-                              const r = await devolverCompromisso(c.id, motivo);
-                              if (!r.ok) {
-                                setAviso(r.erro ?? 'Não consegui devolver.');
-                                return;
-                              }
-                              await relerPdi(aberta.perfilId);
-                            }}
-                            style={{
-                              border: '1px solid var(--red)',
-                              background: 'transparent',
-                              color: 'var(--red)',
-                              borderRadius: 14,
-                              padding: '4px 10px',
-                              font: 'inherit',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Devolver
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                              : `devolvido: ${c.devolvidoMotivo}`
+                      }
+                      etiquetas={
+                        <Etiqueta
+                          tom={
+                            c.estado === 'feito'
+                              ? 'aviso'
+                              : c.estado === 'validado'
+                                ? 'ok'
+                                : c.estado === 'devolvido'
+                                  ? 'erro'
+                                  : 'neutro'
+                          }
+                          texto={
+                            c.estado === 'feito'
+                              ? 'Feito'
+                              : c.estado === 'validado'
+                                ? 'Validado'
+                                : c.estado === 'devolvido'
+                                  ? 'Devolvido'
+                                  : 'Aberto'
+                          }
+                        />
+                      }
+                      acoes={
+                        /* So' faz sentido julgar o que ela marcou. Validar algo
+                           que ninguem fez seria dar por cumprido no escuro. */
+                        c.estado === 'feito' ? (
+                          <>
+                            <Acao
+                              primaria
+                              onClick={async () => {
+                                await validarCompromisso(c.id);
+                                await relerPdi(aberta.perfilId);
+                              }}
+                            >
+                              Validar
+                            </Acao>
+                            <Acao
+                              onClick={async () => {
+                                const motivo = window.prompt(
+                                  'O que precisa ser refeito? (devolver sem motivo não ajuda)',
+                                );
+                                if (motivo == null) return;
+                                const r = await devolverCompromisso(c.id, motivo);
+                                if (!r.ok) {
+                                  setAviso(r.erro ?? 'Não consegui devolver.');
+                                  return;
+                                }
+                                await relerPdi(aberta.perfilId);
+                              }}
+                            >
+                              Devolver
+                            </Acao>
+                          </>
+                        ) : undefined
+                      }
+                    />
                   ))}
                 </>
               )}
