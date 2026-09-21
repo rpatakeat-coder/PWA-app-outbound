@@ -4489,6 +4489,17 @@ function MainApp() {
     }
   })();
 
+  // O "Gestor" do app de campo deixou de abrir uma tela daqui: ele LEVA pro
+  // cockpit, em /gestao. Os dois produtos dividem a mesma origem e a mesma
+  // sessao do Supabase, entao e' navegacao normal — nao ha' login de novo.
+  //
+  // Por que nao duas telas: a do app era um painel de gestao dentro de um app
+  // de rua, e o cockpit responde as mesmas perguntas melhor e numa tela que
+  // cabe. Manter as duas garantia que uma das duas ficaria errada.
+  const irParaOCockpit = () => {
+    window.location.href = '/gestao';
+  };
+
   const itensNavWeb: Array<{ aba: AppTab; rotulo: string; Icone: typeof IconLocation; badge?: number; visivel: boolean }> = [
     { aba: 'map', rotulo: 'Mapa', Icone: IconLocation, visivel: true },
     { aba: 'list', rotulo: 'Lista', Icone: IconSquareMenu, visivel: true },
@@ -4544,7 +4555,7 @@ function MainApp() {
               accessibilityLabel={item.rotulo}
               style={[styles.sbItem, ativo && styles.sbItemAtivo]}
               {...ds(ativo ? { trans: '1' } : { trans: '1', hover: 'surface2' })}
-              onPress={() => setTab(item.aba)}
+              onPress={() => (item.aba === 'gestor' ? irParaOCockpit() : setTab(item.aba))}
             >
               <View style={styles.sbItemIcone}>
                 <item.Icone width={24} height={24} fill={ativo ? iconColors.tintRedText : iconColors.muted} />
@@ -5001,7 +5012,10 @@ function MainApp() {
           accessibilityRole="button"
           accessibilityLabel="Vendedores sem ID do HubSpot"
           style={styles.avisoTopo}
-          onPress={() => irParaTelaDePerfil('gestor')}
+          // Vai direto pra aba que conserta: Acessos marca quem esta' sem ID.
+          onPress={() => {
+            window.location.href = '/gestao/#/acessos';
+          }}
         >
           <IconWarning width={20} height={20} fill={iconColors.tintAmberText} />
           <Text style={styles.avisoTopoTexto} numberOfLines={2}>
@@ -5448,7 +5462,18 @@ function MainApp() {
             // ate' aqui nada chamava setTab('gestor') / setTab('meu') no
             // celular, e as duas telas do M6 eram inalcancaveis.
             canViewGestor
-              ? { chave: 'gestor', Icone: IconBarGraph, rotulo: 'Painel do gestor', aoTocar: () => irParaTelaDePerfil('gestor') }
+              ? {
+                  chave: 'gestor',
+                  Icone: IconBarGraph,
+                  rotulo: 'Painel do gestor',
+                  // Sem `setPerfilAberto(false)` de proposito: o Painel
+                  // empilha um estado no history ao abrir e, ao fechar, o
+                  // cleanup chama `history.back()` (Painel.tsx). Esse back e'
+                  // navegacao same-document e ABORTA a ida pro /gestao que
+                  // acabou de comecar — o menu fechava e ficava tudo como
+                  // estava. Quem desmonta o painel aqui e' o unload.
+                  aoTocar: irParaOCockpit,
+                }
               : null,
             // Escondido pro viewer, que o guard de papel ja' redireciona.
             !isViewer
