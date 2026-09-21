@@ -48,6 +48,13 @@ Dois produtos num repositório, mesmo domínio, mesma sessão Supabase:
 - **Datas: sempre Brasília** (`diaBRT`). `toISOString().slice(0,10)` vira o
   dia às 21h. Helpers testados em `gestao/src/dados/datas.ts`.
 - **FlatList não muda `numColumns` em voo** — troque a `key`.
+- **`Painel` aberto cancela navegação pra fora.** Ele empilha um estado no
+  history ao abrir e chama `history.back()` no cleanup ao fechar
+  (`src/components/Painel.tsx`). Esse `back()` é navegação same-document e
+  **aborta** um `window.location.href` que acabou de começar. Item de menu que
+  leva pra fora (ex.: "Painel do gestor" → `/gestao`) **não** deve fechar o
+  painel antes: quem o desmonta é o unload. Sintoma: o menu fecha, a URL volta
+  pro que era e nada acontece — parece que o `onPress` não rodou.
 - **Nunca envolver `TextInput` em Touchable/Pressable** (inclusive o padrão
   nativo `TouchableWithoutFeedback onPress={Keyboard.dismiss}` em volta de
   formulário). Em navegador touch o wrapper vira responder, cancela o click
