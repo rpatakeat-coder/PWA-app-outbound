@@ -1,4 +1,4 @@
-// Documentação: como o sistema funciona, por escrito.
+// Documentação: como o sistema funciona, por escrito — e um chat para perguntar.
 //
 // POR QUE ESTA TELA EXISTE
 // O funcionamento estava espalhado entre o código, os comentários das Edge
@@ -12,14 +12,29 @@
 // próxima pessoa que mudar a regra saiba que tem um texto aqui para corrigir.
 //
 // Documentação que envelhece em silêncio é pior que documentação nenhuma:
-// ela dá confiança errada. Por isso o aviso de revisão no topo é literal, e
-// não decorativo.
+// ela dá confiança errada. É o motivo das DUAS defesas desta tela:
+//
+//   1. O que é CONFIGURAÇÃO (status que existem, quem vê o quê, prazo por
+//      etapa, contagens) não é escrito aqui — é LIDO do banco a cada abertura.
+//      Essas partes se atualizam sozinhas porque nunca foram texto.
+//
+//   2. O que é NARRATIVA continua escrito, mas as frases verificáveis passam
+//      por uma conferência contra o banco ao abrir. Divergiu, aparece na cara.
+//      Ver `src/dados/documentacao.ts`.
+//
+// O CHAT responde ancorado nas duas fontes — o texto desta página e a
+// configuração lida agora — e é instruído a dizer "não sei" em vez de
+// preencher lacuna. Um chat de documentação que inventa é pior que nenhum: a
+// pessoa confia, age, e descobre depois.
 //
 // SÓ GESTOR VÊ, e isso não precisa de código aqui: o cockpit inteiro já é
 // gestor-only — o `App.tsx` devolve "Este painel é da gestão" para quem não
 // tem `profiles.role = 'gestor'` antes de renderizar aba nenhuma. Repetir a
 // checagem nesta tela daria a impressão falsa de que as outras não têm.
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { supabase } from '../supabase';
+import { conferir, fatosEmTexto, type FatosVivos, type Verificacao } from '../dados/documentacao';
+import { carregarFatosVivos } from '../dados/documentacaoVivo';
 
 /** Data da última conferência do texto contra o código. Quem alterar uma regra
  *  descrita aqui atualiza esta data — é o que separa "documentação" de
@@ -62,7 +77,27 @@ function Tabela({ cabecalho, linhas }: { cabecalho: string[]; linhas: ReactNode[
   );
 }
 
-const SECOES: Secao[] = [
+/** As seções, montadas com os fatos vivos quando eles chegaram.
+ *
+ *  É função e não constante porque as partes de CONFIGURAÇÃO são lidas do
+ *  banco: status que existem, quem enxerga o quê, prazo por etapa. Enquanto
+ *  `fatos` é null a seção mostra "lendo…" em vez de um valor escrito à mão —
+ *  um número antigo com cara de atual é exatamente o que esta página existe
+ *  para evitar. */
+/** `sector_visibility` vem como uma linha por par (setor, status). A tela quer
+ *  uma linha por SETOR — é como a pergunta é feita: "o que o setor Fulano
+ *  enxerga?", e não "quem enxerga churn?". */
+function agruparVisibilidade(fatos: FatosVivos): { setor: string; statuses: string[] }[] {
+  const mapa = new Map<string, string[]>();
+  for (const v of fatos.visibilidade) {
+    mapa.set(v.setor, [...(mapa.get(v.setor) ?? []), v.status]);
+  }
+  return [...mapa.entries()]
+    .map(([setor, statuses]) => ({ setor, statuses: statuses.sort() }))
+    .sort((a, b) => a.setor.localeCompare(b.setor, 'pt-BR'));
+}
+
+const montarSecoes = (fatos: FatosVivos | null): Secao[] => [
   // -------------------------------------------------------------------------
   {
     id: 'visao-geral',
@@ -258,22 +293,49 @@ const SECOES: Secao[] = [
 
         <h4>2. O setor corta por status</h4>
         <p>
-          Cada setor enxerga apenas os status liberados para ele, e{' '}
-          <strong>só Outbound e RPA enxergam <code>lead</code></strong>. Quem está em outro setor
-          abre o mapa e vê pouca coisa — não porque falta permissão, mas porque o status daqueles
-          clientes não está liberado para o setor dele.
+          Cada setor enxerga apenas os status liberados para ele. Quem está num setor sem o status{' '}
+          <code>lead</code> abre o mapa e vê pouca coisa — não porque falta permissão, mas porque
+          aqueles clientes não estão liberados para o setor dele.
         </p>
         <p>
           <strong>Sintoma clássico:</strong> a tela diz “não tem dado”, e não “sem permissão”. Se
           alguém reclamar que o mapa está vazio, o setor é a primeira coisa a conferir.
         </p>
+        <p className="doc__vivo-rotulo">
+          Lido do banco agora — esta tabela não é texto, é a configuração de verdade:
+        </p>
+        {fatos ? (
+          <Tabela
+            cabecalho={['Setor', 'Status que enxerga']}
+            linhas={agruparVisibilidade(fatos).map((l) => [
+              <strong>{l.setor}</strong>,
+              l.statuses.join(', ') || '—',
+            ])}
+          />
+        ) : (
+          <p className="doc__lendo">Lendo a configuração…</p>
+        )}
 
         <h4>Os status que existem de verdade</h4>
+        {fatos ? (
+          <Tabela
+            cabecalho={['Status', 'Nome na tela', 'Quantos leads']}
+            linhas={fatos.statuses
+              .filter((st) => st.ativo)
+              .map((st) => [
+                <code>{st.slug}</code>,
+                st.label,
+                (fatos.contagemPorStatus.find((c) => c.status === st.slug)?.total ?? 0)
+                  .toLocaleString('pt-BR'),
+              ])}
+          />
+        ) : (
+          <p className="doc__lendo">Lendo a configuração…</p>
+        )}
         <p>
-          <code>lead</code>, <code>cliente</code>, <code>churn</code> e <code>ganho_fs</code>. Um
-          cliente fechado é <code>status = 'cliente'</code> — são quase 2.900 deles, contra 2
-          registros com data de ganho preenchida. Ou seja: <strong>para contar fechamento, o
-          status é a fonte confiável</strong>, não a data.
+          Um cliente fechado é <code>status = 'cliente'</code>. Para contar fechamento,{' '}
+          <strong>o status é a fonte confiável</strong> — a data de ganho só existe nos negócios que
+          passaram pelo funil do app depois que esse carimbo começou a ser gravado.
         </p>
         <Fonte>
           Tabela <code>sector_visibility</code> no banco; o recorte por área em{' '}
@@ -416,6 +478,28 @@ const SECOES: Secao[] = [
           que o vendedor concluiu ou dispensou <strong>não volta</strong> naquele mesmo episódio da
           etapa.
         </p>
+        <p className="doc__vivo-rotulo">
+          Os prazos são configuráveis por etapa. Lido do banco agora:
+        </p>
+        {fatos ? (
+          fatos.slas.length === 0 ? (
+            <p className="doc__lendo">
+              Nenhum prazo configurado — sem isso o motor não gera tarefa de SLA nenhuma.
+            </p>
+          ) : (
+            <Tabela
+              cabecalho={['Etapa', 'Prazo', 'Tarefa que nasce', 'Ativo']}
+              linhas={fatos.slas.map((sla) => [
+                sla.etapa,
+                sla.dias == null ? '—' : `${sla.dias} dias úteis`,
+                sla.tarefa ?? '—',
+                sla.ativo ? 'sim' : 'não',
+              ])}
+            />
+          )
+        ) : (
+          <p className="doc__lendo">Lendo a configuração…</p>
+        )}
 
         <h4>Fila 2 — tarefas que a gestão põe no HubSpot</h4>
         <p>
@@ -562,6 +646,20 @@ const SECOES: Secao[] = [
           pessoa não recebe lead nem tarefa, e a conta parece normal por meses — o problema só
           aparece pela reclamação. A aba <strong>Acessos</strong> marca quem está nessa situação.
         </p>
+        {fatos && !fatos.erro && (
+          <p className={fatos.semIdHubspot > 0 ? 'doc__alerta' : 'doc__vivo-rotulo'}>
+            {fatos.semIdHubspot > 0 ? (
+              <>
+                <strong>Agora:</strong> {fatos.semIdHubspot} de {fatos.pessoasAtivas} pessoas ativas
+                estão sem ID do HubSpot. Elas não recebem lead nem tarefa.
+              </>
+            ) : (
+              <>
+                Agora: todas as {fatos.pessoasAtivas} pessoas ativas têm ID do HubSpot.
+              </>
+            )}
+          </p>
+        )}
         <p>
           Desativar tem duas partes: <strong>revogar o acesso</strong> e{' '}
           <strong>decidir quem fica com a carteira</strong>. Vendedor desativado recebe o sufixo{' '}
@@ -632,10 +730,37 @@ const SECOES: Secao[] = [
   },
 ];
 
+type Mensagem = { papel: 'usuario' | 'assistente'; texto: string };
+
+const SUGESTOES = [
+  'Por que um vendedor não está vendo os leads no mapa?',
+  'De onde vêm os leads que aparecem no app?',
+  'Por que alguém não recebe tarefa nenhuma?',
+  'O que acontece quando o vendedor faz check-in?',
+];
+
 export function Documentacao() {
   // Índice fixo no topo em vez de sanfona: a pessoa que abre esta aba quase
   // sempre tem UMA pergunta, e rolar procurando o título é pior que clicar.
-  const [ativa, setAtiva] = useState<string>(SECOES[0].id);
+  const [ativa, setAtiva] = useState<string>('visao-geral');
+  const [fatos, setFatos] = useState<FatosVivos | null>(null);
+
+  // A configuração é lida a cada abertura da aba. Não há cache de propósito:
+  // esta página existe para dizer o que vale AGORA, e um valor de dez minutos
+  // atrás com cara de atual é o defeito que ela deveria evitar.
+  useEffect(() => {
+    let cancelado = false;
+    void carregarFatosVivos().then((f) => {
+      if (!cancelado) setFatos(f);
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
+  const secoes = montarSecoes(fatos);
+  const verificacoes: Verificacao[] = fatos ? conferir(fatos) : [];
+  const divergiu = verificacoes.filter((v) => v.situacao === 'divergiu');
 
   const irPara = (id: string) => {
     setAtiva(id);
@@ -650,14 +775,17 @@ export function Documentacao() {
           regra vive, para quem quiser conferir no código.
         </p>
         <p className="doc__revisao">
-          Última conferência contra o código: <strong>{REVISADO_EM}</strong>. Mudou uma regra
-          descrita aqui? Corrija o texto junto — documentação que envelhece em silêncio dá confiança
-          errada.
+          O texto foi conferido contra o código em <strong>{REVISADO_EM}</strong>. As tabelas de
+          configuração e os números vêm do banco a cada abertura — esses não envelhecem.
         </p>
       </div>
 
+      <ChatDaDocumentacao fatos={fatos} />
+
+      <Conferencia verificacoes={verificacoes} divergiu={divergiu.length} fatos={fatos} />
+
       <nav className="doc__indice" aria-label="Seções da documentação">
-        {SECOES.map((s) => (
+        {secoes.map((s) => (
           <button
             key={s.id}
             type="button"
@@ -669,13 +797,197 @@ export function Documentacao() {
         ))}
       </nav>
 
-      {SECOES.map((s) => (
-        <section key={s.id} id={`doc-${s.id}`} className="cartao doc__secao">
-          <h3 className="doc__titulo">{s.titulo}</h3>
-          <p className="doc__pergunta">{s.pergunta}</p>
-          <div className="doc__conteudo">{s.conteudo}</div>
-        </section>
-      ))}
+      {/* `id` no container: é daqui que o chat tira o texto que manda ao
+          modelo. Ler o que está NA TELA, em vez de manter uma segunda cópia do
+          texto para a IA, é o que impede os dois de divergirem. */}
+      <div id="doc-texto">
+        {secoes.map((s) => (
+          <section key={s.id} id={`doc-${s.id}`} className="cartao doc__secao">
+            <h3 className="doc__titulo">{s.titulo}</h3>
+            <p className="doc__pergunta">{s.pergunta}</p>
+            <div className="doc__conteudo">{s.conteudo}</div>
+          </section>
+        ))}
+      </div>
     </div>
   );
+}
+
+/** O resultado da conferência das frases verificáveis contra o banco. */
+function Conferencia({
+  verificacoes,
+  divergiu,
+  fatos,
+}: {
+  verificacoes: Verificacao[];
+  divergiu: number;
+  fatos: FatosVivos | null;
+}) {
+  const [aberto, setAberto] = useState(false);
+  // Divergência não se esconde atrás de clique: ela abre sozinha. O resto fica
+  // recolhido porque "tudo confere" é a resposta esperada, e resposta esperada
+  // não merece espaço na tela.
+  const mostrar = aberto || divergiu > 0;
+
+  if (!fatos) return <div className="cartao doc__conferencia">Conferindo com o banco…</div>;
+
+  return (
+    <div className={`cartao doc__conferencia${divergiu > 0 ? ' doc__conferencia--alerta' : ''}`}>
+      <button type="button" className="doc__conferencia-topo" onClick={() => setAberto((a) => !a)}>
+        <span>
+          {divergiu > 0 ? (
+            <>
+              <strong>{divergiu}</strong> afirmação(ões) desta página não batem com o banco
+            </>
+          ) : (
+            <>As afirmações desta página conferem com o banco</>
+          )}
+        </span>
+        <span className="doc__conferencia-seta">{mostrar ? '▲' : '▼'}</span>
+      </button>
+
+      {mostrar && (
+        <ul className="doc__conferencia-lista">
+          {verificacoes.map((v) => (
+            <li key={v.id} className={`doc__check doc__check--${v.situacao}`}>
+              <span className="doc__check-selo">
+                {v.situacao === 'confere' ? 'confere' : v.situacao === 'divergiu' ? 'divergiu' : 'não medido'}
+              </span>
+              <span>
+                <strong>{v.afirmacao}</strong>
+                <br />
+                {v.detalhe}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** O chat. Ancorado no texto que está na tela e na configuração lida agora. */
+function ChatDaDocumentacao({ fatos }: { fatos: FatosVivos | null }) {
+  const [mensagens, setMensagens] = useState<Mensagem[]>([]);
+  const [rascunho, setRascunho] = useState('');
+  const [pensando, setPensando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const fimRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    fimRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [mensagens, pensando]);
+
+  const perguntar = async (texto: string) => {
+    const pergunta = texto.trim();
+    if (!pergunta || pensando) return;
+    setErro(null);
+    setRascunho('');
+    // O histórico mandado é o de ANTES desta pergunta — ela vai no campo
+    // próprio. Mandar nos dois lugares faria o modelo ver a pergunta duas vezes.
+    const historico = mensagens.slice(-8);
+    setMensagens((m) => [...m, { papel: 'usuario', texto: pergunta }]);
+    setPensando(true);
+    try {
+      // O texto vem do DOM, que é o que a pessoa está lendo. Se um dia o texto
+      // mudar, o chat muda junto sem ninguém lembrar de sincronizar.
+      const documentacao = document.getElementById('doc-texto')?.innerText ?? '';
+      const { data, error } = await supabase.functions.invoke('documentacao-chat', {
+        body: {
+          pergunta,
+          documentacao,
+          configuracao: fatos ? fatosEmTexto(fatos) : '',
+          historico,
+        },
+      });
+      if (error) throw new Error(await mensagemDoErro(error));
+      if (data?.error) throw new Error(data.error);
+      const resposta = String(data?.texto ?? '').trim();
+      if (!resposta) throw new Error('A resposta voltou vazia.');
+      setMensagens((m) => [...m, { papel: 'assistente', texto: resposta }]);
+    } catch (e) {
+      // A pergunta CONTINUA na tela quando falha. Some com ela e a pessoa
+      // digita de novo sem saber se o problema foi o que ela escreveu.
+      setErro((e as Error)?.message ?? 'Não consegui responder agora.');
+    } finally {
+      setPensando(false);
+    }
+  };
+
+  return (
+    <div className="cartao doc__chat">
+      <div className="doc__chat-topo">
+        <h3 className="doc__titulo">Perguntar</h3>
+        <p className="doc__pergunta">
+          Responde com base nesta página e na configuração do banco. Não tem acesso a dados de
+          cliente, e diz quando não sabe.
+        </p>
+      </div>
+
+      {mensagens.length === 0 && !pensando && (
+        <div className="doc__chat-sugestoes">
+          {SUGESTOES.map((sug) => (
+            <button
+              key={sug}
+              type="button"
+              className="doc__chat-sugestao"
+              onClick={() => void perguntar(sug)}
+            >
+              {sug}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {mensagens.length > 0 && (
+        <div className="doc__chat-conversa">
+          {mensagens.map((m, i) => (
+            <div key={i} className={`doc__balao doc__balao--${m.papel}`}>
+              {m.texto}
+            </div>
+          ))}
+          {pensando && <div className="doc__balao doc__balao--assistente doc__balao--pensando">Pensando…</div>}
+          <div ref={fimRef} />
+        </div>
+      )}
+
+      {erro && <p className="doc__chat-erro">{erro}</p>}
+
+      <form
+        className="doc__chat-campo"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void perguntar(rascunho);
+        }}
+      >
+        <input
+          type="text"
+          value={rascunho}
+          onChange={(e) => setRascunho(e.target.value)}
+          placeholder="Como funciona…?"
+          disabled={pensando}
+          aria-label="Sua pergunta"
+        />
+        <button type="submit" disabled={pensando || !rascunho.trim()}>
+          {pensando ? 'Perguntando…' : 'Perguntar'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/** O `functions.invoke` embrulha o corpo do erro; sem abrir, toda falha vira
+ *  "Edge Function returned a non-2xx status code" — que não diz nada a quem
+ *  está lendo, nem a quem for investigar depois. */
+async function mensagemDoErro(error: unknown): Promise<string> {
+  const ctx = (error as { context?: Response })?.context;
+  if (ctx && typeof ctx.json === 'function') {
+    try {
+      const corpo = await ctx.json();
+      if (corpo?.error) return String(corpo.error);
+    } catch {
+      // corpo não era JSON — cai na mensagem crua
+    }
+  }
+  return (error as Error)?.message ?? 'Falha ao chamar o chat.';
 }

@@ -659,3 +659,224 @@ body {
 .doc__tabela tr:last-child td {
   border-bottom: 0;
 }
+
+/* --- Documentação: conferência, fatos vivos e chat ------------------------- */
+
+.doc__vivo-rotulo {
+  font-size: 12.5px !important;
+  color: var(--muted) !important;
+  margin-bottom: 6px !important;
+}
+
+.doc__lendo {
+  font-size: 13px !important;
+  color: var(--muted) !important;
+  font-style: italic;
+}
+
+.doc__alerta {
+  padding: 8px 10px;
+  border-left: 3px solid var(--amber);
+  border-radius: 6px;
+  background: var(--amber-soft);
+  color: var(--amber-ink) !important;
+  font-size: 13px !important;
+}
+
+/* Conferência ------------------------------------------------------------- */
+
+.doc__conferencia {
+  padding: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.doc__conferencia--alerta {
+  border-left: 3px solid var(--amber);
+}
+
+.doc__conferencia-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.doc__conferencia-seta {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.doc__conferencia-lista {
+  margin: 0;
+  padding: 0 16px 14px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.doc__check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  line-height: 19px;
+}
+
+/* O selo é texto, não cor sozinha: quem não distingue verde de âmbar precisa
+   conseguir ler o resultado do mesmo jeito. */
+.doc__check-selo {
+  flex: 0 0 auto;
+  min-width: 78px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: lowercase;
+}
+
+.doc__check--confere .doc__check-selo {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.doc__check--divergiu .doc__check-selo {
+  background: var(--amber-soft);
+  color: var(--amber-ink);
+}
+
+.doc__check--nao-medido .doc__check-selo {
+  background: var(--sunk);
+  color: var(--muted);
+}
+
+/* Chat -------------------------------------------------------------------- */
+
+.doc__chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.doc__chat-topo .doc__pergunta {
+  margin-bottom: 0;
+}
+
+.doc__chat-sugestoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.doc__chat-sugestao {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.doc__chat-sugestao:hover {
+  background: var(--panel2);
+  border-color: var(--red);
+}
+
+.doc__chat-conversa {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* Teto com rolagem: conversa longa não pode empurrar a documentação inteira
+     para fora da tela — ela é o conteúdo principal, o chat é o atalho. */
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.doc__balao {
+  max-width: 88%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 20px;
+  white-space: pre-wrap;
+}
+
+.doc__balao--usuario {
+  align-self: flex-end;
+  background: var(--red-soft);
+  color: var(--ink);
+  border-bottom-right-radius: 4px;
+}
+
+.doc__balao--assistente {
+  align-self: flex-start;
+  background: var(--sunk);
+  color: var(--ink);
+  border-bottom-left-radius: 4px;
+}
+
+.doc__balao--pensando {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.doc__chat-erro {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--red);
+  border-radius: 6px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 13px;
+}
+
+.doc__chat-campo {
+  display: flex;
+  gap: 8px;
+}
+
+.doc__chat-campo input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-family: inherit;
+}
+
+.doc__chat-campo input:focus {
+  outline: none;
+  border-color: var(--red);
+}
+
+.doc__chat-campo button {
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--red);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.doc__chat-campo button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
