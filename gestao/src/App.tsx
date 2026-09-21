@@ -20,10 +20,12 @@ import { Semana } from './telas/Semana';
 import { Rotas } from './telas/Rotas';
 import { Acessos } from './telas/Acessos';
 import { DesativarAcesso } from './telas/DesativarAcesso';
+import { Documentacao } from './telas/Documentacao';
 // Icones oficiais do kit. Named import, um arquivo por icone: o pacote NAO tem
 // export default nem barril em './icons' — o README e o llms.txt do proprio kit
 // erram os dois, e o import default volta undefined.
 // Cuidado com o nome torto: IconArrowFoward, com um 'r' so'.
+import { IconBookOpen } from 'takeat-design-system-ui-kit/icons/IconBookOpen';
 import { IconUserGroup } from 'takeat-design-system-ui-kit/icons/IconUserGroup';
 import { IconCalendarCheck } from 'takeat-design-system-ui-kit/icons/IconCalendarCheck';
 import { IconCalendar } from 'takeat-design-system-ui-kit/icons/IconCalendar';
@@ -93,6 +95,11 @@ const ABAS = [
   // mesma pergunta vista dos dois lados. `teto` 1600 porque sao duas colunas
   // (lista de 420 + painel) e a 1200 o painel apertaria.
   { id: 'desativar-acesso', rotulo: 'Desativar acesso', descricao: 'Quem sai, e quem fica com a carteira?', Icone: IconUserError, teto: 1600 },
+  // Decima e ultima. Fica no fim porque nao e' operacao do dia: e' onde se
+  // recorre quando algo nao bate. `teto` 1200 porque e' leitura corrida — a
+  // propria tela ainda estreita o texto pra 68ch, que e' medida de linha que
+  // se le' sem perder a volta.
+  { id: 'documentacao', rotulo: 'Documentação', descricao: 'Como o sistema funciona?', Icone: IconBookOpen, teto: 1200 },
 ] as const;
 
 type AbaId = (typeof ABAS)[number]['id'];
@@ -313,6 +320,7 @@ export default function App() {
           {aba === 'time' && <Cockpit />}
           {aba === 'acessos' && <Acessos />}
           {aba === 'desativar-acesso' && <DesativarAcesso />}
+          {aba === 'documentacao' && <Documentacao />}
         </div>
       </div>
     </>
