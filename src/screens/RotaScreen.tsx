@@ -1384,9 +1384,12 @@ export function RotaScreen({
       </ScrollView>
       )}
 
-      {/* Os TRES auxiliares que de fato moram nesta tela. RouteConfigCard,
-          RouteHistorySection e DismissedContaAlvoCard, que o M3 lista, nao
-          estao aqui — sao do GestorScreen. Nao foram tocados. */}
+      {/* Os TRES auxiliares que de fato moram nesta tela. RouteConfigCard e
+          DismissedContaAlvoCard, que o M3 lista, nao estao aqui — vivem em
+          Configuracoes → "Area do gestor" (eram do GestorScreen, que saiu
+          quando o botao Gestor passou a levar pro cockpit). O
+          RouteHistorySection saiu junto: a aba Rotas do cockpit responde a
+          mesma coisa, por dia e por vendedor. */}
       <Modal
         visible={configAberta}
         animationType="slide"

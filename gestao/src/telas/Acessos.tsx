@@ -46,7 +46,9 @@
 //   - "Corrigir cadastro" (preencher id_hubspot) -> NAO EXISTE em lugar nenhum
 //   - "Trocar setor"                             -> NAO EXISTE em lugar nenhum
 //   - "Marcar nao vendedor"                      -> existe, mas no APP DE CAMPO
-//     (aba Gestor, cartao "Vendedores & usuarios")
+//     (Configuracoes -> "Area do gestor"). Ate' 21/09/2026 ficava na aba
+//     Gestor do app; a aba saiu quando o botao passou a levar pro cockpit, e
+//     os cartoes que escreviam foram pra Configuracoes.
 //
 // As duas primeiras viraram acao que ABRE A EXPLICACAO do conserto, em vez de
 // botao que promete gravar. Um botao que nao escreve e' pior que nenhum: a
@@ -651,7 +653,7 @@ function DrawerDoConserto({
                 <li>
                   <strong style={{ color: 'var(--ink)' }}>Se saiu do campo:</strong> marque como{' '}
                   <code>nao_vendedor</code>. O alarme some e o ranking se corrige junto. Isso dá para
-                  fazer <strong>no app de campo</strong>, aba Gestor → “Vendedores &amp; usuários”.
+                  fazer <strong>no app de campo</strong>, em Configurações → “Área do gestor”.
                 </li>
               </>
             ) : (
@@ -663,8 +665,8 @@ function DrawerDoConserto({
                 </li>
                 <li>
                   <strong style={{ color: 'var(--ink)' }}>Se não trabalha carteira:</strong> marque
-                  como <code>nao_vendedor</code>, <strong>no app de campo</strong>, aba Gestor →
-                  “Vendedores &amp; usuários”. Cobrar o campo de quem não é de campo é alarme falso
+                  como <code>nao_vendedor</code>, <strong>no app de campo</strong>, em
+                  Configurações → “Área do gestor”. Cobrar o campo de quem não é de campo é alarme falso
                   permanente, que treina a ignorar a faixa inteira.
                 </li>
               </>

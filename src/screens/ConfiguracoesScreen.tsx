@@ -24,6 +24,10 @@ import {
   useIconColors,
 } from '../components/icons';
 import { ds } from './sharedStyles';
+import { RouteConfigCard } from './RouteConfigCard';
+import { SellerClassificationCard } from './SellerClassificationCard';
+import { DismissedContaAlvoCard } from './DismissedContaAlvoCard';
+import { SellerGoalsCard } from './SellerGoalsCard';
 
 // Configuracoes como TELA (prompt 13a/13b do handoff) — antes era o modal da
 // engrenagem (isPasswordModalOpen). Toda a logica veio junto sem mudanca:
@@ -355,11 +359,37 @@ export function ConfiguracoesScreen({
                 <IconUserGroup width={20} height={20} fill={iconColors.muted} />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={[styles.cardLinkTitulo, !layout.ehDesktop && styles.cardLinkTituloMovel]}>Vendedores e usuários</Text>
-                <Text style={styles.hint}>Metas, classificação e atividade por vendedor, no cockpit.</Text>
+                <Text style={[styles.cardLinkTitulo, !layout.ehDesktop && styles.cardLinkTituloMovel]}>Time no cockpit</Text>
+                <Text style={styles.hint}>Quem está travado, quem cumpriu e onde agir hoje.</Text>
               </View>
               <IconExternalLink width={20} height={20} fill={iconColors.muted} />
             </TouchableOpacity>
+            {/* Os quatro ajustes que o cockpit NAO tem. Eles moravam na aba
+                Gestor do app de campo; a aba saiu (o botao passou a levar pro
+                /gestao) e eles vieram pra ca' em vez de sumir — sem eles a
+                unica forma de mudar cada um seria SQL na producao:
+
+                  route_config ............. o cockpit le' (Prospeccao) e
+                                             nunca escreve;
+                  seller_classification .... o cockpit so' escreve
+                                             'nao_vendedor', dentro do
+                                             "Desativar acesso";
+                  conta_alvo_dismissed ..... o cockpit nao desfaz descarte;
+                  seller_visit_goals ....... o cockpit le' (equipe.ts) e nunca
+                                             escreve.
+
+                Ficam aqui, e nao na Rota, porque sao regra do time — valem
+                pra todo mundo e mudam raramente. Cada um se abre sozinho;
+                fechados, sao quatro linhas.
+
+                O SellerGoalsCard tambem aparece no "Meu desempenho" do
+                celular, de onde nao saiu: sem esta copia o gestor no
+                COMPUTADOR ficaria sem nenhuma forma de mudar a meta de
+                ninguem, porque aquela tela so' monta em tela estreita. */}
+            <RouteConfigCard />
+            <SellerGoalsCard />
+            <SellerClassificationCard />
+            <DismissedContaAlvoCard />
           </View>
         </View>
       )}

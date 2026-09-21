@@ -544,7 +544,7 @@ export function Daily() {
           }}
         >
           Sem meta individual, o executivo cai na meta global de {dados.metaGlobal} visitas/dia.
-          Metas por vendedor ficam no app de campo.
+          Metas por vendedor ficam no app de campo, em Configurações → “Área do gestor”.
           {dados.comRotaHoje > 0 &&
             ` ${dados.comRotaHoje} de ${executivos.length} montaram Rota do dia e estão sendo medidos contra a própria promessa.`}
           {dados.semMeta > 0 &&

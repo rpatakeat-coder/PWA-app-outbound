@@ -127,7 +127,6 @@ import { useLayout } from './src/hooks/useLayout';
 import { useNomesDeClientes } from './src/hooks/useNomesDeClientes';
 import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
 import { useStages } from './src/hooks/useStages';
-import { GestorScreen } from './src/screens/GestorScreen';
 import { TarefasScreen, baldeDeVencimento, baldeDaTarefaDoCrm } from './src/screens/TarefasScreen';
 import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
@@ -257,7 +256,7 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
   { value: 'ex_cliente', label: 'Ex-cliente', color: 'var(--brand-text)' },
 ];
 
-type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'tasks' | 'gestor' | 'meu' | 'config';
+type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'tasks' | 'meu' | 'config';
 
 // Documentacao das regras de geracao automatica de tarefas (motor
 // generate_client_tasks no Supabase). Isto e' so a explicacao mostrada no
@@ -902,16 +901,13 @@ function MainApp() {
   // filtro de vendedor ativo (Todos ou um). Só gestor (o painel é gestor-only).
   // Se o usuario viewer entrou em uma aba que nao existe pra ele (rota/agenda)
   // via state preservado entre sessoes, joga de volta pro mapa.
-  // Mesma protecao pra aba gestor: so admin pode ver, qualquer outro perfil
-  // que caia ali (state preservado) volta pro mapa.
+  // A aba 'gestor' tinha um guard igual a este; ela deixou de existir quando o
+  // painel saiu daqui pro cockpit, e com ela o guard.
   useEffect(() => {
     if (isViewer && (tab === 'route' || tab === 'agenda' || tab === 'tasks' || tab === 'meu')) {
       setTab('map');
     }
-    if (!canViewGestor && tab === 'gestor') {
-      setTab('map');
-    }
-  }, [isViewer, canViewGestor, tab]);
+  }, [isViewer, tab]);
 
   // Lista de vendedores com id_hubspot configurado — alimenta o picker do admin
   // no filtro do mapa/lista/rota e o "Responsável" nos itens da agenda.
@@ -4480,8 +4476,6 @@ function MainApp() {
         return { titulo: 'Agenda', sub: 'Rotas, demos e follow-ups da semana' };
       case 'tasks':
         return { titulo: 'Tarefas', sub: `${visibleTasksCount} ${visibleTasksCount === 1 ? 'cobrança aberta' : 'cobranças abertas'} · escalonamento D2 → D5` };
-      case 'gestor':
-        return { titulo: 'Painel do gestor', sub: mesAno };
       case 'config':
         return { titulo: 'Configurações', sub: 'Conta, aparência e administração' };
       default:
@@ -4500,13 +4494,15 @@ function MainApp() {
     window.location.href = '/gestao';
   };
 
-  const itensNavWeb: Array<{ aba: AppTab; rotulo: string; Icone: typeof IconLocation; badge?: number; visivel: boolean }> = [
+  // 'cockpit' nao e' aba: e' destino. Fica na mesma lista porque ocupa o mesmo
+  // lugar na sidebar, mas nunca chega ao `tab` — o onPress navega pra fora.
+  const itensNavWeb: Array<{ aba: AppTab | 'cockpit'; rotulo: string; Icone: typeof IconLocation; badge?: number; visivel: boolean }> = [
     { aba: 'map', rotulo: 'Mapa', Icone: IconLocation, visivel: true },
     { aba: 'list', rotulo: 'Lista', Icone: IconSquareMenu, visivel: true },
     { aba: 'route', rotulo: 'Rota', Icone: IconCar, visivel: !isViewer },
     { aba: 'agenda', rotulo: 'Agenda', Icone: IconCalendar, visivel: !isViewer },
     { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: visibleTasksCount, visivel: !isViewer },
-    { aba: 'gestor', rotulo: 'Gestor', Icone: IconBarGraph, visivel: canViewGestor },
+    { aba: 'cockpit', rotulo: 'Gestor', Icone: IconBarGraph, visivel: canViewGestor },
     { aba: 'meu', rotulo: 'Meu desempenho', Icone: IconTrendingUp, visivel: !canViewGestor && !isViewer },
   ];
 
@@ -4555,7 +4551,7 @@ function MainApp() {
               accessibilityLabel={item.rotulo}
               style={[styles.sbItem, ativo && styles.sbItemAtivo]}
               {...ds(ativo ? { trans: '1' } : { trans: '1', hover: 'surface2' })}
-              onPress={() => (item.aba === 'gestor' ? irParaOCockpit() : setTab(item.aba))}
+              onPress={() => (item.aba === 'cockpit' ? irParaOCockpit() : setTab(item.aba))}
             >
               <View style={styles.sbItemIcone}>
                 <item.Icone width={24} height={24} fill={ativo ? iconColors.tintRedText : iconColors.muted} />
@@ -4768,11 +4764,11 @@ function MainApp() {
             /* A Agenda nao tem busca, mas tambem nao pode ter uma faixa de
                48px vazia: o titulo ocupa o lugar dela. */
             <Text style={styles.headerTitulo}>Agenda</Text>
-          ) : tab === 'gestor' || tab === 'meu' || tab === 'config' ? (
-            /* Estas tres nao sao abas da barra: chegam pelo menu do perfil.
+          ) : tab === 'meu' || tab === 'config' ? (
+            /* Estas duas nao sao abas da barra: chegam pelo menu do perfil.
                Sem o arrow_back a tela fica sem saida — e' a unica volta.
-               Configuracoes reabre o MENU (foi de la' que veio); Gestor e Meu
-               voltam pra aba de origem. */
+               Configuracoes reabre o MENU (foi de la' que veio); Meu
+               desempenho volta pra aba de origem. */
             <View style={styles.headerLinha}>
               <TouchableOpacity
                 accessibilityRole="button"
@@ -4791,7 +4787,7 @@ function MainApp() {
               </TouchableOpacity>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.headerTitulo} numberOfLines={1}>
-                  {tab === 'gestor' ? 'Painel do gestor' : tab === 'meu' ? 'Meu desempenho' : 'Configurações'}
+                  {tab === 'meu' ? 'Meu desempenho' : 'Configurações'}
                 </Text>
               </View>
             </View>
@@ -4824,10 +4820,10 @@ function MainApp() {
           )}
           {/* Unico controle permanente a' direita do header — a engrenagem e o
               botao "Sair" que dividiam este canto sairam no M7. So' nas QUATRO
-              telas com barra: Gestor, Meu desempenho e Configuracoes ja' tem o
+              telas com barra: Meu desempenho e Configuracoes ja' tem o
               arrow_back, e um segundo caminho no mesmo cabecalho diria coisas
               diferentes sobre como sair da tela. */}
-          {tab !== 'gestor' && tab !== 'meu' && tab !== 'config' && (
+          {tab !== 'meu' && tab !== 'config' && (
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="Abrir menu do perfil"
@@ -5333,8 +5329,6 @@ function MainApp() {
           abrirMenuDeConclusao={setCompletingTask}
           myHubspotId={myHubspotId}
         />
-      ) : tab === 'gestor' ? (
-        <GestorScreen enabled={canViewGestor && tab === 'gestor'} onOpenClient={openClientById} />
       ) : tab === 'config' ? (
         <ConfiguracoesScreen
           profile={profile}
@@ -5458,12 +5452,11 @@ function MainApp() {
           </View>
 
           {([
-            // "Painel do gestor" e "Meu desempenho" sao a entrada que faltava:
-            // ate' aqui nada chamava setTab('gestor') / setTab('meu') no
-            // celular, e as duas telas do M6 eram inalcancaveis.
+            // "Painel do gestor" leva pro cockpit; "Meu desempenho" e a
+            // entrada que faltava no celular, onde nada chamava setTab('meu').
             canViewGestor
               ? {
-                  chave: 'gestor',
+                  chave: 'cockpit',
                   Icone: IconBarGraph,
                   rotulo: 'Painel do gestor',
                   // Sem `setPerfilAberto(false)` de proposito: o Painel
@@ -5536,10 +5529,10 @@ function MainApp() {
         </Painel>
       )}
 
-      {/* Gestor e Meu desempenho nao tem barra: nao sao abas, chegam pelo menu
-          do perfil, e o arrow_back do header e' a volta. Com a barra elas
-          teriam dois caminhos de saida dizendo coisas diferentes. */}
-      {!layout.ehLargo && tab !== 'gestor' && tab !== 'meu' && tab !== 'config' && !rotaMapaExpandido && (
+      {/* Meu desempenho e Configuracoes nao tem barra: nao sao abas, chegam
+          pelo menu do perfil, e o arrow_back do header e' a volta. Com a barra
+          elas teriam dois caminhos de saida dizendo coisas diferentes. */}
+      {!layout.ehLargo && tab !== 'meu' && tab !== 'config' && !rotaMapaExpandido && (
       <View style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]}>
         <TouchableOpacity
           accessibilityRole="button"

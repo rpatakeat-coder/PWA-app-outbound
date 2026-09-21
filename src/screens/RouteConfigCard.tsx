@@ -4,7 +4,7 @@ import { IconText, IconSettings } from '../components/icons';
 import { Alert } from '../components/Alert';
 import { useRouteConfig, type RouteConfig } from '../hooks/useRouteConfig';
 
-// Card "⚙️ Config Rota do dia" na aba Gestor: edita raio/nota/avaliações da
+// Card "⚙️ Config Rota do dia" (Configuracoes → "Area do gestor"): edita raio/nota/avaliações da
 // Conta Alvo, meta de visitas/dia e os SLAs por etapa. Salva na route_config
 // (RLS só deixa o gestor editar). Colapsável pra não poluir a tela.
 
@@ -76,7 +76,7 @@ export function RouteConfigCard() {
   return (
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
-        <IconText Icone={IconSettings} style={styles.title} tone="tintRedText">Config Rota do dia</IconText>
+        <IconText Icone={IconSettings} style={styles.title} tone="onSurface">Config Rota do dia</IconText>
         <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
       </TouchableOpacity>
 
@@ -130,15 +130,15 @@ export function RouteConfigCard() {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: 'var(--surface)',
-    borderRadius: 14,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'var(--tint-red-border)',
+    borderColor: 'var(--border)',
     padding: 14,
     marginBottom: 12,
   },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: 15, fontWeight: '800', color: 'var(--tint-red-text)' },
-  chevron: { fontSize: 12, color: 'var(--brand-text)', fontWeight: '800' },
+  title: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
+  chevron: { fontSize: 12, color: 'var(--text-muted)', fontWeight: '800' },
   section: { fontSize: 12, fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 12, marginBottom: 6 },
   row: { flexDirection: 'row', gap: 8 },
   field: { flex: 1, marginBottom: 6 },

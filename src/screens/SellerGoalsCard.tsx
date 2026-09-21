@@ -6,7 +6,8 @@ import { useAllSellers } from '../hooks/useAllSellers';
 import { useSellerGoals } from '../hooks/useSellerGoals';
 import { useRouteConfig } from '../hooks/useRouteConfig';
 
-// "🎯 Metas por vendedor" (aba Gestor): meta DIÁRIA de visitas de cada vendedor.
+// "🎯 Metas por vendedor" (Configuracoes → "Area do gestor", e tambem no
+// "Meu desempenho" do celular): meta DIÁRIA de visitas de cada vendedor.
 // Default = meta global (route_config). O ranking compara feito x meta.
 
 export function SellerGoalsCard() {
@@ -46,7 +47,7 @@ export function SellerGoalsCard() {
   return (
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
-        <IconText Icone={IconStar} style={styles.title} tone="tintRedText">Metas por vendedor</IconText>
+        <IconText Icone={IconStar} style={styles.title} tone="onSurface">Metas por vendedor</IconText>
         <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
       </TouchableOpacity>
 
@@ -88,10 +89,10 @@ export function SellerGoalsCard() {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: 'var(--surface)', borderRadius: 14, borderWidth: 1, borderColor: 'var(--tint-red-border)', padding: 14, marginBottom: 12 },
+  card: { backgroundColor: 'var(--surface)', borderRadius: 8, borderWidth: 1, borderColor: 'var(--border)', padding: 14, marginBottom: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: 15, fontWeight: '800', color: 'var(--tint-red-text)' },
-  chevron: { fontSize: 12, color: 'var(--brand-text)', fontWeight: '800' },
+  title: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
+  chevron: { fontSize: 12, color: 'var(--text-muted)', fontWeight: '800' },
   hint: { fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 },
   name: { flex: 1, fontSize: 13, fontWeight: '600', color: 'var(--text)' },

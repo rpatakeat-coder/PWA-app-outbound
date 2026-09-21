@@ -5,7 +5,7 @@ import { Alert } from '../components/Alert';
 import { useSellerClassification, precisaDeIdHubspot } from '../hooks/useSellerClassification';
 import type { SellerStatus } from '../hooks/useAllSellers';
 
-// "👥 Vendedores & usuários" (aba Gestor): o gestor define quem é vendedor
+// "👥 Vendedores & usuários" (Configuracoes → "Area do gestor"): o gestor define quem é vendedor
 // ativo, quem é usuário comum (sem meta) e quem não é vendedor. Aplica nos
 // rankings/metas/filtros.
 
@@ -46,7 +46,7 @@ export function SellerClassificationCard() {
   return (
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
-        <IconText Icone={IconUserGroup} style={styles.title} tone="tintRedText">Vendedores & usuários</IconText>
+        <IconText Icone={IconUserGroup} style={styles.title} tone="onSurface">Vendedores & usuários</IconText>
         <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
       </TouchableOpacity>
 
@@ -137,10 +137,10 @@ const styles = StyleSheet.create({
     borderColor: 'var(--tint-amber-border)',
   },
   avisoSemIdTexto: { fontSize: 12, lineHeight: 18, color: 'var(--tint-amber-text)' },
-  card: { backgroundColor: 'var(--surface)', borderRadius: 14, borderWidth: 1, borderColor: 'var(--tint-red-border)', padding: 14, marginBottom: 12 },
+  card: { backgroundColor: 'var(--surface)', borderRadius: 8, borderWidth: 1, borderColor: 'var(--border)', padding: 14, marginBottom: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: 15, fontWeight: '800', color: 'var(--tint-red-text)' },
-  chevron: { fontSize: 12, color: 'var(--brand-text)', fontWeight: '800' },
+  title: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
+  chevron: { fontSize: 12, color: 'var(--text-muted)', fontWeight: '800' },
   hint: { fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 },
   toggle: { alignSelf: 'flex-start', backgroundColor: 'var(--surface-2)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 10 },
   toggleActive: { backgroundColor: 'var(--tint-red)' },

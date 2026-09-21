@@ -7,7 +7,7 @@ import {
 import { Alert } from '../components/Alert';
 import { useDismissedContaAlvo } from '../hooks/useDismissedContaAlvo';
 
-// "🚫 Contas Alvo dispensadas" (aba Gestor): lista as conta-alvo que os
+// "🚫 Contas Alvo dispensadas" (Configuracoes → "Area do gestor"): lista as conta-alvo que os
 // vendedores marcaram "Não interessa" (quem/quando), com FILTRO por período e
 // por quem dispensou + EXPORT JSON. Restaurar volta a conta-alvo.
 
@@ -61,7 +61,7 @@ export function DismissedContaAlvoCard() {
   return (
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
-        <IconText Icone={IconCloseCircle} style={styles.title} tone="tintRedText">Contas Alvo dispensadas{data.length ? ` · ${data.length}` : ''}</IconText>
+        <IconText Icone={IconCloseCircle} style={styles.title} tone="onSurface">Contas Alvo dispensadas{data.length ? ` · ${data.length}` : ''}</IconText>
         <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
       </TouchableOpacity>
 
@@ -129,7 +129,7 @@ export function DismissedContaAlvoCard() {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: 'var(--surface)', borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)', padding: 14, marginBottom: 12 },
+  card: { backgroundColor: 'var(--surface)', borderRadius: 8, borderWidth: 1, borderColor: 'var(--border)', padding: 14, marginBottom: 12 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
   chevron: { fontSize: 12, color: 'var(--text-muted)', fontWeight: '800' },
