@@ -6,7 +6,7 @@
 // antes de criar mais uma conta. So' que sao 32 contas: o formulario — que e'
 // o que ele veio fazer — nascia 1800px abaixo da dobra. O diagnostico virou
 // uma faixa curta no topo, que nomeia quem esta' quebrado sem custar rolagem,
-// e a lista completa ficou embaixo.
+// e a lista completa ficou embaixo. A ordem NAO muda.
 //
 // Os dois defeitos que a faixa denuncia sao os que geraram chamado, e nenhum
 // deles se parece com cadastro incompleto pra quem sofre:
@@ -17,6 +17,40 @@
 // NOME do owner do HubSpot, e e' a unica chance de perceber que o id digitado
 // e' de outra pessoa. Depois de criado, o sintoma so' aparece dias depois, em
 // outra tela, como "vendedor sem carteira".
+//
+// ---------------------------------------------------------------------------
+// G11c: o que mudou na APRESENTACAO (consultas, Edges e regras, nada)
+// ---------------------------------------------------------------------------
+//
+// 1. A faixa vermelha deixou de ser paragrafo e virou lista com a acao de cada
+//    caso. Mas as acoes so' prometem o que EXISTE — ver o bloco abaixo.
+//
+// 2. Conferir e Criar viraram dois passos numerados, e o passo 2 DIZ o que
+//    falta quando esta' bloqueado. Antes eram dois botoes lado a lado, e o
+//    segundo parecia desabilitado sem motivo.
+//
+// 3. A tabela de cinco colunas virou a mesma linha de pessoa das outras telas
+//    de gente (`componentes/idioma.tsx`).
+//
+// ---------------------------------------------------------------------------
+// O QUE O CONSERTO REALMENTE PODE FAZER (levantado antes de desenhar)
+// ---------------------------------------------------------------------------
+//
+// Procurei todo mundo que escreve `profiles` nos dois produtos e nas Edges. Os
+// unicos escritores sao: o insert de primeiro login (`AuthContext`), o
+// `avatar_url` da foto de perfil, o upsert da Edge `criar-usuario` e o rename
+// da `revogar-usuario`. NADA atualiza `id_hubspot` nem `sector` depois de
+// criado.
+//
+// Entao, das tres acoes que o desenho pedia:
+//   - "Corrigir cadastro" (preencher id_hubspot) -> NAO EXISTE em lugar nenhum
+//   - "Trocar setor"                             -> NAO EXISTE em lugar nenhum
+//   - "Marcar nao vendedor"                      -> existe, mas no APP DE CAMPO
+//     (aba Gestor, cartao "Vendedores & usuarios")
+//
+// As duas primeiras viraram acao que ABRE A EXPLICACAO do conserto, em vez de
+// botao que promete gravar. Um botao que nao escreve e' pior que nenhum: a
+// pessoa clica, nada acontece, e ela passa a desconfiar da tela inteira.
 import { useEffect, useMemo, useState } from 'react';
 import {
   carregarAcessos,
@@ -26,6 +60,8 @@ import {
   type DadosDeAcesso,
   type RespostaCriacao,
 } from '../dados/acessos';
+import { Drawer } from '../componentes/Drawer';
+import { Acao, Etiqueta, Faixa, LinhaDePessoa, Passo } from '../componentes/idioma';
 
 const DATA = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeZone: 'America/Sao_Paulo' });
 
@@ -65,106 +101,29 @@ function Rotulo({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Faixa de aviso/erro. `tom` decide a cor; o texto sempre diz o que fazer. */
-function Faixa({ tom, children }: { tom: 'erro' | 'aviso' | 'ok'; children: React.ReactNode }) {
-  const cores = {
-    erro: { fundo: 'var(--red-soft)', borda: 'var(--red)', texto: 'var(--red)' },
-    aviso: { fundo: 'var(--amber-soft)', borda: 'var(--amber)', texto: 'var(--amber-ink)' },
-    ok: { fundo: 'var(--green-soft)', borda: 'var(--green)', texto: 'var(--green)' },
-  }[tom];
-  return (
-    <div
-      style={{
-        background: cores.fundo,
-        border: `1px solid ${cores.borda}`,
-        color: cores.texto,
-        borderRadius: 8,
-        padding: '10px 12px',
-        fontSize: 13,
-        lineHeight: '18px',
-        marginTop: 12,
-      }}
-    >
-      {children}
-    </div>
-  );
+/** Qual conserto cada conta quebrada pede.
+ *
+ *  `ondeSeFaz` e' o que separa promessa de explicacao: 'fora' abre o drawer
+ *  com o passo a passo; 'campo' leva pro app, onde o ajuste existe. */
+type Conserto = {
+  rotulo: string;
+  ondeSeFaz: 'fora' | 'campo';
+};
+
+function consertoDe(c: ContaDeAcesso): Conserto {
+  // Quem nao e' mais de campo nao se conserta mudando cadastro: se conserta
+  // saindo da curadoria — e isso arruma o ranking junto. E' a segunda saida que
+  // a nota de rodape ja' explicava, agora nomeada por conta.
+  if (c.setorSemLead) return { rotulo: 'Trocar setor', ondeSeFaz: 'fora' };
+  return { rotulo: 'Corrigir cadastro', ondeSeFaz: 'fora' };
 }
 
-function Etiqueta({ tom, texto }: { tom: 'erro' | 'aviso' | 'neutro'; texto: string }) {
-  const cores = {
-    erro: { fundo: 'var(--red-soft)', texto: 'var(--red)' },
-    aviso: { fundo: 'var(--amber-soft)', texto: 'var(--amber-ink)' },
-    neutro: { fundo: 'var(--panel2)', texto: 'var(--muted)' },
-  }[tom];
-  return (
-    <span
-      style={{
-        background: cores.fundo,
-        color: cores.texto,
-        borderRadius: 999,
-        padding: '2px 9px',
-        fontSize: 11.5,
-        fontWeight: 700,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {texto}
-    </span>
-  );
-}
-
-function LinhaDeConta({ c }: { c: ContaDeAcesso }) {
-  const problema = c.semIdHubspot || c.setorSemLead;
-  return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(200px, 2fr) minmax(160px, 1.4fr) 130px 120px 1fr',
-        gap: 12,
-        alignItems: 'center',
-        padding: '11px 0',
-        borderTop: '1px solid var(--line-soft)',
-        opacity: c.desativado ? 0.55 : 1,
-      }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--ink)' }}>{c.nome}</div>
-        <div
-          style={{
-            fontSize: 12,
-            color: 'var(--muted)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {c.email}
-        </div>
-      </div>
-      <div style={{ fontSize: 13, color: 'var(--ink)' }}>{c.setor ?? '—'}</div>
-      <div style={{ fontSize: 13, color: 'var(--muted)' }}>{PAPEL[c.papel ?? ''] ?? '—'}</div>
-      <div style={{ fontSize: 13, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
-        {c.idHubspot ?? '—'}
-      </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        {c.desativado && <Etiqueta tom="neutro" texto="Desativado" />}
-        {/* Explica a AUSENCIA de alarme: sem isto, um vendedor em setor sem
-            lead que nao aparece na faixa vermelha parece esquecimento. */}
-        {!c.desativado && c.papel === 'user' && c.classificacao === 'nao_vendedor' && (
-          <Etiqueta tom="neutro" texto="Não é de campo" />
-        )}
-        {/* O texto diz o SINTOMA, nao o campo: "sem id_hubspot" nao ajuda
-            ninguem a reconhecer o chamado que vai receber. */}
-        {c.semIdHubspot && <Etiqueta tom="erro" texto="Sem carteira — some do placar" />}
-        {c.setorSemLead && <Etiqueta tom="aviso" texto="Setor sem lead — mapa vazio" />}
-        {!problema && !c.desativado && c.criadoEm && (
-          <span style={{ fontSize: 12, color: 'var(--ter)' }}>
-            desde {DATA.format(new Date(c.criadoEm))}
-          </span>
-        )}
-      </div>
-    </div>
-  );
+/** O texto do sintoma. Palavra por palavra o que a tela ja' dizia — e' o
+ *  chamado que o gestor vai receber, nao o nome do campo. */
+function sintomaDe(c: ContaDeAcesso): string {
+  return c.setorSemLead
+    ? 'o setor não enxerga leads, então o mapa abre vazio'
+    : 'sem ID do HubSpot, some dos rankings e fica sem carteira';
 }
 
 export function Acessos() {
@@ -184,6 +143,10 @@ export function Acessos() {
   // Desativados escondidos por padrao: sao 9 de 32, nao pedem acao nenhuma, e
   // empurravam pra fora da tela justamente as contas que pedem.
   const [verDesativados, setVerDesativados] = useState(false);
+  // A conta cujo conserto o gestor pediu para ver. Drawer, e nao inline: e' a
+  // regra 1 do doc de funcionalidades — detalhe operacional nao vira mural na
+  // tela principal.
+  const [consertando, setConsertando] = useState<ContaDeAcesso | null>(null);
 
   async function recarregar() {
     try {
@@ -236,6 +199,23 @@ export function Acessos() {
     () => (dados?.contas ?? []).filter((c) => verDesativados || !c.desativado),
     [dados, verDesativados],
   );
+
+  // A conferencia valida, com a assinatura ainda batendo.
+  const conferenciaValida = conferencia?.ok === true && assinaturaConferida === assinatura;
+  const problemasDaConferencia = conferenciaValida ? conferencia?.problemas ?? [] : [];
+
+  /** O que falta pra destravar o passo 2. Uma frase, na ordem em que a pessoa
+   *  resolve — dizer tudo de uma vez nao ajuda a dar o proximo passo. */
+  const oQueFalta = (): string => {
+    if (!preenchido) return 'Preencha os campos acima para poder conferir.';
+    if (!conferencia) return 'Falta conferir o ID do HubSpot — é o passo 1.';
+    if (!conferencia.ok) return 'A conferência não passou. Corrija e confira de novo.';
+    if (assinaturaConferida !== assinatura)
+      return 'Você mudou um campo depois de conferir. Confira de novo.';
+    if (edgeAntiga) return 'A função criar-usuario em produção ainda é a antiga — veja abaixo.';
+    if (problemasDaConferencia.length > 0) return 'A conferência encontrou problemas — veja acima.';
+    return 'Confira antes: é o passo que mostra de quem é o ID do HubSpot.';
+  };
 
   async function aoConferir() {
     setOcupado(true);
@@ -292,21 +272,38 @@ export function Acessos() {
               ? '1 conta não consegue trabalhar hoje'
               : `${comProblema.length} contas não conseguem trabalhar hoje`}
           </div>
-          <div style={{ fontSize: 13, color: 'var(--red)', marginTop: 6, lineHeight: '19px' }}>
-            {comProblema.map((c) => (
-              <div key={c.id}>
-                <strong>{c.nome}</strong> ({c.setor ?? 'sem setor'}) —{' '}
-                {c.setorSemLead
-                  ? 'o setor não enxerga leads, então o mapa abre vazio'
-                  : 'sem ID do HubSpot, some dos rankings e fica sem carteira'}
-                .
-              </div>
-            ))}
+
+          <div style={{ marginTop: 4 }}>
+            {comProblema.map((c, i) => {
+              const conserto = consertoDe(c);
+              return (
+                <LinhaDePessoa
+                  key={c.id}
+                  primeira={i === 0}
+                  nome={c.nome}
+                  tomDoAvatar="erro"
+                  sublinha={`${c.setor ?? 'sem setor'} · ${sintomaDe(c)}`}
+                  etiquetas={
+                    c.semIdHubspot ? (
+                      <Etiqueta tom="erro" texto="Sem carteira — some do placar" />
+                    ) : (
+                      <Etiqueta tom="aviso" texto="Setor sem lead — mapa vazio" />
+                    )
+                  }
+                  acoes={
+                    // NAO promete escrever: o conserto destes dois campos nao
+                    // existe em tela nenhuma. A acao abre a explicacao.
+                    <Acao onClick={() => setConsertando(c)}>{conserto.rotulo}</Acao>
+                  }
+                />
+              );
+            })}
           </div>
+
           {/* Duas saidas, e a segunda e' a que faltava: nem todo alarme se
               resolve mudando o setor. Quem saiu do campo tem que sair da
               curadoria — e isso conserta o ranking junto. */}
-          <div style={{ fontSize: 12.5, color: 'var(--red)', marginTop: 8, opacity: 0.9 }}>
+          <div style={{ fontSize: 12.5, color: 'var(--red)', marginTop: 10, opacity: 0.9 }}>
             Ou corrija o cadastro, ou marque a pessoa como <code>nao_vendedor</code> em{' '}
             <code>seller_classification</code> — quem saiu do campo também precisa sair do ranking.
           </div>
@@ -390,69 +387,95 @@ export function Acessos() {
         </div>
 
         {setorEscolhido && !setorEscolhido.veLead && (
-          <Faixa tom="aviso">
+          <Faixa tom="aviso" style={{ marginTop: 12 }}>
             O setor <strong>{setorEscolhido.nome}</strong> não enxerga leads. Se esta pessoa for
             vendedor de rua, ela vai abrir o mapa vazio — foi assim que a última perdeu duas semanas.
           </Faixa>
         )}
 
-        <div style={{ display: 'flex', gap: 10, marginTop: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button style={botaoSec} disabled={!preenchido || ocupado} onClick={aoConferir}>
-            {ocupado && !resultado ? 'Conferindo…' : 'Conferir'}
-          </button>
-          <button
-            style={{
-              ...botaoSec,
-              background: conferido ? 'var(--red)' : 'var(--panel2)',
-              color: conferido ? '#fff' : 'var(--muted)',
-              border: conferido ? 'none' : '1px solid var(--line-btn)',
-              cursor: conferido && !ocupado ? 'pointer' : 'not-allowed',
-            }}
-            disabled={!conferido || ocupado}
-            onClick={aoCriar}
+        {/* ---- os dois passos ---- */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+          <Passo
+            numero={1}
+            titulo="Conferir"
+            estado={conferido ? 'cumprido' : 'atual'}
+            acao={
+              <Acao
+                tamanho="rodape"
+                onClick={() => void aoConferir()}
+                desabilitada={!preenchido || ocupado}
+              >
+                {ocupado && !resultado ? 'Conferindo…' : 'Conferir'}
+              </Acao>
+            }
           >
-            {ocupado && conferido ? 'Criando…' : 'Criar acesso'}
-          </button>
-          {!conferido && (
-            <span style={{ fontSize: 12, color: 'var(--ter)' }}>
-              Confira antes: é o passo que mostra de quem é o ID do HubSpot.
-            </span>
-          )}
-        </div>
-
-        {conferencia && !conferencia.ok && <Faixa tom="erro">{conferencia.erro}</Faixa>}
-
-        {conferencia?.ok && assinaturaConferida === assinatura && (
-          <>
-            {(conferencia.problemas ?? []).length > 0 ? (
-              <Faixa tom="erro">
-                {conferencia.problemas!.map((p, i) => (
+            {/* O resultado fica ESCRITO NO PASSO. Antes ficava numa faixa
+                abaixo dos dois botoes, longe do que o produziu. */}
+            {!conferencia && 'Mostra de quem é o ID do HubSpot antes de criar a conta.'}
+            {conferencia && !conferencia.ok && (
+              <span style={{ color: 'var(--red)' }}>{conferencia.erro}</span>
+            )}
+            {conferenciaValida && problemasDaConferencia.length === 0 && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span>
+                  {conferencia?.ownerNoHubspot
+                    ? `O ID ${dadosDoForm.idHubspot} é de ${conferencia.ownerNoHubspot} no HubSpot — confira se é a mesma pessoa.`
+                    : 'Conferido.'}
+                </span>
+                <Etiqueta tom="ok" texto="Pode criar" />
+              </span>
+            )}
+            {problemasDaConferencia.length > 0 && (
+              <span style={{ color: 'var(--red)' }}>
+                {problemasDaConferencia.map((p, i) => (
                   <div key={i}>{p}</div>
                 ))}
-              </Faixa>
-            ) : (
-              <Faixa tom="ok">
-                Pode criar.
-                {conferencia.ownerNoHubspot
-                  ? ` O ID ${dadosDoForm.idHubspot} é de ${conferencia.ownerNoHubspot} no HubSpot — confira se é a mesma pessoa.`
-                  : ''}
-              </Faixa>
+              </span>
             )}
-            {conferencia.aviso && <Faixa tom="aviso">{conferencia.aviso}</Faixa>}
-            {edgeAntiga && (
-              <Faixa tom="erro">
-                A função <code>criar-usuario</code> em produção ainda é a versão antiga: ela ignora
-                o setor, e a conta nasceria no default do banco — o mesmo defeito listado aí em
-                cima. Rode <code>supabase functions deploy criar-usuario</code> antes de criar.
-              </Faixa>
-            )}
-          </>
+          </Passo>
+
+          <Passo
+            numero={2}
+            titulo="Criar acesso"
+            estado={conferido ? 'atual' : 'bloqueado'}
+            acao={
+              <Acao
+                tamanho="rodape"
+                primaria={conferido}
+                onClick={() => void aoCriar()}
+                desabilitada={!conferido || ocupado}
+              >
+                {ocupado && conferido ? 'Criando…' : 'Criar acesso'}
+              </Acao>
+            }
+          >
+            {conferido ? 'Tudo conferido. Pode criar.' : oQueFalta()}
+          </Passo>
+        </div>
+
+        {/* As faixas que sobrevivem inteiras, como o desenho pede. */}
+        {conferenciaValida && conferencia?.aviso && (
+          <Faixa tom="aviso" style={{ marginTop: 12 }}>
+            {conferencia.aviso}
+          </Faixa>
         )}
 
-        {resultado && !resultado.ok && <Faixa tom="erro">{resultado.erro}</Faixa>}
+        {edgeAntiga && (
+          <Faixa tom="erro" style={{ marginTop: 12 }}>
+            A função <code>criar-usuario</code> em produção ainda é a versão antiga: ela ignora o
+            setor, e a conta nasceria no default do banco — o mesmo defeito listado aí em cima. Rode{' '}
+            <code>supabase functions deploy criar-usuario</code> antes de criar.
+          </Faixa>
+        )}
+
+        {resultado && !resultado.ok && (
+          <Faixa tom="erro" style={{ marginTop: 12 }}>
+            {resultado.erro}
+          </Faixa>
+        )}
 
         {resultado?.ok && (
-          <Faixa tom="ok">
+          <Faixa tom="ok" style={{ marginTop: 12 }}>
             {resultado.jaExistia ? (
               <>Essa conta já existia; nada foi alterado.</>
             ) : (
@@ -518,30 +541,146 @@ export function Acessos() {
           de verdade é a Edge <code>revogar-usuario</code>.
         </div>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(200px, 2fr) minmax(160px, 1.4fr) 130px 120px 1fr',
-            gap: 12,
-            marginTop: 14,
-            fontSize: 11.5,
-            fontWeight: 700,
-            color: 'var(--muted)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-          }}
-        >
-          <div>Pessoa</div>
-          <div>Setor</div>
-          <div>Papel</div>
-          <div>ID HubSpot</div>
-          <div style={{ textAlign: 'right' }}>Situação</div>
+        <div style={{ marginTop: 10 }}>
+          {visiveis.map((c, i) => {
+            const problema = c.semIdHubspot || c.setorSemLead;
+            return (
+              <LinhaDePessoa
+                key={c.id}
+                primeira={i === 0}
+                nome={c.nome}
+                tomDoAvatar={problema ? 'erro' : 'neutro'}
+                esmaecida={c.desativado}
+                // Setor, papel e ID eram tres colunas; viram a sublinha, que e'
+                // onde se le' de relance sem varrer a linha inteira.
+                sublinha={[c.email, c.setor ?? '—', PAPEL[c.papel ?? ''] ?? '—', c.idHubspot ?? 'sem ID']
+                  .filter(Boolean)
+                  .join(' · ')}
+                etiquetas={
+                  <>
+                    {c.desativado && <Etiqueta tom="neutro" texto="Desativado" />}
+                    {/* Explica a AUSENCIA de alarme: sem isto, um vendedor em
+                        setor sem lead que nao aparece na faixa vermelha parece
+                        esquecimento. */}
+                    {!c.desativado && c.papel === 'user' && c.classificacao === 'nao_vendedor' && (
+                      <Etiqueta tom="neutro" texto="Não é de campo" />
+                    )}
+                    {c.semIdHubspot && <Etiqueta tom="erro" texto="Sem carteira — some do placar" />}
+                    {c.setorSemLead && <Etiqueta tom="aviso" texto="Setor sem lead — mapa vazio" />}
+                  </>
+                }
+                valor={
+                  !problema && !c.desativado && c.criadoEm
+                    ? `desde ${DATA.format(new Date(c.criadoEm))}`
+                    : undefined
+                }
+                acoes={
+                  c.desativado ? (
+                    // A ponte pra tela vizinha: `/ DESATIVADO` no nome NAO
+                    // revoga nada — quem revoga e' a Edge, e quem a chama e' a
+                    // Desativar acesso.
+                    <Acao href="#/desativar-acesso" titulo="A conta ainda entra no app">
+                      Encerrar de verdade
+                    </Acao>
+                  ) : problema ? (
+                    <Acao onClick={() => setConsertando(c)}>{consertoDe(c).rotulo}</Acao>
+                  ) : undefined
+                }
+              />
+            );
+          })}
         </div>
-        {visiveis.map((c) => (
-          <LinhaDeConta key={c.id} c={c} />
-        ))}
       </div>
 
+      <DrawerDoConserto conta={consertando} aoFechar={() => setConsertando(null)} />
     </div>
+  );
+}
+
+/** Como consertar, já que a tela não consegue consertar.
+ *
+ *  Este drawer existe porque o levantamento (ver o topo do arquivo) mostrou que
+ *  nem `id_hubspot` nem `sector` têm escrita em lugar nenhum do sistema. Em vez
+ *  de um botão que não faz nada, a ação entrega o passo a passo — e diz, com
+ *  todas as letras, onde cada coisa se resolve. */
+function DrawerDoConserto({
+  conta,
+  aoFechar,
+}: {
+  conta: ContaDeAcesso | null;
+  aoFechar: () => void;
+}) {
+  if (!conta) return null;
+  const porSetor = conta.setorSemLead;
+
+  return (
+    <Drawer
+      aberto
+      titulo={conta.nome}
+      subtitulo={porSetor ? 'O setor não enxerga leads' : 'Sem ID do HubSpot'}
+      aoFechar={aoFechar}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: 13.5, lineHeight: '20px', color: 'var(--ink)' }}>
+        <Faixa tom={porSetor ? 'aviso' : 'erro'}>
+          {sintomaDe(conta)}. É assim que a pessoa descreve o problema quando abre o chamado.
+        </Faixa>
+
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>
+            Este conserto não é feito por esta tela.
+          </div>
+          <div style={{ color: 'var(--muted)', fontSize: 13 }}>
+            Nada no app nem no cockpit altera{' '}
+            <code>{porSetor ? 'profiles.sector' : 'profiles.id_hubspot'}</code> depois que a conta é
+            criada. Não é esquecimento de tela: é que a escrita nunca existiu, e inventar um botão
+            aqui seria prometer o que não acontece.
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Os dois caminhos</div>
+          <ol style={{ margin: 0, paddingLeft: 18, color: 'var(--muted)', fontSize: 13 }}>
+            {porSetor ? (
+              <>
+                <li style={{ marginBottom: 8 }}>
+                  <strong style={{ color: 'var(--ink)' }}>Se {conta.nome} é de campo:</strong> mude o
+                  setor para um que enxergue <code>lead</code>, ou libere <code>lead</code> para o
+                  setor <code>{conta.setor ?? '—'}</code> em <code>sector_visibility</code>. Liberar
+                  o setor inteiro vale para todo mundo que está nele — pense antes.
+                </li>
+                <li>
+                  <strong style={{ color: 'var(--ink)' }}>Se saiu do campo:</strong> marque como{' '}
+                  <code>nao_vendedor</code>. O alarme some e o ranking se corrige junto. Isso dá para
+                  fazer <strong>no app de campo</strong>, aba Gestor → “Vendedores &amp; usuários”.
+                </li>
+              </>
+            ) : (
+              <>
+                <li style={{ marginBottom: 8 }}>
+                  <strong style={{ color: 'var(--ink)' }}>Se {conta.nome} trabalha carteira:</strong>{' '}
+                  pegue o ID do owner no HubSpot (Settings → Users &amp; Teams — é por pessoa, não
+                  por setor) e grave em <code>profiles.id_hubspot</code>.
+                </li>
+                <li>
+                  <strong style={{ color: 'var(--ink)' }}>Se não trabalha carteira:</strong> marque
+                  como <code>nao_vendedor</code>, <strong>no app de campo</strong>, aba Gestor →
+                  “Vendedores &amp; usuários”. Cobrar o campo de quem não é de campo é alarme falso
+                  permanente, que treina a ignorar a faixa inteira.
+                </li>
+              </>
+            )}
+          </ol>
+        </div>
+
+        <Faixa tom="neutro">
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Para quem for direto ao banco</div>
+          <code style={{ fontSize: 12, userSelect: 'all', wordBreak: 'break-all' }}>
+            {porSetor
+              ? `update profiles set sector='<SETOR QUE VÊ LEAD>' where id='${conta.id}';`
+              : `update profiles set id_hubspot='<ID DO OWNER>' where id='${conta.id}';`}
+          </code>
+        </Faixa>
+      </div>
+    </Drawer>
   );
 }
