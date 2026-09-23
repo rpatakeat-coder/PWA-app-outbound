@@ -34,7 +34,7 @@ import { useStagePropertyOptions } from '../hooks/useStagePropertyOptions';
 import { useClientStageChanges } from '../hooks/useClientStageChanges';
 import { useClientNotes } from '../hooks/useClientNotes';
 import { supabase } from '../integrations/supabase/client';
-import { sendHubspotEvent } from '../utils/hubspotSync';
+import { ehFalhaDeTransporte, sendHubspotEvent } from '../utils/hubspotSync';
 
 interface Props {
   client: Client;
@@ -824,10 +824,14 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
         // quando o problema é um campo inválido manda a pessoa conferir o
         // sinal do celular e tentar de novo para sempre — foi o que aconteceu
         // em 14/09/2026 numa passagem para Ag. Pagamento.
+        // Quem sabe separar recusa de falha de transporte e' o modulo que
+        // fala com os dois servidores — aqui so' se pergunta. Antes a regex
+        // vivia nesta linha e nao reconhecia nem o 5xx do n8n nem o
+        // "failed to send a request" do supabase-js: os dois viravam
+        // "O HubSpot recusou", com o status do intermediario no lugar do
+        // motivo do CRM.
         const motivo = (lastErr as Error)?.message?.trim();
-        const pareceRede =
-          !motivo ||
-          /failed to fetch|network|timeout|load failed|aborted/i.test(motivo);
+        const pareceRede = ehFalhaDeTransporte(lastErr);
         Alert.alert(
           'Não consegui mover a etapa',
           pareceRede

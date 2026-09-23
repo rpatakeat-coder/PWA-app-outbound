@@ -41,6 +41,31 @@ function edgeDefinitelyDidNotRun(error: any): boolean {
   return status === 404 || status === 503;
 }
 
+// O supabase-js nem sempre LANCA quando a chamada nao sai do aparelho: ele
+// devolve `{ error }` sem status nenhum (FunctionsFetchError/RelayError). E'
+// rede ruim na rua, e nao da' pra saber se a edge rodou — o mesmo caso
+// ambiguo da excecao, e o mesmo tratamento: tipo idempotente tenta o n8n,
+// que e' outro host e pode estar alcancavel; tipo nao idempotente nao.
+function semRespostaDaEdge(error: any): boolean {
+  return (error?.context?.status ?? error?.status) == null;
+}
+
+// Falha de TRANSPORTE: nao chegamos a ter uma resposta do HubSpot. E' outra
+// coisa que a RECUSA, que vem com o motivo do CRM e pede correcao de campo —
+// e a tela diz frases diferentes pras duas. Confundir as duas manda a pessoa
+// procurar um campo errado num formulario que estava certo.
+export class FalhaDeTransporte extends Error {}
+
+/** Nao houve resposta do HubSpot: rede, edge fora do ar, n8n em 5xx. */
+export function ehFalhaDeTransporte(err: unknown): boolean {
+  if (err instanceof FalhaDeTransporte) return true;
+  const msg = (err as Error)?.message?.trim();
+  if (!msg) return true;
+  // "failed to send a request" e' o texto do supabase-js quando o invoke nem
+  // sai do aparelho — era classificado como recusa do HubSpot.
+  return /failed to fetch|failed to send a request|network|timeout|load failed|aborted/i.test(msg);
+}
+
 async function postToN8n(payload: Record<string, unknown>): Promise<unknown> {
   const res = await fetch(CHANGE_STAGE_WEBHOOK, {
     method: 'POST',
@@ -48,7 +73,11 @@ async function postToN8n(payload: Record<string, unknown>): Promise<unknown> {
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    throw new Error(`Webhook respondeu ${res.status}`);
+    // O n8n e' TRANSPORTE, nao e' o HubSpot. Em 23/09/2026 um 500 daqui
+    // apareceu na tela como "O HubSpot recusou: Webhook respondeu 500", e o
+    // status de um intermediario nao diz nada sobre o que o CRM acha do
+    // negocio.
+    throw new FalhaDeTransporte(`n8n respondeu ${res.status}`);
   }
   try {
     return await res.json();
@@ -65,35 +94,52 @@ export async function sendHubspotEvent(payload: Record<string, unknown>): Promis
     return postToN8n(payload);
   }
 
+  // O `try` cobre SO' a chamada. Ate' 23/09/2026 ele cobria tambem a decisao
+  // logo abaixo, e o `throw` que carrega o motivo do HubSpot caia no `catch`
+  // deste mesmo bloco — que, pra tipo idempotente, engolia o motivo e ia pro
+  // n8n assim mesmo. Quem estava na rua lia o status do n8n ("Webhook
+  // respondeu 500") achando que era a recusa do HubSpot.
+  let resposta: { data: unknown; error: any };
   try {
-    const { data, error } = await supabase.functions.invoke('hubspot-sync', { body: payload });
-    if (!error) return data;
-
-    // A edge RODOU e o HubSpot recusou? Entao o n8n nao resolve: ele fala com o
-    // mesmo HubSpot, que vai recusar igual — e no caminho o motivo se perde e
-    // vira "sem conexao?" na cara de quem esta' na rua.
-    //
-    // Em 14/09/2026 isso custou caro: uma vendedora tentou mover um negocio pra
-    // Ag. Pagamento, o HubSpot recusou por propriedade invalida, o app disse
-    // "sem conexao?" e ela ficou conferindo o sinal do celular.
-    //
-    // So' caimos pro n8n quando a edge COMPROVADAMENTE nao executou nada (404 =
-    // function ausente, 503 = sem HUBSPOT_TOKEN).
-    if (!edgeDefinitelyDidNotRun(error)) {
-      const motivo = await motivoDaEdge(error);
-      throw new Error(motivo ?? `hubspot-sync falhou (${type}): ${error.message ?? error}`);
-    }
-    console.warn(`[hubspot-sync] edge indisponivel (${type}), caindo pro n8n:`, error.message ?? error);
-    return postToN8n(payload);
+    resposta = await supabase.functions.invoke('hubspot-sync', { body: payload });
   } catch (err) {
-    // Exception do invoke (rede/timeout). Mesma regra: nao reexecuta tipo
-    // nao idempotente por conta de erro ambiguo.
+    // Exception do invoke (rede/timeout). A edge PODE ter executado, entao
+    // tipo nao idempotente nao se reexecuta por conta de erro ambiguo.
     if (NON_IDEMPOTENT.has(type)) {
       throw err;
     }
     console.warn(`[hubspot-sync] edge indisponivel (${type}), caindo pro n8n:`, err);
     return postToN8n(payload);
   }
+
+  const { data, error } = resposta;
+  if (!error) return data;
+
+  // Nunca houve resposta: cai no mesmo caminho da excecao de rede.
+  if (semRespostaDaEdge(error)) {
+    if (NON_IDEMPOTENT.has(type)) {
+      throw error;
+    }
+    console.warn(`[hubspot-sync] edge inalcancavel (${type}), caindo pro n8n:`, error.message ?? error);
+    return postToN8n(payload);
+  }
+
+  // A edge RODOU e o HubSpot recusou? Entao o n8n nao resolve: ele fala com o
+  // mesmo HubSpot, que vai recusar igual — e no caminho o motivo se perde e
+  // vira "sem conexao?" na cara de quem esta' na rua.
+  //
+  // Em 14/09/2026 isso custou caro: uma vendedora tentou mover um negocio pra
+  // Ag. Pagamento, o HubSpot recusou por propriedade invalida, o app disse
+  // "sem conexao?" e ela ficou conferindo o sinal do celular.
+  //
+  // So' caimos pro n8n quando a edge COMPROVADAMENTE nao executou nada (404 =
+  // function ausente, 503 = sem HUBSPOT_TOKEN).
+  if (!edgeDefinitelyDidNotRun(error)) {
+    const motivo = await motivoDaEdge(error);
+    throw new Error(motivo ?? `hubspot-sync falhou (${type}): ${error.message ?? error}`);
+  }
+  console.warn(`[hubspot-sync] edge indisponivel (${type}), caindo pro n8n:`, error.message ?? error);
+  return postToN8n(payload);
 }
 
 // ============================================================================
