@@ -117,6 +117,8 @@ import { CEPStep } from './src/screens/CEPStep';
 import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { ChangeStageModal } from './src/screens/ChangeStageModal';
+import { buscarLeadsParecidos } from './src/utils/buscarLeadsParecidos';
+import { fraseDoAviso, type Parecido } from './src/utils/leadDuplicado';
 import { DesfechoVisitaSheet } from './src/screens/DesfechoVisitaSheet';
 import { ComunicadoSheet } from './src/screens/ComunicadoSheet';
 import { EditLocationModal } from './src/screens/EditLocationModal';
@@ -614,6 +616,13 @@ function MainApp() {
   const [enderecoEditavel, setEnderecoEditavel] = useState(false);
   // Duplicado (23505) passa a viver DENTRO da folha, no lugar do Alert seco.
   const [erroDuplicado, setErroDuplicado] = useState<string | null>(null);
+  // Leads que PARECEM ser este, achados antes de gravar. O aviso nao trava: o
+  // vendedor decide, porque rede de verdade existe (o Cachorro do Bonfa tem
+  // tres lojas com o mesmo telefone). `jaAvisei` guarda que ele ja' viu e
+  // escolheu seguir — sem isso o segundo toque cairia no mesmo aviso.
+  const [parecidosEncontrados, setParecidosEncontrados] = useState<Parecido[]>([]);
+  const [procurandoParecidos, setProcurandoParecidos] = useState(false);
+  const jaAvisei = useRef(false);
   // Guarda o flag de geocoding aproximado vindo do CEPStep ate o submit do
   // formulario, pra persistir em clients.geo_approximate.
   const [pendingGeoApproximate, setPendingGeoApproximate] = useState(false);
@@ -2507,6 +2516,8 @@ function MainApp() {
     setCepResolvido(null);
     setEnderecoEditavel(false);
     setErroDuplicado(null);
+    setParecidosEncontrados([]);
+    jaAvisei.current = false;
   };
 
   // Restaurante E contato. `submitClient` e `saveEditClient` ja' barravam os
@@ -2583,10 +2594,40 @@ function MainApp() {
       geo_approximate: pendingGeoApproximate,
     };
 
+    // Antes de gravar: ja' existe esta casa? 83% dos leads da base entram pelo
+    // webhook do HubSpot, entao o vendedor na rua frequentemente nao viu o que
+    // ja' esta' la'. Avisa uma vez; se ele insistir, grava.
+    if (!jaAvisei.current) {
+      setProcurandoParecidos(true);
+      try {
+        const achados = await buscarLeadsParecidos({
+          empresa: newClient.empresa,
+          nome: newClient.nome,
+          telefone: newClient.telefone,
+          latitude: lat,
+          longitude: lng,
+        });
+        if (achados.length > 0) {
+          setParecidosEncontrados(achados);
+          jaAvisei.current = true;
+          setProcurandoParecidos(false);
+          return;
+        }
+      } catch (err) {
+        // A checagem e' uma cortesia: se a consulta falhar, o cadastro segue.
+        // Travar o vendedor na rua por causa de uma busca e' pior que o
+        // duplicado que ela evitaria.
+        console.warn('[duplicado] busca falhou, seguindo com o cadastro:', err);
+      }
+      setProcurandoParecidos(false);
+    }
+
     submittingRef.current = true;
     setErroDuplicado(null);
     try {
       const created = await addClient.mutateAsync(newClient);
+      setParecidosEncontrados([]);
+      jaAvisei.current = false;
       resetForm();
       setIsFormOpen(false);
       Alert.alert(
@@ -6432,7 +6473,14 @@ function MainApp() {
               )}
 
               <Text style={styles.m9Secao}>Restaurante</Text>
-              {campoM9('Nome do restaurante *', form.empresa, v => setForm(s => ({ ...s, empresa: v })))}
+              {/* Trocar o restaurante apaga o aviso e devolve a checagem: senao a
+                  faixa continuaria na tela falando do nome ANTIGO, e o toque
+                  seguinte gravaria um nome que ninguem conferiu. */}
+              {campoM9('Nome do restaurante *', form.empresa, v => {
+                setForm(s => ({ ...s, empresa: v }));
+                if (parecidosEncontrados.length > 0) setParecidosEncontrados([]);
+                jaAvisei.current = false;
+              })}
 
               <Text style={styles.m9Secao}>Contato</Text>
               {campoM9('Nome do contato *', form.nome, v => setForm(s => ({ ...s, nome: v })))}
@@ -6488,6 +6536,43 @@ function MainApp() {
               <Text style={styles.m9Secao}>Observações</Text>
               {campoM9('Anotações', form.observacoes, v => setForm(s => ({ ...s, observacoes: v })), { multiline: true })}
 
+              {/* "Ja existe esta casa?" — AVISO, nao trava. O vendedor viu o
+                  lugar com os proprios olhos; quem decide e' ele. Tocar em
+                  "Salvar lead" de novo cadastra assim mesmo, porque rede de
+                  verdade existe: o Cachorro do Bonfa tem tres lojas com o
+                  mesmo telefone. */}
+              {parecidosEncontrados.length > 0 && (
+                <View style={styles.m9FaixaAviso}>
+                  <Text style={[styles.m9FaixaAvisoTexto, { fontWeight: '700', marginBottom: 6 }]}>
+                    {parecidosEncontrados.length === 1
+                      ? 'Parece que este lead já existe'
+                      : `Parece que este lead já existe (${parecidosEncontrados.length} parecidos)`}
+                  </Text>
+                  {parecidosEncontrados.slice(0, 3).map((p) => (
+                    <View key={p.lead.id} style={styles.m9ParecidoLinha}>
+                      <Text style={[styles.m9FaixaAvisoTexto, { flex: 1, minWidth: 0 }]}>
+                        {fraseDoAviso(p)}
+                      </Text>
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel={`Abrir ${p.lead.empresa || p.lead.nome || 'lead'}`}
+                        style={styles.m9ParecidoBotao}
+                        onPress={() => {
+                          setIsFormOpen(false);
+                          resetForm();
+                          void openClientById(p.lead.id);
+                        }}
+                      >
+                        <Text style={styles.m9ParecidoBotaoTexto}>Abrir</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                  <Text style={[styles.m9FaixaAvisoTexto, { marginTop: 8, opacity: 0.8 }]}>
+                    Se for outra unidade, toque em “Salvar lead” de novo para cadastrar assim mesmo.
+                  </Text>
+                </View>
+              )}
+
               {/* Duplicado: dentro da folha, com o formulario preenchido. */}
               {erroDuplicado && (
                 <View style={styles.m9FaixaAviso}>
@@ -6502,7 +6587,12 @@ function MainApp() {
                   onPress={editingClient ? saveEditClient : submitClient}
                   disabled={!podeSalvar || isSaving}
                 >
-                  {isSaving ? (
+                  {procurandoParecidos ? (
+                    <View style={styles.m9CtaLinha}>
+                      <ActivityIndicator color="#fff" size="small" />
+                      <Text style={[sharedStyles.submitButtonText, { opacity: 0.7 }]}>Conferindo…</Text>
+                    </View>
+                  ) : isSaving ? (
                     /* Rotulo + spinner: trocar o botao inteiro por um
                        ActivityIndicator apaga o que estava acontecendo. */
                     <View style={styles.m9CtaLinha}>
@@ -9612,6 +9702,24 @@ const styles = StyleSheet.create({
     borderColor: 'var(--tint-amber-border)',
   },
   m9FaixaAvisoTexto: { fontSize: 12, lineHeight: 18, color: 'var(--tint-amber-text)' },
+  // flexWrap: a etiqueta "Abrir" tem largura fixa e o texto pode ser longo —
+  // sem envolver, o nome do lead seria espremido ate' virar reticencia.
+  m9ParecidoLinha: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 6,
+  },
+  m9ParecidoBotao: {
+    minHeight: 32,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'var(--tint-amber-border)',
+  },
+  m9ParecidoBotaoTexto: { fontSize: 12, fontWeight: '700', color: 'var(--tint-amber-text)' },
   m9Cta: { height: 48, borderRadius: 12, justifyContent: 'center', paddingVertical: 0 },
   m9CtaLinha: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   m9NotaCta: { marginTop: 8, fontSize: 12, lineHeight: 18, color: 'var(--text-faint)', textAlign: 'center' },
