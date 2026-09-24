@@ -69,6 +69,7 @@ npx tsc --noEmit                      # raiz
 cd gestao && npx tsc -b && npx vite build
 npx tsx src/utils/fotoDePerfil.teste.ts  # na raiz
 npx tsx src/utils/hubspotSync.teste.ts   # na raiz
+npx tsx src/utils/leadDuplicado.teste.ts # na raiz
 npx tsx src/dados/datas.teste.ts      # em gestao/
 npx tsx src/dados/regras.teste.ts
 npx tsx src/dados/documentacao.teste.ts
