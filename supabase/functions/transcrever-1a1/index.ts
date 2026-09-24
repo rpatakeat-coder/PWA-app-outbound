@@ -14,7 +14,7 @@
 //
 // Deploy:
 //   supabase functions deploy transcrever-1a1
-// Depende de: migration 0063_um_a_um_audio.sql e do secret OPENAI_API_KEY
+// Depende de: migration 0085 (tabela um_a_um_audio, só gestor) e do secret OPENAI_API_KEY
 // (o mesmo que a resumo-semanal ja' usa).
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
@@ -87,9 +87,9 @@ Deno.serve(async (req) => {
   if (!registroId) return json(400, { error: 'Corpo inválido: esperava { registroId }' });
 
   const { data: registro, error: erroLer } = await svc
-    .from('um_a_um')
-    .select('id, audio_caminho, audio_tipo, audio_bytes')
-    .eq('id', registroId)
+    .from('um_a_um_audio')
+    .select('registro_id, audio_caminho, audio_tipo, audio_bytes')
+    .eq('registro_id', registroId)
     .maybeSingle();
 
   if (erroLer) return json(500, { error: `Não consegui ler o registro: ${erroLer.message}` });
@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
       `O áudio tem ${mb} MB e o limite da transcrição é 25 MB. ` +
       `Grave pelo próprio cockpit (ele já comprime) ou converta o arquivo para ` +
       `um formato mais leve antes de subir.`;
-    await svc.from('um_a_um').update({ transcricao_erro: erro }).eq('id', registroId);
+    await svc.from('um_a_um_audio').update({ transcricao_erro: erro }).eq('registro_id', registroId);
     return json(413, { error: erro });
   }
 
@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
 
   if (erroBaixar || !arquivo) {
     const erro = `Não consegui baixar o áudio: ${erroBaixar?.message ?? 'arquivo ausente'}`;
-    await svc.from('um_a_um').update({ transcricao_erro: erro }).eq('id', registroId);
+    await svc.from('um_a_um_audio').update({ transcricao_erro: erro }).eq('registro_id', registroId);
     return json(500, { error: erro });
   }
 
@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
 
     if (!res.ok) {
       const erro = `A OpenAI recusou (${res.status}): ${resposta?.error?.message ?? 'sem detalhe'}`;
-      await svc.from('um_a_um').update({ transcricao_erro: erro }).eq('id', registroId);
+      await svc.from('um_a_um_audio').update({ transcricao_erro: erro }).eq('registro_id', registroId);
       return json(502, { error: erro, modelo: MODELO });
     }
 
@@ -160,14 +160,14 @@ Deno.serve(async (req) => {
       // Audio mudo ou ruido puro. Isso e' informacao, nao erro de sistema — e a
       // tela precisa dizer QUAL dos dois foi.
       const erro = 'A transcrição voltou vazia: o áudio pode estar mudo ou sem fala audível.';
-      await svc.from('um_a_um').update({ transcricao_erro: erro }).eq('id', registroId);
+      await svc.from('um_a_um_audio').update({ transcricao_erro: erro }).eq('registro_id', registroId);
       return json(422, { error: erro });
     }
 
     const { error: erroGravar } = await svc
-      .from('um_a_um')
+      .from('um_a_um_audio')
       .update({ transcricao: texto, transcricao_erro: null, transcrito_em: new Date().toISOString() })
-      .eq('id', registroId);
+      .eq('registro_id', registroId);
 
     if (erroGravar) {
       return json(500, { error: `Transcrevi mas não consegui gravar: ${erroGravar.message}`, texto });
@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
     const erro = e.includes('abort')
       ? `Tempo esgotado (${TIMEOUT_MS / 1000}s). Áudio muito longo para uma tentativa só.`
       : e;
-    await svc.from('um_a_um').update({ transcricao_erro: erro }).eq('id', registroId);
+    await svc.from('um_a_um_audio').update({ transcricao_erro: erro }).eq('registro_id', registroId);
     return json(500, { error: erro });
   } finally {
     clearTimeout(timer);
