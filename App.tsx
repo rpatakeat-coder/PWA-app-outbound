@@ -82,6 +82,7 @@ import {
   IconMenu,
   IconMenuCircles,
   IconTrendingDown,
+  IconBook,
 } from './src/components/icons';
 import { Avatar } from './src/components/Avatar';
 import { useFotoDePerfil } from './src/hooks/useFotoDePerfil';
@@ -150,6 +151,7 @@ import { useStages } from './src/hooks/useStages';
 import { TarefasScreen, baldeDeVencimento, baldeDaTarefaDoCrm } from './src/screens/TarefasScreen';
 import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
+import PlaybookScreen from './src/screens/PlaybookScreen';
 import { ConfiguracoesScreen } from './src/screens/ConfiguracoesScreen';
 import { ds, sharedStyles } from './src/screens/sharedStyles';
 import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
@@ -276,7 +278,7 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
   { value: 'ex_cliente', label: 'Ex-cliente', color: 'var(--brand-text)' },
 ];
 
-type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'tasks' | 'meu' | 'config';
+type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'tasks' | 'playbook' | 'meu' | 'config';
 
 // Documentacao das regras de geracao automatica de tarefas (motor
 // generate_client_tasks no Supabase). Isto e' so a explicacao mostrada no
@@ -5048,6 +5050,37 @@ function MainApp() {
     window.location.href = '/gestao';
   };
 
+  // Rodape do mapa novo (prompt final §B2). Nada aqui e' hook: vive depois dos
+  // early returns do MainApp sem risco.
+  // Paradas de hoje que faltam, na ordem do plano (selo da Agenda e a
+  // "proxima parada" do Playbook).
+  const paradasQueFaltam = routeStops.filter(
+    (st) => st.status !== 'done' && st.status !== 'removed' && !(st.client && visitadoHoje(st.client.visited_at)),
+  );
+  const proximaParadaDoPlano = (() => {
+    const st = paradasQueFaltam[0];
+    if (!st?.client) return null;
+    const numero = routeStops.indexOf(st) + 1;
+    const etapa = st.client.status === 'cliente' || st.client.status === 'churn' ? st.client.status : st.client.etapa ?? null;
+    return { nome: getClientPrimaryName(st.client), numero, etapa };
+  })();
+  // Tarefas: atrasadas + vencem hoje. Sem pendencia, sem selo (nunca "0").
+  const seloTarefas = tarefasPorBalde.atrasadas + tarefasPorBalde.hoje;
+  const abasDoRodape: Array<{ aba: AppTab; rotulo: string; Icone: typeof IconLocation; ativa: boolean; selo: number | null; seloClaro?: boolean }> = [
+    { aba: 'map', rotulo: 'Mapa', Icone: tab === 'map' ? IconLocationFilled : IconLocation, ativa: tab === 'map' || tab === 'list', selo: null },
+    ...(isViewer ? [] : [
+      { aba: 'agenda' as AppTab, rotulo: 'Agenda', Icone: IconCalendar, ativa: tab === 'agenda' || tab === 'route', selo: paradasQueFaltam.length || null, seloClaro: true },
+      { aba: 'tasks' as AppTab, rotulo: 'Tarefas', Icone: IconClipboardCheck, ativa: tab === 'tasks', selo: seloTarefas || null },
+      { aba: 'playbook' as AppTab, rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, ativa: tab === 'playbook', selo: null },
+    ]),
+  ];
+  // Trocar de aba fecha o card aberto; o mapa (lente, zoom, filtros) fica como
+  // estava, porque nada disso e' desmontado.
+  const irParaAba = (aba: AppTab) => {
+    if (aba !== 'map') setSelectedClient(null);
+    setTab(aba);
+  };
+
   // 'cockpit' nao e' aba: e' destino. Fica na mesma lista porque ocupa o mesmo
   // lugar na sidebar, mas nunca chega ao `tab` — o onPress navega pra fora.
   const itensNavWeb: Array<{ aba: AppTab | 'cockpit'; rotulo: string; Icone: typeof IconLocation; badge?: number; visivel: boolean }> = [
@@ -5316,8 +5349,28 @@ function MainApp() {
             </View>
           ) : tab === 'agenda' ? (
             /* A Agenda nao tem busca, mas tambem nao pode ter uma faixa de
-               48px vazia: o titulo ocupa o lugar dela. */
-            <Text style={styles.headerTitulo}>Agenda</Text>
+               48px vazia: o titulo ocupa o lugar dela. No mapa novo a Rota
+               deixa de ser aba e mora aqui (prompt final §B1). */
+            modoNovo ? (
+              <View style={styles.headerLinha}>
+                <Text style={styles.headerTitulo}>Agenda</Text>
+                {!isViewer && (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Abrir a rota de hoje"
+                    style={styles.headerPilula}
+                    onPress={() => setTab('route')}
+                  >
+                    <IconCar width={18} height={18} fill="#FFFFFF" />
+                    <Text style={styles.headerPilulaTexto}>Rota de hoje</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : (
+              <Text style={styles.headerTitulo}>Agenda</Text>
+            )
+          ) : tab === 'playbook' ? (
+            <Text style={styles.headerTitulo}>Playbook</Text>
           ) : tab === 'meu' || tab === 'config' ? (
             /* Estas duas nao sao abas da barra: chegam pelo menu do perfil.
                Sem o arrow_back a tela fica sem saida — e' a unica volta.
@@ -5917,6 +5970,8 @@ function MainApp() {
           abrirMenuDeConclusao={setCompletingTask}
           myHubspotId={myHubspotId}
         />
+      ) : tab === 'playbook' ? (
+        <PlaybookScreen email={profile?.email} proximaParada={proximaParadaDoPlano} />
       ) : tab === 'config' ? (
         <ConfiguracoesScreen
           profile={profile}
@@ -6121,7 +6176,40 @@ function MainApp() {
       {/* Meu desempenho e Configuracoes nao tem barra: nao sao abas, chegam
           pelo menu do perfil, e o arrow_back do header e' a volta. Com a barra
           elas teriam dois caminhos de saida dizendo coisas diferentes. */}
-      {!layout.ehLargo && tab !== 'meu' && tab !== 'config' && !rotaMapaExpandido && (
+      {!layout.ehLargo && tab !== 'meu' && tab !== 'config' && !rotaMapaExpandido && modoNovo && (
+      /* RODAPE DO MAPA NOVO (prompt final §B2): Mapa · Agenda · Tarefas ·
+         Playbook, iguais para todos. A Rota mora na Agenda, o "+" e' botao do
+         mapa e a Gestao fica no menu do avatar, para o time inteiro. */
+      <View style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]}>
+        {abasDoRodape.map((a) => {
+          const ativo = a.ativa;
+          return (
+            <TouchableOpacity
+              key={a.aba}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: ativo }}
+              accessibilityLabel={a.selo ? `${a.rotulo}, ${a.selo}` : a.rotulo}
+              style={[styles.navItem, styles.navItemNovo]}
+              onPress={() => irParaAba(a.aba)}
+            >
+              {ativo && <View style={styles.navTracoAtivo} />}
+              <View style={styles.navIconeAncora}>
+                <NavIcon Icone={a.Icone} ativo={ativo} size={24} />
+                {a.selo != null && (
+                  <View style={[styles.navBadge, a.seloClaro && styles.navBadgeClaro]}>
+                    <Text style={[styles.navBadgeText, a.seloClaro && styles.navBadgeTextClaro]}>
+                      {a.selo > 99 ? '99+' : a.selo}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.navItemText, ativo && styles.navItemTextActive]}>{a.rotulo}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      )}
+      {!layout.ehLargo && tab !== 'meu' && tab !== 'config' && !rotaMapaExpandido && !modoNovo && (
       <View style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]}>
         <TouchableOpacity
           accessibilityRole="button"
@@ -10049,6 +10137,16 @@ const styles = StyleSheet.create({
   // Com o botao Gestao ha' 2 abas a esquerda do FAB e 3 a direita. As duas da
   // esquerda pesam 1.5 cada: 3 = 3, e o vao do FAB fica no centro da barra.
   navItemLadoDeDois: { flex: 1.5 },
+  // Rodape do mapa novo: 4 abas iguais, alvo inteiro, traco de 3px no topo da ativa.
+  navItemNovo: { minHeight: 60, position: 'relative' },
+  navTracoAtivo: { position: 'absolute', top: -1, left: '22%', right: '22%', height: 3, borderRadius: 2, backgroundColor: '#C8131B' },
+  navBadgeClaro: { backgroundColor: 'var(--bg)', borderColor: 'var(--surface)' },
+  navBadgeTextClaro: { color: 'var(--text)' },
+  headerPilula: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, paddingHorizontal: 14,
+    borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  headerPilulaTexto: { fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
   navIcon: { fontSize: 17, marginBottom: 2 },
   navIconActive: {},
   // Badge de notificacao de tarefas pendentes, sobreposto no icone da aba.

@@ -149,6 +149,16 @@ export {
 
 type IconeSvg = (props: Record<string, unknown>) => React.JSX.Element;
 
+// Livro aberto da aba Playbook (prompt final §B2). O kit não tem ícone de
+// livro; mesmo contrato dos dele: 24x24, cor pelo `fill`.
+export function IconBook({ width = 24, height = 24, fill = 'currentColor' }: { width?: number; height?: number; fill?: string }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill={fill} aria-hidden="true">
+      <path d="M12 6.4C10.3 5.2 8 4.5 5.5 4.5c-1.2 0-2.3.2-3.3.5a.9.9 0 0 0-.7.9v12.2c0 .6.6 1 1.2.8.9-.3 1.8-.4 2.8-.4 2.3 0 4.4.7 5.9 1.9.2.2.4.2.6.2s.4 0 .6-.2c1.5-1.2 3.6-1.9 5.9-1.9 1 0 1.9.1 2.8.4.6.2 1.2-.2 1.2-.8V5.9a.9.9 0 0 0-.7-.9c-1-.3-2.1-.5-3.3-.5-2.5 0-4.8.7-6.5 1.9Zm-1 11.1c-1.6-.8-3.5-1.3-5.5-1.3-.8 0-1.6.1-2.3.2V6.6c.7-.2 1.5-.3 2.3-.3 2 0 3.9.6 5.5 1.7v9.5Zm9.8-1.1c-.7-.1-1.5-.2-2.3-.2-2 0-3.9.5-5.5 1.3V8c1.6-1.1 3.5-1.7 5.5-1.7.8 0 1.6.1 2.3.3v9.8Z" />
+    </svg>
+  );
+}
+
 /**
  * Cores de icone conforme o tema.
  *
