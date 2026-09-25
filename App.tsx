@@ -1783,7 +1783,22 @@ function MainApp() {
     const camada = pontos.map(({ c, p }) => ({ lat: c.latitude as number, lng: c.longitude as number, ...pontoDe(p) }));
     return { focoMapaNovo: foco, camadaPontos: camada, comNome: nomes, pilhaDe: pilhaDeId };
   }, [visiveisMapaNovo, lente, selectedClient?.id, mapRegion, layout.ehLargo, janelaTela.width, janelaTela.height, pilhaAberta]);
-  const abrirPilha = useCallback((c: Client) => { setPilhaAberta(pilhaDe.get(c.id)?.lider ?? null); }, [pilhaDe]);
+  // Pilha até 8: abre em leque. Maior: aproxima o mapa até os pinos se
+  // separarem — a não ser que estejam todos no mesmo ponto (aí só o leque separa).
+  const abrirPilha = useCallback((c: Client) => {
+    const pl = pilhaDe.get(c.id);
+    if (!pl) return;
+    const membros = focoMapaNovo.filter((it) => pl.membros.includes(it.c.id))
+      .map((it) => ({ latitude: Number(it.c.latitude), longitude: Number(it.c.longitude) }));
+    const mesmoPonto = membros.every((m) => m.latitude === membros[0]?.latitude && m.longitude === membros[0]?.longitude);
+    if (pl.membros.length > 8 && !mesmoPonto && mapRef.current) {
+      try {
+        mapRef.current.fitToCoordinates(membros, { edgePadding: { top: 80, right: 60, bottom: 80, left: 60 }, animated: true });
+        return;
+      } catch { /* cai no leque */ }
+    }
+    setPilhaAberta(pl.lider);
+  }, [pilhaDe, focoMapaNovo]);
 
   // Folha de baixo do mapa novo: os pinos da lente, com distância e se a
   // parada do plano já foi feita.
@@ -4128,7 +4143,7 @@ function MainApp() {
           return (
           <MarkerP2
             // cluster é fixo por marcador (Marker.tsx): trocar o agrupamento recria o pino.
-            key={`${c.id}-${focoMapaNovo.length > 150 ? "g" : "s"}`}
+            key={c.id}
             client={c}
             contexto={contextoPino}
             // pilha fechada: o toque abre o leque; o resto abre o card
@@ -4141,7 +4156,8 @@ function MainApp() {
             ladoNome={comNome.get(c.id) ?? 'dir'}
             // Até a entrega de densidade: muitos pinos inteiros (lente Contas-alvo
             // numa cidade inteira) agrupam; o plano nunca.
-            agrupar={focoMapaNovo.length > 150}
+            // pilhas (C11) já seguram o número de pinos: sem bolha de contagem
+            agrupar={false}
             nomeDeAlvo={lente === 'alvo'}
             pilhaN={n > 1 && !aberta ? n : 1}
             leque={leque}
