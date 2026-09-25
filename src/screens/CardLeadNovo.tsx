@@ -61,7 +61,11 @@ function kicker(d: DadosCardNovo): string {
 }
 
 function subtitulo(c: Client): string | null {
-  const rua = [c.endereco?.trim(), c.numero?.trim()].filter(Boolean).join(', ');
+  // Munição traz o endereço inteiro do Google ("Av. X, 488 - Bairro, Cidade -
+  // RS, CEP, Brasil"): fica só "rua, número"; o bairro vem do campo próprio.
+  const enderecoCurto = (c.endereco ?? '').split(' - ')[0].trim();
+  const jaTemNumero = !!c.numero && enderecoCurto.includes(String(c.numero).trim());
+  const rua = [enderecoCurto, jaTemNumero ? null : c.numero?.trim()].filter(Boolean).join(', ');
   const partes = [rua, c.bairro?.trim()].filter(Boolean);
   return partes.length ? partes.join(' · ') : c.cidade?.trim() || null;
 }
