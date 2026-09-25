@@ -1723,7 +1723,7 @@ function MainApp() {
     // Nomes: afastado (bairro/cidade) só plano e selecionado; de perto, os
     // que cabem sem sobrepor, na ordem selecionado › plano › cobrar › Q › M.
     const nomes = new Set<string>();
-    const perto = !!mapRegion && mapRegion.latitudeDelta <= 0.03;
+    const perto = !!mapRegion && mapRegion.latitudeDelta <= 0.08; // bairro para dentro; a regra de sobreposição cuida da leitura
     const prioridade = (it: (typeof foco)[number]) =>
       it.c.id === selectedClient?.id ? 0 : it.plano ? 1 : it.p.etiqueta?.texto === 'cobrar' ? 2
         : it.p.temp === 'Q' ? 3 : it.p.temp === 'M' ? 4 : it.p.tipo === 'cliente' ? 5 : 6;
