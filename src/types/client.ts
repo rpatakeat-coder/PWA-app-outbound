@@ -13,6 +13,11 @@ export interface ClientStatusRow {
   is_default_for_new_leads: boolean | null;
 }
 
+// As seis origens da prancha do mapa (0102, clients_origem_lead_valida).
+export type OrigemLead =
+  | 'casa_dos_dados' | 'google_maps_motor' | 'indicacao'
+  | 'inbound_site' | 'hubspot' | 'cadastro_na_rua';
+
 export interface Client {
   id: string;
   nome: string;
@@ -51,6 +56,13 @@ export interface Client {
   conta_alvo_dismissed_by: string | null;
   conta_alvo_dismissed_by_name: string | null;
   conta_alvo_dismissed_at: string | null;
+  // De onde o lead veio (0102; nulo = não informado). O `origem` antigo
+  // (manual/import/api/conta_alvo) é outra coisa: como o pino foi gravado.
+  origem_lead?: OrigemLead | null;
+  origem_detalhe?: string | null;
+  entrou_em?: string | null;
+  // Munição do Cockpit que virou este pino (0098).
+  lead_prospeccao_id?: string | null;
   visited_at: string | null;
   // Quantas vezes o lead ja foi visitado (contador mantido pela RPC
   // mark_client_as_visited; o historico completo vive em client_visits).

@@ -39,6 +39,8 @@ const CLIENT_LIST_COLUMNS = [
   'conta_alvo_dismissed', 'conta_alvo_dismissed_at',
   'conta_alvo_dismissed_by', 'conta_alvo_dismissed_by_name',
   'atualizacao_diaria',
+  // 0102: de onde o lead veio (etiqueta de origem do mapa novo).
+  'origem_lead', 'origem_detalhe', 'entrou_em', 'lead_prospeccao_id',
 ].join(',');
 
 export type AreaFilter = { lat: number; lon: number; radiusKm: number };
