@@ -9,6 +9,7 @@ import React from 'react';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Alert } from '../components/Alert';
+import { Toast } from '../components/Toast';
 import type { Client } from '../types/client';
 import { ORIGEM, origemDoFiltro } from '../utils/lentes';
 import { openGoogleMaps, type TravelMode } from '../utils/navigation';
@@ -243,7 +244,7 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
         <Botao rotulo="Agendar" onPress={a.onScheduleMeeting} estilo={s.botao48} />
         <Botao
           rotulo={d.naRota ? '✓ Rota de hoje' : '+ Rota de hoje'}
-          onPress={d.naRota ? undefined : a.onAddToRoute}
+          onPress={d.naRota ? () => Toast.mostrar('Já está na rota de hoje', 'ok') : a.onAddToRoute}
           estilo={[s.botao48, d.naRota && s.naRota]}
           texto={d.naRota ? s.naRotaTexto : undefined}
           acessivel={d.naRota ? 'Já está na rota de hoje' : 'Adicionar à rota de hoje'}
