@@ -66,6 +66,12 @@ self.addEventListener('fetch', (event) => {
   //   - Nominatim / OSRM / BrasilAPI / ViaCEP: respostas pontuais de consulta.
   if (url.origin !== self.location.origin) return;
 
+  // /gestao e' outro front (o cockpit), de mesa e sempre com rede: passa direto,
+  // SEM cache. Antes, a navegacao para /gestao caia no ramo abaixo e era gravada
+  // na chave '/' — o proximo vendedor offline abria a casca da GESTAO no lugar
+  // do mapa, e a gestao podia ser servida velha do cache de estaticos.
+  if (url.pathname === '/gestao' || url.pathname.startsWith('/gestao/')) return;
+
   // Navegacao (abrir/recarregar o app): rede primeiro pra pegar a versao mais
   // nova; se estiver offline, serve a casca do cache.
   if (req.mode === 'navigate') {
