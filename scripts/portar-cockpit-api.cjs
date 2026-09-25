@@ -35,9 +35,24 @@ const ROTAS = [
   'criar-empresa-prospeccao',
   'restaurantes-proximos',
   'novidades-mercado',
+  // leads: importar-leads e a porta dos robos (Casa dos Dados, Google Places) e da
+  // tela; buscar-leads e a busca que o gestor dispara na Prospeccao.
+  'importar-leads',
+  'buscar-leads',
 ];
 // Os .json que o codigo pede e que o index.ts entrega vivos (equipe e configuracao).
-const JSON_SERVIDOS = ['data/usuarios.json', 'data/territorios.json', 'data/redes-excluidas.json', 'data/maptiler-config.json'];
+const JSON_SERVIDOS = ['data/usuarios.json', 'data/territorios.json', 'data/redes-excluidas.json', 'data/maptiler-config.json',
+  'data/leads-referencia.json', 'data/cadencias.json', 'data/comissionamento.json', 'data/temperatura.json',
+  'data/supabase-config.json'];
+// Os que o Cockpit pede com requireOpcional e que aqui NAO existem: o index.ts
+// lanca, o requireOpcional devolve null — o mesmo que acontece na Vercel, onde
+// esses arquivos sairam do repositorio em 02/09 (o snapshot vive no banco).
+const JSON_AUSENTES = ['data/hubspot.json', 'data/narrativas.json', 'data/resumo-semanal.json', 'data/weekly-raw.json',
+  'data/sync-status.json', 'data/hubspot-previous.json'];
+// Modulos do Node que o codigo pede. O index.ts entrega um substituto; fs so e
+// usado no modo linha de comando do backfill (require.main === module), que no
+// pacote nunca roda.
+const EXTERNOS = ['fs'];
 
 function morrer(msg) {
   console.error('PORTE REPROVADO — ' + msg);
@@ -63,14 +78,19 @@ function visitar(arquivo) {
   fontes.set(arquivo, src);
   for (const m of src.matchAll(/require\(\s*(['"])([^'"]+)\1\s*\)/g)) {
     const spec = m[2];
-    if (!spec.startsWith('.')) morrer(arquivo + ' pede o modulo externo "' + spec + '", que o pacote nao serve');
+    if (!spec.startsWith('.')) {
+      if (!EXTERNOS.includes(spec)) morrer(arquivo + ' pede o modulo externo "' + spec + '", que o pacote nao serve');
+      continue;
+    }
     const alvo = resolver(arquivo, spec);
     if (alvo.endsWith('.json')) {
+      if (JSON_AUSENTES.includes(alvo)) continue;
       if (!JSON_SERVIDOS.includes(alvo)) morrer(arquivo + ' pede ' + alvo + ', que o index.ts nao entrega');
       jsons.add(alvo);
     } else visitar(alvo);
   }
-  if (/require\(\s*[^'"\s]/.test(src)) morrer(arquivo + ' tem require dinamico');
+  // `require()` vazio aparece em comentario do Cockpit ("entram via require()"); nao e chamada.
+  if (/require\(\s*[^'"\s)]/.test(src)) morrer(arquivo + ' tem require dinamico');
 }
 ROTAS.forEach((r) => visitar('api/' + r + '.js'));
 
@@ -97,11 +117,12 @@ function resolver(de, spec) {
   return p;
 }
 
-// ambiente = { process, json(caminho) }
+// ambiente = { process, json(caminho), externo(nome) }
 export function carregador(ambiente) {
   const cache = Object.create(null);
   function requireDe(de) {
     return function (spec) {
+      if (!spec.startsWith('.')) return ambiente.externo(spec);
       const p = resolver(de, spec);
       if (p.endsWith('.json')) return ambiente.json(p);
       if (cache[p]) return cache[p].exports;

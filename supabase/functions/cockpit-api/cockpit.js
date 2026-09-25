@@ -2,8 +2,8 @@
 // NAO EDITAR: cada funcao abaixo e um arquivo do Cockpit, byte a byte. Para mudar
 // uma regra, mude no Cockpit e gere de novo.
 export const ORIGEM = "2a51316";
-export const ROTAS = ["negocio-acao","criar-negocio","desfazer-negocio","criar-nota-negocio","criar-empresa-prospeccao","restaurantes-proximos","novidades-mercado"];
-export const JSONS = ["data/maptiler-config.json","data/redes-excluidas.json","data/usuarios.json"];
+export const ROTAS = ["negocio-acao","criar-negocio","desfazer-negocio","criar-nota-negocio","criar-empresa-prospeccao","restaurantes-proximos","novidades-mercado","importar-leads","buscar-leads"];
+export const JSONS = ["data/cadencias.json","data/comissionamento.json","data/leads-referencia.json","data/maptiler-config.json","data/redes-excluidas.json","data/supabase-config.json","data/temperatura.json","data/territorios.json","data/usuarios.json"];
 
 const FONTES = {
   "api/negocio-acao.js": function (module, exports, require, process) {
@@ -4146,6 +4146,2537 @@ module.exports = {
 };
 
   },
+  "api/importar-leads.js": function (module, exports, require, process) {
+// api/importar-leads.js — Etapa 4 (Prospecção)
+// Recebe um lote de leads já raspados (Outscraper, Google Places, Firecrawl/iFood,
+// Firecrawl/TripAdvisor — qualquer fonte no mesmo formato normalizado) e grava na área
+// de staging (tabela leads_prospeccao). NUNCA cria Company/Deal aqui — isso só acontece
+// depois, quando algém confirma manualmente em api/criar-empresa-prospeccao.js.
+//
+// Dois jeitos de chamar esta rota, os dois seguros (nenhum token de fonte externa
+// aparece no navegador):
+//   1. Sessão do gestor; o executivo só pode materializar uma sugestão da Casa dos
+//      Dados já atribuída ao próprio owner (Authorization: Bearer <token supabase>).
+//   2. Um webhook/automação server-to-server (ex.: Make.com) com o header
+//      x-import-secret == process.env.IMPORT_SECRET — pensado pra quando o Outscraper
+//      (ou um cenário do Make) empurrar dados direto, sem passar pelo navegador de ninguém.
+//
+// Variáveis de ambiente novas: IMPORT_SECRET (string qualquer, só você e o Make sabem).
+
+const { montarDadosCompletos } = require('../scripts/montar-dados.js');
+
+const FONTES_ROTULO = {
+  outscraper: 'Outscraper', google_places: 'Google Places',
+  tripadvisor: 'Tripadvisor', ifood: 'iFood', manual: 'Manual',
+  // BLOCO 14 (12/08/26): a Casa dos Dados vira fonte de primeira classe. Antes so dava
+  // pra importar como "manual", o que apagava a origem e, pior, caia no corte de
+  // qualidade padrao -- ver FONTES_SEM_AVALIACAO logo abaixo.
+  casa_dos_dados: 'Casa dos Dados'
+};
+
+// Fontes cujo lead NAO PODE ter avaliacao, por definicao. Uma empresa que abriu ha dez
+// dias nao tem 100 avaliacoes no Google -- nao e lead ruim, e lead novo, e e exatamente
+// o que queremos atacar: restaurante recem-aberto ainda nao escolheu sistema. Aplicar o
+// corte de volume aqui reprovaria 100% da Casa dos Dados, e foi por isso que nada dela
+// chegou na fila de Prospeccao. O corte continua valendo integralmente para Outscraper,
+// Google Places, TripAdvisor e iFood, onde a ausencia de avaliacao indica de fato
+// estabelecimento fraco ou cadastro sujo.
+const FONTES_SEM_AVALIACAO = new Set(['casa_dos_dados']);
+
+let USUARIOS = [];
+try {
+  const raw = require('../data/usuarios.json');
+  USUARIOS = Array.isArray(raw) ? raw : (raw.usuarios || []);
+} catch (e) { USUARIOS = []; }
+
+function normalizarTelefone(tel) {
+  if (!tel) return null;
+  let digitos = String(tel).replace(/\D/g, '');  // A mesma linha costuma vir como +55 27... no Tripadvisor e 27... no iFood.
+  // Normaliza o DDI brasileiro para que fontes diferentes não virem duas contas.
+  if (digitos.startsWith('55') && (digitos.length === 12 || digitos.length === 13)) digitos = digitos.slice(2);
+  return digitos.length >= 8 ? digitos : null;
+}
+
+function normalizarTexto(valor) {
+  return String(valor || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// CORREÇÃO (16/08/26, Julyan): mesma lista/lógica de canonizarCidade() do template —
+// duplicada aqui porque este arquivo roda isolado na função serverless (sem import do
+// template). Evita que fontes que mandam município em CAIXA ALTA sem acento (Casa dos
+// Dados) criem registros com cidade "diferente" de quem já existe na base ("SAO PAULO"
+// vs "São Paulo"), o que duplicava cards de praça no Cockpit.
+const CIDADES_CANONICAS = {
+  'vila velha': 'Vila Velha', 'vitoria': 'Vitória', 'rio de janeiro': 'Rio de Janeiro',
+  'sao paulo': 'São Paulo', 'porto alegre': 'Porto Alegre', 'canoas': 'Canoas'
+};
+function canonizarCidade(cidade) {
+  const bruto = String(cidade || '').trim();
+  if (!bruto) return bruto;
+  const chave = bruto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return CIDADES_CANONICAS[chave] || bruto;
+}
+
+// A nota não define fit comercial. O único corte de potencial é volume de avaliações.
+// Ainda assim, uma categoria explicitamente fora de foodservice não pode entrar na fila
+// só por ter muitas avaliações (ex.: monumento, hostel ou shopping). Fontes verticais
+// como iFood/Tripadvisor podem vir sem categoria e continuam válidas.
+const CATEGORIAS_FORA_FOODSERVICE = new Set([
+  'hostel', 'hotel', 'lodging', 'monument', 'museu', 'park', 'tourist attraction',
+  'shopping', 'shopping mall', 'store', 'supermarket', 'grocery store', 'pharmacy',
+  'school', 'university', 'hospital', 'gym'
+]);
+function fazSentidoFoodservice(lead) {
+  const categoria = normalizarTexto(lead.categoria);
+  const nome = normalizarTexto(lead.nome);
+  const nomeEvidenciaFoodservice = /\b(restaurante|restaurant|cafe|cafeteria|bar|pub|bistro|burger|hamburg|pizza|pizzaria|churrasc|lanch|doceria|padaria|confeitaria|cozinha|cantina|choperia|grill|comida|food|sushi|temakeria|sorvet|acai)\b/.test(nome);
+  if (nomeEvidenciaFoodservice) return true;
+  return !categoria || !CATEGORIAS_FORA_FOODSERVICE.has(categoria);
+}
+
+function distanciaKm(a, b) {
+  if (a.lat == null || a.lng == null || b.lat == null || b.lng == null) return Infinity;
+  const rad = x => Number(x) * Math.PI / 180;
+  const dLat = rad(Number(b.lat) - Number(a.lat));
+  const dLng = rad(Number(b.lng) - Number(a.lng));
+  const lat1 = rad(a.lat), lat2 = rad(b.lat);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+function mesmoRestaurante(a, b) {
+  if (a.place_id && b.place_id && String(a.place_id) === String(b.place_id)) return true;
+  const telA = normalizarTelefone(a.telefone_normalizado || a.telefone);
+  const telB = normalizarTelefone(b.telefone_normalizado || b.telefone);
+  if (telA && telB && telA === telB) return true;
+  const mesmoNomeCidade = normalizarTexto(a.nome) && normalizarTexto(a.nome) === normalizarTexto(b.nome) &&
+    normalizarTexto(a.cidade) === normalizarTexto(b.cidade);
+  if (!mesmoNomeCidade) return false;
+  const endA = normalizarTexto(a.endereco), endB = normalizarTexto(b.endereco);
+  if (endA && endB && endA === endB) return true;
+  const bairroA = normalizarTexto(a.bairro), bairroB = normalizarTexto(b.bairro);
+  if (bairroA && bairroB && bairroA === bairroB) return true;
+  return distanciaKm(a, b) <= 0.15;
+}
+
+function juntarFontes(a, b) {
+  const fontes = [...String(a || '').split('+'), ...String(b || '').split('+')]
+    .map(x => x.trim()).filter(Boolean);
+  return [...new Set(fontes)].join(' + ');
+}
+
+// Não soma avaliações de plataformas: Outscraper pode representar o mesmo Google
+// Places. Mantém o maior volume confiável e a nota ligada a esse volume.
+function mesclarRestaurante(base, novo) {
+  const novoTemMaisImpacto = (Number(novo.avaliacoes) || 0) > (Number(base.avaliacoes) || 0);
+  return {
+    fonte: juntarFontes(base.fonte, novo.fonte),
+    place_id: base.place_id || novo.place_id || null,
+    cnpj: base.cnpj || novo.cnpj || null,
+    data_abertura: base.data_abertura || novo.data_abertura || null,
+    categoria: base.categoria || novo.categoria || null,
+    endereco: base.endereco || novo.endereco || null,
+    bairro: base.bairro || novo.bairro || null,
+    estado: base.estado || novo.estado || null,
+    telefone: base.telefone || novo.telefone || null,
+    telefone_normalizado: base.telefone_normalizado || novo.telefone_normalizado || null,
+    nota: novoTemMaisImpacto ? novo.nota : base.nota,
+    avaliacoes: novoTemMaisImpacto ? novo.avaliacoes : base.avaliacoes,
+    lat: base.lat != null ? base.lat : novo.lat,
+    lng: base.lng != null ? base.lng : novo.lng,
+    presencial: base.presencial !== false || novo.presencial !== false,
+    delivery: !!base.delivery || !!novo.delivery,
+    horario_funcionamento: base.horario_funcionamento || novo.horario_funcionamento || null,
+    ja_existe_hubspot: !!base.ja_existe_hubspot || !!novo.ja_existe_hubspot,
+    updated_at: new Date().toISOString()
+  };
+}
+
+// ---- Roteamento por território (mesma regra do time de campo) ----
+// Lead entra no staging JÁ com o executivo certo. Cidade/bairro fora do mapa
+// de território fica 'pendente' sem dono — o gestor decide, nada de chute.
+// Porto Alegre: rotação Kelly/Ricardo fica pra quando o Ricardo tiver owner ID
+// no HubSpot; até lá, POA e Canoas vão pra Kelly.
+/* A TABELA DE TERRITORIOS MUDOU DE CASA (01/09/26).
+   Ela vivia aqui dentro, e passou a ser lida por tres lugares: esta importacao, a
+   redistribuicao dos leads que ja estao na base sem dono, e o backfill semanal (que
+   precisa saber quantas contas buscar por executivo). Tres copias da mesma regra e o
+   comeco de tres verdades — alguem corrige um bairro num lado, esquece nos outros, e o
+   lead cai para quem nao pediu aquele territorio. Uma fonte: lib/territorios.js. */
+const { rotearTerritorio, semAcento } = require('../lib/territorios.js');
+module.exports = async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-import-secret');
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method !== 'POST') return res.status(405).json({ erro: 'Método não permitido' });
+
+  const supaUrl = process.env.SUPABASE_URL;
+  const supaAnon = process.env.SUPABASE_ANON_KEY;
+  const supaService = process.env.SUPABASE_SERVICE_KEY;
+  const importSecret = process.env.IMPORT_SECRET;
+  if (!supaUrl || !supaAnon || !supaService) {
+    return res.status(500).json({ erro: 'Servidor sem configuração completa (SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_KEY são obrigatórios).' });
+  }
+
+  let criadoPor = null;
+  let usuarioSessao = null;
+  const secretRecebido = req.headers['x-import-secret'];
+  if (importSecret && secretRecebido && secretRecebido === importSecret) {
+    criadoPor = 'automacao-importacao';
+  } else {
+    const auth = req.headers.authorization || '';
+    const sessionToken = auth.replace(/^Bearer\s+/i, '');
+    if (!sessionToken) {
+      /* DIAGNÓSTICO DE SEGREDO (28/08/26).
+         Contexto: o backfill semanal da Casa dos Dados ficou 12 dias sem importar nada.
+         Primeiro porque faltava IMPORT_SECRET no GitHub; depois, com o segredo
+         configurado nos DOIS lados e produção redeployada, o endpoint continuou
+         recusando — e "recusado" não diz se o servidor não tem a variável, se o valor
+         difere, ou se alguém colou um \n junto.
+
+         Este bloco responde essas três perguntas SEM revelar valor nenhum: presença,
+         tamanhos, e se bateria depois de um trim. Comparação de tamanho e de
+         igualdade-após-trim não permite reconstruir o segredo, e mata em uma tentativa
+         o erro mais comum de copiar e colar.
+
+         Só aparece quando o chamador MANDOU um segredo — ou seja, para quem já tem um
+         candidato. Requisição sem header nenhum recebe a resposta seca de antes. */
+      const diag = secretRecebido ? {
+        servidorTemSegredo: !!importSecret,
+        tamanhoNoServidor: importSecret ? String(importSecret).length : 0,
+        tamanhoRecebido: String(secretRecebido).length,
+        bateriaAposTrim: !!importSecret && String(secretRecebido).trim() === String(importSecret).trim(),
+        dica: !importSecret
+          ? 'A variável IMPORT_SECRET não existe NESTE deployment. Confira o ambiente (Production) e se houve redeploy depois de criá-la.'
+          : (String(secretRecebido).trim() === String(importSecret).trim()
+            ? 'Os valores batem depois de remover espaços/quebras de linha: um dos dois tem espaço em branco sobrando na ponta.'
+            : 'Os valores são diferentes de verdade (não é espaço em branco). Regrave os dois com o mesmo texto.')
+      } : undefined;
+      return res.status(401).json(Object.assign(
+        { erro: 'Sem sessão e sem segredo de importação válido.' },
+        diag ? { diagnosticoSegredo: diag } : {}
+      ));
+    }
+    try {
+      const check = await fetch(`${supaUrl}/auth/v1/user`, {
+        headers: { Authorization: `Bearer ${sessionToken}`, apikey: supaAnon }
+      });
+      if (!check.ok) return res.status(401).json({ erro: 'Sessão inválida ou expirada.' });
+      const user = await check.json();
+      const email = (user && user.email) ? String(user.email).toLowerCase() : null;
+      usuarioSessao = email ? USUARIOS.find(u => String(u.email).toLowerCase() === email) : null;
+      const repImportandoCasa = usuarioSessao && usuarioSessao.role === 'rep' && req.body && req.body.fonte === 'casa_dos_dados';
+      if (!usuarioSessao || (usuarioSessao.role !== 'manager' && !repImportandoCasa)) {
+        return res.status(403).json({ erro: 'Executivos só podem adicionar empresas sugeridas pela Casa dos Dados no próprio território.' });
+      }
+      criadoPor = usuarioSessao.email;
+    } catch (e) {
+      return res.status(401).json({ erro: 'Não foi possível validar a sessão.' });
+    }
+  }
+
+  const { fonte, leads } = req.body || {};
+  if (!fonte || !['outscraper', 'google_places', 'tripadvisor', 'ifood', 'manual', 'casa_dos_dados'].includes(fonte)) {
+    return res.status(400).json({ erro: 'Campo "fonte" inválido — use outscraper, google_places, tripadvisor, ifood, manual ou casa_dos_dados.' });
+  }
+  if (!Array.isArray(leads) || leads.length === 0) {
+    return res.status(400).json({ erro: 'Envie "leads" como array com pelo menos 1 item.' });
+  }
+  if (leads.length > 500) {
+    return res.status(400).json({ erro: 'Máximo 500 leads por importação — divida em lotes menores.' });
+  }
+  // Executivo só materializa a recomendação territorial que a própria Agenda mostrou.
+  // Owner ausente ou diferente falha fechado; importações genéricas e redistribuição
+  // de carteira continuam exclusivas do gestor.
+  if (usuarioSessao && usuarioSessao.role === 'rep') {
+    const ownerDaSessao = String(usuarioSessao.ownerId || '');
+    const foraDoProprioTerritorio = fonte !== 'casa_dos_dados' || !ownerDaSessao ||
+      leads.some(l => String(l.responsavel_owner_id || '') !== ownerDaSessao);
+    if (foraDoProprioTerritorio) {
+      return res.status(403).json({ erro: 'Você só pode adicionar uma sugestão da Casa dos Dados atribuída ao seu próprio território.' });
+    }
+  }
+
+  let nomesNoHubspot = new Set();
+  try {
+    const completo = montarDadosCompletos();
+    Object.values(completo.funilLeads || {}).forEach(lista => (lista || []).forEach(l => l.name && nomesNoHubspot.add(l.name.toLowerCase().trim())));
+    (completo.temperatura.quentes || []).forEach(l => l.name && nomesNoHubspot.add(l.name.toLowerCase().trim()));
+    (completo.temperatura.frios || []).forEach(l => l.name && nomesNoHubspot.add(l.name.toLowerCase().trim()));
+  } catch (e) { /* dedup best-effort */ }
+
+  // Régua oficial: somente volume de avaliações. Nota é contexto, nunca corte nem
+  // desempate. O mínimo pode ser ajustado por lote, sempre com relatório explícito.
+  const semCorteDeAvaliacao = FONTES_SEM_AVALIACAO.has(fonte);
+  const qualidade = {
+    avaliacoesMin: (req.body.qualidade && req.body.qualidade.avaliacoesMin != null)
+      ? Number(req.body.qualidade.avaliacoesMin)
+      : (semCorteDeAvaliacao ? 0 : 100)
+  };
+
+  const linhasTodas = leads.map(l => {
+    const cidade = canonizarCidade(l.cidade || l.city || '');
+    const bairro = l.bairro || null;
+    const lat = l.lat != null ? l.lat : (l.latitude != null ? l.latitude : null);
+    const lng = l.lng != null ? l.lng : (l.longitude != null ? l.longitude : null);
+    /* Dono: explícito no lead (l.responsavel_owner_id) vence; senão, roteia por território.
+       A COORDENADA VAI JUNTO (01/09/26): sem ela o roteador só consegue decidir pelo nome do
+       bairro, e nome não cobre uma cidade de 96 distritos — foi assim que a regra de sobra
+       despejou 290 contas numa pessoa em São Paulo. Com lat/lng, bairro que nenhuma lista
+       conhece cai no executivo do centro de zona mais próximo, que é geograficamente coerente
+       por construção. Ver lib/territorios.js.
+       lat/lng são lidos aqui com a MESMA regra usada logo abaixo no objeto da linha: se as
+       duas leituras divergirem, o dono passa a ser calculado sobre coordenada diferente da
+       que fica gravada, e o km do card deixa de explicar o dono. */
+    const dono = l.responsavel_owner_id ? String(l.responsavel_owner_id) : rotearTerritorio(cidade, bairro, lat, lng);
+    return {
+    place_id: l.place_id || null,
+    cnpj: l.cnpj || null,
+    data_abertura: l.data_abertura || null,
+    fonte: FONTES_ROTULO[fonte],
+    nome: String(l.nome || l.name || '').trim(),
+    categoria: l.categoria || null,
+    endereco: l.endereco || l.address || null,
+    bairro,
+    cidade,
+    estado: l.estado || l.state || null,
+    telefone: l.telefone || l.phone_number || null,
+    telefone_normalizado: normalizarTelefone(l.telefone || l.phone_number),
+    nota: l.nota != null ? l.nota : (l.rating != null ? l.rating : null),
+    avaliacoes: l.avaliacoes != null ? l.avaliacoes : (l.rating_count != null ? l.rating_count : null),
+    lat: lat,
+    lng: lng,
+    presencial: l.presencial !== false,
+    delivery: !!l.delivery,
+    horario_funcionamento: Array.isArray(l.weekday_hours) ? l.weekday_hours.join(' | ') : (l.horario_funcionamento || null),
+    ja_existe_hubspot: nomesNoHubspot.has(String(l.nome || l.name || '').toLowerCase().trim()),
+    responsavel_owner_id: dono,
+    status: dono ? 'atribuido' : 'pendente',
+    criado_por: criadoPor
+    };
+  }).filter(l => l.nome && l.cidade);
+
+  // Atencao ao `== null`: para as fontes normais, avaliacao ausente E reprovacao (o
+  // lead veio sem o dado que define o corte). Para a Casa dos Dados a ausencia e o
+  // estado esperado, entao so reprova se vier um numero abaixo do minimo.
+  const reprovadosQualidade = linhasTodas.filter(l =>
+    semCorteDeAvaliacao
+      ? (l.avaliacoes != null && Number(l.avaliacoes) < qualidade.avaliacoesMin)
+      : (l.avaliacoes == null || Number(l.avaliacoes) < qualidade.avaliacoesMin)
+  );
+  const reprovadosFit = linhasTodas.filter(l => !fazSentidoFoodservice(l));
+  const linhas = linhasTodas.filter(l =>
+    !reprovadosQualidade.includes(l) && !reprovadosFit.includes(l)
+  );
+
+  if (linhas.length === 0) {
+    const soQualidade = linhasTodas.length > 0 && reprovadosQualidade.length === linhasTodas.length;
+    return res.status(400).json({
+      erro: soQualidade
+        ? `Nenhuma conta passou pela régua de impacto (avaliações >= ${qualidade.avaliacoesMin}; a nota não influencia).`
+        : 'Nenhum restaurante válido no lote (precisa de nome, cidade, avaliações mínimas e categoria compatível com foodservice).',
+      reprovados_qualidade: reprovadosQualidade.length,
+      reprovados_fit: reprovadosFit.length
+    });
+  }
+
+  // Carrega a base canônica para deduplicar também entre fontes diferentes. Falha
+  // fechada: se não der para conferir a base, não importa e não arrisca duplicar.
+  let existentes = [];
+  try {
+    // Pagina toda a base: o limite padrão do PostgREST não pode transformar uma
+    // conta antiga em "nova" só porque ela ficou fora da primeira página.
+    const tamanhoPagina = 1000;
+    for (let offset = 0; ; offset += tamanhoPagina) {
+      const respExistentes = await fetch(`${supaUrl}/rest/v1/leads_prospeccao?select=id,place_id,fonte,nome,categoria,endereco,bairro,cidade,estado,telefone,telefone_normalizado,nota,avaliacoes,lat,lng,presencial,delivery,horario_funcionamento,ja_existe_hubspot&limit=${tamanhoPagina}&offset=${offset}`, {
+        headers: { apikey: supaService, Authorization: `Bearer ${supaService}` }
+      });
+      if (!respExistentes.ok) throw new Error((await respExistentes.text()).slice(0, 200));
+      const pagina = await respExistentes.json();
+      existentes.push(...pagina);
+      if (pagina.length < tamanhoPagina) break;
+    }
+  } catch (e) {
+    return res.status(502).json({ erro: 'Não foi possível conferir duplicidades antes da importação. Nada foi gravado: ' + String(e.message || e) });
+  }
+
+  const novas = [];
+  const mesclas = new Map();
+  const resultado = {
+    inseridos: 0, duplicados: 0, mesclados: 0, erros: [], duplicados_exemplos: [],
+    reprovados_qualidade: reprovadosQualidade.length,
+    reprovados_fit: reprovadosFit.length,
+    regra_qualidade: `avaliações >= ${qualidade.avaliacoesMin}; nota não influencia`,
+    reprovados_exemplos: reprovadosQualidade.slice(0, 10).map(l => `${l.nome} (${l.avaliacoes ?? '?'} avaliações)`),
+    reprovados_fit_exemplos: reprovadosFit.slice(0, 10).map(l => `${l.nome} (${l.categoria || 'sem categoria'})`)
+  };
+  linhas.forEach(l => {
+    const existente = existentes.find(x => mesmoRestaurante(x, l));
+    if (existente) {
+      resultado.duplicados++;
+      if (resultado.duplicados_exemplos.length < 10) resultado.duplicados_exemplos.push(`${l.nome} (${l.fonte} → ${existente.fonte})`);
+      const camposMesclados = mesclarRestaurante(existente, l);
+      Object.assign(existente, camposMesclados);
+      mesclas.set(existente.id, camposMesclados);
+      return;
+    }
+    const indiceNoLote = novas.findIndex(x => mesmoRestaurante(x, l));
+    if (indiceNoLote >= 0) {
+      resultado.duplicados++;
+      if (resultado.duplicados_exemplos.length < 10) resultado.duplicados_exemplos.push(`${l.nome} (repetido no próprio lote)`);
+      // CORREÇÃO (16/08/26): mesclarRestaurante() inclui updated_at, que só faz
+      // sentido pro PATCH de um registro que já existe no Supabase (caminho de
+      // `mesclas`, logo abaixo). Aqui é fusão de dois itens NOVOS dentro do mesmo
+      // lote — se updated_at vazasse pro objeto, esse registro ficava com uma
+      // coluna a mais que os outros de `novas`, e o insert em lote no Postgrest
+      // recusa tudo com "PGRST102: All object keys must match".
+      const mesclado = mesclarRestaurante(novas[indiceNoLote], l);
+      delete mesclado.updated_at;
+      novas[indiceNoLote] = { ...novas[indiceNoLote], ...mesclado };
+      return;
+    }
+    novas.push(l);
+  });
+
+  // Enriquece o registro já existente com a nova fonte e com os melhores dados,
+  // preservando owner, status e histórico comercial.
+  const pendentesMescla = [...mesclas.entries()];
+  for (let i = 0; i < pendentesMescla.length; i += 20) {
+    const loteMescla = pendentesMescla.slice(i, i + 20);
+    const respostas = await Promise.all(loteMescla.map(([id, campos]) => fetch(`${supaUrl}/rest/v1/leads_prospeccao?id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { apikey: supaService, Authorization: `Bearer ${supaService}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify(campos)
+    })));
+    respostas.forEach(resp => { if (resp.ok) resultado.mesclados++; else resultado.erros.push('Falha ao enriquecer um registro existente.'); });
+  }
+
+  if (novas.length > 0) {
+    try {
+      const resp = await fetch(`${supaUrl}/rest/v1/leads_prospeccao`, {
+        method: 'POST',
+        headers: {
+          apikey: supaService, Authorization: `Bearer ${supaService}`,
+          'Content-Type': 'application/json', Prefer: 'return=representation'
+        },
+        body: JSON.stringify(novas)
+      });
+      if (!resp.ok) {
+        const texto = await resp.text();
+        return res.status(502).json({ erro: 'Supabase recusou a importação: ' + texto.slice(0, 300), parcial: resultado });
+      }
+      const linhasInseridas = await resp.json().catch(() => []);
+      resultado.inseridos = novas.length;
+      // PEDIDO (19/08/26, Julyan: "eu preciso jogar alguns leads no pipe deles") — os
+      // IDs recém-criados voltam na resposta, pra quem importa poder na sequência
+      // materializar o negócio no HubSpot sem precisar de uma segunda tela/busca.
+      resultado.leadsCriados = linhasInseridas.map(l => ({ id: l.id, nome: l.nome, responsavel_owner_id: l.responsavel_owner_id }));
+      // Distribuição por executivo — pra conferir o roteamento de território no ato
+      resultado.distribuicao = {};
+      novas.forEach(l => {
+        const chave = l.responsavel_owner_id || 'pendente_sem_dono';
+        resultado.distribuicao[chave] = (resultado.distribuicao[chave] || 0) + 1;
+      });
+    } catch (e) {
+      return res.status(500).json({ erro: 'Falha ao gravar no Supabase: ' + String(e.message || e), parcial: resultado });
+    }
+  }
+
+  return res.status(200).json(resultado);
+};
+
+
+  },
+  "scripts/montar-dados.js": function (module, exports, require, process) {
+// scripts/montar-dados.js
+// FONTE ÚNICA da montagem do objeto DATA do cockpit (Etapa 1b — dados atrás do login).
+//
+// Antes, o build.js montava o DATA e embutia TUDO dentro do public/index.html — qualquer
+// visitante via o CRM inteiro no código-fonte da página, sem logar. Agora a montagem vive
+// aqui e é usada por DOIS consumidores:
+//   1. scripts/build.js  — gera o HTML público SÓ com o shell (login + placeholders vazios).
+//   2. api/dados.js      — serverless da Vercel: valida a sessão e devolve o DATA de verdade,
+//                          já filtrado pelo papel de quem pediu (gestor = tudo; executivo =
+//                          o próprio funil completo + resumo agregado dos colegas).
+//
+// Todos os arquivos de dados entram via require() com caminho estático — é o que garante
+// que a Vercel empacote os JSONs junto com a função serverless (mesmo padrão que o
+// api/atualizar-mrr.js já usa pro usuarios.json).
+
+// Arquivos opcionais — podem não existir num repo recém-clonado ou antes da 1ª execução
+// dos workflows. try/catch com require estático mantém o empacotamento da Vercel funcionando.
+function requireOpcional(fn) {
+  try { return fn(); } catch (e) { return null; }
+}
+
+// ══ DE ONDE VEM O SNAPSHOT DO CRM (02/09/26) ═══════════════════════════════════════
+// Os seis arquivos que o ROBO produz (hubspot, narrativas, resumo-semanal, weekly-raw,
+// sync-status, hubspot-previous) sairam do repositorio: agora eles vivem numa tabela do
+// Supabase (public.cockpit_snapshot) e a rota /api/dados os injeta aqui antes de montar.
+// Motivo: cada rodada do robo commitava esses arquivos, e todo commit gera um deploy na
+// Vercel — com o teto de 100 deploys/dia, a atualizacao ficava limitada a ~15 por dia.
+//
+// ELES SAO `let` E NAO `const`, e a troca e do PROCESSO INTEIRO, de proposito. O snapshot
+// e o mesmo para todo mundo: nao existe versao do CRM por usuario. O que e por usuario e o
+// FILTRO, e ele acontece depois, em filtrarParaPapel(dados, usuario), que recebe a pessoa
+// por argumento. Guardar o snapshot no modulo e cache; guardar o usuario seria vazamento.
+//
+// E O REQUIRE CONTINUA AQUI COMO REDE: se a tabela estiver vazia ou o Supabase fora do ar,
+// a rota cai no arquivo. Por isso hubspot e narrativas viraram opcionais — antes eram
+// require duro, e no dia em que o arquivo deixar de ser commitado o modulo nem carregaria.
+let hubspot = requireOpcional(() => require('../data/hubspot.json'));
+let narrativas = requireOpcional(() => require('../data/narrativas.json'));
+const usuariosRaw = require('../data/usuarios.json');
+
+/* ══ OS GESTORES QUE TAMBÉM VENDEM (24/09/26) ═══════════════════════════════════
+   Julyan vende em evento e pelo field sales, e as vendas dele contam no placar do
+   time. Ele não é rep — não tem plano de dia, não entra na rodada, não tem meta
+   individual — mas o que ele fecha é venda da casa.
+   A lista sai do MESMO usuarios.json que define os reps, pela role: quem é manager e
+   tem ownerId. Sem ownerId não dá para saber quais negócios são dele, e é por isso
+   que a linha do Julyan ganhou o dele hoje. */
+const GESTORES_QUE_VENDEM = (function () {
+  const lista = Array.isArray(usuariosRaw) ? usuariosRaw : (usuariosRaw.usuarios || []);
+  const out = {};
+  lista.forEach(function (u) {
+    if (!u || u.role !== 'manager') return;
+    if (!u.ownerId || String(u.ownerId).startsWith('pendente_')) return;
+    out[String(u.ownerId)] = { name: u.nome || 'gestor', ownerId: String(u.ownerId) };
+  });
+  return out;
+}());
+
+// (requireOpcional foi movida para o topo do arquivo em 02/09/26: ela passou a ser usada
+// pelos primeiros requires, e declaracao de function sobe por hoisting mas fica confusa
+// de ler — ver o bloco no inicio do arquivo.)
+const leadsReferencia = requireOpcional(() => require('../data/leads-referencia.json')) || { pracas: [] };
+/* QUEM COBRE O QUÊ (09/09/26) — a declaração única de território.
+   ANTES DISTO A MESMA REGRA VIVIA EM DOIS LUGARES: a tela do gestor derivava a praça de
+   cada executivo dos BAIRROS DOS LEADS DE EXEMPLO em leads-referencia.json, e a busca
+   semanal tinha a própria cópia em regex (as metaBairros do backfill). As duas divergiam
+   calada, e o preço foi medido em 09/09: quatro dos onze executivos não apareciam em
+   praça nenhuma, e por isso não podiam receber carga de prospecção. */
+const territorios = requireOpcional(() => require('../data/territorios.json')) || { territorios: [] };
+const supabaseConfig = requireOpcional(() => require('../data/supabase-config.json'));
+const maptilerConfig = requireOpcional(() => require('../data/maptiler-config.json'));
+let resumoSemanal = requireOpcional(() => require('../data/resumo-semanal.json'));
+let weeklyRaw = requireOpcional(() => require('../data/weekly-raw.json'));
+// AUTOMAÇÃO 3 (13/08/26) — status da última rodada do robô da Daily: falhas de
+// sincronização de realizado_visitas/avancos/propostas, se houver. Opcional porque só
+// passa a existir depois da PRIMEIRA execução do fetch-hubspot.js com esta automação.
+let syncStatus = requireOpcional(() => require('../data/sync-status.json'));
+// Grandes redes que a Takeat não atende — usado pela Prospecção para tirar da fila
+// recomendada (vai pra "Revisar escopo", não some). Dado editável em data/.
+const redesExcluidas = requireOpcional(() => require('../data/redes-excluidas.json'));
+let hubspotPrevious = requireOpcional(() => require('../data/hubspot-previous.json'));
+// Régua de cadência (data/cadencias.json). É CONFIGURAÇÃO, não código: o template lê
+// DATA.cadencias e nunca hardcoda os passos, então ajustar a régua (dias, canais, quais
+// cadências existem, motivos válidos de saída) é editar esse JSON e rodar o build.
+// Opcional pelo mesmo motivo dos outros: repo recém-clonado pode não ter o arquivo — aí
+// o template cai no fallback mínimo e mostra "régua não configurada" em vez de inventar.
+const cadencias = requireOpcional(() => require('../data/cadencias.json'));
+/* Tabela do variável (data/comissionamento.json). CONFIGURAÇÃO pelo mesmo motivo das
+   outras: o valor de cada faixa é decisão do Julyan, não regra de código, e a tela
+   NUNCA escreve um número de dinheiro que não tenha saído daqui. Opcional como as
+   demais — sem o arquivo, a tela não mostra a caixa da comissão em vez de inventar
+   quanto alguém vai receber, que é o pior número errado possível. */
+const comissionamento = requireOpcional(() => require('../data/comissionamento.json'));
+/* Régua da temperatura (data/temperatura.json). CONFIGURAÇÃO, como cadencias: o robô
+   calcula a nota com ela e a tela ESCREVE a fórmula a partir dela. Duas cópias da
+   frase (uma no JSON, uma no template) divergiriam no primeiro ajuste de peso. */
+const temperaturaRegua = requireOpcional(() => require('../data/temperatura.json'));
+
+const USUARIOS = Array.isArray(usuariosRaw) ? usuariosRaw : (usuariosRaw.usuarios || []);
+
+function fmtDate(iso) {
+  const d = new Date(iso);
+  // CORREÇÃO (18/08/26, achado na revisão final: "atualizado em 18/08 às 21:46"
+  // exibido numa segunda-feira à noite, horário de Brasília) — a HORA já convertia
+  // pro fuso certo (timeZone abaixo), mas a DATA não tinha o mesmo timeZone e usava
+  // o fuso do SERVIDOR (UTC, no GitHub Actions) — à noite em Brasília (UTC-3), já é
+  // "amanhã" em UTC, então a data mostrava 1 dia à frente do que realmente é aqui.
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo' }) +
+    ' às ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+}
+
+// ============ MONTAGEM DO DATA COMPLETO (idêntica à antiga lógica do build.js) ============
+
+// ══ A ROTA INJETA O SNAPSHOT AQUI ══════════════════════════════════════════════════
+// Recebe o que veio da tabela e substitui SO o que veio preenchido. Chave ausente ou
+// nula mantem o arquivo — nunca apaga um dado que existe com um vazio que chegou, porque
+// tabela sem a linha e "ainda nao publicou", nao "nao ha dado".
+//
+// Devolve o que foi trocado, e a rota registra isso: sem esse retorno nao daria para
+// saber, olhando producao, se a tela esta sendo servida pelo Supabase ou pelo arquivo —
+// e essa e a unica pergunta que importa durante a virada.
+function usarSnapshot(fontes) {
+  const f = fontes || {};
+  const trocadas = [];
+  const usar = (chave, valor, aplicar) => {
+    if (valor == null) return;
+    aplicar(valor);
+    trocadas.push(chave);
+  };
+  usar('hubspot', f.hubspot, v => { hubspot = v; });
+  usar('narrativas', f.narrativas, v => { narrativas = v; });
+  usar('resumo-semanal', f['resumo-semanal'], v => { resumoSemanal = v; });
+  usar('weekly-raw', f['weekly-raw'], v => { weeklyRaw = v; });
+  usar('sync-status', f['sync-status'], v => { syncStatus = v; });
+  usar('hubspot-previous', f['hubspot-previous'], v => { hubspotPrevious = v; });
+  return trocadas;
+}
+
+// ══ CADA LEAD DIZ EM QUE ETAPA ESTA (04/09/26) ═════════════════════════════════════
+// Os objetos de funilLeads[etapa] vinham do robo SEM stageId: a etapa existia so como
+// chave do mapa. Medido na ficha do negocio — ela faz ORDEM_FUNIL_FICHA.indexOf(l.stageId)
+// e com -1 NAO DESENHA A TRILHA: os oito segmentos de mudar etapa nao existiam para
+// negocio nenhum vindo da carga (0 segmentos medidos num lead do robo, 8 no criado na
+// sessao, que nasce com stageId). O chip do topo tambem saia sem o nome da etapa.
+//
+// AQUI E NAO NO ROBO porque esta funcao e a porta unica — producao, preview e as suites
+// passam por ela, e o snapshot do Supabase e injetado antes dela rodar. Corrigir no robo
+// valeria so na proxima rodada e deixaria todo snapshot ja gravado sem o campo.
+//
+// `||` e nao sobrescrita: se o lead ja trouxer a etapa, a dele manda. A chave do mapa e o
+// fallback, nao a autoridade.
+function comEtapaNoLead(porEtapa) {
+  const saida = {};
+  Object.entries(porEtapa || {}).forEach(([etapa, leads]) => {
+    saida[etapa] = (Array.isArray(leads) ? leads : []).map(l => (l && typeof l === 'object')
+      ? Object.assign({}, l, {
+          stageId: l.stageId || etapa,
+          stage: l.stage || ((hubspot.stageMeta && hubspot.stageMeta.labels) ? (hubspot.stageMeta.labels[etapa] || '') : '')
+        })
+      : l);
+  });
+  return saida;
+}
+
+// O snapshot do CRM e obrigatorio para montar qualquer coisa. Sem ele — nem na tabela nem
+// no arquivo — a resposta certa e um erro claro, nunca uma tela com zeros: zero negocio
+// aberto e uma afirmacao sobre o funil, e nao ha funil nenhum para afirmar.
+/* NARRATIVAS TAMBEM E OBRIGATORIO (03/09/26), e isto nao era verdade antes de hoje.
+   Ele deixou de ser versionado (o robo commitava e cada commit gerava um deploy), entao
+   nao esta mais no pacote do deploy: a UNICA fonte dele passou a ser a tabela. E ele nao
+   e complemento — montarDadosCompletos() abre com Object.keys(narrativas.reps), ou seja
+   ELE E O QUADRO DE EXECUTIVOS. Sem ele nao ha uma pessoa na tela.
+
+   Antes desta linha, uma leitura de tabela que falhasse (6s de timeout em api/dados.js)
+   derrubava a rota com TypeError em campo nulo — 500 e stack trace. Agora cai no mesmo
+   503 com motivo que o hubspot ausente ja produzia, que e a resposta certa: a tela diz
+   que nao tem dado, em vez de mentir ou explodir. Ver o bloco do .gitignore. */
+function temSnapshot() { return !!(hubspot && hubspot.kpis && narrativas && narrativas.reps); }
+/* QUAL das duas faltou. Vive aqui porque hubspot e narrativas sao locais deste modulo;
+   a rota nao os ve. Uma funcao so, usada num lugar so, para o 503 mandar procurar no
+   lugar certo: as duas chegam pelo mesmo caminho e quebram por motivos diferentes. */
+function faltandoNoSnapshot() {
+  const f = [];
+  if (!(hubspot && hubspot.kpis)) f.push('o funil do CRM');
+  if (!(narrativas && narrativas.reps)) f.push('o quadro de executivos (narrativas)');
+  return f;
+}
+
+function montarDadosCompletos() {
+  // Ordem de exibição = ordem em que aparecem no narrativas.json
+  const ownerIds = Object.keys(narrativas.reps);
+
+  const reps = ownerIds.map(ownerId => {
+    const n = narrativas.reps[ownerId];
+    const h = hubspot.reps[ownerId] || { open: 0, stages: {}, criticos: [], travados: [], leadsTravados: 0, ganhosSemana: 0, ganhosSemanaNomes: [], fechadosNoMes: 0, metaMensal: 10, metaMrr: null, metaReceita: null, patamarMeta: null, visitasHubspotHoje: 0, avancosHubspotHoje: 0, propostasHubspotHoje: 0, fechamentosHubspotHoje: 0 };
+
+    return {
+      ownerId,
+      name: n.name,
+      praca: n.praca,
+      tag: n.tag,
+      tagLabel: n.tagLabel,
+      gargalo: n.gargalo,
+      boasPraticas: n.boasPraticas,
+      compromissos: n.compromissos,
+      /* O PRAZO DE CADA COMPROMISSO, mesmo índice de `compromissos` (19/09/26). Sem ele a
+         aba Pessoas não consegue dizer o que VENCEU, que é a manchete do gestor na
+         segunda. Array irmão em vez de objeto porque cinco leitores indexam o texto e o
+         checked[] de pdi_compromissos guarda a POSIÇÃO. */
+      compromissosPrazo: Array.isArray(n.compromissosPrazo) ? n.compromissosPrazo : [],
+      open: h.open,
+      stages: h.stages,
+      criticos: h.criticos,
+      travados: h.travados || [],
+      /* TODOS os abertos, enxutos — o mapa de cadência precisa da régua de cada um, e os
+         recortes (criticos/travados/plotaveis) cobriam 124 dos 204 negócios do time.
+         ESTE OBJETO É UM FILTRO: campo que não está nesta lista não chega à tela, e foi
+         assim que metaMrr e metaReceita morreram em silêncio em 10/09. */
+      abertos: Array.isArray(h.abertos) ? h.abertos : [],
+      quentes: h.quentes || [],
+      leadsTravados: h.leadsTravados || 0,
+      ganhosSemana: h.ganhosSemana || 0,
+      ganhosSemanaNomes: h.ganhosSemanaNomes || [],
+      fechadosNoMes: h.fechadosNoMes || 0,
+      /* ══ AS TRES METAS PASSAM, E ZERO E ZERO (10/09/26) ══════════════════════════
+         Duas coisas estavam erradas nesta linha, e as duas apareceram medindo a tela
+         depois da rodada do robo:
+
+         1. ESTE OBJETO E UM FILTRO. `metaMrr` e `metaReceita` chegavam do robo e
+            morriam aqui, porque nao estavam na lista — a tela recebia undefined nas
+            duas metas novas.
+         2. `|| 10` TRANSFORMA ZERO EM DEZ. A Amanda saiu da planilha e tem meta 0; a
+            tela mostrava 10 para ela, que e exatamente o numero que este trabalho veio
+            tirar. Zero e falsy, e `|| ` nao distingue "nao tem meta" de "meta zero". */
+      metaMensal: h.metaMensal != null ? h.metaMensal : 10,
+      metaMrr: h.metaMrr != null ? h.metaMrr : null,
+      metaReceita: h.metaReceita != null ? h.metaReceita : null,
+      patamarMeta: h.patamarMeta || null,
+      visitasHubspotHoje: h.visitasHubspotHoje || 0,
+      // BLOCO 15: nomes de quem avancou de etapa e de quem recebeu proposta hoje, pra
+      // Daily & Ritmo. Vem do fetch-hubspot; enquanto o cron nao roda, chega vazio e a
+      // tela mostra so a contagem, avisando que os nomes vem na proxima rodada.
+      avancosHojeNomes: Array.isArray(h.avancosHojeNomes) ? h.avancosHojeNomes : [],
+      propostasHojeNomes: Array.isArray(h.propostasHojeNomes) ? h.propostasHojeNomes : [],
+      avancosHubspotHoje: h.avancosHubspotHoje || 0,
+      propostasHubspotHoje: h.propostasHubspotHoje || 0,
+      fechamentosHubspotHoje: h.fechamentosHubspotHoje || 0
+    };
+  });
+
+  // ---- Semáforo de saúde geral do funil ----
+  const totalAberto = hubspot.kpis.emAberto || 0;
+  const totalTravados = hubspot.kpis.leadsTravados || 0;
+  const pctTravados = totalAberto > 0 ? (totalTravados / totalAberto) * 100 : 0;
+  let saude;
+  if (pctTravados < 15) {
+    saude = { nivel: 'ok', label: 'Funil saudável', detalhe: `${Math.round(pctTravados)}% dos leads abertos com SLA estourado` };
+  } else if (pctTravados < 35) {
+    saude = { nivel: 'warn', label: 'Atenção', detalhe: `${Math.round(pctTravados)}% dos leads abertos com SLA estourado` };
+  } else {
+    saude = { nivel: 'crit', label: 'Funil travado', detalhe: `${Math.round(pctTravados)}% dos leads abertos com SLA estourado` };
+  }
+
+  // ---- Deltas vs. última atualização ----
+  function delta(atual, anterior) {
+    if (anterior === undefined || anterior === null) return null;
+    const diff = atual - anterior;
+    if (diff === 0) return { sinal: 'flat', valor: 0 };
+    return { sinal: diff > 0 ? 'up' : 'down', valor: Math.abs(diff) };
+  }
+  const kpiDeltas = hubspotPrevious ? {
+    leadsCriados: delta(hubspot.kpis.leadsCriados, hubspotPrevious.kpis.leadsCriados),
+    ganhos: delta(hubspot.kpis.ganhos, hubspotPrevious.kpis.ganhos),
+    perdidos: delta(hubspot.kpis.perdidos, hubspotPrevious.kpis.perdidos),
+    emAberto: delta(hubspot.kpis.emAberto, hubspotPrevious.kpis.emAberto),
+    emReciclagem: delta(hubspot.kpis.emReciclagem, hubspotPrevious.kpis.emReciclagem),
+    fechadosNoMes: delta(hubspot.kpis.fechadosNoMes, hubspotPrevious.kpis.fechadosNoMes),
+    taxaAvanco: delta(hubspot.kpis.taxaAvanco, hubspotPrevious.kpis.taxaAvanco)
+  } : null;
+
+  // ---- Ranking de vendas da semana ----
+  const ganhosDetalheFresco = (weeklyRaw && weeklyRaw.ganhosSemanaDetalhe) || (resumoSemanal && resumoSemanal.ganhosSemanaDetalhe) || [];
+  let rankingSemanal = [];
+  if (ganhosDetalheFresco.length > 0) {
+    const porOwner = {};
+    ganhosDetalheFresco.forEach(d => {
+      if (!d.ownerId) return;
+      if (!porOwner[d.ownerId]) porOwner[d.ownerId] = { count: 0, mrrTotal: 0, clientes: [] };
+      porOwner[d.ownerId].count += 1;
+      porOwner[d.ownerId].mrrTotal += d.mrr || 0;
+      porOwner[d.ownerId].clientes.push({ nome: d.nome, mrr: d.mrr || 0 });
+    });
+    rankingSemanal = Object.entries(porOwner)
+      .map(([ownerId, v]) => ({
+        ownerId,
+        name: (narrativas.reps[ownerId] || {}).name || ownerId,
+        count: v.count,
+        mrrTotal: v.mrrTotal,
+        clientes: v.clientes
+      }))
+      .sort((a, b) => (b.count - a.count) || (b.mrrTotal - a.mrrTotal))
+      .slice(0, 3);
+  }
+
+  // ---- Vendas do mês: as TRÊS medidas por executivo (10/09/26) ------------------
+  //  Antes daqui saíam clientes e MRR. A receita (o valor TOTAL do plano negociado,
+  //  `amount`) não vinha, e por isso duas das três metas do Julyan não tinham
+  //  realizado nenhum na tela.
+  //
+  //  E O MÊS DE CADA VENDA PASSA A SER O DE COMPETÊNCIA, não o do closedate. Julyan,
+  //  10/09: "uma venda do marco foi no mes passado, é q o boleto compensou na virada
+  //  pro dia 1". O CRM não sabe disso — o único campo de data do ganho é o closedate.
+  //  Quem sabe é ele, e a decisão está registrada em data/metas.json, negócio por
+  //  negócio, com motivo. Aqui a venda ajustada SAI do mês e o ajuste viaja no payload
+  //  para a tela poder dizer que houve — divergir do CRM em silêncio seria pior que o
+  //  número errado.
+  let vendasMes = null;
+  if (Array.isArray(hubspot.vendasMes)) {
+    const MESES_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+    const agoraBr = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const mesCorrente = agoraBr.toISOString().slice(0, 7);
+    const porOwnerMes = {};
+    const ajustadas = [];
+    /* AS VENDAS DO GESTOR FICAM À PARTE, e não em porOwnerMes: aquela lista é o pódio
+       e a régua por pessoa, e é ela que alimenta a rodada, a Daily e a meta individual.
+       O gestor não tem plano de dia nem lugar na fila — o que ele tem é venda. */
+    const doGestor = { count: 0, mrrTotal: 0, receitaTotal: 0, clientes: [], name: null, ownerId: null };
+    /* E O QUE NÃO É DE NINGUÉM DO TIME CONTINUA FORA, mas agora CONTADO: antes ele
+       sumia sem deixar rastro, e foi assim que quatro vendas do gestor ficaram um mês
+       inteiro fora do placar sem ninguém ver. */
+    const foraDoTime = [];
+    hubspot.vendasMes.forEach(d => {
+      /* SER REP GANHA DE SER GESTOR (24/09/26). O mesmo ownerId pode estar nas duas
+         listas — é o caso do login de executivo que o Julyan usa para testar o funil.
+         Quando isso acontece, a venda conta como venda de rep: quem tem tela de pessoa
+         precisa ver a própria venda nela. O balde `doGestor` é de quem é SÓ gestor.
+         Sem esta ordem, a aba do executivo mostrava 0 clientes fechados no mês com
+         quatro vendas fechadas no CRM. */
+      const ehRep = !!(d.ownerId && narrativas.reps[d.ownerId]);
+      const ehGestor = !ehRep && !!(d.ownerId && GESTORES_QUE_VENDEM[d.ownerId]);
+      if (!d.ownerId || (!ehRep && !ehGestor)) {
+        foraDoTime.push({ id: d.id || null, nome: d.nome, ownerId: d.ownerId || null,
+          mrr: d.mrr || 0, receita: d.receita || 0, closedate: d.closedate || null });
+        return;
+      }
+      // A venda cujo mês de competência não é o corrente sai da conta do mês, e fica
+      // registrada para a tela mostrar.
+      const mes = d.mesDeCompetencia || mesCorrente;
+      if (mes !== mesCorrente) {
+        /* O NOME SAI DA FONTE CERTA para cada um: a do rep vem de narrativas, a do
+           gestor de usuarios.json. Ler narrativas.reps[ownerId].name para o gestor
+           estouraria aqui — ele não está lá, e é justamente por isso que este patch
+           existe. */
+        const quem = narrativas.reps[d.ownerId] || GESTORES_QUE_VENDEM[d.ownerId];
+        ajustadas.push({ id: d.id || null, nome: d.nome, ownerId: d.ownerId,
+          name: (quem && quem.name) || 'sem nome', mrr: d.mrr || 0, receita: d.receita || 0,
+          closedate: d.closedate || null, contaEm: mes, motivo: d.ajustado || null });
+        return;
+      }
+      if (ehGestor) {
+        doGestor.count += 1;
+        doGestor.mrrTotal += d.mrr || 0;
+        doGestor.receitaTotal += d.receita || 0;
+        doGestor.name = GESTORES_QUE_VENDEM[d.ownerId].name;
+        doGestor.ownerId = d.ownerId;
+        doGestor.clientes.push({ id: d.id || null, nome: d.nome, mrr: d.mrr || 0,
+          receita: d.receita || 0, closedate: d.closedate || null });
+        return;
+      }
+      if (!porOwnerMes[d.ownerId]) porOwnerMes[d.ownerId] = { count: 0, mrrTotal: 0, receitaTotal: 0, clientes: [] };
+      porOwnerMes[d.ownerId].count += 1;
+      porOwnerMes[d.ownerId].mrrTotal += d.mrr || 0;
+      porOwnerMes[d.ownerId].receitaTotal += d.receita || 0;
+      porOwnerMes[d.ownerId].clientes.push({ id: d.id || null, nome: d.nome, mrr: d.mrr || 0,
+        receita: d.receita || 0, closedate: d.closedate || null });
+    });
+    const porRepMes = Object.entries(porOwnerMes).map(([ownerId, v]) => ({
+      ownerId,
+      name: narrativas.reps[ownerId].name,
+      praca: narrativas.reps[ownerId].praca || '—',
+      count: v.count,
+      mrrTotal: v.mrrTotal,
+      receitaTotal: v.receitaTotal,
+      clientes: v.clientes.sort((a, b) => (b.mrr || 0) - (a.mrr || 0))
+    })).sort((a, b) => (b.count - a.count) || (b.mrrTotal - a.mrrTotal));
+
+    vendasMes = {
+      mesLabel: `${MESES_PT[agoraBr.getUTCMonth()]}/${agoraBr.getUTCFullYear()}`,
+      mes: mesCorrente,
+      /* ══ OS TOTAIS SOMAM O TIME MAIS O GESTOR (24/09/26) ═══════════════════════
+         Venda do gestor é venda da casa e conta no placar. O `porRep` abaixo NÃO a
+         inclui de propósito — ele é o pódio e a régua por pessoa. Quem quiser saber a
+         diferença entre os dois lê `gestor`, que viaja ao lado com nome e clientes. */
+      totalClientes: porRepMes.reduce((s, r) => s + r.count, 0) + doGestor.count,
+      totalMrr: porRepMes.reduce((s, r) => s + r.mrrTotal, 0) + doGestor.mrrTotal,
+      totalReceita: porRepMes.reduce((s, r) => s + r.receitaTotal, 0) + doGestor.receitaTotal,
+      porRep: porRepMes,
+      /* A PARTE DO GESTOR, nomeada. `null` quando ele não vendeu no mês — e null é
+         diferente de zero: zero seria uma linha na tela dizendo que ele não vendeu. */
+      gestor: doGestor.count ? {
+        ownerId: doGestor.ownerId, name: doGestor.name, count: doGestor.count,
+        mrrTotal: doGestor.mrrTotal, receitaTotal: doGestor.receitaTotal,
+        clientes: doGestor.clientes.sort((a, b) => (b.mrr || 0) - (a.mrr || 0))
+      } : null,
+      /* E O QUE FICOU FORA DO TIME, CONTADO em vez de sumido em silêncio. */
+      foraDoTime: foraDoTime,
+      // as vendas que saíram do mês por competência, com o motivo de cada uma
+      ajustadas: ajustadas
+    };
+  }
+
+  // ---- Quentes/frios com a praça anexada ----
+  function comPraca(lista) {
+    return (lista || []).map(l => ({ ...l, praca: (narrativas.reps[l.ownerId] || {}).praca || '—' }));
+  }
+  const temperaturaComPraca = {
+    quentes: comPraca((hubspot.temperatura || {}).quentes),
+    frios: comPraca((hubspot.temperatura || {}).frios)
+  };
+
+  return {
+    /* AS OPÇÕES DAS PROPRIEDADES DE ENUMERAÇÃO, como o HubSpot as nomeia. A tela usa
+       para MOSTRAR; o valor gravado continua vindo das listas do template. Sem isto a
+       tela imprimia o valor cru e oito opções divergiam do CRM. */
+    opcoesHubspot: hubspot.opcoesDeNegocio || null,
+    hubspotUpdatedAtFmt: fmtDate(hubspot.updatedAt),
+    // ITEM 4 (10/08/26): o timestamp CRU vai junto do formatado. A tela precisa dele
+    // pra calcular a idade do dado e avisar em vermelho quando o robô das 5h falhou —
+    // apresentar número velho na Daily sem saber que é velho era o risco real.
+    hubspotUpdatedAtISO: hubspot.updatedAt || null,
+    versaoAnalise: narrativas._atualizado_em || 'v1',
+    kpisHub: hubspot.kpis,
+    kpiDetalhe: {
+      leadsCriados: (hubspot.kpiDetalhe?.leadsCriados || []).map(d => ({ ...d, vendedor: (narrativas.reps[d.ownerId] || {}).name || '—' })),
+      perdidos: (hubspot.kpiDetalhe?.perdidos || []).map(d => ({ ...d, vendedor: (narrativas.reps[d.ownerId] || {}).name || '—' }))
+    },
+    kpiDeltas,
+    /* POR QUE PERDEMOS (30/08/26): motivo de perda dos ultimos 90 dias, por motivo e por
+       executivo. Vem do HubSpot em motivo_do_perdido, que o time preenche.
+
+       DESDE 19/09 ELE CARREGA emLotePorMotivo: quanto de cada motivo foi marcado numa
+       sentada. O objeto vai INTEIRO para o gestor, então os campos novos viajam
+       sozinhos — não há lista de campos aqui que precise ser atualizada. */
+    motivosPerda: hubspot.motivosPerda || null,
+    /* Conversão por turma, velocidade de etapa e ciclo — o gestor recebe inteiro. */
+    historicoEtapas: hubspot.historicoEtapas || null,
+    funil: hubspot.funil,
+    /* SEM ISTO A TRILHA DE ETAPAS DA FICHA NAO DESENHA — ver comEtapaNoLead. */
+    funilLeads: comEtapaNoLead(hubspot.funilLeads),
+    /* o numero de quem saiu do time viaja DENTRO de kpisHub, que a tela ja recebe
+       inteiro — passar de novo no topo era um caminho que a lista branca do recorte por
+       papel descartava em silencio. */
+    /* O CORTE DA COLUNA PERDIDO desce para os dois papeis. Sem ele a tela nao tem como
+       dizer 'nada saiu da carteira desde 01/09' e a coluna vazia leria como 'nunca perdi
+       nada' — mentira por omissao, com 1.811 perdas no CRM. */
+    perdidoVisivel: hubspot.perdidoVisivel || null,
+    onboardingVisivel: hubspot.onboardingVisivel || null,
+    leadsReciclagem60: hubspot.leadsReciclagem60 || [],
+    vendasMes,
+    temperatura: temperaturaComPraca,
+    stageMeta: hubspot.stageMeta || { slaDays: {}, descriptions: {}, labels: {} },
+    saude,
+    reps,
+    /* AGREGADO ANÔNIMO: só percentuais e a contagem de quantas pessoas entraram na
+       conta. Nenhum nome, nenhum ownerId de colega, nenhuma lista. */
+    habitosTime: habitosDoTime(hubspot.reps || {}, ownerIds),
+    leadsReferencia: leadsReferencia.pracas || [],
+    /* O MAPA INTEIRO É DO GESTOR: é com ele que a aba Rotas sabe de quem é cada praça,
+       quem está sem rota declarada e o que ficou sem dono. O recorte do executivo está
+       mais abaixo — ele recebe só a rota dele. */
+    territorios: territorios.territorios || [],
+    territoriosSemDono: territorios._sem_dono || [],
+    footerText: `Fonte: HubSpot (pipeline 916011864, atualizado a cada 2h no horário comercial) + Daily (prometido/realizado) · Leads críticos = mais antigos sem avanço de etapa.`,
+    // AUTOMAÇÃO 3 (13/08/26) — status da última rodada do robô: se alguma escrita de
+    // realizado_visitas/avancos/propostas falhou ou não bateu na conferência pós-escrita.
+    // Opcional: undefined até a primeira rodada rodar com esta automação.
+    syncStatus: syncStatus || null,
+    resumoSemanal: (resumoSemanal || weeklyRaw) ? {
+      geradoEmFmt: resumoSemanal ? fmtDate(resumoSemanal.geradoEm) : null,
+      numerosAtualizadosEmFmt: weeklyRaw ? fmtDate(weeklyRaw.geradoEm) : (resumoSemanal ? fmtDate(resumoSemanal.geradoEm) : null),
+      janela: (weeklyRaw && weeklyRaw.janela) || (resumoSemanal && resumoSemanal.janela),
+      /* A JANELA QUE O TEXTO DA IA DESCREVE (19/09/26), que NÃO é a de cima.
+         `janela` acima vem do weekly-raw, regravado a cada daily-refresh; `porRep` e
+         `comoAgir` logo abaixo vêm do resumo-semanal, escrito só no cron de domingo
+         22h. A janela do weekly-raw vira na sexta 23:59 e a do resumo só no domingo:
+         nesse fim de semana o placar é de uma semana e o board é da anterior. Sem
+         este campo a tela não tem como saber disso, e foi assim que "2 ganhos" e
+         "R$ 857 de MRR" de semanas diferentes ficaram lado a lado em 16/09. */
+      janelaDaLeitura: (resumoSemanal && resumoSemanal.janela && resumoSemanal.janela.atual) || null,
+      kpisComparativo: (weeklyRaw && weeklyRaw.kpisComparativo) || (resumoSemanal && resumoSemanal.kpisComparativo),
+      resumoGeral: resumoSemanal ? resumoSemanal.resumoGeral : null,
+      comoAgir: resumoSemanal ? resumoSemanal.comoAgir : [],
+      // BLOCO 41 — faísca de 5 semanas (fechamentos/reuniões/criados) pros KPIs de time
+      // da aba Semana do gestor. Só existe a partir desta build; resumo-semanal.json de
+      // builds antigas não tem o campo, daí o fallback pra null (a tela desenha 1 barra só).
+      serieSemanal: resumoSemanal ? (resumoSemanal.serieSemanal || null) : null,
+      porRep: resumoSemanal ? (resumoSemanal.porRep || {}) : {},
+      /* A aba Semana mostra um selo discreto quando a rodada da IA falhou em parte.
+         Sem repassar aqui, aquele selo seria codigo morto por construcao — o campo
+         existe no snapshot e nao existia nesta projecao. */
+      _falhasIA: resumoSemanal ? (resumoSemanal._falhasIA || null) : null,
+      ganhosSemanaDetalhe: ganhosDetalheFresco,
+      reunioesSemanaDetalhe: (weeklyRaw && weeklyRaw.reunioesSemanaDetalhe) || (resumoSemanal && resumoSemanal.reunioesSemanaDetalhe) || [],
+      // BLOCO 41 — "criados" por pessoa na semana (board da Semana do gestor).
+      leadsCriadosSemanaDetalhe: (weeklyRaw && weeklyRaw.leadsCriadosSemanaDetalhe) || (resumoSemanal && resumoSemanal.leadsCriadosSemanaDetalhe) || [],
+      quentesDemoOuNegociacao: (weeklyRaw && weeklyRaw.quentesDemoOuNegociacao) || (resumoSemanal && resumoSemanal.quentesDemoOuNegociacao) || [],
+      // snapshotReps alimenta o card "Onde atacar esta semana" (visão por praça).
+      // Ele só existe no weekly-raw.json — o resumo-semanal.json (texto da IA) não tem.
+      // Sem esta linha o card lia undefined e sumia da tela em silêncio, sem erro.
+      snapshotReps: (weeklyRaw && weeklyRaw.snapshotReps) || {},
+      ranking: rankingSemanal
+    } : null,
+    agenda: hubspot.agenda || null,
+    redesExcluidas: (redesExcluidas && Array.isArray(redesExcluidas.redes)) ? redesExcluidas.redes : [],
+    // Configuração da régua de cadência — igual pros dois papéis (é política do canal,
+    // não dado de cliente), por isso passa intacta pelo filtrarParaPapel.
+    cadencias: cadencias || null,
+    /* A TABELA DO VARIÁVEL — igual para os dois papéis, como cadencias: é política de
+       remuneração, não dado de cliente. O que o filtro por papel corta é a LISTA de
+       vendas por pessoa (vendasMes), e é dela que sai quantos clientes cada um tem —
+       então o executivo calcula a comissão dele e não vê a do colega. */
+    comissionamento: comissionamento || null,
+    /* CADÊNCIA DIÁRIA (08/09/26): atividade por executivo por dia útil, do robô.
+       DADO, não configuração — o filtro por papel abaixo corta para o executivo. */
+    cadenciaDiaria: hubspot.cadenciaDiaria || null,
+    /* A RÉGUA DA TEMPERATURA vai inteira para os dois papéis: é política de
+       priorização, e a tela precisa dela para escrever de onde a nota vem. */
+    temperaturaRegua: temperaturaRegua || null,
+    usuarios: USUARIOS
+  };
+}
+
+// ============ FILTRO POR PAPEL (o que cada login pode receber do servidor) ============
+//
+// Gestor: DATA completo.
+// Executivo: o PRÓPRIO objeto rep completo (tudo que já via no Meu Painel) + dos colegas
+// apenas o resumo agregado que o Pódio/ranking precisa — SEM clientes, funil, notas,
+// gargalo ou coaching dos outros. Corte aprovado pelo Julyan em 07/08/26.
+
+// Campos de colega visíveis pra qualquer executivo (necessários pro Pódio/seletores):
+/* ══ HÁBITOS DO TIME — NÚMERO AGREGADO, SEM NOME ════════════════════════════════════
+   Ver o cabeçalho de scripts/montar-dados.js? Não: a razão inteira está no commit e no
+   comentário da aba. Aqui fica a mecânica.
+   Três percentuais por pessoa, e o percentil 80 do time como referência. Quem não tem
+   negócio aberto fica FORA da conta (n/0 não é 0%, é "não medido" — e um zero desses
+   puxaria o benchmark do time inteiro para baixo). */
+function pctSeguro(parte, total) {
+  if (!total || total <= 0) return null;
+  return Math.round((parte / total) * 100);
+}
+
+function habitosDoRep(h) {
+  const abertos = Number(h && h.open) || 0;
+  if (!abertos) return { cadencia: null, qualificacao: null, proximoPasso: null, abertos: 0 };
+  const travados = Number(h && h.leadsTravados) || 0;
+  /* a lista completa de abertos por rep não vem no snapshot; o que vem por rep são os
+     recortes (travados, criticos, quentes). Para os dois hábitos de registro, a base é
+     a união desses recortes — é a amostra que existe, e ela é a mesma para todo mundo. */
+  const amostra = [];
+  ['travados', 'criticos', 'quentes'].forEach(k => {
+    (h && Array.isArray(h[k]) ? h[k] : []).forEach(l => {
+      if (l && l.id && !amostra.some(x => x.id === l.id)) amostra.push(l);
+    });
+  });
+  const comQualif = amostra.filter(l => String(l.nome_do_sistema || '').trim() && String(l.gargalo_operacional || '').trim()).length;
+  const comPasso = amostra.filter(l => String(l.proximaAtividade || l.proximaReuniao || '').trim()).length;
+  return {
+    cadencia: pctSeguro(abertos - travados, abertos),
+    qualificacao: pctSeguro(comQualif, amostra.length),
+    proximoPasso: pctSeguro(comPasso, amostra.length),
+    abertos
+  };
+}
+
+function percentil80(valores) {
+  const v = (valores || []).filter(x => typeof x === 'number' && isFinite(x)).sort((a, b) => a - b);
+  if (!v.length) return null;
+  /* percentil 80 pelo método do índice mais próximo: com 6 pessoas cai no 2º melhor. */
+  const i = Math.min(v.length - 1, Math.max(0, Math.ceil(0.8 * v.length) - 1));
+  return v[i];
+}
+
+function habitosDoTime(hubspotReps, ownerIds) {
+  const porRep = {};
+  (ownerIds || []).forEach(id => { porRep[id] = habitosDoRep((hubspotReps || {})[id]); });
+  const medidos = Object.values(porRep).filter(x => x && x.abertos > 0);
+  const benchmark = {
+    cadencia: percentil80(medidos.map(x => x.cadencia)),
+    qualificacao: percentil80(medidos.map(x => x.qualificacao)),
+    proximoPasso: percentil80(medidos.map(x => x.proximoPasso))
+  };
+  return { porRep, benchmark, pessoasMedidas: medidos.length };
+}
+
+function resumoDeColega(r) {
+  return {
+    ownerId: r.ownerId,
+    name: r.name,
+    praca: r.praca,
+    fechadosNoMes: r.fechadosNoMes,
+    metaMensal: r.metaMensal,
+    metaMrr: r.metaMrr,
+    metaReceita: r.metaReceita,
+    patamarMeta: r.patamarMeta,
+    ganhosSemana: r.ganhosSemana,
+    // Estruturas vazias mas bem-tipadas: o template varre .criticos/.travados/.stages de
+    // todos os reps em alguns pontos — vazio renderiza estado vazio, undefined quebraria.
+    open: 0, stages: {}, criticos: [], travados: [], quentes: [], leadsTravados: 0,
+    ganhosSemanaNomes: [], gargalo: null, boasPraticas: [], compromissos: [],
+    tag: null, tagLabel: null,
+    visitasHubspotHoje: 0, avancosHubspotHoje: 0, propostasHubspotHoje: 0, fechamentosHubspotHoje: 0
+  };
+}
+
+function filtrarParaPapel(dados, usuario) {
+  if (!usuario || usuario.role === 'manager') return dados;
+
+  const meuId = String(usuario.ownerId);
+  const soMeu = lista => (lista || []).filter(x => String(x.ownerId) === meuId);
+  const meuNome = usuario.nome;
+
+  const meuRep = dados.reps.find(r => String(r.ownerId) === meuId) || null;
+  // Preserva a ORDEM original dos reps (o Pódio e os seletores dependem dela).
+  const reps = dados.reps.map(r => (String(r.ownerId) === meuId ? r : resumoDeColega(r)));
+
+  const vendasMes = dados.vendasMes ? {
+    ...dados.vendasMes,
+    porRep: dados.vendasMes.porRep.map(r =>
+      String(r.ownerId) === meuId ? r : { ...r, clientes: [] } // agregado dos colegas sem nomes de cliente
+    )
+  } : null;
+
+  const rs = dados.resumoSemanal;
+  const resumoSemanalFiltrado = rs ? {
+    ...rs,
+    porRep: meuId in (rs.porRep || {}) ? { [meuId]: rs.porRep[meuId] } : {},
+    ganhosSemanaDetalhe: soMeu(rs.ganhosSemanaDetalhe),
+    reunioesSemanaDetalhe: soMeu(rs.reunioesSemanaDetalhe),
+    // BLOCO 41 — mesmo corte de privacidade dos outros dois: o executivo só vê os
+    // negócios criados que são dele, nunca os dos colegas.
+    leadsCriadosSemanaDetalhe: soMeu(rs.leadsCriadosSemanaDetalhe),
+    quentesDemoOuNegociacao: soMeu(rs.quentesDemoOuNegociacao),
+    ranking: (rs.ranking || []).map(r =>
+      String(r.ownerId) === meuId ? r : { ...r, clientes: [] }
+    ),
+    // PRIVACIDADE: snapshotReps traz funil, travados, quentes e meta de TODO o time.
+    // O spread acima o deixaria passar inteiro pro executivo — vazamento silencioso,
+    // do mesmo tipo que o corte de 07/08 fechou para clientes/funil/notas. O executivo
+    // recebe só o próprio; a visão por praça é do gestor.
+    snapshotReps: (rs.snapshotReps && rs.snapshotReps[meuId])
+      ? { [meuId]: rs.snapshotReps[meuId] } : {}
+  } : null;
+
+  const funilLeads = {};
+  Object.entries(dados.funilLeads || {}).forEach(([stage, leads]) => {
+    funilLeads[stage] = soMeu(leads);
+  });
+  /* O corte de Perdido nao tem nome de ninguem: e a data em que o Cockpit passou a
+     registrar perda. Vai inteiro para o executivo. */
+  const perdidoVisivel = dados.perdidoVisivel || null;
+  const onboardingVisivel = dados.onboardingVisivel || null;
+
+  // BLOCO 4 (11/08/26) — corte por papel na agenda.
+  // Nota do Expogo e tarefa criada por automação chegam do HubSpot SEM
+  // hubspot_owner_id; quem diz de quem é o compromisso é o dono do NEGÓCIO associado
+  // (lead_owner_id). O cliente já sabia disso — agendaNormalizar resolve por
+  // lead_owner_id justamente porque "era o que fazia compromisso sumir da agenda de
+  // todo mundo". Só que este filtro roda ANTES, no servidor, e cortava o item pelo
+  // campo vazio: o executivo nunca recebia o registro, então não tinha o que resolver.
+  // O gestor recebia tudo e via o compromisso na agenda da pessoa — os dois olhando a
+  // mesma semana e vendo agendas diferentes.
+  // Medido na base: 20 itens sem hubspot_owner_id, 17 deles pertencendo a alguém do
+  // time (Amanda 8, Sandro 5, Bruno 4). Os outros 3 são de owner fora do time e
+  // continuam fora, como devem.
+  // O corte de privacidade não afrouxa: o item só passa se o dono do negócio for
+  // EXATAMENTE quem está logado. Sem dono em nenhum dos dois campos, não passa.
+  const meuCompromisso = it => {
+    const dono = String(it.hubspot_owner_id || it.ownerId || '');
+    if (dono) return dono === meuId;
+    return String(it.lead_owner_id || '') === meuId;
+  };
+  const agenda = dados.agenda ? {
+    ...dados.agenda,
+    itens: (dados.agenda.itens || []).filter(meuCompromisso)
+  } : null;
+
+  // Leads da praça: só as praças onde o executivo é responsável (por nome) ou cuja praça
+  // bate com a dele — nunca a carteira de leads das outras cidades.
+  const leadsReferencia = (dados.leadsReferencia || []).filter(p =>
+    (Array.isArray(p.responsaveis) && p.responsaveis.includes(meuNome)) || p.nome === (meuRep && meuRep.praca)
+  );
+
+  /* A ROTA DELE, E SÓ A DELE. O mapa completo diz por onde cada colega anda, e território
+     de quem está ao lado não é informação do executivo — mesma regra que cortou
+     snapshotReps em 07/08. O que ele PRECISA é a própria rota, porque é ela que define
+     onde a prospecção dele acontece. */
+  const meuTerritorio = (dados.territorios || []).filter(x => x && x.rep === meuNome);
+
+  /* O EXECUTIVO RECEBE O PRÓPRIO HÁBITO E O NÚMERO DO TIME — nunca o porRep inteiro.
+     O spread de ...dados levaria o mapa com todo mundo, que é exatamente o vazamento
+     silencioso que o corte de snapshotReps fechou em 07/08. */
+  /* CADÊNCIA DIÁRIA DO EXECUTIVO: só a linha dele. O heatmap do time é da tela do
+     gestor; mandar `porOwner` inteiro para o executivo entregaria a atividade diária
+     de cada colega no payload dele — o oposto do corte de 07/08/26. Os `dias` vão
+     junto porque sem eles o sparkline não sabe a que dia cada barra pertence. */
+  const cadenciaMinha = (dados.cadenciaDiaria && dados.cadenciaDiaria.porOwner) ? {
+    dias: dados.cadenciaDiaria.dias || [],
+    porOwner: { [meuId]: dados.cadenciaDiaria.porOwner[meuId] || null },
+    fonte: dados.cadenciaDiaria.fonte || null,
+    naoConta: dados.cadenciaDiaria.naoConta || null,
+    truncado: dados.cadenciaDiaria.truncado || [],
+    geradoEm: dados.cadenciaDiaria.geradoEm || null
+  } : null;
+  const habitosMeu = (dados.habitosTime && dados.habitosTime.porRep && dados.habitosTime.porRep[meuId]) || null;
+  const habitosTime = dados.habitosTime ? {
+    meu: habitosMeu,
+    benchmark: dados.habitosTime.benchmark,
+    pessoasMedidas: dados.habitosTime.pessoasMedidas
+  } : null;
+
+  return {
+    ...dados,
+    habitosTime,
+    /* SEM ESTA LINHA o spread acima entregaria cadenciaDiaria.porOwner INTEIRO ao
+       executivo — a atividade diária de cada colega no payload dele. Declarar
+       cadenciaMinha e esquecer de usá-la é o vazamento em silêncio de sempre. */
+    cadenciaDiaria: cadenciaMinha,
+    reps,
+    kpiDetalhe: {
+      leadsCriados: soMeu(dados.kpiDetalhe.leadsCriados),
+      perdidos: soMeu(dados.kpiDetalhe.perdidos)
+    },
+    /* O EXECUTIVO VE SO A PROPRIA ASSINATURA DE PERDA. O total do time e a comparacao
+       entre executivos e material de gestao: saber que o colega perde mais por preco nao
+       ajuda ninguem na rua, e ranking de derrota nas costas do outro nao e transparencia. */
+    /* HISTÓRICO DE ETAPA DO EXECUTIVO: só a fatia dele, mais as referências do time que
+       não têm nome de ninguém (velocidade por etapa, ciclo e agregado). Corte no
+       servidor, como o resto do arquivo: carteira de outra pessoa não desce para o
+       navegador dele. A escada por turma sai — é leitura de time, não dele. */
+    historicoEtapas: dados.historicoEtapas ? {
+      dias: dados.historicoEtapas.dias,
+      primeiroMes: dados.historicoEtapas.primeiroMes,
+      ultimoMes: dados.historicoEtapas.ultimoMes,
+      minimoDaTurma: dados.historicoEtapas.minimoDaTurma,
+      escada: {},
+      velocidade: dados.historicoEtapas.velocidade || [],
+      ciclo: dados.historicoEtapas.ciclo || null,
+      agregado: dados.historicoEtapas.agregado || null,
+      porOwner: { [meuId]: (dados.historicoEtapas.porOwner || {})[meuId] || null }
+    } : null,
+    motivosPerda: dados.motivosPerda ? {
+      dias: dados.motivosPerda.dias,
+      total: Object.values((dados.motivosPerda.porOwner || {})[meuId] || {}).reduce((a, b) => a + b, 0),
+      porMotivo: (dados.motivosPerda.porOwner || {})[meuId] || {},
+      porOwner: { [meuId]: (dados.motivosPerda.porOwner || {})[meuId] || {} },
+      /* Exemplos para o clique no motivo — so os negocios DELE. Corte no servidor: perda
+         de outra pessoa nao desce para o navegador dele. */
+      exemplos: Object.keys(dados.motivosPerda.exemplos || {}).reduce((acc, motivo) => {
+        const meus = (dados.motivosPerda.exemplos[motivo] || []).filter(x => String(x.ownerId || '') === String(meuId));
+        if (meus.length) acc[motivo] = meus;
+        return acc;
+      }, {})
+    } : null,
+    temperatura: {
+      quentes: soMeu(dados.temperatura.quentes),
+      frios: soMeu(dados.temperatura.frios)
+    },
+    funilLeads,
+    perdidoVisivel,
+    onboardingVisivel,
+    leadsReciclagem60: soMeu(dados.leadsReciclagem60 || []),
+    vendasMes,
+    resumoSemanal: resumoSemanalFiltrado,
+    agenda,
+    leadsReferencia,
+    territorios: meuTerritorio,
+    // AUTOMAÇÃO 3 — o relatório BRUTO do robô (falhas por executivo, verificação de
+    // escrita) continua sendo do gestor. Mas o executivo precisa saber se a carga que
+    // está na tela dele é confiável: recomendação em cima de snapshot velho, ou visita
+    // que ficou presa no app e não subiu, muda o que ele faz às 8h30. Então ele recebe
+    // um recorte: quando rodou, se a rodada teve falha, e se ALGUMA falha era dele —
+    // nunca as falhas dos colegas.
+    syncStatus: dados.syncStatus ? {
+      ultimaExecucao: dados.syncStatus.ultimaExecucao || null,
+      houveFalha: Array.isArray(dados.syncStatus.falhas) && dados.syncStatus.falhas.length > 0,
+      falhaMinha: Array.isArray(dados.syncStatus.falhas)
+        ? dados.syncStatus.falhas.some(f => String(f && (f.ownerId || f.owner_id) || '') === meuId)
+        : false
+    } : null
+    // kpisHub, kpiDeltas, saude, funil (contagens agregadas do time), stageMeta,
+    // hubspotUpdatedAtFmt, usuarios (nomes/e-mails do próprio time) permanecem — são
+    // agregados sem detalhe de cliente, necessários pra meta coletiva e pro Pódio.
+  };
+}
+
+// Config do Supabase — usada só pelo build (vai no shell público pro login funcionar).
+function configSupabase() {
+  return supabaseConfig ? { url: supabaseConfig.url, anonKey: supabaseConfig.anonKey } : null;
+}
+
+// Chave do MapTiler (mapa de planejamento de rota) — vem de um arquivo no repo,
+// igual ao supabase-config.json, e NÃO de env var da Vercel: esse projeto não tem
+// build rodando lá (deploy é estático, arquivos manuais), então uma env var no
+// painel da Vercel nunca seria lida por nada. É uma chave PÚBLICA por natureza
+// (o navegador precisa dela pra buscar os tiles direto) — protegida por
+// restrição de domínio no próprio painel do MapTiler, não por sigilo no código.
+function configMaptiler() {
+  return maptilerConfig ? maptilerConfig.key : null;
+}
+
+module.exports = { montarDadosCompletos, filtrarParaPapel, configSupabase, configMaptiler, USUARIOS, usarSnapshot, temSnapshot, faltandoNoSnapshot };
+
+  },
+  "lib/territorios.js": function (module, exports, require, process) {
+// lib/territorios.js
+//
+// QUEM É O DONO DE CADA CONTA-ALVO — uma fonte só (01/09/26).
+//
+// POR QUE ESTE ARQUIVO EXISTE: a tabela de territórios vivia dentro de
+// api/importar-leads.js, e a partir de hoje ela é lida por três lugares diferentes —
+// a importação (que dá dono a lead novo), a redistribuição dos leads que já estão na
+// base sem dono, e o backfill semanal (que precisa saber quantas contas buscar por
+// executivo). Três cópias da mesma regra é o começo de três verdades: alguém corrige o
+// bairro num lado, esquece nos outros, e o lead cai para quem não pediu aquele
+// território. Uma fonte, importada pelos três.
+//
+// ATUALIZAÇÃO DE 01/09/26 (Julyan): "André e Luiz vão pro RJ. Renata e Sérgio integram
+// SP." Isso muda o Rio de 2 para 4 executivos e São Paulo de 1 para 3 — e é o que
+// resolve o problema que a auditoria de hoje achou: 283 contas-alvo com coordenada,
+// disponíveis, INVISÍVEIS na tela porque não tinham dono (252 sem dono nenhum + 31
+// presas no Michel, desligado em 20/08).
+//
+// A CAUSA daquele buraco: o Rio era roteado por bairro, e só cinco bairros tinham dono.
+// Todo o resto da cidade — Centro, Zona Sul inteira, Ilha, Zona Norte, Zona Oeste
+// extrema — caía sem dono, e o cron semanal continuava despejando lá. Agora o Rio tem
+// COBERTURA TOTAL: quatro zonas e uma regra de sobra que garante que nenhuma conta do
+// município fique órfã. Se um bairro novo aparecer, ele cai na zona da sobra em vez de
+// desaparecer.
+//
+// COMO A DIVISÃO FOI FEITA, e por que:
+//   · geografia antes de contagem — dividir o Rio por número de leads produziria zonas
+//     que atravessam a cidade, e quem visita paga o deslocamento;
+//   · quem já tinha território mantém o dele (Bruno na Jacarepaguá/Zona Oeste, Sandro
+//     na Grande Tijuca): mudar território de quem está rodando custa relacionamento;
+//   · os dois novos entram nas duas zonas que estavam sem ninguém e são as de maior
+//     densidade de restaurante — André na Zona Sul + Centro, Luiz na Zona Norte + Ilha;
+//   · Campo Grande / Santa Cruz / Bangu (a antiga zona do Michel, 42 contas) vão para o
+//     Bruno, que já é o executivo da Zona Oeste — é o único vizinho de verdade.
+
+function semAcento(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(new RegExp('[' + String.fromCharCode(0x300) + '-' + String.fromCharCode(0x36f) + ']', 'g'), '');
+}
+
+/* atalho de leitura: casa qualquer um dos nomes na chave "cidade bairro".
+
+   FRONTEIRA DE PALAVRA, e por que ela não é detalhe (01/09/26): a primeira versão usava
+   includes cru, e com isso o nome de duas letras 'se' (o distrito da Sé) casava
+   "vila sao JOSE" e "SERralheiro", e 'bras' casava "BRASilandia". Como o passo do nome
+   vem antes da coordenada, uma zona recebia bairro que não é dela e o executivo herdava
+   o dono errado. Medido: 7 das 400 contas de São Paulo estavam assim — pouco em número e
+   grosseiro em espécie, porque "Vila São José (Cidade Dutra)" na fila de quem roda o Centro
+   é uma visita de 25 km. (O desequilíbrio 290 · 88 · 22 tinha outra causa, já corrigida: a
+   regra de sobra por nome numa cidade de 96 distritos. Ver a NOTA de CENTROS_DE_ZONA.)
+   Espaço, parêntese e fim de string são fronteira, então nome composto continua casando
+   dentro de rótulo sujo: "FREGUESIA (ILHA DO GOVERNADOR)" casa 'ilha do governador' e
+   "PENHA CIRCULAR" casa 'penha'. As expressões são compiladas uma vez, na carga. */
+const escaparRe = n => n.replace(/[.*+?^${}()|[\]\\]/g, function (c) { return '\\' + c; });
+const algum = (...nomes) => {
+  const res = nomes.map(n => new RegExp('\\b' + escaparRe(n) + '\\b'));
+  return t => res.some(re => re.test(t));
+};
+
+const RIO = 'rio de janeiro';
+const SAOPAULO = 'sao paulo';
+
+/* A TRAVA DE CIDADE (01/09/26) — ver a NOTA no patch terr-cidade.
+   Cada regra declara a que município pertence, e o buscador só considera a regra quando
+   a cidade casa. Sem isso, os homônimos entre Rio e São Paulo — Lapa, Saúde,
+   Higienópolis, Jardim Botânico, Penha — mandariam conta paulistana para executivo do
+   Rio: uma conta a 400 km na fila de quem trabalha a pé. Território errado é pior que
+   território vazio; o vazio se resolve com sourcing, o errado com pedido de desculpas.
+   Regra sem `cidade` (a da Kelly, que já testa cidade dentro do próprio teste) continua
+   valendo para qualquer município — é o caso de quem cobre a cidade inteira. */
+/* ══ O ID REAL, POR NOME ═══════════════════════════════════════════════════════════
+   Quatro regras deste arquivo tinham `owner: idDoNome('André Gomes', 'pendente_andregomes')` e parentes — nomes
+   de espera cadastrados antes do ownerId existir. NINGUÉM os resolve: o fetch-hubspot
+   apenas os FILTRA. Uma regra dessas roteando um lead grava id falso em
+   responsavel_owner_id, e aquele lead fica sem aparecer na Daily de ninguém.
+   Agora o id sai de data/usuarios.json, por nome, e o placeholder é só o fallback de
+   quem realmente ainda não tem id. */
+const USUARIOS_PARA_ID = (() => {
+  try {
+    const u = require('../data/usuarios.json');
+    const lista = Array.isArray(u) ? u : (u.usuarios || []);
+    const m = {};
+    lista.forEach(function (x) {
+      const n = semAcento(x && (x.nome || x.name));
+      if (n && x.ownerId && !String(x.ownerId).startsWith('pendente_')) m[n] = String(x.ownerId);
+    });
+    return m;
+  } catch (e) { return {}; }
+})();
+
+function idDoNome(nome, fallback) {
+  return USUARIOS_PARA_ID[semAcento(nome)] || fallback || null;
+}
+
+/* ══ AS REGRAS DECLARADAS (09/09/26) ═════════════════════════════════════════════════
+   Derivadas de data/territorios.json, a mesma fonte que a tela do gestor e a busca
+   semanal leem. Elas vêm ANTES das listas largas abaixo: bairro que o Julyan nomeou hoje
+   ganha de bairro que estava numa lista de 01/09.
+
+   `todoOMunicipio` gera regra de cidade inteira, respeitando `exceto` — é o caso do
+   Ricardo em Porto Alegre ("só não pega cidade baixa") e do Luiz na Baixada.
+
+   BORDA DE PALAVRA, não substring: 'vila mariana' não é 'vila maria'. Foi o defeito que a
+   derivação das sub-cotas do backfill pegou hoje, e ele valeria igual aqui. */
+/* ══ O BAIRRO DE VERDADE, DENTRO DE UM CAMPO SUJO ══════════════════════════════════
+   MEDIDO no banco: a coluna `bairro` de leads_prospeccao frequentemente carrega o
+   endereço com o bairro no fim — "Lj B - Tijuca", "Loja A B C D - Barra da Tijuca",
+   "SUC 0028 - Tijuca", "frente - Tijuca", "Lj D - Rio Comprido". O que vem depois do
+   ÚLTIMO " - " é o bairro; o resto é número de loja, e comparar a string inteira faria
+   nenhum deles casar com nada.
+
+   Também aparece endereço puro sem bairro nenhum ("Av. Lúcio Costa", "R. Des. Izidro").
+   Nesses o resultado é o próprio texto, que não casa com bairro declarado — e o lead
+   fica sem dono e VISÍVEL, que é o certo: ninguém sabe em que bairro ele está. */
+function bairroLimpo(bairro) {
+  let s = String(bairro == null ? '' : bairro).trim();
+  const i = s.lastIndexOf(' - ');
+  if (i > -1) s = s.slice(i + 3).trim();
+  return semAcento(s);
+}
+
+const DECLARADOS = (() => {
+  let decl = [];
+  try { decl = require('../data/territorios.json').territorios || []; } catch (e) { decl = []; }
+  const regras = [];
+  /* ══ COMPARA O BAIRRO INTEIRO, NÃO UM PEDAÇO DELE ═══════════════════════════════
+     Era ' <declarado> ' dentro de ' <cidade> <bairro do lead> ', e "Barra da Tijuca"
+     contém " tijuca ": o "Tijuca" do Bruno levava a Barra do André, e o `.find` entrega
+     ao primeiro que casa, ou seja a quem aparece antes no JSON. Mesma família do
+     "vila maria" que casava "vila mariana", agora no caso em que um bairro é o SUFIXO do
+     outro — Tijuca/Barra da Tijuca, Penha/Penha Circular, Freguesia/Freguesia (Jacarepaguá).
+
+     O teste recebe a chave "<cidade> <bairro>" por compatibilidade com as regras antigas,
+     então o bairro é o que sobra depois de tirar o nome da cidade. */
+  const casaBairro = function (chaves, cidadeChave) {
+    return function (t) {
+      const inteiro = semAcento(t);
+      let bai = inteiro;
+      if (cidadeChave && bai.indexOf(cidadeChave) === 0) bai = bai.slice(cidadeChave.length).trim();
+      const limpo = bairroLimpo(bai);
+      return chaves.some(function (k) { return limpo === k || bai === k; });
+    };
+  };
+  /* bairro nomeado primeiro; cidade inteira depois — senão a regra de cidade do Ricardo
+     engoliria os três bairros da Kelly em Porto Alegre. */
+  decl.forEach(function (tr) {
+    if (!tr || tr.ativo === false) return;
+    (tr.areas || []).forEach(function (a) {
+      if (!a || !a.municipio || a.todoOMunicipio) return;
+      const chaves = (a.bairros || []).map(semAcento).filter(Boolean);
+      if (!chaves.length) return;
+      regras.push({
+        owner: idDoNome(tr.rep, null), nome: tr.rep,
+        praca: a.municipio + '/' + a.uf + ' · declarado',
+        cidade: semAcento(a.municipio), declarado: true,
+        teste: casaBairro(chaves, semAcento(a.municipio))
+      });
+    });
+  });
+  decl.forEach(function (tr) {
+    if (!tr || tr.ativo === false) return;
+    (tr.areas || []).forEach(function (a) {
+      if (!a || !a.municipio || !a.todoOMunicipio) return;
+      const fora = (a.exceto || []).map(semAcento).filter(Boolean);
+      const cid = semAcento(a.municipio);
+      regras.push({
+        owner: idDoNome(tr.rep, null), nome: tr.rep,
+        praca: a.municipio + '/' + a.uf + ' · município inteiro'
+          + (fora.length ? ' (exceto ' + (a.exceto || []).join(', ') + ')' : ''),
+        cidade: cid, declarado: true, todoOMunicipioDeclarado: true,
+        teste: function (t) {
+          const alvo = ' ' + String(t || '') + ' ';
+          if (fora.some(function (k) { return alvo.indexOf(' ' + k + ' ') > -1; })) return false;
+          return alvo.indexOf(cid) > -1;
+        }
+      });
+    });
+  });
+  /* ══ A SOBRA DA CIDADE DE UM DONO SÓ ══════════════════════════════════════════════
+     A rota é declarada por BAIRRO e a busca varre o MUNICÍPIO. Medido em 09/09: 301
+     leads sem dono, sendo 247 de Guarulhos em 106 bairros que ninguém nomeou (a cidade
+     tem ~140), 29 de Suzano, 19 de Mogi e 5 de Salesópolis.
+
+     Cidade com UM ÚNICO dono declarado: a sobra é dele, sem ambiguidade — ele é a única
+     pessoa que anda ali. Cidade com DOIS OU MAIS: a sobra NÃO entra, porque dividir
+     bairro entre duas pessoas é decisão de território e é do Julyan. Aqueles leads
+     continuam sem dono e VISÍVEIS na fila da praça, onde ele distribui. Sem dono e
+     visível é melhor que com dono errado. */
+  const porCidade = {};
+  regras.forEach(function (r) {
+    if (!r.owner) return;
+    (porCidade[r.cidade] = porCidade[r.cidade] || {})[r.nome] = true;
+  });
+  Object.keys(porCidade).forEach(function (cid) {
+    const donos = Object.keys(porCidade[cid]);
+    if (donos.length !== 1) return;                       /* dois donos: decisão dele */
+    const base = regras.find(function (r) { return r.cidade === cid && r.nome === donos[0]; });
+    if (!base || base.todoOMunicipioDeclarado) return;    /* já cobre a cidade inteira */
+    regras.push({
+      owner: base.owner, nome: base.nome,
+      praca: cid + ' · sobra do município (único dono declarado)',
+      cidade: cid, declarado: true, sobraDeclarada: true,
+      teste: function (t) { return (' ' + String(t || '') + ' ').indexOf(cid) > -1; }
+    });
+  });
+
+  /* regra sem id não entra: melhor SEM DONO do que com id inventado */
+  return regras.filter(function (r) { return !!r.owner; });
+})();
+
+const TERRITORIOS = [
+  /* ── ES ────────────────────────────────────────────────────────────────────────── */
+  { owner: '86100505', nome: 'Marco Filho', praca: 'Vila Velha/ES', cidade: 'vila velha',
+    teste: t => t.includes('vila velha') },
+  { owner: '87069181', nome: 'Amanda Pardim', praca: 'Vitória/ES', cidade: 'vitoria',
+    teste: t => t.includes('vitoria') },
+
+  /* ── RIO DE JANEIRO: quatro zonas ──────────────────────────────────────────────
+     A ordem importa: o teste mais específico vem primeiro, e a Zona Sul é testada
+     antes do Centro porque "centro" aparece em nomes compostos de outras zonas. */
+
+  /* SANDRO — Grande Tijuca e Zona Norte central (território que ele já tinha) */
+  { owner: '87569072', nome: 'Sandro Brito', praca: 'RJ · Grande Tijuca', cidade: RIO,
+    teste: algum('tijuca', 'vila isabel', 'maracana', 'andarai', 'grajau', 'rio comprido',
+      'estacio', 'engenho novo', 'sao francisco xavier', 'riachuelo', 'todos os santos',
+      'engenho de dentro', 'piedade', 'encantado', 'jacare', 'inhauma', 'cachambi',
+      'meier', 'sao cristovao', 'praca da bandeira', 'usina', 'alto da boa vista') },
+
+  /* BRUNO — Jacarepaguá, Barra e Zona Oeste (o dele + a zona que ficou sem dono
+     quando o Michel saiu: Campo Grande, Santa Cruz, Bangu e vizinhas) */
+  { owner: '86100506', nome: 'Bruno Martins', praca: 'RJ · Jacarepaguá e Zona Oeste', cidade: RIO,
+    teste: t => algum('taquara', 'jacarepagua', 'pechincha', 'curicica', 'gardenia azul',
+      'itanhanga', 'vargem grande', 'vargem pequena', 'vila valqueire', 'jardim sulacap',
+      'recreio', 'barra olimpica', 'barra da tijuca', 'guaratiba', 'campo grande',
+      'santa cruz', 'bangu', 'realengo', 'padre miguel', 'senador camara',
+      'magalhaes bastos', 'sepetiba', 'paciencia', 'cosmos', 'senador vasconcelos',
+      'inhoaiba', 'santissimo', 'campo dos afonsos', 'deodoro', 'vila militar')(t)
+      || (t.includes('freguesia') && !t.includes('ilha'))
+      || (t.includes(RIO) && /\banil\b/.test(t)) },
+
+  /* ANDRÉ (novo, 01/09/26) — Zona Sul e Centro. As duas zonas de maior densidade de
+     restaurante da cidade, e as duas que estavam inteiras sem dono: só Botafogo,
+     Copacabana, Leblon, Ipanema e Centro somavam 77 contas invisíveis. */
+  { owner: idDoNome('André Gomes', 'pendente_andregomes'), nome: 'André Gomes', praca: 'RJ · Zona Sul e Centro', cidade: RIO,
+    teste: t => algum('copacabana', 'ipanema', 'leblon', 'botafogo', 'laranjeiras',
+      'catete', 'flamengo', 'gloria', 'humaita', 'gavea', 'jardim botanico',
+      'cosme velho', 'leme', 'rocinha', 'urca', 'lagoa', 'vidigal', 'sao conrado',
+      'lapa', 'cidade nova', 'santo cristo', 'saude', 'gamboa', 'benfica',
+      'catumbi', 'santa teresa', 'caju', 'mangueira')(t)
+      || (t.includes(RIO) && /\bcentro\b/.test(t)) },
+
+  /* LUIZ (novo, 01/09/26) — Zona Norte/Leste e Ilha do Governador. Cauda longa: muitos
+     bairros de 1 a 6 contas cada, que só viram backlog de verdade somados. */
+  { owner: idDoNome('Luiz Pimentel', 'pendente_luizpimentel'), nome: 'Luiz Pimentel', praca: 'RJ · Zona Norte e Ilha', cidade: RIO,
+    teste: algum('olaria', 'penha', 'vila da penha', 'braz de pina', 'bras de pina',
+      'cordovil', 'parada de lucas', 'vigario geral', 'del castilho', 'mare',
+      'bonsucesso', 'ramos', 'pavuna', 'coelho neto', 'costa barros', 'rocha miranda',
+      'honorio gurgel', 'guadalupe', 'iraja', 'vicente de carvalho', 'madureira',
+      'campinho', 'oswaldo cruz', 'marechal hermes', 'tomas coelho', 'cavalcanti',
+      'agua santa', 'jardim america', 'higienopolis', 'maria da graca', 'jacarezinho',
+      'jardim carioca', 'jardim guanabara', 'cacuia', 'portuguesa', 'taua', 'paqueta',
+      'galeao', 'bancarios', 'zumbi', 'praia da bandeira', 'ribeira', 'cocota',
+      'pitangueiras', 'moneró', 'monero',
+      /* a Freguesia da ILHA e do Luiz; a Freguesia de Jacarepagua e do Bruno. O mesmo nome
+         em duas zonas da cidade — a regra do Bruno exclui 'ilha' e esta a inclui, para o
+         caso nao depender da regra de sobra (na simulacao os dois cairam nela por acidente,
+         e acerto por acidente e o que deixa de acertar quando alguem mexe na sobra). */
+      'freguesia (ilha') },
+
+  /* SOBRA DO RIO — a regra que fecha o buraco (01/09/26).
+     Antes, bairro fora das listas caía sem dono e ficava invisível para sempre. Agora
+     cai no Luiz, que cobre a maior área e a cauda mais longa. Não é "lixeira": é o
+     destino explícito da exceção, registrado aqui para que a próxima pessoa saiba onde
+     olhar quando um bairro novo aparecer. */
+  { owner: idDoNome('Luiz Pimentel', 'pendente_luizpimentel'), nome: 'Luiz Pimentel', praca: 'RJ · sobra do município', cidade: RIO,
+    sobra: true, teste: t => t.includes(RIO) },
+
+  /* ── SÃO PAULO: três zonas ────────────────────────────────────────────────────────
+     Whell mantém a Zona Sul, que é a dele desde 10/08. Renata e Sérgio entram nas duas
+     regiões restantes. Nota de realidade: SP tem hoje 42 contas na base inteira, 35
+     bairros com 1 ou 2 cada — dividir por três dá 14 por executivo, o que não é
+     backlog. A divisão está certa; o que falta é sourcing, e é por isso que a meta de
+     SP no backfill sobe de 30 para 90 nesta mesma rodada. */
+
+  /* WHELL — Zona Sul e Oeste (a dele) */
+  { owner: '89842507', nome: 'Wericles Andrade', praca: 'SP · Zona Sul e Oeste', cidade: SAOPAULO,
+    teste: algum('morumbi', 'santo amaro', 'itaim bibi', 'vila olimpia', 'brooklin',
+      'moema', 'campo belo', 'jardim paulista', 'pinheiros', 'vila madalena',
+      'perdizes', 'alto de pinheiros', 'butanta', 'jardim das acacias',
+      'chacara santo antonio', 'cidade moncoes', 'indianopolis', 'paraisopolis',
+      'jardim morumbi', 'vila leopoldina', 'agua branca', 'jardim cabore',
+      'jardim das pedras', 'jardim tres marias', 'vila do sol') },
+
+  /* RENATA (nova, 01/09/26) — Centro expandido e Zona Leste */
+  { owner: idDoNome('Renata Pessoa', 'pendente_renatapessoa'), nome: 'Renata Pessoa', praca: 'SP · Centro e Zona Leste', cidade: SAOPAULO,
+    teste: t => algum('bela vista', 'consolacao', 'republica', 'se', 'liberdade',
+      'bom retiro', 'bras', 'mooca', 'tatuape', 'vila regente feijo', 'vila gomes cardim',
+      'vila bertioga', 'anhangabau', 'santa cecilia', 'higienopolis', 'pacaembu',
+      'aclimacao', 'cambuci', 'ipiranga', 'vila prudente', 'sao mateus', 'itaquera',
+      'penha de franca', 'vila formosa', 'cidade mae do ceu', 'jardim ana rosa',
+      'parque sao rafael', 'parque industrial tomas edson', 'agua funda',
+      'chacara nossa senhora do bom conselho',
+      /* vindas do Sérgio na correção de mapa: ficam ao sul do Centro, colado na zona dela */
+      'vila mariana', 'saude', 'jabaquara', 'planalto paulista', 'bosque da saude',
+      'chacara inglesa', 'aclimacao', 'paraiso')(t)
+      || (t.includes('sao paulo') && /\bcentro\b/.test(t)) },
+
+  /* SÉRGIO (novo, 01/09/26) — Zona Norte.
+     A 1ª versão desta linha dizia "Zona Norte e Vila Mariana", e isso estava errado no
+     mapa: Santana fica ao norte do centro e Vila Mariana ao sul, com uns 12 km e a cidade
+     inteira entre as duas. Zona que atravessa a cidade é zona que ninguém roda — o dia
+     vira trânsito. Vila Mariana, Saúde e Jabaquara foram para a Renata, que faz
+     fronteira com elas pelo Centro expandido. */
+  { owner: idDoNome('Sérgio Caetano', 'pendente_scaetano'), nome: 'Sérgio Caetano', praca: 'SP · Zona Norte e Lapa', cidade: SAOPAULO,
+    teste: algum('santana', 'tucuruvi', 'casa verde', 'freguesia do o', 'lapa',
+      'barra funda', 'varzea da barra funda', 'vila guilherme', 'vila maria',
+      'jacana', 'vila ede', 'parque taipas', 'brasilandia', 'pirituba', 'vila clarice',
+      'jaragua', 'imirim', 'mandaqui', 'vila nova cachoeirinha', 'limao',
+      'jardim sao paulo', 'parada inglesa') },
+
+  /* SOBRA DE SÃO PAULO — mesma lógica do Rio: bairro fora das listas tem destino
+     explícito em vez de virar invisível. Vai para a Renata, cuja zona (Centro
+     expandido) é a de fronteira mais elástica. */
+  { owner: idDoNome('Renata Pessoa', 'pendente_renatapessoa'), nome: 'Renata Pessoa', praca: 'SP · sobra do município', cidade: SAOPAULO,
+    sobra: true, teste: t => t.includes('sao paulo') },
+
+  /* ── RS ────────────────────────────────────────────────────────────────────────── */
+  { owner: '91477292', nome: 'Kelly Travieso', praca: 'Porto Alegre e Canoas/RS',
+    teste: algum('canoas', 'porto alegre') }
+];
+
+/* ══════════════════════════════════════════════════════════════════════════════════════
+   A SOBRA POR CENTRO MAIS PRÓXIMO — ver a NOTA do patch sobra-por-coordenada.
+   Nome resolve o bairro conhecido; coordenada resolve a cauda. São Paulo tem 96 distritos
+   e enumerar todos de cabeça é como se erra território: um nome trocado manda o executivo
+   para o outro lado da cidade.
+   Os centros são os MESMOS declarados em TERRITORIO_DO_EXECUTIVO no template — repetidos
+   aqui porque este módulo roda no servidor (api/importar-leads) e aquele objeto vive no
+   navegador. Divergir os dois seria duas verdades sobre a mesma zona, então a lista traz
+   o aviso: mudou lá, muda aqui.
+   ══════════════════════════════════════════════════════════════════════════════════════ */
+const CENTROS_DE_ZONA = [
+  { owner: '86100506', nome: 'Bruno Martins', cidade: RIO, lat: -22.9260, lng: -43.3760 },
+  { owner: '87569072', nome: 'Sandro Brito', cidade: RIO, lat: -22.9245, lng: -43.2320 },
+  { owner: idDoNome('André Gomes', 'pendente_andregomes'), nome: 'André Gomes', cidade: RIO, lat: -22.9500, lng: -43.1830 },
+  { owner: idDoNome('Luiz Pimentel', 'pendente_luizpimentel'), nome: 'Luiz Pimentel', cidade: RIO, lat: -22.8420, lng: -43.2790 },
+  { owner: '89842507', nome: 'Wericles Andrade', cidade: SAOPAULO, lat: -23.6520, lng: -46.7080 },
+  /* centro no MEIO da zona (Centro -> Zona Leste), nao na ponta: com o centro na Se, a
+     Zona Leste caia no Sergio por diferenca de 700 metros — medido com Parque Cisper. */
+  { owner: idDoNome('Renata Pessoa', 'pendente_renatapessoa'), nome: 'Renata Pessoa', cidade: SAOPAULO, lat: -23.5500, lng: -46.5900 },
+  { owner: idDoNome('Sérgio Caetano', 'pendente_scaetano'), nome: 'Sérgio Caetano', cidade: SAOPAULO, lat: -23.5020, lng: -46.6250 }
+];
+
+/* distância em km, suficiente para comparar centros dentro de uma cidade */
+/* ══ AS CIDADES EM QUE ELE JÁ NOMEOU BAIRRO ════════════════════════════════════════
+   Nelas, as listas largas de 01/09 param de valer: elas foram escritas antes das quatro
+   rodadas de rota ditada e dizem o INVERSO do mapa de hoje ("André = Zona Sul e Centro",
+   "Bruno = Jacarepaguá e Zona Oeste"). Bairro que ninguém nomeou fica SEM DONO e visível
+   na fila da praça — sem dono e visível é melhor que com dono errado. */
+const CIDADES_COM_BAIRRO_DECLARADO = (() => {
+  const fora = {};
+  let decl = [];
+  try { decl = require('../data/territorios.json').territorios || []; } catch (e) { decl = []; }
+  decl.forEach(function (tr) {
+    if (!tr || tr.ativo === false) return;
+    (tr.areas || []).forEach(function (a) {
+      if (!a || !a.municipio || a.todoOMunicipio) return;
+      if ((a.bairros || []).length) fora[semAcento(a.municipio)] = true;
+    });
+  });
+  return fora;
+})();
+
+/* ══ O QUE ESTÁ FORA DE ROTA ════════════════════════════════════════════════════════
+   `_fora_de_rota` mora em data/territorios.json desde 08/09 — "zona oeste no momento nao
+   precisa" — e MEDIDO em 09/09 nenhum consumidor o lia. A frase estava escrita e não
+   valia para nada: o Bruno tinha 60 leads em Campo Grande, Santa Cruz e Bangu.
+
+   Ele corta ANTES de qualquer atribuição, inclusive da declarada: se o Julyan tirou a
+   região de rota, ninguém deve receber lead dali nem por engano. */
+const FORA_DE_ROTA = (() => {
+  let lista = [];
+  try { lista = require('../data/territorios.json')._fora_de_rota || []; } catch (e) { lista = []; }
+  return lista.map(function (z) {
+    return {
+      cidade: semAcento(z.municipio),
+      zona: z.zona || 'fora de rota',
+      bairros: (z.bairros || []).map(semAcento).filter(Boolean)
+    };
+  }).filter(function (z) { return z.cidade && z.bairros.length; });
+})();
+
+function estaForaDeRota(cidade, bairro) {
+  const cid = semAcento(cidade);
+  const bai = bairroLimpo(bairro);
+  if (!bai) return null;
+  const z = FORA_DE_ROTA.find(function (x) {
+    return cid.indexOf(x.cidade) > -1 && x.bairros.indexOf(bai) > -1;
+  });
+  return z || null;
+}
+
+/* ══ A SOBRA DO MUNICÍPIO, ESCOLHIDA A DEDO ═════════════════════════════════════════
+   `sobraDoMunicipio: true` numa área declarada por bairro: este rep leva o RESTO daquele
+   município — o bairro que ninguém nomeou, a grafia que não casa com nada, e o registro
+   que veio com endereço no lugar do bairro.
+
+   É a garantia de "nao deixa sem dono" (Julyan, 09/09) como REGRA e não como promessa de
+   que eu listei os 163 bairros do Rio corretamente. */
+const SOBRAS_DE_MUNICIPIO = (() => {
+  let decl = [];
+  try { decl = require('../data/territorios.json').territorios || []; } catch (e) { decl = []; }
+  const fora = [];
+  decl.forEach(function (tr) {
+    if (!tr || tr.ativo === false) return;
+    (tr.areas || []).forEach(function (a) {
+      if (!a || !a.municipio || !a.sobraDoMunicipio) return;
+      const owner = idDoNome(tr.rep, null);
+      if (!owner) return;
+      fora.push({
+        owner: owner, nome: tr.rep,
+        praca: a.municipio + '/' + a.uf + ' · sobra do município (declarada)',
+        cidade: semAcento(a.municipio), declarado: true, sobraDoMunicipio: true
+      });
+    });
+  });
+  return fora;
+})();
+
+function kmEntre(lat1, lng1, lat2, lng2) {
+  const R = 6371, rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/* De todos os executivos daquele município, o do centro mais próximo. Devolve null quando
+   não há coordenada — e aí a regra de sobra por nome, que continua existindo, assume. */
+function donoPorProximidade(cidade, lat, lng) {
+  if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return null;
+  const cid = semAcento(cidade);
+  const candidatos = CENTROS_DE_ZONA.filter(c => cid.includes(c.cidade));
+  if (!candidatos.length) return null;
+  let melhor = null, menor = Infinity;
+  for (const c of candidatos) {
+    const d = kmEntre(Number(lat), Number(lng), c.lat, c.lng);
+    if (d < menor) { menor = d; melhor = c; }
+  }
+  return melhor ? { owner: melhor.owner, nome: melhor.nome, praca: melhor.nome + ' · por proximidade (' + menor.toFixed(1) + ' km do centro da zona)', porCoordenada: true } : null;
+}
+
+/* A ZONA QUE VEM ESCRITA NO NOME DO BAIRRO — ver a NOTA do patch dica-de-zona.
+   Só existe para São Paulo e só para as quatro zonas que a fonte escreve entre
+   parênteses. Vale mais que a coordenada porque o parêntese nunca é um chute: a
+   coordenada, quando o geocodificador falha, vira o centróide do município e passa a
+   apontar para o centro de zona de quem estiver mais perto do centróide. */
+const ZONAS_ESCRITAS = [
+  { marca: ['(zona norte)', '(z norte)'], owner: idDoNome('Sérgio Caetano', 'pendente_scaetano'), nome: 'Sérgio Caetano' },
+  { marca: ['(zona leste)', '(z leste)'], owner: idDoNome('Renata Pessoa', 'pendente_renatapessoa'), nome: 'Renata Pessoa' },
+  { marca: ['(zona sul)', '(z sul)', '(zona oeste)', '(z oeste)'], owner: '89842507', nome: 'Wericles Andrade' }
+];
+
+function donoPorZonaEscrita(cidade, bairro) {
+  const cid = semAcento(cidade);
+  if (!cid.includes(SAOPAULO)) return null;
+  const b = semAcento(bairro);
+  const z = ZONAS_ESCRITAS.find(x => x.marca.some(m => b.includes(m)));
+  return z
+    ? { owner: z.owner, nome: z.nome, praca: z.nome + ' · zona escrita no nome do bairro', porZonaEscrita: true }
+    : null;
+}
+
+/* ══ CIDADE DIVIDIDA POR MERIDIANO ═══════════════════════════════════════════════════
+   Guarulhos tem DOIS donos e ~140 bairros, dos quais 18 estão nomeados. Sem esta regra a
+   busca traz 83% do município sem dono. O divisor mora em data/territorios.json, junto do
+   resto do território — não cravado aqui.
+
+   A COORDENADA SÓ DECIDE DENTRO DA CAIXA DA CIDADE. Medido em 09/09: 38 dos 247 leads de
+   Guarulhos tinham ponto entre -51,4 e -45,6 de longitude, para uma cidade de 30 km — o
+   geocodificador falha e devolve outra cidade. Fora da caixa, devolve null: o lead fica
+   sem dono e VISÍVEL na fila da praça, onde o gestor distribui. */
+const DIVISORES = (() => {
+  try { return require('../data/territorios.json')._divisores_de_cidade || []; }
+  catch (e) { return []; }
+})();
+
+function donoPorMeridiano(cidade, lat, lng) {
+  const cid = semAcento(cidade);
+  const d = DIVISORES.find(function (x) { return cid.indexOf(semAcento(x.municipio)) > -1; });
+  if (!d) return null;
+  const la = Number(lat), lo = Number(lng);
+  if (!Number.isFinite(la) || !Number.isFinite(lo)) return null;
+  const cx = d.caixa || {};
+  const dentro = Array.isArray(cx.lat) && Array.isArray(cx.lng)
+    && la >= cx.lat[0] && la <= cx.lat[1] && lo >= cx.lng[0] && lo <= cx.lng[1];
+  if (!dentro) return null;   /* coordenada impossível não decide território */
+  const nome = lo < Number(d.corte) ? d.oeste : d.leste;
+  const owner = idDoNome(nome, null);
+  if (!owner) return null;
+  return { owner: owner, nome: nome,
+    praca: d.municipio + '/' + d.uf + ' · ' + (lo < Number(d.corte) ? 'oeste' : 'leste')
+      + ' do meridiano ' + d.corte, porMeridiano: true };
+}
+
+function rotearTerritorio(cidade, bairro, lat, lng) {
+  const r = regraDoTerritorio(cidade, bairro, lat, lng);
+  return r ? r.owner : null;
+}
+
+/* Igual ao de cima, mas devolve a regra inteira — a redistribuição e os relatórios
+   precisam do NOME e da PRAÇA para dizer o que fizeram, não só do id. */
+function regraDoTerritorio(cidade, bairro, lat, lng) {
+  const cid = semAcento(cidade);
+  const chave = cid + ' ' + semAcento(bairro);
+  /* 1º o bairro conhecido (a fronteira que não é um raio); 2º a zona escrita no nome do
+     bairro, quando a fonte a declara; 3º a coordenada; 4º a sobra por nome, que só
+     existe para lead sem coordenada nenhuma. */
+  /* A DECLARAÇÃO DO JULYAN GANHA DE TUDO (09/09/26). Ela é a decisão de hoje; as listas
+     largas abaixo são a cobertura de 01/09 que ele nunca revogou, e continuam valendo
+     para o bairro que ele não nomeou. Sem esta precedência, Copacabana ia para o André
+     (que saiu da Zona Sul) e Cachambi para o Sandro (que saiu da Grande Tijuca). */
+  /* bairro NOMEADO primeiro; a sobra da cidade de um dono só depois — ela é o resto, e
+     consultá-la antes faria a cidade inteira cair no primeiro dono mesmo onde outro tem
+     bairro nomeado. */
+  /* FORA DE ROTA CORTA ANTES DE TUDO: se ele tirou a região da rota, ninguém recebe
+     lead dali — nem por declaração, nem por lista antiga, nem por coordenada. */
+  if (estaForaDeRota(cidade, bairro)) return null;
+  const declarado = DECLARADOS.find(x => !x.sobraDeclarada && cid.includes(x.cidade) && x.teste(chave));
+  if (declarado) return declarado;
+  const sobraDele = DECLARADOS.find(x => x.sobraDeclarada && cid.includes(x.cidade) && x.teste(chave));
+  if (sobraDele) return sobraDele;
+  /* o meridiano vem DEPOIS do bairro nomeado — quem nomeou a rua manda — e ANTES das
+     listas largas e da coordenada genérica, porque ele é a divisão que o Julyan pediu
+     para aquela cidade */
+  const porMeridiano = donoPorMeridiano(cidade, lat, lng);
+  if (porMeridiano) return porMeridiano;
+  /* A SOBRA DECLARADA DO MUNICÍPIO vem DEPOIS do bairro nomeado de todo mundo (senão o
+     dono da sobra levaria a Zona Sul do vizinho) e ANTES das listas largas de 01/09
+     (senão o mapa antigo volta a decidir, que é o defeito que pôs 107 leads na carteira
+     errada). É ela que cumpre o "nao deixa sem dono". */
+  const sobraDoMunicipio = SOBRAS_DE_MUNICIPIO.find(x => cid.indexOf(x.cidade) > -1);
+  if (sobraDoMunicipio) return sobraDoMunicipio;
+  /* ══ AS LISTAS DE 01/09 NÃO VALEM ONDE ELE JÁ NOMEOU BAIRRO ═════════════════════
+     Elas são cobertura para praça que ele não detalhou. Onde detalhou, elas são o mapa
+     ANTIGO e o mapa antigo diz o inverso do de hoje — provado: CENTRO caía no André pela
+     regra "RJ · Zona Sul e Centro", de quando ele era da Zona Sul. Deixá-las valendo é o
+     que punha 107 leads de Copacabana e Botafogo na carteira de quem trabalha na Barra. */
+  const cidadeDetalhada = Object.keys(CIDADES_COM_BAIRRO_DECLARADO)
+    .some(function (c) { return cid.indexOf(c) > -1; });
+  if (cidadeDetalhada) return null;
+  const porNome = TERRITORIOS.find(x => (!x.cidade || cid.includes(x.cidade)) && x.teste(chave) && !x.sobra);
+  if (porNome) return porNome;
+  const porZona = donoPorZonaEscrita(cidade, bairro);
+  if (porZona) return porZona;
+  const porCoord = donoPorProximidade(cidade, lat, lng);
+  if (porCoord) return porCoord;
+  return TERRITORIOS.find(x => (!x.cidade || cid.includes(x.cidade)) && x.teste(chave)) || null;
+}
+
+module.exports = { TERRITORIOS, DECLARADOS, DIVISORES, donoPorMeridiano, FORA_DE_ROTA, estaForaDeRota, bairroLimpo, CIDADES_COM_BAIRRO_DECLARADO, SOBRAS_DE_MUNICIPIO, CENTROS_DE_ZONA, ZONAS_ESCRITAS, rotearTerritorio, regraDoTerritorio, donoPorProximidade, donoPorZonaEscrita, kmEntre, semAcento };
+
+  },
+  "api/buscar-leads.js": function (module, exports, require, process) {
+// api/buscar-leads.js
+//
+// BUSCA SOB DEMANDA NA CASA DOS DADOS (06/09/26, aba Rotas & Prospecção do gestor).
+//
+// POR QUE ESTA ROTA EXISTE: a regra de ouro da aba nova é "nada entra sozinho — o gestor
+// dispara a importação, por praça, quando o estoque pede". Até aqui existiam duas metades
+// e faltava a ponte entre elas:
+//   · scripts/backfill-casa-dos-dados.js BUSCA, mas só roda no cron de segunda;
+//   · api/importar-leads.js RECEBE leads prontos, mas não sai buscando.
+// Esta rota é a ponte: recebe uma praça, chama a MESMA busca do coletor semanal e entrega
+// o resultado para o MESMO endpoint de importação.
+//
+// NÃO REIMPLEMENTA NADA. Busca, normalização, filtro de foodservice, deduplicação,
+// roteamento por território e corte de qualidade continuam onde sempre estiveram e
+// continuam sendo testados lá. Este arquivo tem uma responsabilidade só: autorizar o
+// gestor e amarrar as duas pontas. Se um dia o critério de qualidade mudar, muda num
+// lugar e vale para o cron e para o botão — que é o contrário do que já me custou caro
+// neste produto (a mesma regra escrita em dois lugares, divergindo em silêncio).
+//
+// O QUE ESTA ROTA NÃO FAZ, e o motivo está na tela:
+//   · Google Places — o coletor existe (scripts/backfill-google-places.js) e roda mensal.
+//     A FONTE MUDOU PARA O SERPER em 14/09/26: a chave do Google nunca existiu — nem
+//     nos Secrets do GitHub, nem na Vercel (conferido nos dois). Agora e SERPER_API_KEY,
+//     e ela vive so nos Secrets do GitHub, nao nas env vars da Vercel. Sem ela aqui,
+//     disparar Places por esta rota devolveria erro, entao o chip continua desabilitado
+//     dizendo isso — o que mudou foi o nome da chave que falta, nao a situacao.
+//   · TripAdvisor — fora da allowlist de rede e o ToS proíbe coleta automatizada. Não é
+//     "ainda não fizemos": é uma fonte que não pode existir por este caminho.
+//
+// Variáveis de ambiente (todas já existem na Vercel):
+//   CASADOSDADOS_TOKEN  -> a mesma que api/novidades-mercado.js usa
+//   IMPORT_SECRET       -> o mesmo que api/importar-leads.js valida
+//   SUPABASE_URL / SUPABASE_ANON_KEY -> para validar a sessão do gestor
+
+const { CIDADES, buscarCidade, importarLote } = require('../scripts/backfill-casa-dos-dados.js');
+const { montarDadosCompletos } = require('../scripts/montar-dados.js');
+
+/* teto de segurança: o botão é do gestor, mas uma requisição HTTP não pode paginar a
+   Casa dos Dados por minutos. 100 é o topo que a própria tela oferece. */
+const QUANTIDADE_MAXIMA = 100;
+const QUANTIDADE_PADRAO = 25;
+
+module.exports = async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method !== 'POST') return res.status(405).json({ erro: 'Método não permitido' });
+
+  const casaToken = process.env.CASADOSDADOS_TOKEN;
+  const importSecret = process.env.IMPORT_SECRET;
+  if (!casaToken) return res.status(500).json({ erro: 'CASADOSDADOS_TOKEN não configurado neste deployment.' });
+  if (!importSecret) return res.status(500).json({ erro: 'IMPORT_SECRET não configurado neste deployment.' });
+
+  /* ── SÓ O GESTOR DISPARA ──────────────────────────────────────────────────────
+     Mesma checagem de api/importar-leads.js: sessão do Supabase, e-mail conferido
+     contra data/usuarios.json. Aqui é mais restrito de propósito — importar-leads
+     deixa o executivo trazer conta da Casa dos Dados para a própria carteira; disparar
+     uma VARREDURA de praça é decisão de quem olha o estoque do time. */
+  const auth = req.headers.authorization || '';
+  if (!/^Bearer\s+/i.test(auth)) return res.status(401).json({ erro: 'Faça login para disparar a importação.' });
+  const supaUrl = process.env.SUPABASE_URL;
+  const supaAnon = process.env.SUPABASE_ANON_KEY;
+  if (!supaUrl || !supaAnon) return res.status(500).json({ erro: 'Supabase não configurado neste deployment.' });
+
+  let quemPediu = null;
+  try {
+    const check = await fetch(supaUrl + '/auth/v1/user', {
+      headers: { Authorization: auth, apikey: supaAnon }
+    });
+    if (!check.ok) return res.status(401).json({ erro: 'Sessão inválida ou expirada.' });
+    const email = String(((await check.json()) || {}).email || '').toLowerCase();
+    const USUARIOS = (montarDadosCompletos().usuarios) || [];
+    const u = email ? USUARIOS.find(x => String(x.email).toLowerCase() === email) : null;
+    if (!u || u.role !== 'manager') {
+      return res.status(403).json({ erro: 'Só o gestor dispara importação de praça.' });
+    }
+    quemPediu = u.email;
+  } catch (e) {
+    return res.status(401).json({ erro: 'Não foi possível validar a sessão.' });
+  }
+
+  /* ── a praça tem que ser uma que o roteador saiba rotear ────────────────────────
+     CIDADES é a lista do coletor, e é ela que api/importar-leads sabe transformar em
+     dono. Aceitar município livre criaria lead sem território — órfão nascendo por
+     digitação, que é o problema que o card de território órfão existe para resolver. */
+  const municipio = String((req.body && req.body.municipio) || '').trim();
+  const cfgOriginal = CIDADES.find(c => c.municipio.toLowerCase() === municipio.toLowerCase());
+  if (!cfgOriginal) {
+    return res.status(400).json({
+      erro: 'Praça desconhecida — o roteador não saberia de quem é o lead.',
+      pracasValidas: CIDADES.map(c => c.municipio)
+    });
+  }
+
+  let quantidade = Number((req.body && req.body.quantidade) || QUANTIDADE_PADRAO);
+  if (!isFinite(quantidade) || quantidade <= 0) quantidade = QUANTIDADE_PADRAO;
+  quantidade = Math.min(Math.round(quantidade), QUANTIDADE_MAXIMA);
+
+  /* a quantidade pedida vira o objetivo E o teto desta rodada: o coletor para de paginar
+     assim que alcança, então o gestor não espera por 500 leads que ele não pediu */
+  const cfg = Object.assign({}, cfgOriginal, { objetivoMinimo: quantidade, tetoMaximo: quantidade });
+
+  try {
+    const leads = await buscarCidade(cfg, casaToken);
+    if (!leads || !leads.length) {
+      return res.status(200).json({
+        ok: true, municipio: cfgOriginal.municipio, encontrados: 0, inseridos: 0, duplicados: 0,
+        aviso: 'A busca rodou e não trouxe conta nova nesta praça — o filtro de foodservice e a janela de abertura já descartam o resto.'
+      });
+    }
+    const r = await importarLote(leads, importSecret);
+    return res.status(200).json({
+      ok: true,
+      municipio: cfgOriginal.municipio,
+      encontrados: leads.length,
+      inseridos: r.inseridos || 0,
+      duplicados: r.duplicados || 0,
+      pedidoPor: quemPediu
+    });
+  } catch (e) {
+    /* O ERRO CHEGA NA TELA COM O MOTIVO. Importação que "rodou" e não trouxe nada, sem
+       dizer por quê, faz o gestor apertar o botão de novo — e a segunda tentativa custa
+       a mesma cota de API da primeira. */
+    return res.status(502).json({ erro: 'A busca na Casa dos Dados falhou: ' + (e && e.message ? e.message : 'erro desconhecido') });
+  }
+};
+
+  },
+  "scripts/backfill-casa-dos-dados.js": function (module, exports, require, process) {
+// scripts/backfill-casa-dos-dados.js
+// Roda semanalmente via GitHub Actions — busca o BACKLOG de contas-alvo da Casa dos
+// Dados por CIDADE de cada executivo (diferente de api/novidades-mercado.js, que só
+// busca "quem abriu essa semana" pra Agenda). Esta rodada existe pra resolver o pedido
+// do Julyan: "quero ninguém sem da Casa dos Dados" — auditoria real mostrou que só 1
+// conta em toda a base tinha essa fonte (criada manualmente pela Kelly), e o Wericles
+// (São Paulo) não tinha NENHUM lead de fonte nenhuma.
+//
+// NÃO reimplementa deduplicação, roteamento por território nem filtro de qualidade —
+// tudo isso já existe e já é testado em api/importar-leads.js. Este script só busca
+// na Casa dos Dados, normaliza pro formato que aquele endpoint espera, e chama ele via
+// HTTP (o mesmo caminho que a doc do endpoint já previa: "webhook/automação
+// server-to-server, com o header x-import-secret").
+//
+// Variáveis de ambiente:
+//   CASADOSDADOS_TOKEN  -> chave da API (mesma usada por api/novidades-mercado.js)
+//   IMPORT_SECRET       -> mesmo segredo que api/importar-leads.js já valida
+//   COCKPIT_URL         -> opcional, default aponta pra produção
+
+const CASA_URL = 'https://api.casadosdados.com.br/v5/cnpj/pesquisa?tipo_resultado=completo';
+const COCKPIT_URL = process.env.COCKPIT_URL || 'https://fieldsalestakeat.vercel.app';
+
+// CORREÇÃO (16/08/26, Julyan): "quero mais leads pra todos, pelo menos 30 por executivo".
+// Cada cidade agora carrega um objetivoMinimo (soma dos executivos que ela atende) e um
+// tetoMaximo de segurança (pra não virar fila que ninguém lê — mesma preocupação de antes).
+// Continua sendo backlog de verdade, não só "abriu essa semana".
+const TAMANHO_PAGINA_API = 40; // a Casa dos Dados pagina; busca em blocos até o teto de cada cidade
+const MAX_PAGINAS_POR_CIDADE = 30; // trava de segurança — nunca deixa uma cidade paginar pra sempre
+// Janela ampla o bastante pra cobrir o mercado ativo (não só "abriu esta semana",
+// que é o filtro do endpoint da Agenda) — 8 anos captura o estabelecimento maduro
+// que ainda pode não ter sistema de PDV, sem se limitar a CNPJ recém-nascido.
+const JANELA_DIAS = 365 * 8;
+// CORREÇÃO (16/08/26, Julyan, 2ª rodada): "não posso sujar o funil do gestor" — subiu
+// de 60 pra 90 dias mínimos de abertura, mais margem de segurança contra CNPJ que
+// ainda pode fechar ou estar com cadastro incompleto.
+const DIAS_MINIMO_ABERTURA = 90;
+
+// Uma linha por CIDADE que api/importar-leads.js sabe rotear (a função rotearTerritorio
+// de lá decide o dono certo por cidade+bairro). Rio de Janeiro cobre 2 executivos
+// (Bruno, Sandro — Michel foi desligado em 20/08/26) — por isso carrega metaBairros:
+// sub-cotas de 30 leads por bairro de cada um, testadas com o MESMO critério de bairro
+// que rotearTerritorio usa lá no endpoint (mantido em sincronia manual — se mudar um
+// lado, mudar o outro).
+// Cidades de executivo único (1 rep por município) só precisam do objetivoMinimo geral.
+/* ══ AS CIDADES E AS SUB-COTAS SAEM DE data/territorios.json (09/09/26) ═══════════════
+   ESTE ARRAY ERA A SEGUNDA CÓPIA DA MESMA REGRA. A tela do gestor decidia a praça de cada
+   executivo por um caminho (os bairros dos leads de exemplo em leads-referencia.json) e
+   esta busca decidia por outro (as metaBairros em regex, aqui). As duas divergiam calada,
+   e o preço foi medido em 09/09: quatro dos onze executivos não apareciam em praça
+   nenhuma na tela, e cinco municípios de rota real — Mogi das Cruzes, Biritiba Mirim,
+   Salesópolis, Suzano e Guarulhos — não eram buscados por ninguém. Gente com rota e sem
+   munição.
+
+   AGORA A DECLARAÇÃO É UMA. O território de cada pessoa está em data/territorios.json, e
+   tanto a tela quanto esta busca leem de lá. Mexer no bairro de alguém é mexer naquele
+   arquivo, e é decisão do Julyan.
+
+   O QUE ESTA DERIVAÇÃO FAZ:
+   · junta os municípios de todos os territórios, um por cidade;
+   · monta uma sub-cota por executivo em cada cidade que tem mais de um dono, com o teste
+     de bairro vindo dos bairros DECLARADOS (e não de uma regex escrita à mão);
+   · quem tem `todoOMunicipio` não gera sub-cota de bairro — ele cobre a cidade, menos o
+     que estiver em `exceto`;
+   · objetivo e teto por cidade escalam com quanta gente ela tem, porque cidade com três
+     donos precisa de mais lead que cidade com um. */
+const TERRITORIOS = (() => {
+  try { return require('../data/territorios.json').territorios || []; }
+  catch (e) {
+    console.log('[backfill-casa-dos-dados] AVISO: nao li data/territorios.json — ' + e.message);
+    return [];
+  }
+})();
+
+const semAcentoBairro = s => String(s || '').toLowerCase().normalize('NFD')
+  .replace(new RegExp('[' + String.fromCharCode(0x300) + '-' + String.fromCharCode(0x36f) + ']', 'g'), '')
+  .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+
+const CIDADES = (() => {
+  const porCidade = new Map();
+  TERRITORIOS.forEach(tr => {
+    if (tr && tr.ativo === false) return;   /* Amanda, em transicao para Inside */
+    (tr.areas || []).forEach(a => {
+      if (!a || !a.municipio) return;
+      const k = a.municipio + '|' + (a.uf || '');
+      if (!porCidade.has(k)) porCidade.set(k, { municipio: a.municipio, uf: a.uf, donos: [] });
+      porCidade.get(k).donos.push({ rep: tr.rep, area: a });
+    });
+  });
+
+  return [...porCidade.values()].map(c => {
+    /* 30 contas por dono é o objetivo que já vigorava; o teto é cinco vezes isso, para a
+       busca poder passar do mínimo quando um bairro rende pouco e outro rende muito. */
+    const n = c.donos.length;
+    const cfg = { municipio: c.municipio, uf: c.uf, objetivoMinimo: 30 * n, tetoMaximo: 150 * n };
+
+    /* SUB-COTA SÓ ONDE HÁ MAIS DE UM DONO E OS BAIRROS ESTÃO DECLARADOS. Sem isso, a
+       cidade cumpre a meta geral com contas de uma zona só e a zona do colega nasce
+       vazia — foi o motivo pelo qual as sub-cotas existem desde 01/09. */
+    const comBairro = c.donos.filter(d => !d.area.todoOMunicipio && (d.area.bairros || []).length);
+    if (n > 1 && comBairro.length > 1) {
+      /* ══ UM BAIRRO, UM DONO ═══════════════════════════════════════════════════════
+         O resolvedor é compartilhado pelas metas desta cidade, e é ele que decide de
+         quem é o bairro — em vez de cada meta responder por si e o mesmo lead contar
+         duas vezes.
+
+         BORDA DE PALAVRA, e não substring: 'vila mariana' NÃO é 'vila maria'. Sem a
+         borda, um bairro órfão entra na rota do vizinho de nome parecido — foi o que
+         aconteceu com a Vila Mariana, que está sem dono, caindo no Sérgio.
+
+         O CONTAINMENT existe porque o CRM guarda o bairro com apêndice digitado à mão
+         ("Freguesia (Jacarepaguá, entorno imediato de Taquara)", "Tijuca (Shopping
+         45)"). E é por isso que a POSIÇÃO decide: o bairro é o que vem primeiro, o
+         resto é contexto. Em empate, ganha a chave mais longa, que é a mais específica. */
+      const donosDoBairro = comBairro.map(d => ({
+        rep: d.rep,
+        chaves: (d.area.bairros || []).map(semAcentoBairro).filter(Boolean)
+      }));
+      const cache = new Map();
+      const donoDoBairro = b => {
+        const alvo = ' ' + String(b || '') + ' ';
+        if (cache.has(alvo)) return cache.get(alvo);
+        let melhor = null;
+        donosDoBairro.forEach(d => {
+          d.chaves.forEach(k => {
+            const pos = alvo.indexOf(' ' + k + ' ');
+            if (pos < 0) return;
+            if (!melhor || pos < melhor.pos || (pos === melhor.pos && k.length > melhor.tam)) {
+              melhor = { rep: d.rep, pos: pos, tam: k.length };
+            }
+          });
+        });
+        const quem = melhor ? melhor.rep : null;
+        cache.set(alvo, quem);
+        return quem;
+      };
+      cfg.metaBairros = comBairro.map(d => ({
+        nome: d.rep + ' (' + (d.area.bairros || []).slice(0, 3).join(', ') + '…)',
+        minimo: 30,
+        teste: b => donoDoBairro(b) === d.rep
+      }));
+    }
+    return cfg;
+  });
+})();
+
+/* PRAÇA SEM NENHUM TERRITÓRIO DECLARADO AINDA PRECISA SER BUSCADA. Vitória é o caso de
+   hoje: a Amanda foi para Inside e ninguém assumiu, mas a praça existe no radar e o
+   estoque dela não pode secar em silêncio enquanto o Julyan não reatribui. */
+const CIDADES_SEM_DONO = [
+  { municipio: 'Vitória', uf: 'ES', objetivoMinimo: 30, tetoMaximo: 150 }
+];
+CIDADES_SEM_DONO.forEach(c => {
+  if (!CIDADES.some(x => x.municipio === c.municipio)) CIDADES.push(c);
+});
+
+const CNAE_FOODSERVICE = [
+  '5611201', '5611202', '5611203', '5611204', '5620104', '4721102', '1091102'
+];
+
+let REDES_EXCLUIDAS = [];
+try {
+  const raw = require('../data/redes-excluidas.json');
+  REDES_EXCLUIDAS = (raw && Array.isArray(raw.redes)) ? raw.redes : [];
+} catch (e) { REDES_EXCLUIDAS = []; }
+
+const semAcento = t => String(t || '').toLowerCase().normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+function ehRedeGrande(nome) {
+  const n = semAcento(nome);
+  return !!n && REDES_EXCLUIDAS.some(r => n.includes(semAcento(r)));
+}
+// Mesmo padrão de api/novidades-mercado.js: CPF/raiz de CNPJ virando razão social é
+// empresário individual sem estabelecimento — corta, exceto se tiver marca societária.
+function ehPessoaFisica(i) {
+  const t = String(i.razaoSocial || i.nome || '').trim();
+  if (/\b(ltda|eireli|s\/?a\b|me\b|mei\b|epp\b)/i.test(t)) return false;
+  const inicio = t.split(/\s+/)[0] || '';
+  return /^\d[\d.\-\/]*$/.test(inicio) && inicio.replace(/\D/g, '').length >= 8;
+}
+
+// CORREÇÃO (16/08/26, Julyan, 2ª rodada): "filtra o que não for de food" — o CNAE de
+// foodservice às vezes classifica errado (ex: mercearia/tabacaria/distribuidora
+// registradas sob um CNAE de restaurante). Corta pelo NOME quando bate um desses
+// padrões de varejo/serviço não-alimentício, mesmo já tendo passado pelo CNAE.
+const PADROES_FORA_DE_FOODSERVICE = [
+  /\bconveniencia\b/, /\bdistribuidora\b/, /\badega(s)?\b/,
+  /\bhortifruti\b/, /\bfarmacia\b/, /\bdrogaria\b/, /\bpapelaria\b/, /\batacad/,
+  /\bsupermercado\b/, /\bmercadinho\b/, /\bpet\b/, /\bmaterial\b/, /\bconstru/,
+  /\blavanderia\b/, /\bbarbearia\b/, /\botica\b/, /\bconfec/
+];
+function ehForaDeFoodservice(nome) {
+  const n = semAcento(nome);
+  return PADROES_FORA_DE_FOODSERVICE.some(re => re.test(n));
+}
+
+function isoDiasAtras(dias) {
+  const d = new Date(Date.now() - dias * 86400000);
+  return d.toISOString().slice(0, 10);
+}
+
+// Mesma normalização de api/novidades-mercado.js — mantém os dois lugares que falam
+// com a Casa dos Dados devolvendo o mesmo formato de lead.
+function normalizar(e) {
+  if (!e || !e.cnpj) return null;
+  const end = e.endereco || {};
+  const nome = (e.nome_fantasia && String(e.nome_fantasia).trim()) || (e.razao_social && String(e.razao_social).trim()) || 'Sem nome';
+  const logradouro = [end.tipo_logradouro, end.logradouro].filter(Boolean).join(' ').trim();
+  return {
+    place_id: null, // Casa dos Dados não tem place_id do Google — dedup usa telefone/nome+cidade
+    cnpj: String(e.cnpj), // CORREÇÃO (16/08/26, Julyan): ficha da rota pedia isso — o campo já vinha na resposta, só não era salvo
+    data_abertura: e.data_abertura || null, // idem — alimenta o "Aberta há" na ficha (nome snake_case combinando com a coluna do Supabase)
+    nome: nome.slice(0, 160),
+    razaoSocial: e.razao_social || null,
+    categoria: null, // CNAE já garantiu foodservice; categoria textual não vem desta fonte
+    endereco: [logradouro, end.numero].filter(Boolean).join(', ') || null,
+    bairro: end.bairro || null,
+    cidade: end.municipio || null,
+    estado: end.uf || null,
+    // CONFIRMADO (16/08/26) na documentação oficial (docs.casadosdados.com.br): o
+    // schema de resposta CNPJPesquisaResposta — tanto na v4 (Consulta CNPJ) quanto na
+    // v5 (Pesquisa Avançada), mesmo com tipo_resultado=completo — NÃO tem campo de
+    // telefone nenhum. `telefone` e `ddd` existem só como FILTRO de busca no corpo da
+    // requisição (e `mais_filtros.com_telefone` filtra só quem tem telefone cadastrado)
+    // — a API deixa buscar por telefone, mas nunca devolve o número de volta. Isso não
+    // é lacuna do nosso código, é limitação real do provedor. Null é o valor correto
+    // e definitivo aqui, não um "ainda não implementado".
+    telefone: null,
+    nota: null,
+    avaliacoes: null, // Casa dos Dados não tem avaliação — api/importar-leads.js já sabe não cortar por isso
+    // CORREÇÃO CRÍTICA (16/08/26, Julyan: "ainda não funciona" na busca por proximidade
+    // — investigado ao vivo): `end.ibge.latitude/longitude` NÃO é o endereço do
+    // estabelecimento, é o centro geográfico do MUNICÍPIO INTEIRO — confirmado que
+    // TODOS os leads de uma mesma cidade compartilhavam a coordenada idêntica até a
+    // 13ª casa decimal. Isso fazia a busca "perto de mim" nunca achar nada perto do
+    // bairro real do executivo (o ponto genérico podia estar a mais de 10km de
+    // distância de onde o lead de fato fica) e, quando achava, mostrava a MESMA
+    // distância pra centenas de leads diferentes ao mesmo tempo. Corrigido geocodificando
+    // o endereço real (rua + bairro + cidade) via MapTiler logo abaixo, em buscarCidade —
+    // não aqui, porque normalizar() é síncrona e geocodificar precisa de await.
+    lat: null,
+    lng: null
+  };
+}
+
+// Geocodifica o endereço real de cada lead via MapTiler — substitui a coordenada
+// genérica do município (ver comentário em normalizar()). Roda uma vez por lead
+// recém-importado, não a cada carregamento de tela. `country=br&language=pt` sem
+// viés de proximidade aqui é seguro porque o endereço já tem cidade explícita —
+// diferente da busca por texto solto do executivo (ver geocodificarLocalAtuacao no
+// template, que precisa de viés porque o texto digitado não tem cidade junto).
+async function geocodificarEnderecoReal(item, maptilerKey) {
+  if (!maptilerKey) return item;
+  const texto = [item.endereco, item.bairro, item.cidade, item.estado].filter(Boolean).join(', ');
+  if (!texto) return item;
+  try {
+    const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(texto)}.json?key=${maptilerKey}&country=br&language=pt`;
+    const resp = await fetch(url);
+    if (!resp.ok) return item;
+    const json = await resp.json();
+    const top = (json.features || [])[0];
+    if (!top || !Array.isArray(top.center)) return item;
+    const [lng, lat] = top.center;
+    return { ...item, lat, lng };
+  } catch (e) {
+    return item; // geocode é bônus (melhora a ordenação por distância) — falhar não pode derrubar a importação
+  }
+}
+
+async function autenticarECconsultar(corpoConsulta, casaToken) {
+  const variantes = [
+    { nome: 'header api-key', headers: { 'api-key': casaToken } },
+    { nome: 'header api_key', headers: { 'api_key': casaToken } },
+    { nome: 'header Authorization Bearer', headers: { Authorization: 'Bearer ' + casaToken } },
+    { nome: 'header x-api-key', headers: { 'x-api-key': casaToken } }
+  ];
+  for (const v of variantes) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    try {
+      const r = await fetch(CASA_URL, {
+        method: 'POST', signal: ctrl.signal,
+        headers: Object.assign({ 'Content-Type': 'application/json' }, v.headers),
+        body: corpoConsulta
+      });
+      clearTimeout(timer);
+      const texto = await r.text();
+      let j = null;
+      try { j = JSON.parse(texto); } catch (e) { j = null; }
+      if (r.ok) return { ok: true, json: j || {}, via: v.nome };
+    } catch (e) { clearTimeout(timer); }
+  }
+  return { ok: false };
+}
+
+// Retorna também o detalhe por metaBairro (quando a cidade tiver), pra main() poder
+// avisar se algum executivo específico não bateu os 30 mesmo esticando o teto.
+async function buscarCidade(cidadeCfg, casaToken) {
+  const { municipio, uf, objetivoMinimo, tetoMaximo, metaBairros } = cidadeCfg;
+  const leadsCidade = [];
+  let pagina = 1;
+
+  function contagemPorMeta() {
+    if (!metaBairros) return null;
+    return metaBairros.map(m => ({
+      nome: m.nome,
+      minimo: m.minimo,
+      encontrados: leadsCidade.filter(l => m.teste(semAcento(l.bairro))).length
+    }));
+  }
+  function metasBatidas() {
+    if (!metaBairros) return leadsCidade.length >= objetivoMinimo;
+    return contagemPorMeta().every(m => m.encontrados >= m.minimo);
+  }
+
+  while (leadsCidade.length < tetoMaximo && pagina <= MAX_PAGINAS_POR_CIDADE && !metasBatidas()) {
+    const corpoConsulta = JSON.stringify({
+      codigo_atividade_principal: CNAE_FOODSERVICE,
+      situacao_cadastral: ['ATIVA'],
+      uf: [uf.toLowerCase()],
+      municipio: [municipio.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')],
+      data_abertura: { inicio: isoDiasAtras(JANELA_DIAS), fim: isoDiasAtras(DIAS_MINIMO_ABERTURA) },
+      mei: { excluir_optante: true },
+      mais_filtros: { com_telefone: true, excluir_email_contab: true },
+      limite: TAMANHO_PAGINA_API,
+      pagina
+    });
+    const resp = await autenticarECconsultar(corpoConsulta, casaToken);
+    if (!resp.ok) {
+      console.log(`[backfill-casa-dos-dados] ${municipio}/${uf}: falha de autenticação/rede na página ${pagina}.`);
+      break;
+    }
+    const cru = (resp.json && (resp.json.cnpjs || resp.json.results || (Array.isArray(resp.json.data) ? resp.json.data : null))) || [];
+    if (!Array.isArray(cru) || cru.length === 0) break; // acabaram os resultados dessa cidade
+
+    cru.forEach(raw => {
+      const item = normalizar(raw);
+      if (!item) return;
+      if (ehRedeGrande(item.nome) || ehRedeGrande(item.razaoSocial)) return;
+      if (ehPessoaFisica(item)) return;
+      if (ehForaDeFoodservice(item.nome)) return;
+      leadsCidade.push(item);
+    });
+
+    if (cru.length < TAMANHO_PAGINA_API) break; // última página da Casa dos Dados pra essa cidade
+    pagina++;
+  }
+  const leadsFinais = leadsCidade.slice(0, tetoMaximo);
+  // Geocodifica em série (não em paralelo) pra não estourar rate-limit da MapTiler —
+  // uma cidade tem no máximo `tetoMaximo` leads (150-400), então isso soma no máximo
+  // alguns minutos a mais na rodada semanal, tempo que sobra de sabra no cron.
+  const maptilerKey = (() => { try { return require('../data/maptiler-config.json').key; } catch (e) { return null; } })();
+  for (let i = 0; i < leadsFinais.length; i++) {
+    leadsFinais[i] = await geocodificarEnderecoReal(leadsFinais[i], maptilerKey);
+  }
+  return { leads: leadsFinais, porMeta: contagemPorMeta() };
+}
+
+async function importarLote(leadsCidade, importSecret) {
+  if (leadsCidade.length === 0) return { inseridos: 0, duplicados: 0 };
+  const resp = await fetch(`${COCKPIT_URL}/api/importar-leads`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-import-secret': importSecret },
+    body: JSON.stringify({ fonte: 'casa_dos_dados', leads: leadsCidade })
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    console.log('[backfill-casa-dos-dados] Importação recusada:', data.erro || resp.status);
+    // Repassa o diagnóstico do endpoint (presença/tamanho/trim do segredo — nunca o
+    // valor). Sem isto, "recusado" não distingue variável ausente de valor diferente.
+    if (data.diagnosticoSegredo) console.log('[backfill-casa-dos-dados] Diagnóstico do segredo:', JSON.stringify(data.diagnosticoSegredo));
+    return { inseridos: 0, duplicados: 0, erro: data.erro || String(resp.status) };
+  }
+  return data;
+}
+
+const fs = require('fs');
+
+async function main() {
+  const casaToken = process.env.CASADOSDADOS_TOKEN;
+  const importSecret = process.env.IMPORT_SECRET;
+  if (!casaToken) {
+    console.log('[backfill-casa-dos-dados] Falta CASADOSDADOS_TOKEN — nada rodado.');
+    process.exit(1);
+  }
+  // MODO FALLBACK (16/08/26): enquanto o IMPORT_SECRET não estiver ativo na Vercel
+  // (precisa de redeploy, e o teto de 100 deploys/dia da Vercel travou isso hoje),
+  // o script ainda busca tudo normalmente, mas em vez de chamar /api/importar-leads
+  // (que recusaria sem o segredo), grava um JSON pra importação manual pelo modal
+  // "colar/anexar JSON" do Cockpit (gestor, autenticado pela própria sessão — não
+  // depende do IMPORT_SECRET de jeito nenhum). Assim que o IMPORT_SECRET entrar em
+  // vigor na Vercel, este script volta a importar sozinho automaticamente.
+  const modoManual = !importSecret;
+  if (modoManual) {
+    console.log('[backfill-casa-dos-dados] IMPORT_SECRET ausente — rodando em MODO MANUAL: vai gravar um JSON pra importar pelo modal do Cockpit em vez de importar sozinho.');
+  }
+
+  /* ── PULAR CIDADE NESTA RODADA (01/09/26) ──────────────────────────────────────────
+     Pedido: "coloque outra lista de casa dos dados para os executivos online, menos a
+     Amanda". A Amanda cobre Vitória, e a lista CIDADES acima mapeia cidade→executivo.
+
+     Por que PARÂMETRO e não remoção da linha: "menos a Amanda" é o estado de hoje, não
+     uma regra do produto. Apagar Vitória do array faria a próxima rodada automática (o
+     cron de domingo) deixar a praça dela sem backlog para sempre, silenciosamente — e
+     ninguém iria lembrar de recolocar. Com o parâmetro, o padrão continua sendo TODAS as
+     cidades, e pular é uma escolha explícita de quem dispara, registrada no log.
+
+     Casa sem acento e sem caixa, porque quem digita no botão do workflow vai escrever
+     "vitoria" tanto quanto "Vitória". */
+  const semAcento = t => String(t || '').normalize('NFD')
+    .replace(new RegExp('[' + String.fromCharCode(0x300) + '-' + String.fromCharCode(0x36f) + ']', 'g'), '')
+    .toLowerCase().trim();
+  const pularPedido = String(process.env.PULAR_CIDADES || '').split(',').map(semAcento).filter(Boolean);
+  const cidadesDaRodada = CIDADES.filter(c => !pularPedido.includes(semAcento(c.municipio)));
+  if (pularPedido.length) {
+    const puladas = CIDADES.filter(c => pularPedido.includes(semAcento(c.municipio))).map(c => c.municipio + '/' + c.uf);
+    const naoAchadas = pularPedido.filter(p => !CIDADES.some(c => semAcento(c.municipio) === p));
+    console.log('[backfill-casa-dos-dados] PULANDO nesta rodada: ' + (puladas.join(', ') || '(nenhuma)'));
+    /* pedido que não casa com cidade nenhuma é erro de digitação, e erro de digitação
+       aqui significa importar para quem não devia — melhor parar do que adivinhar. */
+    if (naoAchadas.length) {
+      console.error('[backfill-casa-dos-dados] PULAR_CIDADES tem nome que não existe na lista: ' + naoAchadas.join(', '));
+      console.error('  cidades conhecidas: ' + CIDADES.map(c => c.municipio).join(', '));
+      process.exit(1);
+    }
+    if (!cidadesDaRodada.length) {
+      console.error('[backfill-casa-dos-dados] todas as cidades foram puladas — nada a fazer.');
+      process.exit(1);
+    }
+  }
+
+  let totalInseridos = 0, totalDuplicados = 0;
+  const porCidade = {};
+  const todosOsLeads = [];
+  // Cidades cujo POST foi RECUSADO pelo endpoint (não é o mesmo que "nada novo pra
+  // inserir"). Sem esta lista, recusa em todas as cidades fechava a execução em verde.
+  const recusadas = [];
+  let totalEncontrados = 0;
+  for (const cidadeCfg of cidadesDaRodada) {
+    const { municipio, uf } = cidadeCfg;
+    console.log(`[backfill-casa-dos-dados] Buscando ${municipio}/${uf}… (objetivo mínimo: ${cidadeCfg.objetivoMinimo})`);
+    const { leads: leadsCidade, porMeta } = await buscarCidade(cidadeCfg, casaToken);
+    console.log(`[backfill-casa-dos-dados] ${municipio}/${uf}: ${leadsCidade.length} contas após filtro (rede grande e pessoa física fora).`);
+    if (porMeta) {
+      porMeta.forEach(m => {
+        const ok = m.encontrados >= m.minimo;
+        console.log(`[backfill-casa-dos-dados]   ${ok ? '✅' : '⚠️ ABAIXO DA META'} ${m.nome}: ${m.encontrados}/${m.minimo}`);
+      });
+    }
+    if (modoManual) {
+      todosOsLeads.push(...leadsCidade);
+      porCidade[`${municipio}/${uf}`] = { encontrados: leadsCidade.length, porMeta: porMeta || undefined };
+    } else {
+      const resultado = await importarLote(leadsCidade, importSecret);
+      porCidade[`${municipio}/${uf}`] = { encontrados: leadsCidade.length, inseridos: resultado.inseridos || 0, duplicados: resultado.duplicados || 0, recusado: resultado.erro || undefined, porMeta: porMeta || undefined };
+      totalInseridos += resultado.inseridos || 0;
+      totalDuplicados += resultado.duplicados || 0;
+      totalEncontrados += leadsCidade.length;
+      if (resultado.erro) recusadas.push({ cidade: `${municipio}/${uf}`, encontrados: leadsCidade.length, erro: resultado.erro });
+    }
+  }
+
+  console.log('[backfill-casa-dos-dados] Resumo final:', JSON.stringify(porCidade, null, 2));
+
+  if (modoManual) {
+    const saida = { fonte: 'casa_dos_dados', leads: todosOsLeads };
+    fs.mkdirSync('artifacts', { recursive: true });
+    fs.writeFileSync('artifacts/leads-casa-dos-dados.json', JSON.stringify(saida, null, 2));
+    console.log(`[backfill-casa-dos-dados] ${todosOsLeads.length} conta(s) gravadas em artifacts/leads-casa-dos-dados.json — baixe o artifact desta execução e cole o conteúdo no modal "Importar contas" (aba colar/anexar JSON) do Cockpit.`);
+
+    /* MODO MANUAL PASSA A FALHAR A EXECUÇÃO (28/08/26).
+       O fallback foi escrito em 16/08 como ponte temporária: "assim que o IMPORT_SECRET
+       entrar em vigor na Vercel, este script volta a importar sozinho". Passaram 12 dias
+       e ninguém configurou — e o Action fechava em VERDE toda semana, porque tinha
+       encontrado as contas e gravado o artefato.
+
+       O que isso produziu, medido: a rodada de 24/08 encontrou 400+ contas no Rio, 39 em
+       Vila Velha, 38 em Vitória, com todas as cotas por executivo batidas — e o banco
+       registra ZERO linhas criadas nos últimos 7 dias. Ninguém baixa artefato. A fila de
+       Prospecção ficou congelada desde 16/08, e o Julyan chegou a dizer "nem eu e os
+       executivos estamos usando" — não havia nada novo para usar.
+
+       Verde escondendo no-op é pior que vermelho: vermelho é visto. O artefato continua
+       sendo publicado (a etapa de upload usa `if: always()`), então nada se perde — só o
+       resultado da execução passa a dizer a verdade.
+
+       Sai daqui sozinho no momento em que o IMPORT_SECRET existir nos dois lados. */
+    const aviso = `${todosOsLeads.length} contas-alvo encontradas e NENHUMA importada: IMPORT_SECRET não está configurado.`;
+    console.log(`::warning title=Prospecção não foi atualizada::${aviso}`);
+    if (process.env.GITHUB_STEP_SUMMARY) {
+      try {
+        fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+          '## ⚠️ A fila de Prospecção NÃO foi atualizada',
+          '',
+          `Encontradas **${todosOsLeads.length} contas-alvo**. Importadas: **0**.`,
+          '',
+          'O script não tem `IMPORT_SECRET`, então não pode chamar `api/importar-leads.js`',
+          'e caiu no modo manual — gravou o JSON como artefato desta execução.',
+          '',
+          '**Para voltar a importar sozinho, os dois lados precisam do mesmo segredo:**',
+          '',
+          '1. GitHub → Settings → Secrets and variables → Actions → `IMPORT_SECRET`',
+          '2. Vercel → Settings → Environment Variables → `IMPORT_SECRET` (e redeploy)',
+          '',
+          'Enquanto isso, dá pra importar à mão: baixe o artefato `leads-casa-dos-dados`',
+          'e cole o conteúdo no modal "Importar contas" do Cockpit (aba colar/anexar JSON).',
+          ''
+        ].join('\n'));
+      } catch (e) { /* resumo é bônus; não pode derrubar o relatório */ }
+    }
+    console.log('[backfill-casa-dos-dados] Encerrando com falha DE PROPÓSITO: a execução não cumpriu o que existe pra fazer.');
+    process.exit(1);
+  } else {
+    console.log(`[backfill-casa-dos-dados] Total: ${totalInseridos} contas novas, ${totalDuplicados} já existentes (mescladas).`);
+
+    /* FALHA QUANDO O ENDPOINT RECUSA (28/08/26 — lacuna do meu próprio conserto).
+       A passagem anterior fez o MODO MANUAL falhar alto, mas deixou passar o caso
+       em que o segredo existe no GitHub, o POST é feito, e o endpoint recusa: a
+       execução somava inseridos=0 em todas as cidades e fechava em VERDE.
+
+       Aconteceu ao vivo na primeira execução com o segredo configurado: as 7 cidades
+       responderam "Sem sessão e sem segredo de importação válido" (segredo ausente ou
+       diferente do lado da Vercel, ou faltando o redeploy) e o Action deu success.
+
+       Recusa é diferente de "nada novo": recusa é 0 inserido E 0 duplicado com contas
+       encontradas. Quando tudo está certo e não há nada novo, `duplicados` sobe. */
+    if (recusadas.length > 0) {
+      const aviso = `${recusadas.length} cidade(s) recusadas pelo endpoint. ${totalEncontrados} contas encontradas, ${totalInseridos} importadas.`;
+      console.log(`::error title=Importação recusada::${aviso}`);
+      console.log('[backfill-casa-dos-dados] Recusas:', JSON.stringify(recusadas, null, 2));
+      if (process.env.GITHUB_STEP_SUMMARY) {
+        try {
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+            '## ❌ O endpoint recusou a importação',
+            '',
+            `Encontradas **${totalEncontrados}** contas. Importadas: **${totalInseridos}**.`,
+            '',
+            `Motivo devolvido: \`${recusadas[0].erro}\``,
+            '',
+            'O segredo chegou daqui (o GitHub o injetou no ambiente), então a diferença',
+            'está do outro lado. Confira, na Vercel:',
+            '',
+            '1. `IMPORT_SECRET` existe em Settings → Environment Variables?',
+            '2. O valor é **idêntico** ao do GitHub?',
+            '3. Houve **redeploy** depois de criar a variável? (env var nova só vale no deploy seguinte)',
+            ''
+          ].join('\n'));
+        } catch (e) { /* resumo é bônus */ }
+      }
+      process.exit(1);
+    }
+  }
+}
+
+/* ── QUEM CHAMA ESTE ARQUIVO (06/09/26) ─────────────────────────────────────────
+   Como PROGRAMA (o cron de segunda, e o disparo manual do workflow): roda a rodada
+   inteira, todas as cidades. Como MODULO (api/buscar-leads.js, quando o gestor aperta
+   o botao na aba Rotas): nao roda nada sozinho — quem chama escolhe a cidade.
+   Sem esta guarda, um require aqui dispararia a varredura completa dentro de uma
+   requisicao HTTP. */
+if (require.main === module) {
+  main().catch(e => {
+    console.log('[backfill-casa-dos-dados] Falha geral:', e.message || e);
+    process.exit(1);
+  });
+}
+
+/* As pecas que a rota sob demanda reusa. Nada aqui e reimplementado do outro lado:
+   busca, normalizacao, filtro de foodservice e o envio para /api/importar-leads sao
+   ESTES, os mesmos que rodam toda segunda. */
+module.exports = {
+  CIDADES,
+  buscarCidade,
+  importarLote,
+  normalizar,
+  ehRedeGrande,
+  ehPessoaFisica,
+  ehForaDeFoodservice
+};
+
+  },
 };
 
 function resolver(de, spec) {
@@ -4157,11 +6688,12 @@ function resolver(de, spec) {
   return p;
 }
 
-// ambiente = { process, json(caminho) }
+// ambiente = { process, json(caminho), externo(nome) }
 export function carregador(ambiente) {
   const cache = Object.create(null);
   function requireDe(de) {
     return function (spec) {
+      if (!spec.startsWith('.')) return ambiente.externo(spec);
       const p = resolver(de, spec);
       if (p.endsWith('.json')) return ambiente.json(p);
       if (cache[p]) return cache[p].exports;
