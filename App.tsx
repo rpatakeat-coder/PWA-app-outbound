@@ -980,6 +980,11 @@ function MainApp() {
   const [filtrosNovos, setFiltrosNovos] = useState<FiltrosNovos>(FILTROS_VAZIOS);
   const [filtrosNovosAbertos, setFiltrosNovosAbertos] = useState(false);
   const janelaTela = useWindowDimensions();
+  // Altura da folha de baixo do mapa novo: o mapa termina no topo dela, para
+  // o logo e os Termos do Google ficarem sempre visíveis (prompt final C10).
+  const [alturaFolha, setAlturaFolha] = useState(0);
+  // Sem o "Mapa | Lista" no topo, quem estava na Lista volta para o mapa.
+  useEffect(() => { if (modoNovo) setVistaMapa('mapa'); }, [modoNovo]);
 
   // ===== Mapa de calor de visitas (só gestor) =====
   // Camada opcional sobre o mapa principal: densidade de check-ins por área.
@@ -3953,11 +3958,16 @@ function MainApp() {
   const rotaMapaGrande = rotaMovel && (mapaExpandido || routeDisplayClients.length === 0);
   const rotaFaixaDeMapa = rotaMovel && !rotaMapaGrande;
 
+  // Folha de baixo do mapa novo: no celular, sem lead aberto, fora do modo de
+  // criação e fora da lente Calor. Uma condição só para a folha, o "+" e o
+  // encolhimento do mapa (logo do Google visível).
+  const folhaVisivel = modoNovo && !layout.ehLargo && !creationMode && !selectedClient && lente !== 'calor';
+
   const conteudoMapa = (
     <>
       <MapView
         mapRef={(ref) => { mapRef.current = ref as unknown as RNMapView; }}
-        style={styles.map}
+        style={[styles.map, folhaVisivel && alturaFolha > 0 && { marginBottom: alturaFolha }]}
         // Mede a area real do mapa na tela pra ancorar o pin de criacao no
         // centro do MAPA (nao da tela). Guarda x/y/width/height absolutos.
         onLayout={(e) => {
@@ -4109,6 +4119,16 @@ function MainApp() {
         {/* Polyline da rota: usa geometria real (OSRM, segue ruas) quando
             disponivel; cai pra linha reta tracejada enquanto carrega ou
             se a API falhou. Oculta no modo calor. */}
+        {/* Mapa novo (prompt final C7): azul com contorno branco, abaixo dos
+            pinos — vermelho fica reservado a pino e ação. */}
+        {!heatOn && modoNovo && routeWaypoints.length >= 2 && (
+          <Polyline
+            coordinates={routeGeometry.data && routeGeometry.data.coordinates.length > 1 ? routeGeometry.data.coordinates : routeWaypoints}
+            strokeColor="rgba(255,255,255,0.9)"
+            strokeWidth={9}
+            zIndex={1}
+          />
+        )}
         {!heatOn && routeWaypoints.length >= 2 && (
           <Polyline
             coordinates={
@@ -4116,8 +4136,9 @@ function MainApp() {
                 ? routeGeometry.data.coordinates
                 : routeWaypoints
             }
-            strokeColor="#C8131B"
-            strokeWidth={4}
+            strokeColor={modoNovo ? 'rgba(59,130,246,0.9)' : '#C8131B'}
+            strokeWidth={modoNovo ? 5 : 4}
+            zIndex={modoNovo ? 2 : undefined}
             lineDashPattern={
               routeGeometry.data && routeGeometry.data.coordinates.length > 1
                 ? undefined
@@ -4154,7 +4175,7 @@ function MainApp() {
         {/* So' nas abas de leads: `renderMap` tambem alimenta a FAIXA de mapa
             da Rota, e la' a contagem do recorte nao quer dizer nada — o que
             esta' na tela e' a sequencia, nao o resultado de um filtro. */}
-        {!layout.ehLargo && !creationMode && ehAbaDeLeads && (
+        {!layout.ehLargo && !creationMode && ehAbaDeLeads && !modoNovo && (
           <View style={[styles.recortePill, statusBloqueadoPeloSetor && styles.recortePillAviso]}>
             <Text style={[styles.recorteTexto, statusBloqueadoPeloSetor && styles.recorteTextoAviso]}>
               {/* Zero por PERMISSAO tem a mesma cara de zero por regiao vazia.
@@ -4279,8 +4300,9 @@ function MainApp() {
 
       {/* Mapa novo: folha de baixo sem lead aberto (prancha §5). No
           desktop o painel lateral de 352px continua fazendo esse papel. */}
-      {modoNovo && !layout.ehLargo && !creationMode && !selectedClient && lente !== 'calor' && (
+      {folhaVisivel && (
         <FolhaDoMapa
+          aoMedir={setAlturaFolha}
           itens={itensFolha}
           planoTotal={routeDisplayClients.length}
           planoFeito={routeStops.filter((s) => s.status === 'done').length}
@@ -4290,6 +4312,18 @@ function MainApp() {
           onAbrir={handleMarkerPress}
           onCheguei={(c) => handleMarkAsVisited(c)}
         />
+      )}
+
+      {/* "+" do mapa novo: botão flutuante acima da folha (C10); o rodapé fica sem botão central. */}
+      {modoNovo && !layout.ehLargo && !creationMode && !isViewer && !selectedClient && (
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Novo lead"
+          style={[styles.fabMapaNovo, { bottom: baseInferior + (folhaVisivel ? alturaFolha : 0) + 12 }]}
+          onPress={() => setShowCepStep(true)}
+        >
+          <IconPlus width={26} height={26} fill="#FFFFFF" />
+        </TouchableOpacity>
       )}
 
       {creationMode && creationCenter && (
@@ -5353,8 +5387,9 @@ function MainApp() {
         })()}
 
         {/* Linha 2 — Mapa / Lista. Raio 12 so' nas pontas: e' um controle, nao
-            dois botoes. */}
-        {ehAbaDeLeads && (
+            dois botoes. Mapa novo (prompt final C8): sai — a lista e' a folha
+            "Nesta área", e o topo fica em 2 linhas. */}
+        {ehAbaDeLeads && !modoNovo && (
           <View style={styles.headerSegmento}>
             {([
               { id: 'mapa' as const, rotulo: 'Mapa', Icone: IconLocation },
@@ -5971,7 +6006,7 @@ function MainApp() {
       <View style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]}>
         <TouchableOpacity
           accessibilityRole="button"
-          style={[styles.navItem, verGestao && styles.navItemLadoDeDois]}
+          style={[styles.navItem, verGestao && !modoNovo && styles.navItemLadoDeDois]}
           onPress={() => setTab('map')}
         >
           <NavIcon Icone={tab === 'map' ? IconLocationFilled : IconLocation} ativo={tab === 'map'} />
@@ -5986,7 +6021,7 @@ function MainApp() {
           <>
             <TouchableOpacity
               accessibilityRole="button"
-              style={[styles.navItem, verGestao && styles.navItemLadoDeDois]}
+              style={[styles.navItem, verGestao && !modoNovo && styles.navItemLadoDeDois]}
               onPress={() => setTab('route')}
             >
               <NavIcon Icone={IconCar} ativo={tab === 'route'} />
@@ -6045,8 +6080,9 @@ function MainApp() {
             )}
 
             {/* FAB central. A borda de 4px em --surface e' o que o recorta da
-                barra; sem ela ele encosta nas abas vizinhas. */}
-            <TouchableOpacity
+                barra; sem ela ele encosta nas abas vizinhas. No mapa novo ele
+                vira botao flutuante do mapa (C10: cobria o logo do Google). */}
+            {!modoNovo && <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="Adicionar lead"
               activeOpacity={0.94}
@@ -6054,7 +6090,7 @@ function MainApp() {
               onPress={() => setShowCepStep(true)}
             >
               <IconPlus width={32} height={32} fill="#FFFFFF" />
-            </TouchableOpacity>
+            </TouchableOpacity>}
           </>
         )}
 
@@ -9104,6 +9140,12 @@ const styles = StyleSheet.create({
   errorText: { color: 'var(--brand-text)', fontSize: 16 },
   // Map
   map: { flex: 1 },
+  // "+" do mapa novo (C10): 52 px, vermelho, acima da folha.
+  fabMapaNovo: {
+    position: 'absolute', right: 16, width: 52, height: 52, borderRadius: 26, zIndex: 25,
+    backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 8,
+  },
   // Aviso do carregamento por área. No TOPO do mapa: embaixo ficam a legenda
   // de temperatura, o botao de localizacao e a barra de navegacao.
   areaStatusWrap: {

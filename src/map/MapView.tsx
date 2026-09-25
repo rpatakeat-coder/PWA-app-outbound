@@ -374,13 +374,28 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
     const marker = new ctx.maps.marker.AdvancedMarkerElement({
       map: ctx.map,
       content: dot,
-      zIndex: 2500,
+      zIndex: 9999, // sempre por cima dos pinos (prompt final C11)
+    });
+
+    // Halo de precisão: raio = margem de erro do GPS. Mostra ao vendedor por
+    // que o check-in pode dizer "longe" com GPS fraco.
+    const halo = new ctx.maps.Circle({
+      map: ctx.map,
+      clickable: false,
+      fillColor: '#3B82F6',
+      fillOpacity: 0.12,
+      strokeColor: '#3B82F6',
+      strokeOpacity: 0.35,
+      strokeWeight: 1,
+      zIndex: 0,
     });
 
     const watchId = navigator.geolocation?.watchPosition(
       (pos) => {
         const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         marker.position = p;
+        halo.setCenter(p);
+        halo.setRadius(Math.min(pos.coords.accuracy || 0, 500));
         if (followRef.current) ctx.map.panTo(p);
       },
       (err) => console.warn('[MAP] geolocation:', err.message),
@@ -390,6 +405,7 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
     return () => {
       if (watchId != null) navigator.geolocation.clearWatch(watchId);
       marker.map = null;
+      halo.setMap(null);
     };
   }, [ctx, showsUserLocation]);
 

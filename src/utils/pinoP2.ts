@@ -107,6 +107,10 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
     else if (codigo && MORNO.has(codigo)) temp = 'M';
     else if (codigo && FRIO.has(codigo)) temp = 'F';
     else if (codigo === PERDIDO) temp = 'X';
+    // Cadastro na rua que ainda não virou negócio no HubSpot: a prancha diz
+    // que nasce em "Primeiro contato" (frio). Eram ~32 dos 37 "?" restantes
+    // (25/09) — leads de rua sem negócio, a maioria de quem saiu do time.
+    else if (codigo == null && !c.id_hubspot && c.origem_lead === 'cadastro_na_rua') temp = 'F';
     else temp = '?'; // sem etapa, texto que a tabela não conhece, ou "é origem"
   }
 

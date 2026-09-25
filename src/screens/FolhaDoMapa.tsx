@@ -27,6 +27,8 @@ type Props = {
   rotuloLente: string;
   onAbrir: (c: Client) => void;
   onCheguei: (c: Client) => void;
+  /** Altura da folha na tela (o mapa termina no topo dela). */
+  aoMedir?: (altura: number) => void;
 };
 
 function PinoMini({ p, plano }: { p: Pino; plano: number | null }) {
@@ -53,14 +55,14 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir }: Props) {
   const [aberta, setAberta] = useState(false);
   const [modo, setModo] = useState<'prioridade' | 'distancia'>('prioridade');
   const ordenados = useMemo(() => ordenarItens(itens, modo), [itens, modo]);
   const proxima = useMemo(() => ordenarItens(itens, 'prioridade').find((it) => it.plano && !it.feito) ?? null, [itens]);
 
   return (
-    <View style={[s.folha, { bottom: chao }]} accessibilityLabel="Agora, perto de você">
+    <View style={[s.folha, { bottom: chao }]} accessibilityLabel="Agora, perto de você" onLayout={(e) => aoMedir?.(Math.round(e.nativeEvent.layout.height))}>
       <Pressable accessibilityRole="button" accessibilityLabel={aberta ? 'Recolher a lista' : 'Abrir a lista desta área'} onPress={() => setAberta((v) => !v)} style={s.alca}>
         <View style={s.alcaBarra} />
       </Pressable>
@@ -99,8 +101,8 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
       )}
 
       <Pressable accessibilityRole="button" onPress={() => setAberta((v) => !v)} style={s.nestaArea}>
-        <Text style={s.nestaAreaTexto}>{`${rotuloLente} · nesta área · ${itens.length} ${aberta ? '▾' : '▴'}`}</Text>
-        {totalNaArea > itens.length && <Text style={s.nestaAreaSub}>{`${totalNaArea - itens.length} viram ponto no mapa`}</Text>}
+        <Text style={s.nestaAreaTexto}>{`Nesta área · ${totalNaArea} · ${itens.length} ${itens.length === 1 ? 'pino' : 'pinos'}, ${Math.max(0, totalNaArea - itens.length)} pontos ${aberta ? '▾' : '▴'}`}</Text>
+        <Text style={s.nestaAreaSub}>{`Lente ${rotuloLente}`}</Text>
       </Pressable>
 
       {aberta && (

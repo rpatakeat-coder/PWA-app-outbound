@@ -49,6 +49,8 @@ ok(classificarPino(base({ etapa: 'NEGÓCIO PERDIDO' }), ctx).temp === 'X', '"NEG
 ok(classificarPino(base({ etapa: 'CASA DOS DADOS' }), ctx).temp === '?', '"CASA DOS DADOS" é origem: pino "?" cinza, não temperatura');
 ok(classificarPino(base({ etapa: 'Acompanhamento' }), ctx).temp === '?', 'etapa que a tabela não conhece vira "?"');
 ok(classificarPino(base({ etapa: null }), ctx).glifo === '?', 'sem etapa vira "?"');
+ok(classificarPino(base({ etapa: null, id_hubspot: null, origem_lead: 'cadastro_na_rua' }), ctx).temp === 'F', 'cadastro na rua sem negócio nasce em Primeiro contato (frio)');
+ok(classificarPino(base({ etapa: null, id_hubspot: '999', origem_lead: 'cadastro_na_rua' }), ctx).temp === '?', 'com negócio e sem etapa conhecida continua "?" (não inventa)');
 ok(classificarPino(base({ etapa: null, id_hubspot: '555' }), ctx).temp === 'Q', 'sem etapa no app: usa a etapa do snapshot do Cockpit (0105)');
 ok(classificarPino(base({ etapa: 'Prospecção', id_hubspot: '555' }), ctx).temp === 'F', 'etapa do app reconhecida vale mais que o snapshot');
 
