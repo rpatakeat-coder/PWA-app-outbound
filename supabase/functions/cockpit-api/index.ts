@@ -2,7 +2,8 @@
 //
 // As rotas de servidor do Cockpit Field Sales (mudar etapa, criar e desfazer
 // negocio, nota, tarefa de rota, MRR, sugestao do gestor, empresa da prospeccao,
-// restaurantes proximos, novidades de mercado), servidas pelo APP. O codigo das
+// restaurantes proximos, novidades de mercado, importar e buscar leads), servidas
+// pelo APP. O codigo das
 // rotas e o do Cockpit, byte a byte, em cockpit.js (gerado por
 // scripts/portar-cockpit-api.cjs). Este arquivo so faz a ponte:
 //
@@ -16,16 +17,18 @@
 //   - data/usuarios.json: equipe_cockpit + profiles, lida a cada chamada. E dela
 //     que cada rota tira o papel (gestor/executivo) e o ownerId da pessoa — a
 //     trava "so o dono ou um gestor mexe no negocio";
-//   - data/redes-excluidas.json e data/maptiler-config.json: public.cockpit_config.
+//   - territorios, leads-referencia, redes-excluidas, maptiler, cadencias,
+//     comissionamento, temperatura: public.cockpit_config; supabase-config: o APP.
 //
-// verify_jwt fica ligado: sem sessao valida, nem chega aqui.
+// Publicado duas vezes (ver modoRobo): cockpit-api com verify_jwt ligado, para a
+// tela; cockpit-robo com verify_jwt desligado e SO importar-leads, para os robos.
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 // O pacote vem do proprio repositorio, FIXADO NO HASH do commit que o gerou: o que
 // roda e, por construcao, o arquivo versionado — sem copia manual no deploy.
 // Gerou de novo? Commit, e troque o hash aqui pelo do commit novo.
-import { carregador, ROTAS, ORIGEM } from 'https://raw.githubusercontent.com/rpatakeat-coder/PWA-app-outbound/58e3c6a735943944cff02f1845ade8633c7bbc51/supabase/functions/cockpit-api/cockpit.js';
+import { carregador, ROTAS, ORIGEM } from 'https://raw.githubusercontent.com/rpatakeat-coder/PWA-app-outbound/7421944e8ab6685576974041838f214a35b18e17/supabase/functions/cockpit-api/cockpit.js';
 
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -47,19 +50,33 @@ segredo('SUPABASE_SERVICE_KEY', 'SUPABASE_SERVICE_ROLE_KEY');
 segredo('CASADOSDADOS_TOKEN');
 segredo('SERPER_API_KEY');
 segredo('PWA_DEEP_LINK');
+// A porta dos robos de leads (x-import-secret), o mesmo segredo do GitHub.
+segredo('IMPORT_SECRET');
 
 // ---- os .json, vivos ----
 // Os modulos do Cockpit guardam a referencia no carregamento
 // (USUARIOS = Array.isArray(raw) ? raw : raw.usuarios), entao o que se entrega e
 // SEMPRE O MESMO objeto, com o conteudo trocado no lugar a cada chamada.
 const USUARIOS: any[] = [];
-const CONFIG_JSON: Record<string, any> = {
-  'data/redes-excluidas.json': {},
-  'data/maptiler-config.json': {},
-};
 const CHAVE_CONFIG: Record<string, string> = {
   'data/redes-excluidas.json': 'redes-excluidas',
   'data/maptiler-config.json': 'maptiler-config',
+  'data/territorios.json': 'territorios',
+  'data/leads-referencia.json': 'leads-referencia',
+  'data/cadencias.json': 'cadencias',
+  'data/comissionamento.json': 'comissionamento',
+  'data/temperatura.json': 'temperatura',
+};
+const CONFIG_JSON: Record<string, any> = Object.fromEntries(Object.keys(CHAVE_CONFIG).map((k) => [k, {}]));
+// A configuracao do Supabase do Cockpit e a do APP (o banco onde tudo vive agora).
+const SUPABASE_CONFIG = { url: Deno.env.get('SUPABASE_URL'), anonKey: Deno.env.get('SUPABASE_ANON_KEY') };
+// fs: so o modo linha de comando do backfill usa (require.main === module, que no
+// pacote nunca e verdade). Qualquer uso real cai aqui e falha alto.
+const FS_SUBSTITUTO = {
+  existsSync: () => false,
+  appendFileSync: () => {},
+  readFileSync: () => { throw new Error('fs indisponivel na Edge Function'); },
+  writeFileSync: () => { throw new Error('fs indisponivel na Edge Function'); },
 };
 function trocarNoLugar(alvo: any, novo: any) {
   Object.keys(alvo).forEach((k) => delete alvo[k]);
@@ -109,8 +126,15 @@ const carregar = carregador({
   process: { env },
   json(caminho: string) {
     if (caminho === 'data/usuarios.json') return USUARIOS;
+    if (caminho === 'data/supabase-config.json') return SUPABASE_CONFIG;
     if (CONFIG_JSON[caminho]) return CONFIG_JSON[caminho];
+    // snapshot (hubspot.json, narrativas.json...): o Cockpit pede com requireOpcional
+    // e, sem o arquivo, segue com null — o mesmo comportamento da Vercel.
     throw new Error('json do Cockpit nao servido: ' + caminho);
+  },
+  externo(nome: string) {
+    if (nome === 'fs') return FS_SUBSTITUTO;
+    throw new Error('modulo externo nao servido: ' + nome);
   },
 });
 
@@ -160,13 +184,21 @@ async function executar(handler: any, request: Request, url: URL): Promise<Respo
 
 Deno.serve(async (request) => {
   const url = new URL(request.url);
-  const rota = url.pathname.replace(/^.*\/cockpit-api\/?/, '').replace(/\/+$/, '');
+  // Duas publicacoes deste mesmo arquivo:
+  //   cockpit-api  (verify_jwt ligado): a tela, com a sessao do usuario;
+  //   cockpit-robo (verify_jwt desligado): SO importar-leads, a porta dos robos
+  //     do GitHub, que se identificam por x-import-secret e nao tem JWT. A rota
+  //     do Cockpit valida o segredo (ou a sessao) por conta propria — fail-closed.
+  const modoRobo = /\/cockpit-robo(\/|$)/.test(url.pathname);
+  const permitidas = modoRobo ? ['importar-leads'] : ROTAS;
+  // Os robos montam `${COCKPIT_URL}/api/importar-leads`: o prefixo api/ cai aqui.
+  const rota = url.pathname.replace(/^.*\/cockpit-(api|robo)\/?/, '').replace(/^api\//, '').replace(/\/+$/, '');
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (!rota) {
-    return new Response(JSON.stringify({ ok: true, origem: 'cockpit-unificado@' + ORIGEM, rotas: ROTAS }),
+    return new Response(JSON.stringify({ ok: true, origem: 'cockpit-unificado@' + ORIGEM, rotas: permitidas }),
       { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } });
   }
-  if (!ROTAS.includes(rota)) {
+  if (!permitidas.includes(rota)) {
     return new Response(JSON.stringify({ erro: 'Rota do Cockpit ainda não trazida para o APP: ' + rota }),
       { status: 404, headers: { ...CORS, 'Content-Type': 'application/json' } });
   }
