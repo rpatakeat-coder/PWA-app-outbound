@@ -91,17 +91,17 @@ Deno.serve(async (req) => {
   // ---- 2. a equipe (equipe_cockpit + profiles) ----
   const { data: linhas, error: erroEquipe } = await svc
     .from('equipe_cockpit')
-    .select('profile_id, papel, nome, ordem, ignorar_owner, ramp_stage, a_comecar, field_status, profiles!inner(email, full_name, id_hubspot)')
+    .select('profile_id, papel, nome, ordem, ignorar_owner, so_acesso, ramp_stage, a_comecar, field_status, profiles!inner(email, full_name, id_hubspot)')
     .eq('ativo', true)
     .order('ordem', { ascending: true, nullsFirst: false });
   if (erroEquipe) return json(500, { erro: 'Não consegui ler a equipe: ' + erroEquipe.message });
-  const equipe = (linhas ?? []).map((l: any) => {
+  const cadastro = (linhas ?? []).map((l: any) => {
     const p = l.profiles ?? {};
     const x: Record<string, unknown> = {
       email: String(p.email ?? '').toLowerCase(),
       role: l.papel,
       // ignorar_owner (0094): no Cockpit esta pessoa não tem dono no HubSpot.
-      ownerId: l.ignorar_owner ? null : (p.id_hubspot ?? null),
+      ownerId: (l.ignorar_owner || l.so_acesso) ? null : (p.id_hubspot ?? null),
       // O nome do Cockpit (0093) é a chave dos arquivos de território: o recorte
       // do executivo casa a rota e as praças por ele.
       nome: l.nome ?? p.full_name ?? undefined,
@@ -109,10 +109,14 @@ Deno.serve(async (req) => {
     if (l.ramp_stage) x.rampStage = l.ramp_stage;
     if (l.a_comecar) x.aComecar = true;
     if (l.field_status) x.fieldStatus = l.field_status;
-    return x;
+    return { pessoa: x, soAcesso: !!l.so_acesso };
   });
+  // so_acesso (0095): entra como gestor, mas fica FORA da equipe da montagem —
+  // DATA.usuarios é denominador ("visto por X/N") e fonte do placar; quem só tem
+  // acesso não pode mudar nenhum dos dois.
+  const equipe = cadastro.filter((c) => !c.soAcesso).map((c) => c.pessoa);
   usarEquipe(equipe);
-  const usuario: any = equipe.find((x) => x.email === emailLogado);
+  const usuario: any = (cadastro.find((c) => c.pessoa.email === emailLogado) || {}).pessoa;
   if (!usuario) return json(403, { erro: 'Seu login não está na equipe do Cockpit. Fale com seu gestor.' });
   const url = new URL(req.url);
   const recurso = url.searchParams.get('recurso');

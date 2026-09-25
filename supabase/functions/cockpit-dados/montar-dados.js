@@ -25,7 +25,7 @@ function requireOpcional(fn) {
   try { return fn(); } catch (e) { return null; }
 }
 
-// ══ DE ONDE VEM O SNAPSHOT DO CRM (02/09/26) ═══════════════════════════════════════
+// ══ DE ONDE VEM O SNAPSHOT DO CRM (02/09/26) ═══════════════════════════════════════════════
 // Os seis arquivos que o ROBO produz (hubspot, narrativas, resumo-semanal, weekly-raw,
 // sync-status, hubspot-previous) sairam do repositorio: agora eles vivem numa tabela do
 // Supabase (public.cockpit_snapshot) e a rota /api/dados os injeta aqui antes de montar.
@@ -161,7 +161,7 @@ function usarSnapshot(fontes) {
   return trocadas;
 }
 
-// ══ CADA LEAD DIZ EM QUE ETAPA ESTA (04/09/26) ═════════════════════════════════════
+// ══ CADA LEAD DIZ EM QUE ETAPA ESTA (04/09/26) ═════════════════════════════════════════════
 // Os objetos de funilLeads[etapa] vinham do robo SEM stageId: a etapa existia so como
 // chave do mapa. Medido na ficha do negocio — ela faz ORDEM_FUNIL_FICHA.indexOf(l.stageId)
 // e com -1 NAO DESENHA A TRILHA: os oito segmentos de mudar etapa nao existiam para
@@ -563,7 +563,7 @@ function montarDadosCompletos() {
 // gargalo ou coaching dos outros. Corte aprovado pelo Julyan em 07/08/26.
 
 // Campos de colega visíveis pra qualquer executivo (necessários pro Pódio/seletores):
-/* ══ HÁBITOS DO TIME — NÚMERO AGREGADO, SEM NOME ════════════════════════════════════
+/* ══ HÁBITOS DO TIME — NÚMERO AGREGADO, SEM NOME ════════════════════════════════════════════════════
    Ver o cabeçalho de scripts/montar-dados.js? Não: a razão inteira está no commit e no
    comentário da aba. Aqui fica a mecânica.
    Três percentuais por pessoa, e o percentil 80 do time como referência. Quem não tem
@@ -814,7 +814,7 @@ function filtrarParaPapel(dados, usuario) {
     } : null
     // kpisHub, kpiDeltas, saude, funil (contagens agregadas do time), stageMeta,
     // hubspotUpdatedAtFmt, usuarios (nomes/e-mails do próprio time) permanecem — são
-    // agregados sem detalhe de cliente, necessários pra meta coletiva e pro Pódio.
+    // agregados sem detalhe de cliente, necessários pro Pódio.
   };
 }
 
