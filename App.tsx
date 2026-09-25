@@ -95,6 +95,9 @@ import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useClientSearch, useClients } from './src/hooks/useClients';
 import { useNaEquipeCockpit } from './src/hooks/useNaEquipeCockpit';
+import { useContextoDoPino, useLeadsNaFila, useMapaNovo } from './src/hooks/useMapaNovo';
+import PinoP2, { ANCORA_PINO_P2 } from './src/map/PinoP2';
+import { classificarPino, type ContextoPino } from './src/utils/pinoP2';
 import { useMeetings } from './src/hooks/useMeetings';
 import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
 import { useClientNotes } from './src/hooks/useClientNotes';
@@ -448,6 +451,53 @@ const MarkerWithReady = React.memo(
     prev.coordinate.latitude === next.coordinate.latitude &&
     prev.coordinate.longitude === next.coordinate.longitude &&
     prev.onPress === next.onPress,
+);
+
+// Visitado HOJE em Brasília (selo ✓ do pino P2).
+function visitadoHoje(iso: string | null | undefined): boolean {
+  if (!iso) return false;
+  const dia = (d: Date) => Math.floor((d.getTime() - 3 * 3600000) / 86400000);
+  const t = new Date(iso);
+  return !Number.isNaN(t.getTime()) && dia(t) === dia(new Date());
+}
+
+// Pino P2 do mapa novo. A classificação sai de uma função pura
+// (src/utils/pinoP2.ts); o memo compara o que muda o desenho.
+const MarkerP2 = React.memo(
+  function MarkerP2({
+    client, contexto, onPress, planoNumero, feito, naFila, selecionado,
+  }: {
+    client: Client; contexto: ContextoPino; onPress: (client: Client) => void;
+    planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean;
+  }) {
+    const handlePress = useCallback(() => onPress(client), [onPress, client]);
+    const pino = classificarPino(client, contexto);
+    return (
+      <Marker
+        coordinate={{ latitude: client.latitude as number, longitude: client.longitude as number }}
+        onPress={handlePress}
+        anchor={ANCORA_PINO_P2}
+        zIndex={selecionado ? 2000 : planoNumero ? 1000 : undefined}
+        cluster={!planoNumero}
+      >
+        <PinoP2
+          pino={pino}
+          planoNumero={planoNumero}
+          visitado={feito || visitadoHoje(client.visited_at)}
+          naFila={naFila}
+          selecionado={selecionado}
+        />
+      </Marker>
+    );
+  },
+  (a, b) =>
+    a.client === b.client &&
+    a.contexto === b.contexto &&
+    a.onPress === b.onPress &&
+    a.planoNumero === b.planoNumero &&
+    a.feito === b.feito &&
+    a.naFila === b.naFila &&
+    a.selecionado === b.selecionado,
 );
 
 const markerStyles = StyleSheet.create({
@@ -896,6 +946,16 @@ function MainApp() {
   // gestor tem linha la', migration 0096; gestor novo entra la' tambem).
   const naEquipeCockpit = useNaEquipeCockpit();
   const verGestao = !isViewer && naEquipeCockpit;
+  // Mapa novo (prancha): ligado por `?mapa=novo`, lembrado no aparelho. Sem o
+  // contexto carregado ainda, o mapa segue com o pino atual — nunca um pino
+  // pela metade.
+  const mapaNovo = useMapaNovo();
+  const contextoPinoBase = useContextoDoPino(mapaNovo);
+  const leadsNaFila = useLeadsNaFila();
+  const contextoPino = useMemo<ContextoPino | null>(
+    () => (contextoPinoBase ? { ...contextoPinoBase, agora: new Date() } : null),
+    [contextoPinoBase],
+  );
 
   // ===== Mapa de calor de visitas (só gestor) =====
   // Camada opcional sobre o mapa principal: densidade de check-ins por área.
@@ -3785,7 +3845,33 @@ function MainApp() {
         {/* Pins normais somem enquanto o calor está ligado: aí o mapa mostra
             APENAS os lugares visitados (do vendedor filtrado ou de todos),
             sem os leads engolirem as manchas. Voltam ao desligar o 🔥. */}
-        {!heatOn && filteredMapMarkers.map(client => (
+        {/* Mapa novo: pino P2 para os leads da área e para as paradas da
+            rota (com o número do plano no selo, no lugar do RouteMarker). */}
+        {!heatOn && mapaNovo && contextoPino && filteredMapMarkers.map(client => (
+          <MarkerP2
+            key={client.id}
+            client={client}
+            contexto={contextoPino}
+            onPress={handleMarkerPress}
+            naFila={leadsNaFila.has(client.id)}
+            selecionado={selectedClient?.id === client.id}
+          />
+        ))}
+        {!heatOn && mapaNovo && contextoPino && routeDisplayClients
+          .filter(c => c.latitude != null && c.longitude != null)
+          .map((client, index) => (
+            <MarkerP2
+              key={`route-${client.id}`}
+              client={client}
+              contexto={contextoPino}
+              onPress={handleMarkerPress}
+              planoNumero={index + 1}
+              feito={routeStops.find(s => s.client_id === client.id)?.status === 'done'}
+              naFila={leadsNaFila.has(client.id)}
+              selecionado={selectedClient?.id === client.id}
+            />
+          ))}
+        {!heatOn && !(mapaNovo && contextoPino) && filteredMapMarkers.map(client => (
           <MarkerWithReady
             key={client.id}
             client={client}
@@ -3811,7 +3897,7 @@ function MainApp() {
         {/* Markers da rota com numero da ordem — renderizam acima dos
             normais e ficam visiveis independente do filtro de status.
             Também somem no modo calor pra não poluir. */}
-        {!heatOn && routeDisplayClients
+        {!heatOn && !(mapaNovo && contextoPino) && routeDisplayClients
           .filter(c => c.latitude != null && c.longitude != null)
           .map((client, index) => {
             const stop = routeStops.find(s => s.client_id === client.id);
