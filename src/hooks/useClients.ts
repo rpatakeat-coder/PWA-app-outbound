@@ -43,6 +43,8 @@ const CLIENT_LIST_COLUMNS = [
   'origem_lead', 'origem_detalhe', 'entrou_em', 'lead_prospeccao_id',
   // 0106: lead de teste (some do mapa para quem não é admin).
   'is_teste',
+  // Ficha de rua: "Tipo de lugar" só aparece quando falta.
+  'categoria',
 ].join(',');
 
 export type AreaFilter = { lat: number; lon: number; radiusKm: number };

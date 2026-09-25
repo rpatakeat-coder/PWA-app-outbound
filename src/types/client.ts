@@ -65,6 +65,8 @@ export interface Client {
   lead_prospeccao_id?: string | null;
   // Lead de teste (0106): fora do mapa, listas e contagens do app.
   is_teste?: boolean;
+  // Tipo de lugar (Restaurante, Bar…) — a ficha de rua pergunta só se faltar.
+  categoria?: string | null;
   visited_at: string | null;
   // Quantas vezes o lead ja foi visitado (contador mantido pela RPC
   // mark_client_as_visited; o historico completo vive em client_visits).

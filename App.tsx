@@ -101,6 +101,10 @@ import PinoP2, { ANCORA_PINO_P2 } from './src/map/PinoP2';
 import FiltrosMapaNovo from './src/screens/FiltrosMapaNovo';
 import { PeekCardNovo, TopoCardNovo, type AcoesCardNovo, type DadosCardNovo } from './src/screens/CardLeadNovo';
 import FolhaDoMapa, { type ItemFolha } from './src/screens/FolhaDoMapa';
+import FichaDeRua, { type CamposCadastro } from './src/screens/FichaDeRua';
+import { ROTULO_ETAPA } from './src/utils/fichaDeRua';
+import { negocioAcao } from './src/utils/negocioAcao';
+import { textoNormalizado } from './src/utils/pinoP2';
 import { FILTROS_VAZIOS, LENTES, noFoco, passaNosFiltros, pontoDe, quantosFiltros, type FiltrosNovos, type Lente } from './src/utils/lentes';
 import CamadaDePontos from './src/map/CamadaDePontos';
 import { rotulosSemSobrepor } from './src/utils/rotulos';
@@ -3072,6 +3076,10 @@ function MainApp() {
   const [isVisiting, setIsVisiting] = useState(false);
   // Sobe logo depois do check-in bem-sucedido: o que aconteceu DENTRO da visita
   // (ver DesfechoVisitaSheet). Puravel — o check-in ja' gravou.
+  // Ficha de rua (mapa novo): abre depois do check-in de um lead.
+  const [fichaPendente, setFichaPendente] = useState<{
+    client: Client; checkinEm: string; etapaAtual: string | null; primeiraVisita: boolean;
+  } | null>(null);
   const [desfechoPendente, setDesfechoPendente] = useState<{
     idHubspot: string;
     cliente: string;
@@ -3249,7 +3257,19 @@ function MainApp() {
       Toast.mostrar(corrigirPino
         ? `✓ Check-in em ${nomeDoLead} · pino corrigido (estava a ${Math.round(distance)} m)`
         : `✓ Check-in em ${nomeDoLead} registrado`, 'ok');
-      if (visitado.status === 'lead' && visitado.id_hubspot) {
+      if (modoNovo && contextoPino && visitado.status === 'lead') {
+        // Etapa atual no código do Cockpit: texto do app pela etapa_de_para,
+        // senão a do snapshot (0105).
+        const chave = textoNormalizado(visitado.etapa);
+        const pelaTabela = chave ? contextoPino.etapaDePara.get(chave) ?? null : null;
+        const peloSnapshot = visitado.id_hubspot ? contextoPino.tempoPorNegocio.get(String(visitado.id_hubspot))?.etapaCodigo ?? null : null;
+        setFichaPendente({
+          client: visitado,
+          checkinEm: visitado.visited_at ?? new Date().toISOString(),
+          etapaAtual: pelaTabela ?? peloSnapshot,
+          primeiraVisita: (client.visit_count ?? 0) === 0,
+        });
+      } else if (visitado.status === 'lead' && visitado.id_hubspot) {
         setDesfechoPendente({
           idHubspot: visitado.id_hubspot,
           cliente: visitado.empresa?.trim() || visitado.nome,
@@ -3263,7 +3283,7 @@ function MainApp() {
       visitingRef.current = false;
       setIsVisiting(false);
     }
-  }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, isMonitoringRoute, getBestFix]);
+  }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, isMonitoringRoute, getBestFix, modoNovo, contextoPino]);
   handleMarkAsVisitedRef.current = handleMarkAsVisited;
 
   // Fila offline: quem sobe o check-in guardado sem sinal. Ref porque a
@@ -3286,6 +3306,7 @@ function MainApp() {
   };
   useEffect(() => {
     const tirar = registrarExecutor('checkin', (item) => subirCheckinRef.current(item.payload, item.acaoId));
+    const tirarNegocio = registrarExecutor('negocio', async (item) => { await negocioAcao((item.payload as { corpo: Record<string, unknown> }).corpo); });
     const subir = () => {
       void subirFila().then((n) => {
         if (n > 0) Toast.mostrar(`✓ Sinal voltou · ${n === 1 ? '1 item enviado' : `${n} itens enviados`}`, 'ok');
@@ -3296,6 +3317,7 @@ function MainApp() {
     if (typeof window !== 'undefined') window.addEventListener('online', subir);
     return () => {
       tirar();
+      tirarNegocio();
       clearInterval(intervalo);
       if (typeof window !== 'undefined') window.removeEventListener('online', subir);
     };
@@ -6802,6 +6824,45 @@ function MainApp() {
         />
       )}
 
+      {fichaPendente && (
+        <FichaDeRua
+          visivel
+          client={fichaPendente.client}
+          checkinEm={fichaPendente.checkinEm}
+          etapaAtual={fichaPendente.etapaAtual}
+          primeiraVisita={fichaPendente.primeiraVisita}
+          proxima={(() => {
+            const feitos = new Set(routeStops.filter((s) => s.status === 'done').map((s) => s.client_id));
+            const i = routeDisplayClients.findIndex((c) => c.id !== fichaPendente.client.id && !feitos.has(c.id));
+            return i >= 0 ? { numero: i + 1, nome: routeDisplayClients[i].empresa?.trim() || routeDisplayClients[i].nome, client: routeDisplayClients[i] } : null;
+          })()}
+          onFechar={() => setFichaPendente(null)}
+          onProxima={(c) => handleMarkerPress(c)}
+          onSalvarCadastro={async (campos: CamposCadastro) => {
+            const c = fichaPendente.client;
+            if (campos.empresa || campos.telefone) {
+              // Mesmo caminho do formulário de edição (sincroniza com o HubSpot).
+              await updateClient.mutateAsync({
+                id: c.id, nome: c.nome, empresa: campos.empresa ?? c.empresa ?? undefined, endereco: c.endereco ?? undefined,
+                numero: c.numero, cep: c.cep ?? undefined, cidade: c.cidade ?? undefined, estado: c.estado ?? undefined,
+                telefone: campos.telefone ?? c.telefone ?? undefined, email: c.email ?? undefined, status: c.status,
+                latitude: c.latitude, longitude: c.longitude, observacoes: c.observacoes ?? undefined,
+              });
+            }
+            if (campos.categoria) {
+              const { error } = await supabase.from('clients').update({ categoria: campos.categoria }).eq('id', c.id);
+              if (error) throw error;
+            }
+          }}
+          onEtapaMudou={(codigo) => {
+            // O HubSpot já gravou; põe o rótulo no lead para a letra do pino mudar na hora.
+            const rotulo = ROTULO_ETAPA[codigo];
+            if (!rotulo) return;
+            void supabase.from('clients').update({ etapa: rotulo }).eq('id', fichaPendente.client.id)
+              .then(() => queryClient.invalidateQueries({ queryKey: ['clients'] }));
+          }}
+        />
+      )}
       {desfechoPendente && (
         <DesfechoVisitaSheet
           idHubspot={desfechoPendente.idHubspot}

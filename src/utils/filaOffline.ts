@@ -11,7 +11,8 @@
 // deixa o item na fila; erro de regra (longe demais, lead sumiu) vira "falhou"
 // na hora, porque tentar de novo daria o mesmo erro.
 
-export type TipoAcao = 'checkin';
+// 'negocio': um envio da porta única do Cockpit (negocio-acao) que ficou sem sinal.
+export type TipoAcao = 'checkin' | 'negocio';
 
 export type ItemFila = {
   acaoId: string;

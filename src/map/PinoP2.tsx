@@ -27,18 +27,23 @@ type Props = {
   nomeDeAlvo?: boolean;
   /** Lado do nome (prompt final C1): direita, ou esquerda quando não cabe. */
   ladoNome?: 'dir' | 'esq';
+  /** Pilha (C11): quantos pinos este representa. >1 mostra o número e "Nome +N". */
+  pilhaN?: number;
+  /** Leque aberto (C11): deslocamento do pino em relação ao ponto real. */
+  leque?: { dx: number; dy: number } | null;
 };
 
 const LOGO = require('../../assets/pin-logo.png');
 
-function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta = true, nomeDeAlvo = false, ladoNome = 'dir' }: Props) {
+function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta = true, nomeDeAlvo = false, ladoNome = 'dir', pilhaN = 1, leque = null }: Props) {
+  const emPilha = pilhaN > 1;
   const pequeno = pino.tipo === 'alvo';
   const w = pequeno ? 26 : 32;
   const anel = pino.dono === 'sem'
     ? '3px dashed #FACC15'
     : `${pino.dono === 'colega' ? 2 : 3}px solid ${pino.cor}`;
   const topoSelo = -w * 1.2 - 12;
-  const mostraEtiqueta = comEtiqueta && (!pequeno || selecionado || nomeDeAlvo);
+  const mostraEtiqueta = !leque && comEtiqueta && (!pequeno || selecionado || nomeDeAlvo || emPilha);
   // C1: o tempo só aparece se decide algo — hoje, cobrar ou mais de 7 dias.
   const t = pino.etiqueta?.texto ?? '';
   const mostraTempo = !!pino.etiqueta && (t === 'hoje' || t === 'cobrar' || t.includes('parado'));
@@ -55,7 +60,14 @@ function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta 
             pointerEvents: 'none',
           }} />
         )}
-        <div style={{ position: 'absolute', left: 0, top: 0, width: 0, height: 0, transform: `scale(${selecionado ? 1.25 : 1})`, transformOrigin: '0 0' }}>
+        {leque && (
+          // linha fina do ponto real até a ponta do pino no leque
+          <div style={{
+            position: 'absolute', left: 0, top: 0, height: 1.5, background: 'rgba(255,255,255,.7)', transformOrigin: '0 0',
+            width: Math.hypot(leque.dx, leque.dy), transform: `rotate(${Math.atan2(leque.dy, leque.dx)}rad)`, pointerEvents: 'none',
+          }} />
+        )}
+        <div style={{ position: 'absolute', left: leque?.dx ?? 0, top: leque?.dy ?? 0, width: 0, height: 0, transform: `scale(${selecionado ? 1.25 : 1})`, transformOrigin: '0 0' }}>
           <div style={{
             position: 'absolute', left: -w / 2, top: -w * 1.2, width: w, height: w, boxSizing: 'border-box',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -64,7 +76,9 @@ function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta 
             boxShadow: selecionado ? '0 0 0 5px rgba(255,255,255,.35),0 3px 10px rgba(0,0,0,.6)' : '0 3px 8px rgba(0,0,0,.55)',
           }}>
             <div style={{ transform: 'rotate(45deg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {pino.logo
+              {emPilha
+                ? <span style={{ fontWeight: 900, fontSize: 14, lineHeight: 1, color: '#fff' }}>{pilhaN}</span>
+                : pino.logo
                 ? <Image source={LOGO} style={{ width: 14, height: 18 }} resizeMode="contain" fadeDuration={0} accessibilityLabel="Cliente Takeat" />
                 : !!pino.glifo && <span style={{ fontWeight: 900, fontSize: 15, lineHeight: 1, color: pino.cor }}>{pino.glifo}</span>}
             </div>
@@ -89,7 +103,7 @@ function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta 
               position: 'absolute', ...(esq ? { right: 18, alignItems: 'flex-end' } : { left: 18 }), top: -w * 1.2 + 2, display: 'flex', flexDirection: 'column', gap: 2,
               whiteSpace: 'nowrap', pointerEvents: 'none',
             }}>
-              <span style={{ fontWeight: 800, fontSize: 11, lineHeight: 1.1, color: '#fff', textShadow: '0 1px 2px #000,0 0 5px #000' }}>{pino.nome}</span>
+              <span style={{ fontWeight: 800, fontSize: 11, lineHeight: 1.1, color: '#fff', textShadow: '0 1px 2px #000,0 0 5px #000' }}>{emPilha ? `${pino.nome} +${pilhaN - 1}` : pino.nome}</span>
               {mostraTempo && pino.etiqueta && (
                 <span style={{
                   alignSelf: esq ? 'flex-end' : 'flex-start', fontWeight: 800, fontSize: 9.5, lineHeight: 1, padding: '2px 5px', borderRadius: 4,
