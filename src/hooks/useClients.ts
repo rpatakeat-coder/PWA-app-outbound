@@ -481,12 +481,41 @@ export function useClients(
       clientId,
       latitude,
       longitude,
-    }: { clientId: string; latitude: number; longitude: number }) => {
-      const { data, error } = await supabase.rpc('mark_client_as_visited', {
+      accuracyM = null,
+      acaoId = null,
+      feitoEm = null,
+    }: {
+      clientId: string; latitude: number; longitude: number;
+      // 0102: precisão do GPS no toque, ID idempotente da fila offline e a
+      // hora real do toque (check-in que esperou sinal).
+      accuracyM?: number | null; acaoId?: string | null; feitoEm?: string | null;
+    }) => {
+      // Fila offline: se esta ação já foi gravada (a resposta se perdeu na
+      // volta), não repete nada — nem a visita nem a Task no HubSpot.
+      if (acaoId) {
+        const { data: ja } = await supabase
+          .from('client_visits').select('id').eq('acao_id', acaoId).limit(1);
+        if (ja && ja.length > 0) {
+          const { data: row, error: e2 } = await supabase
+            .from('clients').select(CLIENT_LIST_COLUMNS).eq('id', clientId).single();
+          if (e2) throw e2;
+          return mapRow(row);
+        }
+      }
+      let { data, error } = await supabase.rpc('mark_client_as_visited', {
         p_client_id: clientId,
         p_user_lat: latitude,
         p_user_lon: longitude,
+        ...(acaoId ? { p_acao_id: acaoId } : {}),
+        ...(accuracyM != null ? { p_accuracy_m: accuracyM } : {}),
+        ...(feitoEm ? { p_feito_em: feitoEm } : {}),
       });
+      // Banco sem a 0102 (função de 3 argumentos): grava do jeito antigo.
+      if (error && error.code === 'PGRST202') {
+        ({ data, error } = await supabase.rpc('mark_client_as_visited', {
+          p_client_id: clientId, p_user_lat: latitude, p_user_lon: longitude,
+        }));
+      }
       if (error) throw error;
       let client = mapRow(data);
 

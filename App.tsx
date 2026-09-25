@@ -26,6 +26,8 @@ import {
 } from 'react-native';
 import { KeyboardAvoidingView } from './src/components/KeyboardAvoidingView';
 import { Alert, AlertHost } from './src/components/Alert';
+import { Toast, ToastHost } from './src/components/Toast';
+import { ehErroDeRede, enfileirar, novoAcaoId, registrarExecutor, subirFila } from './src/utils/filaOffline';
 import { Painel } from './src/components/Painel';
 import { useTheme } from './src/theme';
 import {
@@ -2938,7 +2940,27 @@ function MainApp() {
         return;
       }
 
-      const visitado = await markAsVisited.mutateAsync({ clientId: client.id, latitude: userLat, longitude: userLon });
+      // ID idempotente e hora do TOQUE: se não houver sinal, é com eles que o
+      // check-in sobe depois pela fila, sem duplicar e com o horário real.
+      const acaoId = novoAcaoId();
+      const feitoEm = new Date().toISOString();
+      const nomeDoLead = client.empresa?.trim() || client.nome;
+      let visitado: Client;
+      try {
+        visitado = await markAsVisited.mutateAsync({
+          clientId: client.id, latitude: userLat, longitude: userLon,
+          accuracyM: fixAccuracy, acaoId, feitoEm,
+        });
+      } catch (err) {
+        if (!ehErroDeRede(err)) throw err;
+        await enfileirar({
+          acaoId, tipo: 'checkin', rotulo: `Check-in · ${nomeDoLead}`, criadoEm: feitoEm,
+          payload: { clientId: client.id, latitude: userLat, longitude: userLon, accuracyM: fixAccuracy, feitoEm },
+        });
+        Toast.mostrar(`Sem sinal · check-in em ${nomeDoLead} na fila, sobe sozinho`, 'fila');
+        onDone?.();
+        return;
+      }
       // Auto-conclui a parada da rota do dia correspondente: o check-in É a
       // conclusão da visita, então a parada não deveria ficar "pendente" só
       // porque o vendedor não tocou o checkbox (senão o ranking subestima).
@@ -2953,14 +2975,13 @@ function MainApp() {
       // pos-venda (o proprio check-in ja' nao toca o funil deles), e visita sem
       // deal_id vira "visita nao confirmada" do lado do Cockpit — fica fora do
       // ciclo fechado em vez de entrar torta.
+      Toast.mostrar(`✓ Check-in em ${nomeDoLead} registrado`, 'ok');
       if (visitado.status === 'lead' && visitado.id_hubspot) {
         setDesfechoPendente({
           idHubspot: visitado.id_hubspot,
           cliente: visitado.empresa?.trim() || visitado.nome,
           visitadoEm: visitado.visited_at ?? new Date().toISOString(),
         });
-      } else {
-        Alert.alert('Pronto', 'Lead marcado como visitado.');
       }
       onDone?.();
     } catch (err: any) {
@@ -2970,6 +2991,40 @@ function MainApp() {
       setIsVisiting(false);
     }
   }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, isMonitoringRoute, getBestFix]);
+
+  // Fila offline: quem sobe o check-in guardado sem sinal. Ref porque a
+  // mutation e as paradas mudam a cada render e o executor é registrado uma vez.
+  const subirCheckinRef = useRef<(p: Record<string, unknown>, acaoId: string) => Promise<void>>(async () => {});
+  subirCheckinRef.current = async (p, acaoId) => {
+    const clientId = String(p.clientId);
+    await markAsVisited.mutateAsync({
+      clientId, latitude: Number(p.latitude), longitude: Number(p.longitude),
+      accuracyM: p.accuracyM == null ? null : Number(p.accuracyM),
+      acaoId, feitoEm: (p.feitoEm as string | undefined) ?? null,
+    });
+    if (!isMonitoringRoute) {
+      const stop = fieldOps.stops.find((s) => s.client_id === clientId && s.status !== 'done');
+      if (stop) {
+        try { await fieldOps.markStopDone.mutateAsync(stop); } catch { /* não bloqueia o check-in */ }
+      }
+    }
+  };
+  useEffect(() => {
+    const tirar = registrarExecutor('checkin', (item) => subirCheckinRef.current(item.payload, item.acaoId));
+    const subir = () => {
+      void subirFila().then((n) => {
+        if (n > 0) Toast.mostrar(`✓ Sinal voltou · ${n === 1 ? '1 item enviado' : `${n} itens enviados`}`, 'ok');
+      });
+    };
+    subir();
+    const intervalo = setInterval(subir, 30000);
+    if (typeof window !== 'undefined') window.addEventListener('online', subir);
+    return () => {
+      tirar();
+      clearInterval(intervalo);
+      if (typeof window !== 'undefined') window.removeEventListener('online', subir);
+    };
+  }, []);
 
   // Conta Alvo "Não interessa": descarta o alvo (some do mapa/lista, sai da rota,
   // não vira deal, não é re-sugerido). Só faz sentido em conta-alvo sem deal.
@@ -8190,6 +8245,7 @@ export default function App() {
               desmonta (ex.: erro ao salvar que fecha o modal). */}
           <AvisoDeComunicado />
           <AlertHost />
+          <ToastHost />
         </QueryClientProvider>
       </AuthProvider>
     </SafeAreaProvider>
