@@ -141,6 +141,12 @@ const ESTILO_MAPA = '<style>/* scripts/importar-cockpit.cjs: botao Mapa do PWA *
   + 'transition:background var(--t-rapido) var(--ease);}'
   + '.pwa-voltar-mapa:hover{background:var(--sunk);}'
   + '.pwa-voltar-mapa:focus-visible{outline:2px solid var(--ink);outline-offset:2px;}'
+  // No cabecalho de celular (o mesmo 900px em que o Cockpit o troca) nao cabe o
+  // rotulo: medido a 390px, a pilula de 86px empurrava o avatar 30px para fora
+  // de um cabecalho com overflow:hidden. La' ela vira so' o icone, 40x40, como o
+  // sino; o aria-label continua dizendo "Voltar para o mapa".
+  + '@media (max-width:900px){.pwa-voltar-mapa{width:40px;padding:0;justify-content:center;}'
+  + '.pwa-voltar-mapa span{display:none;}}'
   + '</style>';
 const FIM_HEAD = '</head>';
 if (html.split(FIM_HEAD).length - 1 !== 1) morrer('esperava 1 ' + FIM_HEAD);
