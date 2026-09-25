@@ -153,6 +153,7 @@ import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
 import PlaybookScreen from './src/screens/PlaybookScreen';
 import TarefasNovoScreen from './src/screens/TarefasNovoScreen';
+import AgendaNovoScreen from './src/screens/AgendaNovoScreen';
 import { enviarConclusao, type PedidoConclusao } from './src/utils/concluirTarefa';
 import { grupoDaTarefa } from './src/utils/abaTarefas';
 import { distanciaTexto } from './src/utils/cardNovo';
@@ -5513,7 +5514,7 @@ function MainApp() {
             390px: a tira da a visao da semana e o corpo mostra UM dia. Ela
             mora no header porque depende do vermelho da marca — o "hoje" e'
             branco e os outros dias sao brancos translucidos. */}
-        {tab === 'agenda' && (() => {
+        {tab === 'agenda' && !modoNovo && (() => {
           // Semana de segunda a domingo que CONTEM o dia selecionado.
           const desloc = (diaSelecionado.getDay() + 6) % 7;
           const segunda = new Date(diaSelecionado);
@@ -6038,6 +6039,36 @@ function MainApp() {
           enabled={tab === 'meu'}
           tarefasPendentes={visibleTasksCount}
           aoAbrirTarefas={() => setTab('tasks')}
+        />
+      ) : modoNovo ? (
+        <AgendaNovoScreen
+          paradas={routeStops}
+          reunioes={meetings}
+          metaVisitasDia={routeConfig.meta_visitas_dia}
+          nomeDoLead={getClientPrimaryName}
+          nomePorId={(id) => {
+            const c = clients.find((x) => x.id === id);
+            return c ? getClientPrimaryName(c) : (nomesReunioes.get(id) ?? null);
+          }}
+          distanciaAte={(id) => {
+            const c = id ? clients.find((x) => x.id === id) ?? routeStops.find((st) => st.client_id === id)?.client ?? null : null;
+            if (!c || !userLocation || c.latitude == null || c.longitude == null) return null;
+            return distanciaTexto(haversineMeters(userLocation.latitude, userLocation.longitude, Number(c.latitude), Number(c.longitude)));
+          }}
+          visitadoHoje={(c) => visitadoHoje(c.visited_at)}
+          // Mesmo check-in do mapa: vai ao mapa com o card aberto e roda o
+          // fluxo de lá (GPS novo, "Está na porta?", ficha de rua).
+          aoCheguei={(c) => {
+            setTab('map');
+            openClientDetails(c);
+            void handleMarkAsVisited(c);
+          }}
+          aoAbrirLead={(id) => {
+            const c = routeStops.find((st) => st.client_id === id)?.client ?? clients.find((x) => x.id === id);
+            setTab('map');
+            if (c) openClientDetails(c);
+            else void openClientById(id);
+          }}
         />
       ) : (
         <AgendaScreen
