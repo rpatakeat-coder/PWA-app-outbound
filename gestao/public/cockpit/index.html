@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@2a51316.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@6809783.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   var FN = "https://mxyjvijclhlxrlafqcrz.supabase.co/functions/v1/";
@@ -34067,7 +34067,7 @@ function dg4Dados(ctx) {
         ? pl6ResultadoInfo(sl.p || 'funil', sl.r.tipo) : null;
       const evid = (typeof pl6EvidenciaDoSlot === 'function')
         ? pl6EvidenciaDoSlot({ tipo: sl.origem === 'rua' ? 'rua' : 'visita',
-          id: sl.dealId, hora: sl.hora, duracao: sl.duracao }, diaISO, oid) : null;
+          id: sl.dealId, hora: sl.hora, duracao: sl.duracao }, c.diaEmFoco || hoje, oid) : null;
       const temCheck = !!(evid && evid.txt && evid.txt.indexOf('sem check-in') < 0
         && evid.txt.indexOf('fila do app') < 0);
       return {
