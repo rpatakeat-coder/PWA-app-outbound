@@ -107,7 +107,7 @@ import { negocioAcao } from './src/utils/negocioAcao';
 import { textoNormalizado } from './src/utils/pinoP2';
 import { FILTROS_VAZIOS, LENTES, noFoco, passaNosFiltros, pontoDe, quantosFiltros, type FiltrosNovos, type Lente } from './src/utils/lentes';
 import CamadaDePontos from './src/map/CamadaDePontos';
-import { rotulosSemSobrepor } from './src/utils/rotulos';
+import { pilhasNaTela, posicoesDoLeque, rotulosSemSobrepor, type Pilha } from './src/utils/rotulos';
 import { classificarPino, type ContextoPino } from './src/utils/pinoP2';
 import { useMeetings } from './src/hooks/useMeetings';
 import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
@@ -476,10 +476,11 @@ function visitadoHoje(iso: string | null | undefined): boolean {
 // (src/utils/pinoP2.ts); o memo compara o que muda o desenho.
 const MarkerP2 = React.memo(
   function MarkerP2({
-    client, contexto, onPress, planoNumero, feito, naFila, selecionado, comNome = true, agrupar = false, nomeDeAlvo = false, ladoNome = 'dir',
+    client, contexto, onPress, planoNumero, feito, naFila, selecionado, comNome = true, agrupar = false, nomeDeAlvo = false, ladoNome = 'dir', pilhaN = 1, leque = null,
   }: {
     client: Client; contexto: ContextoPino; onPress: (client: Client) => void;
     planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean; comNome?: boolean; agrupar?: boolean; nomeDeAlvo?: boolean; ladoNome?: 'dir' | 'esq';
+    pilhaN?: number; leque?: { dx: number; dy: number } | null;
   }) {
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
     const pino = classificarPino(client, contexto);
@@ -488,7 +489,7 @@ const MarkerP2 = React.memo(
         coordinate={{ latitude: client.latitude as number, longitude: client.longitude as number }}
         onPress={handlePress}
         anchor={ANCORA_PINO_P2}
-        zIndex={selecionado ? 2000 : planoNumero ? 1000 : comNome ? 500 : undefined}
+        zIndex={selecionado ? 2000 : leque ? 1500 : planoNumero ? 1000 : comNome ? 500 : undefined}
         cluster={agrupar && !planoNumero}
       >
         <PinoP2
@@ -500,6 +501,8 @@ const MarkerP2 = React.memo(
           comEtiqueta={comNome}
           nomeDeAlvo={nomeDeAlvo}
           ladoNome={ladoNome}
+          pilhaN={pilhaN}
+          leque={leque}
         />
       </Marker>
     );
@@ -515,7 +518,9 @@ const MarkerP2 = React.memo(
     a.comNome === b.comNome &&
     a.agrupar === b.agrupar &&
     a.nomeDeAlvo === b.nomeDeAlvo &&
-    a.ladoNome === b.ladoNome,
+    a.ladoNome === b.ladoNome &&
+    a.pilhaN === b.pilhaN &&
+    a.leque?.dx === b.leque?.dx && a.leque?.dy === b.leque?.dy,
 );
 
 
@@ -983,6 +988,9 @@ function MainApp() {
   const [lente, setLente] = useState<Lente>('dia');
   const [filtrosNovos, setFiltrosNovos] = useState<FiltrosNovos>(FILTROS_VAZIOS);
   const [filtrosNovosAbertos, setFiltrosNovosAbertos] = useState(false);
+  // Pilha aberta em leque (C11): id do líder. Fecha ao mexer o mapa.
+  const [pilhaAberta, setPilhaAberta] = useState<string | null>(null);
+  useEffect(() => { setPilhaAberta(null); }, [mapRegion]);
   const janelaTela = useWindowDimensions();
   // Altura da folha de baixo do mapa novo: o mapa termina no topo dela, para
   // o logo e os Termos do Google ficarem sempre visíveis (prompt final C10).
@@ -1737,7 +1745,7 @@ function MainApp() {
     [itensMapaNovo, filtrosNovos],
   );
 
-  const { focoMapaNovo, camadaPontos, comNome } = useMemo(() => {
+  const { focoMapaNovo, camadaPontos, comNome, pilhaDe } = useMemo(() => {
     const foco: typeof visiveisMapaNovo = [];
     const pontos: typeof visiveisMapaNovo = [];
     for (const it of visiveisMapaNovo) {
@@ -1754,17 +1762,28 @@ function MainApp() {
         : it.p.tipo === 'alvo' ? 8
         : it.p.dono === 'meu' ? (it.p.temp === 'Q' ? 3 : it.p.temp === 'M' ? 4 : 5)
         : it.p.dono === 'colega' ? 6 : 7;
-    const candidatos = foco
-      .filter((it) => perto || it.plano || it.c.id === selectedClient?.id)
-      .map((it) => ({ id: it.c.id, lat: it.c.latitude as number, lng: it.c.longitude as number, prioridade: prioridade(it) }));
-    if (mapRegion && candidatos.length) {
-      const larguraPx = layout.ehLargo ? Math.max(320, janelaTela.width - 352 - 240) : janelaTela.width;
-      const alturaPx = layout.ehLargo ? janelaTela.height : Math.max(300, janelaTela.height - 250);
-      for (const [id, lado] of rotulosSemSobrepor(candidatos, { ...mapRegion, larguraPx, alturaPx })) nomes.set(id, lado);
+    const larguraPx = layout.ehLargo ? Math.max(320, janelaTela.width - 352 - 240) : janelaTela.width;
+    const alturaPx = layout.ehLargo ? janelaTela.height : Math.max(300, janelaTela.height - 250);
+    const janela = mapRegion ? { ...mapRegion, larguraPx, alturaPx } : null;
+    // Pilhas (C11): corpos que se sobrepõem na tela viram um pino com número.
+    const todos = foco.map((it) => ({ id: it.c.id, lat: it.c.latitude as number, lng: it.c.longitude as number, prioridade: prioridade(it) }));
+    const pilhas: Pilha[] = janela ? pilhasNaTela(todos, janela) : todos.map((t) => ({ lider: t.id, membros: [t.id] }));
+    const pilhaDeId = new Map<string, Pilha>();
+    for (const pl of pilhas) for (const m of pl.membros) pilhaDeId.set(m, pl);
+    // Nome só para quem aparece como pino (líder de pilha fechada ou sozinho).
+    const candidatos = todos.filter((t) => {
+      const pl = pilhaDeId.get(t.id);
+      const visivelComoPino = !pl || pl.membros.length === 1 || (pl.lider === t.id && pilhaAberta !== pl.lider);
+      const it = foco.find((x) => x.c.id === t.id);
+      return visivelComoPino && (perto || !!it?.plano || t.id === selectedClient?.id);
+    });
+    if (janela && candidatos.length) {
+      for (const [id, lado] of rotulosSemSobrepor(candidatos, janela)) nomes.set(id, lado);
     }
     const camada = pontos.map(({ c, p }) => ({ lat: c.latitude as number, lng: c.longitude as number, ...pontoDe(p) }));
-    return { focoMapaNovo: foco, camadaPontos: camada, comNome: nomes };
-  }, [visiveisMapaNovo, lente, selectedClient?.id, mapRegion, layout.ehLargo, janelaTela.width, janelaTela.height]);
+    return { focoMapaNovo: foco, camadaPontos: camada, comNome: nomes, pilhaDe: pilhaDeId };
+  }, [visiveisMapaNovo, lente, selectedClient?.id, mapRegion, layout.ehLargo, janelaTela.width, janelaTela.height, pilhaAberta]);
+  const abrirPilha = useCallback((c: Client) => { setPilhaAberta(pilhaDe.get(c.id)?.lider ?? null); }, [pilhaDe]);
 
   // Folha de baixo do mapa novo: os pinos da lente, com distância e se a
   // parada do plano já foi feita.
@@ -4099,13 +4118,21 @@ function MainApp() {
         {/* Mapa novo: pino P2 para os leads da área e para as paradas da
             rota (com o número do plano no selo, no lugar do RouteMarker). */}
         {modoNovo && <CamadaDePontos pontos={camadaPontos} />}
-        {modoNovo && contextoPino && focoMapaNovo.map(({ c, plano }) => (
+        {modoNovo && contextoPino && focoMapaNovo.map(({ c, plano }) => {
+          // Pilha (C11): fechada mostra só o líder com o número; aberta, todos em leque.
+          const pl = pilhaDe.get(c.id);
+          const n = pl?.membros.length ?? 1;
+          const aberta = !!pl && n > 1 && pilhaAberta === pl.lider;
+          if (pl && n > 1 && !aberta && pl.lider !== c.id) return null;
+          const leque = aberta && pl ? posicoesDoLeque(n)[pl.membros.indexOf(c.id)] : null;
+          return (
           <MarkerP2
             // cluster é fixo por marcador (Marker.tsx): trocar o agrupamento recria o pino.
             key={`${c.id}-${focoMapaNovo.length > 150 ? "g" : "s"}`}
             client={c}
             contexto={contextoPino}
-            onPress={handleMarkerPress}
+            // pilha fechada: o toque abre o leque; o resto abre o card
+            onPress={n > 1 && !aberta ? abrirPilha : handleMarkerPress}
             planoNumero={plano}
             feito={plano != null && routeStops.find(s => s.client_id === c.id)?.status === 'done'}
             naFila={leadsNaFila.has(c.id)}
@@ -4116,8 +4143,11 @@ function MainApp() {
             // numa cidade inteira) agrupam; o plano nunca.
             agrupar={focoMapaNovo.length > 150}
             nomeDeAlvo={lente === 'alvo'}
+            pilhaN={n > 1 && !aberta ? n : 1}
+            leque={leque}
           />
-        ))}
+          );
+        })}
         {!heatOn && !modoNovo && filteredMapMarkers.map(client => (
           <MarkerWithReady
             key={client.id}
