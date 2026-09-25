@@ -32,7 +32,7 @@ export function useMapaNovo(): boolean {
 }
 
 type ContextoBruto = {
-  tempo: [string, number | null, boolean, string | null][];
+  tempo: [string, number | null, boolean, string | null, string | null][];
   donos: string[];
   limites: [number, number];
   atualizado_em: string | null;
@@ -70,8 +70,8 @@ export function useContextoDoPino(ligado: boolean): Omit<ContextoPino, 'agora'> 
   return useMemo(() => {
     if (!ligado || !contexto.data || !etapas.data) return null;
     const tempoPorNegocio = new Map<string, TempoDoNegocio>();
-    for (const [id, dias, sla, ult] of contexto.data.tempo ?? []) {
-      tempoPorNegocio.set(String(id), { diasNaEtapa: dias, slaEstourado: !!sla, ultimaInteracao: ult });
+    for (const [id, dias, sla, ult, etapa] of contexto.data.tempo ?? []) {
+      tempoPorNegocio.set(String(id), { diasNaEtapa: dias, slaEstourado: !!sla, ultimaInteracao: ult, etapaCodigo: etapa ?? null });
     }
     const lim = contexto.data.limites;
     return {

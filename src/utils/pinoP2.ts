@@ -12,7 +12,9 @@ export type TipoPino = 'lead' | 'cliente' | 'ex' | 'alvo';
 export type Temperatura = 'Q' | 'M' | 'F' | 'X' | '?';
 export type Dono = 'meu' | 'colega' | 'sem';
 
-export type TempoDoNegocio = { diasNaEtapa: number | null; slaEstourado: boolean; ultimaInteracao: string | null };
+// etapaCodigo: a etapa do negócio no snapshot do Cockpit (0105) — vale quando o
+// texto de clients.etapa está vazio ou não casa na etapa_de_para.
+export type TempoDoNegocio = { diasNaEtapa: number | null; slaEstourado: boolean; ultimaInteracao: string | null; etapaCodigo?: string | null };
 
 export type ContextoPino = {
   meuOwnerId: string | null;
@@ -87,7 +89,10 @@ export function nomeCurto(nome: string): string {
 export function classificarPino(c: Client, ctx: ContextoPino): Pino {
   const codigo = (() => {
     const chave = textoNormalizado(c.etapa);
-    return chave && ctx.etapaDePara.has(chave) ? ctx.etapaDePara.get(chave) ?? null : undefined;
+    const doTexto = chave && ctx.etapaDePara.has(chave) ? ctx.etapaDePara.get(chave) ?? null : undefined;
+    if (doTexto) return doTexto;
+    const doSnapshot = c.id_hubspot ? ctx.tempoPorNegocio.get(String(c.id_hubspot))?.etapaCodigo : null;
+    return doSnapshot ?? doTexto;
   })();
 
   let tipo: TipoPino;
@@ -109,9 +114,15 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
   const glifo = tipo === 'ex' ? '↺' : tipo === 'lead' ? (temp as string) : '';
 
   const owner = c.vendedor_id_hubspot ? String(c.vendedor_id_hubspot) : null;
-  const dono: Dono = owner && ctx.meuOwnerId && owner === String(ctx.meuOwnerId)
+  // Cliente é carteira da empresa: 3.066 dos 3.070 não têm vendedor no
+  // cadastro (25/09). Pintá-los de "sem dono" (tracejado amarelo) fazia quase
+  // todo pino parecer abandonado — C4 do prompt final. Cliente sem dono do
+  // time leva anel sólido fino; ex-cliente sem dono segue tracejado (é o
+  // sinal de "disponível para reconquista").
+  const donoBruto: Dono = owner && ctx.meuOwnerId && owner === String(ctx.meuOwnerId)
     ? 'meu'
     : owner && ctx.donosDoTime.has(owner) ? 'colega' : 'sem';
+  const dono: Dono = tipo === 'cliente' && donoBruto === 'sem' ? 'colega' : donoBruto;
 
   // Tempo sem toque: a última interação do Cockpit ou a última visita, o que
   // for mais recente. Cliente, conta-alvo e negócio perdido não têm relógio de funil.

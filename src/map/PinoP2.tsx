@@ -25,11 +25,13 @@ type Props = {
   comEtiqueta?: boolean;
   /** Na lente Contas-alvo a conta-alvo também ganha nome (fora dela, só selecionada). */
   nomeDeAlvo?: boolean;
+  /** Lado do nome (prompt final C1): direita, ou esquerda quando não cabe. */
+  ladoNome?: 'dir' | 'esq';
 };
 
 const LOGO = require('../../assets/pin-logo.png');
 
-function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta = true, nomeDeAlvo = false }: Props) {
+function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta = true, nomeDeAlvo = false, ladoNome = 'dir' }: Props) {
   const pequeno = pino.tipo === 'alvo';
   const w = pequeno ? 26 : 32;
   const anel = pino.dono === 'sem'
@@ -37,6 +39,10 @@ function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta 
     : `${pino.dono === 'colega' ? 2 : 3}px solid ${pino.cor}`;
   const topoSelo = -w * 1.2 - 12;
   const mostraEtiqueta = comEtiqueta && (!pequeno || selecionado || nomeDeAlvo);
+  // C1: o tempo só aparece se decide algo — hoje, cobrar ou mais de 7 dias.
+  const t = pino.etiqueta?.texto ?? '';
+  const mostraTempo = !!pino.etiqueta && (t === 'hoje' || t === 'cobrar' || t.includes('parado'));
+  const esq = ladoNome === 'esq';
 
   return (
     <div style={{ position: 'relative', width: 44, height: 48, cursor: 'pointer' }}>
@@ -80,13 +86,13 @@ function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta 
           )}
           {mostraEtiqueta && (
             <div style={{
-              position: 'absolute', left: 18, top: -w * 1.2 + 2, display: 'flex', flexDirection: 'column', gap: 2,
+              position: 'absolute', ...(esq ? { right: 18, alignItems: 'flex-end' } : { left: 18 }), top: -w * 1.2 + 2, display: 'flex', flexDirection: 'column', gap: 2,
               whiteSpace: 'nowrap', pointerEvents: 'none',
             }}>
               <span style={{ fontWeight: 800, fontSize: 11, lineHeight: 1.1, color: '#fff', textShadow: '0 1px 2px #000,0 0 5px #000' }}>{pino.nome}</span>
-              {pino.etiqueta && (
+              {mostraTempo && pino.etiqueta && (
                 <span style={{
-                  alignSelf: 'flex-start', fontWeight: 800, fontSize: 9.5, lineHeight: 1, padding: '2px 5px', borderRadius: 4,
+                  alignSelf: esq ? 'flex-end' : 'flex-start', fontWeight: 800, fontSize: 9.5, lineHeight: 1, padding: '2px 5px', borderRadius: 4,
                   background: pino.etiqueta.fundo, color: pino.etiqueta.tinta,
                 }}>{pino.etiqueta.texto}</span>
               )}

@@ -25,6 +25,9 @@ type Props = {
   aoTrocarSoMinhaArea: (v: boolean) => void;
   aoAbrirMaisFiltros: () => void;
   motorConferidoEm?: string | null;
+  /** Só para gestor/admin: leads de teste (0106) ficam escondidos por padrão. */
+  mostrarTestes?: boolean;
+  aoTrocarMostrarTestes?: (v: boolean) => void;
 };
 
 const COR_TEMP: Record<TempFiltro, string> = {
@@ -39,6 +42,7 @@ function alternar<T>(s: Set<T>, v: T): Set<T> {
 
 export default function FiltrosMapaNovo({
   visivel, aoFechar, itens, filtros, aoAplicar, soMinhaArea, aoTrocarSoMinhaArea, aoAbrirMaisFiltros, motorConferidoEm,
+  mostrarTestes, aoTrocarMostrarTestes,
 }: Props) {
   const [rascunho, setRascunho] = useState<FiltrosNovos>(filtros);
   useEffect(() => { if (visivel) setRascunho(filtros); }, [visivel, filtros]);
@@ -111,6 +115,16 @@ export default function FiltrosMapaNovo({
             chip(`o-${k}`, ORIGEM[k].rotulo, contagem.origem.get(k) ?? 0, rascunho.origem.has(k),
               () => setRascunho((r) => ({ ...r, origem: alternar(r.origem, k) })), undefined, ORIGEM[k]))}
         </View>
+
+        {aoTrocarMostrarTestes && (
+          <View style={s.linhaSwitch}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.secaoTitulo}>Mostrar testes</Text>
+              <Text style={s.ajuda}>Leads de QA ("Teste", "RPA demo"). Só gestor vê esta opção.</Text>
+            </View>
+            <Switch value={!!mostrarTestes} onValueChange={aoTrocarMostrarTestes} accessibilityLabel="Mostrar testes" />
+          </View>
+        )}
 
         <Pressable accessibilityRole="button" style={s.mais} onPress={aoAbrirMaisFiltros}>
           <Text style={s.maisTexto}>Mais filtros · UF, etapa, vendedor, visita</Text>

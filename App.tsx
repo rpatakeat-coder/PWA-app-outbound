@@ -472,10 +472,10 @@ function visitadoHoje(iso: string | null | undefined): boolean {
 // (src/utils/pinoP2.ts); o memo compara o que muda o desenho.
 const MarkerP2 = React.memo(
   function MarkerP2({
-    client, contexto, onPress, planoNumero, feito, naFila, selecionado, comNome = true, agrupar = false, nomeDeAlvo = false,
+    client, contexto, onPress, planoNumero, feito, naFila, selecionado, comNome = true, agrupar = false, nomeDeAlvo = false, ladoNome = 'dir',
   }: {
     client: Client; contexto: ContextoPino; onPress: (client: Client) => void;
-    planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean; comNome?: boolean; agrupar?: boolean; nomeDeAlvo?: boolean;
+    planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean; comNome?: boolean; agrupar?: boolean; nomeDeAlvo?: boolean; ladoNome?: 'dir' | 'esq';
   }) {
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
     const pino = classificarPino(client, contexto);
@@ -495,6 +495,7 @@ const MarkerP2 = React.memo(
           selecionado={selecionado}
           comEtiqueta={comNome}
           nomeDeAlvo={nomeDeAlvo}
+          ladoNome={ladoNome}
         />
       </Marker>
     );
@@ -509,7 +510,8 @@ const MarkerP2 = React.memo(
     a.selecionado === b.selecionado &&
     a.comNome === b.comNome &&
     a.agrupar === b.agrupar &&
-    a.nomeDeAlvo === b.nomeDeAlvo,
+    a.nomeDeAlvo === b.nomeDeAlvo &&
+    a.ladoNome === b.ladoNome,
 );
 
 
@@ -948,6 +950,8 @@ function MainApp() {
   // apontam pro mesmo tier.
   const isAdmin = isGestor;
   const canViewGestor = isGestor;
+  // Filtros → "Mostrar testes" (só gestor/admin).
+  const [mostrarTestes, setMostrarTestes] = useState(false);
   // Usuario 'view' = somente leitura. Esconde criar/editar/excluir/rotas/agenda/notas.
   // Aplicacao real do bloqueio esta nas RLS policies do Supabase (is_view_only_user()).
   const isViewer = profile?.role === 'view';
@@ -1436,6 +1440,8 @@ function MainApp() {
     if (f.tempFilter && stageTemperature(c.etapa)?.label !== f.tempFilter) return false;
     // Conta Alvo descartada ("Não interessa") some do mapa/lista.
     if (c.conta_alvo_dismissed) return false;
+    // Lead de teste (0106): fora do mapa, listas e contagens; só admin vê, se pedir.
+    if (c.is_teste && !mostrarTestes) return false;
     if (f.contaAlvoOnly && !c.conta_alvo_place_id) return false;
     if (f.vendorFilterHubspotId === '__none__') {
       if (c.vendedor_id_hubspot) return false;
@@ -1449,7 +1455,7 @@ function MainApp() {
       if (!haystack.includes(searchTerm)) return false;
     }
     return true;
-  }, [searchTerm]);
+  }, [searchTerm, mostrarTestes]);
 
   const recorteAplicado = useMemo<RecorteDeFiltros>(
     () => ({ stateFilter, stageFilter, tempFilter, contaAlvoOnly, vendorFilterHubspotId, visitFilter }),
@@ -1724,18 +1730,21 @@ function MainApp() {
     }
     // Nomes: afastado (bairro/cidade) só plano e selecionado; de perto, os
     // que cabem sem sobrepor, na ordem selecionado › plano › cobrar › Q › M.
-    const nomes = new Set<string>();
+    const nomes = new Map<string, 'dir' | 'esq'>();
     const perto = !!mapRegion && mapRegion.latitudeDelta <= 0.08; // bairro para dentro; a regra de sobreposição cuida da leitura
     const prioridade = (it: (typeof foco)[number]) =>
       it.c.id === selectedClient?.id ? 0 : it.plano ? 1 : it.p.etiqueta?.texto === 'cobrar' ? 2
-        : it.p.temp === 'Q' ? 3 : it.p.temp === 'M' ? 4 : it.p.tipo === 'cliente' ? 5 : 6;
+        // prompt final C1: meu quente › meu morno › meu › colega › sem dono › conta-alvo
+        : it.p.tipo === 'alvo' ? 8
+        : it.p.dono === 'meu' ? (it.p.temp === 'Q' ? 3 : it.p.temp === 'M' ? 4 : 5)
+        : it.p.dono === 'colega' ? 6 : 7;
     const candidatos = foco
       .filter((it) => perto || it.plano || it.c.id === selectedClient?.id)
       .map((it) => ({ id: it.c.id, lat: it.c.latitude as number, lng: it.c.longitude as number, prioridade: prioridade(it) }));
     if (mapRegion && candidatos.length) {
       const larguraPx = layout.ehLargo ? Math.max(320, janelaTela.width - 352 - 240) : janelaTela.width;
       const alturaPx = layout.ehLargo ? janelaTela.height : Math.max(300, janelaTela.height - 250);
-      for (const id of rotulosSemSobrepor(candidatos, { ...mapRegion, larguraPx, alturaPx })) nomes.add(id);
+      for (const [id, lado] of rotulosSemSobrepor(candidatos, { ...mapRegion, larguraPx, alturaPx })) nomes.set(id, lado);
     }
     const camada = pontos.map(({ c, p }) => ({ lat: c.latitude as number, lng: c.longitude as number, ...pontoDe(p) }));
     return { focoMapaNovo: foco, camadaPontos: camada, comNome: nomes };
@@ -4049,6 +4058,7 @@ function MainApp() {
             naFila={leadsNaFila.has(c.id)}
             selecionado={selectedClient?.id === c.id}
             comNome={comNome.has(c.id)}
+            ladoNome={comNome.get(c.id) ?? 'dir'}
             // Até a entrega de densidade: muitos pinos inteiros (lente Contas-alvo
             // numa cidade inteira) agrupam; o plano nunca.
             agrupar={focoMapaNovo.length > 150}
@@ -6276,6 +6286,8 @@ function MainApp() {
             setTimeout(() => setIsFiltersOpen(true), 300);
           }}
           motorConferidoEm={contextoPino?.atualizadoEm ?? null}
+          mostrarTestes={canViewGestor ? mostrarTestes : undefined}
+          aoTrocarMostrarTestes={canViewGestor ? setMostrarTestes : undefined}
         />
       )}
 

@@ -41,6 +41,8 @@ const CLIENT_LIST_COLUMNS = [
   'atualizacao_diaria',
   // 0102: de onde o lead veio (etiqueta de origem do mapa novo).
   'origem_lead', 'origem_detalhe', 'entrou_em', 'lead_prospeccao_id',
+  // 0106: lead de teste (some do mapa para quem não é admin).
+  'is_teste',
 ].join(',');
 
 export type AreaFilter = { lat: number; lon: number; radiusKm: number };
@@ -524,6 +526,32 @@ export function useClients(
       }
       if (error) throw error;
       let client = mapRow(data);
+
+      // "Estou na porta" moveu o pino: a coordenada nova vai ao HubSpot pelo
+      // mesmo evento `update` da edição de cadastro — que NÃO manda dono (caso
+      // "Acarajé da Pri", 29/07) — com TODOS os campos do lead como estão no
+      // banco, porque o update grava o corpo inteiro no negócio.
+      if (corrigirPino && client.geo_source === 'checkin' && client.id_hubspot) {
+        sendHubspotEvent({
+          type: 'update',
+          id: client.id,
+          bairro: client.bairro,
+          celular: client.telefone,
+          cep: client.cep,
+          cidade: client.cidade,
+          dealname: client.empresa ?? client.nome,
+          email: client.email,
+          estado_uf: client.estado,
+          id_hubspot: client.id_hubspot,
+          latitude: client.latitude !== null ? String(client.latitude) : null,
+          logradouro: client.endereco,
+          longitude: client.longitude !== null ? String(client.longitude) : null,
+          nome: client.nome,
+          numero_do_local: client.numero,
+          observacoes: client.observacoes,
+          url: client.url_hubspot,
+        }).catch((err) => console.warn('[HUBSPOT] coordenada corrigida não subiu:', err));
+      }
 
       // Conta Alvo: o lead foi materializado localmente pela Rota do dia
       // (tem conta_alvo_place_id) e o deal no HubSpot so' nasce NA VISITA. Cria

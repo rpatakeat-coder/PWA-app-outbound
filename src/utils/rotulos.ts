@@ -33,6 +33,10 @@ const bate = (a: Caixa, b: Caixa) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 &
 // Geometria do PinoP2: o nome começa 18 px à direita da ponta e ocupa
 // ~120 × 28 px (nome + etiqueta de tempo).
 const NOME = { dx0: 18, dx1: 140, dy0: -40, dy1: -10 };
+// Prompt final C1: à direita; se não couber, à esquerda. No máximo 8 por tela.
+const NOME_ESQ = { dx0: -140, dx1: -18, dy0: -40, dy1: -10 };
+export const MAX_NOMES = 8;
+export type Lado = 'dir' | 'esq';
 
 export function projetar(lat: number, lng: number, j: Janela): { x: number; y: number } {
   const x = ((lng - (j.longitude - j.longitudeDelta / 2)) / j.longitudeDelta) * j.larguraPx;
@@ -40,8 +44,8 @@ export function projetar(lat: number, lng: number, j: Janela): { x: number; y: n
   return { x, y };
 }
 
-/** Ids que podem mostrar o nome sem sobrepor outro nome. */
-export function rotulosSemSobrepor(cands: Candidato[], j: Janela): Set<string> {
+/** Ids que podem mostrar o nome sem sobrepor outro nome, e de que lado. */
+export function rotulosSemSobrepor(cands: Candidato[], j: Janela): Map<string, Lado> {
   const cx = j.larguraPx / 2;
   const cy = j.alturaPx / 2;
   const pos = cands
@@ -51,12 +55,18 @@ export function rotulosSemSobrepor(cands: Candidato[], j: Janela): Set<string> {
   const dist = (p: { x: number; y: number }) => (p.x - cx) ** 2 + (p.y - cy) ** 2;
   pos.sort((a, b) => a.c.prioridade - b.c.prioridade || dist(a) - dist(b));
   const aceitos: Caixa[] = [];
-  const saida = new Set<string>();
+  const saida = new Map<string, Lado>();
   for (const p of pos) {
-    const caixa: Caixa = { x0: p.x + NOME.dx0, x1: p.x + NOME.dx1, y0: p.y + NOME.dy0, y1: p.y + NOME.dy1 };
-    if (aceitos.some((a) => bate(a, caixa))) continue;
-    aceitos.push(caixa);
-    saida.add(p.c.id);
+    if (saida.size >= MAX_NOMES) break;
+    for (const [lado, g] of [['dir', NOME], ['esq', NOME_ESQ]] as const) {
+      const caixa: Caixa = { x0: p.x + g.dx0, x1: p.x + g.dx1, y0: p.y + g.dy0, y1: p.y + g.dy1 };
+      // o nome tem de caber na tela (senão o lado não serve)
+      if (caixa.x0 < 0 || caixa.x1 > j.larguraPx + 10) continue;
+      if (aceitos.some((a) => bate(a, caixa))) continue;
+      aceitos.push(caixa);
+      saida.set(p.c.id, lado);
+      break;
+    }
   }
   return saida;
 }

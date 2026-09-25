@@ -24,6 +24,7 @@ const ctx: ContextoPino = {
     ['222', { diasNaEtapa: 50, slaEstourado: false, ultimaInteracao: '2026-08-10T12:00:00Z' }],
     ['333', { diasNaEtapa: 9, slaEstourado: true, ultimaInteracao: '2026-09-20T12:00:00Z' }],
     ['444', { diasNaEtapa: 18, slaEstourado: false, ultimaInteracao: null }],
+    ['555', { diasNaEtapa: 3, slaEstourado: false, ultimaInteracao: null, etapaCodigo: '1395880472' }],
   ]),
   etapaDePara: new Map<string, string | null>([
     ['prospeccao', '1395880469'], ['negociacao', '1395880472'], ['demo/proposta', '1395880471'],
@@ -48,6 +49,8 @@ ok(classificarPino(base({ etapa: 'NEGÓCIO PERDIDO' }), ctx).temp === 'X', '"NEG
 ok(classificarPino(base({ etapa: 'CASA DOS DADOS' }), ctx).temp === '?', '"CASA DOS DADOS" é origem: pino "?" cinza, não temperatura');
 ok(classificarPino(base({ etapa: 'Acompanhamento' }), ctx).temp === '?', 'etapa que a tabela não conhece vira "?"');
 ok(classificarPino(base({ etapa: null }), ctx).glifo === '?', 'sem etapa vira "?"');
+ok(classificarPino(base({ etapa: null, id_hubspot: '555' }), ctx).temp === 'Q', 'sem etapa no app: usa a etapa do snapshot do Cockpit (0105)');
+ok(classificarPino(base({ etapa: 'Prospecção', id_hubspot: '555' }), ctx).temp === 'F', 'etapa do app reconhecida vale mais que o snapshot');
 
 // tipo
 const cli = classificarPino(base({ status: 'cliente', etapa: null }), ctx);
@@ -64,6 +67,8 @@ const colega = classificarPino(base({ vendedor_id_hubspot: '97978276' }), ctx);
 ok(colega.dono === 'colega' && colega.opacidade === 0.8, 'lead do Sérgio: colega, opacidade 0,8');
 ok(classificarPino(base({ vendedor_id_hubspot: '86100505' }), ctx).dono === 'sem', 'dono fora do time (saiu): sem dono');
 ok(classificarPino(base({ vendedor_id_hubspot: null }), ctx).dono === 'sem', 'sem vendedor: sem dono');
+ok(classificarPino(base({ status: 'cliente', vendedor_id_hubspot: null }), ctx).dono !== 'sem', 'cliente sem vendedor NÃO é tracejado amarelo (C4)');
+ok(classificarPino(base({ status: 'churn', vendedor_id_hubspot: null }), ctx).dono === 'sem', 'ex-cliente sem dono segue tracejado (reconquista)');
 ok(classificarPino(base({}), { ...ctx, meuOwnerId: null }).dono === 'colega', 'sem owner próprio (gestor sem id): nada é "meu"');
 
 // tempo

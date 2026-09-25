@@ -63,6 +63,8 @@ export interface Client {
   entrou_em?: string | null;
   // Munição do Cockpit que virou este pino (0098).
   lead_prospeccao_id?: string | null;
+  // Lead de teste (0106): fora do mapa, listas e contagens do app.
+  is_teste?: boolean;
   visited_at: string | null;
   // Quantas vezes o lead ja foi visitado (contador mantido pela RPC
   // mark_client_as_visited; o historico completo vive em client_visits).
