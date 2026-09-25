@@ -44,6 +44,8 @@ const ROTAS = {
   'criar-empresa-prospeccao': 'cockpit-api/criar-empresa-prospeccao',
   'restaurantes-proximos': 'cockpit-api/restaurantes-proximos',
   'novidades-mercado': 'cockpit-api/novidades-mercado',
+  'importar-leads': 'cockpit-api/importar-leads',
+  'buscar-leads': 'cockpit-api/buscar-leads',
 };
 
 function morrer(msg) {
