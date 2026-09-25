@@ -23,18 +23,20 @@ type Props = {
   selecionado?: boolean;
   /** Etiqueta com nome e tempo (a prancha esconde na conta-alvo fora da lente dela). */
   comEtiqueta?: boolean;
+  /** Na lente Contas-alvo a conta-alvo também ganha nome (fora dela, só selecionada). */
+  nomeDeAlvo?: boolean;
 };
 
 const LOGO = require('../../assets/pin-logo.png');
 
-function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta = true }: Props) {
+function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta = true, nomeDeAlvo = false }: Props) {
   const pequeno = pino.tipo === 'alvo';
   const w = pequeno ? 26 : 32;
   const anel = pino.dono === 'sem'
     ? '3px dashed #FACC15'
     : `${pino.dono === 'colega' ? 2 : 3}px solid ${pino.cor}`;
   const topoSelo = -w * 1.2 - 12;
-  const mostraEtiqueta = comEtiqueta && (!pequeno || selecionado);
+  const mostraEtiqueta = comEtiqueta && (!pequeno || selecionado || nomeDeAlvo);
 
   return (
     <div style={{ position: 'relative', width: 44, height: 48, cursor: 'pointer' }}>

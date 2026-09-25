@@ -470,10 +470,10 @@ function visitadoHoje(iso: string | null | undefined): boolean {
 // (src/utils/pinoP2.ts); o memo compara o que muda o desenho.
 const MarkerP2 = React.memo(
   function MarkerP2({
-    client, contexto, onPress, planoNumero, feito, naFila, selecionado, comNome = true, agrupar = false,
+    client, contexto, onPress, planoNumero, feito, naFila, selecionado, comNome = true, agrupar = false, nomeDeAlvo = false,
   }: {
     client: Client; contexto: ContextoPino; onPress: (client: Client) => void;
-    planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean; comNome?: boolean; agrupar?: boolean;
+    planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean; comNome?: boolean; agrupar?: boolean; nomeDeAlvo?: boolean;
   }) {
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
     const pino = classificarPino(client, contexto);
@@ -492,6 +492,7 @@ const MarkerP2 = React.memo(
           naFila={naFila}
           selecionado={selecionado}
           comEtiqueta={comNome}
+          nomeDeAlvo={nomeDeAlvo}
         />
       </Marker>
     );
@@ -505,7 +506,8 @@ const MarkerP2 = React.memo(
     a.naFila === b.naFila &&
     a.selecionado === b.selecionado &&
     a.comNome === b.comNome &&
-    a.agrupar === b.agrupar,
+    a.agrupar === b.agrupar &&
+    a.nomeDeAlvo === b.nomeDeAlvo,
 );
 
 
@@ -3937,6 +3939,7 @@ function MainApp() {
             // Até a entrega de densidade: muitos pinos inteiros (lente Contas-alvo
             // numa cidade inteira) agrupam; o plano nunca.
             agrupar={focoMapaNovo.length > 150}
+            nomeDeAlvo={lente === 'alvo'}
           />
         ))}
         {!heatOn && !modoNovo && filteredMapMarkers.map(client => (
