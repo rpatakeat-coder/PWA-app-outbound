@@ -92,7 +92,7 @@ export function ToastHost() {
           <Pressable style={styles.faixaLinha} onPress={() => setVerFila((v) => !v)} accessibilityLabel="Ver a fila de sincronização">
             <Text style={[styles.faixaTexto, falhas.length ? styles.textoErro : styles.textoFila]} numberOfLines={1}>
               {falhas.length
-                ? `${falhas.length} não ${falhas.length === 1 ? 'subiu' : 'subiram'}`
+                ? `${falhas.length} não ${falhas.length === 1 ? 'subiu' : 'subiram'}${naFila.length ? ` · ${naFila.length} na fila` : ''}`
                 : `${online ? 'Enviando' : 'Sem sinal'} · ${naFila.length} na fila${maisAntigo ? ` · desde ${hora(maisAntigo)}` : ''}`}
             </Text>
             <Text style={[styles.faixaAcao, falhas.length ? styles.textoErro : styles.textoFila]}>{verFila ? 'Fechar' : 'Ver fila'}</Text>
