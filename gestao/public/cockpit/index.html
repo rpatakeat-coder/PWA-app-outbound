@@ -7,7 +7,7 @@
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   var FN = "https://mxyjvijclhlxrlafqcrz.supabase.co/functions/v1/";
-  var ROTAS = {"dados":"cockpit-dados"};
+  var ROTAS = {"dados":"cockpit-dados","negocio-acao":"cockpit-api/negocio-acao","criar-negocio":"cockpit-api/criar-negocio","desfazer-negocio":"cockpit-api/desfazer-negocio","criar-nota-negocio":"cockpit-api/criar-nota-negocio","criar-empresa-prospeccao":"cockpit-api/criar-empresa-prospeccao","restaurantes-proximos":"cockpit-api/restaurantes-proximos","novidades-mercado":"cockpit-api/novidades-mercado"};
   var original = window.fetch.bind(window);
   window.fetch = function (entrada, init) {
     var alvo = typeof entrada === 'string' ? entrada : (entrada && entrada.url) || '';

@@ -36,6 +36,14 @@ const BANCO_DO_COCKPIT = 'xitmahwxncpdzopmdook';
 // portado E conferido contra o original.
 const ROTAS = {
   dados: 'cockpit-dados',
+  // cockpit-api: o codigo das rotas do Cockpit, byte a byte (scripts/portar-cockpit-api.cjs)
+  'negocio-acao': 'cockpit-api/negocio-acao',
+  'criar-negocio': 'cockpit-api/criar-negocio',
+  'desfazer-negocio': 'cockpit-api/desfazer-negocio',
+  'criar-nota-negocio': 'cockpit-api/criar-nota-negocio',
+  'criar-empresa-prospeccao': 'cockpit-api/criar-empresa-prospeccao',
+  'restaurantes-proximos': 'cockpit-api/restaurantes-proximos',
+  'novidades-mercado': 'cockpit-api/novidades-mercado',
 };
 
 function morrer(msg) {
