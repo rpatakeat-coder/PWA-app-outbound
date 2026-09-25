@@ -152,6 +152,10 @@ import { TarefasScreen, baldeDeVencimento, baldeDaTarefaDoCrm } from './src/scre
 import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
 import PlaybookScreen from './src/screens/PlaybookScreen';
+import TarefasNovoScreen from './src/screens/TarefasNovoScreen';
+import { enviarConclusao, type PedidoConclusao } from './src/utils/concluirTarefa';
+import { grupoDaTarefa } from './src/utils/abaTarefas';
+import { distanciaTexto } from './src/utils/cardNovo';
 import { ConfiguracoesScreen } from './src/screens/ConfiguracoesScreen';
 import { ds, sharedStyles } from './src/screens/sharedStyles';
 import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
@@ -3360,6 +3364,7 @@ function MainApp() {
   useEffect(() => {
     const tirar = registrarExecutor('checkin', (item) => subirCheckinRef.current(item.payload, item.acaoId));
     const tirarNegocio = registrarExecutor('negocio', async (item) => { await negocioAcao((item.payload as { corpo: Record<string, unknown> }).corpo); });
+    const tirarTarefa = registrarExecutor('tarefa', (item) => enviarConclusao(item.payload as unknown as PedidoConclusao));
     const subir = () => {
       void subirFila().then((n) => {
         if (n > 0) Toast.mostrar(`✓ Sinal voltou · ${n === 1 ? '1 item enviado' : `${n} itens enviados`}`, 'ok');
@@ -3371,6 +3376,7 @@ function MainApp() {
     return () => {
       tirar();
       tirarNegocio();
+      tirarTarefa();
       clearInterval(intervalo);
       if (typeof window !== 'undefined') window.removeEventListener('online', subir);
     };
@@ -5065,7 +5071,12 @@ function MainApp() {
     return { nome: getClientPrimaryName(st.client), numero, etapa };
   })();
   // Tarefas: atrasadas + vencem hoje. Sem pendencia, sem selo (nunca "0").
-  const seloTarefas = tarefasPorBalde.atrasadas + tarefasPorBalde.hoje;
+  // No mapa novo as sugestoes do app (client_tasks) ficam fora: o selo e' o que
+  // o Cockpit cobra, as tarefas do HubSpot (prompt final §B2/§B4).
+  const seloTarefas = tarefasDoCrmParaContagem.filter((t) => {
+    const g = grupoDaTarefa(t.venceEm, new Date());
+    return g === 'atrasadas' || g === 'hoje';
+  }).length;
   const abasDoRodape: Array<{ aba: AppTab; rotulo: string; Icone: typeof IconLocation; ativa: boolean; selo: number | null; seloClaro?: boolean }> = [
     { aba: 'map', rotulo: 'Mapa', Icone: tab === 'map' ? IconLocationFilled : IconLocation, ativa: tab === 'map' || tab === 'list', selo: null },
     ...(isViewer ? [] : [
@@ -5404,7 +5415,12 @@ function MainApp() {
               {/* A sublinha responde a pergunta da tela antes de qualquer
                   toque: o que venceu e o que vence hoje. */}
               <Text style={styles.headerSublinha} numberOfLines={1}>
-                {`${tarefasPorBalde.atrasadas} atrasadas · ${tarefasPorBalde.hoje} para hoje`}
+                {modoNovo
+                  ? (() => {
+                      const atr = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'atrasadas').length;
+                      return `${atr} atrasadas · ${seloTarefas - atr} para hoje`;
+                    })()
+                  : `${tarefasPorBalde.atrasadas} atrasadas · ${tarefasPorBalde.hoje} para hoje`}
               </Text>
             </View>
           ) : (
@@ -5924,6 +5940,36 @@ function MainApp() {
           irParaMapa={() => setTab('map')}
           metaVisitasDia={routeConfig.meta_visitas_dia}
           suggestRoute={suggestRoute}
+        />
+      ) : tab === 'tasks' && modoNovo ? (
+        <TarefasNovoScreen
+          email={profile?.email}
+          sugestoes={visibleTasks}
+          nomeDaSugestao={(t) => {
+            const c = clients.find((x) => x.id === t.client_id);
+            return c ? getClientPrimaryName(c) : (nomesTarefas.get(t.client_id) ?? 'lead');
+          }}
+          aoConcluirSugestao={(task) => {
+            // Mesmo caminho da tela antiga: com o lead carregado, o menu de
+            // destino; sem ele, a confirmação simples.
+            const c = clients.find((x) => x.id === task.client_id);
+            if (c) { setCompletingTask({ task, client: c }); return; }
+            Alert.alert('Concluir sugestão', `Marcar "${task.title}" como concluída?`, [
+              { text: 'Cancelar', style: 'cancel' },
+              { text: 'Concluir', onPress: () => resolveTask.mutate({ id: task.id, status: 'concluida' }) },
+            ]);
+          }}
+          aoAbrirSugestao={(task) => { setTab('map'); void openClientById(task.client_id); }}
+          aoAbrirLead={(id, tarefa) => {
+            setTarefaDaFicha(tarefa);
+            setTab('map');
+            void openClientById(id);
+          }}
+          distanciaAte={(id) => {
+            const c = id ? clients.find((x) => x.id === id) : null;
+            if (!c || !userLocation || c.latitude == null || c.longitude == null) return null;
+            return distanciaTexto(haversineMeters(userLocation.latitude, userLocation.longitude, Number(c.latitude), Number(c.longitude)));
+          }}
         />
       ) : tab === 'tasks' ? (
         <TarefasScreen

@@ -12,7 +12,8 @@
 // na hora, porque tentar de novo daria o mesmo erro.
 
 // 'negocio': um envio da porta única do Cockpit (negocio-acao) que ficou sem sinal.
-export type TipoAcao = 'checkin' | 'negocio';
+// 'tarefa': concluir uma tarefa do HubSpot (aba Tarefas / Liguei) sem sinal.
+export type TipoAcao = 'checkin' | 'negocio' | 'tarefa';
 
 export type ItemFila = {
   acaoId: string;
