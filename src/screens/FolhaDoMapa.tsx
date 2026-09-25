@@ -28,7 +28,7 @@ type Props = {
   onAbrir: (c: Client) => void;
   onCheguei: (c: Client) => void;
   /** Altura da folha na tela (o mapa termina no topo dela). */
-  aoMedir?: (altura: number) => void;
+  aoMedir?: (medida: { y: number; altura: number }) => void;
 };
 
 function PinoMini({ p, plano }: { p: Pino; plano: number | null }) {
@@ -62,7 +62,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
   const proxima = useMemo(() => ordenarItens(itens, 'prioridade').find((it) => it.plano && !it.feito) ?? null, [itens]);
 
   return (
-    <View style={[s.folha, { bottom: chao }]} accessibilityLabel="Agora, perto de você" onLayout={(e) => aoMedir?.(Math.round(e.nativeEvent.layout.height))}>
+    <View style={[s.folha, { bottom: chao }]} accessibilityLabel="Agora, perto de você" onLayout={(e) => aoMedir?.({ y: Math.round(e.nativeEvent.layout.y), altura: Math.round(e.nativeEvent.layout.height) })}>
       <Pressable accessibilityRole="button" accessibilityLabel={aberta ? 'Recolher a lista' : 'Abrir a lista desta área'} onPress={() => setAberta((v) => !v)} style={s.alca}>
         <View style={s.alcaBarra} />
       </Pressable>

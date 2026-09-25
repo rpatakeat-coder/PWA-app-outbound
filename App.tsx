@@ -983,6 +983,8 @@ function MainApp() {
   // Altura da folha de baixo do mapa novo: o mapa termina no topo dela, para
   // o logo e os Termos do Google ficarem sempre visíveis (prompt final C10).
   const [alturaFolha, setAlturaFolha] = useState(0);
+  const [topoFolha, setTopoFolha] = useState<number | null>(null);
+  const [margemMapa, setMargemMapa] = useState(0);
   // Sem o "Mapa | Lista" no topo, quem estava na Lista volta para o mapa.
   useEffect(() => { if (modoNovo) setVistaMapa('mapa'); }, [modoNovo]);
 
@@ -3962,12 +3964,21 @@ function MainApp() {
   // criação e fora da lente Calor. Uma condição só para a folha, o "+" e o
   // encolhimento do mapa (logo do Google visível).
   const folhaVisivel = modoNovo && !layout.ehLargo && !creationMode && !selectedClient && lente !== 'calor';
+  // Margem do mapa = onde o mapa terminaria sem margem menos o topo MEDIDO da
+  // folha (a barra de baixo real não tem a altura do baseInferior; a conta
+  // fixa deixava o logo do Google 34 px atrás da folha — medido em 25/09).
+  useEffect(() => {
+    if (!folhaVisivel || topoFolha == null || !mapLayout) { if (margemMapa !== 0 && !folhaVisivel) setMargemMapa(0); return; }
+    const fundoSemMargem = mapLayout.y + mapLayout.height + margemMapa;
+    const alvo = Math.max(0, Math.round(fundoSemMargem - topoFolha));
+    if (Math.abs(alvo - margemMapa) > 1) setMargemMapa(alvo);
+  }, [folhaVisivel, topoFolha, mapLayout, margemMapa]);
 
   const conteudoMapa = (
     <>
       <MapView
         mapRef={(ref) => { mapRef.current = ref as unknown as RNMapView; }}
-        style={[styles.map, folhaVisivel && alturaFolha > 0 && { marginBottom: alturaFolha }]}
+        style={[styles.map, folhaVisivel && margemMapa > 0 && { marginBottom: margemMapa }]}
         // Mede a area real do mapa na tela pra ancorar o pin de criacao no
         // centro do MAPA (nao da tela). Guarda x/y/width/height absolutos.
         onLayout={(e) => {
@@ -4302,7 +4313,7 @@ function MainApp() {
           desktop o painel lateral de 352px continua fazendo esse papel. */}
       {folhaVisivel && (
         <FolhaDoMapa
-          aoMedir={setAlturaFolha}
+          aoMedir={({ y, altura }) => { setAlturaFolha(altura); setTopoFolha(y); }}
           itens={itensFolha}
           planoTotal={routeDisplayClients.length}
           planoFeito={routeStops.filter((s) => s.status === 'done').length}
