@@ -1,7 +1,7 @@
 // Teste da aba Agenda (mapa novo): faixa de dias úteis, próxima parada, compromissos.
 //
 // Rode com:  npx tsx src/utils/agendaNovo.teste.ts
-import { compromissosDoDia, diasDaFaixa, estadoDasParadas, rotuloDoDia } from './agendaNovo';
+import { compromissosDoDia, diasDaFaixa, estadoDasParadas, rotuloDoDia, tituloUtil } from './agendaNovo';
 
 let falhas = 0;
 const ok = (c: boolean, m: string) => {
@@ -32,6 +32,9 @@ ok(hoje.map((x) => `${x.hora} ${x.tipo} ${x.nome}`).join(' | ') === '09:00 retor
   'pela hora de Brasília; visita do Planejamento de quem já é parada não repete; reunião do app entra');
 ok(compromissosDoDia('2026-09-28', tarefas, reunioes, () => null)[0]?.tipo === 'reunião', 'segunda: a reunião de demo cai no dia dela');
 ok(compromissosDoDia('2026-09-29', tarefas, reunioes, () => null).length === 0, 'dia sem nada: vazio');
+
+ok(tituloUtil('Visita - Alemão pizzas', 'visita', 'Alemão Pizzas') === null, '"Visita - Alemão pizzas" não repete o nome na linha');
+ok(tituloUtil('Follow-up - Identificar o nome do decisor', 'retorno', 'Ferro Xis') === 'Follow-up - Identificar o nome do decisor', 'assunto com a ação fica');
 
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);

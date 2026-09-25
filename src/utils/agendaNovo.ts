@@ -50,7 +50,8 @@ export type Compromisso = {
   quando: string | null;
   hora: string | null;
   tipo: 'reunião' | 'retorno' | 'visita';
-  titulo: string;
+  /** O assunto, quando ele diz algo além de "Tipo - Nome do lead". */
+  titulo: string | null;
   clientId: string | null;
   nome: string | null;
   fonte: 'hubspot' | 'app';
@@ -58,6 +59,15 @@ export type Compromisso = {
 
 type TarefaMin = { id: string; assunto: string; venceEm: string | null; tipo: 'visita' | 'follow_up' | 'outro'; clientId: string | null; nomeDoCliente: string | null };
 type ReuniaoMin = { id: string; client_id: string; scheduled_at: string; type: string; status: string };
+
+const sem = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+/** "Visita - Kadô" com nome "Kadô" não diz nada que a linha já não diga. */
+export function tituloUtil(assunto: string, tipo: string, nome: string | null): string | null {
+  let resto = sem(assunto);
+  if (nome) resto = resto.replace(sem(nome), '').trim();
+  if (!resto || resto === sem(tipo) || /^(visita|follow up|retorno|reuniao|rota)$/.test(resto)) return null;
+  return assunto;
+}
 
 const horaBRT = (iso: string | null) => {
   if (!iso) return null;
@@ -83,13 +93,13 @@ export function compromissosDoDia(
     if (!t.venceEm || diaBRT(t.venceEm) !== dia) continue;
     if (t.tipo === 'visita' && t.clientId && jaNoPlano.has(t.clientId)) continue;
     const tipo = t.tipo === 'visita' ? 'visita' : /reuni|demo/i.test(t.assunto) ? 'reunião' : 'retorno';
-    itens.push({ id: `hs-${t.id}`, quando: t.venceEm, hora: horaBRT(t.venceEm), tipo, titulo: t.assunto, clientId: t.clientId, nome: t.nomeDoCliente, fonte: 'hubspot' });
+    itens.push({ id: `hs-${t.id}`, quando: t.venceEm, hora: horaBRT(t.venceEm), tipo, titulo: tituloUtil(t.assunto, tipo, t.nomeDoCliente), clientId: t.clientId, nome: t.nomeDoCliente, fonte: 'hubspot' });
   }
   for (const r of reunioes) {
     if (r.status === 'cancelada' || r.status === 'cancelled' || r.status === 'canceled') continue;
     if (diaBRT(r.scheduled_at) !== dia) continue;
     const tipo = r.type === 'follow_up' ? 'retorno' : 'reunião';
-    itens.push({ id: `app-${r.id}`, quando: r.scheduled_at, hora: horaBRT(r.scheduled_at), tipo, titulo: tipo === 'retorno' ? 'Follow-up' : 'Reunião', clientId: r.client_id, nome: nomeDoLead(r.client_id), fonte: 'app' });
+    itens.push({ id: `app-${r.id}`, quando: r.scheduled_at, hora: horaBRT(r.scheduled_at), tipo, titulo: null, clientId: r.client_id, nome: nomeDoLead(r.client_id), fonte: 'app' });
   }
   return itens.sort((a, b) => (a.quando ? Date.parse(a.quando) : 0) - (b.quando ? Date.parse(b.quando) : 0));
 }

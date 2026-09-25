@@ -21,7 +21,7 @@ export type Playbook = { paginas: PaginaPlaybook[]; categorias: string[] };
 export type Progresso = Record<string, { pct: number; lida?: boolean; em: number }>;
 
 export const semAcento = (s: string) =>
-  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
 /** Casa título, resumo e o texto de busca do dado, sem acento e sem caixa. */
 export function filtrarPaginas(pb: Playbook, termo: string, categoria: string | null): PaginaPlaybook[] {

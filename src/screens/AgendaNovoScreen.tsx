@@ -144,7 +144,10 @@ export default function AgendaNovoScreen({
               <Text style={s.hora}>{k.hora ?? '—'}</Text>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={s.paradaNome} numberOfLines={1}>{`${k.tipo[0].toUpperCase()}${k.tipo.slice(1)} · ${k.nome ?? 'cliente não identificado'}`}</Text>
-                <Text style={s.paradaSub} numberOfLines={1}>{[k.titulo, distanciaAte(k.clientId)].filter(Boolean).join(' · ')}</Text>
+                {(() => {
+                  const sub = [k.titulo, distanciaAte(k.clientId)].filter(Boolean).join(' · ');
+                  return sub ? <Text style={s.paradaSub} numberOfLines={1}>{sub}</Text> : null;
+                })()}
                 <View style={s.chips}><Text style={s.chip}>{k.fonte === 'hubspot' ? 'Planejamento' : 'Agendado no app'}</Text></View>
               </View>
               {!!k.clientId && <IconChevronRight width={20} height={20} fill={cores.muted} />}
@@ -164,7 +167,8 @@ const s = StyleSheet.create({
   tela: { flex: 1, backgroundColor: 'var(--bg)' },
   conteudo: { padding: 16, paddingBottom: 32, gap: 12 },
   subtitulo: { fontSize: 13, lineHeight: 18, color: 'var(--text-muted)' },
-  faixa: { gap: 8, paddingRight: 16 },
+  // paddingTop: o selo do dia sai 6px acima da caixa, e o scroll horizontal corta o que passa.
+  faixa: { gap: 8, paddingRight: 16, paddingTop: 8 },
   dia: {
     width: 56, minHeight: 64, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 2,
     backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)',
