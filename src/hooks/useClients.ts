@@ -486,11 +486,14 @@ export function useClients(
       accuracyM = null,
       acaoId = null,
       feitoEm = null,
+      corrigirPino = false,
     }: {
       clientId: string; latitude: number; longitude: number;
       // 0102: precisão do GPS no toque, ID idempotente da fila offline e a
       // hora real do toque (check-in que esperou sinal).
       accuracyM?: number | null; acaoId?: string | null; feitoEm?: string | null;
+      // 0104: "Estou na porta" — o pino nunca confirmado vai para o GPS e o check-in entra.
+      corrigirPino?: boolean;
     }) => {
       // Fila offline: se esta ação já foi gravada (a resposta se perdeu na
       // volta), não repete nada — nem a visita nem a Task no HubSpot.
@@ -511,6 +514,7 @@ export function useClients(
         ...(acaoId ? { p_acao_id: acaoId } : {}),
         ...(accuracyM != null ? { p_accuracy_m: accuracyM } : {}),
         ...(feitoEm ? { p_feito_em: feitoEm } : {}),
+        ...(corrigirPino ? { p_corrigir_pino: true } : {}),
       });
       // Banco sem a 0102 (função de 3 argumentos): grava do jeito antigo.
       if (error && error.code === 'PGRST202') {

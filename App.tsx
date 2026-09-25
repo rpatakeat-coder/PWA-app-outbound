@@ -2963,6 +2963,44 @@ function MainApp() {
   // getCurrentPositionAsync pode voltar rapido com um fix grosseiro/cacheado.
   // Se vier ruim, escuta ate ~8s e fica com o de menor raio de erro.
   const getBestFix = useCallback(async (): Promise<Location.LocationObject> => {
+    // Web (o PWA): direto no navigator.geolocation com maximumAge 0. O
+    // caminho do expo-location pode devolver a posição GUARDADA da parada
+    // anterior — o "você está a 800 m" com o executivo na porta. Amostra por
+    // até 10 s, fica com a leitura mais precisa, para cedo com ±20 m e
+    // descarta leitura com mais de 15 s.
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.geolocation) {
+      return new Promise((resolve, reject) => {
+        let melhor: GeolocationPosition | null = null;
+        let terminou = false;
+        const fim = (erro?: GeolocationPositionError) => {
+          if (terminou) return;
+          terminou = true;
+          navigator.geolocation.clearWatch(id);
+          clearTimeout(teto);
+          if (!melhor) { reject(new Error(erro?.message || 'Não foi possível ler o GPS. Confira se a localização está ligada.')); return; }
+          resolve({
+            coords: {
+              latitude: melhor.coords.latitude, longitude: melhor.coords.longitude, accuracy: melhor.coords.accuracy,
+              altitude: melhor.coords.altitude, altitudeAccuracy: melhor.coords.altitudeAccuracy,
+              heading: melhor.coords.heading, speed: melhor.coords.speed,
+            },
+            timestamp: melhor.timestamp,
+          } as Location.LocationObject);
+        };
+        const id = navigator.geolocation.watchPosition(
+          (pos) => {
+            if (Date.now() - pos.timestamp > 15000) return; // leitura velha (cache)
+            if (!melhor || pos.coords.accuracy < melhor.coords.accuracy) melhor = pos;
+            if (pos.coords.accuracy <= 20) fim();
+          },
+          (erro) => { if (erro.code === erro.PERMISSION_DENIED || !melhor) fim(erro); },
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 },
+        );
+        const teto = setTimeout(() => fim(), 10000);
+        // Aos 4 s, com ±40 m ou melhor, já dá: não segura o vendedor na porta.
+        setTimeout(() => { if (melhor && melhor.coords.accuracy <= 40) fim(); }, 4000);
+      });
+    }
     const first = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
     if ((first.coords.accuracy ?? Number.POSITIVE_INFINITY) <= GOOD_FIX_ACCURACY_M) return first;
 
@@ -2993,6 +3031,8 @@ function MainApp() {
   }, []);
 
   const visitingRef = useRef(false);
+  // "Tentar de novo" (GPS impreciso) chama o check-in de novo por aqui.
+  const handleMarkAsVisitedRef = useRef<(c: Client, onDone?: () => void) => Promise<void>>(async () => {});
   const [isVisiting, setIsVisiting] = useState(false);
   // Sobe logo depois do check-in bem-sucedido: o que aconteceu DENTRO da visita
   // (ver DesfechoVisitaSheet). Puravel — o check-in ja' gravou.
@@ -3037,18 +3077,25 @@ function MainApp() {
       let targetLat = Number(client.latitude);
       let targetLon = Number(client.longitude);
       let isApproxPin = client.geo_approximate === true;
+      let geoSource = client.geo_source ?? null;
       try {
         const { data: freshRow } = await supabase
           .from('clients')
-          .select('latitude, longitude, geo_approximate')
+          .select('latitude, longitude, geo_approximate, geo_source')
           .eq('id', client.id)
           .maybeSingle();
         if (freshRow?.latitude != null && freshRow?.longitude != null) {
           targetLat = Number(freshRow.latitude);
           targetLon = Number(freshRow.longitude);
           isApproxPin = freshRow.geo_approximate === true;
+          geoSource = (freshRow.geo_source as string | null) ?? null;
         }
       } catch { /* sem rede: segue com o snapshot do sheet */ }
+      // Pino confirmado na porta = nasceu do GPS de alguém (cadastro na rua,
+      // mover pino ou "Estou na porta"). O resto veio de endereço convertido —
+      // 4.143 pinos do OpenStreetMap, 26 visitados (25/09): é ali que o app
+      // dizia "longe" com o executivo na porta.
+      const pinoConfirmado = (geoSource === 'coords' || geoSource === 'checkin') && !isApproxPin;
 
       let position: Location.LocationObject;
       try {
@@ -3067,31 +3114,65 @@ function MainApp() {
       // banco teria aceitado.
       const maxDistance = isApproxPin ? 500 : 200;
 
+      // Pergunta com botões e devolve a escolha (o Alert do app é por callback).
+      const perguntar = (titulo: string, msg: string, botoes: { text: string; valor: string; style?: 'cancel' | 'destructive' }[]) =>
+        new Promise<string>((res) => Alert.alert(titulo, msg, botoes.map((b) => ({ text: b.text, style: b.style, onPress: () => res(b.valor) }))));
+      const moverPino = () => { setEditingLocationFor(client); setSelectedClient(null); };
+
+      let corrigirPino = false;
       if (distance > maxDistance) {
-        // Fix grosseiro: o problema nao e' a distancia, e' a leitura. Mandar
-        // "aproxime-se" aqui e' o que fazia o vendedor andar em volta do lead
-        // sem nunca conseguir bater o ponto.
-        if (fixAccuracy != null && fixAccuracy > COARSE_FIX_ACCURACY_M) {
-          Alert.alert(
-            'Localização imprecisa',
-            `Seu aparelho está reportando a posição com margem de erro de ~${Math.round(fixAccuracy)} m `
-            + `(a conta deu ${Math.round(distance)} m até o lead), então não dá pra confirmar que você está no local.\n\n`
-            + 'No iPhone: Ajustes › Privacidade e Segurança › Serviços de Localização › este app › ative "Localização Exata". '
-            + 'Depois volte pro app e tente de novo.',
+        if (!pinoConfirmado && distance <= 2000) {
+          // Pino nunca confirmado: o provável é o PINO estar errado, não o
+          // vendedor longe. Com GPS firme, "Estou na porta" corrige e registra.
+          if (fixAccuracy == null || fixAccuracy > 40) {
+            const r = await perguntar(
+              'GPS ainda impreciso',
+              `Seu GPS está com margem de ±${fixAccuracy != null ? Math.round(fixAccuracy) : '?'} m, e o pino está a ${Math.round(distance)} m. `
+              + 'Fique uns segundos a céu aberto (longe de toldo e parede) e toque em Tentar de novo.',
+              [{ text: 'Cancelar', valor: 'nao', style: 'cancel' }, { text: 'Tentar de novo', valor: 'de-novo' }],
+            );
+            if (r === 'de-novo') setTimeout(() => { void handleMarkAsVisitedRef.current(client, onDone); }, 50);
+            return;
+          }
+          const r = await perguntar(
+            'Está na porta?',
+            `Você está a ${Math.round(distance)} m do pino, mas esse pino veio do endereço e nunca foi confirmado no local. `
+            + `Se você está na porta, o pino vem para onde você está (GPS ±${Math.round(fixAccuracy)} m) e o check-in entra.`,
             [
-              { text: 'Fechar', style: 'cancel' },
-              { text: 'Abrir configurações', onPress: () => Linking.openSettings() },
+              { text: 'Estou na porta', valor: 'porta' },
+              { text: 'É outro lugar · mover pino', valor: 'outro' },
+              { text: 'Ainda não cheguei', valor: 'nao', style: 'cancel' },
             ],
           );
+          if (r === 'outro') { moverPino(); return; }
+          if (r !== 'porta') return;
+          corrigirPino = true;
+        } else {
+          // Fix grosseiro: o problema nao e' a distancia, e' a leitura.
+          if (fixAccuracy != null && fixAccuracy > COARSE_FIX_ACCURACY_M) {
+            Alert.alert(
+              'Localização imprecisa',
+              `Seu aparelho está reportando a posição com margem de erro de ~${Math.round(fixAccuracy)} m `
+              + `(a conta deu ${Math.round(distance)} m até o lead), então não dá pra confirmar que você está no local.\n\n`
+              + 'No iPhone: Ajustes › Privacidade e Segurança › Serviços de Localização › este app › ative "Localização Exata". '
+              + 'Depois volte pro app e tente de novo.',
+              [
+                { text: 'Fechar', style: 'cancel' },
+                { text: 'Abrir configurações', onPress: () => Linking.openSettings() },
+              ],
+            );
+            return;
+          }
+          const r = await perguntar(
+            'Você está longe do pino',
+            `Distância: ${Math.round(distance)} m (limite: ${maxDistance} m).`
+            + (fixAccuracy != null ? ` Precisão do GPS: ±${Math.round(fixAccuracy)} m.` : '')
+            + (pinoConfirmado ? '\nEsse pino já foi confirmado no local por GPS. Se o lugar mudou, mova o pino.' : '\nAproxime-se para marcar a visita.'),
+            [{ text: 'Fechar', valor: 'nao', style: 'cancel' }, { text: 'Mover pino', valor: 'outro' }],
+          );
+          if (r === 'outro') moverPino();
           return;
         }
-        Alert.alert(
-          'Você está muito longe',
-          `Distância atual: ${Math.round(distance)} m (limite: ${maxDistance} m).`
-          + (fixAccuracy != null ? `\nPrecisão do GPS: ±${Math.round(fixAccuracy)} m.` : '')
-          + '\nAproxime-se do local para marcar como visitado.',
-        );
-        return;
       }
 
       // ID idempotente e hora do TOQUE: se não houver sinal, é com eles que o
@@ -3103,13 +3184,13 @@ function MainApp() {
       try {
         visitado = await markAsVisited.mutateAsync({
           clientId: client.id, latitude: userLat, longitude: userLon,
-          accuracyM: fixAccuracy, acaoId, feitoEm,
+          accuracyM: fixAccuracy, acaoId, feitoEm, corrigirPino,
         });
       } catch (err) {
         if (!ehErroDeRede(err)) throw err;
         await enfileirar({
           acaoId, tipo: 'checkin', rotulo: `Check-in · ${nomeDoLead}`, criadoEm: feitoEm,
-          payload: { clientId: client.id, latitude: userLat, longitude: userLon, accuracyM: fixAccuracy, feitoEm },
+          payload: { clientId: client.id, latitude: userLat, longitude: userLon, accuracyM: fixAccuracy, feitoEm, corrigirPino },
         });
         Toast.mostrar(`Sem sinal · check-in em ${nomeDoLead} na fila, sobe sozinho`, 'fila');
         onDone?.();
@@ -3129,7 +3210,9 @@ function MainApp() {
       // pos-venda (o proprio check-in ja' nao toca o funil deles), e visita sem
       // deal_id vira "visita nao confirmada" do lado do Cockpit — fica fora do
       // ciclo fechado em vez de entrar torta.
-      Toast.mostrar(`✓ Check-in em ${nomeDoLead} registrado`, 'ok');
+      Toast.mostrar(corrigirPino
+        ? `✓ Check-in em ${nomeDoLead} · pino corrigido (estava a ${Math.round(distance)} m)`
+        : `✓ Check-in em ${nomeDoLead} registrado`, 'ok');
       if (visitado.status === 'lead' && visitado.id_hubspot) {
         setDesfechoPendente({
           idHubspot: visitado.id_hubspot,
@@ -3145,6 +3228,7 @@ function MainApp() {
       setIsVisiting(false);
     }
   }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, isMonitoringRoute, getBestFix]);
+  handleMarkAsVisitedRef.current = handleMarkAsVisited;
 
   // Fila offline: quem sobe o check-in guardado sem sinal. Ref porque a
   // mutation e as paradas mudam a cada render e o executor é registrado uma vez.
@@ -3155,6 +3239,7 @@ function MainApp() {
       clientId, latitude: Number(p.latitude), longitude: Number(p.longitude),
       accuracyM: p.accuracyM == null ? null : Number(p.accuracyM),
       acaoId, feitoEm: (p.feitoEm as string | undefined) ?? null,
+      corrigirPino: p.corrigirPino === true,
     });
     if (!isMonitoringRoute) {
       const stop = fieldOps.stops.find((s) => s.client_id === clientId && s.status !== 'done');
