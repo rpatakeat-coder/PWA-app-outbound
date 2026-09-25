@@ -23,6 +23,7 @@ import {
   Pressable,
   Switch,
   AppState,
+  useWindowDimensions,
 } from 'react-native';
 import { KeyboardAvoidingView } from './src/components/KeyboardAvoidingView';
 import { Alert, AlertHost } from './src/components/Alert';
@@ -96,7 +97,10 @@ import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tan
 import { useClientSearch, useClients } from './src/hooks/useClients';
 import { useNaEquipeCockpit } from './src/hooks/useNaEquipeCockpit';
 import { useContextoDoPino, useLeadsNaFila, useMapaNovo } from './src/hooks/useMapaNovo';
-import PinoP2, { ANCORA_PINO_P2 } from './src/map/PinoP2';
+import PinoP2, { ANCORA_PINO_P2, ANCORA_PONTO, PontoP2 } from './src/map/PinoP2';
+import FiltrosMapaNovo from './src/screens/FiltrosMapaNovo';
+import { FILTROS_VAZIOS, LENTES, noFoco, passaNosFiltros, quantosFiltros, type FiltrosNovos, type Lente } from './src/utils/lentes';
+import { rotulosSemSobrepor } from './src/utils/rotulos';
 import { classificarPino, type ContextoPino } from './src/utils/pinoP2';
 import { useMeetings } from './src/hooks/useMeetings';
 import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
@@ -465,10 +469,10 @@ function visitadoHoje(iso: string | null | undefined): boolean {
 // (src/utils/pinoP2.ts); o memo compara o que muda o desenho.
 const MarkerP2 = React.memo(
   function MarkerP2({
-    client, contexto, onPress, planoNumero, feito, naFila, selecionado,
+    client, contexto, onPress, planoNumero, feito, naFila, selecionado, comNome = true,
   }: {
     client: Client; contexto: ContextoPino; onPress: (client: Client) => void;
-    planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean;
+    planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean; comNome?: boolean;
   }) {
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
     const pino = classificarPino(client, contexto);
@@ -486,6 +490,7 @@ const MarkerP2 = React.memo(
           visitado={feito || visitadoHoje(client.visited_at)}
           naFila={naFila}
           selecionado={selecionado}
+          comEtiqueta={comNome}
         />
       </Marker>
     );
@@ -497,7 +502,23 @@ const MarkerP2 = React.memo(
     a.planoNumero === b.planoNumero &&
     a.feito === b.feito &&
     a.naFila === b.naFila &&
-    a.selecionado === b.selecionado,
+    a.selecionado === b.selecionado &&
+    a.comNome === b.comNome,
+);
+
+// Ponto de 7 px do mapa novo (fora da lente). Sem onPress: decisão é no pino.
+const MarkerPonto = React.memo(
+  function MarkerPonto({ client, contexto }: { client: Client; contexto: ContextoPino }) {
+    return (
+      <Marker
+        coordinate={{ latitude: client.latitude as number, longitude: client.longitude as number }}
+        anchor={ANCORA_PONTO}
+      >
+        <PontoP2 pino={classificarPino(client, contexto)} />
+      </Marker>
+    );
+  },
+  (a, b) => a.client === b.client && a.contexto === b.contexto,
 );
 
 const markerStyles = StyleSheet.create({
@@ -956,18 +977,28 @@ function MainApp() {
     () => (contextoPinoBase ? { ...contextoPinoBase, agora: new Date() } : null),
     [contextoPinoBase],
   );
+  const modoNovo = mapaNovo && !!contextoPino;
+  // Lente ativa (uma por vez; "Meu dia" é o padrão) e filtros do mapa novo.
+  const [lente, setLente] = useState<Lente>('dia');
+  const [filtrosNovos, setFiltrosNovos] = useState<FiltrosNovos>(FILTROS_VAZIOS);
+  const [filtrosNovosAbertos, setFiltrosNovosAbertos] = useState(false);
+  const janelaTela = useWindowDimensions();
 
   // ===== Mapa de calor de visitas (só gestor) =====
   // Camada opcional sobre o mapa principal: densidade de check-ins por área.
   // Só o gestor vê o botão; a busca dos pontos só dispara quando ligado.
   const [heatOn, setHeatOn] = useState(false);
+  // Mapa novo: o calor é uma LENTE (vale no celular também), não um botão de gestor.
+  useEffect(() => {
+    if (modoNovo) setHeatOn(lente === 'calor');
+  }, [modoNovo, lente]);
   const [heatSeller, setHeatSeller] = useState<string | null>(null); // null = Todos
   const {
     points: heatPoints,
     sellers: heatSellers,
     capped: heatCapped,
     isLoading: heatLoading,
-  } = useVisitsHeatmap(canViewGestor && heatOn);
+  } = useVisitsHeatmap((canViewGestor || modoNovo) && heatOn);
 
   // Pontos filtrados pelo vendedor selecionado, agregados na grade.
   const heat = useMemo(() => {
@@ -1662,6 +1693,59 @@ function MainApp() {
   );
 
   const routeDisplayClients = routeClients.length > 0 ? routeClients : routeDraft;
+
+  // ===== Mapa novo: lente + filtros + nomes sem sobrepor =====
+  // Base = TODOS os status carregados na área (a lente decide o destaque; o
+  // status único dos chips antigos não se aplica aqui), mais as paradas do
+  // plano, que aparecem mesmo fora do recorte.
+  const itensMapaNovo = useMemo(() => {
+    if (!modoNovo || !contextoPino) return [];
+    const plano = new Map<string, number>();
+    routeDisplayClients.forEach((c, i) => plano.set(c.id, i + 1));
+    const vistos = new Set<string>();
+    const base: Client[] = [];
+    for (const c of [...routeDisplayClients, ...clientsForCount]) {
+      if (vistos.has(c.id) || c.latitude == null || c.longitude == null) continue;
+      if (!plano.has(c.id) && renderBounds) {
+        const lat = c.latitude as number;
+        const lon = c.longitude as number;
+        if (lat < renderBounds.latMin || lat > renderBounds.latMax || lon < renderBounds.lonMin || lon > renderBounds.lonMax) continue;
+      }
+      vistos.add(c.id);
+      base.push(c);
+    }
+    return base.map((c) => ({ c, p: classificarPino(c, contextoPino), plano: plano.get(c.id) ?? null }));
+  }, [modoNovo, contextoPino, routeDisplayClients, clientsForCount, renderBounds]);
+
+  const visiveisMapaNovo = useMemo(
+    () => itensMapaNovo.filter(({ c, p, plano }) => plano != null || passaNosFiltros(c, p, filtrosNovos)),
+    [itensMapaNovo, filtrosNovos],
+  );
+
+  const { focoMapaNovo, pontosMapaNovo, comNome } = useMemo(() => {
+    const foco: typeof visiveisMapaNovo = [];
+    const pontos: typeof visiveisMapaNovo = [];
+    for (const it of visiveisMapaNovo) {
+      if (noFoco(lente, it.p, it.plano) || it.c.id === selectedClient?.id) foco.push(it);
+      else if (lente !== 'calor') pontos.push(it);
+    }
+    // Nomes: afastado (bairro/cidade) só plano e selecionado; de perto, os
+    // que cabem sem sobrepor, na ordem selecionado › plano › cobrar › Q › M.
+    const nomes = new Set<string>();
+    const perto = !!mapRegion && mapRegion.latitudeDelta <= 0.03;
+    const prioridade = (it: (typeof foco)[number]) =>
+      it.c.id === selectedClient?.id ? 0 : it.plano ? 1 : it.p.etiqueta?.texto === 'cobrar' ? 2
+        : it.p.temp === 'Q' ? 3 : it.p.temp === 'M' ? 4 : it.p.tipo === 'cliente' ? 5 : 6;
+    const candidatos = foco
+      .filter((it) => perto || it.plano || it.c.id === selectedClient?.id)
+      .map((it) => ({ id: it.c.id, lat: it.c.latitude as number, lng: it.c.longitude as number, prioridade: prioridade(it) }));
+    if (mapRegion && candidatos.length) {
+      const larguraPx = layout.ehLargo ? Math.max(320, janelaTela.width - 352 - 240) : janelaTela.width;
+      const alturaPx = layout.ehLargo ? janelaTela.height : Math.max(300, janelaTela.height - 250);
+      for (const id of rotulosSemSobrepor(candidatos, { ...mapRegion, larguraPx, alturaPx })) nomes.add(id);
+    }
+    return { focoMapaNovo: foco, pontosMapaNovo: pontos, comNome: nomes };
+  }, [visiveisMapaNovo, lente, selectedClient?.id, mapRegion, layout.ehLargo, janelaTela.width, janelaTela.height]);
 
   // Dia que a Agenda mostra. Unico estado novo do M4: a tira da semana vive no
   // header (que e' desta casca) e o corpo vive na AgendaScreen, entao o dia
@@ -3847,31 +3931,23 @@ function MainApp() {
             sem os leads engolirem as manchas. Voltam ao desligar o 🔥. */}
         {/* Mapa novo: pino P2 para os leads da área e para as paradas da
             rota (com o número do plano no selo, no lugar do RouteMarker). */}
-        {!heatOn && mapaNovo && contextoPino && filteredMapMarkers.map(client => (
+        {modoNovo && contextoPino && pontosMapaNovo.map(({ c }) => (
+          <MarkerPonto key={`pt-${c.id}`} client={c} contexto={contextoPino} />
+        ))}
+        {modoNovo && contextoPino && focoMapaNovo.map(({ c, plano }) => (
           <MarkerP2
-            key={client.id}
-            client={client}
+            key={c.id}
+            client={c}
             contexto={contextoPino}
             onPress={handleMarkerPress}
-            naFila={leadsNaFila.has(client.id)}
-            selecionado={selectedClient?.id === client.id}
+            planoNumero={plano}
+            feito={plano != null && routeStops.find(s => s.client_id === c.id)?.status === 'done'}
+            naFila={leadsNaFila.has(c.id)}
+            selecionado={selectedClient?.id === c.id}
+            comNome={comNome.has(c.id)}
           />
         ))}
-        {!heatOn && mapaNovo && contextoPino && routeDisplayClients
-          .filter(c => c.latitude != null && c.longitude != null)
-          .map((client, index) => (
-            <MarkerP2
-              key={`route-${client.id}`}
-              client={client}
-              contexto={contextoPino}
-              onPress={handleMarkerPress}
-              planoNumero={index + 1}
-              feito={routeStops.find(s => s.client_id === client.id)?.status === 'done'}
-              naFila={leadsNaFila.has(client.id)}
-              selecionado={selectedClient?.id === client.id}
-            />
-          ))}
-        {!heatOn && !(mapaNovo && contextoPino) && filteredMapMarkers.map(client => (
+        {!heatOn && !modoNovo && filteredMapMarkers.map(client => (
           <MarkerWithReady
             key={client.id}
             client={client}
@@ -3897,7 +3973,7 @@ function MainApp() {
         {/* Markers da rota com numero da ordem — renderizam acima dos
             normais e ficam visiveis independente do filtro de status.
             Também somem no modo calor pra não poluir. */}
-        {!heatOn && !(mapaNovo && contextoPino) && routeDisplayClients
+        {!heatOn && !modoNovo && routeDisplayClients
           .filter(c => c.latitude != null && c.longitude != null)
           .map((client, index) => {
             const stop = routeStops.find(s => s.client_id === client.id);
@@ -5273,6 +5349,37 @@ function MainApp() {
               contentContainerStyle={styles.filtroBarraLinha}
               keyboardShouldPersistTaps="handled"
             >
+              {modoNovo ? (
+                <>
+                  {LENTES.map((l) => {
+                    const ativa = lente === l.id;
+                    return (
+                      <TouchableOpacity
+                        key={l.id}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: ativa }}
+                        accessibilityLabel={`Lente ${l.rotulo}`}
+                        style={[styles.tempChipMobile, styles.lenteChip, ativa && styles.lenteChipAtiva]}
+                        onPress={() => setLente(l.id)}
+                      >
+                        <Text style={[styles.tempChipMobileTexto, ativa && styles.lenteChipAtivaTexto]}>{l.rotulo}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={quantosFiltros(filtrosNovos) ? `Filtros, ${quantosFiltros(filtrosNovos)} ativos` : 'Filtros'}
+                    style={[styles.tempChipMobile, styles.lenteChip, quantosFiltros(filtrosNovos) > 0 && styles.tempChipMobileAtivo]}
+                    onPress={() => { Keyboard.dismiss(); setFiltrosNovosAbertos(true); }}
+                  >
+                    <IconFilterList width={18} height={18} fill={quantosFiltros(filtrosNovos) ? iconColors.tintRedText : iconColors.muted} />
+                    <Text style={[styles.tempChipMobileTexto, quantosFiltros(filtrosNovos) > 0 && { color: 'var(--tint-red-text)' }]}>
+                      {quantosFiltros(filtrosNovos) ? `Filtros · ${quantosFiltros(filtrosNovos)}` : 'Filtros'}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+              <>
               <TouchableOpacity
                 accessibilityRole="button"
                 accessibilityLabel="Filtros"
@@ -5320,6 +5427,8 @@ function MainApp() {
                   <Text style={[styles.tempChipMobileTexto, chip.ativo && { color: 'var(--tint-red-text)' }]}>{chip.rotulo}</Text>
                 </TouchableOpacity>
               ))}
+              </>
+              )}
             </ScrollView>
             {linhaFiltrosAtivos && <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>{linhaFiltrosAtivos}</View>}
           </View>
@@ -6026,6 +6135,26 @@ function MainApp() {
         </View>
       </Modal>
 
+
+      {/* Filtros do mapa novo (prancha §8.9). "Mais filtros" abre o modal
+          antigo logo abaixo, com UF, etapa, vendedor e visita. */}
+      {modoNovo && (
+        <FiltrosMapaNovo
+          visivel={filtrosNovosAbertos}
+          aoFechar={() => setFiltrosNovosAbertos(false)}
+          itens={itensMapaNovo}
+          filtros={filtrosNovos}
+          aoAplicar={setFiltrosNovos}
+          soMinhaArea={showOnlyMyArea}
+          aoTrocarSoMinhaArea={setShowOnlyMyArea}
+          aoAbrirMaisFiltros={() => {
+            setFiltrosNovosAbertos(false);
+            // Depois do painel fechar: o history.back() dele cancelaria a abertura.
+            setTimeout(() => setIsFiltersOpen(true), 300);
+          }}
+          motorConferidoEm={contextoPino?.atualizadoEm ?? null}
+        />
+      )}
 
       {/* Modal de filtros: UF + etapa comercial. */}
       <Modal
@@ -10012,6 +10141,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'var(--surface)',
   },
   tempChipMobileAtivo: { backgroundColor: 'var(--tint-red)', borderColor: '#C8131B' },
+  // Lentes do mapa novo: 44 px de altura (prancha §5), a ativa em destaque cheio.
+  lenteChip: { height: 44, borderRadius: 22, paddingHorizontal: 16 },
+  lenteChipAtiva: { backgroundColor: 'var(--text)', borderColor: 'var(--text)' },
+  lenteChipAtivaTexto: { color: 'var(--bg)', fontWeight: '800' },
   tempChipMobileTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
   faChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   faChip: {

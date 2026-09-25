@@ -97,3 +97,25 @@ function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta 
 }
 
 export default React.memo(PinoP2);
+
+// Ponto de 7 px: o que está fora da lente ativa ("hierarquia, não filtro").
+// Mesma cor e forma do pino (prancha): conta-alvo é anel roxo, ex-cliente é
+// quadradinho rosa, sem dono é anel tracejado amarelo, o resto é bolinha na
+// cor da temperatura. Sem toque próprio de propósito — decisão é no pino.
+export const ANCORA_PONTO = { x: 0.5, y: 0.5 };
+
+function PontoP2Base({ pino }: { pino: Pino }) {
+  const alvo = pino.tipo === 'alvo';
+  const semDono = pino.dono === 'sem' && !alvo;
+  return (
+    <div style={{
+      width: 7, height: 7, boxSizing: 'border-box', pointerEvents: 'none',
+      borderRadius: pino.tipo === 'ex' ? 2 : '50%',
+      background: alvo || semDono ? 'transparent' : pino.cor,
+      border: alvo ? '1.5px solid #C084FC' : semDono ? '1.5px dashed #FACC15' : 'none',
+      opacity: alvo ? 0.6 : 0.55,
+    }} />
+  );
+}
+
+export const PontoP2 = React.memo(PontoP2Base);

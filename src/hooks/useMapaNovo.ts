@@ -80,6 +80,7 @@ export function useContextoDoPino(ligado: boolean): Omit<ContextoPino, 'agora'> 
       tempoPorNegocio,
       etapaDePara: new Map(etapas.data.map((e) => [e.texto_normalizado, e.etapa_codigo])),
       limites: Array.isArray(lim) && lim.length === 2 ? [Number(lim[0]), Number(lim[1])] : [7, 30],
+      atualizadoEm: contexto.data.atualizado_em ?? null,
     };
   }, [ligado, contexto.data, etapas.data, meuOwnerId]);
 }

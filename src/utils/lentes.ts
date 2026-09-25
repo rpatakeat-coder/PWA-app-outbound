@@ -1,0 +1,123 @@
+// Lentes e filtros do mapa novo (entrega 3; prancha §5 e §8.9).
+//
+// "Hierarquia, não filtro": a lente não esconde ninguém — decide quem ganha
+// pino inteiro (pede decisão agora) e quem vira ponto de 7 px. Quem tira do
+// mapa são os Filtros, que o vendedor escolhe e vê contados.
+
+import type { Client, OrigemLead } from '../types/client';
+import type { Pino } from './pinoP2';
+
+export type Lente = 'dia' | 'carteira' | 'alvo' | 'rec' | 'semdono' | 'calor';
+
+export const LENTES: { id: Lente; rotulo: string }[] = [
+  { id: 'dia', rotulo: 'Meu dia' },
+  { id: 'carteira', rotulo: 'Carteira' },
+  { id: 'alvo', rotulo: 'Contas-alvo' },
+  { id: 'rec', rotulo: 'Reconquista' },
+  { id: 'semdono', rotulo: 'Sem dono' },
+  { id: 'calor', rotulo: 'Calor' },
+];
+
+/** Pino inteiro nesta lente? (o resto vira ponto). Calor não mostra pino. */
+export function noFoco(lente: Lente, p: Pino, planoNumero: number | null | undefined): boolean {
+  if (lente === 'calor') return false;
+  if (planoNumero) return lente === 'dia' || lente === 'carteira' || p.dono === 'meu';
+  switch (lente) {
+    case 'dia':
+      return p.dono === 'meu' && (p.etiqueta?.texto === 'cobrar' || p.temp === 'Q' || p.temp === 'M' || p.tipo === 'cliente');
+    case 'carteira':
+      return p.dono === 'meu';
+    case 'alvo':
+      return p.tipo === 'alvo';
+    case 'rec':
+      return p.tipo === 'ex';
+    case 'semdono':
+      return p.dono === 'sem';
+  }
+}
+
+// ---- Filtros -------------------------------------------------------------
+
+export type StatusFiltro = 'lead' | 'cliente' | 'ex' | 'alvo' | 'ganho_fs';
+export type TempFiltro = 'Q' | 'M' | 'F' | 'fechado' | 'perdido' | 'alvo';
+export type OrigemFiltro = OrigemLead | 'nao_informado';
+
+export type FiltrosNovos = {
+  status: Set<StatusFiltro>;
+  temp: Set<TempFiltro>;
+  origem: Set<OrigemFiltro>;
+};
+
+export const FILTROS_VAZIOS: FiltrosNovos = { status: new Set(), temp: new Set(), origem: new Set() };
+
+export const ROTULO_STATUS: Record<StatusFiltro, string> = {
+  lead: 'Lead', cliente: 'Cliente', ex: 'Ex-Cliente', alvo: 'Conta Alvo', ganho_fs: 'Ganho - Field Sales',
+};
+export const ROTULO_TEMP: Record<TempFiltro, string> = {
+  Q: 'Quente', M: 'Morno', F: 'Frio', fechado: 'Fechado', perdido: 'Perdido', alvo: 'Conta Alvo',
+};
+
+// Cores da prancha §8.1: fundo / texto.
+export const ORIGEM: Record<OrigemFiltro, { rotulo: string; fundo: string; tinta: string }> = {
+  casa_dos_dados: { rotulo: 'Casa dos Dados', fundo: '#1E3A5F', tinta: '#BFDBFE' },
+  google_maps_motor: { rotulo: 'Google Maps · motor', fundo: '#3B2A0B', tinta: '#FDE68A' },
+  indicacao: { rotulo: 'Indicação', fundo: '#14532D', tinta: '#BBF7D0' },
+  inbound_site: { rotulo: 'Inbound site', fundo: '#312E81', tinta: '#C7D2FE' },
+  hubspot: { rotulo: 'HubSpot', fundo: '#3A2410', tinta: '#FDBA74' },
+  cadastro_na_rua: { rotulo: 'Cadastro na rua', fundo: '#3F1D1D', tinta: '#FECACA' },
+  nao_informado: { rotulo: 'Não informado', fundo: '#2A2F38', tinta: '#C9CED6' },
+};
+
+export function statusDoFiltro(c: Client, p: Pino): StatusFiltro {
+  if (c.status === 'ganho_fs') return 'ganho_fs';
+  if (p.tipo === 'alvo') return 'alvo';
+  if (p.tipo === 'ex') return 'ex';
+  if (c.status === 'cliente') return 'cliente';
+  return 'lead';
+}
+
+export function tempDoFiltro(p: Pino): TempFiltro | null {
+  if (p.tipo === 'alvo') return 'alvo';
+  if (p.tipo === 'cliente') return 'fechado';
+  if (p.temp === 'X') return 'perdido';
+  if (p.temp === 'Q' || p.temp === 'M' || p.temp === 'F') return p.temp;
+  return null; // ex-cliente e etapa desconhecida não têm temperatura
+}
+
+export function origemDoFiltro(c: Client): OrigemFiltro {
+  return (c.origem_lead as OrigemLead | null | undefined) ?? 'nao_informado';
+}
+
+/** Cada grupo marcado é um OU dentro dele; grupos diferentes se somam (E). */
+export function passaNosFiltros(c: Client, p: Pino, f: FiltrosNovos): boolean {
+  if (f.status.size && !f.status.has(statusDoFiltro(c, p))) return false;
+  if (f.temp.size) {
+    const t = tempDoFiltro(p);
+    if (!t || !f.temp.has(t)) return false;
+  }
+  if (f.origem.size && !f.origem.has(origemDoFiltro(c))) return false;
+  return true;
+}
+
+export function quantosFiltros(f: FiltrosNovos): number {
+  return f.status.size + f.temp.size + f.origem.size;
+}
+
+/**
+ * Contagem de cada chip: quantos passariam se o chip fosse o único do seu
+ * grupo, respeitando os OUTROS grupos (é o número que o chip entrega ao tocar).
+ */
+export function contarChips(itens: { c: Client; p: Pino }[], f: FiltrosNovos) {
+  const semStatus = { ...f, status: new Set<StatusFiltro>() };
+  const semTemp = { ...f, temp: new Set<TempFiltro>() };
+  const semOrigem = { ...f, origem: new Set<OrigemFiltro>() };
+  const status = new Map<StatusFiltro, number>();
+  const temp = new Map<TempFiltro, number>();
+  const origem = new Map<OrigemFiltro, number>();
+  for (const { c, p } of itens) {
+    if (passaNosFiltros(c, p, semStatus)) { const k = statusDoFiltro(c, p); status.set(k, (status.get(k) ?? 0) + 1); }
+    if (passaNosFiltros(c, p, semTemp)) { const k = tempDoFiltro(p); if (k) temp.set(k, (temp.get(k) ?? 0) + 1); }
+    if (passaNosFiltros(c, p, semOrigem)) { const k = origemDoFiltro(c); origem.set(k, (origem.get(k) ?? 0) + 1); }
+  }
+  return { status, temp, origem };
+}

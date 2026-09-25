@@ -22,6 +22,8 @@ export type ContextoPino = {
   etapaDePara: Map<string, string | null>;
   limites: [number, number];
   agora: Date;
+  /** Quando o robô do Cockpit escreveu o snapshot de onde sai o tempo parado. */
+  atualizadoEm?: string | null;
 };
 
 export type Pino = {
