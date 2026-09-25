@@ -6,7 +6,7 @@
 // passando lead frio perto na frente da cobrança; o card dizendo "0 m" ou
 // "posição exata" quando não sabe; e telefone ausente sem aviso.
 import type { Client } from '../types/client';
-import { distanciaTexto, fatosDoCard, ordenarItens, type ItemFolha } from './cardNovo';
+import { distanciaTexto, fatosDoCard, ordenarItens, textoDoToque, type ItemFolha } from './cardNovo';
 import type { Pino } from './pinoP2';
 
 let falhas = 0;
@@ -48,6 +48,12 @@ ok(fatosDoCard({ client: cli({ conta_alvo_rating: 4.5 as never, conta_alvo_revie
   .some((f) => f.texto === '4,5★ · 475 no Google'), 'nota do Google no formato da prancha');
 ok(fatosDoCard({ client: cli({}), pino: pino({ tipo: 'ex' }), distanciaM: null }).some((f) => f.texto === 'data de saída desconhecida'),
   'ex-cliente sem data diz "desconhecida", nunca "há 0 dias"');
+
+// contradições vistas na ficha do JULYAN HOUSE (25/09)
+const f1 = fatosDoCard({ client: cli({ geo_approximate: false }), pino: pino({}), distanciaM: null, aproximado: true }).map((f) => f.texto);
+ok(f1.includes('≈ posição aproximada') && !f1.includes('posição exata'), 'chip de posição segue o alerta do card, não só geo_approximate');
+ok(textoDoToque('hoje') === 'tocado hoje' && textoDoToque('12d parado') === '12d sem toque' && textoDoToque('5d') === '5d sem toque'
+  && textoDoToque('cobrar') === 'cobrança vencida', 'no card o tempo diz o que mede (sem toque), não conflita com "dias na etapa"');
 
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);

@@ -7345,7 +7345,7 @@ function ClientBottomSheet({
 
   // Mapa novo: o card da prancha usa os MESMOS handlers deste painel.
   const dadosNovo: DadosCardNovo | null = novo
-    ? { ...novo, client, isMarkingVisited, responsavelNome: responsavelNome ?? null }
+    ? { ...novo, client, isMarkingVisited, responsavelNome: responsavelNome ?? null, aproximado: isApprox }
     : null;
   const acoesNovo: AcoesCardNovo = {
     onMarkVisited, onChangeStage, onScheduleMeeting, onAddToRoute, onDismissContaAlvo, onEdit, onClose,

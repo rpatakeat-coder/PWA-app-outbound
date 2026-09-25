@@ -12,13 +12,25 @@ export function distanciaTexto(m: number | null): string | null {
 
 type Fato = { texto: string; aviso?: boolean };
 
-export function fatosDoCard(d: { client: Client; pino: Pino; distanciaM: number | null }): Fato[] {
+// O pino diz só "hoje / 5d / 12d parado" (cabe ao lado do nome); no card o
+// mesmo número ganha o que ele mede — dias SEM TOQUE — porque logo abaixo o
+// alerta de SLA fala em dias NA ETAPA, e "hoje" ao lado de "78 dias parado"
+// parecia contradição (medido na ficha do JULYAN HOUSE, 25/09).
+export function textoDoToque(t: string): string {
+  if (t === 'cobrar') return 'cobrança vencida';
+  if (t === 'hoje') return 'tocado hoje';
+  const n = t.match(/^(\d+)d/);
+  return n ? `${n[1]}d sem toque` : t;
+}
+
+/** `aproximado`: a MESMA conta do alerta de localização do card (não só geo_approximate). */
+export function fatosDoCard(d: { client: Client; pino: Pino; distanciaM: number | null; aproximado?: boolean }): Fato[] {
   const { client: c, pino } = d;
   const f: Fato[] = [];
   const dist = distanciaTexto(d.distanciaM);
   if (dist) f.push({ texto: dist });
-  if (pino.etiqueta) f.push({ texto: pino.etiqueta.texto, aviso: pino.etiqueta.texto === 'cobrar' || pino.etiqueta.texto.includes('parado') });
-  f.push(c.geo_approximate ? { texto: '≈ posição aproximada', aviso: true } : { texto: 'posição exata' });
+  if (pino.etiqueta) f.push({ texto: textoDoToque(pino.etiqueta.texto), aviso: pino.etiqueta.texto === 'cobrar' || pino.etiqueta.texto.includes('parado') });
+  f.push((d.aproximado ?? c.geo_approximate) ? { texto: '≈ posição aproximada', aviso: true } : { texto: 'posição exata' });
   f.push(c.telefone?.trim() ? { texto: `☎ ${c.telefone.trim()}` } : { texto: 'sem telefone', aviso: true });
   if (c.conta_alvo_rating != null) {
     const nota = Number(c.conta_alvo_rating).toFixed(1).replace('.', ',');

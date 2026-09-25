@@ -40,6 +40,8 @@ export type DadosCardNovo = {
   responsavelNome: string | null;
   etapaRotulo: string | null;
   isMarkingVisited: boolean;
+  /** Mesma conta do alerta "Localização aproximada" do card. */
+  aproximado?: boolean;
 };
 
 const ROTULO_TEMP: Record<string, string> = { Q: 'LEAD QUENTE', M: 'LEAD MORNO', F: 'LEAD FRIO', X: 'PERDIDO', '?': 'ETAPA NÃO RECONHECIDA' };
