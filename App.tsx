@@ -97,9 +97,10 @@ import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tan
 import { useClientSearch, useClients } from './src/hooks/useClients';
 import { useNaEquipeCockpit } from './src/hooks/useNaEquipeCockpit';
 import { useContextoDoPino, useLeadsNaFila, useMapaNovo } from './src/hooks/useMapaNovo';
-import PinoP2, { ANCORA_PINO_P2, ANCORA_PONTO, PontoP2 } from './src/map/PinoP2';
+import PinoP2, { ANCORA_PINO_P2 } from './src/map/PinoP2';
 import FiltrosMapaNovo from './src/screens/FiltrosMapaNovo';
-import { FILTROS_VAZIOS, LENTES, noFoco, passaNosFiltros, quantosFiltros, type FiltrosNovos, type Lente } from './src/utils/lentes';
+import { FILTROS_VAZIOS, LENTES, noFoco, passaNosFiltros, pontoDe, quantosFiltros, type FiltrosNovos, type Lente } from './src/utils/lentes';
+import CamadaDePontos from './src/map/CamadaDePontos';
 import { rotulosSemSobrepor } from './src/utils/rotulos';
 import { classificarPino, type ContextoPino } from './src/utils/pinoP2';
 import { useMeetings } from './src/hooks/useMeetings';
@@ -469,10 +470,10 @@ function visitadoHoje(iso: string | null | undefined): boolean {
 // (src/utils/pinoP2.ts); o memo compara o que muda o desenho.
 const MarkerP2 = React.memo(
   function MarkerP2({
-    client, contexto, onPress, planoNumero, feito, naFila, selecionado, comNome = true,
+    client, contexto, onPress, planoNumero, feito, naFila, selecionado, comNome = true, agrupar = false,
   }: {
     client: Client; contexto: ContextoPino; onPress: (client: Client) => void;
-    planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean; comNome?: boolean;
+    planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean; comNome?: boolean; agrupar?: boolean;
   }) {
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
     const pino = classificarPino(client, contexto);
@@ -482,7 +483,7 @@ const MarkerP2 = React.memo(
         onPress={handlePress}
         anchor={ANCORA_PINO_P2}
         zIndex={selecionado ? 2000 : planoNumero ? 1000 : undefined}
-        cluster={!planoNumero}
+        cluster={agrupar && !planoNumero}
       >
         <PinoP2
           pino={pino}
@@ -503,23 +504,11 @@ const MarkerP2 = React.memo(
     a.feito === b.feito &&
     a.naFila === b.naFila &&
     a.selecionado === b.selecionado &&
-    a.comNome === b.comNome,
+    a.comNome === b.comNome &&
+    a.agrupar === b.agrupar,
 );
 
-// Ponto de 7 px do mapa novo (fora da lente). Sem onPress: decisão é no pino.
-const MarkerPonto = React.memo(
-  function MarkerPonto({ client, contexto }: { client: Client; contexto: ContextoPino }) {
-    return (
-      <Marker
-        coordinate={{ latitude: client.latitude as number, longitude: client.longitude as number }}
-        anchor={ANCORA_PONTO}
-      >
-        <PontoP2 pino={classificarPino(client, contexto)} />
-      </Marker>
-    );
-  },
-  (a, b) => a.client === b.client && a.contexto === b.contexto,
-);
+
 
 const markerStyles = StyleSheet.create({
   container: { alignItems: 'center' },
@@ -1722,7 +1711,7 @@ function MainApp() {
     [itensMapaNovo, filtrosNovos],
   );
 
-  const { focoMapaNovo, pontosMapaNovo, comNome } = useMemo(() => {
+  const { focoMapaNovo, camadaPontos, comNome } = useMemo(() => {
     const foco: typeof visiveisMapaNovo = [];
     const pontos: typeof visiveisMapaNovo = [];
     for (const it of visiveisMapaNovo) {
@@ -1744,7 +1733,8 @@ function MainApp() {
       const alturaPx = layout.ehLargo ? janelaTela.height : Math.max(300, janelaTela.height - 250);
       for (const id of rotulosSemSobrepor(candidatos, { ...mapRegion, larguraPx, alturaPx })) nomes.add(id);
     }
-    return { focoMapaNovo: foco, pontosMapaNovo: pontos, comNome: nomes };
+    const camada = pontos.map(({ c, p }) => ({ lat: c.latitude as number, lng: c.longitude as number, ...pontoDe(p) }));
+    return { focoMapaNovo: foco, camadaPontos: camada, comNome: nomes };
   }, [visiveisMapaNovo, lente, selectedClient?.id, mapRegion, layout.ehLargo, janelaTela.width, janelaTela.height]);
 
   // Dia que a Agenda mostra. Unico estado novo do M4: a tira da semana vive no
@@ -3931,12 +3921,11 @@ function MainApp() {
             sem os leads engolirem as manchas. Voltam ao desligar o 🔥. */}
         {/* Mapa novo: pino P2 para os leads da área e para as paradas da
             rota (com o número do plano no selo, no lugar do RouteMarker). */}
-        {modoNovo && contextoPino && pontosMapaNovo.map(({ c }) => (
-          <MarkerPonto key={`pt-${c.id}`} client={c} contexto={contextoPino} />
-        ))}
+        {modoNovo && <CamadaDePontos pontos={camadaPontos} />}
         {modoNovo && contextoPino && focoMapaNovo.map(({ c, plano }) => (
           <MarkerP2
-            key={c.id}
+            // cluster é fixo por marcador (Marker.tsx): trocar o agrupamento recria o pino.
+            key={`${c.id}-${focoMapaNovo.length > 150 ? "g" : "s"}`}
             client={c}
             contexto={contextoPino}
             onPress={handleMarkerPress}
@@ -3945,6 +3934,9 @@ function MainApp() {
             naFila={leadsNaFila.has(c.id)}
             selecionado={selectedClient?.id === c.id}
             comNome={comNome.has(c.id)}
+            // Até a entrega de densidade: muitos pinos inteiros (lente Contas-alvo
+            // numa cidade inteira) agrupam; o plano nunca.
+            agrupar={focoMapaNovo.length > 150}
           />
         ))}
         {!heatOn && !modoNovo && filteredMapMarkers.map(client => (
