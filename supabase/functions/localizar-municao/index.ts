@@ -52,8 +52,9 @@ function tokens(s: unknown): string[] {
 //   - NOME nos dois sentidos: 60% das palavras do lead estão no título E 50% das do
 //     título estão no lead (o título com palavras a mais é outro lugar);
 //   - LUGAR: se o lead tem bairro, o endereço tem que ter o bairro; sem bairro, a
-//     cidade no endereço E o nome inteiro batendo (todas as palavras, mínimo duas,
-//     ou o título inteiro dentro do lead).
+//     cidade no endereço E todas as palavras do lead no título (mínimo duas) —
+//     "Didico Quintal do Sabor" não é "Restaurante Quintal do Sabor" só porque o
+//     título inteiro cabe no nome do lead.
 function confere(lead: any, lugar: any): { ok: boolean; motivo: string } {
   const doLead = tokens(lead.nome);
   const doTitulo = tokens(lugar.title);
@@ -71,7 +72,7 @@ function confere(lead: any, lugar: any): { ok: boolean; motivo: string } {
     if (!end.includes(bairro)) return { ok: false, motivo: 'bairro não bate: ' + lugar.address };
   } else {
     if (!cidade || !end.includes(cidade)) return { ok: false, motivo: 'cidade não bate: ' + lugar.address };
-    const nomeInteiro = (achadas === doLead.length && doLead.length >= 2) || doTituloNoLead === doTitulo.length;
+    const nomeInteiro = achadas === doLead.length && doLead.length >= 2;
     if (!nomeInteiro) return { ok: false, motivo: 'sem bairro e nome não bate inteiro: ' + lugar.title };
   }
   if (lugar.latitude == null || lugar.longitude == null) return { ok: false, motivo: 'resultado sem coordenada' };
