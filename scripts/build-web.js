@@ -43,6 +43,22 @@ if (fs.existsSync(gestao)) {
   const destino = path.join(distDir, 'gestao');
   fs.cpSync(path.join(gestao, 'dist'), destino, { recursive: true });
   console.log('> cockpit copiado pra dist/gestao/');
+
+  // /gestao E O COCKPIT FIELD SALES (25/09/2026, Julyan: "tudo uma ferramenta
+  // so"). O HTML do Cockpit (gestao/public/cockpit/, gerado por
+  // scripts/importar-cockpit.cjs) vira a entrada de /gestao. A gestao antiga
+  // continua inteira em /gestao/painel-antigo.html — os assets dela sao
+  // absolutos (/gestao/assets/) e a navegacao e por hash, entao ela funciona
+  // no endereco novo sem rebuild. E para la que o Cockpit manda #/acessos,
+  // #/desativar-acesso e #/documentacao, que so existem nela.
+  const entradaCockpit = path.join(destino, 'cockpit', 'index.html');
+  if (!fs.existsSync(entradaCockpit)) {
+    console.error('ERRO: dist/gestao/cockpit/index.html nao existe — /gestao ficaria sem o Cockpit.');
+    process.exit(1);
+  }
+  fs.renameSync(path.join(destino, 'index.html'), path.join(destino, 'painel-antigo.html'));
+  fs.copyFileSync(entradaCockpit, path.join(destino, 'index.html'));
+  console.log('> /gestao agora e o Cockpit; gestao antiga em /gestao/painel-antigo.html');
 }
 
 /** Lista recursiva de arquivos, com caminho relativo a `dir`. */

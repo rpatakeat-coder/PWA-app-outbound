@@ -74,6 +74,13 @@ const camada = `<script>
 /* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@${commit}.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
+  /* /gestao E O COCKPIT desde 25/09/2026. As tres telas que so a gestao antiga
+     tem (os links do app de campo apontam para elas) continuam existindo em
+     /gestao/painel-antigo.html — o mapa nao precisa mudar nenhum link. */
+  if (/^#\\/(acessos|desativar-acesso|documentacao)\\b/.test(location.hash)) {
+    location.replace('/gestao/painel-antigo.html' + location.hash);
+    return;
+  }
   var FN = ${JSON.stringify(url + '/functions/v1/')};
   var ROTAS = ${JSON.stringify(ROTAS)};
   var original = window.fetch.bind(window);
