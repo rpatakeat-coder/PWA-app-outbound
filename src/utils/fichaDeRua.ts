@@ -211,3 +211,56 @@ export function notaDaVisita(f: Ficha, p: { cliente: string; ocorridoEm: string;
 export function completude(dados: { nomeReal: boolean; decisor: boolean; telefone: boolean; tipo: boolean; bairro: boolean }): number {
   return [dados.nomeReal, dados.decisor, dados.telefone, dados.tipo, dados.bairro].filter(Boolean).length;
 }
+
+// ---- Campos das etapas (mesmos rótulos, picklists e validação do Cockpit) ----
+export const PICKLIST: Record<string, string[]> = {
+  origem_do_lead: ['Rua', 'Indicação', 'Casa dos Dados', 'Instagram', 'Ads', 'GoogleMaps', 'Familia', 'Eventos'],
+  gargalo_operacional: ['Fila', 'Falta de Garçom', 'Falta de Gestão', 'Sem fidelização', 'Demora na divisão de contas', 'Estoque'],
+  plano_apresentado: ['Básico (PDV + delivery)', 'Básico (PDV + mesa + delivery)', 'Inovação', 'Pro', 'Enterprise'],
+  motivo_do_perdido: MOTIVOS_PERDIDO.map((m) => m.valor),
+};
+export type TipoCampo = 'selecao' | 'texto' | 'tel' | 'numero' | 'data';
+export const TIPO_CAMPO: Record<string, TipoCampo> = {
+  origem_do_lead: 'selecao', gargalo_operacional: 'selecao', plano_apresentado: 'selecao', motivo_do_perdido: 'selecao',
+  celular: 'tel', nome_do_sistema: 'texto', valor_de_mrr: 'numero', data_da_reuniao: 'data', observacao__desqualificado: 'texto',
+};
+// No Cockpit, "Outros" e "Funcionalidade" não explicam sozinhos: pedem o texto.
+export const MOTIVOS_QUE_EXIGEM_TEXTO = ['Outros', 'Funcionalidade'];
+
+/** Etapas da folha "Mudar etapa", na ordem do prompt (Reciclagem e Perdido no fim). */
+export const ETAPAS_DA_FOLHA: string[] = [
+  ETAPA.prospeccao, ETAPA.visita, ETAPA.decisor, ETAPA.demo, ETAPA.negociacao, ETAPA.pagamento, ETAPA.onboarding,
+  ETAPA.reciclagem, ETAPA.perdido,
+];
+
+/**
+ * Valida o que a pessoa digitou e monta `propriedades` no formato que o
+ * servidor grava: número > 0 como texto; data como meia-noite UTC em ms
+ * (igual ao Cockpit); picklist só com valor da lista.
+ */
+export function montarPropriedades(destino: string, digitado: Record<string, string>, jaTem: Record<string, unknown>):
+  { propriedades: Record<string, string>; erros: Record<string, string> } {
+  const propriedades: Record<string, string> = {};
+  const erros: Record<string, string> = {};
+  const exigidos = [...(PROPS_OBRIGATORIAS_POR_ETAPA[destino] ?? [])];
+  if (destino === ETAPA.perdido && MOTIVOS_QUE_EXIGEM_TEXTO.includes(digitado.motivo_do_perdido ?? '')) exigidos.push('observacao__desqualificado');
+  for (const k of exigidos) {
+    const v = (digitado[k] ?? '').trim();
+    const temNoNegocio = jaTem[k] != null && String(jaTem[k]).trim() !== '';
+    if (!v) { if (!temNoNegocio) erros[k] = k === 'observacao__desqualificado' ? 'Este motivo não explica sozinho — escreva o que pesou.' : 'Preencha para mudar a etapa.'; continue; }
+    const tipo = TIPO_CAMPO[k] ?? 'texto';
+    if (tipo === 'selecao' && !(PICKLIST[k] ?? []).includes(v)) { erros[k] = 'Escolha uma das opções.'; continue; }
+    if (tipo === 'numero') {
+      const n = Number(v.replace(',', '.'));
+      if (!isFinite(n) || n <= 0) { erros[k] = 'Valor inválido.'; continue; }
+      propriedades[k] = String(n); continue;
+    }
+    if (tipo === 'data') {
+      const d = new Date(`${v}T00:00:00Z`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(d.getTime())) { erros[k] = 'Data inválida.'; continue; }
+      propriedades[k] = String(d.getTime()); continue;
+    }
+    propriedades[k] = v;
+  }
+  return { propriedades, erros };
+}

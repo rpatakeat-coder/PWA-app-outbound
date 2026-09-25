@@ -102,6 +102,7 @@ import FiltrosMapaNovo from './src/screens/FiltrosMapaNovo';
 import { PeekCardNovo, TopoCardNovo, type AcoesCardNovo, type DadosCardNovo } from './src/screens/CardLeadNovo';
 import FolhaDoMapa, { type ItemFolha } from './src/screens/FolhaDoMapa';
 import FichaDeRua, { type CamposCadastro } from './src/screens/FichaDeRua';
+import MudarEtapaNovo from './src/screens/MudarEtapaNovo';
 import { ROTULO_ETAPA } from './src/utils/fichaDeRua';
 import { negocioAcao } from './src/utils/negocioAcao';
 import { textoNormalizado } from './src/utils/pinoP2';
@@ -3110,6 +3111,22 @@ function MainApp() {
   const [isVisiting, setIsVisiting] = useState(false);
   // Sobe logo depois do check-in bem-sucedido: o que aconteceu DENTRO da visita
   // (ver DesfechoVisitaSheet). Puravel — o check-in ja' gravou.
+  // Mudar etapa do mapa novo (porta única): lead + etapa atual no código do Cockpit.
+  const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null } | null>(null);
+  const codigoDaEtapa = (c: Client): string | null => {
+    if (!contextoPino) return null;
+    const chave = textoNormalizado(c.etapa);
+    const pelaTabela = chave ? contextoPino.etapaDePara.get(chave) ?? null : null;
+    const peloSnapshot = c.id_hubspot ? contextoPino.tempoPorNegocio.get(String(c.id_hubspot))?.etapaCodigo ?? null : null;
+    return pelaTabela ?? peloSnapshot;
+  };
+  const aplicarEtapaNoLead = (clientId: string, codigo: string) => {
+    // O HubSpot já gravou; o rótulo no lead faz a letra do pino mudar na hora.
+    const rotulo = ROTULO_ETAPA[codigo];
+    if (!rotulo) return;
+    void supabase.from('clients').update({ etapa: rotulo }).eq('id', clientId)
+      .then(() => queryClient.invalidateQueries({ queryKey: ['clients'] }));
+  };
   // Ficha de rua (mapa novo): abre depois do check-in de um lead.
   const [fichaPendente, setFichaPendente] = useState<{
     client: Client; checkinEm: string; etapaAtual: string | null; primeiraVisita: boolean;
@@ -3911,7 +3928,12 @@ function MainApp() {
       onCancelMeeting={isViewer ? undefined : (m) => confirmCancelMeeting(m)}
       onChangeStage={
         !isViewer && selectedClient.status === 'lead'
-          ? () => { setChangingStageFor({ client: selectedClient }); setSelectedClient(null); }
+          ? () => {
+              // Mapa novo: porta única do Cockpit (regras do servidor). Mapa atual: modal de hoje.
+              if (modoNovo && contextoPino) setEtapaNovaPara({ client: selectedClient, etapaAtual: codigoDaEtapa(selectedClient) });
+              else setChangingStageFor({ client: selectedClient });
+              setSelectedClient(null);
+            }
           : undefined
       }
       isMarkingVisited={isVisiting || markAsVisited.isPending}
@@ -6900,13 +6922,16 @@ function MainApp() {
               if (error) throw error;
             }
           }}
-          onEtapaMudou={(codigo) => {
-            // O HubSpot já gravou; põe o rótulo no lead para a letra do pino mudar na hora.
-            const rotulo = ROTULO_ETAPA[codigo];
-            if (!rotulo) return;
-            void supabase.from('clients').update({ etapa: rotulo }).eq('id', fichaPendente.client.id)
-              .then(() => queryClient.invalidateQueries({ queryKey: ['clients'] }));
-          }}
+          onEtapaMudou={(codigo) => aplicarEtapaNoLead(fichaPendente.client.id, codigo)}
+        />
+      )}
+      {etapaNovaPara && (
+        <MudarEtapaNovo
+          visivel
+          client={etapaNovaPara.client}
+          etapaAtual={etapaNovaPara.etapaAtual}
+          onFechar={() => setEtapaNovaPara(null)}
+          onMudou={(codigo) => aplicarEtapaNoLead(etapaNovaPara.client.id, codigo)}
         />
       )}
       {desfechoPendente && (

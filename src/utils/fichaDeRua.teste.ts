@@ -6,7 +6,7 @@
 // (pular fase, Ganho), mandar "decisor_alcancado: nao", salvar sem o que é
 // obrigatório, e pedir o nome do lugar para "Bar do Zé".
 import {
-  ETAPA, FICHA_VAZIA, etapaSugerida, faltandoParaEtapa, movimentoPermitido, notaDaVisita,
+  ETAPA, FICHA_VAZIA, etapaSugerida, faltandoParaEtapa, montarPropriedades, movimentoPermitido, notaDaVisita,
   pareceNomeDePessoa, proximoPassoDaFicha, rotuloSalvar, type Ficha,
 } from './fichaDeRua';
 
@@ -61,6 +61,18 @@ ok(/\ndecisor_alcancado: sim\n/.test(notaDaVisita(F({ comoFoi: 'falou_com_deciso
 // nome de pessoa
 ok(pareceNomeDePessoa('Amanda') && pareceNomeDePessoa('FRANCISCO'), 'Amanda / FRANCISCO parecem pessoa');
 ok(!pareceNomeDePessoa('Bar do Zé') && !pareceNomeDePessoa('Avelí') && !pareceNomeDePessoa('Marcos Bar'), 'nome de lugar não pede correção');
+
+// folha "Mudar etapa": propriedades no formato do servidor
+const demo = montarPropriedades(ETAPA.demo, { plano_apresentado: 'Pro', valor_de_mrr: '249,90', data_da_reuniao: '2026-09-30' }, {});
+ok(demo.propriedades.valor_de_mrr === '249.9' && demo.propriedades.data_da_reuniao === String(Date.UTC(2026, 8, 30)) && !Object.keys(demo.erros).length,
+  'Demo: MRR com vírgula vira número e a data vira meia-noite UTC em ms (igual ao Cockpit)');
+ok(montarPropriedades(ETAPA.demo, { plano_apresentado: 'Plano X', valor_de_mrr: '0', data_da_reuniao: '30/09' }, {}).erros.plano_apresentado === 'Escolha uma das opções.',
+  'picklist fora da lista é recusada no app');
+ok(Object.keys(montarPropriedades(ETAPA.demo, { plano_apresentado: 'Pro', valor_de_mrr: '0', data_da_reuniao: '30/09' }, {}).erros).length === 2, 'MRR 0 e data mal escrita são recusados');
+ok(!Object.keys(montarPropriedades(ETAPA.decisor, {}, { celular: '+5527999', gargalo_operacional: 'Fila', nome_do_sistema: 'Saipos' }).erros).length,
+  'o que o negócio já tem não é pedido de novo');
+ok(montarPropriedades(ETAPA.perdido, { motivo_do_perdido: 'Outros' }, {}).erros.observacao__desqualificado !== undefined, 'Perdido por "Outros" pede o texto');
+ok(!Object.keys(montarPropriedades(ETAPA.perdido, { motivo_do_perdido: 'Preço' }, {}).erros).length, 'Perdido por "Preço" não pede texto');
 
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);
