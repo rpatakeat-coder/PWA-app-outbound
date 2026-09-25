@@ -2695,7 +2695,7 @@ function MainApp() {
   // Folha de baixo do mapa novo: no celular, sem lead aberto, fora do modo de
   // criação e fora da lente Calor. Uma condição só para a folha, o "+" e o
   // encolhimento do mapa (logo do Google visível).
-  const folhaVisivel = modoNovo && !layout.ehLargo && !creationMode && !selectedClient && lente !== 'calor';
+  const folhaVisivel = modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && lente !== 'calor';
   // Margem do mapa = onde o mapa terminaria sem margem menos o topo MEDIDO da
   // folha (a barra de baixo real não tem a altura do baseInferior; a conta
   // fixa deixava o logo do Google 34 px atrás da folha — medido em 25/09).
@@ -4436,7 +4436,7 @@ function MainApp() {
       )}
 
       {/* "+" do mapa novo: botão flutuante acima da folha (C10); o rodapé fica sem botão central. */}
-      {modoNovo && !layout.ehLargo && !creationMode && !isViewer && !selectedClient && (
+      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !isViewer && !selectedClient && (
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Novo lead"
@@ -10140,8 +10140,9 @@ const styles = StyleSheet.create({
   // Rodape do mapa novo: 4 abas iguais, alvo inteiro, traco de 3px no topo da ativa.
   navItemNovo: { minHeight: 60, position: 'relative' },
   navTracoAtivo: { position: 'absolute', top: -1, left: '22%', right: '22%', height: 3, borderRadius: 2, backgroundColor: '#C8131B' },
-  navBadgeClaro: { backgroundColor: 'var(--bg)', borderColor: 'var(--surface)' },
-  navBadgeTextClaro: { color: 'var(--text)' },
+  // Selo claro no escuro, escuro no claro: o texto do tema invertido.
+  navBadgeClaro: { backgroundColor: 'var(--text)', borderColor: 'var(--surface)' },
+  navBadgeTextClaro: { color: 'var(--surface)' },
   headerPilula: {
     flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, paddingHorizontal: 14,
     borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.18)',
