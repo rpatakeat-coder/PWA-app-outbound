@@ -65,6 +65,13 @@ function confere(lead: any, lugar: any): { ok: boolean; motivo: string } {
   const doTituloNoLead = doTitulo.filter((t) => noLead.has(t)).length;
   if (!achadas || achadas / doLead.length < 0.6) return { ok: false, motivo: 'nome não bate: ' + lugar.title };
   if (!doTitulo.length || doTituloNoLead / doTitulo.length < 0.5) return { ok: false, motivo: 'título tem outro nome: ' + lugar.title };
+  // NOME DE UMA PALAVRA SÓ ("na brasa", "Bar do Zé") não decide sozinho: a rodada
+  // real de 25/09 gravou "na brasa" em "Irmãos na Brasa", e o dry_run minutos
+  // antes tinha casado o mesmo lead com "Boteco na Brasa". Aí o título não pode ter
+  // nenhuma palavra a mais que o lead.
+  if (doLead.length === 1 && doTituloNoLead !== doTitulo.length) {
+    return { ok: false, motivo: 'nome de uma palavra só e título com outras: ' + lugar.title };
+  }
   const end = norm(lugar.address);
   const cidade = norm(lead.cidade);
   const bairro = norm(lead.bairro);
