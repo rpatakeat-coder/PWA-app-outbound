@@ -99,6 +99,8 @@ import { useNaEquipeCockpit } from './src/hooks/useNaEquipeCockpit';
 import { useContextoDoPino, useLeadsNaFila, useMapaNovo } from './src/hooks/useMapaNovo';
 import PinoP2, { ANCORA_PINO_P2 } from './src/map/PinoP2';
 import FiltrosMapaNovo from './src/screens/FiltrosMapaNovo';
+import { PeekCardNovo, TopoCardNovo, type AcoesCardNovo, type DadosCardNovo } from './src/screens/CardLeadNovo';
+import FolhaDoMapa, { type ItemFolha } from './src/screens/FolhaDoMapa';
 import { FILTROS_VAZIOS, LENTES, noFoco, passaNosFiltros, pontoDe, quantosFiltros, type FiltrosNovos, type Lente } from './src/utils/lentes';
 import CamadaDePontos from './src/map/CamadaDePontos';
 import { rotulosSemSobrepor } from './src/utils/rotulos';
@@ -1738,6 +1740,22 @@ function MainApp() {
     const camada = pontos.map(({ c, p }) => ({ lat: c.latitude as number, lng: c.longitude as number, ...pontoDe(p) }));
     return { focoMapaNovo: foco, camadaPontos: camada, comNome: nomes };
   }, [visiveisMapaNovo, lente, selectedClient?.id, mapRegion, layout.ehLargo, janelaTela.width, janelaTela.height]);
+
+  // Folha de baixo do mapa novo: os pinos da lente, com distância e se a
+  // parada do plano já foi feita.
+  const itensFolha = useMemo<ItemFolha[]>(() => {
+    const feitos = new Set(routeStops.filter((s) => s.status === 'done').map((s) => s.client_id));
+    const distancia = (c: Client) => {
+      if (!userLocation || c.latitude == null || c.longitude == null) return null;
+      const r = 6371000;
+      const dLat = ((Number(c.latitude) - userLocation.latitude) * Math.PI) / 180;
+      const dLon = ((Number(c.longitude) - userLocation.longitude) * Math.PI) / 180;
+      const a = Math.sin(dLat / 2) ** 2
+        + Math.cos((userLocation.latitude * Math.PI) / 180) * Math.cos((Number(c.latitude) * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+      return 2 * r * Math.asin(Math.sqrt(a));
+    };
+    return focoMapaNovo.map(({ c, p, plano }) => ({ c, p, plano, distanciaM: distancia(c), feito: feitos.has(c.id) }));
+  }, [focoMapaNovo, routeStops, userLocation]);
 
   // Dia que a Agenda mostra. Unico estado novo do M4: a tira da semana vive no
   // header (que e' desta casca) e o corpo vive na AgendaScreen, entao o dia
@@ -3664,6 +3682,16 @@ function MainApp() {
   const selectedClientSheet = selectedClient ? (
     <ClientBottomSheet
       client={selectedClient}
+      novo={modoNovo && contextoPino ? {
+        pino: classificarPino(selectedClient, contextoPino),
+        planoNumero: (() => { const i = routeDisplayClients.findIndex((c) => c.id === selectedClient.id); return i >= 0 ? i + 1 : null; })(),
+        naRota: routeStopClientIds.has(selectedClient.id),
+        visitadoHoje: visitadoHoje(selectedClient.visited_at),
+        distanciaM: userLocation && selectedClient.latitude != null && selectedClient.longitude != null
+          ? haversineMeters(userLocation.latitude, userLocation.longitude, Number(selectedClient.latitude), Number(selectedClient.longitude))
+          : null,
+        etapaRotulo: selectedClient.etapa ?? null,
+      } : null}
       insets={insets}
       statusConfig={statusConfig}
       slaDays={routeSlaDays}
@@ -4152,6 +4180,21 @@ function MainApp() {
         >
           <IconPlus width={26} height={26} fill="#fff" />
         </TouchableOpacity>
+      )}
+
+      {/* Mapa novo: folha de baixo sem lead aberto (prancha §5). No
+          desktop o painel lateral de 352px continua fazendo esse papel. */}
+      {modoNovo && !layout.ehLargo && !creationMode && !selectedClient && lente !== 'calor' && (
+        <FolhaDoMapa
+          itens={itensFolha}
+          planoTotal={routeDisplayClients.length}
+          planoFeito={routeStops.filter((s) => s.status === 'done').length}
+          chao={baseInferior}
+          totalNaArea={visiveisMapaNovo.length}
+          rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
+          onAbrir={handleMarkerPress}
+          onCheguei={(c) => handleMarkAsVisited(c)}
+        />
       )}
 
       {creationMode && creationCenter && (
@@ -6935,7 +6978,10 @@ function ClientBottomSheet({
   onSavePhone,
   responsavelNome,
   onReenviarHubspot,
+  novo,
 }: {
+  /** Mapa novo (prancha §7): troca o topo e o peek; abas e alertas continuam. */
+  novo?: Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> | null;
   client: Client;
   insets: { bottom: number };
   statusConfig: Record<string, { label: string; color: string }>;
@@ -7296,6 +7342,14 @@ function ClientBottomSheet({
   // arraste) e a acessibilidade vivem no <Painel> — a casca unica do app
   // (M1b). Aqui fica so' o conteudo das faixas.
   const layout = useLayout();
+
+  // Mapa novo: o card da prancha usa os MESMOS handlers deste painel.
+  const dadosNovo: DadosCardNovo | null = novo
+    ? { ...novo, client, isMarkingVisited, responsavelNome: responsavelNome ?? null }
+    : null;
+  const acoesNovo: AcoesCardNovo = {
+    onMarkVisited, onChangeStage, onScheduleMeeting, onAddToRoute, onDismissContaAlvo, onEdit, onClose,
+  };
 
   // ── Faixa de topo (M1c) ───────────────────────────────────────────────
   // Identificacao + as acoes principais, fixas: nao rolam com a ficha. No
@@ -7784,7 +7838,7 @@ function ClientBottomSheet({
       visivel
       aoFechar={onClose}
       rotulo={primaryName}
-      topo={faixaTopo}
+      topo={novo ? <TopoCardNovo d={dadosNovo!} a={acoesNovo} /> : faixaTopo}
       estagio={estagio}
       aoTrocarEstagio={setEstagio}
       estiloCorpo={layout.ehDesktop ? styles.corpoDesktop : styles.corpoMobile}
@@ -7793,7 +7847,18 @@ function ClientBottomSheet({
       indicesGrudados={[1]}
       // Estagio 1 (celular): peek — linha do lead + tres acoes de 48px.
       // O restante da ficha so' monta no estagio 2.
-      peek={
+      peek={novo ? (
+            <View>
+              {tarefaDaGestao ? (
+                <View style={[styles.fichaTarefa, { marginHorizontal: 16 }]}>
+                  <Text style={styles.fichaTarefaTitulo} numberOfLines={2}>
+                    {tarefaDaGestao.assunto.replace(/^(?:visita|follow.?up)\s*[-–—]\s*/i, '').trim() || 'Tarefa da gestão'}
+                  </Text>
+                </View>
+              ) : null}
+              <PeekCardNovo d={dadosNovo!} a={acoesNovo} />
+            </View>
+          ) : (
             <View style={styles.peekCorpo}>
               {/* O RECADO DA TAREFA QUE TROUXE A PESSOA ATE' AQUI.
                   Vai no PEEK, e nao no `topo`: no celular a ficha abre neste
@@ -7892,6 +7957,7 @@ function ClientBottomSheet({
                 </TouchableOpacity>
               </View>
             </View>
+          )
       }
     >
       {/* Filhos do corpo como ARRAY EXPLICITO de tres posicoes: a barra de
