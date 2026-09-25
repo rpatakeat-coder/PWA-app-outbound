@@ -985,6 +985,7 @@ function MainApp() {
   const [alturaFolha, setAlturaFolha] = useState(0);
   const [topoFolha, setTopoFolha] = useState<number | null>(null);
   const [margemMapa, setMargemMapa] = useState(0);
+  const [fundoMapaTela, setFundoMapaTela] = useState<number | null>(null);
   // Sem o "Mapa | Lista" no topo, quem estava na Lista volta para o mapa.
   useEffect(() => { if (modoNovo) setVistaMapa('mapa'); }, [modoNovo]);
 
@@ -2654,11 +2655,11 @@ function MainApp() {
   // folha (a barra de baixo real não tem a altura do baseInferior; a conta
   // fixa deixava o logo do Google 34 px atrás da folha — medido em 25/09).
   useEffect(() => {
-    if (!folhaVisivel || topoFolha == null || !mapLayout) { if (margemMapa !== 0 && !folhaVisivel) setMargemMapa(0); return; }
-    const fundoSemMargem = mapLayout.y + mapLayout.height + margemMapa;
+    if (!folhaVisivel || topoFolha == null || fundoMapaTela == null) { if (margemMapa !== 0 && !folhaVisivel) setMargemMapa(0); return; }
+    const fundoSemMargem = fundoMapaTela + margemMapa;
     const alvo = Math.max(0, Math.round(fundoSemMargem - topoFolha));
     if (Math.abs(alvo - margemMapa) > 1) setMargemMapa(alvo);
-  }, [folhaVisivel, topoFolha, mapLayout, margemMapa]);
+  }, [folhaVisivel, topoFolha, fundoMapaTela, margemMapa]);
 
   const [resolvingPin, setResolvingPin] = useState(false);
 
@@ -3985,6 +3986,9 @@ function MainApp() {
         onLayout={(e) => {
           const { x, y, width, height } = e.nativeEvent.layout;
           setMapLayout({ x, y, width, height });
+          // Fundo do mapa na régua da TELA (para a folha do mapa novo não tapar o logo do Google).
+          const alvo = (e.nativeEvent as unknown as { target?: { getBoundingClientRect?: () => DOMRect } }).target;
+          if (alvo?.getBoundingClientRect) setFundoMapaTela(Math.round(alvo.getBoundingClientRect().bottom));
         }}
         initialRegion={mapCenter}
         showsUserLocation={true}

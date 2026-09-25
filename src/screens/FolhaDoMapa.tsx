@@ -62,7 +62,13 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
   const proxima = useMemo(() => ordenarItens(itens, 'prioridade').find((it) => it.plano && !it.feito) ?? null, [itens]);
 
   return (
-    <View style={[s.folha, { bottom: chao }]} accessibilityLabel="Agora, perto de você" onLayout={(e) => aoMedir?.({ y: Math.round(e.nativeEvent.layout.y), altura: Math.round(e.nativeEvent.layout.height) })}>
+    <View style={[s.folha, { bottom: chao }]} accessibilityLabel="Agora, perto de você" onLayout={(e) => {
+      // No navegador o evento traz o próprio elemento: o topo vem na régua da
+      // TELA, a mesma do mapa (o layout.y é relativo ao pai, que não é o do mapa).
+      const alvo = (e.nativeEvent as unknown as { target?: { getBoundingClientRect?: () => DOMRect } }).target;
+      const topo = alvo?.getBoundingClientRect ? alvo.getBoundingClientRect().top : e.nativeEvent.layout.y;
+      aoMedir?.({ y: Math.round(topo), altura: Math.round(e.nativeEvent.layout.height) });
+    }}>
       <Pressable accessibilityRole="button" accessibilityLabel={aberta ? 'Recolher a lista' : 'Abrir a lista desta área'} onPress={() => setAberta((v) => !v)} style={s.alca}>
         <View style={s.alcaBarra} />
       </Pressable>
