@@ -29,33 +29,53 @@ const GENERICAS = new Set([
   'restaurante', 'bar', 'lanchonete', 'pizzaria', 'padaria', 'cafe', 'cafeteria', 'bistro', 'lanches',
   'gastrobar', 'espetos', 'espeto', 'churrascaria', 'hamburgueria', 'burger', 'delivery', 'comercio',
   'alimentos', 'ltda', 'me', 'eireli', 'epp', 'de', 'da', 'do', 'das', 'dos', 'e', 'a', 'o', 'the',
-  'sp', 'rj', 'mg', 'pr', 'rs', 'sc', 'ba', 'go', 'df', 'unidade', 'filial', 'loja',
+  'sp', 'rj', 'mg', 'pr', 'rs', 'sc', 'ba', 'go', 'df', 'es', 'unidade', 'filial', 'loja',
+  'boteco', 'quiosque', 'na', 'no', 'em', 'oficial',
 ]);
+// Abreviações de logradouro/bairro: "Jd São Jorge" e "Jardim São Jorge" são o mesmo lugar.
+const ABREVIACOES: Record<string, string> = {
+  jd: 'jardim', jdm: 'jardim', vl: 'vila', pq: 'parque', sta: 'santa', sto: 'santo', cj: 'conjunto', res: 'residencial',
+};
 
 function norm(s: unknown): string {
-  return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-    .replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
+    .split(' ').map((t) => ABREVIACOES[t] ?? t).join(' ');
 }
 function tokens(s: unknown): string[] {
-  return norm(s).split(' ').filter((t) => t.length > 1 && !GENERICAS.has(t));
+  return [...new Set(norm(s).split(' ').filter((t) => t.length > 1 && !GENERICAS.has(t)))];
 }
 
-// O nome bate quando as palavras que identificam o lead aparecem no título do lugar
-// (pelo menos uma, e pelo menos 60% delas). O lugar bate quando o endereço do
-// resultado cita a cidade do lead (ou o bairro, para cidade escrita de outro jeito).
+// A regra é conservadora de propósito (dry_run de 25/09 mostrou os três jeitos de
+// errar: "Gula Gula" casou com "Santa Gula Doces", "Top Gourmet" da Cidade de Deus
+// com "Top Life Gourmet Fitness" na Praça Seca, "Bar do Zé" só pela palavra "Zé"):
+//   - NOME nos dois sentidos: 60% das palavras do lead estão no título E 50% das do
+//     título estão no lead (o título com palavras a mais é outro lugar);
+//   - LUGAR: se o lead tem bairro, o endereço tem que ter o bairro; sem bairro, a
+//     cidade no endereço E o nome inteiro batendo (todas as palavras, mínimo duas,
+//     ou o título inteiro dentro do lead).
 function confere(lead: any, lugar: any): { ok: boolean; motivo: string } {
   const doLead = tokens(lead.nome);
-  const doTitulo = new Set(tokens(lugar.title));
+  const doTitulo = tokens(lugar.title);
   if (!doLead.length) return { ok: false, motivo: 'nome do lead só tem palavra genérica' };
-  const achadas = doLead.filter((t) => doTitulo.has(t)).length;
+  const titulo = new Set(doTitulo);
+  const noLead = new Set(doLead);
+  const achadas = doLead.filter((t) => titulo.has(t)).length;
+  const doTituloNoLead = doTitulo.filter((t) => noLead.has(t)).length;
   if (!achadas || achadas / doLead.length < 0.6) return { ok: false, motivo: 'nome não bate: ' + lugar.title };
+  if (!doTitulo.length || doTituloNoLead / doTitulo.length < 0.5) return { ok: false, motivo: 'título tem outro nome: ' + lugar.title };
   const end = norm(lugar.address);
   const cidade = norm(lead.cidade);
   const bairro = norm(lead.bairro);
-  const lugarBate = (cidade && end.includes(cidade)) || (bairro && bairro.length > 3 && end.includes(bairro));
-  if (!lugarBate) return { ok: false, motivo: 'lugar não bate: ' + lugar.address };
+  if (bairro) {
+    if (!end.includes(bairro)) return { ok: false, motivo: 'bairro não bate: ' + lugar.address };
+  } else {
+    if (!cidade || !end.includes(cidade)) return { ok: false, motivo: 'cidade não bate: ' + lugar.address };
+    const nomeInteiro = (achadas === doLead.length && doLead.length >= 2) || doTituloNoLead === doTitulo.length;
+    if (!nomeInteiro) return { ok: false, motivo: 'sem bairro e nome não bate inteiro: ' + lugar.title };
+  }
   if (lugar.latitude == null || lugar.longitude == null) return { ok: false, motivo: 'resultado sem coordenada' };
-  return { ok: true, motivo: 'nome ' + achadas + '/' + doLead.length + ' e lugar batem' };
+  return { ok: true, motivo: 'nome ' + achadas + '/' + doLead.length + ', título ' + doTituloNoLead + '/' + doTitulo.length + ', lugar bate' };
 }
 
 const json = (s: number, b: unknown) => new Response(JSON.stringify(b), { status: s, headers: { 'Content-Type': 'application/json' } });
