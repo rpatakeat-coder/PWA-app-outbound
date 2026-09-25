@@ -26,6 +26,8 @@ export type AcoesCardNovo = {
   onDismissContaAlvo?: () => void;
   onEdit?: () => void;
   onClose: () => void;
+  /** Peek → ficha completa (abas Histórico · Agenda · Dados). */
+  onExpandir?: () => void;
 };
 
 export type DadosCardNovo = {
@@ -154,11 +156,17 @@ function Cabecalho({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; com
   const sub = subtitulo(d.client);
   return (
     <View style={s.cabecalho}>
-      <View style={{ flex: 1, minWidth: 0 }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={compacto && a.onExpandir ? 'Abrir ficha completa' : undefined}
+        disabled={!compacto || !a.onExpandir}
+        onPress={a.onExpandir}
+        style={{ flex: 1, minWidth: 0 }}
+      >
         <Text style={[s.kicker, { color: d.pino.cor }]} numberOfLines={1}>{kicker(d)}</Text>
         <Text style={[s.titulo, nome.length > 40 && s.tituloLongo]} numberOfLines={compacto ? 1 : 2}>{nome}</Text>
         <Text style={[s.sub, !sub && s.vazio]} numberOfLines={1}>{sub ?? 'endereço não informado'}</Text>
-      </View>
+      </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={a.onClose} style={s.fechar}>
         <Text style={s.fecharTexto}>✕</Text>
       </Pressable>
@@ -201,6 +209,11 @@ export function PeekCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       <Fatos d={d} />
       <BotaoCheguei d={d} a={a} />
       <GradeQuatro d={d} a={a} />
+      {a.onExpandir && (
+        <Pressable accessibilityRole="button" accessibilityLabel="Abrir ficha completa" onPress={a.onExpandir} style={s.expandir}>
+          <Text style={s.expandirTexto}>Ficha completa · etapa, agenda, histórico, dados ▴</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -288,5 +301,7 @@ const s = StyleSheet.create({
   infoRotulo: { fontSize: 11, fontWeight: '800', letterSpacing: 0.6, color: 'var(--text-muted)', width: 56 },
   infoValor: { flex: 1, fontSize: 13, fontWeight: '600', color: 'var(--text)' },
   origem: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  expandir: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  expandirTexto: { fontSize: 13, fontWeight: '700', color: 'var(--info-text)' },
   origemTexto: { fontSize: 12, fontWeight: '800' },
 });

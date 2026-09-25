@@ -7349,6 +7349,7 @@ function ClientBottomSheet({
     : null;
   const acoesNovo: AcoesCardNovo = {
     onMarkVisited, onChangeStage, onScheduleMeeting, onAddToRoute, onDismissContaAlvo, onEdit, onClose,
+    onExpandir: () => setEstagio('cheia'),
   };
 
   // ── Faixa de topo (M1c) ───────────────────────────────────────────────
