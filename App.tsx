@@ -2646,6 +2646,20 @@ function MainApp() {
   // Sem isso, o pin visual aponta um lugar mas a coordenada salva e' outra.
   const [mapLayout, setMapLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
 
+  // Folha de baixo do mapa novo: no celular, sem lead aberto, fora do modo de
+  // criação e fora da lente Calor. Uma condição só para a folha, o "+" e o
+  // encolhimento do mapa (logo do Google visível).
+  const folhaVisivel = modoNovo && !layout.ehLargo && !creationMode && !selectedClient && lente !== 'calor';
+  // Margem do mapa = onde o mapa terminaria sem margem menos o topo MEDIDO da
+  // folha (a barra de baixo real não tem a altura do baseInferior; a conta
+  // fixa deixava o logo do Google 34 px atrás da folha — medido em 25/09).
+  useEffect(() => {
+    if (!folhaVisivel || topoFolha == null || !mapLayout) { if (margemMapa !== 0 && !folhaVisivel) setMargemMapa(0); return; }
+    const fundoSemMargem = mapLayout.y + mapLayout.height + margemMapa;
+    const alvo = Math.max(0, Math.round(fundoSemMargem - topoFolha));
+    if (Math.abs(alvo - margemMapa) > 1) setMargemMapa(alvo);
+  }, [folhaVisivel, topoFolha, mapLayout, margemMapa]);
+
   const [resolvingPin, setResolvingPin] = useState(false);
 
   const startMapCreation = useCallback(() => {
@@ -3960,19 +3974,6 @@ function MainApp() {
   const rotaMapaGrande = rotaMovel && (mapaExpandido || routeDisplayClients.length === 0);
   const rotaFaixaDeMapa = rotaMovel && !rotaMapaGrande;
 
-  // Folha de baixo do mapa novo: no celular, sem lead aberto, fora do modo de
-  // criação e fora da lente Calor. Uma condição só para a folha, o "+" e o
-  // encolhimento do mapa (logo do Google visível).
-  const folhaVisivel = modoNovo && !layout.ehLargo && !creationMode && !selectedClient && lente !== 'calor';
-  // Margem do mapa = onde o mapa terminaria sem margem menos o topo MEDIDO da
-  // folha (a barra de baixo real não tem a altura do baseInferior; a conta
-  // fixa deixava o logo do Google 34 px atrás da folha — medido em 25/09).
-  useEffect(() => {
-    if (!folhaVisivel || topoFolha == null || !mapLayout) { if (margemMapa !== 0 && !folhaVisivel) setMargemMapa(0); return; }
-    const fundoSemMargem = mapLayout.y + mapLayout.height + margemMapa;
-    const alvo = Math.max(0, Math.round(fundoSemMargem - topoFolha));
-    if (Math.abs(alvo - margemMapa) > 1) setMargemMapa(alvo);
-  }, [folhaVisivel, topoFolha, mapLayout, margemMapa]);
 
   const conteudoMapa = (
     <>
