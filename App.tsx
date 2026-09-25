@@ -3930,9 +3930,17 @@ function MainApp() {
         !isViewer && selectedClient.status === 'lead'
           ? () => {
               // Mapa novo: porta única do Cockpit (regras do servidor). Mapa atual: modal de hoje.
-              if (modoNovo && contextoPino) setEtapaNovaPara({ client: selectedClient, etapaAtual: codigoDaEtapa(selectedClient) });
-              else setChangingStageFor({ client: selectedClient });
-              setSelectedClient(null);
+              if (modoNovo && contextoPino) {
+                const c = selectedClient;
+                const atual = codigoDaEtapa(c);
+                setSelectedClient(null);
+                // Depois do card fechar: o history.back() do Painel do card
+                // fecharia na hora o Painel novo (armadilha do CLAUDE.md).
+                setTimeout(() => setEtapaNovaPara({ client: c, etapaAtual: atual }), 350);
+              } else {
+                setChangingStageFor({ client: selectedClient });
+                setSelectedClient(null);
+              }
             }
           : undefined
       }
