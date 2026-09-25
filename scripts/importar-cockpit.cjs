@@ -121,6 +121,31 @@ if (!relativas) morrer('nenhuma imagem em assets/ — o formato da pagina mudou,
 html = html.split('src="assets/').join('src="/gestao/cockpit/assets/');
 if (/["'(]assets\//.test(html)) morrer('sobrou referencia relativa a assets/ fora de src="..."');
 
+// ---- troca 4: o botao Mapa no cabecalho ----
+// No PWA instalado nao existe o voltar do navegador (no iPhone, nenhum): quem
+// entrava na gestao pelo mapa ficava preso nela. "Mapa" volta em um toque, na
+// mesma janela e na mesma sessao. Mora logo antes do sino e herda o jeito dele
+// (pilula, borda --line, fundo --panel), com 40px de altura para o polegar.
+const SINO = '<button id="avisosSinoBtn"';
+const sinos = html.split(SINO).length - 1;
+if (sinos !== 1) morrer('esperava 1 ' + SINO + ' no cabecalho, achei ' + sinos);
+const BOTAO_MAPA = '<a id="pwaVoltarMapa" class="pwa-voltar-mapa" href="/" aria-label="Voltar para o mapa" title="Voltar para o mapa">'
+  + '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+  + '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>'
+  + '<span>Mapa</span></a>\n    ';
+html = html.replace(SINO, BOTAO_MAPA + SINO);
+const ESTILO_MAPA = '<style>/* scripts/importar-cockpit.cjs: botao Mapa do PWA */'
+  + '.pwa-voltar-mapa{flex:none;display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 14px;'
+  + 'border-radius:var(--r-pill);border:1px solid var(--line);background:var(--panel);color:var(--ink);'
+  + 'font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;'
+  + 'transition:background var(--t-rapido) var(--ease);}'
+  + '.pwa-voltar-mapa:hover{background:var(--sunk);}'
+  + '.pwa-voltar-mapa:focus-visible{outline:2px solid var(--ink);outline-offset:2px;}'
+  + '</style>';
+const FIM_HEAD = '</head>';
+if (html.split(FIM_HEAD).length - 1 !== 1) morrer('esperava 1 ' + FIM_HEAD);
+html = html.replace(FIM_HEAD, ESTILO_MAPA + '\n' + FIM_HEAD);
+
 // ---- grava: a pagina e os arquivos que ela referencia por caminho relativo ----
 fs.rmSync(DESTINO, { recursive: true, force: true });
 fs.mkdirSync(path.join(DESTINO, 'assets'), { recursive: true });

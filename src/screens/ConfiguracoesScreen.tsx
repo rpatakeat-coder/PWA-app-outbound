@@ -338,14 +338,16 @@ export function ConfiguracoesScreen({
               accessibilityRole="link"
               style={[styles.cardLink, !layout.ehDesktop && styles.cardLinkMovel]}
               {...ds({ hover: 'borda', trans: '1' })}
-              {...({ href: '/gestao/', hrefAttrs: { target: '_blank', rel: 'noopener' } } as Record<string, unknown>)}
+              // Na mesma janela: no PWA instalado uma aba nova cai no navegador, que
+              // no iPhone nao tem a sessao do app e pede login de novo.
+              {...({ href: '/gestao/' } as Record<string, unknown>)}
             >
               <View style={[styles.quadroIcone, !layout.ehDesktop && styles.quadroIconeMovel, { backgroundColor: 'var(--tint-red)' }]}>
                 <IconBarGraph width={20} height={20} fill={iconColors.tintRedText} />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={[styles.cardLinkTitulo, !layout.ehDesktop && styles.cardLinkTituloMovel]}>Abrir painel de gestão</Text>
-                <Text style={styles.hint}>Funil do time, travados e gargalo. Melhor no computador.</Text>
+                <Text style={styles.hint}>Funil do time, travados e gargalo.</Text>
               </View>
               <IconExternalLink width={20} height={20} fill={iconColors.muted} />
             </TouchableOpacity>
@@ -353,7 +355,7 @@ export function ConfiguracoesScreen({
               accessibilityRole="link"
               style={[styles.cardLink, !layout.ehDesktop && styles.cardLinkMovel]}
               {...ds({ hover: 'borda', trans: '1' })}
-              {...({ href: '/gestao/#/time', hrefAttrs: { target: '_blank', rel: 'noopener' } } as Record<string, unknown>)}
+              {...({ href: '/gestao/#/time' } as Record<string, unknown>)}
             >
               <View style={[styles.quadroIcone, !layout.ehDesktop && styles.quadroIconeMovel, { backgroundColor: 'var(--surface-2)' }]}>
                 <IconUserGroup width={20} height={20} fill={iconColors.muted} />

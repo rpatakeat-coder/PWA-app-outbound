@@ -92,6 +92,7 @@ import MapView, { Marker, Polyline, Circle, type MapViewHandle as RNMapView } fr
 import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useClientSearch, useClients } from './src/hooks/useClients';
+import { useNaEquipeCockpit } from './src/hooks/useNaEquipeCockpit';
 import { useMeetings } from './src/hooks/useMeetings';
 import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
 import { useClientNotes } from './src/hooks/useClientNotes';
@@ -884,6 +885,15 @@ function MainApp() {
   // Usuario 'view' = somente leitura. Esconde criar/editar/excluir/rotas/agenda/notas.
   // Aplicacao real do bloqueio esta nas RLS policies do Supabase (is_view_only_user()).
   const isViewer = profile?.role === 'view';
+  // GESTAO PARA A EQUIPE INTEIRA (25/09/2026). /gestao e' o Cockpit Field Sales,
+  // e ele abre na conta de quem entra: o gestor ve o time, o executivo ve o
+  // proprio painel. Por isso o botao vale para todo mundo da equipe do Cockpit, e
+  // nao so' para role 'gestor'. A regra e' UMA: estar na equipe. Nem o role
+  // 'gestor' basta — gestor fora de equipe_cockpit levaria 403 da gestao, e no 403
+  // a tela do Cockpit faz signOut local, derrubando o login do mapa (em 25/09 todo
+  // gestor tem linha la', migration 0096; gestor novo entra la' tambem).
+  const naEquipeCockpit = useNaEquipeCockpit();
+  const verGestao = !isViewer && naEquipeCockpit;
 
   // ===== Mapa de calor de visitas (só gestor) =====
   // Camada opcional sobre o mapa principal: densidade de check-ins por área.
@@ -4543,7 +4553,7 @@ function MainApp() {
     { aba: 'route', rotulo: 'Rota', Icone: IconCar, visivel: !isViewer },
     { aba: 'agenda', rotulo: 'Agenda', Icone: IconCalendar, visivel: !isViewer },
     { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: visibleTasksCount, visivel: !isViewer },
-    { aba: 'cockpit', rotulo: 'Gestor', Icone: IconBarGraph, visivel: canViewGestor },
+    { aba: 'cockpit', rotulo: 'Gestão', Icone: IconBarGraph, visivel: verGestao },
     { aba: 'meu', rotulo: 'Meu desempenho', Icone: IconTrendingUp, visivel: !canViewGestor && !isViewer },
   ];
 
@@ -5493,13 +5503,14 @@ function MainApp() {
           </View>
 
           {([
-            // "Painel do gestor" leva pro cockpit; "Meu desempenho" e a
-            // entrada que faltava no celular, onde nada chamava setTab('meu').
-            canViewGestor
+            // "Gestão" leva pro cockpit (para a equipe inteira, ver verGestao);
+            // "Meu desempenho" e a entrada que faltava no celular, onde nada
+            // chamava setTab('meu').
+            verGestao
               ? {
                   chave: 'cockpit',
                   Icone: IconBarGraph,
-                  rotulo: 'Painel do gestor',
+                  rotulo: 'Gestão',
                   // Sem `setPerfilAberto(false)` de proposito: o Painel
                   // empilha um estado no history ao abrir e, ao fechar, o
                   // cleanup chama `history.back()` (Painel.tsx). Esse back e'
@@ -5577,7 +5588,7 @@ function MainApp() {
       <View style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]}>
         <TouchableOpacity
           accessibilityRole="button"
-          style={styles.navItem}
+          style={[styles.navItem, verGestao && styles.navItemLadoDeDois]}
           onPress={() => setTab('map')}
         >
           <NavIcon Icone={tab === 'map' ? IconLocationFilled : IconLocation} ativo={tab === 'map'} />
@@ -5592,7 +5603,7 @@ function MainApp() {
           <>
             <TouchableOpacity
               accessibilityRole="button"
-              style={styles.navItem}
+              style={[styles.navItem, verGestao && styles.navItemLadoDeDois]}
               onPress={() => setTab('route')}
             >
               <NavIcon Icone={IconCar} ativo={tab === 'route'} />
@@ -5631,6 +5642,24 @@ function MainApp() {
               </View>
               <Text style={[styles.navItemText, tab === 'tasks' && styles.navItemTextActive]}>Tarefas</Text>
             </TouchableOpacity>
+
+            {/* GESTAO: o Cockpit, na conta de quem toca (25/09/2026). Um toque, na
+                mesma janela — no PWA instalado uma aba nova cai no navegador, que
+                no iPhone nao tem a sessao do app e pede login de novo. Nao e' aba:
+                e' destino, entao nunca fica "ativo" aqui. Com ele sao tres a
+                direita do FAB; Mapa e Rota ganham navItemLadoDeDois para os dois
+                lados somarem a mesma largura e o FAB (left 50%) seguir no vao. */}
+            {verGestao && (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Gestão: abrir o Cockpit"
+                style={styles.navItem}
+                onPress={irParaOCockpit}
+              >
+                <NavIcon Icone={IconBarGraph} ativo={false} />
+                <Text style={styles.navItemText}>Gestão</Text>
+              </TouchableOpacity>
+            )}
 
             {/* FAB central. A borda de 4px em --surface e' o que o recorta da
                 barra; sem ela ele encosta nas abas vizinhas. */}
@@ -9384,6 +9413,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Com o botao Gestao ha' 2 abas a esquerda do FAB e 3 a direita. As duas da
+  // esquerda pesam 1.5 cada: 3 = 3, e o vao do FAB fica no centro da barra.
+  navItemLadoDeDois: { flex: 1.5 },
   navIcon: { fontSize: 17, marginBottom: 2 },
   navIconActive: {},
   // Badge de notificacao de tarefas pendentes, sobreposto no icone da aba.

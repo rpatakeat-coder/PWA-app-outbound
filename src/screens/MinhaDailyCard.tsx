@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useMinhaDaily } from '../hooks/useMinhaDaily';
 import { useAuth } from '../context/AuthContext';
+import { useNaEquipeCockpit } from '../hooks/useNaEquipeCockpit';
 import { Alert } from '../components/Alert';
 import { IconText, IconTrendingUp } from '../components/icons';
 
@@ -40,6 +41,8 @@ export function MinhaDailyCard({ enabled }: { enabled: boolean }) {
   const { daily, isLoading, prometer, anotar } = useMinhaDaily(enabled);
   const { profile } = useAuth();
   const ehGestor = profile?.role === 'gestor';
+  // Desde 25/09/2026 o executivo tambem tem a Daily dele no Cockpit (/gestao).
+  const naEquipeCockpit = useNaEquipeCockpit();
   const [editando, setEditando] = useState(false);
   const [valor, setValor] = useState('');
   const [nota, setNota] = useState<string | null>(null);
@@ -153,15 +156,17 @@ export function MinhaDailyCard({ enabled }: { enabled: boolean }) {
       {/* Onde a promessa vai parar.
           Sem esta linha, o vendedor digita um numero e nao faz ideia de que
           alguem olha — e um placar invisivel nao motiva nem cobra, so' gera
-          desconfianca quando ele descobre depois. Pra gestor o texto vira link:
-          ele CONSULTA o cockpit; o vendedor comum nao tem acesso, e mandar ele
-          pra uma tela que recusa a entrada seria pior que nao mostrar nada. */}
-      {ehGestor ? (
+          desconfianca quando ele descobre depois. Pra quem esta' na equipe do
+          Cockpit o texto vira link (25/09/2026: o executivo tambem tem a Daily
+          dele la'); pra quem nao esta', a gestao recusaria a entrada — pior que
+          nao mostrar nada. NA MESMA JANELA: no PWA instalado uma aba nova cai no
+          navegador, que no iPhone nao tem a sessao do app e pede login de novo. */}
+      {naEquipeCockpit ? (
         <Text
           style={styles.destino}
-          {...({ href: '/gestao/#/daily', hrefAttrs: { target: '_blank', rel: 'noopener' } } as any)}
+          {...({ href: '/gestao/#/daily' } as any)}
         >
-          Este número aparece na Daily do time →
+          {ehGestor ? 'Este número aparece na Daily do time →' : 'Sua palavra do dia aparece na Daily do time →'}
         </Text>
       ) : (
         <Text style={styles.destinoTexto}>
