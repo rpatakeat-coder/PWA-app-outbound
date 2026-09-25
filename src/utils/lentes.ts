@@ -4,8 +4,8 @@
 // pino inteiro (pede decisão agora) e quem vira ponto de 7 px. Quem tira do
 // mapa são os Filtros, que o vendedor escolhe e vê contados.
 
-import type { Client, OrigemLead } from '../types/client';
-import type { Pino } from './pinoP2';
+import type { Client } from '../types/client';
+import type { OrigemPick, Pino } from './pinoP2';
 
 export type Lente = 'dia' | 'carteira' | 'alvo' | 'rec' | 'semdono' | 'calor';
 
@@ -40,7 +40,7 @@ export function noFoco(lente: Lente, p: Pino, planoNumero: number | null | undef
 
 export type StatusFiltro = 'lead' | 'cliente' | 'ex' | 'alvo' | 'ganho_fs';
 export type TempFiltro = 'Q' | 'M' | 'F' | 'fechado' | 'perdido' | 'alvo';
-export type OrigemFiltro = OrigemLead | 'nao_informado';
+export type OrigemFiltro = OrigemPick | 'nao_informado';
 
 export type FiltrosNovos = {
   status: Set<StatusFiltro>;
@@ -57,15 +57,17 @@ export const ROTULO_TEMP: Record<TempFiltro, string> = {
   Q: 'Quente', M: 'Morno', F: 'Frio', fechado: 'Fechado', perdido: 'Perdido', alvo: 'Conta Alvo',
 };
 
-// Cores da prancha §8.1: fundo / texto.
+// Picklist origem_do_lead do HubSpot, com as cores do prompt final (fundo / texto).
 export const ORIGEM: Record<OrigemFiltro, { rotulo: string; fundo: string; tinta: string }> = {
-  casa_dos_dados: { rotulo: 'Casa dos Dados', fundo: '#1E3A5F', tinta: '#BFDBFE' },
-  google_maps_motor: { rotulo: 'Google Maps · motor', fundo: '#3B2A0B', tinta: '#FDE68A' },
-  indicacao: { rotulo: 'Indicação', fundo: '#14532D', tinta: '#BBF7D0' },
-  inbound_site: { rotulo: 'Inbound site', fundo: '#312E81', tinta: '#C7D2FE' },
-  hubspot: { rotulo: 'HubSpot', fundo: '#3A2410', tinta: '#FDBA74' },
-  cadastro_na_rua: { rotulo: 'Cadastro na rua', fundo: '#3F1D1D', tinta: '#FECACA' },
-  nao_informado: { rotulo: 'Não informado', fundo: '#2A2F38', tinta: '#C9CED6' },
+  Rua: { rotulo: 'Rua', fundo: '#3F1D1D', tinta: '#FECACA' },
+  'Casa dos Dados': { rotulo: 'Casa dos Dados', fundo: '#1E3A5F', tinta: '#BFDBFE' },
+  GoogleMaps: { rotulo: 'Google Maps · motor', fundo: '#3B2A0B', tinta: '#FDE68A' },
+  'Indicação': { rotulo: 'Indicação', fundo: '#14532D', tinta: '#BBF7D0' },
+  Instagram: { rotulo: 'Instagram', fundo: '#3B1D3A', tinta: '#F5D0FE' },
+  Ads: { rotulo: 'Ads', fundo: '#312E81', tinta: '#C7D2FE' },
+  Familia: { rotulo: 'Família', fundo: '#1F3A34', tinta: '#A7F3D0' },
+  Eventos: { rotulo: 'Eventos', fundo: '#3A2410', tinta: '#FDBA74' },
+  nao_informado: { rotulo: 'Origem não informada', fundo: '#2A2F38', tinta: '#C9CED6' },
 };
 
 export function statusDoFiltro(c: Client, p: Pino): StatusFiltro {
@@ -84,8 +86,8 @@ export function tempDoFiltro(p: Pino): TempFiltro | null {
   return null; // ex-cliente e etapa desconhecida não têm temperatura
 }
 
-export function origemDoFiltro(c: Client): OrigemFiltro {
-  return (c.origem_lead as OrigemLead | null | undefined) ?? 'nao_informado';
+export function origemDoFiltro(p: Pino): OrigemFiltro {
+  return p.origem ?? 'nao_informado';
 }
 
 /** Cada grupo marcado é um OU dentro dele; grupos diferentes se somam (E). */
@@ -95,7 +97,7 @@ export function passaNosFiltros(c: Client, p: Pino, f: FiltrosNovos): boolean {
     const t = tempDoFiltro(p);
     if (!t || !f.temp.has(t)) return false;
   }
-  if (f.origem.size && !f.origem.has(origemDoFiltro(c))) return false;
+  if (f.origem.size && !f.origem.has(origemDoFiltro(p))) return false;
   return true;
 }
 
@@ -117,7 +119,7 @@ export function contarChips(itens: { c: Client; p: Pino }[], f: FiltrosNovos) {
   for (const { c, p } of itens) {
     if (passaNosFiltros(c, p, semStatus)) { const k = statusDoFiltro(c, p); status.set(k, (status.get(k) ?? 0) + 1); }
     if (passaNosFiltros(c, p, semTemp)) { const k = tempDoFiltro(p); if (k) temp.set(k, (temp.get(k) ?? 0) + 1); }
-    if (passaNosFiltros(c, p, semOrigem)) { const k = origemDoFiltro(c); origem.set(k, (origem.get(k) ?? 0) + 1); }
+    if (passaNosFiltros(c, p, semOrigem)) { const k = origemDoFiltro(p); origem.set(k, (origem.get(k) ?? 0) + 1); }
   }
   return { status, temp, origem };
 }

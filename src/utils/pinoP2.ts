@@ -14,7 +14,24 @@ export type Dono = 'meu' | 'colega' | 'sem';
 
 // etapaCodigo: a etapa do negócio no snapshot do Cockpit (0105) — vale quando o
 // texto de clients.etapa está vazio ou não casa na etapa_de_para.
-export type TempoDoNegocio = { diasNaEtapa: number | null; slaEstourado: boolean; ultimaInteracao: string | null; etapaCodigo?: string | null };
+export type TempoDoNegocio = {
+  diasNaEtapa: number | null; slaEstourado: boolean; ultimaInteracao: string | null; etapaCodigo?: string | null;
+  /** Faixa da nota 0–100 do Cockpit (lib/temperatura.js): 'quente' | 'morno' | 'frio' (0107). */
+  faixa?: string | null;
+  /** Nota parcial (sem toque registrado): o pino mostra a letra com ponto, "F·". */
+  parcial?: boolean;
+  /** origem_do_lead do HubSpot (picklist oficial). */
+  origemHs?: string | null;
+};
+
+// Origem = picklist origem_do_lead do HubSpot (prompt final corrigido). Sem o
+// negócio no snapshot, a origem derivada no app (0102) é traduzida para o
+// nome da picklist; "hubspot"/"inbound_site" não existem lá e viram vazio.
+export type OrigemPick = 'Rua' | 'GoogleMaps' | 'Casa dos Dados' | 'Indicação' | 'Instagram' | 'Ads' | 'Familia' | 'Eventos';
+const PICKLIST = new Set<string>(['Rua', 'GoogleMaps', 'Casa dos Dados', 'Indicação', 'Instagram', 'Ads', 'Familia', 'Eventos']);
+const DERIVADA_PARA_PICKLIST: Record<string, OrigemPick> = {
+  cadastro_na_rua: 'Rua', google_maps_motor: 'GoogleMaps', casa_dos_dados: 'Casa dos Dados', indicacao: 'Indicação',
+};
 
 export type ContextoPino = {
   meuOwnerId: string | null;
@@ -39,6 +56,8 @@ export type Pino = {
   nome: string;
   etiqueta: { texto: string; fundo: string; tinta: string } | null;
   opacidade: number;
+  /** Origem na picklist do HubSpot; null = "origem não informada". */
+  origem: OrigemPick | null;
 };
 
 // Cores da prancha (dado, não tema: pintam o mapa escuro igual nos dois temas).
@@ -101,8 +120,20 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
   else if (c.conta_alvo_place_id && !c.id_hubspot) tipo = 'alvo';
   else tipo = 'lead';
 
+  const tempoHs = c.id_hubspot ? ctx.tempoPorNegocio.get(String(c.id_hubspot)) : undefined;
   let temp: Temperatura | null = null;
+  let parcial = false;
   if (tipo === 'lead') {
+    // Temperatura = faixa da nota do Cockpit (Q ≥ 70 · M ≥ 55 · F). Perdido
+    // continua X. Sem o negócio no snapshot, cai na etapa (regra anterior).
+    const faixa = tempoHs?.faixa ?? null;
+    if (codigo === PERDIDO) temp = 'X';
+    else if (faixa === 'quente') temp = 'Q';
+    else if (faixa === 'morno') temp = 'M';
+    else if (faixa === 'frio') temp = 'F';
+    if (temp && temp !== 'X' && faixa) parcial = !!tempoHs?.parcial;
+  }
+  if (tipo === 'lead' && !temp) {
     if (codigo && QUENTE.has(codigo)) temp = 'Q';
     else if (codigo && MORNO.has(codigo)) temp = 'M';
     else if (codigo && FRIO.has(codigo)) temp = 'F';
@@ -115,7 +146,7 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
   }
 
   const cor = tipo === 'cliente' ? COR.cliente : tipo === 'ex' ? COR.ex : tipo === 'alvo' ? COR.alvo : COR[temp ?? '?'];
-  const glifo = tipo === 'ex' ? '↺' : tipo === 'lead' ? (temp as string) : '';
+  const glifo = tipo === 'ex' ? '↺' : tipo === 'lead' ? `${temp}${parcial ? '·' : ''}` : '';
 
   const owner = c.vendedor_id_hubspot ? String(c.vendedor_id_hubspot) : null;
   // Cliente é carteira da empresa: 3.066 dos 3.070 não têm vendedor no
@@ -133,7 +164,7 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
   let etiqueta: Pino['etiqueta'] = null;
   let dias: number | null = null;
   if (tipo === 'lead' && temp !== 'X') {
-    const t = c.id_hubspot ? ctx.tempoPorNegocio.get(String(c.id_hubspot)) : undefined;
+    const t = tempoHs;
     const candidatos = [diasDesde(t?.ultimaInteracao, ctx.agora), diasDesde(c.visited_at, ctx.agora)]
       .filter((d): d is number => d != null);
     dias = candidatos.length ? Math.min(...candidatos) : (t?.diasNaEtapa ?? null);
@@ -143,7 +174,11 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
 
   const opacidade = dias != null && dias > ctx.limites[1] ? 0.72 : dono === 'colega' ? 0.8 : 1;
 
+  const origemHs = tempoHs?.origemHs && PICKLIST.has(tempoHs.origemHs) ? (tempoHs.origemHs as OrigemPick) : null;
+  const origem: OrigemPick | null = origemHs ?? (c.origem_lead ? DERIVADA_PARA_PICKLIST[c.origem_lead] ?? null : null);
+
   return {
+    origem,
     tipo, temp, cor, glifo, logo: tipo === 'cliente', dono,
     aproximado: c.geo_approximate === true,
     nome: nomeCurto(c.empresa?.trim() || c.nome || ''),

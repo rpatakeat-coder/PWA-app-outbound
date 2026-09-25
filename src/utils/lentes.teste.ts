@@ -45,12 +45,12 @@ ok(!noFoco('calor', P({ etapa: 'Negociação' }), 1), 'Calor: nenhum pino');
 
 // filtros
 const itens = [
-  { c: L({ id: 'a', etapa: 'Negociação', origem_lead: 'hubspot' }) },
+  { c: L({ id: 'a', etapa: 'Negociação', origem_lead: 'cadastro_na_rua' }) },
   { c: L({ id: 'b', etapa: 'Prospecção', origem_lead: 'casa_dos_dados' }) },
-  { c: L({ id: 'c', status: 'cliente', etapa: null, origem_lead: 'hubspot' }) },
+  { c: L({ id: 'c', status: 'cliente', etapa: null, origem_lead: 'cadastro_na_rua' }) },
   { c: L({ id: 'd', status: 'churn', origem_lead: null }) },
   { c: L({ id: 'e', conta_alvo_place_id: 'x', origem_lead: 'google_maps_motor' }) },
-  { c: L({ id: 'f', etapa: 'Perdido', origem_lead: 'cadastro_na_rua' }) },
+  { c: L({ id: 'f', etapa: 'Perdido', origem_lead: 'indicacao' }) },
 ].map(({ c }) => ({ c, p: classificarPino(c, ctx) }));
 const f = (x: Partial<FiltrosNovos>): FiltrosNovos => ({ ...FILTROS_VAZIOS, ...x });
 const passam = (fx: FiltrosNovos) => itens.filter(({ c, p }) => passaNosFiltros(c, p, fx)).map(({ c }) => c.id).join('');
@@ -61,15 +61,16 @@ ok(passam(f({ status: new Set(['cliente', 'ex']) })) === 'cd', 'Cliente OU Ex-Cl
 ok(passam(f({ temp: new Set(['Q', 'F']) })) === 'ab', 'Quente OU Frio');
 ok(passam(f({ temp: new Set(['fechado']) })) === 'c' && passam(f({ temp: new Set(['perdido']) })) === 'f', 'Fechado e Perdido');
 ok(passam(f({ origem: new Set(['nao_informado']) })) === 'd', 'origem "Não informado" acha quem não tem origem');
-ok(passam(f({ status: new Set(['lead']), origem: new Set(['hubspot']) })) === 'a', 'Lead E HubSpot (grupos cruzam)');
+ok(passam(f({ origem: new Set(['nao_informado']) })) === 'd' && !passam(f({ origem: new Set(['nao_informado']) })).includes('a'), 'origem "hubspot" derivada não existe na picklist: não vira origem inventada');
+ok(passam(f({ status: new Set(['lead']), origem: new Set(['Rua']) })) === 'a', 'Lead E Rua (grupos cruzam)');
 ok(quantosFiltros(f({ status: new Set(['lead']), temp: new Set(['Q', 'M']) })) === 3, 'Filtros · N conta cada chip');
 
 // contagem do chip = o que o toque entrega
-const ativo = f({ origem: new Set(['hubspot']) });
+const ativo = f({ origem: new Set(['Rua']) });
 const n = contarChips(itens, ativo);
 ok(n.status.get('lead') === 1 && n.status.get('cliente') === 1, 'contagem de Status respeita a origem marcada');
-ok(n.origem.get('casa_dos_dados') === 1 && n.origem.get('hubspot') === 2, 'contagem de Origem ignora a própria origem marcada');
-const toque = passam(f({ origem: new Set(['hubspot']), status: new Set(['lead']) })).length;
+ok(n.origem.get('Casa dos Dados') === 1 && n.origem.get('Rua') === 2, 'contagem de Origem ignora a própria origem marcada');
+const toque = passam(f({ origem: new Set(['Rua']), status: new Set(['lead']) })).length;
 ok(toque === n.status.get('lead'), 'tocar "Lead" entrega o número que o chip mostrava');
 
 if (falhas) {

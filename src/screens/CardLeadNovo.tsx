@@ -224,7 +224,7 @@ export function PeekCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
 /** Estágio 2 (cheio): a ordem inteira da prancha §7, até o bloco de origem. */
 export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   const c = d.client;
-  const o = ORIGEM[origemDoFiltro(c)];
+  const o = ORIGEM[origemDoFiltro(d.pino)];
   const entrou = c.entrou_em
     ? new Date(c.entrou_em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Sao_Paulo' })
     : null;

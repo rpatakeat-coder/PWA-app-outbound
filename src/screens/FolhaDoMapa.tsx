@@ -40,7 +40,7 @@ function PinoMini({ p, plano }: { p: Pino; plano: number | null }) {
 }
 
 function Etiquetas({ it }: { it: ItemFolha }) {
-  const o = ORIGEM[origemDoFiltro(it.c)];
+  const o = ORIGEM[origemDoFiltro(it.p)];
   return (
     <View style={s.etiquetas}>
       {it.p.etiqueta && (

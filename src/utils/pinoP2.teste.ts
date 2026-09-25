@@ -93,6 +93,21 @@ ok(textoNormalizado('  NEGÓCIO   PERDIDO ') === 'negocio perdido', 'normaliza i
 ok(classificarPino(base({ geo_approximate: true }), ctx).aproximado, 'posição aproximada liga o halo');
 ok(classificarPino(base({ etapa: 'Perdido', id_hubspot: '222' }), ctx).etiqueta === null, 'negócio perdido não tem relógio (nem 46d parado)');
 
+// temperatura = faixa da nota do Cockpit; origem = picklist do HubSpot (prompt corrigido)
+const ctxHs: ContextoPino = { ...ctx, tempoPorNegocio: new Map([
+  ['n1', { diasNaEtapa: 20, slaEstourado: false, ultimaInteracao: null, faixa: 'morno', parcial: false, origemHs: 'Indicação' }],
+  ['n2', { diasNaEtapa: 1, slaEstourado: false, ultimaInteracao: null, faixa: 'frio', parcial: true, origemHs: 'NaoExiste' }],
+  ['n3', { diasNaEtapa: 1, slaEstourado: false, ultimaInteracao: null, faixa: 'quente', parcial: false, origemHs: null }],
+]) };
+ok(classificarPino(base({ etapa: 'Negociação', id_hubspot: 'n1' }), ctxHs).temp === 'M', 'Negociação com nota morna do Cockpit é M (a nota manda, não a etapa)');
+ok(classificarPino(base({ etapa: 'Prospecção', id_hubspot: 'n2' }), ctxHs).glifo === 'F·', 'nota parcial mostra "F·"');
+ok(classificarPino(base({ etapa: 'Perdido', id_hubspot: 'n3' }), ctxHs).temp === 'X', 'Perdido continua X mesmo com nota quente');
+ok(classificarPino(base({ etapa: 'Negociação' }), ctxHs).temp === 'Q', 'fora do snapshot: temperatura pela etapa');
+ok(classificarPino(base({ id_hubspot: 'n1' }), ctxHs).origem === 'Indicação', 'origem vem do origem_do_lead do HubSpot');
+ok(classificarPino(base({ id_hubspot: 'n2', origem_lead: 'casa_dos_dados' }), ctxHs).origem === 'Casa dos Dados', 'valor fora da picklist cai na origem derivada');
+ok(classificarPino(base({ origem_lead: 'hubspot' }), ctxHs).origem === null, '"hubspot" não é origem da picklist: vira "não informada"');
+ok(classificarPino(base({ origem_lead: 'cadastro_na_rua' }), ctxHs).origem === 'Rua', 'cadastro na rua é "Rua" na picklist');
+
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);
   process.exit(1);
