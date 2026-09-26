@@ -16,6 +16,8 @@ import { compromissosDoDia, diasDaFaixa, estadoDasParadas, rotuloDoDia } from '.
 import type { Client, ClientMeeting, FieldRouteStopWithClient } from '../types/client';
 
 type Props = {
+  /** Dia que abre selecionado (o "Ver na Agenda" da ficha de rua). */
+  diaInicial?: string | null;
   paradas: FieldRouteStopWithClient[];
   reunioes: ClientMeeting[];
   metaVisitasDia: number;
@@ -34,13 +36,13 @@ const ruaDo = (c: Client | null) => {
 };
 
 export default function AgendaNovoScreen({
-  paradas, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead,
+  diaInicial, paradas, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead,
 }: Props) {
   const cores = useIconColors();
   const agora = new Date();
   const hoje = diaBRT(agora)!;
   const dias = useMemo(() => diasDaFaixa(agora), [hoje]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [dia, setDia] = useState(hoje);
+  const [dia, setDia] = useState(diaInicial && diaInicial >= hoje ? diaInicial : hoje);
   const { tarefas } = useTarefasDoCrm(true);
 
   const estado = estadoDasParadas(

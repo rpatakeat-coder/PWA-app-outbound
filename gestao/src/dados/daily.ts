@@ -49,6 +49,9 @@ const DIAS_DE_HISTORICO = 90;
 export interface DiaDoExecutivo {
   dia: string;
   visitas: number;
+  /** Destas visitas, quantas foram DECLARADAS (fora do raio, sem GPS no
+   *  local — 0109). Contam como visita; aqui só se separa para medir. */
+  visitasSemGps: number;
   avancos: number;
   propostas: number;
   /** null quando a pessoa nao tem `id_hubspot`: fechamento se conta por
@@ -125,7 +128,7 @@ export async function carregarDaily(): Promise<DadosDaily> {
     buscarTudo<any>((de, ate) =>
       supabase
         .from('client_visits')
-        .select('client_id, visited_by, visited_at')
+        .select('client_id, visited_by, visited_at, declarada')
         .gte('visited_at', desde)
         .range(de, ate),
     ),
@@ -176,8 +179,8 @@ export async function carregarDaily(): Promise<DadosDaily> {
   // As visitas e mudancas sao chaveadas pelo id do USUARIO (auth.users), e os
   // fechamentos pelo owner do HubSpot. Sao dois espacos de id diferentes, e por
   // isso a ponte por profiles.id_hubspot precisa ser explicita.
-  type Balde = { visitas: string[]; avancos: string[]; propostas: string[]; fechamentos: string[] };
-  const vazio = (): Balde => ({ visitas: [], avancos: [], propostas: [], fechamentos: [] });
+  type Balde = { visitas: string[]; semGps: number; avancos: string[]; propostas: string[]; fechamentos: string[] };
+  const vazio = (): Balde => ({ visitas: [], semGps: 0, avancos: [], propostas: [], fechamentos: [] });
   const porPessoaDia = new Map<string, Balde>();
   const chave = (pessoa: string, dia: string) => `${pessoa}|${dia}`;
   const balde = (pessoa: string, dia: string): Balde => {
@@ -189,9 +192,9 @@ export async function carregarDaily(): Promise<DadosDaily> {
 
   for (const v of visitas) {
     if (!v.visited_by) continue;
-    balde(v.visited_by, diaBRT(v.visited_at)).visitas.push(
-      nomeDoCliente.get(v.client_id) ?? 'lead removido',
-    );
+    const bv = balde(v.visited_by, diaBRT(v.visited_at));
+    bv.visitas.push(nomeDoCliente.get(v.client_id) ?? 'lead removido');
+    if (v.declarada === true) bv.semGps++;
   }
 
   for (const m of mudancas) {
@@ -298,6 +301,7 @@ export async function carregarDaily(): Promise<DadosDaily> {
         return {
           dia,
           ...bruto,
+          visitasSemGps: b.semGps,
           fechamentos: semOwner ? null : bruto.fechamentos,
           pontos: pontosDoDia(bruto),
           pontosParciais: semOwner,

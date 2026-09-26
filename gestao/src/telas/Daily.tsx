@@ -121,6 +121,12 @@ function CelulaVisitas({ d }: { d: DiaDoExecutivo }) {
     >
       {d.visitas || '—'}
       {d.prometido != null && <span style={{ color: 'var(--ter)' }}> / {d.prometido}</span>}
+      {/* Visita declarada (0109): conta, mas o gestor vê quantas não tiveram GPS no local. */}
+      {d.visitasSemGps > 0 && (
+        <span style={{ display: 'block', fontSize: 11, color: 'var(--amber-ink)' }} title="Registradas fora do raio: o executivo declarou que esteve lá">
+          {d.visitasSemGps} sem GPS
+        </span>
+      )}
     </td>
   );
 }
@@ -443,7 +449,10 @@ export function Daily() {
         <Kpi
           rotulo="Visitas"
           valor={String(totais.visitas)}
-          qualificador={metaDoTime > 0 ? `meta do time: ${metaDoTime}/dia` : 'sem meta no time'}
+          qualificador={[
+            metaDoTime > 0 ? `meta do time: ${metaDoTime}/dia` : 'sem meta no time',
+            (() => { const n = executivos.reduce((s, e) => s + e.hoje.visitasSemGps, 0); return n > 0 ? `${n} sem GPS` : null; })(),
+          ].filter(Boolean).join(' · ')}
           tom={metaDoTime > 0 && totais.visitas < metaDoTime ? 'alerta' : undefined}
         />
         <Kpi rotulo="Fechamentos" valor={String(totais.fechamentos)} qualificador="hoje" />

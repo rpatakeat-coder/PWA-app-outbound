@@ -33,6 +33,10 @@ type Props = {
   onSalvarCadastro: (campos: CamposCadastro) => Promise<void>;
   /** Etapa mudou no HubSpot: o app põe o rótulo no lead para a letra do pino mudar na hora. */
   onEtapaMudou: (codigo: string) => void;
+  /** "Ver na Agenda": abre a Agenda no dia do próximo passo (ou hoje). */
+  onAgenda?: (dia: string | null) => void;
+  /** Visita declarada (0109): a faixa diz isso, não "check-in". */
+  declarada?: boolean;
 };
 
 type Resultado = { rotulo: string; estado: 'ok' | 'fila' | 'falhou' | 'pulado'; detalhe?: string };
@@ -42,10 +46,12 @@ const hora = (iso: string) => {
   try { return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }); } catch { return ''; }
 };
 
-export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou }: Props) {
+export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, declarada = false }: Props) {
   const [f, setF] = useState<Ficha>(FICHA_VAZIA);
   const [salvando, setSalvando] = useState(false);
   const [resultados, setResultados] = useState<Resultado[] | null>(null);
+  // O próximo passo que a ficha combinou, para a tela "Ficha salva" dizer o que fazer.
+  const [passoSalvo, setPassoSalvo] = useState<{ data: string; tipo: string; texto: string; virouTarefa: boolean } | null>(null);
   useEffect(() => { if (visivel) { setF(FICHA_VAZIA); setResultados(null); } }, [visivel, client.id]);
 
   const nome = client.empresa?.trim() || client.nome || 'Lead';
@@ -100,12 +106,15 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     }
 
     if (!dealId) {
+      const passoSemNegocio = proximoPassoDaFicha(f, hoje);
+      if (passoSemNegocio) setPassoSalvo({ ...passoSemNegocio, virouTarefa: false });
       lista.push({ rotulo: 'HubSpot', estado: 'pulado', detalhe: 'este lead ainda não tem negócio no HubSpot' });
     } else {
       // 2) nota da visita (DESFECHO_VISITA v1)
       await enviar({ op: 'nota', dealId, texto: notaDaVisita(f, { cliente: nome, ocorridoEm: checkinEm, hoje }) }, 'Nota da visita', lista);
       // 3) próximo passo com data → tarefa (+ sistema e dor no negócio)
       const passo = proximoPassoDaFicha(f, hoje);
+      if (passo) setPassoSalvo({ ...passo, virouTarefa: true });
       if (passo) {
         const qualificacao: Record<string, string> = {};
         if (f.sistema.trim()) qualificacao.nomeDoSistema = f.sistema.trim().slice(0, 120);
@@ -143,7 +152,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     <Modal visible={visivel} animationType="slide" onRequestClose={onFechar}>
       <View style={s.tela}>
         <View style={s.faixa}>
-          <Text style={s.faixaTexto} numberOfLines={1}>{`✓ Check-in · ${nome} · ${hora(checkinEm)}`}</Text>
+          <Text style={s.faixaTexto} numberOfLines={1}>{`✓ ${declarada ? 'Visita declarada' : 'Check-in'} · ${nome} · ${hora(checkinEm)}`}</Text>
         </View>
 
         {resultados ? (
@@ -162,6 +171,31 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                 </View>
               </View>
             ))}
+            {/* O que vem depois da visita: o passo combinado e onde ele mora. */}
+            <View style={s.passo}>
+              <Text style={s.secao}>PRÓXIMO PASSO</Text>
+              {passoSalvo ? (
+                <>
+                  <Text style={s.passoTitulo}>
+                    {`${passoSalvo.texto} · ${passoSalvo.data.split('-').reverse().slice(0, 2).join('/')}`}
+                  </Text>
+                  <Text style={s.ajuda}>
+                    {passoSalvo.virouTarefa
+                      ? 'Está na sua Agenda e nas Tarefas, e o Cockpit já vê.'
+                      : 'Sem negócio no HubSpot: não virou tarefa. Marque pelo "Agendar" do card.'}
+                  </Text>
+                </>
+              ) : (
+                <Text style={s.ajuda}>
+                  {f.proximo === 'sem_interesse' ? 'Sem interesse: o negócio foi para Perdido, nada a marcar.' : 'Nenhum próximo passo com data.'}
+                </Text>
+              )}
+              {onAgenda && (
+                <Pressable accessibilityRole="button" style={[s.botao, s.botaoSec]} onPress={() => { onFechar(); onAgenda(passoSalvo?.data ?? null); }}>
+                  <Text style={s.botaoSecTexto}>{passoSalvo ? 'Ver na Agenda' : 'Abrir a Agenda'}</Text>
+                </Pressable>
+              )}
+            </View>
             <View style={s.rodapeAcoes}>
               {proxima && (
                 <Pressable accessibilityRole="button" style={[s.botao, s.botaoPrincipal]} onPress={() => { onFechar(); onProxima(proxima.client); }}>
@@ -252,6 +286,8 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
 }
 
 const s = StyleSheet.create({
+  passo: { gap: 6, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)', marginTop: 8 },
+  passoTitulo: { fontSize: 16, fontWeight: '800', color: 'var(--text)' },
   tela: { flex: 1, backgroundColor: 'var(--bg)' },
   faixa: { backgroundColor: '#14532D', paddingHorizontal: 16, paddingTop: 'max(12px, env(safe-area-inset-top))' as unknown as number, paddingBottom: 12 },
   faixaTexto: { color: '#BBF7D0', fontSize: 14, fontWeight: '800' },

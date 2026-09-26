@@ -1003,6 +1003,8 @@ function MainApp() {
   const [filtrosNovosAbertos, setFiltrosNovosAbertos] = useState(false);
   // Pilha aberta em leque (C11): id do líder. Fecha ao mexer o mapa.
   const [pilhaAberta, setPilhaAberta] = useState<string | null>(null);
+  // Dia em que a Agenda do mapa novo abre (vem do "Ver na Agenda" da ficha).
+  const [agendaDiaInicial, setAgendaDiaInicial] = useState<string | null>(null);
   // Resumo de quadra tocado: a folha mostra só os pinos dele até fechar.
   const [quadraAberta, setQuadraAberta] = useState<{ lider: string; ids: Set<string>; area: string } | null>(null);
   useEffect(() => { setPilhaAberta(null); }, [mapRegion]);
@@ -1027,8 +1029,9 @@ function MainApp() {
   const [heatOn, setHeatOn] = useState(false);
   // Mapa novo: o calor é uma LENTE (vale no celular também), não um botão de gestor.
   useEffect(() => {
-    if (modoNovo) setHeatOn(lente === 'calor');
-  }, [modoNovo, lente]);
+    // Julyan 26/09: calor é do GESTOR — o executivo não vê a lente nem a camada.
+    if (modoNovo) setHeatOn(lente === 'calor' && canViewGestor);
+  }, [modoNovo, lente, canViewGestor]);
   const [heatSeller, setHeatSeller] = useState<string | null>(null); // null = Todos
   const {
     points: heatPoints,
@@ -3171,7 +3174,7 @@ function MainApp() {
   };
   // Ficha de rua (mapa novo): abre depois do check-in de um lead.
   const [fichaPendente, setFichaPendente] = useState<{
-    client: Client; checkinEm: string; etapaAtual: string | null; primeiraVisita: boolean;
+    client: Client; checkinEm: string; etapaAtual: string | null; primeiraVisita: boolean; declarada?: boolean;
   } | null>(null);
   const [desfechoPendente, setDesfechoPendente] = useState<{
     idHubspot: string;
@@ -3257,6 +3260,9 @@ function MainApp() {
       const moverPino = () => { setEditingLocationFor(client); setSelectedClient(null); };
 
       let corrigirPino = false;
+      // 0109: fora do raio e o pino confirmado (ou longe demais para ser a
+      // porta): o executivo pode registrar como visita declarada (§8.2.2).
+      let declarada = false;
       if (distance > maxDistance) {
         if (!pinoConfirmado && distance <= 2000) {
           // Pino nunca confirmado: o provável é o PINO estar errado, não o
@@ -3305,10 +3311,17 @@ function MainApp() {
             `Distância: ${Math.round(distance)} m (limite: ${maxDistance} m).`
             + (fixAccuracy != null ? ` Precisão do GPS: ±${Math.round(fixAccuracy)} m.` : '')
             + (pinoConfirmado ? '\nEsse pino já foi confirmado no local por GPS. Se o lugar mudou, mova o pino.' : '\nAproxime-se para marcar a visita.'),
-            [{ text: 'Fechar', valor: 'nao', style: 'cancel' }, { text: 'Mover pino', valor: 'outro' }],
+            [
+              { text: 'Fechar', valor: 'nao', style: 'cancel' },
+              { text: 'Mover pino', valor: 'outro' },
+              // Mapa novo: a visita entra marcada como declarada, com a
+              // distância real; o pino não se mexe.
+              ...(modoNovo ? [{ text: 'Registrar como visita declarada', valor: 'declarada' }] : []),
+            ],
           );
-          if (r === 'outro') moverPino();
-          return;
+          if (r === 'outro') { moverPino(); return; }
+          if (r !== 'declarada') return;
+          declarada = true;
         }
       }
 
@@ -3321,13 +3334,13 @@ function MainApp() {
       try {
         visitado = await markAsVisited.mutateAsync({
           clientId: client.id, latitude: userLat, longitude: userLon,
-          accuracyM: fixAccuracy, acaoId, feitoEm, corrigirPino,
+          accuracyM: fixAccuracy, acaoId, feitoEm, corrigirPino, declarada,
         });
       } catch (err) {
         if (!ehErroDeRede(err)) throw err;
         await enfileirar({
           acaoId, tipo: 'checkin', rotulo: `Check-in · ${nomeDoLead}`, criadoEm: feitoEm,
-          payload: { clientId: client.id, latitude: userLat, longitude: userLon, accuracyM: fixAccuracy, feitoEm, corrigirPino },
+          payload: { clientId: client.id, latitude: userLat, longitude: userLon, accuracyM: fixAccuracy, feitoEm, corrigirPino, declarada },
         });
         Toast.mostrar(`Sem sinal · check-in em ${nomeDoLead} na fila, sobe sozinho`, 'fila');
         onDone?.();
@@ -3351,7 +3364,9 @@ function MainApp() {
       // pos-venda (o proprio check-in ja' nao toca o funil deles), e visita sem
       // deal_id vira "visita nao confirmada" do lado do Cockpit — fica fora do
       // ciclo fechado em vez de entrar torta.
-      Toast.mostrar(corrigirPino
+      Toast.mostrar(declarada
+        ? `✓ Visita declarada em ${nomeDoLead} (você estava a ${Math.round(distance)} m)`
+        : corrigirPino
         ? `✓ Check-in em ${nomeDoLead} · pino corrigido (estava a ${Math.round(distance)} m)`
         : `✓ Check-in em ${nomeDoLead} registrado`, 'ok');
       if (modoNovo && contextoPino && visitado.status === 'lead') {
@@ -3365,6 +3380,7 @@ function MainApp() {
           checkinEm: visitado.visited_at ?? new Date().toISOString(),
           etapaAtual: pelaTabela ?? peloSnapshot,
           primeiraVisita: (client.visit_count ?? 0) === 0,
+          declarada,
         });
       } else if (visitado.status === 'lead' && visitado.id_hubspot) {
         setDesfechoPendente({
@@ -3393,6 +3409,7 @@ function MainApp() {
       accuracyM: p.accuracyM == null ? null : Number(p.accuracyM),
       acaoId, feitoEm: (p.feitoEm as string | undefined) ?? null,
       corrigirPino: p.corrigirPino === true,
+      declarada: p.declarada === true,
     });
     if (!isMonitoringRoute) {
       const stop = fieldOps.stops.find((s) => s.client_id === clientId && s.status !== 'done');
@@ -5178,6 +5195,8 @@ function MainApp() {
   // estava, porque nada disso e' desmontado.
   const irParaAba = (aba: AppTab) => {
     if (aba !== 'map') setSelectedClient(null);
+    // Pelo rodapé a Agenda abre em hoje (o dia da ficha vale só para o "Ver na Agenda").
+    if (aba === 'agenda') setAgendaDiaInicial(null);
     setTab(aba);
   };
 
@@ -5796,7 +5815,7 @@ function MainApp() {
             >
               {modoNovo ? (
                 <>
-                  {LENTES.map((l) => {
+                  {LENTES.filter((l) => l.id !== 'calor' || canViewGestor).map((l) => {
                     const ativa = lente === l.id;
                     return (
                       <TouchableOpacity
@@ -6130,6 +6149,8 @@ function MainApp() {
         />
       ) : modoNovo ? (
         <AgendaNovoScreen
+          key={agendaDiaInicial ?? 'hoje'}
+          diaInicial={agendaDiaInicial}
           paradas={routeStops}
           reunioes={meetings}
           metaVisitasDia={routeConfig.meta_visitas_dia}
@@ -7167,6 +7188,9 @@ function MainApp() {
           })()}
           onFechar={() => setFichaPendente(null)}
           onProxima={(c) => handleMarkerPress(c)}
+          declarada={fichaPendente.declarada}
+          // Depois da visita: a Agenda no dia do passo combinado.
+          onAgenda={(dia) => { setSelectedClient(null); setAgendaDiaInicial(dia); setTab('agenda'); }}
           onSalvarCadastro={async (campos: CamposCadastro) => {
             const c = fichaPendente.client;
             if (campos.empresa || campos.telefone) {
