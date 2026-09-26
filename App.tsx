@@ -1725,7 +1725,7 @@ function MainApp() {
         return;
       }
       if (naTela) return;
-      mapa.fitToCoordinates(pontos, { edgePadding: { top: 140, right: 60, bottom: 280, left: 60 }, animated: true });
+      mapa.fitToCoordinates(pontos, { edgePadding: { top: 60, right: 40, bottom: 60, left: 40 }, animated: true });
     }, 700);
     return () => clearTimeout(id);
   }, [modoNovo, searchTerm, buscando, filteredWithCoords, mapRegion]);
