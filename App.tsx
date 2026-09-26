@@ -7572,6 +7572,7 @@ function MainApp() {
         <FichaDeRua
           visivel
           client={fichaPendente.client}
+          ownerId={myHubspotId}
           checkinEm={fichaPendente.checkinEm}
           etapaAtual={fichaPendente.etapaAtual}
           primeiraVisita={fichaPendente.primeiraVisita}

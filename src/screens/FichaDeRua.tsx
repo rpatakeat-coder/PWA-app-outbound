@@ -13,7 +13,7 @@
 // para o Desfazer valer; se a página fechar nesse meio-tempo, vão para a
 // fila offline e sobem sozinhos. Sem sinal, a fila também segura.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { Client } from '../types/client';
 import { enfileirar, ehErroDeRede, novoAcaoId } from '../utils/filaOffline';
@@ -24,6 +24,7 @@ import {
 } from '../utils/fichaDeRua';
 import { ehRecusa, negocioAcao } from '../utils/negocioAcao';
 import { supabase } from '../integrations/supabase/client';
+import { comprimir, enviarFoto, escolherFoto } from '../utils/fotoVisita';
 
 export type CamposCadastro = { empresa?: string; telefone?: string; categoria?: string };
 
@@ -44,6 +45,8 @@ type Props = {
   onAgenda?: (dia: string | null) => void;
   /** Visita declarada (0109): o chip diz isso, não "GPS confere". */
   declarada?: boolean;
+  /** id_hubspot de quem registra (pasta da foto e dono no Cockpit). */
+  ownerId?: string | null;
 };
 
 type Resultado = { rotulo: string; estado: 'ok' | 'fila' | 'falhou' | 'pulado'; detalhe?: string };
@@ -53,19 +56,22 @@ const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 
 const diaMes = (iso: string) => iso.split('-').reverse().slice(0, 2).join('/');
 const JANELA_DESFAZER_MS = 5000;
 
-export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, declarada = false }: Props) {
+export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, declarada = false, ownerId = null }: Props) {
   const [f, setF] = useState<Ficha>(FICHA_VAZIA);
   const [opcao, setOpcao] = useState<string | null>(null);
   const [completar, setCompletar] = useState(false);
   const [outroSistema, setOutroSistema] = useState(false);
+  // Foto da fachada/cardápio: comprimida na hora, sobe junto com a visita.
+  const [foto, setFoto] = useState<{ blob: Blob; url: string } | null>(null);
+  const [preparandoFoto, setPreparandoFoto] = useState(false);
   const [fase, setFase] = useState<'form' | 'desfazer' | 'enviando' | 'salvo'>('form');
   const [resultados, setResultados] = useState<Resultado[]>([]);
   const [passoSalvo, setPassoSalvo] = useState<{ data: string; texto: string; virouTarefa: boolean } | null>(null);
-  const pendente = useRef<{ campos: CamposCadastro; envios: Envio[]; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const pendente = useRef<{ campos: CamposCadastro; envios: Envio[]; foto: Blob | null; timer: ReturnType<typeof setTimeout> } | null>(null);
 
   useEffect(() => {
     if (!visivel) return;
-    setF(FICHA_VAZIA); setOpcao(null); setCompletar(false); setOutroSistema(false);
+    setF(FICHA_VAZIA); setOpcao(null); setCompletar(false); setOutroSistema(false); setFoto(null);
     setFase('form'); setResultados([]); setPassoSalvo(null);
   }, [visivel, client.id]);
 
@@ -150,6 +156,17 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
       const foi = await enviar(e, lista);
       if (foi && e.etapa) onEtapaMudou(e.etapa);
     }
+    if (p.foto) {
+      try {
+        await enviarFoto({
+          blob: p.foto, ownerId, dealId, clientId: client.id,
+          lat: client.latitude != null ? Number(client.latitude) : null, lng: client.longitude != null ? Number(client.longitude) : null,
+        });
+        lista.push({ rotulo: 'Foto da visita · vai para o gestor', estado: 'ok' });
+      } catch (err) {
+        lista.push({ rotulo: 'Foto da visita', estado: 'falhou', detalhe: String((err as Error)?.message ?? err) });
+      }
+    }
     setResultados(lista);
     setFase('salvo');
   }
@@ -210,7 +227,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
         envios.push({ corpo: { op: 'mudar-etapa', dealId, novaEtapa: sugerida, propriedades }, rotulo: `Etapa → ${ROTULO_ETAPA[sugerida]}`, etapa: sugerida });
       }
     }
-    pendente.current = { campos, envios, timer: setTimeout(() => { void executar(); }, JANELA_DESFAZER_MS) };
+    pendente.current = { campos, envios, foto: foto?.blob ?? null, timer: setTimeout(() => { void executar(); }, JANELA_DESFAZER_MS) };
     setFase('desfazer');
   }
 
@@ -338,6 +355,32 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                     <Text style={s.rotulo}>Maior dor</Text>
                     <View style={s.chips}>{GARGALOS.map((g) => chip(g, g, f.dor === g, () => set({ dor: f.dor === g ? null : g })))}</View>
 
+                    <Text style={s.rotulo}>Foto da fachada ou do cardápio · vai para o gestor</Text>
+                    <View style={s.fotoLinha}>
+                      {foto && <Image source={{ uri: foto.url }} style={s.fotoMini} accessibilityLabel="Foto escolhida" />}
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={preparandoFoto}
+                        onPress={async () => {
+                          const arq = await escolherFoto();
+                          if (!arq) return;
+                          setPreparandoFoto(true);
+                          try {
+                            const blob = await comprimir(arq);
+                            setFoto({ blob, url: URL.createObjectURL(blob) });
+                          } catch { /* foto ilegível: segue sem */ } finally { setPreparandoFoto(false); }
+                        }}
+                        style={s.chip}
+                      >
+                        {preparandoFoto ? <ActivityIndicator /> : <Text style={s.chipTexto}>{foto ? 'Trocar foto' : 'Tirar foto'}</Text>}
+                      </Pressable>
+                      {foto && (
+                        <Pressable accessibilityRole="button" onPress={() => setFoto(null)} style={s.chip}>
+                          <Text style={s.chipTexto}>Tirar</Text>
+                        </Pressable>
+                      )}
+                    </View>
+
                     {!temTelefone && (
                       <>
                         <Text style={s.rotulo}>Telefone / WhatsApp</Text>
@@ -454,6 +497,8 @@ const s = StyleSheet.create({
   completarAlerta: { fontSize: 12, fontWeight: '600', color: '#F87171' },
   seta: { fontSize: 14, color: 'var(--text-muted)', paddingHorizontal: 6 },
   completar: { gap: 8 },
+  fotoLinha: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  fotoMini: { width: 56, height: 56, borderRadius: 10, backgroundColor: 'var(--surface-2)' },
   rotulo: { fontSize: 13, fontWeight: '600', color: 'var(--text)', marginTop: 6 },
   ajuda: { fontSize: 12, fontWeight: '500', color: 'var(--text-muted)' },
   aviso: { fontSize: 13, color: 'var(--tint-amber-text)', backgroundColor: 'var(--tint-amber)', padding: 10, borderRadius: 10 },
