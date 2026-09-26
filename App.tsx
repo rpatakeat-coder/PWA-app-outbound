@@ -3538,8 +3538,10 @@ function MainApp() {
       const perguntar = (titulo: string, msg: string, botoes: { text: string; valor: string; style?: 'cancel' | 'destructive' }[]) =>
         new Promise<string>((res) => Alert.alert(titulo, msg, botoes.map((b) => ({ text: b.text, style: b.style, onPress: () => res(b.valor) }))));
 
-      // FOTO É A SEGUNDA PROVA (Julyan, 26/09): quando o GPS não confirma a
-      // porta, a visita só entra com foto — da fachada, do balcão, do cardápio.
+      // FOTO É A SEGUNDA PROVA (Julyan, 26/09): SÓ quando o GPS FALHA (não
+      // respondeu, leitura grosseira, impreciso) a visita entra com foto — da
+      // fachada, do balcão, do cardápio. Check-in normal e visita declarada
+      // por distância não pedem foto: nada de microgerenciar.
       // A câmera abre no toque do botão (o navegador exige o gesto), antes do
       // check-in: sem foto, nada é gravado.
       const tirarFotoDeProva = async (): Promise<Blob | null> => {
@@ -3659,13 +3661,13 @@ function MainApp() {
               { text: 'Mover pino', valor: 'outro' },
               // Mapa novo: a visita entra marcada como declarada, com a
               // distância real; o pino não se mexe.
-              ...(modoNovo ? [{ text: 'Registrar com foto', valor: 'declarada' }] : []),
+              // GPS firme dizendo "longe" não é GPS falhando: declara sem foto
+              // (Julyan, 26/09: foto só quando o GPS falha, sem microgerenciar).
+              ...(modoNovo ? [{ text: 'Registrar como visita declarada', valor: 'declarada' }] : []),
             ],
           );
           if (r === 'outro') { moverPino(); return; }
           if (r !== 'declarada') return;
-          fotoProva = await tirarFotoDeProva();
-          if (!fotoProva) return;
           declarada = true;
         }
       }
@@ -3721,7 +3723,9 @@ function MainApp() {
       // deal_id vira "visita nao confirmada" do lado do Cockpit — fica fora do
       // ciclo fechado em vez de entrar torta.
       Toast.mostrar(declarada
-        ? `✓ Visita com foto em ${nomeDoLead}${semLeitura ? ' · sem GPS agora' : ` · GPS a ${Math.round(distance)} m`}`
+        ? (fotoProva
+          ? `✓ Visita com foto em ${nomeDoLead}${semLeitura ? ' · sem GPS agora' : ''}`
+          : `✓ Visita declarada em ${nomeDoLead} (você estava a ${Math.round(distance)} m)`)
         : corrigirPino
         ? `✓ Check-in em ${nomeDoLead} · pino corrigido (estava a ${Math.round(distance)} m)`
         : `✓ Check-in em ${nomeDoLead} registrado`, 'ok');
