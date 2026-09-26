@@ -1,9 +1,9 @@
-// Folha inferior do mapa novo, sem lead aberto (entrega 4; prancha §5).
+// Folha inferior do mapa novo, sem lead aberto (handoff v4.1 §3 e §6.1).
 //
-// Peek: "AGORA, PERTO DE VOCÊ" + progresso do plano + a próxima parada com
-// Ir e Cheguei. Tocar em "Nesta área" abre a lista dos pinos da lente, por
-// Prioridade (plano › cobrança › quente › morno › distância) ou Distância.
-// O peek não passa de ~40% da tela: o mapa é o produto.
+// Espiada (88 px): "PRÓXIMA PORTA · N DO PLANO", o progresso de visitas do
+// dia e a próxima porta com Cheguei. Tocar na alça abre a lista da área
+// (ou da quadra), por Prioridade (plano › cobrança › quente › morno ›
+// distância) ou Distância. O mapa é o produto: em repouso ele fica com ~73%.
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -34,7 +34,18 @@ type Props = {
   quadra?: { area: string; aoFechar: () => void } | null;
   /** Lentes Sem dono e Reconquista: "É meu" direto na linha (só na rota de hoje). */
   eMeu?: { naRota: Set<string>; aoAssumir: (c: Client) => void } | null;
+  /** Visitas do plano feitas hoje e a meta do playbook (6). */
+  visitasFeitas: number;
+  metaVisitas: number;
+  /** Toque em "x de 6 visitas". */
+  aoProgresso?: () => void;
 };
+
+// Andando na rua: ~80 m por minuto, contando esquina e sinal.
+function aPe(m: number | null): string | null {
+  if (m == null) return null;
+  return `${Math.max(1, Math.round(m / 80))} min a pé`;
+}
 
 function PinoMini({ p, plano }: { p: Pino; plano: number | null }) {
   return (
@@ -60,7 +71,7 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas, metaVisitas, aoProgresso }: Props) {
   const [abertaPeloToque, setAberta] = useState(false);
   const aberta = abertaPeloToque || !!quadra;
   const [modo, setModo] = useState<'prioridade' | 'distancia'>('prioridade');
@@ -79,40 +90,38 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
         <View style={s.alcaBarra} />
       </Pressable>
       <View style={s.linhaTopo}>
-        <Text style={s.kicker}>AGORA, PERTO DE VOCÊ</Text>
-        <Text style={s.progresso}>
-          {planoTotal ? `Plano de hoje · ${planoFeito} de ${planoTotal} feito` : 'Sem plano para hoje'}
+        <Text style={s.kicker} numberOfLines={1}>
+          {proxima ? `PRÓXIMA PORTA · ${proxima.plano} DO PLANO` : planoTotal ? 'PLANO DE HOJE' : 'AGORA, PERTO DE VOCÊ'}
         </Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${visitasFeitas} de ${metaVisitas} visitas hoje`} onPress={aoProgresso} hitSlop={10}>
+          <Text style={s.progresso}>{`${visitasFeitas} de ${metaVisitas} visitas ›`}</Text>
+        </Pressable>
       </View>
 
       {proxima ? (
-        <>
-          <Pressable accessibilityRole="button" onPress={() => onAbrir(proxima.c)} style={s.proxima}>
-            <PinoMini p={proxima.p} plano={proxima.plano} />
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={s.nome} numberOfLines={1}>{`${proxima.plano} · ${proxima.c.empresa?.trim() || proxima.c.nome}`}</Text>
-              <Text style={s.sub} numberOfLines={1}>
-                {[proxima.c.endereco?.trim() || proxima.c.bairro?.trim() || 'endereço não informado', distanciaTexto(proxima.distanciaM)].filter(Boolean).join(' · ')}
-              </Text>
-              <Etiquetas it={proxima} />
-            </View>
+        <View style={s.proxima}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${proxima.c.empresa?.trim() || proxima.c.nome}`} onPress={() => onAbrir(proxima.c)} style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.nome} numberOfLines={1}>{proxima.c.empresa?.trim() || proxima.c.nome}</Text>
+            <Text style={s.sub} numberOfLines={1}>
+              {[distanciaTexto(proxima.distanciaM), aPe(proxima.distanciaM), proxima.c.bairro?.trim() || null].filter(Boolean).join(' · ') || 'toque para ver o lead'}
+            </Text>
           </Pressable>
-          <View style={s.acoes}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Ir até a próxima parada" onPress={() => ir(proxima.c, false)} style={[s.btn, s.btnIr]}>
-              <Text style={s.btnIrTexto}>Ir</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Cheguei na próxima parada" onPress={() => onCheguei(proxima.c)} style={[s.btn, s.btnCheguei]}>
-              <Text style={s.btnChegueiTexto}>Cheguei</Text>
-            </Pressable>
-          </View>
-        </>
+          <Pressable accessibilityRole="button" accessibilityLabel="Cheguei na próxima porta" onPress={() => onCheguei(proxima.c)} style={s.btnCheguei}>
+            <Text style={s.btnChegueiTexto}>Cheguei</Text>
+          </Pressable>
+        </View>
       ) : (
-        <Text style={s.semProxima}>
-          {planoTotal ? 'Plano de hoje concluído.' : 'Nada planejado para hoje no Cockpit. Os pinos da lente estão na lista abaixo.'}
-        </Text>
+        <Pressable accessibilityRole="button" onPress={() => setAberta((v) => !v)} style={s.proxima}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.nome} numberOfLines={1}>
+              {planoTotal ? `Plano de hoje concluído · ${planoFeito} de ${planoTotal}` : 'Nada planejado para hoje no Cockpit'}
+            </Text>
+            <Text style={s.sub} numberOfLines={1}>{`${totalNaArea} na área · lente ${rotuloLente} · toque para ver a lista`}</Text>
+          </View>
+        </Pressable>
       )}
 
-      {quadra ? (
+      {aberta && (quadra ? (
         <View style={s.quadraTopo}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={s.nestaAreaTexto} numberOfLines={1}>{`Quadra · ${quadra.area} · ${itens.length} ${itens.length === 1 ? 'pino' : 'pinos'}`}</Text>
@@ -123,11 +132,16 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
           </Pressable>
         </View>
       ) : (
-      <Pressable accessibilityRole="button" onPress={() => setAberta((v) => !v)} style={s.nestaArea}>
-        <Text style={s.nestaAreaTexto}>{`Nesta área · ${totalNaArea} · ${itens.length} ${itens.length === 1 ? 'pino' : 'pinos'}, ${Math.max(0, totalNaArea - itens.length)} pontos ${aberta ? '▾' : '▴'}`}</Text>
-        <Text style={s.nestaAreaSub}>{`Lente ${rotuloLente}`}</Text>
-      </Pressable>
-      )}
+        <View style={s.quadraTopo}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.nestaAreaTexto} numberOfLines={1}>{`Nesta área · ${itens.length} ${itens.length === 1 ? 'pino' : 'pinos'} da lente`}</Text>
+            <Text style={s.nestaAreaSub}>{`Lente ${rotuloLente} · ${Math.max(0, totalNaArea - itens.length)} outros viram ponto`}</Text>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Recolher a lista" onPress={() => setAberta(false)} style={s.quadraFechar}>
+            <Text style={s.quadraFecharTexto}>✕</Text>
+          </Pressable>
+        </View>
+      ))}
 
       {aberta && (
         <>
@@ -174,30 +188,27 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
 const s = StyleSheet.create({
   folha: {
     position: 'absolute', left: 0, right: 0, zIndex: 20,
-    backgroundColor: 'var(--surface)', borderTopLeftRadius: 18, borderTopRightRadius: 18,
+    backgroundColor: 'var(--surface)', borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    borderTopWidth: 1, borderColor: 'var(--border)',
     // 48%: com 62% a lista aberta tomava a tela e o mapa virava uma faixa sem arrasto (26/09).
-    paddingHorizontal: 16, paddingBottom: 10, gap: 8, maxHeight: '48%',
+    paddingHorizontal: 16, paddingBottom: 10, gap: 6, maxHeight: '52%',
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 18, shadowOffset: { width: 0, height: -4 }, elevation: 10,
   },
-  alca: { alignSelf: 'stretch', alignItems: 'center', paddingTop: 8, paddingBottom: 2, minHeight: 20 },
-  alcaBarra: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'var(--stroke-strong)' },
+  alca: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', height: 18 },
+  alcaBarra: { width: 40, height: 5, borderRadius: 3, backgroundColor: 'var(--stroke-strong)' },
   linhaTopo: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },
-  kicker: { fontSize: 11, fontWeight: '800', letterSpacing: 0.6, color: 'var(--brand-text)' },
-  progresso: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)' },
-  proxima: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56 },
+  kicker: { flex: 1, fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: '#F87171' },
+  progresso: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
+  proxima: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
+  btnCheguei: { height: 48, paddingHorizontal: 20, borderRadius: 14, backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  btnChegueiTexto: { fontSize: 15, fontWeight: '700', color: '#fff' },
   mini: { width: 30, height: 30, borderRadius: 15, borderWidth: 2.5, backgroundColor: '#14171C', alignItems: 'center', justifyContent: 'center' },
   miniTexto: { fontSize: 12, fontWeight: '900' },
-  nome: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
-  sub: { fontSize: 12, color: 'var(--text-muted)', marginTop: 1 },
+  nome: { fontSize: 16, fontWeight: '600', color: 'var(--text)' },
+  sub: { fontSize: 13, fontWeight: '500', color: 'var(--text-muted)', marginTop: 1 },
   etiquetas: { flexDirection: 'row', gap: 4, marginTop: 3, flexShrink: 0 },
   tag: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, maxWidth: 120 },
   tagTexto: { fontSize: 10, fontWeight: '800' },
-  acoes: { flexDirection: 'row', gap: 8 },
-  btn: { minHeight: 56, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  btnIr: { flex: 1, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)' },
-  btnIrTexto: { fontSize: 16, fontWeight: '800', color: 'var(--text)' },
-  btnCheguei: { flex: 2, backgroundColor: '#E51A31' },
-  btnChegueiTexto: { fontSize: 17, fontWeight: '800', color: '#fff' },
   semProxima: { fontSize: 13, color: 'var(--text-muted)', paddingVertical: 6 },
   nestaArea: { minHeight: 44, justifyContent: 'center' },
   eMeu: { minHeight: 44, minWidth: 64, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#FACC15', alignItems: 'center', justifyContent: 'center' },

@@ -103,6 +103,8 @@ import PinoP2, { ANCORA_PINO_P2 } from './src/map/PinoP2';
 import FiltrosMapaNovo from './src/screens/FiltrosMapaNovo';
 import { PeekCardNovo, TopoCardNovo, type AcoesCardNovo, type DadosCardNovo } from './src/screens/CardLeadNovo';
 import FolhaDoMapa, { type ItemFolha } from './src/screens/FolhaDoMapa';
+import TopoCampo, { ALTURA_TOPO_CAMPO } from './src/screens/TopoCampo';
+import FolhaLentes, { COR_LENTE } from './src/screens/FolhaLentes';
 import FolhaCalor from './src/screens/FolhaCalor';
 import AvisosPainel from './src/screens/AvisosPainel';
 import { useAvisos } from './src/hooks/useAvisos';
@@ -1027,6 +1029,8 @@ function MainApp() {
   const [lente, setLente] = useState<Lente>('dia');
   const [filtrosNovos, setFiltrosNovos] = useState<FiltrosNovos>(FILTROS_VAZIOS);
   const [filtrosNovosAbertos, setFiltrosNovosAbertos] = useState(false);
+  // Lentes, filtros e legenda saíram do topo (handoff v4.1 §6.9).
+  const [lentesAbertas, setLentesAbertas] = useState(false);
   // Pilha aberta em leque (C11): id do líder. Fecha ao mexer o mapa.
   const [pilhaAberta, setPilhaAberta] = useState<string | null>(null);
   // Dia em que a Agenda do mapa novo abre (vem do "Ver na Agenda" da ficha).
@@ -4553,7 +4557,7 @@ function MainApp() {
         // `top` contado do Y REAL do mapa, igual aos botoes: este overlay e'
         // absoluto contra a RAIZ DA TELA, e o `top: 8` cru punha a pill em
         // cima da busca do header (valia ja' pra de carregamento).
-        style={[styles.areaStatusWrap, { top: (mapLayout?.y ?? 0) + 8 }]}
+        style={[styles.areaStatusWrap, { top: modoNovo && !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 8 : (mapLayout?.y ?? 0) + 8 }]}
         pointerEvents="none"
       >
         {((showOnlyMyArea && viewportTooWide) || isLoading || waitingForLocation) && (
@@ -4651,7 +4655,7 @@ function MainApp() {
 
       {/* Map buttons. Recenter e FAB somem enquanto o calor está ligado
           (o painel de calor ocupa a faixa de baixo). */}
-      {userLocation && !creationMode && !heatOn && !rotaFaixaDeMapa && (
+      {userLocation && !creationMode && !heatOn && !rotaFaixaDeMapa && !(modoNovo && !layout.ehLargo && (selectedClient || telaCheia || !folhaDeBaixo)) && (
         <TouchableOpacity
           style={
             rotaMapaGrande
@@ -4668,7 +4672,10 @@ function MainApp() {
                   // `top: 16` cru punha o botao em cima da busca do header.
                   layout.ehLargo
                     ? { bottom: baseInferior, left: 16 }
-                    : { top: (mapLayout?.y ?? 0) + 16, left: 16 },
+                    : modoNovo && tab === 'map'
+                      // Handoff v4.1 §3: coluna à direita, 12 px acima do "+", que fica 12 px acima da folha.
+                      ? { bottom: baseInferior + (folhaDeBaixo ? alturaFolha : 0) + 12 + 52 + 12, right: 12, width: 44, height: 44, borderRadius: 22 }
+                      : { top: (mapLayout?.y ?? 0) + 16, left: 16 },
                   layout.ehLargo && styles.mapaControleWeb,
                 ]
           }
@@ -4694,6 +4701,33 @@ function MainApp() {
         >
           <IconPlus width={26} height={26} fill="#fff" />
         </TouchableOpacity>
+      )}
+
+      {/* Topo do app de campo v4.1: UMA linha flutuando sobre o mapa. */}
+      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && (
+        <TopoCampo
+          top={insets.top + 7}
+          lente={{ rotulo: LENTES.find((l) => l.id === lente)?.rotulo ?? 'Meu dia', cor: COR_LENTE[lente] }}
+          aoAbrirLentes={() => { Keyboard.dismiss(); setLentesAbertas(true); }}
+          busca={searchQuery}
+          aoBuscar={setSearchQuery}
+          buscando={buscando}
+          selo={avisos.selo}
+          aoSino={() => setAvisosAbertos(true)}
+          avatar={{ url: profile?.avatar_url, nome: profile?.full_name, email: profile?.email }}
+          aoAvatar={() => setPerfilAberto(true)}
+        />
+      )}
+      {modoNovo && !layout.ehLargo && (
+        <FolhaLentes
+          visivel={lentesAbertas}
+          aoFechar={() => setLentesAbertas(false)}
+          lentes={LENTES.filter((l) => l.id !== 'calor' || canViewGestor)}
+          atual={lente}
+          aoEscolher={setLente}
+          filtrosAtivos={quantosFiltros(filtrosNovos)}
+          aoFiltros={() => setFiltrosNovosAbertos(true)}
+        />
       )}
 
       {/* Mapa novo: folha de baixo sem lead aberto (prancha §5). No
@@ -4722,6 +4756,9 @@ function MainApp() {
           eMeu={!isViewer && (lente === 'semdono' || lente === 'rec') ? { naRota: routeStopClientIds, aoAssumir: (c) => { void assumirDoMapa(c); } } : null}
           planoTotal={routeDisplayClients.length}
           planoFeito={routeStops.filter((s) => s.status === 'done').length}
+          visitasFeitas={routeStops.filter((s) => s.status === 'done').length}
+          metaVisitas={routeConfig.meta_visitas_dia > 0 ? routeConfig.meta_visitas_dia : 6}
+          aoProgresso={() => irParaAba('agenda')}
           chao={baseInferior}
           totalNaArea={visiveisMapaNovo.length}
           rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
@@ -4736,7 +4773,7 @@ function MainApp() {
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Novo lead"
-          style={[styles.fabMapaNovo, { bottom: baseInferior + (folhaDeBaixo ? alturaFolha : 0) + 12 }]}
+          style={[styles.fabMapaNovo, { right: 12, bottom: baseInferior + (folhaDeBaixo ? alturaFolha : 0) + 12 }]}
           onPress={() => setShowCepStep(true)}
         >
           <IconPlus width={26} height={26} fill="#FFFFFF" />
@@ -5627,7 +5664,7 @@ function MainApp() {
       {/* Header vermelho — so' no celular. No web o vermelho vira o CTA
           (handoff: "o vermelho sai do header"). No mapa expandido da Rota ele
           some junto com a barra: o mapa e' a tela. */}
-      {!layout.ehLargo && !rotaMapaExpandido && (
+      {!layout.ehLargo && !rotaMapaExpandido && !(modoNovo && tab === 'map') && (
       <View style={[styles.header, isDark && styles.headerEscuro]}>
         {/* Linha 1 — busca + avatar. A busca subiu pro header: ela e' o
             caminho pro lead que NAO esta' na area carregada, e ficava abaixo
@@ -6014,7 +6051,7 @@ function MainApp() {
       )}
 
       {/* Vendedor/admin: search + chips de status (um por vez) + filtros. */}
-      {!isViewer && ehAbaDeLeads && !layout.ehLargo && (
+      {!isViewer && ehAbaDeLeads && !layout.ehLargo && !modoNovo && (
         <>
           {/* UMA faixa de filtro, nao tres. O status virou chip removivel na
               mesma linha dos de temperatura: `Lead / Cliente / Ex-Cliente /
@@ -6595,7 +6632,7 @@ function MainApp() {
       {/* Meu desempenho e Configuracoes nao tem barra: nao sao abas, chegam
           pelo menu do perfil, e o arrow_back do header e' a volta. Com a barra
           elas teriam dois caminhos de saida dizendo coisas diferentes. */}
-      {!layout.ehLargo && tab !== 'meu' && tab !== 'config' && !rotaMapaExpandido && modoNovo && !telaCheia && (
+      {!layout.ehLargo && tab !== 'meu' && tab !== 'config' && !rotaMapaExpandido && modoNovo && !telaCheia && !(tab === 'map' && selectedClient) && (
       /* RODAPE DO MAPA NOVO (prompt final §B2): Mapa · Agenda · Tarefas ·
          Playbook, iguais para todos. A Rota mora na Agenda, o "+" e' botao do
          mapa e a Gestao fica no menu do avatar, para o time inteiro. */
