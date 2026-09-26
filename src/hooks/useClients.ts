@@ -25,7 +25,7 @@ const mapRow = (row: any): Client => row as Client;
 // ATENCAO ao adicionar coluna nova que a tela use: ela precisa entrar aqui. O
 // tipo Client continua declarando o campo, entao o TypeScript NAO acusa a
 // ausencia — o valor simplesmente chega undefined em runtime.
-const CLIENT_LIST_COLUMNS = [
+export const CLIENT_LIST_COLUMNS = [
   'id', 'nome', 'empresa', 'email', 'telefone',
   'endereco', 'numero', 'bairro', 'cidade', 'estado', 'cep',
   'latitude', 'longitude', 'geo_source', 'geo_approximate',

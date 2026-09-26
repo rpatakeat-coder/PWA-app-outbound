@@ -107,6 +107,8 @@ import TopoCampo, { ALTURA_TOPO_CAMPO } from './src/screens/TopoCampo';
 import FolhaLentes, { COR_LENTE } from './src/screens/FolhaLentes';
 import AvisoSemSinal from './src/screens/AvisoSemSinal';
 import FolhaMeuDia from './src/screens/FolhaMeuDia';
+import FolhaBusca, { type LinhaBusca } from './src/screens/FolhaBusca';
+import { useBuscaNegocios } from './src/hooks/useBuscaNegocios';
 import { useMeuDia } from './src/hooks/useMeuDia';
 import FolhaCalor from './src/screens/FolhaCalor';
 import AvisosPainel from './src/screens/AvisosPainel';
@@ -797,6 +799,7 @@ function MainApp() {
     () => new Set<ClientStatus>(['cliente', 'lead']),
   );
   const [searchQuery, setSearchQuery] = useState('');
+  const [buscaAberta, setBuscaAberta] = useState(false);
   const [stateFilter, setStateFilter] = useState<string | null>(null);
   const [stageFilter, setStageFilter] = useState<string | null>(null);
   // Filtro de vendedor responsavel. null = sem filtro.
@@ -1746,7 +1749,8 @@ function MainApp() {
   // mapa enquadra os achados; achado unico, o mapa vai ate' ele e abre o cartao.
   const buscaEnquadrada = useRef('');
   useEffect(() => {
-    if (!modoNovo || !searchTerm || buscando || buscaEnquadrada.current === searchTerm) return;
+    // Com a folha de busca aberta, quem escolhe é o executivo, na lista.
+    if (!modoNovo || buscaAberta || !searchTerm || buscando || buscaEnquadrada.current === searchTerm) return;
     const achados = filteredWithCoords.slice(0, 40);
     if (!achados.length) return;
     const id = setTimeout(() => {
@@ -1766,7 +1770,7 @@ function MainApp() {
       mapa.fitToCoordinates(pontos, { edgePadding: { top: 60, right: 40, bottom: 60, left: 40 }, animated: true });
     }, 700);
     return () => clearTimeout(id);
-  }, [modoNovo, searchTerm, buscando, filteredWithCoords, mapRegion]);
+  }, [modoNovo, buscaAberta, searchTerm, buscando, filteredWithCoords, mapRegion]);
 
   const routeStops = fieldOps.stops;
   const routeStopClientIds = useMemo(
@@ -3313,6 +3317,48 @@ function MainApp() {
     return 2 * R * Math.asin(Math.sqrt(a));
   };
 
+  // BUSCA EM FOLHA CHEIA (handoff v4.1 §6.10): os do mapa, mais perto primeiro,
+  // e os negócios do executivo no HubSpot — com pino abre o cartão, sem pino
+  // oferece Posicionar. Depois do history.back() do Painel (350 ms) é que o
+  // mapa anda e o cartão abre, senão o back fecha o cartão novo.
+  const buscaNegocios = useBuscaNegocios(searchQuery, myHubspotId, modoNovo && buscaAberta);
+  const abrirDaBusca = useCallback((c: Client) => {
+    setBuscaAberta(false);
+    buscaEnquadrada.current = searchTerm;
+    setTimeout(() => {
+      if (c.latitude != null && c.longitude != null) {
+        mapRef.current?.animateToRegion({ latitude: Number(c.latitude) - 0.002, longitude: Number(c.longitude), latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);
+      }
+      setSelectedClient(c);
+    }, 350);
+  }, [searchTerm]);
+  const linhasBusca = useMemo<LinhaBusca[]>(() => {
+    if (!buscaAberta || searchTerm.length < 2) return [];
+    const origem = userLocation ?? { latitude: mapCenter.latitude, longitude: mapCenter.longitude };
+    const metros = (c: Client) => haversineMeters(origem.latitude, origem.longitude, Number(c.latitude), Number(c.longitude));
+    const fmt = (m: number) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1).replace('.', ',')} km`);
+    const subDe = (c: Client) => [normalizeStage(c.etapa), c.bairro].filter(Boolean).join(' · ') || (c.cidade ?? '');
+    const locais = [...filteredWithCoords].map((c) => ({ c, m: metros(c) })).sort((a, b) => a.m - b.m).slice(0, 30);
+    const vistos = new Set(locais.map((x) => x.c.id));
+    const linhas: LinhaBusca[] = locais.map(({ c, m }) => ({
+      chave: 'c' + c.id, nome: getClientPrimaryName(c), sub: subDe(c), distancia: fmt(m), acao: 'abrir', aoTocar: () => abrirDaBusca(c),
+    }));
+    for (const n of buscaNegocios.data ?? []) {
+      const c = n.cliente;
+      if (c && vistos.has(c.id)) continue;
+      const etapa = (n.etapa && ROTULO_ETAPA[n.etapa]) || 'Negócio';
+      if (c && c.latitude != null && c.longitude != null) {
+        linhas.push({ chave: 'n' + n.id, nome: n.nome, sub: `${etapa} · fora do recorte do mapa`, distancia: fmt(metros(c)), acao: 'abrir', aoTocar: () => abrirDaBusca(c) });
+      } else if (!isViewer) {
+        linhas.push({
+          chave: 'n' + n.id, nome: n.nome, sub: `${etapa} · ainda não está no mapa`, distancia: null, acao: 'posicionar',
+          aoTocar: () => { setBuscaAberta(false); setTimeout(() => iniciarPosicionar(n.id, n.nome), 350); },
+        });
+      }
+    }
+    return linhas;
+  }, [buscaAberta, searchTerm, filteredWithCoords, buscaNegocios.data, userLocation, mapCenter, abrirDaBusca, iniciarPosicionar, isViewer]);
+
   // Fix "bom o suficiente" pra medir proximidade: acima disso o raio de erro do
   // proprio GPS ja e' da ordem do limite de check-in.
   const GOOD_FIX_ACCURACY_M = 50;
@@ -4844,11 +4890,23 @@ function MainApp() {
           aoAbrirLentes={() => { Keyboard.dismiss(); setLentesAbertas(true); }}
           busca={searchQuery}
           aoBuscar={setSearchQuery}
+          aoAbrirBusca={() => setBuscaAberta(true)}
           buscando={buscando}
           selo={avisos.selo}
           aoSino={() => setAvisosAbertos(true)}
           avatar={{ url: profile?.avatar_url, nome: profile?.full_name, email: profile?.email }}
           aoAvatar={() => setPerfilAberto(true)}
+        />
+      )}
+      {modoNovo && !layout.ehLargo && (
+        <FolhaBusca
+          visivel={buscaAberta}
+          aoFechar={() => setBuscaAberta(false)}
+          busca={searchQuery}
+          aoBuscar={setSearchQuery}
+          linhas={linhasBusca}
+          carregando={buscando || buscaNegocios.isFetching}
+          foraFalhou={buscaNegocios.isError}
         />
       )}
       {modoNovo && !layout.ehLargo && (

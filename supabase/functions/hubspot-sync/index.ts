@@ -690,6 +690,48 @@ async function handleDealNames(token: string, body: Record<string, unknown>) {
   return json(200, { nomes });
 }
 
+// ===== search_deals =====
+// Negócios DO EXECUTIVO no Field Sales cujo nome casa com o termo — só leitura.
+//
+// Existe para a busca do mapa (handoff v4.1 §6.10): "inclui negócios que ainda
+// não estão no mapa". O mapa só conhece o que tem pino em `clients`; negócio
+// criado no HubSpot sem endereço não aparecia em busca nenhuma, e o executivo
+// precisava abrir o CRM para achá-lo. Aqui ele acha e, pelo app, posiciona.
+//
+// Dono e pipeline vão no FILTRO, não no pós-processamento: a busca nunca
+// devolve negócio de outro executivo nem de outro pipeline. Perdido fica de
+// fora (é histórico; reabrir é decisão de etapa, não de busca).
+const ETAPA_PERDIDO = '1396006164';
+async function handleSearchDeals(token: string, body: Record<string, unknown>) {
+  const ownerId = trimOrNull(body.owner_id);
+  const termo = trimOrNull(body.q);
+  if (!ownerId) return json(400, { error: 'owner_id e obrigatorio' });
+  if (!termo || termo.length < 2) return json(200, { negocios: [] });
+
+  const res = await hsFetch(token, 'POST', '/crm/v3/objects/deals/search', {
+    query: termo.slice(0, 80),
+    filterGroups: [{ filters: [
+      { propertyName: 'hubspot_owner_id', operator: 'EQ', value: ownerId },
+      { propertyName: 'pipeline', operator: 'EQ', value: CREATE_PIN_PIPELINE_ID },
+      { propertyName: 'dealstage', operator: 'NEQ', value: ETAPA_PERDIDO },
+    ] }],
+    properties: ['dealname', 'dealstage', 'hs_lastmodifieddate'],
+    sorts: [{ propertyName: 'hs_lastmodifieddate', direction: 'DESCENDING' }],
+    limit: 20,
+  });
+  if (!res.ok) {
+    return json(502, { error: 'HubSpot recusou a busca de negocios', detail: res.body?.message ?? `status ${res.status}` });
+  }
+  const negocios = (res.body?.results ?? [])
+    .map((d: { id?: string; properties?: Record<string, unknown> }) => ({
+      id: String(d?.id ?? ''),
+      nome: trimOrNull(d?.properties?.dealname) ?? 'Negócio sem nome',
+      etapa: trimOrNull(d?.properties?.dealstage),
+    }))
+    .filter((d: { id: string }) => d.id);
+  return json(200, { negocios });
+}
+
 // ===== deal_stage =====
 // A etapa ATUAL do negocio, direto do HubSpot, e o rotulo dela.
 //
@@ -1091,6 +1133,8 @@ Deno.serve(async (req: Request) => {
         return await handleListTasks(token, body);
       case 'decisor':
         return await handleDecisor(token, body);
+      case 'search_deals':
+        return await handleSearchDeals(token, body);
       case 'deal_names':
         return await handleDealNames(token, body);
       case 'deal_stage':

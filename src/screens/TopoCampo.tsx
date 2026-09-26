@@ -6,7 +6,7 @@
 // bordas, 48 de altura, raio 24. O mapa começa atrás dela: é o mapa que
 // ocupa a tela, não o cabeçalho.
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from '../components/Avatar';
 import { IconBell, IconClose, IconSearch } from '../components/icons';
@@ -19,6 +19,8 @@ type Props = {
   aoAbrirLentes: () => void;
   busca: string;
   aoBuscar: (t: string) => void;
+  /** O campo só abre a folha de busca (§6.10); digitar é lá. */
+  aoAbrirBusca: () => void;
   buscando: boolean;
   selo: number;
   aoSino: () => void;
@@ -26,7 +28,7 @@ type Props = {
   aoAvatar: () => void;
 };
 
-export default function TopoCampo({ top, lente, aoAbrirLentes, busca, aoBuscar, buscando, selo, aoSino, avatar, aoAvatar }: Props) {
+export default function TopoCampo({ top, lente, aoAbrirLentes, busca, aoBuscar, aoAbrirBusca, buscando, selo, aoSino, avatar, aoAvatar }: Props) {
   return (
     <View style={[s.barra, { top }]} accessibilityRole="toolbar">
       <Pressable accessibilityRole="button" accessibilityLabel={`Lente ${lente.rotulo}. Trocar lente, filtros e legenda`} onPress={aoAbrirLentes} style={s.lente}>
@@ -36,17 +38,14 @@ export default function TopoCampo({ top, lente, aoAbrirLentes, busca, aoBuscar, 
       </Pressable>
       <View style={s.busca}>
         <IconSearch width={16} height={16} fill="#AEB4BE" />
-        <TextInput
-          style={s.buscaCampo}
-          placeholder="Buscar lead, rua, CNPJ"
-          placeholderTextColor="#8B919C"
-          value={busca}
-          onChangeText={aoBuscar}
-          returnKeyType="search"
-          autoCorrect={false}
-          autoCapitalize="none"
-          accessibilityLabel="Buscar lead, rua ou CNPJ"
-        />
+        <Pressable
+          style={s.buscaAbrir}
+          onPress={aoAbrirBusca}
+          accessibilityRole="search"
+          accessibilityLabel={busca ? `Busca: ${busca}. Abrir busca` : 'Buscar lead, rua ou CNPJ'}
+        >
+          <Text style={[s.buscaCampo, !busca && s.buscaVazia]} numberOfLines={1}>{busca || 'Buscar lead, rua, CNPJ'}</Text>
+        </Pressable>
         {buscando && <ActivityIndicator size="small" color="#AEB4BE" />}
         {busca.length > 0 && !buscando && (
           <Pressable accessibilityRole="button" accessibilityLabel="Limpar busca" onPress={() => aoBuscar('')} hitSlop={12}>
@@ -91,6 +90,8 @@ const s = StyleSheet.create({
   seta: { fontSize: 11, color: '#AEB4BE' },
   busca: { flex: 1, minWidth: 0, height: 40, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 6 },
   buscaCampo: { flex: 1, minWidth: 0, fontSize: 13, color: '#F4F5F7', height: 40 },
+  buscaAbrir: { flex: 1, minWidth: 0, minHeight: 40, justifyContent: 'center' },
+  buscaVazia: { color: '#8B919C' },
   icone: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   selo: {
     position: 'absolute', top: 2, right: 2, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3,
