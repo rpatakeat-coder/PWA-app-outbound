@@ -3596,11 +3596,17 @@ function MainApp() {
       let isApproxPin = client.geo_approximate === true;
       let geoSource = client.geo_source ?? null;
       try {
-        const { data: freshRow } = await supabase
-          .from('clients')
-          .select('latitude, longitude, geo_approximate, geo_source')
-          .eq('id', client.id)
-          .maybeSingle();
+        // Sem sinal (ou sinal pendurado) esta releitura travava o Cheguei antes da
+        // fila (auditoria 26/09): 4 s de prazo e, offline, nem tenta.
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new Error('offline');
+        const { data: freshRow } = await Promise.race([
+          supabase
+            .from('clients')
+            .select('latitude, longitude, geo_approximate, geo_source')
+            .eq('id', client.id)
+            .maybeSingle(),
+          new Promise<{ data: null }>((res) => setTimeout(() => res({ data: null }), 4000)),
+        ]);
         if (freshRow?.latitude != null && freshRow?.longitude != null) {
           targetLat = Number(freshRow.latitude);
           targetLon = Number(freshRow.longitude);
