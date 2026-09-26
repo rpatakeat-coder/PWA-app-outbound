@@ -530,7 +530,7 @@ const MarkerP2 = React.memo(
         coordinate={{ latitude: client.latitude as number, longitude: client.longitude as number }}
         onPress={handlePress}
         anchor={ANCORA_PINO_P2}
-        zIndex={selecionado ? 2000 : leque ? 1500 : papel === 'proxima' ? 1200 : planoNumero ? 1000 : foraDaLente ? 100 : 500}
+        zIndex={selecionado ? 2000 : leque ? 1500 : papel === 'proxima' ? 1200 : planoNumero ? 1000 : rotulo ? 800 : foraDaLente ? 100 : 500}
         cluster={agrupar && !planoNumero}
       >
         <PinoP2
