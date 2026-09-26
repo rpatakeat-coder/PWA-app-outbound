@@ -541,7 +541,8 @@ export function useClients(
       corrigirPino = false,
       declarada = false,
     }: {
-      clientId: string; latitude: number; longitude: number;
+      // 0115: nulos só em visita declarada sem GPS (a RPC recusa o resto).
+      clientId: string; latitude: number | null; longitude: number | null;
       // 0102: precisão do GPS no toque, ID idempotente da fila offline e a
       // hora real do toque (check-in que esperou sinal).
       accuracyM?: number | null; acaoId?: string | null; feitoEm?: string | null;

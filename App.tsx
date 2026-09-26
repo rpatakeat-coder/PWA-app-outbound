@@ -3493,21 +3493,54 @@ function MainApp() {
         return;
       }
 
+      // Pergunta com botões e devolve a escolha (o Alert do app é por callback).
+      const perguntar = (titulo: string, msg: string, botoes: { text: string; valor: string; style?: 'cancel' | 'destructive' }[]) =>
+        new Promise<string>((res) => Alert.alert(titulo, msg, botoes.map((b) => ({ text: b.text, style: b.style, onPress: () => res(b.valor) }))));
+
+      // FOTO É A SEGUNDA PROVA (Julyan, 26/09): SÓ quando o GPS FALHA (não
+      // respondeu, leitura grosseira, impreciso) a visita entra com foto — da
+      // fachada, do balcão, do cardápio. Check-in normal e visita declarada
+      // por distância não pedem foto: nada de microgerenciar.
+      // A câmera abre no toque do botão (o navegador exige o gesto), antes do
+      // check-in: sem foto, nada é gravado.
+      const tirarFotoDeProva = async (): Promise<Blob | null> => {
+        const arq = await escolherFotoVisita();
+        if (!arq) {
+          Toast.mostrar('Sem a foto, a visita não entra: o GPS não confirmou que você está na porta.', 'erro');
+          return null;
+        }
+        try { return await comprimirFotoVisita(arq); } catch {
+          Toast.mostrar('Não consegui ler a foto. Tente de novo.', 'erro');
+          return null;
+        }
+      };
+      let fotoProva: Blob | null = null;
+
+      // GPS NEGADO (0115, Julyan 26/09): o caminho é ligar a localização e
+      // fazer o check-in. Só como saída, no mapa novo, registra com foto de
+      // prova: visita declarada, sem lugar.
+      let semGps = false;
       const { status: permStatus } = await Location.requestForegroundPermissionsAsync();
       if (permStatus !== 'granted') {
         // requestForegroundPermissionsAsync só abre o prompt do sistema na
         // primeira vez. Se o usuário já negou antes, ele só retorna 'denied'
         // sem abrir nada — por isso a gente direciona pro app de configurações
         // do sistema, que é o único caminho de reverter um "deny" prévio.
-        Alert.alert(
+        const r = await perguntar(
           'Localização desativada',
-          'Pra marcar como visitado a gente precisa do GPS do celular pra confirmar que você tá no local. Abrir as configurações do sistema pra habilitar?',
+          'Pra marcar como visitado a gente precisa do GPS do celular pra confirmar que você tá no local. Abrir as configurações do sistema pra habilitar?'
+          + (modoNovo ? '\n\nSe não der agora, registre com uma foto da porta como prova.' : ''),
           [
-            { text: 'Agora não', style: 'cancel' },
-            { text: 'Abrir configurações', onPress: () => Linking.openSettings() },
+            { text: 'Agora não', valor: 'nao', style: 'cancel' },
+            { text: 'Abrir configurações', valor: 'config' },
+            ...(modoNovo ? [{ text: 'Registrar com foto', valor: 'foto' }] : []),
           ],
         );
-        return;
+        if (r === 'config') { Linking.openSettings(); return; }
+        if (r !== 'foto') return;
+        fotoProva = await tirarFotoDeProva();
+        if (!fotoProva) return;
+        semGps = true;
       }
 
       // Coordenada do lead LIDA DO BANCO na hora. O objeto do sheet e' um
@@ -3537,38 +3570,15 @@ function MainApp() {
       // dizia "longe" com o executivo na porta.
       const pinoConfirmado = (geoSource === 'coords' || geoSource === 'checkin') && !isApproxPin;
 
-      // Pergunta com botões e devolve a escolha (o Alert do app é por callback).
-      const perguntar = (titulo: string, msg: string, botoes: { text: string; valor: string; style?: 'cancel' | 'destructive' }[]) =>
-        new Promise<string>((res) => Alert.alert(titulo, msg, botoes.map((b) => ({ text: b.text, style: b.style, onPress: () => res(b.valor) }))));
 
-      // FOTO É A SEGUNDA PROVA (Julyan, 26/09): SÓ quando o GPS FALHA (não
-      // respondeu, leitura grosseira, impreciso) a visita entra com foto — da
-      // fachada, do balcão, do cardápio. Check-in normal e visita declarada
-      // por distância não pedem foto: nada de microgerenciar.
-      // A câmera abre no toque do botão (o navegador exige o gesto), antes do
-      // check-in: sem foto, nada é gravado.
-      const tirarFotoDeProva = async (): Promise<Blob | null> => {
-        const arq = await escolherFotoVisita();
-        if (!arq) {
-          Toast.mostrar('Sem a foto, a visita não entra: o GPS não confirmou que você está na porta.', 'erro');
-          return null;
-        }
-        try { return await comprimirFotoVisita(arq); } catch {
-          Toast.mostrar('Não consegui ler a foto. Tente de novo.', 'erro');
-          return null;
-        }
-      };
-      let fotoProva: Blob | null = null;
-
-      let position: Location.LocationObject;
-      let semLeitura = false;
+      let position: Location.LocationObject | null = null;
+      let semLeitura = semGps;
       try {
-        position = await getBestFix();
+        if (!semGps) position = await getBestFix();
       } catch (err: any) {
-        // Sem GPS agora: vale a última posição que o mapa leu, como visita
-        // declarada e com foto. Sem posição nenhuma, o banco não aceita
-        // (mark_client_as_visited exige coordenada).
-        if (!modoNovo || !userLocation) {
+        // Sem GPS agora: vale a última posição que o mapa leu; sem nenhuma,
+        // vai sem lugar (0115). Nos dois casos, declarada e com foto.
+        if (!modoNovo) {
           Alert.alert('Erro de GPS', err?.message ?? 'Não foi possível obter sua localização.');
           return;
         }
@@ -3580,14 +3590,14 @@ function MainApp() {
         if (r !== 'foto') return;
         fotoProva = await tirarFotoDeProva();
         if (!fotoProva) return;
-        position = { coords: { latitude: userLocation.latitude, longitude: userLocation.longitude, accuracy: null } } as unknown as Location.LocationObject;
+        if (userLocation) position = { coords: { latitude: userLocation.latitude, longitude: userLocation.longitude, accuracy: null } } as unknown as Location.LocationObject;
         semLeitura = true;
       }
 
-      const userLat = position.coords.latitude;
-      const userLon = position.coords.longitude;
-      const fixAccuracy = position.coords.accuracy ?? null;
-      const distance = haversineMeters(userLat, userLon, targetLat, targetLon);
+      const userLat: number | null = position ? position.coords.latitude : null;
+      const userLon: number | null = position ? position.coords.longitude : null;
+      const fixAccuracy = position ? position.coords.accuracy ?? null : null;
+      const distance = userLat != null && userLon != null ? haversineMeters(userLat, userLon, targetLat, targetLon) : Number.NaN;
       // Mesmo criterio da RPC mark_client_as_visited (200m preciso / 500m
       // aproximado). Antes o app travava em 200m fixo e barrava check-in que o
       // banco teria aceitado.
@@ -3771,7 +3781,7 @@ function MainApp() {
   subirCheckinRef.current = async (p, acaoId) => {
     const clientId = String(p.clientId);
     await markAsVisited.mutateAsync({
-      clientId, latitude: Number(p.latitude), longitude: Number(p.longitude),
+      clientId, latitude: p.latitude == null ? null : Number(p.latitude), longitude: p.longitude == null ? null : Number(p.longitude),
       accuracyM: p.accuracyM == null ? null : Number(p.accuracyM),
       acaoId, feitoEm: (p.feitoEm as string | undefined) ?? null,
       corrigirPino: p.corrigirPino === true,
