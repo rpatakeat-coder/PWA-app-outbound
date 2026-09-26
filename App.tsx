@@ -1761,8 +1761,10 @@ function MainApp() {
     [itensMapaNovo, filtrosNovos],
   );
 
-  // ~1,3 km de altura na tela: é a quadra, não o bairro.
-  const ZOOM_RUA_LAT_DELTA = 0.012;
+  // Zoom 15 para dentro (~2,7 km de mapa no celular). Medido em 26/09: 0,012
+  // não disparava nem no zoom em que já se lê o nome da rua (o mapa do
+  // celular tem ~744 px de altura, ~0,014 de delta ali).
+  const ZOOM_RUA_LAT_DELTA = 0.025;
   const { focoMapaNovo, camadaPontos, comNome, pilhaDe, janelaMapa } = useMemo(() => {
     const foco: typeof visiveisMapaNovo = [];
     const pontos: typeof visiveisMapaNovo = [];
@@ -8614,7 +8616,16 @@ function ClientBottomSheet({
             <View style={styles.acoesTemporarias}>
   {/* Acoes rapidas no topo: visita (acao mais usada em campo) e
                   editar — antes ficavam no fim do sheet, exigindo rolar tudo. */}
-              {(onMarkVisited || onEdit) && (
+              {/* Card novo: Cheguei, Rota de hoje, Ir, WhatsApp e Mudar etapa já
+                  estão no topo (e o Mudar etapa daqui é o modal antigo, fora da
+                  porta única). Na aba Dados ficam só Editar · Mover pino ·
+                  Remover (prompt final §7.11). */}
+              {novo && onEdit && (
+                <TouchableOpacity style={[styles.acaoSecundaria, { marginBottom: 8 }]} onPress={onEdit}>
+                  <IconText Icone={IconPencil} style={styles.acaoSecundariaTexto} tone="onSurface">Editar dados</IconText>
+                </TouchableOpacity>
+              )}
+              {!novo && (onMarkVisited || onEdit) && (
                 <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
                   {onMarkVisited && (
                     <TouchableOpacity
@@ -8642,7 +8653,7 @@ function ClientBottomSheet({
                 </View>
               )}
 
-  {onAddToRoute && (
+  {!novo && onAddToRoute && (
                 <TouchableOpacity
                   style={styles.addRouteButton}
                   onPress={onAddToRoute}
@@ -8652,7 +8663,7 @@ function ClientBottomSheet({
               )}
 
               {/* Navigation */}
-              <View style={styles.navigationSection}>
+              {!novo && <View style={styles.navigationSection}>
                 <Text style={[sharedStyles.fieldLabel, { marginBottom: 8 }]}>Traçar Rota</Text>
                 {client.latitude && client.longitude && (
                   <View style={[styles.navigationRow, { marginBottom: 8 }]}>
@@ -8703,11 +8714,11 @@ function ClientBottomSheet({
                     </TouchableOpacity>
                   );
                 })()}
-              </View>
+              </View>}
 
   {/* Mover para etapa: admin-only durante testes. Dispara webhook change_stage.
                   Se o cliente não tiver id_hubspot, o modal alerta. */}
-              {onChangeStage && (
+              {!novo && onChangeStage && (
                 <TouchableOpacity
                   style={styles.changeStageButton}
                   onPress={onChangeStage}
@@ -8725,7 +8736,7 @@ function ClientBottomSheet({
                   style={[styles.acaoSecundaria, { marginBottom: 8 }]}
                   onPress={onEditLocation}
                 >
-                  <IconText Icone={IconPencil} style={styles.acaoSecundariaTexto} tone="onSurface">Editar localização (mover pin)</IconText>
+                  <IconText Icone={IconPencil} style={styles.acaoSecundariaTexto} tone="onSurface">{novo ? 'Mover pino' : 'Editar localização (mover pin)'}</IconText>
                 </TouchableOpacity>
               )}
               {onDelete && (
