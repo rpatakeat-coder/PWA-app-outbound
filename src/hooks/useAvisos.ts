@@ -43,7 +43,10 @@ export function textoDoMotor(a: AvisoMotor): string {
 export function useAvisos(ativo: boolean, meuOwnerId: string | null, verTodos: boolean) {
   const motor = useQuery<AvisoMotor[]>({
     queryKey: ['avisos_motor', meuOwnerId, verTodos],
-    enabled: ativo && (verTodos || !!meuOwnerId),
+    // SÓ O GESTOR (Julyan, 26/09: "isso nem era pra ter pro executivo, é lixo de
+    // informação"). Conta-alvo com CNPJ baixado já sai do mapa sozinha; o resto
+    // (sumiu do Google, fechado) é triagem da carteira, que é do gestor.
+    enabled: ativo && verTodos,
     staleTime: 10 * 60 * 1000,
     queryFn: async () => {
       const desde = new Date(Date.now() - 30 * 86400000).toISOString();
