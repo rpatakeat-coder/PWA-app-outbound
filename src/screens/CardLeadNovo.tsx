@@ -32,6 +32,8 @@ export type AcoesCardNovo = {
   onExpandir?: () => void;
   /** Alerta de cobrança: encerra a tarefa do HubSpot + registra a ligação. */
   onLiguei?: () => void;
+  /** "É meu": assume o lead sem dono que está na rota de hoje (assumirLead). */
+  onEMeu?: () => void;
 };
 
 export type DadosCardNovo = {
@@ -288,6 +290,16 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       <View style={s.linhaInfo}>
         <Text style={s.infoRotulo}>DONO</Text>
         <Text style={[s.infoValor, d.pino.dono === 'sem' && { color: '#FACC15' }]} numberOfLines={1}>{dono}</Text>
+        {d.pino.dono === 'sem' && a.onEMeu && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={d.naRota ? 'É meu: colocar no meu funil' : 'É meu: ponha na rota de hoje primeiro'}
+            onPress={d.naRota ? a.onEMeu : () => Toast.mostrar('Para assumir, ponha na rota de hoje (+ Rota de hoje) e toque em É meu.', 'fila')}
+            style={({ pressed }) => [s.eMeu, !d.naRota && s.eMeuForaDaRota, pressed && { opacity: 0.8 }]}
+          >
+            <Text style={[s.eMeuTexto, !d.naRota && s.eMeuTextoForaDaRota]}>É meu</Text>
+          </Pressable>
+        )}
       </View>
       <View style={s.linhaInfo}>
         <Text style={s.infoRotulo}>ORIGEM</Text>
@@ -306,6 +318,10 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
 const s = StyleSheet.create({
   peek: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8, gap: 10 },
   topo: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, gap: 10 },
+  eMeu: { marginLeft: 'auto', minHeight: 44, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#FACC15', alignItems: 'center', justifyContent: 'center' },
+  eMeuForaDaRota: { backgroundColor: 'transparent', borderWidth: 1, borderStyle: 'dashed', borderColor: '#FACC15' },
+  eMeuTexto: { fontSize: 14, fontWeight: '800', color: '#14171C' },
+  eMeuTextoForaDaRota: { color: '#FACC15' },
   alerta: {
     flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 12, paddingRight: 6, paddingVertical: 6,
     borderRadius: 10, backgroundColor: 'var(--tint-red)', borderWidth: 1, borderColor: 'var(--tint-red-border)',

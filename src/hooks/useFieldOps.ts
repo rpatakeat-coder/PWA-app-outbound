@@ -177,8 +177,9 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
   // saveRoute apaga e regrava todas as paradas, e com isso zerava as já feitas.
   // Sem rota hoje, cria a do dia (mesmo upsert do saveRoute). Só na própria
   // rota: quem monitora a de outro vendedor não mexe nela.
-  const adicionarParadaFeita = useMutation({
-    mutationFn: async (client: Client) => {
+  // Mesmo insert de UMA linha, com o status escolhido: 'done' no check-in fora
+  // do plano, 'planned' no "+ Rota de hoje" do mapa novo.
+  const inserirParada = async (client: Client, status: 'done' | 'planned') => {
       if (!user?.id || targetSeller !== user.id) return null;
       let rotaId = route?.id ?? null;
       if (!rotaId) {
@@ -211,16 +212,17 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
         client_id: client.id,
         position: posicao,
         planned_at: new Date().toISOString(),
-        status: 'done',
+        status,
       });
       if (error) throw error;
       return posicao;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['field_routes'] });
-      queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
-    },
-  });
+  };
+  const invalidarRota = () => {
+    queryClient.invalidateQueries({ queryKey: ['field_routes'] });
+    queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
+  };
+  const adicionarParadaFeita = useMutation({ mutationFn: (client: Client) => inserirParada(client, 'done'), onSuccess: invalidarRota });
+  const adicionarParada = useMutation({ mutationFn: (client: Client) => inserirParada(client, 'planned'), onSuccess: invalidarRota });
 
   // Alterna status entre 'done' e 'planned' — usado pelo checkbox da lista
   // de stops, pra permitir desfazer um marcado por engano.
@@ -244,6 +246,7 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
     updateStops,
     removeStop,
     adicionarParadaFeita,
+    adicionarParada,
     markStopDone,
     toggleStopDone,
   };

@@ -159,6 +159,7 @@ import AgendaNovoScreen from './src/screens/AgendaNovoScreen';
 import { concluirComDesfazer, enviarConclusao, type PedidoConclusao } from './src/utils/concluirTarefa';
 import { diasDeAtraso, ehCobranca, grupoDaTarefa } from './src/utils/abaTarefas';
 import { distanciaTexto } from './src/utils/cardNovo';
+import { assumirLead } from './src/utils/assumirLead';
 import { ConfiguracoesScreen } from './src/screens/ConfiguracoesScreen';
 import { ds, sharedStyles } from './src/screens/sharedStyles';
 import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
@@ -2621,11 +2622,19 @@ function MainApp() {
       Alert.alert('Ja esta na rota', 'Este lead ja faz parte do planejamento.');
       return;
     }
+    // Mapa novo: UMA parada no fim da rota de hoje. O saveManualRoute apaga e
+    // regrava todas as paradas e devolvia as já feitas para "pendente".
+    if (modoNovo && !isMonitoringRoute) {
+      void fieldOps.adicionarParada.mutateAsync(client)
+        .then(() => Toast.mostrar(`✓ ${client.empresa?.trim() || client.nome} na rota de hoje`, 'ok'))
+        .catch((e) => Alert.alert('Não entrou na rota', String((e as Error)?.message ?? e)));
+      return;
+    }
     const next = [...routeDisplayClients, client];
     setRouteDraft(next);
     setSelectedClient(null);
     saveManualRoute(next);
-  }, [routeDisplayClients, routeStopClientIds, saveManualRoute]);
+  }, [routeDisplayClients, routeStopClientIds, saveManualRoute, modoNovo, isMonitoringRoute, fieldOps.adicionarParada]);
 
   // Detecta lat/lon que aparecem em mais de um cliente — é sinal claro de
   // geocodificação ruim (Nominatim caiu no centroide da rua/CEP em vez do
@@ -3953,6 +3962,15 @@ function MainApp() {
           ? haversineMeters(userLocation.latitude, userLocation.longitude, Number(selectedClient.latitude), Number(selectedClient.longitude))
           : null,
         etapaRotulo: selectedClient.etapa ?? null,
+        // "É meu" (Julyan 26/09): lead sem dono na rota de hoje entra no meu funil.
+        onEMeu: isViewer ? undefined : async () => {
+          const c = selectedClient;
+          const r = await assumirLead(c, { idHubspot: myHubspotId, nome: profile?.full_name ?? null });
+          if (!r.ok) { Alert.alert('Não deu para assumir', r.erro); return; }
+          setSelectedClient({ ...c, vendedor_id_hubspot: myHubspotId, ...(r.etapa ? { etapa: r.etapa } : {}) });
+          void queryClient.invalidateQueries({ queryKey: ['clients'] });
+          Toast.mostrar(r.aviso ? `✓ É seu · ${r.aviso}` : `✓ É seu · no seu funil${r.etapa ? ` (${r.etapa})` : ''} · HubSpot + Cockpit`, 'ok');
+        },
         ...(() => {
           // A cobrança do card é a MESMA tarefa do HubSpot da aba Tarefas:
           // Liguei aqui some de lá, e vice-versa.
@@ -7552,7 +7570,7 @@ function ClientBottomSheet({
   novo,
 }: {
   /** Mapa novo (prancha §7): troca o topo e o peek; abas e alertas continuam. */
-  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void }) | null;
+  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void }) | null;
   client: Client;
   insets: { bottom: number };
   statusConfig: Record<string, { label: string; color: string }>;
@@ -7922,6 +7940,7 @@ function ClientBottomSheet({
     onMarkVisited, onChangeStage, onScheduleMeeting, onAddToRoute, onDismissContaAlvo, onEdit, onClose,
     onExpandir: () => setEstagio('cheia'),
     onLiguei: novo?.onLiguei,
+    onEMeu: novo?.onEMeu,
   };
 
   // ── Faixa de topo (M1c) ───────────────────────────────────────────────
