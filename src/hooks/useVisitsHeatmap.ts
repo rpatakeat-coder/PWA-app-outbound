@@ -45,6 +45,9 @@ export function useVisitsHeatmap(enabled: boolean) {
           .select('visited_at_lat, visited_at_lon, visited_by, visited_by_name, visited_at, client:clients(cidade, bairro)')
           .not('visited_at_lat', 'is', null)
           .not('visited_at_lon', 'is', null)
+          // Visita declarada (0109) guarda o GPS de onde o executivo ESTAVA,
+          // longe do lead: na mancha ela pintaria o lugar errado.
+          .eq('declarada', false)
           .order('visited_at', { ascending: false })
           .range(from, from + PAGE - 1);
         if (error) throw error;
