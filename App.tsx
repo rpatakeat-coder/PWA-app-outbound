@@ -1072,7 +1072,13 @@ function MainApp() {
     () => (contextoPinoBase ? { ...contextoPinoBase, agora: new Date() } : null),
     [contextoPinoBase],
   );
-  const modoNovo = mapaNovo && !!contextoPino;
+  // O MAPA NOVO DESDE O PRIMEIRO QUADRO (Julyan, 26/09: "ainda carrega o antigo
+  // antes"). Antes, modoNovo esperava o contexto dos pinos (RPC mapa_contexto) e,
+  // nesse meio segundo a 2 s em 4G, a tela abria no layout ANTIGO e trocava.
+  // Agora o layout novo abre na hora; só os pinos esperam o contexto (todo uso
+  // de contextoPino já se protege de null), e se a RPC falhar o contexto vem
+  // vazio (useContextoDoPino), para o pino nunca sumir.
+  const modoNovo = mapaNovo;
   // Lente ativa (uma por vez; "Meu dia" é o padrão) e filtros do mapa novo.
   const [lente, setLente] = useState<Lente>('dia');
   const [filtrosNovos, setFiltrosNovos] = useState<FiltrosNovos>(FILTROS_VAZIOS);

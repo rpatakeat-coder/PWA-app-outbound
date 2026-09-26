@@ -73,24 +73,29 @@ export function useContextoDoPino(ligado: boolean): Omit<ContextoPino, 'agora'> 
   const meuOwnerId = (profile as { id_hubspot?: string | null } | null)?.id_hubspot ?? null;
 
   return useMemo(() => {
-    if (!ligado || !contexto.data || !etapas.data) return null;
+    if (!ligado) return null;
+    // Falhou a leitura: contexto vazio em vez de nada — o pino sai com a
+    // classificação básica (sem tempo parado nem dono do time) e não some.
+    const dadosCtx = contexto.data ?? (contexto.isError ? { tempo: [], donos: [], limites: [7, 30] as [number, number], atualizado_em: null } : null);
+    const dadosEtapas = etapas.data ?? (etapas.isError ? [] : null);
+    if (!dadosCtx || !dadosEtapas) return null;
     const tempoPorNegocio = new Map<string, TempoDoNegocio>();
-    for (const [id, dias, sla, ult, etapa, faixa, parcial, origem] of contexto.data.tempo ?? []) {
+    for (const [id, dias, sla, ult, etapa, faixa, parcial, origem] of dadosCtx.tempo ?? []) {
       tempoPorNegocio.set(String(id), {
         diasNaEtapa: dias, slaEstourado: !!sla, ultimaInteracao: ult, etapaCodigo: etapa ?? null,
         faixa: faixa ?? null, parcial: !!parcial, origemHs: origem ?? null,
       });
     }
-    const lim = contexto.data.limites;
+    const lim = dadosCtx.limites;
     return {
       meuOwnerId: meuOwnerId ? String(meuOwnerId) : null,
-      donosDoTime: new Set((contexto.data.donos ?? []).map(String)),
+      donosDoTime: new Set((dadosCtx.donos ?? []).map(String)),
       tempoPorNegocio,
-      etapaDePara: new Map(etapas.data.map((e) => [e.texto_normalizado, e.etapa_codigo])),
+      etapaDePara: new Map(dadosEtapas.map((e) => [e.texto_normalizado, e.etapa_codigo])),
       limites: Array.isArray(lim) && lim.length === 2 ? [Number(lim[0]), Number(lim[1])] : [7, 30],
-      atualizadoEm: contexto.data.atualizado_em ?? null,
+      atualizadoEm: dadosCtx.atualizado_em ?? null,
     };
-  }, [ligado, contexto.data, etapas.data, meuOwnerId]);
+  }, [ligado, contexto.data, contexto.isError, etapas.data, etapas.isError, meuOwnerId]);
 }
 
 /** Ids dos leads com check-in esperando sinal (selo ↑ âmbar no pino). */
