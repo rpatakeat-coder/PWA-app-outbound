@@ -421,7 +421,7 @@ const s = StyleSheet.create({
     borderRadius: 10, backgroundColor: 'var(--tint-red)', borderWidth: 1, borderColor: 'var(--tint-red-border)',
   },
   alertaTitulo: { fontSize: 13, fontWeight: '800', color: 'var(--tint-red-text)' },
-  alertaSub: { fontSize: 12, color: 'var(--tint-red-text)', opacity: 0.85 },
+  alertaSub: { fontSize: 13, color: 'var(--tint-red-text)', opacity: 0.85 },
   alertaBotao: { minHeight: 44, minWidth: 72, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#C8131B', alignItems: 'center', justifyContent: 'center' },
   alertaBotaoTexto: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
   cabecalho: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
@@ -457,7 +457,7 @@ const s = StyleSheet.create({
   avancarTexto: { color: '#FFFFFF', fontWeight: '700' },
   outra: { flexGrow: 1 },
   negocioEtapa: { fontSize: 16, fontWeight: '600', color: 'var(--text)' },
-  negocioNota: { fontSize: 12.5, fontWeight: '500', color: 'var(--text-muted)' },
+  negocioNota: { fontSize: 13, fontWeight: '500', color: 'var(--text-muted)' },
   grade: { flexDirection: 'row', gap: 8 },
   botao: {
     flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 12,
