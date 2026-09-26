@@ -4624,7 +4624,7 @@ function MainApp() {
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Novo lead"
-          style={[styles.fabMapaNovo, { bottom: baseInferior + (folhaVisivel ? alturaFolha : 0) + 12 }]}
+          style={[styles.fabMapaNovo, { bottom: baseInferior + (folhaDeBaixo ? alturaFolha : 0) + 12 }]}
           onPress={() => setShowCepStep(true)}
         >
           <IconPlus width={26} height={26} fill="#FFFFFF" />

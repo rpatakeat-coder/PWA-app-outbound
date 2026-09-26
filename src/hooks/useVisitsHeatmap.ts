@@ -104,18 +104,27 @@ export function useVisitsHeatmap(enabled: boolean) {
       try {
         const ids = [...acc.keys()];
         const desde = new Date(Date.now() - 30 * 86400000).toISOString();
-        const [perfis, apelidos, semGps] = await Promise.all([
+        const [perfis, apelidos, equipe, semGps] = await Promise.all([
           ids.length ? supabase.from('profiles').select('id, full_name').in('id', ids) : Promise.resolve({ data: [] as { id: string; full_name: string | null }[] }),
           ids.length ? supabase.from('vendedor_apelido').select('profile_id, apelido').in('profile_id', ids) : Promise.resolve({ data: [] as { profile_id: string; apelido: string }[] }),
+          // O nome do CADASTRO é o do Cockpit (equipe_cockpit.nome: "Wericles
+          // Andrade"); o do perfil costuma ser o apelido de login ("Whell Andrade").
+          ids.length ? supabase.from('equipe_cockpit').select('profile_id, nome').in('profile_id', ids) : Promise.resolve({ data: [] as { profile_id: string; nome: string | null }[] }),
           supabase.from('client_visits').select('id', { count: 'exact', head: true })
             .gte('visited_at', desde).or('declarada.eq.true,visited_at_lat.is.null'),
         ]);
+        const doCadastro = new Map(((equipe.data ?? []) as { profile_id: string; nome: string | null }[])
+          .filter((e) => e.nome && e.nome.trim()).map((e) => [e.profile_id, e.nome!.trim()]));
+        const limpo = (s: string | null | undefined) => (s ?? '').replace(/\s*\/\s*DESATIVADO\s*$/i, '').trim();
         for (const p of (perfis.data ?? []) as { id: string; full_name: string | null }[]) {
-          nomes[p.id] = { nome: (p.full_name ?? '').replace(/\s*\/\s*DESATIVADO\s*$/i, '').trim() || 'Sem nome', apelidos: [] };
+          const doPerfil = limpo(p.full_name);
+          const nome = doCadastro.get(p.id) ?? (doPerfil || 'Sem nome');
+          nomes[p.id] = { nome, apelidos: doPerfil && doPerfil.toLowerCase() !== nome.toLowerCase() ? [doPerfil] : [] };
         }
         for (const a of (apelidos.data ?? []) as { profile_id: string; apelido: string }[]) {
           const n = nomes[a.profile_id];
-          if (n && a.apelido && a.apelido.trim().toLowerCase() !== n.nome.toLowerCase()) n.apelidos.push(a.apelido.trim());
+          const ap = limpo(a.apelido);
+          if (n && ap && ap.toLowerCase() !== n.nome.toLowerCase() && !n.apelidos.some((x) => x.toLowerCase() === ap.toLowerCase())) n.apelidos.push(ap);
         }
         semGps30d = typeof semGps.count === 'number' ? semGps.count : null;
       } catch { /* complemento opcional */ }
