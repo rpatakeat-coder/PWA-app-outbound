@@ -99,7 +99,7 @@ import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tan
 import { useClientSearch, useClients } from './src/hooks/useClients';
 import { useNaEquipeCockpit } from './src/hooks/useNaEquipeCockpit';
 import { useContextoDoPino, useLeadsNaFila, useMapaNovo } from './src/hooks/useMapaNovo';
-import PinoP2, { ANCORA_PINO_P2 } from './src/map/PinoP2';
+import PinoP2, { ANCORA_PINO_P2, sinalDoPino, type PapelPino } from './src/map/PinoP2';
 import FiltrosMapaNovo from './src/screens/FiltrosMapaNovo';
 import { PeekCardNovo, TopoCardNovo, type AcoesCardNovo, type DadosCardNovo } from './src/screens/CardLeadNovo';
 import FolhaDoMapa, { type ItemFolha } from './src/screens/FolhaDoMapa';
@@ -494,10 +494,11 @@ function visitadoHoje(iso: string | null | undefined): boolean {
 // (src/utils/pinoP2.ts); o memo compara o que muda o desenho.
 const MarkerP2 = React.memo(
   function MarkerP2({
-    client, contexto, onPress, planoNumero, feito, naFila, selecionado, comNome = true, agrupar = false, nomeDeAlvo = false, ladoNome = 'dir', pilhaN = 1, leque = null, sol = false,
+    client, contexto, onPress, planoNumero, feito, naFila, selecionado, papel, lente, foraDaLente = false, agrupar = false, pilhaN = 1, leque = null, sol = false,
   }: {
     client: Client; contexto: ContextoPino; onPress: (client: Client) => void;
-    planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean; comNome?: boolean; agrupar?: boolean; nomeDeAlvo?: boolean; ladoNome?: 'dir' | 'esq';
+    planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean;
+    papel: PapelPino; lente: Lente; foraDaLente?: boolean; agrupar?: boolean;
     pilhaN?: number; leque?: { dx: number; dy: number } | null; sol?: boolean;
   }) {
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
@@ -507,18 +508,19 @@ const MarkerP2 = React.memo(
         coordinate={{ latitude: client.latitude as number, longitude: client.longitude as number }}
         onPress={handlePress}
         anchor={ANCORA_PINO_P2}
-        zIndex={selecionado ? 2000 : leque ? 1500 : planoNumero ? 1000 : comNome ? 500 : undefined}
+        zIndex={selecionado ? 2000 : leque ? 1500 : papel === 'proxima' ? 1200 : planoNumero ? 1000 : foraDaLente ? 100 : 500}
         cluster={agrupar && !planoNumero}
       >
         <PinoP2
           pino={pino}
+          papel={papel}
+          lente={lente}
           planoNumero={planoNumero}
           visitado={feito || visitadoHoje(client.visited_at)}
           naFila={naFila}
           selecionado={selecionado}
-          comEtiqueta={comNome}
-          nomeDeAlvo={nomeDeAlvo}
-          ladoNome={ladoNome}
+          foraDaLente={foraDaLente}
+          sinal={papel === 'proxima' || selecionado ? sinalDoPino(pino) : null}
           pilhaN={pilhaN}
           leque={leque}
           sol={sol}
@@ -534,10 +536,10 @@ const MarkerP2 = React.memo(
     a.feito === b.feito &&
     a.naFila === b.naFila &&
     a.selecionado === b.selecionado &&
-    a.comNome === b.comNome &&
+    a.papel === b.papel &&
+    a.lente === b.lente &&
+    a.foraDaLente === b.foraDaLente &&
     a.agrupar === b.agrupar &&
-    a.nomeDeAlvo === b.nomeDeAlvo &&
-    a.ladoNome === b.ladoNome &&
     a.pilhaN === b.pilhaN &&
     a.sol === b.sol &&
     a.leque?.dx === b.leque?.dx && a.leque?.dy === b.leque?.dy,
@@ -1925,6 +1927,8 @@ function MainApp() {
     }
     setPilhaAberta(pl.lider);
   }, [pilhaDe, focoMapaNovo]);
+  // Cor de cada pino da área: o anel da quadra pinta a proporção delas.
+  const corPorId = useMemo(() => new Map(visiveisMapaNovo.map((it) => [it.c.id, it.p.cor])), [visiveisMapaNovo]);
 
   // Folha de baixo do mapa novo: os pinos da lente, com distância e se a
   // parada do plano já foi feita.
@@ -1953,7 +1957,8 @@ function MainApp() {
       return [{ ...pl, ...projetar(Number(it.c.latitude), Number(it.c.longitude), janelaMapa) }];
     });
     // Cartões que se tocariam na tela viram uma quadra só (quadrasNaTela).
-    const { quadras, absorvida } = quadrasNaTela(comPosicao);
+    // Anel de 46 px (v4.1), nao mais o cartao de 180 x 88: a caixa de colisao encolhe junto.
+    const { quadras, absorvida } = quadrasNaTela(comPosicao, 56, 56);
     const r = new Map<string, { resumo: ResumoQuadra; membros: string[] }>();
     for (const [lider, membros] of quadras) {
       r.set(lider, { resumo: resumoDaQuadra(membros.map((id) => porId.get(id)).filter(Boolean) as ItemFolha[]), membros });
@@ -4425,7 +4430,7 @@ function MainApp() {
         {/* Mapa novo: pino P2 para os leads da área e para as paradas da
             rota (com o número do plano no selo, no lugar do RouteMarker). */}
         {modoNovo && <CamadaDePontos key={modoSol ? 'sol' : 'noite'} pontos={camadaPontos} sol={modoSol} />}
-        {modoNovo && contextoPino && focoMapaNovo.map(({ c, plano }) => {
+        {modoNovo && contextoPino && focoMapaNovo.map(({ c, p, plano }) => {
           // Pilha (C11): fechada mostra só o líder com o número; aberta, todos em leque.
           const pl = pilhaDe.get(c.id);
           const n = pl?.membros.length ?? 1;
@@ -4446,7 +4451,7 @@ function MainApp() {
                 zIndex={quadraAberta?.lider === pl.lider ? 1800 : 800}
                 onPress={() => { setSelectedClient(null); setQuadraAberta({ lider: pl.lider, ids: new Set(membros), area: resumo.area }); }}
               >
-                <CartaoQuadra resumo={resumo} n={membros.length} />
+                <CartaoQuadra resumo={resumo} n={membros.length} cores={membros.map((id) => corPorId.get(id) ?? '#6B7280')} />
               </Marker>
             );
           }
@@ -4462,13 +4467,13 @@ function MainApp() {
             feito={plano != null && routeStops.find(s => s.client_id === c.id)?.status === 'done'}
             naFila={leadsNaFila.has(c.id)}
             selecionado={selectedClient?.id === c.id}
-            comNome={comNome.has(c.id)}
-            ladoNome={comNome.get(c.id) ?? 'dir'}
+            papel={c.id === idClienteParadaAtual ? 'proxima' : plano != null ? 'plano' : 'lente'}
+            lente={lente}
+            foraDaLente={!noFoco(lente, p, plano) && selectedClient?.id !== c.id}
             // Até a entrega de densidade: muitos pinos inteiros (lente Contas-alvo
             // numa cidade inteira) agrupam; o plano nunca.
             // pilhas (C11) já seguram o número de pinos: sem bolha de contagem
             agrupar={false}
-            nomeDeAlvo={lente === 'alvo'}
             pilhaN={n > 1 && !aberta ? n : 1}
             leque={leque}
             sol={modoSol}
@@ -4521,15 +4526,33 @@ function MainApp() {
             se a API falhou. Oculta no modo calor. */}
         {/* Mapa novo (prompt final C7): azul com contorno branco, abaixo dos
             pinos — vermelho fica reservado a pino e ação. */}
+        {/* Handoff v4.1 §5: o plano é andado — trajeto pontilhado de 3 px
+            (branco no escuro, preto no sol) e o anel da microrrota (2–3
+            quarteirões) em volta da próxima porta, com o que dá para bater a pé. */}
         {!heatOn && modoNovo && routeWaypoints.length >= 2 && (
           <Polyline
             coordinates={routeGeometry.data && routeGeometry.data.coordinates.length > 1 ? routeGeometry.data.coordinates : routeWaypoints}
-            strokeColor="rgba(255,255,255,0.9)"
-            strokeWidth={9}
-            zIndex={1}
+            strokeColor={modoSol ? '#111418' : 'rgba(255,255,255,0.95)'}
+            strokeWidth={3}
+            lineDashPattern={[1, 7]}
+            zIndex={2}
           />
         )}
-        {!heatOn && routeWaypoints.length >= 2 && (
+        {!heatOn && modoNovo && lente === 'dia' && (() => {
+          const prox = routeDisplayClients.find((c) => c.id === idClienteParadaAtual);
+          if (!prox || prox.latitude == null || prox.longitude == null) return null;
+          return (
+            <Circle
+              center={{ latitude: Number(prox.latitude), longitude: Number(prox.longitude) }}
+              radius={250}
+              fillColor="rgba(229,26,49,0.07)"
+              strokeColor="rgba(229,26,49,0.85)"
+              strokeWidth={1.5}
+              zIndex={1}
+            />
+          );
+        })()}
+        {!heatOn && !modoNovo && routeWaypoints.length >= 2 && (
           <Polyline
             coordinates={
               routeGeometry.data && routeGeometry.data.coordinates.length > 1

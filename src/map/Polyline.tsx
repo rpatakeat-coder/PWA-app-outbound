@@ -63,7 +63,22 @@ export default function Polyline({
       // Tracejado na Google e' uma linha invisivel com simbolos repetidos por
       // cima — nao ha equivalente direto ao lineDashPattern nativo.
       strokeOpacity: dashed ? 0 : 1,
-      icons: dashed
+      icons: dashed && (dash[0] ?? 8) <= 1
+        // Pontilhado (traço de 1): bolinhas, como o trajeto a pé do handoff v4.1.
+        ? [
+            {
+              icon: {
+                path: ctx.maps.SymbolPath.CIRCLE,
+                fillColor: strokeColor,
+                fillOpacity: 1,
+                strokeOpacity: 0,
+                scale: Math.max(1, strokeWidth / 2),
+              },
+              offset: '0',
+              repeat: `${(dash[0] ?? 1) + (dash[1] ?? 7) + strokeWidth}px`,
+            },
+          ]
+        : dashed
         ? [
             {
               icon: {

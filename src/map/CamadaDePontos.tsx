@@ -73,13 +73,13 @@ export default function CamadaDePontos({ pontos, sol = false }: { pontos: Ponto[
             g.beginPath();
             g.roundRect ? g.roundRect(x - 3.5, y - 3.5, 7, 7, 2) : g.rect(x - 3.5, y - 3.5, 7, 7);
             g.fill();
-            if (sol) { g.strokeStyle = 'rgba(0,0,0,.65)'; g.lineWidth = 1; g.stroke(); }
+            g.strokeStyle = sol ? 'rgba(0,0,0,.65)' : 'rgba(0,0,0,.35)'; g.lineWidth = 1; g.stroke();
           } else if (p.forma === 'bola') {
             g.fillStyle = p.cor;
             g.beginPath();
             g.arc(x, y, 3.5, 0, Math.PI * 2);
             g.fill();
-            if (sol) { g.strokeStyle = 'rgba(0,0,0,.65)'; g.lineWidth = 1; g.stroke(); }
+            g.strokeStyle = sol ? 'rgba(0,0,0,.65)' : 'rgba(0,0,0,.35)'; g.lineWidth = 1; g.stroke();
           } else {
             g.strokeStyle = p.cor;
             g.lineWidth = 1.5;

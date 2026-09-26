@@ -368,9 +368,10 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
       width: '18px',
       height: '18px',
       borderRadius: '50%',
-      background: '#1d4ed8',
+      background: '#2563EB',
       border: '3px solid #fff',
-      boxShadow: '0 0 0 6px rgba(29,78,216,0.18)',
+      // Handoff v4.1 §5: halo de 44 px — a pessoa nunca some embaixo dos pinos.
+      boxShadow: '0 0 0 13px rgba(59,130,246,0.22)',
       transform: 'translateY(50%)', // ancora no centro, nao na base
     });
 
