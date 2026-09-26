@@ -1,10 +1,10 @@
-// Card do lead no mapa novo (entrega 4; prancha §7).
+// Cartão do lead do app de campo v4.1 (handoff §6.3).
 //
-// Só a parte de cima muda: kicker, título, subtítulo, fatos, Cheguei, as duas
-// grades de ação, dono e origem. As abas Histórico · Agenda · Dados e a faixa
-// de alertas continuam as do ClientBottomSheet — são as mesmas funções, e a
-// regra da prancha é "nada da tela atual é removido" (§9). Toda ação aqui
-// chama o MESMO handler que o card atual já usa.
+// Espiada: uma ação grande (Cheguei), três secundárias (Ligar/+ Telefone/É
+// meu · Ir · Agendar) e "…". Meia: chips de sinal, alertas, o bloco NEGÓCIO,
+// dono e origem, e a grade de "mais". As abas Histórico · Agenda · Dados
+// continuam as do ClientBottomSheet (ficha cheia). Toda ação chama o MESMO
+// handler que o card já usava.
 import React from 'react';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -34,6 +34,8 @@ export type AcoesCardNovo = {
   onLiguei?: () => void;
   /** "É meu": assume o lead sem dono que está na rota de hoje (assumirLead). */
   onEMeu?: () => void;
+  /** "Mover o pino": abre a edição de localização. */
+  onMoverPino?: () => void;
 };
 
 export type DadosCardNovo = {
@@ -60,9 +62,8 @@ function kicker(d: DadosCardNovo): string {
   if (pino.tipo === 'cliente') partes.push('CLIENTE TAKEAT');
   else if (pino.tipo === 'ex') partes.push('EX-CLIENTE');
   else if (pino.tipo === 'alvo') partes.push('CONTA-ALVO');
-  else partes.push(`${pino.temp} · ${ROTULO_TEMP[pino.temp ?? '?']}`);
-  if (pino.tipo === 'lead' && d.etapaRotulo) partes.push(d.etapaRotulo.toUpperCase());
-  if (d.planoNumero) partes.push(`PLANO (${d.planoNumero})`);
+  else partes.push(ROTULO_TEMP[pino.temp ?? '?']);
+  if (d.planoNumero) partes.push(`PLANO ${d.planoNumero}`);
   if (!partes.length) partes.push((client.status ?? '').toUpperCase());
   return `● ${partes.join(' · ')}`;
 }
@@ -143,13 +144,8 @@ function Botao({ rotulo, onPress, estilo, texto, desabilitado, tracejado, acessi
 }
 
 function BotaoCheguei({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
-  const sub = d.visitadoHoje
-    ? null
-    : d.planoNumero ? `conclui a parada ${d.planoNumero} do plano`
-      // Fora do plano, o check-in cria a parada (useFieldOps.adicionarParadaFeita);
-      // pino aproximado ainda pergunta "Está na porta?" e corrige a posição.
-      : d.aproximado ? 'entra no plano de hoje e corrige o pino'
-        : 'entra no plano de hoje sozinho';
+  // Visitado hoje: o toque abre o registro direto, sem outro check-in.
+  const sub = d.visitadoHoje ? 'visitado hoje · não vira segunda visita' : 'abre o registro da visita';
   return (
     <Pressable
       accessibilityRole="button"
@@ -160,7 +156,7 @@ function BotaoCheguei({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
     >
       {d.isMarkingVisited ? <ActivityIndicator color="#fff" /> : (
         <>
-          <Text style={s.chegueiTexto}>{d.visitadoHoje ? 'Visitado hoje · registrar de novo' : 'Cheguei'}</Text>
+          <Text style={s.chegueiTexto}>{d.visitadoHoje ? 'Registrar de novo' : 'Cheguei'}</Text>
           {!!sub && <Text style={s.chegueiSub}>{sub}</Text>}
         </>
       )}
@@ -175,7 +171,10 @@ function Cabecalho({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; com
   // vira o título e o nome cadastrado fica na linha de baixo, com Corrigir.
   const ehPessoa = pareceNomeDePessoa(cadastrado) && !!endereco;
   const nome = ehPessoa ? endereco! : cadastrado;
-  const sub = ehPessoa ? `cadastrado como "${cadastrado}"` : endereco;
+  const posicao = (d.aproximado ?? d.client.geo_approximate) ? '≈ posição aproximada' : 'posição exata';
+  const sub = ehPessoa
+    ? `cadastrado como "${cadastrado}"`
+    : [endereco, distanciaTexto(d.distanciaM), posicao].filter(Boolean).join(' · ');
   return (
     <View style={s.cabecalho}>
       <Pressable
@@ -187,7 +186,7 @@ function Cabecalho({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; com
       >
         <Text style={[s.kicker, { color: d.pino.cor }]} numberOfLines={1}>{kicker(d)}</Text>
         <Text style={[s.titulo, nome.length > 40 && s.tituloLongo]} numberOfLines={compacto ? 1 : 2}>{nome}</Text>
-        <Text style={[s.sub, !sub && s.vazio]} numberOfLines={1}>{sub ?? 'endereço não informado'}</Text>
+        <Text style={[s.sub, !sub && s.vazio]} numberOfLines={2}>{sub || 'endereço não informado'}</Text>
       </Pressable>
       {ehPessoa && !compacto && a.onEdit && (
         <Pressable accessibilityRole="button" accessibilityLabel="Corrigir o nome do lugar" onPress={a.onEdit} style={s.corrigir}>
@@ -202,9 +201,12 @@ function Cabecalho({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; com
 }
 
 function Fatos({ d }: { d: DadosCardNovo }) {
+  // Distância e posição já estão no subtítulo; aqui ficam os sinais.
+  const sinais = fatosDoCard(d).filter((f) => !f.texto.startsWith('≈') && f.texto !== 'posição exata' && f.texto !== distanciaTexto(d.distanciaM));
+  if (!sinais.length) return null;
   return (
     <View style={s.fatos}>
-      {fatosDoCard(d).map((f) => (
+      {sinais.map((f) => (
         <View key={f.texto} style={[s.fato, f.aviso && s.fatoAviso]}>
           <Text style={[s.fatoTexto, f.aviso && s.fatoAvisoTexto]} numberOfLines={1}>{f.texto}</Text>
         </View>
@@ -213,17 +215,68 @@ function Fatos({ d }: { d: DadosCardNovo }) {
   );
 }
 
-function GradeQuatro({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
+function assumir(d: DadosCardNovo, a: AcoesCardNovo) {
+  if (!a.onEMeu) return;
+  if (d.naRota) a.onEMeu();
+  else Toast.mostrar('Para assumir, ponha na rota de hoje (+ Rota de hoje) e toque em É meu.', 'fila');
+}
+
+function GradeEspiada({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   const c = d.client;
   const temTel = !!c.telefone?.trim();
+  const podeAssumir = d.pino.dono === 'sem' && !!a.onEMeu;
   return (
     <View style={s.grade}>
-      {temTel
-        ? <Botao rotulo="Ligar" onPress={() => ligar(c)} estilo={s.botao64} />
-        : <Botao rotulo="+ Telefone" onPress={a.onEdit} estilo={s.botao64} tracejado acessivel="Adicionar telefone" />}
-      <Botao rotulo="WhatsApp" onPress={() => openWhatsapp(c.telefone)} desabilitado={!toWhatsappNumber(c.telefone)} estilo={s.botao64} />
-      <Botao rotulo="Ir" onPress={() => ir(c)} desabilitado={c.latitude == null} estilo={s.botao64} />
-      <Botao rotulo="Não vale" onPress={() => naoVale(d, a)} desabilitado={!(d.pino.tipo === 'alvo' ? a.onDismissContaAlvo : a.onChangeStage)} estilo={s.botao64} texto={s.naoValeTexto} />
+      {podeAssumir
+        ? <Botao rotulo="É meu" onPress={() => assumir(d, a)} estilo={[s.botao48, s.eMeuBotao]} texto={s.eMeuTexto} acessivel="É meu: colocar no meu funil" />
+        : temTel
+          ? <Botao rotulo="Ligar" onPress={() => ligar(c)} estilo={s.botao48} />
+          : <Botao rotulo="+ Telefone" onPress={a.onEdit} estilo={s.botao48} tracejado acessivel="Adicionar telefone" />}
+      <Botao rotulo="Ir" onPress={() => ir(c)} desabilitado={c.latitude == null} estilo={s.botao48} />
+      <Botao rotulo="Agendar" onPress={a.onScheduleMeeting} estilo={s.botao48} />
+      {a.onExpandir && <Botao rotulo="…" onPress={a.onExpandir} estilo={[s.botao48, s.botaoMais]} acessivel="Mais: abrir o cartão" />}
+    </View>
+  );
+}
+
+function GradeMais({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
+  const c = d.client;
+  return (
+    <View style={s.grade2}>
+      <Botao rotulo="Editar dados" onPress={a.onEdit} estilo={s.botaoMeia} />
+      <Botao rotulo="WhatsApp" onPress={() => openWhatsapp(c.telefone)} desabilitado={!toWhatsappNumber(c.telefone)} estilo={s.botaoMeia} />
+      <Botao
+        rotulo={d.naRota ? '✓ Rota de hoje' : '+ Rota de hoje'}
+        onPress={d.naRota ? () => Toast.mostrar('Já está na rota de hoje', 'ok') : a.onAddToRoute}
+        estilo={[s.botaoMeia, d.naRota && s.naRota]}
+        texto={d.naRota ? s.naRotaTexto : undefined}
+        acessivel={d.naRota ? 'Já está na rota de hoje' : 'Adicionar à rota de hoje'}
+      />
+      <Botao rotulo="Mover o pino" onPress={a.onMoverPino} estilo={s.botaoMeia} />
+      <Botao rotulo="Não vale" onPress={() => naoVale(d, a)} desabilitado={!(d.pino.tipo === 'alvo' ? a.onDismissContaAlvo : a.onChangeStage)} estilo={s.botaoMeia} texto={s.naoValeTexto} />
+    </View>
+  );
+}
+
+// Bloco NEGÓCIO (handoff §7.1). A fase 4 traz a barra de 8 etapas, o botão de
+// avanço por etapa e a cobrança; por ora, a etapa e o caminho para mudá-la.
+function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
+  if (d.pino.tipo === 'alvo' && !d.client.id_hubspot) {
+    return (
+      <View style={s.negocio}>
+        <Text style={s.negocioRotulo}>NEGÓCIO · FUNIL FIELD SALES</Text>
+        <Text style={s.negocioEtapa}>Conta-alvo</Text>
+        <Text style={s.negocioNota}>Prospecção aprovada · ainda não é negócio de ninguém</Text>
+        {a.onEMeu && <Botao rotulo="É meu · entrar em Prospecção" onPress={() => assumir(d, a)} estilo={[s.botao48, s.eMeuBotao]} texto={s.eMeuTexto} />}
+      </View>
+    );
+  }
+  if (d.pino.tipo === 'cliente') return null;
+  return (
+    <View style={s.negocio}>
+      <Text style={s.negocioRotulo}>NEGÓCIO · FUNIL FIELD SALES</Text>
+      <Text style={s.negocioEtapa}>{d.etapaRotulo ?? (d.client.id_hubspot ? 'Etapa não reconhecida' : 'Ainda sem negócio no HubSpot')}</Text>
+      {a.onChangeStage && d.client.id_hubspot && <Botao rotulo="Mudar etapa" onPress={a.onChangeStage} estilo={s.botao48} />}
     </View>
   );
 }
@@ -233,14 +286,8 @@ export function PeekCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   return (
     <View style={s.peek}>
       <Cabecalho d={d} a={a} compacto />
-      <Fatos d={d} />
       <BotaoCheguei d={d} a={a} />
-      <GradeQuatro d={d} a={a} />
-      {a.onExpandir && (
-        <Pressable accessibilityRole="button" accessibilityLabel="Abrir ficha completa" onPress={a.onExpandir} style={s.expandir}>
-          <Text style={s.expandirTexto}>Ficha completa · etapa, agenda, histórico, dados ▴</Text>
-        </Pressable>
-      )}
+      <GradeEspiada d={d} a={a} />
     </View>
   );
 }
@@ -289,33 +336,13 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
           )}
         </View>
       )}
-      <Fatos d={d} />
       <BotaoCheguei d={d} a={a} />
-      <GradeQuatro d={d} a={a} />
-      <View style={s.grade}>
-        <Botao rotulo="Mudar etapa" onPress={a.onChangeStage} estilo={s.botao48} />
-        <Botao rotulo="Agendar" onPress={a.onScheduleMeeting} estilo={s.botao48} />
-        <Botao
-          rotulo={d.naRota ? '✓ Rota de hoje' : '+ Rota de hoje'}
-          onPress={d.naRota ? () => Toast.mostrar('Já está na rota de hoje', 'ok') : a.onAddToRoute}
-          estilo={[s.botao48, d.naRota && s.naRota]}
-          texto={d.naRota ? s.naRotaTexto : undefined}
-          acessivel={d.naRota ? 'Já está na rota de hoje' : 'Adicionar à rota de hoje'}
-        />
-      </View>
+      <GradeEspiada d={d} a={{ ...a, onExpandir: undefined }} />
+      <Fatos d={d} />
+      <BlocoNegocio d={d} a={a} />
       <View style={s.linhaInfo}>
         <Text style={s.infoRotulo}>DONO</Text>
         <Text style={[s.infoValor, d.pino.dono === 'sem' && { color: '#FACC15' }]} numberOfLines={1}>{dono}</Text>
-        {d.pino.dono === 'sem' && a.onEMeu && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={d.naRota ? 'É meu: colocar no meu funil' : 'É meu: ponha na rota de hoje primeiro'}
-            onPress={d.naRota ? a.onEMeu : () => Toast.mostrar('Para assumir, ponha na rota de hoje (+ Rota de hoje) e toque em É meu.', 'fila')}
-            style={({ pressed }) => [s.eMeu, !d.naRota && s.eMeuForaDaRota, pressed && { opacity: 0.8 }]}
-          >
-            <Text style={[s.eMeuTexto, !d.naRota && s.eMeuTextoForaDaRota]}>É meu</Text>
-          </Pressable>
-        )}
       </View>
       <View style={s.linhaInfo}>
         <Text style={s.infoRotulo}>ORIGEM</Text>
@@ -327,6 +354,7 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
             .filter(Boolean).join(' · ')}
         </Text>
       </View>
+      <GradeMais d={d} a={a} />
     </View>
   );
 }
@@ -336,7 +364,7 @@ const s = StyleSheet.create({
   topo: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, gap: 10 },
   eMeu: { marginLeft: 'auto', minHeight: 44, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#FACC15', alignItems: 'center', justifyContent: 'center' },
   eMeuForaDaRota: { backgroundColor: 'transparent', borderWidth: 1, borderStyle: 'dashed', borderColor: '#FACC15' },
-  eMeuTexto: { fontSize: 14, fontWeight: '800', color: '#14171C' },
+  eMeuTexto: { fontSize: 14, fontWeight: '700', color: '#FACC15' },
   eMeuTextoForaDaRota: { color: '#FACC15' },
   alerta: {
     flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 12, paddingRight: 6, paddingVertical: 6,
@@ -347,9 +375,9 @@ const s = StyleSheet.create({
   alertaBotao: { minHeight: 44, minWidth: 72, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#C8131B', alignItems: 'center', justifyContent: 'center' },
   alertaBotaoTexto: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
   cabecalho: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  kicker: { fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
-  titulo: { fontSize: 24, lineHeight: 30, fontWeight: '800', color: 'var(--text)', marginTop: 2 },
-  tituloLongo: { fontSize: 19, lineHeight: 24 },
+  kicker: { fontSize: 11, fontWeight: '600', letterSpacing: 0.88 },
+  titulo: { fontSize: 20, lineHeight: 24, fontWeight: '700', color: 'var(--text)', marginTop: 2 },
+  tituloLongo: { fontSize: 18, lineHeight: 22 },
   sub: { fontSize: 13, color: 'var(--text-muted)', marginTop: 2 },
   vazio: { fontStyle: 'italic' },
   corrigir: { minHeight: 44, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: 'var(--tint-amber-border)', backgroundColor: 'var(--tint-amber)', alignItems: 'center', justifyContent: 'center' },
@@ -361,9 +389,17 @@ const s = StyleSheet.create({
   fatoTexto: { fontSize: 12, fontWeight: '700', color: 'var(--text)' },
   fatoAviso: { backgroundColor: 'var(--tint-amber)' },
   fatoAvisoTexto: { color: 'var(--tint-amber-text)' },
-  cheguei: { minHeight: 58, borderRadius: 14, backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
-  chegueiTexto: { fontSize: 17, fontWeight: '800', color: '#fff' },
-  chegueiSub: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,.85)', marginTop: 2 },
+  cheguei: { minHeight: 56, borderRadius: 16, backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
+  chegueiTexto: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  chegueiSub: { fontSize: 12, fontWeight: '500', color: 'rgba(255,255,255,.85)', marginTop: 1 },
+  botaoMais: { flex: 0, width: 56 },
+  eMeuBotao: { backgroundColor: 'transparent', borderColor: '#FACC15', borderWidth: 1.5 },
+  grade2: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  botaoMeia: { flex: 0, width: '48.5%', minHeight: 48 },
+  negocio: { gap: 6, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)' },
+  negocioRotulo: { fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: 'var(--text-faint)' },
+  negocioEtapa: { fontSize: 16, fontWeight: '600', color: 'var(--text)' },
+  negocioNota: { fontSize: 12.5, fontWeight: '500', color: 'var(--text-muted)' },
   grade: { flexDirection: 'row', gap: 8 },
   botao: {
     flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 12,
@@ -371,7 +407,7 @@ const s = StyleSheet.create({
   },
   botao64: { minHeight: 64 },
   botao48: { minHeight: 48 },
-  botaoTexto: { fontSize: 13, fontWeight: '800', color: 'var(--text)' },
+  botaoTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
   tracejado: { borderStyle: 'dashed', backgroundColor: 'transparent' },
   desabilitado: { opacity: 0.45 },
   naoValeTexto: { color: 'var(--brand-text)' },

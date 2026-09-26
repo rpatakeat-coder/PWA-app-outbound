@@ -23,7 +23,7 @@ export const COMO_FOI: { id: Desfecho; rotulo: string }[] = [
   { id: 'estabelecimento_fechado', rotulo: 'Estava fechado' },
 ];
 
-export type Proximo = 'reuniao' | 'voltar7' | 'ligar_amanha' | 'sem_interesse';
+export type Proximo = 'reuniao' | 'voltar7' | 'ligar_amanha' | 'sem_interesse' | 'voltar_horario' | 'voltar_amanha';
 export const PROXIMOS: { id: Proximo; rotulo: string }[] = [
   { id: 'reuniao', rotulo: 'Reunião' },
   { id: 'voltar7', rotulo: 'Voltar em 7 dias' },
@@ -35,6 +35,39 @@ export const DIAS_REUNIAO = [
   { dias: 3, rotulo: 'Em 3 dias' },
   { dias: 5, rotulo: 'Em 1 semana' },
 ] as const;
+
+// "E agora?" depende do "Como foi?" (handoff v4.1 §6.4). Reunião vem em três
+// chips (amanhã, 3 dias, 1 semana) para caber nos 3 toques.
+export type OpcaoAgora = { id: string; rotulo: string; proximo: Proximo; dias?: number };
+const REUNIOES: OpcaoAgora[] = [
+  { id: 'reuniao1', rotulo: 'Reunião amanhã', proximo: 'reuniao', dias: 1 },
+  { id: 'reuniao3', rotulo: 'Reunião em 3 dias', proximo: 'reuniao', dias: 3 },
+  { id: 'reuniao5', rotulo: 'Reunião em 1 semana', proximo: 'reuniao', dias: 5 },
+];
+const VOLTAR7: OpcaoAgora = { id: 'voltar7', rotulo: 'Voltar em 7 dias', proximo: 'voltar7' };
+const LIGAR: OpcaoAgora = { id: 'ligar_amanha', rotulo: 'Ligar amanhã', proximo: 'ligar_amanha' };
+const SEM: OpcaoAgora = { id: 'sem_interesse', rotulo: 'Sem interesse', proximo: 'sem_interesse' };
+export function opcoesAgora(comoFoi: Desfecho | null): OpcaoAgora[] {
+  switch (comoFoi) {
+    case 'falou_com_decisor': return [...REUNIOES, VOLTAR7, LIGAR, SEM];
+    case 'decisor_ausente': return [{ id: 'voltar_horario', rotulo: 'Voltar no horário do dono', proximo: 'voltar_horario' }, VOLTAR7, LIGAR, SEM];
+    case 'sem_interesse': return [VOLTAR7, LIGAR, SEM];
+    case 'estabelecimento_fechado': return [{ id: 'voltar_amanha', rotulo: 'Voltar amanhã', proximo: 'voltar_amanha' }, VOLTAR7, LIGAR];
+    default: return [];
+  }
+}
+
+// Melhor horário para achar quem decide (propriedade melhor_horario_decisor).
+// O foodservice tem relógio próprio: o dono não atende no rush.
+export const HORARIOS = [
+  { valor: 'cedo_antes_10h', rotulo: 'Cedo, antes das 10h', curto: 'antes das 10h' },
+  { valor: '10h_11h30', rotulo: '10h–11h30', curto: '10h–11h30' },
+  { valor: '14h30_17h30', rotulo: '14h30–17h30', curto: '14h30–17h30' },
+  { valor: 'noite_apos_17h', rotulo: 'Noite, após 17h', curto: 'após 17h' },
+] as const;
+export type HorarioDecisor = (typeof HORARIOS)[number]['valor'];
+
+export const SISTEMAS = ['Nenhum', 'Saipos', 'Goomer', 'Consumer', 'Outro'] as const;
 
 export const TIPOS = ['Restaurante', 'Bar', 'Café / Padaria', 'Lanchonete', 'Pizzaria', 'Delivery'] as const;
 export const PAPEIS = ['Dono', 'Gerente'] as const;
@@ -161,11 +194,12 @@ export type Ficha = {
   telefone: string;
   tipo: (typeof TIPOS)[number] | null;
   moverEtapa: boolean;
+  horario: HorarioDecisor | null;
 };
 
 export const FICHA_VAZIA: Ficha = {
   comoFoi: null, proximo: null, diasReuniao: null, motivoPerdido: null, nomeDoLugar: '', decisor: '', papel: null,
-  sistema: '', dor: null, telefone: '', tipo: null, moverEtapa: true,
+  sistema: '', dor: null, telefone: '', tipo: null, moverEtapa: true, horario: null,
 };
 
 /** Botão Salvar: diz o que falta, ou "Salvar". */
@@ -185,6 +219,11 @@ export function proximoPassoDaFicha(f: Ficha, hoje: string): { data: string; tip
   if (f.proximo === 'reuniao' && f.diasReuniao) return { data: proximoDiaUtil(hoje, f.diasReuniao), tipo: 'reuniao', texto: 'Reunião combinada na visita', canal: 'visita' };
   if (f.proximo === 'voltar7') return { data: proximoDiaUtil(hoje, 5), tipo: 'visita', texto: 'Voltar para nova visita', canal: 'visita' };
   if (f.proximo === 'ligar_amanha') return { data: proximoDiaUtil(hoje, 1), tipo: 'follow-up', texto: 'Ligar', canal: 'ligacao' };
+  if (f.proximo === 'voltar_amanha') return { data: proximoDiaUtil(hoje, 1), tipo: 'visita', texto: 'Voltar: estava fechado', canal: 'visita' };
+  if (f.proximo === 'voltar_horario') {
+    const h = HORARIOS.find((x) => x.valor === f.horario);
+    return { data: proximoDiaUtil(hoje, 1), tipo: 'visita', texto: h ? `Voltar no horário do dono (${h.curto})` : 'Voltar no horário do dono', canal: 'visita' };
+  }
   return null;
 }
 
@@ -202,6 +241,7 @@ export function notaDaVisita(f: Ficha, p: { cliente: string; ocorridoEm: string;
     decisorAlcancado: f.comoFoi === 'falou_com_decisor' ? 'sim' : 'desconhecido',
     dor: f.dor,
     observacao: [f.sistema ? `sistema: ${f.sistema}` : null, f.tipo ? `tipo: ${f.tipo}` : null,
+      f.horario ? `dono costuma estar: ${HORARIOS.find((x) => x.valor === f.horario)?.rotulo ?? f.horario}` : null,
       f.proximo === 'sem_interesse' && f.motivoPerdido ? `sem interesse: ${f.motivoPerdido}` : null].filter(Boolean).join(' · ') || null,
     proximoPasso: passo ? { canal: passo.canal, dia: passo.data, acao: passo.texto } : null,
   });

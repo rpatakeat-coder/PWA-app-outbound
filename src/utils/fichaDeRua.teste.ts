@@ -6,6 +6,7 @@
 // (pular fase, Ganho), mandar "decisor_alcancado: nao", salvar sem o que é
 // obrigatório, e pedir o nome do lugar para "Bar do Zé".
 import {
+  opcoesAgora, HORARIOS,
   ETAPA, FICHA_VAZIA, etapaSugerida, faltandoParaEtapa, montarPropriedades, movimentoPermitido, notaDaVisita,
   pareceNomeDePessoa, proximoPassoDaFicha, rotuloSalvar, type Ficha,
 } from './fichaDeRua';
@@ -73,6 +74,17 @@ ok(!Object.keys(montarPropriedades(ETAPA.decisor, {}, { celular: '+5527999', gar
   'o que o negócio já tem não é pedido de novo');
 ok(montarPropriedades(ETAPA.perdido, { motivo_do_perdido: 'Outros' }, {}).erros.observacao__desqualificado !== undefined, 'Perdido por "Outros" pede o texto');
 ok(!Object.keys(montarPropriedades(ETAPA.perdido, { motivo_do_perdido: 'Preço' }, {}).erros).length, 'Perdido por "Preço" não pede texto');
+
+// ---- v4.1: "E agora?" depende do "Como foi?" ----
+ok(opcoesAgora('decisor_ausente')[0].proximo === 'voltar_horario', 'quem decide não estava: primeira opção é voltar no horário do dono');
+ok(!opcoesAgora('estabelecimento_fechado').some((o) => o.proximo === 'sem_interesse'), 'estava fechado: não oferece sem interesse');
+ok(opcoesAgora('falou_com_decisor').filter((o) => o.proximo === 'reuniao').map((o) => o.dias).join() === '1,3,5', 'falou com quem decide: reunião em 1, 3 e 5 dias úteis');
+ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
+{
+  const p = proximoPassoDaFicha({ ...FICHA_VAZIA, comoFoi: 'decisor_ausente', proximo: 'voltar_horario', horario: '14h30_17h30' }, '2026-09-25');
+  ok(!!p && p.tipo === 'visita' && p.texto.includes('14h30–17h30') && p.data === '2026-09-28', 'voltar no horário do dono: visita no próximo dia útil com o horário');
+  ok(HORARIOS.length === 4, 'quatro faixas de horário');
+}
 
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);

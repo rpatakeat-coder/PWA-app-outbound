@@ -3340,6 +3340,20 @@ function MainApp() {
 
   const handleMarkAsVisited = useCallback(async (client: Client, onDone?: () => void) => {
     if (visitingRef.current) return;
+    // Handoff v4.1 §6.4: check-in repetido no mesmo dia não vira segunda
+    // visita. Quem já fez check-in hoje neste lead vai direto ao registro —
+    // sem gravar outra client_visits nem outra tarefa de visita no HubSpot.
+    if (modoNovo && contextoPino && client.status === 'lead' && visitadoHoje(client.visited_at) && !!profile?.id && client.visited_by === profile.id) {
+      const chave = textoNormalizado(client.etapa);
+      const pelaTabela = chave ? contextoPino.etapaDePara.get(chave) ?? null : null;
+      const peloSnapshot = client.id_hubspot ? contextoPino.tempoPorNegocio.get(String(client.id_hubspot))?.etapaCodigo ?? null : null;
+      setFichaPendente({
+        client, checkinEm: client.visited_at ?? new Date().toISOString(), etapaAtual: pelaTabela ?? peloSnapshot,
+        primeiraVisita: (client.visit_count ?? 0) <= 1,
+      });
+      onDone?.();
+      return;
+    }
     visitingRef.current = true;
     setIsVisiting(true);
 
@@ -8230,6 +8244,7 @@ function ClientBottomSheet({
     onExpandir: () => setEstagio('cheia'),
     onLiguei: novo?.onLiguei,
     onEMeu: novo?.onEMeu,
+    onMoverPino: onEditLocation,
   };
 
   // ── Faixa de topo (M1c) ───────────────────────────────────────────────
