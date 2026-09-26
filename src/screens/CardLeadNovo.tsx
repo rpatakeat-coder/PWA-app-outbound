@@ -260,6 +260,22 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   return (
     <View style={s.topo}>
       <Cabecalho d={d} a={a} compacto={false} />
+      {/* Motor (prompt §7.4): a conta-alvo sumiu do Google ou está fechada. Descartar
+          tira da rota antes de alguém perder a viagem até uma porta fechada. */}
+      {(d.client.motor_status === 'sumiu_google' || d.client.motor_status === 'fechado_temporario') && (
+        <View style={s.alerta}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.alertaTitulo} numberOfLines={2}>
+              {`Motor (${d.client.motor_conferido_em ? new Date(d.client.motor_conferido_em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }) : '—'}): ${d.client.motor_status === 'sumiu_google' ? 'sumiu do Google. Pode ter fechado.' : 'fechado temporariamente no Google.'}`}
+            </Text>
+          </View>
+          {a.onDismissContaAlvo && (
+            <Pressable accessibilityRole="button" accessibilityLabel="Descartar esta conta-alvo" onPress={a.onDismissContaAlvo} style={({ pressed }) => [s.alertaBotao, pressed && { opacity: 0.8 }]}>
+              <Text style={s.alertaBotaoTexto}>Descartar</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
       {d.cobranca && (
         <View style={s.alerta}>
           <View style={{ flex: 1, minWidth: 0 }}>

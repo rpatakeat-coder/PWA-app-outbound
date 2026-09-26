@@ -17,7 +17,8 @@ export type Ponto = {
   opacidade: number;
 };
 
-export default function CamadaDePontos({ pontos }: { pontos: Ponto[] }) {
+// sol: modo sol (mapa claro) ganha contorno escuro nos pontos cheios, que sumiam no fundo claro.
+export default function CamadaDePontos({ pontos, sol = false }: { pontos: Ponto[]; sol?: boolean }) {
   const ctx = useMapContext();
   const pontosRef = useRef(pontos);
   pontosRef.current = pontos;
@@ -72,11 +73,13 @@ export default function CamadaDePontos({ pontos }: { pontos: Ponto[] }) {
             g.beginPath();
             g.roundRect ? g.roundRect(x - 3.5, y - 3.5, 7, 7, 2) : g.rect(x - 3.5, y - 3.5, 7, 7);
             g.fill();
+            if (sol) { g.strokeStyle = 'rgba(0,0,0,.65)'; g.lineWidth = 1; g.stroke(); }
           } else if (p.forma === 'bola') {
             g.fillStyle = p.cor;
             g.beginPath();
             g.arc(x, y, 3.5, 0, Math.PI * 2);
             g.fill();
+            if (sol) { g.strokeStyle = 'rgba(0,0,0,.65)'; g.lineWidth = 1; g.stroke(); }
           } else {
             g.strokeStyle = p.cor;
             g.lineWidth = 1.5;

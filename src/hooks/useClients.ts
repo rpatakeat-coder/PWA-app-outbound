@@ -43,6 +43,8 @@ const CLIENT_LIST_COLUMNS = [
   'origem_lead', 'origem_detalhe', 'entrou_em', 'lead_prospeccao_id',
   // 0106: lead de teste (some do mapa para quem não é admin).
   'is_teste',
+  // 0110: motor das contas-alvo (alerta "sumiu do Google" no card).
+  'motor_status', 'motor_conferido_em',
   // Ficha de rua: "Tipo de lugar" só aparece quando falta.
   'categoria',
 ].join(',');

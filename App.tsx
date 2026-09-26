@@ -83,6 +83,7 @@ import {
   IconMenuCircles,
   IconTrendingDown,
   IconBook,
+  IconSparkle,
 } from './src/components/icons';
 import { Avatar } from './src/components/Avatar';
 import { useFotoDePerfil } from './src/hooks/useFotoDePerfil';
@@ -488,11 +489,11 @@ function visitadoHoje(iso: string | null | undefined): boolean {
 // (src/utils/pinoP2.ts); o memo compara o que muda o desenho.
 const MarkerP2 = React.memo(
   function MarkerP2({
-    client, contexto, onPress, planoNumero, feito, naFila, selecionado, comNome = true, agrupar = false, nomeDeAlvo = false, ladoNome = 'dir', pilhaN = 1, leque = null,
+    client, contexto, onPress, planoNumero, feito, naFila, selecionado, comNome = true, agrupar = false, nomeDeAlvo = false, ladoNome = 'dir', pilhaN = 1, leque = null, sol = false,
   }: {
     client: Client; contexto: ContextoPino; onPress: (client: Client) => void;
     planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean; comNome?: boolean; agrupar?: boolean; nomeDeAlvo?: boolean; ladoNome?: 'dir' | 'esq';
-    pilhaN?: number; leque?: { dx: number; dy: number } | null;
+    pilhaN?: number; leque?: { dx: number; dy: number } | null; sol?: boolean;
   }) {
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
     const pino = classificarPino(client, contexto);
@@ -515,6 +516,7 @@ const MarkerP2 = React.memo(
           ladoNome={ladoNome}
           pilhaN={pilhaN}
           leque={leque}
+          sol={sol}
         />
       </Marker>
     );
@@ -532,6 +534,7 @@ const MarkerP2 = React.memo(
     a.nomeDeAlvo === b.nomeDeAlvo &&
     a.ladoNome === b.ladoNome &&
     a.pilhaN === b.pilhaN &&
+    a.sol === b.sol &&
     a.leque?.dx === b.leque?.dx && a.leque?.dy === b.leque?.dy,
 );
 
@@ -1035,6 +1038,15 @@ function MainApp() {
     if (modoNovo) setHeatOn(lente === 'calor' && canViewGestor);
   }, [modoNovo, lente, canViewGestor]);
   const [heatSeller, setHeatSeller] = useState<string | null>(null); // null = Todos
+  // Modo sol (prompt §6, menu do avatar): mapa claro para ler na rua ao meio-dia.
+  // Lembrado no aparelho; só vale no mapa novo.
+  const [modoSol, setModoSol] = useState<boolean>(() => {
+    try { return localStorage.getItem('takeat-modo-sol') === '1'; } catch { return false; }
+  });
+  const alternarModoSol = () => setModoSol((v) => {
+    try { localStorage.setItem('takeat-modo-sol', v ? '0' : '1'); } catch { /* sem storage: vale só nesta sessão */ }
+    return !v;
+  });
   // Lente Calor do mapa novo: Time (todos) ou Só eu.
   const [calorEscopo, setCalorEscopo] = useState<'time' | 'eu'>('time');
   const {
@@ -3800,6 +3812,7 @@ function MainApp() {
         {/* Mapa cheio. zIndex baixo: cards e botoes flutuam sobre. */}
         <MapView
           mapRef={(ref) => { navMapRef.current = ref as unknown as RNMapView; }}
+          claro={modoNovo && modoSol}
           style={{ flex: 1 }}
           initialRegion={{
             latitude: (userLocation?.latitude ?? navigationCurrentStop.latitude) as number,
@@ -4212,6 +4225,8 @@ function MainApp() {
     <>
       <MapView
         mapRef={(ref) => { mapRef.current = ref as unknown as RNMapView; }}
+        // Modo sol: mapa claro com o app escuro (recria o mapa: colorScheme só vale na construção).
+        claro={modoNovo && modoSol}
         style={[styles.map, folhaDeBaixo && margemMapa > 0 && { marginBottom: margemMapa }]}
         // Mede a area real do mapa na tela pra ancorar o pin de criacao no
         // centro do MAPA (nao da tela). Guarda x/y/width/height absolutos.
@@ -4312,7 +4327,7 @@ function MainApp() {
             sem os leads engolirem as manchas. Voltam ao desligar o 🔥. */}
         {/* Mapa novo: pino P2 para os leads da área e para as paradas da
             rota (com o número do plano no selo, no lugar do RouteMarker). */}
-        {modoNovo && <CamadaDePontos pontos={camadaPontos} />}
+        {modoNovo && <CamadaDePontos key={modoSol ? 'sol' : 'noite'} pontos={camadaPontos} sol={modoSol} />}
         {modoNovo && contextoPino && focoMapaNovo.map(({ c, plano }) => {
           // Pilha (C11): fechada mostra só o líder com o número; aberta, todos em leque.
           const pl = pilhaDe.get(c.id);
@@ -4359,6 +4374,7 @@ function MainApp() {
             nomeDeAlvo={lente === 'alvo'}
             pilhaN={n > 1 && !aberta ? n : 1}
             leque={leque}
+            sol={modoSol}
           />
           );
         })}
@@ -6383,6 +6399,10 @@ function MainApp() {
             // Escondido pro viewer, que o guard de papel ja' redireciona.
             !isViewer
               ? { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu desempenho', aoTocar: () => irParaTelaDePerfil('meu') }
+              : null,
+            // Modo sol (prompt §6): mapa claro para ler na rua ao meio-dia. Só no mapa novo.
+            modoNovo
+              ? { chave: 'sol', Icone: IconSparkle, rotulo: modoSol ? 'Modo sol · ligado' : 'Modo sol · mapa claro', aoTocar: () => { alternarModoSol(); setPerfilAberto(false); } }
               : null,
             { chave: 'config', Icone: IconSettings, rotulo: 'Configurações', aoTocar: () => irParaTelaDePerfil('config') },
             // O logout disparava a UM toque, sem rede — e sem conexao pra

@@ -94,6 +94,8 @@ export interface MapViewProps {
   provider?: unknown;
   /** Callback-ref alternativo, como no react-native-map-clustering. */
   mapRef?: (ref: MapViewHandle | null) => void;
+  /** Modo sol (mapa novo): força a variante CLARA do estilo, com o app escuro. */
+  claro?: boolean;
 }
 
 /** Bolha de cluster: mesmo visual do react-native-map-clustering (circulo + contagem). */
@@ -158,6 +160,7 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
     clusterColor = '#3b82f6',
     clusterTextColor = '#ffffff',
     mapRef,
+    claro = false,
   } = props;
 
   // O mapa nao le CSS: a variante clara/escura vem do estilo publicado no Map
@@ -222,7 +225,7 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
           // Seleciona a variante clara/escura do estilo publicado nesse Map ID.
           // Precisa vir na construcao — nao ha setter depois; por isso o
           // efeito inteiro depende de `isDark`.
-          colorScheme: isDark ? 'DARK' : 'LIGHT',
+          colorScheme: isDark && !claro ? 'DARK' : 'LIGHT',
           // UI propria do app: os controles padrao da Google brigariam com os
           // botoes flutuantes (centralizar, calor, rota) desenhados por cima.
           disableDefaultUI: true,
@@ -345,7 +348,7 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
     // (o Map ID nao pode ser trocado depois). initialRegion e as props de
     // clustering sao snapshot inicial, como no react-native-maps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDark]);
+  }, [isDark, claro]);
 
   // ---- Ponto azul da posicao do usuario ----
   // O react-native-maps delega isso ao SO; na web desenhamos e acompanhamos

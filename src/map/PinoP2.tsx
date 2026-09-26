@@ -31,11 +31,13 @@ type Props = {
   pilhaN?: number;
   /** Leque aberto (C11): deslocamento do pino em relação ao ponto real. */
   leque?: { dx: number; dy: number } | null;
+  /** Modo sol (prancha §6): mapa claro — corpo continua escuro, borda externa de 1 px preto, nome escuro com halo branco. */
+  sol?: boolean;
 };
 
 const LOGO = require('../../assets/pin-logo.png');
 
-function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta = true, nomeDeAlvo = false, ladoNome = 'dir', pilhaN = 1, leque = null }: Props) {
+function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta = true, nomeDeAlvo = false, ladoNome = 'dir', pilhaN = 1, leque = null, sol = false }: Props) {
   const emPilha = pilhaN > 1;
   const pequeno = pino.tipo === 'alvo';
   const w = pequeno ? 26 : 32;
@@ -73,7 +75,8 @@ function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta 
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: pequeno ? 'rgba(20,23,28,.85)' : '#14171C', border: anel,
             borderRadius: '50% 50% 50% 0', transform: 'rotate(-45deg)', opacity: pino.opacidade,
-            boxShadow: selecionado ? '0 0 0 5px rgba(255,255,255,.35),0 3px 10px rgba(0,0,0,.6)' : '0 3px 8px rgba(0,0,0,.55)',
+            boxShadow: (selecionado ? '0 0 0 5px rgba(255,255,255,.35),0 3px 10px rgba(0,0,0,.6)' : '0 3px 8px rgba(0,0,0,.55)')
+              + (sol ? ',0 0 0 1px #000' : ''),
           }}>
             <div style={{ transform: 'rotate(45deg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {emPilha
@@ -103,7 +106,7 @@ function PinoP2({ pino, planoNumero, visitado, naFila, selecionado, comEtiqueta 
               position: 'absolute', ...(esq ? { right: 18, alignItems: 'flex-end' } : { left: 18 }), top: -w * 1.2 + 2, display: 'flex', flexDirection: 'column', gap: 2,
               whiteSpace: 'nowrap', pointerEvents: 'none',
             }}>
-              <span style={{ fontWeight: 800, fontSize: 11, lineHeight: 1.1, color: '#fff', textShadow: '0 1px 2px #000,0 0 5px #000' }}>{emPilha ? `${pino.nome} +${pilhaN - 1}` : pino.nome}</span>
+              <span style={{ fontWeight: 800, fontSize: 11, lineHeight: 1.1, color: sol ? '#111' : '#fff', textShadow: sol ? '0 0 2px #fff,0 0 4px #fff,0 0 6px #fff' : '0 1px 2px #000,0 0 5px #000' }}>{emPilha ? `${pino.nome} +${pilhaN - 1}` : pino.nome}</span>
               {mostraTempo && pino.etiqueta && (
                 <span style={{
                   alignSelf: esq ? 'flex-end' : 'flex-start', fontWeight: 800, fontSize: 9.5, lineHeight: 1, padding: '2px 5px', borderRadius: 4,

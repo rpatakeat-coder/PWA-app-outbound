@@ -65,6 +65,9 @@ export interface Client {
   lead_prospeccao_id?: string | null;
   // Lead de teste (0106): fora do mapa, listas e contagens do app.
   is_teste?: boolean;
+  // Motor mensal das contas-alvo (0110): ok | sumiu_google | fechado_temporario | nao_achado.
+  motor_status?: string | null;
+  motor_conferido_em?: string | null;
   // Tipo de lugar (Restaurante, Bar…) — a ficha de rua pergunta só se faltar.
   categoria?: string | null;
   visited_at: string | null;

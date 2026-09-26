@@ -33,6 +33,8 @@ ok(resumoDaQuadra([...comBoa, it('q', { dono: 'meu', temp: 'Q' }, { empresa: 'Ba
 ok(resumoDaQuadra([...comBoa, it('c', { etiqueta: { texto: 'cobrar', fundo: '', tinta: '' } }, { empresa: 'Kadô' })]).melhor?.id === 'c', 'cobrança vence carteira e conta-alvo');
 ok(resumoDaQuadra([...comBoa, it('p', {}, {}, 3, 3000)]).melhor?.texto === 'melhor: parada 3 · 3,0 km', 'plano de hoje vence tudo');
 ok(resumoDaQuadra([it('x', {}, { bairro: null, cidade: 'Serra' })]).area === 'Serra', 'sem bairro: a cidade');
+const fechou = it('fechou', { tipo: 'alvo', temp: null }, { conta_alvo_rating: 4.9, conta_alvo_reviews: 900, motor_status: 'sumiu_google' }, null, 50);
+ok(resumoDaQuadra([...base, fechou]).melhor?.id !== 'fechou', 'conta-alvo que o motor viu fechada nunca é o melhor candidato');
 
 // cartões que se tocariam viram uma quadra só
 const m = (pre: string, n: number) => Array.from({ length: n }, (_, i) => pre + i);

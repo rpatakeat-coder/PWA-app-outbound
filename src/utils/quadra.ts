@@ -6,7 +6,7 @@
 import type { Pino } from './pinoP2';
 
 type Item = {
-  c: { id: string; empresa?: string | null; nome: string; bairro?: string | null; cidade?: string | null; conta_alvo_rating?: number | null; conta_alvo_reviews?: number | null };
+  c: { id: string; empresa?: string | null; nome: string; bairro?: string | null; cidade?: string | null; conta_alvo_rating?: number | null; conta_alvo_reviews?: number | null; motor_status?: string | null };
   p: Pino;
   plano: number | null;
   distanciaM: number | null;
@@ -27,6 +27,8 @@ const distTexto = (m: number | null) =>
 
 /** Prompt: plano de hoje › cobrança › minha carteira quente › conta-alvo ≥ 4,5★ e ≥ 100 avaliações › o resto (mais perto). */
 function pesoMelhor(it: Item): number {
+  // O motor (0110) viu que fechou: nunca é o "melhor" — seria mandar alguém a porta fechada.
+  if (it.c.motor_status === 'sumiu_google' || it.c.motor_status === 'fechado_temporario') return 9;
   if (it.plano != null) return 0;
   if (it.p.etiqueta?.texto === 'cobrar') return 1;
   if (it.p.dono === 'meu' && it.p.temp === 'Q') return 2;
