@@ -502,12 +502,12 @@ function visitadoHoje(iso: string | null | undefined): boolean {
 // (src/utils/pinoP2.ts); o memo compara o que muda o desenho.
 const MarkerP2 = React.memo(
   function MarkerP2({
-    client, contexto, onPress, planoNumero, feito, naFila, selecionado, papel, lente, foraDaLente = false, agrupar = false, pilhaN = 1, leque = null, sol = false,
+    client, contexto, onPress, planoNumero, feito, naFila, selecionado, papel, lente, foraDaLente = false, agrupar = false, pilhaN = 1, leque = null, sol = false, rotulo = false,
   }: {
     client: Client; contexto: ContextoPino; onPress: (client: Client) => void;
     planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean;
     papel: PapelPino; lente: Lente; foraDaLente?: boolean; agrupar?: boolean;
-    pilhaN?: number; leque?: { dx: number; dy: number } | null; sol?: boolean;
+    pilhaN?: number; leque?: { dx: number; dy: number } | null; sol?: boolean; rotulo?: boolean;
   }) {
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
     const pino = classificarPino(client, contexto);
@@ -532,6 +532,7 @@ const MarkerP2 = React.memo(
           pilhaN={pilhaN}
           leque={leque}
           sol={sol}
+          rotulo={rotulo}
         />
       </Marker>
     );
@@ -550,6 +551,7 @@ const MarkerP2 = React.memo(
     a.agrupar === b.agrupar &&
     a.pilhaN === b.pilhaN &&
     a.sol === b.sol &&
+    a.rotulo === b.rotulo &&
     a.leque?.dx === b.leque?.dx && a.leque?.dy === b.leque?.dy,
 );
 
@@ -4717,6 +4719,9 @@ function MainApp() {
             pilhaN={n > 1 && !aberta ? n : 1}
             leque={leque}
             sol={modoSol}
+            // Nome no zoom de rua para quem cabe sem cobrir outro nome
+            // (rotulosSemSobrepor); afastado, só plano, próxima e selecionado.
+            rotulo={comNome.has(c.id) && (plano != null || (!!mapRegion && mapRegion.latitudeDelta <= 0.02))}
           />
           );
         })}

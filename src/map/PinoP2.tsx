@@ -38,6 +38,8 @@ type Props = {
   selecionado?: boolean;
   /** Fora da lente atual (zoom de rua mostra todos inteiros): 22%. */
   foraDaLente?: boolean;
+  /** Zoom de rua: o nome cabe sem cobrir outro nome (rotulosSemSobrepor). */
+  rotulo?: boolean;
   /** Segunda linha do rótulo (dono às 15h › cobrar › ICP › dias sem toque). */
   sinal?: string | null;
   /** Pilha (C11): quantos pinos este representa. >1 mostra o número e "Nome +N". */
@@ -69,17 +71,20 @@ function seloDoPino(p: Props): Selo | null {
 }
 
 function PinoP2(props: Props) {
-  const { pino, papel, selecionado, foraDaLente, visitado, sinal, pilhaN = 1, leque = null, sol = false } = props;
+  const { pino, papel, selecionado, foraDaLente, visitado, sinal, pilhaN = 1, leque = null, sol = false, rotulo = false } = props;
   const emPilha = pilhaN > 1;
-  const d = selecionado ? 42 : papel === 'proxima' ? 38 : papel === 'plano' ? 30 : 24;
+  // LEGÍVEL NA RUA (Julyan, 26/09: "executivo de 40 anos, no sol, não enxerga"):
+  // os tamanhos do handoff (24/30/38/42) sumiam no celular. Subiram 4–6 px.
+  const d = selecionado ? 46 : papel === 'proxima' ? 42 : papel === 'plano' ? 34 : 30;
   const semDono = pino.dono === 'sem' && pino.tipo !== 'alvo';
   const aro = semDono ? '2.5px dashed #FACC15' : '2.5px solid #FFFFFF';
   const halo = selecionado
     ? '0 0 0 6px rgba(255,255,255,.35),'
     : papel === 'proxima' ? '0 0 0 5px rgba(229,26,49,.45),' : '';
-  const opacidade = foraDaLente && !selecionado ? 0.22 : visitado && !selecionado ? 0.55 : 1;
+  // Fora da lente fica mais quieto, não invisível: 0,22 virava fantasma no mapa.
+  const opacidade = foraDaLente && !selecionado ? 0.75 : visitado && !selecionado ? 0.8 : 1;
   const selo = emPilha ? null : seloDoPino(props);
-  const comNome = !leque && (selecionado || papel === 'proxima');
+  const comNome = !leque && (selecionado || papel === 'proxima' || rotulo);
   const topoDisco = -8 - d; // ponta de 8 px + disco
   const logoW = Math.round(d * 0.56);
 
@@ -129,7 +134,7 @@ function PinoP2(props: Props) {
               padding: '3px 7px', borderRadius: 7,
               background: sol ? 'rgba(255,255,255,.95)' : 'rgba(10,12,15,.82)',
             }}>
-              <span style={{ fontWeight: 600, fontSize: 12, lineHeight: 1.25, color: sol ? '#111418' : '#FFFFFF' }}>
+              <span style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.25, color: sol ? '#111418' : '#FFFFFF' }}>
                 {emPilha ? `${pino.nome} +${pilhaN - 1}` : pino.nome}
               </span>
               {!!sinal && (

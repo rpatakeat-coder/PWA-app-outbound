@@ -126,8 +126,9 @@ export function contarChips(itens: { c: Client; p: Pino }[], f: FiltrosNovos) {
 
 /** Como o lead aparece fora da lente: ponto de 7 px na cor e forma da categoria. */
 export function pontoDe(p: Pino): { cor: string; forma: 'bola' | 'quadrado' | 'anel' | 'tracejado'; opacidade: number } {
-  if (p.tipo === 'alvo') return { cor: '#C084FC', forma: 'anel', opacidade: 0.6 };
-  if (p.dono === 'sem') return { cor: '#FACC15', forma: 'tracejado', opacidade: 0.55 };
-  if (p.tipo === 'ex') return { cor: p.cor, forma: 'quadrado', opacidade: 0.55 };
-  return { cor: p.cor, forma: 'bola', opacidade: 0.55 };
+  // Pontos de 9 px a 0,85 (eram 7 px a 0,55 e sumiam no celular ao sol).
+  if (p.tipo === 'alvo') return { cor: '#C084FC', forma: 'anel', opacidade: 0.9 };
+  if (p.dono === 'sem') return { cor: '#FACC15', forma: 'tracejado', opacidade: 0.85 };
+  if (p.tipo === 'ex') return { cor: p.cor, forma: 'quadrado', opacidade: 0.85 };
+  return { cor: p.cor, forma: 'bola', opacidade: 0.85 };
 }

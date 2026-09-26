@@ -71,21 +71,21 @@ export default function CamadaDePontos({ pontos, sol = false }: { pontos: Ponto[
           if (p.forma === 'quadrado') {
             g.fillStyle = p.cor;
             g.beginPath();
-            g.roundRect ? g.roundRect(x - 3.5, y - 3.5, 7, 7, 2) : g.rect(x - 3.5, y - 3.5, 7, 7);
+            g.roundRect ? g.roundRect(x - 4.5, y - 4.5, 9, 9, 2) : g.rect(x - 4.5, y - 4.5, 9, 9);
             g.fill();
-            g.strokeStyle = sol ? 'rgba(0,0,0,.65)' : 'rgba(0,0,0,.35)'; g.lineWidth = 1; g.stroke();
+            g.strokeStyle = sol ? 'rgba(0,0,0,.7)' : 'rgba(0,0,0,.55)'; g.lineWidth = 1.2; g.stroke();
           } else if (p.forma === 'bola') {
             g.fillStyle = p.cor;
             g.beginPath();
-            g.arc(x, y, 3.5, 0, Math.PI * 2);
+            g.arc(x, y, 4.5, 0, Math.PI * 2);
             g.fill();
-            g.strokeStyle = sol ? 'rgba(0,0,0,.65)' : 'rgba(0,0,0,.35)'; g.lineWidth = 1; g.stroke();
+            g.strokeStyle = sol ? 'rgba(0,0,0,.7)' : 'rgba(0,0,0,.55)'; g.lineWidth = 1.2; g.stroke();
           } else {
             g.strokeStyle = p.cor;
-            g.lineWidth = 1.5;
+            g.lineWidth = 2.2;
             g.setLineDash(p.forma === 'tracejado' ? [2, 1.5] : []);
             g.beginPath();
-            g.arc(x, y, 2.8, 0, Math.PI * 2);
+            g.arc(x, y, 3.8, 0, Math.PI * 2);
             g.stroke();
             g.setLineDash([]);
           }
