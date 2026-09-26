@@ -109,7 +109,10 @@ import AvisoSemSinal from './src/screens/AvisoSemSinal';
 import FolhaMeuDia from './src/screens/FolhaMeuDia';
 import FolhaBusca, { type LinhaBusca } from './src/screens/FolhaBusca';
 import { useBuscaNegocios } from './src/hooks/useBuscaNegocios';
-import { comprimir, enviarFoto, escolherFoto } from './src/utils/fotoVisita';
+// Nomes próprios: escolherFoto/enviarFoto já são a foto de PERFIL dentro do
+// MainApp (useFotoDePerfil) e o nome local sombreava o import — a câmera do
+// check-in abria o seletor do avatar.
+import { comprimir as comprimirFotoVisita, enviarFoto as enviarFotoVisita, escolherFoto as escolherFotoVisita } from './src/utils/fotoVisita';
 import { useMeuDia } from './src/hooks/useMeuDia';
 import FolhaCalor from './src/screens/FolhaCalor';
 import AvisosPainel from './src/screens/AvisosPainel';
@@ -3545,12 +3548,12 @@ function MainApp() {
       // A câmera abre no toque do botão (o navegador exige o gesto), antes do
       // check-in: sem foto, nada é gravado.
       const tirarFotoDeProva = async (): Promise<Blob | null> => {
-        const arq = await escolherFoto();
+        const arq = await escolherFotoVisita();
         if (!arq) {
           Toast.mostrar('Sem a foto, a visita não entra: o GPS não confirmou que você está na porta.', 'erro');
           return null;
         }
-        try { return await comprimir(arq); } catch {
+        try { return await comprimirFotoVisita(arq); } catch {
           Toast.mostrar('Não consegui ler a foto. Tente de novo.', 'erro');
           return null;
         }
@@ -3699,7 +3702,7 @@ function MainApp() {
       let fotoProvaPendente: Blob | null = null;
       if (fotoProva) {
         try {
-          await enviarFoto({ blob: fotoProva, ownerId: myHubspotId, dealId: client.id_hubspot ?? null, clientId: client.id, lat: userLat, lng: userLon });
+          await enviarFotoVisita({ blob: fotoProva, ownerId: myHubspotId, dealId: client.id_hubspot ?? null, clientId: client.id, lat: userLat, lng: userLon });
         } catch {
           fotoProvaPendente = fotoProva;
         }
