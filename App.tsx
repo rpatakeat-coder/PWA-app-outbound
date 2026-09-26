@@ -102,6 +102,7 @@ import PinoP2, { ANCORA_PINO_P2 } from './src/map/PinoP2';
 import FiltrosMapaNovo from './src/screens/FiltrosMapaNovo';
 import { PeekCardNovo, TopoCardNovo, type AcoesCardNovo, type DadosCardNovo } from './src/screens/CardLeadNovo';
 import FolhaDoMapa, { type ItemFolha } from './src/screens/FolhaDoMapa';
+import FolhaCalor from './src/screens/FolhaCalor';
 import FichaDeRua, { type CamposCadastro } from './src/screens/FichaDeRua';
 import MudarEtapaNovo from './src/screens/MudarEtapaNovo';
 import { ROTULO_ETAPA } from './src/utils/fichaDeRua';
@@ -167,7 +168,7 @@ import { reverseGeocode } from './src/utils/geocoding';
 import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingProvider } from './src/utils/routing';
 import { useVisitsHeatmap } from './src/hooks/useVisitsHeatmap';
 import { useSellerClassification, precisaDeIdHubspot } from './src/hooks/useSellerClassification';
-import { buildHeatCells, heatColor, heatIntensity, HEAT_CELL_M, HEAT_LEGEND_STOPS } from './src/utils/heatmap';
+import { buildHeatCells, celulasNinguemFoi, heatColor, heatIntensity, HEAT_CELL_M, HEAT_LEGEND_STOPS } from './src/utils/heatmap';
 import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type MandatoryReason } from './src/utils/dailyRoute';
 import { fetchContaAlvo } from './src/utils/contaAlvo';
 import { fetchSlaCandidate } from './src/utils/slaCandidate';
@@ -1034,20 +1035,42 @@ function MainApp() {
     if (modoNovo) setHeatOn(lente === 'calor' && canViewGestor);
   }, [modoNovo, lente, canViewGestor]);
   const [heatSeller, setHeatSeller] = useState<string | null>(null); // null = Todos
+  // Lente Calor do mapa novo: Time (todos) ou Só eu.
+  const [calorEscopo, setCalorEscopo] = useState<'time' | 'eu'>('time');
   const {
     points: heatPoints,
     sellers: heatSellers,
     capped: heatCapped,
     isLoading: heatLoading,
+    nomes: heatNomes,
+    semGps30d: heatSemGps30d,
   } = useVisitsHeatmap((canViewGestor || modoNovo) && heatOn);
+  // Mapa novo (prompt §5): a mancha é dos ÚLTIMOS 30 DIAS, do time ou só minha.
+  const pontosCalor = useMemo(() => {
+    if (!modoNovo) return heatPoints;
+    const desde = Date.now() - 30 * 86400000;
+    return heatPoints.filter((p) => (!p.at || Date.parse(p.at) >= desde)
+      && (calorEscopo === 'time' || p.sellerId === profile?.id));
+  }, [modoNovo, heatPoints, calorEscopo, profile?.id]);
+  const vendedoresCalor = useMemo(() => {
+    const por = new Map<string, number>();
+    for (const p of pontosCalor) if (p.sellerId) por.set(p.sellerId, (por.get(p.sellerId) ?? 0) + 1);
+    return [...por.entries()].map(([id, count]) => {
+      const n = heatNomes[id];
+      const doPonto = pontosCalor.find((p) => p.sellerId === id)?.sellerName ?? 'Sem nome';
+      const apelidos = [...(n?.apelidos ?? []), ...(n && doPonto && doPonto.toLowerCase() !== n.nome.toLowerCase() ? [doPonto] : [])];
+      return { id, nome: n?.nome ?? doPonto, apelidos: [...new Set(apelidos)], count };
+    }).sort((a, b) => b.count - a.count);
+  }, [pontosCalor, heatNomes]);
 
   // Pontos filtrados pelo vendedor selecionado, agregados na grade.
   const heat = useMemo(() => {
-    if (!heatOn) return { cells: [], max: 0, total: 0 };
-    const pts = heatSeller ? heatPoints.filter((p) => p.sellerId === heatSeller) : heatPoints;
+    if (!heatOn) return { cells: [], max: 0, total: 0, pts: [] as typeof heatPoints };
+    const base = modoNovo ? pontosCalor : heatPoints;
+    const pts = heatSeller ? base.filter((p) => p.sellerId === heatSeller) : base;
     const { cells, max } = buildHeatCells(pts);
-    return { cells, max, total: pts.length };
-  }, [heatOn, heatSeller, heatPoints]);
+    return { cells, max, total: pts.length, pts };
+  }, [heatOn, heatSeller, heatPoints, pontosCalor, modoNovo]);
 
   // Exporta o mapa de calor (visitas) em JSON — mesmo mecanismo do export da
   // agenda (sobe no bucket 'exports', devolve signed URL de 7 dias). Respeita o
@@ -1759,6 +1782,13 @@ function MainApp() {
     }
     return base.map((c) => ({ c, p: classificarPino(c, contextoPino), plano: plano.get(c.id) ?? null }));
   }, [modoNovo, contextoPino, routeDisplayClients, clientsForCount, renderBounds]);
+
+  // Lente Calor: áreas com 3+ pinos e nenhum check-in no período (anel azul tracejado).
+  const ninguemFoi = useMemo(() => {
+    if (!modoNovo || !heatOn || !mapRegion) return [] as { lat: number; lon: number; pinos: number }[];
+    const pinos = itensMapaNovo.map(({ c }) => ({ lat: Number(c.latitude), lon: Number(c.longitude) }));
+    return celulasNinguemFoi(pinos, heat.pts ?? [], mapRegion.latitude);
+  }, [modoNovo, heatOn, mapRegion, itensMapaNovo, heat]);
 
   const visiveisMapaNovo = useMemo(
     () => itensMapaNovo.filter(({ c, p, plano }) => plano != null || passaNosFiltros(c, p, filtrosNovos)),
@@ -2748,16 +2778,19 @@ function MainApp() {
   // criação e fora da lente Calor. Uma condição só para a folha, o "+" e o
   // encolhimento do mapa (logo do Google visível).
   const folhaVisivel = modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && lente !== 'calor';
+  // Lente Calor no celular: folha própria (vendedores, Time/Só eu, Ninguém foi).
+  const folhaCalorVisivel = modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && lente === 'calor' && heatOn;
+  const folhaDeBaixo = folhaVisivel || folhaCalorVisivel;
   // Margem do mapa = onde o mapa terminaria sem margem menos o topo MEDIDO da
   // folha (a barra de baixo real não tem a altura do baseInferior; a conta
   // fixa deixava o logo do Google 34 px atrás da folha — medido em 25/09).
   useEffect(() => {
-    const alvo = folhaVisivel && topoFolha != null && fundoMapaTela != null
+    const alvo = folhaDeBaixo && topoFolha != null && fundoMapaTela != null
       // teto de 60% da altura do mapa: nunca some com o mapa por erro de medida
       ? Math.min(Math.max(0, Math.round(fundoMapaTela - topoFolha)), Math.round(fundoMapaTela * 0.6))
       : 0;
     if (Math.abs(alvo - margemMapa) > 1) { margemMapaRef.current = alvo; setMargemMapa(alvo); }
-  }, [folhaVisivel, topoFolha, fundoMapaTela, margemMapa]);
+  }, [folhaDeBaixo, topoFolha, fundoMapaTela, margemMapa]);
 
   const [resolvingPin, setResolvingPin] = useState(false);
 
@@ -3963,14 +3996,7 @@ function MainApp() {
           : null,
         etapaRotulo: selectedClient.etapa ?? null,
         // "É meu" (Julyan 26/09): lead sem dono na rota de hoje entra no meu funil.
-        onEMeu: isViewer ? undefined : async () => {
-          const c = selectedClient;
-          const r = await assumirLead(c, { idHubspot: myHubspotId, nome: profile?.full_name ?? null });
-          if (!r.ok) { Alert.alert('Não deu para assumir', r.erro); return; }
-          setSelectedClient({ ...c, vendedor_id_hubspot: myHubspotId, ...(r.etapa ? { etapa: r.etapa } : {}) });
-          void queryClient.invalidateQueries({ queryKey: ['clients'] });
-          Toast.mostrar(r.aviso ? `✓ É seu · ${r.aviso}` : `✓ É seu · no seu funil${r.etapa ? ` (${r.etapa})` : ''} · HubSpot + Cockpit`, 'ok');
-        },
+        onEMeu: isViewer ? undefined : () => { void assumirDoMapa(selectedClient); },
         ...(() => {
           // A cobrança do card é a MESMA tarefa do HubSpot da aba Tarefas:
           // Liguei aqui some de lá, e vice-versa.
@@ -4186,7 +4212,7 @@ function MainApp() {
     <>
       <MapView
         mapRef={(ref) => { mapRef.current = ref as unknown as RNMapView; }}
-        style={[styles.map, folhaVisivel && margemMapa > 0 && { marginBottom: margemMapa }]}
+        style={[styles.map, folhaDeBaixo && margemMapa > 0 && { marginBottom: margemMapa }]}
         // Mede a area real do mapa na tela pra ancorar o pin de criacao no
         // centro do MAPA (nao da tela). Guarda x/y/width/height absolutos.
         onLayout={(e) => {
@@ -4254,6 +4280,15 @@ function MainApp() {
             grade, cor/raio conforme a densidade de visitas. Renderiza ANTES
             dos markers pra os pins ficarem por cima. Funciona em Apple e
             Google Maps (o <Heatmap> nativo só roda no Google). */}
+        {/* Ninguém foi (prompt §5): área com pino e sem check-in no período. */}
+        {heatOn && modoNovo && ninguemFoi.map((a) => (
+          <Marker key={`ninguem-${a.lat.toFixed(5)}-${a.lon.toFixed(5)}`} coordinate={{ latitude: a.lat, longitude: a.lon }} anchor={{ x: 0.5, y: 0.5 }} cluster={false}>
+            <div
+              aria-label={`Ninguém foi: ${a.pinos} pinos sem check-in`}
+              style={{ width: 46, height: 46, borderRadius: 23, border: '2px dashed #60A5FA', background: 'rgba(96,165,250,0.10)', boxSizing: 'border-box' }}
+            />
+          </Marker>
+        ))}
         {heatOn && heat.cells.map((cell) => {
           const t = heatIntensity(cell.n, heat.max);
           return (
@@ -4294,6 +4329,8 @@ function MainApp() {
                 key={`quadra-${pl.lider}`}
                 coordinate={{ latitude: c.latitude as number, longitude: c.longitude as number }}
                 anchor={ANCORA_QUADRA}
+                // o resumo já é o agrupamento: nunca vira bolha do clusterer
+                cluster={false}
                 zIndex={quadraAberta?.lider === pl.lider ? 1800 : 800}
                 onPress={() => { setSelectedClient(null); setQuadraAberta({ lider: pl.lider, ids: new Set(membros), area: resumo.area }); }}
               >
@@ -4550,11 +4587,28 @@ function MainApp() {
 
       {/* Mapa novo: folha de baixo sem lead aberto (prancha §5). No
           desktop o painel lateral de 352px continua fazendo esse papel. */}
+      {folhaCalorVisivel && (
+        <FolhaCalor
+          chao={baseInferior}
+          aoMedir={({ y, altura }) => { setAlturaFolha(altura); setTopoFolha(y); }}
+          escopo={calorEscopo}
+          aoEscopo={(e) => { setCalorEscopo(e); setHeatSeller(null); }}
+          vendedores={vendedoresCalor}
+          vendedor={heatSeller}
+          aoVendedor={setHeatSeller}
+          total={heat.total}
+          ninguemFoi={ninguemFoi.length}
+          semGps30d={heatSemGps30d}
+          carregando={heatLoading}
+        />
+      )}
       {folhaVisivel && (
         <FolhaDoMapa
           aoMedir={({ y, altura }) => { setAlturaFolha(altura); setTopoFolha(y); }}
           itens={quadraAberta ? itensFolha.filter((it) => quadraAberta.ids.has(it.c.id)) : itensFolha}
           quadra={quadraAberta ? { area: quadraAberta.area, aoFechar: () => setQuadraAberta(null) } : null}
+          // Prompt §5: nas lentes Sem dono e Reconquista a linha tem "É meu" sem abrir o card.
+          eMeu={!isViewer && (lente === 'semdono' || lente === 'rec') ? { naRota: routeStopClientIds, aoAssumir: (c) => { void assumirDoMapa(c); } } : null}
           planoTotal={routeDisplayClients.length}
           planoFeito={routeStops.filter((s) => s.status === 'done').length}
           chao={baseInferior}
@@ -5178,6 +5232,16 @@ function MainApp() {
   // cabe. Manter as duas garantia que uma das duas ficaria errada.
   const irParaOCockpit = () => {
     window.location.href = '/gestao';
+  };
+
+  // "É meu" (Julyan 26/09): o card e a linha da lista (lentes Sem dono e
+  // Reconquista) chamam esta mesma função. Travas no servidor (assumir-negocio).
+  const assumirDoMapa = async (c: Client) => {
+    const r = await assumirLead(c, { idHubspot: myHubspotId, nome: profile?.full_name ?? null });
+    if (!r.ok) { Alert.alert('Não deu para assumir', r.erro); return; }
+    if (selectedClient?.id === c.id) setSelectedClient({ ...c, vendedor_id_hubspot: myHubspotId, ...(r.etapa ? { etapa: r.etapa } : {}) });
+    void queryClient.invalidateQueries({ queryKey: ['clients'] });
+    Toast.mostrar(r.aviso ? `✓ É seu · ${r.aviso}` : `✓ É seu · no seu funil${r.etapa ? ` (${r.etapa})` : ''} · HubSpot + Cockpit`, 'ok');
   };
 
   // Rodape do mapa novo (prompt final §B2). Nada aqui e' hook: vive depois dos

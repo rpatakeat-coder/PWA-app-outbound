@@ -113,3 +113,57 @@ export function heatColor(t: number, alpha: number): string {
 export const HEAT_LEGEND_STOPS = Array.from({ length: 24 }, (_, i) =>
   heatColor(i / 23, 1),
 );
+
+// "NINGUEM FOI" (prompt final §5, lente Calor): areas com pino e sem nenhum
+// check-in no periodo. Mesma grade de HEAT_CELL_M, com a latitude de referencia
+// passada por quem chama (o centro do mapa), para pinos e visitas cairem nas
+// MESMAS celulas. So entra celula com `minPinos` ou mais — um pino solto sem
+// visita nao e' "area esquecida", e' so um lead.
+export function celulasNinguemFoi(
+  pinos: { lat: number; lon: number }[],
+  visitas: { lat: number; lon: number }[],
+  refLat: number,
+  minPinos = 3,
+  max = 60,
+): { lat: number; lon: number; pinos: number }[] {
+  const latStep = HEAT_CELL_M / 111320;
+  const lonStep = HEAT_CELL_M / (111320 * Math.cos((refLat * Math.PI) / 180));
+  const idx = (p: { lat: number; lon: number }) => [Math.round(p.lat / latStep), Math.round(p.lon / lonStep)] as const;
+  const k = (i: number, j: number) => i + ':' + j;
+  const visitadas = new Set<string>();
+  for (const v of visitas) if (Number.isFinite(v.lat) && Number.isFinite(v.lon)) { const [i, j] = idx(v); visitadas.add(k(i, j)); }
+  // A grade é fixa: uma área de verdade pode cair em duas células vizinhas.
+  // Por isso (1) visita na célula VIZINHA também conta como "alguém foi" e
+  // (2) células vizinhas sem visita se juntam numa área só.
+  const perto = (i: number, j: number) => {
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) if (visitadas.has(k(i + a, j + b))) return true;
+    return false;
+  };
+  const celulas = new Map<string, { i: number; j: number; lat: number; lon: number; n: number }>();
+  for (const p of pinos) {
+    if (!Number.isFinite(p.lat) || !Number.isFinite(p.lon)) continue;
+    const [i, j] = idx(p);
+    if (perto(i, j)) continue;
+    const c = celulas.get(k(i, j));
+    if (c) { c.lat += p.lat; c.lon += p.lon; c.n += 1; } else celulas.set(k(i, j), { i, j, lat: p.lat, lon: p.lon, n: 1 });
+  }
+  const vistas = new Set<string>();
+  const areas: { lat: number; lon: number; pinos: number }[] = [];
+  for (const [chave, c0] of celulas) {
+    if (vistas.has(chave)) continue;
+    let lat = 0, lon = 0, n = 0;
+    const fila = [c0];
+    vistas.add(chave);
+    while (fila.length) {
+      const c = fila.pop()!;
+      lat += c.lat; lon += c.lon; n += c.n;
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+        const kk = k(c.i + a, c.j + b);
+        const viz = celulas.get(kk);
+        if (viz && !vistas.has(kk)) { vistas.add(kk); fila.push(viz); }
+      }
+    }
+    if (n >= minPinos) areas.push({ lat: lat / n, lon: lon / n, pinos: n });
+  }
+  return areas.sort((a, b) => b.pinos - a.pinos).slice(0, max);
+}

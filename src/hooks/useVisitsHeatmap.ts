@@ -94,7 +94,33 @@ export function useVisitsHeatmap(enabled: boolean) {
       }
       const sellers: VisitSeller[] = [...acc.values()].sort((a, b) => b.count - a.count);
 
-      return { points, sellers, capped };
+      // Lente Calor do mapa novo (prompt final §5): nome do CADASTRO e o apelido
+      // antigo ("Wericles Andrade · era 'Whell Andrade'"), e quantos check-ins dos
+      // últimos 30 dias não têm GPS no local (declarados ou sem coordenada) —
+      // ficam fora da mancha, e a tela diz quantos. Falha aqui não derruba o
+      // calor: some só o complemento.
+      const nomes: Record<string, { nome: string; apelidos: string[] }> = {};
+      let semGps30d: number | null = null;
+      try {
+        const ids = [...acc.keys()];
+        const desde = new Date(Date.now() - 30 * 86400000).toISOString();
+        const [perfis, apelidos, semGps] = await Promise.all([
+          ids.length ? supabase.from('profiles').select('id, full_name').in('id', ids) : Promise.resolve({ data: [] as { id: string; full_name: string | null }[] }),
+          ids.length ? supabase.from('vendedor_apelido').select('profile_id, apelido').in('profile_id', ids) : Promise.resolve({ data: [] as { profile_id: string; apelido: string }[] }),
+          supabase.from('client_visits').select('id', { count: 'exact', head: true })
+            .gte('visited_at', desde).or('declarada.eq.true,visited_at_lat.is.null'),
+        ]);
+        for (const p of (perfis.data ?? []) as { id: string; full_name: string | null }[]) {
+          nomes[p.id] = { nome: (p.full_name ?? '').replace(/\s*\/\s*DESATIVADO\s*$/i, '').trim() || 'Sem nome', apelidos: [] };
+        }
+        for (const a of (apelidos.data ?? []) as { profile_id: string; apelido: string }[]) {
+          const n = nomes[a.profile_id];
+          if (n && a.apelido && a.apelido.trim().toLowerCase() !== n.nome.toLowerCase()) n.apelidos.push(a.apelido.trim());
+        }
+        semGps30d = typeof semGps.count === 'number' ? semGps.count : null;
+      } catch { /* complemento opcional */ }
+
+      return { points, sellers, capped, nomes, semGps30d };
     },
     enabled,
     staleTime: 5 * 60 * 1000,
@@ -104,6 +130,8 @@ export function useVisitsHeatmap(enabled: boolean) {
     points: query.data?.points ?? [],
     sellers: query.data?.sellers ?? [],
     capped: query.data?.capped ?? false,
+    nomes: query.data?.nomes ?? {},
+    semGps30d: query.data?.semGps30d ?? null,
     isLoading: query.isLoading,
     refetch: query.refetch,
   };

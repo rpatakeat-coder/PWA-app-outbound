@@ -8,6 +8,7 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { Client } from '../types/client';
+import { Toast } from '../components/Toast';
 import { ORIGEM, origemDoFiltro } from '../utils/lentes';
 import type { Pino } from '../utils/pinoP2';
 import { distanciaTexto, ir } from './CardLeadNovo';
@@ -31,6 +32,8 @@ type Props = {
   aoMedir?: (medida: { y: number; altura: number }) => void;
   /** Resumo de quadra tocado no mapa: a lista mostra só os pinos dele. */
   quadra?: { area: string; aoFechar: () => void } | null;
+  /** Lentes Sem dono e Reconquista: "É meu" direto na linha (só na rota de hoje). */
+  eMeu?: { naRota: Set<string>; aoAssumir: (c: Client) => void } | null;
 };
 
 function PinoMini({ p, plano }: { p: Pino; plano: number | null }) {
@@ -57,7 +60,7 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu }: Props) {
   const [abertaPeloToque, setAberta] = useState(false);
   const aberta = abertaPeloToque || !!quadra;
   const [modo, setModo] = useState<'prioridade' | 'distancia'>('prioridade');
@@ -148,7 +151,16 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
                       it.c.conta_alvo_rating != null ? `${Number(it.c.conta_alvo_rating).toFixed(1).replace('.', ',')}★` : null].filter(Boolean).join(' · ') || ' '}
                   </Text>
                 </View>
-                <Etiquetas it={it} />
+                {eMeu && it.p.dono === 'sem' ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={eMeu.naRota.has(it.c.id) ? `É meu: ${it.c.empresa?.trim() || it.c.nome}` : 'É meu: ponha na rota de hoje primeiro'}
+                    onPress={() => (eMeu.naRota.has(it.c.id) ? eMeu.aoAssumir(it.c) : Toast.mostrar('Para assumir, ponha na rota de hoje (+ Rota de hoje no card) e toque em É meu.', 'fila'))}
+                    style={[s.eMeu, !eMeu.naRota.has(it.c.id) && s.eMeuFora]}
+                  >
+                    <Text style={[s.eMeuTexto, !eMeu.naRota.has(it.c.id) && s.eMeuTextoFora]}>É meu</Text>
+                  </Pressable>
+                ) : <Etiquetas it={it} />}
               </Pressable>
             ))}
             {ordenados.length > 80 && <Text style={s.semProxima}>{`Mais ${ordenados.length - 80} — aproxime o mapa para ver.`}</Text>}
@@ -187,6 +199,10 @@ const s = StyleSheet.create({
   btnChegueiTexto: { fontSize: 17, fontWeight: '800', color: '#fff' },
   semProxima: { fontSize: 13, color: 'var(--text-muted)', paddingVertical: 6 },
   nestaArea: { minHeight: 44, justifyContent: 'center' },
+  eMeu: { minHeight: 44, minWidth: 64, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#FACC15', alignItems: 'center', justifyContent: 'center' },
+  eMeuFora: { backgroundColor: 'transparent', borderWidth: 1, borderStyle: 'dashed', borderColor: '#FACC15' },
+  eMeuTexto: { fontSize: 13, fontWeight: '800', color: '#14171C' },
+  eMeuTextoFora: { color: '#FACC15' },
   quadraTopo: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
   quadraFechar: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -8 },
   quadraFecharTexto: { fontSize: 18, color: 'var(--text-muted)' },
