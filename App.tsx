@@ -1761,11 +1761,17 @@ function MainApp() {
     [itensMapaNovo, filtrosNovos],
   );
 
+  // ~1,3 km de altura na tela: é a quadra, não o bairro.
+  const ZOOM_RUA_LAT_DELTA = 0.012;
   const { focoMapaNovo, camadaPontos, comNome, pilhaDe, janelaMapa } = useMemo(() => {
     const foco: typeof visiveisMapaNovo = [];
     const pontos: typeof visiveisMapaNovo = [];
+    // Zoom de rua (prompt final §5): de perto, todo pino da área é inteiro,
+    // não só os da lente — quem aproxima quer ver o que tem na quadra sem
+    // trocar de lente. Afastado, fora da lente vira ponto de 7 px.
+    const zoomRua = !!mapRegion && mapRegion.latitudeDelta <= ZOOM_RUA_LAT_DELTA;
     for (const it of visiveisMapaNovo) {
-      if (noFoco(lente, it.p, it.plano) || it.c.id === selectedClient?.id) foco.push(it);
+      if ((zoomRua && lente !== 'calor') || noFoco(lente, it.p, it.plano) || it.c.id === selectedClient?.id) foco.push(it);
       else if (lente !== 'calor') pontos.push(it);
     }
     // Nomes: afastado (bairro/cidade) só plano e selecionado; de perto, os
@@ -8380,6 +8386,7 @@ function ClientBottomSheet({
       aoFechar={onClose}
       rotulo={primaryName}
       topo={novo ? <TopoCardNovo d={dadosNovo!} a={acoesNovo} /> : faixaTopo}
+      topoRola={!!novo}
       estagio={estagio}
       aoTrocarEstagio={setEstagio}
       estiloCorpo={layout.ehDesktop ? styles.corpoDesktop : styles.corpoMobile}

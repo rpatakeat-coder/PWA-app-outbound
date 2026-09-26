@@ -68,6 +68,13 @@ export interface PainelProps {
    * RNW cria tem `position:sticky` e nada mais, e o conteudo rola por tras.
    */
   indicesGrudados?: number[];
+  /**
+   * Celular: o topo rola junto com o corpo em vez de ficar fixo. O card do
+   * mapa novo tem topo alto (Cheguei + duas grades + dono + origem): fixo, ele
+   * comia ~70% da tela e as abas rolavam numa faixa estreita embaixo (print
+   * do Julyan, 26/09). Os índices grudados andam uma casa (o topo vira o 0).
+   */
+  topoRola?: boolean;
 }
 
 export function Painel({
@@ -84,6 +91,7 @@ export function Painel({
   estiloCorpo,
   estiloConteudoCorpo,
   indicesGrudados,
+  topoRola = false,
 }: PainelProps) {
   const layout = useLayout();
   const ehDesktop = layout.ehDesktop;
@@ -276,16 +284,24 @@ export function Painel({
             <View {...panResponder.panHandlers}>{peek}</View>
           ) : (
             <>
-              {topo}
+              {!(topoRola && !ehDesktop) && topo}
               <ScrollView
                 ref={corpoRef}
                 style={[estilos.corpo, estiloCorpo]}
                 contentContainerStyle={estiloConteudoCorpo}
-                stickyHeaderIndices={indicesGrudados}
+                stickyHeaderIndices={topoRola && !ehDesktop ? indicesGrudados?.map((i) => i + 1) : indicesGrudados}
                 showsVerticalScrollIndicator
                 keyboardShouldPersistTaps="handled"
               >
-                {children}
+                {topoRola && !ehDesktop
+                  ? [
+                      <View key="painel-topo">{topo}</View>,
+                      // chave por posição, sem Children.toArray: ele descarta os
+                      // slots vazios e o índice grudado passaria a apontar errado
+                      ...(Array.isArray(children) ? children : [children]).map((k, i) =>
+                        React.isValidElement(k) ? React.cloneElement(k, { key: k.key ?? `painel-${i}` }) : k),
+                    ]
+                  : children}
               </ScrollView>
               {rodape}
             </>
