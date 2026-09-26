@@ -188,6 +188,11 @@ function normalizeProperties(sub: Record<string, unknown>): Record<string, unkno
 // endereco de um lead alheio roubava o lead no HubSpot (caso "Acaraje da Pri",
 // 2026-07-29: uma edicao de cadastro reatribuiu o deal pro editor). Quem muda
 // dono e' o HubSpot, nao uma edicao de pin.
+// Valores internos da picklist origem_do_lead do deal (conferidos em
+// 26/09/2026). Valor fora da lista e' descartado: mandar opcao inexistente e'
+// 400 e derrubaria a criacao do negocio inteiro.
+const ORIGENS_DO_LEAD = new Set(['Rua', 'Indicação', 'Casa dos Dados', 'Instagram', 'Ads', 'GoogleMaps', 'Familia', 'Eventos']);
+
 function dealPropertiesFromBody(
   body: Record<string, unknown>,
   opts: { withOwner: boolean },
@@ -208,6 +213,9 @@ function dealPropertiesFromBody(
     id_pin_app_outbound: str(body.id ?? body.id_pin),
   };
   if (opts.withOwner) props.hubspot_owner_id = str(body.vendedor_id);
+  // Origem so' na CRIACAO (mesmo criterio do dono): o update nao reescreve a
+  // origem que o time corrigiu no CRM.
+  if (opts.withOwner && ORIGENS_DO_LEAD.has(str(body.origem_do_lead))) props.origem_do_lead = str(body.origem_do_lead);
   return props;
 }
 

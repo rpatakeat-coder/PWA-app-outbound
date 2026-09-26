@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
+import { origemDoLeadHs } from '../utils/origemDoLead';
 import { useAuth } from '../context/AuthContext';
 import type { Client, ClientFormData } from '../types/client';
 import { bboxAround, boundsKey, roundCoordsForKey, type Bounds } from '../utils/area';
@@ -128,6 +129,7 @@ function payloadCreatePin(c: Client, ownerId: string, ownerNome: string): Record
     url: c.url_hubspot,
     vendedor_id: ownerId,
     vendedor_nome: ownerNome,
+    origem_do_lead: origemDoLeadHs(c),
   };
 }
 

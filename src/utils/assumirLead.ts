@@ -8,6 +8,7 @@
 //   - sem negócio: create_pin da hubspot-sync (o mesmo do cadastro e da conta-
 //     alvo na visita) cria o negócio em Prospecção com o executivo como dono.
 import { supabase } from '../integrations/supabase/client';
+import { origemDoLeadHs } from './origemDoLead';
 import { sendHubspotEvent } from './hubspotSync';
 import type { Client } from '../types/client';
 
@@ -56,6 +57,7 @@ export async function assumirLead(
       url: client.url_hubspot,
       vendedor_id: eu.idHubspot,
       vendedor_nome: eu.nome ?? '',
+      origem_do_lead: origemDoLeadHs(client),
     });
     const o = (typeof body === 'object' && body ? body : null) as Record<string, unknown> | null;
     const id = typeof body === 'string' ? body : (o?.id_hubspot ?? o?.deal_id ?? o?.id ?? null);
