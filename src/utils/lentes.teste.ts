@@ -38,7 +38,7 @@ ok(noFoco('dia', P({ status: 'cliente' }), null), 'Meu dia: meu cliente');
 ok(!noFoco('dia', P({ etapa: 'Negociação', vendedor_id_hubspot: '2' }), null), 'Meu dia: quente do colega vira ponto');
 ok(noFoco('dia', P({ etapa: 'Prospecção', vendedor_id_hubspot: '2' }), 3), 'Meu dia: parada do plano sempre inteira');
 ok(noFoco('carteira', P({ etapa: 'Prospecção' }), null) && !noFoco('carteira', P({ vendedor_id_hubspot: '2' }), null), 'Carteira: só o que é meu');
-ok(noFoco('alvo', P({ conta_alvo_place_id: 'a', origem_lead: 'casa_dos_dados' }), null) && !noFoco('alvo', P({}), null), 'Contas-alvo: só conta-alvo');
+ok(noFoco('alvo', P({ conta_alvo_place_id: 'a', origem_lead: 'casa_dos_dados', lead_prospeccao_id: 'lp' }), null) && !noFoco('alvo', P({}), null), 'Contas-alvo: só conta-alvo');
 ok(noFoco('rec', P({ status: 'churn' }), null) && !noFoco('rec', P({ status: 'cliente' }), null), 'Reconquista: só ex-cliente');
 ok(noFoco('semdono', P({ vendedor_id_hubspot: '777' }), null) && !noFoco('semdono', P({}), null), 'Sem dono: dono fora do time');
 ok(!noFoco('calor', P({ etapa: 'Negociação' }), 1), 'Calor: nenhum pino');
@@ -49,7 +49,7 @@ const itens = [
   { c: L({ id: 'b', etapa: 'Prospecção', origem_lead: 'casa_dos_dados', id_hubspot: '900' }) },
   { c: L({ id: 'c', status: 'cliente', etapa: null, origem_lead: 'cadastro_na_rua' }) },
   { c: L({ id: 'd', status: 'churn', origem_lead: null }) },
-  { c: L({ id: 'e', conta_alvo_place_id: 'x', origem_lead: 'google_maps_motor' }) },
+  { c: L({ id: 'e', conta_alvo_place_id: 'x', origem_lead: 'google_maps_motor', lead_prospeccao_id: 'lp' }) },
   { c: L({ id: 'f', etapa: 'Perdido', origem_lead: 'indicacao' }) },
 ].map(({ c }) => ({ c, p: classificarPino(c, ctx) }));
 const f = (x: Partial<FiltrosNovos>): FiltrosNovos => ({ ...FILTROS_VAZIOS, ...x });

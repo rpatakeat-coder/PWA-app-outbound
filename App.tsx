@@ -181,7 +181,6 @@ import { useVisitsHeatmap } from './src/hooks/useVisitsHeatmap';
 import { useSellerClassification, precisaDeIdHubspot } from './src/hooks/useSellerClassification';
 import { buildHeatCells, celulasNinguemFoi, heatColor, heatIntensity, HEAT_CELL_M, HEAT_LEGEND_STOPS } from './src/utils/heatmap';
 import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type MandatoryReason } from './src/utils/dailyRoute';
-import { fetchContaAlvo } from './src/utils/contaAlvo';
 import { fetchSlaCandidate } from './src/utils/slaCandidate';
 import { slaStatus, type SlaDays } from './src/utils/sla';
 import { useRouteConfig } from './src/hooks/useRouteConfig';
@@ -1584,6 +1583,9 @@ function MainApp() {
     if (f.tempFilter && stageTemperature(c.etapa)?.label !== f.tempFilter) return false;
     // Conta Alvo descartada ("Não interessa") some do mapa/lista.
     if (c.conta_alvo_dismissed) return false;
+    // Só CNPJ ativo (Julyan, 26/09): conta sem negócio que o motor viu baixada
+    // na Receita sai do mapa. O sino continua avisando, para descartar.
+    if (!c.id_hubspot && c.motor_status === 'cnpj_baixado') return false;
     // Lead de teste (0106): fora do mapa, listas e contagens; só admin vê, se pedir.
     if (c.is_teste && !mostrarTestes) return false;
     if (f.contaAlvoOnly && !c.conta_alvo_place_id) return false;
@@ -2350,20 +2352,11 @@ function MainApp() {
         providers: {
           // SLA estourado (regra do MD): lead mais urgente do vendedor via RPC.
           sla: async (excludeIds) => fetchSlaCandidate(vendor, excludeIds),
-          // Conta Alvo: edge acha restaurante 4,5+/100+ a <=2km e materializa
-          // como lead. Sem GPS real (só override), nao busca (a regra é "perto
-          // de onde o vendedor está").
-          contaAlvo: async () => (
-            userLocation
-              ? await fetchContaAlvo({
-                  lat: base.latitude,
-                  lon: base.longitude,
-                  vendedor_id_hubspot: vendor,
-                  // profile.id = auth.users.id (created_by NOT NULL no clients).
-                  created_by: profile?.id ?? null,
-                })
-              : null
-          ),
+          // Conta-alvo NÃO nasce mais aqui (Julyan, 26/09: "agora eu que comando
+          // tudo"). A edge conta-alvo-nearby criava sozinha um lead do Google
+          // perto do executivo; conta-alvo agora é só o que o gestor atribui no
+          // Cockpit (leads_prospeccao), que já chega ao mapa pelo gatilho.
+          contaAlvo: async () => null,
         },
       });
     } catch (err: any) {
@@ -6781,6 +6774,16 @@ function MainApp() {
           </View>
 
           {([
+            // ORDEM DO HANDOFF v4.1 §6.17: Meu dia · Gestão · Lente Calor (gestor) ·
+            // Modo sol (chave) · Configurações · Sair. "Cockpit" e "Gestão" são o
+            // mesmo /gestao: fica uma entrada só.
+            // Escondido pro viewer, que o guard de papel ja' redireciona.
+            !isViewer
+              ? modoNovo
+                // Depois do menu fechar: o history.back() do Painel fecharia o novo (CLAUDE.md).
+                ? { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu dia em números', aoTocar: () => { setPerfilAberto(false); setTimeout(() => setMeuDiaAberto(true), 350); } }
+                : { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu desempenho', aoTocar: () => irParaTelaDePerfil('meu') }
+              : null,
             // "Gestão" leva pro cockpit (para a equipe inteira, ver verGestao);
             // "Meu desempenho" e a entrada que faltava no celular, onde nada
             // chamava setTab('meu').
@@ -6798,16 +6801,12 @@ function MainApp() {
                   aoTocar: irParaOCockpit,
                 }
               : null,
-            // Escondido pro viewer, que o guard de papel ja' redireciona.
-            !isViewer
-              ? modoNovo
-                // Depois do menu fechar: o history.back() do Painel fecharia o novo (CLAUDE.md).
-                ? { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu dia em números', aoTocar: () => { setPerfilAberto(false); setTimeout(() => setMeuDiaAberto(true), 350); } }
-                : { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu desempenho', aoTocar: () => irParaTelaDePerfil('meu') }
+            modoNovo && canViewGestor
+              ? { chave: 'calor', Icone: IconBarGraph, rotulo: 'Lente Calor', aoTocar: () => { setPerfilAberto(false); setLente('calor'); } }
               : null,
             // Modo sol (prompt §6): mapa claro para ler na rua ao meio-dia. Só no mapa novo.
             modoNovo
-              ? { chave: 'sol', Icone: IconSparkle, rotulo: modoSol ? 'Modo sol · ligado' : 'Modo sol · mapa claro', aoTocar: () => { alternarModoSol(); setPerfilAberto(false); } }
+              ? { chave: 'sol', Icone: IconSparkle, rotulo: 'Modo sol · mapa claro', chaveLigada: modoSol, aoTocar: () => { alternarModoSol(); } }
               : null,
             { chave: 'config', Icone: IconSettings, rotulo: 'Configurações', aoTocar: () => irParaTelaDePerfil('config') },
             // O logout disparava a UM toque, sem rede — e sem conexao pra
@@ -6835,11 +6834,13 @@ function MainApp() {
             Icone: typeof IconSettings;
             rotulo: string;
             perigo?: boolean;
+            chaveLigada?: boolean;
             aoTocar: () => void;
           }>).map(item => (
             <TouchableOpacity
               key={item.chave}
-              accessibilityRole="button"
+              accessibilityRole={item.chaveLigada !== undefined ? 'switch' : 'button'}
+              accessibilityState={item.chaveLigada !== undefined ? { checked: item.chaveLigada } : undefined}
               accessibilityLabel={item.rotulo}
               style={styles.perfilItem}
               onPress={item.aoTocar}
@@ -6858,7 +6859,11 @@ function MainApp() {
                   trailing. O handoff pede `logout` ali, mas o leading do item
                   ja' e' o `logout`: seguir a letra poria o mesmo glifo duas
                   vezes na mesma linha. */}
-              {!item.perigo && (
+              {item.chaveLigada !== undefined ? (
+                <View style={[styles.perfilChave, item.chaveLigada && styles.perfilChaveLigada]}>
+                  <View style={[styles.perfilChaveBola, item.chaveLigada && styles.perfilChaveBolaLigada]} />
+                </View>
+              ) : !item.perigo && (
                 <IconChevronRight width={24} height={24} fill={iconColors.disabled} />
               )}
             </TouchableOpacity>
@@ -9879,6 +9884,10 @@ const styles = StyleSheet.create({
     borderBottomColor: 'var(--border)',
   },
   perfilItemTexto: { flex: 1, minWidth: 0, fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '500', color: 'var(--text)' },
+  perfilChave: { width: 44, height: 26, borderRadius: 13, padding: 3, backgroundColor: 'var(--surface-3, #3A3F47)' },
+  perfilChaveLigada: { backgroundColor: '#16A34A' },
+  perfilChaveBola: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFFFFF' },
+  perfilChaveBolaLigada: { transform: [{ translateX: 18 }] },
   perfilItemTextoPerigo: { color: '#C8131B' },
   headerVoltar: {
     width: 48,
