@@ -827,6 +827,17 @@ function MainApp() {
   const [taskSevFilter, setTaskSevFilter] = useState<string | null>(null);
   const [showOnlyMyArea, setShowOnlyMyArea] = useState(true);
   const [locationPermission, setLocationPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
+  // ABRIR SEM ESPERAR O GPS (26/09/2026). A ultima posicao conhecida fica no
+  // aparelho e so' serve para ENQUADRAR: centro do mapa e caixa da primeira
+  // busca. Nunca vira userLocation — o check-in continua exigindo o GPS de
+  // agora. Sem isto o app ficava em "Localizando voce..." ate' o prompt de
+  // permissao e a primeira leitura do GPS responderem, segundos na rua.
+  const [posicaoGuardada] = useState<{ latitude: number; longitude: number } | null>(() => {
+    try {
+      const p = JSON.parse(localStorage.getItem('takeat-ultima-posicao') || 'null');
+      return p && Number.isFinite(p.latitude) && Number.isFinite(p.longitude) ? p : null;
+    } catch { return null; }
+  });
   const [routeDate] = useState(todayKey());
   const [routeDraft, setRouteDraft] = useState<Client[]>([]);
   // Ponto de partida customizado da rota. null = usa o GPS (comportamento
@@ -878,16 +889,23 @@ function MainApp() {
   // Dispara a busca junto com a montagem do mapa, em vez de esperar o
   // primeiro assentamento — senão a tela abre vazia por um instante.
   useEffect(() => {
-    if (activeBounds || !userLocation || !showOnlyMyArea) return;
+    const centro = userLocation ?? posicaoGuardada;
+    if (activeBounds || !centro || !showOnlyMyArea) return;
     setActiveBounds(
       boundsFromRegion({
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
+        latitude: centro.latitude,
+        longitude: centro.longitude,
         latitudeDelta: 0.05,
         longitudeDelta: 0.05,
       }),
     );
-  }, [userLocation, activeBounds, showOnlyMyArea]);
+  }, [userLocation, posicaoGuardada, activeBounds, showOnlyMyArea]);
+
+  // Guarda a posicao para a proxima abertura (ver posicaoGuardada).
+  useEffect(() => {
+    if (!userLocation) return;
+    try { localStorage.setItem('takeat-ultima-posicao', JSON.stringify({ latitude: userLocation.latitude, longitude: userLocation.longitude })); } catch { /* sem storage: abre esperando o GPS */ }
+  }, [userLocation]);
 
   useEffect(() => {
     if (!showOnlyMyArea || !mapRegion) return;
@@ -921,7 +939,7 @@ function MainApp() {
     bounds: showOnlyMyArea ? activeBounds : null,
     // Com o filtro ligado, não busca antes de existir uma caixa: sem isso a
     // primeira query sairia sem recorte e traria tudo.
-    enabled: !waitingForLocation && !areaPermissionDenied && (!showOnlyMyArea || !!activeBounds),
+    enabled: (!waitingForLocation || !!posicaoGuardada) && !areaPermissionDenied && (!showOnlyMyArea || !!activeBounds),
   });
 
   // Busca no servidor: cobre a base inteira, não só o pedaço carregado. Sem
@@ -2716,6 +2734,9 @@ function MainApp() {
         longitudeDelta: 0.05,
       };
     }
+    if (posicaoGuardada) {
+      return { latitude: posicaoGuardada.latitude, longitude: posicaoGuardada.longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 };
+    }
     if (filteredWithCoords.length > 0) {
       return {
         latitude: filteredWithCoords[0].latitude as number,
@@ -2730,7 +2751,18 @@ function MainApp() {
       latitudeDelta: 15,
       longitudeDelta: 15,
     };
-  }, [userLocation, filteredWithCoords]);
+  }, [userLocation, posicaoGuardada, filteredWithCoords]);
+
+  const jaFoiAoGps = useRef(false);
+  useEffect(() => {
+    if (!userLocation || jaFoiAoGps.current || !mapRef.current) return;
+    jaFoiAoGps.current = true;
+    if (!posicaoGuardada) return;
+    const dLat = (userLocation.latitude - posicaoGuardada.latitude) * 111;
+    const dLon = (userLocation.longitude - posicaoGuardada.longitude) * 111 * Math.cos(userLocation.latitude * Math.PI / 180);
+    if (Math.hypot(dLat, dLon) < 1) return;
+    mapRef.current.animateToRegion({ latitude: userLocation.latitude, longitude: userLocation.longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 }, 400);
+  }, [userLocation, posicaoGuardada]);
 
   const centerOnUser = () => {
     if (userLocation && mapRef.current) {
@@ -3744,7 +3776,7 @@ function MainApp() {
   // área. Sem ele, arrastar o mapa pra uma região ainda não buscada trocaria
   // o app inteiro por um spinner — o carregamento de área tem que ser o aviso
   // discreto sobre o mapa, não uma tela cheia.
-  if (loading || (isLoading && !jaCarregouAlgumaVez) || waitingForLocation) {
+  if (loading || (isLoading && !jaCarregouAlgumaVez && showOnlyMyArea) || (waitingForLocation && !posicaoGuardada)) {
     return (
       <View style={styles.centered}>
         <Image source={require('./assets/icon.png')} style={{ width: 72, height: 72, marginBottom: 16, tintColor: '#C8131B', resizeMode: 'contain' }} />
@@ -4476,14 +4508,16 @@ function MainApp() {
         style={[styles.areaStatusWrap, { top: (mapLayout?.y ?? 0) + 8 }]}
         pointerEvents="none"
       >
-        {showOnlyMyArea && (viewportTooWide || isLoading) && (
+        {((showOnlyMyArea && viewportTooWide) || isLoading || waitingForLocation) && (
           <View style={styles.areaStatusPill}>
-            {viewportTooWide ? (
+            {showOnlyMyArea && viewportTooWide ? (
               <IconText Icone={IconSearch} style={styles.areaStatusText} tone="onSurface">Aproxime para carregar os clientes desta região</IconText>
             ) : (
               <>
                 <ActivityIndicator size="small" color="#fff" />
-                <Text style={styles.areaStatusText}>Carregando esta região…</Text>
+                <Text style={styles.areaStatusText}>
+                  {isLoading ? (showOnlyMyArea ? 'Carregando esta região…' : 'Carregando todos os clientes…') : 'Localizando você…'}
+                </Text>
               </>
             )}
           </View>
