@@ -175,7 +175,8 @@ const s = StyleSheet.create({
   folha: {
     position: 'absolute', left: 0, right: 0, zIndex: 20,
     backgroundColor: 'var(--surface)', borderTopLeftRadius: 18, borderTopRightRadius: 18,
-    paddingHorizontal: 16, paddingBottom: 10, gap: 8, maxHeight: '62%',
+    // 48%: com 62% a lista aberta tomava a tela e o mapa virava uma faixa sem arrasto (26/09).
+    paddingHorizontal: 16, paddingBottom: 10, gap: 8, maxHeight: '48%',
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 18, shadowOffset: { width: 0, height: -4 }, elevation: 10,
   },
   alca: { alignSelf: 'stretch', alignItems: 'center', paddingTop: 8, paddingBottom: 2, minHeight: 20 },

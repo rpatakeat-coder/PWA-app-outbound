@@ -649,6 +649,8 @@ const estilos = StyleSheet.create({
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
+    // Acima da folha (20) e do "+" (25) do mapa novo, por garantia.
+    zIndex: 60,
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },

@@ -2794,9 +2794,14 @@ function MainApp() {
   // Folha de baixo do mapa novo: no celular, sem lead aberto, fora do modo de
   // criação e fora da lente Calor. Uma condição só para a folha, o "+" e o
   // encolhimento do mapa (logo do Google visível).
-  const folhaVisivel = modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && lente !== 'calor';
+  // Tela cheia do mapa aberta (prompt §B2: Novo lead, Filtros, edição): a folha,
+  // o "+" e o rodapé saem. O CEPStep é View, não Modal — ficava POR BAIXO da
+  // folha (zIndex 20) e do "+", e o executivo não conseguia cadastrar lead
+  // (print do Julyan, 26/09). Só estados declarados ANTES desta linha.
+  const telaCheia = showCepStep || isFormOpen || !!editingClient || !!editingLocationFor || filtrosNovosAbertos;
+  const folhaVisivel = modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && lente !== 'calor';
   // Lente Calor no celular: folha própria (vendedores, Time/Só eu, Ninguém foi).
-  const folhaCalorVisivel = modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && lente === 'calor' && heatOn;
+  const folhaCalorVisivel = modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && lente === 'calor' && heatOn;
   const folhaDeBaixo = folhaVisivel || folhaCalorVisivel;
   // Margem do mapa = onde o mapa terminaria sem margem menos o topo MEDIDO da
   // folha (a barra de baixo real não tem a altura do baseInferior; a conta
@@ -2804,7 +2809,9 @@ function MainApp() {
   useEffect(() => {
     const alvo = folhaDeBaixo && topoFolha != null && fundoMapaTela != null
       // teto de 60% da altura do mapa: nunca some com o mapa por erro de medida
-      ? Math.min(Math.max(0, Math.round(fundoMapaTela - topoFolha)), Math.round(fundoMapaTela * 0.6))
+      // Teto de 35%: a margem só acompanha a folha em PEEK (logo do Google à vista).
+      // Com a lista aberta a folha passa por cima, e o mapa segue grande e arrastável.
+      ? Math.min(Math.max(0, Math.round(fundoMapaTela - topoFolha)), Math.round(fundoMapaTela * 0.35))
       : 0;
     if (Math.abs(alvo - margemMapa) > 1) { margemMapaRef.current = alvo; setMargemMapa(alvo); }
   }, [folhaDeBaixo, topoFolha, fundoMapaTela, margemMapa]);
@@ -4641,7 +4648,8 @@ function MainApp() {
       )}
 
       {/* "+" do mapa novo: botão flutuante acima da folha (C10); o rodapé fica sem botão central. */}
-      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !isViewer && !selectedClient && (
+      {/* Com a lista aberta (folha alta) o "+" sairia do mapa e cobriria as lentes: some. */}
+      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !isViewer && !selectedClient && !telaCheia && !(folhaDeBaixo && alturaFolha > janelaTela.height * 0.36) && (
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Novo lead"
@@ -6499,7 +6507,7 @@ function MainApp() {
       {/* Meu desempenho e Configuracoes nao tem barra: nao sao abas, chegam
           pelo menu do perfil, e o arrow_back do header e' a volta. Com a barra
           elas teriam dois caminhos de saida dizendo coisas diferentes. */}
-      {!layout.ehLargo && tab !== 'meu' && tab !== 'config' && !rotaMapaExpandido && modoNovo && (
+      {!layout.ehLargo && tab !== 'meu' && tab !== 'config' && !rotaMapaExpandido && modoNovo && !telaCheia && (
       /* RODAPE DO MAPA NOVO (prompt final §B2): Mapa · Agenda · Tarefas ·
          Playbook, iguais para todos. A Rota mora na Agenda, o "+" e' botao do
          mapa e a Gestao fica no menu do avatar, para o time inteiro. */
