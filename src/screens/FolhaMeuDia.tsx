@@ -63,7 +63,7 @@ export default function FolhaMeuDia({ visivel, aoFechar, dados, carregando, meta
             </View>
             <View style={s.linha}>
               <Text style={s.linhaRotulo}>Sequência</Text>
-              <Text style={s.linhaValor}>{dados.sequenciaDias ? `${dados.sequenciaDias} ${dados.sequenciaDias === 1 ? 'dia' : 'dias'} seguidos com rua` : 'comece hoje'}</Text>
+              <Text style={s.linhaValor}>{dados.sequenciaDias ? `${dados.sequenciaDias} ${dados.sequenciaDias === 1 ? 'dia com rua' : 'dias seguidos com rua'}` : 'comece hoje'}</Text>
             </View>
             {proxima && (
               <Pressable accessibilityRole="button" onPress={() => { aoFechar(); aoIrProxima(); }} style={s.botao}>

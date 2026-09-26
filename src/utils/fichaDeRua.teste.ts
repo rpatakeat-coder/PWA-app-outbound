@@ -31,6 +31,8 @@ ok(!movimentoPermitido(BACKLOG, ETAPA.visita).ok && movimentoPermitido(BACKLOG, 
 ok(etapaSugerida({ atual: ETAPA.prospeccao, comoFoi: 'decisor_ausente', proximo: 'voltar7', primeiraVisita: true }) === ETAPA.visita, '1ª visita em Prospecção sugere Visita');
 ok(etapaSugerida({ atual: ETAPA.visita, comoFoi: 'falou_com_decisor', proximo: 'reuniao', primeiraVisita: false }) === ETAPA.decisor, 'decisor + reunião em Visita sugere Conversa com Decisor');
 ok(etapaSugerida({ atual: ETAPA.prospeccao, comoFoi: 'falou_com_decisor', proximo: 'reuniao', primeiraVisita: true }) === ETAPA.visita, 'decisor + reunião em Prospecção sobe só um degrau (Visita), não pula');
+ok(etapaSugerida({ atual: null, comoFoi: 'decisor_ausente', proximo: 'voltar_horario', primeiraVisita: true }) === null, 'etapa desconhecida: não sugere mover (chutava Prospecção e pedia origem sem campo)');
+ok(etapaSugerida({ atual: null, comoFoi: 'nao_quis', proximo: 'sem_interesse', primeiraVisita: true }) === ETAPA.perdido, 'etapa desconhecida + sem interesse: Perdido continua valendo');
 ok(etapaSugerida({ atual: ETAPA.negociacao, comoFoi: 'sem_interesse', proximo: 'sem_interesse', primeiraVisita: false }) === ETAPA.perdido, 'Sem interesse sugere Perdido de qualquer etapa');
 ok(etapaSugerida({ atual: ETAPA.visita, comoFoi: 'decisor_ausente', proximo: 'ligar_amanha', primeiraVisita: false }) === null, 'Ligar amanhã mantém a etapa');
 ok(etapaSugerida({ atual: ETAPA.demo, comoFoi: 'falou_com_decisor', proximo: 'reuniao', primeiraVisita: false }) === null, 'já além de Decisor: não sugere voltar');

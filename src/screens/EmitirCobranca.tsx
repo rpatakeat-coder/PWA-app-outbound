@@ -57,6 +57,21 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
     setPasso(1); setErro(null); setTodosPacotes(false); setTodosAdicionais(false);
   }, [visivel, client.id]);
 
+  // O que o negócio já tem chega um instante depois de abrir (leitura ao vivo do
+  // HubSpot): completa só o que ainda está vazio, sem apagar o que foi digitado.
+  // Antes, pacote e MRR já apresentados eram digitados de novo (auditoria 26/09).
+  useEffect(() => {
+    if (!visivel) return;
+    const plano = String(jaTem.plano_apresentado ?? '');
+    const mrr = jaTem.valor_de_mrr != null ? String(jaTem.valor_de_mrr) : '';
+    setC((x) => ({
+      ...x,
+      celular: x.celular || String(jaTem.celular ?? '').trim(),
+      pacote_contratado: x.pacote_contratado || (PLANO_PARA_PACOTE[plano] ?? ''),
+      ...(x.mrr ? {} : { mrr, amount: valorDoPeriodo(mrr, x.periodo_contratado || 'Mensal') }),
+    }));
+  }, [visivel, jaTem]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     const on = () => setOnline(true);
     const off = () => setOnline(false);

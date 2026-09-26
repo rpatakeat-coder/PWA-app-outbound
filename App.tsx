@@ -96,7 +96,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import MapView, { Marker, Polyline, Circle, type MapViewHandle as RNMapView } from './src/map';
 import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useClientSearch, useClients } from './src/hooks/useClients';
+import { CLIENT_LIST_COLUMNS, useClientSearch, useClients } from './src/hooks/useClients';
 import { useNaEquipeCockpit } from './src/hooks/useNaEquipeCockpit';
 import { useContextoDoPino, useLeadsNaFila, useMapaNovo } from './src/hooks/useMapaNovo';
 import PinoP2, { ANCORA_PINO_P2, sinalDoPino, type PapelPino } from './src/map/PinoP2';
@@ -2992,7 +2992,16 @@ function MainApp() {
     let addr: { endereco: string; numero: string; bairro: string; cidade: string; estado: string; cep: string } | null = null;
     try { addr = await reverseGeocode(creationCenter.latitude, creationCenter.longitude); } catch { /* sem endereço: grava só a posição */ }
     const { dealId, nome } = posicionarDeal;
+    // Etapa real do negócio: sem ela o pino nascia "Etapa não reconhecida" e o
+    // registro sugeria mover para Prospecção pedindo origem (auditoria 26/09).
+    let etapa: string | null = null;
+    try {
+      const { data: st } = await supabase.functions.invoke('hubspot-sync', { body: { type: 'deal_stage', id_hubspot: dealId } });
+      const id = (st as { dealstage?: string } | null)?.dealstage;
+      etapa = (id && STAGES.find((x) => x.id === id)?.label) || null;
+    } catch { /* sem etapa: o pino fica sem, como antes */ }
     const campos = {
+      ...(etapa ? { etapa } : {}),
       latitude: creationCenter.latitude, longitude: creationCenter.longitude, geo_source: 'coords', geo_approximate: false,
       endereco: addr?.endereco || null, numero: addr?.numero || null, bairro: addr?.bairro || null,
       cidade: addr?.cidade || null, estado: addr?.estado || null, cep: addr?.cep || null,
@@ -3174,6 +3183,14 @@ function MainApp() {
       jaAvisei.current = false;
       resetForm();
       setIsFormOpen(false);
+      // Mapa novo: nada de pergunta na fila (ela surgia minutos depois, por cima
+      // de outra folha — auditoria 26/09). Abre o cartão do lead novo: o próximo
+      // passo na rua é o Cheguei, e o Agendar está ali no cartão.
+      if (modoNovo) {
+        Toast.mostrar(`✓ Lead cadastrado · ${created.empresa?.trim() || created.nome}`, 'ok');
+        setTimeout(() => setSelectedClient(created), 350);
+        return;
+      }
       Alert.alert(
         'Cliente cadastrado',
         'Deseja agendar uma reunião com este lead agora?',
@@ -3344,6 +3361,11 @@ function MainApp() {
       }
       setSelectedClient(c);
     }, 350);
+    // O resultado da busca é uma cópia guardada (até 1 min): depois de mudar a
+    // etapa, o cartão reabria com a etapa velha e oferecia o mesmo avanço
+    // (auditoria 26/09). Troca pela linha atual do banco assim que ela chega.
+    void supabase.from('clients').select(CLIENT_LIST_COLUMNS).eq('id', c.id).maybeSingle()
+      .then(({ data }) => { if (data) setTimeout(() => setSelectedClient((atual) => (atual?.id === c.id ? ({ ...atual, ...(data as unknown as Client) }) : atual)), 360); });
   }, [searchTerm]);
   const linhasBusca = useMemo<LinhaBusca[]>(() => {
     if (!buscaAberta || searchTerm.length < 2) return [];
@@ -3361,7 +3383,7 @@ function MainApp() {
       if (c && vistos.has(c.id)) continue;
       const etapa = (n.etapa && ROTULO_ETAPA[n.etapa]) || 'Negócio';
       if (c && c.latitude != null && c.longitude != null) {
-        linhas.push({ chave: 'n' + n.id, nome: n.nome, sub: `${etapa} · fora do recorte do mapa`, distancia: fmt(metros(c)), acao: 'abrir', aoTocar: () => abrirDaBusca(c) });
+        linhas.push({ chave: 'n' + n.id, nome: n.nome, sub: `${normalizeStage(c.etapa) ?? etapa}${c.bairro ? ` · ${c.bairro}` : ''}`, distancia: fmt(metros(c)), acao: 'abrir', aoTocar: () => abrirDaBusca(c) });
       } else if (!isViewer) {
         linhas.push({
           chave: 'n' + n.id, nome: n.nome, sub: `${etapa} · ainda não está no mapa`, distancia: null, acao: 'posicionar',
@@ -3708,10 +3730,19 @@ function MainApp() {
       const nomeDoLead = client.empresa?.trim() || client.nome;
       let visitado: Client;
       try {
-        visitado = await markAsVisited.mutateAsync({
-          clientId: client.id, latitude: userLat, longitude: userLon,
-          accuracyM: fixAccuracy, acaoId, feitoEm, corrigirPino, declarada,
-        });
+        // SEM SINAL NÃO GIRA (auditoria 26/09): o supabase-js refaz a chamada por
+        // conta própria e o Cheguei ficava girando até o sinal voltar — a fila
+        // nunca entrava. Sem rede conhecida vai direto para a fila; com rede
+        // ruim, 12 s de prazo. O acaoId garante que a chamada atrasada, se
+        // chegar, não duplica a visita.
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new TypeError('Failed to fetch (sem sinal)');
+        visitado = await Promise.race([
+          markAsVisited.mutateAsync({
+            clientId: client.id, latitude: userLat, longitude: userLon,
+            accuracyM: fixAccuracy, acaoId, feitoEm, corrigirPino, declarada,
+          }),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new TypeError('Failed to fetch (timeout do check-in)')), 12000)),
+        ]);
       } catch (err) {
         if (!ehErroDeRede(err)) throw err;
         await enfileirar({
@@ -8415,8 +8446,13 @@ function ClientBottomSheet({
     Date.now() - new Date(client.created_at).getTime() > CARENCIA_MS;
 
   const approxReasons: string[] = [];
-  if (!client.numero) approxReasons.push('Endereço sem número');
-  if (client.geo_source === 'hubspot' || client.geo_source === 'coords') {
+  // Pino marcado NO LOCAL pelo app (GPS do cadastro, mapa arrastado até a porta
+  // ou corrigido no check-in) é o mais preciso que existe: número de endereço e
+  // geocodificação não importam. Até 26/09 ele aparecia como "aproximado" no
+  // cartão (auditoria do Julyan), contradizendo o check-in que confia nele.
+  const pinoNoLocal = (client.geo_source === 'coords' || client.geo_source === 'checkin') && client.geo_approximate !== true;
+  if (!pinoNoLocal && !client.numero) approxReasons.push('Endereço sem número');
+  if (client.geo_source === 'hubspot') {
     approxReasons.push('Posicionado pela latitude/longitude (sem geocodificação por endereço)');
   }
   // Coordenadas idênticas a outro cliente são, na prática, garantia de erro de
@@ -8438,7 +8474,9 @@ function ClientBottomSheet({
       : client.geo_source === 'hubspot'
       ? 'Latitude/longitude vindas do HubSpot'
       : client.geo_source === 'coords'
-      ? 'Latitude/longitude informadas manualmente'
+      ? 'Marcado no local pelo app (GPS ou mapa)'
+      : client.geo_source === 'checkin'
+      ? 'Corrigido pelo GPS no check-in'
       : 'Origem da localização não identificada';
 
   const formatDate = (iso: string | null) => {

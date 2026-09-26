@@ -56,8 +56,21 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
     if (!visivel) return;
     setDestino(destinoInicial); setDigitado({}); setErros({}); setRecusa(null);
     if (!dealId) return;
-    supabase.rpc('mapa_negocio', { p_deal: dealId }).then(({ data }) => setJaTem((data as Record<string, unknown>) ?? {}));
-  }, [visivel, dealId, destinoInicial]);
+    // Snapshot do Cockpit (mapa_negocio) + leitura AO VIVO do HubSpot (ler_negocio):
+    // o snapshot atrasa até 2 h e pedia de novo o que o registro acabou de gravar
+    // (auditoria 26/09). O vivo vence; o telefone do cadastro é a última reserva.
+    let vivo = true;
+    const base: Record<string, unknown> = client.telefone ? { celular: client.telefone } : {};
+    setJaTem(base);
+    Promise.all([
+      supabase.rpc('mapa_negocio', { p_deal: dealId }).then(({ data }) => (data as Record<string, unknown>) ?? {}, () => ({})),
+      client.vendedor_id_hubspot
+        ? supabase.functions.invoke('hubspot-sync', { body: { type: 'ler_negocio', id_hubspot: dealId, owner_id: String(client.vendedor_id_hubspot) } })
+            .then(({ data }) => ((data as { propriedades?: Record<string, unknown> } | null)?.propriedades ?? {}), () => ({}))
+        : Promise.resolve({}),
+    ]).then(([snap, aoVivo]) => { if (vivo) setJaTem({ ...base, ...snap, ...aoVivo }); });
+    return () => { vivo = false; };
+  }, [visivel, dealId, destinoInicial]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const exigidos = destino
     ? [...(PROPS_OBRIGATORIAS_POR_ETAPA[destino] ?? []),

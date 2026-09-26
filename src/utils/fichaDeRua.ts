@@ -140,6 +140,10 @@ export function etapaSugerida(p: {
   else if (p.comoFoi === 'falou_com_decisor' && p.proximo === 'reuniao') alvo = ETAPA.decisor;
   else if (p.primeiraVisita) alvo = ETAPA.visita;
   if (!alvo) return null;
+  // Etapa desconhecida no app (pino sem etapa, snapshot sem o negócio): não
+  // adivinhar. Chutar o 1º degrau pedia "origem do lead" sem campo na tela e
+  // sumia com o Salvar (auditoria 26/09). O servidor sabe a etapa real.
+  if (!atual && alvo !== ETAPA.perdido) return null;
   const iAtual = atual ? ESCADA.indexOf(atual) : -1;
   // já está nela ou além (exceto Perdido, que vale de qualquer etapa)
   if (alvo !== ETAPA.perdido && iAtual >= ESCADA.indexOf(alvo) && !ISENTAS.has(atual ?? '')) return null;

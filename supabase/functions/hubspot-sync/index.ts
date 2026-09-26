@@ -523,8 +523,10 @@ async function handleDecisor(token: string, body: Record<string, unknown>) {
       filterGroups: [{ filters: [{ propertyName: 'phone', operator: 'CONTAINS_TOKEN', value: `*${digitos.slice(-8)}` }] }],
       properties: ['firstname', 'phone'], limit: 5,
     });
+    // Contato que JÁ está no negócio com outro nome não é o decisor: é a casa
+    // com o mesmo telefone (auditoria 26/09, o decisor "sumia" dentro dele).
     const achado = ((busca.body?.results ?? []) as { id: string; properties?: Record<string, string> }[])
-      .find((c) => soDigitosTel(c.properties?.phone).endsWith(digitos.slice(-8)));
+      .find((c) => !ids.includes(String(c.id)) && soDigitosTel(c.properties?.phone).endsWith(digitos.slice(-8)));
     if (achado) contactId = achado.id;
   }
 
@@ -712,6 +714,29 @@ async function handleDealNames(token: string, body: Record<string, unknown>) {
     if (d?.id && nome) nomes[String(d.id)] = nome;
   }
   return json(200, { nomes });
+}
+
+// ===== ler_negocio =====
+// O que o negócio JÁ TEM no HubSpot agora — só leitura, só do próprio dono.
+// A tela de etapa lia só o snapshot do Cockpit (mapa_negocio), que atrasa até
+// 2 h: telefone, dor, sistema, MRR e plano gravados minutos antes eram pedidos
+// de novo (auditoria 26/09). Com isto a tela só pede o que falta de verdade.
+const PROPS_LEITURA = ['dealstage', 'origem_do_lead', 'celular', 'gargalo_operacional', 'nome_do_sistema', 'plano_apresentado', 'valor_de_mrr', 'data_da_reuniao', 'hubspot_owner_id'];
+async function handleLerNegocio(token: string, body: Record<string, unknown>) {
+  const idHubspot = trimOrNull(body.id_hubspot);
+  const ownerId = trimOrNull(body.owner_id);
+  if (!idHubspot || !ownerId) return json(400, { error: 'id_hubspot e owner_id sao obrigatorios' });
+  const r = await hsFetch(token, 'GET', `/crm/v3/objects/deals/${idHubspot}?properties=${PROPS_LEITURA.join(',')}`);
+  if (!r.ok) return json(502, { error: 'HubSpot nao devolveu o negocio', detail: r.body?.message ?? `status ${r.status}` });
+  const p = (r.body?.properties ?? {}) as Record<string, string | null>;
+  if (trimOrNull(p.hubspot_owner_id) !== ownerId) return json(403, { error: 'negocio de outro dono' });
+  const propriedades: Record<string, string> = {};
+  for (const k of PROPS_LEITURA) {
+    if (k === 'hubspot_owner_id') continue;
+    const v = trimOrNull(p[k]);
+    if (v) propriedades[k] = k === 'data_da_reuniao' ? v.slice(0, 10) : v;
+  }
+  return json(200, { propriedades });
 }
 
 // ===== search_deals =====
@@ -1157,6 +1182,8 @@ Deno.serve(async (req: Request) => {
         return await handleListTasks(token, body);
       case 'decisor':
         return await handleDecisor(token, body);
+      case 'ler_negocio':
+        return await handleLerNegocio(token, body);
       case 'search_deals':
         return await handleSearchDeals(token, body);
       case 'deal_names':

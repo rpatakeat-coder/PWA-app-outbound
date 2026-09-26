@@ -220,7 +220,10 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
       if (f.decisor.trim()) {
         envios.push({
           rota: 'hubspot-sync',
-          corpo: { type: 'decisor', id_hubspot: dealId, nome: f.decisor.trim(), papel: f.papel ?? undefined, celular: (f.telefone || client.telefone || '').trim() || undefined, owner_id: client.vendedor_id_hubspot ?? undefined },
+          // Sem celular: o telefone da ficha é o da CASA, não o de quem decide. Mandá-lo
+          // fazia a rota achar o contato do próprio negócio pelo número e "associar"
+          // o decisor a ele — nome e papel sumiam (auditoria 26/09).
+          corpo: { type: 'decisor', id_hubspot: dealId, nome: f.decisor.trim(), papel: f.papel ?? undefined, owner_id: client.vendedor_id_hubspot ?? undefined },
           rotulo: 'Quem decide no negócio',
         });
       }
