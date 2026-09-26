@@ -31,10 +31,12 @@ type Props = {
   aoAbrirSugestao: (t: ClientTask) => void;
   aoAbrirLead: (clientId: string, tarefa: TarefaParaAFicha) => void;
   distanciaAte: (clientId: string | null) => string | null;
+  /** Negócio da tarefa sem ponto no mapa: posicionar sem criar outro (handoff v4.1 §6.7). */
+  aoPosicionar?: (dealId: string, nome: string) => void;
 };
 
 export default function TarefasNovoScreen({
-  email, sugestoes, nomeDaSugestao, aoConcluirSugestao, aoAbrirSugestao, aoAbrirLead, distanciaAte,
+  email, sugestoes, nomeDaSugestao, aoConcluirSugestao, aoAbrirSugestao, aoAbrirLead, distanciaAte, aoPosicionar,
 }: Props) {
   const cores = useIconColors();
   const queryClient = useQueryClient();
@@ -65,10 +67,9 @@ export default function TarefasNovoScreen({
       Alert.alert('Tarefa sem negócio', 'Esta tarefa não está ligada a nenhum negócio no HubSpot, então não há ficha para abrir. Conclua pelo círculo quando fizer.');
       return;
     }
-    Alert.alert('Ainda não está no mapa', `${t.nomeDoCliente ?? 'Este negócio'} não tem ponto no mapa (falta um endereço confiável). Dá para ver e agir pelo HubSpot.`, [
-      { text: 'Fechar', style: 'cancel' },
-      { text: 'Abrir no HubSpot', onPress: () => { void Linking.openURL(`https://app.hubspot.com/contacts/24373118/record/0-3/${t.dealId}`); } },
-    ]);
+    // Nunca mandar para o HubSpot (handoff v4.1): o executivo põe no mapa ali mesmo.
+    if (aoPosicionar) { aoPosicionar(t.dealId, t.nomeDoCliente ?? 'Negócio'); return; }
+    Alert.alert('Ainda não está no mapa', `${t.nomeDoCliente ?? 'Este negócio'} não tem ponto no mapa.`);
   };
 
   const concluir = (t: TarefaDoCrmNaTela, liguei: boolean) => {
@@ -152,7 +153,16 @@ export default function TarefasNovoScreen({
                         {chips.origem && <Text style={[s.chipOrigem, chips.alerta && s.chipAlerta]} numberOfLines={1}>{chips.origem}</Text>}
                       </View>
                     </TouchableOpacity>
-                    {rapida === 'liguei' && (
+                    {!t.clientId && !!t.dealId && aoPosicionar ? (
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel={`Posicionar no mapa: ${t.nomeDoCliente ?? t.assunto}`}
+                        style={[s.rapida, s.posicionar]}
+                        onPress={() => aoPosicionar(String(t.dealId), t.nomeDoCliente ?? 'Negócio')}
+                      >
+                        <Text style={[s.rapidaTexto, { color: '#fff' }]}>Posicionar</Text>
+                      </TouchableOpacity>
+                    ) : rapida === 'liguei' && (
                       <TouchableOpacity
                         accessibilityRole="button"
                         accessibilityLabel={`Liguei: ${t.assunto}`}
@@ -230,6 +240,7 @@ export default function TarefasNovoScreen({
 }
 
 const s = StyleSheet.create({
+  posicionar: { backgroundColor: '#E51A31', borderColor: '#E51A31' },
   tela: { flex: 1, backgroundColor: 'var(--bg)' },
   conteudo: { padding: 16, paddingBottom: 32, gap: 16 },
   subtitulo: { fontSize: 13, lineHeight: 18, color: 'var(--text-muted)' },

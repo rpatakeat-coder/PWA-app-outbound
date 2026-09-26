@@ -2907,6 +2907,22 @@ function MainApp() {
   }, [folhaDeBaixo, topoFolha, fundoMapaTela, margemMapa]);
 
   const [resolvingPin, setResolvingPin] = useState(false);
+  // Posicionar negócio que já existe (handoff v4.1 §6.7): o pino fica fixo no
+  // centro, quem se mexe é o mapa, e o confirmar liga o ponto ao negócio —
+  // sem create_pin, sem negócio novo.
+  const [posicionarDeal, setPosicionarDeal] = useState<{ dealId: string; nome: string } | null>(null);
+  const iniciarPosicionar = useCallback((dealId: string, nome: string) => {
+    setTab('map');
+    const centro = userLocation ?? { latitude: mapCenter.latitude, longitude: mapCenter.longitude };
+    setPosicionarDeal({ dealId, nome });
+    setCreationCenter({ latitude: centro.latitude, longitude: centro.longitude });
+    setCreationMode(true);
+    setTimeout(() => mapRef.current?.animateToRegion({ ...centro, latitudeDelta: 0.004, longitudeDelta: 0.004 }, 300), 400);
+  }, [userLocation, mapCenter]);
+  const irParaMim = useCallback(() => {
+    if (!userLocation) { Toast.mostrar('Sem GPS agora: arraste o mapa até o lugar.', 'fila'); return; }
+    mapRef.current?.animateToRegion({ ...userLocation, latitudeDelta: 0.004, longitudeDelta: 0.004 }, 300);
+  }, [userLocation]);
 
   const startMapCreation = useCallback(() => {
     setShowCepStep(false);
@@ -2918,7 +2934,44 @@ function MainApp() {
   const cancelMapCreation = useCallback(() => {
     setCreationMode(false);
     setCreationCenter(null);
+    setPosicionarDeal(null);
   }, []);
+
+  const confirmarPosicionar = useCallback(async () => {
+    if (!creationCenter || !posicionarDeal) return;
+    setResolvingPin(true);
+    let addr: { endereco: string; numero: string; bairro: string; cidade: string; estado: string; cep: string } | null = null;
+    try { addr = await reverseGeocode(creationCenter.latitude, creationCenter.longitude); } catch { /* sem endereço: grava só a posição */ }
+    const { dealId, nome } = posicionarDeal;
+    const campos = {
+      latitude: creationCenter.latitude, longitude: creationCenter.longitude, geo_source: 'coords', geo_approximate: false,
+      endereco: addr?.endereco || null, numero: addr?.numero || null, bairro: addr?.bairro || null,
+      cidade: addr?.cidade || null, estado: addr?.estado || null, cep: addr?.cep || null,
+    };
+    try {
+      // Já existe ponto deste negócio (ex.: sem coordenada)? Atualiza; senão cria ligado a ele.
+      const { data: existente } = await supabase.from('clients').select('id').eq('id_hubspot', dealId).limit(1).maybeSingle();
+      if (existente?.id) {
+        const { error } = await supabase.from('clients').update(campos).eq('id', existente.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('clients').insert({
+          ...campos, nome, empresa: nome, status: 'lead', id_hubspot: dealId,
+          url_hubspot: `https://app.hubspot.com/contacts/24373118/record/0-3/${dealId}`,
+          vendedor_id_hubspot: myHubspotId ?? null, created_by: profile?.id ?? null,
+        });
+        if (error) throw error;
+      }
+      Toast.mostrar(`${nome} no mapa · ligado ao negócio que já existia`, 'ok');
+      void queryClient.invalidateQueries({ queryKey: ['clients'] });
+      void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] });
+      setCreationMode(false); setCreationCenter(null); setPosicionarDeal(null);
+    } catch (err: any) {
+      Alert.alert('Não deu para posicionar', err?.message ?? 'Erro desconhecido');
+    } finally {
+      setResolvingPin(false);
+    }
+  }, [creationCenter, posicionarDeal, myHubspotId, profile?.id, queryClient]);
 
   const confirmMapCreation = useCallback(async () => {
     if (!creationCenter) return;
@@ -4827,10 +4880,17 @@ function MainApp() {
 
       {creationMode && creationCenter && (
         <View style={[styles.creationBar, { bottom: baseInferior }]}>
-          <Text style={styles.creationBarTitle}>Selecione o local do cliente</Text>
+          <Text style={styles.creationBarTitle}>{posicionarDeal ? `Posicionar ${posicionarDeal.nome}` : 'Selecione o local do cliente'}</Text>
           <Text style={styles.creationBarHint}>
-            Arraste o mapa para posicionar o pin no local exato. Endereço, CEP e bairro serão preenchidos automaticamente.
+            {posicionarDeal
+              ? 'Negócio que já existe · não cria outro. Arraste o mapa até a porta ou toque em Estou aqui.'
+              : 'Arraste o mapa para posicionar o pin no local exato. Endereço, CEP e bairro serão preenchidos automaticamente.'}
           </Text>
+          {posicionarDeal && (
+            <TouchableOpacity accessibilityRole="button" style={styles.creationBarCancel} onPress={irParaMim} disabled={resolvingPin}>
+              <Text style={styles.creationBarCancelText}>Estou aqui</Text>
+            </TouchableOpacity>
+          )}
           <Text style={styles.creationBarCoords}>
             {creationCenter.latitude.toFixed(6)}, {creationCenter.longitude.toFixed(6)}
           </Text>
@@ -4844,13 +4904,13 @@ function MainApp() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.creationBarConfirm, resolvingPin && { opacity: 0.7 }]}
-              onPress={confirmMapCreation}
+              onPress={posicionarDeal ? confirmarPosicionar : confirmMapCreation}
               disabled={resolvingPin}
             >
               {resolvingPin ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.creationBarConfirmText}>Confirmar local</Text>
+                <Text style={styles.creationBarConfirmText}>{posicionarDeal ? 'Colocar no mapa aqui' : 'Confirmar local'}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -6370,6 +6430,7 @@ function MainApp() {
             setTab('map');
             void openClientById(id);
           }}
+          aoPosicionar={isViewer ? undefined : iniciarPosicionar}
           distanciaAte={(id) => {
             const c = id ? clients.find((x) => x.id === id) : null;
             if (!c || !userLocation || c.latitude == null || c.longitude == null) return null;
