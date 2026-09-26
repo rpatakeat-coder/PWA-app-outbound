@@ -37,7 +37,7 @@ const IGNORAR = new Set(['ltda', 'eireli', 'restaurante', 'restaurantes', 'comer
   'cafeteria', 'coffee', 'sushi', 'temakeria', 'poke', 'casa', 'nova', 'novo', 'shopping', 'gourmet', 'deli', 'bistro',
   'doces', 'doceria', 'bolos', 'padaria', 'panificadora', 'pastelaria', 'pastel', 'esfiharia', 'esfiha', 'acai', 'espetinho',
   'churrascaria', 'rotisseria', 'marmitaria', 'food', 'foods', 'express', 'delivery', 'house', 'point', 'espaco', 'center',
-  'central', 'sabor', 'sabores', 'mais', 'filial', 'unidade', 'matriz']);
+  'central', 'sabor', 'sabores', 'mais', 'filial', 'unidade', 'matriz', 'zona', 'norte', 'leste', 'oeste']);
 const semAcento = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 const json = (status: number, body: unknown) =>
@@ -79,7 +79,7 @@ async function receita(cnpj: string): Promise<{ situacao: string | null; fantasi
   } catch { return null; }
 }
 
-async function porBusca(key: string, c: { empresa: string | null; nome: string; endereco: string | null; cidade: string | null; latitude: number; longitude: number }, nomeBusca?: string | null): Promise<Achado> {
+async function porBusca(key: string, c: { empresa: string | null; nome: string; endereco: string | null; cidade: string | null; bairro?: string | null; latitude: number; longitude: number }, nomeBusca?: string | null): Promise<Achado> {
   const texto = [limparNome(nomeBusca || c.empresa?.trim() || c.nome), c.endereco, c.cidade].filter(Boolean).join(', ');
   const r = await fetch(`${PLACES}/places:searchText`, {
     method: 'POST',
@@ -101,13 +101,16 @@ async function porBusca(key: string, c: { empresa: string | null; nome: string; 
   // O pino da munição veio de endereço convertido e pode estar longe da porta,
   // então com nome e cidade batendo aceita até 1,5 km.
   const palavras = (s: string) => new Set(semAcento(s).split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !IGNORAR.has(w)));
-  const alvo = palavras(nomeBusca || c.empresa || c.nome);
+  // Palavra da cidade/bairro no nome ("POINT SUZANO") casaria com qualquer lugar dali.
+  const local = new Set([...palavras(c.cidade ?? ''), ...palavras(c.bairro ?? '')]);
+  const alvo = new Set([...palavras(nomeBusca || c.empresa || c.nome)].filter((w) => !local.has(w)));
   const bateNome = (n: string) => {
     if (!alvo.size) return false;
     const achado = palavras(n);
     let em = 0;
     for (const w of alvo) if (achado.has(w)) em++;
-    return em >= 1 && em / alvo.size >= 0.5;
+    // Nome de 2+ palavras próprias exige 2 batendo ("Varanda Poke" não é "Varanda Verde").
+    return em >= Math.min(2, alvo.size) && em / alvo.size >= 0.5;
   };
   const cidade = c.cidade ? semAcento(c.cidade).trim() : '';
   const mesmaCidade = (end: string | undefined) => !cidade || !end || semAcento(end).includes(cidade);
@@ -142,7 +145,7 @@ Deno.serve(async (req) => {
   const antes = new Date(Date.now() - 30 * 86400000).toISOString();
 
   const { data: fila, error } = await svc.from('clients')
-    .select('id, empresa, nome, endereco, cidade, latitude, longitude, conta_alvo_place_id, motor_google_place_id, conta_alvo_dismissed, is_teste, lead_prospeccao_id')
+    .select('id, empresa, nome, endereco, bairro, cidade, latitude, longitude, conta_alvo_place_id, motor_google_place_id, conta_alvo_dismissed, is_teste, lead_prospeccao_id')
     .not('conta_alvo_place_id', 'is', null)
     .eq('status', 'lead')
     // um .or() só: descartado e teste saem logo abaixo, no código
