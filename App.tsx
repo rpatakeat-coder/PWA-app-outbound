@@ -6766,8 +6766,22 @@ function MainApp() {
                 <IconClose width={16} height={16} fill={iconColors.muted} />
               </TouchableOpacity>
             </View>
+            {/* No mapa novo a lista principal sao as tarefas do HubSpot (o que o
+                Cockpit movimenta); as regras abaixo valem so' para as sugestoes do
+                app. Sem este paragrafo o modal dizia "voce nao cria manualmente"
+                sobre tarefas que o gestor e o proprio executivo criam. */}
+            {modoNovo && (
+              <Text style={styles.taskRulesIntro}>
+                A lista principal são as suas tarefas do HubSpot: o que o Cockpit
+                planeja, o funil e a ficha de rua criam, e as cobranças de SLA. Elas
+                seguem o prazo de cada uma e somem quando você conclui (círculo ou
+                Liguei).
+                {'\n\n'}Abaixo, em "Sugestões do app", ficam as geradas pelas regras
+                a seguir. O Cockpit não cobra estas.
+              </Text>
+            )}
             <Text style={styles.taskRulesIntro}>
-              As tarefas são criadas automaticamente pelo sistema a partir do
+              {modoNovo ? 'As sugestões do app' : 'As tarefas'} são criadas automaticamente pelo sistema a partir do
               estado dos seus leads. Você não cria manualmente — só conclui ou
               dispensa.
               {'\n\n'}Ao concluir, você escolhe o destino do lead: avançar de
