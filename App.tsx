@@ -6681,6 +6681,22 @@ function MainApp() {
           vistoEm={avisos.vistoEm}
           falhas={avisos.falhas}
           cobrancasAtrasadas={tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'atrasadas').length}
+          atrasadasPerto={(() => {
+            if (!userLocation) return null;
+            let perto = 0;
+            for (const t of tarefasDoCrmParaContagem) {
+              if (grupoDaTarefa(t.venceEm, new Date()) !== 'atrasadas' || !t.clientId) continue;
+              const c = clients.find((x) => x.id === t.clientId);
+              if (c && c.latitude != null && c.longitude != null
+                && haversineMeters(userLocation.latitude, userLocation.longitude, Number(c.latitude), Number(c.longitude)) < 1000) perto += 1;
+            }
+            return perto;
+          })()}
+          gestor={avisos.gestor}
+          aoDescartar={isViewer ? undefined : (a) => handleDismissContaAlvo(
+            { id: a.id, empresa: a.nome, nome: a.nome } as Client,
+            () => { void queryClient.invalidateQueries({ queryKey: ['avisos_motor'] }); },
+          )}
           carregando={avisos.carregando}
           aoAbrirLead={(id) => { avisos.marcarVisto(); setAvisosAbertos(false); setTab('map'); setTimeout(() => { void openClientById(id); }, 350); }}
           aoTentarDeNovo={() => { void subirFila(true).then((n) => Toast.mostrar(n > 0 ? `✓ ${n} ${n === 1 ? 'envio subiu' : 'envios subiram'}` : 'Ainda não subiu — confira o sinal', n > 0 ? 'ok' : 'erro')); }}

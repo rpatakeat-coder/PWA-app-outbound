@@ -23,6 +23,15 @@ export type AvisoMotor = {
 const CHAVE_VISTO = 'takeat-avisos-visto-em';
 const lerVisto = () => { try { return Number(localStorage.getItem(CHAVE_VISTO)) || 0; } catch { return 0; } };
 
+export type AvisoGestor = { id: string; titulo: string; em: string; autor: string | null };
+
+/** Motivo curto do motor, para a linha do sino (§6.11: nome, motivo e cidade). */
+export function motivoDoMotor(a: AvisoMotor): string {
+  return a.status === 'sumiu_google' ? 'sumiu do Google'
+    : a.status === 'cnpj_baixado' ? 'CNPJ baixado'
+    : 'fechado';
+}
+
 export function textoDoMotor(a: AvisoMotor): string {
   const quando = new Date(a.em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
   const oque = a.status === 'sumiu_google' ? 'sumiu do Google — pode ter fechado'
@@ -55,6 +64,25 @@ export function useAvisos(ativo: boolean, meuOwnerId: string | null, verTodos: b
     },
   });
 
+  // DO GESTOR: os recados dos últimos 14 dias. O não lido já abre sozinho
+  // (folha na raiz do App); aqui fica o registro para reler.
+  const gestor = useQuery<AvisoGestor[]>({
+    queryKey: ['avisos_gestor'],
+    enabled: ativo,
+    staleTime: 10 * 60 * 1000,
+    queryFn: async () => {
+      const desde = new Date(Date.now() - 14 * 86400000).toISOString();
+      const { data, error } = await supabase.from('comunicados')
+        .select('id, titulo, publicado_em, created_by_name')
+        .not('publicado_em', 'is', null)
+        .gte('publicado_em', desde)
+        .order('publicado_em', { ascending: false })
+        .limit(5);
+      if (error) return []; // tabela ausente ou sem permissão: sem bloco, sem quebrar
+      return ((data ?? []) as any[]).map((c) => ({ id: c.id, titulo: c.titulo, em: c.publicado_em, autor: c.created_by_name ?? null }));
+    },
+  });
+
   const [fila, setFila] = useState<ItemFila[]>([]);
   useEffect(() => (ativo ? ouvirFila(setFila) : undefined), [ativo]);
   const falhas = useMemo(() => fila.filter((i) => i.estado === 'falhou'), [fila]);
@@ -69,6 +97,7 @@ export function useAvisos(ativo: boolean, meuOwnerId: string | null, verTodos: b
 
   return {
     motor: motor.data ?? [],
+    gestor: gestor.data ?? [],
     carregando: motor.isLoading,
     falhas,
     selo: novosMotor + falhas.length,
