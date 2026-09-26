@@ -10,11 +10,25 @@ const ALVO_BYTES = 320 * 1024;
 /** Abre a câmera (ou a galeria) e devolve o arquivo escolhido. */
 export function escolherFoto(): Promise<File | null> {
   return new Promise((resolve) => {
+    // Cancelar a câmera tem de devolver null: sem isso a promessa nunca se
+    // resolve, e o check-in com foto obrigatória fica travado no Cheguei.
+    // 'cancel' existe no Chrome 113+ e no Safari 16.4+; a volta do foco à
+    // página é a reserva para os mais antigos.
+    let feito = false;
+    const fim = (f: File | null) => {
+      if (feito) return;
+      feito = true;
+      window.removeEventListener('focus', aoVoltar);
+      resolve(f);
+    };
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
     input.setAttribute('capture', 'environment');
-    input.onchange = () => resolve(input.files?.[0] ?? null);
+    input.onchange = () => fim(input.files?.[0] ?? null);
+    input.addEventListener('cancel', () => fim(null));
+    const aoVoltar = () => setTimeout(() => { if (!input.files?.length) fim(null); }, 1500);
+    window.addEventListener('focus', aoVoltar);
     input.click();
   });
 }
