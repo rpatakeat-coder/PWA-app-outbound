@@ -11,6 +11,41 @@ const SW_URL = '/sw.js';
 /** Evita dois reloads em sequencia se dois gatilhos dispararem juntos. */
 let reloading = false;
 
+/* NUNCA RECARREGAR NO MEIO DO TRABALHO (26/09/2026).
+   Ate' aqui a versao nova assumia na hora — no boot e toda vez que o app
+   voltava do segundo plano (depois do Waze, do WhatsApp). O executivo perdia o
+   cadastro que estava digitando e via 15 s de "Carregando..." no meio da rua;
+   num dia com varios deploys isso acontecia a cada volta ao app. Agora a
+   versao nova espera: so' troca quando nada esta aberto (o App informa por
+   definirOcupado), nenhum campo tem foco e ha' 15 s sem toque. */
+let ocupado: () => boolean = () => false;
+let ultimoToque = Date.now();
+if (typeof window !== 'undefined') {
+  for (const ev of ['pointerdown', 'keydown', 'touchstart']) {
+    window.addEventListener(ev, () => { ultimoToque = Date.now(); }, { passive: true, capture: true });
+  }
+}
+/** O App diz se ha' ficha, formulario, card ou folha aberta. */
+export function definirOcupado(fn: () => boolean): void {
+  ocupado = fn;
+}
+function podeTrocarAgora(): boolean {
+  const el = typeof document !== 'undefined' ? document.activeElement : null;
+  const digitando = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
+  return !digitando && !ocupado() && Date.now() - ultimoToque > 15000;
+}
+let esperando: ReturnType<typeof setInterval> | null = null;
+function ativarQuandoSeguro(waiting: ServiceWorker): void {
+  if (podeTrocarAgora()) { waiting.postMessage({ type: 'SKIP_WAITING' }); return; }
+  if (esperando) return;
+  esperando = setInterval(() => {
+    if (!podeTrocarAgora()) return;
+    if (esperando) clearInterval(esperando);
+    esperando = null;
+    waiting.postMessage({ type: 'SKIP_WAITING' });
+  }, 3000);
+}
+
 /**
  * Registra o service worker e arma o reload automatico.
  * Chamar uma vez no boot (index.js).
@@ -56,12 +91,23 @@ export async function checkAndReloadIfUpdateAvailable(): Promise<boolean> {
     // o novo em segundo plano e o deixa em `waiting`.
     await registration.update();
 
+    // Versão nova ainda baixando: quando terminar de instalar, entra no mesmo
+    // fluxo do momento seguro (sem isto ela ficava parada até a próxima volta ao app).
+    const instalando = registration.installing;
+    if (instalando && !registration.waiting) {
+      instalando.addEventListener('statechange', () => {
+        if (instalando.state === 'installed' && registration.waiting) ativarQuandoSeguro(registration.waiting);
+      });
+      return false;
+    }
+
     const waiting = registration.waiting;
     if (!waiting) return false;
 
     // Sem isso o SW novo so assumiria quando TODAS as abas fossem fechadas —
-    // o vendedor ficaria na versao velha o dia inteiro.
-    waiting.postMessage({ type: 'SKIP_WAITING' });
+    // o vendedor ficaria na versao velha o dia inteiro. Mas so' no momento
+    // seguro: ver definirOcupado.
+    ativarQuandoSeguro(waiting);
     return true;
   } catch (err) {
     console.warn('[SW] check/update falhou:', err);

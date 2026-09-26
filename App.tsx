@@ -163,6 +163,7 @@ import AgendaNovoScreen from './src/screens/AgendaNovoScreen';
 import { concluirComDesfazer, enviarConclusao, type PedidoConclusao } from './src/utils/concluirTarefa';
 import { diasDeAtraso, ehCobranca, grupoDaTarefa } from './src/utils/abaTarefas';
 import { distanciaTexto } from './src/utils/cardNovo';
+import { definirOcupado } from './src/utils/updates';
 import { assumirLead } from './src/utils/assumirLead';
 import { ConfiguracoesScreen } from './src/screens/ConfiguracoesScreen';
 import { ds, sharedStyles } from './src/screens/sharedStyles';
@@ -5262,6 +5263,11 @@ function MainApp() {
   const irParaOCockpit = () => {
     window.location.href = '/gestao';
   };
+
+  // Versão nova do app só entra quando nada está aberto (src/utils/updates.ts):
+  // recarregar no meio da ficha ou do cadastro perdia o trabalho do executivo.
+  definirOcupado(() => telaCheia || !!selectedClient || !!fichaPendente || !!etapaNovaPara || !!schedulingFor
+    || !!changingStageFor || !!completingTask || avisosAbertos || perfilAberto || isVisiting);
 
   // "É meu" (Julyan 26/09): o card e a linha da lista (lentes Sem dono e
   // Reconquista) chamam esta mesma função. Travas no servidor (assumir-negocio).
