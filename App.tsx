@@ -3313,7 +3313,7 @@ function MainApp() {
   // Sobe logo depois do check-in bem-sucedido: o que aconteceu DENTRO da visita
   // (ver DesfechoVisitaSheet). Puravel — o check-in ja' gravou.
   // Mudar etapa do mapa novo (porta única): lead + etapa atual no código do Cockpit.
-  const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null } | null>(null);
+  const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null } | null>(null);
   const codigoDaEtapa = (c: Client): string | null => {
     if (!contextoPino) return null;
     const chave = textoNormalizado(c.etapa);
@@ -4124,6 +4124,14 @@ function MainApp() {
           ? haversineMeters(userLocation.latitude, userLocation.longitude, Number(selectedClient.latitude), Number(selectedClient.longitude))
           : null,
         etapaRotulo: selectedClient.etapa ?? null,
+        etapaCodigo: codigoDaEtapa(selectedClient),
+        // Botão de avanço do bloco NEGÓCIO: abre Mudar etapa já na etapa destino.
+        onAvancar: isViewer ? undefined : (destino: string) => {
+          const c = selectedClient;
+          const atual = codigoDaEtapa(c);
+          setSelectedClient(null);
+          setTimeout(() => setEtapaNovaPara({ client: c, etapaAtual: atual, destinoInicial: destino }), 350);
+        },
         // "É meu" (Julyan 26/09): lead sem dono na rota de hoje entra no meu funil.
         onEMeu: isViewer ? undefined : () => { void assumirDoMapa(selectedClient); },
         ...(() => {
@@ -7536,6 +7544,7 @@ function MainApp() {
           visivel
           client={etapaNovaPara.client}
           etapaAtual={etapaNovaPara.etapaAtual}
+          destinoInicial={etapaNovaPara.destinoInicial ?? null}
           onFechar={() => setEtapaNovaPara(null)}
           onMudou={(codigo) => aplicarEtapaNoLead(etapaNovaPara.client.id, codigo)}
         />
@@ -7873,7 +7882,7 @@ function ClientBottomSheet({
   novo,
 }: {
   /** Mapa novo (prancha §7): troca o topo e o peek; abas e alertas continuam. */
-  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void }) | null;
+  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onAvancar?: (destino: string) => void }) | null;
   client: Client;
   insets: { bottom: number };
   statusConfig: Record<string, { label: string; color: string }>;
@@ -8245,6 +8254,7 @@ function ClientBottomSheet({
     onLiguei: novo?.onLiguei,
     onEMeu: novo?.onEMeu,
     onMoverPino: onEditLocation,
+    onAvancar: novo?.onAvancar,
   };
 
   // ── Faixa de topo (M1c) ───────────────────────────────────────────────

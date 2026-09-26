@@ -15,7 +15,7 @@ import { ORIGEM, origemDoFiltro } from '../utils/lentes';
 import { openGoogleMaps, type TravelMode } from '../utils/navigation';
 import type { Pino } from '../utils/pinoP2';
 import { distanciaTexto, fatosDoCard } from '../utils/cardNovo';
-import { pareceNomeDePessoa } from '../utils/fichaDeRua';
+import { ETAPA, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA, ROTULO_PROP, pareceNomeDePessoa } from '../utils/fichaDeRua';
 
 export { distanciaTexto };
 import { openWhatsapp, toWhatsappNumber } from '../utils/whatsapp';
@@ -36,6 +36,8 @@ export type AcoesCardNovo = {
   onEMeu?: () => void;
   /** "Mover o pino": abre a edição de localização. */
   onMoverPino?: () => void;
+  /** Botão de avanço do bloco NEGÓCIO: abre Mudar etapa já na etapa destino. */
+  onAvancar?: (destino: string) => void;
 };
 
 export type DadosCardNovo = {
@@ -47,6 +49,8 @@ export type DadosCardNovo = {
   distanciaM: number | null;
   responsavelNome: string | null;
   etapaRotulo: string | null;
+  /** Código canônico da etapa (etapa_de_para / snapshot). */
+  etapaCodigo?: string | null;
   isMarkingVisited: boolean;
   /** Mesma conta do alerta "Localização aproximada" do card. */
   aproximado?: boolean;
@@ -243,7 +247,10 @@ function GradeMais({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   const c = d.client;
   return (
     <View style={s.grade2}>
-      <Botao rotulo="Editar dados" onPress={a.onEdit} estilo={s.botaoMeia} />
+      {/* Ag. Pagamento: cobrança emitida, nada muda até o Pago (o servidor também recusa). */}
+      {d.etapaCodigo === ETAPA.pagamento
+        ? <Botao rotulo="Dados travados" desabilitado estilo={s.botaoMeia} acessivel="Dados travados: cobrança emitida, nada muda até o Pago" />
+        : <Botao rotulo="Editar dados" onPress={a.onEdit} estilo={s.botaoMeia} />}
       <Botao rotulo="WhatsApp" onPress={() => openWhatsapp(c.telefone)} desabilitado={!toWhatsappNumber(c.telefone)} estilo={s.botaoMeia} />
       <Botao
         rotulo={d.naRota ? '✓ Rota de hoje' : '+ Rota de hoje'}
@@ -258,8 +265,29 @@ function GradeMais({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   );
 }
 
-// Bloco NEGÓCIO (handoff §7.1). A fase 4 traz a barra de 8 etapas, o botão de
-// avanço por etapa e a cobrança; por ora, a etapa e o caminho para mudá-la.
+// Bloco NEGÓCIO (handoff §7.1): barra das 8 etapas, a etapa atual com uma nota,
+// UM botão de avanço (que muda conforme a etapa) e "Outra etapa".
+const FUNIL8 = [ETAPA.prospeccao, ETAPA.visita, ETAPA.decisor, ETAPA.demo, ETAPA.negociacao, ETAPA.pagamento, ETAPA.ganho, ETAPA.onboarding];
+function pede(destino: string): string {
+  const c = PROPS_OBRIGATORIAS_POR_ETAPA[destino] ?? [];
+  return c.length ? `Pede ${c.map((k) => ROTULO_PROP[k] ?? k).join(', ')}` : 'Não pede nada novo';
+}
+function avancoDaEtapa(codigo: string | null | undefined): { botao: string | null; destino: string | null; nota: string } {
+  switch (codigo) {
+    case ETAPA.prospeccao: return { botao: 'Avançar para Visita', destino: ETAPA.visita, nota: pede(ETAPA.visita) };
+    case ETAPA.visita: return { botao: 'Avançar para Conversa com decisor', destino: ETAPA.decisor, nota: pede(ETAPA.decisor) };
+    case ETAPA.decisor: return { botao: 'Avançar para Demo/Proposta', destino: ETAPA.demo, nota: pede(ETAPA.demo) };
+    case ETAPA.demo: return { botao: 'Avançar para Negociação', destino: ETAPA.negociacao, nota: pede(ETAPA.negociacao) };
+    case ETAPA.negociacao: return { botao: 'Emitir cobrança', destino: ETAPA.pagamento, nota: 'O Asaas pede os dados do contrato' };
+    case ETAPA.pagamento: return { botao: null, destino: null, nota: 'Cobrança emitida · dados travados até o Pago · sem pagar em 2 dias, o gestor é avisado' };
+    case ETAPA.ganho: return { botao: 'Enviar para onboarding', destino: ETAPA.onboarding, nota: 'Pago · o Asaas confirmou' };
+    case ETAPA.onboarding: return { botao: null, destino: null, nota: 'Com o time de implantação · as tarefas do negócio foram fechadas' };
+    case ETAPA.reciclagem: return { botao: 'Voltar para Visita', destino: ETAPA.visita, nota: 'Lateral do funil' };
+    case ETAPA.perdido: return { botao: 'Reabrir em Reciclagem', destino: ETAPA.reciclagem, nota: 'Perda marcada por engano tem volta' };
+    default: return { botao: null, destino: null, nota: 'Etapa não reconhecida no funil Field Sales' };
+  }
+}
+
 function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   if (d.pino.tipo === 'alvo' && !d.client.id_hubspot) {
     return (
@@ -272,11 +300,33 @@ function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
     );
   }
   if (d.pino.tipo === 'cliente') return null;
+  if (!d.client.id_hubspot) {
+    return (
+      <View style={s.negocio}>
+        <Text style={s.negocioRotulo}>NEGÓCIO · FUNIL FIELD SALES</Text>
+        <Text style={s.negocioEtapa}>Ainda sem negócio no HubSpot</Text>
+        <Text style={s.negocioNota}>O negócio nasce em Prospecção quando o lead é assumido (É meu) ou cadastrado.</Text>
+      </View>
+    );
+  }
+  const codigo = d.etapaCodigo ?? null;
+  const i = codigo ? FUNIL8.indexOf(codigo) : -1;
+  const av = avancoDaEtapa(codigo);
   return (
     <View style={s.negocio}>
-      <Text style={s.negocioRotulo}>NEGÓCIO · FUNIL FIELD SALES</Text>
-      <Text style={s.negocioEtapa}>{d.etapaRotulo ?? (d.client.id_hubspot ? 'Etapa não reconhecida' : 'Ainda sem negócio no HubSpot')}</Text>
-      {a.onChangeStage && d.client.id_hubspot && <Botao rotulo="Mudar etapa" onPress={a.onChangeStage} estilo={s.botao48} />}
+      <View style={s.negocioTopo}>
+        <Text style={s.negocioRotulo}>NEGÓCIO · FUNIL FIELD SALES</Text>
+        <Text style={s.negocioRotulo}>{i >= 0 ? `${i + 1} de 8` : 'lateral do funil'}</Text>
+      </View>
+      <View style={s.barra8}>{FUNIL8.map((e, k) => <View key={e} style={[s.seg, k <= i && s.segFeito]} />)}</View>
+      <Text style={s.negocioEtapa}>{codigo ? ROTULO_ETAPA[codigo] ?? d.etapaRotulo : d.etapaRotulo ?? 'Etapa não reconhecida'}</Text>
+      <Text style={s.negocioNota}>{av.nota}</Text>
+      <View style={s.grade}>
+        {av.botao && av.destino && a.onAvancar && (
+          <Botao rotulo={av.botao} onPress={() => a.onAvancar!(av.destino!)} estilo={[s.botao48, s.avancar]} texto={s.avancarTexto} />
+        )}
+        {a.onChangeStage && <Botao rotulo="Outra etapa" onPress={a.onChangeStage} estilo={[s.botao48, av.botao ? s.outra : null]} />}
+      </View>
     </View>
   );
 }
@@ -399,6 +449,13 @@ const s = StyleSheet.create({
   botaoMeia: { flexGrow: 0, flexShrink: 0, flexBasis: '48.5%', width: '48.5%', minHeight: 48 },
   negocio: { gap: 6, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)' },
   negocioRotulo: { fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: 'var(--text-faint)' },
+  negocioTopo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  barra8: { flexDirection: 'row', gap: 3 },
+  seg: { flex: 1, height: 6, borderRadius: 3, backgroundColor: 'var(--border)' },
+  segFeito: { backgroundColor: '#E51A31' },
+  avancar: { flexGrow: 2, backgroundColor: '#E51A31', borderColor: '#E51A31' },
+  avancarTexto: { color: '#FFFFFF', fontWeight: '700' },
+  outra: { flexGrow: 1 },
   negocioEtapa: { fontSize: 16, fontWeight: '600', color: 'var(--text)' },
   negocioNota: { fontSize: 12.5, fontWeight: '500', color: 'var(--text-muted)' },
   grade: { flexDirection: 'row', gap: 8 },

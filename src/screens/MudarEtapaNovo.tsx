@@ -5,7 +5,9 @@
 // Escolhida a etapa, aparecem SÓ os campos obrigatórios que o negócio ainda não
 // tem (mapa_negocio, 0108), com as picklists exatas. Grava por negocio-acao
 // (op mudar-etapa); a recusa do servidor aparece aqui com a mensagem dele. Sem
-// sinal, entra na fila. Ag. Pagamento (15 campos do contrato) abre a Gestão.
+// sinal, entra na fila. Ag. Pagamento abre Emitir cobrança (handoff v4.1
+// §7.3) — o contrato inteiro, pelo celular. Com a cobrança emitida, daqui só
+// se sai para Reciclagem ou Perdido (a mesma trava do servidor).
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -19,6 +21,7 @@ import {
   ROTULO_PROP, TIPO_CAMPO, montarPropriedades, movimentoPermitido,
 } from '../utils/fichaDeRua';
 import { negocioAcao } from '../utils/negocioAcao';
+import EmitirCobranca from './EmitirCobranca';
 
 type Props = {
   visivel: boolean;
@@ -26,11 +29,20 @@ type Props = {
   etapaAtual: string | null;
   onFechar: () => void;
   onMudou: (codigo: string) => void;
+  /** Botão de avanço do bloco NEGÓCIO: já abre na etapa escolhida. */
+  destinoInicial?: string | null;
 };
+
+// O que cada etapa pede, à direita da linha (handoff §6.5).
+function pedeTexto(id: string): string {
+  if (id === ETAPA.pagamento) return 'abre Emitir cobrança';
+  const campos = PROPS_OBRIGATORIAS_POR_ETAPA[id] ?? [];
+  return campos.length ? `pede ${campos.map((k) => ROTULO_PROP[k] ?? k).join(', ')}` : 'não pede nada novo';
+}
 
 const ROTULO_PICK: Record<string, string> = { Reembolso: 'Estorno', GoogleMaps: 'Google Maps', Familia: 'Família' };
 
-export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, onMudou }: Props) {
+export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, onMudou, destinoInicial = null }: Props) {
   const [destino, setDestino] = useState<string | null>(null);
   const [digitado, setDigitado] = useState<Record<string, string>>({});
   const [jaTem, setJaTem] = useState<Record<string, unknown>>({});
@@ -42,10 +54,10 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
 
   useEffect(() => {
     if (!visivel) return;
-    setDestino(null); setDigitado({}); setErros({}); setRecusa(null);
+    setDestino(destinoInicial); setDigitado({}); setErros({}); setRecusa(null);
     if (!dealId) return;
     supabase.rpc('mapa_negocio', { p_deal: dealId }).then(({ data }) => setJaTem((data as Record<string, unknown>) ?? {}));
-  }, [visivel, dealId]);
+  }, [visivel, dealId, destinoInicial]);
 
   const exigidos = destino
     ? [...(PROPS_OBRIGATORIAS_POR_ETAPA[destino] ?? []),
@@ -127,34 +139,36 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
         {!dealId ? (
           <Text style={s.aviso}>Este lead ainda não tem negócio no HubSpot. A etapa passa a existir quando o negócio for criado.</Text>
         ) : !destino ? (
-          ETAPAS_DA_FOLHA.map((id, i) => {
+          [...ETAPAS_DA_FOLHA.slice(0, 7), ETAPA.ganho, ...ETAPAS_DA_FOLHA.slice(7)].map((id, i) => {
             const atual = id === etapaAtual;
-            const mov = movimentoPermitido(etapaAtual, id);
+            const travada = etapaAtual === ETAPA.pagamento && id !== ETAPA.reciclagem && id !== ETAPA.perdido;
+            const mov = id === ETAPA.ganho
+              ? { ok: false, motivo: 'só o Asaas marca, quando o pagamento cai' }
+              : travada ? { ok: false, motivo: 'cobrança emitida · dados travados até o Pago' }
+                : movimentoPermitido(etapaAtual, id);
             const separa = id === ETAPA.reciclagem;
             return (
               <View key={id}>
                 {separa && <View style={s.divisor} />}
                 <Pressable accessibilityRole="button" accessibilityState={{ disabled: atual || !mov.ok, selected: atual }}
                   disabled={atual || !mov.ok} onPress={() => setDestino(id)} style={[s.linha, (atual || !mov.ok) && s.linhaInativa]}>
-                  <Text style={[s.linhaNum, atual && s.linhaAtual]}>{atual ? '●' : i < 7 ? String(i + 1) : '·'}</Text>
+                  <Text style={[s.linhaNum, atual && s.linhaAtual]}>{atual ? '●' : i < 8 ? String(i + 1) : '·'}</Text>
                   <View style={{ flex: 1 }}>
                     <Text style={[s.linhaRotulo, atual && s.linhaAtual]}>{ROTULO_ETAPA[id]}{atual ? ' · atual' : ''}</Text>
-                    {!atual && !mov.ok && <Text style={s.linhaMotivo}>{mov.motivo}</Text>}
+                    <Text style={s.linhaMotivo}>{atual ? 'atual' : !mov.ok ? mov.motivo : pedeTexto(id)}</Text>
                   </View>
                 </Pressable>
               </View>
             );
           })
         ) : destino === ETAPA.pagamento ? (
-          <View style={{ gap: 12 }}>
-            <Text style={s.aviso}>Ag. Pagamento pede os 15 campos do contrato (CNPJ, plano, adicionais, pagamento…). Preencha na Gestão, que tem o formulário completo.</Text>
-            <Pressable accessibilityRole="button" style={[s.botao, s.botaoPrin]} onPress={() => { window.location.href = '/gestao'; }}>
-              <Text style={s.botaoPrinTexto}>Abrir na Gestão</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" style={[s.botao, s.botaoSec]} onPress={() => setDestino(null)}>
-              <Text style={s.botaoSecTexto}>Voltar</Text>
-            </Pressable>
-          </View>
+          <EmitirCobranca
+            visivel
+            client={client}
+            jaTem={jaTem}
+            onFechar={() => { setDestino(null); onFechar(); }}
+            onEmitida={(codigo) => onMudou(codigo)}
+          />
         ) : (
           <View style={{ gap: 12 }}>
             <Text style={s.ajuda}>{exigidos.length ? 'Esta etapa pede:' : 'Nada a preencher — é só confirmar.'}</Text>
