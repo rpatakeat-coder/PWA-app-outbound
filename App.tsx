@@ -1453,8 +1453,8 @@ function MainApp() {
   // chips de status em tempo real conforme o usuario digita no search.
   // id_hubspot do usuario logado, usado pelo toggle "meus leads" (non-admin).
   const myHubspotId = profile?.id_hubspot ?? null;
-  // Sino de Avisos (mapa novo): motor + falhas de sincronização. Ver src/hooks/useAvisos.ts.
-  const avisos = useAvisos(modoNovo, myHubspotId, canViewGestor);
+  // Sino de Avisos (mapa novo): falhas de sincronização + recados do gestor. Ver src/hooks/useAvisos.ts.
+  const avisos = useAvisos(modoNovo);
   const [avisosAbertos, setAvisosAbertos] = useState(false);
   // Meu dia em números (handoff v4.1 §6.12): só o medido — check-ins de hoje,
   // Daily prometida, reuniões e sequência. Alimenta também o "x/6" da pílula.
@@ -1609,9 +1609,11 @@ function MainApp() {
     if (f.tempFilter && stageTemperature(c.etapa)?.label !== f.tempFilter) return false;
     // Conta Alvo descartada ("Não interessa") some do mapa/lista.
     if (c.conta_alvo_dismissed) return false;
-    // Só CNPJ ativo (Julyan, 26/09): conta sem negócio que o motor viu baixada
-    // na Receita sai do mapa. O sino continua avisando, para descartar.
-    if (!c.id_hubspot && c.motor_status === 'cnpj_baixado') return false;
+    // SÓ CONTA ATIVA (Julyan, 26/09: "quero só os ativos e as contas que o
+    // Cockpit sugere"): conta sem negócio que o motor viu com CNPJ baixado,
+    // sumir do Google ou fechar sai do mapa. "nao_achado" fica: o motor não
+    // achou no Google, comum em conta da Casa dos Dados, e não quer dizer fechou.
+    if (!c.id_hubspot && (c.motor_status === 'cnpj_baixado' || c.motor_status === 'sumiu_google' || c.motor_status === 'fechado_temporario')) return false;
     // Lead de teste (0106): fora do mapa, listas e contagens; só admin vê, se pedir.
     if (c.is_teste && !mostrarTestes) return false;
     if (f.contaAlvoOnly && !c.conta_alvo_place_id) return false;
@@ -6825,9 +6827,7 @@ function MainApp() {
 
       {avisosAbertos && (
         <AvisosPainel
-          aoFechar={() => { avisos.marcarVisto(); setAvisosAbertos(false); }}
-          motor={avisos.motor}
-          vistoEm={avisos.vistoEm}
+          aoFechar={() => setAvisosAbertos(false)}
           falhas={avisos.falhas}
           cobrancasAtrasadas={tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'atrasadas').length}
           atrasadasPerto={(() => {
@@ -6842,14 +6842,9 @@ function MainApp() {
             return perto;
           })()}
           gestor={avisos.gestor}
-          aoDescartar={isViewer ? undefined : (a) => handleDismissContaAlvo(
-            { id: a.id, empresa: a.nome, nome: a.nome } as Client,
-            () => { void queryClient.invalidateQueries({ queryKey: ['avisos_motor'] }); },
-          )}
           carregando={avisos.carregando}
-          aoAbrirLead={(id) => { avisos.marcarVisto(); setAvisosAbertos(false); setTab('map'); setTimeout(() => { void openClientById(id); }, 350); }}
           aoTentarDeNovo={() => { void subirFila(true).then((n) => Toast.mostrar(n > 0 ? `✓ ${n} ${n === 1 ? 'envio subiu' : 'envios subiram'}` : 'Ainda não subiu — confira o sinal', n > 0 ? 'ok' : 'erro')); }}
-          aoAbrirTarefas={() => { avisos.marcarVisto(); setAvisosAbertos(false); setTab('tasks'); }}
+          aoAbrirTarefas={() => { setAvisosAbertos(false); setTab('tasks'); }}
         />
       )}
 
