@@ -1720,7 +1720,7 @@ function MainApp() {
         Math.abs(p.latitude - mapRegion.latitude) <= mapRegion.latitudeDelta / 2
         && Math.abs(p.longitude - mapRegion.longitude) <= mapRegion.longitudeDelta / 2);
       if (achados.length === 1) {
-        mapa.animateToRegion({ ...pontos[0], latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);
+        mapa.animateToRegion({ latitude: pontos[0].latitude - 0.002, longitude: pontos[0].longitude, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);
         setSelectedClient(achados[0]);
         return;
       }
@@ -2841,7 +2841,27 @@ function MainApp() {
     setSelectedClient(data as Client);
   }, [clients]);
 
-  const handleMarkerPress = useCallback((c: Client) => openClientDetails(c), [openClientDetails]);
+  // O cartão do mapa novo cobre a metade de baixo. Pino tocado na borda ou
+  // embaixo ficava escondido atrás dele ou colado no canto (medido em 26/09):
+  // o mapa desliza, no mesmo zoom, até o pino ficar a ~30% do topo.
+  const regiaoRef = useRef(mapRegion);
+  regiaoRef.current = mapRegion;
+  const handleMarkerPress = useCallback((c: Client) => {
+    openClientDetails(c);
+    const mapRegion = regiaoRef.current;
+    if (!modoNovo || !mapRegion || !mapRef.current || c.latitude == null || c.longitude == null) return;
+    const lat = Number(c.latitude);
+    const lon = Number(c.longitude);
+    const fy = (mapRegion.latitude + mapRegion.latitudeDelta / 2 - lat) / mapRegion.latitudeDelta;
+    const fx = (lon - (mapRegion.longitude - mapRegion.longitudeDelta / 2)) / mapRegion.longitudeDelta;
+    if (fy >= 0.12 && fy <= 0.42 && fx >= 0.15 && fx <= 0.85) return;
+    mapRef.current.animateToRegion({
+      latitude: lat - 0.2 * mapRegion.latitudeDelta,
+      longitude: lon,
+      latitudeDelta: mapRegion.latitudeDelta,
+      longitudeDelta: mapRegion.longitudeDelta,
+    }, 300);
+  }, [openClientDetails, modoNovo]);
 
   // Modo de criação manual via mapa: pin fixo no centro da tela
   const [creationMode, setCreationMode] = useState(false);
