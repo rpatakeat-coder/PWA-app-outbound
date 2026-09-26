@@ -274,10 +274,10 @@ function pede(destino: string): string {
 }
 function avancoDaEtapa(codigo: string | null | undefined): { botao: string | null; destino: string | null; nota: string } {
   switch (codigo) {
-    case ETAPA.prospeccao: return { botao: 'Avançar para Visita', destino: ETAPA.visita, nota: pede(ETAPA.visita) };
-    case ETAPA.visita: return { botao: 'Avançar para Conversa com decisor', destino: ETAPA.decisor, nota: pede(ETAPA.decisor) };
-    case ETAPA.decisor: return { botao: 'Avançar para Demo/Proposta', destino: ETAPA.demo, nota: pede(ETAPA.demo) };
-    case ETAPA.demo: return { botao: 'Avançar para Negociação', destino: ETAPA.negociacao, nota: pede(ETAPA.negociacao) };
+    case ETAPA.prospeccao: return { botao: 'Avançar → Visita', destino: ETAPA.visita, nota: pede(ETAPA.visita) };
+    case ETAPA.visita: return { botao: 'Avançar → Decisor', destino: ETAPA.decisor, nota: pede(ETAPA.decisor) };
+    case ETAPA.decisor: return { botao: 'Avançar → Demo', destino: ETAPA.demo, nota: pede(ETAPA.demo) };
+    case ETAPA.demo: return { botao: 'Avançar → Negociação', destino: ETAPA.negociacao, nota: pede(ETAPA.negociacao) };
     case ETAPA.negociacao: return { botao: 'Emitir cobrança', destino: ETAPA.pagamento, nota: 'O Asaas pede os dados do contrato' };
     case ETAPA.pagamento: return { botao: null, destino: null, nota: 'Cobrança emitida · dados travados até o Pago · sem pagar em 2 dias, o gestor é avisado' };
     case ETAPA.ganho: return { botao: 'Enviar para onboarding', destino: ETAPA.onboarding, nota: 'Pago · o Asaas confirmou' };
