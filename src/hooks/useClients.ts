@@ -280,6 +280,21 @@ export function useClients(
     enabled: callerEnabled && isAuthenticated && (isViewer || visibilityQuery.isFetched),
   });
 
+  // SALVAR NAO ESPERA A BASE RECARREGAR (26/09/2026). O onSuccess devolvia a
+  // promessa do invalidateQueries, e o mutateAsync so' resolvia depois do
+  // refetch inteiro: "Salvando..." por 10 s no cadastro (a base do gestor sao
+  // ~9 mil linhas). Agora a linha gravada entra direto no cache e o refetch
+  // corre por baixo, sem ninguem esperar.
+  const mexerNoCache = (fn: (lista: Client[]) => Client[]) => {
+    queryClient.setQueriesData<Client[]>({ queryKey: ['clients'] }, (lista) => (lista ? fn(lista) : lista));
+  };
+  const trocarNoCache = (c: Client) => mexerNoCache((lista) => {
+    const i = lista.findIndex((x) => x.id === c.id);
+    if (i < 0) return [...lista, c];
+    const nova = lista.slice(); nova[i] = { ...lista[i], ...c }; return nova;
+  });
+  const recarregarPorBaixo = () => { void queryClient.invalidateQueries({ queryKey: ['clients'] }); };
+
   const addClient = useMutation({
     mutationFn: async (form: ClientFormData) => {
       const insertPayload: Record<string, unknown> = {
@@ -346,6 +361,10 @@ export function useClients(
           const urlHubspot = (asObj?.url_hubspot ?? asObj?.url ?? null) as string | null;
           const updatePayload: Record<string, unknown> = { id_hubspot: String(idHubspot) };
           if (urlHubspot) updatePayload.url_hubspot = urlHubspot;
+          // O create_pin sempre abre o negocio em Prospeccao (CREATE_PIN_STAGE_ID
+          // da hubspot-sync). Sem gravar aqui, o lead ficava sem etapa — fora do
+          // funil no app e no Cockpit — ate' a sincronizacao da noite.
+          if (!client.etapa) updatePayload.etapa = 'Prospecção';
           const { error: updErr } = await supabase
             .from('clients')
             .update(updatePayload)
@@ -354,6 +373,7 @@ export function useClients(
             console.warn('[WEBHOOK] update id_hubspot falhou:', updErr.message);
             return false;
           }
+          trocarNoCache({ ...client, ...(updatePayload as Partial<Client>) });
           return true;
         };
 
@@ -382,8 +402,8 @@ export function useClients(
           if (!applied) {
             // Resposta sem id (ex.: fallback n8n sem corpo) — confirma pelo banco.
             await pollIdFromDb();
+            recarregarPorBaixo();
           }
-          queryClient.invalidateQueries({ queryKey: ['clients'] });
         } catch (err) {
           // Erro ambiguo: a edge pode ter criado o deal e gravado o id. Confirma
           // pelo banco antes de dar por perdido (nao reenvia — evita duplicar).
@@ -393,9 +413,10 @@ export function useClients(
         }
       })();
 
+      trocarNoCache(client);
       return client;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
+    onSuccess: recarregarPorBaixo,
   });
 
   const updateClient = useMutation({
@@ -492,17 +513,19 @@ export function useClients(
         }
       }
 
+      trocarNoCache(client);
       return client;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
+    onSuccess: recarregarPorBaixo,
   });
 
   const deleteClient = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('clients').delete().eq('id', id);
       if (error) throw error;
+      mexerNoCache((lista) => lista.filter((x) => x.id !== id));
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
+    onSuccess: recarregarPorBaixo,
   });
 
   const markAsVisited = useMutation({
@@ -848,7 +871,7 @@ export function useClients(
         .eq('id', clientId);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
+    onSuccess: recarregarPorBaixo,
   });
 
   /** Reenvia um lead que nao chegou ao HubSpot.
