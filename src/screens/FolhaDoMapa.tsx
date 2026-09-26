@@ -5,7 +5,7 @@
 // (ou da quadra), por Prioridade (plano › cobrança › quente › morno ›
 // distância) ou Distância. O mapa é o produto: em repouso ele fica com ~73%.
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { Client } from '../types/client';
 import { Toast } from '../components/Toast';
@@ -77,6 +77,54 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
   const [modo, setModo] = useState<'prioridade' | 'distancia'>('prioridade');
   const ordenados = useMemo(() => ordenarItens(itens, modo), [itens, modo]);
   const proxima = useMemo(() => ordenarItens(itens, 'prioridade').find((it) => it.plano && !it.feito) ?? null, [itens]);
+  // Arrastar a pílula para cima abre a lista da área (handoff v4.1, xama1).
+  const arrasto = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 12 && Math.abs(g.dy) > Math.abs(g.dx),
+    onPanResponderRelease: (_e, g) => { if (g.dy < -30) setAberta(true); },
+  }), []);
+  const medir = (e: { nativeEvent: { layout: { y: number; height: number } } }) => {
+    // No navegador o evento traz o próprio elemento: o topo vem na régua da TELA.
+    const alvo = (e.nativeEvent as unknown as { target?: { getBoundingClientRect?: () => DOMRect } }).target;
+    const topo = alvo?.getBoundingClientRect ? alvo.getBoundingClientRect().top : e.nativeEvent.layout.y;
+    aoMedir?.({ y: Math.round(topo), altura: Math.round(e.nativeEvent.layout.height) + 8 });
+  };
+
+  // PÍLULA DA PRÓXIMA PORTA (handoff v4.1 revisado, xama1): a folha espiada de
+  // 88 px + rodapé de 90 px eram 178 px de faixa sólida (21% da tela). A pílula
+  // flutua a 8 px do rodapé, tem 60 px e nenhum rótulo: nome e distância, o
+  // progresso em tracinhos e o Cheguei. "Dono às 15h" e "decisor ?" já estão na
+  // etiqueta do pino, não se repetem aqui.
+  if (!aberta) {
+    const meta = Math.max(1, metaVisitas);
+    return (
+      <View style={[s.pilula, { bottom: chao + 8 }]} accessibilityLabel="Próxima porta" onLayout={medir} {...arrasto.panHandlers}>
+        {proxima ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${proxima.c.empresa?.trim() || proxima.c.nome}`} onPress={() => onAbrir(proxima.c)} style={s.pilulaTexto}>
+            <Text style={s.pilulaNome} numberOfLines={1}>{proxima.c.empresa?.trim() || proxima.c.nome}</Text>
+            <Text style={s.pilulaSub} numberOfLines={1}>{[distanciaTexto(proxima.distanciaM), aPe(proxima.distanciaM)].filter(Boolean).join(' · ') || 'toque para ver o lead'}</Text>
+          </Pressable>
+        ) : (
+          <Pressable accessibilityRole="button" accessibilityLabel="Abrir a lista desta área" onPress={() => setAberta(true)} style={s.pilulaTexto}>
+            <Text style={s.pilulaNome} numberOfLines={1}>{planoTotal ? `Plano de hoje concluído · ${planoFeito} de ${planoTotal}` : 'Nada planejado hoje no Cockpit'}</Text>
+            <Text style={s.pilulaSub} numberOfLines={1}>{`${totalNaArea} na área · toque para ver a lista`}</Text>
+          </Pressable>
+        )}
+        <Pressable accessibilityRole="button" accessibilityLabel={`${visitasFeitas} de ${meta} visitas hoje`} onPress={aoProgresso} style={s.pilulaProgresso} hitSlop={6}>
+          <Text style={s.pilulaConta}>{`${visitasFeitas}/${meta}`}</Text>
+          <View style={s.tracos}>{Array.from({ length: Math.min(meta, 8) }, (_, k) => <View key={k} style={[s.traco, k < visitasFeitas && s.tracoFeito]} />)}</View>
+        </Pressable>
+        {proxima ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Cheguei na próxima porta" onPress={() => onCheguei(proxima.c)} style={s.pilulaCheguei}>
+            <Text style={s.btnChegueiTexto}>Cheguei</Text>
+          </Pressable>
+        ) : (
+          <Pressable accessibilityRole="button" accessibilityLabel="Abrir a lista desta área" onPress={() => setAberta(true)} style={s.pilulaLista}>
+            <Text style={s.pilulaListaTexto}>Lista</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={[s.folha, { bottom: chao }]} accessibilityLabel="Agora, perto de você" onLayout={(e) => {
@@ -186,6 +234,23 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
 }
 
 const s = StyleSheet.create({
+  pilula: {
+    position: 'absolute', left: 10, right: 10, zIndex: 20, height: 60, borderRadius: 18,
+    flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 14, paddingRight: 6,
+    backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)',
+    shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 18, shadowOffset: { width: 0, height: 6 }, elevation: 10,
+  },
+  pilulaTexto: { flex: 1, minWidth: 0, justifyContent: 'center', minHeight: 48 },
+  pilulaNome: { fontSize: 15, fontWeight: '600', color: 'var(--text)' },
+  pilulaSub: { fontSize: 12, fontWeight: '500', color: 'var(--text-muted)', marginTop: 1 },
+  pilulaProgresso: { alignItems: 'center', gap: 4, paddingHorizontal: 2, minHeight: 44, justifyContent: 'center' },
+  pilulaConta: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
+  tracos: { flexDirection: 'row', gap: 2 },
+  traco: { width: 5, height: 4, borderRadius: 1, backgroundColor: 'var(--stroke-strong)' },
+  tracoFeito: { backgroundColor: '#E51A31' },
+  pilulaCheguei: { height: 48, paddingHorizontal: 18, borderRadius: 13, backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  pilulaLista: { height: 48, paddingHorizontal: 16, borderRadius: 13, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  pilulaListaTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
   folha: {
     position: 'absolute', left: 0, right: 0, zIndex: 20,
     backgroundColor: 'var(--surface)', borderTopLeftRadius: 22, borderTopRightRadius: 22,
