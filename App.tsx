@@ -1062,7 +1062,7 @@ function MainApp() {
   // gestor tem linha la', migration 0096; gestor novo entra la' tambem).
   const naEquipeCockpit = useNaEquipeCockpit();
   const verGestao = !isViewer && naEquipeCockpit;
-  // Mapa novo (prancha): ligado por `?mapa=novo`, lembrado no aparelho. Sem o
+  // Mapa novo: padrão no celular desde 26/09 (useMapaNovo; `?mapa=antigo` sai). Sem o
   // contexto carregado ainda, o mapa segue com o pino atual — nunca um pino
   // pela metade.
   const mapaNovo = useMapaNovo();

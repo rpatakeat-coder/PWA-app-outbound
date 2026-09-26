@@ -1,9 +1,10 @@
 // Mapa novo (prancha "mapa comercial"): a chave que liga, e o que o pino P2
 // precisa além do lead.
 //
-// A chave é opt-in enquanto o Julyan aprova: `?mapa=novo` na URL liga e fica
-// lembrado no aparelho; `?mapa=antigo` volta. Assim o mapa novo vive ao lado
-// do atual, no mesmo app, sem tirar nada de quem está na rua.
+// PADRÃO NO CELULAR desde 26/09/2026 (decisão do Julyan): o mapa novo abre
+// sozinho em tela de celular. `?mapa=antigo` é a saída de emergência e fica
+// lembrada no aparelho; `?mapa=novo` desfaz a saída. No computador o padrão
+// continua o antigo (o redesenho v4.1 é de celular) e `?mapa=novo` liga.
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -13,14 +14,18 @@ import { ouvirFila, type ItemFila } from '../utils/filaOffline';
 import type { ContextoPino, TempoDoNegocio } from '../utils/pinoP2';
 
 const CHAVE = 'takeat-mapa-novo';
+const CHAVE_ANTIGO = 'takeat-mapa-antigo';
+const LARGURA_CELULAR = 768;
 
 function lerChave(): boolean {
   try {
     if (typeof window === 'undefined') return false;
     const q = new URLSearchParams(window.location.search).get('mapa');
-    if (q === 'novo') window.localStorage.setItem(CHAVE, '1');
-    if (q === 'antigo') window.localStorage.removeItem(CHAVE);
-    return window.localStorage.getItem(CHAVE) === '1';
+    if (q === 'novo') { window.localStorage.setItem(CHAVE, '1'); window.localStorage.removeItem(CHAVE_ANTIGO); }
+    if (q === 'antigo') { window.localStorage.removeItem(CHAVE); window.localStorage.setItem(CHAVE_ANTIGO, '1'); }
+    if (window.localStorage.getItem(CHAVE_ANTIGO) === '1') return false;
+    if (window.localStorage.getItem(CHAVE) === '1') return true;
+    return window.innerWidth < LARGURA_CELULAR;
   } catch {
     return false;
   }
