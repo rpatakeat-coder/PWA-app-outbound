@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   TextInput,
@@ -129,6 +129,17 @@ export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial }: CEPStep
       setLoading(false);
     }
   };
+
+  // Busca sozinha ao completar os 8 digitos (26/09/2026): na rua, com uma mao,
+  // "digitar e ainda tocar em Buscar" era um passo a mais em todo cadastro.
+  // Uma vez por CEP — corrigir um digito busca de novo; o botao continua la'.
+  const ultimoCepBuscado = useRef('');
+  useEffect(() => {
+    const limpo = cep.replace(/\D/g, '');
+    if (limpo.length !== 8 || limpo === ultimoCepBuscado.current || loading) return;
+    ultimoCepBuscado.current = limpo;
+    void searchCEP();
+  }, [cep]);
 
   const submitCEP = async () => {
     if (!cepData) return;
