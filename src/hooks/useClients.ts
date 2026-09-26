@@ -200,16 +200,14 @@ export function useClients(
       // PostgREST capa em 1000 linhas por padrão. Pagina em blocos pra trazer
       // todos os clientes do setor sem precisar mexer no max-rows do servidor.
       const PAGE_SIZE = 1000;
-      const all: any[] = [];
-      let from = 0;
-      while (true) {
-        // ORDER BY estavel e OBRIGATORIO com paginacao por .range(): sem ele o
-        // PostgREST/Postgres nao garante a mesma ordem entre as paginas, entao
-        // linhas na fronteira (ex.: registro ~2815 de ~5k, 5 paginas) podem ser
-        // PULADAS ou duplicadas — o lead "some" da lista de forma intermitente.
+      // Monta a consulta de UMA pagina. ORDER BY estavel e OBRIGATORIO com
+      // paginacao por .range(): sem ele o PostgREST/Postgres nao garante a
+      // mesma ordem entre as paginas, entao linhas na fronteira podem ser
+      // PULADAS ou duplicadas — o lead "some" da lista de forma intermitente.
+      const pagina = (from: number, contar: boolean) => {
         let q = supabase
           .from('clients')
-          .select(CLIENT_LIST_COLUMNS)
+          .select(CLIENT_LIST_COLUMNS, contar ? { count: 'exact' } : undefined)
           .order('id', { ascending: true })
           .range(from, from + PAGE_SIZE - 1);
 
@@ -239,13 +237,36 @@ export function useClients(
             .gte('longitude', bbox.lonMin)
             .lte('longitude', bbox.lonMax);
         }
+        return q;
+      };
 
-        const { data, error } = await q;
-        if (error) throw error;
-        const batch = data ?? [];
-        all.push(...batch);
-        if (batch.length < PAGE_SIZE) break;
-        from += PAGE_SIZE;
+      // PAGINAS EM PARALELO (26/09/2026). A base inteira sao ~9 mil linhas; o
+      // laco antigo pedia uma pagina so' depois da anterior chegar e o app
+      // ficava 12 s em "Carregando..." com a rede ociosa. Agora a primeira
+      // pagina traz o total e as demais saem todas juntas: ~3 s.
+      const primeira = await pagina(0, true);
+      if (primeira.error) throw primeira.error;
+      const all: any[] = [...(primeira.data ?? [])];
+      const total = primeira.count ?? all.length;
+      if (all.length === PAGE_SIZE && total > PAGE_SIZE) {
+        const inicios: number[] = [];
+        for (let from = PAGE_SIZE; from < total; from += PAGE_SIZE) inicios.push(from);
+        const resto = await Promise.all(inicios.map((from) => pagina(from, false)));
+        for (const r of resto) {
+          if (r.error) throw r.error;
+          all.push(...(r.data ?? []));
+        }
+        // Se entrou linha entre a contagem e as paginas, a ultima vem cheia:
+        // continua em serie ate' vir uma pagina curta (o comportamento antigo).
+        let from = PAGE_SIZE * (inicios.length + 1);
+        let cheia = (resto[resto.length - 1]?.data ?? []).length === PAGE_SIZE;
+        while (cheia) {
+          const r = await pagina(from, false);
+          if (r.error) throw r.error;
+          all.push(...(r.data ?? []));
+          cheia = (r.data ?? []).length === PAGE_SIZE;
+          from += PAGE_SIZE;
+        }
       }
       return all.map(mapRow);
     },
