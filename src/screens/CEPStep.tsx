@@ -54,6 +54,8 @@ type DadosCep = {
 };
 
 interface CEPStepProps {
+  /** Posição do GPS agora: habilita "Estou aqui" (handoff v4.1 §6.8 — na rua, o executivo está na porta). */
+  posicaoAtual?: { latitude: number; longitude: number } | null;
   onNext: (data: Partial<ClientFormData> & {
     latitude?: number | null;
     longitude?: number | null;
@@ -75,7 +77,7 @@ interface CEPStepProps {
 
 type Mode = 'cep' | 'coords';
 
-export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial }: CEPStepProps) {
+export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial, posicaoAtual = null }: CEPStepProps) {
   const layout = useLayout();
   const iconColors = useIconColors();
   // O passo 1 do M9 E' o CEP: a antiga tela "Como deseja cadastrar?" deixou de
@@ -196,6 +198,30 @@ export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial }: CEPStep
   };
 
   // ---- Coords Flow ----
+  // "Estou aqui": o GPS de agora vira o endereço, e segue para o formulário.
+  const usarPosicaoAtual = async () => {
+    if (!posicaoAtual) return;
+    Keyboard.dismiss();
+    setLoading(true);
+    try {
+      const addr = await reverseGeocode(posicaoAtual.latitude, posicaoAtual.longitude);
+      onNext({
+        latitude: posicaoAtual.latitude,
+        longitude: posicaoAtual.longitude,
+        endereco: addr?.endereco || '',
+        numero: addr?.numero || '',
+        cidade: addr?.cidade || '',
+        estado: addr?.estado || '',
+        cep: addr?.cep ? `${addr.cep.slice(0, 5)}-${addr.cep.slice(5)}` : '',
+        bairro: addr?.bairro || '',
+      });
+    } catch {
+      onNext({ latitude: posicaoAtual.latitude, longitude: posicaoAtual.longitude });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const submitCoords = async () => {
     const lat = parseFloat(latitude.replace(',', '.'));
     const lng = parseFloat(longitude.replace(',', '.'));
@@ -358,6 +384,26 @@ export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial }: CEPStep
               </TouchableOpacity>
             </View>
 
+            {/* --- Estou aqui (primário na rua) --- */}
+            {!!posicaoAtual && !cepData && (
+              <>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Estou aqui: usar a posição do GPS"
+                  onPress={usarPosicaoAtual}
+                  disabled={loading}
+                  style={estilos.estouAqui}
+                >
+                  {loading ? <ActivityIndicator color="#fff" /> : (
+                    <>
+                      <Text style={estilos.estouAquiTexto}>Estou aqui</Text>
+                      <Text style={estilos.estouAquiSub}>usa o GPS e preenche o endereço</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <Text style={estilos.ou}>ou pelo CEP</Text>
+              </>
+            )}
             {/* --- Campo CEP --- */}
             {campo(
               'cep',
@@ -535,6 +581,10 @@ export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial }: CEPStep
 
 // ===== Estilos do M9 (passo 1) =====
 const estilos = StyleSheet.create({
+  estouAqui: { minHeight: 56, borderRadius: 16, backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
+  estouAquiTexto: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  estouAquiSub: { fontSize: 12, fontWeight: '500', color: 'rgba(255,255,255,.85)', marginTop: 1 },
+  ou: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)', textAlign: 'center', marginVertical: 2 },
   folha: {
     backgroundColor: 'var(--surface)',
     borderTopLeftRadius: 16,

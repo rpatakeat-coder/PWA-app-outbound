@@ -826,6 +826,27 @@ function MainApp() {
   const [isPickingVendor, setIsPickingVendor] = useState(false);
   const [expandedStages, setExpandedStages] = useState<Set<string>>(() => new Set());
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  // PARECIDOS AO DIGITAR (handoff v4.1 §6.8): no cadastro novo, a checagem de
+  // duplicado roda enquanto o executivo digita (0,7 s depois da última tecla),
+  // não só no Salvar. Nome parecido, mesmo telefone ou a menos de 50 m: a
+  // faixa já existente aparece com "Abrir" e "Não, é outro". Visto o aviso, o
+  // Salvar não pergunta de novo.
+  useEffect(() => {
+    if (!isFormOpen || editingClient) return;
+    const lat = form.latitude ? parseFloat(form.latitude) : NaN;
+    const lng = form.longitude ? parseFloat(form.longitude) : NaN;
+    const temNome = (form.empresa ?? '').trim().length >= 3;
+    const temTel = (form.telefone ?? '').replace(/[^0-9]/g, '').length >= 10;
+    if ((!temNome && !temTel) || isNaN(lat) || isNaN(lng)) return;
+    const id = setTimeout(() => {
+      buscarLeadsParecidos({ empresa: form.empresa || null, nome: form.nome, telefone: form.telefone || null, latitude: lat, longitude: lng })
+        .then((achados) => {
+          if (achados.length) { setParecidosEncontrados(achados); jaAvisei.current = true; }
+        })
+        .catch(() => { /* cortesia: sem rede, o Salvar confere */ });
+    }, 700);
+    return () => clearTimeout(id);
+  }, [isFormOpen, editingClient, form.empresa, form.telefone, form.latitude, form.longitude]);
   // Modal que explica as regras de geracao automatica de tarefas (botao "ⓘ"
   // no cabecalho da aba Tarefas).
   const [isTaskRulesOpen, setIsTaskRulesOpen] = useState(false);
@@ -7679,6 +7700,7 @@ function MainApp() {
       {/* CEP Step Modal */}
       {showCepStep && (
         <CEPStep
+          posicaoAtual={userLocation}
           onNext={(cepData) => {
             setForm(prev => ({
               ...prev,
@@ -7903,9 +7925,13 @@ function MainApp() {
                       </TouchableOpacity>
                     </View>
                   ))}
-                  <Text style={[styles.m9FaixaAvisoTexto, { marginTop: 8, opacity: 0.8 }]}>
-                    Se for outra unidade, toque em “Salvar lead” de novo para cadastrar assim mesmo.
-                  </Text>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={[styles.m9ParecidoBotao, { alignSelf: 'flex-start', marginTop: 8 }]}
+                    onPress={() => { setParecidosEncontrados([]); jaAvisei.current = true; }}
+                  >
+                    <Text style={styles.m9ParecidoBotaoTexto}>Não, é outro</Text>
+                  </TouchableOpacity>
                 </View>
               )}
 
