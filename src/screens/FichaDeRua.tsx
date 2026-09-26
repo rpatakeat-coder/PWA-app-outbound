@@ -23,6 +23,7 @@ import {
   type Ficha,
 } from '../utils/fichaDeRua';
 import { ehRecusa, negocioAcao } from '../utils/negocioAcao';
+import { supabase } from '../integrations/supabase/client';
 
 export type CamposCadastro = { empresa?: string; telefone?: string; categoria?: string };
 
@@ -46,7 +47,7 @@ type Props = {
 };
 
 type Resultado = { rotulo: string; estado: 'ok' | 'fila' | 'falhou' | 'pulado'; detalhe?: string };
-type Envio = { corpo: Record<string, unknown>; rotulo: string; etapa?: string };
+type Envio = { corpo: Record<string, unknown>; rotulo: string; etapa?: string; rota?: 'hubspot-sync' };
 
 const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
 const diaMes = (iso: string) => iso.split('-').reverse().slice(0, 2).join('/');
@@ -107,6 +108,17 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   }
 
   async function enviar(e: Envio, lista: Resultado[]): Promise<boolean> {
+    if (e.rota === 'hubspot-sync') {
+      try {
+        const { error } = await supabase.functions.invoke('hubspot-sync', { body: e.corpo });
+        if (error) throw error;
+        lista.push({ rotulo: e.rotulo, estado: 'ok' });
+        return true;
+      } catch (err) {
+        lista.push({ rotulo: e.rotulo, estado: 'falhou', detalhe: String((err as Error)?.message ?? err) });
+        return false;
+      }
+    }
     try {
       await negocioAcao(e.corpo);
       lista.push({ rotulo: e.rotulo, estado: 'ok' });
@@ -149,7 +161,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
       if (!p) return;
       clearTimeout(p.timer);
       pendente.current = null;
-      for (const e of p.envios) void enfileirar({ acaoId: novoAcaoId(), tipo: 'negocio', rotulo: `${e.rotulo} · ${nome}`, payload: { corpo: e.corpo } });
+      for (const e of p.envios) if (!e.rota) void enfileirar({ acaoId: novoAcaoId(), tipo: 'negocio', rotulo: `${e.rotulo} · ${nome}`, payload: { corpo: e.corpo } });
     };
     window.addEventListener('pagehide', aoSair);
     return () => window.removeEventListener('pagehide', aoSair);
@@ -177,6 +189,19 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
             ...(Object.keys(qualificacao).length ? { qualificacao } : {}),
           },
           rotulo: `${passo.tipo === 'reuniao' ? 'Reunião' : 'Próximo passo'} em ${diaMes(passo.data)}`,
+        });
+      }
+      // Colheita nova (handoff v4.1 decisões 14–15): quem decide vira contato
+      // do negócio e o melhor horário vai para a propriedade do HubSpot.
+      const horarioHs = HORARIOS.find((h) => h.valor === f.horario)?.hs;
+      if (horarioHs) {
+        envios.push({ rota: 'hubspot-sync', corpo: { type: 'qualificar', id_hubspot: dealId, propriedades: { melhor_horario_do_decisor: horarioHs } }, rotulo: 'Melhor horário do decisor' });
+      }
+      if (f.decisor.trim()) {
+        envios.push({
+          rota: 'hubspot-sync',
+          corpo: { type: 'decisor', id_hubspot: dealId, nome: f.decisor.trim(), papel: f.papel ?? undefined, celular: (f.telefone || client.telefone || '').trim() || undefined, owner_id: client.vendedor_id_hubspot ?? undefined },
+          rotulo: 'Quem decide no negócio',
         });
       }
       if (sugerida && f.moverEtapa) {

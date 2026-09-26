@@ -86,6 +86,17 @@ ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
   ok(HORARIOS.length === 4, 'quatro faixas de horário');
 }
 
+// ---- horário: os valores do app são os que a hubspot-sync aceita ----
+{
+  // eslint-free: o teste roda com o cwd na raiz do repositório
+  const fs = require('fs');
+  const edge = fs.readFileSync('supabase/functions/hubspot-sync/index.ts', 'utf8');
+  const i = edge.indexOf('HORARIOS_DECISOR = new Set([');
+  const trecho = i >= 0 ? edge.slice(i, edge.indexOf('])', i)) : '';
+  const aceitos = (trecho.match(/'([^']*)'/g) ?? []).map((x: string) => x.slice(1, -1));
+  ok(aceitos.length === 4 && HORARIOS.every((h) => aceitos.includes(h.hs)), 'os 4 horários do app são os valores aceitos pela hubspot-sync');
+}
+
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);
   process.exit(1);

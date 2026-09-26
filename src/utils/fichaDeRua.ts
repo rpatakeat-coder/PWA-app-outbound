@@ -57,13 +57,14 @@ export function opcoesAgora(comoFoi: Desfecho | null): OpcaoAgora[] {
   }
 }
 
-// Melhor horário para achar quem decide (propriedade melhor_horario_decisor).
-// O foodservice tem relógio próprio: o dono não atende no rush.
+// Melhor horário para achar quem decide. O foodservice tem relógio próprio:
+// o dono não atende no rush. `hs` é o valor interno da propriedade
+// melhor_horario_do_decisor que o Julyan criou no HubSpot (26/09/2026).
 export const HORARIOS = [
-  { valor: 'cedo_antes_10h', rotulo: 'Cedo, antes das 10h', curto: 'antes das 10h' },
-  { valor: '10h_11h30', rotulo: '10h–11h30', curto: '10h–11h30' },
-  { valor: '14h30_17h30', rotulo: '14h30–17h30', curto: '14h30–17h30' },
-  { valor: 'noite_apos_17h', rotulo: 'Noite, após 17h', curto: 'após 17h' },
+  { valor: 'cedo_antes_10h', rotulo: 'Cedo, antes das 10h', curto: 'antes das 10h', hs: 'Cedo, antes das 10' },
+  { valor: '10h_11h30', rotulo: '10h–11h30', curto: '10h–11h30', hs: '10-11:30' },
+  { valor: '14h30_17h30', rotulo: '14h30–17h30', curto: '14h30–17h30', hs: '14:30-17:30' },
+  { valor: 'noite_apos_17h', rotulo: 'Noite, após 17h', curto: 'após 17h', hs: 'Noite, após as 17' },
 ] as const;
 export type HorarioDecisor = (typeof HORARIOS)[number]['valor'];
 

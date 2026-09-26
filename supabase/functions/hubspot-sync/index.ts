@@ -381,7 +381,11 @@ async function handleUpdate(token: string, body: Record<string, unknown>) {
 // veio. PATCH com '' APAGA a propriedade no HubSpot, entao uma chamada parcial
 // por aquela rota limparia dealname, celular, cep e endereco do negocio. A
 // rota de la' so' e' segura porque quem chama manda o cadastro inteiro.
-const QUALIFICACAO_PERMITIDA = new Set(['nome_do_sistema', 'gargalo_operacional']);
+const QUALIFICACAO_PERMITIDA = new Set(['nome_do_sistema', 'gargalo_operacional', 'melhor_horario_do_decisor']);
+
+// Melhor horário para achar quem decide (propriedade criada pelo Julyan em
+// 26/09/2026; valores internos conferidos na definição do HubSpot).
+const HORARIOS_DECISOR = new Set(['Cedo, antes das 10', '10-11:30', '14:30-17:30', 'Noite, após as 17']);
 
 // Enumeracao do HubSpot. Valor fora da lista volta como erro cru da API, que o
 // vendedor na rua leria como "deu erro" sem saber o que corrigir.
@@ -412,6 +416,14 @@ async function handleQualificar(token: string, body: Record<string, unknown>) {
     if (valor) properties[k] = valor;
   }
 
+  const horario = properties.melhor_horario_do_decisor;
+  if (typeof horario === 'string' && !HORARIOS_DECISOR.has(horario)) {
+    return json(400, {
+      error: 'melhor_horario_do_decisor invalido',
+      detail: `aceitos: ${[...HORARIOS_DECISOR].join(', ')}`,
+    });
+  }
+
   const gargalo = properties.gargalo_operacional;
   if (typeof gargalo === 'string' && !GARGALOS_VALIDOS.has(gargalo)) {
     return json(400, {
@@ -433,6 +445,78 @@ async function handleQualificar(token: string, body: Record<string, unknown>) {
   }
 
   return json(200, { ok: true, id_hubspot: idHubspot, gravadas: Object.keys(properties) });
+}
+
+// ===== decisor =====
+// Quem decide vira CONTATO associado ao negócio (handoff App de Campo v4.1,
+// decisão 14). É o mesmo contato que o RPA do Asaas procura para mandar o
+// link — por isso não se cria contato à toa:
+//   1. contato já associado com o mesmo nome → só atualiza papel e celular;
+//   2. contato com o mesmo celular (qualquer negócio) → associa esse;
+//   3. senão, cria e associa.
+// Nunca renomeia o contato que já está no negócio: se o nome é outro, é outra
+// pessoa (o cadastro pode ter o gerente e a visita achou o dono).
+const PAPEIS_DECISOR = new Set(['Dono', 'Gerente']);
+const soDigitosTel = (v: unknown) => str(v).replace(/[^0-9]/g, '');
+const mesmoNome = (a: unknown, b: unknown) =>
+  str(a).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() ===
+  str(b).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+async function handleDecisor(token: string, body: Record<string, unknown>) {
+  const idHubspot = trimOrNull(body.id_hubspot);
+  const nome = trimOrNull(body.nome);
+  if (!idHubspot || !nome) return json(400, { error: 'id_hubspot e nome sao obrigatorios' });
+  const papel = trimOrNull(body.papel);
+  if (papel && !PAPEIS_DECISOR.has(papel)) return json(400, { error: 'papel invalido', detail: 'aceitos: Dono, Gerente' });
+  const celular = trimOrNull(body.celular);
+  const props: Record<string, string> = { firstname: nome };
+  if (papel) props.jobtitle = papel;
+  if (celular) props.phone = celular;
+
+  // 1) contatos já no negócio
+  const assoc = await hsFetch(token, 'GET', `/crm/v4/objects/deals/${idHubspot}/associations/contacts`);
+  const ids = ((assoc.body?.results ?? []) as { toObjectId?: string | number }[]).map((r) => String(r.toObjectId ?? '')).filter(Boolean);
+  if (ids.length) {
+    const lidos = await hsFetch(token, 'POST', '/crm/v3/objects/contacts/batch/read', {
+      properties: ['firstname', 'lastname', 'phone'], inputs: ids.map((id) => ({ id })),
+    });
+    const igual = ((lidos.body?.results ?? []) as { id: string; properties?: Record<string, string> }[])
+      .find((c) => mesmoNome(`${c.properties?.firstname ?? ''} ${c.properties?.lastname ?? ''}`, nome) || mesmoNome(c.properties?.firstname, nome));
+    if (igual) {
+      const upd: Record<string, string> = {};
+      if (papel) upd.jobtitle = papel;
+      if (celular) upd.phone = celular;
+      if (Object.keys(upd).length) await hsFetch(token, 'PATCH', `/crm/v3/objects/contacts/${igual.id}`, { properties: upd });
+      return json(200, { ok: true, contact_id: igual.id, acao: 'atualizado' });
+    }
+  }
+
+  // 2) mesmo celular em outro contato
+  let contactId: string | null = null;
+  const digitos = soDigitosTel(celular);
+  if (digitos.length >= 10) {
+    const busca = await hsFetch(token, 'POST', '/crm/v3/objects/contacts/search', {
+      filterGroups: [{ filters: [{ propertyName: 'phone', operator: 'CONTAINS_TOKEN', value: `*${digitos.slice(-8)}` }] }],
+      properties: ['firstname', 'phone'], limit: 5,
+    });
+    const achado = ((busca.body?.results ?? []) as { id: string; properties?: Record<string, string> }[])
+      .find((c) => soDigitosTel(c.properties?.phone).endsWith(digitos.slice(-8)));
+    if (achado) contactId = achado.id;
+  }
+
+  // 3) cria
+  let acao = 'associado';
+  if (!contactId) {
+    const owner = trimOrNull(body.owner_id);
+    const novo = await hsFetch(token, 'POST', '/crm/v3/objects/contacts', { properties: { ...props, ...(owner ? { hubspot_owner_id: owner } : {}) } });
+    contactId = trimOrNull(novo.body?.id) ?? novo.body?.message?.match(/Existing ID:\s*(\d+)/)?.[1] ?? null;
+    if (!contactId) return json(502, { error: 'HubSpot recusou o contato', detail: novo.body?.message ?? `status ${novo.status}` });
+    acao = 'criado';
+  }
+  const ligou = await hsFetch(token, 'PUT', `/crm/v4/objects/deals/${idHubspot}/associations/contacts/${contactId}`,
+    [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: ASSOC_DEAL_TO_CONTACT }]);
+  if (!ligou.ok) return json(502, { error: 'HubSpot recusou ligar o contato ao negocio', detail: ligou.body?.message ?? `status ${ligou.status}` });
+  return json(200, { ok: true, contact_id: contactId, acao });
 }
 
 // ===== list_tasks =====
@@ -1005,6 +1089,8 @@ Deno.serve(async (req: Request) => {
         return await handleQualificar(token, body);
       case 'list_tasks':
         return await handleListTasks(token, body);
+      case 'decisor':
+        return await handleDecisor(token, body);
       case 'deal_names':
         return await handleDealNames(token, body);
       case 'deal_stage':
