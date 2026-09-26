@@ -1702,6 +1702,34 @@ function MainApp() {
     [filteredClients]
   );
 
+  // BUSCA LEVA O MAPA ATE' O ACHADO (26/09/2026). A busca so' filtrava: se o
+  // lead procurado estava fora da tela, o executivo digitava e nao via nada.
+  // Agora, depois de uma pausa na digitacao, se nenhum achado esta' na tela o
+  // mapa enquadra os achados; achado unico, o mapa vai ate' ele e abre o cartao.
+  const buscaEnquadrada = useRef('');
+  useEffect(() => {
+    if (!modoNovo || !searchTerm || buscando || buscaEnquadrada.current === searchTerm) return;
+    const achados = filteredWithCoords.slice(0, 40);
+    if (!achados.length) return;
+    const id = setTimeout(() => {
+      buscaEnquadrada.current = searchTerm;
+      const mapa = mapRef.current;
+      if (!mapa) return;
+      const pontos = achados.map((c) => ({ latitude: Number(c.latitude), longitude: Number(c.longitude) }));
+      const naTela = mapRegion && pontos.some((p) =>
+        Math.abs(p.latitude - mapRegion.latitude) <= mapRegion.latitudeDelta / 2
+        && Math.abs(p.longitude - mapRegion.longitude) <= mapRegion.longitudeDelta / 2);
+      if (achados.length === 1) {
+        mapa.animateToRegion({ ...pontos[0], latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);
+        setSelectedClient(achados[0]);
+        return;
+      }
+      if (naTela) return;
+      mapa.fitToCoordinates(pontos, { edgePadding: { top: 140, right: 60, bottom: 280, left: 60 }, animated: true });
+    }, 700);
+    return () => clearTimeout(id);
+  }, [modoNovo, searchTerm, buscando, filteredWithCoords, mapRegion]);
+
   const routeStops = fieldOps.stops;
   const routeStopClientIds = useMemo(
     () => new Set(routeStops.map(stop => stop.client_id).concat(routeDraft.map(c => c.id))),
