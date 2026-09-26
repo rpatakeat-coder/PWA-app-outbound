@@ -93,15 +93,36 @@ self.addEventListener('fetch', (event) => {
   // Estaticos do proprio dominio (JS/CSS/imagens): stale-while-revalidate —
   // responde na hora do cache e atualiza em segundo plano. E' o que mantem a
   // abertura rapida em 4G ruim.
+  // HTML NO LUGAR DE CÓDIGO (26/09/2026, app em branco medido na produção):
+  // na troca de deploy, um bundle novo pedido a uma borda ainda na versão
+  // antiga cai na reescrita "/(.*) -> /index.html" e volta como HTML com 200 e
+  // o cache "immutable" de 1 ano do /_expo/static. Guardado, o app abria em
+  // branco para sempre — nem a revalidação curava, porque o cache HTTP do
+  // navegador devolvia o mesmo HTML. Agora: código que chega como HTML não é
+  // guardado, o que já estava guardado é apagado, e a busca é refeita pulando
+  // o cache do navegador.
+  const esperaCodigo = req.destination === 'script' || req.destination === 'style' || /\.(m?js|css)$/.test(url.pathname);
+  const ehHtml = (res) => (res.headers.get('content-type') || '').includes('text/html');
+  const valido = (res) => !!res && res.ok && res.type === 'basic' && !(esperaCodigo && ehHtml(res));
+
   event.respondWith(
     caches.open(CACHE).then(async (cache) => {
-      const cached = await cache.match(req);
+      let cached = await cache.match(req);
+      if (cached && esperaCodigo && ehHtml(cached)) {
+        await cache.delete(req);
+        cached = undefined;
+      }
 
       const network = fetch(req)
-        .then((res) => {
+        .then(async (res) => {
           // Só guarda resposta completa e valida. `res.ok` exclui 404/500;
           // type 'basic' exclui opaca (que nao da pra validar).
-          if (res.ok && res.type === 'basic') cache.put(req, res.clone());
+          if (valido(res)) { cache.put(req, res.clone()); return res; }
+          if (esperaCodigo) {
+            const sep = req.url.includes('?') ? '&' : '?';
+            const de_novo = await fetch(req.url + sep + 'sw=' + Date.now(), { cache: 'reload' }).catch(() => null);
+            if (valido(de_novo)) { cache.put(req, de_novo.clone()); return de_novo; }
+          }
           return res;
         })
         .catch(() => null);

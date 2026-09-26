@@ -31,6 +31,6 @@
       "source": "/gestao/:path*",
       "destination": "/gestao/index.html"
     },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!_expo/).*)", "destination": "/index.html" }
   ]
 }

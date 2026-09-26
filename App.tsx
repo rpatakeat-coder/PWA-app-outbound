@@ -490,6 +490,20 @@ const MarkerWithReady = React.memo(
     prev.onPress === next.onPress,
 );
 
+// Abrir os ajustes de localização. Na web (o PWA) Linking.openSettings não
+// existe e o toque dava erro calado: lá, o passo a passo por aparelho.
+function abrirAjustesDeLocalizacao() {
+  if (Platform.OS !== 'web' && typeof (Linking as { openSettings?: unknown }).openSettings === 'function') {
+    void Linking.openSettings();
+    return;
+  }
+  Alert.alert(
+    'Ligar a localização',
+    'iPhone: Ajustes › Privacidade e Segurança › Serviços de Localização › ative, e em Safari (ou no app) escolha "Durante o uso" com Localização Exata.\n\n'
+    + 'Android: Configurações › Localização › ative, e permita a localização para o navegador.',
+  );
+}
+
 // Visitado HOJE em Brasília (selo ✓ do pino P2).
 function visitadoHoje(iso: string | null | undefined): boolean {
   if (!iso) return false;
@@ -2540,7 +2554,7 @@ function MainApp() {
           'Sem permissao de localizacao',
           'Nao conseguimos acessar sua localizacao. Ative a permissao nas configuracoes do sistema para usar a navegacao.',
           [
-            { text: 'Abrir configuracoes', onPress: () => Linking.openSettings() },
+            { text: 'Abrir configuracoes', onPress: () => abrirAjustesDeLocalizacao() },
             { text: 'Cancelar', style: 'cancel', onPress: () => setIsNavigating(false) },
           ],
         );
@@ -3538,7 +3552,7 @@ function MainApp() {
             ...(modoNovo ? [{ text: 'Registrar com foto', valor: 'foto' }] : []),
           ],
         );
-        if (r === 'config') { Linking.openSettings(); return; }
+        if (r === 'config') { abrirAjustesDeLocalizacao(); return; }
         if (r !== 'foto') return;
         fotoProva = await tirarFotoDeProva();
         if (!fotoProva) return;
@@ -3660,7 +3674,7 @@ function MainApp() {
                 ...(modoNovo ? [{ text: 'Registrar com foto', valor: 'foto' }] : []),
               ],
             );
-            if (r === 'config') { Linking.openSettings(); return; }
+            if (r === 'config') { abrirAjustesDeLocalizacao(); return; }
             if (r !== 'foto') return;
             fotoProva = await tirarFotoDeProva();
             if (!fotoProva) return;
@@ -4085,7 +4099,7 @@ function MainApp() {
         </Text>
         <TouchableOpacity
           style={styles.permissionPrimaryButton}
-          onPress={() => Linking.openSettings()}
+          onPress={() => abrirAjustesDeLocalizacao()}
         >
           <Text style={styles.permissionPrimaryButtonText}>Abrir configurações do sistema</Text>
         </TouchableOpacity>
