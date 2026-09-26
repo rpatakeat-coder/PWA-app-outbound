@@ -49,14 +49,14 @@ export default function FolhaBusca({ visivel, aoFechar, busca, aoBuscar, linhas,
             <TextInput
               ref={campo}
               style={s.campoTexto}
-              placeholder="Buscar lead, rua, CNPJ"
+              placeholder="Lead, rua ou bairro"
               placeholderTextColor="#8B919C"
               value={busca}
               onChangeText={aoBuscar}
               returnKeyType="search"
               autoCorrect={false}
               autoCapitalize="none"
-              accessibilityLabel="Buscar lead, rua ou CNPJ"
+              accessibilityLabel="Buscar lead, rua ou bairro"
             />
             {carregando && <ActivityIndicator size="small" color="#AEB4BE" />}
             {busca.length > 0 && !carregando && (

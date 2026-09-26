@@ -1602,7 +1602,7 @@ function MainApp() {
     }
     if (!matchesVisitFilterCom(c.visited_at, f.visitFilter)) return false;
     if (searchTerm) {
-      const haystack = `${c.nome ?? ''} ${c.empresa ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''} ${c.etapa ?? ''}`
+      const haystack = `${c.nome ?? ''} ${c.empresa ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''} ${c.endereco ?? ''} ${c.etapa ?? ''}`
         .normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase();
       if (!haystack.includes(searchTerm)) return false;
     }

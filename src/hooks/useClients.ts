@@ -87,6 +87,7 @@ export function useClientSearch(term: string) {
             `empresa.ilike.${alvo}`,
             `cidade.ilike.${alvo}`,
             `bairro.ilike.${alvo}`,
+            `endereco.ilike.${alvo}`,
           ].join(','),
         )
         // Teto baixo de propósito: é uma lista de sugestões, não um relatório.
