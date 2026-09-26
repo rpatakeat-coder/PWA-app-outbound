@@ -6,7 +6,7 @@
 // com Desfazer de 5 s (src/utils/concluirTarefa.ts). As `client_tasks` do app
 // ficam à parte, como "sugestão do app": o Cockpit não as vê.
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useTarefasDoCrm, type TarefaDoCrmNaTela, type TarefaParaAFicha } from '../hooks/useTarefasDoCrm';
@@ -14,6 +14,7 @@ import { IconCall, IconCheck, IconChevronDown, IconChevronRight, useIconColors }
 import { acaoRapida, agrupar, chipsDaTarefa, diaBRT } from '../utils/abaTarefas';
 import { concluirComDesfazer } from '../utils/concluirTarefa';
 import type { ClientTask } from '../types/client';
+import { Alert } from '../components/Alert';
 
 type Feita = { id: string; assunto: string; nome: string | null; em: number };
 
@@ -55,6 +56,20 @@ export default function TarefasNovoScreen({
   const idsFeitos = useMemo(() => new Set(feitas.map((f) => f.id)), [feitas]);
   const abertas = tarefas.filter((t) => !emJanela.has(t.id) && !idsFeitos.has(t.id));
   const grupos = agrupar(abertas.map((t) => ({ ...t, origem: t.marcador?.origem ?? null })), agora);
+
+  // TAREFA SEM PINO (26/09/2026). O negocio da tarefa nao esta' no mapa (sem
+  // endereco confiavel, possivel duplicado, ou tarefa solta no CRM). Antes o
+  // toque nao fazia nada — clique morto. Agora explica e leva ao HubSpot.
+  const abrirSemPino = (t: TarefaDoCrmNaTela) => {
+    if (!t.dealId) {
+      Alert.alert('Tarefa sem negócio', 'Esta tarefa não está ligada a nenhum negócio no HubSpot, então não há ficha para abrir. Conclua pelo círculo quando fizer.');
+      return;
+    }
+    Alert.alert('Ainda não está no mapa', `${t.nomeDoCliente ?? 'Este negócio'} não tem ponto no mapa (falta um endereço confiável). Dá para ver e agir pelo HubSpot.`, [
+      { text: 'Fechar', style: 'cancel' },
+      { text: 'Abrir no HubSpot', onPress: () => { void Linking.openURL(`https://app.hubspot.com/contacts/24373118/record/0-3/${t.dealId}`); } },
+    ]);
+  };
 
   const concluir = (t: TarefaDoCrmNaTela, liguei: boolean) => {
     setEmJanela((s) => new Set(s).add(t.id));
@@ -114,7 +129,7 @@ export default function TarefasNovoScreen({
                 const chips = chipsDaTarefa(t, agora);
                 const rapida = acaoRapida(t);
                 const dist = distanciaAte(t.clientId);
-                const lead = [t.nomeDoCliente ?? 'cliente não identificado', dist].filter(Boolean).join(' · ');
+                const lead = [t.nomeDoCliente ?? 'cliente não identificado', dist, t.clientId ? null : 'fora do mapa'].filter(Boolean).join(' · ');
                 return (
                   <View key={t.id} style={[s.linha, chips.alerta && s.linhaAlerta]}>
                     <TouchableOpacity
@@ -128,8 +143,7 @@ export default function TarefasNovoScreen({
                     <TouchableOpacity
                       accessibilityRole="button"
                       style={s.linhaCorpo}
-                      disabled={!t.clientId}
-                      onPress={() => t.clientId && aoAbrirLead(t.clientId, { assunto: t.assunto, corpo: t.corpo, venceEm: t.venceEm })}
+                      onPress={() => (t.clientId ? aoAbrirLead(t.clientId, { assunto: t.assunto, corpo: t.corpo, venceEm: t.venceEm }) : abrirSemPino(t))}
                     >
                       <Text style={s.linhaTitulo} numberOfLines={2}>{t.assunto}</Text>
                       <Text style={s.linhaLead} numberOfLines={1}>{lead}</Text>
