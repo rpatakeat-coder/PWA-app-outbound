@@ -31,10 +31,12 @@ type Props = {
 export default function TopoCampo({ top, lente, aoAbrirLentes, busca, aoBuscar, aoAbrirBusca, buscando, selo, aoSino, avatar, aoAvatar }: Props) {
   return (
     <View style={[s.barra, { top }]} accessibilityRole="toolbar">
-      <Pressable accessibilityRole="button" accessibilityLabel={`Lente ${lente.rotulo}. Trocar lente, filtros e legenda`} onPress={aoAbrirLentes} style={s.lente}>
-        <View style={[s.bolinha, { backgroundColor: lente.cor }]} />
-        <Text style={s.lenteTexto} numberOfLines={1}>{lente.rotulo}</Text>
-        <Text style={s.seta}>▾</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Lente ${lente.rotulo}. Trocar lente, filtros e legenda`} onPress={aoAbrirLentes} style={s.lenteAlvo}>
+        <View style={s.lente}>
+          <View style={[s.bolinha, { backgroundColor: lente.cor }]} />
+          <Text style={s.lenteTexto} numberOfLines={1}>{lente.rotulo}</Text>
+          <Text style={s.seta}>▾</Text>
+        </View>
       </Pressable>
       <View style={s.busca}>
         <IconSearch width={16} height={16} fill="#AEB4BE" />
@@ -48,7 +50,7 @@ export default function TopoCampo({ top, lente, aoAbrirLentes, busca, aoBuscar, 
         </Pressable>
         {buscando && <ActivityIndicator size="small" color="#AEB4BE" />}
         {busca.length > 0 && !buscando && (
-          <Pressable accessibilityRole="button" accessibilityLabel="Limpar busca" onPress={() => aoBuscar('')} hitSlop={12}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Limpar busca" onPress={() => aoBuscar('')} style={s.limpar}>
             <IconClose width={16} height={16} fill="#AEB4BE" />
           </Pressable>
         )}
@@ -74,13 +76,18 @@ export default function TopoCampo({ top, lente, aoAbrirLentes, busca, aoBuscar, 
 const s = StyleSheet.create({
   barra: {
     position: 'absolute', left: 12, right: 12, height: ALTURA_TOPO_CAMPO, zIndex: 30,
-    flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 4, paddingRight: 4,
+    flexDirection: 'row', alignItems: 'center', gap: 0, paddingLeft: 4, paddingRight: 0,
     borderRadius: 24, borderWidth: 1, borderColor: '#2E333B',
     backgroundColor: 'rgba(20,22,26,.9)',
     // @ts-expect-error — só existe no web; é o vidro do handoff (blur 12).
     backdropFilter: 'blur(12px)',
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 4 },
   },
+  // ALVOS DE 48 (handoff v4.1 §13): a barra tem 48 contando a borda; o alvo
+  // ocupa a altura toda (margem -1 sobre a borda) e o desenho segue com 40.
+  // hitSlop não vale no navegador: o "limpar" tinha 16 px de toque.
+  lenteAlvo: { height: 48, marginVertical: -1, justifyContent: 'center', flexShrink: 0, maxWidth: 140 },
+  limpar: { width: 48, height: 48, marginVertical: -1, alignItems: 'center', justifyContent: 'center' },
   lente: {
     height: 40, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12,
     borderRadius: 20, backgroundColor: '#262A31', flexShrink: 0, maxWidth: 140,
@@ -90,9 +97,9 @@ const s = StyleSheet.create({
   seta: { fontSize: 11, color: '#AEB4BE' },
   busca: { flex: 1, minWidth: 0, height: 40, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 6 },
   buscaCampo: { flex: 1, minWidth: 0, fontSize: 13, color: '#F4F5F7', height: 40 },
-  buscaAbrir: { flex: 1, minWidth: 0, minHeight: 40, justifyContent: 'center' },
+  buscaAbrir: { flex: 1, minWidth: 0, minHeight: 48, marginVertical: -1, justifyContent: 'center' },
   buscaVazia: { color: '#8B919C' },
-  icone: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  icone: { width: 48, height: 48, marginVertical: -1, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   selo: {
     position: 'absolute', top: 2, right: 2, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3,
     backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center',

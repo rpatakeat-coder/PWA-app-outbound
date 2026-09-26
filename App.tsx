@@ -4311,6 +4311,18 @@ function MainApp() {
   const selectedClientSheet = selectedClient ? (
     <ClientBottomSheet
       client={selectedClient}
+      aoAbrirMeia={() => {
+        // O cartão cobre os 60% de baixo: o pino vai para ~22% da altura,
+        // no meio da faixa de mapa que sobra (centro da tela = 50%).
+        if (selectedClient.latitude == null || selectedClient.longitude == null) return;
+        const delta = mapRegion?.latitudeDelta ?? 0.01;
+        mapRef.current?.animateToRegion({
+          latitude: Number(selectedClient.latitude) - delta * 0.28,
+          longitude: Number(selectedClient.longitude),
+          latitudeDelta: delta,
+          longitudeDelta: mapRegion?.longitudeDelta ?? delta,
+        }, 300);
+      }}
       novo={modoNovo && contextoPino ? {
         pino: classificarPino(selectedClient, contextoPino),
         planoNumero: (() => { const i = routeDisplayClients.findIndex((c) => c.id === selectedClient.id); return i >= 0 ? i + 1 : null; })(),
@@ -8132,6 +8144,7 @@ function MainApp() {
 
 function ClientBottomSheet({
   client,
+  aoAbrirMeia,
   insets,
   statusConfig,
   slaDays,
@@ -8159,6 +8172,8 @@ function ClientBottomSheet({
 }: {
   /** Mapa novo (prancha §7): troca o topo e o peek; abas e alertas continuam. */
   novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onAvancar?: (destino: string) => void }) | null;
+  /** Mapa novo: o cartão subiu para a meia altura (60%) — o mapa leva o pino para a faixa de cima. */
+  aoAbrirMeia?: () => void;
   client: Client;
   insets: { bottom: number };
   statusConfig: Record<string, { label: string; color: string }>;
@@ -8201,6 +8216,7 @@ function ClientBottomSheet({
   // de dois bairros. Arrastar pra cima (ou tocar a linha) expande; arrastar
   // pra baixo volta ao peek; de novo, fecha. Desktop abre completo direto.
   const [estagio, setEstagio] = useState<'peek' | 'cheia'>('peek');
+  useEffect(() => { if (novo && estagio === 'cheia') aoAbrirMeia?.(); }, [estagio]); // eslint-disable-line react-hooks/exhaustive-deps
   // M1d: timeline limitada a 6 — o painel passa de 1.800px e o rodape sai
   // do alcance com historico longo.
   const [historicoCompleto, setHistoricoCompleto] = useState(false);
@@ -9022,6 +9038,7 @@ function ClientBottomSheet({
       rotulo={primaryName}
       topo={novo ? <TopoCardNovo d={dadosNovo!} a={acoesNovo} /> : faixaTopo}
       topoRola={!!novo}
+      alturaMaxCheia={novo ? '60%' : undefined}
       estagio={estagio}
       aoTrocarEstagio={setEstagio}
       estiloCorpo={layout.ehDesktop ? styles.corpoDesktop : styles.corpoMobile}
@@ -9230,8 +9247,9 @@ function ClientBottomSheet({
 
             {/* Caminho pro registro completo. E' o url_hubspot que manda, nao o
                 id: lead pode ter id sem url, e link pra lugar nenhum e' pior
-                que nenhum link. */}
-            {client.url_hubspot ? (
+                que nenhum link. No mapa novo o link sai (handoff v4.1 §13: nenhum
+                caminho do executivo leva ao HubSpot; o gestor tem o Cockpit). */}
+            {client.url_hubspot && !novo ? (
               <TouchableOpacity
                 accessibilityRole="link"
                 style={styles.linhaLink}

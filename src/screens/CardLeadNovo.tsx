@@ -432,7 +432,7 @@ const s = StyleSheet.create({
   vazio: { fontStyle: 'italic' },
   corrigir: { minHeight: 44, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: 'var(--tint-amber-border)', backgroundColor: 'var(--tint-amber)', alignItems: 'center', justifyContent: 'center' },
   corrigirTexto: { fontSize: 13, fontWeight: '800', color: 'var(--tint-amber-text)' },
-  fechar: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -8 },
+  fechar: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', marginRight: -10 },
   fecharTexto: { fontSize: 18, color: 'var(--text-muted)' },
   fatos: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   fato: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: 'var(--surface-2)' },
@@ -441,7 +441,7 @@ const s = StyleSheet.create({
   fatoAvisoTexto: { color: 'var(--tint-amber-text)' },
   cheguei: { minHeight: 56, borderRadius: 16, backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
   chegueiTexto: { fontSize: 16, fontWeight: '700', color: '#fff' },
-  chegueiSub: { fontSize: 12, fontWeight: '500', color: 'rgba(255,255,255,.85)', marginTop: 1 },
+  chegueiSub: { fontSize: 13, fontWeight: '500', color: 'rgba(255,255,255,.85)', marginTop: 1 },
   // flex:0 no RN web vira '0 1 0%' e espreme o botão a 9 px: base e encolhimento explícitos.
   botaoMais: { flexGrow: 0, flexShrink: 0, flexBasis: 56, width: 56 },
   eMeuBotao: { backgroundColor: 'transparent', borderColor: '#FACC15', borderWidth: 1.5 },

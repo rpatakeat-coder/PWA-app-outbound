@@ -336,11 +336,31 @@ async function reconcileStageChange(token: string, idHubspot: string, clientId: 
   }
 }
 
+// ===== trava de Ag. Pagamento =====
+// Depois de emitida a cobrança, nada do negócio muda até o Pago (handoff v4.1
+// §12.5 e §13; a mesma regra de mudar-etapa-negocio.js no Cockpit). O RPA do
+// Asaas lê o CONTATO e o negócio para gerar o link: editar cadastro, contato ou
+// qualificação aqui mudaria o que ele cobra. A tela já esconde a edição; esta é
+// a trava do servidor, para quem chegar por outro caminho.
+const ETAPA_AG_PAGAMENTO = '1395880473';
+async function travadoEmAgPagamento(token: string, idHubspot: string): Promise<Response | null> {
+  const r = await hsFetch(token, 'GET', `/crm/v3/objects/deals/${idHubspot}?properties=dealstage`);
+  if (r.ok && trimOrNull(r.body?.properties?.dealstage) === ETAPA_AG_PAGAMENTO) {
+    return json(409, {
+      error: 'Negócio em Ag. Pagamento: os dados ficam travados até o pagamento.',
+      detail: 'A cobrança já saiu. Para mudar algo, o negócio sai de Ag. Pagamento (Reciclagem ou Perdido) pelo Cockpit.',
+    });
+  }
+  return null;
+}
+
 // ===== update =====
 // Ramo "Update" do n8n: atualiza o contato associado (se houver) e o deal.
 async function handleUpdate(token: string, body: Record<string, unknown>) {
   const idHubspot = trimOrNull(body.id_hubspot);
   if (!idHubspot) return json(400, { error: 'id_hubspot e obrigatorio' });
+  const travado = await travadoEmAgPagamento(token, idHubspot);
+  if (travado) return travado;
 
   // Busca o contato associado — falha aqui nao bloqueia (onError: continue).
   const assoc = await hsFetch(token, 'GET', `/crm/v4/objects/deals/${idHubspot}/associations/contacts`);
@@ -401,6 +421,8 @@ const GARGALOS_VALIDOS = new Set([
 async function handleQualificar(token: string, body: Record<string, unknown>) {
   const idHubspot = trimOrNull(body.id_hubspot);
   if (!idHubspot) return json(400, { error: 'id_hubspot e obrigatorio' });
+  const travado = await travadoEmAgPagamento(token, idHubspot);
+  if (travado) return travado;
 
   const cru =
     body.propriedades && typeof body.propriedades === 'object' && !Array.isArray(body.propriedades)
@@ -466,6 +488,8 @@ async function handleDecisor(token: string, body: Record<string, unknown>) {
   const idHubspot = trimOrNull(body.id_hubspot);
   const nome = trimOrNull(body.nome);
   if (!idHubspot || !nome) return json(400, { error: 'id_hubspot e nome sao obrigatorios' });
+  const travado = await travadoEmAgPagamento(token, idHubspot);
+  if (travado) return travado;
   const papel = trimOrNull(body.papel);
   if (papel && !PAPEIS_DECISOR.has(papel)) return json(400, { error: 'papel invalido', detail: 'aceitos: Dono, Gerente' });
   const celular = trimOrNull(body.celular);

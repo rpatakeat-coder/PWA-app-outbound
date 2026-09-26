@@ -75,6 +75,12 @@ export interface PainelProps {
    * do Julyan, 26/09). Os índices grudados andam uma casa (o topo vira o 0).
    */
   topoRola?: boolean;
+  /**
+   * Celular: teto da folha aberta (estágio 2). O cartão do mapa novo usa 60%
+   * para o mapa continuar com pelo menos 40% e o pino à vista (handoff v4.1
+   * §13: "com o cartão meia, pino visível e ≥ 40% de mapa"). O resto rola.
+   */
+  alturaMaxCheia?: number | `${number}%`;
 }
 
 export function Painel({
@@ -92,6 +98,7 @@ export function Painel({
   estiloConteudoCorpo,
   indicesGrudados,
   topoRola = false,
+  alturaMaxCheia,
 }: PainelProps) {
   const layout = useLayout();
   const ehDesktop = layout.ehDesktop;
@@ -269,6 +276,7 @@ export function Painel({
             estilos.painel,
             ehDesktop ? estilos.drawer : estilos.folha,
             !ehDesktop && mostrandoPeek && estilos.folhaPeek,
+            !ehDesktop && !mostrandoPeek && alturaMaxCheia != null && { maxHeight: alturaMaxCheia },
             transformacao,
           ]}
         >
