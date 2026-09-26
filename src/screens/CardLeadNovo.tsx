@@ -229,16 +229,26 @@ function GradeEspiada({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   const c = d.client;
   const temTel = !!c.telefone?.trim();
   const podeAssumir = d.pino.dono === 'sem' && !!a.onEMeu;
+  // LIGAR E WHATSAPP À MÃO (Julyan, 26/09): com telefone, uma fileira só de
+  // contato, meia largura cada — "WhatsApp" não cabe legível em 64 px na
+  // fileira de quatro. Sem telefone, "+ Telefone" fica na fileira de baixo.
+  const zap = temTel ? toWhatsappNumber(c.telefone) : null;
   return (
-    <View style={s.grade}>
-      {podeAssumir
-        ? <Botao rotulo="É meu" onPress={() => assumir(d, a)} estilo={[s.botao48, s.eMeuBotao]} texto={s.eMeuTexto} acessivel="É meu: colocar no meu funil" />
-        : temTel
-          ? <Botao rotulo="Ligar" onPress={() => ligar(c)} estilo={s.botao48} />
-          : <Botao rotulo="+ Telefone" onPress={a.onEdit} estilo={s.botao48} tracejado acessivel="Adicionar telefone" />}
-      <Botao rotulo="Ir" onPress={() => ir(c)} desabilitado={c.latitude == null} estilo={s.botao48} />
-      <Botao rotulo="Agendar" onPress={a.onScheduleMeeting} estilo={s.botao48} />
-      {a.onExpandir && <Botao rotulo="…" onPress={a.onExpandir} estilo={[s.botao48, s.botaoMais]} acessivel="Mais: abrir o cartão" />}
+    <View style={{ gap: 8 }}>
+      {temTel && (
+        <View style={s.grade}>
+          <Botao rotulo="Ligar" onPress={() => ligar(c)} estilo={s.botao48} acessivel={`Ligar para ${c.telefone}`} />
+          <Botao rotulo="WhatsApp" onPress={() => openWhatsapp(c.telefone)} desabilitado={!zap} estilo={[s.botao48, s.zapBotao]} texto={s.zapTexto} acessivel="Abrir conversa no WhatsApp" />
+        </View>
+      )}
+      <View style={s.grade}>
+        {podeAssumir
+          ? <Botao rotulo="É meu" onPress={() => assumir(d, a)} estilo={[s.botao48, s.eMeuBotao]} texto={s.eMeuTexto} acessivel="É meu: colocar no meu funil" />
+          : !temTel && <Botao rotulo="+ Telefone" onPress={a.onEdit} estilo={s.botao48} tracejado acessivel="Adicionar telefone" />}
+        <Botao rotulo="Ir" onPress={() => ir(c)} desabilitado={c.latitude == null} estilo={s.botao48} />
+        <Botao rotulo="Agendar" onPress={a.onScheduleMeeting} estilo={s.botao48} />
+        {a.onExpandir && <Botao rotulo="…" onPress={a.onExpandir} estilo={[s.botao48, s.botaoMais]} acessivel="Mais: abrir o cartão" />}
+      </View>
     </View>
   );
 }
@@ -251,7 +261,6 @@ function GradeMais({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       {d.etapaCodigo === ETAPA.pagamento
         ? <Botao rotulo="Dados travados" desabilitado estilo={s.botaoMeia} acessivel="Dados travados: cobrança emitida, nada muda até o Pago" />
         : <Botao rotulo="Editar dados" onPress={a.onEdit} estilo={s.botaoMeia} />}
-      <Botao rotulo="WhatsApp" onPress={() => openWhatsapp(c.telefone)} desabilitado={!toWhatsappNumber(c.telefone)} estilo={s.botaoMeia} />
       <Botao
         rotulo={d.naRota ? '✓ Rota de hoje' : '+ Rota de hoje'}
         onPress={d.naRota ? () => Toast.mostrar('Já está na rota de hoje', 'ok') : a.onAddToRoute}
@@ -465,6 +474,8 @@ const s = StyleSheet.create({
   },
   botao64: { minHeight: 64 },
   botao48: { minHeight: 48 },
+  zapBotao: { backgroundColor: '#128C4A', borderColor: '#128C4A' },
+  zapTexto: { color: '#FFFFFF' },
   botaoTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
   tracejado: { borderStyle: 'dashed', backgroundColor: 'transparent' },
   desabilitado: { opacity: 0.45 },
