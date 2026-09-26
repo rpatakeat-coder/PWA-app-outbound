@@ -56,10 +56,10 @@ ok(classificarPino(base({ etapa: 'Prospecção', id_hubspot: '555' }), ctx).temp
 
 // tipo
 const cli = classificarPino(base({ status: 'cliente', etapa: null }), ctx);
-ok(cli.tipo === 'cliente' && cli.logo && cli.cor === '#E51A31' && cli.etiqueta === null, 'cliente: anel vermelho + logo, sem relógio');
+ok(cli.tipo === 'cliente' && cli.logo && cli.cor === '#16A34A' && cli.etiqueta === null, 'cliente: disco verde + logo, sem relógio');
 ok(classificarPino(base({ status: 'lead', etapa: 'Ganho' }), ctx).tipo === 'cliente', 'etapa Ganho conta como cliente');
 const ex = classificarPino(base({ status: 'churn' }), ctx);
-ok(ex.tipo === 'ex' && ex.glifo === '↺' && ex.cor === '#F472B6', 'ex-cliente: anel rosa + ↺');
+ok(ex.tipo === 'ex' && ex.glifo === '↺' && ex.cor === '#EC4899', 'ex-cliente: anel rosa + ↺');
 ok(classificarPino(base({ conta_alvo_place_id: 'municao:1' }), ctx).tipo === 'alvo', 'munição sem negócio é conta-alvo');
 ok(classificarPino(base({ conta_alvo_place_id: 'abc', id_hubspot: '111' }), ctx).tipo === 'lead', 'conta-alvo que virou negócio vira lead');
 

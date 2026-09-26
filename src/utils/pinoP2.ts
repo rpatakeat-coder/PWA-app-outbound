@@ -58,12 +58,15 @@ export type Pino = {
   opacidade: number;
   /** Origem na picklist do HubSpot; null = "origem não informada". */
   origem: OrigemPick | null;
+  /** Nota do Google da conta-alvo (selo ★ do Disco Takeat). */
+  nota?: number | null;
 };
 
-// Cores da prancha (dado, não tema: pintam o mapa escuro igual nos dois temas).
+// Cores do Disco Takeat (prompt final §6 — a legenda de hoje). Dado, não
+// tema: pintam o disco igual nos dois temas e no modo sol.
 export const COR = {
-  Q: '#EF4444', M: '#F5A524', F: '#60A5FA', X: '#6B7280', '?': '#6B7280',
-  cliente: '#E51A31', ex: '#F472B6', alvo: '#A855F7', semDono: '#FACC15',
+  Q: '#E23B3B', M: '#F5A524', F: '#0EA5E9', X: '#4B5563', '?': '#6B7280',
+  cliente: '#16A34A', ex: '#EC4899', alvo: '#8B5CF6', semDono: '#FACC15',
 } as const;
 
 // Etapas canônicas do Cockpit por temperatura.
@@ -180,6 +183,7 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
   return {
     origem,
     tipo, temp, cor, glifo, logo: tipo === 'cliente', dono,
+    nota: tipo === 'alvo' && c.conta_alvo_rating != null ? Number(c.conta_alvo_rating) : null,
     aproximado: c.geo_approximate === true,
     nome: nomeCurto(c.empresa?.trim() || c.nome || ''),
     etiqueta, opacidade,

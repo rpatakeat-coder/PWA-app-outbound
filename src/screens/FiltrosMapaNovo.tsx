@@ -31,7 +31,7 @@ type Props = {
 };
 
 const COR_TEMP: Record<TempFiltro, string> = {
-  Q: '#EF4444', M: '#F5A524', F: '#60A5FA', fechado: '#E51A31', perdido: '#6B7280', alvo: '#A855F7',
+  Q: '#E23B3B', M: '#F5A524', F: '#0EA5E9', fechado: '#16A34A', perdido: '#4B5563', alvo: '#8B5CF6',
 };
 
 function alternar<T>(s: Set<T>, v: T): Set<T> {
