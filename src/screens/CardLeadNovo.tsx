@@ -294,7 +294,7 @@ function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       <View style={s.negocio}>
         <Text style={s.negocioRotulo}>NEGÓCIO · FUNIL FIELD SALES</Text>
         <Text style={s.negocioEtapa}>Conta-alvo</Text>
-        <Text style={s.negocioNota}>Prospecção aprovada · ainda não é negócio de ninguém</Text>
+        <Text style={s.negocioNota}>{`Importada ${d.client.origem_lead === 'casa_dos_dados' ? 'da Casa dos Dados' : 'do Google'} · ainda não é negócio de ninguém`}</Text>
         {a.onEMeu && <Botao rotulo="É meu · entrar em Prospecção" onPress={() => assumir(d, a)} estilo={[s.botao48, s.eMeuBotao]} texto={s.eMeuTexto} />}
       </View>
     );

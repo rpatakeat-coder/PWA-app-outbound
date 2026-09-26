@@ -55,6 +55,11 @@ ok(classificarPino(base({ etapa: null, id_hubspot: '555' }), ctx).temp === 'Q', 
 ok(classificarPino(base({ etapa: 'Prospecção', id_hubspot: '555' }), ctx).temp === 'F', 'etapa do app reconhecida vale mais que o snapshot');
 
 // tipo
+// Conta-alvo = importada (Casa dos Dados / Google) sem negócio; não a etapa do pipeline (Julyan, 26/09).
+ok(classificarPino(base({ id_hubspot: null, etapa: null, origem_lead: 'casa_dos_dados', conta_alvo_place_id: 'p1' }), ctx).tipo === 'alvo', 'Casa dos Dados sem negócio é conta-alvo');
+ok(classificarPino(base({ id_hubspot: null, etapa: null, origem_lead: 'google_maps_motor', conta_alvo_place_id: 'p2' }), ctx).tipo === 'alvo', 'Google sem negócio é conta-alvo');
+ok(classificarPino(base({ id_hubspot: null, etapa: null, origem_lead: 'cadastro_na_rua', conta_alvo_place_id: 'p3' }), ctx).tipo === 'lead', 'lead da rua com place_id do motor continua lead');
+ok(classificarPino(base({ id_hubspot: '77', origem_lead: 'casa_dos_dados', conta_alvo_place_id: 'p4' }), ctx).tipo === 'lead', 'Casa dos Dados que virou negócio é lead');
 const cli = classificarPino(base({ status: 'cliente', etapa: null }), ctx);
 ok(cli.tipo === 'cliente' && cli.logo && cli.cor === '#16A34A' && cli.etiqueta === null, 'cliente: disco verde + logo, sem relógio');
 ok(classificarPino(base({ status: 'lead', etapa: 'Ganho' }), ctx).tipo === 'cliente', 'etapa Ganho conta como cliente');

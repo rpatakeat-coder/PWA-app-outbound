@@ -120,7 +120,11 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
   let tipo: TipoPino;
   if (c.status === 'cliente' || (codigo && GANHO.has(codigo))) tipo = 'cliente';
   else if (c.status === 'churn') tipo = 'ex';
-  else if (c.conta_alvo_place_id && !c.id_hubspot) tipo = 'alvo';
+  // Conta-alvo = conta importada (Casa dos Dados ou Google) que ainda não é
+  // negócio — NÃO a etapa "Conta Alvo" do pipeline, que o time não usa
+  // (Julyan, 26/09). place_id sozinho não basta: o motor também acha o do
+  // lead cadastrado na rua (15 casos em 26/09), e esse é lead, não alvo.
+  else if (!c.id_hubspot && (c.origem_lead === 'casa_dos_dados' || c.origem_lead === 'google_maps_motor' || (!c.origem_lead && !!c.conta_alvo_place_id))) tipo = 'alvo';
   else tipo = 'lead';
 
   const tempoHs = c.id_hubspot ? ctx.tempoPorNegocio.get(String(c.id_hubspot)) : undefined;
