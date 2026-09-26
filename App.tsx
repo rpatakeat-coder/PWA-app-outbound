@@ -109,6 +109,7 @@ import AvisoSemSinal from './src/screens/AvisoSemSinal';
 import FolhaMeuDia from './src/screens/FolhaMeuDia';
 import FolhaBusca, { type LinhaBusca } from './src/screens/FolhaBusca';
 import { useBuscaNegocios } from './src/hooks/useBuscaNegocios';
+import { comprimir, enviarFoto, escolherFoto } from './src/utils/fotoVisita';
 import { useMeuDia } from './src/hooks/useMeuDia';
 import FolhaCalor from './src/screens/FolhaCalor';
 import AvisosPainel from './src/screens/AvisosPainel';
@@ -3455,6 +3456,8 @@ function MainApp() {
   // Ficha de rua (mapa novo): abre depois do check-in de um lead.
   const [fichaPendente, setFichaPendente] = useState<{
     client: Client; checkinEm: string; etapaAtual: string | null; primeiraVisita: boolean; declarada?: boolean;
+    /** Foto de prova que não subiu na hora: a ficha tenta de novo ao salvar. */
+    fotoProva?: Blob | null;
   } | null>(null);
   const [desfechoPendente, setDesfechoPendente] = useState<{
     idHubspot: string;
@@ -3531,12 +3534,49 @@ function MainApp() {
       // dizia "longe" com o executivo na porta.
       const pinoConfirmado = (geoSource === 'coords' || geoSource === 'checkin') && !isApproxPin;
 
+      // Pergunta com botões e devolve a escolha (o Alert do app é por callback).
+      const perguntar = (titulo: string, msg: string, botoes: { text: string; valor: string; style?: 'cancel' | 'destructive' }[]) =>
+        new Promise<string>((res) => Alert.alert(titulo, msg, botoes.map((b) => ({ text: b.text, style: b.style, onPress: () => res(b.valor) }))));
+
+      // FOTO É A SEGUNDA PROVA (Julyan, 26/09): quando o GPS não confirma a
+      // porta, a visita só entra com foto — da fachada, do balcão, do cardápio.
+      // A câmera abre no toque do botão (o navegador exige o gesto), antes do
+      // check-in: sem foto, nada é gravado.
+      const tirarFotoDeProva = async (): Promise<Blob | null> => {
+        const arq = await escolherFoto();
+        if (!arq) {
+          Toast.mostrar('Sem a foto, a visita não entra: o GPS não confirmou que você está na porta.', 'erro');
+          return null;
+        }
+        try { return await comprimir(arq); } catch {
+          Toast.mostrar('Não consegui ler a foto. Tente de novo.', 'erro');
+          return null;
+        }
+      };
+      let fotoProva: Blob | null = null;
+
       let position: Location.LocationObject;
+      let semLeitura = false;
       try {
         position = await getBestFix();
       } catch (err: any) {
-        Alert.alert('Erro de GPS', err?.message ?? 'Não foi possível obter sua localização.');
-        return;
+        // Sem GPS agora: vale a última posição que o mapa leu, como visita
+        // declarada e com foto. Sem posição nenhuma, o banco não aceita
+        // (mark_client_as_visited exige coordenada).
+        if (!modoNovo || !userLocation) {
+          Alert.alert('Erro de GPS', err?.message ?? 'Não foi possível obter sua localização.');
+          return;
+        }
+        const r = await perguntar(
+          'GPS não respondeu',
+          'Dá para registrar esta visita com uma foto da porta como prova. O gestor vê que foi sem GPS.',
+          [{ text: 'Cancelar', valor: 'nao', style: 'cancel' }, { text: 'Registrar com foto', valor: 'foto' }],
+        );
+        if (r !== 'foto') return;
+        fotoProva = await tirarFotoDeProva();
+        if (!fotoProva) return;
+        position = { coords: { latitude: userLocation.latitude, longitude: userLocation.longitude, accuracy: null } } as unknown as Location.LocationObject;
+        semLeitura = true;
       }
 
       const userLat = position.coords.latitude;
@@ -3548,16 +3588,13 @@ function MainApp() {
       // banco teria aceitado.
       const maxDistance = isApproxPin ? 500 : 200;
 
-      // Pergunta com botões e devolve a escolha (o Alert do app é por callback).
-      const perguntar = (titulo: string, msg: string, botoes: { text: string; valor: string; style?: 'cancel' | 'destructive' }[]) =>
-        new Promise<string>((res) => Alert.alert(titulo, msg, botoes.map((b) => ({ text: b.text, style: b.style, onPress: () => res(b.valor) }))));
       const moverPino = () => { setEditingLocationFor(client); setSelectedClient(null); };
 
       let corrigirPino = false;
       // 0109: fora do raio e o pino confirmado (ou longe demais para ser a
       // porta): o executivo pode registrar como visita declarada (§8.2.2).
-      let declarada = false;
-      if (distance > maxDistance) {
+      let declarada = semLeitura;
+      if (distance > maxDistance && !semLeitura) {
         if (!pinoConfirmado && distance <= 2000) {
           // Pino nunca confirmado: o provável é o PINO estar errado, não o
           // vendedor longe. Com GPS firme, "Estou na porta" corrige e registra.
@@ -3566,12 +3603,19 @@ function MainApp() {
               'GPS ainda impreciso',
               `Seu GPS está com margem de ±${fixAccuracy != null ? Math.round(fixAccuracy) : '?'} m, e o pino está a ${Math.round(distance)} m. `
               + 'Fique uns segundos a céu aberto (longe de toldo e parede) e toque em Tentar de novo.',
-              [{ text: 'Cancelar', valor: 'nao', style: 'cancel' }, { text: 'Tentar de novo', valor: 'de-novo' }],
+              [
+                { text: 'Cancelar', valor: 'nao', style: 'cancel' },
+                { text: 'Tentar de novo', valor: 'de-novo' },
+                ...(modoNovo ? [{ text: 'Registrar com foto', valor: 'foto' }] : []),
+              ],
             );
-            if (r === 'de-novo') setTimeout(() => { void handleMarkAsVisitedRef.current(client, onDone); }, 50);
-            return;
+            if (r === 'de-novo') { setTimeout(() => { void handleMarkAsVisitedRef.current(client, onDone); }, 50); return; }
+            if (r !== 'foto') return;
+            fotoProva = await tirarFotoDeProva();
+            if (!fotoProva) return;
+            declarada = true;
           }
-          const r = await perguntar(
+          const r = declarada ? 'ja-declarada' : await perguntar(
             'Está na porta?',
             `Você está a ${Math.round(distance)} m do pino, mas esse pino veio do endereço e nunca foi confirmado no local. `
             + `Se você está na porta, o pino vem para onde você está (GPS ±${Math.round(fixAccuracy)} m) e o check-in entra.`,
@@ -3582,23 +3626,28 @@ function MainApp() {
             ],
           );
           if (r === 'outro') { moverPino(); return; }
-          if (r !== 'porta') return;
-          corrigirPino = true;
+          if (r !== 'porta' && r !== 'ja-declarada') return;
+          if (r === 'porta') corrigirPino = true;
         } else {
           // Fix grosseiro: o problema nao e' a distancia, e' a leitura.
           if (fixAccuracy != null && fixAccuracy > COARSE_FIX_ACCURACY_M) {
-            Alert.alert(
+            const r = await perguntar(
               'Localização imprecisa',
               `Seu aparelho está reportando a posição com margem de erro de ~${Math.round(fixAccuracy)} m `
               + `(a conta deu ${Math.round(distance)} m até o lead), então não dá pra confirmar que você está no local.\n\n`
               + 'No iPhone: Ajustes › Privacidade e Segurança › Serviços de Localização › este app › ative "Localização Exata". '
-              + 'Depois volte pro app e tente de novo.',
+              + (modoNovo ? 'Ou registre com uma foto da porta como prova.' : 'Depois volte pro app e tente de novo.'),
               [
-                { text: 'Fechar', style: 'cancel' },
-                { text: 'Abrir configurações', onPress: () => Linking.openSettings() },
+                { text: 'Fechar', valor: 'nao', style: 'cancel' },
+                { text: 'Abrir configurações', valor: 'config' },
+                ...(modoNovo ? [{ text: 'Registrar com foto', valor: 'foto' }] : []),
               ],
             );
-            return;
+            if (r === 'config') { Linking.openSettings(); return; }
+            if (r !== 'foto') return;
+            fotoProva = await tirarFotoDeProva();
+            if (!fotoProva) return;
+            declarada = true;
           }
           const r = await perguntar(
             'Você está longe do pino',
@@ -3610,11 +3659,13 @@ function MainApp() {
               { text: 'Mover pino', valor: 'outro' },
               // Mapa novo: a visita entra marcada como declarada, com a
               // distância real; o pino não se mexe.
-              ...(modoNovo ? [{ text: 'Registrar como visita declarada', valor: 'declarada' }] : []),
+              ...(modoNovo ? [{ text: 'Registrar com foto', valor: 'declarada' }] : []),
             ],
           );
           if (r === 'outro') { moverPino(); return; }
           if (r !== 'declarada') return;
+          fotoProva = await tirarFotoDeProva();
+          if (!fotoProva) return;
           declarada = true;
         }
       }
@@ -3637,8 +3688,19 @@ function MainApp() {
           payload: { clientId: client.id, latitude: userLat, longitude: userLon, accuracyM: fixAccuracy, feitoEm, corrigirPino, declarada },
         });
         Toast.mostrar(`Sem sinal · check-in em ${nomeDoLead} na fila, sobe sozinho`, 'fila');
+        if (fotoProva) Toast.mostrar('A foto de prova não subiu sem sinal: tire de novo no registro da visita quando voltar o sinal.', 'erro');
         onDone?.();
         return;
+      }
+      // A foto de prova sobe já, sem depender da ficha: é ela que sustenta a
+      // visita declarada no Cockpit. Falhou? A ficha tenta de novo ao salvar.
+      let fotoProvaPendente: Blob | null = null;
+      if (fotoProva) {
+        try {
+          await enviarFoto({ blob: fotoProva, ownerId: myHubspotId, dealId: client.id_hubspot ?? null, clientId: client.id, lat: userLat, lng: userLon });
+        } catch {
+          fotoProvaPendente = fotoProva;
+        }
       }
       // Auto-conclui a parada da rota do dia correspondente: o check-in É a
       // conclusão da visita, então a parada não deveria ficar "pendente" só
@@ -3659,7 +3721,7 @@ function MainApp() {
       // deal_id vira "visita nao confirmada" do lado do Cockpit — fica fora do
       // ciclo fechado em vez de entrar torta.
       Toast.mostrar(declarada
-        ? `✓ Visita declarada em ${nomeDoLead} (você estava a ${Math.round(distance)} m)`
+        ? `✓ Visita com foto em ${nomeDoLead}${semLeitura ? ' · sem GPS agora' : ` · GPS a ${Math.round(distance)} m`}`
         : corrigirPino
         ? `✓ Check-in em ${nomeDoLead} · pino corrigido (estava a ${Math.round(distance)} m)`
         : `✓ Check-in em ${nomeDoLead} registrado`, 'ok');
@@ -3677,6 +3739,7 @@ function MainApp() {
           etapaAtual: pelaTabela ?? peloSnapshot,
           primeiraVisita: (client.visit_count ?? 0) === 0,
           declarada,
+          fotoProva: fotoProvaPendente,
         });
       } else if (visitado.status === 'lead' && visitado.id_hubspot) {
         setDesfechoPendente({
@@ -3692,7 +3755,7 @@ function MainApp() {
       visitingRef.current = false;
       setIsVisiting(false);
     }
-  }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, fieldOps.adicionarParadaFeita, isMonitoringRoute, getBestFix, modoNovo, contextoPino]);
+  }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, fieldOps.adicionarParadaFeita, isMonitoringRoute, getBestFix, modoNovo, contextoPino, userLocation, myHubspotId]);
   handleMarkAsVisitedRef.current = handleMarkAsVisited;
 
   // Fila offline: quem sobe o check-in guardado sem sinal. Ref porque a
@@ -7718,6 +7781,7 @@ function MainApp() {
           onFechar={() => setFichaPendente(null)}
           onProxima={(c) => handleMarkerPress(c)}
           declarada={fichaPendente.declarada}
+          fotoProva={fichaPendente.fotoProva ?? null}
           // Depois da visita: a Agenda no dia do passo combinado.
           onAgenda={(dia) => { setSelectedClient(null); setAgendaDiaInicial(dia); setTab('agenda'); }}
           onSalvarCadastro={async (campos: CamposCadastro) => {

@@ -45,6 +45,8 @@ type Props = {
   onAgenda?: (dia: string | null) => void;
   /** Visita declarada (0109): o chip diz isso, não "GPS confere". */
   declarada?: boolean;
+  /** Foto de prova (GPS falhou) que não subiu no check-in: entra já escolhida. */
+  fotoProva?: Blob | null;
   /** id_hubspot de quem registra (pasta da foto e dono no Cockpit). */
   ownerId?: string | null;
 };
@@ -56,7 +58,7 @@ const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 
 const diaMes = (iso: string) => iso.split('-').reverse().slice(0, 2).join('/');
 const JANELA_DESFAZER_MS = 5000;
 
-export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, declarada = false, ownerId = null }: Props) {
+export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, declarada = false, ownerId = null, fotoProva = null }: Props) {
   const [f, setF] = useState<Ficha>(FICHA_VAZIA);
   const [opcao, setOpcao] = useState<string | null>(null);
   const [completar, setCompletar] = useState(false);
@@ -71,7 +73,8 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
 
   useEffect(() => {
     if (!visivel) return;
-    setF(FICHA_VAZIA); setOpcao(null); setCompletar(false); setOutroSistema(false); setFoto(null);
+    setF(FICHA_VAZIA); setOpcao(null); setCompletar(false); setOutroSistema(false);
+    setFoto(fotoProva ? { blob: fotoProva, url: URL.createObjectURL(fotoProva) } : null);
     setFase('form'); setResultados([]); setPassoSalvo(null);
   }, [visivel, client.id]);
 
