@@ -1045,6 +1045,10 @@ function MainApp() {
   // Altura da folha de baixo do mapa novo: o mapa termina no topo dela, para
   // o logo e os Termos do Google ficarem sempre visíveis (prompt final C10).
   const [alturaFolha, setAlturaFolha] = useState(0);
+  // Altura MEDIDA do rodapé do mapa novo. A base fixa (90 + área segura) era
+  // ~29 px maior que o rodapé real (56–61 + área segura): a pílula da próxima
+  // porta e os botões flutuavam num vão sobre o nada (medido em 26/09).
+  const [alturaRodape, setAlturaRodape] = useState<number | null>(null);
   const [topoFolha, setTopoFolha] = useState<number | null>(null);
   const [margemMapa, setMargemMapa] = useState(0);
   // Fundo do mapa na tela SEM margem — medido só quando a margem é zero, para
@@ -4772,7 +4776,7 @@ function MainApp() {
                     ? { bottom: baseInferior, left: 16 }
                     : modoNovo && tab === 'map'
                       // Handoff v4.1 §3: coluna à direita, 12 px acima do "+", que fica 12 px acima da folha.
-                      ? { bottom: baseInferior + (folhaDeBaixo ? alturaFolha : 0) + 12 + 52 + 12, right: 12, width: 44, height: 44, borderRadius: 22 }
+                      ? { bottom: (alturaRodape ?? baseInferior) + (folhaDeBaixo ? alturaFolha : 0) + 12 + 52 + 12, right: 12, width: 44, height: 44, borderRadius: 22 }
                       : { top: (mapLayout?.y ?? 0) + 16, left: 16 },
                   layout.ehLargo && styles.mapaControleWeb,
                 ]
@@ -4857,7 +4861,7 @@ function MainApp() {
           visitasFeitas={routeStops.filter((s) => s.status === 'done').length}
           metaVisitas={routeConfig.meta_visitas_dia > 0 ? routeConfig.meta_visitas_dia : 6}
           aoProgresso={() => irParaAba('agenda')}
-          chao={baseInferior}
+          chao={alturaRodape ?? baseInferior}
           totalNaArea={visiveisMapaNovo.length}
           rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
           onAbrir={handleMarkerPress}
@@ -4871,7 +4875,7 @@ function MainApp() {
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Novo lead"
-          style={[styles.fabMapaNovo, { right: 12, bottom: baseInferior + (folhaDeBaixo ? alturaFolha : 0) + 12 }]}
+          style={[styles.fabMapaNovo, { right: 12, bottom: (alturaRodape ?? baseInferior) + (folhaDeBaixo ? alturaFolha : 0) + 12 }]}
           onPress={() => setShowCepStep(true)}
         >
           <IconPlus width={26} height={26} fill="#FFFFFF" />
@@ -6742,7 +6746,7 @@ function MainApp() {
       /* RODAPE DO MAPA NOVO (prompt final §B2): Mapa · Agenda · Tarefas ·
          Playbook, iguais para todos. A Rota mora na Agenda, o "+" e' botao do
          mapa e a Gestao fica no menu do avatar, para o time inteiro. */
-      <View style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]}>
+      <View style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]} onLayout={(e) => setAlturaRodape(Math.round(e.nativeEvent.layout.height))}>
         {abasDoRodape.map((a) => {
           const ativo = a.ativa;
           return (
