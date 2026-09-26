@@ -104,6 +104,8 @@ import FiltrosMapaNovo from './src/screens/FiltrosMapaNovo';
 import { PeekCardNovo, TopoCardNovo, type AcoesCardNovo, type DadosCardNovo } from './src/screens/CardLeadNovo';
 import FolhaDoMapa, { type ItemFolha } from './src/screens/FolhaDoMapa';
 import FolhaCalor from './src/screens/FolhaCalor';
+import AvisosPainel from './src/screens/AvisosPainel';
+import { useAvisos } from './src/hooks/useAvisos';
 import FichaDeRua, { type CamposCadastro } from './src/screens/FichaDeRua';
 import MudarEtapaNovo from './src/screens/MudarEtapaNovo';
 import { ROTULO_ETAPA } from './src/utils/fichaDeRua';
@@ -1370,6 +1372,9 @@ function MainApp() {
   // chips de status em tempo real conforme o usuario digita no search.
   // id_hubspot do usuario logado, usado pelo toggle "meus leads" (non-admin).
   const myHubspotId = profile?.id_hubspot ?? null;
+  // Sino de Avisos (mapa novo): motor + falhas de sincronização. Ver src/hooks/useAvisos.ts.
+  const avisos = useAvisos(modoNovo, myHubspotId, canViewGestor);
+  const [avisosAbertos, setAvisosAbertos] = useState(false);
 
   // Recorte de tarefas por vendedor. Gestor (canViewGestor: admin ou Julyan) ve
   // TODAS; vendedor comum ve so as dos leads dele (match por vendedor_id_hubspot).
@@ -5652,6 +5657,22 @@ function MainApp() {
               telas com barra: Meu desempenho e Configuracoes ja' tem o
               arrow_back, e um segundo caminho no mesmo cabecalho diria coisas
               diferentes sobre como sair da tela. */}
+          {/* Sino de Avisos (prompt §5): o que não é tarefa — motor e envios que não subiram. */}
+          {modoNovo && tab !== 'meu' && tab !== 'config' && (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={avisos.selo ? `Avisos, ${avisos.selo} ${avisos.selo === 1 ? 'novo' : 'novos'}` : 'Avisos'}
+              style={styles.headerAjuda}
+              onPress={() => setAvisosAbertos(true)}
+            >
+              <IconBell width={24} height={24} fill="#FFFFFF" />
+              {avisos.selo > 0 && (
+                <View style={styles.sinoSelo}>
+                  <Text style={styles.sinoSeloTexto}>{avisos.selo > 9 ? '9+' : avisos.selo}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
           {tab !== 'meu' && tab !== 'config' && (
             <TouchableOpacity
               accessibilityRole="button"
@@ -6301,6 +6322,20 @@ function MainApp() {
       )}
 
       {selectedClientSheet}
+
+      {avisosAbertos && (
+        <AvisosPainel
+          aoFechar={() => { avisos.marcarVisto(); setAvisosAbertos(false); }}
+          motor={avisos.motor}
+          vistoEm={avisos.vistoEm}
+          falhas={avisos.falhas}
+          cobrancasAtrasadas={tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'atrasadas').length}
+          carregando={avisos.carregando}
+          aoAbrirLead={(id) => { avisos.marcarVisto(); setAvisosAbertos(false); setTab('map'); setTimeout(() => { void openClientById(id); }, 350); }}
+          aoTentarDeNovo={() => { void subirFila(true).then((n) => Toast.mostrar(n > 0 ? `✓ ${n} ${n === 1 ? 'envio subiu' : 'envios subiram'}` : 'Ainda não subiu — confira o sinal', n > 0 ? 'ok' : 'erro')); }}
+          aoAbrirTarefas={() => { avisos.marcarVisto(); setAvisosAbertos(false); setTab('tasks'); }}
+        />
+      )}
 
       {/* Enquadramento da foto de perfil. Fica NESTE nivel, e nao dentro da
           folha do perfil: no desktop aquela folha nem e' montada, e o ajuste
@@ -9460,6 +9495,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  sinoSelo: {
+    position: 'absolute', top: 4, right: 4, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9,
+    backgroundColor: '#F59E0B', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#C8131B',
+  },
+  sinoSeloTexto: { fontSize: 10, fontWeight: '800', color: '#14171C' },
   headerAjuda: {
     width: 48,
     height: 48,
