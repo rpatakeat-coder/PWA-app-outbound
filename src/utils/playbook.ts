@@ -52,6 +52,49 @@ export function sugestoesDaEtapa(pb: Playbook, etapa: string | null | undefined)
     .filter((p): p is PaginaPlaybook => !!p);
 }
 
+/** O que se sabe da próxima porta (mapa_negocio + o pino). */
+export type ContextoPorta = {
+  etapa: string | null;
+  temNegocio: boolean;
+  celular?: string | null;
+  gargalo?: string | null;
+  sistema?: string | null;
+};
+export type CartaoContextual = { pagina: PaginaPlaybook; titulo: string; motivo: string };
+
+const ANTES_DO_DECISOR = /prospec|visita|backlog|conta|contato|lead/;
+
+/**
+ * O cartão do topo do Playbook (handoff v4.1 §6.16): UMA leitura, escolhida
+ * pelo que falta para vender naquela porta, não só pela etapa.
+ * 1. Quem decide ainda é desconhecido (conta sem negócio, ou negócio antes da
+ *    Conversa com decisor sem o celular dele) → achar o decisor.
+ * 2. Dor declarada → mapa dor → solução, com a dor no motivo.
+ * 3. Sistema declarado → objeções (a conversa é sobre trocar).
+ * 4. Sem nada disso → a primeira sugestão da etapa.
+ */
+export function cartaoContextual(pb: Playbook, ctx: ContextoPorta): CartaoContextual | null {
+  const pag = (id: string) => pb.paginas.find((p) => p.id === id) ?? null;
+  const e = semAcento(ctx.etapa ?? '');
+  const semDecisor = !ctx.temNegocio || (!ctx.celular && (!e || ANTES_DO_DECISOR.test(e)));
+  if (semDecisor) {
+    const p = pag('acesso-decisor');
+    if (p) return { pagina: p, titulo: 'Achar o decisor antes de bater na porta', motivo: 'Ainda não sabemos quem decide nesta casa.' };
+  }
+  const dor = (ctx.gargalo ?? '').trim();
+  if (dor) {
+    const p = pag('mapa-dor-solucao');
+    if (p) return { pagina: p, titulo: 'Mapa dor → solução', motivo: `Dor declarada: ${dor}.` };
+  }
+  const sistema = (ctx.sistema ?? '').trim();
+  if (sistema) {
+    const p = pag('objecoes');
+    if (p) return { pagina: p, titulo: 'Objeções de quem já tem sistema', motivo: `Usa ${sistema} hoje.` };
+  }
+  const [primeira] = sugestoesDaEtapa(pb, ctx.etapa);
+  return primeira ? { pagina: primeira, titulo: primeira.titulo, motivo: ctx.etapa ? `Etapa: ${ctx.etapa}.` : 'Leitura da etapa.' } : null;
+}
+
 /** A última página começada e não terminada (nem marcada como lida). */
 export function continuarLendo(pb: Playbook, prog: Progresso): { pagina: PaginaPlaybook; pct: number } | null {
   let melhor: { pagina: PaginaPlaybook; pct: number; em: number } | null = null;

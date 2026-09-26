@@ -5620,7 +5620,7 @@ function MainApp() {
     if (!st?.client) return null;
     const numero = routeStops.indexOf(st) + 1;
     const etapa = st.client.status === 'cliente' || st.client.status === 'churn' ? st.client.status : st.client.etapa ?? null;
-    return { nome: getClientPrimaryName(st.client), numero, etapa };
+    return { nome: getClientPrimaryName(st.client), numero, etapa, dealId: st.client.id_hubspot ?? null };
   })();
   // Tarefas: atrasadas + vencem hoje. Sem pendencia, sem selo (nunca "0").
   // No mapa novo as sugestoes do app (client_tasks) ficam fora: o selo e' o que

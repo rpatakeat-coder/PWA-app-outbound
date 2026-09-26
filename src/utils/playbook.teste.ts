@@ -1,7 +1,7 @@
 // Teste da aba Playbook: busca sem acento, sugestão pela etapa, continuar lendo.
 //
 // Rode com:  npx tsx src/utils/playbook.teste.ts
-import { continuarLendo, filtrarPaginas, rotuloProgresso, sugestoesDaEtapa, type Playbook } from './playbook';
+import { cartaoContextual, continuarLendo, filtrarPaginas, rotuloProgresso, sugestoesDaEtapa, type Playbook } from './playbook';
 
 let falhas = 0;
 const ok = (c: boolean, m: string) => {
@@ -51,6 +51,15 @@ const c = continuarLendo(PB, {
 ok(c?.pagina.id === 'objecoes' && c.pct === 35, 'continuar lendo = a mais recente começada, não lida, que ainda existe');
 ok(continuarLendo(PB, { objecoes: { pct: 99, em: 1 } }) === null, 'rolou até o fim: não oferece continuar');
 ok(rotuloProgresso({ pct: 35.4, em: 1 }) === '35%' && rotuloProgresso({ pct: 10, em: 1, lida: true }) === 'lida ✓' && rotuloProgresso(undefined) === null, 'rótulo do progresso');
+
+// cartão contextual da próxima porta (§6.16)
+ok(cartaoContextual(PB, { etapa: null, temNegocio: false })?.pagina.id === 'acesso-decisor', 'conta-alvo sem negócio: achar o decisor');
+ok(cartaoContextual(PB, { etapa: 'Visita', temNegocio: true })?.pagina.id === 'acesso-decisor', 'Visita sem celular do decisor: achar o decisor');
+ok(cartaoContextual(PB, { etapa: 'Visita', temNegocio: true, celular: '11999', gargalo: 'Fila' })?.motivo === 'Dor declarada: Fila.', 'decisor conhecido + dor: mapa dor → solução com a dor');
+ok(cartaoContextual(PB, { etapa: 'Demo/Proposta', temNegocio: true, gargalo: 'Fila' })?.pagina.id === 'mapa-dor-solucao', 'depois da Conversa com decisor, sem celular não volta para achar decisor');
+ok(cartaoContextual(PB, { etapa: 'Negociação', temNegocio: true, celular: '1', sistema: 'Saipos' })?.pagina.id === 'objecoes', 'sistema declarado: objeções');
+ok(cartaoContextual(PB, { etapa: 'Negociação', temNegocio: true, celular: '1' })?.pagina.id === 'objecoes', 'sem dor nem sistema: primeira da etapa');
+ok(cartaoContextual({ paginas: [], categorias: [] }, { etapa: null, temNegocio: false }) === null, 'playbook vazio: sem cartão');
 
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);

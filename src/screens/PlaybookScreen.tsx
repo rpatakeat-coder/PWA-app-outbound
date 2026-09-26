@@ -14,7 +14,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 import { IconChevronLeft, IconChevronRight, IconClose, IconSearch, useIconColors } from '../components/icons';
 import {
-  continuarLendo, filtrarPaginas, rotuloProgresso, sugestoesDaEtapa,
+  cartaoContextual, continuarLendo, filtrarPaginas, rotuloProgresso, sugestoesDaEtapa,
   type PaginaPlaybook, type Playbook, type Progresso,
 } from '../utils/playbook';
 
@@ -37,7 +37,7 @@ async function buscarPlaybook(): Promise<Playbook> {
   return pb;
 }
 
-export type ProximaParada = { nome: string; numero: number; etapa: string | null };
+export type ProximaParada = { nome: string; numero: number; etapa: string | null; dealId?: string | null };
 
 type Props = {
   email: string | null | undefined;
@@ -60,6 +60,18 @@ export default function PlaybookScreen({ email, proximaParada }: Props) {
   const [categoria, setCategoria] = useState<string | null>(null);
   const [aberta, setAberta] = useState<{ id: string; ancora?: string } | null>(null);
   const [prog, setProg] = useState<Progresso>(() => (email ? ler<Progresso>(chaveProgresso(email)) ?? {} : {}));
+  // O que o negócio da próxima porta já tem (dor, sistema, celular do decisor):
+  // escolhe o cartão do topo. Sem negócio ou sem sinal, fica vazio e o cartão
+  // cai em "achar o decisor" ou na etapa.
+  const [jaTem, setJaTem] = useState<{ celular?: string; gargalo_operacional?: string; nome_do_sistema?: string }>({});
+  const dealDaProxima = proximaParada?.dealId ?? null;
+  useEffect(() => {
+    setJaTem({});
+    if (!dealDaProxima) return;
+    let vivo = true;
+    void supabase.rpc('mapa_negocio', { p_deal: dealDaProxima }).then(({ data }) => { if (vivo && data) setJaTem(data as never); });
+    return () => { vivo = false; };
+  }, [dealDaProxima]);
 
   // "Lida" que o Cockpit já registrou (outro aparelho, a tela do Cockpit).
   useEffect(() => {
@@ -133,12 +145,34 @@ export default function PlaybookScreen({ email, proximaParada }: Props) {
   const lista = filtrarPaginas(pb, termo, categoria);
   const buscando = termo.trim().length > 0;
   const sugeridas = proximaParada && !buscando ? sugestoesDaEtapa(pb, proximaParada.etapa) : [];
+  const cartao = proximaParada && !buscando
+    ? cartaoContextual(pb, { etapa: proximaParada.etapa, temNegocio: !!proximaParada.dealId, celular: jaTem.celular, gargalo: jaTem.gargalo_operacional, sistema: jaTem.nome_do_sistema })
+    : null;
+  const outras = cartao ? sugeridas.filter((p) => p.id !== cartao.pagina.id) : sugeridas;
   const continuar = !buscando ? continuarLendo(pb, prog) : null;
   const categorias = pb.categorias.filter((c) => pb.paginas.some((p) => p.categoria === c));
 
   return (
     <ScrollView style={s.tela} contentContainerStyle={s.conteudo} keyboardShouldPersistTaps="handled">
       <Text style={s.subtitulo}>{`${pb.paginas.length} páginas · fonte oficial do Field Sales`}</Text>
+
+      {/* CARTÃO DA PRÓXIMA PORTA (§6.16), acima de tudo: uma leitura escolhida
+          pelo que falta naquela casa (decisor, dor, sistema), e as outras da etapa. */}
+      {cartao && proximaParada && (
+        <View style={s.proxima}>
+          <Text style={s.proximaKicker}>{`PRÓXIMA PORTA · ${proximaParada.nome}`.toUpperCase()}</Text>
+          <TouchableOpacity accessibilityRole="button" onPress={() => setAberta({ id: cartao.pagina.id })} style={{ gap: 2 }}>
+            <Text style={s.proximaTitulo} numberOfLines={2}>{cartao.titulo}</Text>
+            <Text style={s.proximaMotivo} numberOfLines={2}>{cartao.motivo}</Text>
+          </TouchableOpacity>
+          {outras.map((p) => (
+            <TouchableOpacity key={p.id} accessibilityRole="button" style={s.proximaLinha} onPress={() => setAberta({ id: p.id })}>
+              <Text style={s.proximaLinhaTexto} numberOfLines={1}>{p.titulo}</Text>
+              <IconChevronRight width={20} height={20} fill="#FFFFFF" />
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       <View style={s.busca}>
         <IconSearch width={20} height={20} fill={cores.muted} />
@@ -173,21 +207,6 @@ export default function PlaybookScreen({ email, proximaParada }: Props) {
           );
         })}
       </ScrollView>
-
-      {sugeridas.length > 0 && proximaParada && (
-        <View style={s.proxima}>
-          <Text style={s.proximaKicker}>PARA A PRÓXIMA PARADA</Text>
-          <Text style={s.proximaTitulo} numberOfLines={2}>
-            {`Antes de entrar em ${proximaParada.nome} · parada ${proximaParada.numero}${proximaParada.etapa ? ` · ${proximaParada.etapa}` : ''}`}
-          </Text>
-          {sugeridas.map((p) => (
-            <TouchableOpacity key={p.id} accessibilityRole="button" style={s.proximaLinha} onPress={() => setAberta({ id: p.id })}>
-              <Text style={s.proximaLinhaTexto} numberOfLines={1}>{p.titulo}</Text>
-              <IconChevronRight width={20} height={20} fill="#FFFFFF" />
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
 
       {continuar && (
         <TouchableOpacity accessibilityRole="button" style={s.continuar} onPress={() => setAberta({ id: continuar.pagina.id })}>
@@ -349,6 +368,7 @@ const s = StyleSheet.create({
   chipTextoAtivo: { color: '#FFFFFF' },
   proxima: { backgroundColor: '#5B0A10', borderRadius: 16, padding: 16, gap: 8 },
   proximaKicker: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#FCA5A5' },
+  proximaMotivo: { fontSize: 13, lineHeight: 18, color: '#FECACA' },
   proximaTitulo: { fontSize: 15, lineHeight: 21, fontWeight: '700', color: '#FFFFFF' },
   proximaLinha: {
     flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingHorizontal: 12,
