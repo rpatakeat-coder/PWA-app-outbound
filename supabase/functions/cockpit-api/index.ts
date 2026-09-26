@@ -28,7 +28,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 // O pacote vem do proprio repositorio, FIXADO NO HASH do commit que o gerou: o que
 // roda e, por construcao, o arquivo versionado — sem copia manual no deploy.
 // Gerou de novo? Commit, e troque o hash aqui pelo do commit novo.
-import { carregador, ROTAS, ORIGEM } from 'https://raw.githubusercontent.com/rpatakeat-coder/PWA-app-outbound/7421944e8ab6685576974041838f214a35b18e17/supabase/functions/cockpit-api/cockpit.js';
+import { carregador, ROTAS, ORIGEM } from 'https://raw.githubusercontent.com/rpatakeat-coder/PWA-app-outbound/09c6bb69bb738a5731120a21d0c6f7761f5218ff/supabase/functions/cockpit-api/cockpit.js';
 
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
