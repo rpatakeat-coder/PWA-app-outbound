@@ -10,6 +10,7 @@ import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { useTarefasDoCrm } from '../hooks/useTarefasDoCrm';
+import { ir } from './CardLeadNovo';
 import { IconChevronRight, useIconColors } from '../components/icons';
 import { diaBRT, ehCobranca } from '../utils/abaTarefas';
 import { compromissosDoDia, diasDaFaixa, estadoDasParadas, rotuloDoDia } from '../utils/agendaNovo';
@@ -26,6 +27,8 @@ type Props = {
   distanciaAte: (clientId: string | null) => string | null;
   visitadoHoje: (c: Client) => boolean;
   aoCheguei: (c: Client) => void;
+  /** Hora em que a Daily de hoje foi registrada (dailies.created_at). */
+  dailyValidadaEm?: string | null;
   aoAbrirLead: (clientId: string) => void;
 };
 
@@ -36,7 +39,7 @@ const ruaDo = (c: Client | null) => {
 };
 
 export default function AgendaNovoScreen({
-  diaInicial, paradas, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead,
+  diaInicial, paradas, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead, dailyValidadaEm,
 }: Props) {
   const cores = useIconColors();
   const agora = new Date();
@@ -84,14 +87,14 @@ export default function AgendaNovoScreen({
       {dia === hoje && (
         <>
           <View style={s.progresso}>
-            <Text style={s.progressoTitulo}>{`Plano de hoje · ${feitas} de ${estado.length} feito`}</Text>
-            {estado.length > 0 && (
-              <View style={s.segmentos}>
-                {estado.map((p) => <View key={p.id} style={[s.segmento, p.estado === 'feito' && s.segmentoFeito]} />)}
-              </View>
-            )}
-            <Text style={s.progressoLinha}>{`visitas hoje: ${feitas} de ${meta}`}</Text>
-            <Text style={s.progressoMeta}>{`Meta do playbook: ${meta} visitas qualificadas por dia`}</Text>
+            {/* Handoff v4.1 §6.14: "Plano de hoje · x de 6", barra verde e a hora da Daily. */}
+            <Text style={s.progressoTitulo}>{`Plano de hoje · ${feitas} de ${meta}`}</Text>
+            <View style={s.barraPlano}><View style={[s.barraPlanoCheia, { width: `${Math.min(100, Math.round((feitas / meta) * 100))}%` }]} /></View>
+            <Text style={s.progressoMeta}>
+              {dailyValidadaEm
+                ? `validado na Daily ${new Date(dailyValidadaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}`
+                : 'Daily de hoje ainda não registrada'}
+            </Text>
           </View>
 
           {estado.length === 0 && (
@@ -117,9 +120,15 @@ export default function AgendaNovoScreen({
                       {cobrar.has(p.client_id) && <Text style={[s.chip, s.chipCobrar]}>cobrar</Text>}
                     </View>
                   </View>
-                  <Text style={[s.status, p.estado === 'feito' && s.statusFeito, proxima && s.statusProxima]}>
-                    {p.estado === 'feito' ? 'feito ✓' : proxima ? 'próxima' : 'pendente'}
-                  </Text>
+                  {p.estado === 'feito' ? (
+                    <Text style={[s.status, s.statusFeito]}>Feito</Text>
+                  ) : proxima ? (
+                    <Text style={[s.status, s.statusProxima]}>próxima</Text>
+                  ) : c ? (
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Ir até ${nome}`} style={s.ir} onPress={() => ir(c)}>
+                      <Text style={s.irTexto}>Ir</Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </TouchableOpacity>
                 {proxima && c && (
                   <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Cheguei em ${nome}`} style={s.cheguei} onPress={() => aoCheguei(c)}>
@@ -159,7 +168,7 @@ export default function AgendaNovoScreen({
       )}
 
       {dia !== hoje && compromissos.length === 0 && (
-        <Text style={s.vazio}>Nada marcado neste dia. O "Agendar" do card e o próximo passo da ficha caem aqui.</Text>
+        <Text style={s.vazio}>Nada marcado neste dia. O “Agendar” do cartão e o próximo passo do registro caem aqui.</Text>
       )}
     </ScrollView>
   );
@@ -172,7 +181,7 @@ const s = StyleSheet.create({
   // paddingTop: o selo do dia sai 6px acima da caixa, e o scroll horizontal corta o que passa.
   faixa: { gap: 8, paddingRight: 16, paddingTop: 8 },
   dia: {
-    width: 56, minHeight: 64, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 2,
+    width: 54, minHeight: 60, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 2,
     backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)',
   },
   diaAtivo: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
@@ -208,6 +217,10 @@ const s = StyleSheet.create({
   status: { fontSize: 12, fontWeight: '700', color: 'var(--text-faint)' },
   statusFeito: { color: 'var(--tint-green-text)' },
   statusProxima: { color: '#C8131B' },
+  barraPlano: { height: 8, borderRadius: 4, backgroundColor: 'var(--surface-3, #3A3F47)', overflow: 'hidden', marginTop: 8 },
+  barraPlanoCheia: { height: 8, borderRadius: 4, backgroundColor: '#16A34A' },
+  ir: { minHeight: 44, minWidth: 56, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center' },
+  irTexto: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   cheguei: { marginHorizontal: 12, marginBottom: 12, minHeight: 48, borderRadius: 12, backgroundColor: '#C8131B', alignItems: 'center', justifyContent: 'center' },
   chegueiTexto: { fontSize: 16, fontWeight: '800', color: '#FFFFFF' },
   grupo: { gap: 8, marginTop: 4 },

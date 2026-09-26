@@ -13,7 +13,8 @@ import { useTarefasDoCrm, type TarefaDoCrmNaTela, type TarefaParaAFicha } from '
 import { IconCall, IconCheck, IconChevronDown, IconChevronRight, useIconColors } from '../components/icons';
 import { acaoRapida, agrupar, chipsDaTarefa, diaBRT } from '../utils/abaTarefas';
 import { concluirComDesfazer } from '../utils/concluirTarefa';
-import type { ClientTask } from '../types/client';
+import { ir } from './CardLeadNovo';
+import type { Client, ClientTask } from '../types/client';
 import { Alert } from '../components/Alert';
 
 type Feita = { id: string; assunto: string; nome: string | null; em: number };
@@ -33,10 +34,12 @@ type Props = {
   distanciaAte: (clientId: string | null) => string | null;
   /** Negócio da tarefa sem ponto no mapa: posicionar sem criar outro (handoff v4.1 §6.7). */
   aoPosicionar?: (dealId: string, nome: string) => void;
+  /** O lead com coordenada, quando carregado: habilita o "Ir" (handoff v4.1 §6.15). */
+  clienteDe?: (clientId: string) => Client | null;
 };
 
 export default function TarefasNovoScreen({
-  email, sugestoes, nomeDaSugestao, aoConcluirSugestao, aoAbrirSugestao, aoAbrirLead, distanciaAte, aoPosicionar,
+  email, sugestoes, nomeDaSugestao, aoConcluirSugestao, aoAbrirSugestao, aoAbrirLead, distanciaAte, aoPosicionar, clienteDe,
 }: Props) {
   const cores = useIconColors();
   const queryClient = useQueryClient();
@@ -162,7 +165,7 @@ export default function TarefasNovoScreen({
                       >
                         <Text style={[s.rapidaTexto, { color: '#fff' }]}>Posicionar</Text>
                       </TouchableOpacity>
-                    ) : rapida === 'liguei' && (
+                    ) : rapida === 'liguei' ? (
                       <TouchableOpacity
                         accessibilityRole="button"
                         accessibilityLabel={`Liguei: ${t.assunto}`}
@@ -172,7 +175,16 @@ export default function TarefasNovoScreen({
                         <IconCall width={18} height={18} fill={cores.onSurface} />
                         <Text style={s.rapidaTexto}>Liguei</Text>
                       </TouchableOpacity>
-                    )}
+                    ) : (() => {
+                      // Visita e reunião: "Ir" até o lead (a pé / carro / Waze).
+                      const c = t.clientId && clienteDe ? clienteDe(t.clientId) : null;
+                      if (!c || c.latitude == null || c.longitude == null) return null;
+                      return (
+                        <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Ir até ${t.nomeDoCliente ?? t.assunto}`} style={s.rapida} onPress={() => ir(c)}>
+                          <Text style={s.rapidaTexto}>Ir</Text>
+                        </TouchableOpacity>
+                      );
+                    })()}
                   </View>
                 );
               })}

@@ -6536,6 +6536,7 @@ function MainApp() {
             void openClientById(id);
           }}
           aoPosicionar={isViewer ? undefined : iniciarPosicionar}
+          clienteDe={(id) => clients.find((x) => x.id === id) ?? routeStops.find((st) => st.client_id === id)?.client ?? null}
           distanciaAte={(id) => {
             const c = id ? clients.find((x) => x.id === id) : null;
             if (!c || !userLocation || c.latitude == null || c.longitude == null) return null;
@@ -6628,6 +6629,7 @@ function MainApp() {
             return distanciaTexto(haversineMeters(userLocation.latitude, userLocation.longitude, Number(c.latitude), Number(c.longitude)));
           }}
           visitadoHoje={(c) => visitadoHoje(c.visited_at)}
+          dailyValidadaEm={meuDia.data?.prometido?.validadaEm ?? null}
           // Mesmo check-in do mapa: vai ao mapa com o card aberto e roda o
           // fluxo de lá (GPS novo, "Está na porta?", ficha de rua).
           aoCheguei={(c) => {
