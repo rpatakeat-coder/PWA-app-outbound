@@ -105,6 +105,9 @@ import { PeekCardNovo, TopoCardNovo, type AcoesCardNovo, type DadosCardNovo } fr
 import FolhaDoMapa, { type ItemFolha } from './src/screens/FolhaDoMapa';
 import TopoCampo, { ALTURA_TOPO_CAMPO } from './src/screens/TopoCampo';
 import FolhaLentes, { COR_LENTE } from './src/screens/FolhaLentes';
+import AvisoSemSinal from './src/screens/AvisoSemSinal';
+import FolhaMeuDia from './src/screens/FolhaMeuDia';
+import { useMeuDia } from './src/hooks/useMeuDia';
 import FolhaCalor from './src/screens/FolhaCalor';
 import AvisosPainel from './src/screens/AvisosPainel';
 import { useAvisos } from './src/hooks/useAvisos';
@@ -1404,6 +1407,10 @@ function MainApp() {
   // Sino de Avisos (mapa novo): motor + falhas de sincronização. Ver src/hooks/useAvisos.ts.
   const avisos = useAvisos(modoNovo, myHubspotId, canViewGestor);
   const [avisosAbertos, setAvisosAbertos] = useState(false);
+  // Meu dia em números (handoff v4.1 §6.12): só o medido — check-ins de hoje,
+  // Daily prometida, reuniões e sequência. Alimenta também o "x/6" da pílula.
+  const [meuDiaAberto, setMeuDiaAberto] = useState(false);
+  const meuDia = useMeuDia(modoNovo, profile?.id ?? null);
 
   // Recorte de tarefas por vendedor. Gestor (canViewGestor: admin ou Julyan) ve
   // TODAS; vendedor comum ve so as dos leads dele (match por vendedor_id_hubspot).
@@ -3596,6 +3603,8 @@ function MainApp() {
         : corrigirPino
         ? `✓ Check-in em ${nomeDoLead} · pino corrigido (estava a ${Math.round(distance)} m)`
         : `✓ Check-in em ${nomeDoLead} registrado`, 'ok');
+      // O "x/6" da pílula e o Meu dia contam check-ins reais: atualiza na hora.
+      void queryClient.invalidateQueries({ queryKey: ['meu_dia'] });
       if (modoNovo && contextoPino && visitado.status === 'lead') {
         // Etapa atual no código do Cockpit: texto do app pela etapa_de_para,
         // senão a do snapshot (0105).
@@ -4662,6 +4671,7 @@ function MainApp() {
         style={[styles.areaStatusWrap, { top: modoNovo && !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 8 : (mapLayout?.y ?? 0) + 8 }]}
         pointerEvents="none"
       >
+        {modoNovo && !layout.ehLargo && <AvisoSemSinal />}
         {((showOnlyMyArea && viewportTooWide) || isLoading || waitingForLocation) && (
           <View style={styles.areaStatusPill}>
             {showOnlyMyArea && viewportTooWide ? (
@@ -4821,6 +4831,25 @@ function MainApp() {
         />
       )}
       {modoNovo && !layout.ehLargo && (
+        <FolhaMeuDia
+          visivel={meuDiaAberto}
+          aoFechar={() => setMeuDiaAberto(false)}
+          dados={meuDia.data}
+          carregando={meuDia.isLoading}
+          metaPadrao={routeConfig.meta_visitas_dia > 0 ? routeConfig.meta_visitas_dia : 6}
+          portasNaMicrorrota={(() => {
+            // Portas boas a pé: leads e contas-alvo não visitados hoje, a até 250 m da próxima porta.
+            const prox = routeDisplayClients.find((c) => c.id === idClienteParadaAtual);
+            if (!prox || prox.latitude == null || prox.longitude == null) return 0;
+            return visiveisMapaNovo.filter(({ c, p, plano }) => plano == null && (p.tipo === 'lead' || p.tipo === 'alvo') && p.temp !== 'X'
+              && !visitadoHoje(c.visited_at) && c.latitude != null && c.longitude != null
+              && haversineMeters(Number(prox.latitude), Number(prox.longitude), Number(c.latitude), Number(c.longitude)) <= 250).length;
+          })()}
+          proxima={(() => { const c = routeDisplayClients.find((x) => x.id === idClienteParadaAtual); return c ? { nome: getClientPrimaryName(c) } : null; })()}
+          aoIrProxima={() => { const c = routeDisplayClients.find((x) => x.id === idClienteParadaAtual); if (c) handleMarkerPress(c); }}
+        />
+      )}
+      {modoNovo && !layout.ehLargo && (
         <FolhaLentes
           visivel={lentesAbertas}
           aoFechar={() => setLentesAbertas(false)}
@@ -4858,9 +4887,9 @@ function MainApp() {
           eMeu={!isViewer && (lente === 'semdono' || lente === 'rec') ? { naRota: routeStopClientIds, aoAssumir: (c) => { void assumirDoMapa(c); } } : null}
           planoTotal={routeDisplayClients.length}
           planoFeito={routeStops.filter((s) => s.status === 'done').length}
-          visitasFeitas={routeStops.filter((s) => s.status === 'done').length}
-          metaVisitas={routeConfig.meta_visitas_dia > 0 ? routeConfig.meta_visitas_dia : 6}
-          aoProgresso={() => irParaAba('agenda')}
+          visitasFeitas={meuDia.data?.visitasHoje ?? routeStops.filter((s) => s.status === 'done').length}
+          metaVisitas={meuDia.data?.prometido?.visitas || (routeConfig.meta_visitas_dia > 0 ? routeConfig.meta_visitas_dia : 6)}
+          aoProgresso={() => setMeuDiaAberto(true)}
           chao={alturaRodape ?? baseInferior}
           totalNaArea={visiveisMapaNovo.length}
           rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
@@ -6676,7 +6705,10 @@ function MainApp() {
               : null,
             // Escondido pro viewer, que o guard de papel ja' redireciona.
             !isViewer
-              ? { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu desempenho', aoTocar: () => irParaTelaDePerfil('meu') }
+              ? modoNovo
+                // Depois do menu fechar: o history.back() do Painel fecharia o novo (CLAUDE.md).
+                ? { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu dia em números', aoTocar: () => { setPerfilAberto(false); setTimeout(() => setMeuDiaAberto(true), 350); } }
+                : { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu desempenho', aoTocar: () => irParaTelaDePerfil('meu') }
               : null,
             // Modo sol (prompt §6): mapa claro para ler na rua ao meio-dia. Só no mapa novo.
             modoNovo
