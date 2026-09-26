@@ -75,3 +75,35 @@ export function resumoDaQuadra(itens: Item[]): ResumoQuadra {
   }
   return { area, composicao, melhor };
 }
+
+/**
+ * O cartão tem ~160 × 64 px e a pilha junta pinos a 24 px: quadras vizinhas
+ * sobrepunham os cartões. Aqui as quadras cujos cartões se tocariam na tela
+ * viram uma só; a maior fica com o lugar. `absorvida` diz qual pilha foi
+ * engolida por qual (quem desenha esconde o líder dela também).
+ */
+export function quadrasNaTela(
+  pilhas: Array<{ lider: string; membros: string[]; x: number; y: number }>,
+  larguraPx = 170,
+  alturaPx = 72,
+): { quadras: Map<string, string[]>; absorvida: Map<string, string> } {
+  const caixa = (p: { x: number; y: number }) => ({ x0: p.x - larguraPx / 2, x1: p.x + larguraPx / 2, y0: p.y - alturaPx, y1: p.y });
+  const bate = (a: ReturnType<typeof caixa>, b: ReturnType<typeof caixa>) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+  const grandes = pilhas.filter((p) => p.membros.length >= MINIMO_QUADRA)
+    .sort((a, b) => b.membros.length - a.membros.length || a.lider.localeCompare(b.lider));
+  const aceitas: Array<{ lider: string; caixa: ReturnType<typeof caixa> }> = [];
+  const quadras = new Map<string, string[]>();
+  const absorvida = new Map<string, string>();
+  for (const p of grandes) {
+    const c = caixa(p);
+    const dona = aceitas.find((a) => bate(a.caixa, c));
+    if (dona) {
+      quadras.get(dona.lider)!.push(...p.membros);
+      absorvida.set(p.lider, dona.lider);
+    } else {
+      aceitas.push({ lider: p.lider, caixa: c });
+      quadras.set(p.lider, [...p.membros]);
+    }
+  }
+  return { quadras, absorvida };
+}

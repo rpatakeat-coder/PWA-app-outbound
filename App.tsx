@@ -109,8 +109,8 @@ import { negocioAcao } from './src/utils/negocioAcao';
 import { textoNormalizado } from './src/utils/pinoP2';
 import { FILTROS_VAZIOS, LENTES, noFoco, passaNosFiltros, pontoDe, quantosFiltros, type FiltrosNovos, type Lente } from './src/utils/lentes';
 import CamadaDePontos from './src/map/CamadaDePontos';
-import { pilhasNaTela, posicoesDoLeque, rotulosSemSobrepor, type Pilha } from './src/utils/rotulos';
-import { MINIMO_QUADRA, resumoDaQuadra, type ResumoQuadra } from './src/utils/quadra';
+import { pilhasNaTela, posicoesDoLeque, projetar, rotulosSemSobrepor, type Pilha } from './src/utils/rotulos';
+import { MINIMO_QUADRA, quadrasNaTela, resumoDaQuadra, type ResumoQuadra } from './src/utils/quadra';
 import CartaoQuadra, { ANCORA_QUADRA } from './src/map/CartaoQuadra';
 import { classificarPino, type ContextoPino } from './src/utils/pinoP2';
 import { useMeetings } from './src/hooks/useMeetings';
@@ -1761,7 +1761,7 @@ function MainApp() {
     [itensMapaNovo, filtrosNovos],
   );
 
-  const { focoMapaNovo, camadaPontos, comNome, pilhaDe } = useMemo(() => {
+  const { focoMapaNovo, camadaPontos, comNome, pilhaDe, janelaMapa } = useMemo(() => {
     const foco: typeof visiveisMapaNovo = [];
     const pontos: typeof visiveisMapaNovo = [];
     for (const it of visiveisMapaNovo) {
@@ -1797,7 +1797,7 @@ function MainApp() {
       for (const [id, lado] of rotulosSemSobrepor(candidatos, janela)) nomes.set(id, lado);
     }
     const camada = pontos.map(({ c, p }) => ({ lat: c.latitude as number, lng: c.longitude as number, ...pontoDe(p) }));
-    return { focoMapaNovo: foco, camadaPontos: camada, comNome: nomes, pilhaDe: pilhaDeId };
+    return { focoMapaNovo: foco, camadaPontos: camada, comNome: nomes, pilhaDe: pilhaDeId, janelaMapa: janela };
   }, [visiveisMapaNovo, lente, selectedClient?.id, mapRegion, layout.ehLargo, janelaTela.width, janelaTela.height, pilhaAberta]);
   // Pilha até 8: abre em leque. Maior: aproxima o mapa até os pinos se
   // separarem — a não ser que estejam todos no mesmo ponto (aí só o leque separa).
@@ -1833,17 +1833,23 @@ function MainApp() {
   }, [focoMapaNovo, routeStops, userLocation]);
   // Resumo de quadra (prompt final §5): pilha grande vira área + composição +
   // melhor candidato, no lugar do pino com um número.
-  const resumoDaPilha = useMemo(() => {
+  const { resumoDaPilha, quadraAbsorvida } = useMemo(() => {
     const porId = new Map(itensFolha.map((it) => [it.c.id, it]));
-    const r = new Map<string, ResumoQuadra>();
-    const vistas = new Set<string>();
-    for (const pl of pilhaDe.values()) {
-      if (vistas.has(pl.lider) || pl.membros.length < MINIMO_QUADRA) continue;
-      vistas.add(pl.lider);
-      r.set(pl.lider, resumoDaQuadra(pl.membros.map((id) => porId.get(id)).filter(Boolean) as ItemFolha[]));
+    const unicas = new Map<string, Pilha>();
+    for (const pl of pilhaDe.values()) if (pl.membros.length >= MINIMO_QUADRA) unicas.set(pl.lider, pl);
+    const comPosicao = [...unicas.values()].flatMap((pl) => {
+      const it = porId.get(pl.lider);
+      if (!it || !janelaMapa) return [];
+      return [{ ...pl, ...projetar(Number(it.c.latitude), Number(it.c.longitude), janelaMapa) }];
+    });
+    // Cartões que se tocariam na tela viram uma quadra só (quadrasNaTela).
+    const { quadras, absorvida } = quadrasNaTela(comPosicao);
+    const r = new Map<string, { resumo: ResumoQuadra; membros: string[] }>();
+    for (const [lider, membros] of quadras) {
+      r.set(lider, { resumo: resumoDaQuadra(membros.map((id) => porId.get(id)).filter(Boolean) as ItemFolha[]), membros });
     }
-    return r;
-  }, [pilhaDe, itensFolha]);
+    return { resumoDaPilha: r, quadraAbsorvida: absorvida };
+  }, [pilhaDe, itensFolha, janelaMapa]);
 
   // Dia que a Agenda mostra. Unico estado novo do M4: a tira da semana vive no
   // header (que e' desta casca) e o corpo vive na AgendaScreen, entao o dia
@@ -4236,17 +4242,19 @@ function MainApp() {
           const aberta = !!pl && n > 1 && pilhaAberta === pl.lider;
           if (pl && n > 1 && !aberta && pl.lider !== c.id) return null;
           const leque = aberta && pl ? posicoesDoLeque(n)[pl.membros.indexOf(c.id)] : null;
-          const resumo = pl && !aberta ? resumoDaPilha.get(pl.lider) : undefined;
-          if (resumo && pl) {
+          if (pl && !aberta && quadraAbsorvida.has(pl.lider)) return null;
+          const quadra = pl && !aberta ? resumoDaPilha.get(pl.lider) : undefined;
+          if (quadra && pl) {
+            const { resumo, membros } = quadra;
             return (
               <Marker
                 key={`quadra-${pl.lider}`}
                 coordinate={{ latitude: c.latitude as number, longitude: c.longitude as number }}
                 anchor={ANCORA_QUADRA}
                 zIndex={quadraAberta?.lider === pl.lider ? 1800 : 800}
-                onPress={() => { setSelectedClient(null); setQuadraAberta({ lider: pl.lider, ids: new Set(pl.membros), area: resumo.area }); }}
+                onPress={() => { setSelectedClient(null); setQuadraAberta({ lider: pl.lider, ids: new Set(membros), area: resumo.area }); }}
               >
-                <CartaoQuadra resumo={resumo} n={n} />
+                <CartaoQuadra resumo={resumo} n={membros.length} />
               </Marker>
             );
           }

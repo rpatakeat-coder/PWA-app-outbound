@@ -1,7 +1,7 @@
 // Teste do resumo de quadra: área, composição e melhor candidato.
 //
 // Rode com:  npx tsx src/utils/quadra.teste.ts
-import { resumoDaQuadra } from './quadra';
+import { quadrasNaTela, resumoDaQuadra } from './quadra';
 import type { Pino } from './pinoP2';
 
 let falhas = 0;
@@ -33,6 +33,17 @@ ok(resumoDaQuadra([...comBoa, it('q', { dono: 'meu', temp: 'Q' }, { empresa: 'Ba
 ok(resumoDaQuadra([...comBoa, it('c', { etiqueta: { texto: 'cobrar', fundo: '', tinta: '' } }, { empresa: 'Kadô' })]).melhor?.id === 'c', 'cobrança vence carteira e conta-alvo');
 ok(resumoDaQuadra([...comBoa, it('p', {}, {}, 3, 3000)]).melhor?.texto === 'melhor: parada 3 · 3,0 km', 'plano de hoje vence tudo');
 ok(resumoDaQuadra([it('x', {}, { bairro: null, cidade: 'Serra' })]).area === 'Serra', 'sem bairro: a cidade');
+
+// cartões que se tocariam viram uma quadra só
+const m = (pre: string, n: number) => Array.from({ length: n }, (_, i) => pre + i);
+const q = quadrasNaTela([
+  { lider: 'A', membros: m('a', 34), x: 200, y: 300 },
+  { lider: 'B', membros: m('b', 12), x: 260, y: 320 },   // cartão bate no de A
+  { lider: 'C', membros: m('c', 8), x: 200, y: 500 },    // longe
+  { lider: 'D', membros: m('d', 3), x: 205, y: 300 },    // pilha pequena: nem entra
+]);
+ok([...q.quadras.keys()].join() === 'A,C' && q.quadras.get('A')!.length === 46, 'B se toca com A: vira uma quadra com 46; C fica sozinha');
+ok(q.absorvida.get('B') === 'A' && !q.absorvida.has('D'), 'B absorvida por A; pilha pequena fica de fora');
 
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);
