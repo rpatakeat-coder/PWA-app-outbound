@@ -262,11 +262,11 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       <Cabecalho d={d} a={a} compacto={false} />
       {/* Motor (prompt §7.4): a conta-alvo sumiu do Google ou está fechada. Descartar
           tira da rota antes de alguém perder a viagem até uma porta fechada. */}
-      {(d.client.motor_status === 'sumiu_google' || d.client.motor_status === 'fechado_temporario') && (
+      {(d.client.motor_status === 'sumiu_google' || d.client.motor_status === 'fechado_temporario' || d.client.motor_status === 'cnpj_baixado') && (
         <View style={s.alerta}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={s.alertaTitulo} numberOfLines={2}>
-              {`Motor (${d.client.motor_conferido_em ? new Date(d.client.motor_conferido_em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }) : '—'}): ${d.client.motor_status === 'sumiu_google' ? 'sumiu do Google. Pode ter fechado.' : 'fechado temporariamente no Google.'}`}
+              {`Motor (${d.client.motor_conferido_em ? new Date(d.client.motor_conferido_em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }) : '—'}): ${d.client.motor_status === 'sumiu_google' ? 'sumiu do Google. Pode ter fechado.' : d.client.motor_status === 'cnpj_baixado' ? 'CNPJ baixado na Receita. A empresa pode ter fechado.' : 'fechado temporariamente no Google.'}`}
             </Text>
           </View>
           {a.onDismissContaAlvo && (

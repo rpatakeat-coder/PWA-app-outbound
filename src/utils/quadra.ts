@@ -28,7 +28,7 @@ const distTexto = (m: number | null) =>
 /** Prompt: plano de hoje › cobrança › minha carteira quente › conta-alvo ≥ 4,5★ e ≥ 100 avaliações › o resto (mais perto). */
 function pesoMelhor(it: Item): number {
   // O motor (0110) viu que fechou: nunca é o "melhor" — seria mandar alguém a porta fechada.
-  if (it.c.motor_status === 'sumiu_google' || it.c.motor_status === 'fechado_temporario') return 9;
+  if (it.c.motor_status === 'sumiu_google' || it.c.motor_status === 'fechado_temporario' || it.c.motor_status === 'cnpj_baixado') return 9;
   if (it.plano != null) return 0;
   if (it.p.etiqueta?.texto === 'cobrar') return 1;
   if (it.p.dono === 'meu' && it.p.temp === 'Q') return 2;
@@ -86,8 +86,8 @@ export function resumoDaQuadra(itens: Item[]): ResumoQuadra {
  */
 export function quadrasNaTela(
   pilhas: Array<{ lider: string; membros: string[]; x: number; y: number }>,
-  larguraPx = 170,
-  alturaPx = 72,
+  larguraPx = 180,
+  alturaPx = 88, // 3 linhas + ponta + folga: 72 deixava dois cartões encostando (26/09)
 ): { quadras: Map<string, string[]>; absorvida: Map<string, string> } {
   const caixa = (p: { x: number; y: number }) => ({ x0: p.x - larguraPx / 2, x1: p.x + larguraPx / 2, y0: p.y - alturaPx, y1: p.y });
   const bate = (a: ReturnType<typeof caixa>, b: ReturnType<typeof caixa>) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
