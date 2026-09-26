@@ -46,7 +46,7 @@ export default function TopoCampo({ top, lente, aoAbrirLentes, busca, aoBuscar, 
           accessibilityRole="search"
           accessibilityLabel={busca ? `Busca: ${busca}. Abrir busca` : 'Buscar lead, rua ou CNPJ'}
         >
-          <Text style={[s.buscaCampo, !busca && s.buscaVazia]} numberOfLines={1}>{busca || 'Buscar lead, rua, CNPJ'}</Text>
+          <Text style={[s.buscaCampo, !busca && s.buscaVazia]} numberOfLines={1}>{busca || 'Lead, rua ou CNPJ'}</Text>
         </Pressable>
         {buscando && <ActivityIndicator size="small" color="#AEB4BE" />}
         {busca.length > 0 && !buscando && (

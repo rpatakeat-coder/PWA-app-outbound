@@ -105,8 +105,8 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
           </Pressable>
         ) : (
           <Pressable accessibilityRole="button" accessibilityLabel="Abrir a lista desta área" onPress={() => setAberta(true)} style={s.pilulaTexto}>
-            <Text style={s.pilulaNome} numberOfLines={1}>{planoTotal ? `Plano de hoje concluído · ${planoFeito} de ${planoTotal}` : 'Nada planejado hoje no Cockpit'}</Text>
-            <Text style={s.pilulaSub} numberOfLines={1}>{`${totalNaArea} na área · toque para ver a lista`}</Text>
+            <Text style={s.pilulaNome} numberOfLines={1}>{planoTotal ? `Plano concluído · ${planoFeito} de ${planoTotal}` : 'Nada planejado hoje'}</Text>
+            <Text style={s.pilulaSub} numberOfLines={1}>{`${totalNaArea} na área · ver a lista`}</Text>
           </Pressable>
         )}
         <Pressable accessibilityRole="button" accessibilityLabel={`${visitasFeitas} de ${meta} visitas hoje`} onPress={aoProgresso} style={s.pilulaProgresso} hitSlop={6}>
