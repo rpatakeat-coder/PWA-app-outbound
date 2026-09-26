@@ -29,6 +29,8 @@ type Props = {
   onCheguei: (c: Client) => void;
   /** Altura da folha na tela (o mapa termina no topo dela). */
   aoMedir?: (medida: { y: number; altura: number }) => void;
+  /** Resumo de quadra tocado no mapa: a lista mostra só os pinos dele. */
+  quadra?: { area: string; aoFechar: () => void } | null;
 };
 
 function PinoMini({ p, plano }: { p: Pino; plano: number | null }) {
@@ -55,8 +57,9 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir }: Props) {
-  const [aberta, setAberta] = useState(false);
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra }: Props) {
+  const [abertaPeloToque, setAberta] = useState(false);
+  const aberta = abertaPeloToque || !!quadra;
   const [modo, setModo] = useState<'prioridade' | 'distancia'>('prioridade');
   const ordenados = useMemo(() => ordenarItens(itens, modo), [itens, modo]);
   const proxima = useMemo(() => ordenarItens(itens, 'prioridade').find((it) => it.plano && !it.feito) ?? null, [itens]);
@@ -106,10 +109,22 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
         </Text>
       )}
 
+      {quadra ? (
+        <View style={s.quadraTopo}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.nestaAreaTexto} numberOfLines={1}>{`Quadra · ${quadra.area} · ${itens.length} ${itens.length === 1 ? 'pino' : 'pinos'}`}</Text>
+            <Text style={s.nestaAreaSub}>{`Lente ${rotuloLente} · melhor candidato primeiro`}</Text>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Fechar a lista da quadra" onPress={quadra.aoFechar} style={s.quadraFechar}>
+            <Text style={s.quadraFecharTexto}>✕</Text>
+          </Pressable>
+        </View>
+      ) : (
       <Pressable accessibilityRole="button" onPress={() => setAberta((v) => !v)} style={s.nestaArea}>
         <Text style={s.nestaAreaTexto}>{`Nesta área · ${totalNaArea} · ${itens.length} ${itens.length === 1 ? 'pino' : 'pinos'}, ${Math.max(0, totalNaArea - itens.length)} pontos ${aberta ? '▾' : '▴'}`}</Text>
         <Text style={s.nestaAreaSub}>{`Lente ${rotuloLente}`}</Text>
       </Pressable>
+      )}
 
       {aberta && (
         <>
@@ -172,6 +187,9 @@ const s = StyleSheet.create({
   btnChegueiTexto: { fontSize: 17, fontWeight: '800', color: '#fff' },
   semProxima: { fontSize: 13, color: 'var(--text-muted)', paddingVertical: 6 },
   nestaArea: { minHeight: 44, justifyContent: 'center' },
+  quadraTopo: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
+  quadraFechar: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -8 },
+  quadraFecharTexto: { fontSize: 18, color: 'var(--text-muted)' },
   nestaAreaTexto: { fontSize: 13, fontWeight: '800', color: 'var(--text)' },
   nestaAreaSub: { fontSize: 11, color: 'var(--text-muted)' },
   ordem: { flexDirection: 'row', gap: 8 },

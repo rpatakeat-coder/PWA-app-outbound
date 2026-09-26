@@ -110,6 +110,8 @@ import { textoNormalizado } from './src/utils/pinoP2';
 import { FILTROS_VAZIOS, LENTES, noFoco, passaNosFiltros, pontoDe, quantosFiltros, type FiltrosNovos, type Lente } from './src/utils/lentes';
 import CamadaDePontos from './src/map/CamadaDePontos';
 import { pilhasNaTela, posicoesDoLeque, rotulosSemSobrepor, type Pilha } from './src/utils/rotulos';
+import { MINIMO_QUADRA, resumoDaQuadra, type ResumoQuadra } from './src/utils/quadra';
+import CartaoQuadra, { ANCORA_QUADRA } from './src/map/CartaoQuadra';
 import { classificarPino, type ContextoPino } from './src/utils/pinoP2';
 import { useMeetings } from './src/hooks/useMeetings';
 import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
@@ -1001,7 +1003,10 @@ function MainApp() {
   const [filtrosNovosAbertos, setFiltrosNovosAbertos] = useState(false);
   // Pilha aberta em leque (C11): id do líder. Fecha ao mexer o mapa.
   const [pilhaAberta, setPilhaAberta] = useState<string | null>(null);
+  // Resumo de quadra tocado: a folha mostra só os pinos dele até fechar.
+  const [quadraAberta, setQuadraAberta] = useState<{ lider: string; ids: Set<string>; area: string } | null>(null);
   useEffect(() => { setPilhaAberta(null); }, [mapRegion]);
+  useEffect(() => { setQuadraAberta(null); }, [lente]);
   const janelaTela = useWindowDimensions();
   // Altura da folha de baixo do mapa novo: o mapa termina no topo dela, para
   // o logo e os Termos do Google ficarem sempre visíveis (prompt final C10).
@@ -1826,6 +1831,19 @@ function MainApp() {
     };
     return focoMapaNovo.map(({ c, p, plano }) => ({ c, p, plano, distanciaM: distancia(c), feito: feitos.has(c.id) }));
   }, [focoMapaNovo, routeStops, userLocation]);
+  // Resumo de quadra (prompt final §5): pilha grande vira área + composição +
+  // melhor candidato, no lugar do pino com um número.
+  const resumoDaPilha = useMemo(() => {
+    const porId = new Map(itensFolha.map((it) => [it.c.id, it]));
+    const r = new Map<string, ResumoQuadra>();
+    const vistas = new Set<string>();
+    for (const pl of pilhaDe.values()) {
+      if (vistas.has(pl.lider) || pl.membros.length < MINIMO_QUADRA) continue;
+      vistas.add(pl.lider);
+      r.set(pl.lider, resumoDaQuadra(pl.membros.map((id) => porId.get(id)).filter(Boolean) as ItemFolha[]));
+    }
+    return r;
+  }, [pilhaDe, itensFolha]);
 
   // Dia que a Agenda mostra. Unico estado novo do M4: a tira da semana vive no
   // header (que e' desta casca) e o corpo vive na AgendaScreen, entao o dia
@@ -4218,6 +4236,20 @@ function MainApp() {
           const aberta = !!pl && n > 1 && pilhaAberta === pl.lider;
           if (pl && n > 1 && !aberta && pl.lider !== c.id) return null;
           const leque = aberta && pl ? posicoesDoLeque(n)[pl.membros.indexOf(c.id)] : null;
+          const resumo = pl && !aberta ? resumoDaPilha.get(pl.lider) : undefined;
+          if (resumo && pl) {
+            return (
+              <Marker
+                key={`quadra-${pl.lider}`}
+                coordinate={{ latitude: c.latitude as number, longitude: c.longitude as number }}
+                anchor={ANCORA_QUADRA}
+                zIndex={quadraAberta?.lider === pl.lider ? 1800 : 800}
+                onPress={() => { setSelectedClient(null); setQuadraAberta({ lider: pl.lider, ids: new Set(pl.membros), area: resumo.area }); }}
+              >
+                <CartaoQuadra resumo={resumo} n={n} />
+              </Marker>
+            );
+          }
           return (
           <MarkerP2
             // cluster é fixo por marcador (Marker.tsx): trocar o agrupamento recria o pino.
@@ -4470,7 +4502,8 @@ function MainApp() {
       {folhaVisivel && (
         <FolhaDoMapa
           aoMedir={({ y, altura }) => { setAlturaFolha(altura); setTopoFolha(y); }}
-          itens={itensFolha}
+          itens={quadraAberta ? itensFolha.filter((it) => quadraAberta.ids.has(it.c.id)) : itensFolha}
+          quadra={quadraAberta ? { area: quadraAberta.area, aoFechar: () => setQuadraAberta(null) } : null}
           planoTotal={routeDisplayClients.length}
           planoFeito={routeStops.filter((s) => s.status === 'done').length}
           chao={baseInferior}
