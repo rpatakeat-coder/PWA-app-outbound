@@ -15,6 +15,7 @@ import { ORIGEM, origemDoFiltro } from '../utils/lentes';
 import { openGoogleMaps, type TravelMode } from '../utils/navigation';
 import type { Pino } from '../utils/pinoP2';
 import { distanciaTexto, fatosDoCard } from '../utils/cardNovo';
+import { pareceNomeDePessoa } from '../utils/fichaDeRua';
 
 export { distanciaTexto };
 import { openWhatsapp, toWhatsappNumber } from '../utils/whatsapp';
@@ -29,6 +30,8 @@ export type AcoesCardNovo = {
   onClose: () => void;
   /** Peek → ficha completa (abas Histórico · Agenda · Dados). */
   onExpandir?: () => void;
+  /** Alerta de cobrança: encerra a tarefa do HubSpot + registra a ligação. */
+  onLiguei?: () => void;
 };
 
 export type DadosCardNovo = {
@@ -43,6 +46,8 @@ export type DadosCardNovo = {
   isMarkingVisited: boolean;
   /** Mesma conta do alerta "Localização aproximada" do card. */
   aproximado?: boolean;
+  /** Tarefa de cobrança (SLA) aberta no HubSpot para este lead — a MESMA da aba Tarefas. */
+  cobranca?: { texto: string; assunto: string } | null;
 };
 
 const ROTULO_TEMP: Record<string, string> = { Q: 'LEAD QUENTE', M: 'LEAD MORNO', F: 'LEAD FRIO', X: 'PERDIDO', '?': 'ETAPA NÃO RECONHECIDA' };
@@ -139,7 +144,10 @@ function BotaoCheguei({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   const sub = d.visitadoHoje
     ? null
     : d.planoNumero ? `conclui a parada ${d.planoNumero} do plano`
-      : d.client.id_hubspot ? 'registra a visita no Cockpit e no HubSpot' : 'registra a visita no Cockpit';
+      // Fora do plano, o check-in cria a parada (useFieldOps.adicionarParadaFeita);
+      // pino aproximado ainda pergunta "Está na porta?" e corrige a posição.
+      : d.aproximado ? 'entra no plano de hoje e corrige o pino'
+        : 'entra no plano de hoje sozinho';
   return (
     <Pressable
       accessibilityRole="button"
@@ -159,8 +167,13 @@ function BotaoCheguei({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
 }
 
 function Cabecalho({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; compacto: boolean }) {
-  const nome = d.client.empresa?.trim() || d.client.nome || 'Sem nome';
-  const sub = subtitulo(d.client);
+  const cadastrado = d.client.empresa?.trim() || d.client.nome || 'Sem nome';
+  const endereco = subtitulo(d.client);
+  // Prancha §7.2: nome de pessoa ("Amanda") não diz qual é o lugar. O endereço
+  // vira o título e o nome cadastrado fica na linha de baixo, com Corrigir.
+  const ehPessoa = pareceNomeDePessoa(cadastrado) && !!endereco;
+  const nome = ehPessoa ? endereco! : cadastrado;
+  const sub = ehPessoa ? `cadastrado como "${cadastrado}"` : endereco;
   return (
     <View style={s.cabecalho}>
       <Pressable
@@ -174,6 +187,11 @@ function Cabecalho({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; com
         <Text style={[s.titulo, nome.length > 40 && s.tituloLongo]} numberOfLines={compacto ? 1 : 2}>{nome}</Text>
         <Text style={[s.sub, !sub && s.vazio]} numberOfLines={1}>{sub ?? 'endereço não informado'}</Text>
       </Pressable>
+      {ehPessoa && !compacto && a.onEdit && (
+        <Pressable accessibilityRole="button" accessibilityLabel="Corrigir o nome do lugar" onPress={a.onEdit} style={s.corrigir}>
+          <Text style={s.corrigirTexto}>Corrigir</Text>
+        </Pressable>
+      )}
       <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={a.onClose} style={s.fechar}>
         <Text style={s.fecharTexto}>✕</Text>
       </Pressable>
@@ -240,6 +258,19 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   return (
     <View style={s.topo}>
       <Cabecalho d={d} a={a} compacto={false} />
+      {d.cobranca && (
+        <View style={s.alerta}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.alertaTitulo} numberOfLines={1}>{d.cobranca.texto}</Text>
+            <Text style={s.alertaSub} numberOfLines={1}>{d.cobranca.assunto}</Text>
+          </View>
+          {a.onLiguei && (
+            <Pressable accessibilityRole="button" accessibilityLabel="Liguei: encerrar a cobrança" onPress={a.onLiguei} style={({ pressed }) => [s.alertaBotao, pressed && { opacity: 0.8 }]}>
+              <Text style={s.alertaBotaoTexto}>Liguei</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
       <Fatos d={d} />
       <BotaoCheguei d={d} a={a} />
       <GradeQuatro d={d} a={a} />
@@ -275,12 +306,22 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
 const s = StyleSheet.create({
   peek: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8, gap: 10 },
   topo: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, gap: 10 },
+  alerta: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 12, paddingRight: 6, paddingVertical: 6,
+    borderRadius: 10, backgroundColor: 'var(--tint-red)', borderWidth: 1, borderColor: 'var(--tint-red-border)',
+  },
+  alertaTitulo: { fontSize: 13, fontWeight: '800', color: 'var(--tint-red-text)' },
+  alertaSub: { fontSize: 12, color: 'var(--tint-red-text)', opacity: 0.85 },
+  alertaBotao: { minHeight: 44, minWidth: 72, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#C8131B', alignItems: 'center', justifyContent: 'center' },
+  alertaBotaoTexto: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
   cabecalho: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   kicker: { fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
   titulo: { fontSize: 24, lineHeight: 30, fontWeight: '800', color: 'var(--text)', marginTop: 2 },
   tituloLongo: { fontSize: 19, lineHeight: 24 },
   sub: { fontSize: 13, color: 'var(--text-muted)', marginTop: 2 },
   vazio: { fontStyle: 'italic' },
+  corrigir: { minHeight: 44, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: 'var(--tint-amber-border)', backgroundColor: 'var(--tint-amber)', alignItems: 'center', justifyContent: 'center' },
+  corrigirTexto: { fontSize: 13, fontWeight: '800', color: 'var(--tint-amber-text)' },
   fechar: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -8 },
   fecharTexto: { fontSize: 18, color: 'var(--text-muted)' },
   fatos: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },

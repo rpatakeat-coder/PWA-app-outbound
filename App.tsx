@@ -154,8 +154,8 @@ import { AgendaScreen } from './src/screens/AgendaScreen';
 import PlaybookScreen from './src/screens/PlaybookScreen';
 import TarefasNovoScreen from './src/screens/TarefasNovoScreen';
 import AgendaNovoScreen from './src/screens/AgendaNovoScreen';
-import { enviarConclusao, type PedidoConclusao } from './src/utils/concluirTarefa';
-import { grupoDaTarefa } from './src/utils/abaTarefas';
+import { concluirComDesfazer, enviarConclusao, type PedidoConclusao } from './src/utils/concluirTarefa';
+import { diasDeAtraso, ehCobranca, grupoDaTarefa } from './src/utils/abaTarefas';
 import { distanciaTexto } from './src/utils/cardNovo';
 import { ConfiguracoesScreen } from './src/screens/ConfiguracoesScreen';
 import { ds, sharedStyles } from './src/screens/sharedStyles';
@@ -967,6 +967,9 @@ function MainApp() {
   // apontam pro mesmo tier.
   const isAdmin = isGestor;
   const canViewGestor = isGestor;
+  // Cobranças concluídas pelo Liguei do card, dentro da janela do Desfazer:
+  // o alerta some na hora e volta se desfizer (src/utils/concluirTarefa.ts).
+  const [cobrancasEmJanela, setCobrancasEmJanela] = useState<Set<string>>(new Set());
   // Filtros → "Mostrar testes" (só gestor/admin).
   const [mostrarTestes, setMostrarTestes] = useState(false);
   // Usuario 'view' = somente leitura. Esconde criar/editar/excluir/rotas/agenda/notas.
@@ -3306,6 +3309,10 @@ function MainApp() {
         const stop = fieldOps.stops.find((s) => s.client_id === client.id && s.status !== 'done');
         if (stop) {
           try { await fieldOps.markStopDone.mutateAsync(stop); } catch { /* não bloqueia o check-in */ }
+        } else if (modoNovo && !fieldOps.stops.some((s) => s.client_id === client.id)) {
+          // Mapa novo: check-in fora do plano entra na rota de hoje como parada
+          // feita (a Agenda e o "X de N feito" passam a contar essa visita).
+          try { await fieldOps.adicionarParadaFeita.mutateAsync(client); } catch { /* não bloqueia o check-in */ }
         }
       }
       // O desfecho so' faz sentido pra LEAD com deal: visitar cliente/churn e'
@@ -3341,7 +3348,7 @@ function MainApp() {
       visitingRef.current = false;
       setIsVisiting(false);
     }
-  }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, isMonitoringRoute, getBestFix, modoNovo, contextoPino]);
+  }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, fieldOps.adicionarParadaFeita, isMonitoringRoute, getBestFix, modoNovo, contextoPino]);
   handleMarkAsVisitedRef.current = handleMarkAsVisited;
 
   // Fila offline: quem sobe o check-in guardado sem sinal. Ref porque a
@@ -3359,6 +3366,9 @@ function MainApp() {
       const stop = fieldOps.stops.find((s) => s.client_id === clientId && s.status !== 'done');
       if (stop) {
         try { await fieldOps.markStopDone.mutateAsync(stop); } catch { /* não bloqueia o check-in */ }
+      } else if (modoNovo && !fieldOps.stops.some((s) => s.client_id === clientId)) {
+        const c = clients.find((x) => x.id === clientId);
+        if (c) { try { await fieldOps.adicionarParadaFeita.mutateAsync(c); } catch { /* não bloqueia o check-in */ } }
       }
     }
   };
@@ -3894,6 +3904,35 @@ function MainApp() {
           ? haversineMeters(userLocation.latitude, userLocation.longitude, Number(selectedClient.latitude), Number(selectedClient.longitude))
           : null,
         etapaRotulo: selectedClient.etapa ?? null,
+        ...(() => {
+          // A cobrança do card é a MESMA tarefa do HubSpot da aba Tarefas:
+          // Liguei aqui some de lá, e vice-versa.
+          const c = selectedClient;
+          const t = tarefasDoCrmParaContagem.find((x) => !cobrancasEmJanela.has(x.id)
+            && ehCobranca({ assunto: x.assunto, origem: x.marcador?.origem })
+            && (x.clientId === c.id || (!!x.dealId && !!c.id_hubspot && String(x.dealId) === String(c.id_hubspot))));
+          if (!t) return { cobranca: null };
+          const agora = new Date();
+          const atraso = diasDeAtraso(t.venceEm, agora);
+          const g = grupoDaTarefa(t.venceEm, agora);
+          const texto = atraso > 0 ? `Cobrança venceu há ${atraso} ${atraso === 1 ? 'dia' : 'dias'}`
+            : g === 'hoje' ? 'Cobrança vence hoje'
+            : `Cobrança para ${t.venceEm ? new Date(t.venceEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }) : 'hoje'}`;
+          const soltar = () => setCobrancasEmJanela((s) => { const n = new Set(s); n.delete(t.id); return n; });
+          return {
+            cobranca: { texto, assunto: t.assunto },
+            onLiguei: () => {
+              setCobrancasEmJanela((s) => new Set(s).add(t.id));
+              concluirComDesfazer({
+                pedido: { taskId: t.id, nota: t.dealId ? { dealId: String(t.dealId), texto: `Ligação · tarefa encerrada: ${t.assunto}` } : null },
+                rotulo: `Liguei · ${getClientPrimaryName(c)}`,
+                textoToast: '✓ Ligação registrada · HubSpot + Cockpit',
+                aoVoltar: soltar,
+                aoGravar: () => { void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] }).then(soltar); },
+              });
+            },
+          };
+        })(),
       } : null}
       insets={insets}
       statusConfig={statusConfig}
@@ -7440,7 +7479,7 @@ function ClientBottomSheet({
   novo,
 }: {
   /** Mapa novo (prancha §7): troca o topo e o peek; abas e alertas continuam. */
-  novo?: Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> | null;
+  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void }) | null;
   client: Client;
   insets: { bottom: number };
   statusConfig: Record<string, { label: string; color: string }>;
@@ -7809,6 +7848,7 @@ function ClientBottomSheet({
   const acoesNovo: AcoesCardNovo = {
     onMarkVisited, onChangeStage, onScheduleMeeting, onAddToRoute, onDismissContaAlvo, onEdit, onClose,
     onExpandir: () => setEstagio('cheia'),
+    onLiguei: novo?.onLiguei,
   };
 
   // ── Faixa de topo (M1c) ───────────────────────────────────────────────

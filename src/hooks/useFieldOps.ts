@@ -172,6 +172,56 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }),
   });
 
+  // Check-in num lead fora do plano vira parada, já feita, no FIM da rota de
+  // hoje (prompt final §5 "Rota = fila viva" e §8.2.4). Insere UMA linha: o
+  // saveRoute apaga e regrava todas as paradas, e com isso zerava as já feitas.
+  // Sem rota hoje, cria a do dia (mesmo upsert do saveRoute). Só na própria
+  // rota: quem monitora a de outro vendedor não mexe nela.
+  const adicionarParadaFeita = useMutation({
+    mutationFn: async (client: Client) => {
+      if (!user?.id || targetSeller !== user.id) return null;
+      let rotaId = route?.id ?? null;
+      if (!rotaId) {
+        const { data: rota, error } = await supabase
+          .from('field_routes')
+          .upsert({
+            seller_id: user.id,
+            route_date: routeDate,
+            title: 'Rota do dia',
+            status: 'planned',
+            source: 'manual',
+            priority_mode: 'manual',
+            created_by: user.id,
+          }, { onConflict: 'seller_id,route_date' })
+          .select()
+          .single();
+        if (error) throw error;
+        rotaId = (rota as FieldRoute).id;
+      }
+      const { data: atuais, error: erroAtuais } = await supabase
+        .from('field_route_stops')
+        .select('client_id, position, status')
+        .eq('route_id', rotaId);
+      if (erroAtuais) throw erroAtuais;
+      const linhas = (atuais ?? []) as Array<{ client_id: string; position: number; status: string }>;
+      if (linhas.some((l) => l.client_id === client.id && l.status !== 'removed')) return null;
+      const posicao = linhas.reduce((m, l) => Math.max(m, l.position ?? 0), 0) + 1;
+      const { error } = await supabase.from('field_route_stops').insert({
+        route_id: rotaId,
+        client_id: client.id,
+        position: posicao,
+        planned_at: new Date().toISOString(),
+        status: 'done',
+      });
+      if (error) throw error;
+      return posicao;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['field_routes'] });
+      queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
+    },
+  });
+
   // Alterna status entre 'done' e 'planned' — usado pelo checkbox da lista
   // de stops, pra permitir desfazer um marcado por engano.
   const toggleStopDone = useMutation({
@@ -193,6 +243,7 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
     saveRoute,
     updateStops,
     removeStop,
+    adicionarParadaFeita,
     markStopDone,
     toggleStopDone,
   };
