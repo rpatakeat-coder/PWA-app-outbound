@@ -392,10 +392,11 @@ const s = StyleSheet.create({
   cheguei: { minHeight: 56, borderRadius: 16, backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
   chegueiTexto: { fontSize: 16, fontWeight: '700', color: '#fff' },
   chegueiSub: { fontSize: 12, fontWeight: '500', color: 'rgba(255,255,255,.85)', marginTop: 1 },
-  botaoMais: { flex: 0, width: 56 },
+  // flex:0 no RN web vira '0 1 0%' e espreme o botão a 9 px: base e encolhimento explícitos.
+  botaoMais: { flexGrow: 0, flexShrink: 0, flexBasis: 56, width: 56 },
   eMeuBotao: { backgroundColor: 'transparent', borderColor: '#FACC15', borderWidth: 1.5 },
   grade2: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  botaoMeia: { flex: 0, width: '48.5%', minHeight: 48 },
+  botaoMeia: { flexGrow: 0, flexShrink: 0, flexBasis: '48.5%', width: '48.5%', minHeight: 48 },
   negocio: { gap: 6, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)' },
   negocioRotulo: { fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: 'var(--text-faint)' },
   negocioEtapa: { fontSize: 16, fontWeight: '600', color: 'var(--text)' },
