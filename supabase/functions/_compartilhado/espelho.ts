@@ -91,7 +91,14 @@ export async function espelharNegocio(token: string, svc: Svc, dealId: string, o
 /** Dispara sem segurar a resposta (Edge Runtime), e engole erro: o espelho nunca derruba a escrita. */
 export function espelharDepois(token: string, svc: Svc, dealId: string | null | undefined) {
   if (!dealId) return;
-  const p = espelharNegocio(token, svc, String(dealId)).catch((e) => console.warn('[espelho]', dealId, (e as Error).message));
+  // DUAS LEITURAS: agora, e 20 s depois. O HubSpot recalcula sozinho, segundos depois
+  // da escrita, os campos derivados (notes_last_updated, que decide os "dias parado");
+  // a primeira leitura pega a etapa na hora, a segunda pega esses campos já certos.
+  const id = String(dealId);
+  const p = espelharNegocio(token, svc, id)
+    .then(() => new Promise((r) => setTimeout(r, 20000)))
+    .then(() => espelharNegocio(token, svc, id))
+    .catch((e) => console.warn('[espelho]', dealId, (e as Error).message));
   // deno-lint-ignore no-explicit-any
   const rt = (globalThis as any).EdgeRuntime;
   if (rt && typeof rt.waitUntil === 'function') rt.waitUntil(p);
