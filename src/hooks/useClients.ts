@@ -308,6 +308,7 @@ export function useClients(
         cep: form.cep ?? null,
         cidade: form.cidade ?? null,
         estado: form.estado ?? null,
+        bairro: form.bairro ?? null,
         telefone: form.telefone ?? null,
         email: form.email ?? null,
         status: form.status,

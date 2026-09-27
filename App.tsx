@@ -293,6 +293,10 @@ const initialFormState = {
   latitude: '',
   longitude: '',
   observacoes: '',
+  // undefined = "não mexer" na edição (updateClient só grava o bairro que vier);
+  // no cadastro novo leva o bairro que o GPS/CEP achou (27/09: o cadastro nunca
+  // gravava o bairro — 94% das visitas de setembro eram em lead sem bairro).
+  bairro: undefined as string | undefined,
 };
 
 const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = [
@@ -3065,6 +3069,7 @@ function MainApp() {
       numero: addr?.numero ?? '',
       cidade: addr?.cidade ?? '',
       estado: addr?.estado ?? '',
+      bairro: addr?.bairro || undefined,
     });
     // Pin no mapa é sempre preciso (o usuário aponta o local exato).
     setPendingGeoApproximate(false);
@@ -3148,6 +3153,7 @@ function MainApp() {
       cep: form.cep || null,
       cidade: form.cidade || null,
       estado: form.estado || null,
+      bairro: form.bairro || null,
       telefone: form.telefone || null,
       email: form.email || null,
       observacoes: form.observacoes || null,
@@ -3241,6 +3247,7 @@ function MainApp() {
       latitude: client.latitude?.toString() || '',
       longitude: client.longitude?.toString() || '',
       observacoes: client.observacoes || '',
+      bairro: client.bairro || undefined,
     });
     setSelectedClient(null);
     setIsFormOpen(true);
@@ -7959,6 +7966,7 @@ function MainApp() {
               numero: cepData.numero || '',
               cidade: cepData.cidade || '',
               estado: cepData.estado || '',
+              bairro: cepData.bairro || undefined,
               latitude: cepData.latitude?.toString() || '',
               longitude: cepData.longitude?.toString() || '',
             }));

@@ -253,13 +253,24 @@ export async function reverseGeocode(lat: number, lng: number): Promise<{
     if (data.error) return null;
 
     const addr = data.address || {};
+    const cep = (addr.postcode || '').replace(/\D/g, '');
+    // BAIRRO (27/09/26): suburb/neighbourhood só cobrem parte do Brasil — medido, 94%
+    // das visitas de setembro eram em lead sem bairro, quase todos criados pelo
+    // "Estou aqui". O Nominatim também põe o bairro em quarter/city_district/
+    // residential; e quando não põe em lugar nenhum, o CEP que ele devolve dá o
+    // bairro pelo ViaCEP (a mesma consulta do CEP digitado). O Cockpit mede
+    // "bairro que converte" por este campo.
+    let bairro: string = addr.suburb || addr.neighbourhood || addr.quarter || addr.city_district || addr.residential || '';
+    if (!bairro && cep.length === 8) {
+      try { bairro = (await fetchCepData(cep))?.bairro || ''; } catch { /* sem bairro, segue */ }
+    }
     return {
       endereco: addr.road || '',
       numero: addr.house_number || '',
-      bairro: addr.suburb || addr.neighbourhood || '',
+      bairro,
       cidade: addr.city || addr.town || addr.village || '',
       estado: addr.state || '',
-      cep: (addr.postcode || '').replace(/\D/g, ''),
+      cep,
     };
   } catch (err) {
     throw toGeocodingError(err);
