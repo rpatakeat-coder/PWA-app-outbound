@@ -63,17 +63,23 @@ async function aplicarEspelho(svc: any, fontes: any, desde: string | null, equip
   const ags: any[] = a.data ?? [];
   if (!negs.length && !ags.length) return null;
 
-  // Os donos que o robô desenha (REPS = role rep com ownerId) e o nome de cada um.
-  const nomes: Record<string, string> = {};
-  (equipe || []).forEach((u: any) => { if (u && u.role === 'rep' && u.ownerId) nomes[String(u.ownerId)] = String(u.nome || ''); });
-
   const funil: Record<string, any[]> = {};
   Object.entries(hub.funilLeads || {}).forEach(([k, v]) => { funil[k] = Array.isArray(v) ? (v as any[]).slice() : []; });
+  // Os donos que o robô desenha e o nome de cada um: os que JÁ têm card no snapshot
+  // (é a lista REPS do robô, com o nome que ele usa) + os executivos da equipe, para
+  // quem ainda não tem card nenhum.
+  const nomes: Record<string, string> = {};
+  (equipe || []).forEach((u: any) => { if (u && u.role === 'rep' && u.ownerId) nomes[String(u.ownerId)] = String(u.nome || ''); });
+  Object.values(funil).forEach((lista) => lista.forEach((c: any) => {
+    if (c && c.ownerId && c.vendedor && c.vendedor !== '—') nomes[String(c.ownerId)] = String(c.vendedor);
+  }));
   const cfg = CONFIG.valores && CONFIG.valores.temperatura;
   let negocios = 0;
   for (const e of negs) {
     if (e.pipeline && e.pipeline !== PIPELINE_FIELD_SALES) continue;
     if (!nomes[String(e.owner_id)]) continue;
+    // Os mesmos que o robô descarta (nome com "teste", ids excluídos): nunca entram.
+    if ((REALIZADO as any).ehNegocioExcluido({ id: String(e.deal_id), properties: e.props || {} })) continue;
     let antigo: any = null;
     for (const k of Object.keys(funil)) {
       const i = funil[k].findIndex((c: any) => String(c && c.id) === String(e.deal_id));

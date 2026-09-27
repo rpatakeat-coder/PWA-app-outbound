@@ -49,7 +49,7 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { espelharDepois } from '../_compartilhado/espelho.ts';
+import { espelharDepois, espelharNegocio } from '../_compartilhado/espelho.ts';
 
 const HS = 'https://api.hubapi.com';
 const FETCH_TIMEOUT_MS = 12_000;
@@ -1188,6 +1188,15 @@ Deno.serve(async (req: Request) => {
         return await handleListTasks(token, body);
       case 'decisor':
         return await handleDecisor(token, body);
+      case 'espelhar': {
+        // Só LÊ do HubSpot e grava no espelho do banco (0116): nada muda no CRM.
+        // Base do espelhamento periódico e do reteste sem escrever em negócio real.
+        const ids = (Array.isArray(body.deal_ids) ? body.deal_ids : [body.id_hubspot]).map((x) => trimOrNull(x)).filter(Boolean).slice(0, 20) as string[];
+        const svc = serviceClient();
+        const resultados = [];
+        for (const id of ids) resultados.push({ id, ...(await espelharNegocio(token, svc, id, 'periodico')) });
+        return json(200, { resultados });
+      }
       case 'ler_negocio':
         return await handleLerNegocio(token, body);
       case 'search_deals':
