@@ -29,6 +29,7 @@ import { KeyboardAvoidingView } from './src/components/KeyboardAvoidingView';
 import { Alert, AlertHost } from './src/components/Alert';
 import { Toast, ToastHost } from './src/components/Toast';
 import { ehErroDeRede, enfileirar, novoAcaoId, registrarExecutor, subirFila } from './src/utils/filaOffline';
+import { subirFicha as subirFichaDaFila, type LinhaFicha as LinhaFichaDaFila } from './src/utils/fichaNoBanco';
 import { Painel } from './src/components/Painel';
 import { useTheme } from './src/theme';
 import {
@@ -3862,6 +3863,7 @@ function MainApp() {
     const tirar = registrarExecutor('checkin', (item) => subirCheckinRef.current(item.payload, item.acaoId));
     const tirarNegocio = registrarExecutor('negocio', async (item) => { await negocioAcao((item.payload as { corpo: Record<string, unknown> }).corpo); });
     const tirarTarefa = registrarExecutor('tarefa', (item) => enviarConclusao(item.payload as unknown as PedidoConclusao));
+    const tirarFicha = registrarExecutor('ficha', (item) => subirFichaDaFila(item.payload as unknown as LinhaFichaDaFila));
     const subir = () => {
       void subirFila().then((n) => {
         if (n > 0) Toast.mostrar(`✓ Sinal voltou · ${n === 1 ? '1 item enviado' : `${n} itens enviados`}`, 'ok');
@@ -3874,6 +3876,7 @@ function MainApp() {
       tirar();
       tirarNegocio();
       tirarTarefa();
+      tirarFicha();
       clearInterval(intervalo);
       if (typeof window !== 'undefined') window.removeEventListener('online', subir);
     };

@@ -13,7 +13,8 @@
 
 // 'negocio': um envio da porta única do Cockpit (negocio-acao) que ficou sem sinal.
 // 'tarefa': concluir uma tarefa do HubSpot (aba Tarefas / Liguei) sem sinal.
-export type TipoAcao = 'checkin' | 'negocio' | 'tarefa';
+// 'ficha': a linha da ficha de rua em fichas_de_rua (0120), idempotente pelo acaoId.
+export type TipoAcao = 'checkin' | 'negocio' | 'tarefa' | 'ficha';
 
 export type ItemFila = {
   acaoId: string;

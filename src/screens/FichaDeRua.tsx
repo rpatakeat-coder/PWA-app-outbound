@@ -25,6 +25,7 @@ import {
 import { ehRecusa, negocioAcao } from '../utils/negocioAcao';
 import { supabase } from '../integrations/supabase/client';
 import { comprimir, enviarFoto, escolherFoto } from '../utils/fotoVisita';
+import { gravarFichaNoBanco, linhaDaFicha, type LinhaFicha } from '../utils/fichaNoBanco';
 
 export type CamposCadastro = { empresa?: string; telefone?: string; categoria?: string };
 
@@ -69,7 +70,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   const [fase, setFase] = useState<'form' | 'desfazer' | 'enviando' | 'salvo'>('form');
   const [resultados, setResultados] = useState<Resultado[]>([]);
   const [passoSalvo, setPassoSalvo] = useState<{ data: string; texto: string; virouTarefa: boolean } | null>(null);
-  const pendente = useRef<{ campos: CamposCadastro; envios: Envio[]; foto: Blob | null; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const pendente = useRef<{ campos: CamposCadastro; envios: Envio[]; foto: Blob | null; linha: LinhaFicha | null; timer: ReturnType<typeof setTimeout> } | null>(null);
 
   useEffect(() => {
     if (!visivel) return;
@@ -170,6 +171,11 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
         lista.push({ rotulo: 'Foto da visita', estado: 'falhou', detalhe: String((err as Error)?.message ?? err) });
       }
     }
+    // A ficha no banco (0120): é o que o Cockpit lê para o funil de porta.
+    if (p.linha) {
+      const r = await gravarFichaNoBanco(p.linha, nome);
+      lista.push({ rotulo: 'Ficha no Cockpit', estado: r, ...(r === 'fila' ? { detalhe: 'salvo no celular, sobe quando voltar o sinal' } : {}) });
+    }
     setResultados(lista);
     setFase('salvo');
   }
@@ -182,6 +188,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
       clearTimeout(p.timer);
       pendente.current = null;
       for (const e of p.envios) if (!e.rota) void enfileirar({ acaoId: novoAcaoId(), tipo: 'negocio', rotulo: `${e.rotulo} · ${nome}`, payload: { corpo: e.corpo } });
+      if (p.linha) void enfileirar({ acaoId: p.linha.acao_id, tipo: 'ficha', rotulo: `Ficha · ${nome}`, payload: p.linha as unknown as Record<string, unknown> });
     };
     window.addEventListener('pagehide', aoSair);
     return () => window.removeEventListener('pagehide', aoSair);
@@ -233,7 +240,12 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
         envios.push({ corpo: { op: 'mudar-etapa', dealId, novaEtapa: sugerida, propriedades }, rotulo: `Etapa → ${ROTULO_ETAPA[sugerida]}`, etapa: sugerida });
       }
     }
-    pendente.current = { campos, envios, foto: foto?.blob ?? null, timer: setTimeout(() => { void executar(); }, JANELA_DESFAZER_MS) };
+    const linha = linhaDaFicha(f, {
+      ownerId, clientId: client.id ?? null, dealId, ocorridoEm: checkinEm, declarada,
+      etapaAntes: etapaAtual ?? null, etapaDepois: dealId && sugerida && f.moverEtapa ? sugerida : null,
+      comFoto: !!foto, bairro: client.bairro, cidade: client.cidade, hoje,
+    });
+    pendente.current = { campos, envios, foto: foto?.blob ?? null, linha, timer: setTimeout(() => { void executar(); }, JANELA_DESFAZER_MS) };
     setFase('desfazer');
   }
 
