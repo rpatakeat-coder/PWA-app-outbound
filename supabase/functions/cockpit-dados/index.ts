@@ -25,8 +25,8 @@ import {
   montarDadosCompletos, filtrarParaPapel, usarEquipe, usarConfig, usarSnapshot, temSnapshot, faltandoNoSnapshot,
 } from './montar-dados.js';
 import * as REALIZADO from './realizado.js';
-import { montarLeadDoFunil, montarCardPerdido, OPEN_STAGES, STAGES } from '../_compartilhado/lead-do-funil.js';
-import { espelharRecentes } from '../_compartilhado/espelho.ts';
+import { STAGES, PROP_ENTRADA_ONBOARDING } from '../_compartilhado/lead-do-funil.js';
+import { espelharRecentes, montarCardDoEspelho } from '../_compartilhado/espelho.ts';
 
 const CAPITULO_DE_GESTOR = 'Liderança';
 const CORS = {
@@ -53,6 +53,8 @@ const CACHE: { assinatura: string | null; fontes: Record<string, unknown> | null
    Sem espelho mais novo, nada muda: o Cockpit é exatamente o do snapshot.
    Não mexe no CACHE: devolve fontes novas só para esta resposta. */
 const PIPELINE_FIELD_SALES = '916011864';
+// As colunas de desfecho: ordenadas por "quando foi" (mais recente primeiro).
+const FECHADAS: string[] = [STAGES.perdido, STAGES.ganho1, STAGES.ganho2];
 async function aplicarEspelho(svc: any, fontes: any, desde: string | null, equipe: any[]) {
   const hub = fontes && fontes.hubspot;
   if (!hub || !desde) return null;
@@ -87,19 +89,25 @@ async function aplicarEspelho(svc: any, fontes: any, desde: string | null, equip
       if (i >= 0) { antigo = funil[k][i]; funil[k].splice(i, 1); }
     }
     const st = String(e.dealstage || '');
-    const d = { id: String(e.deal_id), properties: { ...(e.props || {}), dealstage: st } };
-    let card: any = null;
-    if (OPEN_STAGES.includes(st)) card = montarLeadDoFunil(d, st, { ownerNameById: nomes, tarefas: e.tarefas || [], configTemperatura: cfg });
-    else if (st === STAGES.perdido) card = montarCardPerdido(d, { ownerNameById: nomes, tarefas: e.tarefas || [] });
+    const p = e.props || {};
+    let card: any = montarCardDoEspelho(String(e.deal_id), st, p, e.tarefas || [], nomes, cfg);
+    // COLUNA FECHADA TEM JANELA NO ROBÔ (datas de corte): só entra por aqui quem já estava
+    // no funil do snapshot ou fechou DEPOIS dele — nunca uma venda ou perda antiga só
+    // porque alguém editou o negócio e o espelho periódico o trouxe.
+    if (card && FECHADAS.includes(st) && !antigo) {
+      const quando = Date.parse(String((st === STAGES.ganho2 ? p[PROP_ENTRADA_ONBOARDING] : p.closedate) || ''));
+      if (!(quando > Date.parse(desde) - 86400000)) card = null;
+    }
     if (card) {
       if (antigo && antigo.notas) card.notas = antigo.notas;   // as notas do app vêm do robô
+      // Onboarding: o robô clona TODAS as propriedades; o espelho só as do card.
+      if (st === STAGES.ganho2 && antigo && antigo.props) card.props = { ...antigo.props, ...card.props };
       (funil[st] = funil[st] || []).push(card);
     }
-    // Ganho/Onboarding: sai do funil aberto (o robô desenha essas colunas na janela dele).
     if (card || antigo) negocios++;
   }
   Object.keys(funil).forEach((k) => {
-    funil[k].sort((x: any, y: any) => (k === STAGES.perdido ? (x.dias - y.dias) : (y.dias - x.dias)));
+    funil[k].sort((x: any, y: any) => (FECHADAS.includes(k) ? (x.dias - y.dias) : (y.dias - x.dias)));
   });
 
   // Agenda: a mesma janela do robô (60 dias atrás, 90 à frente), trocando pelo id.

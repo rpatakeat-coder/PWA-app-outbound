@@ -10,7 +10,11 @@
 // resposta de quem escreveu (EdgeRuntime.waitUntil). Falhar aqui nunca desfaz nem
 // atrasa a escrita: o pior caso é o gestor ver a mudança na próxima rodada do robô,
 // como era antes.
-import { PROPS_DO_CARD } from './lead-do-funil.js';
+import {
+  PROPS_DO_ESPELHO, STAGES, OPEN_STAGES,
+  montarLeadDoFunil, montarCardPerdido, montarCardGanho, montarCardOnboarding,
+} from './lead-do-funil.js';
+import { CONFIG_PADRAO } from './temperatura.js';
 
 const HS = 'https://api.hubapi.com';
 // As da agenda do robô (scripts/fetch-hubspot.js, fetchAgenda).
@@ -46,8 +50,29 @@ async function lerEmLote(token: string, tipo: 'tasks' | 'meetings', ids: string[
   return (r.body?.results ?? []) as { id: string; properties?: Record<string, unknown> }[];
 }
 
+/* O card de QUALQUER coluna, montado pelo código do robô (lib/lead-do-funil.js).
+   null = etapa que o Cockpit não desenha (Backlog, Reciclagem, Conta-alvo). Usado ao
+   gravar o espelho (o mapa lê o card pronto) e pelo cockpit-dados, que remonta com os
+   nomes dos executivos e os dias de agora. */
+// deno-lint-ignore no-explicit-any
+export function montarCardDoEspelho(dealId: string, stageId: string, props: Record<string, any>, tarefas: any[], nomes: Record<string, string>, cfg: any) {
+  const d = { id: String(dealId), properties: { ...props, dealstage: stageId } };
+  if ((OPEN_STAGES as string[]).includes(stageId)) return montarLeadDoFunil(d, stageId, { ownerNameById: nomes, tarefas, configTemperatura: cfg });
+  if (stageId === STAGES.perdido) return montarCardPerdido(d, { ownerNameById: nomes, tarefas });
+  if (stageId === STAGES.ganho1) return montarCardGanho(d, { ownerNameById: nomes, tarefas });
+  if (stageId === STAGES.ganho2) return montarCardOnboarding(d, { ownerNameById: nomes });
+  return null;
+}
+
+async function configTemperatura(svc: Svc) {
+  try {
+    const { data } = await svc.from('cockpit_config').select('conteudo').eq('chave', 'temperatura').maybeSingle();
+    return (data && data.conteudo) || CONFIG_PADRAO;
+  } catch { return CONFIG_PADRAO; }
+}
+
 export async function espelharNegocio(token: string, svc: Svc, dealId: string, origem: 'app' | 'periodico' = 'app') {
-  const d = await hs(token, 'GET', `/crm/v3/objects/deals/${dealId}?properties=${[...PROPS_DO_CARD, 'pipeline'].join(',')}`);
+  const d = await hs(token, 'GET', `/crm/v3/objects/deals/${dealId}?properties=${PROPS_DO_ESPELHO.join(',')}`);
   if (!d.ok) return { ok: false, motivo: `negocio ${d.status}` };
   const props = soComValor(d.body?.properties);
   const owner = (props.hubspot_owner_id as string) ?? null;
@@ -67,9 +92,15 @@ export async function espelharNegocio(token: string, svc: Svc, dealId: string, o
     .sort((a: any, b: any) => ((a.timestamp || '9999') < (b.timestamp || '9999') ? -1 : 1));
 
   const agora = new Date().toISOString();
+  // O card pronto (0118): o mapa lê daqui a etapa, os dias parado e a temperatura.
+  let card = null;
+  try {
+    card = montarCardDoEspelho(String(dealId), String(props.dealstage ?? ''), props, abertas, {}, await configTemperatura(svc));
+  } catch (e) { console.warn('[espelho] card', dealId, (e as Error).message); }
   const { error: e1 } = await svc.from('espelho_negocios').upsert({
     deal_id: String(dealId), owner_id: owner, dealstage: (props.dealstage as string) ?? null,
     pipeline: (props.pipeline as string) ?? null, props, tarefas: abertas, origem, atualizado_em: agora,
+    card, card_em: agora,
   });
   if (e1) return { ok: false, motivo: 'espelho_negocios: ' + e1.message };
 
