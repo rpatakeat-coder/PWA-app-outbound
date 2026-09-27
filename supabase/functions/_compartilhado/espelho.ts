@@ -88,6 +88,45 @@ export async function espelharNegocio(token: string, svc: Svc, dealId: string, o
   return { ok: true, tarefas: tarefas.length, reunioes: reunioes.length };
 }
 
+/* ══ ESPELHO PERIÓDICO (0117) ═════════════════════════════════════════════════════
+   O que muda DIRETO no HubSpot (fora do app) entra no espelho quando alguém abre o
+   Cockpit: busca os negócios do time alterados desde a última rodada e espelha, no
+   máximo a cada 5 min e até 25 por rodada, com pausa entre eles (cada negócio custa ~5
+   chamadas; o HubSpot aceita ~10/s). hs_lastmodifieddate pode ser tocado em massa pelo
+   HubSpot — o teto de 25 é o que impede isso de virar uma avalanche. */
+const PIPELINE_FIELD_SALES = '916011864';
+export async function espelharRecentes(token: string, svc: Svc, owners: string[], desdePadrao: string | null) {
+  if (!token || !owners.length) return { pulou: 'sem token ou sem donos' };
+  const { data: ult } = await svc.from('espelho_rodadas').select('rodou_em').order('rodou_em', { ascending: false }).limit(1);
+  const ultima = ult && ult[0] ? Date.parse(ult[0].rodou_em) : 0;
+  if (Date.now() - ultima < 5 * 60 * 1000) return { pulou: 'rodou há menos de 5 min' };
+  const desdeMs = Math.max(ultima || 0, desdePadrao ? Date.parse(desdePadrao) || 0 : 0) || (Date.now() - 2 * 3600 * 1000);
+  const { data: rod } = await svc.from('espelho_rodadas').insert({ desde: new Date(desdeMs).toISOString() }).select('id').single();
+  try {
+    const r = await hs(token, 'POST', '/crm/v3/objects/deals/search', {
+      filterGroups: [{ filters: [
+        { propertyName: 'pipeline', operator: 'EQ', value: PIPELINE_FIELD_SALES },
+        { propertyName: 'hs_lastmodifieddate', operator: 'GTE', value: String(desdeMs) },
+        { propertyName: 'hubspot_owner_id', operator: 'IN', values: owners.slice(0, 100) },
+      ] }],
+      properties: ['dealname'],
+      sorts: [{ propertyName: 'hs_lastmodifieddate', direction: 'DESCENDING' }],
+      limit: 100,
+    });
+    if (!r.ok) throw new Error('busca ' + r.status);
+    const ids = ((r.body?.results ?? []) as { id: string }[]).map((x) => String(x.id)).slice(0, 25);
+    for (const id of ids) {
+      await espelharNegocio(token, svc, id, 'periodico');
+      await new Promise((ok) => setTimeout(ok, 400));
+    }
+    if (rod) await svc.from('espelho_rodadas').update({ negocios: ids.length }).eq('id', rod.id);
+    return { negocios: ids.length };
+  } catch (e) {
+    if (rod) await svc.from('espelho_rodadas').update({ erro: String((e as Error).message) }).eq('id', rod.id);
+    return { erro: String((e as Error).message) };
+  }
+}
+
 /** Dispara sem segurar a resposta (Edge Runtime), e engole erro: o espelho nunca derruba a escrita. */
 export function espelharDepois(token: string, svc: Svc, dealId: string | null | undefined) {
   if (!dealId) return;

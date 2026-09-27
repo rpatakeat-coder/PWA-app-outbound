@@ -26,6 +26,7 @@ import {
 } from './montar-dados.js';
 import * as REALIZADO from './realizado.js';
 import { montarLeadDoFunil, montarCardPerdido, OPEN_STAGES, STAGES } from '../_compartilhado/lead-do-funil.js';
+import { espelharRecentes } from '../_compartilhado/espelho.ts';
 
 const CAPITULO_DE_GESTOR = 'Liderança';
 const CORS = {
@@ -308,6 +309,15 @@ Deno.serve(async (req) => {
       const esp = await aplicarEspelho(svc, CACHE.fontes, CACHE.hubspotEm, equipe);
       if (esp) { usarSnapshot(esp.fontes); procedencia.espelho = esp.contagem; }
     } catch (e) { console.warn('[cockpit-dados] espelho não aplicado:', (e as Error).message); }
+    // Espelho periódico em segundo plano (0117): o que mudou direto no HubSpot entra
+    // no espelho para a PRÓXIMA abertura do Cockpit. Não segura esta resposta.
+    try {
+      const donos = (equipe || []).map((u: any) => u && u.ownerId).filter(Boolean).map(String);
+      const tarefa = espelharRecentes(Deno.env.get('HUBSPOT_TOKEN') ?? '', svc, donos, CACHE.hubspotEm)
+        .catch((e) => console.warn('[cockpit-dados] espelho periódico:', (e as Error).message));
+      const rt = (globalThis as any).EdgeRuntime;
+      if (rt && typeof rt.waitUntil === 'function') rt.waitUntil(tarefa);
+    } catch { /* nunca derruba o Cockpit */ }
     const completo = montarDadosCompletos();
     const dados: any = removerNulosRecursivo(filtrarParaPapel(completo, usuario));
     const pwaDeepLink = String(Deno.env.get('PWA_DEEP_LINK') || '').trim();
