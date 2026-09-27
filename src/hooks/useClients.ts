@@ -795,6 +795,14 @@ export function useClients(
             console.warn('[VISITA] change_stage automatico falhou:', err);
           }
         })();
+        // O lead volta JÁ em Visita: a ficha de rua abre sabendo a etapa (e oferece
+        // avançar), e o cartão mostra o botão certo. Antes voltava com a etapa antiga
+        // — vazia na conta-alvo que acabou de virar negócio — e o cartão dizia "etapa
+        // não reconhecida" sem botão de avançar (auditoria 27/09). O espelho do
+        // servidor confirma a etapa real no lead segundos depois.
+        client = { ...client, etapa: VISITA_STAGE_LABEL };
+        void supabase.from('clients').update({ etapa: VISITA_STAGE_LABEL }).eq('id', client.id)
+          .then(({ error }) => { if (error) console.warn('[VISITA] etapa no lead:', error.message); });
       }
 
       return client;

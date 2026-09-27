@@ -3496,12 +3496,23 @@ function MainApp() {
     const peloSnapshot = c.id_hubspot ? contextoPino.tempoPorNegocio.get(String(c.id_hubspot))?.etapaCodigo ?? null : null;
     return pelaTabela ?? peloSnapshot;
   };
-  const aplicarEtapaNoLead = (clientId: string, codigo: string) => {
-    // O HubSpot já gravou; o rótulo no lead faz a letra do pino mudar na hora.
+  const aplicarEtapaNoLead = (clientId: string, codigo: string, reabrir?: Client) => {
+    // O HubSpot já gravou. O cartão e o pino mudam NA HORA (cache local + cartão
+    // aberto), sem esperar o banco: antes o rótulo só mudava se o update do celular
+    // desse certo, e ele falhava calado (auditoria 27/09, Restaurante Dona Ba). O
+    // espelho do servidor grava a mesma etapa no lead segundos depois.
     const rotulo = ROTULO_ETAPA[codigo];
     if (!rotulo) return;
-    void supabase.from('clients').update({ etapa: rotulo }).eq('id', clientId)
-      .then(() => queryClient.invalidateQueries({ queryKey: ['clients'] }));
+    queryClient.setQueriesData({ queryKey: ['clients'] }, (velho: unknown) =>
+      Array.isArray(velho) ? velho.map((c: Client) => (c.id === clientId ? { ...c, etapa: rotulo } : c)) : velho);
+    setSelectedClient((atual) => (atual && atual.id === clientId ? { ...atual, etapa: rotulo } : atual));
+    // Mudar etapa fecha o cartão para abrir a folha: reabre já na etapa nova.
+    if (reabrir) setTimeout(() => setSelectedClient({ ...reabrir, etapa: rotulo }), 400);
+    void supabase.from('clients').update({ etapa: rotulo }).eq('id', clientId).then(({ error }) => {
+      if (error) console.warn('[etapa no lead]', error.message);
+      void queryClient.invalidateQueries({ queryKey: ['clients'] });
+      void queryClient.invalidateQueries({ queryKey: ['mapa-contexto'] });
+    });
   };
   // Ficha de rua (mapa novo): abre depois do check-in de um lead.
   const [fichaPendente, setFichaPendente] = useState<{
@@ -3546,8 +3557,8 @@ function MainApp() {
 
       // FOTO É A SEGUNDA PROVA (Julyan, 26/09): SÓ quando o GPS FALHA (não
       // respondeu, leitura grosseira, impreciso) a visita entra com foto — da
-      // fachada, do balcão, do cardápio. Check-in normal e visita declarada
-      // por distância não pedem foto: nada de microgerenciar.
+      // fachada, do balcão, do cardápio. Longe do pino também pede a foto da
+      // fachada (27/09). Só o check-in normal, dentro do raio, não pede.
       // A câmera abre no toque do botão (o navegador exige o gesto), antes do
       // check-in: sem foto, nada é gravado.
       const tirarFotoDeProva = async (): Promise<Blob | null> => {
@@ -3726,14 +3737,16 @@ function MainApp() {
               { text: 'Fechar', valor: 'nao', style: 'cancel' },
               { text: 'Mover pino', valor: 'outro' },
               // Mapa novo: a visita entra marcada como declarada, com a
-              // distância real; o pino não se mexe.
-              // GPS firme dizendo "longe" não é GPS falhando: declara sem foto
-              // (Julyan, 26/09: foto só quando o GPS falha, sem microgerenciar).
-              ...(modoNovo ? [{ text: 'Registrar como visita declarada', valor: 'declarada' }] : []),
+              // distância real; o pino não se mexe. LONGE PEDE FOTO DA FACHADA
+              // (Julyan, 27/09: "se falar que tá longe manda a foto da fachada
+              // obrigatoriamente") — é a prova de que estava na porta.
+              ...(modoNovo ? [{ text: 'Registrar com foto da fachada', valor: 'declarada' }] : []),
             ],
           );
           if (r === 'outro') { moverPino(); return; }
           if (r !== 'declarada') return;
+          fotoProva = await tirarFotoDeProva();
+          if (!fotoProva) return;
           declarada = true;
         }
       }
@@ -7899,7 +7912,7 @@ function MainApp() {
           etapaAtual={etapaNovaPara.etapaAtual}
           destinoInicial={etapaNovaPara.destinoInicial ?? null}
           onFechar={() => setEtapaNovaPara(null)}
-          onMudou={(codigo) => aplicarEtapaNoLead(etapaNovaPara.client.id, codigo)}
+          onMudou={(codigo) => aplicarEtapaNoLead(etapaNovaPara.client.id, codigo, etapaNovaPara.client)}
         />
       )}
       {desfechoPendente && (

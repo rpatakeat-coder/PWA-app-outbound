@@ -25,6 +25,15 @@ const PROPS_REUNIAO = ['hs_meeting_title', 'hs_meeting_body', 'hs_meeting_start_
 // deno-lint-ignore no-explicit-any
 type Svc = { from: (t: string) => any };
 
+// O rótulo que o app grava em clients.etapa (src/utils/fichaDeRua.ts ROTULO_ETAPA) e que
+// a etapa_de_para reconhece. Só as etapas do funil Field Sales.
+const PIPELINE_DO_FUNIL = '916011864';
+const ROTULO_DA_ETAPA: Record<string, string> = {
+  '1395880469': 'Prospecção', '1396005401': 'Visita', '1395880470': 'Conversa com decisor', '1395880471': 'Demo/Proposta',
+  '1395880472': 'Negociação', '1395880473': 'Ag. Pagamento', '1396006163': 'Enviado Onboarding', '1398311191': 'Reciclagem',
+  '1396006162': 'Ganho', '1396006164': 'Perdido', '1396007427': 'Backlog', '1413529973': 'Conta Alvo',
+};
+
 async function hs(token: string, method: string, path: string, body?: unknown) {
   const r = await fetch(HS + path, {
     method,
@@ -103,6 +112,18 @@ export async function espelharNegocio(token: string, svc: Svc, dealId: string, o
     card, card_em: agora,
   });
   if (e1) return { ok: false, motivo: 'espelho_negocios: ' + e1.message };
+
+  // A ETAPA NO LEAD DO MAPA (27/09/26). O pino e o cartão leem clients.etapa primeiro;
+  // quem gravava era só o app, do celular, e falhava calado (o Restaurante Dona Ba ficou
+  // sem etapa depois do check-in que criou o negócio em Visita, e o cartão escondeu o
+  // botão de avançar). Toda releitura do negócio — escrita do app, do Cockpit, check-in
+  // ou mudança direto no HubSpot pelo espelho periódico — grava a etapa real no lead.
+  const rotulo = ROTULO_DA_ETAPA[String(props.dealstage ?? '')];
+  if (rotulo && (props.pipeline ?? PIPELINE_DO_FUNIL) === PIPELINE_DO_FUNIL) {
+    const { error: e3 } = await svc.from('clients').update({ etapa: rotulo })
+      .eq('id_hubspot', String(dealId)).or(`etapa.is.null,etapa.neq."${rotulo}"`);
+    if (e3) console.warn('[espelho] etapa no lead', dealId, e3.message);
+  }
 
   const linhas = [
     ...tarefas.map((t) => ({ hs_object_id: String(t.id), tipo: 'tarefa', props: { ...soComValor(t.properties), hs_object_id: String(t.id) } })),
