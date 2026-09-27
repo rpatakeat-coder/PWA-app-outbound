@@ -49,6 +49,7 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { espelharDepois } from '../_compartilhado/espelho.ts';
 
 const HS = 'https://api.hubapi.com';
 const FETCH_TIMEOUT_MS = 12_000;
@@ -1149,6 +1150,10 @@ async function handleUpdateMeeting(token: string, body: Record<string, unknown>)
   return json(200, { ok: true, engagement_id: id });
 }
 
+// Operações que mudam o negócio, suas tarefas, reuniões ou notas — as que o espelho acompanha.
+const ESCRITAS_NO_NEGOCIO = new Set(['change_stage', 'update', 'qualificar', 'decisor', 'create_pin',
+  'create_note', 'update_note', 'create_task', 'update_task', 'create_meeting', 'update_meeting']);
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') {
@@ -1170,6 +1175,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const type = trimOrNull(body?.type);
+  const rotear = async (): Promise<Response> => {
   try {
     switch (type) {
       case 'change_stage':
@@ -1213,4 +1219,18 @@ Deno.serve(async (req: Request) => {
     console.error('[hubspot-sync] erro inesperado', type, err);
     return json(500, { error: 'Erro interno', detail: String(err) });
   }
+  };
+  const resp = await rotear();
+
+  // ESPELHO AO VIVO (0116): escreveu no negócio e deu certo? Relê o negócio (e as
+  // tarefas/reuniões dele) e grava no banco, sem segurar esta resposta, para o
+  // Cockpit do gestor ver a mudança na hora em vez de esperar o robô.
+  if (resp.ok && ESCRITAS_NO_NEGOCIO.has(type ?? '')) {
+    let dealId = trimOrNull(body.id_hubspot) ?? trimOrNull(body.deal_id);
+    if (!dealId) {
+      try { dealId = trimOrNull((await resp.clone().json())?.id_hubspot); } catch { /* sem corpo */ }
+    }
+    espelharDepois(token, serviceClient(), dealId);
+  }
+  return resp;
 });

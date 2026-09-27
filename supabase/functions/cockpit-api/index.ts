@@ -25,6 +25,7 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { espelharDepois } from '../_compartilhado/espelho.ts';
 // O pacote vem do proprio repositorio, FIXADO NO HASH do commit que o gerou: o que
 // roda e, por construcao, o arquivo versionado — sem copia manual no deploy.
 // Gerou de novo? Commit, e troque o hash aqui pelo do commit novo.
@@ -139,6 +140,9 @@ const carregar = carregador({
 });
 
 // ---- req/res da Vercel sobre Request/Response ----
+// Rotas que mudam negócio no HubSpot — as que o espelho acompanha.
+const ROTAS_QUE_ESCREVEM = new Set(['negocio-acao', 'criar-negocio', 'criar-nota-negocio']);
+
 async function executar(handler: any, request: Request, url: URL): Promise<Response> {
   const headers: Record<string, string> = {};
   request.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
@@ -208,5 +212,19 @@ Deno.serve(async (request) => {
     return new Response(JSON.stringify({ erro: 'Não consegui ler a equipe/configuração: ' + (e as Error).message }),
       { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } });
   }
-  return executar(carregar('api/' + rota + '.js'), request, url);
+  // ESPELHO AO VIVO (0116): escrita no negócio que deu certo relê o negócio e grava no
+  // banco, sem segurar a resposta — o Cockpit do gestor vê na hora, sem esperar o robô.
+  const escreve = ROTAS_QUE_ESCREVEM.has(rota);
+  const pedido = escreve ? await request.clone().text().catch(() => '') : '';
+  const resp = await executar(carregar('api/' + rota + '.js'), request, url);
+  if (escreve && resp.ok) {
+    let corpo: any = {};
+    try { corpo = JSON.parse(pedido || '{}'); } catch { /* corpo não-JSON */ }
+    if (corpo?.op !== 'ler-etapa') {
+      let dealId = corpo?.dealId ?? corpo?.id_hubspot ?? corpo?.deal_id ?? null;
+      if (!dealId) { try { const r = await resp.clone().json(); dealId = r?.dealId ?? r?.id_hubspot ?? r?.negocio?.id ?? null; } catch { /* sem corpo */ } }
+      espelharDepois(Deno.env.get('HUBSPOT_TOKEN') ?? '', svc, dealId ? String(dealId) : null);
+    }
+  }
+  return resp;
 });

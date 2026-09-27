@@ -25,6 +25,7 @@ import {
   montarDadosCompletos, filtrarParaPapel, usarEquipe, usarConfig, usarSnapshot, temSnapshot, faltandoNoSnapshot,
 } from './montar-dados.js';
 import * as REALIZADO from './realizado.js';
+import { montarLeadDoFunil, montarCardPerdido, OPEN_STAGES, STAGES } from '../_compartilhado/lead-do-funil.js';
 
 const CAPITULO_DE_GESTOR = 'Liderança';
 const CORS = {
@@ -39,8 +40,81 @@ const json = (status: number, body: unknown) =>
 
 // Snapshot já baixado por esta instância (mesma lógica do original: guarda as
 // FONTES cruas, nunca o dado montado, para o recorte por papel ter um lugar só).
-const CACHE: { assinatura: string | null; fontes: Record<string, unknown> | null; atualizadoEm: string | null } =
-  { assinatura: null, fontes: null, atualizadoEm: null };
+const CACHE: { assinatura: string | null; fontes: Record<string, unknown> | null; atualizadoEm: string | null; hubspotEm: string | null } =
+  { assinatura: null, fontes: null, atualizadoEm: null, hubspotEm: null };
+
+/* ══ ESPELHO AO VIVO POR CIMA DO SNAPSHOT (0116, 26/09/2026) ══════════════════════
+   O snapshot é do robô (a cada 2 h, nada no fim de semana). Tudo o que o app escreve
+   no HubSpot relê o negócio e grava em espelho_negocios / espelho_agenda. Aqui, o que
+   for MAIS NOVO que o snapshot entra por cima: o card sai do funil onde estava e entra
+   na etapa nova, montado por lib/lead-do-funil.js — o MESMO código do robô, portado
+   (supabase/functions/_compartilhado/) —, e tarefas/reuniões entram na agenda.
+   Sem espelho mais novo, nada muda: o Cockpit é exatamente o do snapshot.
+   Não mexe no CACHE: devolve fontes novas só para esta resposta. */
+const PIPELINE_FIELD_SALES = '916011864';
+async function aplicarEspelho(svc: any, fontes: any, desde: string | null, equipe: any[]) {
+  const hub = fontes && fontes.hubspot;
+  if (!hub || !desde) return null;
+  const [n, a] = await Promise.all([
+    svc.from('espelho_negocios').select('deal_id, owner_id, dealstage, pipeline, props, tarefas, atualizado_em').gt('atualizado_em', desde).limit(1000),
+    svc.from('espelho_agenda').select('hs_object_id, tipo, props, atualizado_em').gt('atualizado_em', desde).limit(3000),
+  ]);
+  const negs: any[] = n.data ?? [];
+  const ags: any[] = a.data ?? [];
+  if (!negs.length && !ags.length) return null;
+
+  // Os donos que o robô desenha (REPS = role rep com ownerId) e o nome de cada um.
+  const nomes: Record<string, string> = {};
+  (equipe || []).forEach((u: any) => { if (u && u.role === 'rep' && u.ownerId) nomes[String(u.ownerId)] = String(u.nome || ''); });
+
+  const funil: Record<string, any[]> = {};
+  Object.entries(hub.funilLeads || {}).forEach(([k, v]) => { funil[k] = Array.isArray(v) ? (v as any[]).slice() : []; });
+  const cfg = CONFIG.valores && CONFIG.valores.temperatura;
+  let negocios = 0;
+  for (const e of negs) {
+    if (e.pipeline && e.pipeline !== PIPELINE_FIELD_SALES) continue;
+    if (!nomes[String(e.owner_id)]) continue;
+    let antigo: any = null;
+    for (const k of Object.keys(funil)) {
+      const i = funil[k].findIndex((c: any) => String(c && c.id) === String(e.deal_id));
+      if (i >= 0) { antigo = funil[k][i]; funil[k].splice(i, 1); }
+    }
+    const st = String(e.dealstage || '');
+    const d = { id: String(e.deal_id), properties: { ...(e.props || {}), dealstage: st } };
+    let card: any = null;
+    if (OPEN_STAGES.includes(st)) card = montarLeadDoFunil(d, st, { ownerNameById: nomes, tarefas: e.tarefas || [], configTemperatura: cfg });
+    else if (st === STAGES.perdido) card = montarCardPerdido(d, { ownerNameById: nomes, tarefas: e.tarefas || [] });
+    if (card) {
+      if (antigo && antigo.notas) card.notas = antigo.notas;   // as notas do app vêm do robô
+      (funil[st] = funil[st] || []).push(card);
+    }
+    // Ganho/Onboarding: sai do funil aberto (o robô desenha essas colunas na janela dele).
+    if (card || antigo) negocios++;
+  }
+  Object.keys(funil).forEach((k) => {
+    funil[k].sort((x: any, y: any) => (k === STAGES.perdido ? (x.dias - y.dias) : (y.dias - x.dias)));
+  });
+
+  // Agenda: a mesma janela do robô (60 dias atrás, 90 à frente), trocando pelo id.
+  const ini = Date.now() - 60 * 86400000, fim = Date.now() + 90 * 86400000;
+  const itens: any[] = Array.isArray(hub.agenda && hub.agenda.itens) ? hub.agenda.itens.slice() : [];
+  const pos = new Map(itens.map((it: any, i: number) => [String(it && it.hs_object_id), i]));
+  let agenda = 0;
+  for (const g of ags) {
+    const p = g.props || {};
+    if (!nomes[String(p.hubspot_owner_id || '')]) continue;
+    const quando = Date.parse(p.hs_timestamp || p.hs_meeting_start_time || '');
+    if (!Number.isFinite(quando) || quando < ini || quando > fim) continue;
+    const i = pos.get(String(g.hs_object_id));
+    if (i != null) itens[i] = { ...itens[i], ...p }; else itens.push(p);
+    agenda++;
+  }
+  if (!negocios && !agenda) return null;
+  return {
+    fontes: { ...fontes, hubspot: { ...hub, funilLeads: funil, agenda: { ...(hub.agenda || {}), itens } } },
+    contagem: { negocios, agenda, desde },
+  };
+}
 // Configuração (public.cockpit_config, 0092): mesma ideia da assinatura — só
 // baixa de novo quando alguma chave mudou.
 const CONFIG: { assinatura: string | null; valores: Record<string, any> } = { assinatura: null, valores: {} };
@@ -185,6 +259,8 @@ Deno.serve(async (req) => {
     const assinatura = Array.isArray(ass) && ass.length
       ? ass.map((l: any) => String(l.chave) + '@' + String(l.atualizado_em)).sort().join('|')
       : null;
+    const linhaHub = Array.isArray(ass) ? ass.find((l: any) => l && l.chave === 'hubspot') : null;
+    CACHE.hubspotEm = linhaHub ? String(linhaHub.atualizado_em) : null;
     if (assinatura && CACHE.assinatura === assinatura && CACHE.fontes) {
       const trocadasC = usarSnapshot(CACHE.fontes);
       const temHubspotC = trocadasC.indexOf('hubspot') >= 0;
@@ -220,6 +296,12 @@ Deno.serve(async (req) => {
           (procedencia.motivo || 'origem desconhecida') + '). A próxima carga do robô resolve; nada foi perdido.',
       });
     }
+    // Espelho ao vivo por cima do snapshot (ver aplicarEspelho). Falhar aqui nunca
+    // derruba o Cockpit: sem espelho, sai o snapshot como sempre.
+    try {
+      const esp = await aplicarEspelho(svc, CACHE.fontes, CACHE.hubspotEm, equipe);
+      if (esp) { usarSnapshot(esp.fontes); procedencia.espelho = esp.contagem; }
+    } catch (e) { console.warn('[cockpit-dados] espelho não aplicado:', (e as Error).message); }
     const completo = montarDadosCompletos();
     const dados: any = removerNulosRecursivo(filtrarParaPapel(completo, usuario));
     const pwaDeepLink = String(Deno.env.get('PWA_DEEP_LINK') || '').trim();
@@ -227,7 +309,8 @@ Deno.serve(async (req) => {
     return json(200, {
       sessao: { email: usuario.email, role: usuario.role, ownerId: usuario.ownerId, nome: usuario.nome, aComecar: !!usuario.aComecar },
       procedencia: { fonte: procedencia.fonte, motivo: procedencia.motivo || null,
-        chaves: procedencia.chaves || [], atualizadoEm: procedencia.atualizadoEm || null },
+        chaves: procedencia.chaves || [], atualizadoEm: procedencia.atualizadoEm || null,
+        espelho: procedencia.espelho || null },
       dados,
     });
   } catch (e) {
