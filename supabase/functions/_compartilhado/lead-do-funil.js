@@ -1,4 +1,4 @@
-// PORTADO de julyanrib/cockpit-unificado lib/lead-do-funil.js @ c12f517 por scripts/portar-compartilhado.cjs.
+// PORTADO de julyanrib/cockpit-unificado lib/lead-do-funil.js @ 03d8f2d por scripts/portar-compartilhado.cjs.
 // NÃO EDITAR AQUI: mude no Cockpit e rode o portador de novo.
 // lib/lead-do-funil.js
 //
