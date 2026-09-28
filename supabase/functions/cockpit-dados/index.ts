@@ -281,11 +281,13 @@ Deno.serve(async (req) => {
     const dono = String(p.hubspot_owner_id || '');
     if (String(usuario.role) !== 'manager' && dono !== String(usuario.ownerId)) return json(403, { erro: 'Esse negócio é de outra pessoa.' });
     const nome = String(p.dealname || '').trim();
-    if (nome) {
+    // Só com a CIDADE do negócio: "Bar do Zé" de outra cidade não é este. Sem cidade,
+    // o casamento é pela posição (a ~200 m, adiante), depois de geocodificar.
+    if (nome && p.cidade) {
       const padrao = nome.replace(/[\\%_]/g, (m) => '\\' + m);
       const [a, b] = await Promise.all([
-        svc.from('clients').select('id, vendedor_id_hubspot').is('id_hubspot', null).eq('is_archived', false).ilike('empresa', padrao).limit(5),
-        svc.from('clients').select('id, vendedor_id_hubspot').is('id_hubspot', null).eq('is_archived', false).ilike('nome', padrao).limit(5),
+        svc.from('clients').select('id, vendedor_id_hubspot').is('id_hubspot', null).eq('is_archived', false).ilike('empresa', padrao).ilike('cidade', String(p.cidade).trim()).limit(5),
+        svc.from('clients').select('id, vendedor_id_hubspot').is('id_hubspot', null).eq('is_archived', false).ilike('nome', padrao).ilike('cidade', String(p.cidade).trim()).limit(5),
       ]);
       const vistos = new Map<string, any>();
       [...(a.data || []), ...(b.data || [])].forEach((c: any) => vistos.set(String(c.id), c));

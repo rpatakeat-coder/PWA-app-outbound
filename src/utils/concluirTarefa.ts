@@ -17,6 +17,8 @@ export type PedidoConclusao = {
   taskId: string;
   /** Liguei: registra a ligação como nota no negócio, junto com a conclusão. */
   nota?: { dealId: string; texto: string } | null;
+  /** Registro: o próximo passo (corpo da porta única), criado depois da conclusão. */
+  proximo?: Record<string, unknown> | null;
 };
 
 export const JANELA_DESFAZER_MS = 5000;
@@ -41,6 +43,18 @@ export async function enviarConclusao(p: PedidoConclusao): Promise<void> {
       await negocioAcao({ op: 'nota', dealId: p.nota.dealId, texto: p.nota.texto });
     } catch (e) {
       if (ehErroDeRede(e)) throw e;
+    }
+  }
+  // O PRÓXIMO PASSO vai no mesmo pedido (28/09/2026): antes ele saía só no aoGravar da
+  // tela, que não roda na fila — sem sinal, a tarefa concluía e o próximo contato sumia.
+  // Se só ele falhar por rede, entra sozinho na fila (a conclusão e a nota já foram).
+  if (p.proximo) {
+    try {
+      await negocioAcao(p.proximo);
+    } catch (e) {
+      if (ehErroDeRede(e)) {
+        await enfileirar({ acaoId: novoAcaoId(), tipo: 'negocio', rotulo: 'Próximo passo do registro', payload: { corpo: p.proximo } });
+      }
     }
   }
 }

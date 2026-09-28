@@ -3,7 +3,10 @@ import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import type { Client, FieldRoute, FieldRouteStopWithClient } from '../types/client';
 
-export const todayKey = () => new Date().toISOString().slice(0, 10);
+// O DIA DE BRASÍLIA (28/09/2026). Era toISOString (UTC): das 21h em diante "hoje" virava
+// amanhã — a Agenda mostrava a rota de amanhã como a de hoje, e o "+ Rota de hoje" e o
+// "Montar meu dia" gravavam no dia seguinte.
+export const todayKey = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
 const toRad = (deg: number) => (deg * Math.PI) / 180;
 
@@ -205,8 +208,17 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
         .eq('route_id', rotaId);
       if (erroAtuais) throw erroAtuais;
       const linhas = (atuais ?? []) as Array<{ client_id: string; position: number; status: string }>;
-      if (linhas.some((l) => l.client_id === client.id && l.status !== 'removed')) return null;
+      if (linhas.some((l) => l.client_id === client.id && l.status !== 'removed' && l.status !== 'skipped')) return null;
       const posicao = linhas.reduce((m, l) => Math.max(m, l.position ?? 0), 0) + 1;
+      // Já esteve na rota e foi tirado: a linha existe (índice único rota + lead), então
+      // volta a planejada no fim da fila em vez de um INSERT que daria chave duplicada.
+      if (linhas.some((l) => l.client_id === client.id)) {
+        const { error: eVolta } = await supabase.from('field_route_stops')
+          .update({ status, position: posicao, planned_at: new Date().toISOString() })
+          .eq('route_id', rotaId).eq('client_id', client.id);
+        if (eVolta) throw eVolta;
+        return posicao;
+      }
       const { error } = await supabase.from('field_route_stops').insert({
         route_id: rotaId,
         client_id: client.id,

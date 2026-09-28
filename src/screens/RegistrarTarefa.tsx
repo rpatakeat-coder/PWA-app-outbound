@@ -13,8 +13,6 @@ import { Painel } from '../components/Painel';
 import { Toast } from '../components/Toast';
 import { IconCall, useIconColors } from '../components/icons';
 import { concluirComDesfazer } from '../utils/concluirTarefa';
-import { negocioAcao } from '../utils/negocioAcao';
-import { ehErroDeRede, enfileirar, novoAcaoId } from '../utils/filaOffline';
 import { diaBRT } from '../utils/abaTarefas';
 import {
   COMO_FOI, PROXIMOS, diaUtilDepois, notaDoRegistro, pedidoDoProximo, proximoSugerido, type ComoFoi,
@@ -61,27 +59,13 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
     aoSumir?.(t.id);
     aoFechar();
     concluirComDesfazer({
-      pedido: { taskId: t.id, nota: t.dealId ? { dealId: t.dealId, texto } : null },
+      pedido: { taskId: t.id, nota: t.dealId ? { dealId: t.dealId, texto } : null, proximo: passo },
       rotulo: `Registro · ${t.nome ?? t.assunto}`,
       textoToast: passo ? `✓ Registrado · próximo em ${data!.split('-').reverse().slice(0, 2).join('/')}` : '✓ Registrado · HubSpot + Cockpit',
       aoVoltar: () => aoVoltar?.(t.id),
-      aoGravar: () => {
-        void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] });
-        if (!passo) return;
-        void (async () => {
-          try {
-            await negocioAcao(passo);
-            void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] });
-          } catch (e) {
-            if (ehErroDeRede(e)) {
-              await enfileirar({ acaoId: novoAcaoId(), tipo: 'negocio', rotulo: `Próximo passo · ${t.nome ?? t.assunto}`, payload: { corpo: passo } });
-              Toast.mostrar('Sem sinal · o próximo passo sobe quando voltar', 'fila');
-            } else {
-              Toast.mostrar(`O registro entrou, mas o próximo passo não: ${(e as Error).message}`, 'erro');
-            }
-          }
-        })();
-      },
+      // A conclusão, a nota e o próximo passo saem juntos (concluirTarefa), inclusive pela
+      // fila quando não há sinal.
+      aoGravar: () => { void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] }); },
     });
   };
 

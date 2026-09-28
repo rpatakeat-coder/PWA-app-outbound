@@ -896,7 +896,12 @@ function MainApp() {
       return p && Number.isFinite(p.latitude) && Number.isFinite(p.longitude) ? p : null;
     } catch { return null; }
   });
-  const [routeDate] = useState(todayKey());
+  const [routeDate, setRouteDate] = useState(todayKey());
+  // Passou da meia-noite com o app aberto: a rota passa a ser a do dia novo.
+  useEffect(() => {
+    const t = setInterval(() => { const k = todayKey(); setRouteDate((r) => (r === k ? r : k)); }, 60_000);
+    return () => clearInterval(t);
+  }, []);
   const [routeDraft, setRouteDraft] = useState<Client[]>([]);
   // Ponto de partida customizado da rota. null = usa o GPS (comportamento
   // padrao). Quando definido (o vendedor escolheu um cliente/local como base),
@@ -2809,26 +2814,21 @@ function MainApp() {
   }, [currentStopIndex, routeDisplayClients.length]);
 
   const addClientToRoute = useCallback((client: Client) => {
+    // Olhando a rota de outra pessoa: não se escreve nela nem na sua por engano.
+    if (isMonitoringRoute) { Toast.mostrar('Esta é a rota de outra pessoa: volte para a sua para pôr leads.', 'fila'); return; }
     if (routeStopClientIds.has(client.id)) {
       Alert.alert('Ja esta na rota', 'Este lead ja faz parte do planejamento.');
       return;
     }
-    // Mapa novo: UMA parada no fim da rota de hoje. O saveManualRoute apaga e
-    // regrava todas as paradas e devolvia as já feitas para "pendente".
-    if (modoNovo && !isMonitoringRoute) {
-      void fieldOps.adicionarParada.mutateAsync(client)
-        // null = não escreveu (já estava, ou a tela é a rota de outra pessoa): sem ✓ falso.
-        .then((pos) => pos == null
-          ? Toast.mostrar('Não entrou: ou já está na rota, ou esta tela é a rota de outra pessoa', 'fila')
-          : Toast.mostrar(`✓ ${client.empresa?.trim() || client.nome} na rota de hoje`, 'ok'))
-        .catch((e) => Alert.alert('Não entrou na rota', String((e as Error)?.message ?? e)));
-      return;
-    }
-    const next = [...routeDisplayClients, client];
-    setRouteDraft(next);
-    setSelectedClient(null);
-    saveManualRoute(next);
-  }, [routeDisplayClients, routeStopClientIds, saveManualRoute, modoNovo, isMonitoringRoute, fieldOps.adicionarParada]);
+    // UMA parada no fim da rota de hoje, nos dois mapas. O saveManualRoute que o mapa
+    // antigo usava apagava e regravava a rota inteira (as feitas voltavam a pendentes).
+    void fieldOps.adicionarParada.mutateAsync(client)
+      // null = não escreveu (já estava): sem ✓ falso.
+      .then((pos) => pos == null
+        ? Toast.mostrar('Não entrou: esse lead já está na rota de hoje.', 'fila')
+        : Toast.mostrar(`✓ ${client.empresa?.trim() || client.nome} na rota de hoje`, 'ok'))
+      .catch((e) => Alert.alert('Não entrou na rota', String((e as Error)?.message ?? e)));
+  }, [routeStopClientIds, isMonitoringRoute, fieldOps.adicionarParada]);
 
   // ROTEIRIZAR O PLANO DO DIA (28/09/2026, Julyan: "preciso roteirizar o plano do dia").
   // Pega as paradas EM ABERTO da rota de hoje e põe na melhor ordem de percurso a partir
