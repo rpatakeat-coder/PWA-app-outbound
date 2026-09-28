@@ -64,7 +64,7 @@ export default function AvisosPainel({
             {gestor.map((g) => (
               <View key={g.id} style={s.item}>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={s.itemTexto} numberOfLines={2}>{g.titulo}</Text>
+                  <Text style={s.itemTexto} numberOfLines={g.pessoal ? 8 : 2}>{g.titulo}</Text>
                   <Text style={s.linhaPequena}>
                     {[g.autor, new Date(g.em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })].filter(Boolean).join(' · ')}
                   </Text>

@@ -1,16 +1,19 @@
-// O meu plano de desenvolvimento — e o botão que só eu posso apertar.
+// O meu plano de desenvolvimento — o PDI do Cockpit, visto do app.
 //
-// Quem marca "feito" é a própria pessoa. Isso não é regra de interface: a
-// escrita passa pela função `pdi_marcar_feito`, que é SECURITY DEFINER e
-// filtra por `seller_id = auth.uid()`. Sem ela a policy de UPDATE da tabela
-// deixaria qualquer um dos dois lados escrever qualquer coluna — RLS não
-// restringe COLUNA, só linha, e o gestor precisa do UPDATE para validar.
+// DESDE A 0082 (24/09/2026) o PDI é o do Cockpit, e este hook lia o formato antigo
+// (pdi_documentos.seller_id, pdi_compromissos.pdi_id/texto/feito_em, RPC
+// pdi_marcar_feito): a consulta quebrava com 42703 e a tela de desempenho perdia o
+// bloco inteiro. No formato do Cockpit (28/09/2026):
+//   · os ACORDOS são texto da análise semanal (narrativas.reps[owner].compromissos),
+//     identificados pela POSIÇÃO;
+//   · o ESTADO vive em pdi_compromissos (owner_id + versao_analise), em arrays pelo
+//     mesmo índice: checked[i], validado_em[i], devolvido_em[i], devolvido_motivo[i].
+// Os dois chegam juntos pela cockpit-dados?recurso=meu-pdi, só os meus.
 //
-// O gestor valida ou devolve com motivo; nada disso é escrito daqui.
+// Marcar "feito" grava checked[i] no mesmo upsert que o Cockpit usa (a RLS deixa o
+// dono escrever a própria linha). Validar e devolver continuam sendo do gestor.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
-
-const TABELA_AUSENTE = 'PGRST205';
 
 export type EstadoDoCompromisso = 'aberto' | 'feito' | 'validado' | 'devolvido';
 
@@ -24,82 +27,74 @@ export type MeuCompromisso = {
 
 export type MeuPdi = { titulo: string; compromissos: MeuCompromisso[] } | null;
 
+type Resposta = {
+  ok?: boolean; semOwner?: boolean; versaoAnalise?: string; ownerId?: string;
+  compromissos?: string[];
+  estado?: { checked?: boolean[] | null; validado_em?: (string | null)[] | null; devolvido_em?: (string | null)[] | null; devolvido_motivo?: (string | null)[] | null } | null;
+};
+
+// Mesma derivação do Cockpit: devolvido vence validado vence feito — a última palavra
+// do gestor é a que vale.
+export function estadoDoAcordo(i: number, est: Resposta['estado']): EstadoDoCompromisso {
+  const feito = !!(est && est.checked && est.checked[i]);
+  const validado = (est && est.validado_em && est.validado_em[i]) || null;
+  const devolvido = (est && est.devolvido_em && est.devolvido_em[i]) || null;
+  if (devolvido && (!validado || devolvido > validado)) return 'devolvido';
+  if (validado) return 'validado';
+  return feito ? 'feito' : 'aberto';
+}
+
 export function useMeuPdi(enabled: boolean) {
   const qc = useQueryClient();
 
-  const query = useQuery<MeuPdi>({
+  const query = useQuery<{ pdi: MeuPdi; bruto: Resposta | null }>({
     queryKey: ['meu_pdi'],
     enabled,
     staleTime: 60_000,
     queryFn: async () => {
-      const { data: sessao } = await supabase.auth.getUser();
-      const meuId = sessao?.user?.id;
-      if (!meuId) return null;
-
-      const doc = await supabase
-        .from('pdi_documentos')
-        .select('id, titulo')
-        .eq('seller_id', meuId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      // Tabela ausente não pode quebrar a tela de desempenho: o resto dela
-      // (visitas, pontos, daily) continua valendo sem o PDI.
-      if (doc.error) {
-        if (doc.error.code === TABELA_AUSENTE) return null;
-        throw doc.error;
-      }
-      if (!doc.data) return null;
-
-      const comp = await supabase
-        .from('pdi_compromissos')
-        .select('id, texto, ordem, feito_em, validado_em, devolvido_em, devolvido_motivo')
-        .eq('pdi_id', doc.data.id)
-        .order('ordem', { ascending: true });
-      if (comp.error) throw comp.error;
-
+      const { data, error } = await supabase.functions.invoke('cockpit-dados?recurso=meu-pdi', { method: 'GET' });
+      // Sem PDI (fora da equipe, sem owner, rede): a tela segue sem o bloco.
+      if (error || !data || !(data as Resposta).ok || (data as Resposta).semOwner) return { pdi: null, bruto: null };
+      const r = data as Resposta;
+      const textos = (r.compromissos || []).filter((t) => typeof t === 'string' && t.trim());
+      if (!textos.length) return { pdi: null, bruto: r };
       return {
-        titulo: doc.data.titulo as string,
-        compromissos: (comp.data ?? []).map((c) => {
-          const feitoEm = (c.feito_em as string | null) ?? null;
-          const validadoEm = (c.validado_em as string | null) ?? null;
-          const devolvidoEm = (c.devolvido_em as string | null) ?? null;
-          // Mesma derivação do cockpit (gestao/src/dados/regras.ts): devolvido
-          // vence validado vence feito — a última palavra do gestor é a que
-          // vale. Os dois projetos não podem se importar, então a regra está
-          // escrita duas vezes; se uma mudar, a outra precisa mudar junto.
-          const estado: EstadoDoCompromisso =
-            devolvidoEm && (!validadoEm || devolvidoEm > validadoEm)
-              ? 'devolvido'
-              : validadoEm
-                ? 'validado'
-                : feitoEm
-                  ? 'feito'
-                  : 'aberto';
-          return {
-            id: c.id as string,
-            texto: c.texto as string,
-            feito: feitoEm != null,
-            estado,
-            devolvidoMotivo: (c.devolvido_motivo as string | null) ?? null,
-          };
-        }),
+        bruto: r,
+        pdi: {
+          titulo: 'Acordos da semana',
+          compromissos: textos.map((texto, i) => {
+            const estado = estadoDoAcordo(i, r.estado);
+            return {
+              id: String(i),
+              texto,
+              feito: !!(r.estado && r.estado.checked && r.estado.checked[i]),
+              estado,
+              devolvidoMotivo: (r.estado && r.estado.devolvido_motivo && r.estado.devolvido_motivo[i]) || null,
+            };
+          }),
+        },
       };
     },
   });
 
   const marcar = useMutation({
     mutationFn: async ({ id, feito }: { id: string; feito: boolean }) => {
-      const { error } = await supabase.rpc('pdi_marcar_feito', {
-        p_compromisso: id,
-        p_feito: feito,
-      });
+      const r = query.data?.bruto;
+      const { data: s } = await supabase.auth.getUser();
+      const { data: perfil } = await supabase.from('profiles').select('id_hubspot').eq('id', s?.user?.id ?? '').maybeSingle();
+      const ownerId = (perfil as { id_hubspot?: string | null } | null)?.id_hubspot;
+      if (!r || !r.versaoAnalise || !ownerId) throw new Error('PDI indisponível agora.');
+      const n = (r.compromissos || []).length;
+      const checked = Array.from({ length: n }, (_, i) => !!(r.estado && r.estado.checked && r.estado.checked[i]));
+      checked[Number(id)] = feito;
+      const { error } = await supabase.from('pdi_compromissos').upsert({
+        owner_id: String(ownerId), versao_analise: r.versaoAnalise, checked,
+        atualizado_por: s?.user?.email ?? null, updated_at: new Date().toISOString(),
+      }, { onConflict: 'owner_id,versao_analise' });
       if (error) throw error;
     },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['meu_pdi'] });
-    },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['meu_pdi'] }); },
   });
 
-  return { pdi: query.data ?? null, carregando: query.isLoading, marcar };
+  return { pdi: query.data?.pdi ?? null, carregando: query.isLoading, marcar };
 }

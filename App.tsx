@@ -164,6 +164,8 @@ import { useComunicadosNaoLidos } from './src/hooks/useComunicados';
 import { useTarefasDoCrm } from './src/hooks/useTarefasDoCrm';
 import { useLayout } from './src/hooks/useLayout';
 import { useNomesDeClientes } from './src/hooks/useNomesDeClientes';
+import { useAoVivo } from './src/hooks/useAoVivo';
+import { lerDeepLink, semDeepLink } from './src/utils/deepLink';
 import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
 import { useStages } from './src/hooks/useStages';
 import { TarefasScreen, baldeDeVencimento, baldeDaTarefaDoCrm } from './src/screens/TarefasScreen';
@@ -1469,6 +1471,9 @@ function MainApp() {
   // chips de status em tempo real conforme o usuario digita no search.
   // id_hubspot do usuario logado, usado pelo toggle "meus leads" (non-admin).
   const myHubspotId = profile?.id_hubspot ?? null;
+  // Canal ao vivo (0128): o que muda no Cockpit, no robô ou em outro aparelho aparece
+  // no mapa sem recarregar. Ver src/hooks/useAoVivo.ts.
+  useAoVivo(isAuthenticated, myHubspotId, canViewGestor);
   // Sino de Avisos (mapa novo): falhas de sincronização + recados do gestor. Ver src/hooks/useAvisos.ts.
   const avisos = useAvisos(modoNovo);
   const [avisosAbertos, setAvisosAbertos] = useState(false);
@@ -2951,6 +2956,41 @@ function MainApp() {
       longitudeDelta: mapRegion.longitudeDelta,
     }, 300);
   }, [openClientDetails, modoNovo]);
+
+  // DEEP LINK DO COCKPIT (v5, 28/09/2026): "Abrir no mapa" chega aqui como
+  // /mapa?pino=<negócio>&cartao=aberto, ?rua=… ou ?lente=…. Roda uma vez, depois do
+  // login, e sai da barra de endereço para recarregar não reabrir o cartão.
+  const deepLinkFeito = useRef(false);
+  useEffect(() => {
+    if (deepLinkFeito.current || !isAuthenticated || typeof window === 'undefined' || !window.location) return;
+    deepLinkFeito.current = true;
+    const dl = lerDeepLink(window.location.search);
+    if (!dl) return;
+    try {
+      window.history.replaceState(window.history.state, '', semDeepLink(window.location.pathname, window.location.search, window.location.hash));
+    } catch { /* barra de endereço fica como veio; nada quebra */ }
+    setTab('map');
+    if (dl.lente) setLente(dl.lente);
+    if (dl.rua) { setSearchQuery(dl.rua); if (modoNovo) setBuscaAberta(true); }
+    if (!dl.pino) return;
+    void (async () => {
+      let q = supabase.from('clients').select(CLIENT_LIST_COLUMNS).limit(1);
+      q = dl.pino!.dealId ? q.eq('id_hubspot', dl.pino!.dealId) : q.eq('id', dl.pino!.clientId!);
+      const { data } = await q.maybeSingle();
+      const c = data as unknown as Client | null;
+      if (!c) { Toast.mostrar('Esse negócio ainda não tem pino no mapa.', 'erro'); return; }
+      const lat = Number(c.latitude), lon = Number(c.longitude);
+      // logo depois do login o mapa pode não ter montado ainda: tenta por até 5 s
+      const enquadrar = (tentativa: number) => {
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+        if (mapRef.current) {
+          mapRef.current.animateToRegion({ latitude: lat - 0.002, longitude: lon, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);
+        } else if (tentativa < 10) setTimeout(() => enquadrar(tentativa + 1), 500);
+      };
+      enquadrar(0);
+      if (dl.cartaoAberto) setSelectedClient(c);
+    })();
+  }, [isAuthenticated, modoNovo]);
 
   // Modo de criação manual via mapa: pin fixo no centro da tela
   const [creationMode, setCreationMode] = useState(false);
@@ -5084,7 +5124,7 @@ function MainApp() {
           aoAbrirBusca={() => setBuscaAberta(true)}
           buscando={buscando}
           selo={avisos.selo}
-          aoSino={() => setAvisosAbertos(true)}
+          aoSino={() => { setAvisosAbertos(true); avisos.marcarRecadosVistos(); }}
           avatar={{ url: profile?.avatar_url, nome: profile?.full_name, email: profile?.email }}
           aoAvatar={() => setPerfilAberto(true)}
         />
@@ -6204,7 +6244,7 @@ function MainApp() {
               accessibilityRole="button"
               accessibilityLabel={avisos.selo ? `Avisos, ${avisos.selo} ${avisos.selo === 1 ? 'novo' : 'novos'}` : 'Avisos'}
               style={styles.headerAjuda}
-              onPress={() => setAvisosAbertos(true)}
+              onPress={() => { setAvisosAbertos(true); avisos.marcarRecadosVistos(); }}
             >
               <IconBell width={24} height={24} fill="#FFFFFF" />
               {avisos.selo > 0 && (

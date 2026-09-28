@@ -227,6 +227,58 @@ Deno.serve(async (req) => {
   }
   if (recurso === 'precificacao') return json(200, { ok: true, precificacao: PRECIFICACAO });
 
+  /* ══ AO VIVO (Cockpit v5, fase 2, 28/09/2026) ══════════════════════════════════
+     O Cockpit recebe pelo Realtime um sinal "o negócio X mudou" (0128) e pede aqui só
+     os cards desses negócios, montados pelo MESMO montarCardDoEspelho do carregamento.
+     O executivo só recebe os dele; negócio de fora do Field Sales ou excluído pelo robô
+     volta como `fora`, e a tela o tira do funil. Máximo de 50 por pedido. */
+  if (recurso === 'negocios') {
+    const ids = String(url.searchParams.get('ids') || '').split(',').map((s) => s.trim()).filter((s) => /^\d{1,20}$/.test(s)).slice(0, 50);
+    if (!ids.length) return json(400, { erro: 'Passe ids=1,2,3.' });
+    const { data: rows, error } = await svc.from('espelho_negocios')
+      .select('deal_id, owner_id, dealstage, pipeline, props, tarefas, atualizado_em').in('deal_id', ids);
+    if (error) return json(500, { erro: 'Não consegui ler o espelho: ' + error.message });
+    const nomes: Record<string, string> = {};
+    (equipe || []).forEach((p: any) => { if (p && p.ownerId) nomes[String(p.ownerId)] = String(p.nome || ''); });
+    const cfg = config.temperatura;
+    const ehGestor = String(usuario.role) === 'manager';
+    const negocios = (rows || []).map((e: any) => {
+      const id = String(e.deal_id);
+      if (!ehGestor && String(e.owner_id) !== String(usuario.ownerId)) return { id, fora: true };
+      if (e.pipeline && e.pipeline !== PIPELINE_FIELD_SALES) return { id, fora: true };
+      if (!nomes[String(e.owner_id)]) return { id, fora: true };
+      if ((REALIZADO as any).ehNegocioExcluido({ id, properties: e.props || {} })) return { id, fora: true };
+      const st = String(e.dealstage || '');
+      const card = montarCardDoEspelho(id, st, e.props || {}, e.tarefas || [], nomes, cfg);
+      if (!card) return { id, fora: true };
+      return { id, stageId: st, fechada: FECHADAS.includes(st), atualizadoEm: e.atualizado_em, card: removerNulosRecursivo(card) };
+    });
+    return json(200, { ok: true, negocios });
+  }
+
+  /* ══ O MEU PDI NO APP (28/09/2026) ═════════════════════════════════════════════
+     Desde a 0082 o PDI é o do Cockpit: os acordos são texto da análise semanal
+     (narrativas.reps[owner].compromissos, na POSIÇÃO) e o estado de cada um vive em
+     pdi_compromissos (owner_id + versao_analise, arrays pelo mesmo índice). O app lia o
+     formato antigo (pdi_id, texto, feito_em) e quebrava com 42703. Aqui ele recebe os
+     dois juntos, só os dele. */
+  if (recurso === 'meu-pdi') {
+    if (!usuario.ownerId) return json(200, { ok: true, semOwner: true });
+    await lerSnapshot();
+    const narr: any = (CACHE.fontes && (CACHE.fontes as any).narrativas) || {};
+    const n: any = (narr.reps || {})[String(usuario.ownerId)] || {};
+    const versao = String(narr._atualizado_em || 'v1');
+    const { data: est } = await svc.from('pdi_compromissos')
+      .select('checked, validado_em, devolvido_em, devolvido_motivo, treino_foco, treino_feito_em, data_um_a_um')
+      .eq('owner_id', String(usuario.ownerId)).eq('versao_analise', versao).maybeSingle();
+    return json(200, {
+      ok: true, versaoAnalise: versao,
+      compromissos: Array.isArray(n.compromissos) ? n.compromissos : [],
+      prazos: Array.isArray(n.compromissosPrazo) ? n.compromissosPrazo : [],
+      estado: est || null,
+    });
+  }
+
   if (recurso === 'realizado-hoje') {
     const hsToken = Deno.env.get('HUBSPOT_TOKEN');
     if (!hsToken) return json(503, { erro: 'Servidor sem HUBSPOT_TOKEN — não é possível medir o cumprido agora.' });

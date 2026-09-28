@@ -1097,7 +1097,15 @@ async function handleUpdateTask(token: string, body: Record<string, unknown>) {
 
   const res = await hsFetch(token, 'PATCH', `/crm/v3/objects/tasks/${id}`, { properties: props });
   if (!res.ok) return json(502, { error: 'HubSpot recusou o update da task', detail: res.body?.message ?? `status ${res.status}` });
-  return json(200, { ok: true, engagement_id: id });
+  // O NEGÓCIO DA TAREFA (28/09/2026): o app só manda o engagement_id, e sem o negócio o
+  // espelho não relia nada — tarefa concluída no mapa só chegava ao Cockpit pelo robô
+  // (até 2 h). A associação dá o negócio, e o espelho ao vivo faz o resto.
+  let idHubspot: string | null = null;
+  try {
+    const a = await hsFetch(token, 'GET', `/crm/v4/objects/tasks/${id}/associations/deals`);
+    idHubspot = a.ok ? trimOrNull(a.body?.results?.[0]?.toObjectId) : null;
+  } catch { /* sem negócio: segue como antes */ }
+  return json(200, { ok: true, engagement_id: id, id_hubspot: idHubspot });
 }
 
 // ---- Demo/reuniao -> Meeting ----
