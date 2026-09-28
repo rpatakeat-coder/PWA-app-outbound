@@ -8,7 +8,8 @@
 // porta?", ficha de rua): a tela só leva ao mapa e dispara o fluxo de lá.
 import React, { useMemo, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../context/AuthContext';
 import { Alert } from '../components/Alert';
 import { supabase } from '../integrations/supabase/client';
 import { concluirComDesfazer } from '../utils/concluirTarefa';
@@ -61,6 +62,30 @@ export default function AgendaNovoScreen({
   const dias = useMemo(() => diasDaFaixa(agora), [hoje]); // eslint-disable-line react-hooks/exhaustive-deps
   const [dia, setDia] = useState(diaInicial && diaInicial >= hoje ? diaInicial : hoje);
   const { tarefas } = useTarefasDoCrm(true);
+  const { user } = useAuth();
+
+  /* O PLANO DOS OUTROS DIAS (28/09/2026, Julyan: "a munição não está indo pra agenda").
+     O que se põe no Planejamento vira parada da rota DAQUELE dia (plano_para_rota), mas
+     a Agenda só mostrava a rota de hoje: amanhã em diante aparecia só tarefa e reunião,
+     e o planejado sumia. Uma consulta traz as rotas da faixa inteira. */
+  const planoDaFaixa = useQuery({
+    queryKey: ['field_route_stops', 'faixa', user?.id, dias[0], dias[dias.length - 1]],
+    enabled: !!user?.id,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('field_routes')
+        .select('route_date, stops:field_route_stops(id, client_id, status, position, planned_at, client:clients(*))')
+        .eq('seller_id', user!.id).gte('route_date', dias[0]).lte('route_date', dias[dias.length - 1]);
+      if (error) throw error;
+      const porDia = new Map<string, FieldRouteStopWithClient[]>();
+      for (const r of (data ?? []) as unknown as Array<{ route_date: string; stops: FieldRouteStopWithClient[] }>) {
+        const vivas = (r.stops ?? []).filter((s) => s.status !== 'removed').sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+        porDia.set(r.route_date, [...(porDia.get(r.route_date) ?? []), ...vivas]);
+      }
+      return porDia;
+    },
+  });
+  const paradasDoDia = (d: string) => (d === hoje ? paradas : (planoDaFaixa.data?.get(d) ?? []));
 
   const estado = estadoDasParadas(
     paradas.map((p) => ({ ...p, visitadoHoje: !!p.client && visitadoHoje(p.client) })),
@@ -68,7 +93,7 @@ export default function AgendaNovoScreen({
   const feitas = estado.filter((p) => p.estado === 'feito').length;
   const noPlano = new Set(paradas.map((p) => p.client_id));
   const cobrar = new Set(tarefas.filter((t) => ehCobranca({ assunto: t.assunto, origem: t.marcador?.origem }) && t.clientId).map((t) => t.clientId!));
-  const doDia = (d: string) => compromissosDoDia(d, tarefas, reunioes, nomePorId, d === hoje ? noPlano : undefined);
+  const doDia = (d: string) => compromissosDoDia(d, tarefas, reunioes, nomePorId, d === hoje ? noPlano : new Set(paradasDoDia(d).map((p) => p.client_id)));
   const compromissos = doDia(dia).filter((k) => !concluidas.has(k.id)
     && !(k.fonte === 'app' && reunioes.some((r) => `app-${r.id}` === k.id && r.status === 'realizada')));
 
@@ -135,7 +160,7 @@ export default function AgendaNovoScreen({
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.faixa}>
         {dias.map((d) => {
           const r = rotuloDoDia(d, hoje);
-          const n = (d === hoje ? estado.length : 0) + doDia(d).length;
+          const n = (d === hoje ? estado.length : paradasDoDia(d).length) + doDia(d).length;
           const ativo = d === dia;
           return (
             <TouchableOpacity
@@ -233,6 +258,31 @@ export default function AgendaNovoScreen({
         </>
       )}
 
+      {dia !== hoje && paradasDoDia(dia).length > 0 && (
+        <View style={s.grupo}>
+          <Text style={s.secao}>{`PLANO DO DIA · ${paradasDoDia(dia).length}`}</Text>
+          {paradasDoDia(dia).map((p, i) => {
+            const c = p.client;
+            const nome = c ? nomeDoLead(c) : 'Parada';
+            // A hora que o Planejamento marcou (plano_para_rota grava planned_at no dia);
+            // parada sem hora mostra a ordem.
+            const hora = p.planned_at && dia === diaBRT(new Date(p.planned_at))
+              ?new Date(p.planned_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : null;
+            return (
+              <TouchableOpacity key={p.id} accessibilityRole="button" style={s.compromisso} onPress={() => aoAbrirLead(p.client_id)}>
+                <Text style={s.hora}>{hora ?? String(i + 1)}</Text>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={s.paradaNome} numberOfLines={1}>{nome}</Text>
+                  {!!ruaDo(c) && <Text style={s.paradaSub} numberOfLines={1}>{[ruaDo(c), distanciaAte(p.client_id)].filter(Boolean).join(' · ')}</Text>}
+                  <View style={s.chips}><Text style={s.chip}>Visita do plano</Text></View>
+                </View>
+                <IconChevronRight width={20} height={20} fill={cores.muted} />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
       {compromissos.length > 0 && (
         <View style={s.grupo}>
           <Text style={s.secao}>{dia === hoje ? 'REUNIÕES E RETORNOS DE HOJE' : 'REUNIÕES E RETORNOS'}</Text>
@@ -263,7 +313,7 @@ export default function AgendaNovoScreen({
         </View>
       )}
 
-      {dia !== hoje && compromissos.length === 0 && (
+      {dia !== hoje && compromissos.length === 0 && paradasDoDia(dia).length === 0 && (
         <Text style={s.vazio}>Nada marcado neste dia. O “Agendar” do cartão e o próximo passo do registro caem aqui.</Text>
       )}
     </ScrollView>
