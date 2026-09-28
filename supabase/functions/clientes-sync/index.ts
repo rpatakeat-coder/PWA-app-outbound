@@ -81,6 +81,56 @@ async function buscar(token: string, body: unknown) {
   throw new Error('HubSpot: limite de tentativas');
 }
 
+// ── CLIENTE SEM PINO GANHA PINO (27/09/26, Julyan: "pode seguir") ────────────────
+// 246 clientes ativos não estavam no mapa: não dá para visitar o que não se vê. Cada
+// rodada cria até PINOS_POR_RODADA pinos: coordenada do HubSpot se houver; senão o
+// endereço no Google Geocoding (~R$ 0,03 cada, uma vez só). Sem endereço que o Google
+// ache, fica sem pino e tenta de novo na rodada seguinte. O pino nasce 'cliente',
+// ligado ao negócio (id_hubspot), dono = executivo do território (0125), criado pelo
+// mesmo usuário RPA do webhook do HubSpot.
+const PINOS_POR_RODADA = 80;
+const USUARIO_RPA = 'be747e54-0ceb-45ee-bf1a-4398cdc9e6a0';
+
+async function localizar(chave: string, c: Record<string, unknown>) {
+  const endereco = [[c.numero, c.logradouro].filter(Boolean).join(' '), c.bairro, c.cidade, c.estado, c.cep, 'Brasil']
+    .map((x) => (x == null ? '' : String(x).trim())).filter(Boolean).join(', ');
+  if (!c.logradouro && !c.cep) return null;
+  const r = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(endereco)}&region=br&language=pt-BR&key=${chave}`);
+  const d = await r.json().catch(() => null);
+  const hit = d?.status === 'OK' ? d.results?.[0] : null;
+  const loc = hit?.geometry?.location;
+  if (!loc || typeof loc.lat !== 'number') return null;
+  const tipo = String(hit.geometry?.location_type ?? '');
+  return { lat: loc.lat as number, lng: loc.lng as number, aproximado: !(tipo === 'ROOFTOP' || tipo === 'RANGE_INTERPOLATED') };
+}
+
+async function criarPinosQueFaltam(svc: ReturnType<typeof createClient>) {
+  const chave = Deno.env.get('GOOGLE_GEOCODING_API_KEY') ?? '';
+  const { data: faltam } = await svc.from('clientes_takeat')
+    .select('deal_id, nome, cnpj, celular, logradouro, numero, bairro, cidade, estado, cep, latitude, longitude, executivo_owner_id')
+    .is('client_id', null).in('situacao', ['ativo', 'em_risco']).limit(PINOS_POR_RODADA);
+  let criados = 0, semEndereco = 0;
+  for (const c of faltam ?? []) {
+    // Já existe pino deste negócio (arquivado ou criado agora por outro caminho)? Não duplica.
+    const { data: ja } = await svc.from('clients').select('id').eq('id_hubspot', c.deal_id).limit(1);
+    if (ja && ja.length) continue;
+    let geo = c.latitude != null && c.longitude != null ? { lat: c.latitude, lng: c.longitude, aproximado: true } : null;
+    if (!geo && chave) geo = await localizar(chave, c);
+    if (!geo) { semEndereco++; continue; }
+    const nome = String(c.nome ?? '').trim() || 'Cliente Takeat';
+    const { error } = await svc.from('clients').insert({
+      nome, empresa: nome, status: 'cliente', origem: 'api', tags: ['clientes_sync'],
+      id_hubspot: c.deal_id, telefone: c.celular, endereco: c.logradouro, numero: c.numero, bairro: c.bairro,
+      cidade: c.cidade, estado: c.estado, cep: c.cep, latitude: geo.lat, longitude: geo.lng,
+      geo_source: c.latitude != null ? 'hubspot' : 'google', geo_approximate: geo.aproximado,
+      vendedor_id_hubspot: c.executivo_owner_id, created_by: USUARIO_RPA, updated_by: USUARIO_RPA,
+    });
+    if (error) { console.warn('[clientes-sync] pino', c.deal_id, error.message); continue; }
+    criados++;
+  }
+  return { criados, semEndereco };
+}
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return json(405, { error: 'Use POST' });
   const svc = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
@@ -147,9 +197,15 @@ Deno.serve(async (req) => {
       pinos += Number(data ?? 0);
     }
   }
+  // Pinos novos entram no mapa já nesta rodada; o vínculo client_id se acerta na próxima
+  // gravação (a subconsulta por id_hubspot em gravar_clientes_takeat).
+  let pinosNovos: { criados: number; semEndereco: number } | null = null;
+  if (!erro) {
+    try { pinosNovos = await criarPinosQueFaltam(svc); } catch (e) { console.warn('[clientes-sync] pinos novos', (e as Error).message); }
+  }
   const porSituacao = linhas.reduce((a: Record<string, number>, l) => { const s = String(l.situacao); a[s] = (a[s] ?? 0) + 1; return a; }, {});
   const resumo = {
-    negocios: linhas.length, pinos, por_situacao: porSituacao,
+    negocios: linhas.length, pinos, por_situacao: { ...porSituacao, ...(pinosNovos ? { pinos_criados: pinosNovos.criados, sem_endereco: pinosNovos.semEndereco } : {}) },
     etapas_sem_classificacao: Object.keys(semClassificacao).length ? semClassificacao : null,
     erro, duracao_ms: Date.now() - inicio,
   };
