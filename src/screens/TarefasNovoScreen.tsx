@@ -10,6 +10,7 @@ import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpac
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useTarefasDoCrm, type TarefaDoCrmNaTela, type TarefaParaAFicha } from '../hooks/useTarefasDoCrm';
+import { useMeuPdi } from '../hooks/useMeuPdi';
 import { IconCall, IconCheck, IconChevronDown, IconChevronRight, useIconColors } from '../components/icons';
 import { acaoRapida, agrupar, chipsDaTarefa, diaBRT } from '../utils/abaTarefas';
 import { concluirComDesfazer } from '../utils/concluirTarefa';
@@ -44,6 +45,11 @@ export default function TarefasNovoScreen({
   const cores = useIconColors();
   const queryClient = useQueryClient();
   const { tarefas, carregando, erro, semMedicao } = useTarefasDoCrm(true);
+  // OS ACORDOS DO 1:1 (Cockpit v5, contrato linha 16, 28/09/2026): o que o gestor
+  // combinou no 1:1 vira item aqui, com o mesmo "feito" que o Cockpit lê em Pessoas.
+  // Validado some (o gestor já conferiu); devolvido volta com o motivo.
+  const { pdi, marcar: marcarAcordo } = useMeuPdi(true);
+  const acordos = (pdi?.compromissos ?? []).filter((c) => c.estado !== 'validado');
   const agora = new Date();
   const hoje = diaBRT(agora)!;
   const chave = email ? chaveFeitas(email, hoje) : null;
@@ -190,6 +196,36 @@ export default function TarefasNovoScreen({
               })}
             </View>
           ))}
+
+          {acordos.length > 0 && (
+            <View style={s.grupo}>
+              <Text style={s.grupoTituloNeutro}>{`DO SEU 1:1 · ${acordos.length}`}</Text>
+              {acordos.map((c) => (
+                <View key={`pdi-${c.id}`} style={[s.linha, c.estado === 'devolvido' && s.linhaAlerta]}>
+                  <TouchableOpacity
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: c.feito, disabled: marcarAcordo.isPending }}
+                    accessibilityLabel={`${c.feito ? 'Desmarcar' : 'Marcar como feito'}: ${c.texto}`}
+                    style={s.circuloAlvo}
+                    disabled={marcarAcordo.isPending}
+                    onPress={() => marcarAcordo.mutate({ id: c.id, feito: !c.feito })}
+                  >
+                    <View style={[s.circulo, c.feito && s.circuloFeito]}>
+                      {c.feito && <IconCheck width={16} height={16} fill="#FFFFFF" />}
+                    </View>
+                  </TouchableOpacity>
+                  <View style={s.linhaCorpo}>
+                    <Text style={[s.linhaTitulo, c.feito && s.linhaTituloFeita]} numberOfLines={3}>{c.texto}</Text>
+                    <View style={s.chips}>
+                      <Text style={s.chip}>acordo do 1:1</Text>
+                      {c.estado === 'feito' && <Text style={s.chipOrigem}>feito · o gestor valida</Text>}
+                      {c.estado === 'devolvido' && <Text style={[s.chipOrigem, s.chipAlerta]} numberOfLines={2}>{`devolvido: ${c.devolvidoMotivo ?? 'fale com o gestor'}`}</Text>}
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
 
           {sugestoes.length > 0 && (
             <View style={s.grupo}>

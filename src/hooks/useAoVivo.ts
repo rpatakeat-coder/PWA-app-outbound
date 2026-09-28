@@ -35,6 +35,8 @@ export const INVALIDA_POR_TIPO: Record<string, string[][]> = {
   plano: [['field_routes'], ['field_route_stops'], ['meu_dia']],
   comunicado: [['avisos_gestor'], ['comunicados_nao_lidos']],
   recado: [['avisos_gestor']],
+  // 0129: o gestor validou ou devolveu um acordo do 1:1 (ou eu marquei em outro aparelho)
+  pdi: [['meu_pdi']],
 };
 
 export function sinalMeInteressa(s: Sinal, meuOwnerId: string | null, ehGestor: boolean): boolean {
