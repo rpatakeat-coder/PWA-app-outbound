@@ -37,6 +37,7 @@ const ETAPAS: Record<string, { rotulo: string; situacao: 'ativo' | 'em_risco' | 
   '162579091': { rotulo: 'Engajamento', situacao: 'ativo' },
   '162579092': { rotulo: 'Integração', situacao: 'ativo' },
   '162579097': { rotulo: 'Em cancelamento', situacao: 'em_risco' },
+  '1308818229': { rotulo: 'Pré-Cancelamento', situacao: 'em_risco' },
   '171389298': { rotulo: 'Comanda parada', situacao: 'em_risco' },
   '1122729590': { rotulo: 'Churn', situacao: 'ex' },
   '1154518702': { rotulo: 'Cancelado', situacao: 'ex' },
