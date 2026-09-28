@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNaEquipeCockpit } from '../hooks/useNaEquipeCockpit';
 import { Alert } from '../components/Alert';
 import { IconText, IconTrendingUp } from '../components/icons';
+import { atributosDaGestao } from '../utils/abrirGestao';
 
 // "Minha Daily" — a promessa do dia e o placar dela, pro proprio vendedor.
 //
@@ -164,7 +165,7 @@ export function MinhaDailyCard({ enabled }: { enabled: boolean }) {
       {naEquipeCockpit ? (
         <Text
           style={styles.destino}
-          {...({ href: '/gestao/#/daily' } as any)}
+          {...({ href: '/gestao/#/daily', hrefAttrs: atributosDaGestao() } as any)}
         >
           {ehGestor ? 'Este número aparece na Daily do time →' : 'Sua palavra do dia aparece na Daily do time →'}
         </Text>

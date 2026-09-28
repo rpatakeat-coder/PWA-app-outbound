@@ -28,6 +28,7 @@ import { RouteConfigCard } from './RouteConfigCard';
 import { SellerClassificationCard } from './SellerClassificationCard';
 import { DismissedContaAlvoCard } from './DismissedContaAlvoCard';
 import { SellerGoalsCard } from './SellerGoalsCard';
+import { atributosDaGestao } from '../utils/abrirGestao';
 
 // Configuracoes como TELA (prompt 13a/13b do handoff) — antes era o modal da
 // engrenagem (isPasswordModalOpen). Toda a logica veio junto sem mudanca:
@@ -338,9 +339,9 @@ export function ConfiguracoesScreen({
               accessibilityRole="link"
               style={[styles.cardLink, !layout.ehDesktop && styles.cardLinkMovel]}
               {...ds({ hover: 'borda', trans: '1' })}
-              // Na mesma janela: no PWA instalado uma aba nova cai no navegador, que
-              // no iPhone nao tem a sessao do app e pede login de novo.
-              {...({ href: '/gestao/' } as Record<string, unknown>)}
+              // Aba nova, menos no iPhone com o app instalado: lá a aba nova cai no
+              // Safari, sem a sessão do app, e pede login de novo (utils/abrirGestao).
+              {...({ href: '/gestao/', hrefAttrs: atributosDaGestao() } as Record<string, unknown>)}
             >
               <View style={[styles.quadroIcone, !layout.ehDesktop && styles.quadroIconeMovel, { backgroundColor: 'var(--tint-red)' }]}>
                 <IconBarGraph width={20} height={20} fill={iconColors.tintRedText} />
@@ -355,7 +356,7 @@ export function ConfiguracoesScreen({
               accessibilityRole="link"
               style={[styles.cardLink, !layout.ehDesktop && styles.cardLinkMovel]}
               {...ds({ hover: 'borda', trans: '1' })}
-              {...({ href: '/gestao/#/time' } as Record<string, unknown>)}
+              {...({ href: '/gestao/#/time', hrefAttrs: atributosDaGestao() } as Record<string, unknown>)}
             >
               <View style={[styles.quadroIcone, !layout.ehDesktop && styles.quadroIconeMovel, { backgroundColor: 'var(--surface-2)' }]}>
                 <IconUserGroup width={20} height={20} fill={iconColors.muted} />
