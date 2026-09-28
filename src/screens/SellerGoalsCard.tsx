@@ -97,6 +97,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 },
   name: { flex: 1, fontSize: 13, fontWeight: '600', color: 'var(--text)' },
   input: { width: 70, borderWidth: 1, borderColor: 'var(--border)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, fontSize: 14, color: 'var(--text)', backgroundColor: 'var(--bg)', textAlign: 'center' },
-  saveBtn: { backgroundColor: '#C8131B', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 8 },
+  saveBtn: { backgroundColor: 'var(--vermelho-acao)', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 8 },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

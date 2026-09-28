@@ -102,7 +102,7 @@ const s = StyleSheet.create({
   icone: { width: 48, height: 48, marginVertical: -1, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   selo: {
     position: 'absolute', top: 2, right: 2, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3,
-    backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center',
   },
   seloTexto: { fontSize: 10, fontWeight: '800', color: '#fff' },
   avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#262A31' },

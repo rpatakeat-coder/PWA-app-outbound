@@ -31,6 +31,7 @@ export default function AvisoSemSinal() {
 }
 
 const s = StyleSheet.create({
-  pilula: { alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: '#3A2A06', borderWidth: 1, borderColor: '#F5A524' },
-  texto: { fontSize: 12, fontWeight: '600', color: '#FDE68A' },
+  // A2 (handoff v6): o fundo era hex do escuro; agora a tinta âmbar do tema, par do texto
+  pilula: { alignSelf: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, backgroundColor: 'var(--tint-amber)', borderWidth: 1, borderColor: 'var(--tint-amber-border)' },
+  texto: { fontSize: 12, fontWeight: '600', color: 'var(--tint-amber-text)' },
 });

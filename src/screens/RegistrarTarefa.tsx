@@ -156,7 +156,7 @@ const s = StyleSheet.create({
   titulo: { fontSize: 18, fontWeight: '700', color: 'var(--text)' },
   sub: { fontSize: 13, color: 'var(--text-muted)' },
   corpo: { gap: 10, paddingBottom: 16 },
-  ligar: { minHeight: 48, borderRadius: 12, backgroundColor: '#16A34A', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 14 },
+  ligar: { minHeight: 48, borderRadius: 12, backgroundColor: 'var(--verde-acao)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 14 },
   ligarTexto: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   secao: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: 'var(--text-muted)', marginTop: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -166,6 +166,6 @@ const s = StyleSheet.create({
   chipTextoAtivo: { color: 'var(--bg)' },
   aviso: { fontSize: 12, color: 'var(--tint-amber-text, #B45309)' },
   nota: { minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', paddingHorizontal: 12, fontSize: 15, color: 'var(--text)', backgroundColor: 'var(--surface)' },
-  salvar: { minHeight: 50, borderRadius: 14, backgroundColor: '#C8131B', alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  salvar: { minHeight: 50, borderRadius: 14, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   salvarTexto: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
 });

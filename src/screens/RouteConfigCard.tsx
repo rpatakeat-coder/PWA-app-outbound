@@ -145,6 +145,6 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 11, fontWeight: '700', color: 'var(--text-muted)', marginBottom: 4 },
   input: { borderWidth: 1, borderColor: 'var(--border)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: 'var(--text)', backgroundColor: 'var(--bg)' },
   fieldHint: { fontSize: 10, color: 'var(--text-subtle)', marginTop: 2 },
-  saveBtn: { backgroundColor: '#C8131B', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 14 },
+  saveBtn: { backgroundColor: 'var(--vermelho-acao)', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 14 },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

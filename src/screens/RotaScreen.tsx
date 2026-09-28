@@ -313,7 +313,7 @@ export function RotaScreen({
     <TouchableOpacity
       style={[
         layout.ehDesktop
-          ? [sharedStyles.submitButton, { marginTop: 12, backgroundColor: '#C8131B' }]
+          ? [sharedStyles.submitButton, { marginTop: 12, backgroundColor: 'var(--vermelho-acao)' }]
           : [styles.ctaPrimario, { marginTop: 12 }],
         isMonitoringRoute && { opacity: 0.4 },
       ]}
@@ -428,7 +428,7 @@ export function RotaScreen({
         <TouchableOpacity
           style={[
             sharedStyles.dropdownButton,
-            routeVendorFilterHubspotId !== null && { borderColor: '#C8131B', backgroundColor: 'var(--tint-red)' },
+            routeVendorFilterHubspotId !== null && { borderColor: 'var(--vermelho-acao)', backgroundColor: 'var(--tint-red)' },
           ]}
           onPress={() => abrirEscolhaDeVendedor()}
         >
@@ -444,7 +444,7 @@ export function RotaScreen({
         <TouchableOpacity
           style={[
             sharedStyles.dropdownButton,
-            routeVendorFilterHubspotId !== null && { borderColor: '#C8131B', backgroundColor: 'var(--tint-red)' },
+            routeVendorFilterHubspotId !== null && { borderColor: 'var(--vermelho-acao)', backgroundColor: 'var(--tint-red)' },
           ]}
           onPress={() => {
             if (!myHubspotId) {
@@ -633,7 +633,7 @@ export function RotaScreen({
             <TouchableOpacity
               style={[
                 styles.secondaryButton,
-                { backgroundColor: '#16a34a' },
+                { backgroundColor: 'var(--verde-acao)' },
                 !layout.ehDesktop && styles.acaoMovel,
               ]}
               onPress={startNavigation}
@@ -661,7 +661,7 @@ export function RotaScreen({
             <TouchableOpacity
               style={[
                 styles.secondaryButton,
-                { backgroundColor: '#C8131B' },
+                { backgroundColor: 'var(--vermelho-acao)' },
                 !layout.ehDesktop && styles.acaoMovel,
               ]}
               onPress={viewRouteOnMap}
@@ -753,7 +753,7 @@ export function RotaScreen({
           const indiceCor = isDone
             ? { bg: '#EAF7EE', fg: '#167532' }
             : ehAtual
-              ? { bg: '#C8131B', fg: '#FFFFFF' }
+              ? { bg: 'var(--vermelho-acao)', fg: 'var(--vermelho-acao-tinta)' }
               : { bg: 'var(--surface-2)', fg: 'var(--text-muted)' };
           return (
             <TouchableOpacity
@@ -1272,7 +1272,7 @@ export function RotaScreen({
                     feita
                       ? { backgroundColor: 'var(--tint-green)' }
                       : agora
-                        ? { backgroundColor: '#C8131B' }
+                        ? { backgroundColor: 'var(--vermelho-acao)' }
                         : { backgroundColor: 'var(--surface-2)' },
                   ]}>
                     {feita
@@ -1610,7 +1610,7 @@ const styles = StyleSheet.create({
   folhaProxima: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   folhaProximaNome: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: 'var(--text)' },
   folhaPino: { width: 32, height: 32, flexGrow: 0, flexShrink: 0, flexBasis: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  folhaPinoAgora: { backgroundColor: '#C8131B' },
+  folhaPinoAgora: { backgroundColor: 'var(--vermelho-acao)' },
   folhaPinoTexto: { fontSize: 14, lineHeight: 20, fontWeight: '700', color: 'var(--text-muted)', fontVariant: ['tabular-nums'] },
   folhaLinha: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
   folhaLinhaNome: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: 'var(--text)' },
@@ -1620,7 +1620,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     height: 48,
     borderRadius: 12,
-    backgroundColor: '#16a34a',
+    backgroundColor: 'var(--verde-acao)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1633,7 +1633,7 @@ const styles = StyleSheet.create({
   ctaPrimario: {
     height: 48,
     borderRadius: 12,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1690,7 +1690,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: 'var(--tint-red)',
     borderWidth: 1,
-    borderColor: '#C8131B',
+    borderColor: 'var(--vermelho-acao)',
   },
   montagemLinha: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   montagemTitulo: { fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '600', color: 'var(--text)' },
@@ -1733,7 +1733,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  paradaCardAtual: { borderColor: '#C8131B' },
+  paradaCardAtual: { borderColor: 'var(--vermelho-acao)' },
   paradaTopo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   // Alvo de 48 sem engordar o quadrado de 24: o padding e' que cresce.
   paradaCheckAlvo: { padding: 12, marginLeft: -12, marginVertical: -12 },
@@ -1801,7 +1801,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxChecked: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  checkboxChecked: { backgroundColor: 'var(--verde-acao)', borderColor: '#16a34a' },
   mandatoryTag: { fontSize: 11, fontWeight: '800', color: 'var(--brand-text)', marginTop: 3 },
   manualRow: {
     flexDirection: 'row',
@@ -1932,7 +1932,7 @@ const estilosRail = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  abaAtiva: { backgroundColor: 'var(--tint-red)', borderColor: '#C8131B' },
+  abaAtiva: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--vermelho-acao)' },
   abaTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
   abaTextoAtiva: { color: 'var(--tint-red-text)' },
   lista: { paddingHorizontal: 24, paddingVertical: 8 },
@@ -1954,7 +1954,7 @@ const estilosRail = StyleSheet.create({
     backgroundColor: 'var(--surface-2)',
   },
   indiceFeito: { backgroundColor: 'var(--tint-green)' },
-  indiceAtual: { backgroundColor: '#C8131B' },
+  indiceAtual: { backgroundColor: 'var(--vermelho-acao)' },
   indiceTexto: { fontSize: 12, lineHeight: 28, letterSpacing: 0.5, fontWeight: '700', color: 'var(--text-muted)' },
   paradaNome: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text)', flexShrink: 1 },
   paradaDetalhe: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)' },
@@ -1974,7 +1974,7 @@ const estilosRail = StyleSheet.create({
   ctaCheio: {
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
@@ -1986,7 +1986,7 @@ const estilosRail = StyleSheet.create({
     height: 40,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C8131B',
+    borderColor: 'var(--vermelho-acao)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',

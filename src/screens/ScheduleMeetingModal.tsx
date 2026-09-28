@@ -691,7 +691,7 @@ const styles = StyleSheet.create({
     borderColor: 'var(--border)',
     backgroundColor: 'var(--bg)',
   },
-  durationChipActive: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
+  durationChipActive: { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
   durationChipTxt: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
   durationChipTxtActive: { color: '#fff' },
   inviteBox: {
@@ -723,7 +723,7 @@ const styles = StyleSheet.create({
   inviteTitle: { fontSize: 14, fontWeight: '700', color: 'var(--tint-red-text)' },
   inviteSubtitle: { fontSize: 12, color: 'var(--tint-red-text)', marginTop: 2 },
   submit: {
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -800,8 +800,8 @@ const calStyles = StyleSheet.create({
     borderRadius: 8,
   },
   cellEmpty: { width: `${100 / 7}%`, aspectRatio: 1 },
-  cellToday: { borderWidth: 1, borderColor: '#C8131B' },
-  cellSelected: { backgroundColor: '#C8131B' },
+  cellToday: { borderWidth: 1, borderColor: 'var(--vermelho-acao)' },
+  cellSelected: { backgroundColor: 'var(--vermelho-acao)' },
   cellPast: { opacity: 0.35 },
   cellTxt: { fontSize: 14, color: 'var(--text)', fontWeight: '600' },
   cellTxtPast: { color: 'var(--text-subtle)' },
@@ -830,7 +830,7 @@ const pickerStyles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 2,
   },
-  itemActive: { backgroundColor: '#C8131B' },
+  itemActive: { backgroundColor: 'var(--vermelho-acao)' },
   itemTxt: { fontSize: 16, color: 'var(--text)', fontWeight: '600' },
   itemTxtActive: { color: '#fff', fontWeight: '700' },
 });

@@ -228,8 +228,8 @@ function Fatos({ d }: { d: DadosCardNovo }) {
 // Cliente e ex-cliente: situação, comandas, última comanda e queda, já na espiada
 // (Julyan 27/09). Verde = ativo, vermelho = atenção, rosa = ex-cliente.
 const TOM_CLIENTE = {
-  ok: { fundo: '#0F2E1B', tinta: '#86EFAC' },
-  aviso: { fundo: '#4B1C1C', tinta: '#FCA5A5' },
+  ok: { fundo: 'var(--tint-green)', tinta: 'var(--tint-green-text)' }, // A2: funcionava só no escuro
+  aviso: { fundo: 'var(--tint-red)', tinta: 'var(--tint-red-text)' },
   ex: { fundo: '#3B1230', tinta: '#F9A8D4' },
 } as const;
 function LinhaCliente({ d }: { d: DadosCardNovo }) {
@@ -433,7 +433,7 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       <BlocoNegocio d={d} a={a} />
       <View style={s.linhaInfo}>
         <Text style={s.infoRotulo}>DONO</Text>
-        <Text style={[s.infoValor, d.pino.dono === 'sem' && { color: '#FACC15' }]} numberOfLines={1}>{dono}</Text>
+        <Text style={[s.infoValor, d.pino.dono === 'sem' && { color: 'var(--amarelo-sem-dono-texto)' }]} numberOfLines={1}>{dono}</Text>
       </View>
       <View style={s.linhaInfo}>
         <Text style={s.infoRotulo}>ORIGEM</Text>
@@ -455,15 +455,15 @@ const s = StyleSheet.create({
   topo: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, gap: 10 },
   eMeu: { marginLeft: 'auto', minHeight: 44, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#FACC15', alignItems: 'center', justifyContent: 'center' },
   eMeuForaDaRota: { backgroundColor: 'transparent', borderWidth: 1, borderStyle: 'dashed', borderColor: '#FACC15' },
-  eMeuTexto: { fontSize: 14, fontWeight: '700', color: '#FACC15' },
-  eMeuTextoForaDaRota: { color: '#FACC15' },
+  eMeuTexto: { fontSize: 14, fontWeight: '700', color: 'var(--amarelo-sem-dono-texto)' },
+  eMeuTextoForaDaRota: { color: 'var(--amarelo-sem-dono-texto)' },
   alerta: {
     flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 12, paddingRight: 6, paddingVertical: 6,
     borderRadius: 10, backgroundColor: 'var(--tint-red)', borderWidth: 1, borderColor: 'var(--tint-red-border)',
   },
   alertaTitulo: { fontSize: 13, fontWeight: '800', color: 'var(--tint-red-text)' },
   alertaSub: { fontSize: 13, color: 'var(--tint-red-text)', opacity: 0.85 },
-  alertaBotao: { minHeight: 44, minWidth: 72, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#C8131B', alignItems: 'center', justifyContent: 'center' },
+  alertaBotao: { minHeight: 44, minWidth: 72, paddingHorizontal: 12, borderRadius: 8, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center' },
   alertaBotaoTexto: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
   cabecalho: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   kicker: { fontSize: 11, fontWeight: '600', letterSpacing: 0.88 },
@@ -480,7 +480,7 @@ const s = StyleSheet.create({
   fatoTexto: { fontSize: 12, fontWeight: '700', color: 'var(--text)' },
   fatoAviso: { backgroundColor: 'var(--tint-amber)' },
   fatoAvisoTexto: { color: 'var(--tint-amber-text)' },
-  cheguei: { minHeight: 56, borderRadius: 16, backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
+  cheguei: { minHeight: 56, borderRadius: 16, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
   chegueiTexto: { fontSize: 16, fontWeight: '700', color: '#fff' },
   chegueiSub: { fontSize: 13, fontWeight: '500', color: 'rgba(255,255,255,.85)', marginTop: 1 },
   // flex:0 no RN web vira '0 1 0%' e espreme o botão a 9 px: base e encolhimento explícitos.
@@ -493,8 +493,8 @@ const s = StyleSheet.create({
   negocioTopo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   barra8: { flexDirection: 'row', gap: 3 },
   seg: { flex: 1, height: 6, borderRadius: 3, backgroundColor: 'var(--border)' },
-  segFeito: { backgroundColor: '#E51A31' },
-  avancar: { flexGrow: 2, backgroundColor: '#E51A31', borderColor: '#E51A31' },
+  segFeito: { backgroundColor: 'var(--vermelho-acao)' },
+  avancar: { flexGrow: 2, backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
   avancarTexto: { color: '#FFFFFF', fontWeight: '700' },
   outra: { flexGrow: 1 },
   negocioEtapa: { fontSize: 16, fontWeight: '600', color: 'var(--text)' },

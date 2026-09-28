@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     transform: [{ translateY: -(PIN_H + ARROW) / 2 }],
   },
   centerPin: {
-    width: PIN_W, height: PIN_H, borderRadius: PIN_W / 2, backgroundColor: '#C8131B',
+    width: PIN_W, height: PIN_H, borderRadius: PIN_W / 2, backgroundColor: 'var(--vermelho-acao)',
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: '#fff',
   },
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     marginTop: -1,
   },
   centerDot: {
-    width: 6, height: 6, borderRadius: 3, backgroundColor: '#C8131B',
+    width: 6, height: 6, borderRadius: 3, backgroundColor: 'var(--vermelho-acao)',
     marginTop: 2,
   },
   infoRow: {
@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
   infoText: { flex: 1, fontSize: 12, color: 'var(--text-muted)', fontWeight: '600' },
   resetLink: { fontSize: 12, color: 'var(--info-text)', fontWeight: '700' },
   saveBtn: {
-    backgroundColor: '#C8131B', borderRadius: 12, paddingVertical: 14,
+    backgroundColor: 'var(--vermelho-acao)', borderRadius: 12, paddingVertical: 14,
     alignItems: 'center', marginTop: 10,
   },
   saveBtnDisabled: { opacity: 0.5 },

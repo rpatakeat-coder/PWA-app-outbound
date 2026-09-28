@@ -393,8 +393,8 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas,
                     borderRadius: 5,
                     borderWidth: 1.5,
                     marginTop: 1,
-                    borderColor: c.feito ? '#C8131B' : 'var(--border)',
-                    backgroundColor: c.feito ? '#C8131B' : 'transparent',
+                    borderColor: c.feito ? 'var(--vermelho-acao)' : 'var(--border)',
+                    backgroundColor: c.feito ? 'var(--vermelho-acao)' : 'transparent',
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
@@ -543,7 +543,7 @@ const styles = StyleSheet.create({
   // `aspectRatio: 1` com `flex: 1`: a celula acompanha a largura da tela em
   // vez dos 28px fixos do desktop.
   calorCelula: { flex: 1, aspectRatio: 1, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
-  calorCelulaHoje: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#C8131B' },
+  calorCelulaHoje: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: 'var(--vermelho-acao)' },
   calorLegenda: { flexDirection: 'row', gap: 4 },
   calorDia: { flex: 1, textAlign: 'center', fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)' },
   container: { flex: 1, backgroundColor: 'var(--bg)' },
@@ -562,7 +562,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'var(--border)',
   },
-  periodChipActive: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
+  periodChipActive: { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
   periodChipText: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
   periodChipTextActive: { color: '#fff' },
   sectionTitle: { fontSize: 13, fontWeight: '700', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 8, marginBottom: 10 },
@@ -624,7 +624,7 @@ const estilosWeb = StyleSheet.create({
     gap: 24,
     padding: 24,
     borderRadius: 8,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     marginBottom: 24,
   },
   bannerKicker: {

@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
   pchipTextActive: { color: '#fff' },
   chips: { gap: 6, paddingBottom: 6 },
   chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: 'var(--surface-2)', maxWidth: 190 },
-  chipActive: { backgroundColor: '#C8131B' },
+  chipActive: { backgroundColor: 'var(--vermelho-acao)' },
   chipText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)' },
   chipTextActive: { color: '#fff' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },

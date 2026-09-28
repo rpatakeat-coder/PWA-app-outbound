@@ -260,7 +260,7 @@ const estilos = StyleSheet.create({
   },
   valor: { fontSize: 15, color: 'var(--text)', marginTop: 3, lineHeight: 21 },
   botao: {
-    backgroundColor: '#16a34a',
+    backgroundColor: 'var(--verde-acao)',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',

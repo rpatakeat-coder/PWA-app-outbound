@@ -150,9 +150,9 @@ const styles = StyleSheet.create({
   name: { fontSize: 13, fontWeight: '700', color: 'var(--text)', marginBottom: 5 },
   seg: { flexDirection: 'row', gap: 6 },
   segBtn: { flex: 1, paddingVertical: 7, borderRadius: 8, backgroundColor: 'var(--surface-2)', alignItems: 'center' },
-  segBtnActive: { backgroundColor: '#C8131B' },
+  segBtnActive: { backgroundColor: 'var(--vermelho-acao)' },
   segText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)' },
   segTextActive: { color: '#fff' },
-  saveBtn: { backgroundColor: '#C8131B', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 6 },
+  saveBtn: { backgroundColor: 'var(--vermelho-acao)', borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 6 },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

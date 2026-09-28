@@ -182,6 +182,6 @@ const s = StyleSheet.create({
   botao: { minHeight: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   botaoLimpar: { flex: 1, borderWidth: 1, borderColor: 'var(--border)' },
   botaoLimparTexto: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
-  botaoVer: { flex: 2, backgroundColor: '#E51A31' },
+  botaoVer: { flex: 2, backgroundColor: 'var(--vermelho-acao)' },
   botaoVerTexto: { fontSize: 15, fontWeight: '800', color: '#fff' },
 });

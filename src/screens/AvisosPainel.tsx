@@ -94,7 +94,7 @@ const s = StyleSheet.create({
   blocoErro: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--tint-red-border)' },
   blocoTitulo: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
   linhaPequena: { fontSize: 12, lineHeight: 16, color: 'var(--text-muted)' },
-  botao: { marginTop: 8, minHeight: 44, borderRadius: 10, backgroundColor: '#C8131B', alignItems: 'center', justifyContent: 'center' },
+  botao: { marginTop: 8, minHeight: 44, borderRadius: 10, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center' },
   botaoTexto: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
   secao: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, color: 'var(--text-faint)' },
   item: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border-soft)' },

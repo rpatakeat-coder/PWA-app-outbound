@@ -265,7 +265,7 @@ const estilos = StyleSheet.create({
   },
   botaoZoomTexto: { fontSize: 20, fontWeight: '700', color: 'var(--text)', lineHeight: 24 },
   trilha: { flex: 1, height: 4, borderRadius: 2, backgroundColor: 'var(--surface-2)', overflow: 'hidden' },
-  trilhaCheia: { height: 4, backgroundColor: '#C8131B' },
+  trilhaCheia: { height: 4, backgroundColor: 'var(--vermelho-acao)' },
   acoes: { flexDirection: 'row', gap: 10, marginTop: 4 },
   botaoVazio: {
     flex: 1,
@@ -278,7 +278,7 @@ const estilos = StyleSheet.create({
   botaoVazioTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text-muted)' },
   botaoCheio: {
     flex: 2,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',

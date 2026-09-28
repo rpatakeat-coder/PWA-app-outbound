@@ -126,8 +126,8 @@ const s = StyleSheet.create({
   distancia: { fontSize: 13, color: 'var(--text-muted)', fontVariant: ['tabular-nums'] },
   posicionar: {
     minHeight: 36, paddingHorizontal: 12, borderRadius: 18, justifyContent: 'center',
-    backgroundColor: '#3A1519', borderWidth: 1, borderColor: '#E51A31',
+    backgroundColor: 'var(--tint-red)', borderWidth: 1, borderColor: 'var(--vermelho-acao)',
   },
-  posicionarTexto: { fontSize: 13, fontWeight: '700', color: '#FF8A95' },
+  posicionarTexto: { fontSize: 13, fontWeight: '700', color: 'var(--vermelho-texto)' },
   aviso: { fontSize: 12, color: '#F5A524', paddingTop: 12 },
 });

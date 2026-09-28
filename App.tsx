@@ -623,7 +623,7 @@ const markerStyles = StyleSheet.create({
     backgroundColor: 'var(--surface)',
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#C8131B',
+    borderColor: 'var(--vermelho-acao)',
     paddingHorizontal: 3,
     paddingVertical: 1,
     minWidth: 18,
@@ -654,7 +654,7 @@ const markerStyles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
@@ -4970,7 +4970,7 @@ function MainApp() {
                 marcava feita sem check-in, e a Agenda contava visita que ninguém provou.
                 Agora é o mesmo check-in do mapa (GPS ou foto); só depois dele a navegação avança. */}
             <TouchableOpacity
-              style={[navStyles.bottomCardButton, { backgroundColor: '#E51A31' }]}
+              style={[navStyles.bottomCardButton, { backgroundColor: 'var(--vermelho-acao)' }]}
               accessibilityRole="button"
               accessibilityLabel={`Cheguei em ${navTitle}`}
               onPress={() => {
@@ -5585,7 +5585,7 @@ function MainApp() {
               pointerEvents="none"
               style={{ position: 'absolute', left: centerX - 18, top: centerY - 43, alignItems: 'center' }}
             >
-              <View style={[markerStyles.pin, { backgroundColor: '#C8131B' }]}>
+              <View style={[markerStyles.pin, { backgroundColor: 'var(--vermelho-acao)' }]}>
                 {/* Mesmo asset branco dos pinos do mapa: markerStyles.logo
                     deixou de ter tintColor, então o icon.png original
                     apareceria vermelho sobre o círculo vermelho. */}
@@ -6025,7 +6025,7 @@ function MainApp() {
           accessibilityState={{ checked: showOnlyMyArea }}
           style={[
             styles.pmwSwitch,
-            { backgroundColor: showOnlyMyArea ? '#C8131B' : 'var(--stroke-default)', alignItems: showOnlyMyArea ? 'flex-end' : 'flex-start' },
+            { backgroundColor: showOnlyMyArea ? 'var(--vermelho-acao)' : 'var(--stroke-default)', alignItems: showOnlyMyArea ? 'flex-end' : 'flex-start' },
           ]}
           {...ds({ trans: '1' })}
           onPress={() => handleToggleArea(!showOnlyMyArea)}
@@ -6127,7 +6127,7 @@ function MainApp() {
                 accessibilityState={{ checked: heatOn }}
                 style={[
                   styles.pmwSwitch,
-                  { backgroundColor: heatOn ? '#C8131B' : 'var(--stroke-default)', alignItems: heatOn ? 'flex-end' : 'flex-start' },
+                  { backgroundColor: heatOn ? 'var(--vermelho-acao)' : 'var(--stroke-default)', alignItems: heatOn ? 'flex-end' : 'flex-start' },
                 ]}
                 {...ds({ trans: '1' })}
                 onPress={() => setHeatOn(v => !v)}
@@ -8141,7 +8141,7 @@ function MainApp() {
                     {getClientPrimaryName(client)} — o que acontece com o lead depois de concluir?
                   </Text>
                   <TouchableOpacity
-                    style={[styles.taskDoneOption, { backgroundColor: '#16a34a' }]}
+                    style={[styles.taskDoneOption, { backgroundColor: 'var(--verde-acao)' }]}
                     onPress={() => {
                       setCompletingTask(null);
                       setChangingStageFor({ client, taskId: task.id });
@@ -8292,7 +8292,7 @@ function MainApp() {
                   <TouchableOpacity
                     style={[
                       sharedStyles.dropdownButton,
-                      vendorFilterHubspotId !== null && { borderColor: '#C8131B', backgroundColor: 'var(--tint-red)' },
+                      vendorFilterHubspotId !== null && { borderColor: 'var(--vermelho-acao)', backgroundColor: 'var(--tint-red)' },
                     ]}
                     onPress={() => setIsPickingVendor(true)}
                   >
@@ -8308,7 +8308,7 @@ function MainApp() {
                   <TouchableOpacity
                     style={[
                       sharedStyles.dropdownButton,
-                      vendorFilterHubspotId !== null && { borderColor: '#C8131B', backgroundColor: 'var(--tint-red)' },
+                      vendorFilterHubspotId !== null && { borderColor: 'var(--vermelho-acao)', backgroundColor: 'var(--tint-red)' },
                     ]}
                     onPress={() => {
                       if (!myHubspotId) {
@@ -8440,7 +8440,7 @@ function MainApp() {
                   style={[
                     sharedStyles.filterChip,
                     { borderWidth: 1, borderColor: 'var(--border)', alignSelf: 'flex-start', marginTop: 4 },
-                    contaAlvoOnly && { backgroundColor: '#C8131B', borderColor: '#C8131B' },
+                    contaAlvoOnly && { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
                   ]}
                   onPress={() => setContaAlvoOnly((v) => {
                     const next = !v;
@@ -8465,7 +8465,7 @@ function MainApp() {
                         key={label}
                         style={[
                           sharedStyles.filterChip,
-                          selected && { backgroundColor: '#C8131B', borderColor: '#C8131B' },
+                          selected && { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
                           !selected && { borderWidth: 1, borderColor: 'var(--border)' },
                           { alignSelf: 'flex-start' },
                         ]}
@@ -10794,7 +10794,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 8,
     gap: 12,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
   },
   headerLinha: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerBusca: {
@@ -10865,10 +10865,10 @@ const styles = StyleSheet.create({
   },
   perfilItemTexto: { flex: 1, minWidth: 0, fontSize: 16, lineHeight: 24, letterSpacing: 0.15, fontWeight: '500', color: 'var(--text)' },
   perfilChave: { width: 44, height: 26, borderRadius: 13, padding: 3, backgroundColor: 'var(--surface-3, #3A3F47)' },
-  perfilChaveLigada: { backgroundColor: '#16A34A' },
+  perfilChaveLigada: { backgroundColor: 'var(--verde-acao)' },
   perfilChaveBola: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFFFFF' },
   perfilChaveBolaLigada: { transform: [{ translateX: 18 }] },
-  perfilItemTextoPerigo: { color: '#C8131B' },
+  perfilItemTextoPerigo: { color: 'var(--vermelho-texto)' },
   headerVoltar: {
     width: 48,
     height: 48,
@@ -10879,7 +10879,7 @@ const styles = StyleSheet.create({
   },
   sinoSelo: {
     position: 'absolute', top: 4, right: 4, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9,
-    backgroundColor: '#F59E0B', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#C8131B',
+    backgroundColor: '#F59E0B', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'var(--vermelho-acao)',
   },
   sinoSeloTexto: { fontSize: 10, fontWeight: '800', color: '#14171C' },
   headerAjuda: {
@@ -10944,7 +10944,7 @@ const styles = StyleSheet.create({
   // Branco cheio no inativo escuro competia com o ativo; .64 recua sem perder
   // legibilidade (6.7:1 sobre o fundo do proprio chip).
   headerSegmentoTextoEscuro: { color: 'rgba(255,255,255,0.64)' },
-  headerSegmentoTextoAtivo: { color: '#C8131B' },
+  headerSegmentoTextoAtivo: { color: 'var(--vermelho-texto)' },
   headerSegmentoTextoAtivoEscuro: { color: 'var(--brand-text)' },
   // No escuro o vermelho chapado no topo cansa e briga com a superficie.
   headerEscuro: { backgroundColor: 'var(--surface)' },
@@ -10992,7 +10992,7 @@ const styles = StyleSheet.create({
   permissionTitle: { fontSize: 20, fontWeight: '700', color: 'var(--text)', marginBottom: 8, textAlign: 'center' },
   permissionBody: { fontSize: 14, color: 'var(--text-muted)', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
   permissionPrimaryButton: {
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 12,
@@ -11034,7 +11034,7 @@ const styles = StyleSheet.create({
   // fim, o ultimo chip fica com ar em vez de colado na borda da tela (antes
   // parecia cortado/quebrado, nao rolavel).
   filterScroll: { paddingLeft: 12, paddingRight: 20, paddingVertical: 8, gap: 6 },
-  filterChipActive: { backgroundColor: '#C8131B' },
+  filterChipActive: { backgroundColor: 'var(--vermelho-acao)' },
   // Multi-select dos status na aba Rota (wrap, varios chips em ordem livre)
   // Resultado da busca manual: titulo + cidade + botao adicionar
   // Badge admin: indica qual roteador foi usado pra otimizar a ultima rota.
@@ -11069,7 +11069,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     minWidth: 16,
     height: 16,
     borderRadius: 8,
@@ -11117,7 +11117,7 @@ const styles = StyleSheet.create({
   // "+" do mapa novo (C10): 52 px, vermelho, acima da folha.
   fabMapaNovo: {
     position: 'absolute', right: 16, width: 52, height: 52, borderRadius: 26, zIndex: 25,
-    backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 8,
   },
   // Aviso do carregamento por área. No TOPO do mapa: embaixo ficam a legenda
@@ -11316,7 +11316,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  calorRadioAtivo: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
+  calorRadioAtivo: { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
   calorNome: { flex: 1, fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-muted)' },
   calorNomeAtivo: { fontWeight: '700', color: 'var(--tint-red-text)' },
   calorContagem: {
@@ -11331,7 +11331,7 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: 16,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -11363,7 +11363,7 @@ const styles = StyleSheet.create({
   // Ponto vermelho no centro exato do mapa — marca onde a coordenada e' capturada.
   creationCenterDotInner: {
     width: 8, height: 8, borderRadius: 4,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     borderWidth: 2, borderColor: '#fff',
   },
   creationBar: {
@@ -11385,7 +11385,7 @@ const styles = StyleSheet.create({
   creationBarRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
   creationBarCancel: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: 'var(--surface-2)' },
   creationBarCancelText: { color: 'var(--text)', fontWeight: '700' },
-  creationBarConfirm: { flex: 2, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#16a34a' },
+  creationBarConfirm: { flex: 2, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: 'var(--verde-acao)' },
   creationBarConfirmText: { color: '#fff', fontWeight: '700' },
   // Bottom Nav
   // Coluna lateral do desktop. `absolute` colada nas quatro bordas da esquerda:
@@ -11453,7 +11453,7 @@ const styles = StyleSheet.create({
     height: 18,
     paddingHorizontal: 5,
     borderRadius: 9,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -11547,7 +11547,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     borderWidth: 1.5,
     borderColor: 'var(--surface)',
   },
@@ -11558,7 +11558,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
     borderRadius: 12,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
   },
   hwCtaTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: '#FFFFFF' },
   // ---- Mapa web: linha painel + mapa ----
@@ -11590,7 +11590,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'var(--stroke-default)',
   },
-  pmwSegmentoAtivo: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
+  pmwSegmentoAtivo: { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
   pmwSegmentoTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
   pmwSegmentoTextoAtivo: { color: '#FFFFFF' },
   pmwTituloLinha: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -11615,7 +11615,7 @@ const styles = StyleSheet.create({
     borderColor: 'var(--stroke-default)',
     backgroundColor: 'var(--surface)',
   },
-  pmwChipAtivo: { backgroundColor: 'var(--tint-red)', borderColor: '#C8131B' },
+  pmwChipAtivo: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--vermelho-acao)' },
   pmwChipDot: { width: 10, height: 10, borderRadius: 5 },
   pmwChipTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
   pmwChipContagem: { fontSize: 12, lineHeight: 16, fontWeight: '500', color: 'var(--text-faint)' },
@@ -11711,7 +11711,7 @@ const styles = StyleSheet.create({
     height: 18,
     paddingHorizontal: 5,
     borderRadius: 9,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -11806,7 +11806,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ltwPagBotaoAtivo: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
+  ltwPagBotaoAtivo: { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
   ltwPagTexto: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: 'var(--text-muted)' },
   // ---- Rota web: rail de 420px a' direita do mapa ----
   bottomNav: {
@@ -11830,7 +11830,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     alignItems: 'center',
     justifyContent: 'center',
     // A borda em --surface e' o que recorta o FAB da barra.
@@ -11867,7 +11867,7 @@ const styles = StyleSheet.create({
   navItemLadoDeDois: { flex: 1.5 },
   // Rodape do mapa novo: 4 abas iguais, alvo inteiro, traco de 3px no topo da ativa.
   navItemNovo: { minHeight: 60, position: 'relative' },
-  navTracoAtivo: { position: 'absolute', top: -1, left: '22%', right: '22%', height: 3, borderRadius: 2, backgroundColor: '#C8131B' },
+  navTracoAtivo: { position: 'absolute', top: -1, left: '22%', right: '22%', height: 3, borderRadius: 2, backgroundColor: 'var(--vermelho-acao)' },
   // Selo claro no escuro, escuro no claro: o texto do tema invertido.
   navBadgeClaro: { backgroundColor: 'var(--text)', borderColor: 'var(--surface)' },
   navBadgeTextClaro: { color: 'var(--surface)' },
@@ -11883,7 +11883,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -6,
     right: -12,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     borderRadius: 9,
     minWidth: 18,
     height: 18,
@@ -11897,7 +11897,7 @@ const styles = StyleSheet.create({
   navBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   navItemText: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-faint)' },
   // ===== Calendario da Agenda (so' desktop) =====
-  navItemTextActive: { fontWeight: '700', color: '#C8131B' },
+  navItemTextActive: { fontWeight: '700', color: 'var(--vermelho-texto)' },
   // List
   // Card Mobile do DS: radius 16, padding 16, sombra shadow/01 (key-light 14%).
   clientCard: {
@@ -11954,7 +11954,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 8,
   },
-  segmentButtonActive: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
+  segmentButtonActive: { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
   segmentButtonText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)', textAlign: 'center' },
   segmentButtonTextActive: { color: '#fff' },
   // Uso do produto (HubSpot) — cores vem do estado, so' o layout fica aqui.
@@ -12051,7 +12051,7 @@ const styles = StyleSheet.create({
   ruleLevelText: { fontSize: 13, color: 'var(--text)', flex: 1, lineHeight: 18 },
   taskRulesDoneButton: {
     marginTop: 14,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     borderRadius: 12,
     paddingVertical: 13,
     alignItems: 'center',
@@ -12079,7 +12079,7 @@ const styles = StyleSheet.create({
   metricLabel: { fontSize: 13, fontWeight: '800', color: 'var(--text)' },
   metricValue: { fontSize: 15, fontWeight: '900', color: 'var(--text)' },
   progressTrack: { height: 8, borderRadius: 4, backgroundColor: 'var(--surface-3)', overflow: 'hidden', marginTop: 10 },
-  progressFill: { height: 8, borderRadius: 4, backgroundColor: '#16a34a' },
+  progressFill: { height: 8, borderRadius: 4, backgroundColor: 'var(--verde-acao)' },
   rankingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
   warningText: { fontSize: 12, color: 'var(--tint-amber-text)', backgroundColor: 'var(--tint-amber)', padding: 10, borderRadius: 8, marginTop: 10 },
   masterGrid: { gap: 8, marginTop: 8 },
@@ -12127,7 +12127,7 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 9999,
     paddingHorizontal: 12,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -12237,7 +12237,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 48,
     borderRadius: 12,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -12249,7 +12249,7 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C8131B',
+    borderColor: 'var(--vermelho-acao)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -12329,7 +12329,7 @@ const styles = StyleSheet.create({
     borderColor: 'var(--stroke-default)',
     backgroundColor: 'var(--surface)',
   },
-  tempChipMobileAtivo: { backgroundColor: 'var(--tint-red)', borderColor: '#C8131B' },
+  tempChipMobileAtivo: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--vermelho-acao)' },
   // Lentes do mapa novo: 44 px de altura (prancha §5), a ativa em destaque cheio.
   lenteChip: { height: 44, borderRadius: 22, paddingHorizontal: 16 },
   lenteChipAtiva: { backgroundColor: 'var(--text)', borderColor: 'var(--text)' },
@@ -12362,7 +12362,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C8131B',
+    borderColor: 'var(--vermelho-acao)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -12384,7 +12384,7 @@ const styles = StyleSheet.create({
     borderColor: 'var(--stroke-default)',
     backgroundColor: 'var(--surface)',
   },
-  filtroLinhaAtiva: { backgroundColor: 'var(--tint-red)', borderColor: '#C8131B' },
+  filtroLinhaAtiva: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--vermelho-acao)' },
   filtroLinhaTexto: {
     flexShrink: 1,
     fontSize: 14,
@@ -12397,7 +12397,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
@@ -12410,7 +12410,7 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#C8131B',
+    borderColor: 'var(--vermelho-acao)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
@@ -12483,7 +12483,7 @@ const styles = StyleSheet.create({
   },
   telefoneCampoDesktop: { height: 40, borderRadius: 8, fontSize: 14, lineHeight: 20 },
   telefoneCampoMobile: { height: 48, borderRadius: 16, fontSize: 16, lineHeight: 24 },
-  telefoneSalvar: { backgroundColor: '#C8131B', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  telefoneSalvar: { backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   telefoneSalvarDesktop: { height: 32, borderRadius: 8 },
   telefoneSalvarMobile: { height: 48, borderRadius: 12 },
   telefoneSalvarTexto: { color: '#FFFFFF', fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600' },
@@ -12594,7 +12594,7 @@ const styles = StyleSheet.create({
   noteEditActions: { flexDirection: 'row', gap: 8, marginTop: 8, justifyContent: 'flex-end' },
   noteEditCancel: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: 'var(--surface-2)' },
   noteEditCancelText: { color: 'var(--text-muted)', fontWeight: '700', fontSize: 13 },
-  noteEditSave: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: '#C8131B' },
+  noteEditSave: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: 'var(--vermelho-acao)' },
   noteEditSaveText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   navigationSection: { paddingTop: 12, borderTopWidth: 1, borderTopColor: 'var(--border-soft)', marginBottom: 16 },
   navigationRow: { flexDirection: 'row', gap: 10 },
@@ -12632,7 +12632,7 @@ const styles = StyleSheet.create({
   acaoPrimaria: {
     minHeight: 48,
     borderRadius: 16,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
@@ -12654,7 +12654,7 @@ const styles = StyleSheet.create({
   acaoSecundariaTexto: { color: 'var(--text)', fontSize: 16, fontWeight: '600', letterSpacing: 0.15 },
   scheduleButton: {
     minHeight: 48,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     borderRadius: 16,
     paddingVertical: 12,
     alignItems: 'center',
@@ -12689,6 +12689,6 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 8 },
   deleteButton: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: 'var(--tint-red)', borderWidth: 1, borderColor: 'var(--tint-red-border)' },
   deleteButtonText: { fontSize: 14, fontWeight: '700', color: 'var(--brand-text)' },
-  closeActionButton: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#C8131B' },
+  closeActionButton: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: 'var(--vermelho-acao)' },
   closeActionButtonText: { fontSize: 14, fontWeight: '700', color: '#fff' },
 });

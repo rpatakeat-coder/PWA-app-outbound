@@ -222,6 +222,6 @@ const s = StyleSheet.create({
   botao: { minHeight: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   botaoSec: { flex: 1, borderWidth: 1, borderColor: 'var(--border)' },
   botaoSecTexto: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
-  botaoPrin: { flex: 2, backgroundColor: '#E51A31' },
+  botaoPrin: { flex: 2, backgroundColor: 'var(--vermelho-acao)' },
   botaoPrinTexto: { fontSize: 15, fontWeight: '800', color: '#fff' },
 });

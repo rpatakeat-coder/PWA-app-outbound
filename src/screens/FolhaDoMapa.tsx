@@ -70,8 +70,8 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   if (it.p.queda) {
     return (
       <View style={s.etiquetas}>
-        <View style={[s.tag, { backgroundColor: '#4B1C1C' }]}>
-          <Text style={[s.tagTexto, { color: '#FCA5A5' }]} numberOfLines={1}>{quedaCurta(it.p.queda)}</Text>
+        <View style={[s.tag, { backgroundColor: 'var(--tint-red)' }]}>
+          <Text style={[s.tagTexto, { color: 'var(--vermelho-texto)' }]} numberOfLines={1}>{quedaCurta(it.p.queda)}</Text>
         </View>
       </View>
     );
@@ -302,8 +302,8 @@ const s = StyleSheet.create({
   pilulaConta: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
   tracos: { flexDirection: 'row', gap: 2 },
   traco: { width: 5, height: 4, borderRadius: 1, backgroundColor: 'var(--stroke-strong)' },
-  tracoFeito: { backgroundColor: '#E51A31' },
-  pilulaCheguei: { height: 48, paddingHorizontal: 18, borderRadius: 13, backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  tracoFeito: { backgroundColor: 'var(--vermelho-acao)' },
+  pilulaCheguei: { height: 48, paddingHorizontal: 18, borderRadius: 13, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   pilulaLista: { height: 48, paddingHorizontal: 16, borderRadius: 13, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   pilulaListaTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
   folha: {
@@ -317,12 +317,12 @@ const s = StyleSheet.create({
   alca: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', height: 18 },
   alcaBarra: { width: 40, height: 5, borderRadius: 3, backgroundColor: 'var(--stroke-strong)' },
   linhaTopo: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },
-  kicker: { flex: 1, fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: '#F87171' },
+  kicker: { flex: 1, fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: 'var(--vermelho-texto)' },
   progresso: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
   pilulaProva: { fontSize: 11, fontWeight: '600', color: 'var(--text-muted)', marginTop: 2 },
   pilulaProvaFalta: { color: 'var(--tint-amber-text)' },
   proxima: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
-  btnCheguei: { height: 48, paddingHorizontal: 20, borderRadius: 14, backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  btnCheguei: { height: 48, paddingHorizontal: 20, borderRadius: 14, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   btnChegueiTexto: { fontSize: 15, fontWeight: '700', color: '#fff' },
   mini: { width: 30, height: 30, borderRadius: 15, borderWidth: 2.5, backgroundColor: '#14171C', alignItems: 'center', justifyContent: 'center' },
   miniTexto: { fontSize: 12, fontWeight: '900' },
@@ -336,7 +336,7 @@ const s = StyleSheet.create({
   eMeu: { minHeight: 44, minWidth: 64, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#FACC15', alignItems: 'center', justifyContent: 'center' },
   eMeuFora: { backgroundColor: 'transparent', borderWidth: 1, borderStyle: 'dashed', borderColor: '#FACC15' },
   eMeuTexto: { fontSize: 13, fontWeight: '800', color: '#14171C' },
-  eMeuTextoFora: { color: '#FACC15' },
+  eMeuTextoFora: { color: 'var(--amarelo-sem-dono-texto)' },
   quadraTopo: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
   quadraFechar: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', marginRight: -8 },
   quadraFecharTexto: { fontSize: 18, color: 'var(--text-muted)' },

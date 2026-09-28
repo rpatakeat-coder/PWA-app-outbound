@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   webSplit: { flex: 1, flexDirection: 'row' },
   webMarca: {
     flex: 1,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     padding: 64,
     justifyContent: 'space-between',
   },
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     color: 'var(--text-muted)',
     marginBottom: 8,
   },
-  inputWrapErro: { borderWidth: 1, borderColor: '#C8131B' },
+  inputWrapErro: { borderWidth: 1, borderColor: 'var(--vermelho-acao)' },
   webInputWrap: {
     height: 40,
     borderRadius: 8,
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
   },
   scrollContent: {
     flexGrow: 1,
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
     color: 'var(--text)',
   },
   button: {
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',

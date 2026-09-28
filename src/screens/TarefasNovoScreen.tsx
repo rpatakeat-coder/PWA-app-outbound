@@ -289,13 +289,13 @@ export default function TarefasNovoScreen({
 }
 
 const s = StyleSheet.create({
-  posicionar: { backgroundColor: '#E51A31', borderColor: '#E51A31' },
+  posicionar: { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
   tela: { flex: 1, backgroundColor: 'var(--bg)' },
   conteudo: { padding: 16, paddingBottom: 32, gap: 16 },
   subtitulo: { fontSize: 13, lineHeight: 18, color: 'var(--text-muted)' },
   seletor: { flexDirection: 'row', gap: 4, padding: 4, borderRadius: 12, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)' },
   seletorItem: { flex: 1, minHeight: 44, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  seletorItemAtivo: { backgroundColor: '#C8131B' },
+  seletorItemAtivo: { backgroundColor: 'var(--vermelho-acao)' },
   seletorTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text-muted)' },
   seletorTextoAtivo: { color: '#FFFFFF' },
   aviso: { fontSize: 13, lineHeight: 18, color: 'var(--tint-amber-text)', backgroundColor: 'var(--tint-amber)', padding: 12, borderRadius: 10 },

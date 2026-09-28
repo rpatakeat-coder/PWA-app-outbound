@@ -581,7 +581,7 @@ export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial, posicaoAt
 
 // ===== Estilos do M9 (passo 1) =====
 const estilos = StyleSheet.create({
-  estouAqui: { minHeight: 56, borderRadius: 16, backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
+  estouAqui: { minHeight: 56, borderRadius: 16, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
   estouAquiTexto: { fontSize: 16, fontWeight: '700', color: '#fff' },
   estouAquiSub: { fontSize: 12, fontWeight: '500', color: 'rgba(255,255,255,.85)', marginTop: 1 },
   ou: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)', textAlign: 'center', marginVertical: 2 },
@@ -623,7 +623,7 @@ const estilos = StyleSheet.create({
     marginBottom: 8,
   },
   campoFocado: { borderColor: 'var(--stroke-strong)' },
-  campoErro: { borderColor: '#C8131B' },
+  campoErro: { borderColor: 'var(--vermelho-acao)' },
   campoRotulo: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, color: 'var(--text-faint)' },
   campoValor: {
     fontSize: 16,
@@ -678,7 +678,7 @@ const estilos = StyleSheet.create({
   ctaPrimario: {
     height: 48,
     borderRadius: 12,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 8,
@@ -798,7 +798,7 @@ const styles = StyleSheet.create({
     color: 'var(--text)',
   },
   submitBtn: {
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',

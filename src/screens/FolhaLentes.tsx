@@ -108,7 +108,7 @@ const s = StyleSheet.create({
     width: '48.5%', minHeight: 64, padding: 12, gap: 4, borderRadius: 14,
     backgroundColor: 'var(--surface-2)', borderWidth: 1, borderColor: 'var(--border)',
   },
-  lenteAtiva: { backgroundColor: '#3A1519', borderColor: '#E51A31', borderWidth: 1.5 },
+  lenteAtiva: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--vermelho-acao)', borderWidth: 1.5 },
   lenteLinha: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   bolinha: { width: 8, height: 8, borderRadius: 4 },
   lenteNome: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },

@@ -438,7 +438,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                   : f.proximo === 'sem_interesse' ? 'Sem interesse: o negócio vai para Perdido.' : 'Sem próximo passo com data.'}
               </Text>
               {fase === 'salvo' && (
-                <Text style={[s.ajuda, { color: problemas.some((p) => p.estado === 'falhou') ? '#FCA5A5' : '#86EFAC' }]}>
+                <Text style={[s.ajuda, { color: problemas.some((p) => p.estado === 'falhou') ? 'var(--vermelho-texto)' : 'var(--verde-texto)' }]}>
                   {problemas.length === 0
                     ? 'Salvo · HubSpot e Cockpit atualizados'
                     : problemas.map((p) => `${p.estado === 'fila' ? '↑' : p.estado === 'falhou' ? '✕' : '–'} ${p.rotulo}${p.detalhe ? `: ${p.detalhe}` : ''}`).join('\n')}
@@ -500,19 +500,19 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)',
   },
   opcaoTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
-  opcaoAtiva: { backgroundColor: 'var(--tint-red)', borderColor: '#E51A31', borderWidth: 1.5 },
+  opcaoAtiva: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--vermelho-acao)', borderWidth: 1.5 },
   opcaoAtivaTexto: { color: 'var(--tint-red-text)' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { minHeight: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)', justifyContent: 'center' },
   chipTexto: { fontSize: 13, fontWeight: '600', color: 'var(--text)' },
   etapa: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)' },
   caixa: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: 'var(--stroke-strong)', alignItems: 'center', justifyContent: 'center' },
-  caixaMarcada: { backgroundColor: '#E51A31', borderColor: '#E51A31' },
+  caixaMarcada: { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
   caixaV: { color: '#fff', fontSize: 14, fontWeight: '800' },
   etapaTitulo: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
   completarTopo: { flexDirection: 'row', alignItems: 'center', minHeight: 52, paddingVertical: 6, borderTopWidth: 1, borderTopColor: 'var(--border-soft)', marginTop: 4 },
   completarTitulo: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
-  completarAlerta: { fontSize: 12, fontWeight: '600', color: '#F87171' },
+  completarAlerta: { fontSize: 12, fontWeight: '600', color: 'var(--vermelho-texto)' },
   seta: { fontSize: 14, color: 'var(--text-muted)', paddingHorizontal: 6 },
   completar: { gap: 8 },
   fotoLinha: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
@@ -522,20 +522,20 @@ const s = StyleSheet.create({
   aviso: { fontSize: 13, color: 'var(--tint-amber-text)', backgroundColor: 'var(--tint-amber)', padding: 10, borderRadius: 10 },
   campo: { minHeight: 50, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--bg)', paddingHorizontal: 12, fontSize: 16, color: 'var(--text)' },
   rodape: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 'max(16px, env(safe-area-inset-bottom))' as unknown as number, gap: 6, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
-  salvar: { height: 56, borderRadius: 16, backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center' },
+  salvar: { height: 56, borderRadius: 16, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center' },
   salvarDesligado: { backgroundColor: 'var(--surface-2)' },
   salvarTexto: { fontSize: 16, fontWeight: '700', color: '#fff' },
   salvarTextoDesligado: { color: 'var(--text-muted)', fontSize: 14 },
   legenda: { fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' },
   salvo: { paddingHorizontal: 16, paddingBottom: 'max(16px, env(safe-area-inset-bottom))' as unknown as number, gap: 8 },
   salvoTopo: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
-  salvoTitulo: { flex: 1, fontSize: 16, fontWeight: '700', color: '#86EFAC' },
+  salvoTitulo: { flex: 1, fontSize: 16, fontWeight: '700', color: 'var(--verde-texto)' },
   desfazer: { minHeight: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center' },
   desfazerTexto: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   proxima: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 14, backgroundColor: 'var(--surface-2)', marginTop: 4 },
-  proximaRotulo: { fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: '#F87171' },
+  proximaRotulo: { fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: 'var(--vermelho-texto)' },
   proximaNome: { fontSize: 16, fontWeight: '600', color: 'var(--text)', marginTop: 2 },
-  proximaBotao: { height: 48, paddingHorizontal: 22, borderRadius: 14, backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center' },
+  proximaBotao: { height: 48, paddingHorizontal: 22, borderRadius: 14, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center' },
   proximaBotaoTexto: { fontSize: 15, fontWeight: '700', color: '#fff' },
   salvoAcoes: { flexDirection: 'row', gap: 8 },
   secundario: { flex: 1, minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center' },

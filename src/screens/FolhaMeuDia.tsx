@@ -25,8 +25,11 @@ type Props = {
   aoIrProxima: () => void;
 };
 
-const VERMELHO = '#E51A31';
-const VERDE = '#16A34A';
+// tokens v6 por papel: preenchimento (acao) e texto, cada um certo nos dois temas
+const VERMELHO = 'var(--vermelho-acao)';
+const VERMELHO_TEXTO = 'var(--vermelho-texto)';
+const VERDE = 'var(--verde-acao)';
+const VERDE_TEXTO = 'var(--verde-texto)';
 
 /** Uma casa por visita da meta: "6 visitas alinhadas". Passou da meta, as casas extras entram. */
 function Casas({ feito, meta }: { feito: number; meta: number }) {
@@ -81,7 +84,7 @@ export default function FolhaMeuDia({ visivel, aoFechar, dados, carregando, meta
                 {`VISITAS COM CHECK-IN HOJE · ${p?.visitas ? 'PROMETIDO NA DAILY' : 'META DO DIA'}`}
               </Text>
               <View style={s.heroLinha}>
-                <Text style={[s.heroNum, { color: bateu ? VERDE : VERMELHO }]}>{dados.medido ? feitas : '—'}</Text>
+                <Text style={[s.heroNum, { color: bateu ? VERDE_TEXTO : VERMELHO_TEXTO }]}>{dados.medido ? feitas : '—'}</Text>
                 <Text style={s.heroDe}>{dados.medido ? `de ${meta}` : 'não medido agora'}</Text>
               </View>
               {/* D1: a meta conta a visita feita; a prova, com o mesmo peso, é a mesma do Cockpit */}
@@ -101,7 +104,7 @@ export default function FolhaMeuDia({ visivel, aoFechar, dados, carregando, meta
               <View style={s.semana}>
                 <View style={s.semanaTopo}>
                   <Text style={s.secao}>SEMANA</Text>
-                  <Text style={[s.semanaNum, { color: semanaBateu ? VERDE : 'var(--text)' }]}>
+                  <Text style={[s.semanaNum, { color: semanaBateu ? VERDE_TEXTO : 'var(--text)' }]}>
                     {`${sem.visitas}`}<Text style={s.semanaDe}>{` / ${metaSemana} visitas${sem.provadas != null ? ` · ${sem.provadas} prov.` : ''}`}</Text>
                   </Text>
                 </View>
@@ -112,7 +115,7 @@ export default function FolhaMeuDia({ visivel, aoFechar, dados, carregando, meta
                     <Text style={s.blocoRotulo}>{sem.demos === 1 ? 'demo marcada' : 'demos marcadas'}</Text>
                   </View>
                   <View style={[s.bloco, (sem.ganhos ?? 0) > 0 && s.blocoGanho]}>
-                    <Text style={[s.blocoNum, (sem.ganhos ?? 0) > 0 && { color: VERDE }]}>{sem.ganhos ?? '—'}</Text>
+                    <Text style={[s.blocoNum, (sem.ganhos ?? 0) > 0 && { color: VERDE_TEXTO }]}>{sem.ganhos ?? '—'}</Text>
                     <Text style={s.blocoRotulo}>{sem.ganhos === 1 ? 'cliente ganho' : 'clientes ganhos'}</Text>
                     {sem.ganhosMes != null && (
                       <Text style={s.blocoSub}>{`${sem.ganhosMes}${sem.metaMes ? ` de ${sem.metaMes}` : ''} no mês`}</Text>

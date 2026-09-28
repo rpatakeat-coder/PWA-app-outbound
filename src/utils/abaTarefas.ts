@@ -10,12 +10,14 @@
 export type GrupoTarefa = 'atrasadas' | 'hoje' | 'amanha' | 'semana' | 'depois';
 
 export const GRUPOS: Array<{ id: GrupoTarefa; rotulo: string; cor: string }> = [
-  { id: 'atrasadas', rotulo: 'ATRASADAS · SLA ESTOURADO', cor: '#F87171' },
-  { id: 'hoje', rotulo: 'VENCE HOJE', cor: '#FCA5A5' },
-  { id: 'amanha', rotulo: 'AMANHÃ', cor: '#FDE68A' },
-  { id: 'semana', rotulo: 'ESTA SEMANA', cor: '#C9CED6' },
+  // cores por papel (A2, handoff v6): hex claro era ilegível no tema claro. "SLA ESTOURADO" saiu
+  // do rótulo: nem toda atrasada é de SLA (o chip da linha diz quando é).
+  { id: 'atrasadas', rotulo: 'ATRASADAS', cor: 'var(--vermelho-texto)' },
+  { id: 'hoje', rotulo: 'VENCE HOJE', cor: 'var(--vermelho-texto)' },
+  { id: 'amanha', rotulo: 'AMANHÃ', cor: 'var(--ambar-texto)' },
+  { id: 'semana', rotulo: 'ESTA SEMANA', cor: 'var(--text-muted)' },
   // Fora do prompt, de propósito: tarefa daqui a 10 dias sumiria da tela.
-  { id: 'depois', rotulo: 'MAIS À FRENTE', cor: '#8B919C' },
+  { id: 'depois', rotulo: 'MAIS À FRENTE', cor: 'var(--text-subtle)' },
 ];
 
 /** Dia AAAA-MM-DD em Brasília (toISOString vira o dia às 21h). */

@@ -762,7 +762,7 @@ const styles = StyleSheet.create({
   calDiaCorpo: { padding: 8, gap: 8 },
   // 520 de coluna - ~61 do cabecalho: o dia cheio rola por dentro, nao vaza.
   calDiaCorpoRolagem: { maxHeight: 459 },
-  calDiaHoje: { borderColor: '#C8131B' },
+  calDiaHoje: { borderColor: 'var(--vermelho-acao)' },
   calDiaNumero: { fontSize: 20, lineHeight: 28, fontWeight: '600', color: 'var(--text)' },
   calDiaSemana: {
     fontSize: 11,
@@ -885,7 +885,7 @@ const ovl = StyleSheet.create({
     flex: 1,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#C8131B',
+    backgroundColor: 'var(--vermelho-acao)',
     alignItems: 'flex-start',
     justifyContent: 'center',
     paddingHorizontal: 16,
