@@ -13,6 +13,8 @@ import { useAuth } from '../context/AuthContext';
 import { Alert } from '../components/Alert';
 import { supabase } from '../integrations/supabase/client';
 import RegistrarTarefa, { type TarefaParaRegistrar } from './RegistrarTarefa';
+import { fetchOptimizedTrip } from '../utils/routing';
+import { Toast } from '../components/Toast';
 
 import { useTarefasDoCrm } from '../hooks/useTarefasDoCrm';
 import { ir } from './CardLeadNovo';
@@ -43,6 +45,8 @@ type Props = {
   montandoDia?: boolean;
   /** Telefone do lead, para o "Ligar agora" do registro. */
   telefoneDe?: (clientId: string | null) => string | null;
+  /** Onde a pessoa está: o ponto de partida do roteirizar dos outros dias. */
+  base?: { latitude: number; longitude: number } | null;
 };
 
 const ruaDo = (c: Client | null) => {
@@ -53,8 +57,9 @@ const ruaDo = (c: Client | null) => {
 
 export default function AgendaNovoScreen({
   diaInicial, paradas, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead, dailyValidadaEm,
-  aoRoteirizar, roteirizando, aoMontarDia, montandoDia, telefoneDe,
+  aoRoteirizar, roteirizando, aoMontarDia, montandoDia, telefoneDe, base,
 }: Props) {
+  const [roteirizandoDia, setRoteirizandoDia] = useState(false);
   const [registrando, setRegistrando] = useState<TarefaParaRegistrar | null>(null);
   const queryClient = useQueryClient();
   // Concluídas nesta sessão: somem da lista na hora (o Desfazer as devolve).
@@ -88,7 +93,14 @@ export default function AgendaNovoScreen({
       return porDia;
     },
   });
-  const paradasDoDia = (d: string) => (d === hoje ? paradas : (planoDaFaixa.data?.get(d) ?? []));
+  const horaDe = (p: FieldRouteStopWithClient, d: string) => (p.planned_at && diaBRT(new Date(p.planned_at)) === d ? Date.parse(p.planned_at) : null);
+  const paradasDoDia = (d: string) => {
+    if (d === hoje) return paradas;
+    const l = [...(planoDaFaixa.data?.get(d) ?? [])];
+    // Na ORDEM DA ROTA: é ela que o Percurso segue. O Roteirizar grava essa ordem pela
+    // melhor rota ou pela hora combinada no Planejamento.
+    return l.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  };
 
   const estado = estadoDasParadas(
     paradas.map((p) => ({ ...p, visitadoHoje: !!p.client && visitadoHoje(p.client) })),
@@ -134,21 +146,79 @@ export default function AgendaNovoScreen({
   /* O PERCURSO: as paradas em aberto, na ordem do plano, no Google Maps (até 10 — o
      limite de pontos do Maps no celular). Roteirizar antes põe na melhor ordem. */
   const abertasComPonto = estado.filter((p) => p.estado !== 'feito' && p.client?.latitude != null && p.client?.longitude != null);
-  const abrirPercurso = () => {
-    const pts = abertasComPonto.slice(0, 10).map((p) => `${p.client!.latitude},${p.client!.longitude}`);
-    if (!pts.length) return;
-    const abrir = (modo: 'walking' | 'driving') => {
-      const destino = pts[pts.length - 1];
-      const meio = pts.slice(0, -1).join('|');
+  /* O PERCURSO COMPLETO, A PÉ OU DE CARRO (28/09/2026). O Google Maps aceita 10
+     pontos por vez: com mais paradas, o percurso sai em partes (1–10, 11–20…), cada
+     uma continuando de onde a anterior parou. */
+  const abrirPercursoDe = (lista: FieldRouteStopWithClient[]) => {
+    const pts = lista.filter((p) => p.client?.latitude != null && p.client?.longitude != null)
+      .map((p) => `${p.client!.latitude},${p.client!.longitude}`);
+    if (!pts.length) { Toast.mostrar('Nenhuma parada deste dia tem posição no mapa.', 'fila'); return; }
+    const abrirParte = (modo: 'walking' | 'driving', ini: number) => {
+      const parte = pts.slice(ini, ini + 10);
+      const origem = ini > 0 ? pts[ini - 1] : null;
+      const destino = parte[parte.length - 1];
+      const meio = parte.slice(0, -1).join('|');
       const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destino)}`
+        + (origem ? `&origin=${encodeURIComponent(origem)}` : '')
         + (meio ? `&waypoints=${encodeURIComponent(meio)}` : '') + `&travelmode=${modo}`;
       void Linking.openURL(url);
     };
-    Alert.alert(`Percurso · ${pts.length} ${pts.length === 1 ? 'parada' : 'paradas'}`, abertasComPonto.length > 10 ? 'O Maps abre as 10 primeiras; depois delas, abra de novo.' : undefined, [
-      { text: 'A pé', onPress: () => abrir('walking') },
-      { text: 'Carro', onPress: () => abrir('driving') },
+    const escolherParte = (modo: 'walking' | 'driving') => {
+      if (pts.length <= 10) { abrirParte(modo, 0); return; }
+      const partes = Array.from({ length: Math.ceil(pts.length / 10) }, (_, i) => i * 10);
+      Alert.alert('Qual parte do percurso?', `São ${pts.length} paradas; o Maps abre 10 por vez.`, [
+        ...partes.map((ini) => ({ text: `Paradas ${ini + 1}–${Math.min(ini + 10, pts.length)}`, onPress: () => abrirParte(modo, ini) })),
+        { text: 'Cancelar', style: 'cancel' as const },
+      ]);
+    };
+    Alert.alert(`Percurso · ${pts.length} ${pts.length === 1 ? 'parada' : 'paradas'}`, 'Na ordem do plano, no Google Maps.', [
+      { text: 'A pé', onPress: () => escolherParte('walking') },
+      { text: 'Carro', onPress: () => escolherParte('driving') },
       { text: 'Cancelar', style: 'cancel' },
     ]);
+  };
+  const abrirPercurso = () => abrirPercursoDe(abertasComPonto);
+
+  /* ROTEIRIZAR QUALQUER DIA: a melhor ordem das paradas do dia (ORS, OSRM de reserva),
+     a partir de onde a pessoa está — ou da primeira parada, sem GPS. Só a posição muda;
+     a hora combinada no Planejamento continua a mesma. */
+  const gravarOrdem = async (final: FieldRouteStopWithClient[]) => {
+    for (const [i, p] of final.entries()) {
+      const { error } = await supabase.from('field_route_stops').update({ position: i + 1 }).eq('id', p.id);
+      if (error) throw error;
+    }
+    void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
+  };
+  const perguntarRoteirizar = (lista: FieldRouteStopWithClient[], d: string) => {
+    const comHora = lista.filter((p) => horaDe(p, d) != null).length;
+    Alert.alert('Roteirizar o dia', comHora ? `${comHora} de ${lista.length} paradas têm hora combinada no Planejamento.` : undefined, [
+      { text: 'Pela melhor rota', onPress: () => { void roteirizarDia(lista); } },
+      ...(comHora ? [{ text: 'Pela hora combinada', onPress: () => {
+        const ord = [...lista].sort((a, b) => (horaDe(a, d) ?? Infinity) - (horaDe(b, d) ?? Infinity) || (a.position ?? 0) - (b.position ?? 0));
+        void gravarOrdem(ord).then(() => Toast.mostrar('✓ Na ordem da hora combinada', 'ok')).catch((e) => Alert.alert('Não deu para reordenar', String((e as Error)?.message ?? e)));
+      } }] : []),
+      { text: 'Cancelar', style: 'cancel' as const },
+    ]);
+  };
+  const roteirizarDia = async (lista: FieldRouteStopWithClient[]) => {
+    const abertas = lista.filter((p) => p.status !== 'done' && p.client?.latitude != null && p.client?.longitude != null);
+    if (abertas.length < 2 || roteirizandoDia) return;
+    const ponto = (p: FieldRouteStopWithClient) => ({ latitude: Number(p.client!.latitude), longitude: Number(p.client!.longitude) });
+    const partida = base ?? ponto(abertas[0]);
+    setRoteirizandoDia(true);
+    try {
+      const trip = await fetchOptimizedTrip([partida, ...abertas.map(ponto)]);
+      const ordem = trip.inputOrderToVisit.slice(1).map((i) => abertas[i - 1]).filter(Boolean);
+      const resto = lista.filter((p) => !ordem.includes(p));
+      const final = [...lista.filter((p) => p.status === 'done'), ...ordem, ...resto.filter((p) => p.status !== 'done')];
+      await gravarOrdem(final);
+      const km = (trip.distanceMeters / 1000).toFixed(1).replace('.', ',');
+      Toast.mostrar(`✓ Roteirizado · ${ordem.length} paradas · ${km} km · ~${Math.round(trip.durationSeconds / 60)} min de carro`, 'ok');
+    } catch (e) {
+      Alert.alert('Não deu para roteirizar', 'O serviço de rotas não respondeu; a ordem de antes ficou como estava.\n' + String((e as Error)?.message ?? ''));
+    } finally {
+      setRoteirizandoDia(false);
+    }
   };
   const meta = metaVisitasDia > 0 ? metaVisitasDia : 6;
 
@@ -214,7 +284,7 @@ export default function AgendaNovoScreen({
                 </TouchableOpacity>
               )}
               <TouchableOpacity accessibilityRole="button" accessibilityLabel="Abrir o percurso no Google Maps" style={[s.acaoRota, s.acaoRotaPrim]} onPress={abrirPercurso}>
-                <Text style={[s.acaoRotaTexto, { color: '#FFFFFF' }]}>{`Percurso · ${Math.min(10, abertasComPonto.length)}`}</Text>
+                <Text style={[s.acaoRotaTexto, { color: '#FFFFFF' }]}>{`Percurso · ${abertasComPonto.length}`}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -261,6 +331,20 @@ export default function AgendaNovoScreen({
             );
           })}
         </>
+      )}
+
+      {dia !== hoje && paradasDoDia(dia).length > 0 && (
+        <View style={s.acoesRota}>
+          {paradasDoDia(dia).length >= 2 && (
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Roteirizar este dia" disabled={roteirizandoDia}
+              style={[s.acaoRota, roteirizandoDia && { opacity: 0.6 }]} onPress={() => perguntarRoteirizar(paradasDoDia(dia), dia)}>
+              <Text style={s.acaoRotaTexto}>{roteirizandoDia ? 'Calculando…' : 'Roteirizar'}</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Abrir o percurso deste dia no Google Maps" style={[s.acaoRota, s.acaoRotaPrim]} onPress={() => abrirPercursoDe(paradasDoDia(dia))}>
+            <Text style={[s.acaoRotaTexto, { color: '#FFFFFF' }]}>{`Percurso · ${paradasDoDia(dia).length}`}</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {dia !== hoje && paradasDoDia(dia).length > 0 && (

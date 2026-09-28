@@ -7121,6 +7121,7 @@ function MainApp() {
           roteirizando={roteirizando}
           aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
           montandoDia={montandoDia}
+          base={userLocation ? { latitude: userLocation.latitude, longitude: userLocation.longitude } : null}
           telefoneDe={(id) => (id ? (clients.find((x) => x.id === id) ?? routeStops.find((st) => st.client_id === id)?.client ?? null)?.telefone ?? null : null)}
           dailyValidadaEm={meuDia.data?.prometido?.validadaEm ?? null}
           // Mesmo check-in do mapa: vai ao mapa com o card aberto e roda o
