@@ -131,6 +131,10 @@ interface Props {
   isAdmin: boolean;
   myHubspotId: string | null;
   generateDailyRoute: () => Promise<void> | void;
+  /** Reordena as paradas que já estão na rota, em microrrotas (mapa novo). */
+  otimizarParadas?: () => void;
+  /** O montador do mapa novo não apaga nada: sem o aviso de "descarta a sequência". */
+  montaSemApagar?: boolean;
   startNavigation: () => void;
   viewRouteOnMap: () => void;
   addClientToRoute: (c: Client) => void;
@@ -185,6 +189,8 @@ export function RotaScreen({
   isAdmin,
   myHubspotId,
   generateDailyRoute,
+  otimizarParadas,
+  montaSemApagar,
   startNavigation,
   viewRouteOnMap,
   addClientToRoute,
@@ -232,7 +238,7 @@ export function RotaScreen({
   // confirma antes, no mesmo padrao do "Limpar rota". E' tambem o motivo de o
   // CTA nao voltar como botao vermelho ao lado da sequencia.
   const gerarRotaDoDia = () => {
-    if (routeDisplayClients.length === 0) {
+    if (routeDisplayClients.length === 0 || montaSemApagar) {
       void generateDailyRoute();
       return;
     }
@@ -1034,7 +1040,7 @@ export function RotaScreen({
                   accessibilityRole="button"
                   style={[estilosRail.ctaVazado, (isOptimizing || isMonitoringRoute) && { opacity: 0.4 }]}
                   disabled={isOptimizing || isMonitoringRoute}
-                  onPress={() => generateDailyRoute()}
+                  onPress={() => (otimizarParadas ? otimizarParadas() : generateDailyRoute())}
                 >
                   {isOptimizing ? (
                     <ActivityIndicator size="small" color={iconColors.brandText} />

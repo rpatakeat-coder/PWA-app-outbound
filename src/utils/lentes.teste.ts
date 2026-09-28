@@ -7,7 +7,7 @@
 // cruzar; e a contagem do chip prometendo um número que o toque não entrega.
 import type { Client } from '../types/client';
 import { classificarPino, type ContextoPino } from './pinoP2';
-import { contarChips, FILTROS_VAZIOS, noFoco, passaNosFiltros, quantosFiltros, type FiltrosNovos } from './lentes';
+import { contarChips, FILTROS_VAZIOS, noFoco, passaNosFiltros, quantosFiltros, visitaDoFiltro, type FiltrosNovos } from './lentes';
 
 let falhas = 0;
 const ok = (c: boolean, m: string) => {
@@ -83,6 +83,18 @@ ok(n.status.get('lead') === 1 && n.status.get('cliente') === 1, 'contagem de Sta
 ok(n.origem.get('Casa dos Dados') === 1 && n.origem.get('Rua') === 2, 'contagem de Origem ignora a própria origem marcada');
 const toque = passam(f({ origem: new Set(['Rua']), status: new Set(['lead']) })).length;
 ok(toque === n.status.get('lead'), 'tocar "Lead" entrega o número que o chip mostrava');
+
+// dono, etapa e última visita (28/09/2026)
+ok(passam(f({ etapa: new Set(['Negociação']) })) === 'a', 'Etapa Negociação');
+ok(passam(f({ etapa: new Set(['Negociação', 'Prospecção']) })) === 'ab', 'Etapa Negociação OU Prospecção');
+ok(passam(f({ visita: new Set(['nunca']) })).length === itens.length, 'sem visita registrada = nunca visitado');
+{
+  const agora = Date.parse('2026-09-28T12:00:00Z');
+  ok(visitaDoFiltro(L({ id: 'v1', visited_at: '2026-09-25T12:00:00Z' }), agora) === 'semana', 'visitado há 3 dias = semana');
+  ok(visitaDoFiltro(L({ id: 'v2', visited_at: '2026-09-10T12:00:00Z' }), agora) === 'mes', 'há 18 dias = 8 a 30');
+  ok(visitaDoFiltro(L({ id: 'v3', visited_at: '2026-07-01T12:00:00Z' }), agora) === 'mais', 'há 3 meses = mais de 30');
+}
+ok(quantosFiltros(f({ etapa: new Set(['Visita']), dono: new Set(['meu']) })) === 2, 'Filtros · N conta os grupos novos');
 
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);

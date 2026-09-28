@@ -8,12 +8,13 @@ import { Painel } from '../components/Painel';
 import type { Lente } from '../utils/lentes';
 
 export const COR_LENTE: Record<Lente, string> = {
-  dia: '#E51A31', carteira: '#F5A524', alvo: '#8B5CF6', rec: '#EC4899', queda: '#16A34A', semdono: '#FACC15', calor: '#F97316',
+  dia: '#E51A31', carteira: '#F5A524', clientes: '#16A34A', alvo: '#8B5CF6', rec: '#EC4899', queda: '#84CC16', semdono: '#FACC15', calor: '#F97316',
 };
 
 const DESCRICAO: Record<Lente, string> = {
   dia: 'plano + microrrota',
   carteira: 'meus leads por etapa',
+  clientes: 'clientes ativos · relacionamento',
   alvo: 'prospecção aprovada',
   rec: 'ex-clientes',
   queda: 'faturamento caindo ou sem comanda',

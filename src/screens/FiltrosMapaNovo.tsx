@@ -10,8 +10,8 @@ import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Painel } from '../components/Painel';
 import type { Client } from '../types/client';
 import {
-  contarChips, FILTROS_VAZIOS, ORIGEM, passaNosFiltros, ROTULO_STATUS, ROTULO_TEMP,
-  type FiltrosNovos, type OrigemFiltro, type StatusFiltro, type TempFiltro,
+  contarChips, ETAPAS_FILTRO, FILTROS_VAZIOS, ORIGEM, passaNosFiltros, ROTULO_DONO, ROTULO_STATUS, ROTULO_TEMP, ROTULO_VISITA,
+  type DonoFiltro, type FiltrosNovos, type OrigemFiltro, type StatusFiltro, type TempFiltro, type VisitaFiltro,
 } from '../utils/lentes';
 import type { Pino } from '../utils/pinoP2';
 
@@ -107,6 +107,27 @@ export default function FiltrosMapaNovo({
           {(Object.keys(ROTULO_TEMP) as TempFiltro[]).map((k) =>
             chip(`t-${k}`, ROTULO_TEMP[k], contagem.temp.get(k) ?? 0, rascunho.temp.has(k),
               () => setRascunho((r) => ({ ...r, temp: alternar(r.temp, k) })), COR_TEMP[k]))}
+        </View>
+
+        <Text style={s.secaoTitulo}>Dono</Text>
+        <View style={s.chips}>
+          {(Object.keys(ROTULO_DONO) as DonoFiltro[]).map((k) =>
+            chip(`d-${k}`, ROTULO_DONO[k], contagem.dono.get(k) ?? 0, rascunho.dono.has(k),
+              () => setRascunho((r) => ({ ...r, dono: alternar(r.dono, k) }))))}
+        </View>
+
+        <Text style={s.secaoTitulo}>Etapa do funil</Text>
+        <View style={s.chips}>
+          {ETAPAS_FILTRO.map((k) =>
+            chip(`e-${k}`, k, contagem.etapa.get(k) ?? 0, rascunho.etapa.has(k),
+              () => setRascunho((r) => ({ ...r, etapa: alternar(r.etapa, k) }))))}
+        </View>
+
+        <Text style={s.secaoTitulo}>Última visita</Text>
+        <View style={s.chips}>
+          {(Object.keys(ROTULO_VISITA) as VisitaFiltro[]).map((k) =>
+            chip(`v-${k}`, ROTULO_VISITA[k], contagem.visita.get(k) ?? 0, rascunho.visita.has(k),
+              () => setRascunho((r) => ({ ...r, visita: alternar(r.visita, k) }))))}
         </View>
 
         <Text style={s.secaoTitulo}>Origem do lead</Text>

@@ -20,6 +20,7 @@ export type DeepLinkMapa = {
 const LENTES: Record<string, Lente> = {
   'meu-dia': 'dia', dia: 'dia',
   carteira: 'carteira',
+  clientes: 'clientes',
   'contas-alvo': 'alvo', alvo: 'alvo',
   reconquista: 'rec', rec: 'rec',
   'em-queda': 'queda', queda: 'queda',

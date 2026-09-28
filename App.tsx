@@ -2930,12 +2930,33 @@ function MainApp() {
     const base = userLocation ?? (ultimaFeita ? ponto(ultimaFeita) : ponto(comGps[0]));
     setRoteirizando(true);
     try {
-      const trip = await fetchOptimizedTrip([base, ...comGps.map(ponto)]);
-      const ordem = trip.inputOrderToVisit.slice(1).map((i) => comGps[i - 1]).filter(Boolean);
+      // SEMPRE EM MICRORROTAS (28/09/2026, Julyan: "a rota de hoje sempre tem que ser
+      // microrrota com qualidade e planejamento"). As paradas em aberto viram grupos de
+      // portas a pé (≤ 300 m), encadeados a partir de onde a pessoa está; dentro do grupo,
+      // a porta mais perto da anterior. Todas entram (são o plano): o que muda é a ordem.
+      const r = montarMicrorrotas(
+        comGps.map((s) => ({ id: s.id, lat: Number(s.client!.latitude), lng: Number(s.client!.longitude), peso: 1, obrigatoria: true })),
+        { lat: base.latitude, lng: base.longitude },
+        { meta: comGps.length, folga: 0, maxPorMicro: 8 },
+      );
+      const porId = new Map(comGps.map((s) => [s.id, s] as const));
+      const ordem = r.ordem.map((id) => porId.get(id)).filter((s): s is (typeof comGps)[number] => !!s);
       const faltando = comGps.filter((s) => !ordem.includes(s));
       await fieldOps.updateStops.mutateAsync([...feitas, ...ordem, ...faltando, ...semGps]);
-      const km = trip.distanceMeters ? ` · ${(trip.distanceMeters / 1000).toFixed(1).replace('.', ',')} km` : '';
-      Toast.mostrar(`✓ Plano roteirizado · ${ordem.length + faltando.length} paradas${km}`, 'ok');
+      let km = '';
+      try {
+        const g = await fetchRouteGeometry([base, ...ordem.map(ponto)]);
+        km = ` · ${(g.distanceMeters / 1000).toFixed(1).replace('.', ',')} km · ~${Math.round(g.durationSeconds / 60)} min de carro`;
+      } catch { /* sem o serviço de rotas: a ordem já foi gravada */ }
+      const nMicro = r.micros.length;
+      Toast.mostrar(`✓ ${ordem.length + faltando.length} paradas em ${nMicro} ${nMicro === 1 ? 'microrrota' : 'microrrotas'}${km}`, 'ok');
+      // QUALIDADE: grupos longe um do outro = o dia mistura regiões. A ordem já é a
+      // melhor possível; o que resolve é o plano — tirar o grupo solto para outro dia.
+      const entreKm = r.metrosEntreMicros / 1000;
+      if (nMicro > 1 && entreKm > 25) {
+        Alert.alert('O dia está espalhado',
+          `São ~${entreKm.toFixed(0)} km entre as ${nMicro} microrrotas. Vale deixar num dia só as portas da mesma região e passar o grupo mais distante para outro dia (no Planejamento ou tirando da rota).`);
+      }
     } catch (e) {
       Alert.alert('Não deu para roteirizar', 'O serviço de rotas não respondeu; a ordem de antes ficou como estava.\n' + String((e as Error)?.message ?? ''));
     } finally {
@@ -6986,7 +7007,11 @@ function MainApp() {
           lastProviderUsed={lastProviderUsed}
           isAdmin={isAdmin}
           myHubspotId={myHubspotId}
-          generateDailyRoute={generateDailyRoute}
+          // Rota vazia: "Montar meu dia" com microrrotas (não apaga nada) no mapa novo;
+          // "Otimizar paradas": reordena as que já estão, em microrrotas.
+          generateDailyRoute={modoNovo ? montarDiaComMicrorrotas : generateDailyRoute}
+          otimizarParadas={modoNovo && !isViewer ? () => { void roteirizarPlano(); } : undefined}
+          montaSemApagar={modoNovo}
           startNavigation={startNavigation}
           viewRouteOnMap={viewRouteOnMap}
           addClientToRoute={addClientToRoute}
