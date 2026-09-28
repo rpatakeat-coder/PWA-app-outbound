@@ -2814,7 +2814,10 @@ function MainApp() {
     // regrava todas as paradas e devolvia as já feitas para "pendente".
     if (modoNovo && !isMonitoringRoute) {
       void fieldOps.adicionarParada.mutateAsync(client)
-        .then(() => Toast.mostrar(`✓ ${client.empresa?.trim() || client.nome} na rota de hoje`, 'ok'))
+        // null = não escreveu (já estava, ou a tela é a rota de outra pessoa): sem ✓ falso.
+        .then((pos) => pos == null
+          ? Toast.mostrar('Não entrou: ou já está na rota, ou esta tela é a rota de outra pessoa', 'fila')
+          : Toast.mostrar(`✓ ${client.empresa?.trim() || client.nome} na rota de hoje`, 'ok'))
         .catch((e) => Alert.alert('Não entrou na rota', String((e as Error)?.message ?? e)));
       return;
     }
@@ -4586,7 +4589,11 @@ function MainApp() {
           : undefined
       }
       isMarkingVisited={isVisiting || markAsVisited.isPending}
-      onAddToRoute={!isViewer && isAdmin ? () => addClientToRoute(selectedClient) : undefined}
+      // Qualquer um que não é só-leitura põe o lead na PRÓPRIA rota de hoje (28/09/2026,
+      // Julyan: "tudo tem que adicionar na rota de hoje"). Estava só para gestor: o
+      // executivo via o botão apagado, e o "É meu" — que pede o lead na rota — ficava
+      // impossível. O banco sempre deixou (field_routes: seller_id = auth.uid()).
+      onAddToRoute={!isViewer ? () => addClientToRoute(selectedClient) : undefined}
       canWriteNotes={!isViewer}
       responsavelNome={
         selectedClient.vendedor_id_hubspot
@@ -5142,7 +5149,7 @@ function MainApp() {
           foraFalhou={buscaNegocios.isError}
         />
       )}
-      {modoNovo && !layout.ehLargo && (
+      {modoNovo && (
         <FolhaMeuDia
           visivel={meuDiaAberto}
           aoFechar={() => setMeuDiaAberto(false)}
@@ -5337,6 +5344,47 @@ function MainApp() {
           <Text style={[styles.faChipTexto, { color: 'var(--tint-red-text)' }]}>Limpar tudo</Text>
         </TouchableOpacity>
       )}
+    </View>
+  );
+
+  // DESKTOP = O MESMO LAYOUT DO CELULAR (28/09/2026, Julyan: "o desktop tem que ser
+  // bom, o mesmo layout"). Com o mapa novo, o painel de 352px deixa de ser o de filtros
+  // antigos (Lead/Cliente, contagem por temperatura) e vira o que o celular tem na folha
+  // de baixo: lentes, próxima porta com Cheguei, progresso do dia e a lista da área por
+  // prioridade ou distância, com "É meu". Mesmo componente (FolhaDoMapa embutida), então
+  // o que muda no celular muda aqui.
+  const painelMapaNovoWeb = (
+    <View style={[styles.pmwContainer, { flexDirection: 'column' }]}>
+      <View style={styles.pmnLentes}>
+        {LENTES.filter((l) => l.id !== 'calor').map((l) => {
+          const ativa = lente === l.id;
+          return (
+            <Pressable key={l.id} accessibilityRole="button" accessibilityState={{ selected: ativa }} onPress={() => { setLente(l.id); setQuadraAberta(null); }}
+              style={[styles.pmnLente, ativa && { backgroundColor: COR_LENTE[l.id], borderColor: COR_LENTE[l.id] }]}>
+              <Text style={[styles.pmnLenteTexto, ativa && { color: '#FFFFFF' }]}>{l.rotulo}</Text>
+            </Pressable>
+          );
+        })}
+        <Pressable accessibilityRole="button" onPress={() => setFiltrosNovosAbertos(true)} style={styles.pmnLente}>
+          <Text style={styles.pmnLenteTexto}>{quantosFiltros(filtrosNovos) ? `Filtros · ${quantosFiltros(filtrosNovos)}` : 'Filtros'}</Text>
+        </Pressable>
+      </View>
+      <FolhaDoMapa
+        embutida
+        chao={0}
+        itens={quadraAberta ? itensFolha.filter((it) => quadraAberta.ids.has(it.c.id)) : itensFolha}
+        quadra={quadraAberta ? { area: quadraAberta.area, aoFechar: () => setQuadraAberta(null) } : null}
+        eMeu={!isViewer && (lente === 'semdono' || lente === 'rec') ? { naRota: routeStopClientIds, aoAssumir: (c) => { void assumirDoMapa(c); } } : null}
+        planoTotal={routeDisplayClients.length}
+        planoFeito={routeStops.filter((s) => s.status === 'done').length}
+        visitasFeitas={meuDia.data?.visitasHoje ?? routeStops.filter((s) => s.status === 'done').length}
+        metaVisitas={meuDia.data?.prometido?.visitas || (routeConfig.meta_visitas_dia > 0 ? routeConfig.meta_visitas_dia : 6)}
+        aoProgresso={() => setMeuDiaAberto(true)}
+        totalNaArea={visiveisMapaNovo.length}
+        rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
+        onAbrir={handleMarkerPress}
+        onCheguei={(c) => handleMarkAsVisited(c)}
+      />
     </View>
   );
 
@@ -6609,7 +6657,7 @@ function MainApp() {
           /* Web: painel de trabalho fixo de 352px + mapa. O conteudo do mapa
              e' o MESMO JSX do celular (conteudoMapa) — so' a composicao muda. */
           <View style={sharedStyles.mapaLinhaWeb}>
-            {painelMapaWeb}
+            {modoNovo ? painelMapaNovoWeb : painelMapaWeb}
             <View style={sharedStyles.mapaAreaWeb}>{conteudoMapa}</View>
           </View>
         ) : (
@@ -10832,6 +10880,9 @@ const styles = StyleSheet.create({
   },
   hwCtaTexto: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: '#FFFFFF' },
   // ---- Mapa web: linha painel + mapa ----
+  pmnLentes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'var(--border)' },
+  pmnLente: { minHeight: 36, paddingHorizontal: 14, borderRadius: 18, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center' },
+  pmnLenteTexto: { fontSize: 13, fontWeight: '600', color: 'var(--text)' },
   pmwContainer: {
     width: 352,
     backgroundColor: 'var(--surface)',

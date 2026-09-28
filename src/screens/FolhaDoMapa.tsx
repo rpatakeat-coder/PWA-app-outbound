@@ -39,6 +39,8 @@ type Props = {
   metaVisitas: number;
   /** Toque em "x de 6 visitas". */
   aoProgresso?: () => void;
+  /** Desktop (28/09/2026): a mesma folha vira o painel lateral, sempre aberta, sem alça. */
+  embutida?: boolean;
 };
 
 // Andando na rua: ~80 m por minuto, contando esquina e sinal.
@@ -82,9 +84,9 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas, metaVisitas, aoProgresso }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas, metaVisitas, aoProgresso, embutida }: Props) {
   const [abertaPeloToque, setAberta] = useState(false);
-  const aberta = abertaPeloToque || !!quadra;
+  const aberta = !!embutida || abertaPeloToque || !!quadra;
   const [modo, setModo] = useState<'prioridade' | 'distancia'>('prioridade');
   const ordenados = useMemo(() => ordenarItens(itens, modo), [itens, modo]);
   const proxima = useMemo(() => ordenarItens(itens, 'prioridade').find((it) => it.plano && !it.feito) ?? null, [itens]);
@@ -138,16 +140,18 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
   }
 
   return (
-    <View style={[s.folha, { bottom: chao }]} accessibilityLabel="Agora, perto de você" onLayout={(e) => {
+    <View style={embutida ? s.painel : [s.folha, { bottom: chao }]} accessibilityLabel="Agora, perto de você" onLayout={embutida ? undefined : (e) => {
       // No navegador o evento traz o próprio elemento: o topo vem na régua da
       // TELA, a mesma do mapa (o layout.y é relativo ao pai, que não é o do mapa).
       const alvo = (e.nativeEvent as unknown as { target?: { getBoundingClientRect?: () => DOMRect } }).target;
       const topo = alvo?.getBoundingClientRect ? alvo.getBoundingClientRect().top : e.nativeEvent.layout.y;
       aoMedir?.({ y: Math.round(topo), altura: Math.round(e.nativeEvent.layout.height) });
     }}>
-      <Pressable accessibilityRole="button" accessibilityLabel={aberta ? 'Recolher a lista' : 'Abrir a lista desta área'} onPress={() => setAberta((v) => !v)} style={s.alca}>
-        <View style={s.alcaBarra} />
-      </Pressable>
+      {!embutida && (
+        <Pressable accessibilityRole="button" accessibilityLabel={aberta ? 'Recolher a lista' : 'Abrir a lista desta área'} onPress={() => setAberta((v) => !v)} style={s.alca}>
+          <View style={s.alcaBarra} />
+        </Pressable>
+      )}
       <View style={s.linhaTopo}>
         <Text style={s.kicker} numberOfLines={1}>
           {proxima ? `PRÓXIMA PORTA · ${proxima.plano} DO PLANO` : planoTotal ? 'PLANO DE HOJE' : 'AGORA, PERTO DE VOCÊ'}
@@ -196,9 +200,11 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
             <Text style={s.nestaAreaTexto} numberOfLines={1}>{`Nesta área · ${itens.length} ${itens.length === 1 ? 'pino' : 'pinos'} da lente`}</Text>
             <Text style={s.nestaAreaSub}>{`Lente ${rotuloLente} · ${Math.max(0, totalNaArea - itens.length)} outros viram ponto`}</Text>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Recolher a lista" onPress={() => setAberta(false)} style={s.quadraFechar}>
-            <Text style={s.quadraFecharTexto}>✕</Text>
-          </Pressable>
+          {!embutida && (
+            <Pressable accessibilityRole="button" accessibilityLabel="Recolher a lista" onPress={() => setAberta(false)} style={s.quadraFechar}>
+              <Text style={s.quadraFecharTexto}>✕</Text>
+            </Pressable>
+          )}
         </View>
       ))}
 
@@ -212,7 +218,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
               </Pressable>
             ))}
           </View>
-          <ScrollView style={s.lista} contentContainerStyle={{ paddingBottom: 8 }}>
+          <ScrollView style={embutida ? s.listaEmbutida : s.lista} contentContainerStyle={{ paddingBottom: 8 }}>
             {ordenados.length === 0 && <Text style={s.semProxima}>Nada desta lente na área. Troque de lente ou afaste o mapa.</Text>}
             {ordenados.slice(0, 80).map((it) => (
               <Pressable key={it.c.id} accessibilityRole="button" onPress={() => onAbrir(it.c)} style={s.linha}>
@@ -302,5 +308,7 @@ const s = StyleSheet.create({
   ordemTexto: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)' },
   ordemTextoAtivo: { color: 'var(--bg)' },
   lista: { maxHeight: 320 },
+  painel: { flex: 1, minHeight: 0, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, gap: 6, backgroundColor: 'var(--surface)' },
+  listaEmbutida: { flex: 1, minHeight: 0 },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
 });

@@ -37,6 +37,8 @@ export const INVALIDA_POR_TIPO: Record<string, string[][]> = {
   recado: [['avisos_gestor']],
   // 0129: o gestor validou ou devolveu um acordo do 1:1 (ou eu marquei em outro aparelho)
   pdi: [['meu_pdi']],
+  // 0130: agendamento (Agendar do app) criado, reagendado ou cancelado
+  agenda: [['client_meetings']],
 };
 
 export function sinalMeInteressa(s: Sinal, meuOwnerId: string | null, ehGestor: boolean): boolean {
