@@ -245,9 +245,8 @@ function LinhaCliente({ d }: { d: DadosCardNovo }) {
 }
 
 function assumir(d: DadosCardNovo, a: AcoesCardNovo) {
-  if (!a.onEMeu) return;
-  if (d.naRota) a.onEMeu();
-  else Toast.mostrar('Para assumir, ponha na rota de hoje (+ Rota de hoje) e toque em É meu.', 'fila');
+  // fora da rota, quem pergunta e põe na rota é o App (assumirDoMapa)
+  if (a.onEMeu) a.onEMeu();
 }
 
 function GradeEspiada({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {

@@ -263,8 +263,8 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
                 {eMeu && it.p.dono === 'sem' ? (
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={eMeu.naRota.has(it.c.id) ? `É meu: ${it.c.empresa?.trim() || it.c.nome}` : 'É meu: ponha na rota de hoje primeiro'}
-                    onPress={() => (eMeu.naRota.has(it.c.id) ? eMeu.aoAssumir(it.c) : Toast.mostrar('Para assumir, ponha na rota de hoje (+ Rota de hoje no card) e toque em É meu.', 'fila'))}
+                    accessibilityLabel={eMeu.naRota.has(it.c.id) ? `É meu: ${it.c.empresa?.trim() || it.c.nome}` : `É meu: pôr na rota de hoje e assumir ${it.c.empresa?.trim() || it.c.nome}`}
+                    onPress={() => eMeu.aoAssumir(it.c)}
                     style={[s.eMeu, !eMeu.naRota.has(it.c.id) && s.eMeuFora]}
                   >
                     <Text style={[s.eMeuTexto, !eMeu.naRota.has(it.c.id) && s.eMeuTextoFora]}>É meu</Text>

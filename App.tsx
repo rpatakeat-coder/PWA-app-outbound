@@ -6467,7 +6467,24 @@ function MainApp() {
 
   // "É meu" (Julyan 26/09): o card e a linha da lista (lentes Sem dono e
   // Reconquista) chamam esta mesma função. Travas no servidor (assumir-negocio).
-  const assumirDoMapa = async (c: Client) => {
+  //
+  // FORA DA ROTA DE HOJE (28/09/2026, Julyan: "botão é meu não funciona"): a regra de só
+  // assumir o que está na rota continua, mas o toque não morre num aviso de 3 s — pergunta,
+  // põe na rota e SÓ ENTÃO assume (assumir-negocio confere a rota no servidor).
+  const assumirDoMapa = async (c: Client, jaConfirmado = false) => {
+    if (!routeStopClientIds.has(c.id) && !jaConfirmado) {
+      if (isMonitoringRoute) { Toast.mostrar('Esta é a rota de outra pessoa: volte para a sua para assumir.', 'fila'); return; }
+      const nome = c.empresa?.trim() || c.nome || 'este lead';
+      Alert.alert('Pôr na rota e assumir?', `O É meu vale para os leads da sua rota de hoje. Ponho ${nome} na rota e coloco no seu funil (Prospecção)?`, [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Pôr na rota e assumir', onPress: () => {
+          void fieldOps.adicionarParada.mutateAsync(c)
+            .then(() => assumirDoMapa(c, true))
+            .catch((e) => Alert.alert('Não entrou na rota', String((e as Error)?.message ?? e)));
+        } },
+      ]);
+      return;
+    }
     const r = await assumirLead(c, { idHubspot: myHubspotId, nome: profile?.full_name ?? null });
     if (!r.ok) { Alert.alert('Não deu para assumir', r.erro); return; }
     if (selectedClient?.id === c.id) setSelectedClient({ ...c, vendedor_id_hubspot: myHubspotId, ...(r.etapa ? { etapa: r.etapa } : {}) });
@@ -9020,7 +9037,8 @@ function ClientBottomSheet({
   // mapa continua visivel e o vendedor sabe se o lead e' o da esquina ou o
   // de dois bairros. Arrastar pra cima (ou tocar a linha) expande; arrastar
   // pra baixo volta ao peek; de novo, fecha. Desktop abre completo direto.
-  const [estagio, setEstagio] = useState<'peek' | 'cheia'>('peek');
+  // 28/09/2026 (Julyan: "a ficha tem q abrir toda"): no mapa novo abre direto cheia.
+  const [estagio, setEstagio] = useState<'peek' | 'cheia'>(novo ? 'cheia' : 'peek');
   useEffect(() => { if (novo && estagio === 'cheia') aoAbrirMeia?.(); }, [estagio]); // eslint-disable-line react-hooks/exhaustive-deps
   // M1d: timeline limitada a 6 — o painel passa de 1.800px e o rodape sai
   // do alcance com historico longo.
@@ -9034,8 +9052,8 @@ function ClientBottomSheet({
   // O "por que?" do alerta de localizacao: em repouso a faixa diz uma linha.
   const [porQueLocal, setPorQueLocal] = useState(false);
   useEffect(() => {
-    setEstagio('peek');
-  }, [client.id]);
+    setEstagio(novo ? 'cheia' : 'peek');
+  }, [client.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const primaryName = getClientPrimaryName(client);
   const { user } = useAuth();
@@ -9850,7 +9868,7 @@ function ClientBottomSheet({
       rotulo={primaryName}
       topo={novo ? <TopoCardNovo d={dadosNovo!} a={acoesNovo} /> : faixaTopo}
       topoRola={!!novo}
-      alturaMaxCheia={novo ? '60%' : undefined}
+      alturaMaxCheia={novo ? '92%' : undefined}
       estagio={estagio}
       aoTrocarEstagio={setEstagio}
       estiloCorpo={layout.ehDesktop ? styles.corpoDesktop : styles.corpoMobile}
