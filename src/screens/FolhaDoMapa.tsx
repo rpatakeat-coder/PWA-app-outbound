@@ -91,7 +91,15 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
   const emAberto = Math.max(0, planoTotal - planoFeito);
   const [abertaPeloToque, setAberta] = useState(false);
   const aberta = !!embutida || abertaPeloToque || !!quadra;
-  const [modo, setModo] = useState<'prioridade' | 'distancia'>('prioridade');
+  // A ordem escolhida fica no aparelho (28/09/2026): quem anda por distância não
+  // quer escolher de novo a cada vez que a lista abre.
+  const [modo, setModoEstado] = useState<'prioridade' | 'distancia'>(() => {
+    try { return window.localStorage.getItem('takeat-folha-ordem') === 'distancia' ? 'distancia' : 'prioridade'; } catch { return 'prioridade'; }
+  });
+  const setModo = (m: 'prioridade' | 'distancia') => {
+    setModoEstado(m);
+    try { window.localStorage.setItem('takeat-folha-ordem', m); } catch { /* sem storage: só não lembra */ }
+  };
   const ordenados = useMemo(() => ordenarItens(itens, modo), [itens, modo]);
   const proxima = useMemo(() => ordenarItens(itens, 'prioridade').find((it) => it.plano && !it.feito) ?? null, [itens]);
   // Arrastar a pílula para cima abre a lista da área (handoff v4.1, xama1).

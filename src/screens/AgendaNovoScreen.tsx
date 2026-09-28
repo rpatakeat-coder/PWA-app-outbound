@@ -37,6 +37,9 @@ type Props = {
   /** Põe as paradas em aberto na melhor ordem a partir de onde a pessoa está (App.tsx). */
   aoRoteirizar?: () => void;
   roteirizando?: boolean;
+  /** Monta o dia com microrrotas a partir da carteira (App.tsx). */
+  aoMontarDia?: () => void;
+  montandoDia?: boolean;
 };
 
 const ruaDo = (c: Client | null) => {
@@ -47,7 +50,7 @@ const ruaDo = (c: Client | null) => {
 
 export default function AgendaNovoScreen({
   diaInicial, paradas, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead, dailyValidadaEm,
-  aoRoteirizar, roteirizando,
+  aoRoteirizar, roteirizando, aoMontarDia, montandoDia,
 }: Props) {
   const queryClient = useQueryClient();
   // Concluídas nesta sessão: somem da lista na hora (o Desfazer as devolve).
@@ -164,6 +167,14 @@ export default function AgendaNovoScreen({
             </Text>
           </View>
 
+          {aoMontarDia && (
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Montar meu dia com microrrotas" disabled={montandoDia}
+              style={[s.montarDia, montandoDia && { opacity: 0.6 }]} onPress={aoMontarDia}>
+              <Text style={s.montarDiaTitulo}>{montandoDia ? 'Montando o dia…' : 'Montar meu dia'}</Text>
+              <Text style={s.montarDiaSub}>microrrotas a pé, a partir de onde você está · o plano do Cockpit continua</Text>
+            </TouchableOpacity>
+          )}
+
           {abertasComPonto.length > 0 && (
             <View style={s.acoesRota}>
               {aoRoteirizar && abertasComPonto.length >= 2 && (
@@ -179,7 +190,7 @@ export default function AgendaNovoScreen({
           )}
 
           {estado.length === 0 && (
-            <Text style={s.vazio}>Sem rota hoje. Monte pela "Rota de hoje" no topo.</Text>
+            <Text style={s.vazio}>Sem rota hoje. Toque em "Montar meu dia" ou ponha leads com "+ Rota de hoje" no cartão.</Text>
           )}
 
           {estado.map((p, i) => {
@@ -262,6 +273,9 @@ export default function AgendaNovoScreen({
 const s = StyleSheet.create({
   tela: { flex: 1, backgroundColor: 'var(--bg)' },
   acoesRota: { flexDirection: 'row', gap: 8 },
+  montarDia: { minHeight: 56, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: '#C8131B', justifyContent: 'center', gap: 2 },
+  montarDiaTitulo: { fontSize: 16, fontWeight: '700', color: 'var(--text)' },
+  montarDiaSub: { fontSize: 12, color: 'var(--text-muted)' },
   acaoRota: { flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   acaoRotaPrim: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
   acaoRotaTexto: { fontSize: 15, fontWeight: '700', color: 'var(--text)' },

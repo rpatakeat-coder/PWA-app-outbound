@@ -221,6 +221,61 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
     queryClient.invalidateQueries({ queryKey: ['field_routes'] });
     queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
   };
+  // MONTAR O DIA (microrrotas, 28/09/2026). Grava a ordem que a montagem calculou
+  // SEM apagar nada: as feitas continuam feitas e na frente, as do plano que a
+  // montagem não usou continuam no fim, as novas entram, as removidas que voltaram
+  // revivem. Diferente do saveRoute, que apaga e regrava (e zerava as feitas).
+  const montarDia = useMutation({
+    mutationFn: async (ordem: Client[]) => {
+      if (!user?.id || targetSeller !== user.id) throw new Error('Só dá para montar a sua própria rota.');
+      let rotaId = route?.id ?? null;
+      if (!rotaId) {
+        const { data: rota, error } = await supabase
+          .from('field_routes')
+          .upsert({
+            seller_id: user.id, route_date: routeDate, title: 'Rota do dia', status: 'planned',
+            source: 'suggested', priority_mode: 'microrrotas', created_by: user.id,
+          }, { onConflict: 'seller_id,route_date' })
+          .select()
+          .single();
+        if (error) throw error;
+        rotaId = (rota as FieldRoute).id;
+      }
+      const { data: atuais, error: e1 } = await supabase
+        .from('field_route_stops').select('id, client_id, position, status').eq('route_id', rotaId);
+      if (e1) throw e1;
+      const linhas = (atuais ?? []) as Array<{ id: string; client_id: string; position: number; status: string }>;
+      const porCliente = new Map(linhas.map((l) => [l.client_id, l]));
+      const feitas = linhas.filter((l) => l.status === 'done').sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+      const naOrdem = ordem.filter((c) => porCliente.get(c.id)?.status !== 'done');
+      let novas = 0;
+      for (const c of naOrdem) {
+        const l = porCliente.get(c.id);
+        if (!l) {
+          const { data: nova, error } = await supabase.from('field_route_stops')
+            .insert({ route_id: rotaId, client_id: c.id, position: 1000 + novas, planned_at: new Date().toISOString(), status: 'planned' })
+            .select('id, client_id, position, status').single();
+          if (error) throw error;
+          porCliente.set(c.id, nova as { id: string; client_id: string; position: number; status: string });
+          novas += 1;
+        } else if (l.status === 'removed' || l.status === 'skipped') {
+          const { error } = await supabase.from('field_route_stops').update({ status: 'planned' }).eq('id', l.id);
+          if (error) throw error;
+          novas += 1;
+        }
+      }
+      const usados = new Set(naOrdem.map((c) => c.id));
+      const sobras = linhas.filter((l) => l.status === 'planned' && !usados.has(l.client_id)).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+      const final = [...feitas.map((l) => l.id), ...naOrdem.map((c) => porCliente.get(c.id)!.id), ...sobras.map((l) => l.id)];
+      for (const [i, id] of final.entries()) {
+        const { error } = await supabase.from('field_route_stops').update({ position: i + 1 }).eq('id', id);
+        if (error) throw error;
+      }
+      return { novas, total: final.length };
+    },
+    onSuccess: () => invalidarRota(),
+  });
+
   const adicionarParadaFeita = useMutation({ mutationFn: (client: Client) => inserirParada(client, 'done'), onSuccess: invalidarRota });
   const adicionarParada = useMutation({ mutationFn: (client: Client) => inserirParada(client, 'planned'), onSuccess: invalidarRota });
 
@@ -246,6 +301,7 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
     updateStops,
     removeStop,
     adicionarParadaFeita,
+    montarDia,
     adicionarParada,
     markStopDone,
     toggleStopDone,

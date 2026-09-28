@@ -184,6 +184,7 @@ import { ds, sharedStyles } from './src/screens/sharedStyles';
 import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
 import { fetchCepData, geocodeAddress, reverseGeocode } from './src/utils/geocoding';
 import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingProvider } from './src/utils/routing';
+import { montarMicrorrotas } from './src/utils/microrrotas';
 import { useVisitsHeatmap } from './src/hooks/useVisitsHeatmap';
 import { useSellerClassification, precisaDeIdHubspot } from './src/hooks/useSellerClassification';
 import { buildHeatCells, celulasNinguemFoi, heatColor, heatIntensity, HEAT_CELL_M, HEAT_LEGEND_STOPS } from './src/utils/heatmap';
@@ -1099,6 +1100,7 @@ function MainApp() {
   // Resumo de quadra tocado: a folha mostra só os pinos dele até fechar.
   const [quadraAberta, setQuadraAberta] = useState<{ lider: string; ids: Set<string>; area: string } | null>(null);
   const [roteirizando, setRoteirizando] = useState(false);
+  const [montandoDia, setMontandoDia] = useState(false);
   useEffect(() => { setPilhaAberta(null); }, [mapRegion]);
   useEffect(() => { setQuadraAberta(null); }, [lente]);
   const janelaTela = useWindowDimensions();
@@ -2833,6 +2835,83 @@ function MainApp() {
   // de onde a pessoa está (o mesmo TSP da Rota do dia: OpenRouteService, OSRM de
   // reserva). As feitas ficam na frente, na ordem em que foram feitas; sem coordenada
   // vão para o fim. Só reescreve a posição (updateStops): status e check-in não mudam.
+  // MONTAR O DIA COM MICRORROTAS (28/09/2026, Julyan). Parte de onde a pessoa está,
+  // lê a CARTEIRA DELA num raio de 8 km direto do banco (o `clients` da tela é só a
+  // área visível) e monta portas a pé em grupos (src/utils/microrrotas.ts). O que o
+  // Cockpit já planejou para hoje entra sempre; o feito não muda; nada é apagado.
+  // Peso de cada porta: SLA estourado, tarefa vencendo, etapa quente, conta-alvo bem
+  // avaliada, cliente sem visita há 30 dias — e quem foi visitado há 3 dias perde.
+  const montarDiaComMicrorrotas = async () => {
+    if (montandoDia) return;
+    if (isMonitoringRoute) { Toast.mostrar('Esta é a rota de outra pessoa: só ela monta o próprio dia.', 'fila'); return; }
+    if (!userLocation) { Alert.alert('Sem localização', 'Ative o GPS: o dia é montado a partir de onde você está.'); return; }
+    if (!myHubspotId) { Alert.alert('Sem carteira', 'Seu usuário não está ligado a um dono no HubSpot, então não há carteira para montar o dia.'); return; }
+    setMontandoDia(true);
+    try {
+      const R = 8000;
+      const dLat = R / 111000, dLng = R / (111000 * Math.max(0.2, Math.cos((userLocation.latitude * Math.PI) / 180)));
+      const { data, error } = await supabase.from('clients').select(CLIENT_LIST_COLUMNS)
+        .eq('vendedor_id_hubspot', myHubspotId).eq('is_archived', false)
+        .gte('latitude', userLocation.latitude - dLat).lte('latitude', userLocation.latitude + dLat)
+        .gte('longitude', userLocation.longitude - dLng).lte('longitude', userLocation.longitude + dLng)
+        .limit(1000);
+      if (error) throw error;
+      const carteira = (data ?? []) as unknown as Client[];
+      const FECHADAS = new Set(['Perdido', 'NEGÓCIO PERDIDO', 'Ganho', 'Enviado Onboarding', 'Backlog']);
+      const hojeStr = diaBRT(new Date()) ?? '';
+      const comTarefa = new Set(tarefasDoCrmParaContagem
+        .filter((t) => t.clientId && t.venceEm && (diaBRT(t.venceEm) ?? '9999') <= hojeStr).map((t) => String(t.clientId)));
+      const PESO_ETAPA: Record<string, number> = {
+        'Negociação': 25, 'Demo/Proposta': 25, 'Conversa com decisor': 22, 'Ag. Pagamento': 20,
+        'Visita': 15, 'Prospecção': 10, 'Reciclagem': 6,
+      };
+      const diasDesde = (iso: string | null) => (iso ? (Date.now() - Date.parse(iso)) / 86400000 : Infinity);
+      const peso = (c: Client) => {
+        let p = 1;
+        const ctx = c.id_hubspot ? contextoPino?.tempoPorNegocio.get(String(c.id_hubspot)) : undefined;
+        if (ctx?.slaEstourado) p += 40;
+        if (comTarefa.has(c.id)) p += 35;
+        if (c.status === 'cliente') p += diasDesde(c.visited_at) > 30 ? 8 : 2;
+        else if (c.id_hubspot) p += PESO_ETAPA[c.etapa ?? ''] ?? 8;
+        else p += 12 + (Number(c.conta_alvo_rating) >= 4.5 ? 5 : 0);
+        if (diasDesde(c.visited_at) < 3) p -= 20;
+        return Math.max(1, p);
+      };
+      const plano = routeStops.filter((s) => s.status !== 'done' && s.status !== 'removed' && s.client && s.client.latitude != null && s.client.longitude != null);
+      const candidatas = [
+        ...carteira
+          .filter((c) => (c.status === 'lead' || c.status === 'cliente') && !c.conta_alvo_dismissed
+            && !visitadoHoje(c.visited_at) && !FECHADAS.has(c.etapa ?? '') && c.latitude != null && c.longitude != null)
+          .map((c) => ({ id: c.id, lat: Number(c.latitude), lng: Number(c.longitude), peso: peso(c) })),
+        ...plano.map((s) => ({ id: s.client_id, lat: Number(s.client!.latitude), lng: Number(s.client!.longitude), peso: 50, obrigatoria: true })),
+      ];
+      const meta = routeConfig.meta_visitas_dia > 0 ? routeConfig.meta_visitas_dia : 6;
+      const r = montarMicrorrotas(candidatas, { lat: userLocation.latitude, lng: userLocation.longitude }, { meta });
+      if (!r.ordem.length) { Alert.alert('Nada para montar', 'Não achei leads seus com posição no mapa a até 8 km daqui.'); return; }
+      const porId = new Map<string, Client>([...carteira.map((c) => [c.id, c] as const), ...plano.map((s) => [s.client_id, s.client!] as const)]);
+      const ordemClientes = r.ordem.map((id) => porId.get(id)).filter((c): c is Client => !!c);
+      const km = (r.metrosEntreMicros / 1000).toFixed(1).replace('.', ',');
+      const partes = r.micros.map((m, i) => `${i + 1}ª: ${m.ids.length} ${m.ids.length === 1 ? 'porta' : 'portas a pé'}`).join(' · ');
+      const confirmou = await new Promise<boolean>((res) => {
+        Alert.alert(
+          `${ordemClientes.length} paradas em ${r.micros.length} ${r.micros.length === 1 ? 'microrrota' : 'microrrotas'}`,
+          `${partes}\n~${km} km entre elas, a partir de onde você está.\n\nO que já está no plano continua, o feito não muda, e tudo vai para o Planejamento do Cockpit.`,
+          [
+            { text: 'Cancelar', style: 'cancel', onPress: () => res(false) },
+            { text: 'Montar o dia', onPress: () => res(true) },
+          ],
+        );
+      });
+      if (!confirmou) return;
+      const out = await fieldOps.montarDia.mutateAsync(ordemClientes);
+      Toast.mostrar(`✓ Dia montado · ${out.total} paradas em ${r.micros.length} ${r.micros.length === 1 ? 'microrrota' : 'microrrotas'}`, 'ok');
+    } catch (e) {
+      Alert.alert('Não deu para montar o dia', String((e as Error)?.message ?? e));
+    } finally {
+      setMontandoDia(false);
+    }
+  };
+
   const roteirizarPlano = async () => {
     if (roteirizando) return;
     if (isMonitoringRoute) { Toast.mostrar('Esta é a rota de outra pessoa: só ela roteiriza.', 'fila'); return; }
@@ -7040,6 +7119,8 @@ function MainApp() {
           visitadoHoje={(c) => visitadoHoje(c.visited_at)}
           aoRoteirizar={isViewer ? undefined : () => { void roteirizarPlano(); }}
           roteirizando={roteirizando}
+          aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
+          montandoDia={montandoDia}
           dailyValidadaEm={meuDia.data?.prometido?.validadaEm ?? null}
           // Mesmo check-in do mapa: vai ao mapa com o card aberto e roda o
           // fluxo de lá (GPS novo, "Está na porta?", ficha de rua).
