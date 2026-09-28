@@ -1266,6 +1266,10 @@ function MainApp() {
   // entra ou sai vai ao Planejamento do Cockpit pelo gatilho rota_para_plano (0136).
   const [planejarDia, setPlanejarDia] = useState<string | null>(null);
   const planejarToqueRef = useRef<((c: Client) => void) | null>(null);
+  // As marcas ainda não confirmadas do modo Planejar (o toque marca, o Confirmar grava).
+  // São de UM dia: trocar de dia, sair do modo ou virar a meia-noite as descarta.
+  const [rascunhoPlano, setRascunhoPlano] = useState<Map<string, { client: Client; entrar: boolean }>>(() => new Map());
+  useEffect(() => { setRascunhoPlano((m) => (m.size ? new Map() : m)); }, [planejarDia]);
   const opsOutroDia = useFieldOps(planejarDia ?? routeDate, isAuthenticated && !!planejarDia && planejarDia !== routeDate);
   const opsDoDia = planejarDia && planejarDia !== routeDate ? opsOutroDia : fieldOps;
   const planejarOutroDia = !!planejarDia && planejarDia !== routeDate;
@@ -1980,10 +1984,17 @@ function MainApp() {
         };
       });
   }, [planejarDia, opsDoDia.stops, colunaDoPlanoQ.data]);
-  const clientesDoPlanoNoMapa = useMemo(
-    () => (planejarDia ? paradasDoDiaPlanejado.map((p) => p.client) : routeDisplayClients),
-    [planejarDia, paradasDoDiaPlanejado, routeDisplayClients],
-  );
+  // No modo Planejar o mapa já mostra o dia como vai ficar: sem as marcadas para sair,
+  // com as marcadas para entrar no fim (numeradas) — antes de confirmar.
+  const pendentesDoPlano = useMemo(() => [...rascunhoPlano.values()], [rascunhoPlano]);
+  const clientesDoPlanoNoMapa = useMemo(() => {
+    if (!planejarDia) return routeDisplayClients;
+    const saem = new Set(pendentesDoPlano.filter((x) => !x.entrar).map((x) => x.client.id));
+    return [
+      ...paradasDoDiaPlanejado.filter((p) => !saem.has(p.client.id)).map((p) => p.client),
+      ...pendentesDoPlano.filter((x) => x.entrar).map((x) => x.client),
+    ];
+  }, [planejarDia, paradasDoDiaPlanejado, pendentesDoPlano, routeDisplayClients]);
   const itensMapaNovo = useMemo(() => {
     if (!modoNovo || !contextoPino) return [];
     const plano = new Map<string, number>();
@@ -2008,63 +2019,96 @@ function MainApp() {
   paradasDoDiaRef.current = paradasDoDiaPlanejado;
   const planejarDiaRef = useRef<string | null>(null);
   planejarDiaRef.current = planejarDia;
-  // FILA (auditoria 28/09): um toque de cada vez, com o dia do toque. Dois toques rápidos
-  // gravavam a mesma posição, o segundo toque no mesmo pino dava "já está" em vez de tirar,
-  // e o react-query só avisava o último. `ajustes` é o que já foi pedido e ainda não voltou
-  // do banco: o próximo toque decide em cima dele, não da lista velha.
-  const filaPlanejarRef = useRef<Promise<void>>(Promise.resolve());
-  const ajustesPlanejarRef = useRef(new Map<string, boolean>());
-  const noDiaAgora = (id: string) => ajustesPlanejarRef.current.get(id)
-    ?? paradasDoDiaRef.current.some((p) => p.client.id === id);
-  const destinoNoCockpit = (col: FaixaDoPlano[] | null, c: Client) => {
-    if (!profile?.id_hubspot) return 'Agenda · seu usuário não está ligado ao HubSpot, o Cockpit não vê';
-    if (!col) return 'Agenda';
-    if (faixaDoLead(col, c)) return 'Agenda + Cockpit';
-    return vaiAoCockpit(c) ? 'Agenda · o Cockpit está cheio nesse dia' : 'Agenda · sem negócio, o Cockpit não mostra';
-  };
-  const alternarNoPlano = (c: Client, forcar?: boolean) => {
-    const dia = planejarDiaRef.current;
-    const eu = profile?.id;
-    if (!dia || !eu) return;
+  // CONFIRMAÇÃO (Julyan, 28/09: "apenas um clique já tá indo pro planejamento, pode ter
+  // algo de confirmação"). O toque MARCA: o pino fica destacado, o mapa já mostra o dia
+  // como vai ficar e a folha lista "a confirmar". Confirmar grava tudo de uma vez, um por
+  // vez e com o dia das marcas (a fila da auditoria: posição e contagem não se atropelam);
+  // Descartar tira as marcas sem tocar no banco.
+  const rascunhoRef = useRef(rascunhoPlano);
+  rascunhoRef.current = rascunhoPlano;
+  const confirmandoPlanoRef = useRef(false);
+  const [confirmandoPlano, setConfirmandoPlano] = useState(false);
+  const marcarNoPlano = (c: Client) => {
+    if (!planejarDiaRef.current || confirmandoPlanoRef.current) return;
     const nome = c.empresa?.trim() || c.nome;
-    const parada = paradasDoDiaRef.current.find((p) => p.client.id === c.id);
-    const estava = noDiaAgora(c.id);
-    if (estava && parada?.status === 'done' && !ajustesPlanejarRef.current.has(c.id)) {
-      Toast.mostrar(`${nome} já foi visitado nesse dia.`, 'fila'); return;
+    if (rascunhoRef.current.has(c.id)) {
+      setRascunhoPlano((m) => { const n = new Map(m); n.delete(c.id); return n; });
+      return;
     }
-    if (estava && parada && parada.compromisso != null && !ajustesPlanejarRef.current.has(c.id)) {
+    const parada = paradasDoDiaRef.current.find((p) => p.client.id === c.id);
+    if (parada?.status === 'done') { Toast.mostrar(`${nome} já foi visitado nesse dia.`, 'fila'); return; }
+    if (parada && parada.compromisso != null) {
       Toast.mostrar(`${nome} tem visita marcada${parada.compromisso ? ` às ${parada.compromisso}` : ''} nesse dia. Para desmarcar, mude na Agenda.`, 'fila');
       return;
     }
-    const entrar = forcar ?? !estava;
-    ajustesPlanejarRef.current.set(c.id, entrar);
-    filaPlanejarRef.current = filaPlanejarRef.current.then(async () => {
-      try {
-        const r = entrar ? await porNoDia(eu, dia, c.id) : await tirarDoDia(eu, dia, c.id);
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['field_routes'] }),
-          queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }),
-          queryClient.invalidateQueries({ queryKey: ['plano_do_dia'] }),
-        ]);
-        let col: FaixaDoPlano[] | null = null;
-        if (profile?.id_hubspot) col = await lerColunaDoPlano(String(profile.id_hubspot), dia).catch(() => null);
-        const desfazer = { rotulo: 'Desfazer', onPress: () => (planejarDiaRef.current === dia
-          ? alternarNoPlano(c, !entrar)
-          : Toast.mostrar(`Volte para ${rotuloDoDia(dia)} para desfazer.`, 'fila')) };
-        if (entrar) {
-          Toast.mostrar(r === 'ja' ? `${nome} já estava em ${rotuloDoDia(dia)}.` : `✓ ${nome} · ${rotuloDoDia(dia)} · ${destinoNoCockpit(col, c)}`, r === 'ja' ? 'fila' : 'ok', r === 'ja' ? undefined : desfazer);
-        } else {
-          Toast.mostrar(r ? `${nome} saiu de ${rotuloDoDia(dia)}${col && faixaDoLead(col, c) ? ' · ainda no Cockpit, confira lá' : ''}` : `${nome} não estava em ${rotuloDoDia(dia)}.`, r ? 'ok' : 'fila', r ? desfazer : undefined);
-        }
-      } catch (e) {
-        Toast.mostrar(`${entrar ? 'Não entrou' : 'Não saiu'}: ${String((e as Error)?.message ?? e)}`, 'erro');
-      } finally {
-        if (ajustesPlanejarRef.current.get(c.id) === entrar) ajustesPlanejarRef.current.delete(c.id);
-      }
-    });
+    setRascunhoPlano((m) => new Map(m).set(c.id, { client: c, entrar: !parada }));
   };
-  const tirarDoDiaPlanejado = (p: ParadaDoDia) => alternarNoPlano(p.client);
-  planejarToqueRef.current = planejarDia ? (c: Client) => alternarNoPlano(c) : null;
+  const gravarNoDia = async (dia: string, itens: { client: Client; entrar: boolean }[]) => {
+    const eu = profile!.id;
+    const feitos: { client: Client; entrar: boolean }[] = [];
+    const falhas: string[] = [];
+    for (const it of itens) {
+      try {
+        if (it.entrar) { if ((await porNoDia(eu, dia, it.client.id)) === 'entrou') feitos.push(it); }
+        else if (await tirarDoDia(eu, dia, it.client.id)) feitos.push(it);
+      } catch (e) {
+        falhas.push(`${it.client.empresa?.trim() || it.client.nome}: ${String((e as Error)?.message ?? e)}`);
+      }
+    }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['field_routes'] }),
+      queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }),
+      queryClient.invalidateQueries({ queryKey: ['plano_do_dia'] }),
+    ]);
+    return { feitos, falhas };
+  };
+  const confirmarPlano = async () => {
+    const dia = planejarDiaRef.current;
+    const itens = [...rascunhoRef.current.values()];
+    if (!dia || !profile?.id || !itens.length || confirmandoPlanoRef.current) return;
+    confirmandoPlanoRef.current = true;
+    setConfirmandoPlano(true);
+    try {
+      const { feitos, falhas } = await gravarNoDia(dia, itens);
+      const col = profile.id_hubspot ? await lerColunaDoPlano(String(profile.id_hubspot), dia).catch(() => null) : null;
+      setRascunhoPlano(new Map());
+      const entraram = feitos.filter((f) => f.entrar);
+      const sairam = feitos.length - entraram.length;
+      const noCockpit = col ? entraram.filter((f) => faixaDoLead(col, f.client)).length : null;
+      const partes: string[] = [];
+      if (entraram.length) {
+        partes.push(`${entraram.length} ${entraram.length === 1 ? 'entrou' : 'entraram'} em ${rotuloDoDia(dia)}`
+          + (!profile.id_hubspot ? ' · só na Agenda (seu usuário não está ligado ao HubSpot)'
+            : noCockpit == null ? ' · na Agenda'
+              : noCockpit === entraram.length ? ' · Agenda + Cockpit'
+                : ` · ${noCockpit} no Cockpit, ${entraram.length - noCockpit} só no app`));
+      }
+      if (sairam) partes.push(`${sairam} ${sairam === 1 ? 'saiu' : 'saíram'}`);
+      if (falhas.length) Toast.mostrar(`Não gravei ${falhas.length}: ${falhas[0]}`, 'erro');
+      else if (partes.length) {
+        Toast.mostrar(`✓ ${partes.join(' · ')}`, 'ok', {
+          rotulo: 'Desfazer',
+          onPress: () => {
+            void gravarNoDia(dia, feitos.map((f) => ({ client: f.client, entrar: !f.entrar })))
+              .then((r) => Toast.mostrar(r.falhas.length ? `Não desfiz ${r.falhas.length}: ${r.falhas[0]}` : 'Desfeito.', r.falhas.length ? 'erro' : 'ok'));
+          },
+        });
+      } else Toast.mostrar('Nada mudou: já estava assim no banco.', 'fila');
+    } finally {
+      confirmandoPlanoRef.current = false;
+      setConfirmandoPlano(false);
+    }
+  };
+  const descartarPlano = () => setRascunhoPlano(new Map());
+  const trocarDiaPlanejado = (iso: string) => {
+    if (rascunhoRef.current.size) {
+      Toast.mostrar(`Confirme ou descarte ${rascunhoRef.current.size === 1 ? 'a marca' : `as ${rascunhoRef.current.size} marcas`} antes de trocar de dia.`, 'fila');
+      return;
+    }
+    setPlanejarDia(iso);
+  };
+  const tirarDoDiaPlanejado = (p: ParadaDoDia) => marcarNoPlano(p.client);
+  planejarToqueRef.current = planejarDia ? marcarNoPlano : null;
   const abrirPlanejar = () => {
     const hora = Number(new Date().toLocaleString('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Sao_Paulo' }));
     setQuadraAberta(null);
@@ -2072,6 +2116,7 @@ function MainApp() {
     setPlanejarDia(diasDoPlanejar.some((d) => d.iso === inicial) ? inicial : (diasDoPlanejar[0]?.iso ?? null));
   };
   const fecharPlanejar = () => {
+    if (rascunhoRef.current.size) { void confirmarPlano().then(() => setPlanejarDia(null)); return; }
     const dia = planejarDiaRef.current;
     const lista = paradasDoDiaRef.current;
     setPlanejarDia(null);
@@ -5238,7 +5283,7 @@ function MainApp() {
             // planejando outro dia, "feito" e "próxima" são os daquele dia, não os de hoje
             feito={plano != null && (planejarDia ? paradasDoDiaPlanejado.find((p) => p.client.id === c.id)?.status === 'done' : routeStops.find(s => s.client_id === c.id)?.status === 'done')}
             naFila={leadsNaFila.has(c.id)}
-            selecionado={selectedClient?.id === c.id}
+            selecionado={selectedClient?.id === c.id || rascunhoPlano.has(c.id)}
             papel={!planejarOutroDia && c.id === idClienteParadaAtual ? 'proxima' : plano != null ? 'plano' : 'lente'}
             lente={lente}
             foraDaLente={!noFoco(lente, p, plano) && selectedClient?.id !== c.id}
@@ -5603,7 +5648,11 @@ function MainApp() {
         <BarraPlanejar
           dias={diasDoPlanejar}
           dia={planejarDia}
-          aoDia={setPlanejarDia}
+          aoDia={trocarDiaPlanejado}
+          pendentes={pendentesDoPlano}
+          confirmando={confirmandoPlano}
+          aoConfirmar={() => { void confirmarPlano(); }}
+          aoDescartar={descartarPlano}
           paradas={paradasDoDiaPlanejado}
           carregando={opsDoDia.isLoading}
           aoAbrir={openClientDetails}
@@ -5772,7 +5821,11 @@ function MainApp() {
           chao={0}
           dias={diasDoPlanejar}
           dia={planejarDia}
-          aoDia={setPlanejarDia}
+          aoDia={trocarDiaPlanejado}
+          pendentes={pendentesDoPlano}
+          confirmando={confirmandoPlano}
+          aoConfirmar={() => { void confirmarPlano(); }}
+          aoDescartar={descartarPlano}
           paradas={paradasDoDiaPlanejado}
           carregando={opsDoDia.isLoading}
           aoAbrir={openClientDetails}

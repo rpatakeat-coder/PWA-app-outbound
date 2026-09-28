@@ -21,12 +21,20 @@ type Props = {
   aoAbrir: (c: Client) => void;
   aoTirar: (p: ParadaDoDia) => void;
   aoFechar: () => void;
+  /** Marcas ainda não gravadas: o toque marca, o Confirmar grava (28/09). */
+  pendentes: { client: Client; entrar: boolean }[];
+  confirmando?: boolean;
+  aoConfirmar: () => void;
+  aoDescartar: () => void;
   chao: number;
   embutida?: boolean;
   aoMedir?: (medida: { y: number; altura: number }) => void;
 };
 
-export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, aoAbrir, aoTirar, aoFechar, chao, embutida, aoMedir }: Props) {
+export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, aoAbrir, aoTirar, aoFechar, pendentes, confirmando, aoConfirmar, aoDescartar, chao, embutida, aoMedir }: Props) {
+  const saem = new Set(pendentes.filter((x) => !x.entrar).map((x) => x.client.id));
+  const entram = pendentes.filter((x) => x.entrar);
+  const ficam = paradas.length - saem.size;
   const atual = dias.find((d) => d.iso === dia);
   const rotulo = atual ? (atual.hoje ? 'hoje' : atual.rotulo) : dia;
   const soNoApp = paradas.filter((p) => p.noCockpit === false);
@@ -49,9 +57,16 @@ export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, a
             {carregando ? `Carregando ${rotulo}…` : `${paradas.length} ${paradas.length === 1 ? 'parada' : 'paradas'} ${atual?.hoje ? 'hoje' : `na ${rotulo}`}`}
           </Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Terminar o planejamento" onPress={aoFechar} style={s.pronto}>
-          <Text style={s.prontoTexto}>Pronto</Text>
-        </Pressable>
+        {pendentes.length ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`Confirmar ${pendentes.length} ${pendentes.length === 1 ? 'mudança' : 'mudanças'}`}
+            onPress={aoConfirmar} disabled={confirmando} style={[s.pronto, confirmando && { opacity: 0.6 }]}>
+            <Text style={s.prontoTexto}>{confirmando ? 'Gravando…' : `Confirmar ${pendentes.length}`}</Text>
+          </Pressable>
+        ) : (
+          <Pressable accessibilityRole="button" accessibilityLabel="Terminar o planejamento" onPress={aoFechar} style={s.pronto}>
+            <Text style={s.prontoTexto}>Pronto</Text>
+          </Pressable>
+        )}
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.dias}>
@@ -64,17 +79,31 @@ export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, a
         ))}
       </ScrollView>
 
-      <Text style={s.dica}>
-        {`Toque nos pinos para pôr ou tirar ${atual?.hoje ? 'de hoje' : `da ${rotulo}`}. Longe, aproxime o mapa: de perto cada lead vira um pino.`}
-      </Text>
+      {pendentes.length ? (
+        <View style={s.marcas}>
+          <Text style={s.marcasTexto} numberOfLines={2}>
+            {[entram.length ? `+${entram.length} para entrar` : null, saem.size ? `−${saem.size} para sair` : null].filter(Boolean).join(' · ')}
+            {` · fica com ${ficam + entram.length}. Toque de novo num pino para desmarcar.`}
+          </Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Descartar as marcas" onPress={aoDescartar} disabled={confirmando} style={s.descartar}>
+            <Text style={s.descartarTexto}>Descartar</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Text style={s.dica}>
+          {`Toque nos pinos para marcar o que entra ou sai ${atual?.hoje ? 'de hoje' : `da ${rotulo}`}, e confirme. Longe, aproxime o mapa: de perto cada lead vira um pino.`}
+        </Text>
+      )}
 
       <ScrollView style={embutida ? s.listaEmbutida : s.lista} contentContainerStyle={{ paddingBottom: 6 }}>
-        {!carregando && paradas.length === 0 && (
+        {!carregando && paradas.length === 0 && entram.length === 0 && (
           <Text style={s.vazio}>Nada neste dia ainda. Escolha no mapa os leads perto uns dos outros.</Text>
         )}
-        {paradas.map((p, i) => {
+        {(() => { let k = 0; return paradas.map((p) => {
           const nome = p.client.empresa?.trim() || p.client.nome;
-          const notas = [
+          const sai = saem.has(p.client.id);
+          const n = sai ? null : ++k;
+          const notas = sai ? 'sai ao confirmar' : [
             p.client.bairro?.trim() || null,
             p.status === 'done' ? 'feita' : null,
             p.compromisso != null ? `visita marcada${p.compromisso ? ` ${p.compromisso}` : ''}` : null,
@@ -82,19 +111,34 @@ export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, a
           ].filter(Boolean).join(' · ');
           return (
             <View key={p.id} style={s.linha}>
-              <View style={s.num}><Text style={s.numTexto}>{i + 1}</Text></View>
+              <View style={[s.num, sai && s.numFora]}><Text style={[s.numTexto, sai && s.numForaTexto]}>{n ?? '–'}</Text></View>
               <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${nome}`} onPress={() => aoAbrir(p.client)} style={s.linhaTexto}>
-                <Text style={s.nome} numberOfLines={1}>{nome}</Text>
+                <Text style={[s.nome, sai && s.nomeFora]} numberOfLines={1}>{nome}</Text>
                 {!!notas && <Text style={s.sub} numberOfLines={1}>{notas}</Text>}
               </Pressable>
               {p.status !== 'done' && p.compromisso == null && (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Tirar ${nome} do dia`} onPress={() => aoTirar(p)} style={s.tirar} hitSlop={4}>
-                  <Text style={s.tirarTexto}>✕</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel={sai ? `Manter ${nome} no dia` : `Marcar ${nome} para sair do dia`} onPress={() => aoTirar(p)} style={s.tirar} hitSlop={4}>
+                  <Text style={s.tirarTexto}>{sai ? '↺' : '✕'}</Text>
                 </Pressable>
               )}
             </View>
           );
-        })}
+        }).concat(entram.map((x) => {
+          const nome = x.client.empresa?.trim() || x.client.nome;
+          const n = ++k;
+          return (
+            <View key={`novo-${x.client.id}`} style={s.linha}>
+              <View style={[s.num, s.numNovo]}><Text style={s.numTexto}>{n}</Text></View>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${nome}`} onPress={() => aoAbrir(x.client)} style={s.linhaTexto}>
+                <Text style={s.nome} numberOfLines={1}>{nome}</Text>
+                <Text style={s.sub} numberOfLines={1}>{[x.client.bairro?.trim() || null, 'a confirmar', !vaiAoCockpit(x.client) ? 'sem negócio: só no app' : null].filter(Boolean).join(' · ')}</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Desmarcar ${nome}`} onPress={() => aoTirar({ id: x.client.id, client: x.client, status: 'planned', noCockpit: null, compromisso: null })} style={s.tirar} hitSlop={4}>
+                <Text style={s.tirarTexto}>✕</Text>
+              </Pressable>
+            </View>
+          );
+        })); })()}
         {soNoApp.length > 0 && (
           <Text style={s.aviso}>
             {[semNegocio > 0 ? `${semNegocio} sem negócio nem conta-alvo: ficam na rota e na Agenda do app, o Cockpit não tem onde mostrar.` : null,
@@ -137,5 +181,13 @@ const s = StyleSheet.create({
   sub: { fontSize: 12, fontWeight: '500', color: 'var(--text-muted)', marginTop: 1 },
   tirar: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -8 },
   tirarTexto: { fontSize: 16, color: 'var(--text-muted)' },
+  marcas: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 12, borderRadius: 12, backgroundColor: 'var(--surface-2)' },
+  marcasTexto: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: '600', color: 'var(--text)' },
+  descartar: { minHeight: 40, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  descartarTexto: { fontSize: 13, fontWeight: '700', color: 'var(--text-muted)' },
+  numFora: { backgroundColor: 'transparent', borderWidth: 1, borderColor: 'var(--border)' },
+  numForaTexto: { color: 'var(--text-muted)' },
+  numNovo: { backgroundColor: '#E51A31' },
+  nomeFora: { color: 'var(--text-muted)', textDecorationLine: 'line-through' },
   aviso: { fontSize: 12, color: 'var(--text-muted)', paddingTop: 8 },
 });
