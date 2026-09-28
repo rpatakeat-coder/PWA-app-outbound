@@ -25,5 +25,8 @@ igual('sem sobras', semDeepLink('/', '?pino=1', '#x'), '/#x');
 igual('link antigo do Cockpit abre o cartão do negócio', lerDeepLink('?acao=ligar&dealId=123&telefone=27999&origem=cockpit')!.pino, { dealId: '123' });
 igual('e sai inteiro da barra', semDeepLink('/', '?acao=ligar&dealId=123&telefone=27999&origem=cockpit', ''), '/');
 
+igual('o dia de uma pessoa (gestor)', lerDeepLink('?lente=meu-dia&pessoa=86100505'), { cartaoAberto: false, lente: 'dia', pessoa: '86100505' });
+igual('pessoa com lixo é ignorada', lerDeepLink('?pessoa=abc'), null);
+
 if (falhas) { console.log(falhas + ' falha(s)'); process.exit(1); }
 console.log('deep link: todos ok');

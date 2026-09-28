@@ -2971,6 +2971,8 @@ function MainApp() {
     } catch { /* barra de endereço fica como veio; nada quebra */ }
     setTab('map');
     if (dl.lente) setLente(dl.lente);
+    // o gestor abre o dia de uma pessoa: a rota do mapa passa a ser a dela (monitoramento)
+    if (dl.pessoa && isAdmin) setRouteVendorFilterHubspotId(dl.pessoa);
     if (dl.rua) { setSearchQuery(dl.rua); if (modoNovo) setBuscaAberta(true); }
     if (!dl.pino) return;
     void (async () => {
@@ -2990,7 +2992,7 @@ function MainApp() {
       enquadrar(0);
       if (dl.cartaoAberto) setSelectedClient(c);
     })();
-  }, [isAuthenticated, modoNovo]);
+  }, [isAuthenticated, modoNovo, isAdmin]);
 
   // Modo de criação manual via mapa: pin fixo no centro da tela
   const [creationMode, setCreationMode] = useState(false);

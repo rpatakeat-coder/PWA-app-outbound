@@ -13,6 +13,8 @@ export type DeepLinkMapa = {
   cartaoAberto: boolean;
   rua?: string;
   lente?: Lente;
+  // gestor: a rota do dia desta pessoa (id do dono no HubSpot)
+  pessoa?: string;
 };
 
 const LENTES: Record<string, Lente> = {
@@ -41,7 +43,9 @@ export function lerDeepLink(search: string): DeepLinkMapa | null {
   if (out.pino) out.cartaoAberto = (q.get('cartao') || 'aberto') !== 'fechado';
   if (rua) out.rua = rua;
   if (LENTES[lenteBruta]) out.lente = LENTES[lenteBruta];
-  return out.pino || out.rua || out.lente ? out : null;
+  const pessoa = (q.get('pessoa') || '').trim();
+  if (/^\d{1,20}$/.test(pessoa)) out.pessoa = pessoa;
+  return out.pino || out.rua || out.lente || out.pessoa ? out : null;
 }
 
 // A barra de endereço sem as chaves do deep link (as outras, como ?mapa=, ficam).
