@@ -9,6 +9,8 @@ import React, { useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
+import { supabase } from '../integrations/supabase/client';
+
 import { Painel } from '../components/Painel';
 import { Toast } from '../components/Toast';
 import { IconCall, useIconColors } from '../components/icons';
@@ -45,11 +47,25 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
 
   useEffect(() => { setComoFoi(null); setProximoId('nada'); setNota(''); }, [tarefa?.id]);
 
+  // O TELEFONE SEMPRE (28/09/2026, Julyan: "é sempre ter botão de ligar"). Ele vinha do lead
+  // carregado no mapa; lead fora da área da tela abria a folha sem o Ligar. Sem telefone na
+  // tarefa, busca pelo negócio; sem telefone nenhum, o botão fica, desligado, dizendo por quê.
+  const [foneBuscado, setFoneBuscado] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    setFoneBuscado(undefined);
+    if (!tarefa || tarefa.telefone || !tarefa.dealId) return;
+    let vivo = true;
+    void supabase.from('clients').select('telefone').eq('id_hubspot', tarefa.dealId).limit(1)
+      .then(({ data }) => { if (vivo) setFoneBuscado(((data && data[0]) as { telefone?: string | null } | undefined)?.telefone ?? null); });
+    return () => { vivo = false; };
+  }, [tarefa?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!tarefa) return null;
   const hoje = diaBRT(new Date())!;
   const proximo = PROXIMOS.find((p) => p.id === proximoId)!.proximo;
   const data = proximo.tipo === 'nada' ? null : diaUtilDepois(hoje, proximo.dias);
-  const fone = tarefa.telefone ? soDigitos(tarefa.telefone) : '';
+  const telefone = tarefa.telefone || foneBuscado || null;
+  const fone = telefone ? soDigitos(telefone) : '';
 
   const registrar = () => {
     if (!comoFoi) return;
@@ -84,12 +100,17 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
       </View>
     }>
       <View style={s.corpo}>
-        {!!fone && (
+        {fone ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Ligar para ${tarefa.nome ?? 'o lead'}`} style={s.ligar}
             onPress={() => { void Linking.openURL(`tel:${fone.length <= 11 ? '+55' + fone : '+' + fone}`); }}>
             <IconCall width={20} height={20} fill="#FFFFFF" />
-            <Text style={s.ligarTexto}>{`Ligar agora · ${tarefa.telefone}`}</Text>
+            <Text style={s.ligarTexto}>{`Ligar agora · ${telefone}`}</Text>
           </Pressable>
+        ) : (
+          <View accessibilityRole="button" accessibilityState={{ disabled: true }} style={[s.ligar, { opacity: 0.45 }]}>
+            <IconCall width={20} height={20} fill="#FFFFFF" />
+            <Text style={s.ligarTexto}>{foneBuscado === undefined && tarefa.dealId && !tarefa.telefone ? 'Buscando o telefone…' : 'Sem telefone no cadastro · ponha na ficha do lead'}</Text>
+          </View>
         )}
 
         <Text style={s.secao}>COMO FOI</Text>
