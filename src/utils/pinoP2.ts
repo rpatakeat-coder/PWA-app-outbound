@@ -43,7 +43,12 @@ export type ContextoPino = {
   agora: Date;
   /** Quando o robô do Cockpit escreveu o snapshot de onde sai o tempo parado. */
   atualizadoEm?: string | null;
+  /** Clientes da Takeat em queda (clientes-sync, 0122/0126), por id do pino. */
+  quedaPorCliente?: Map<string, QuedaDoCliente>;
 };
+
+/** Cliente em queda: o porquê (queda do faturamento ou dias sem comanda), o tamanho e o dono pelo território. */
+export type QuedaDoCliente = { motivo: string; faturamento: number | null; dono: string | null };
 
 export type Pino = {
   tipo: TipoPino;
@@ -60,6 +65,8 @@ export type Pino = {
   origem: OrigemPick | null;
   /** Nota do Google da conta-alvo (selo ★ do Disco Takeat). */
   nota?: number | null;
+  /** Cliente ativo em queda (lente "Clientes em queda"). */
+  queda?: QuedaDoCliente | null;
 };
 
 // Cores do Disco Takeat (prompt final §6 — a legenda de hoje). Dado, não
@@ -180,6 +187,11 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
     else if (dias != null) etiqueta = etiquetaDeTempo(dias, ctx.limites);
   }
 
+  // Cliente da Takeat em queda (faturamento caindo ou dias sem comanda): etiqueta que se
+  // lê na lista e no cartão, e a lente "Clientes em queda" dá pino inteiro a ele.
+  const queda = tipo === 'cliente' ? ctx.quedaPorCliente?.get(c.id) ?? null : null;
+  if (queda && !etiqueta) etiqueta = { texto: 'em queda', fundo: '#4B1C1C', tinta: '#FCA5A5' };
+
   const opacidade = dias != null && dias > ctx.limites[1] ? 0.72 : dono === 'colega' ? 0.8 : 1;
 
   const origemHs = tempoHs?.origemHs && PICKLIST.has(tempoHs.origemHs) ? (tempoHs.origemHs as OrigemPick) : null;
@@ -191,6 +203,6 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
     nota: tipo === 'alvo' && c.conta_alvo_rating != null ? Number(c.conta_alvo_rating) : null,
     aproximado: c.geo_approximate === true,
     nome: nomeCurto(c.empresa?.trim() || c.nome || ''),
-    etiqueta, opacidade,
+    etiqueta, opacidade, queda,
   };
 }

@@ -7,13 +7,14 @@
 import type { Client } from '../types/client';
 import type { OrigemPick, Pino } from './pinoP2';
 
-export type Lente = 'dia' | 'carteira' | 'alvo' | 'rec' | 'semdono' | 'calor';
+export type Lente = 'dia' | 'carteira' | 'alvo' | 'rec' | 'queda' | 'semdono' | 'calor';
 
 export const LENTES: { id: Lente; rotulo: string }[] = [
   { id: 'dia', rotulo: 'Meu dia' },
   { id: 'carteira', rotulo: 'Carteira' },
   { id: 'alvo', rotulo: 'Contas-alvo' },
   { id: 'rec', rotulo: 'Reconquista' },
+  { id: 'queda', rotulo: 'Em queda' },
   { id: 'semdono', rotulo: 'Sem dono' },
   { id: 'calor', rotulo: 'Calor' },
 ];
@@ -31,6 +32,8 @@ export function noFoco(lente: Lente, p: Pino, planoNumero: number | null | undef
       return p.tipo === 'alvo';
     case 'rec':
       return p.tipo === 'ex';
+    case 'queda':
+      return !!p.queda;
     case 'semdono':
       return p.dono === 'sem';
   }

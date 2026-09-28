@@ -11,7 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import { ouvirFila, type ItemFila } from '../utils/filaOffline';
-import type { ContextoPino, TempoDoNegocio } from '../utils/pinoP2';
+import type { ContextoPino, QuedaDoCliente, TempoDoNegocio } from '../utils/pinoP2';
 
 const CHAVE = 'takeat-mapa-novo';
 const CHAVE_ANTIGO = 'takeat-mapa-antigo';
@@ -41,6 +41,8 @@ type ContextoBruto = {
   donos: string[];
   limites: [number, number];
   atualizado_em: string | null;
+  /** Clientes em queda (0126): [client_id, motivo, faturamento do último mês, executivo do território]. */
+  queda?: [string, string | null, number | null, string | null][];
 };
 
 /** Tempo parado + donos do time + limites (RPC mapa_contexto, 0103) e a tabela etapa_de_para (0102). */
@@ -87,7 +89,12 @@ export function useContextoDoPino(ligado: boolean): Omit<ContextoPino, 'agora'> 
       });
     }
     const lim = dadosCtx.limites;
+    const quedaPorCliente = new Map<string, QuedaDoCliente>();
+    for (const [id, motivo, fat, dono] of dadosCtx.queda ?? []) {
+      quedaPorCliente.set(String(id), { motivo: motivo ?? 'em queda', faturamento: fat == null ? null : Number(fat), dono: dono ?? null });
+    }
     return {
+      quedaPorCliente,
       meuOwnerId: meuOwnerId ? String(meuOwnerId) : null,
       donosDoTime: new Set((dadosCtx.donos ?? []).map(String)),
       tempoPorNegocio,

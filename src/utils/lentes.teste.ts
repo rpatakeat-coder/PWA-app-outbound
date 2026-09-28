@@ -43,6 +43,17 @@ ok(noFoco('rec', P({ status: 'churn' }), null) && !noFoco('rec', P({ status: 'cl
 ok(noFoco('semdono', P({ vendedor_id_hubspot: '777' }), null) && !noFoco('semdono', P({}), null), 'Sem dono: dono fora do time');
 ok(!noFoco('calor', P({ etapa: 'Negociação' }), 1), 'Calor: nenhum pino');
 
+// Em queda (clientes-sync, 0126): só cliente que está na lista de queda
+{
+  const ctxQ: ContextoPino = { ...ctx, quedaPorCliente: new Map([['q', { motivo: 'faturamento -35% no bimestre', faturamento: 120000, dono: '1' }]]) };
+  const Q = (x: Partial<Client>) => classificarPino(L(x), ctxQ);
+  ok(noFoco('queda', Q({ id: 'q', status: 'cliente' }), null), 'Em queda: cliente da lista ganha pino inteiro');
+  ok(!noFoco('queda', Q({ id: 'outro', status: 'cliente' }), null), 'Em queda: cliente fora da lista vira ponto');
+  ok(!noFoco('queda', Q({ id: 'q', status: 'lead' }), null), 'Em queda: lead com o mesmo id não entra');
+  ok(Q({ id: 'q', status: 'cliente' }).etiqueta?.texto === 'em queda', 'Em queda: etiqueta no pino');
+  ok(!noFoco('queda', P({ status: 'cliente' }), null), 'Em queda: sem a lista (contexto antigo) ninguém entra');
+}
+
 // filtros
 const itens = [
   { c: L({ id: 'a', etapa: 'Negociação', origem_lead: 'cadastro_na_rua' }) },

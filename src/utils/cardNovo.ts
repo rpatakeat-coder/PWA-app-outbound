@@ -29,21 +29,30 @@ export function fatosDoCard(d: { client: Client; pino: Pino; distanciaM: number 
   const f: Fato[] = [];
   const dist = distanciaTexto(d.distanciaM);
   if (dist) f.push({ texto: dist });
-  if (pino.etiqueta) f.push({ texto: textoDoToque(pino.etiqueta.texto), aviso: pino.etiqueta.texto === 'cobrar' || pino.etiqueta.texto.includes('parado') });
+  if (pino.etiqueta && !pino.queda) f.push({ texto: textoDoToque(pino.etiqueta.texto), aviso: pino.etiqueta.texto === 'cobrar' || pino.etiqueta.texto.includes('parado') });
   f.push((d.aproximado ?? c.geo_approximate) ? { texto: '≈ posição aproximada', aviso: true } : { texto: 'posição exata' });
   f.push(c.telefone?.trim() ? { texto: `☎ ${c.telefone.trim()}` } : { texto: 'sem telefone', aviso: true });
   if (c.conta_alvo_rating != null) {
     const nota = Number(c.conta_alvo_rating).toFixed(1).replace('.', ',');
     f.push({ texto: c.conta_alvo_reviews != null ? `${nota}★ · ${c.conta_alvo_reviews} no Google` : `${nota}★ no Google` });
   }
+  if (pino.queda) f.push({ texto: `↓ ${pino.queda.motivo}${pino.queda.faturamento ? ` · ${faturamentoTexto(pino.queda.faturamento)}/mês` : ''}`, aviso: true });
   if (pino.tipo === 'ex') f.push({ texto: 'data de saída desconhecida' });
   return f;
+}
+
+/** "R$ 1,1 mi", "R$ 240 mil", "R$ 8 mil" — o tamanho do cliente numa palavra. */
+export function faturamentoTexto(v: number): string {
+  if (v >= 1_000_000) return `R$ ${(v / 1_000_000).toFixed(1).replace('.', ',')} mi`;
+  if (v >= 1_000) return `R$ ${Math.round(v / 1_000)} mil`;
+  return `R$ ${Math.round(v)}`;
 }
 
 function peso(it: ItemFolha): number {
   if (it.plano && it.feito) return 5; // parada já feita vai para o fim, mesmo perto
   if (it.plano && !it.feito) return 0;
   if (it.p.etiqueta?.texto === 'cobrar') return 1;
+  if (it.p.queda) return 2; // cliente perdendo volume: o maior primeiro (desempate abaixo)
   if (it.p.temp === 'Q') return 2;
   if (it.p.temp === 'M') return 3;
   return 4;
@@ -54,6 +63,7 @@ export function ordenarItens(itens: ItemFolha[], modo: 'prioridade' | 'distancia
   return [...itens].sort((a, b) =>
     modo === 'distancia'
       ? d(a) - d(b)
-      : peso(a) - peso(b) || (a.plano && b.plano ? a.plano - b.plano : 0) || d(a) - d(b));
+      : peso(a) - peso(b) || (a.plano && b.plano ? a.plano - b.plano : 0)
+        || (b.p.queda?.faturamento ?? 0) - (a.p.queda?.faturamento ?? 0) || d(a) - d(b));
 }
 
