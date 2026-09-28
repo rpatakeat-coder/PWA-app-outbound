@@ -3893,6 +3893,27 @@ function MainApp() {
         }
       }
 
+      // LONGE DO PINO SEMPRE PEDE A FOTO DA FACHADA (28/09/2026, Julyan: "quando estou
+      // longe do pin ele não pede pra tirar foto"). Dois caminhos passavam sem foto: o
+      // "Estou na porta" do pino nunca confirmado (que move o pino para onde a pessoa
+      // está) e o check-in que já chega sem GPS. Visita declarada ou pino corrigido na
+      // hora só entram com a prova — é ela que o gestor vê no Cockpit.
+      if (modoNovo && !fotoProva && (declarada || corrigirPino)) {
+        // O "Estou na porta" acabou de ser tocado e a câmera abre nesse gesto. O
+        // sem-GPS chega aqui segundos depois do Cheguei: a pergunta dá o toque novo
+        // que o navegador exige para abrir a câmera.
+        if (!corrigirPino) {
+          const r = await perguntar(
+            'Foto da fachada',
+            'O GPS não confirmou que você está na porta. A visita entra com uma foto da fachada como prova.',
+            [{ text: 'Cancelar', valor: 'nao', style: 'cancel' }, { text: 'Tirar a foto', valor: 'foto' }],
+          );
+          if (r !== 'foto') return;
+        }
+        fotoProva = await tirarFotoDeProva();
+        if (!fotoProva) return;
+      }
+
       // ID idempotente e hora do TOQUE: se não houver sinal, é com eles que o
       // check-in sobe depois pela fila, sem duplicar e com o horário real.
       const acaoId = novoAcaoId();
@@ -8098,12 +8119,15 @@ function MainApp() {
             const i = routeDisplayClients.findIndex((c) => c.id !== fichaPendente.client.id && !feitos.has(c.id));
             return i >= 0 ? { numero: i + 1, nome: routeDisplayClients[i].empresa?.trim() || routeDisplayClients[i].nome, client: routeDisplayClients[i] } : null;
           })()}
-          onFechar={() => setFichaPendente(null)}
+          // O PASSO CAI NA AGENDA NA HORA (28/09/2026): a ficha acabou de criar a tarefa no
+          // HubSpot, e a Agenda guardava a lista por 3 min. Fechar a ficha ou ir para a
+          // Agenda relê as tarefas e os agendamentos.
+          onFechar={() => { setFichaPendente(null); void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] }); void queryClient.invalidateQueries({ queryKey: ['client_meetings'] }); }}
           onProxima={(c) => handleMarkerPress(c)}
           declarada={fichaPendente.declarada}
           fotoProva={fichaPendente.fotoProva ?? null}
           // Depois da visita: a Agenda no dia do passo combinado.
-          onAgenda={(dia) => { setSelectedClient(null); setAgendaDiaInicial(dia); setTab('agenda'); }}
+          onAgenda={(dia) => { void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] }); void queryClient.invalidateQueries({ queryKey: ['client_meetings'] }); setSelectedClient(null); setAgendaDiaInicial(dia); setTab('agenda'); }}
           onSalvarCadastro={async (campos: CamposCadastro) => {
             const c = fichaPendente.client;
             if (campos.empresa || campos.telefone) {
