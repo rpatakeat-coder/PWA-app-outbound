@@ -50,6 +50,28 @@ export const CLIENT_LIST_COLUMNS = [
   'categoria',
 ].join(',');
 
+// CARGA DO MAPA ENXUTA (auditoria de velocidade, 28/09/2026). A consulta em massa (a área
+// da tela; para o gestor, a base inteira de 9 mil linhas em 10 páginas) baixava as 56
+// colunas acima para cada pino. Saem daqui:
+//   - as que o app não lê em lugar nenhum: origem, created_by, updated_by, visited_at_lat,
+//     visited_at_lon, won_at, conta_alvo_dismissed_at/_by/_by_name, atualizacao_diaria;
+//   - as que só o CARTÃO lê (ele relê a linha inteira ao abrir, App.tsx): created_at,
+//     updated_at, hs_etapa_uso, hs_ultima_comanda_em, hs_uso_sincronizado_em,
+//     hs_cancelamento_solicitado_em, hs_stage_entered_at, hs_last_activity_at,
+//     origem_detalhe, entrou_em, motor_conferido_em.
+// FICAM, de propósito, numero/cep/email/observacoes/geo_source/url_hubspot/categoria: há
+// caminhos que GRAVAM de volta o objeto do mapa (editar, telefone, mover pino, ficha de
+// rua, create_pin do "É meu") e um campo ausente viraria NULL no banco e no HubSpot.
+// Inventário completo por coluna: auditoria de 28/09 (memória velocidade-banco-em-oregon).
+const SO_DO_CARTAO_OU_SEM_USO = new Set([
+  'origem', 'created_by', 'updated_by', 'visited_at_lat', 'visited_at_lon', 'won_at',
+  'conta_alvo_dismissed_at', 'conta_alvo_dismissed_by', 'conta_alvo_dismissed_by_name', 'atualizacao_diaria',
+  'created_at', 'updated_at', 'hs_etapa_uso', 'hs_ultima_comanda_em', 'hs_uso_sincronizado_em',
+  'hs_cancelamento_solicitado_em', 'hs_stage_entered_at', 'hs_last_activity_at',
+  'origem_detalhe', 'entrou_em', 'motor_conferido_em',
+]);
+export const CLIENT_MAP_COLUMNS = CLIENT_LIST_COLUMNS.split(',').filter((c) => !SO_DO_CARTAO_OU_SEM_USO.has(c)).join(',');
+
 export type AreaFilter = { lat: number; lon: number; radiusKm: number };
 
 /**
@@ -210,7 +232,7 @@ export function useClients(
       const pagina = (from: number, contar: boolean) => {
         let q = supabase
           .from('clients')
-          .select(CLIENT_LIST_COLUMNS, contar ? { count: 'exact' } : undefined)
+          .select(CLIENT_MAP_COLUMNS, contar ? { count: 'exact' } : undefined)
           .order('id', { ascending: true })
           .range(from, from + PAGE_SIZE - 1);
 
@@ -790,8 +812,9 @@ export function useClients(
               vendedor_nome: profile?.full_name ?? null,
             });
             // A etapa canonica volta do HubSpot via reconcileStageChange
-            // (edge function) direto no banco; refetch pra UI acompanhar.
-            queryClient.invalidateQueries({ queryKey: ['clients'] });
+            // (edge function) direto no banco; o sinal ao vivo do pino relê esta
+            // linha (useAoVivo). Recarregar ['clients'] aqui baixava a base inteira
+            // do gestor (10 páginas) a cada check-in (auditoria de velocidade, 28/09).
           } catch (err) {
             console.warn('[VISITA] change_stage automatico falhou:', err);
           }
@@ -808,9 +831,11 @@ export function useClients(
 
       return client;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clients'] });
-      queryClient.invalidateQueries({ queryKey: ['client_visits'] });
+    // O check-in já devolve a linha: entra direto no cache, sem recarregar a área
+    // inteira (o gestor baixava as 9 mil linhas a cada visita). Auditoria 28/09.
+    onSuccess: (client) => {
+      if (client) trocarNoCache(client);
+      void queryClient.invalidateQueries({ queryKey: ['client_visits'] });
     },
   });
 

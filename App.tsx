@@ -133,7 +133,7 @@ import CamadaDePontos from './src/map/CamadaDePontos';
 import { pilhasNaTela, posicoesDoLeque, projetar, rotulosSemSobrepor, type Pilha } from './src/utils/rotulos';
 import { MINIMO_QUADRA, quadrasNaTela, resumoDaQuadra, type ResumoQuadra } from './src/utils/quadra';
 import CartaoQuadra, { ANCORA_QUADRA } from './src/map/CartaoQuadra';
-import { classificarPino, type ContextoPino } from './src/utils/pinoP2';
+import { classificarPino, type ContextoPino, type Pino } from './src/utils/pinoP2';
 import { useMeetings } from './src/hooks/useMeetings';
 import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
 import { useClientNotes } from './src/hooks/useClientNotes';
@@ -529,15 +529,17 @@ function visitadoHoje(iso: string | null | undefined): boolean {
 // (src/utils/pinoP2.ts); o memo compara o que muda o desenho.
 const MarkerP2 = React.memo(
   function MarkerP2({
-    client, contexto, onPress, planoNumero, feito, naFila, selecionado, papel, lente, foraDaLente = false, agrupar = false, pilhaN = 1, leque = null, sol = false, rotulo = false,
+    client, contexto, pino: pinoPronto, onPress, planoNumero, feito, naFila, selecionado, papel, lente, foraDaLente = false, agrupar = false, pilhaN = 1, leque = null, sol = false, rotulo = false,
   }: {
     client: Client; contexto: ContextoPino; onPress: (client: Client) => void;
+    /** A classificação já feita no itensMapaNovo (auditoria 28/09: rodava duas vezes por pino). */
+    pino?: Pino;
     planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean;
     papel: PapelPino; lente: Lente; foraDaLente?: boolean; agrupar?: boolean;
     pilhaN?: number; leque?: { dx: number; dy: number } | null; sol?: boolean; rotulo?: boolean;
   }) {
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
-    const pino = classificarPino(client, contexto);
+    const pino = pinoPronto ?? classificarPino(client, contexto);
     return (
       <Marker
         coordinate={{ latitude: client.latitude as number, longitude: client.longitude as number }}
@@ -564,9 +566,11 @@ const MarkerP2 = React.memo(
       </Marker>
     );
   },
+  // Com a classificação pronta, o contexto novo do mapa (a cada releitura do mapa_contexto)
+  // só redesenha o pino cuja classificação mudou — antes redesenhava todos.
   (a, b) =>
     a.client === b.client &&
-    a.contexto === b.contexto &&
+    (a.pino && b.pino ? JSON.stringify(a.pino) === JSON.stringify(b.pino) : a.contexto === b.contexto) &&
     a.onPress === b.onPress &&
     a.planoNumero === b.planoNumero &&
     a.feito === b.feito &&
@@ -966,11 +970,18 @@ function MainApp() {
   useEffect(() => {
     const centro = userLocation ?? posicaoGuardada;
     if (activeBounds || !centro || !showOnlyMyArea) return;
+    // Na proporção da tela (auditoria de velocidade, 28/09/2026): o quadrado de 0,05
+    // não cobria a altura do celular em pé (~0,07 no primeiro enquadramento), e o
+    // boundsContains pedia a área de novo em metade das aberturas.
+    // Altura do mapa ≈ a tela menos o topo e a folha (~200 px); o encaixe em 0,05° do
+    // boundsFromRegion dá a folga que falta, sem inflar a primeira busca.
+    const proporcao = typeof window !== 'undefined' && window.innerWidth > 0
+      ? Math.max(1, (window.innerHeight - 200) / window.innerWidth) : 1;
     setActiveBounds(
       boundsFromRegion({
         latitude: centro.latitude,
         longitude: centro.longitude,
-        latitudeDelta: 0.05,
+        latitudeDelta: 0.05 * proporcao,
         longitudeDelta: 0.05,
       }),
     );
@@ -1941,8 +1952,8 @@ function MainApp() {
     const points: RoutePoint[] = [];
     if (userLocation) {
       points.push({
-        latitude: Math.round(userLocation.latitude * 10_000) / 10_000,
-        longitude: Math.round(userLocation.longitude * 10_000) / 10_000,
+        latitude: Math.round(userLocation.latitude * 1_000) / 1_000,
+        longitude: Math.round(userLocation.longitude * 1_000) / 1_000,
       });
     }
     if (routeStops.length > 0) {
@@ -2969,8 +2980,9 @@ function MainApp() {
   const navigationCurrentStop = isNavigating ? routeDisplayClients[currentStopIndex] : null;
 
   // Geometria do trecho de navegacao: parte do GPS atual (mesmo padrao do
-  // routeWaypoints da view geral). userLocation arredondado a ~10m pra
-  // estabilizar a chave de cache; placeholderData na useQuery garante que,
+  // routeWaypoints da view geral). userLocation arredondado a ~110 m (era ~10 m:
+  // andando, o GPS de 2 em 2 s pedia uma rota nova ao OSRM a cada poucos passos,
+  // duas vezes — esta e a da view geral; auditoria 28/09). placeholderData garante que,
   // durante eventuais refetches, o polyline anterior continue visivel
   // (sem flash de "sem linha").
   const navWaypoints = useMemo<RoutePoint[]>(() => {
@@ -2982,8 +2994,8 @@ function MainApp() {
     if (remaining.length === 0 || !userLocation) return remaining;
     return [
       {
-        latitude: Math.round(userLocation.latitude * 10_000) / 10_000,
-        longitude: Math.round(userLocation.longitude * 10_000) / 10_000,
+        latitude: Math.round(userLocation.latitude * 1_000) / 1_000,
+        longitude: Math.round(userLocation.longitude * 1_000) / 1_000,
       },
       ...remaining,
     ];
@@ -3274,6 +3286,23 @@ function MainApp() {
   const openClientDetails = useCallback((client: Client) => {
     setSelectedClient(client);
   }, []);
+
+  // CARTÃO COMPLETO (auditoria de velocidade, 28/09/2026). A carga do mapa é enxuta
+  // (CLIENT_MAP_COLUMNS, sem as colunas que só o cartão lê: uso do cliente, SLA, datas,
+  // origem detalhada). O cartão relê a linha inteira sempre que estiver com a versão
+  // enxuta — marca: created_at ausente (select * e a RPC do check-in o trazem). Só
+  // PREENCHE o que falta: o que já está no cartão (uma etapa acabada de mudar) fica.
+  const cartaoEnxuto = !!selectedClient && selectedClient.created_at === undefined;
+  useEffect(() => {
+    const id = selectedClient?.id;
+    if (!id || !cartaoEnxuto) return;
+    let vivo = true;
+    void supabase.from('clients').select('*').eq('id', id).maybeSingle().then(({ data }) => {
+      if (!vivo || !data) return;
+      setSelectedClient((atual) => (atual?.id === id ? { ...(data as Client), ...atual } : atual));
+    });
+    return () => { vivo = false; };
+  }, [selectedClient?.id, cartaoEnxuto]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Abre o detalhe de um lead a partir do painel do Gestor (so tem o clientId).
   // Tenta achar na lista local; se nao estiver (recorte de setor/area do
@@ -5300,6 +5329,7 @@ function MainApp() {
             key={c.id}
             client={c}
             contexto={contextoPino}
+            pino={p}
             // pilha fechada: o toque abre o leque; o resto abre o card
             onPress={n > 1 && !aberta ? abrirPilha : aoTocarPino}
             planoNumero={plano}
