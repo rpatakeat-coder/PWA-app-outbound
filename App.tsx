@@ -5214,10 +5214,9 @@ function MainApp() {
                 zIndex={quadraAberta?.lider === pl.lider ? 1800 : 800}
                 onPress={() => {
                   if (planejarDia) {
-                    // Planejar: a lista da quadra não aparece (a folha é a do dia); aproxima até cada lead virar pino
-                    const r = regiaoRef.current;
-                    mapRef.current?.animateToRegion({ latitude: c.latitude as number, longitude: c.longitude as number,
-                      latitudeDelta: Math.min(r?.latitudeDelta ?? 0.02, 0.018), longitudeDelta: Math.min(r?.longitudeDelta ?? 0.02, 0.018) }, 350);
+                    // Planejar: a lista da quadra não aparece (a folha é a do dia). Abre como a
+                    // pilha: em leque, que fica aberto para tocar um a um; grande e espalhada, aproxima.
+                    abrirPilha(c);
                     return;
                   }
                   setSelectedClient(null); setQuadraAberta({ lider: pl.lider, ids: new Set(membros), area: resumo.area });
