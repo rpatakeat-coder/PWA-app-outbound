@@ -185,6 +185,29 @@ Deno.serve(async (req) => {
   const { data: st } = await svc.from('client_statuses').select('slug').eq('is_default_for_new_leads', true).eq('is_active', true).maybeSingle();
   const statusPadrao = st?.slug ?? 'lead';
 
+  // TELEFONES UMA VEZ POR RODADA (auditoria de velocidade, 28/09/2026). Era um ilike por
+  // negócio que falta — 156 varreduras da tabela clients inteira a cada 15 min, 13,6 mil
+  // por dia, sempre os mesmos 149 telefones. Agora lê os telefones uma vez (em páginas
+  // por id) e compara os mesmos 10-11 dígitos normalizados, em memória.
+  let porTelefone: Map<string, any> | null = null;
+  const carregarTelefones = async () => {
+    const m = new Map<string, any>();
+    let ultimo = '';
+    for (;;) {
+      let q = svc.from('clients').select('id, nome, id_hubspot, telefone').not('telefone', 'is', null).order('id').limit(1000);
+      if (ultimo) q = q.gt('id', ultimo);
+      const { data, error } = await q;
+      if (error) throw new Error(`clients (telefones): ${error.message}`);
+      for (const c of data ?? []) {
+        const t = tel(c.telefone);
+        if (t && !m.has(t)) m.set(t, c);
+      }
+      if (!data || data.length < 1000) break;
+      ultimo = String(data[data.length - 1].id);
+    }
+    return m;
+  };
+
   const criados: any[] = [];
   const semLocalizacao: any[] = [];
   const possivelDuplicado: any[] = [];
@@ -217,10 +240,13 @@ Deno.serve(async (req) => {
     // Duplicado: mesmo telefone ou mesmo lugar do Google já no mapa
     let dup: any = null;
     if (telNorm) {
-      // O ilike pelos últimos 4 dígitos só estreita a busca (o telefone é gravado
-      // com máscara variada); quem decide é a comparação dos 10-11 dígitos.
-      const { data: cand } = await svc.from('clients').select('id, nome, id_hubspot, telefone').ilike('telefone', `%${telNorm.slice(-4)}%`).limit(200);
-      dup = (cand ?? []).find((c: any) => tel(c.telefone) === telNorm) ?? null;
+      // O telefone é gravado com máscara variada; quem decide é a comparação dos
+      // 10-11 dígitos normalizados (a mesma de antes, agora num mapa da rodada).
+      if (!porTelefone) {
+        try { porTelefone = await carregarTelefones(); }
+        catch (e) { return json(500, { error: (e as Error).message }); }
+      }
+      dup = porTelefone.get(telNorm) ?? null;
     }
     if (!dup && lead?.place_id) {
       const { data } = await svc.from('clients').select('id, nome, id_hubspot').eq('conta_alvo_place_id', lead.place_id).limit(1);
@@ -275,7 +301,11 @@ Deno.serve(async (req) => {
     if (dryRun) { criados.push({ ...resumo, fonte_geo: geo.fonte, aproximado: geo.aproximado }); continue; }
     const { error } = await svc.from('clients').insert(linha);
     if (error) erros.push({ ...resumo, erro: error.message });
-    else criados.push({ ...resumo, fonte_geo: geo.fonte, aproximado: geo.aproximado });
+    else {
+      criados.push({ ...resumo, fonte_geo: geo.fonte, aproximado: geo.aproximado });
+      // o pino que nasceu agora conta como duplicado para o próximo negócio da rodada
+      if (telNorm && porTelefone) porTelefone.set(telNorm, { id: null, nome: empresa, id_hubspot: id, telefone });
+    }
   }
 
   return json(200, {
