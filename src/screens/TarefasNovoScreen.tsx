@@ -14,7 +14,6 @@ import { useMeuPdi } from '../hooks/useMeuPdi';
 import RegistrarTarefa, { type TarefaParaRegistrar } from './RegistrarTarefa';
 import { IconCall, IconCheck, IconChevronDown, IconChevronRight, useIconColors } from '../components/icons';
 import { acaoRapida, agrupar, chipsDaTarefa, diaBRT } from '../utils/abaTarefas';
-import { concluirComDesfazer } from '../utils/concluirTarefa';
 import { ir } from './CardLeadNovo';
 import type { Client, ClientTask } from '../types/client';
 import { Alert } from '../components/Alert';
@@ -85,29 +84,6 @@ export default function TarefasNovoScreen({
     Alert.alert('Ainda não está no mapa', `${t.nomeDoCliente ?? 'Este negócio'} não tem ponto no mapa.`);
   };
 
-  const concluir = (t: TarefaDoCrmNaTela, liguei: boolean) => {
-    setEmJanela((s) => new Set(s).add(t.id));
-    const nome = t.nomeDoCliente ?? null;
-    const feita: Feita = { id: t.id, assunto: t.assunto, nome, em: Date.now() };
-    setFeitas((f) => [feita, ...f.filter((x) => x.id !== t.id)]);
-    concluirComDesfazer({
-      pedido: {
-        taskId: t.id,
-        nota: liguei && t.dealId ? { dealId: t.dealId, texto: `Ligação · tarefa encerrada: ${t.assunto}` } : null,
-      },
-      rotulo: `${liguei ? 'Liguei' : 'Tarefa feita'} · ${nome ?? t.assunto}`,
-      textoToast: liguei ? '✓ Ligação registrada · HubSpot + Cockpit' : '✓ Tarefa feita · HubSpot + Cockpit',
-      aoVoltar: () => {
-        setEmJanela((s) => { const n = new Set(s); n.delete(t.id); return n; });
-        setFeitas((f) => f.filter((x) => x.id !== t.id));
-      },
-      aoGravar: () => {
-        setEmJanela((s) => { const n = new Set(s); n.delete(t.id); return n; });
-        void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] });
-      },
-    });
-  };
-
   const aviso = semMedicao ?? (erro ? 'Não consegui buscar as tarefas do HubSpot agora. Puxe de novo em instantes.' : null);
 
   return (
@@ -125,7 +101,7 @@ export default function TarefasNovoScreen({
           setFeitas((f) => f.filter((x) => x.id !== id));
         }}
       />
-      <Text style={s.subtitulo}>Tudo que você tem de fazer: do Planejamento, do funil, da ficha de rua e o que você mesmo marcou. Ligação se registra em "Registrar"; visita, no Cheguei.</Text>
+      <Text style={s.subtitulo}>Tudo que você tem de fazer: do Planejamento, do funil, da ficha de rua e o que você mesmo marcou. O círculo e o Registrar abrem a mesma folha: ligar, como foi e o próximo passo.</Text>
 
       <View style={s.seletor} accessibilityRole="tablist">
         {([['abertas', `Abertas · ${abertas.length}`], ['feitas', `Feitas hoje · ${feitas.length}`]] as const).map(([id, rotulo]) => (
@@ -158,13 +134,19 @@ export default function TarefasNovoScreen({
                 const dist = distanciaAte(t.clientId);
                 const cli = t.clientId && clienteDe ? clienteDe(t.clientId) : null;
                 const sub = [t.nomeDoCliente ? t.assunto : null, dist, t.clientId ? null : 'fora do mapa'].filter(Boolean).join(' · ');
+                // O CÍRCULO ABRE O REGISTRO (28/09/2026, Julyan: "tem que abrir a ficha pra ele
+                // colocar já o próximo passo, não só clicar e sumir, sempre ter botão de ligar").
+                // Antes o círculo concluía na hora e a tarefa sumia sem "como foi" nem próximo
+                // passo. Agora ele e o Registrar abrem a mesma folha: Ligar agora, como foi, e agora.
+                const registrar = () => setRegistrando({ id: t.id, assunto: t.assunto, dealId: t.dealId, nome: t.nomeDoCliente, telefone: cli?.telefone ?? null });
+                const cIr = cli && cli.latitude != null && cli.longitude != null ? cli : null;
                 return (
                   <View key={t.id} style={[s.linha, chips.alerta && s.linhaAlerta]}>
                     <TouchableOpacity
                       accessibilityRole="button"
-                      accessibilityLabel={`Concluir: ${t.assunto}`}
+                      accessibilityLabel={`Registrar e concluir: ${t.assunto}`}
                       style={s.circuloAlvo}
-                      onPress={() => concluir(t, false)}
+                      onPress={registrar}
                     >
                       <View style={s.circulo} />
                     </TouchableOpacity>
@@ -181,35 +163,32 @@ export default function TarefasNovoScreen({
                         {chips.origem && <Text style={[s.chipOrigem, chips.alerta && s.chipAlerta]} numberOfLines={1}>{chips.origem}</Text>}
                       </View>
                     </TouchableOpacity>
-                    {!t.clientId && !!t.dealId && aoPosicionar ? (
-                      <TouchableOpacity
-                        accessibilityRole="button"
-                        accessibilityLabel={`Posicionar no mapa: ${t.nomeDoCliente ?? t.assunto}`}
-                        style={[s.rapida, s.posicionar]}
-                        onPress={() => aoPosicionar(String(t.dealId), t.nomeDoCliente ?? 'Negócio')}
-                      >
-                        <Text style={[s.rapidaTexto, { color: '#fff' }]}>Posicionar</Text>
-                      </TouchableOpacity>
-                    ) : rapida === 'liguei' ? (
+                    {/* Registrar em TODA tarefa (liga dali); embaixo, Posicionar ou Ir quando couber */}
+                    <View style={s.acoes}>
                       <TouchableOpacity
                         accessibilityRole="button"
                         accessibilityLabel={`Registrar: ${t.assunto}`}
                         style={s.rapida}
-                        onPress={() => setRegistrando({ id: t.id, assunto: t.assunto, dealId: t.dealId, nome: t.nomeDoCliente, telefone: cli?.telefone ?? null })}
+                        onPress={registrar}
                       >
                         <IconCall width={18} height={18} fill={cores.onSurface} />
                         <Text style={s.rapidaTexto}>Registrar</Text>
                       </TouchableOpacity>
-                    ) : (() => {
-                      // Visita e reunião: "Ir" até o lead (a pé / carro / Waze).
-                      const c = t.clientId && clienteDe ? clienteDe(t.clientId) : null;
-                      if (!c || c.latitude == null || c.longitude == null) return null;
-                      return (
-                        <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Ir até ${t.nomeDoCliente ?? t.assunto}`} style={s.rapida} onPress={() => ir(c)}>
+                      {!t.clientId && !!t.dealId && aoPosicionar ? (
+                        <TouchableOpacity
+                          accessibilityRole="button"
+                          accessibilityLabel={`Posicionar no mapa: ${t.nomeDoCliente ?? t.assunto}`}
+                          style={[s.rapida, s.posicionar]}
+                          onPress={() => aoPosicionar(String(t.dealId), t.nomeDoCliente ?? 'Negócio')}
+                        >
+                          <Text style={[s.rapidaTexto, { color: '#fff' }]}>Posicionar</Text>
+                        </TouchableOpacity>
+                      ) : rapida !== 'liguei' && cIr ? (
+                        <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Ir até ${t.nomeDoCliente ?? t.assunto}`} style={s.rapida} onPress={() => ir(cIr)}>
                           <Text style={s.rapidaTexto}>Ir</Text>
                         </TouchableOpacity>
-                      );
-                    })()}
+                      ) : null}
+                    </View>
                   </View>
                 );
               })}
@@ -341,6 +320,7 @@ const s = StyleSheet.create({
   },
   chipOrigem: { fontSize: 11, fontWeight: '600', color: 'var(--text-faint)', paddingVertical: 3, flexShrink: 1 },
   chipAlerta: { color: 'var(--tint-red-text)', fontWeight: '700' },
+  acoes: { gap: 6, alignItems: 'stretch', justifyContent: 'center', paddingVertical: 8 },
   rapida: {
     minHeight: 44, minWidth: 44, paddingHorizontal: 10, borderRadius: 10, borderWidth: 1, borderColor: 'var(--border)',
     alignItems: 'center', justifyContent: 'center', gap: 2,
