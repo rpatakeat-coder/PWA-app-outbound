@@ -748,7 +748,7 @@ export function RotaScreen({
                 : mreason === 'conta_alvo'
                   ? { t: 'Alvo', bg: '#F1EBFE', fg: '#5B32C4' }
                   : mreason === 'relacionamento'
-                    ? { t: 'Demo', bg: '#F1EBFE', fg: '#5B32C4' }
+                    ? { t: 'Relacion.', bg: '#F1EBFE', fg: '#5B32C4' }
                     : null;
           const indiceCor = isDone
             ? { bg: '#EAF7EE', fg: '#167532' }

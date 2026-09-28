@@ -88,26 +88,26 @@ export function RouteConfigCard() {
             <>
               <Text style={styles.section}>Conta Alvo</Text>
               <View style={styles.row}>
-                <Field label="Raio (km)" k="conta_alvo_raio_m" />
-                <Field label="Nota mín." k="conta_alvo_nota_min" />
-                <Field label="Avaliações mín." k="conta_alvo_reviews_min" />
+                {Field({ label: "Raio (km)", k: "conta_alvo_raio_m" })}
+                {Field({ label: "Nota mín.", k: "conta_alvo_nota_min" })}
+                {Field({ label: "Avaliações mín.", k: "conta_alvo_reviews_min" })}
               </View>
 
               <Text style={styles.section}>Rota do dia</Text>
               <View style={styles.row}>
-                <Field label="Meta visitas/dia" k="meta_visitas_dia" />
+                {Field({ label: "Meta visitas/dia", k: "meta_visitas_dia" })}
               </View>
 
               <Text style={styles.section}>SLA por etapa (dias)</Text>
               <View style={styles.row}>
-                <Field label="Prospecção" k="sla_prospeccao" />
-                <Field label="Visita" k="sla_visita" />
-                <Field label="Conversa" k="sla_conversa" />
+                {Field({ label: "Prospecção", k: "sla_prospeccao" })}
+                {Field({ label: "Visita", k: "sla_visita" })}
+                {Field({ label: "Conversa", k: "sla_conversa" })}
               </View>
               <View style={styles.row}>
-                <Field label="Demo/Proposta" k="sla_demo" />
-                <Field label="Negociação" k="sla_negociacao" />
-                <Field label="Pagamento" k="sla_ag_pagamento" />
+                {Field({ label: "Demo/Proposta", k: "sla_demo" })}
+                {Field({ label: "Negociação", k: "sla_negociacao" })}
+                {Field({ label: "Pagamento", k: "sla_ag_pagamento" })}
               </View>
 
               <TouchableOpacity

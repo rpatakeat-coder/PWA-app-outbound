@@ -31,6 +31,7 @@ export function ComunicadoSheet({
 }) {
   const layout = useLayout();
   const [ocupado, setOcupado] = useState(false);
+  const [falhou, setFalhou] = useState(false);
 
   const quando = new Date(comunicado.publicadoEm).toLocaleString('pt-BR', {
     dateStyle: 'short',
@@ -62,8 +63,12 @@ export function ComunicadoSheet({
               disabled={ocupado}
               onPress={async () => {
                 setOcupado(true);
+                setFalhou(false);
                 try {
                   await aoConfirmar(comunicado.id);
+                } catch {
+                  // sem sinal o "Entendi" não grava: dizer, em vez de voltar ao botão em silêncio
+                  setFalhou(true);
                 } finally {
                   setOcupado(false);
                 }
@@ -74,6 +79,11 @@ export function ComunicadoSheet({
               <Text style={estilos.botaoTexto}>{ocupado ? 'Registrando…' : 'Entendi'}</Text>
             </TouchableOpacity>
 
+            {falhou && (
+              <Text style={[estilos.rodape, { color: 'var(--tint-red-text)' }]}>
+                Não consegui registrar agora (sem sinal?). Toque em “Entendi” de novo quando a internet voltar.
+              </Text>
+            )}
             <Text style={estilos.rodape}>
               Ao tocar em “Entendi”, fica registrado que você leu. Ninguém marca isso por você.
             </Text>

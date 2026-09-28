@@ -215,7 +215,7 @@ export default function AgendaNovoScreen({
       const km = (trip.distanceMeters / 1000).toFixed(1).replace('.', ',');
       Toast.mostrar(`✓ Roteirizado · ${ordem.length} paradas · ${km} km · ~${Math.round(trip.durationSeconds / 60)} min de carro`, 'ok');
     } catch (e) {
-      Alert.alert('Não deu para roteirizar', 'O serviço de rotas não respondeu; a ordem de antes ficou como estava.\n' + String((e as Error)?.message ?? ''));
+      Alert.alert('Não deu para roteirizar', 'O cálculo ou a gravação da ordem falhou; confira a lista antes de sair.\n' + String((e as Error)?.message ?? ''));
     } finally {
       setRoteirizandoDia(false);
     }
@@ -262,7 +262,7 @@ export default function AgendaNovoScreen({
             <View style={s.barraPlano}><View style={[s.barraPlanoCheia, { width: `${Math.min(100, Math.round((feitas / meta) * 100))}%` }]} /></View>
             <Text style={s.progressoMeta}>
               {dailyValidadaEm
-                ? `validado na Daily ${new Date(dailyValidadaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}`
+                ? `Daily registrada às ${new Date(dailyValidadaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}`
                 : 'Daily de hoje ainda não registrada'}
             </Text>
           </View>

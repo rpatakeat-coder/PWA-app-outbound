@@ -138,13 +138,13 @@ export default function TarefasNovoScreen({
                 // colocar já o próximo passo, não só clicar e sumir, sempre ter botão de ligar").
                 // Antes o círculo concluía na hora e a tarefa sumia sem "como foi" nem próximo
                 // passo. Agora ele e o Registrar abrem a mesma folha: Ligar agora, como foi, e agora.
-                const registrar = () => setRegistrando({ id: t.id, assunto: t.assunto, dealId: t.dealId, nome: t.nomeDoCliente, telefone: cli?.telefone ?? null });
+                const registrar = () => setRegistrando({ id: t.id, assunto: t.assunto, dealId: t.dealId, nome: t.nomeDoCliente, telefone: cli?.telefone ?? null, presencial: rapida !== 'liguei' });
                 const cIr = cli && cli.latitude != null && cli.longitude != null ? cli : null;
                 return (
                   <View key={t.id} style={[s.linha, chips.alerta && s.linhaAlerta]}>
                     <TouchableOpacity
                       accessibilityRole="button"
-                      accessibilityLabel={`Registrar e concluir: ${t.assunto}`}
+                      accessibilityLabel={rapida === 'liguei' ? `Registrar e concluir: ${t.assunto}` : `Registrar a ligação: ${t.assunto}`}
                       style={s.circuloAlvo}
                       onPress={registrar}
                     >

@@ -19,12 +19,28 @@ export type PedidoConclusao = {
   nota?: { dealId: string; texto: string } | null;
   /** Registro: o próximo passo (corpo da porta única), criado depois da conclusão. */
   proximo?: Record<string, unknown> | null;
+  /** Tarefa de VISITA ou reunião registrada por telefone: grava a nota e o próximo
+   *  passo, mas NÃO conclui — no Cockpit, visita COMPLETED conta como visita feita, e
+   *  visita só se prova pelo Cheguei (GPS ou foto). Auditoria de 28/09/2026. */
+  manterAberta?: boolean;
 };
 
 export const JANELA_DESFAZER_MS = 5000;
 
 /** O envio de verdade. É também o executor da fila offline. */
 export async function enviarConclusao(p: PedidoConclusao): Promise<void> {
+  if (p.manterAberta) {
+    // Sem conclusão: a nota é o registro. Rede cai → a fila repete o pedido inteiro.
+    if (p.nota?.dealId) await negocioAcao({ op: 'nota', dealId: p.nota.dealId, texto: p.nota.texto });
+    if (p.proximo) {
+      try { await negocioAcao(p.proximo); } catch (e) {
+        // a nota já foi: só o próximo passo vai para a fila (não duplica a nota)
+        if (!ehErroDeRede(e)) throw e;
+        await enfileirar({ acaoId: novoAcaoId(), tipo: 'negocio', rotulo: 'Próximo passo do registro', payload: { corpo: p.proximo } });
+      }
+    }
+    return;
+  }
   const { data, error } = await supabase.functions.invoke('hubspot-sync', {
     body: { type: 'update_task', engagement_id: p.taskId, concluir: true },
   });

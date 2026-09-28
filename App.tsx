@@ -197,6 +197,7 @@ import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type 
 import { fetchSlaCandidate } from './src/utils/slaCandidate';
 import { slaStatus, type SlaDays } from './src/utils/sla';
 import { useRouteConfig } from './src/hooks/useRouteConfig';
+import { useSellerGoals } from './src/hooks/useSellerGoals';
 
 // Sem essas opcoes valem os padroes do react-query — `staleTime: 0` e
 // `refetchOnWindowFocus: true` —, que num PWA de celular sao o pior caso:
@@ -1542,6 +1543,15 @@ function MainApp() {
   const [meuDiaAberto, setMeuDiaAberto] = useState(false);
   const meuDia = useMeuDia(modoNovo, profile?.id ?? null);
 
+  // A META DE VISITAS É UMA SÓ (auditoria 28/09/2026): a Agenda, o Montar meu dia e a Rota
+  // liam só a do time, a pílula lia a promessa, e a meta de cada um (seller_visit_goals)
+  // não era lida por tela nenhuma. Agora, igual ao Cockpit: a promessa da Daily de hoje,
+  // senão a meta da pessoa, senão a do time, senão 6.
+  const { goals: metasPorVendedor } = useSellerGoals(isAuthenticated);
+  const metaDoTime = routeConfig.meta_visitas_dia > 0 ? routeConfig.meta_visitas_dia : 6;
+  const metaMinha = (profile?.id && metasPorVendedor.get(profile.id)) || metaDoTime;
+  const metaDeHoje = meuDia.data?.prometido?.visitas || metaMinha;
+
   // Recorte de tarefas por vendedor. Gestor (canViewGestor: admin ou Julyan) ve
   // TODAS; vendedor comum ve so as dos leads dele (match por vendedor_id_hubspot).
   // Se um gestor escolheu um vendedor no filtro do mapa, respeita esse recorte.
@@ -1605,7 +1615,7 @@ function MainApp() {
     const t = setTimeout(() => setCrmLiberado(true), 4000);
     return () => clearTimeout(t);
   }, [profile, crmLiberado]);
-  const { tarefas: tarefasDoCrmParaContagem } = useTarefasDoCrm(!!profile && (crmLiberado || tab !== 'map'));
+  const { tarefas: tarefasDoCrmParaContagem, medido: tarefasMedidas, erro: tarefasErro, semMedicao: tarefasSemMedicao } = useTarefasDoCrm(!!profile && (crmLiberado || tab !== 'map'));
   const visibleTasksCount = visibleTasks.length + tarefasDoCrmParaContagem.length;
 
   // Sublinha do header de Tarefas. Sai do MESMO `baldeDeVencimento` das abas
@@ -2649,7 +2659,7 @@ function MainApp() {
         base,
         vendor,
         excludeIds: routeStopClientIds,
-        goal: routeConfig.meta_visitas_dia || DAILY_GOAL,
+        goal: metaMinha || DAILY_GOAL,
         providers: {
           // SLA estourado (regra do MD): lead mais urgente do vendedor via RPC.
           sla: async (excludeIds) => fetchSlaCandidate(vendor, excludeIds),
@@ -2757,7 +2767,7 @@ function MainApp() {
       },
       onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
     });
-  }, [clients, fieldOps.saveRoute, userLocation, routeStartOverride, isAdmin, routeVendorFilterHubspotId, myHubspotId, profile?.id, routeStopClientIds, routeDate, queryClient, routeConfig.meta_visitas_dia]);
+  }, [clients, fieldOps.saveRoute, userLocation, routeStartOverride, isAdmin, routeVendorFilterHubspotId, myHubspotId, profile?.id, routeStopClientIds, routeDate, queryClient, metaMinha]);
 
   const saveManualRoute = useCallback((draft = routeDraft) => {
     if (draft.length === 0) {
@@ -3034,8 +3044,8 @@ function MainApp() {
     }
     if (currentStopIndex + 1 >= routeDisplayClients.length) {
       Alert.alert(
-        'Rota concluida',
-        `Voce visitou os ${routeDisplayClients.length} leads da rota de hoje.`,
+        'Rota concluída',
+        `Você visitou os ${routeDisplayClients.length} leads da rota de hoje.`,
         [{ text: 'OK', onPress: () => setIsNavigating(false) }],
       );
       return;
@@ -3045,7 +3055,7 @@ function MainApp() {
 
   const skipNavigationStop = useCallback(() => {
     if (currentStopIndex + 1 >= routeDisplayClients.length) {
-      Alert.alert('Ultimo lead', 'Esse eh o ultimo destino da rota — sem mais leads pra pular.');
+      Alert.alert('Último lead', 'Este é o último destino da rota — sem mais leads para pular.');
       return;
     }
     setCurrentStopIndex(idx => idx + 1);
@@ -3055,7 +3065,7 @@ function MainApp() {
     // Olhando a rota de outra pessoa: não se escreve nela nem na sua por engano.
     if (isMonitoringRoute) { Toast.mostrar('Esta é a rota de outra pessoa: volte para a sua para pôr leads.', 'fila'); return; }
     if (routeStopClientIds.has(client.id)) {
-      Alert.alert('Ja esta na rota', 'Este lead ja faz parte do planejamento.');
+      Alert.alert('Já está na rota', 'Este lead já faz parte do planejamento.');
       return;
     }
     // UMA parada no fim da rota de hoje, nos dois mapas. O saveManualRoute que o mapa
@@ -3125,7 +3135,7 @@ function MainApp() {
           .map((c) => ({ id: c.id, lat: Number(c.latitude), lng: Number(c.longitude), peso: peso(c) })),
         ...plano.map((s) => ({ id: s.client_id, lat: Number(s.client!.latitude), lng: Number(s.client!.longitude), peso: 50, obrigatoria: true })),
       ];
-      const meta = routeConfig.meta_visitas_dia > 0 ? routeConfig.meta_visitas_dia : 6;
+      const meta = metaDeHoje;
       const r = montarMicrorrotas(candidatas, { lat: userLocation.latitude, lng: userLocation.longitude }, { meta });
       if (!r.ordem.length) { Alert.alert('Nada para montar', 'Não achei leads seus com posição no mapa a até 8 km daqui.'); return; }
       const porId = new Map<string, Client>([...carteira.map((c) => [c.id, c] as const), ...plano.map((s) => [s.client_id, s.client!] as const)]);
@@ -3639,11 +3649,11 @@ function MainApp() {
   const submitClient = async () => {
     if (submittingRef.current) return;
     if (!form.nome.trim()) {
-      Alert.alert('Nome do contato', 'Informe o nome do contato responsavel.');
+      Alert.alert('Nome do contato', 'Informe o nome do contato responsável.');
       return;
     }
     if (!form.empresa.trim()) {
-      Alert.alert('Restaurante obrigatorio', 'Informe o nome do restaurante (empresa).');
+      Alert.alert('Restaurante obrigatório', 'Informe o nome do restaurante (empresa).');
       return;
     }
 
@@ -3772,7 +3782,7 @@ function MainApp() {
     if (submittingRef.current) return;
     if (!editingClient || !form.nome.trim()) return;
     if (!form.empresa.trim()) {
-      Alert.alert('Restaurante obrigatorio', 'Informe o nome do restaurante (empresa).');
+      Alert.alert('Restaurante obrigatório', 'Informe o nome do restaurante (empresa).');
       return;
     }
     // Defesa em profundidade: trigger no banco tambem bloqueia, mas avisar
@@ -5666,7 +5676,7 @@ function MainApp() {
           aoFechar={() => setMeuDiaAberto(false)}
           dados={meuDia.data}
           carregando={meuDia.isLoading}
-          metaPadrao={routeConfig.meta_visitas_dia > 0 ? routeConfig.meta_visitas_dia : 6}
+          metaPadrao={metaMinha}
           portasNaMicrorrota={(() => {
             // Portas boas a pé: leads e contas-alvo não visitados hoje, a até 250 m da próxima porta.
             const prox = routeDisplayClients.find((c) => c.id === idClienteParadaAtual);
@@ -5718,7 +5728,7 @@ function MainApp() {
           planoTotal={routeDisplayClients.length}
           planoFeito={routeStops.filter((s) => s.status === 'done').length}
           visitasFeitas={meuDia.data?.visitasHoje ?? routeStops.filter((s) => s.status === 'done').length}
-          metaVisitas={meuDia.data?.prometido?.visitas || (routeConfig.meta_visitas_dia > 0 ? routeConfig.meta_visitas_dia : 6)}
+          metaVisitas={metaDeHoje}
           aoProgresso={() => setMeuDiaAberto(true)}
           chao={alturaRodape ?? baseInferior}
           totalNaArea={visiveisMapaNovo.length}
@@ -5947,7 +5957,7 @@ function MainApp() {
         planoTotal={routeDisplayClients.length}
         planoFeito={routeStops.filter((s) => s.status === 'done').length}
         visitasFeitas={meuDia.data?.visitasHoje ?? routeStops.filter((s) => s.status === 'done').length}
-        metaVisitas={meuDia.data?.prometido?.visitas || (routeConfig.meta_visitas_dia > 0 ? routeConfig.meta_visitas_dia : 6)}
+        metaVisitas={metaDeHoje}
         aoProgresso={() => setMeuDiaAberto(true)}
         totalNaArea={visiveisMapaNovo.length}
         rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
@@ -6837,6 +6847,10 @@ function MainApp() {
               <Text style={styles.headerSublinha} numberOfLines={1}>
                 {modoNovo
                   ? (() => {
+                      // sem a leitura do HubSpot, "0 atrasadas" é um zero que tranquiliza sem medir
+                      if (tarefasSemMedicao) return 'sem medição · ' + tarefasSemMedicao;
+                      if (tarefasErro) return 'não consegui ler o HubSpot agora';
+                      if (!tarefasMedidas) return 'lendo as tarefas do HubSpot…';
                       const atr = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'atrasadas').length;
                       return `${atr} atrasadas · ${seloTarefas - atr} para hoje`;
                     })()
@@ -7378,7 +7392,7 @@ function MainApp() {
           statusConfig={statusConfig}
           statusOptions={statusOptions}
           irParaMapa={() => setTab('map')}
-          metaVisitasDia={routeConfig.meta_visitas_dia}
+          metaVisitasDia={metaDeHoje}
           suggestRoute={suggestRoute}
         />
       ) : tab === 'tasks' && modoNovo ? (
@@ -7480,6 +7494,7 @@ function MainApp() {
           enabled={tab === 'meu'}
           tarefasPendentes={visibleTasksCount}
           aoAbrirTarefas={() => setTab('tasks')}
+          ehGestor={canViewGestor}
         />
       ) : modoNovo ? (
         <AgendaNovoScreen
@@ -7487,7 +7502,7 @@ function MainApp() {
           diaInicial={agendaDiaInicial}
           paradas={routeStops}
           reunioes={meetings}
-          metaVisitasDia={routeConfig.meta_visitas_dia}
+          metaVisitasDia={metaDeHoje}
           nomeDoLead={getClientPrimaryName}
           nomePorId={(id) => {
             const c = clients.find((x) => x.id === id);
@@ -8196,7 +8211,7 @@ function MainApp() {
                 <Text style={styles.passwordModalHint}>
                   {isAdmin
                     ? 'Filtra por qualquer vendedor do time (admin).'
-                    : 'Mostra somente os leads em que voce eh o responsavel.'}
+                    : 'Mostra somente os leads em que você é o responsável.'}
                 </Text>
                 {isAdmin ? (
                   <TouchableOpacity

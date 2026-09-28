@@ -1,5 +1,5 @@
-// Registrar uma tarefa que não é visita — ligação, retorno, cobrança, follow-up
-// (28/09/2026). Serve à aba Tarefas e à Agenda: as duas abrem esta mesma folha, e o
+// Registrar uma tarefa — ligação, retorno, cobrança, follow-up (28/09/2026). Tarefa de
+// visita ou reunião também abre aqui (o Ligar sempre), mas não conclui: só o Cheguei prova visita. Serve à aba Tarefas e à Agenda: as duas abrem esta mesma folha, e o
 // registro sai igual das duas. A regra mora em src/utils/registroDeTarefa.ts.
 //
 // Ao salvar: a tarefa conclui no HubSpot com a nota de COMO FOI (5 s de Desfazer,
@@ -26,6 +26,8 @@ export type TarefaParaRegistrar = {
   dealId: string | null;
   nome: string | null;
   telefone?: string | null;
+  /** Visita ou reunião: registra a ligação e o próximo passo, sem concluir (ver concluirTarefa). */
+  presencial?: boolean;
 };
 
 type Props = {
@@ -72,12 +74,14 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
     const t = tarefa;
     const texto = notaDoRegistro({ comoFoi, assunto: t.assunto, nota, proximo, data });
     const passo = data ? pedidoDoProximo({ dealId: t.dealId, proximo, data, nome: t.nome, nota }) : null;
-    aoSumir?.(t.id);
+    // visita não sai da lista: continua aberta até o Cheguei
+    if (!t.presencial) aoSumir?.(t.id);
     aoFechar();
     concluirComDesfazer({
-      pedido: { taskId: t.id, nota: t.dealId ? { dealId: t.dealId, texto } : null, proximo: passo },
+      pedido: { taskId: t.id, nota: t.dealId ? { dealId: t.dealId, texto } : null, proximo: passo, manterAberta: !!t.presencial },
       rotulo: `Registro · ${t.nome ?? t.assunto}`,
-      textoToast: !t.dealId ? '✓ Tarefa concluída · sem negócio ligado, o como foi não fica registrado'
+      textoToast: t.presencial ? '✓ Ligação registrada · a visita continua aberta até o Cheguei'
+        : !t.dealId ? '✓ Tarefa concluída · sem negócio ligado, o como foi não fica registrado'
         : passo ? `✓ Registrado · próximo em ${data!.split('-').reverse().slice(0, 2).join('/')}` : '✓ Registrado · HubSpot + Cockpit',
       aoVoltar: () => aoVoltar?.(t.id),
       // A conclusão, a nota e o próximo passo saem juntos (concluirTarefa), inclusive pela
@@ -122,7 +126,12 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
         <View style={s.chips}>
           {PROXIMOS.map((p) => chip(p.id, p.rotulo, proximoId === p.id, () => setProximoId(p.id)))}
         </View>
-        {!tarefa.dealId && (
+        {!!tarefa.presencial && (
+          <Text style={s.aviso}>{tarefa.dealId
+            ? 'Tarefa de visita: a ligação e o próximo passo ficam no negócio, mas ela só conclui no Cheguei, com GPS ou foto.'
+            : 'Tarefa de visita sem negócio no HubSpot: não há onde registrar a ligação. Ela conclui no Cheguei, com GPS ou foto.'}</Text>
+        )}
+        {!tarefa.dealId && !tarefa.presencial && (
           <Text style={s.aviso}>Esta tarefa não está ligada a um negócio no HubSpot: ela é concluída, mas o como foi e o próximo passo não têm onde ficar.</Text>
         )}
 
@@ -135,7 +144,7 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
           maxLength={200}
         />
 
-        <Pressable accessibilityRole="button" disabled={!comoFoi} onPress={registrar} style={[s.salvar, !comoFoi && { opacity: 0.45 }]}>
+        <Pressable accessibilityRole="button" disabled={!comoFoi || (!!tarefa.presencial && !tarefa.dealId)} onPress={registrar} style={[s.salvar, (!comoFoi || (!!tarefa.presencial && !tarefa.dealId)) && { opacity: 0.45 }]}>
           <Text style={s.salvarTexto}>{comoFoi ? 'Registrar' : 'Escolha como foi'}</Text>
         </Pressable>
       </View>

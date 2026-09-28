@@ -29,6 +29,8 @@ interface Props {
   /** Pendencias do proprio vendedor — mesmo numero do badge da nav. */
   tarefasPendentes?: number;
   aoAbrirTarefas?: () => void;
+  /** Só o gestor edita a meta de cada um (RLS); o executivo via o editor e levava "Erro ao salvar". */
+  ehGestor?: boolean;
 }
 
 const PERIOD_OPTIONS: { value: GestorPeriodPreset; label: string }[] = [
@@ -141,7 +143,7 @@ function Stat({ value, label, color, onPress }: { value: number; label: string; 
   return <View style={styles.statCard}>{inner}</View>;
 }
 
-export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas }: Props) {
+export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas, ehGestor }: Props) {
   const { pdi, marcar: marcarPdi } = useMeuPdi(enabled);
   const layout = useLayout();
   const [preset, setPreset] = useState<GestorPeriodPreset>('30d');
@@ -432,7 +434,7 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas 
       {!layout.ehLargo && (
         <View style={{ gap: 16 }}>
           <MinhaDailyCard enabled={enabled} />
-          <SellerGoalsCard />
+          {ehGestor && <SellerGoalsCard />}
         </View>
       )}
 

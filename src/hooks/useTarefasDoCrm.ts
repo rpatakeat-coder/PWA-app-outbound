@@ -149,6 +149,8 @@ export function useTarefasDoCrm(enabled: boolean) {
   return {
     ...(query.data ?? VAZIO()),
     carregando: query.isLoading,
+    /** a lista já veio do HubSpot ao menos uma vez (antes disso, zero não é zero) */
+    medido: !!query.data,
     erro: query.error ? ((query.error as Error).message ?? 'falhou') : null,
     recarregar: query.refetch,
   };
