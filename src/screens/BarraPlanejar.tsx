@@ -1,0 +1,138 @@
+// PLANEJAR PELO MAPA (28/09/2026). No lugar da folha do mapa enquanto o modo está
+// ligado: o dia escolhido, as paradas dele em ordem e o Pronto. Tocar num pino do mapa
+// põe ou tira daquele dia (quem faz é o App); aqui só se escolhe o dia, abre a ficha ou
+// tira da lista. O que entra vai para o Planejamento do Cockpit pelo rota_para_plano.
+import React from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import type { Client } from '../types/client';
+import { FAIXAS_POR_DIA, vaiAoCockpit, type DiaPlanejavel } from '../utils/planoNoMapa';
+
+export type ParadaDoDia = { id: string; client: Client; status: string; doCockpit: boolean };
+
+type Props = {
+  dias: DiaPlanejavel[];
+  dia: string;
+  aoDia: (iso: string) => void;
+  paradas: ParadaDoDia[];
+  carregando?: boolean;
+  aoAbrir: (c: Client) => void;
+  aoTirar: (p: ParadaDoDia) => void;
+  aoFechar: () => void;
+  chao: number;
+  embutida?: boolean;
+  aoMedir?: (medida: { y: number; altura: number }) => void;
+};
+
+export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, aoAbrir, aoTirar, aoFechar, chao, embutida, aoMedir }: Props) {
+  const atual = dias.find((d) => d.iso === dia);
+  const rotulo = atual ? (atual.hoje ? 'hoje' : atual.rotulo) : dia;
+  const soNoApp = paradas.filter((p) => !vaiAoCockpit(p.client)).length;
+  const alem = Math.max(0, paradas.length - FAIXAS_POR_DIA);
+  return (
+    <View
+      style={embutida ? s.painel : [s.folha, { bottom: chao }]}
+      accessibilityLabel="Planejar pelo mapa"
+      onLayout={embutida ? undefined : (e) => {
+        const alvo = (e.nativeEvent as unknown as { target?: { getBoundingClientRect?: () => DOMRect } }).target;
+        const topo = alvo?.getBoundingClientRect ? alvo.getBoundingClientRect().top : e.nativeEvent.layout.y;
+        aoMedir?.({ y: Math.round(topo), altura: Math.round(e.nativeEvent.layout.height) });
+      }}
+    >
+      <View style={s.topo}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={s.kicker} numberOfLines={1}>PLANEJAR PELO MAPA</Text>
+          <Text style={s.titulo} numberOfLines={1}>
+            {carregando ? `Carregando ${rotulo}…` : `${paradas.length} ${paradas.length === 1 ? 'parada' : 'paradas'} ${atual?.hoje ? 'hoje' : `na ${rotulo}`}`}
+          </Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Terminar o planejamento" onPress={aoFechar} style={s.pronto}>
+          <Text style={s.prontoTexto}>Pronto</Text>
+        </Pressable>
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.dias}>
+        {dias.map((d) => (
+          <Pressable key={d.iso} accessibilityRole="button" accessibilityState={{ selected: d.iso === dia }}
+            accessibilityLabel={`Planejar ${d.hoje ? 'hoje' : d.rotulo}`} onPress={() => aoDia(d.iso)}
+            style={[s.diaBtn, d.iso === dia && s.diaBtnAtivo]}>
+            <Text style={[s.diaTexto, d.iso === dia && s.diaTextoAtivo]}>{d.hoje ? 'Hoje' : d.rotulo}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      <Text style={s.dica}>
+        {`Toque nos pinos para pôr ou tirar ${atual?.hoje ? 'de hoje' : `da ${rotulo}`}. Entra na Agenda e no Planejamento do Cockpit.`}
+      </Text>
+
+      <ScrollView style={embutida ? s.listaEmbutida : s.lista} contentContainerStyle={{ paddingBottom: 6 }}>
+        {!carregando && paradas.length === 0 && (
+          <Text style={s.vazio}>Nada neste dia ainda. Escolha no mapa os leads perto uns dos outros.</Text>
+        )}
+        {paradas.map((p, i) => {
+          const nome = p.client.empresa?.trim() || p.client.nome;
+          const notas = [
+            p.client.bairro?.trim() || null,
+            p.status === 'done' ? 'feita' : null,
+            p.doCockpit ? 'do Cockpit' : null,
+            !vaiAoCockpit(p.client) ? 'sem negócio: só no app' : i >= FAIXAS_POR_DIA ? 'além das 15 do Cockpit' : null,
+          ].filter(Boolean).join(' · ');
+          return (
+            <View key={p.id} style={s.linha}>
+              <View style={s.num}><Text style={s.numTexto}>{i + 1}</Text></View>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${nome}`} onPress={() => aoAbrir(p.client)} style={s.linhaTexto}>
+                <Text style={s.nome} numberOfLines={1}>{nome}</Text>
+                {!!notas && <Text style={s.sub} numberOfLines={1}>{notas}</Text>}
+              </Pressable>
+              {p.status !== 'done' && (
+                <Pressable accessibilityRole="button" accessibilityLabel={`Tirar ${nome} do dia`} onPress={() => aoTirar(p)} style={s.tirar} hitSlop={4}>
+                  <Text style={s.tirarTexto}>✕</Text>
+                </Pressable>
+              )}
+            </View>
+          );
+        })}
+        {(soNoApp > 0 || alem > 0) && (
+          <Text style={s.aviso}>
+            {[soNoApp > 0 ? `${soNoApp} sem negócio nem conta-alvo: ficam na rota do app, o Cockpit não tem onde mostrar.` : null,
+              alem > 0 ? `O Planejamento do Cockpit guarda ${FAIXAS_POR_DIA} por dia; ${alem} ficam só no app.` : null].filter(Boolean).join(' ')}
+          </Text>
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+const s = StyleSheet.create({
+  folha: {
+    position: 'absolute', left: 0, right: 0, zIndex: 20,
+    backgroundColor: 'var(--surface)', borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    borderTopWidth: 1, borderColor: 'var(--border)',
+    paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, gap: 8, maxHeight: '46%',
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 18, shadowOffset: { width: 0, height: -4 }, elevation: 10,
+  },
+  painel: { flex: 1, minHeight: 0, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, gap: 8, backgroundColor: 'var(--surface)' },
+  topo: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  kicker: { fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: '#F87171' },
+  titulo: { fontSize: 16, fontWeight: '600', color: 'var(--text)', marginTop: 1 },
+  pronto: { height: 44, paddingHorizontal: 18, borderRadius: 13, backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  prontoTexto: { fontSize: 14, fontWeight: '700', color: '#fff' },
+  dias: { gap: 8, paddingRight: 8 },
+  diaBtn: { minHeight: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center' },
+  diaBtnAtivo: { backgroundColor: 'var(--text)', borderColor: 'var(--text)' },
+  diaTexto: { fontSize: 13, fontWeight: '700', color: 'var(--text-muted)' },
+  diaTextoAtivo: { color: 'var(--bg)' },
+  dica: { fontSize: 12, color: 'var(--text-muted)' },
+  lista: { maxHeight: 190 },
+  listaEmbutida: { flex: 1, minHeight: 0 },
+  vazio: { fontSize: 13, color: 'var(--text-muted)', paddingVertical: 8 },
+  linha: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
+  num: { width: 28, height: 28, borderRadius: 14, backgroundColor: 'var(--text)', alignItems: 'center', justifyContent: 'center' },
+  numTexto: { fontSize: 12, fontWeight: '800', color: 'var(--bg)' },
+  linhaTexto: { flex: 1, minWidth: 0, minHeight: 48, justifyContent: 'center' },
+  nome: { fontSize: 15, fontWeight: '600', color: 'var(--text)' },
+  sub: { fontSize: 12, fontWeight: '500', color: 'var(--text-muted)', marginTop: 1 },
+  tirar: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -8 },
+  tirarTexto: { fontSize: 16, color: 'var(--text-muted)' },
+  aviso: { fontSize: 12, color: 'var(--text-muted)', paddingTop: 8 },
+});

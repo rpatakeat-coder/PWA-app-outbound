@@ -104,6 +104,8 @@ import PinoP2, { ANCORA_PINO_P2, sinalDoPino, type PapelPino } from './src/map/P
 import FiltrosMapaNovo from './src/screens/FiltrosMapaNovo';
 import { PeekCardNovo, TopoCardNovo, type AcoesCardNovo, type DadosCardNovo } from './src/screens/CardLeadNovo';
 import FolhaDoMapa, { type ItemFolha } from './src/screens/FolhaDoMapa';
+import BarraPlanejar, { type ParadaDoDia } from './src/screens/BarraPlanejar';
+import { diaInicial, diasPlanejaveis, FAIXAS_POR_DIA, rotuloDoDia, vaiAoCockpit } from './src/utils/planoNoMapa';
 import TopoCampo, { ALTURA_TOPO_CAMPO } from './src/screens/TopoCampo';
 import FolhaLentes, { COR_LENTE } from './src/screens/FolhaLentes';
 import AvisoSemSinal from './src/screens/AvisoSemSinal';
@@ -1258,6 +1260,16 @@ function MainApp() {
   // Gestor monitorando a rota de OUTRO vendedor -> tela read-only.
   const isMonitoringRoute = !!profile?.id && !!routeViewSellerId && routeViewSellerId !== profile.id;
   const fieldOps = useFieldOps(routeDate, isAuthenticated, routeViewSellerId);
+  // PLANEJAR PELO MAPA (28/09/2026): o dia escolhido no modo Planejar. Hoje usa a
+  // própria rota do mapa; outro dia, a rota daquela data (a mesma field_routes). O que
+  // entra ou sai vai ao Planejamento do Cockpit pelo gatilho rota_para_plano (0136).
+  const [planejarDia, setPlanejarDia] = useState<string | null>(null);
+  const planejarToqueRef = useRef<((c: Client) => void) | null>(null);
+  const opsOutroDia = useFieldOps(planejarDia ?? routeDate, isAuthenticated && !!planejarDia && planejarDia !== routeDate);
+  const opsDoDia = planejarDia && planejarDia !== routeDate ? opsOutroDia : fieldOps;
+  const podePlanejar = modoNovo && !isViewer && !isMonitoringRoute;
+  useEffect(() => { if (!podePlanejar) setPlanejarDia(null); }, [podePlanejar]);
+  const diasDoPlanejar = useMemo(() => diasPlanejaveis(routeDate, 10), [routeDate]);
 
   // Carrega o toggle da preferência local na inicialização.
   useEffect(() => {
@@ -1936,13 +1948,22 @@ function MainApp() {
   // Base = TODOS os status carregados na área (a lente decide o destaque; o
   // status único dos chips antigos não se aplica aqui), mais as paradas do
   // plano, que aparecem mesmo fora do recorte.
+  // No modo Planejar os números dos pinos são os do dia escolhido, não os de hoje.
+  const paradasDoDiaPlanejado = useMemo<ParadaDoDia[]>(() => (!planejarDia ? [] : opsDoDia.stops
+    .filter((s) => (s.status === 'planned' || s.status === 'done') && s.client)
+    .map((s) => ({ id: s.id, client: s.client as Client, status: s.status, doCockpit: s.mandatory_reason === 'plano_cockpit' }))),
+  [planejarDia, opsDoDia.stops]);
+  const clientesDoPlanoNoMapa = useMemo(
+    () => (planejarDia ? paradasDoDiaPlanejado.map((p) => p.client) : routeDisplayClients),
+    [planejarDia, paradasDoDiaPlanejado, routeDisplayClients],
+  );
   const itensMapaNovo = useMemo(() => {
     if (!modoNovo || !contextoPino) return [];
     const plano = new Map<string, number>();
-    routeDisplayClients.forEach((c, i) => plano.set(c.id, i + 1));
+    clientesDoPlanoNoMapa.forEach((c, i) => plano.set(c.id, i + 1));
     const vistos = new Set<string>();
     const base: Client[] = [];
-    for (const c of [...routeDisplayClients, ...clientsForCount]) {
+    for (const c of [...clientesDoPlanoNoMapa, ...clientsForCount]) {
       if (vistos.has(c.id) || c.latitude == null || c.longitude == null) continue;
       if (!plano.has(c.id) && renderBounds) {
         const lat = c.latitude as number;
@@ -1953,7 +1974,56 @@ function MainApp() {
       base.push(c);
     }
     return base.map((c) => ({ c, p: classificarPino(c, contextoPino), plano: plano.get(c.id) ?? null }));
-  }, [modoNovo, contextoPino, routeDisplayClients, clientsForCount, renderBounds]);
+  }, [modoNovo, contextoPino, clientesDoPlanoNoMapa, clientsForCount, renderBounds]);
+
+  // Toque no pino com o modo Planejar ligado: põe no dia, ou tira se já está.
+  const paradasDoDiaRef = useRef<ParadaDoDia[]>([]);
+  paradasDoDiaRef.current = paradasDoDiaPlanejado;
+  const planejarDiaRef = useRef<string | null>(null);
+  planejarDiaRef.current = planejarDia;
+  const tirarDoDiaPlanejado = (p: ParadaDoDia) => {
+    const dia = planejarDiaRef.current;
+    const parada = opsDoDia.stops.find((s) => s.id === p.id);
+    if (!dia || !parada) return;
+    const nome = p.client.empresa?.trim() || p.client.nome;
+    opsDoDia.removeStop.mutate(parada, {
+      onSuccess: () => Toast.mostrar(`${nome} saiu de ${rotuloDoDia(dia)}`, 'ok', {
+        rotulo: 'Desfazer',
+        // o mutate segue o dia que está na tela: só desfaz se ainda for o mesmo
+        onPress: () => (planejarDiaRef.current === dia ? opsDoDia.adicionarParada.mutate(p.client) : Toast.mostrar(`Volte para ${rotuloDoDia(dia)} para desfazer.`, 'fila')),
+      }),
+      onError: (e) => Toast.mostrar(`Não saiu: ${String((e as Error)?.message ?? e)}`, 'erro'),
+    });
+  };
+  const alternarNoPlano = (c: Client) => {
+    const dia = planejarDiaRef.current;
+    if (!dia) return;
+    const nome = c.empresa?.trim() || c.nome;
+    const ja = paradasDoDiaRef.current.find((p) => p.client.id === c.id);
+    if (ja?.status === 'done') { Toast.mostrar(`${nome} já foi visitado nesse dia.`, 'fila'); return; }
+    if (ja) { tirarDoDiaPlanejado(ja); return; }
+    const n = paradasDoDiaRef.current.length + 1;
+    const destino = !vaiAoCockpit(c) ? 'sem negócio: só no app'
+      : n > FAIXAS_POR_DIA ? `além das ${FAIXAS_POR_DIA} do Cockpit` : 'Agenda + Cockpit';
+    opsDoDia.adicionarParada.mutate(c, {
+      onSuccess: (pos) => (pos == null
+        ? Toast.mostrar('Não entrou: esse lead já está nesse dia.', 'fila')
+        : Toast.mostrar(`✓ ${n}. ${nome} · ${rotuloDoDia(dia)} · ${destino}`, 'ok')),
+      onError: (e) => Toast.mostrar(`Não entrou: ${String((e as Error)?.message ?? e)}`, 'erro'),
+    });
+  };
+  planejarToqueRef.current = planejarDia ? alternarNoPlano : null;
+  const abrirPlanejar = () => {
+    const hora = Number(new Date().toLocaleString('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Sao_Paulo' }));
+    setQuadraAberta(null);
+    setPlanejarDia(diaInicial(routeDate, Number.isFinite(hora) ? hora : 9));
+  };
+  const fecharPlanejar = () => {
+    const dia = planejarDiaRef.current;
+    const n = paradasDoDiaRef.current.length;
+    setPlanejarDia(null);
+    if (dia && n) Toast.mostrar(`✓ ${n} ${n === 1 ? 'parada' : 'paradas'} em ${rotuloDoDia(dia)} · na Agenda e no Planejamento do Cockpit`, 'ok');
+  };
 
   // Lente Calor: áreas com 3+ pinos e nenhum check-in no período (anel azul tracejado).
   const ninguemFoi = useMemo(() => {
@@ -3091,6 +3161,8 @@ function MainApp() {
   const regiaoRef = useRef(mapRegion);
   regiaoRef.current = mapRegion;
   const handleMarkerPress = useCallback((c: Client) => {
+    // modo Planejar: o toque põe ou tira do dia, sem abrir o card
+    if (planejarToqueRef.current) { planejarToqueRef.current(c); return; }
     openClientDetails(c);
     const mapRegion = regiaoRef.current;
     if (!modoNovo || !mapRegion || !mapRef.current || c.latitude == null || c.longitude == null) return;
@@ -3199,10 +3271,11 @@ function MainApp() {
   // folha (zIndex 20) e do "+", e o executivo não conseguia cadastrar lead
   // (print do Julyan, 26/09). Só estados declarados ANTES desta linha.
   const telaCheia = showCepStep || isFormOpen || !!editingClient || !!editingLocationFor || filtrosNovosAbertos;
-  const folhaVisivel = modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && lente !== 'calor';
+  const folhaVisivel = modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && lente !== 'calor' && !planejarDia;
+  const planejarVisivel = modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && !!planejarDia;
   // Lente Calor no celular: folha própria (vendedores, Time/Só eu, Ninguém foi).
-  const folhaCalorVisivel = modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && lente === 'calor' && heatOn;
-  const folhaDeBaixo = folhaVisivel || folhaCalorVisivel;
+  const folhaCalorVisivel = modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && lente === 'calor' && heatOn && !planejarDia;
+  const folhaDeBaixo = folhaVisivel || folhaCalorVisivel || planejarVisivel;
   // Margem do mapa = onde o mapa terminaria sem margem menos o topo MEDIDO da
   // folha (a barra de baixo real não tem a altura do baseInferior; a conta
   // fixa deixava o logo do Google 34 px atrás da folha — medido em 25/09).
@@ -5422,6 +5495,21 @@ function MainApp() {
           onCheguei={(c) => handleMarkAsVisited(c)}
           aoRoteirizar={isViewer ? undefined : () => { void roteirizarPlano(); }}
           roteirizando={roteirizando}
+          aoPlanejar={podePlanejar ? abrirPlanejar : undefined}
+        />
+      )}
+      {planejarVisivel && planejarDia && (
+        <BarraPlanejar
+          dias={diasDoPlanejar}
+          dia={planejarDia}
+          aoDia={setPlanejarDia}
+          paradas={paradasDoDiaPlanejado}
+          carregando={opsDoDia.isLoading}
+          aoAbrir={openClientDetails}
+          aoTirar={tirarDoDiaPlanejado}
+          aoFechar={fecharPlanejar}
+          chao={alturaRodape ?? baseInferior}
+          aoMedir={({ y, altura }) => { setAlturaFolha(altura); setTopoFolha(y); }}
         />
       )}
 
@@ -5577,7 +5665,20 @@ function MainApp() {
           <Text style={styles.pmnLenteTexto}>{quantosFiltros(filtrosNovos) ? `Filtros · ${quantosFiltros(filtrosNovos)}` : 'Filtros'}</Text>
         </Pressable>
       </View>
-      {lente === 'calor' ? (
+      {planejarDia ? (
+        <BarraPlanejar
+          embutida
+          chao={0}
+          dias={diasDoPlanejar}
+          dia={planejarDia}
+          aoDia={setPlanejarDia}
+          paradas={paradasDoDiaPlanejado}
+          carregando={opsDoDia.isLoading}
+          aoAbrir={openClientDetails}
+          aoTirar={tirarDoDiaPlanejado}
+          aoFechar={fecharPlanejar}
+        />
+      ) : lente === 'calor' ? (
         <FolhaCalor
           embutida
           chao={0}
@@ -5597,6 +5698,7 @@ function MainApp() {
         chao={0}
         aoRoteirizar={isViewer ? undefined : () => { void roteirizarPlano(); }}
         roteirizando={roteirizando}
+        aoPlanejar={podePlanejar ? abrirPlanejar : undefined}
         itens={quadraAberta ? itensFolha.filter((it) => quadraAberta.ids.has(it.c.id)) : itensFolha}
         quadra={quadraAberta ? { area: quadraAberta.area, aoFechar: () => setQuadraAberta(null) } : null}
         eMeu={!isViewer && (lente === 'semdono' || lente === 'rec') ? { naRota: routeStopClientIds, aoAssumir: (c) => { void assumirDoMapa(c); } } : null}
