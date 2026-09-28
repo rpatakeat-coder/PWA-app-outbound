@@ -150,7 +150,7 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
         if (error) throw error;
       }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }); },
   });
 
   const removeStop = useMutation({
@@ -161,7 +161,7 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
         .eq('id', stop.id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }); },
   });
 
   const markStopDone = useMutation({
@@ -172,7 +172,7 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
         .eq('id', stop.id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }); },
   });
 
   // Check-in num lead fora do plano vira parada, já feita, no FIM da rota de
@@ -302,7 +302,7 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
         .eq('id', stop.id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }); },
   });
 
   return {

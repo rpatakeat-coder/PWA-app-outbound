@@ -74,19 +74,27 @@ self.addEventListener('fetch', (event) => {
 
   // Navegacao (abrir/recarregar o app): rede primeiro pra pegar a versao mais
   // nova; se estiver offline, serve a casca do cache.
+  // SINAL FRACO (auditoria de velocidade, 28/09/2026): a rede não tinha prazo — no 4G
+  // ruim a abertura esperava até a conexão desistir, e só então caía na casca. Agora,
+  // com casca guardada, espera no máximo 3 s; a rede continua e atualiza a casca por baixo.
   if (req.mode === 'navigate') {
+    const rede = fetch(req).then((res) => {
+      if (res && res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put('/', copy));
+      }
+      return res;
+    });
     event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('/', copy));
-          return res;
-        })
-        .catch(async () => {
-          const cached = await caches.match('/', { ignoreSearch: true });
-          return cached ?? Response.error();
-        }),
+      (async () => {
+        const cached = await caches.match('/', { ignoreSearch: true });
+        if (!cached) return rede.catch(() => Response.error());
+        const prazo = new Promise((ok) => setTimeout(() => ok(null), 3000));
+        const venceu = await Promise.race([rede.catch(() => null), prazo]);
+        return venceu || cached;
+      })(),
     );
+    event.waitUntil(rede.catch(() => null));
     return;
   }
 

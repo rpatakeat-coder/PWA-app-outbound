@@ -108,6 +108,7 @@ import BarraPlanejar, { type ParadaDoDia } from './src/screens/BarraPlanejar';
 import { diaInicial, diasPlanejaveis, ehCompromisso, faixaDoLead, rotuloDoDia, vaiAoCockpit, type FaixaDoPlano } from './src/utils/planoNoMapa';
 import { lerColunaDoPlano, porNoDia, tirarDoDia } from './src/utils/paradaDoDia';
 import { diasDaFaixa } from './src/utils/agendaNovo';
+import { abrirGestao } from './src/utils/abrirGestao';
 import TopoCampo, { ALTURA_TOPO_CAMPO } from './src/screens/TopoCampo';
 import FolhaLentes, { COR_LENTE } from './src/screens/FolhaLentes';
 import AvisoSemSinal from './src/screens/AvisoSemSinal';
@@ -830,6 +831,13 @@ function MainApp() {
     () => new Set<ClientStatus>(['cliente', 'lead']),
   );
   const [searchQuery, setSearchQuery] = useState('');
+  // A busca espera 300 ms parada (auditoria de velocidade, 28/09/2026): cada letra era uma
+  // consulta ao banco e um recálculo de todos os pinos. O campo mostra o texto na hora.
+  const [buscaParada, setBuscaParada] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaParada(searchQuery), searchQuery ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
   const [buscaAberta, setBuscaAberta] = useState(false);
   const [stateFilter, setStateFilter] = useState<string | null>(null);
   const [stageFilter, setStageFilter] = useState<string | null>(null);
@@ -1012,7 +1020,7 @@ function MainApp() {
   // Busca no servidor: cobre a base inteira, não só o pedaço carregado. Sem
   // isto, procurar por nome um cliente a 80 km não acharia nada depois que a
   // listagem passou a seguir o mapa.
-  const { data: resultadosBusca, isFetching: buscando } = useClientSearch(searchQuery);
+  const { data: resultadosBusca, isFetching: buscando } = useClientSearch(buscaParada);
 
   // O resto do app continua consumindo uma lista só. Os achados da busca
   // entram por cima dos da área, sem duplicar quem já estava nas duas.
@@ -1452,8 +1460,8 @@ function MainApp() {
 
   // Normaliza pra busca case/diacritic-insensitive — "ipê" casa com "ipe".
   const searchTerm = useMemo(
-    () => searchQuery.normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase().trim(),
-    [searchQuery],
+    () => buscaParada.normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase().trim(),
+    [buscaParada],
   );
 
   // UFs presentes no conjunto carregado — chips só mostram opção que existe.
@@ -1577,7 +1585,16 @@ function MainApp() {
   //
   // O hook e' o MESMO da tela de Tarefas, com a mesma `queryKey`: o react-query
   // divide o cache, entao nao ha' segunda ida ao HubSpot.
-  const { tarefas: tarefasDoCrmParaContagem } = useTarefasDoCrm(!!profile);
+  // O selo das Tarefas não precisa estar na primeira pintura (auditoria de velocidade,
+  // 28/09/2026): a leitura passa pela edge e por 3+ chamadas ao HubSpot em série, e
+  // disputava a abertura do mapa. Espera 4 s — ou entra na hora se ele sair do mapa.
+  const [crmLiberado, setCrmLiberado] = useState(false);
+  useEffect(() => {
+    if (!profile || crmLiberado) return;
+    const t = setTimeout(() => setCrmLiberado(true), 4000);
+    return () => clearTimeout(t);
+  }, [profile, crmLiberado]);
+  const { tarefas: tarefasDoCrmParaContagem } = useTarefasDoCrm(!!profile && (crmLiberado || tab !== 'map'));
   const visibleTasksCount = visibleTasks.length + tarefasDoCrmParaContagem.length;
 
   // Sublinha do header de Tarefas. Sai do MESMO `baldeDeVencimento` das abas
@@ -2175,10 +2192,11 @@ function MainApp() {
     const pilhaDeId = new Map<string, Pilha>();
     for (const pl of pilhas) for (const m of pl.membros) pilhaDeId.set(m, pl);
     // Nome só para quem aparece como pino (líder de pilha fechada ou sozinho).
+    const focoPorId = new Map(foco.map((x) => [x.c.id, x]));
     const candidatos = todos.filter((t) => {
       const pl = pilhaDeId.get(t.id);
       const visivelComoPino = !pl || pl.membros.length === 1 || (pl.lider === t.id && pilhaAberta !== pl.lider);
-      const it = foco.find((x) => x.c.id === t.id);
+      const it = focoPorId.get(t.id);
       return visivelComoPino && (perto || !!it?.plano || t.id === selectedClient?.id);
     });
     if (janela && candidatos.length) {
@@ -4617,7 +4635,12 @@ function MainApp() {
   // área. Sem ele, arrastar o mapa pra uma região ainda não buscada trocaria
   // o app inteiro por um spinner — o carregamento de área tem que ser o aviso
   // discreto sobre o mapa, não uma tela cheia.
-  if (loading || (isLoading && !jaCarregouAlgumaVez && showOnlyMyArea) || (waitingForLocation && !posicaoGuardada)) {
+  // AUDITORIA DE VELOCIDADE (28/09/2026): a tela cheia esperava também os clients da área —
+  // e eles só saem depois de sessão → perfil → visibilidade do setor, um atrás do outro.
+  // Pior: com o perfil ainda nulo a trava abria, o mapa montava, e fechava de novo quando a
+  // visibilidade entrava em carga (mapa desmontado e remontado = 2 cargas do Google Maps).
+  // Agora o mapa monta na hora e os pinos chegam por cima, com o aviso discreto da área.
+  if (loading || (waitingForLocation && !posicaoGuardada)) {
     return (
       <View style={styles.centered}>
         <Image source={require('./assets/icon.png')} style={{ width: 72, height: 72, marginBottom: 16, tintColor: '#C8131B', resizeMode: 'contain' }} />
@@ -6359,9 +6382,8 @@ function MainApp() {
   // Por que nao duas telas: a do app era um painel de gestao dentro de um app
   // de rua, e o cockpit responde as mesmas perguntas melhor e numa tela que
   // cabe. Manter as duas garantia que uma das duas ficaria errada.
-  const irParaOCockpit = () => {
-    window.location.href = '/gestao';
-  };
+  // Aba nova (Julyan, 28/09/2026), menos no iPhone com o app instalado (src/utils/abrirGestao.ts).
+  const irParaOCockpit = () => abrirGestao('/gestao');
 
   // Versão nova do app só entra quando nada está aberto (src/utils/updates.ts):
   // recarregar no meio da ficha ou do cadastro perdia o trabalho do executivo.
@@ -6983,7 +7005,7 @@ function MainApp() {
           style={styles.avisoTopo}
           // Vai direto pra aba que conserta: Acessos marca quem esta' sem ID.
           onPress={() => {
-            window.location.href = '/gestao/#/acessos';
+            abrirGestao('/gestao/#/acessos');
           }}
         >
           <IconWarning width={20} height={20} fill={iconColors.tintAmberText} />
@@ -7576,13 +7598,12 @@ function MainApp() {
                   chave: 'cockpit',
                   Icone: IconBarGraph,
                   rotulo: 'Gestão',
-                  // Sem `setPerfilAberto(false)` de proposito: o Painel
+                  // Na mesma janela, SEM `setPerfilAberto(false)`: o Painel
                   // empilha um estado no history ao abrir e, ao fechar, o
-                  // cleanup chama `history.back()` (Painel.tsx). Esse back e'
-                  // navegacao same-document e ABORTA a ida pro /gestao que
-                  // acabou de comecar — o menu fechava e ficava tudo como
-                  // estava. Quem desmonta o painel aqui e' o unload.
-                  aoTocar: irParaOCockpit,
+                  // cleanup chama `history.back()` (Painel.tsx), que ABORTA a
+                  // ida pro /gestao que acabou de comecar. Em aba nova a tela
+                  // atual fica: aí o menu fecha.
+                  aoTocar: () => { if (irParaOCockpit() === 'aba') setPerfilAberto(false); },
                 }
               : null,
             modoNovo && canViewGestor

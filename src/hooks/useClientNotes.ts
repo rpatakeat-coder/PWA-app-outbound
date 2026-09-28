@@ -89,7 +89,7 @@ export function useClientNotes(clientId: string | null | undefined) {
 
       return note;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_notes', clientId] }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['client_notes', clientId] }); },
   });
 
   const updateNote = useMutation({
@@ -105,7 +105,7 @@ export function useClientNotes(clientId: string | null | undefined) {
       if (error) throw error;
       return data as ClientNote;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_notes', clientId] }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['client_notes', clientId] }); },
   });
 
   const deleteNote = useMutation({
@@ -113,7 +113,7 @@ export function useClientNotes(clientId: string | null | undefined) {
       const { error } = await supabase.from('client_notes').delete().eq('id', noteId);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_notes', clientId] }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['client_notes', clientId] }); },
   });
 
   return {

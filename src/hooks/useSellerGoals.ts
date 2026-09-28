@@ -28,7 +28,7 @@ export function useSellerGoals(enabled: boolean) {
       const { error } = await supabase.from('seller_visit_goals').upsert(payload, { onConflict: 'seller_id' });
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['seller_visit_goals'] }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['seller_visit_goals'] }); },
   });
 
   return { goals: query.data ?? new Map<string, number>(), isLoading: query.isLoading, save };

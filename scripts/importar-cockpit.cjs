@@ -100,7 +100,10 @@ const camada = `<script>
     if (typeof entrada !== 'string') {
       init = Object.assign({ method: entrada.method, headers: entrada.headers }, init || {});
     }
-    return original(FN + fn + (m[2] || ''), init);
+    /* forceFunctionRegion: a função roda em Oregon, ao lado do banco (auditoria de
+       velocidade, 28/09/2026): em São Paulo cada leitura dela cruzava o continente. */
+    var q = m[2] || '';
+    return original(FN + fn + q + (q ? '&' : '?') + 'forceFunctionRegion=us-west-2', init);
   };
 })();
 </script>`;

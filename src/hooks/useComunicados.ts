@@ -9,7 +9,7 @@
 // Nesse caso a lista volta VAZIA, não quebra: um app de campo que não abre
 // porque falta uma tabela de recado seria muito pior do que ficar sem recado.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../integrations/supabase/client';
+import { supabase, usuarioDaSessao } from '../integrations/supabase/client';
 
 export type ComunicadoNaoLido = {
   id: string;
@@ -32,7 +32,7 @@ export function useComunicadosNaoLidos(enabled: boolean) {
     // cockpit não existe aqui.
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data: sessao } = await supabase.auth.getUser();
+      const { data: sessao } = await usuarioDaSessao();
       const meuId = sessao?.user?.id;
       if (!meuId) return [];
 
@@ -71,7 +71,7 @@ export function useComunicadosNaoLidos(enabled: boolean) {
 
   const confirmar = useMutation({
     mutationFn: async (comunicadoId: string) => {
-      const { data: sessao } = await supabase.auth.getUser();
+      const { data: sessao } = await usuarioDaSessao();
       const meuId = sessao?.user?.id;
       if (!meuId) throw new Error('sem sessão');
       const { error } = await supabase

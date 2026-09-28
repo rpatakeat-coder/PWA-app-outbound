@@ -101,6 +101,11 @@
       é a diferença entre ler agora e esperar o download.
       Se ela nunca chegar, o fallback abaixo mantém tudo legível.
     -->
+    <!-- Conexões abertas antes de precisar (auditoria de velocidade, 28/09/2026): o banco e o Google Maps
+         entram na abertura do app; sem isto cada um paga DNS + TLS na hora (~300 ms no 4G). -->
+    <link rel="preconnect" href="https://mxyjvijclhlxrlafqcrz.supabase.co" crossorigin />
+    <link rel="preconnect" href="https://maps.googleapis.com" />
+    <link rel="preconnect" href="https://maps.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

@@ -13,7 +13,7 @@
 // Marcar "feito" grava checked[i] no mesmo upsert que o Cockpit usa (a RLS deixa o
 // dono escrever a própria linha). Validar e devolver continuam sendo do gestor.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '../integrations/supabase/client';
+import { supabase, usuarioDaSessao } from '../integrations/supabase/client';
 
 export type EstadoDoCompromisso = 'aberto' | 'feito' | 'validado' | 'devolvido';
 
@@ -80,7 +80,7 @@ export function useMeuPdi(enabled: boolean) {
   const marcar = useMutation({
     mutationFn: async ({ id, feito }: { id: string; feito: boolean }) => {
       const r = query.data?.bruto;
-      const { data: s } = await supabase.auth.getUser();
+      const { data: s } = await usuarioDaSessao();
       const { data: perfil } = await supabase.from('profiles').select('id_hubspot').eq('id', s?.user?.id ?? '').maybeSingle();
       const ownerId = (perfil as { id_hubspot?: string | null } | null)?.id_hubspot;
       if (!r || !r.versaoAnalise || !ownerId) throw new Error('PDI indisponível agora.');

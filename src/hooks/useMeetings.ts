@@ -187,7 +187,7 @@ export function useMeetings() {
 
       return meeting;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_meetings'] }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['client_meetings'] }); },
   });
 
   // Reagenda: muda data/hora (e opcionalmente duração/observações) na MESMA
@@ -306,7 +306,7 @@ export function useMeetings() {
 
       return updated;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_meetings'] }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['client_meetings'] }); },
   });
 
   // Remove a reunião: cancela o compromisso externo antes de apagar a linha.
@@ -336,7 +336,7 @@ export function useMeetings() {
       const { error } = await supabase.from('client_meetings').delete().eq('id', meeting.id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_meetings'] }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['client_meetings'] }); },
   });
 
   return {

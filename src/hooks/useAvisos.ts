@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { supabase } from '../integrations/supabase/client';
+import { supabase, usuarioDaSessao } from '../integrations/supabase/client';
 import { ouvirFila, type ItemFila } from '../utils/filaOffline';
 
 export type AvisoGestor = { id: string; titulo: string; em: string; autor: string | null; pessoal?: boolean };
@@ -53,7 +53,7 @@ export function useAvisos(ativo: boolean) {
       const desde = new Date(Date.now() - 14 * 86400000).toISOString();
       // a RLS devolve só os meus (owner_id = meu_owner_hubspot()); o gestor vê todos, e
       // para ele isto não é recado: fica de fora.
-      const { data: s0 } = await supabase.auth.getUser();
+      const { data: s0 } = await usuarioDaSessao();
       const { data: perfil } = await supabase.from('profiles').select('id_hubspot').eq('id', s0?.user?.id ?? '').maybeSingle();
       const meu = (perfil as { id_hubspot?: string | null } | null)?.id_hubspot;
       if (!meu) return [];

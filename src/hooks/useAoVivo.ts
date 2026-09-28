@@ -27,7 +27,10 @@ type Sinal = { tipo?: string; owner_id?: string | null; client_id?: string | nul
 export const INVALIDA_POR_TIPO: Record<string, string[][]> = {
   pino: [['mapa-contexto']],
   'pino-novo': [['mapa-contexto']],
-  negocio: [['mapa-contexto'], ['tarefas_crm']],
+  // tarefas_crm só relê para o dono do negócio (ver 'negocio-meu'): era uma chamada ao
+  // HubSpot por rajada, para o time inteiro, a cada volta do robô (auditoria 28/09)
+  negocio: [['mapa-contexto']],
+  'negocio-meu': [['tarefas_crm']],
   visita: [['meu_dia'], ['minha_daily'], ['client_visits']],
   foto: [['client_visits']],
   ficha: [['meu_dia']],
@@ -51,6 +54,20 @@ export function sinalMeInteressa(s: Sinal, meuOwnerId: string | null, ehGestor: 
 }
 
 const RELER_BASE_NO_MAXIMO_A_CADA_MS = 60_000;
+// O contexto do mapa (mapa_contexto, que varre o snapshot do funil) no máximo 1 vez por
+// minuto: uma sincronização do robô de 30 s dava ~25 releituras seguidas por aparelho.
+const CONTEXTO_NO_MAXIMO_A_CADA_MS = 60_000;
+
+/** Só as colunas mudaram de verdade? Evita recalcular todos os pinos por eco. */
+function mesmaLinha(a: Client, b: Partial<Client>) {
+  for (const k of Object.keys(b) as (keyof Client)[]) {
+    const x = a[k] as unknown, y = b[k] as unknown;
+    if (x === y) continue;
+    if (x != null && y != null && typeof x === 'object' && JSON.stringify(x) === JSON.stringify(y)) continue;
+    return false;
+  }
+  return true;
+}
 
 export function useAoVivo(ativo: boolean, meuOwnerId: string | null, ehGestor: boolean) {
   const qc = useQueryClient();
@@ -58,6 +75,8 @@ export function useAoVivo(ativo: boolean, meuOwnerId: string | null, ehGestor: b
   const pinos = useRef<Set<string>>(new Set());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const baseRelidaEm = useRef(0);
+  const contextoRelidoEm = useRef(0);
+  const contextoAdiado = useRef<ReturnType<typeof setTimeout> | null>(null);
   const donoRef = useRef({ meuOwnerId, ehGestor });
   donoRef.current = { meuOwnerId, ehGestor };
 
@@ -71,7 +90,23 @@ export function useAoVivo(ativo: boolean, meuOwnerId: string | null, ehGestor: b
       const ids = [...pinos.current].slice(0, 200);
       tipos.current.clear();
       pinos.current.clear();
-      chaves.forEach((k) => { void qc.invalidateQueries({ queryKey: k }); });
+      chaves.forEach((k, id) => {
+        if (id === 'mapa-contexto') {
+          const falta = CONTEXTO_NO_MAXIMO_A_CADA_MS - (Date.now() - contextoRelidoEm.current);
+          if (falta > 0) {
+            if (!contextoAdiado.current) {
+              contextoAdiado.current = setTimeout(() => {
+                contextoAdiado.current = null;
+                contextoRelidoEm.current = Date.now();
+                void qc.invalidateQueries({ queryKey: ['mapa-contexto'] });
+              }, falta);
+            }
+            return;
+          }
+          contextoRelidoEm.current = Date.now();
+        }
+        void qc.invalidateQueries({ queryKey: k });
+      });
       if (nasceu && Date.now() - baseRelidaEm.current > RELER_BASE_NO_MAXIMO_A_CADA_MS) {
         baseRelidaEm.current = Date.now();
         void qc.invalidateQueries({ queryKey: ['clients'] });
@@ -83,12 +118,14 @@ export function useAoVivo(ativo: boolean, meuOwnerId: string | null, ehGestor: b
       const porId = new Map((data as unknown as Client[]).map((c) => [c.id, c]));
       // Só TROCA o que já está no cache: pôr um pino num recorte (bounds, status) de que
       // ele não faz parte mostraria pino onde a consulta não o traria.
-      qc.setQueriesData<Client[]>({ queryKey: ['clients'] }, (lista) => {
+      // Só nas consultas que estão na tela, e só se a linha mudou de verdade: o eco da
+      // própria escrita trocava o array e recalculava todos os pinos à toa.
+      qc.setQueriesData<Client[]>({ queryKey: ['clients'], predicate: (q) => q.getObserversCount() > 0 }, (lista) => {
         if (!lista) return lista;
         let mudou = false;
         const nova = lista.map((c) => {
           const n = porId.get(c.id);
-          if (!n) return c;
+          if (!n || mesmaLinha(c, n)) return c;
           mudou = true;
           return { ...c, ...n };
         });
@@ -102,6 +139,7 @@ export function useAoVivo(ativo: boolean, meuOwnerId: string | null, ehGestor: b
         const { meuOwnerId: dono, ehGestor: gestor } = donoRef.current;
         if (!sinalMeInteressa(s, dono, gestor)) return;
         tipos.current.add(String(s.tipo));
+        if (s.tipo === 'negocio' && dono && String(s.owner_id ?? '') === String(dono)) tipos.current.add('negocio-meu');
         if ((s.tipo === 'pino' || s.tipo === 'visita') && s.client_id) pinos.current.add(String(s.client_id));
         if (!timer.current) timer.current = setTimeout(() => { void aplicar(); }, 1200);
       })
@@ -109,6 +147,8 @@ export function useAoVivo(ativo: boolean, meuOwnerId: string | null, ehGestor: b
     return () => {
       if (timer.current) clearTimeout(timer.current);
       timer.current = null;
+      if (contextoAdiado.current) clearTimeout(contextoAdiado.current);
+      contextoAdiado.current = null;
       supabase.removeChannel(canal);
     };
   }, [ativo, qc]);

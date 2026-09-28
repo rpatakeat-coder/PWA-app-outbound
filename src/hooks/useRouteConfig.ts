@@ -55,7 +55,7 @@ export function useRouteConfig() {
         .eq('id', 1);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['route_config'] }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['route_config'] }); },
   });
 
   return { config: query.data ?? ROUTE_CONFIG_DEFAULTS, isLoading: query.isLoading, save };

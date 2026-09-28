@@ -155,7 +155,7 @@ export function useMinhaDaily(enabled: boolean) {
         );
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['minha_daily', meuId] }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['minha_daily', meuId] }); },
   });
 
   const anotar = useMutation({
@@ -174,7 +174,7 @@ export function useMinhaDaily(enabled: boolean) {
         );
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['minha_daily', meuId] }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['minha_daily', meuId] }); },
   });
 
   return { daily: query.data ?? null, isLoading: query.isLoading, prometer, anotar };

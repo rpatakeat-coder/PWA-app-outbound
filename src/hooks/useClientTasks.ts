@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
@@ -20,22 +19,9 @@ export function useClientTasks() {
   const queryClient = useQueryClient();
   const { isAuthenticated, user } = useAuth();
 
-  // Dispara a geracao (rpc) uma vez quando o usuario autentica. Idempotente:
-  // se ja existir tarefa pendente pro lead, so recalcula severidade. Se a
-  // funcao ainda nao existe (migration nao rodou), ignora silenciosamente.
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    let cancelled = false;
-    (async () => {
-      const { error } = await supabase.rpc('generate_client_tasks');
-      if (cancelled) return;
-      if (error && !isMissingTableError(error)) {
-        console.warn('[TASKS] generate_client_tasks falhou:', error.message);
-      }
-      queryClient.invalidateQueries({ queryKey: ['client_tasks'] });
-    })();
-    return () => { cancelled = true; };
-  }, [isAuthenticated, queryClient]);
+  // A GERAÇÃO É DO BANCO (auditoria de velocidade, 28/09/2026): o app chamava
+  // generate_client_tasks a cada abertura, e ela reescreve toda tarefa pendente (716 mil
+  // updates para 684 linhas). O cron 7 já roda a cada 30 min; aqui o app só lê.
 
   // Carrega todas as tarefas pendentes. A RLS ja libera SELECT pra todo
   // autenticado; o recorte "minhas" (por vendedor) e feito na tela.
@@ -71,7 +57,7 @@ export function useClientTasks() {
         .eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['client_tasks'] }),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['client_tasks'] }); },
   });
 
   return {
