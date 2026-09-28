@@ -12,7 +12,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { Alert } from '../components/Alert';
 import { supabase } from '../integrations/supabase/client';
-import { concluirComDesfazer } from '../utils/concluirTarefa';
+import RegistrarTarefa, { type TarefaParaRegistrar } from './RegistrarTarefa';
 
 import { useTarefasDoCrm } from '../hooks/useTarefasDoCrm';
 import { ir } from './CardLeadNovo';
@@ -41,6 +41,8 @@ type Props = {
   /** Monta o dia com microrrotas a partir da carteira (App.tsx). */
   aoMontarDia?: () => void;
   montandoDia?: boolean;
+  /** Telefone do lead, para o "Ligar agora" do registro. */
+  telefoneDe?: (clientId: string | null) => string | null;
 };
 
 const ruaDo = (c: Client | null) => {
@@ -51,8 +53,9 @@ const ruaDo = (c: Client | null) => {
 
 export default function AgendaNovoScreen({
   diaInicial, paradas, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead, dailyValidadaEm,
-  aoRoteirizar, roteirizando, aoMontarDia, montandoDia,
+  aoRoteirizar, roteirizando, aoMontarDia, montandoDia, telefoneDe,
 }: Props) {
+  const [registrando, setRegistrando] = useState<TarefaParaRegistrar | null>(null);
   const queryClient = useQueryClient();
   // Concluídas nesta sessão: somem da lista na hora (o Desfazer as devolve).
   const [concluidas, setConcluidas] = useState<Set<string>>(new Set());
@@ -114,14 +117,10 @@ export default function AgendaNovoScreen({
     const voltar = () => setConcluidas((s) => { const n = new Set(s); n.delete(k.id); return n; });
     if (k.fonte === 'hubspot') {
       const t = tarefas.find((x) => `hs-${x.id}` === k.id);
-      if (!t) { voltar(); return; }
-      concluirComDesfazer({
-        pedido: { taskId: t.id, nota: t.dealId ? { dealId: t.dealId, texto: `Ligação · tarefa encerrada: ${t.assunto}` } : null },
-        rotulo: `Liguei · ${k.nome ?? t.assunto}`,
-        textoToast: '✓ Ligação registrada · HubSpot + Cockpit',
-        aoVoltar: voltar,
-        aoGravar: () => { void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] }); },
-      });
+      // O mesmo registro da aba Tarefas: como foi, o que vem agora, uma linha.
+      voltar();
+      if (!t) return;
+      setRegistrando({ id: t.id, assunto: t.assunto, dealId: t.dealId, nome: k.nome ?? t.nomeDoCliente, telefone: telefoneDe?.(k.clientId) ?? null });
       return;
     }
     const idReuniao = k.id.replace(/^app-/, '');
@@ -155,6 +154,12 @@ export default function AgendaNovoScreen({
 
   return (
     <ScrollView style={s.tela} contentContainerStyle={s.conteudo}>
+      <RegistrarTarefa
+        tarefa={registrando}
+        aoFechar={() => setRegistrando(null)}
+        aoSumir={(id) => setConcluidas((st) => new Set(st).add(`hs-${id}`))}
+        aoVoltar={(id) => setConcluidas((st) => { const n = new Set(st); n.delete(`hs-${id}`); return n; })}
+      />
       <Text style={s.subtitulo}>A mesma do Planejamento do Cockpit</Text>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.faixa}>
@@ -305,7 +310,7 @@ export default function AgendaNovoScreen({
               </View>
               {dia <= hoje && podeLigar(k) ? (
                 <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Liguei: ${k.nome ?? k.titulo ?? 'retorno'}`} style={s.liguei} onPress={() => liguei(k)}>
-                  <Text style={s.ligueiTexto}>Liguei</Text>
+                  <Text style={s.ligueiTexto}>{k.fonte === 'hubspot' ? 'Registrar' : 'Liguei'}</Text>
                 </TouchableOpacity>
               ) : (!!k.clientId && <IconChevronRight width={20} height={20} fill={cores.muted} />)}
             </TouchableOpacity>

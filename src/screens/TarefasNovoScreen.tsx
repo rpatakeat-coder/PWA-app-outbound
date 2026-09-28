@@ -11,6 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { useTarefasDoCrm, type TarefaDoCrmNaTela, type TarefaParaAFicha } from '../hooks/useTarefasDoCrm';
 import { useMeuPdi } from '../hooks/useMeuPdi';
+import RegistrarTarefa, { type TarefaParaRegistrar } from './RegistrarTarefa';
 import { IconCall, IconCheck, IconChevronDown, IconChevronRight, useIconColors } from '../components/icons';
 import { acaoRapida, agrupar, chipsDaTarefa, diaBRT } from '../utils/abaTarefas';
 import { concluirComDesfazer } from '../utils/concluirTarefa';
@@ -55,6 +56,9 @@ export default function TarefasNovoScreen({
   const chave = email ? chaveFeitas(email, hoje) : null;
 
   const [aba, setAba] = useState<'abertas' | 'feitas'>('abertas');
+  // O REGISTRO (28/09/2026): ligação, retorno, cobrança e follow-up se registram numa
+  // folha — como foi, o que vem agora, uma linha — em vez do "Liguei" que só encerrava.
+  const [registrando, setRegistrando] = useState<TarefaParaRegistrar | null>(null);
   const [verSugestoes, setVerSugestoes] = useState(false);
   // Some da lista no toque; volta se desfizer ou se o HubSpot recusar.
   const [emJanela, setEmJanela] = useState<Set<string>>(new Set());
@@ -108,7 +112,20 @@ export default function TarefasNovoScreen({
 
   return (
     <ScrollView style={s.tela} contentContainerStyle={s.conteudo}>
-      <Text style={s.subtitulo}>Follow-ups, SLA e tudo que o Cockpit movimenta</Text>
+      <RegistrarTarefa
+        tarefa={registrando}
+        aoFechar={() => setRegistrando(null)}
+        aoSumir={(id) => {
+          const t = tarefas.find((x) => x.id === id);
+          setEmJanela((st) => new Set(st).add(id));
+          if (t) setFeitas((f) => [{ id, assunto: t.assunto, nome: t.nomeDoCliente ?? null, em: Date.now() }, ...f.filter((x) => x.id !== id)]);
+        }}
+        aoVoltar={(id) => {
+          setEmJanela((st) => { const n = new Set(st); n.delete(id); return n; });
+          setFeitas((f) => f.filter((x) => x.id !== id));
+        }}
+      />
+      <Text style={s.subtitulo}>Tudo que você tem de fazer: do Planejamento, do funil, da ficha de rua e o que você mesmo marcou. Ligação se registra em "Registrar"; visita, no Cheguei.</Text>
 
       <View style={s.seletor} accessibilityRole="tablist">
         {([['abertas', `Abertas · ${abertas.length}`], ['feitas', `Feitas hoje · ${feitas.length}`]] as const).map(([id, rotulo]) => (
@@ -139,7 +156,8 @@ export default function TarefasNovoScreen({
                 const chips = chipsDaTarefa(t, agora);
                 const rapida = acaoRapida(t);
                 const dist = distanciaAte(t.clientId);
-                const lead = [t.nomeDoCliente ?? 'cliente não identificado', dist, t.clientId ? null : 'fora do mapa'].filter(Boolean).join(' · ');
+                const cli = t.clientId && clienteDe ? clienteDe(t.clientId) : null;
+                const sub = [t.nomeDoCliente ? t.assunto : null, dist, t.clientId ? null : 'fora do mapa'].filter(Boolean).join(' · ');
                 return (
                   <View key={t.id} style={[s.linha, chips.alerta && s.linhaAlerta]}>
                     <TouchableOpacity
@@ -155,10 +173,11 @@ export default function TarefasNovoScreen({
                       style={s.linhaCorpo}
                       onPress={() => (t.clientId ? aoAbrirLead(t.clientId, { assunto: t.assunto, corpo: t.corpo, venceEm: t.venceEm }) : abrirSemPino(t))}
                     >
-                      <Text style={s.linhaTitulo} numberOfLines={2}>{t.assunto}</Text>
-                      <Text style={s.linhaLead} numberOfLines={1}>{lead}</Text>
+                      <Text style={s.linhaTitulo} numberOfLines={2}>{t.nomeDoCliente ?? t.assunto}</Text>
+                      {!!sub && <Text style={s.linhaLead} numberOfLines={2}>{sub}</Text>}
                       <View style={s.chips}>
                         <Text style={s.chip}>{chips.tipo}</Text>
+                        {!!cli?.etapa && <Text style={s.chip}>{cli.etapa}</Text>}
                         {chips.origem && <Text style={[s.chipOrigem, chips.alerta && s.chipAlerta]} numberOfLines={1}>{chips.origem}</Text>}
                       </View>
                     </TouchableOpacity>
@@ -174,12 +193,12 @@ export default function TarefasNovoScreen({
                     ) : rapida === 'liguei' ? (
                       <TouchableOpacity
                         accessibilityRole="button"
-                        accessibilityLabel={`Liguei: ${t.assunto}`}
+                        accessibilityLabel={`Registrar: ${t.assunto}`}
                         style={s.rapida}
-                        onPress={() => concluir(t, true)}
+                        onPress={() => setRegistrando({ id: t.id, assunto: t.assunto, dealId: t.dealId, nome: t.nomeDoCliente, telefone: cli?.telefone ?? null })}
                       >
                         <IconCall width={18} height={18} fill={cores.onSurface} />
-                        <Text style={s.rapidaTexto}>Liguei</Text>
+                        <Text style={s.rapidaTexto}>Registrar</Text>
                       </TouchableOpacity>
                     ) : (() => {
                       // Visita e reunião: "Ir" até o lead (a pé / carro / Waze).
