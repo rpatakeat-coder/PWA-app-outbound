@@ -87,7 +87,7 @@ export default function AgendaNovoScreen({
       if (error) throw error;
       const porDia = new Map<string, FieldRouteStopWithClient[]>();
       for (const r of (data ?? []) as unknown as Array<{ route_date: string; stops: FieldRouteStopWithClient[] }>) {
-        const vivas = (r.stops ?? []).filter((s) => s.status !== 'removed').sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+        const vivas = (r.stops ?? []).filter((s) => s.status !== 'removed' && s.status !== 'skipped').sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
         porDia.set(r.route_date, [...(porDia.get(r.route_date) ?? []), ...vivas]);
       }
       return porDia;

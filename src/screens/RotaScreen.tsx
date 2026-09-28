@@ -257,11 +257,15 @@ export function RotaScreen({
   // Uma copy so' pros dois lugares que explicam a Rota do dia: a longa no
   // cartao do sheet, o resumo no peek do estado vazio. Mesma promessa do M3 —
   // o peek nao inventa outra, so' corta o detalhe das obrigatorias.
-  const copiaRotaLonga = 'Monta as 3 visitas obrigatórias do dia (SLA estourado, Relacionamento '
-    + `+1000 comandas e Conta Alvo) e completa até ${metaVisitasDia} paradas perto de você, `
-    + 'já na ordem otimizada. Parte da sua localização atual.';
-  const copiaRotaCurta = `Monta as obrigatórias e completa até a meta de ${metaVisitasDia}, `
-    + 'partindo de onde você está.';
+  const copiaRotaLonga = montaSemApagar
+    ? `Monta o dia em microrrotas — portas a pé perto umas das outras — com a sua carteira a até 8 km, até ${metaVisitasDia} paradas, pelo que mais vale hoje (SLA, tarefa, etapa, conta-alvo). Nada do que já está na rota é apagado.`
+    : 'Monta as 3 visitas obrigatórias do dia (SLA estourado, Relacionamento '
+      + `+1000 comandas e Conta Alvo) e completa até ${metaVisitasDia} paradas perto de você, `
+      + 'já na ordem otimizada. Parte da sua localização atual.';
+  const copiaRotaCurta = montaSemApagar
+    ? `Monta o dia em microrrotas até a meta de ${metaVisitasDia}, partindo de onde você está.`
+    : `Monta as obrigatórias e completa até a meta de ${metaVisitasDia}, `
+      + 'partindo de onde você está.';
 
   // Voltar do sistema (Android e gesto do iOS, no PWA) recolhe o mapa em vez
   // de sair da tela — mesmo padrao do Painel: empilha um estado ao expandir e

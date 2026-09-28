@@ -61,7 +61,8 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
     concluirComDesfazer({
       pedido: { taskId: t.id, nota: t.dealId ? { dealId: t.dealId, texto } : null, proximo: passo },
       rotulo: `Registro · ${t.nome ?? t.assunto}`,
-      textoToast: passo ? `✓ Registrado · próximo em ${data!.split('-').reverse().slice(0, 2).join('/')}` : '✓ Registrado · HubSpot + Cockpit',
+      textoToast: !t.dealId ? '✓ Tarefa concluída · sem negócio ligado, o como foi não fica registrado'
+        : passo ? `✓ Registrado · próximo em ${data!.split('-').reverse().slice(0, 2).join('/')}` : '✓ Registrado · HubSpot + Cockpit',
       aoVoltar: () => aoVoltar?.(t.id),
       // A conclusão, a nota e o próximo passo saem juntos (concluirTarefa), inclusive pela
       // fila quando não há sinal.
@@ -100,8 +101,8 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
         <View style={s.chips}>
           {PROXIMOS.map((p) => chip(p.id, p.rotulo, proximoId === p.id, () => setProximoId(p.id)))}
         </View>
-        {!tarefa.dealId && proximo.tipo !== 'nada' && (
-          <Text style={s.aviso}>Esta tarefa não está ligada a um negócio: o registro entra, mas o próximo passo não tem onde nascer.</Text>
+        {!tarefa.dealId && (
+          <Text style={s.aviso}>Esta tarefa não está ligada a um negócio no HubSpot: ela é concluída, mas o como foi e o próximo passo não têm onde ficar.</Text>
         )}
 
         <TextInput

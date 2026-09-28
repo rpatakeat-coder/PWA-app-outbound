@@ -54,6 +54,8 @@ export async function enviarConclusao(p: PedidoConclusao): Promise<void> {
     } catch (e) {
       if (ehErroDeRede(e)) {
         await enfileirar({ acaoId: novoAcaoId(), tipo: 'negocio', rotulo: 'Próximo passo do registro', payload: { corpo: p.proximo } });
+      } else {
+        Toast.mostrar(`O registro entrou, mas o próximo passo não: ${(e as Error).message}`, 'erro');
       }
     }
   }

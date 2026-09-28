@@ -2349,6 +2349,14 @@ function MainApp() {
       return;
     }
 
+    // MAPA NOVO NÃO APAGA (auditoria 28/09): o saveRoute apagava a rota inteira, feitas
+    // e as do Planejamento inclusive. A sugestão entra somando, como o Montar meu dia.
+    if (modoNovo) {
+      void fieldOps.montarDia.mutateAsync(ordered.map((item) => item.client))
+        .then((out) => Alert.alert('Rota sugerida', `${out.novas} ${out.novas === 1 ? 'parada nova' : 'paradas novas'} na rota de hoje. Nada do que já estava foi apagado.`))
+        .catch((e) => Alert.alert('Erro ao montar a rota', String((e as Error)?.message ?? e)));
+      return;
+    }
     setRouteDraft(ordered.map(item => item.client));
     fieldOps.saveRoute.mutate({
       routeDate,
@@ -2384,7 +2392,7 @@ function MainApp() {
       },
       onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
     });
-  }, [clients, fieldOps.saveRoute, filteredWithCoords, routeDate, routeLeadCount, routeVendorFilterHubspotId, routeStatusSelection, routeStopClientIds, userLocation, routeStartOverride, vendorById]);
+  }, [clients, fieldOps.saveRoute, fieldOps.montarDia, modoNovo, filteredWithCoords, routeDate, routeLeadCount, routeVendorFilterHubspotId, routeStatusSelection, routeStopClientIds, userLocation, routeStartOverride, vendorById]);
 
   // ===== Rota do dia (automática) =====
   // Monta as visitas OBRIGATÓRIAS do dia (Fase 1: Relacionamento; SLA/Conta
@@ -2877,10 +2885,12 @@ function MainApp() {
         if (diasDesde(c.visited_at) < 3) p -= 20;
         return Math.max(1, p);
       };
-      const plano = routeStops.filter((s) => s.status !== 'done' && s.status !== 'removed' && s.client && s.client.latitude != null && s.client.longitude != null);
+      const plano = routeStops.filter((s) => s.status === 'planned' && s.client && s.client.latitude != null && s.client.longitude != null);
+      // quem ele pulou hoje não volta pela montagem
+      const pulados = new Set(routeStops.filter((s) => s.status === 'skipped').map((s) => s.client_id));
       const candidatas = [
         ...carteira
-          .filter((c) => (c.status === 'lead' || c.status === 'cliente') && !c.conta_alvo_dismissed
+          .filter((c) => (c.status === 'lead' || c.status === 'cliente') && !c.conta_alvo_dismissed && !pulados.has(c.id)
             && !visitadoHoje(c.visited_at) && !FECHADAS.has(c.etapa ?? '') && c.latitude != null && c.longitude != null)
           .map((c) => ({ id: c.id, lat: Number(c.latitude), lng: Number(c.longitude), peso: peso(c) })),
         ...plano.map((s) => ({ id: s.client_id, lat: Number(s.client!.latitude), lng: Number(s.client!.longitude), peso: 50, obrigatoria: true })),
@@ -2895,7 +2905,7 @@ function MainApp() {
       const confirmou = await new Promise<boolean>((res) => {
         Alert.alert(
           `${ordemClientes.length} paradas em ${r.micros.length} ${r.micros.length === 1 ? 'microrrota' : 'microrrotas'}`,
-          `${partes}\n~${km} km entre elas, a partir de onde você está.\n\nO que já está no plano continua, o feito não muda, e tudo vai para o Planejamento do Cockpit.`,
+          `${partes}\n~${km} km entre elas, a partir de onde você está.\n\nNada é apagado: o planejado continua, o feito não muda, o que você pulou não volta. As paradas novas vão para o Planejamento do Cockpit (seg. a sex., lead com negócio ou conta-alvo).`,
           [
             { text: 'Cancelar', style: 'cancel', onPress: () => res(false) },
             { text: 'Montar o dia', onPress: () => res(true) },
@@ -2958,7 +2968,7 @@ function MainApp() {
           `São ~${entreKm.toFixed(0)} km entre as ${nMicro} microrrotas. Vale deixar num dia só as portas da mesma região e passar o grupo mais distante para outro dia (no Planejamento ou tirando da rota).`);
       }
     } catch (e) {
-      Alert.alert('Não deu para roteirizar', 'O serviço de rotas não respondeu; a ordem de antes ficou como estava.\n' + String((e as Error)?.message ?? ''));
+      Alert.alert('Não deu para roteirizar', 'A nova ordem não foi gravada inteira; toque em Roteirizar de novo para refazer.\n' + String((e as Error)?.message ?? ''));
     } finally {
       setRoteirizando(false);
     }
@@ -3127,7 +3137,11 @@ function MainApp() {
         Toast.mostrar('Pondo esse negócio no mapa…', 'fila');
         const pedir = async (extra: string) => {
           const { data: r, error } = await supabase.functions.invoke(`cockpit-dados?recurso=pino-do-negocio&deal=${dl.pino!.dealId}${extra}`, { method: 'GET' });
-          if (error) throw error;
+          if (error) {
+            // O motivo em português vem no corpo ("Esse negócio é de outra pessoa"…).
+            const corpo = await (error as { context?: { json?: () => Promise<{ erro?: string }> } }).context?.json?.().catch(() => null);
+            throw new Error(corpo?.erro ?? error.message);
+          }
           return r as { ok?: boolean; erro?: string; clientId?: string; precisaPosicao?: boolean; endereco?: string; cep?: string | null; temEndereco?: boolean };
         };
         try {
@@ -7003,7 +7017,7 @@ function MainApp() {
           abrirEscolhaDePartida={() => setIsPickingRouteStart(true)}
           abrirEscolhaDeVendedor={() => setIsPickingRouteVendor(true)}
           isMonitoringRoute={isMonitoringRoute}
-          isOptimizing={isOptimizing}
+          isOptimizing={isOptimizing || montandoDia || roteirizando}
           lastProviderUsed={lastProviderUsed}
           isAdmin={isAdmin}
           myHubspotId={myHubspotId}

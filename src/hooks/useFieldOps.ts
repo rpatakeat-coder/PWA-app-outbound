@@ -270,7 +270,7 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
           if (error) throw error;
           porCliente.set(c.id, nova as { id: string; client_id: string; position: number; status: string });
           novas += 1;
-        } else if (l.status === 'removed' || l.status === 'skipped') {
+        } else if (l.status === 'removed') {
           const { error } = await supabase.from('field_route_stops').update({ status: 'planned' }).eq('id', l.id);
           if (error) throw error;
           novas += 1;
