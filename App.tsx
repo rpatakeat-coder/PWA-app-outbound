@@ -1110,7 +1110,6 @@ function MainApp() {
   const [quadraAberta, setQuadraAberta] = useState<{ lider: string; ids: Set<string>; area: string } | null>(null);
   const [roteirizando, setRoteirizando] = useState(false);
   const [montandoDia, setMontandoDia] = useState(false);
-  useEffect(() => { setPilhaAberta(null); }, [mapRegion]);
   useEffect(() => { setQuadraAberta(null); }, [lente]);
   const janelaTela = useWindowDimensions();
   // Altura da folha de baixo do mapa novo: o mapa termina no topo dela, para
@@ -2159,6 +2158,32 @@ function MainApp() {
     }
     setPilhaAberta(pl.lider);
   }, [pilhaDe, focoMapaNovo]);
+  // O LEQUE FICA ABERTO NO MODO PLANEJAR (Julyan, 28/09/2026). Fora dele, fecha ao mexer
+  // o mapa. Planejando, ele toca um a um os leads do mesmo endereço: o leque só fecha
+  // quando o zoom muda de verdade (arrastar não fecha), e sobrevive ao toque — pôr um
+  // lead no dia muda o líder da pilha (o planejado vem na frente), e o leque seguia o
+  // líder antigo e sumia. Agora segue os membros.
+  const zoomDoLequeRef = useRef<number | null>(null);
+  const membrosDoLequeRef = useRef<string[]>([]);
+  useEffect(() => { zoomDoLequeRef.current = pilhaAberta ? (mapRegion?.latitudeDelta ?? null) : null; }, [pilhaAberta]);
+  useEffect(() => {
+    const antes = zoomDoLequeRef.current;
+    const agora = mapRegion?.latitudeDelta ?? null;
+    if (planejarDia && antes != null && agora != null && Math.abs(agora - antes) / antes < 0.15) return;
+    setPilhaAberta(null);
+  }, [mapRegion]);
+  useEffect(() => {
+    if (!pilhaAberta) { membrosDoLequeRef.current = []; return; }
+    const pl = pilhaDe.get(pilhaAberta);
+    if (pl && pl.lider === pilhaAberta && pl.membros.length > 1) { membrosDoLequeRef.current = pl.membros; return; }
+    if (planejarDia) {
+      for (const id of membrosDoLequeRef.current) {
+        const outra = pilhaDe.get(id);
+        if (outra && outra.membros.length > 1) { setPilhaAberta(outra.lider); return; }
+      }
+    }
+    setPilhaAberta(null);
+  }, [pilhaDe, pilhaAberta, planejarDia]);
   // Cor de cada pino da área: o anel da quadra pinta a proporção delas.
   const corPorId = useMemo(() => new Map(visiveisMapaNovo.map((it) => [it.c.id, it.p.cor])), [visiveisMapaNovo]);
 
