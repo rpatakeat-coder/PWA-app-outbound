@@ -28,7 +28,7 @@ import {
 import { KeyboardAvoidingView } from './src/components/KeyboardAvoidingView';
 import { Alert, AlertHost } from './src/components/Alert';
 import { Toast, ToastHost } from './src/components/Toast';
-import { ehErroDeRede, enfileirar, novoAcaoId, registrarExecutor, subirFila } from './src/utils/filaOffline';
+import { ehErroDeRede, enfileirar, novoAcaoId, ouvirFila, registrarExecutor, subirFila } from './src/utils/filaOffline';
 import { subirFicha as subirFichaDaFila, type LinhaFicha as LinhaFichaDaFila } from './src/utils/fichaNoBanco';
 import { Painel } from './src/components/Painel';
 import { useTheme } from './src/theme';
@@ -1537,6 +1537,29 @@ function MainApp() {
   useAoVivo(isAuthenticated, myHubspotId, canViewGestor);
   // Sino de Avisos (mapa novo): falhas de sincronização + recados do gestor. Ver src/hooks/useAvisos.ts.
   const avisos = useAvisos(modoNovo);
+  // A FILA DO CELULAR APARECE NO COCKPIT (S8 / contrato 30, handoff v6): ninguém gravava
+  // fila_pwa e o painel do gestor dizia "não confirmado" para sempre. A cada mudança da
+  // fila o app grava o resumo do dia (pendentes, falhas). Sem sinal a gravação falha e
+  // tenta de novo na próxima mudança — quando o sinal volta, antes e depois da drenagem.
+  useEffect(() => {
+    if (!profile?.id) return;
+    const eu = profile.id;
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const tirar = ouvirFila((itens) => {
+      if (t) clearTimeout(t);
+      t = setTimeout(() => {
+        const agora = new Date().toISOString();
+        void supabase.from('fila_pwa').upsert({
+          seller_id: eu,
+          dia: new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }),
+          pendentes: itens.filter((i) => i.estado === 'na_fila').length,
+          falhas: itens.filter((i) => i.estado === 'falhou').length,
+          ultima_tentativa: agora, versao_app: '2.0.0', atualizado_em: agora,
+        }, { onConflict: 'seller_id,dia' }).then(() => undefined, () => undefined);
+      }, 1500);
+    });
+    return () => { if (t) clearTimeout(t); tirar(); };
+  }, [profile?.id]);
   const [avisosAbertos, setAvisosAbertos] = useState(false);
   // Meu dia em números (handoff v4.1 §6.12): só o medido — check-ins de hoje,
   // Daily prometida, reuniões e sequência. Alimenta também o "x/6" da pílula.
@@ -4021,7 +4044,7 @@ function MainApp() {
   // Sobe logo depois do check-in bem-sucedido: o que aconteceu DENTRO da visita
   // (ver DesfechoVisitaSheet). Puravel — o check-in ja' gravou.
   // Mudar etapa do mapa novo (porta única): lead + etapa atual no código do Cockpit.
-  const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null } | null>(null);
+  const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null } | null>(null);
   const codigoDaEtapa = (c: Client): string | null => {
     if (!contextoPino) return null;
     const chave = textoNormalizado(c.etapa);
@@ -4029,13 +4052,26 @@ function MainApp() {
     const peloSnapshot = c.id_hubspot ? contextoPino.tempoPorNegocio.get(String(c.id_hubspot))?.etapaCodigo ?? null : null;
     return pelaTabela ?? peloSnapshot;
   };
-  const aplicarEtapaNoLead = (clientId: string, codigo: string, reabrir?: Client) => {
+  const aplicarEtapaNoLead = (clientId: string, codigo: string, reabrir?: Client, etapaAntes?: string | null) => {
     // O HubSpot já gravou. O cartão e o pino mudam NA HORA (cache local + cartão
     // aberto), sem esperar o banco: antes o rótulo só mudava se o update do celular
     // desse certo, e ele falhava calado (auditoria 27/09, Restaurante Dona Ba). O
     // espelho do servidor grava a mesma etapa no lead segundos depois.
     const rotulo = ROTULO_ETAPA[codigo];
     if (!rotulo) return;
+    // O HISTÓRICO DO CARTÃO VÊ A MUDANÇA (S4/D4, handoff v6): só o caminho antigo
+    // (ChangeStageModal) gravava client_stage_changes; a mudança pelo mapa novo sumia do
+    // Histórico. Mesma linha do caminho antigo, depois que o HubSpot já aceitou.
+    const antes = etapaAntes ?? (reabrir ?? (selectedClient?.id === clientId ? selectedClient : null))?.etapa ?? null;
+    if (profile?.id && antes !== rotulo) {
+      void supabase.from('client_stage_changes').insert({
+        client_id: clientId, from_stage: antes, to_stage: rotulo, to_stage_id: codigo, sub_values: {},
+        created_by: profile.id, created_by_name: profile.full_name ?? null, created_by_email: profile.email ?? null,
+      }).then(({ error }) => {
+        if (error) console.warn('[histórico da etapa]', error.message);
+        else void queryClient.invalidateQueries({ queryKey: ['client_stage_changes', clientId] });
+      });
+    }
     queryClient.setQueriesData({ queryKey: ['clients'] }, (velho: unknown) =>
       Array.isArray(velho) ? velho.map((c: Client) => (c.id === clientId ? { ...c, etapa: rotulo } : c)) : velho);
     setSelectedClient((atual) => (atual && atual.id === clientId ? { ...atual, etapa: rotulo } : atual));
@@ -4930,22 +4966,22 @@ function MainApp() {
           </View>
 
           <View style={navStyles.bottomCardActions}>
+            {/* SÓ O CHEGUEI MARCA A PARADA FEITA (S12, handoff v6): o "Finalizar visita"
+                marcava feita sem check-in, e a Agenda contava visita que ninguém provou.
+                Agora é o mesmo check-in do mapa (GPS ou foto); só depois dele a navegação avança. */}
             <TouchableOpacity
-              style={[navStyles.bottomCardButton, { backgroundColor: '#16a34a' }]}
+              style={[navStyles.bottomCardButton, { backgroundColor: '#E51A31' }]}
+              accessibilityRole="button"
+              accessibilityLabel={`Cheguei em ${navTitle}`}
               onPress={() => {
-                Alert.alert(
-                  isLast ? 'Concluir rota' : 'Finalizar visita',
-                  isLast
-                    ? `Marcar ${navTitle} como visitado e encerrar a rota?`
-                    : `Marcar ${navTitle} como visitado e ir pro proximo?`,
-                  [
-                    { text: 'Cancelar', style: 'cancel' },
-                    { text: 'Sim', onPress: advanceNavigationStop },
-                  ],
-                );
+                if (!navigationCurrentStop) return;
+                void handleMarkAsVisitedRef.current(navigationCurrentStop, () => {
+                  if (isLast) { setIsNavigating(false); Toast.mostrar('✓ Última parada da rota com check-in', 'ok'); }
+                  else setCurrentStopIndex((idx) => idx + 1);
+                });
               }}
             >
-              <IconText Icone={IconCheck} style={navStyles.bottomCardButtonText} tone="onBrand">Finalizar visita</IconText>
+              <IconText Icone={IconCheck} style={navStyles.bottomCardButtonText} tone="onBrand">Cheguei</IconText>
             </TouchableOpacity>
             <View style={navStyles.bottomCardSecondaryRow}>
               {!isLast && (
@@ -5003,11 +5039,11 @@ function MainApp() {
         etapaRotulo: selectedClient.etapa ?? null,
         etapaCodigo: codigoDaEtapa(selectedClient),
         // Botão de avanço do bloco NEGÓCIO: abre Mudar etapa já na etapa destino.
-        onAvancar: isViewer ? undefined : (destino: string) => {
+        onAvancar: isViewer ? undefined : (destino: string, preenchido?: Record<string, string>) => {
           const c = selectedClient;
           const atual = codigoDaEtapa(c);
           setSelectedClient(null);
-          setTimeout(() => setEtapaNovaPara({ client: c, etapaAtual: atual, destinoInicial: destino }), 350);
+          setTimeout(() => setEtapaNovaPara({ client: c, etapaAtual: atual, destinoInicial: destino, preenchido: preenchido ?? null }), 350);
         },
         // "É meu" (Julyan 26/09): lead sem dono na rota de hoje entra no meu funil.
         onEMeu: isViewer ? undefined : () => { void assumirDoMapa(selectedClient); },
@@ -5728,6 +5764,7 @@ function MainApp() {
           planoTotal={routeDisplayClients.length}
           planoFeito={routeStops.filter((s) => s.status === 'done').length}
           visitasFeitas={meuDia.data?.visitasHoje ?? routeStops.filter((s) => s.status === 'done').length}
+          visitasProvadas={meuDia.data?.provadasHoje ?? null}
           metaVisitas={metaDeHoje}
           aoProgresso={() => setMeuDiaAberto(true)}
           chao={alturaRodape ?? baseInferior}
@@ -5957,6 +5994,7 @@ function MainApp() {
         planoTotal={routeDisplayClients.length}
         planoFeito={routeStops.filter((s) => s.status === 'done').length}
         visitasFeitas={meuDia.data?.visitasHoje ?? routeStops.filter((s) => s.status === 'done').length}
+        visitasProvadas={meuDia.data?.provadasHoje ?? null}
         metaVisitas={metaDeHoje}
         aoProgresso={() => setMeuDiaAberto(true)}
         totalNaArea={visiveisMapaNovo.length}
@@ -6532,7 +6570,18 @@ function MainApp() {
   ];
   // Trocar de aba fecha o card aberto; o mapa (lente, zoom, filtros) fica como
   // estava, porque nada disso e' desmontado.
-  const irParaAba = (aba: AppTab) => {
+  const irParaAba = (aba: AppTab, jaDecidiu = false) => {
+    // MARCAS DO PLANEJAR NÃO SOMEM CALADAS (contrato 33 / A21, handoff v6): trocar de aba
+    // fecha o Planejar e jogava fora as marcas ainda não confirmadas.
+    if (!jaDecidiu && aba !== 'map' && tab === 'map' && rascunhoRef.current.size > 0) {
+      const n = rascunhoRef.current.size;
+      Alert.alert(`${n} ${n === 1 ? 'marca não confirmada' : 'marcas não confirmadas'}`, 'Confirme no plano do dia ou descarte antes de sair do mapa.', [
+        { text: 'Ficar no mapa', style: 'cancel' },
+        { text: 'Descartar', style: 'destructive', onPress: () => { descartarPlano(); irParaAba(aba, true); } },
+        { text: `Confirmar ${n}`, onPress: () => { void confirmarPlano().then(() => irParaAba(aba, true)); } },
+      ]);
+      return;
+    }
     if (aba !== 'map') setSelectedClient(null);
     // Pelo rodapé a Agenda abre em hoje (o dia da ficha vale só para o "Ver na Agenda").
     if (aba === 'agenda') setAgendaDiaInicial(null);
@@ -6546,7 +6595,8 @@ function MainApp() {
     { aba: 'list', rotulo: 'Lista', Icone: IconSquareMenu, visivel: true },
     { aba: 'route', rotulo: 'Rota', Icone: IconCar, visivel: !isViewer },
     { aba: 'agenda', rotulo: 'Agenda', Icone: IconCalendar, visivel: !isViewer },
-    { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: visibleTasksCount, visivel: !isViewer },
+    // N5 (handoff v6): um número de tarefas só, "atrasadas + hoje", igual ao selo do rodapé
+    { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: modoNovo ? seloTarefas : visibleTasksCount, visivel: !isViewer },
     { aba: 'cockpit', rotulo: 'Gestão', Icone: IconBarGraph, visivel: verGestao },
     { aba: 'meu', rotulo: 'Meu desempenho', Icone: IconTrendingUp, visivel: !canViewGestor && !isViewer },
   ];
@@ -6662,7 +6712,8 @@ function MainApp() {
             accessibilityLabel="Sair"
             style={styles.sbSair}
             {...ds({ rotulo: '1', hover: 'surface2', trans: '1' })}
-            onPress={logout}
+            // A15 (handoff v6): os três "Sair" confirmam
+            onPress={() => Alert.alert('Sair da conta?', 'Você precisará entrar de novo com e-mail e senha.', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Sair', style: 'destructive', onPress: () => { void logout(); } }])}
           >
             <IconLogout width={20} height={20} fill={iconColors.muted} />
           </Pressable>
@@ -6720,13 +6771,15 @@ function MainApp() {
         {!isViewer && (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Tarefas pendentes"
+            // UM SINO SÓ (contrato 34 / A13, handoff v6): o do desktop abria Tarefas; agora
+            // é o mesmo do celular — falhas de envio, recados e comunicados. Tarefas têm a aba.
+            accessibilityLabel={modoNovo ? (avisos.selo ? `Avisos, ${avisos.selo} ${avisos.selo === 1 ? 'novo' : 'novos'}` : 'Avisos') : 'Tarefas pendentes'}
             style={styles.hwSino}
             {...ds({ hover: 'surface2', trans: '1' })}
-            onPress={() => setTab('tasks')}
+            onPress={() => { if (modoNovo) { setAvisosAbertos(true); avisos.marcarRecadosVistos(); } else setTab('tasks'); }}
           >
             <IconBell width={20} height={20} fill={iconColors.muted} />
-            {visibleTasksCount > 0 && <View style={styles.hwSinoDot} />}
+            {(modoNovo ? avisos.selo > 0 : visibleTasksCount > 0) && <View style={styles.hwSinoDot} />}
           </Pressable>
         )}
         {!isViewer && (
@@ -7509,7 +7562,7 @@ function MainApp() {
       ) : tab === 'meu' ? (
         <MeuDesempenhoScreen
           enabled={tab === 'meu'}
-          tarefasPendentes={visibleTasksCount}
+          tarefasPendentes={modoNovo ? seloTarefas : visibleTasksCount}
           aoAbrirTarefas={() => setTab('tasks')}
           ehGestor={canViewGestor}
         />
@@ -7686,6 +7739,11 @@ function MainApp() {
                 // Depois do menu fechar: o history.back() do Painel fecharia o novo (CLAUDE.md).
                 ? { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu dia em números', aoTocar: () => { setPerfilAberto(false); setTimeout(() => setMeuDiaAberto(true), 350); } }
                 : { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu desempenho', aoTocar: () => irParaTelaDePerfil('meu') }
+              : null,
+            // D10 (handoff v6): no mapa novo o item acima abre o Meu dia, e o Meu desempenho
+            // ficava sem caminho no celular. Entra logo abaixo.
+            !isViewer && modoNovo
+              ? { chave: 'desempenho', Icone: IconTrendingUp, rotulo: 'Meu desempenho', aoTocar: () => irParaTelaDePerfil('meu') }
               : null,
             // "Gestão" leva pro cockpit (para a equipe inteira, ver verGestao);
             // "Meu desempenho" e a entrada que faltava no celular, onde nada
@@ -8640,7 +8698,7 @@ function MainApp() {
               if (error) throw error;
             }
           }}
-          onEtapaMudou={(codigo) => aplicarEtapaNoLead(fichaPendente.client.id, codigo)}
+          onEtapaMudou={(codigo) => aplicarEtapaNoLead(fichaPendente.client.id, codigo, undefined, fichaPendente.client.etapa ?? null)}
         />
       )}
       {etapaNovaPara && (
@@ -8649,6 +8707,7 @@ function MainApp() {
           client={etapaNovaPara.client}
           etapaAtual={etapaNovaPara.etapaAtual}
           destinoInicial={etapaNovaPara.destinoInicial ?? null}
+          preenchido={etapaNovaPara.preenchido ?? null}
           onFechar={() => setEtapaNovaPara(null)}
           onMudou={(codigo) => aplicarEtapaNoLead(etapaNovaPara.client.id, codigo, etapaNovaPara.client)}
         />
@@ -8993,7 +9052,7 @@ function ClientBottomSheet({
   novo,
 }: {
   /** Mapa novo (prancha §7): troca o topo e o peek; abas e alertas continuam. */
-  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onAvancar?: (destino: string) => void }) | null;
+  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onAvancar?: (destino: string, preenchido?: Record<string, string>) => void }) | null;
   /** Mapa novo: o cartão subiu para a meia altura (60%) — o mapa leva o pino para a faixa de cima. */
   aoAbrirMeia?: () => void;
   client: Client;

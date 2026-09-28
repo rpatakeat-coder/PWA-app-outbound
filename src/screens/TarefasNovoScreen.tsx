@@ -6,7 +6,7 @@
 // com Desfazer de 5 s (src/utils/concluirTarefa.ts). As `client_tasks` do app
 // ficam à parte, como "sugestão do app": o Cockpit não as vê.
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useTarefasDoCrm, type TarefaDoCrmNaTela, type TarefaParaAFicha } from '../hooks/useTarefasDoCrm';
@@ -44,7 +44,10 @@ export default function TarefasNovoScreen({
 }: Props) {
   const cores = useIconColors();
   const queryClient = useQueryClient();
-  const { tarefas, carregando, erro, semMedicao } = useTarefasDoCrm(true);
+  const { tarefas, carregando, erro, semMedicao, recarregar } = useTarefasDoCrm(true);
+  // A8 (handoff v6): o aviso de erro diz "puxe de novo" — agora dá para puxar.
+  const [puxando, setPuxando] = React.useState(false);
+  const puxar = () => { setPuxando(true); void Promise.resolve(recarregar()).finally(() => setPuxando(false)); };
   // OS ACORDOS DO 1:1 (Cockpit v5, contrato linha 16, 28/09/2026): o que o gestor
   // combinou no 1:1 vira item aqui, com o mesmo "feito" que o Cockpit lê em Pessoas.
   // Validado some (o gestor já conferiu); devolvido volta com o motivo.
@@ -87,7 +90,7 @@ export default function TarefasNovoScreen({
   const aviso = semMedicao ?? (erro ? 'Não consegui buscar as tarefas do HubSpot agora. Puxe de novo em instantes.' : null);
 
   return (
-    <ScrollView style={s.tela} contentContainerStyle={s.conteudo}>
+    <ScrollView style={s.tela} contentContainerStyle={s.conteudo} refreshControl={<RefreshControl refreshing={puxando} onRefresh={puxar} />}>
       <RegistrarTarefa
         tarefa={registrando}
         aoFechar={() => setRegistrando(null)}

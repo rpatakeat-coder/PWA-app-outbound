@@ -160,7 +160,7 @@ const s = StyleSheet.create({
   ligarTexto: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   secao: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: 'var(--text-muted)', marginTop: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { minHeight: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center' },
+  chip: { minHeight: 44, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center' },
   chipAtivo: { backgroundColor: 'var(--text)', borderColor: 'var(--text)' },
   chipTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
   chipTextoAtivo: { color: 'var(--bg)' },

@@ -37,7 +37,7 @@ export type AcoesCardNovo = {
   /** "Mover o pino": abre a edição de localização. */
   onMoverPino?: () => void;
   /** Botão de avanço do bloco NEGÓCIO: abre Mudar etapa já na etapa destino. */
-  onAvancar?: (destino: string) => void;
+  onAvancar?: (destino: string, preenchido?: Record<string, string>) => void;
 };
 
 export type DadosCardNovo = {
@@ -116,11 +116,17 @@ function naoVale(d: DadosCardNovo, a: AcoesCardNovo) {
   // negócio vai para a etapa Perdido pelo modal de etapa, que pede o motivo.
   const acao = alvo ? a.onDismissContaAlvo : a.onChangeStage;
   if (!acao) return;
-  const texto = alvo ? 'Ela some do mapa e não é sugerida de novo.' : 'Abre a mudança de etapa para registrar como Perdido, com o motivo.';
+  const texto = alvo ? 'Ela some do mapa e não é sugerida de novo.' : 'Abre a mudança de etapa já em Perdido, com o motivo escrito.';
+  // D5 (handoff v6): o motivo escolhido não se perde mais. Lead com negócio abre Mudar
+  // etapa já em Perdido, com "Outros" e o motivo no texto (os valores do HubSpot não mudam).
+  const porMotivo = (motivo: string) => () => {
+    if (!alvo && a.onAvancar) a.onAvancar('1396006164', { motivo_do_perdido: 'Outros', observacao__desqualificado: motivo });
+    else acao();
+  };
   Alert.alert('Não vale?', texto, [
-    { text: 'Fechou', onPress: acao },
-    { text: 'Fora do perfil', onPress: acao },
-    { text: 'Já é cliente', onPress: acao },
+    { text: 'Fechou', onPress: porMotivo('Fechou') },
+    { text: 'Fora do perfil', onPress: porMotivo('Fora do perfil') },
+    { text: 'Já é cliente', onPress: porMotivo('Já é cliente') },
     { text: 'Cancelar', style: 'cancel' },
   ]);
 }

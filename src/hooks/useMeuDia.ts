@@ -7,7 +7,12 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 
 export type MeuDia = {
+  /** Visitas FEITAS hoje — visitas_do_dia (0143), a mesma função do Cockpit. */
   visitasHoje: number;
+  /** Das feitas, as PROVADAS (GPS até 200/500 m ou foto; não em série). null = não medido. */
+  provadasHoje: number | null;
+  /** false quando nem a função nem a leitura direta responderam: o número não é zero, é não medido. */
+  medido: boolean;
   prometido: { visitas: number | null; avancos: number | null; propostas: number | null; validadaEm: string | null } | null;
   reunioesMarcadasHoje: number;
   reunioesParaHoje: number;
@@ -16,6 +21,7 @@ export type MeuDia = {
   semana: {
     visitas: number;
     demos: number;
+    provadas: number | null;
     ganhos: number | null;
     ganhosNomes: string[];
     ganhosMes: number | null;
@@ -68,14 +74,20 @@ export function useMeuDia(ativo: boolean, profileId: string | null) {
       const linhas = (visitas.data ?? []) as { visited_at: string }[];
       const dias = new Set(linhas.map((v) => diaBRT(new Date(v.visited_at))));
       const d = daily.data as { prometido_visitas: number | null; prometido_avancos: number | null; prometido_propostas: number | null; created_at: string | null } | null;
+      // Uma verdade só (0143): o número do dia vem da função do banco; a leitura direta só
+      // entra se a função falhar, e se as duas falharem o painel diz "não medido" (N3).
+      const diretas = visitas.error ? null : linhas.filter((v) => new Date(v.visited_at) >= hoje0).length;
       return {
-        visitasHoje: linhas.filter((v) => new Date(v.visited_at) >= hoje0).length,
+        visitasHoje: num(pl?.visitas_hoje) ?? diretas ?? 0,
+        provadasHoje: num(pl?.provadas_hoje),
+        medido: pl != null || diretas != null,
         prometido: d ? { visitas: d.prometido_visitas, avancos: d.prometido_avancos, propostas: d.prometido_propostas, validadaEm: d.created_at } : null,
         reunioesMarcadasHoje: marcadas.count ?? 0,
         reunioesParaHoje: paraHoje.count ?? 0,
         sequenciaDias: sequenciaDeDias(dias),
         semana: pl ? {
           visitas: num(pl.visitas_semana) ?? 0,
+          provadas: num(pl.provadas_semana),
           demos: num(pl.demos_semana) ?? 0,
           ganhos: num(pl.ganhos_semana),
           ganhosNomes: Array.isArray(pl.ganhos_semana_nomes) ? (pl.ganhos_semana_nomes as unknown[]).map(String) : [],

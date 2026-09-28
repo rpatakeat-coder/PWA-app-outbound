@@ -773,9 +773,15 @@ export function RotaScreen({
                   <TouchableOpacity
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: isDone }}
-                    accessibilityLabel={isDone ? 'Desmarcar parada' : 'Marcar parada como feita'}
+                    accessibilityLabel={isDone ? 'Desmarcar parada' : `Cheguei em ${title}`}
                     style={styles.paradaCheckAlvo}
-                    onPress={() => { if (stop) fieldOps.toggleStopDone.mutate(stop); }}
+                    // S12 (handoff v6): só o Cheguei marca a parada feita. Desmarcar continua
+                    // (corrigir engano); marcar passa pelo check-in, com GPS ou foto.
+                    onPress={() => {
+                      if (!stop) return;
+                      if (isDone) { fieldOps.toggleStopDone.mutate(stop); return; }
+                      onMarkVisited?.(client, () => { fieldOps.markStopDone.mutate(stop); });
+                    }}
                     disabled={!stop || isMonitoringRoute}
                   >
                     <View style={[styles.checkbox, isDone && styles.checkboxChecked]}>
@@ -842,7 +848,7 @@ export function RotaScreen({
                     disabled={!onMarkVisited}
                   >
                     <IconLocationFilled width={24} height={24} fill="#FFFFFF" />
-                    <Text style={styles.paradaCheckinTexto}>Check-in</Text>
+                    <Text style={styles.paradaCheckinTexto}>Cheguei</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     accessibilityRole="button"
@@ -977,14 +983,18 @@ export function RotaScreen({
                         <View style={estilosRail.parada}>
                           <TouchableOpacity
                             accessibilityRole="button"
-                            accessibilityLabel={isDone ? 'Desmarcar visita' : 'Marcar visita'}
+                            accessibilityLabel={isDone ? 'Desmarcar visita' : `Cheguei em ${nomeDoLead(client)}`}
                             style={[
                               estilosRail.indice,
                               isDone && estilosRail.indiceFeito,
                               !isDone && ehAtual && estilosRail.indiceAtual,
                             ]}
                             disabled={!stop || isMonitoringRoute}
-                            onPress={() => stop && fieldOps.toggleStopDone.mutate(stop)}
+                            onPress={() => {
+                              if (!stop) return;
+                              if (isDone) { fieldOps.toggleStopDone.mutate(stop); return; }
+                              onMarkVisited?.(client, () => { fieldOps.markStopDone.mutate(stop); });
+                            }}
                           >
                             {isDone ? (
                               <IconCheck width={14} height={14} fill="var(--tint-green-text)" />

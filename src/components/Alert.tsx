@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
   },
   // 3+ botoes empilham: lado a lado eles ficariam estreitos demais pra ler.
   buttonColumn: { flexDirection: 'column-reverse', alignItems: 'stretch' },
-  button: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 },
+  button: { minHeight: 44, justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8 }, // A19: alvo de 44
   buttonFull: { alignItems: 'center' },
   buttonPressed: { backgroundColor: 'var(--surface-2)' },
   buttonText: { fontSize: 15, fontWeight: '700', color: 'var(--info-text)' },

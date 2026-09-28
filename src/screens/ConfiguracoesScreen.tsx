@@ -429,7 +429,8 @@ export function ConfiguracoesScreen({
               accessibilityRole="button"
               style={[styles.ctaSair, !layout.ehDesktop && styles.ctaMovel]}
               {...ds({ hover: 'tintred', trans: '1' })}
-              onPress={logout}
+              // A15 (handoff v6): os três "Sair" confirmam
+              onPress={() => Alert.alert('Sair da conta?', 'Você precisará entrar de novo com e-mail e senha.', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Sair', style: 'destructive', onPress: () => { void logout(); } }])}
             >
               <IconLogout width={20} height={20} fill={iconColors.brandText} />
               <Text style={styles.ctaSairTexto}>Sair da conta</Text>

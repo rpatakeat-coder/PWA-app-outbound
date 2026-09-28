@@ -81,9 +81,17 @@ export default function FolhaMeuDia({ visivel, aoFechar, dados, carregando, meta
                 {`VISITAS COM CHECK-IN HOJE · ${p?.visitas ? 'PROMETIDO NA DAILY' : 'META DO DIA'}`}
               </Text>
               <View style={s.heroLinha}>
-                <Text style={[s.heroNum, { color: bateu ? VERDE : VERMELHO }]}>{feitas}</Text>
-                <Text style={s.heroDe}>{`de ${meta}`}</Text>
+                <Text style={[s.heroNum, { color: bateu ? VERDE : VERMELHO }]}>{dados.medido ? feitas : '—'}</Text>
+                <Text style={s.heroDe}>{dados.medido ? `de ${meta}` : 'não medido agora'}</Text>
               </View>
+              {/* D1: a meta conta a visita feita; a prova, com o mesmo peso, é a mesma do Cockpit */}
+              {dados.provadasHoje != null && feitas > 0 && (
+                <Text style={[s.prova, dados.provadasHoje < feitas && { color: 'var(--tint-amber-text)' }]}>
+                  {dados.provadasHoje < feitas
+                    ? `${dados.provadasHoje} ${dados.provadasHoje === 1 ? 'provada' : 'provadas'} · ${feitas - dados.provadasHoje} sem prova (GPS longe, em série ou sem foto)`
+                    : `${dados.provadasHoje} ${dados.provadasHoje === 1 ? 'provada' : 'provadas'} · GPS na porta ou foto`}
+                </Text>
+              )}
               <Casas feito={feitas} meta={meta} />
               {!!frase && <Text style={s.frase}>{frase}</Text>}
             </View>
@@ -94,7 +102,7 @@ export default function FolhaMeuDia({ visivel, aoFechar, dados, carregando, meta
                 <View style={s.semanaTopo}>
                   <Text style={s.secao}>SEMANA</Text>
                   <Text style={[s.semanaNum, { color: semanaBateu ? VERDE : 'var(--text)' }]}>
-                    {`${sem.visitas}`}<Text style={s.semanaDe}>{` / ${metaSemana} visitas`}</Text>
+                    {`${sem.visitas}`}<Text style={s.semanaDe}>{` / ${metaSemana} visitas${sem.provadas != null ? ` · ${sem.provadas} prov.` : ''}`}</Text>
                   </Text>
                 </View>
                 <Trilho feito={sem.visitas} meta={metaSemana} />
@@ -159,6 +167,7 @@ const s = StyleSheet.create({
   heroLinha: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   heroNum: { fontSize: 48, fontWeight: '800', lineHeight: 52 },
   heroDe: { fontSize: 18, fontWeight: '700', color: 'var(--text-muted)' },
+  prova: { fontSize: 13, fontWeight: '700', color: 'var(--tint-green-text)' },
   casas: { flexDirection: 'row', gap: 6 },
   casa: { flex: 1, height: 12, borderRadius: 4, backgroundColor: 'var(--surface-2)' },
   casaExtra: { opacity: 0.7 },

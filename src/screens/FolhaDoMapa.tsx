@@ -36,6 +36,8 @@ type Props = {
   eMeu?: { naRota: Set<string>; aoAssumir: (c: Client) => void } | null;
   /** Visitas do plano feitas hoje e a meta do playbook (6). */
   visitasFeitas: number;
+  /** Das feitas, as provadas (visitas_do_dia, 0143) — o mesmo número do Cockpit. null = não medido. */
+  visitasProvadas?: number | null;
   metaVisitas: number;
   /** Toque em "x de 6 visitas". */
   aoProgresso?: () => void;
@@ -89,7 +91,7 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas, metaVisitas, aoProgresso, embutida, aoRoteirizar, roteirizando, aoPlanejar }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas, visitasProvadas = null, metaVisitas, aoProgresso, embutida, aoRoteirizar, roteirizando, aoPlanejar }: Props) {
   const emAberto = Math.max(0, planoTotal - planoFeito);
   const [abertaPeloToque, setAberta] = useState(false);
   const aberta = !!embutida || abertaPeloToque || !!quadra;
@@ -139,6 +141,12 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
         <Pressable accessibilityRole="button" accessibilityLabel={`${visitasFeitas} de ${meta} visitas hoje`} onPress={aoProgresso} style={s.pilulaProgresso} hitSlop={6}>
           <Text style={s.pilulaConta}>{`${visitasFeitas}/${meta}`}</Text>
           <View style={s.tracos}>{Array.from({ length: Math.min(meta, 8) }, (_, k) => <View key={k} style={[s.traco, k < visitasFeitas && s.tracoFeito]} />)}</View>
+          {/* D1 (handoff v6): a meta conta a visita feita; a prova vem logo embaixo, igual ao Cockpit */}
+          {visitasProvadas != null && visitasFeitas > 0 && (
+            <Text style={[s.pilulaProva, visitasProvadas < visitasFeitas && s.pilulaProvaFalta]} numberOfLines={1}>
+              {visitasProvadas < visitasFeitas ? `${visitasFeitas - visitasProvadas} sem prova` : `${visitasProvadas} prov.`}
+            </Text>
+          )}
         </Pressable>
         {proxima ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Cheguei na próxima porta" onPress={() => onCheguei(proxima.c)} style={s.pilulaCheguei}>
@@ -175,7 +183,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
           {proxima ? `PRÓXIMA PORTA · ${proxima.plano} DO PLANO` : planoTotal ? 'PLANO DE HOJE' : 'AGORA, PERTO DE VOCÊ'}
         </Text>
         <Pressable accessibilityRole="button" accessibilityLabel={`${visitasFeitas} de ${metaVisitas} visitas hoje`} onPress={aoProgresso} hitSlop={10}>
-          <Text style={s.progresso}>{`${visitasFeitas} de ${metaVisitas} visitas ›`}</Text>
+          <Text style={s.progresso}>{`${visitasFeitas} de ${metaVisitas} visitas${visitasProvadas != null && visitasFeitas > 0 ? ` · ${visitasProvadas} ${visitasProvadas === 1 ? 'provada' : 'provadas'}` : ''} ›`}</Text>
         </Pressable>
       </View>
 
@@ -311,6 +319,8 @@ const s = StyleSheet.create({
   linhaTopo: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },
   kicker: { flex: 1, fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: '#F87171' },
   progresso: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
+  pilulaProva: { fontSize: 11, fontWeight: '600', color: 'var(--text-muted)', marginTop: 2 },
+  pilulaProvaFalta: { color: 'var(--tint-amber-text)' },
   proxima: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
   btnCheguei: { height: 48, paddingHorizontal: 20, borderRadius: 14, backgroundColor: '#E51A31', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   btnChegueiTexto: { fontSize: 15, fontWeight: '700', color: '#fff' },

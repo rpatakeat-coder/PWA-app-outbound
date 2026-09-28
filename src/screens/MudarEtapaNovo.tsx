@@ -31,6 +31,8 @@ type Props = {
   onMudou: (codigo: string) => void;
   /** Botão de avanço do bloco NEGÓCIO: já abre na etapa escolhida. */
   destinoInicial?: string | null;
+  /** Campos que já chegam preenchidos (o "Não vale" traz o motivo do Perdido). */
+  preenchido?: Record<string, string> | null;
 };
 
 // O que cada etapa pede, à direita da linha (handoff §6.5).
@@ -42,7 +44,7 @@ function pedeTexto(id: string): string {
 
 const ROTULO_PICK: Record<string, string> = { Reembolso: 'Estorno', GoogleMaps: 'Google Maps', Familia: 'Família' };
 
-export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, onMudou, destinoInicial = null }: Props) {
+export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, onMudou, destinoInicial = null, preenchido = null }: Props) {
   const [destino, setDestino] = useState<string | null>(null);
   const [digitado, setDigitado] = useState<Record<string, string>>({});
   const [jaTem, setJaTem] = useState<Record<string, unknown>>({});
@@ -54,7 +56,7 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
 
   useEffect(() => {
     if (!visivel) return;
-    setDestino(destinoInicial); setDigitado({}); setErros({}); setRecusa(null);
+    setDestino(destinoInicial); setDigitado(preenchido ? { ...preenchido } : {}); setErros({}); setRecusa(null);
     if (!dealId) return;
     // Snapshot do Cockpit (mapa_negocio) + leitura AO VIVO do HubSpot (ler_negocio):
     // o snapshot atrasa até 2 h e pedia de novo o que o registro acabou de gravar

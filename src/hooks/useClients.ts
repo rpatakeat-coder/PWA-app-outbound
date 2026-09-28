@@ -606,7 +606,6 @@ export function useClients(
       }
       if (error) throw error;
       let client = mapRow(data);
-
       // "Estou na porta" moveu o pino: a coordenada nova vai ao HubSpot pelo
       // mesmo evento `update` da edição de cadastro — que NÃO manda dono (caso
       // "Acarajé da Pri", 29/07) — com TODOS os campos do lead como estão no
@@ -631,6 +630,15 @@ export function useClients(
           observacoes: client.observacoes,
           url: client.url_hubspot,
         }).catch((err) => console.warn('[HUBSPOT] coordenada corrigida não subiu:', err));
+      }
+
+      // REPETIÇÃO NO MESMO DIA (S11, handoff v6; depois do pino corrigido, que a RPC grava antes): a RPC não grava segunda visita do mesmo
+      // autor no mesmo lead no mesmo dia (0113) e devolve o lead como está — mas daqui para
+      // baixo saía uma SEGUNDA tarefa COMPLETED no HubSpot, que o Cockpit conta como visita.
+      // Visita nova é a que tem o nosso acao_id; sem ela, nada vai ao HubSpot.
+      if (acaoId) {
+        const { data: gravou } = await supabase.from('client_visits').select('id').eq('acao_id', acaoId).limit(1);
+        if (!gravou || gravou.length === 0) return client;
       }
 
       // Conta Alvo: o lead foi materializado localmente pela Rota do dia
