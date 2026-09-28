@@ -22,12 +22,14 @@ type Props = {
   semGps30d: number | null;
   carregando: boolean;
   aoMedir?: (medida: { y: number; altura: number }) => void;
+  /** Desktop (28/09/2026): a mesma folha dentro do painel lateral. */
+  embutida?: boolean;
 };
 
 const ESCALA = ['#FDE68A', '#FB923C', '#EF4444', '#991B1B'];
 
 export default function FolhaCalor({
-  chao, escopo, aoEscopo, vendedores, vendedor, aoVendedor, total, ninguemFoi, semGps30d, carregando, aoMedir,
+  chao, escopo, aoEscopo, vendedores, vendedor, aoVendedor, total, ninguemFoi, semGps30d, carregando, aoMedir, embutida,
 }: Props) {
   const linha = (id: string | null, nome: string, apelidos: string[], n: number) => {
     const ativo = vendedor === id;
@@ -51,9 +53,9 @@ export default function FolhaCalor({
 
   return (
     <View
-      style={[s.folha, { bottom: chao }]}
+      style={embutida ? s.painel : [s.folha, { bottom: chao }]}
       accessibilityLabel="Calor de visitas"
-      onLayout={(e) => {
+      onLayout={embutida ? undefined : (e) => {
         const alvo = (e.nativeEvent as unknown as { target?: { getBoundingClientRect?: () => DOMRect } }).target;
         const topo = alvo?.getBoundingClientRect ? alvo.getBoundingClientRect().top : e.nativeEvent.layout.y;
         aoMedir?.({ y: Math.round(topo), altura: Math.round(e.nativeEvent.layout.height) });
@@ -81,7 +83,7 @@ export default function FolhaCalor({
       </View>
 
       {escopo === 'time' && (
-        <ScrollView style={s.lista} nestedScrollEnabled>
+        <ScrollView style={embutida ? s.listaEmbutida : s.lista} nestedScrollEnabled>
           {linha(null, 'Todos', [], vendedores.reduce((n, v) => n + v.count, 0))}
           {vendedores.map((v) => linha(v.id, v.nome, v.apelidos, v.count))}
           {!carregando && vendedores.length === 0 && <Text style={s.vazio}>Nenhum check-in com GPS nos últimos 30 dias.</Text>}
@@ -115,6 +117,8 @@ const s = StyleSheet.create({
   legendaTexto: { fontSize: 12, color: 'var(--text-muted)' },
   ninguem: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderStyle: 'dashed', borderColor: '#60A5FA', marginLeft: 6 },
   lista: { maxHeight: 220 },
+  painel: { flex: 1, minHeight: 0, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, gap: 10, backgroundColor: 'var(--surface)' },
+  listaEmbutida: { flex: 1, minHeight: 0 },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, paddingHorizontal: 4, borderRadius: 8 },
   linhaAtiva: { backgroundColor: 'var(--surface-2)' },
   radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: 'var(--stroke-strong)' },

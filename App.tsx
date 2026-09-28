@@ -1098,6 +1098,7 @@ function MainApp() {
   const [agendaDiaInicial, setAgendaDiaInicial] = useState<string | null>(null);
   // Resumo de quadra tocado: a folha mostra só os pinos dele até fechar.
   const [quadraAberta, setQuadraAberta] = useState<{ lider: string; ids: Set<string>; area: string } | null>(null);
+  const [roteirizando, setRoteirizando] = useState(false);
   useEffect(() => { setPilhaAberta(null); }, [mapRegion]);
   useEffect(() => { setQuadraAberta(null); }, [lente]);
   const janelaTela = useWindowDimensions();
@@ -2826,6 +2827,42 @@ function MainApp() {
     setSelectedClient(null);
     saveManualRoute(next);
   }, [routeDisplayClients, routeStopClientIds, saveManualRoute, modoNovo, isMonitoringRoute, fieldOps.adicionarParada]);
+
+  // ROTEIRIZAR O PLANO DO DIA (28/09/2026, Julyan: "preciso roteirizar o plano do dia").
+  // Pega as paradas EM ABERTO da rota de hoje e põe na melhor ordem de percurso a partir
+  // de onde a pessoa está (o mesmo TSP da Rota do dia: OpenRouteService, OSRM de
+  // reserva). As feitas ficam na frente, na ordem em que foram feitas; sem coordenada
+  // vão para o fim. Só reescreve a posição (updateStops): status e check-in não mudam.
+  const roteirizarPlano = async () => {
+    if (roteirizando) return;
+    if (isMonitoringRoute) { Toast.mostrar('Esta é a rota de outra pessoa: só ela roteiriza.', 'fila'); return; }
+    const vivas = [...routeStops].filter((s) => s.status !== 'removed').sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    const feitas = vivas.filter((s) => s.status === 'done');
+    const abertas = vivas.filter((s) => s.status !== 'done');
+    const temGps = (s: (typeof vivas)[number]) => s.client?.latitude != null && s.client?.longitude != null;
+    const comGps = abertas.filter(temGps);
+    const semGps = abertas.filter((s) => !temGps(s));
+    if (comGps.length < 2) {
+      Toast.mostrar(comGps.length ? 'Só uma parada em aberto: não há o que ordenar.' : 'Nada em aberto no plano de hoje.', 'fila');
+      return;
+    }
+    const ultimaFeita = [...feitas].reverse().find(temGps);
+    const ponto = (s: (typeof vivas)[number]) => ({ latitude: Number(s.client!.latitude), longitude: Number(s.client!.longitude) });
+    const base = userLocation ?? (ultimaFeita ? ponto(ultimaFeita) : ponto(comGps[0]));
+    setRoteirizando(true);
+    try {
+      const trip = await fetchOptimizedTrip([base, ...comGps.map(ponto)]);
+      const ordem = trip.inputOrderToVisit.slice(1).map((i) => comGps[i - 1]).filter(Boolean);
+      const faltando = comGps.filter((s) => !ordem.includes(s));
+      await fieldOps.updateStops.mutateAsync([...feitas, ...ordem, ...faltando, ...semGps]);
+      const km = trip.distanceMeters ? ` · ${(trip.distanceMeters / 1000).toFixed(1).replace('.', ',')} km` : '';
+      Toast.mostrar(`✓ Plano roteirizado · ${ordem.length + faltando.length} paradas${km}`, 'ok');
+    } catch (e) {
+      Alert.alert('Não deu para roteirizar', 'O serviço de rotas não respondeu; a ordem de antes ficou como estava.\n' + String((e as Error)?.message ?? ''));
+    } finally {
+      setRoteirizando(false);
+    }
+  };
 
   // Detecta lat/lon que aparecem em mais de um cliente — é sinal claro de
   // geocodificação ruim (Nominatim caiu no centroide da rua/CEP em vez do
@@ -5214,6 +5251,8 @@ function MainApp() {
           rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
           onAbrir={handleMarkerPress}
           onCheguei={(c) => handleMarkAsVisited(c)}
+          aoRoteirizar={isViewer ? undefined : () => { void roteirizarPlano(); }}
+          roteirizando={roteirizando}
         />
       )}
 
@@ -5356,7 +5395,7 @@ function MainApp() {
   const painelMapaNovoWeb = (
     <View style={[styles.pmwContainer, { flexDirection: 'column' }]}>
       <View style={styles.pmnLentes}>
-        {LENTES.filter((l) => l.id !== 'calor').map((l) => {
+        {LENTES.filter((l) => l.id !== 'calor' || canViewGestor).map((l) => {
           const ativa = lente === l.id;
           return (
             <Pressable key={l.id} accessibilityRole="button" accessibilityState={{ selected: ativa }} onPress={() => { setLente(l.id); setQuadraAberta(null); }}
@@ -5369,9 +5408,26 @@ function MainApp() {
           <Text style={styles.pmnLenteTexto}>{quantosFiltros(filtrosNovos) ? `Filtros · ${quantosFiltros(filtrosNovos)}` : 'Filtros'}</Text>
         </Pressable>
       </View>
+      {lente === 'calor' ? (
+        <FolhaCalor
+          embutida
+          chao={0}
+          escopo={calorEscopo}
+          aoEscopo={(e) => { setCalorEscopo(e); setHeatSeller(null); }}
+          vendedores={vendedoresCalor}
+          vendedor={heatSeller}
+          aoVendedor={setHeatSeller}
+          total={heat.total}
+          ninguemFoi={ninguemFoi.length}
+          semGps30d={heatSemGps30d}
+          carregando={heatLoading}
+        />
+      ) : (
       <FolhaDoMapa
         embutida
         chao={0}
+        aoRoteirizar={isViewer ? undefined : () => { void roteirizarPlano(); }}
+        roteirizando={roteirizando}
         itens={quadraAberta ? itensFolha.filter((it) => quadraAberta.ids.has(it.c.id)) : itensFolha}
         quadra={quadraAberta ? { area: quadraAberta.area, aoFechar: () => setQuadraAberta(null) } : null}
         eMeu={!isViewer && (lente === 'semdono' || lente === 'rec') ? { naRota: routeStopClientIds, aoAssumir: (c) => { void assumirDoMapa(c); } } : null}
@@ -5385,6 +5441,7 @@ function MainApp() {
         onAbrir={handleMarkerPress}
         onCheguei={(c) => handleMarkAsVisited(c)}
       />
+      )}
     </View>
   );
 

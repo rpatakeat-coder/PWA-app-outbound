@@ -41,6 +41,9 @@ type Props = {
   aoProgresso?: () => void;
   /** Desktop (28/09/2026): a mesma folha vira o painel lateral, sempre aberta, sem alça. */
   embutida?: boolean;
+  /** Põe as paradas em aberto na melhor ordem a partir de onde a pessoa está. */
+  aoRoteirizar?: () => void;
+  roteirizando?: boolean;
 };
 
 // Andando na rua: ~80 m por minuto, contando esquina e sinal.
@@ -84,7 +87,8 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas, metaVisitas, aoProgresso, embutida }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas, metaVisitas, aoProgresso, embutida, aoRoteirizar, roteirizando }: Props) {
+  const emAberto = Math.max(0, planoTotal - planoFeito);
   const [abertaPeloToque, setAberta] = useState(false);
   const aberta = !!embutida || abertaPeloToque || !!quadra;
   const [modo, setModo] = useState<'prioridade' | 'distancia'>('prioridade');
@@ -177,10 +181,17 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
         <Pressable accessibilityRole="button" onPress={() => setAberta((v) => !v)} style={s.proxima}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={s.nome} numberOfLines={1}>
-              {planoTotal ? `Plano de hoje concluído · ${planoFeito} de ${planoTotal}` : 'Nada planejado para hoje no Cockpit'}
+              {planoTotal ? `Plano de hoje concluído · ${planoFeito} de ${planoTotal}` : 'Nada no plano de hoje'}
             </Text>
-            <Text style={s.sub} numberOfLines={1}>{`${totalNaArea} na área · lente ${rotuloLente} · toque para ver a lista`}</Text>
+            <Text style={s.sub} numberOfLines={2}>{planoTotal ? `${totalNaArea} na área · lente ${rotuloLente}` : 'Ponha leads com + Rota de hoje (no card) ou monte no Planejamento'}</Text>
           </View>
+        </Pressable>
+      )}
+
+      {aberta && aoRoteirizar && emAberto >= 2 && (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Roteirizar as ${emAberto} paradas em aberto`} disabled={roteirizando}
+          onPress={aoRoteirizar} style={[s.roteirizar, roteirizando && { opacity: 0.6 }]}>
+          <Text style={s.roteirizarTexto}>{roteirizando ? 'Calculando a melhor ordem…' : `Roteirizar o plano · ${emAberto} paradas`}</Text>
         </Pressable>
       )}
 
@@ -308,6 +319,8 @@ const s = StyleSheet.create({
   ordemTexto: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)' },
   ordemTextoAtivo: { color: 'var(--bg)' },
   lista: { maxHeight: 320 },
+  roteirizar: { minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  roteirizarTexto: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   painel: { flex: 1, minHeight: 0, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, gap: 6, backgroundColor: 'var(--surface)' },
   listaEmbutida: { flex: 1, minHeight: 0 },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
