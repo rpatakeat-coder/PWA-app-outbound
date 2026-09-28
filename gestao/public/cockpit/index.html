@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@f23f757.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@90aa9b1.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* /gestao E O COCKPIT desde 25/09/2026. As tres telas que so a gestao antiga
@@ -6143,6 +6143,8 @@ foi escrita para jogar o "0 de 27 resolvidos"
   .tm10-cob-tab tr.is-zero td b{color:var(--red-ink);}
   .tm10-cob-nm{font-size:12px;color:var(--muted);}
   .tm10-cob-leg{display:block;margin-top:6px;font:500 12px/1.45 'Poppins',sans-serif;color:var(--muted);}
+  .v5-app-obs{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:10px;background:var(--panel2);margin-bottom:8px;}
+  .v5-app-obs p{margin:0;font:500 14px/1.45 var(--font-body);color:var(--ink);white-space:pre-wrap;}
   .v5-ico{width:1.05em;height:1.05em;vertical-align:-.16em;flex:none;display:inline-block;}
   .v5-ir-rua{margin-top:14px;align-self:flex-start;}
   .v5-link-mapa{display:inline-flex;align-items:center;gap:6px;margin-top:8px;min-height:32px;font:600 12px var(--font-body);color:var(--fg);text-decoration:underline;text-underline-offset:3px;}
@@ -21687,10 +21689,39 @@ function pl6GrupoDaFonte(fonte) {
   return 'aval';
 }
 
+function pl6ChaveNome(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/^oportunidade\s*-\s*/, '').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+function pl6ChaveFone(s) {
+  const d = String(s || '').replace(/\D+/g, '');
+  return d.length >= 8 ? d.slice(-9) : '';
+}
+function pl6JaNaCarteira(rep) {
+  const fones = new Set(), nomes = new Set();
+  const fl = (typeof DATA !== 'undefined' && DATA.funilLeads) || {};
+  Object.keys(fl).forEach(function (st) {
+    (fl[st] || []).forEach(function (l) {
+      if (!l || String(l.ownerId) !== String(rep.ownerId)) return;
+      const f = pl6ChaveFone(l.celular || l.telefone); if (f) fones.add(f);
+      const n = pl6ChaveNome(l.name || l.dealname); if (n.length >= 4) nomes.add(n);
+    });
+  });
+  return function (l) {
+    if (l.hubspot_deal_id) return true;
+    const f = pl6ChaveFone(l.telefone_normalizado || l.telefone);
+    if (f && fones.has(f)) return true;
+    const n = pl6ChaveNome(l.nome);
+    return n.length >= 4 && nomes.has(n);
+  };
+}
+
 function pl6Novos(rep, regioes) {
+  const jaTem = pl6JaNaCarteira(rep);
   const contas = (typeof prospeccaoCache !== 'undefined' && Array.isArray(prospeccaoCache) ? prospeccaoCache : [])
     .filter(l => String(l.responsavel_owner_id) === String(rep.ownerId))
-    .filter(prospeccaoNaCarteira);
+    .filter(prospeccaoNaCarteira)
+    .filter(l => !jaTem(l));
   const porChave = new Map((regioes || []).map(r => [r.chave, r]));
   return contas.map(l => {
 
@@ -22641,7 +22672,11 @@ function pl6DadosFinal(rep) {
       { id: 'todos', rot: 'todos', n: lista.length },
       { id: 'acima', rot: 'acima da régua', n: n(pl6AcimaDaRegua) },
       { id: 'mudo', rot: 'sem próximo passo', n: n(function (x) { return !pl6PassoFuturo(x); }) },
-      { id: 'futuro', rot: 'com passo futuro', n: n(function (x) { return !!pl6PassoFuturo(x); }) }];
+      { id: 'futuro', rot: 'com passo futuro', n: n(function (x) { return !!pl6PassoFuturo(x); }) }]
+      .concat(['1395880469', '1396005401', '1395880470', '1395880471', '1395880472', '1395880473', '1398311191'].map(function (st) {
+        return { id: 'st:' + st, rot: (typeof STAGE_LABELS !== 'undefined' && STAGE_LABELS[st]) || st,
+          n: n(function (x) { return String(x.stageId || (x.etapa === 'Reciclagem' ? '1398311191' : '')) === st; }) };
+      }).filter(function (f) { return f.n > 0; }));
     return [];
   }
   const faixasDoProp = pl6FaixasDo(propAtivo, daOrigem);
@@ -22658,6 +22693,7 @@ function pl6DadosFinal(rep) {
     }
     if (propAtivo === 'nova' && faixaAtiva === 'estrela') return Number(l.nota) >= 4.5;
     if (propAtivo === 'funil') {
+      if (faixaAtiva.indexOf('st:') === 0) return String(l.stageId || (l.etapa === 'Reciclagem' ? '1398311191' : '')) === faixaAtiva.slice(3);
       if (faixaAtiva === 'acima') return pl6AcimaDaRegua(l);
       if (faixaAtiva === 'mudo') return !pl6PassoFuturo(l);
       if (faixaAtiva === 'futuro') return !!pl6PassoFuturo(l);
@@ -22941,6 +22977,8 @@ function pl6DadosFinal(rep) {
 
             cardBorda: movendo ? '#E51A31' : (perg ? '#F0A9B2' : 'var(--line)'),
             mover: 'mover:' + di + ':' + it.si,
+
+            ficha: (it.lead && it.lead.id) ? 'ficha:' + it.lead.id : '',
             rm: di + '.' + it.si,
             arraste: di + ':' + it.si
           };
@@ -23359,8 +23397,9 @@ function pl6TelaFinalHTML(d) {
       <div ${sl.passou ? '' : 'draggable="true"'} data-pl6-arraste="${sl.arraste}" style="background:var(--panel);border:1.5px solid ${sl.cardBorda};border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(43,52,64,.06);cursor:${sl.passou ? 'default' : 'grab'};min-width:0;">
       <div style="display:flex;min-width:0;">
         <span style="flex:none;width:3px;background:${sl.etCor};"></span>
-        <button type="button" data-pl6-acao="${sl.mover}" title="clique pra mover de dia/horário" style="flex:1;min-width:0;text-align:left;border:0;background:transparent;padding:8px 4px 8px 9px;cursor:pointer;">
-          <span style="display:flex;align-items:center;gap:6px;min-width:0;"><b style="flex:none;font:900 10.5px 'Poppins',sans-serif;color:#FFFDF8;background:var(--dark);border-radius:999px;padding:3px 8px;font-variant-numeric:tabular-nums;">${sl.hora}</b><b style="font:800 12px 'Poppins',sans-serif;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sl.nome}</b></span>
+        <button type="button" data-pl6-acao="${sl.mover}" title="mover de dia/horário" aria-label="mover ${sl.nome} de dia ou horário" style="flex:none;align-self:flex-start;border:0;background:transparent;padding:8px 0 4px 9px;cursor:pointer;"><b style="display:block;font:900 10.5px 'Poppins',sans-serif;color:#FFFDF8;background:var(--dark);border-radius:999px;padding:3px 8px;font-variant-numeric:tabular-nums;">${sl.hora}</b></button>
+        <button type="button" data-pl6-acao="${sl.ficha || sl.mover}" title="${sl.ficha ? 'abrir a ficha do lead' : 'clique pra mover de dia/horário'}" style="flex:1;min-width:0;text-align:left;border:0;background:transparent;padding:8px 4px 8px 6px;cursor:pointer;">
+          <span style="display:flex;align-items:center;gap:6px;min-width:0;min-height:19px;"><b style="font:800 12px 'Poppins',sans-serif;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sl.nome}</b></span>
           <span style="display:flex;align-items:center;gap:5px;margin-top:3px;min-width:0;">
             ${sl.selo ? `<b style="flex:none;font:900 8px 'Poppins',sans-serif;letter-spacing:.07em;color:${sl.seloCor};background:${sl.seloBg};border-radius:4px;padding:2px 5px;">${sl.selo}</b>` : ''}
             <span style="font:700 9.5px 'Poppins',sans-serif;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sl.sub}</span>
@@ -24406,7 +24445,7 @@ function pl6Ligar(box, rep) {
       }
 
       if (verbo === 'ficha') {
-        const dealId = arg.indexOf('c-') === 0 ? arg.slice(2) : null;
+        const dealId = (arg.indexOf('c-') === 0 || arg.indexOf('r-') === 0) ? arg.slice(2) : null;
         const doFunil = dealId && typeof buscarLeadFunilPorId === 'function'
           ? buscarLeadFunilPorId(dealId) : null;
         if (doFunil && typeof abrirFichaLeadFunilDrawer === 'function') {
@@ -28281,7 +28320,8 @@ function abrirFichaLeadFunilDrawer(l, voltarPara, foco) {
     ? `<button id="stageFichaVoltar" class="btn-txt">Voltar ao funil</button>`
     : '';
 
-  stageModalBody.innerHTML = v5TopoDoPainel(l) + fichaLeadFunilBodyHTML(l) + '<div id="v5FichaRua"></div>';
+  stageModalBody.innerHTML = v5TopoDoPainel(l) + fichaLeadFunilBodyHTML(l) + '<div id="v5FichaApp"></div><div id="v5FichaRua"></div>';
+  v5CarregarAnotacoesDoApp(l);
   v5CarregarRuaDoNegocio(l);
   stageOverlay.classList.add('show');
   const btnVoltar = document.getElementById('stageFichaVoltar');
@@ -38299,6 +38339,47 @@ function v5TopoDoPainel(l) {
     + '<div class="v5-linha-chips">' + v5DiscoTemperatura(l, 30) + '<span class="v5-tag">' + v5Esc(temp) + '</span>' + v5TagToque(l) + '</div>'
 
     + mapa + v5BotaoCobrar(l) + '</section>';
+}
+
+async function v5CarregarAnotacoesDoApp(l) {
+  const alvo = document.getElementById('v5FichaApp');
+  if (!alvo || !l || !l.id || !supa) return;
+  let pinos = [], notas = [];
+  try {
+    const rc = await supa.from('clients').select('id, observacoes').eq('id_hubspot', String(l.id)).limit(5);
+    if (rc.error) throw rc.error;
+    pinos = rc.data || [];
+    if (pinos.length) {
+      const rn = await supa.from('client_notes').select('body, created_by_name, created_at')
+        .in('client_id', pinos.map(function (p) { return p.id; })).order('created_at', { ascending: false }).limit(10);
+      if (rn.error) throw rn.error;
+      notas = rn.data || [];
+    }
+  } catch (e) {
+    alvo.innerHTML = '<section class="v5-bloco is-denso"><div class="v5-bloco-cab"><h2>Anotações do app</h2></div>'
+      + v5NaoMedido('Não consegui ler as anotações do app agora', 'reabra a ficha para tentar de novo') + '</section>';
+    return;
+  }
+  if (document.getElementById('v5FichaApp') !== alvo) return;
+  const obs = pinos.map(function (p) { return String(p.observacoes || '').trim(); }).filter(Boolean);
+  if (!obs.length && !notas.length) {
+    alvo.innerHTML = pinos.length ? '<section class="v5-bloco is-denso"><div class="v5-bloco-cab"><h2>Anotações do app</h2></div>'
+      + '<p class="v5-bloco-leg">Nenhuma observação nem nota escrita no app para este lead.</p></section>' : '';
+    return;
+  }
+  const quando = function (iso) {
+    const d = new Date(iso);
+    return isNaN(d) ? '' : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })
+      + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+  };
+  alvo.innerHTML = '<section class="v5-bloco is-denso"><div class="v5-bloco-cab"><h2>Anotações do app</h2>' + v5Selo('vivo') + '</div>'
+    + (obs.length ? '<div class="v5-app-obs"><span class="v5-rotulo">Observações do lead</span>'
+      + obs.map(function (t) { return '<p>' + v5Esc(t) + '</p>'; }).join('') + '</div>' : '')
+    + (notas.length ? '<div class="v5-rua">' + notas.map(function (n) {
+      return '<div class="v5-rua-item"><i></i><div><b>' + v5Esc(n.body || '') + '</b>'
+        + '<span>' + v5Esc([quando(n.created_at), n.created_by_name || ''].filter(Boolean).join(' · ')) + '</span></div></div>';
+    }).join('') + '</div>' : '')
+    + '</section>';
 }
 
 const V5_COMO_FOI = { falou_com_decisor: 'Falou com quem decide', decisor_ausente: 'Quem decide não estava', sem_interesse: 'Não quis conversar', estabelecimento_fechado: 'Estava fechado' };
