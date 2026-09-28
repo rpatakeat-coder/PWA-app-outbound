@@ -175,7 +175,7 @@ import PlaybookScreen from './src/screens/PlaybookScreen';
 import TarefasNovoScreen from './src/screens/TarefasNovoScreen';
 import AgendaNovoScreen from './src/screens/AgendaNovoScreen';
 import { concluirComDesfazer, enviarConclusao, type PedidoConclusao } from './src/utils/concluirTarefa';
-import { diasDeAtraso, ehCobranca, grupoDaTarefa } from './src/utils/abaTarefas';
+import { diaBRT, diasDeAtraso, ehCobranca, grupoDaTarefa } from './src/utils/abaTarefas';
 import { distanciaTexto } from './src/utils/cardNovo';
 import { definirOcupado } from './src/utils/updates';
 import { assumirLead } from './src/utils/assumirLead';
@@ -6008,10 +6008,19 @@ function MainApp() {
     const g = grupoDaTarefa(t.venceEm, new Date());
     return g === 'atrasadas' || g === 'hoje';
   }).length;
+  // O NÚMERO DA AGENDA (28/09/2026, Julyan: "coloco na agenda e na rota do dia e o
+  // rodapé fica travado sem atualizar o número"). Contava só as paradas da rota: o que
+  // se agendava (demo, retorno) não mexia no número. Agora soma os agendamentos de hoje
+  // ainda não feitos, sem contar duas vezes quem já está na rota.
+  const hojeNoRodape = diaBRT(new Date());
+  const naRotaDeHoje = new Set(paradasQueFaltam.map((st) => st.client_id));
+  const agendadosDeHoje = meetings.filter((m) => m.status !== 'realizada' && m.status !== 'cancelada'
+    && diaBRT(new Date(m.scheduled_at)) === hojeNoRodape && !naRotaDeHoje.has(m.client_id)).length;
+  const seloAgenda = paradasQueFaltam.length + agendadosDeHoje;
   const abasDoRodape: Array<{ aba: AppTab; rotulo: string; Icone: typeof IconLocation; ativa: boolean; selo: number | null; seloClaro?: boolean }> = [
     { aba: 'map', rotulo: 'Mapa', Icone: tab === 'map' ? IconLocationFilled : IconLocation, ativa: tab === 'map' || tab === 'list', selo: null },
     ...(isViewer ? [] : [
-      { aba: 'agenda' as AppTab, rotulo: 'Agenda', Icone: IconCalendar, ativa: tab === 'agenda' || tab === 'route', selo: paradasQueFaltam.length || null, seloClaro: true },
+      { aba: 'agenda' as AppTab, rotulo: 'Agenda', Icone: IconCalendar, ativa: tab === 'agenda' || tab === 'route', selo: seloAgenda || null, seloClaro: true },
       { aba: 'tasks' as AppTab, rotulo: 'Tarefas', Icone: IconClipboardCheck, ativa: tab === 'tasks', selo: seloTarefas || null },
       { aba: 'playbook' as AppTab, rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, ativa: tab === 'playbook', selo: null },
     ]),
@@ -7008,6 +7017,8 @@ function MainApp() {
             return distanciaTexto(haversineMeters(userLocation.latitude, userLocation.longitude, Number(c.latitude), Number(c.longitude)));
           }}
           visitadoHoje={(c) => visitadoHoje(c.visited_at)}
+          aoRoteirizar={isViewer ? undefined : () => { void roteirizarPlano(); }}
+          roteirizando={roteirizando}
           dailyValidadaEm={meuDia.data?.prometido?.validadaEm ?? null}
           // Mesmo check-in do mapa: vai ao mapa com o card aberto e roda o
           // fluxo de lá (GPS novo, "Está na porta?", ficha de rua).

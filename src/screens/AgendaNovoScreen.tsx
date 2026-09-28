@@ -7,12 +7,16 @@
 // `Cheguei` na próxima parada é o MESMO check-in do mapa (GPS novo, "Está na
 // porta?", ficha de rua): a tela só leva ao mapa e dispara o fluxo de lá.
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
+import { Alert } from '../components/Alert';
+import { supabase } from '../integrations/supabase/client';
+import { concluirComDesfazer } from '../utils/concluirTarefa';
 
 import { useTarefasDoCrm } from '../hooks/useTarefasDoCrm';
 import { ir } from './CardLeadNovo';
 import { IconChevronRight, useIconColors } from '../components/icons';
-import { diaBRT, ehCobranca } from '../utils/abaTarefas';
+import { acaoRapida, diaBRT, ehCobranca } from '../utils/abaTarefas';
 import { compromissosDoDia, diasDaFaixa, estadoDasParadas, rotuloDoDia } from '../utils/agendaNovo';
 import type { Client, ClientMeeting, FieldRouteStopWithClient } from '../types/client';
 
@@ -30,6 +34,9 @@ type Props = {
   /** Hora em que a Daily de hoje foi registrada (dailies.created_at). */
   dailyValidadaEm?: string | null;
   aoAbrirLead: (clientId: string) => void;
+  /** Põe as paradas em aberto na melhor ordem a partir de onde a pessoa está (App.tsx). */
+  aoRoteirizar?: () => void;
+  roteirizando?: boolean;
 };
 
 const ruaDo = (c: Client | null) => {
@@ -40,7 +47,11 @@ const ruaDo = (c: Client | null) => {
 
 export default function AgendaNovoScreen({
   diaInicial, paradas, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead, dailyValidadaEm,
+  aoRoteirizar, roteirizando,
 }: Props) {
+  const queryClient = useQueryClient();
+  // Concluídas nesta sessão: somem da lista na hora (o Desfazer as devolve).
+  const [concluidas, setConcluidas] = useState<Set<string>>(new Set());
   const cores = useIconColors();
   const agora = new Date();
   const hoje = diaBRT(agora)!;
@@ -55,7 +66,63 @@ export default function AgendaNovoScreen({
   const noPlano = new Set(paradas.map((p) => p.client_id));
   const cobrar = new Set(tarefas.filter((t) => ehCobranca({ assunto: t.assunto, origem: t.marcador?.origem }) && t.clientId).map((t) => t.clientId!));
   const doDia = (d: string) => compromissosDoDia(d, tarefas, reunioes, nomePorId, d === hoje ? noPlano : undefined);
-  const compromissos = doDia(dia);
+  const compromissos = doDia(dia).filter((k) => !concluidas.has(k.id)
+    && !(k.fonte === 'app' && reunioes.some((r) => `app-${r.id}` === k.id && r.status === 'realizada')));
+
+  /* TERMINAR AS ATIVIDADES DO DIA (28/09/2026, Julyan). A visita se termina no Cheguei
+     (GPS, foto, ficha). O que é SÓ LIGAÇÃO — retorno, cobrança, follow-up — se confirma
+     aqui com "Liguei", e só isso: visita e reunião não ganham o botão (a mesma regra da
+     aba Tarefas, acaoRapida). No HubSpot a tarefa conclui com uma nota da ligação e 5 s
+     para desfazer; o follow-up agendado no app vira "realizada". */
+  const podeLigar = (k: (typeof compromissos)[number]) => {
+    if (k.fonte === 'hubspot') {
+      const t = tarefas.find((x) => `hs-${x.id}` === k.id);
+      return !!t && acaoRapida(t) === 'liguei';
+    }
+    return k.tipo === 'retorno';
+  };
+  const liguei = (k: (typeof compromissos)[number]) => {
+    setConcluidas((s) => new Set(s).add(k.id));
+    const voltar = () => setConcluidas((s) => { const n = new Set(s); n.delete(k.id); return n; });
+    if (k.fonte === 'hubspot') {
+      const t = tarefas.find((x) => `hs-${x.id}` === k.id);
+      if (!t) { voltar(); return; }
+      concluirComDesfazer({
+        pedido: { taskId: t.id, nota: t.dealId ? { dealId: t.dealId, texto: `Ligação · tarefa encerrada: ${t.assunto}` } : null },
+        rotulo: `Liguei · ${k.nome ?? t.assunto}`,
+        textoToast: '✓ Ligação registrada · HubSpot + Cockpit',
+        aoVoltar: voltar,
+        aoGravar: () => { void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] }); },
+      });
+      return;
+    }
+    const idReuniao = k.id.replace(/^app-/, '');
+    void (async () => {
+      const { error } = await supabase.from('client_meetings').update({ status: 'realizada' }).eq('id', idReuniao);
+      if (error) { voltar(); Alert.alert('Não consegui confirmar', error.message); return; }
+      void queryClient.invalidateQueries({ queryKey: ['client_meetings'] });
+    })();
+  };
+
+  /* O PERCURSO: as paradas em aberto, na ordem do plano, no Google Maps (até 10 — o
+     limite de pontos do Maps no celular). Roteirizar antes põe na melhor ordem. */
+  const abertasComPonto = estado.filter((p) => p.estado !== 'feito' && p.client?.latitude != null && p.client?.longitude != null);
+  const abrirPercurso = () => {
+    const pts = abertasComPonto.slice(0, 10).map((p) => `${p.client!.latitude},${p.client!.longitude}`);
+    if (!pts.length) return;
+    const abrir = (modo: 'walking' | 'driving') => {
+      const destino = pts[pts.length - 1];
+      const meio = pts.slice(0, -1).join('|');
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destino)}`
+        + (meio ? `&waypoints=${encodeURIComponent(meio)}` : '') + `&travelmode=${modo}`;
+      void Linking.openURL(url);
+    };
+    Alert.alert(`Percurso · ${pts.length} ${pts.length === 1 ? 'parada' : 'paradas'}`, abertasComPonto.length > 10 ? 'O Maps abre as 10 primeiras; depois delas, abra de novo.' : undefined, [
+      { text: 'A pé', onPress: () => abrir('walking') },
+      { text: 'Carro', onPress: () => abrir('driving') },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  };
   const meta = metaVisitasDia > 0 ? metaVisitasDia : 6;
 
   return (
@@ -96,6 +163,20 @@ export default function AgendaNovoScreen({
                 : 'Daily de hoje ainda não registrada'}
             </Text>
           </View>
+
+          {abertasComPonto.length > 0 && (
+            <View style={s.acoesRota}>
+              {aoRoteirizar && abertasComPonto.length >= 2 && (
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Roteirizar as paradas em aberto" disabled={roteirizando}
+                  style={[s.acaoRota, roteirizando && { opacity: 0.6 }]} onPress={aoRoteirizar}>
+                  <Text style={s.acaoRotaTexto}>{roteirizando ? 'Calculando…' : 'Roteirizar'}</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Abrir o percurso no Google Maps" style={[s.acaoRota, s.acaoRotaPrim]} onPress={abrirPercurso}>
+                <Text style={[s.acaoRotaTexto, { color: '#FFFFFF' }]}>{`Percurso · ${Math.min(10, abertasComPonto.length)}`}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {estado.length === 0 && (
             <Text style={s.vazio}>Sem rota hoje. Monte pela "Rota de hoje" no topo.</Text>
@@ -161,7 +242,11 @@ export default function AgendaNovoScreen({
                 })()}
                 <View style={s.chips}><Text style={s.chip}>{k.fonte === 'hubspot' ? 'Planejamento' : 'Agendado no app'}</Text></View>
               </View>
-              {!!k.clientId && <IconChevronRight width={20} height={20} fill={cores.muted} />}
+              {dia <= hoje && podeLigar(k) ? (
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Liguei: ${k.nome ?? k.titulo ?? 'retorno'}`} style={s.liguei} onPress={() => liguei(k)}>
+                  <Text style={s.ligueiTexto}>Liguei</Text>
+                </TouchableOpacity>
+              ) : (!!k.clientId && <IconChevronRight width={20} height={20} fill={cores.muted} />)}
             </TouchableOpacity>
           ))}
         </View>
@@ -176,6 +261,12 @@ export default function AgendaNovoScreen({
 
 const s = StyleSheet.create({
   tela: { flex: 1, backgroundColor: 'var(--bg)' },
+  acoesRota: { flexDirection: 'row', gap: 8 },
+  acaoRota: { flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  acaoRotaPrim: { backgroundColor: '#C8131B', borderColor: '#C8131B' },
+  acaoRotaTexto: { fontSize: 15, fontWeight: '700', color: 'var(--text)' },
+  liguei: { minHeight: 44, minWidth: 72, paddingHorizontal: 12, borderRadius: 10, backgroundColor: 'var(--tint-green)', borderWidth: 1, borderColor: 'var(--tint-green-border)', alignItems: 'center', justifyContent: 'center' },
+  ligueiTexto: { fontSize: 14, fontWeight: '700', color: 'var(--tint-green-text)' },
   conteudo: { padding: 16, paddingBottom: 32, gap: 12 },
   subtitulo: { fontSize: 13, lineHeight: 18, color: 'var(--text-muted)' },
   // paddingTop: o selo do dia sai 6px acima da caixa, e o scroll horizontal corta o que passa.
