@@ -256,6 +256,64 @@ Deno.serve(async (req) => {
     return json(200, { ok: true, negocios });
   }
 
+  /* ══ PINO DO NEGÓCIO (28/09/2026) ══════════════════════════════════════════════
+     "Ele tem endereço mas não vai no mapa" (Julyan). Medido: 144 de 532 negócios do
+     funil sem pino — os criados pelo Cockpit ("Criar em Prospecção" só com texto) e as
+     contas-alvo que viraram negócio sem o id voltar ao pino. O "Abrir no mapa" chama
+     aqui quando não acha o pino:
+       1. já tem pino → devolve;
+       2. UM pino sem negócio com o mesmo nome (a conta-alvo) → liga ao negócio;
+       3. senão devolve o endereço do negócio; o app geocodifica e chama de novo com
+          lat/lng, e o pino nasce no dono do negócio, com posição aproximada.
+     Só o dono (ou o gestor) e só Field Sales. Não cria nada no HubSpot. */
+  if (recurso === 'pino-do-negocio') {
+    const deal = String(url.searchParams.get('deal') || '').trim();
+    if (!/^\d{1,20}$/.test(deal)) return json(400, { erro: 'Passe deal=<id>.' });
+    const ja = await svc.from('clients').select('id').eq('id_hubspot', deal).limit(1).maybeSingle();
+    if (ja.data) return json(200, { ok: true, clientId: (ja.data as any).id, como: 'ja-tinha' });
+    const hsTok = Deno.env.get('HUBSPOT_TOKEN');
+    if (!hsTok) return json(500, { erro: 'Sem o token do HubSpot na função.' });
+    const campos = 'dealname,hubspot_owner_id,pipeline,logradouro,numero,bairro,cidade,estado,cep,celular';
+    const rh = await fetch(`https://api.hubapi.com/crm/v3/objects/deals/${deal}?properties=${campos}`, { headers: { Authorization: `Bearer ${hsTok}` } });
+    if (!rh.ok) return json(404, { erro: 'Não achei esse negócio no HubSpot.' });
+    const p: any = ((await rh.json()) as any).properties || {};
+    if (p.pipeline && p.pipeline !== PIPELINE_FIELD_SALES) return json(200, { ok: false, erro: 'Esse negócio não é do funil Field Sales.' });
+    const dono = String(p.hubspot_owner_id || '');
+    if (String(usuario.role) !== 'manager' && dono !== String(usuario.ownerId)) return json(403, { erro: 'Esse negócio é de outra pessoa.' });
+    const nome = String(p.dealname || '').trim();
+    if (nome) {
+      const padrao = nome.replace(/[\\%_]/g, (m) => '\\' + m);
+      const [a, b] = await Promise.all([
+        svc.from('clients').select('id, vendedor_id_hubspot').is('id_hubspot', null).eq('is_archived', false).ilike('empresa', padrao).limit(5),
+        svc.from('clients').select('id, vendedor_id_hubspot').is('id_hubspot', null).eq('is_archived', false).ilike('nome', padrao).limit(5),
+      ]);
+      const vistos = new Map<string, any>();
+      [...(a.data || []), ...(b.data || [])].forEach((c: any) => vistos.set(String(c.id), c));
+      const cands = [...vistos.values()].filter((c: any) => !c.vendedor_id_hubspot || String(c.vendedor_id_hubspot) === dono);
+      if (cands.length === 1) {
+        const up = await svc.from('clients').update({ id_hubspot: deal, vendedor_id_hubspot: dono || null }).eq('id', cands[0].id).is('id_hubspot', null).select('id');
+        if (!up.error && (up.data || []).length) return json(200, { ok: true, clientId: cands[0].id, como: 'ligou' });
+      }
+    }
+    const logradouro = [p.logradouro, p.numero].filter(Boolean).join(', ');
+    const endereco = [logradouro, p.bairro, p.cidade, p.estado, p.cep].filter(Boolean).join(', ');
+    const lat = Number(url.searchParams.get('lat')), lng = Number(url.searchParams.get('lng'));
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+      return json(200, { ok: true, precisaPosicao: true, nome, endereco, cep: p.cep || null, temEndereco: !!(logradouro || p.cep) });
+    }
+    if (!nome) return json(200, { ok: false, erro: 'O negócio está sem nome no HubSpot.' });
+    const prof = dono ? await svc.from('profiles').select('id').eq('id_hubspot', dono).limit(1).maybeSingle() : { data: null };
+    const ins = await svc.from('clients').insert({
+      nome, empresa: nome, endereco: logradouro || null, bairro: p.bairro || null, cidade: p.cidade || null,
+      estado: p.estado || null, cep: p.cep || null, telefone: p.celular || null,
+      latitude: lat, longitude: lng, geo_source: 'nominatim', geo_approximate: true,
+      status: 'lead', origem: 'api', tags: ['pino_do_negocio'], id_hubspot: deal,
+      vendedor_id_hubspot: dono || null, created_by: (prof.data as any)?.id ?? null,
+    }).select('id').single();
+    if (ins.error) return json(500, { erro: 'Não consegui criar o pino: ' + ins.error.message });
+    return json(200, { ok: true, clientId: (ins.data as any).id, como: 'criou' });
+  }
+
   /* ══ O MEU PDI NO APP (28/09/2026) ═════════════════════════════════════════════
      Desde a 0082 o PDI é o do Cockpit: os acordos são texto da análise semanal
      (narrativas.reps[owner].compromissos, na POSIÇÃO) e o estado de cada um vive em

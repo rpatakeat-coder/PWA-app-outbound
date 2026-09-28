@@ -182,7 +182,7 @@ import { assumirLead } from './src/utils/assumirLead';
 import { ConfiguracoesScreen } from './src/screens/ConfiguracoesScreen';
 import { ds, sharedStyles } from './src/screens/sharedStyles';
 import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
-import { reverseGeocode } from './src/utils/geocoding';
+import { fetchCepData, geocodeAddress, reverseGeocode } from './src/utils/geocoding';
 import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingProvider } from './src/utils/routing';
 import { useVisitsHeatmap } from './src/hooks/useVisitsHeatmap';
 import { useSellerClassification, precisaDeIdHubspot } from './src/hooks/useSellerClassification';
@@ -3019,7 +3019,41 @@ function MainApp() {
       let q = supabase.from('clients').select(CLIENT_LIST_COLUMNS).limit(1);
       q = dl.pino!.dealId ? q.eq('id_hubspot', dl.pino!.dealId) : q.eq('id', dl.pino!.clientId!);
       const { data } = await q.maybeSingle();
-      const c = data as unknown as Client | null;
+      let c = data as unknown as Client | null;
+      // SEM PINO (28/09/2026): o negócio nasceu no Cockpit, ou a conta-alvo virou negócio
+      // sem o id voltar ao pino. A cockpit-dados liga ao pino certo ou, com o endereço
+      // do negócio geocodificado aqui, cria o pino no dono. Só falha dizendo o porquê.
+      if (!c && dl.pino!.dealId) {
+        Toast.mostrar('Pondo esse negócio no mapa…', 'fila');
+        const pedir = async (extra: string) => {
+          const { data: r, error } = await supabase.functions.invoke(`cockpit-dados?recurso=pino-do-negocio&deal=${dl.pino!.dealId}${extra}`, { method: 'GET' });
+          if (error) throw error;
+          return r as { ok?: boolean; erro?: string; clientId?: string; precisaPosicao?: boolean; endereco?: string; cep?: string | null; temEndereco?: boolean };
+        };
+        try {
+          let r = await pedir('');
+          if (r?.precisaPosicao) {
+            if (!r.temEndereco) { Toast.mostrar('Esse negócio está sem endereço no HubSpot: preencha na ficha e abra de novo.', 'erro'); return; }
+            let pos = r.endereco ? await geocodeAddress(r.endereco) : null;
+            if (!pos && r.cep) {
+              // O CEP não traz coordenada: vira rua + cidade e geocodifica de novo (e o bairro, se a rua não achar).
+              const viaCep = await fetchCepData(r.cep).catch(() => null);
+              if (viaCep) {
+                pos = (viaCep.logradouro ? await geocodeAddress(`${viaCep.logradouro}, ${viaCep.cidade}, ${viaCep.estado}`) : null)
+                  ?? (viaCep.bairro ? await geocodeAddress(`${viaCep.bairro}, ${viaCep.cidade}, ${viaCep.estado}`) : null);
+              }
+            }
+            if (!pos) { Toast.mostrar('Não achei esse endereço no mapa. Confira o endereço na ficha do negócio.', 'erro'); return; }
+            r = await pedir(`&lat=${pos.latitude}&lng=${pos.longitude}`);
+          }
+          if (!r?.ok || !r.clientId) { Toast.mostrar(r?.erro || 'Não consegui pôr esse negócio no mapa.', 'erro'); return; }
+          const { data: novo } = await supabase.from('clients').select(CLIENT_LIST_COLUMNS).eq('id', r.clientId).maybeSingle();
+          c = novo as unknown as Client | null;
+        } catch (e) {
+          Toast.mostrar('Não consegui pôr esse negócio no mapa: ' + String((e as Error)?.message ?? e), 'erro');
+          return;
+        }
+      }
       if (!c) { Toast.mostrar('Esse negócio ainda não tem pino no mapa.', 'erro'); return; }
       const lat = Number(c.latitude), lon = Number(c.longitude);
       // logo depois do login o mapa pode não ter montado ainda: tenta por até 5 s
