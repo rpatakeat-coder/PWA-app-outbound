@@ -6,7 +6,7 @@
 // passando lead frio perto na frente da cobrança; o card dizendo "0 m" ou
 // "posição exata" quando não sabe; e telefone ausente sem aviso.
 import type { Client } from '../types/client';
-import { distanciaTexto, fatosDoCard, ordenarItens, textoDoToque, type ItemFolha } from './cardNovo';
+import { distanciaTexto, faturamentoTexto, fatosDoCard, ordenarItens, quedaCurta, textoDoToque, type ItemFolha } from './cardNovo';
 import type { Pino } from './pinoP2';
 
 let falhas = 0;
@@ -37,6 +37,23 @@ const prio = ordenarItens(itens, 'prioridade').map((x) => x.c.id).join(',');
 ok(prio === 'plano1,plano2,cobrar,quente,morno,frio-perto,plano-feito', `Prioridade: plano › cobrança › quente › morno › distância (${prio})`);
 ok(ordenarItens(itens, 'distancia')[0].c.id === 'plano-feito', 'Distância: o mais perto primeiro');
 ok(ordenarItens([it('sem', { distanciaM: null }), it('com', { distanciaM: 5000 })], 'distancia')[0].c.id === 'com', 'sem GPS vai para o fim, não vira 0 m');
+
+// clientes em queda (lente "Em queda"): o maior faturamento primeiro, depois do plano
+{
+  const q = (motivo: string, faturamento: number | null) => ({ tipo: 'cliente' as const, temp: null, queda: { motivo, faturamento, dono: null } });
+  const lista = [
+    it('pequeno-perto', { distanciaM: 10, p: q('sem comanda há 6 dias', 8000) }),
+    it('grande-longe', { distanciaM: 9000, p: q('faturamento -35% no bimestre', 1093775) }),
+    it('medio', { distanciaM: 500, p: q('faturamento -21% no bimestre', 240000) }),
+    it('plano', { plano: 1, distanciaM: 7000 }),
+  ];
+  const ordem = ordenarItens(lista, 'prioridade').map((x) => x.c.id).join(',');
+  ok(ordem === 'plano,grande-longe,medio,pequeno-perto', `Em queda: plano › maior faturamento (${ordem})`);
+  ok(quedaCurta({ motivo: 'faturamento -35% no bimestre', faturamento: 1093775 }) === '−35% · R$ 1,1 mi/mês', 'linha: queda e tamanho');
+  ok(quedaCurta({ motivo: 'sem comanda há 7 dias', faturamento: 80400 }) === '7d sem comanda · R$ 80 mil/mês', 'linha: dias sem comanda');
+  ok(quedaCurta({ motivo: 'faturamento -20% no bimestre · sem comanda há 5 dias', faturamento: null }) === '−20% · 5d sem comanda', 'linha: os dois motivos, sem faturamento');
+  ok(faturamentoTexto(240540) === 'R$ 241 mil' && faturamentoTexto(950) === 'R$ 950', 'faturamento em uma palavra');
+}
 
 // fatos
 ok(distanciaTexto(null) === null && distanciaTexto(1234) === '1,2 km' && distanciaTexto(87) === '90 m', 'distância em m/km, nula sem GPS');

@@ -13,7 +13,7 @@ import { ORIGEM, origemDoFiltro } from '../utils/lentes';
 import type { Pino } from '../utils/pinoP2';
 import { distanciaTexto, ir } from './CardLeadNovo';
 
-import { ordenarItens, type ItemFolha } from '../utils/cardNovo';
+import { ordenarItens, quedaCurta, type ItemFolha } from '../utils/cardNovo';
 
 export type { ItemFolha };
 
@@ -56,6 +56,17 @@ function PinoMini({ p, plano }: { p: Pino; plano: number | null }) {
 }
 
 function Etiquetas({ it }: { it: ItemFolha }) {
+  // Cliente em queda: o que importa na linha é quanto caiu e o tamanho dele, não a
+  // origem (que é coisa de lead).
+  if (it.p.queda) {
+    return (
+      <View style={s.etiquetas}>
+        <View style={[s.tag, { backgroundColor: '#4B1C1C' }]}>
+          <Text style={[s.tagTexto, { color: '#FCA5A5' }]} numberOfLines={1}>{quedaCurta(it.p.queda)}</Text>
+        </View>
+      </View>
+    );
+  }
   const o = ORIGEM[origemDoFiltro(it.p)];
   return (
     <View style={s.etiquetas}>
