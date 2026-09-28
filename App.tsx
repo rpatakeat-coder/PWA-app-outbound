@@ -1128,11 +1128,22 @@ function MainApp() {
   const [heatSeller, setHeatSeller] = useState<string | null>(null); // null = Todos
   // Modo sol (prompt §6, menu do avatar): mapa claro para ler na rua ao meio-dia.
   // Lembrado no aparelho; só vale no mapa novo.
+  // v5 (28/09/26): a chave v5-tema é a do Cockpit também (mesmo domínio). Escolher Sol ou
+  // Escuro num lado vale no outro. "Aparelho" (só o Cockpit oferece) deixa o mapa no que
+  // ele já estava, e quem nunca escolheu segue no escuro de sempre.
   const [modoSol, setModoSol] = useState<boolean>(() => {
-    try { return localStorage.getItem('takeat-modo-sol') === '1'; } catch { return false; }
+    try {
+      const v5 = localStorage.getItem('v5-tema');
+      if (v5 === 'sol') return true;
+      if (v5 === 'escuro') return false;
+      return localStorage.getItem('takeat-modo-sol') === '1';
+    } catch { return false; }
   });
   const alternarModoSol = () => setModoSol((v) => {
-    try { localStorage.setItem('takeat-modo-sol', v ? '0' : '1'); } catch { /* sem storage: vale só nesta sessão */ }
+    try {
+      localStorage.setItem('takeat-modo-sol', v ? '0' : '1');
+      localStorage.setItem('v5-tema', v ? 'escuro' : 'sol');
+    } catch { /* sem storage: vale só nesta sessão */ }
     return !v;
   });
   // Lente Calor do mapa novo: Time (todos) ou Só eu.

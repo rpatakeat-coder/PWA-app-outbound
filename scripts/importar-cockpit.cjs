@@ -126,31 +126,42 @@ if (/["'(]assets\//.test(html)) morrer('sobrou referencia relativa a assets/ for
 // entrava na gestao pelo mapa ficava preso nela. "Mapa" volta em um toque, na
 // mesma janela e na mesma sessao. Mora logo antes do sino e herda o jeito dele
 // (pilula, borda --line, fundo --panel), com 40px de altura para o polegar.
+// Cockpit v5 (28/09/26): o cabecalho novo ja traz o botao Mapa (#v5Mapa), escondido,
+// porque fora do PWA nao ha mapa para abrir. Aqui ele so' aparece. O caminho antigo
+// (injetar o botao antes do sino) fica para um template anterior ao v5.
+const MAPA_V5 = '<a id="v5Mapa" class="v5-mapa" href="/" hidden';
+const mapasV5 = html.split(MAPA_V5).length - 1;
+if (mapasV5 > 1) morrer('esperava no maximo 1 ' + MAPA_V5 + ', achei ' + mapasV5);
+if (mapasV5 === 1) {
+  html = html.replace(MAPA_V5, '<a id="v5Mapa" class="v5-mapa" href="/"');
+}
 const SINO = '<button id="avisosSinoBtn"';
 const sinos = html.split(SINO).length - 1;
 if (sinos !== 1) morrer('esperava 1 ' + SINO + ' no cabecalho, achei ' + sinos);
-const BOTAO_MAPA = '<a id="pwaVoltarMapa" class="pwa-voltar-mapa" href="/" aria-label="Voltar para o mapa" title="Voltar para o mapa">'
-  + '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
-  + '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>'
-  + '<span>Mapa</span></a>\n    ';
-html = html.replace(SINO, BOTAO_MAPA + SINO);
-const ESTILO_MAPA = '<style>/* scripts/importar-cockpit.cjs: botao Mapa do PWA */'
-  + '.pwa-voltar-mapa{flex:none;display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 14px;'
-  + 'border-radius:var(--r-pill);border:1px solid var(--line);background:var(--panel);color:var(--ink);'
-  + 'font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;'
-  + 'transition:background var(--t-rapido) var(--ease);}'
-  + '.pwa-voltar-mapa:hover{background:var(--sunk);}'
-  + '.pwa-voltar-mapa:focus-visible{outline:2px solid var(--ink);outline-offset:2px;}'
-  // No cabecalho de celular (o mesmo 900px em que o Cockpit o troca) nao cabe o
-  // rotulo: medido a 390px, a pilula de 86px empurrava o avatar 30px para fora
-  // de um cabecalho com overflow:hidden. La' ela vira so' o icone, 40x40, como o
-  // sino; o aria-label continua dizendo "Voltar para o mapa".
-  + '@media (max-width:900px){.pwa-voltar-mapa{width:40px;padding:0;justify-content:center;}'
-  + '.pwa-voltar-mapa span{display:none;}}'
-  + '</style>';
-const FIM_HEAD = '</head>';
-if (html.split(FIM_HEAD).length - 1 !== 1) morrer('esperava 1 ' + FIM_HEAD);
-html = html.replace(FIM_HEAD, ESTILO_MAPA + '\n' + FIM_HEAD);
+if (mapasV5 === 0) {
+  const BOTAO_MAPA = '<a id="pwaVoltarMapa" class="pwa-voltar-mapa" href="/" aria-label="Voltar para o mapa" title="Voltar para o mapa">'
+    + '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>'
+    + '<span>Mapa</span></a>\n    ';
+  html = html.replace(SINO, BOTAO_MAPA + SINO);
+  const ESTILO_MAPA = '<style>/* scripts/importar-cockpit.cjs: botao Mapa do PWA */'
+    + '.pwa-voltar-mapa{flex:none;display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 14px;'
+    + 'border-radius:var(--r-pill);border:1px solid var(--line);background:var(--panel);color:var(--ink);'
+    + 'font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap;'
+    + 'transition:background var(--t-rapido) var(--ease);}'
+    + '.pwa-voltar-mapa:hover{background:var(--sunk);}'
+    + '.pwa-voltar-mapa:focus-visible{outline:2px solid var(--ink);outline-offset:2px;}'
+    // No cabecalho de celular (o mesmo 900px em que o Cockpit o troca) nao cabe o
+    // rotulo: medido a 390px, a pilula de 86px empurrava o avatar 30px para fora
+    // de um cabecalho com overflow:hidden. La' ela vira so' o icone, 40x40, como o
+    // sino; o aria-label continua dizendo "Voltar para o mapa".
+    + '@media (max-width:900px){.pwa-voltar-mapa{width:40px;padding:0;justify-content:center;}'
+    + '.pwa-voltar-mapa span{display:none;}}'
+    + '</style>';
+  const FIM_HEAD = '</head>';
+  if (html.split(FIM_HEAD).length - 1 !== 1) morrer('esperava 1 ' + FIM_HEAD);
+  html = html.replace(FIM_HEAD, ESTILO_MAPA + '\n' + FIM_HEAD);
+}
 
 // ---- grava: a pagina e os arquivos que ela referencia por caminho relativo ----
 fs.rmSync(DESTINO, { recursive: true, force: true });
