@@ -1777,6 +1777,13 @@ function MainApp() {
     () => filteredClients.filter(c => c.latitude !== null && c.longitude !== null),
     [filteredClients]
   );
+  // O que a BUSCA acha. No mapa novo é o mesmo recorte do mapa (lead, cliente e
+  // ex-cliente juntos); o chip de status único é do mapa antigo e, por padrão
+  // "lead", fazia cliente nunca aparecer na busca (27/09: "Peppers Burger" não achava).
+  const achadosDaBusca = useMemo(
+    () => (modoNovo ? clientsForCount.filter(c => c.latitude !== null && c.longitude !== null) : filteredWithCoords),
+    [modoNovo, clientsForCount, filteredWithCoords]
+  );
 
   // BUSCA LEVA O MAPA ATE' O ACHADO (26/09/2026). A busca so' filtrava: se o
   // lead procurado estava fora da tela, o executivo digitava e nao via nada.
@@ -1786,7 +1793,7 @@ function MainApp() {
   useEffect(() => {
     // Com a folha de busca aberta, quem escolhe é o executivo, na lista.
     if (!modoNovo || buscaAberta || !searchTerm || buscando || buscaEnquadrada.current === searchTerm) return;
-    const achados = filteredWithCoords.slice(0, 40);
+    const achados = achadosDaBusca.slice(0, 40);
     if (!achados.length) return;
     const id = setTimeout(() => {
       buscaEnquadrada.current = searchTerm;
@@ -1805,7 +1812,7 @@ function MainApp() {
       mapa.fitToCoordinates(pontos, { edgePadding: { top: 60, right: 40, bottom: 60, left: 40 }, animated: true });
     }, 700);
     return () => clearTimeout(id);
-  }, [modoNovo, buscaAberta, searchTerm, buscando, filteredWithCoords, mapRegion]);
+  }, [modoNovo, buscaAberta, searchTerm, buscando, achadosDaBusca, mapRegion]);
 
   const routeStops = fieldOps.stops;
   const routeStopClientIds = useMemo(
@@ -3388,8 +3395,9 @@ function MainApp() {
     const origem = userLocation ?? { latitude: mapCenter.latitude, longitude: mapCenter.longitude };
     const metros = (c: Client) => haversineMeters(origem.latitude, origem.longitude, Number(c.latitude), Number(c.longitude));
     const fmt = (m: number) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1).replace('.', ',')} km`);
-    const subDe = (c: Client) => [normalizeStage(c.etapa), c.bairro].filter(Boolean).join(' · ') || (c.cidade ?? '');
-    const locais = [...filteredWithCoords].map((c) => ({ c, m: metros(c) })).sort((a, b) => a.m - b.m).slice(0, 30);
+    const tipoDe = (c: Client) => (c.status === 'cliente' ? 'Cliente Takeat' : c.status === 'churn' ? 'Ex-cliente' : normalizeStage(c.etapa));
+    const subDe = (c: Client) => [tipoDe(c), c.bairro].filter(Boolean).join(' · ') || (c.cidade ?? '');
+    const locais = [...achadosDaBusca].map((c) => ({ c, m: metros(c) })).sort((a, b) => a.m - b.m).slice(0, 30);
     const vistos = new Set(locais.map((x) => x.c.id));
     const linhas: LinhaBusca[] = locais.map(({ c, m }) => ({
       chave: 'c' + c.id, nome: getClientPrimaryName(c), sub: subDe(c), distancia: fmt(m), acao: 'abrir', aoTocar: () => abrirDaBusca(c),
@@ -3408,7 +3416,7 @@ function MainApp() {
       }
     }
     return linhas;
-  }, [buscaAberta, searchTerm, filteredWithCoords, buscaNegocios.data, userLocation, mapCenter, abrirDaBusca, iniciarPosicionar, isViewer]);
+  }, [buscaAberta, searchTerm, achadosDaBusca, buscaNegocios.data, userLocation, mapCenter, abrirDaBusca, iniciarPosicionar, isViewer]);
 
   // Fix "bom o suficiente" pra medir proximidade: acima disso o raio de erro do
   // proprio GPS ja e' da ordem do limite de check-in.
