@@ -1071,6 +1071,25 @@ async function tratarProximoPasso(req, res, usuario, token) {
     }
   } catch (e) { /* o aviso nunca derruba o próximo passo */ }
 
+  /* E ENTRA NO PLANEJAMENTO (0133, 28/09/2026). Visita e reunião combinadas — pela ficha
+     de rua do app ou pela ficha do Cockpit — ocupam a faixa do dia na grade do dono, com
+     a hora; a grade vira parada daquele dia no app. Ligação (follow-up) não entra: na
+     grade ela viraria parada de visita. Mesmo lead no mesmo dia não duplica. */
+  try {
+    const sUrl = process.env.SUPABASE_URL, sKey = process.env.SUPABASE_SERVICE_KEY;
+    const presencial = /visita|reuni|demo/i.test(String(tipo || ''));
+    if (sUrl && sKey && presencial && guard && guard.ownerId) {
+      await fetch(sUrl + '/rest/v1/rpc/plano_poe_slot', {
+        method: 'POST',
+        headers: { apikey: sKey, Authorization: 'Bearer ' + sKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          p_owner: String(guard.ownerId), p_dia: String(data).trim(), p_client: null, p_deal: String(dealId),
+          p_tipo: 'visita', p_hora: /^\d{1,2}:\d{2}$/.test(String(hora || '')) ? String(hora) : null, p_origem: 'passo'
+        })
+      });
+    }
+  } catch (e) { /* a grade nunca derruba o próximo passo */ }
+
   // `qualificacao` volta pro cliente espelhar no DATA em memória — sem isso a ficha
   // continuaria cobrando o que acabou de ser gravado, até o próximo sync.
   return res.status(200).json({
