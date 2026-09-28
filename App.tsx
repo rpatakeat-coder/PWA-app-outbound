@@ -105,7 +105,9 @@ import FiltrosMapaNovo from './src/screens/FiltrosMapaNovo';
 import { PeekCardNovo, TopoCardNovo, type AcoesCardNovo, type DadosCardNovo } from './src/screens/CardLeadNovo';
 import FolhaDoMapa, { type ItemFolha } from './src/screens/FolhaDoMapa';
 import BarraPlanejar, { type ParadaDoDia } from './src/screens/BarraPlanejar';
-import { diaInicial, diasPlanejaveis, FAIXAS_POR_DIA, rotuloDoDia, vaiAoCockpit } from './src/utils/planoNoMapa';
+import { diaInicial, diasPlanejaveis, ehCompromisso, faixaDoLead, rotuloDoDia, vaiAoCockpit, type FaixaDoPlano } from './src/utils/planoNoMapa';
+import { lerColunaDoPlano, porNoDia, tirarDoDia } from './src/utils/paradaDoDia';
+import { diasDaFaixa } from './src/utils/agendaNovo';
 import TopoCampo, { ALTURA_TOPO_CAMPO } from './src/screens/TopoCampo';
 import FolhaLentes, { COR_LENTE } from './src/screens/FolhaLentes';
 import AvisoSemSinal from './src/screens/AvisoSemSinal';
@@ -1267,9 +1269,25 @@ function MainApp() {
   const planejarToqueRef = useRef<((c: Client) => void) | null>(null);
   const opsOutroDia = useFieldOps(planejarDia ?? routeDate, isAuthenticated && !!planejarDia && planejarDia !== routeDate);
   const opsDoDia = planejarDia && planejarDia !== routeDate ? opsOutroDia : fieldOps;
-  const podePlanejar = modoNovo && !isViewer && !isMonitoringRoute;
+  const planejarOutroDia = !!planejarDia && planejarDia !== routeDate;
+  const podePlanejar = modoNovo && !isViewer && !isMonitoringRoute && !!profile?.id;
   useEffect(() => { if (!podePlanejar) setPlanejarDia(null); }, [podePlanejar]);
-  const diasDoPlanejar = useMemo(() => diasPlanejaveis(routeDate, 10), [routeDate]);
+  // Os dias são os da faixa da Agenda (hoje + próximos úteis): tudo que ele planeja aqui
+  // aparece lá. Passou da meia-noite com o modo aberto: o dia que virou passado sai.
+  const diasDoPlanejar = useMemo(() => {
+    const agenda = new Set(diasDaFaixa(new Date()));
+    return diasPlanejaveis(routeDate, 10).filter((d) => agenda.has(d.iso));
+  }, [routeDate]);
+  useEffect(() => {
+    if (planejarDia && !diasDoPlanejar.some((d) => d.iso === planejarDia)) setPlanejarDia(diasDoPlanejar[0]?.iso ?? null);
+  }, [planejarDia, diasDoPlanejar]);
+  // A coluna do dia no Planejamento do Cockpit: a folha diz o que está lá de verdade.
+  const colunaDoPlanoQ = useQuery({
+    queryKey: ['plano_do_dia', profile?.id_hubspot ?? null, planejarDia],
+    enabled: !!planejarDia && !!profile?.id_hubspot,
+    queryFn: () => lerColunaDoPlano(String(profile!.id_hubspot), planejarDia!),
+    staleTime: 15_000,
+  });
 
   // Carrega o toggle da preferência local na inicialização.
   useEffect(() => {
@@ -1949,10 +1967,20 @@ function MainApp() {
   // status único dos chips antigos não se aplica aqui), mais as paradas do
   // plano, que aparecem mesmo fora do recorte.
   // No modo Planejar os números dos pinos são os do dia escolhido, não os de hoje.
-  const paradasDoDiaPlanejado = useMemo<ParadaDoDia[]>(() => (!planejarDia ? [] : opsDoDia.stops
-    .filter((s) => (s.status === 'planned' || s.status === 'done') && s.client)
-    .map((s) => ({ id: s.id, client: s.client as Client, status: s.status, doCockpit: s.mandatory_reason === 'plano_cockpit' }))),
-  [planejarDia, opsDoDia.stops]);
+  const paradasDoDiaPlanejado = useMemo<ParadaDoDia[]>(() => {
+    if (!planejarDia) return [];
+    const col = colunaDoPlanoQ.data;
+    return opsDoDia.stops
+      .filter((s) => (s.status === 'planned' || s.status === 'done') && s.client)
+      .map((s) => {
+        const faixa = col ? faixaDoLead(col, s.client as Client) : null;
+        return {
+          id: s.id, client: s.client as Client, status: s.status,
+          noCockpit: col ? !!faixa : null,
+          compromisso: ehCompromisso(faixa) ? (faixa?.hora ?? '') : null,
+        };
+      });
+  }, [planejarDia, opsDoDia.stops, colunaDoPlanoQ.data]);
   const clientesDoPlanoNoMapa = useMemo(
     () => (planejarDia ? paradasDoDiaPlanejado.map((p) => p.client) : routeDisplayClients),
     [planejarDia, paradasDoDiaPlanejado, routeDisplayClients],
@@ -1981,48 +2009,80 @@ function MainApp() {
   paradasDoDiaRef.current = paradasDoDiaPlanejado;
   const planejarDiaRef = useRef<string | null>(null);
   planejarDiaRef.current = planejarDia;
-  const tirarDoDiaPlanejado = (p: ParadaDoDia) => {
-    const dia = planejarDiaRef.current;
-    const parada = opsDoDia.stops.find((s) => s.id === p.id);
-    if (!dia || !parada) return;
-    const nome = p.client.empresa?.trim() || p.client.nome;
-    opsDoDia.removeStop.mutate(parada, {
-      onSuccess: () => Toast.mostrar(`${nome} saiu de ${rotuloDoDia(dia)}`, 'ok', {
-        rotulo: 'Desfazer',
-        // o mutate segue o dia que está na tela: só desfaz se ainda for o mesmo
-        onPress: () => (planejarDiaRef.current === dia ? opsDoDia.adicionarParada.mutate(p.client) : Toast.mostrar(`Volte para ${rotuloDoDia(dia)} para desfazer.`, 'fila')),
-      }),
-      onError: (e) => Toast.mostrar(`Não saiu: ${String((e as Error)?.message ?? e)}`, 'erro'),
-    });
+  // FILA (auditoria 28/09): um toque de cada vez, com o dia do toque. Dois toques rápidos
+  // gravavam a mesma posição, o segundo toque no mesmo pino dava "já está" em vez de tirar,
+  // e o react-query só avisava o último. `ajustes` é o que já foi pedido e ainda não voltou
+  // do banco: o próximo toque decide em cima dele, não da lista velha.
+  const filaPlanejarRef = useRef<Promise<void>>(Promise.resolve());
+  const ajustesPlanejarRef = useRef(new Map<string, boolean>());
+  const noDiaAgora = (id: string) => ajustesPlanejarRef.current.get(id)
+    ?? paradasDoDiaRef.current.some((p) => p.client.id === id);
+  const destinoNoCockpit = (col: FaixaDoPlano[] | null, c: Client) => {
+    if (!profile?.id_hubspot) return 'Agenda · seu usuário não está ligado ao HubSpot, o Cockpit não vê';
+    if (!col) return 'Agenda';
+    if (faixaDoLead(col, c)) return 'Agenda + Cockpit';
+    return vaiAoCockpit(c) ? 'Agenda · o Cockpit está cheio nesse dia' : 'Agenda · sem negócio, o Cockpit não mostra';
   };
-  const alternarNoPlano = (c: Client) => {
+  const alternarNoPlano = (c: Client, forcar?: boolean) => {
     const dia = planejarDiaRef.current;
-    if (!dia) return;
+    const eu = profile?.id;
+    if (!dia || !eu) return;
     const nome = c.empresa?.trim() || c.nome;
-    const ja = paradasDoDiaRef.current.find((p) => p.client.id === c.id);
-    if (ja?.status === 'done') { Toast.mostrar(`${nome} já foi visitado nesse dia.`, 'fila'); return; }
-    if (ja) { tirarDoDiaPlanejado(ja); return; }
-    const n = paradasDoDiaRef.current.length + 1;
-    const destino = !vaiAoCockpit(c) ? 'sem negócio: só no app'
-      : n > FAIXAS_POR_DIA ? `além das ${FAIXAS_POR_DIA} do Cockpit` : 'Agenda + Cockpit';
-    opsDoDia.adicionarParada.mutate(c, {
-      onSuccess: (pos) => (pos == null
-        ? Toast.mostrar('Não entrou: esse lead já está nesse dia.', 'fila')
-        : Toast.mostrar(`✓ ${n}. ${nome} · ${rotuloDoDia(dia)} · ${destino}`, 'ok')),
-      onError: (e) => Toast.mostrar(`Não entrou: ${String((e as Error)?.message ?? e)}`, 'erro'),
+    const parada = paradasDoDiaRef.current.find((p) => p.client.id === c.id);
+    const estava = noDiaAgora(c.id);
+    if (estava && parada?.status === 'done' && !ajustesPlanejarRef.current.has(c.id)) {
+      Toast.mostrar(`${nome} já foi visitado nesse dia.`, 'fila'); return;
+    }
+    if (estava && parada && parada.compromisso != null && !ajustesPlanejarRef.current.has(c.id)) {
+      Toast.mostrar(`${nome} tem visita marcada${parada.compromisso ? ` às ${parada.compromisso}` : ''} nesse dia. Para desmarcar, mude na Agenda.`, 'fila');
+      return;
+    }
+    const entrar = forcar ?? !estava;
+    ajustesPlanejarRef.current.set(c.id, entrar);
+    filaPlanejarRef.current = filaPlanejarRef.current.then(async () => {
+      try {
+        const r = entrar ? await porNoDia(eu, dia, c.id) : await tirarDoDia(eu, dia, c.id);
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['field_routes'] }),
+          queryClient.invalidateQueries({ queryKey: ['field_route_stops'] }),
+          queryClient.invalidateQueries({ queryKey: ['plano_do_dia'] }),
+        ]);
+        let col: FaixaDoPlano[] | null = null;
+        if (profile?.id_hubspot) col = await lerColunaDoPlano(String(profile.id_hubspot), dia).catch(() => null);
+        const desfazer = { rotulo: 'Desfazer', onPress: () => (planejarDiaRef.current === dia
+          ? alternarNoPlano(c, !entrar)
+          : Toast.mostrar(`Volte para ${rotuloDoDia(dia)} para desfazer.`, 'fila')) };
+        if (entrar) {
+          Toast.mostrar(r === 'ja' ? `${nome} já estava em ${rotuloDoDia(dia)}.` : `✓ ${nome} · ${rotuloDoDia(dia)} · ${destinoNoCockpit(col, c)}`, r === 'ja' ? 'fila' : 'ok', r === 'ja' ? undefined : desfazer);
+        } else {
+          Toast.mostrar(r ? `${nome} saiu de ${rotuloDoDia(dia)}${col && faixaDoLead(col, c) ? ' · ainda no Cockpit, confira lá' : ''}` : `${nome} não estava em ${rotuloDoDia(dia)}.`, r ? 'ok' : 'fila', r ? desfazer : undefined);
+        }
+      } catch (e) {
+        Toast.mostrar(`${entrar ? 'Não entrou' : 'Não saiu'}: ${String((e as Error)?.message ?? e)}`, 'erro');
+      } finally {
+        if (ajustesPlanejarRef.current.get(c.id) === entrar) ajustesPlanejarRef.current.delete(c.id);
+      }
     });
   };
-  planejarToqueRef.current = planejarDia ? alternarNoPlano : null;
+  const tirarDoDiaPlanejado = (p: ParadaDoDia) => alternarNoPlano(p.client);
+  planejarToqueRef.current = planejarDia ? (c: Client) => alternarNoPlano(c) : null;
   const abrirPlanejar = () => {
     const hora = Number(new Date().toLocaleString('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Sao_Paulo' }));
     setQuadraAberta(null);
-    setPlanejarDia(diaInicial(routeDate, Number.isFinite(hora) ? hora : 9));
+    const inicial = diaInicial(routeDate, Number.isFinite(hora) ? hora : 9);
+    setPlanejarDia(diasDoPlanejar.some((d) => d.iso === inicial) ? inicial : (diasDoPlanejar[0]?.iso ?? null));
   };
   const fecharPlanejar = () => {
     const dia = planejarDiaRef.current;
-    const n = paradasDoDiaRef.current.length;
+    const lista = paradasDoDiaRef.current;
     setPlanejarDia(null);
-    if (dia && n) Toast.mostrar(`✓ ${n} ${n === 1 ? 'parada' : 'paradas'} em ${rotuloDoDia(dia)} · na Agenda e no Planejamento do Cockpit`, 'ok');
+    setQuadraAberta(null);
+    if (!dia || !lista.length) return;
+    const noCockpit = lista.filter((p) => p.noCockpit).length;
+    const fora = lista.filter((p) => p.noCockpit === false).length;
+    Toast.mostrar(`✓ ${lista.length} ${lista.length === 1 ? 'parada' : 'paradas'} em ${rotuloDoDia(dia)} · na Agenda`
+      + (noCockpit ? ` · ${noCockpit} no Planejamento do Cockpit` : '')
+      + (fora ? ` · ${fora} só no app` : ''), 'ok');
   };
 
   // Lente Calor: áreas com 3+ pinos e nenhum check-in no período (anel azul tracejado).
@@ -3161,8 +3221,6 @@ function MainApp() {
   const regiaoRef = useRef(mapRegion);
   regiaoRef.current = mapRegion;
   const handleMarkerPress = useCallback((c: Client) => {
-    // modo Planejar: o toque põe ou tira do dia, sem abrir o card
-    if (planejarToqueRef.current) { planejarToqueRef.current(c); return; }
     openClientDetails(c);
     const mapRegion = regiaoRef.current;
     if (!modoNovo || !mapRegion || !mapRef.current || c.latitude == null || c.longitude == null) return;
@@ -3178,6 +3236,15 @@ function MainApp() {
       longitudeDelta: mapRegion.longitudeDelta,
     }, 300);
   }, [openClientDetails, modoNovo]);
+  // TOQUE NO PINO DO MAPA (auditoria 28/09): no modo Planejar põe ou tira do dia; fora
+  // dele, abre o card. Só os marcadores usam este — a "próxima" da ficha e do Meu dia
+  // continuam abrindo o lead, e antes pulavam para o plano de outro dia.
+  const aoTocarPino = useCallback((c: Client) => {
+    if (planejarToqueRef.current) { planejarToqueRef.current(c); return; }
+    handleMarkerPress(c);
+  }, [handleMarkerPress]);
+  // Saiu do mapa: o modo Planejar desliga (senão o toque ficava armado nas outras abas).
+  useEffect(() => { if (tab !== 'map') setPlanejarDia(null); }, [tab]);
 
   // DEEP LINK DO COCKPIT (v5, 28/09/2026): "Abrir no mapa" chega aqui como
   // /mapa?pino=<negócio>&cartao=aberto, ?rua=… ou ?lente=…. Roda uma vez, depois do
@@ -5120,7 +5187,16 @@ function MainApp() {
                 // o resumo já é o agrupamento: nunca vira bolha do clusterer
                 cluster={false}
                 zIndex={quadraAberta?.lider === pl.lider ? 1800 : 800}
-                onPress={() => { setSelectedClient(null); setQuadraAberta({ lider: pl.lider, ids: new Set(membros), area: resumo.area }); }}
+                onPress={() => {
+                  if (planejarDia) {
+                    // Planejar: a lista da quadra não aparece (a folha é a do dia); aproxima até cada lead virar pino
+                    const r = regiaoRef.current;
+                    mapRef.current?.animateToRegion({ latitude: c.latitude as number, longitude: c.longitude as number,
+                      latitudeDelta: Math.min(r?.latitudeDelta ?? 0.02, 0.018), longitudeDelta: Math.min(r?.longitudeDelta ?? 0.02, 0.018) }, 350);
+                    return;
+                  }
+                  setSelectedClient(null); setQuadraAberta({ lider: pl.lider, ids: new Set(membros), area: resumo.area });
+                }}
               >
                 <CartaoQuadra resumo={resumo} n={membros.length} cores={membros.map((id) => corPorId.get(id) ?? '#6B7280')} />
               </Marker>
@@ -5133,12 +5209,13 @@ function MainApp() {
             client={c}
             contexto={contextoPino}
             // pilha fechada: o toque abre o leque; o resto abre o card
-            onPress={n > 1 && !aberta ? abrirPilha : handleMarkerPress}
+            onPress={n > 1 && !aberta ? abrirPilha : aoTocarPino}
             planoNumero={plano}
-            feito={plano != null && routeStops.find(s => s.client_id === c.id)?.status === 'done'}
+            // planejando outro dia, "feito" e "próxima" são os daquele dia, não os de hoje
+            feito={plano != null && (planejarDia ? paradasDoDiaPlanejado.find((p) => p.client.id === c.id)?.status === 'done' : routeStops.find(s => s.client_id === c.id)?.status === 'done')}
             naFila={leadsNaFila.has(c.id)}
             selecionado={selectedClient?.id === c.id}
-            papel={c.id === idClienteParadaAtual ? 'proxima' : plano != null ? 'plano' : 'lente'}
+            papel={!planejarOutroDia && c.id === idClienteParadaAtual ? 'proxima' : plano != null ? 'plano' : 'lente'}
             lente={lente}
             foraDaLente={!noFoco(lente, p, plano) && selectedClient?.id !== c.id}
             // Até a entrega de densidade: muitos pinos inteiros (lente Contas-alvo
@@ -5174,7 +5251,7 @@ function MainApp() {
             }
             meetingCount={upcomingByClient[client.id] ?? 0}
             isContaAlvo={!!client.conta_alvo_place_id}
-            onPress={handleMarkerPress}
+            onPress={aoTocarPino}
           />
         ))}
         {/* Markers da rota com numero da ordem — renderizam acima dos
@@ -5191,7 +5268,7 @@ function MainApp() {
               position={index + 1}
               done={stop?.status === 'done'}
               atual={client.id === idClienteParadaAtual}
-              onPress={handleMarkerPress}
+              onPress={aoTocarPino}
             />
           );
           })}
@@ -5203,7 +5280,7 @@ function MainApp() {
         {/* Handoff v4.1 §5: o plano é andado — trajeto pontilhado de 3 px
             (branco no escuro, preto no sol) e o anel da microrrota (2–3
             quarteirões) em volta da próxima porta, com o que dá para bater a pé. */}
-        {!heatOn && modoNovo && routeWaypoints.length >= 2 && (
+        {!heatOn && modoNovo && !planejarOutroDia && routeWaypoints.length >= 2 && (
           <Polyline
             coordinates={routeGeometry.data && routeGeometry.data.coordinates.length > 1 ? routeGeometry.data.coordinates : routeWaypoints}
             strokeColor={modoSol ? '#111418' : 'rgba(255,255,255,0.95)'}
@@ -5212,7 +5289,7 @@ function MainApp() {
             zIndex={2}
           />
         )}
-        {!heatOn && modoNovo && lente === 'dia' && (() => {
+        {!heatOn && modoNovo && !planejarOutroDia && lente === 'dia' && (() => {
           const prox = routeDisplayClients.find((c) => c.id === idClienteParadaAtual);
           if (!prox || prox.latitude == null || prox.longitude == null) return null;
           return (

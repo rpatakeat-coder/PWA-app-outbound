@@ -32,7 +32,7 @@ export const INVALIDA_POR_TIPO: Record<string, string[][]> = {
   foto: [['client_visits']],
   ficha: [['meu_dia']],
   parada: [['field_routes'], ['field_route_stops'], ['meu_dia']],
-  plano: [['field_routes'], ['field_route_stops'], ['meu_dia']],
+  plano: [['field_routes'], ['field_route_stops'], ['meu_dia'], ['plano_do_dia']],
   comunicado: [['avisos_gestor'], ['comunicados_nao_lidos']],
   recado: [['avisos_gestor']],
   // 0129: o gestor validou ou devolveu um acordo do 1:1 (ou eu marquei em outro aparelho)

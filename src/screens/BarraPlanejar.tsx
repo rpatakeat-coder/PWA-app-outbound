@@ -6,9 +6,11 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { Client } from '../types/client';
-import { FAIXAS_POR_DIA, vaiAoCockpit, type DiaPlanejavel } from '../utils/planoNoMapa';
+import { vaiAoCockpit, type DiaPlanejavel } from '../utils/planoNoMapa';
 
-export type ParadaDoDia = { id: string; client: Client; status: string; doCockpit: boolean };
+/** noCockpit: lido na grade do Planejamento (null enquanto não leu). compromisso: a hora
+ *  da visita marcada (Agenda do app ou próximo passo do CRM); null quando não é. */
+export type ParadaDoDia = { id: string; client: Client; status: string; noCockpit: boolean | null; compromisso: string | null };
 
 type Props = {
   dias: DiaPlanejavel[];
@@ -27,8 +29,9 @@ type Props = {
 export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, aoAbrir, aoTirar, aoFechar, chao, embutida, aoMedir }: Props) {
   const atual = dias.find((d) => d.iso === dia);
   const rotulo = atual ? (atual.hoje ? 'hoje' : atual.rotulo) : dia;
-  const soNoApp = paradas.filter((p) => !vaiAoCockpit(p.client)).length;
-  const alem = Math.max(0, paradas.length - FAIXAS_POR_DIA);
+  const soNoApp = paradas.filter((p) => p.noCockpit === false);
+  const semNegocio = soNoApp.filter((p) => !vaiAoCockpit(p.client)).length;
+  const cheio = soNoApp.length - semNegocio;
   return (
     <View
       style={embutida ? s.painel : [s.folha, { bottom: chao }]}
@@ -62,7 +65,7 @@ export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, a
       </ScrollView>
 
       <Text style={s.dica}>
-        {`Toque nos pinos para pôr ou tirar ${atual?.hoje ? 'de hoje' : `da ${rotulo}`}. Entra na Agenda e no Planejamento do Cockpit.`}
+        {`Toque nos pinos para pôr ou tirar ${atual?.hoje ? 'de hoje' : `da ${rotulo}`}. Longe, aproxime o mapa: de perto cada lead vira um pino.`}
       </Text>
 
       <ScrollView style={embutida ? s.listaEmbutida : s.lista} contentContainerStyle={{ paddingBottom: 6 }}>
@@ -74,8 +77,8 @@ export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, a
           const notas = [
             p.client.bairro?.trim() || null,
             p.status === 'done' ? 'feita' : null,
-            p.doCockpit ? 'do Cockpit' : null,
-            !vaiAoCockpit(p.client) ? 'sem negócio: só no app' : i >= FAIXAS_POR_DIA ? 'além das 15 do Cockpit' : null,
+            p.compromisso != null ? `visita marcada${p.compromisso ? ` ${p.compromisso}` : ''}` : null,
+            p.noCockpit === true ? 'no Cockpit' : p.noCockpit === false ? 'só no app' : null,
           ].filter(Boolean).join(' · ');
           return (
             <View key={p.id} style={s.linha}>
@@ -84,7 +87,7 @@ export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, a
                 <Text style={s.nome} numberOfLines={1}>{nome}</Text>
                 {!!notas && <Text style={s.sub} numberOfLines={1}>{notas}</Text>}
               </Pressable>
-              {p.status !== 'done' && (
+              {p.status !== 'done' && p.compromisso == null && (
                 <Pressable accessibilityRole="button" accessibilityLabel={`Tirar ${nome} do dia`} onPress={() => aoTirar(p)} style={s.tirar} hitSlop={4}>
                   <Text style={s.tirarTexto}>✕</Text>
                 </Pressable>
@@ -92,10 +95,10 @@ export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, a
             </View>
           );
         })}
-        {(soNoApp > 0 || alem > 0) && (
+        {soNoApp.length > 0 && (
           <Text style={s.aviso}>
-            {[soNoApp > 0 ? `${soNoApp} sem negócio nem conta-alvo: ficam na rota do app, o Cockpit não tem onde mostrar.` : null,
-              alem > 0 ? `O Planejamento do Cockpit guarda ${FAIXAS_POR_DIA} por dia; ${alem} ficam só no app.` : null].filter(Boolean).join(' ')}
+            {[semNegocio > 0 ? `${semNegocio} sem negócio nem conta-alvo: ficam na rota e na Agenda do app, o Cockpit não tem onde mostrar.` : null,
+              cheio > 0 ? `${cheio} não couberam no Planejamento do Cockpit (15 faixas por dia, já ocupadas): ficam na rota e na Agenda do app.` : null].filter(Boolean).join(' ')}
           </Text>
         )}
       </ScrollView>

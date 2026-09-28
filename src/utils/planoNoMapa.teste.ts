@@ -1,4 +1,4 @@
-import { diasPlanejaveis, diaInicial, rotuloDoDia, vaiAoCockpit } from './planoNoMapa';
+import { colunaDoDia, diasPlanejaveis, diaInicial, ehCompromisso, faixaDoLead, rotuloDoDia, semanaDoDia, vaiAoCockpit } from './planoNoMapa';
 
 let falhas = 0;
 function igual(nome: string, obtido: unknown, esperado: unknown) {
@@ -21,6 +21,18 @@ igual('domingo abre segunda', diaInicial('2026-10-04', 9), '2026-10-05');
 igual('com negócio vai', vaiAoCockpit({ id_hubspot: '123' }), true);
 igual('conta-alvo vai', vaiAoCockpit({ id_hubspot: null, lead_prospeccao_id: 'u' }), true);
 igual('sem os dois não vai', vaiAoCockpit({ id_hubspot: ' ', lead_prospeccao_id: null }), false);
+
+igual('semana de quarta', semanaDoDia('2026-09-30'), { segunda: '2026-09-28', indice: 2 });
+igual('semana de sexta na virada', semanaDoDia('2026-10-02'), { segunda: '2026-09-28', indice: 4 });
+igual('semana de segunda', semanaDoDia('2026-10-05'), { segunda: '2026-10-05', indice: 0 });
+const grade = [[], [null, 'c-1', { id: '__rua' }, { id: 'n-u', origem: 'app' }, { id: 'c-2', origem: 'app-agenda', hora: '14:00' }]];
+igual('coluna lê texto e objeto, sem marcação', colunaDoDia(grade, 1).map((f) => f.id), ['c-1', 'n-u', 'c-2']);
+igual('coluna de grade quebrada', colunaDoDia(null, 1), []);
+igual('lead com negócio achado por c-', faixaDoLead(colunaDoDia(grade, 1), { id_hubspot: '1' })?.id, 'c-1');
+igual('conta-alvo com negócio achada por n-', faixaDoLead(colunaDoDia(grade, 1), { id_hubspot: '9', lead_prospeccao_id: 'u' })?.id, 'n-u');
+igual('fora da coluna', faixaDoLead(colunaDoDia(grade, 1), { id_hubspot: '7' }), null);
+igual('visita da agenda é compromisso', ehCompromisso(faixaDoLead(colunaDoDia(grade, 1), { id_hubspot: '2' })), true);
+igual('faixa do app não é compromisso', ehCompromisso({ id: 'c-1', origem: 'app' }), false);
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\ntodos passaram');
