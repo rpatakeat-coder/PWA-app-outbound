@@ -3336,6 +3336,16 @@ function MainApp() {
   // embaixo ficava escondido atrás dele ou colado no canto (medido em 26/09):
   // o mapa desliza, no mesmo zoom, até o pino ficar a ~30% do topo.
   const regiaoRef = useRef(mapRegion);
+  // O último check-in deste aparelho (hora, ponto, lead): a regra do check-in em série.
+  // Guardado também no aparelho, para recarregar o app não zerar a regra.
+  const ultimoCheckinRef = useRef<{ t: number; lat: number; lon: number; clientId: string } | null>((() => {
+    try { const v = JSON.parse(localStorage.getItem('takeat-ultimo-checkin') || 'null'); return v && typeof v.t === 'number' ? v : null; } catch { return null; }
+  })());
+  const marcarUltimoCheckin = (clientId: string, lat: number | null, lon: number | null) => {
+    if (lat == null || lon == null) return;
+    ultimoCheckinRef.current = { t: Date.now(), lat, lon, clientId };
+    try { localStorage.setItem('takeat-ultimo-checkin', JSON.stringify(ultimoCheckinRef.current)); } catch { /* sem storage: vale só nesta sessão */ }
+  };
   regiaoRef.current = mapRegion;
   const handleMarkerPress = useCallback((c: Client) => {
     openClientDetails(c);
@@ -4269,6 +4279,27 @@ function MainApp() {
       // "Estou na porta" do pino nunca confirmado (que move o pino para onde a pessoa
       // está) e o check-in que já chega sem GPS. Visita declarada ou pino corrigido na
       // hora só entram com a prova — é ela que o gestor vê no Cockpit.
+      // CHECK-IN EM SÉRIE PEDE FOTO (28/09/2026, Julyan: "precisamos que eles visitem, e
+      // tá provado que não fazem"). Medido em 14 dias: 44 check-ins de leads DIFERENTES
+      // feitos do mesmo ponto (< 50 m) em menos de 3 minutos — o raio de 200 m do banco
+      // aceita cada um, mas ninguém visita três restaurantes em três minutos. O segundo
+      // em série só entra com a foto da fachada deste lugar, que o gestor vê no Cockpit.
+      const emSerie = (() => {
+        const u = ultimoCheckinRef.current;
+        if (!u || u.clientId === client.id || userLat == null || userLon == null) return false;
+        return (Date.now() - u.t) < 3 * 60_000 && distanceMeters(userLat, userLon, u.lat, u.lon) < 50;
+      })();
+      if (modoNovo && !fotoProva && emSerie) {
+        const r = await perguntar(
+          'Foto da fachada',
+          'Você registrou outra visita deste mesmo ponto há menos de 3 minutos. Para esta visita contar, tire uma foto da fachada deste lugar.',
+          [{ text: 'Cancelar', valor: 'nao', style: 'cancel' }, { text: 'Tirar a foto', valor: 'foto' }],
+        );
+        if (r !== 'foto') return;
+        fotoProva = await tirarFotoDeProva();
+        if (!fotoProva) return;
+      }
+
       if (modoNovo && !fotoProva && (declarada || corrigirPino)) {
         // O "Estou na porta" acabou de ser tocado e a câmera abre nesse gesto. O
         // sem-GPS chega aqui segundos depois do Cheguei: a pergunta dá o toque novo
@@ -4312,10 +4343,12 @@ function MainApp() {
           payload: { clientId: client.id, latitude: userLat, longitude: userLon, accuracyM: fixAccuracy, feitoEm, corrigirPino, declarada },
         });
         Toast.mostrar(`Sem sinal · check-in em ${nomeDoLead} na fila, sobe sozinho`, 'fila');
+        marcarUltimoCheckin(client.id, userLat, userLon);
         if (fotoProva) Toast.mostrar('A foto de prova não subiu sem sinal: tire de novo no registro da visita quando voltar o sinal.', 'erro');
         onDone?.();
         return;
       }
+      marcarUltimoCheckin(client.id, userLat, userLon);
       // A foto de prova sobe já, sem depender da ficha: é ela que sustenta a
       // visita declarada no Cockpit. Falhou? A ficha tenta de novo ao salvar.
       let fotoProvaPendente: Blob | null = null;
