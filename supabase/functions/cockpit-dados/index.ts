@@ -273,7 +273,7 @@ Deno.serve(async (req) => {
     if (ja.data) return json(200, { ok: true, clientId: (ja.data as any).id, como: 'ja-tinha' });
     const hsTok = Deno.env.get('HUBSPOT_TOKEN');
     if (!hsTok) return json(500, { erro: 'Sem o token do HubSpot na função.' });
-    const campos = 'dealname,hubspot_owner_id,pipeline,logradouro,numero,bairro,cidade,estado,cep,celular';
+    const campos = 'dealname,hubspot_owner_id,pipeline,logradouro,numero,bairro,cidade,estado,cep,celular,description';
     const rh = await fetch(`https://api.hubapi.com/crm/v3/objects/deals/${deal}?properties=${campos}`, { headers: { Authorization: `Bearer ${hsTok}` } });
     if (!rh.ok) return json(404, { erro: 'Não achei esse negócio no HubSpot.' });
     const p: any = ((await rh.json()) as any).properties || {};
@@ -295,7 +295,20 @@ Deno.serve(async (req) => {
         if (!up.error && (up.data || []).length) return json(200, { ok: true, clientId: cands[0].id, como: 'ligou' });
       }
     }
-    const logradouro = [p.logradouro, p.numero].filter(Boolean).join(', ');
+    // 2b. a conta-alvo que virou este negócio: o banco (0132) cria o pino dela já ligado.
+    const lp = await svc.from('leads_prospeccao').select('id, endereco').eq('hubspot_deal_id', deal).limit(1).maybeSingle();
+    if (lp.data) {
+      const { data: pinDaConta } = await svc.rpc('municao_sincronizar_pino', { p_lead: (lp.data as any).id });
+      if (pinDaConta) return json(200, { ok: true, clientId: pinDaConta, como: 'conta-alvo' });
+    }
+    // O endereço: os campos do negócio; senão o da conta-alvo; senão a linha "Endereço:" que
+    // o Cockpit escreve na descrição do negócio que ele cria ("R. X, 79 - Bairro, Cidade...").
+    let logradouro = [p.logradouro, p.numero].filter(Boolean).join(', ');
+    if (!logradouro && lp.data && (lp.data as any).endereco) logradouro = String((lp.data as any).endereco);
+    if (!logradouro && p.description) {
+      const m = /Endere[cç]o:\s*([^\n—]+)/i.exec(String(p.description));
+      if (m) logradouro = m[1].replace(/\s+(Google|Origem|Telefone):.*$/i, '').trim();
+    }
     const endereco = [logradouro, p.bairro, p.cidade, p.estado, p.cep].filter(Boolean).join(', ');
     const lat = Number(url.searchParams.get('lat')), lng = Number(url.searchParams.get('lng'));
     if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
