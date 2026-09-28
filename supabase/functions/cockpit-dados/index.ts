@@ -302,6 +302,21 @@ Deno.serve(async (req) => {
       return json(200, { ok: true, precisaPosicao: true, nome, endereco, cep: p.cep || null, temEndereco: !!(logradouro || p.cep) });
     }
     if (!nome) return json(200, { ok: false, erro: 'O negócio está sem nome no HubSpot.' });
+    // 3a. antes de criar: um pino sem negócio a até ~200 m cujo nome contém o outro
+    // ("Maria Cereja" × "Padaria Maria Cereja") é a mesma casa — liga em vez de duplicar.
+    const norm = (x: string) => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+    const nNome = norm(nome);
+    const dLat = 0.0018, dLng = 0.0018 / Math.max(0.2, Math.cos(lat * Math.PI / 180));
+    const perto = await svc.from('clients').select('id, nome, empresa, vendedor_id_hubspot').is('id_hubspot', null).eq('is_archived', false)
+      .gte('latitude', lat - dLat).lte('latitude', lat + dLat).gte('longitude', lng - dLng).lte('longitude', lng + dLng).limit(50);
+    const mesmos = (perto.data || []).filter((c: any) => {
+      if (c.vendedor_id_hubspot && String(c.vendedor_id_hubspot) !== dono) return false;
+      return [c.empresa, c.nome].some((x: any) => { const n = norm(x); return n.length >= 4 && (nNome.includes(n) || n.includes(nNome)); });
+    });
+    if (mesmos.length === 1) {
+      const up = await svc.from('clients').update({ id_hubspot: deal, vendedor_id_hubspot: dono || null }).eq('id', mesmos[0].id).is('id_hubspot', null).select('id');
+      if (!up.error && (up.data || []).length) return json(200, { ok: true, clientId: mesmos[0].id, como: 'ligou-perto' });
+    }
     const prof = dono ? await svc.from('profiles').select('id').eq('id_hubspot', dono).limit(1).maybeSingle() : { data: null };
     const ins = await svc.from('clients').insert({
       nome, empresa: nome, endereco: logradouro || null, bairro: p.bairro || null, cidade: p.cidade || null,
