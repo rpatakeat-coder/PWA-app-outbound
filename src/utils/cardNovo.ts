@@ -48,12 +48,12 @@ export function faturamentoTexto(v: number): string {
   return `R$ ${Math.round(v)}`;
 }
 
-/** Na linha da lista: "−38% · R$ 651 mil/mês" ou "7d sem comanda · R$ 80 mil/mês". */
+/** Na linha da lista (cabe na etiqueta a 375 px): "−38% · R$ 651 mil" ou "7d sem comanda · R$ 80 mil". */
 export function quedaCurta(q: { motivo: string; faturamento: number | null }): string {
   const pct = q.motivo.match(/-?\d+%/);
   const dias = q.motivo.match(/há (\d+) dias/);
   return [pct ? pct[0].replace('-', '−') : null, dias ? `${dias[1]}d sem comanda` : null,
-    q.faturamento ? `${faturamentoTexto(q.faturamento)}/mês` : null].filter(Boolean).join(' · ') || 'em queda';
+    q.faturamento ? faturamentoTexto(q.faturamento) : null].filter(Boolean).join(' · ') || 'em queda';
 }
 
 function peso(it: ItemFolha): number {

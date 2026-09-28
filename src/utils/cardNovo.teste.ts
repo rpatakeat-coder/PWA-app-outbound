@@ -49,8 +49,8 @@ ok(ordenarItens([it('sem', { distanciaM: null }), it('com', { distanciaM: 5000 }
   ];
   const ordem = ordenarItens(lista, 'prioridade').map((x) => x.c.id).join(',');
   ok(ordem === 'plano,grande-longe,medio,pequeno-perto', `Em queda: plano › maior faturamento (${ordem})`);
-  ok(quedaCurta({ motivo: 'faturamento -35% no bimestre', faturamento: 1093775 }) === '−35% · R$ 1,1 mi/mês', 'linha: queda e tamanho');
-  ok(quedaCurta({ motivo: 'sem comanda há 7 dias', faturamento: 80400 }) === '7d sem comanda · R$ 80 mil/mês', 'linha: dias sem comanda');
+  ok(quedaCurta({ motivo: 'faturamento -35% no bimestre', faturamento: 1093775 }) === '−35% · R$ 1,1 mi', 'linha: queda e tamanho');
+  ok(quedaCurta({ motivo: 'sem comanda há 7 dias', faturamento: 80400 }) === '7d sem comanda · R$ 80 mil', 'linha: dias sem comanda');
   ok(quedaCurta({ motivo: 'faturamento -20% no bimestre · sem comanda há 5 dias', faturamento: null }) === '−20% · 5d sem comanda', 'linha: os dois motivos, sem faturamento');
   ok(faturamentoTexto(240540) === 'R$ 241 mil' && faturamentoTexto(950) === 'R$ 950', 'faturamento em uma palavra');
 }
