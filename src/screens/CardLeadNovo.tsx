@@ -14,7 +14,7 @@ import type { Client } from '../types/client';
 import { ORIGEM, origemDoFiltro } from '../utils/lentes';
 import { openGoogleMaps, type TravelMode } from '../utils/navigation';
 import type { Pino } from '../utils/pinoP2';
-import { distanciaTexto, fatosDoCard } from '../utils/cardNovo';
+import { distanciaTexto, fatosDoCard, sinaisDoCliente } from '../utils/cardNovo';
 import { ETAPA, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA, ROTULO_PROP, pareceNomeDePessoa } from '../utils/fichaDeRua';
 
 export { distanciaTexto };
@@ -219,6 +219,31 @@ function Fatos({ d }: { d: DadosCardNovo }) {
   );
 }
 
+// Cliente e ex-cliente: situação, comandas, última comanda e queda, já na espiada
+// (Julyan 27/09). Verde = ativo, vermelho = atenção, rosa = ex-cliente.
+const TOM_CLIENTE = {
+  ok: { fundo: '#0F2E1B', tinta: '#86EFAC' },
+  aviso: { fundo: '#4B1C1C', tinta: '#FCA5A5' },
+  ex: { fundo: '#3B1230', tinta: '#F9A8D4' },
+} as const;
+function LinhaCliente({ d }: { d: DadosCardNovo }) {
+  const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  const sinais = sinaisDoCliente(d.client, d.pino, hoje);
+  if (!sinais.length) return null;
+  return (
+    <View style={s.fatos}>
+      {sinais.map((x) => {
+        const t = x.tom ? TOM_CLIENTE[x.tom] : null;
+        return (
+          <View key={x.texto} style={[s.fato, t && { backgroundColor: t.fundo }]}>
+            <Text style={[s.fatoTexto, t && { color: t.tinta }]} numberOfLines={1}>{x.texto}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 function assumir(d: DadosCardNovo, a: AcoesCardNovo) {
   if (!a.onEMeu) return;
   if (d.naRota) a.onEMeu();
@@ -345,6 +370,7 @@ export function PeekCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   return (
     <View style={s.peek}>
       <Cabecalho d={d} a={a} compacto />
+      <LinhaCliente d={d} />
       <BotaoCheguei d={d} a={a} />
       <GradeEspiada d={d} a={a} />
     </View>
@@ -366,6 +392,7 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   return (
     <View style={s.topo}>
       <Cabecalho d={d} a={a} compacto={false} />
+      <LinhaCliente d={d} />
       {/* Motor (prompt §7.4): a conta-alvo sumiu do Google ou está fechada. Descartar
           tira da rota antes de alguém perder a viagem até uma porta fechada. */}
       {(d.client.motor_status === 'sumiu_google' || d.client.motor_status === 'fechado_temporario' || d.client.motor_status === 'cnpj_baixado') && (

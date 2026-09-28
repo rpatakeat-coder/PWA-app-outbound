@@ -36,7 +36,6 @@ export function fatosDoCard(d: { client: Client; pino: Pino; distanciaM: number 
     const nota = Number(c.conta_alvo_rating).toFixed(1).replace('.', ',');
     f.push({ texto: c.conta_alvo_reviews != null ? `${nota}★ · ${c.conta_alvo_reviews} no Google` : `${nota}★ no Google` });
   }
-  if (pino.queda) f.push({ texto: `↓ ${pino.queda.motivo}${pino.queda.faturamento ? ` · ${faturamentoTexto(pino.queda.faturamento)}/mês` : ''}`, aviso: true });
   if (pino.tipo === 'ex') f.push({ texto: 'data de saída desconhecida' });
   return f;
 }
@@ -54,6 +53,44 @@ export function quedaCurta(q: { motivo: string; faturamento: number | null }): s
   const dias = q.motivo.match(/há (\d+) dias/);
   return [pct ? pct[0].replace('-', '−') : null, dias ? `${dias[1]}d sem comanda` : null,
     q.faturamento ? faturamentoTexto(q.faturamento) : null].filter(Boolean).join(' · ') || 'em queda';
+}
+
+/**
+ * Linha do cliente na espiada do cartão (Julyan 27/09: "cliente, ex-cliente, quantas
+ * comandas e em queda"). Vem da clientes-sync (0122): hs_situacao, hs_etapa_uso,
+ * hs_qtd_comandas, hs_ultima_comanda_em, hs_cancelamento_solicitado_em. Lead não tem linha.
+ * `tom`: 'ok' verde, 'aviso' vermelho, 'ex' rosa, nada = neutro.
+ */
+export type SinalCliente = { texto: string; tom?: 'ok' | 'aviso' | 'ex' };
+export function sinaisDoCliente(c: Client, pino: Pino, hojeISO: string): SinalCliente[] {
+  if (pino.tipo !== 'cliente' && pino.tipo !== 'ex') return [];
+  const s: SinalCliente[] = [];
+  const dia = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : null);
+  const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+  const diasDesde = (iso: string) => Math.round((Date.parse(`${hojeISO}T12:00:00Z`) - Date.parse(`${iso}T12:00:00Z`)) / 86400000);
+  const etapa = c.hs_etapa_uso?.trim() || null;
+  if (pino.tipo === 'ex') {
+    const saiu = dia(c.hs_cancelamento_solicitado_em);
+    s.push({ texto: saiu ? `Ex-cliente · cancelou em ${ddmm(saiu)}` : 'Ex-cliente', tom: 'ex' });
+  } else if (etapa && /cancel|parada|risco/i.test(etapa)) {
+    s.push({ texto: `Em risco · ${etapa}`, tom: 'aviso' });
+  } else {
+    s.push({ texto: etapa ? `Cliente ativo · ${etapa}` : 'Cliente ativo', tom: 'ok' });
+  }
+  if (c.hs_qtd_comandas != null) s.push({ texto: `${Number(c.hs_qtd_comandas).toLocaleString('pt-BR')} comandas` });
+  const ult = dia(c.hs_ultima_comanda_em);
+  if (ult) {
+    const n = diasDesde(ult);
+    s.push({ texto: n <= 0 ? 'comanda hoje' : n === 1 ? 'última comanda ontem' : `última comanda há ${n} dias`, tom: pino.tipo === 'cliente' && n >= 5 ? 'aviso' : undefined });
+  } else if (pino.tipo === 'cliente') {
+    s.push({ texto: 'sem comanda registrada' });
+  }
+  if (pino.queda) {
+    const pct = pino.queda.motivo.match(/-?\d+%/);
+    if (pct) s.push({ texto: `↓ ${pct[0].replace('-', '−')} no bimestre${pino.queda.faturamento ? ` · ${faturamentoTexto(pino.queda.faturamento)}/mês` : ''}`, tom: 'aviso' });
+    else if (pino.queda.faturamento) s.push({ texto: `${faturamentoTexto(pino.queda.faturamento)}/mês` });
+  }
+  return s;
 }
 
 function peso(it: ItemFolha): number {

@@ -6,7 +6,7 @@
 // passando lead frio perto na frente da cobrança; o card dizendo "0 m" ou
 // "posição exata" quando não sabe; e telefone ausente sem aviso.
 import type { Client } from '../types/client';
-import { distanciaTexto, faturamentoTexto, fatosDoCard, ordenarItens, quedaCurta, textoDoToque, type ItemFolha } from './cardNovo';
+import { distanciaTexto, faturamentoTexto, fatosDoCard, ordenarItens, quedaCurta, sinaisDoCliente, textoDoToque, type ItemFolha } from './cardNovo';
 import type { Pino } from './pinoP2';
 
 let falhas = 0;
@@ -53,6 +53,22 @@ ok(ordenarItens([it('sem', { distanciaM: null }), it('com', { distanciaM: 5000 }
   ok(quedaCurta({ motivo: 'sem comanda há 7 dias', faturamento: 80400 }) === '7d sem comanda · R$ 80 mil', 'linha: dias sem comanda');
   ok(quedaCurta({ motivo: 'faturamento -20% no bimestre · sem comanda há 5 dias', faturamento: null }) === '−20% · 5d sem comanda', 'linha: os dois motivos, sem faturamento');
   ok(faturamentoTexto(240540) === 'R$ 241 mil' && faturamentoTexto(950) === 'R$ 950', 'faturamento em uma palavra');
+}
+
+// linha do cliente na espiada
+{
+  const hoje = '2026-09-28';
+  const txt = (c: Partial<Client>, p: Partial<Pino>) => sinaisDoCliente(cli(c), pino(p), hoje).map((x) => `${x.tom ?? '-'}:${x.texto}`).join(' | ');
+  ok(txt({}, { tipo: 'lead' }) === '', 'lead não tem linha de cliente');
+  const ativo = txt({ hs_etapa_uso: 'Saudável', hs_qtd_comandas: 23124, hs_ultima_comanda_em: '2026-09-26' },
+    { tipo: 'cliente', queda: { motivo: 'faturamento -26% no bimestre', faturamento: 65610, dono: null } });
+  ok(ativo === 'ok:Cliente ativo · Saudável | -:23.124 comandas | -:última comanda há 2 dias | aviso:↓ −26% no bimestre · R$ 66 mil/mês', `cliente ativo em queda (${ativo})`);
+  const parado = txt({ hs_etapa_uso: 'Risco', hs_qtd_comandas: 900, hs_ultima_comanda_em: '2026-09-20' },
+    { tipo: 'cliente', queda: { motivo: 'sem comanda há 8 dias', faturamento: 716129, dono: null } });
+  ok(parado === 'aviso:Em risco · Risco | -:900 comandas | aviso:última comanda há 8 dias | -:R$ 716 mil/mês', `cliente parado (${parado})`);
+  const ex = txt({ hs_etapa_uso: 'Churn', hs_qtd_comandas: 2980, hs_ultima_comanda_em: '2026-08-17', hs_cancelamento_solicitado_em: '2026-07-24' }, { tipo: 'ex' });
+  ok(ex === 'ex:Ex-cliente · cancelou em 24/07 | -:2.980 comandas | -:última comanda há 42 dias', `ex-cliente (${ex})`);
+  ok(txt({ hs_etapa_uso: 'Setup' }, { tipo: 'cliente' }) === 'ok:Cliente ativo · Setup | -:sem comanda registrada', 'cliente novo sem comanda');
 }
 
 // fatos
