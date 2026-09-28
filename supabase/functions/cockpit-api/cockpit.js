@@ -1056,6 +1056,21 @@ async function tratarProximoPasso(req, res, usuario, token) {
     });
   }
 
+  /* O APP FICA SABENDO NA HORA (28/09/2026). O próximo passo cai na Agenda do app pelas
+     tarefas do HubSpot, mas o app só as relia a cada 3 min. Um sinal 'tarefa' (0128, só
+     o aviso, sem conteúdo) faz o app do dono reler agora. Best-effort: sem ele a tarefa
+     chega do mesmo jeito, só mais tarde. */
+  try {
+    const sUrl = process.env.SUPABASE_URL, sKey = process.env.SUPABASE_SERVICE_KEY;
+    if (sUrl && sKey) {
+      await fetch(sUrl + '/rest/v1/sinais_ao_vivo', {
+        method: 'POST',
+        headers: { apikey: sKey, Authorization: 'Bearer ' + sKey, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ tipo: 'tarefa', deal_id: String(dealId), owner_id: guard && guard.ownerId ? String(guard.ownerId) : null })
+      });
+    }
+  } catch (e) { /* o aviso nunca derruba o próximo passo */ }
+
   // `qualificacao` volta pro cliente espelhar no DATA em memória — sem isso a ficha
   // continuaria cobrando o que acabou de ser gravado, até o próximo sync.
   return res.status(200).json({

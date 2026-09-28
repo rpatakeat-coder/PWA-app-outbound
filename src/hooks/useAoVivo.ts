@@ -39,6 +39,8 @@ export const INVALIDA_POR_TIPO: Record<string, string[][]> = {
   pdi: [['meu_pdi']],
   // 0130: agendamento (Agendar do app) criado, reagendado ou cancelado
   agenda: [['client_meetings']],
+  // cockpit-api: próximo passo criado no Cockpit (tarefa no HubSpot) — a Agenda e as Tarefas releem
+  tarefa: [['tarefas_crm']],
 };
 
 export function sinalMeInteressa(s: Sinal, meuOwnerId: string | null, ehGestor: boolean): boolean {
