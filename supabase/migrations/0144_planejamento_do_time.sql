@@ -161,6 +161,7 @@ begin
                     'promessaDadaEm', ps.promessa_dada_em, 'promessaTravadaEm', ps.promessa_travada_em)
                     from public.planos_semanais ps where ps.owner_id = pe.dono and ps.data_segunda = p_segunda limit 1),
         'demos', public.demos_com_decisor(pe.seller, p_segunda, least(v_sexta, v_hoje)),
+        'planoIds', coalesce((select jsonb_agg(distinct i.item_id) from itens i where i.owner_id = pe.dono), '[]'::jsonb),
         'proxima', (select jsonb_build_object('nome', i.nome, 'hora', i.hora)
                       from itens_feitos i where i.owner_id = pe.dono and i.dia = v_hoje and not i.feita
                      order by i.hora nulls last, i.vaga limit 1),
