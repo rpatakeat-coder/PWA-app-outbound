@@ -56,6 +56,18 @@ if (fs.existsSync(gestao)) {
     console.error('ERRO: dist/gestao/cockpit/index.html nao existe — /gestao ficaria sem o Cockpit.');
     process.exit(1);
   }
+  // O MESMO MAPA NO COCKPIT (28/09/2026, Julyan: "pq não colocar o mesmo mapa nessa
+  // aba?"). O Planejamento do time desenha o mapa do time com o Google Maps do app — a
+  // mesma chave e o mesmo Map ID (estilo claro/escuro publicado nele). A chave já vai
+  // no bundle do app (é pública, restrita por domínio); aqui ela só é repassada ao HTML
+  // do Cockpit, gerada no build a partir das variáveis da Vercel e nunca gravada no git.
+  // Sem chave, o arquivo sai vazio e o Cockpit cai no mapa do OpenStreetMap.
+  const chaveMapa = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+  const mapIdMapa = process.env.EXPO_PUBLIC_GOOGLE_MAPS_MAP_ID || '';
+  fs.writeFileSync(path.join(destino, 'mapa-config.js'),
+    'window.TAKEAT_MAPA = ' + JSON.stringify({ chave: chaveMapa, mapId: mapIdMapa }) + ';\n');
+  console.log('> /gestao/mapa-config.js ' + (chaveMapa ? 'com a chave do app' : 'SEM chave (o Cockpit usa o OpenStreetMap)'));
+
   fs.renameSync(path.join(destino, 'index.html'), path.join(destino, 'painel-antigo.html'));
   fs.copyFileSync(entradaCockpit, path.join(destino, 'index.html'));
   console.log('> /gestao agora e o Cockpit; gestao antiga em /gestao/painel-antigo.html');
