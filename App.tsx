@@ -10574,11 +10574,11 @@ function ClientBottomSheet({
           <View style={styles.meetingsSection}>
             <View style={styles.meetingsHeader}>
               <Text style={sharedStyles.fieldLabel}>
-                Follow ups
+                Follow-ups
               </Text>
             </View>
             {followUps.length === 0 ? (
-              <Text style={styles.meetingsEmpty}>Nenhum follow up marcado.</Text>
+              <Text style={styles.meetingsEmpty}>Nenhum follow-up marcado.</Text>
             ) : (
               followUps.map((m) => renderMeetingChip(m, IconRefresh))
             )}
@@ -10587,7 +10587,7 @@ function ClientBottomSheet({
                 style={styles.followUpButton}
                 onPress={onFollowUp}
               >
-                <IconText Icone={IconRefresh} style={styles.followUpButtonText} tone="onSurface">Marcar Follow Up</IconText>
+                <IconText Icone={IconRefresh} style={styles.followUpButtonText} tone="onSurface">Marcar follow-up</IconText>
               </TouchableOpacity>
             )}
           </View>

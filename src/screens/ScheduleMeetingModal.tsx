@@ -62,15 +62,15 @@ const COPY: Record<MeetingType, {
   },
   follow_up: {
     
-    noun: 'follow up',
-    title: 'Marcar Follow Up',
-    scheduledAlert: 'Follow up marcado',
-    buttonLabel: 'Confirmar follow up',
-    listTitle: 'Follow ups deste lead',
-    emptyList: 'Nenhum follow up marcado.',
-    cancelTitle: 'Cancelar follow up',
-    rescheduleTitle: 'Reagendar follow up',
-    rescheduledAlert: 'Follow up reagendado',
+    noun: 'follow-up',
+    title: 'Marcar follow-up',
+    scheduledAlert: 'Follow-up marcado',
+    buttonLabel: 'Confirmar follow-up',
+    listTitle: 'Follow-ups deste lead',
+    emptyList: 'Nenhum follow-up marcado.',
+    cancelTitle: 'Cancelar follow-up',
+    rescheduleTitle: 'Reagendar follow-up',
+    rescheduledAlert: 'Follow-up reagendado',
     rescheduleButton: 'Confirmar novo horário',
   },
 };
@@ -81,7 +81,8 @@ const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
+// horário de rua (06h–22h): a roda abria em 00h e a pessoa rolava 8 horas até achar o dia
+const HOURS = Array.from({ length: 17 }, (_, i) => i + 6);
 const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5); // 00, 05, ..., 55
 
 const DURATION_OPTIONS: { value: number; label: string }[] = [
@@ -411,7 +412,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao',
               </TouchableOpacity>
             </View>
             <Text style={styles.subtitle} numberOfLines={2}>
-              {client.nome}{client.empresa ? ` • ${client.empresa}` : ''}
+              {client.empresa && client.empresa.trim() !== client.nome?.trim() ? `${client.empresa} • ${client.nome}` : (client.empresa || client.nome)}
             </Text>
 
             {/* Faixa de contexto da tarefa (prompt M2): o vendedor nao perde
@@ -534,7 +535,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao',
             <Text style={styles.label}>Observações</Text>
             <TextInput
               style={[styles.input, styles.textarea]}
-              placeholder={`Anotações sobre o ${copy.noun}...`}
+              placeholder="Observações deste agendamento…"
               placeholderTextColor="var(--text-subtle)"
               value={observacoes}
               onChangeText={setObservacoes}

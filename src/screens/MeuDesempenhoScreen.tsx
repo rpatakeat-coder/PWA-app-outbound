@@ -452,7 +452,7 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas,
             <Stat value={m.visited} label="Visitas (check-in)" color="#a855f7" onPress={() => open('Minhas visitas', 'visited')} />
             <Stat value={m.created} label="Pins criados" color="#3b82f6" onPress={() => open('Pins que criei', 'created')} />
             <Stat value={m.meetings_scheduled} label="Reuniões" color="#f97316" onPress={() => open('Minhas reuniões', 'meetings')} />
-            <Stat value={m.follow_ups_scheduled} label="Follow ups" color="#0891b2" onPress={() => open('Meus follow ups', 'follow_ups')} />
+            <Stat value={m.follow_ups_scheduled} label="Follow-ups" color="#0891b2" onPress={() => open('Meus follow-ups', 'follow_ups')} />
             <Stat value={m.stage_changes} label="Mudanças etapa" color="#0ea5e9" onPress={() => open('Mudanças de etapa', 'stage_changes')} />
             <Stat value={m.notes_created} label="Notas" color="#FFD966" onPress={() => open('Minhas notas', 'notes')} />
             <Stat value={m.won_in_period} label="Fechados" color="#16a34a" onPress={() => open('Clientes que fechei', 'won')} />

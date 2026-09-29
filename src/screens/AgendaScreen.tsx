@@ -155,7 +155,7 @@ export function AgendaScreen({
   }> = {
     rota: { cor: '#C8131B', tinta: '#FAE8E9', rotulo: 'Rota', plural: 'Rotas', Icone: IconCar },
     reuniao: { cor: '#7c3aed', tinta: '#F1EBFE', rotulo: 'Demo', plural: 'Demos', Icone: IconCalendar },
-    follow_up: { cor: '#01AFFF', tinta: '#E6F7FF', rotulo: 'Follow-up', plural: 'Follow ups', Icone: IconCall },
+    follow_up: { cor: '#01AFFF', tinta: '#E6F7FF', rotulo: 'Follow-up', plural: 'Follow-ups', Icone: IconCall },
   };
   // Contagem vem de ANTES do filtro de tipo — senão o chip ativo zeraria os
   // outros e não daria pra voltar sabendo o que tem em cada um.
