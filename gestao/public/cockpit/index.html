@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@ee582fa.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@cce6dbb.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* /gestao E O COCKPIT desde 25/09/2026. As tres telas que so a gestao antiga
@@ -19670,7 +19670,7 @@ function pv6ListaDoCard(d) {
   const l = linhas.filter(function (x) { return x.status && x.atraso != null && x.atraso > 0; });
   return { titulo: 'negócios com a régua estourada', itens: l.map(function (x) {
     return { id: x.id, nome: x.nome, meio: x.etapa + ' · ' + (x.regua || 'sem régua')
-      + ' · ' + x.toques + ' toques · último ' + x.ultimo,
+      + ' · ' + x.toques + (x.toques === 1 ? ' toque' : ' toques') + ' · último ' + x.ultimo,
       fim: 'atrasado ' + x.atraso + 'd', cor: '#E51A31' };
   }),
     vazioBom: 'nenhum negócio dela passou da régua', vazioRuim: false };
