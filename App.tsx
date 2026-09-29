@@ -133,7 +133,7 @@ import CamadaDePontos from './src/map/CamadaDePontos';
 import { pilhasNaTela, posicoesDoLeque, projetar, rotulosSemSobrepor, type Pilha } from './src/utils/rotulos';
 import { MINIMO_QUADRA, quadrasNaTela, resumoDaQuadra, type ResumoQuadra } from './src/utils/quadra';
 import CartaoQuadra, { ANCORA_QUADRA } from './src/map/CartaoQuadra';
-import { classificarPino, type ContextoPino, type Pino } from './src/utils/pinoP2';
+import { classificarPino, COR as COR_DO_PINO, type ContextoPino, type Pino } from './src/utils/pinoP2';
 import { useMeetings } from './src/hooks/useMeetings';
 import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
 import { useClientNotes } from './src/hooks/useClientNotes';
@@ -5611,14 +5611,25 @@ function MainApp() {
           Some enquanto o mapa de calor está ligado (a legenda dele assume). */}
       {!creationMode && !heatOn && layout.ehLargo && (
         <View style={[styles.tempLegend, { bottom: baseInferior }, layout.ehLargo && styles.tempLegendaWeb]} pointerEvents="none">
-          {[
+          {/* A3 (handoff v6): no mapa novo a legenda é a do disco (pinoP2) — a antiga dizia
+              "Fechado" para o verde, que agora é Cliente, e não tinha Ex-cliente nem Sem dono. */}
+          {(modoNovo ? [
+            { c: COR_DO_PINO.Q, l: 'Quente' },
+            { c: COR_DO_PINO.M, l: 'Morno' },
+            { c: COR_DO_PINO.F, l: 'Frio' },
+            { c: COR_DO_PINO.cliente, l: 'Cliente' },
+            { c: COR_DO_PINO.ex, l: 'Ex-cliente' },
+            { c: COR_DO_PINO.alvo, l: 'Conta-alvo' },
+            { c: COR_DO_PINO.X, l: 'Perdido' },
+            { c: COR_DO_PINO.semDono, l: 'Sem dono (anel)' },
+          ] : [
             { c: TEMP_COLORS.hot, l: 'Quente' },
             { c: TEMP_COLORS.warm, l: 'Morno' },
             { c: TEMP_COLORS.cold, l: 'Frio' },
             { c: TEMP_COLORS.won, l: 'Fechado' },
             { c: TEMP_COLORS.lost, l: 'Perdido' },
             { c: CONTA_ALVO_COLOR, l: 'Conta Alvo' },
-          ].map(item => (
+          ]).map(item => (
             <View key={item.l} style={[styles.tempLegendRow, layout.ehLargo && styles.tempLegendaLinhaWeb]}>
               <View style={[styles.tempLegendDot, { backgroundColor: item.c }]} />
               {/* numberOfLines={1}: sem isto "🎯 Conta Alvo" quebrava em
@@ -5763,7 +5774,7 @@ function MainApp() {
           eMeu={!isViewer && (lente === 'semdono' || lente === 'rec') ? { naRota: routeStopClientIds, aoAssumir: (c) => { void assumirDoMapa(c); } } : null}
           planoTotal={routeDisplayClients.length}
           planoFeito={routeStops.filter((s) => s.status === 'done').length}
-          visitasFeitas={meuDia.data?.visitasHoje ?? routeStops.filter((s) => s.status === 'done').length}
+          visitasFeitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
           visitasProvadas={meuDia.data?.provadasHoje ?? null}
           metaVisitas={metaDeHoje}
           aoProgresso={() => setMeuDiaAberto(true)}
@@ -5993,7 +6004,7 @@ function MainApp() {
         eMeu={!isViewer && (lente === 'semdono' || lente === 'rec') ? { naRota: routeStopClientIds, aoAssumir: (c) => { void assumirDoMapa(c); } } : null}
         planoTotal={routeDisplayClients.length}
         planoFeito={routeStops.filter((s) => s.status === 'done').length}
-        visitasFeitas={meuDia.data?.visitasHoje ?? routeStops.filter((s) => s.status === 'done').length}
+        visitasFeitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
         visitasProvadas={meuDia.data?.provadasHoje ?? null}
         metaVisitas={metaDeHoje}
         aoProgresso={() => setMeuDiaAberto(true)}
@@ -6479,8 +6490,18 @@ function MainApp() {
         return { titulo: 'Rota do dia', sub: `${routeDisplayClients.length} ${routeDisplayClients.length === 1 ? 'parada' : 'paradas'}` };
       case 'agenda':
         return { titulo: 'Agenda', sub: 'Rotas, demos e follow-ups da semana' };
-      case 'tasks':
+      case 'tasks': {
+        // O MESMO NÚMERO DO CELULAR (auditoria 28/09): no computador o cabeçalho dizia "12
+        // cobranças abertas · D2 → D5" (as do modo antigo) ao lado de "Abertas · 9". Calculado
+        // aqui mesmo: seloTarefas é declarado mais abaixo e este bloco roda antes dele.
+        if (modoNovo) {
+          const agora = new Date();
+          const atr = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, agora) === 'atrasadas').length;
+          const hj = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, agora) === 'hoje').length;
+          return { titulo: 'Tarefas', sub: tarefasSemMedicao ? `sem medição · ${tarefasSemMedicao}` : tarefasErro ? 'não consegui ler o HubSpot agora' : !tarefasMedidas ? 'lendo as tarefas do HubSpot…' : `${atr} atrasadas · ${hj} para hoje` };
+        }
         return { titulo: 'Tarefas', sub: `${visibleTasksCount} ${visibleTasksCount === 1 ? 'cobrança aberta' : 'cobranças abertas'} · escalonamento D2 → D5` };
+      }
       case 'config':
         return { titulo: 'Configurações', sub: 'Conta, aparência e administração' };
       default:
@@ -6753,6 +6774,11 @@ function MainApp() {
               }}
               autoCorrect={false}
               autoCapitalize="none"
+              // O Chrome enchia a busca com o e-mail do login (auditoria 28/09): "Busca:
+              // outbound@takeat.app" e o mapa sem nada. Busca não é campo de usuário.
+              autoComplete="off"
+              textContentType="none"
+              inputMode="search"
               accessibilityLabel="Buscar lead, cidade ou contato"
             />
             {buscando ? (

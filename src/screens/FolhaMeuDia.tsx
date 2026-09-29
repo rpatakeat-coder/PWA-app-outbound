@@ -138,7 +138,7 @@ export default function FolhaMeuDia({ visivel, aoFechar, dados, carregando, meta
               <Text style={s.linhaRotulo}>Daily</Text>
               <Text style={s.linhaValor}>
                 {p ? [p.visitas ? `${p.visitas} visitas` : null, p.avancos ? `${p.avancos} avanços` : null, p.propostas ? `${p.propostas} propostas` : null].filter(Boolean).join(' · ') || 'prometido sem números'
-                  : 'ainda não fechada no Cockpit hoje'}
+                  : 'nenhuma promessa feita hoje'}
               </Text>
             </View>
             <View style={s.linha}>

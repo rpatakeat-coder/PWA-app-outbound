@@ -53,7 +53,10 @@ export function faturamentoTexto(v: number): string {
 export function quedaCurta(q: { motivo: string; faturamento: number | null }): string {
   const pct = q.motivo.match(/-?\d+%/);
   const dias = q.motivo.match(/há (\d+) dias/);
-  return [pct ? pct[0].replace('-', '−') : null, dias ? `${dias[1]}d sem comanda` : null,
+  // A variação chega da fonte e às vezes vem impossível ("-1160437100%", 62 clientes em
+  // 28/09): queda além de −100% não existe. Aí vale "queda forte", sem o número.
+  const pctTexto = pct ? (Math.abs(parseInt(pct[0], 10)) > 100 ? 'queda forte' : pct[0].replace('-', '−')) : null;
+  return [pctTexto, dias ? `${dias[1]}d sem comanda` : null,
     q.faturamento ? faturamentoTexto(q.faturamento) : null].filter(Boolean).join(' · ') || 'em queda';
 }
 
@@ -89,7 +92,8 @@ export function sinaisDoCliente(c: Client, pino: Pino, hojeISO: string): SinalCl
   }
   if (pino.queda) {
     const pct = pino.queda.motivo.match(/-?\d+%/);
-    if (pct) s.push({ texto: `↓ ${pct[0].replace('-', '−')} no bimestre${pino.queda.faturamento ? ` · ${faturamentoTexto(pino.queda.faturamento)}/mês` : ''}`, tom: 'aviso' });
+    // variação impossível (< −100%) vira "queda forte", como na linha da folha
+    if (pct) s.push({ texto: `↓ ${Math.abs(parseInt(pct[0], 10)) > 100 ? 'queda forte' : pct[0].replace('-', '−')} no bimestre${pino.queda.faturamento ? ` · ${faturamentoTexto(pino.queda.faturamento)}/mês` : ''}`, tom: 'aviso' });
     else if (pino.queda.faturamento) s.push({ texto: `${faturamentoTexto(pino.queda.faturamento)}/mês` });
   }
   return s;

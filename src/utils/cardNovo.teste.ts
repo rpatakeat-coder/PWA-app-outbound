@@ -52,6 +52,7 @@ ok(ordenarItens([it('sem', { distanciaM: null }), it('com', { distanciaM: 5000 }
   ok(quedaCurta({ motivo: 'faturamento -35% no bimestre', faturamento: 1093775 }) === '−35% · R$ 1,1 mi', 'linha: queda e tamanho');
   ok(quedaCurta({ motivo: 'sem comanda há 7 dias', faturamento: 80400 }) === '7d sem comanda · R$ 80 mil', 'linha: dias sem comanda');
   ok(quedaCurta({ motivo: 'faturamento -20% no bimestre · sem comanda há 5 dias', faturamento: null }) === '−20% · 5d sem comanda', 'linha: os dois motivos, sem faturamento');
+  ok(quedaCurta({ motivo: 'faturamento -1160437100% no bimestre', faturamento: 264845 }).startsWith('queda forte'), 'linha: variação impossível vira "queda forte"');
   ok(faturamentoTexto(240540) === 'R$ 241 mil' && faturamentoTexto(950) === 'R$ 950', 'faturamento em uma palavra');
 }
 

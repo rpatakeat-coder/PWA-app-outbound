@@ -62,7 +62,7 @@ export function useMeuDia(ativo: boolean, profileId: string | null) {
       const trinta = new Date(hoje0.getTime() - 30 * DIA_MS);
       const [visitas, daily, marcadas, paraHoje, placar] = await Promise.all([
         supabase.from('client_visits').select('visited_at').eq('visited_by', profileId!).gte('visited_at', trinta.toISOString()),
-        supabase.from('dailies').select('prometido_visitas, prometido_avancos, prometido_propostas, created_at').eq('seller_id', profileId!).eq('data', diaBRT(new Date())).maybeSingle(),
+        supabase.from('dailies').select('prometido_visitas, prometido_avancos, prometido_propostas, created_at, updated_at').eq('seller_id', profileId!).eq('data', diaBRT(new Date())).maybeSingle(),
         supabase.from('client_meetings').select('id', { count: 'exact', head: true }).eq('created_by', profileId!).gte('created_at', hoje0.toISOString()),
         supabase.from('client_meetings').select('id', { count: 'exact', head: true }).eq('created_by', profileId!).eq('status', 'agendada')
           .gte('scheduled_at', hoje0.toISOString()).lt('scheduled_at', amanha0.toISOString()),
@@ -73,7 +73,7 @@ export function useMeuDia(ativo: boolean, profileId: string | null) {
       const num = (v: unknown) => (typeof v === 'number' ? v : v == null ? null : Number(v));
       const linhas = (visitas.data ?? []) as { visited_at: string }[];
       const dias = new Set(linhas.map((v) => diaBRT(new Date(v.visited_at))));
-      const d = daily.data as { prometido_visitas: number | null; prometido_avancos: number | null; prometido_propostas: number | null; created_at: string | null } | null;
+      const d = daily.data as { prometido_visitas: number | null; prometido_avancos: number | null; prometido_propostas: number | null; created_at: string | null; updated_at: string | null } | null;
       // Uma verdade só (0143): o número do dia vem da função do banco; a leitura direta só
       // entra se a função falhar, e se as duas falharem o painel diz "não medido" (N3).
       const diretas = visitas.error ? null : linhas.filter((v) => new Date(v.visited_at) >= hoje0).length;
@@ -81,7 +81,13 @@ export function useMeuDia(ativo: boolean, profileId: string | null) {
         visitasHoje: num(pl?.visitas_hoje) ?? diretas ?? 0,
         provadasHoje: num(pl?.provadas_hoje),
         medido: pl != null || diretas != null,
-        prometido: d ? { visitas: d.prometido_visitas, avancos: d.prometido_avancos, propostas: d.prometido_propostas, validadaEm: d.created_at } : null,
+        // A LINHA DA DAILY NÃO É A PROMESSA (auditoria 28/09): o robô cria a linha do dia vazia
+        // de madrugada (criado_por = sistema-fetch-hubspot), e a Agenda dizia "Daily registrada às
+        // 00:53" e o Meu dia "prometido sem números" sem ninguém ter prometido. Só conta como
+        // registrada quando há algum número prometido; a hora é a da última gravação.
+        prometido: d && (d.prometido_visitas != null || d.prometido_avancos != null || d.prometido_propostas != null)
+          ? { visitas: d.prometido_visitas, avancos: d.prometido_avancos, propostas: d.prometido_propostas, validadaEm: d.updated_at ?? d.created_at }
+          : null,
         reunioesMarcadasHoje: marcadas.count ?? 0,
         reunioesParaHoje: paraHoje.count ?? 0,
         sequenciaDias: sequenciaDeDias(dias),

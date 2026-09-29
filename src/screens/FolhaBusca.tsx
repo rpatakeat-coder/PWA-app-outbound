@@ -56,6 +56,9 @@ export default function FolhaBusca({ visivel, aoFechar, busca, aoBuscar, linhas,
               returnKeyType="search"
               autoCorrect={false}
               autoCapitalize="none"
+              autoComplete="off"
+              textContentType="none"
+              inputMode="search"
               accessibilityLabel="Buscar lead, rua ou bairro"
             />
             {carregando && <ActivityIndicator size="small" color="#AEB4BE" />}

@@ -36,7 +36,8 @@ type Props = {
   /** Lentes Sem dono e Reconquista: "É meu" direto na linha (só na rota de hoje). */
   eMeu?: { naRota: Set<string>; aoAssumir: (c: Client) => void } | null;
   /** Visitas do plano feitas hoje e a meta do playbook (6). */
-  visitasFeitas: number;
+  // null = ainda não medido (N3): mostra "—", nunca "0 de 6" antes de ler
+  visitasFeitas: number | null;
   /** Das feitas, as provadas (visitas_do_dia, 0143) — o mesmo número do Cockpit. null = não medido. */
   visitasProvadas?: number | null;
   metaVisitas: number;
@@ -92,7 +93,9 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas, visitasProvadas = null, metaVisitas, aoProgresso, embutida, aoRoteirizar, roteirizando, aoPlanejar }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, embutida, aoRoteirizar, roteirizando, aoPlanejar }: Props) {
+  const visitasFeitas = feitasMedidas ?? 0;
+  const feitasTexto = feitasMedidas == null ? "—" : String(feitasMedidas);
   const emAberto = Math.max(0, planoTotal - planoFeito);
   const [abertaPeloToque, setAberta] = useState(false);
   const aberta = !!embutida || abertaPeloToque || !!quadra;
@@ -150,8 +153,8 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
             <Text style={s.pilulaSub} numberOfLines={1}>{`${totalNaArea} na área · ver a lista`}</Text>
           </Pressable>
         )}
-        <Pressable accessibilityRole="button" accessibilityLabel={`${visitasFeitas} de ${meta} visitas hoje`} onPress={aoProgresso} style={s.pilulaProgresso} hitSlop={6}>
-          <Text style={s.pilulaConta}>{`${visitasFeitas}/${meta}`}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${feitasTexto} de ${meta} visitas hoje`} onPress={aoProgresso} style={s.pilulaProgresso} hitSlop={6}>
+          <Text style={s.pilulaConta}>{`${feitasTexto}/${meta}`}</Text>
           <View style={s.tracos}>{Array.from({ length: Math.min(meta, 8) }, (_, k) => <View key={k} style={[s.traco, k < visitasFeitas && s.tracoFeito]} />)}</View>
           {/* D1 (handoff v6): a meta conta a visita feita; a prova vem logo embaixo, igual ao Cockpit */}
           {visitasProvadas != null && visitasFeitas > 0 && (
@@ -194,8 +197,8 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
         <Text style={s.kicker} numberOfLines={1}>
           {proxima ? `PRÓXIMA PORTA · ${proxima.plano} DO PLANO` : planoTotal ? 'PLANO DE HOJE' : 'AGORA, PERTO DE VOCÊ'}
         </Text>
-        <Pressable accessibilityRole="button" accessibilityLabel={`${visitasFeitas} de ${metaVisitas} visitas hoje`} onPress={aoProgresso} hitSlop={10}>
-          <Text style={s.progresso}>{`${visitasFeitas} de ${metaVisitas} visitas${visitasProvadas != null && visitasFeitas > 0 ? ` · ${visitasProvadas} ${visitasProvadas === 1 ? 'provada' : 'provadas'}` : ''} ›`}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${feitasTexto} de ${metaVisitas} visitas hoje`} onPress={aoProgresso} hitSlop={10}>
+          <Text style={s.progresso}>{`${feitasTexto} de ${metaVisitas} visitas${visitasProvadas != null && visitasFeitas > 0 ? ` · ${visitasProvadas} ${visitasProvadas === 1 ? 'provada' : 'provadas'}` : ''} ›`}</Text>
         </Pressable>
       </View>
 
