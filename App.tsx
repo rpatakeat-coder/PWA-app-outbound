@@ -3185,6 +3185,43 @@ function MainApp() {
     }
   };
 
+  // MEU ROTEIRO (29/09/2026, Julyan: "acho legal ter o roteiro, mas dá pra escolher as
+  // sequências"). O plano de hoje abria fixo: sem subir, descer nem tirar no mapa novo.
+  // Subir/descer troca a posição de duas paradas (a pílula segue a nova ordem); tirar
+  // marca a parada como removida, e o gatilho rota_para_plano (0146) tira também do
+  // Planejamento — o roteiro é da pessoa. Parada já visitada não muda: é registro.
+  const moverNoRoteiro = async (c: Client, delta: -1 | 1) => {
+    if (isViewer || isMonitoringRoute) { Toast.mostrar('Esta é a rota de outra pessoa: só ela muda a ordem.', 'fila'); return; }
+    const vivas = [...routeStops].filter((s) => s.status !== 'removed').sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    const i = vivas.findIndex((s) => s.client_id === c.id);
+    const j = i + delta;
+    if (i < 0 || j < 0 || j >= vivas.length || vivas[i].status === 'done' || vivas[j].status === 'done') return;
+    const nova = [...vivas];
+    [nova[i], nova[j]] = [nova[j], nova[i]];
+    try {
+      await fieldOps.updateStops.mutateAsync(nova);
+    } catch (e) {
+      Toast.mostrar('Não consegui mudar a ordem: ' + String((e as Error)?.message ?? e), 'erro');
+    }
+  };
+  const tirarDoRoteiro = (c: Client) => {
+    if (isViewer || isMonitoringRoute) { Toast.mostrar('Esta é a rota de outra pessoa: só ela tira paradas.', 'fila'); return; }
+    const parada = routeStops.find((s) => s.client_id === c.id && s.status !== 'removed');
+    if (!parada) return;
+    if (parada.status === 'done') { Toast.mostrar('Essa já foi visitada hoje: fica no registro do dia.', 'fila'); return; }
+    const nome = getClientPrimaryName(c);
+    Alert.alert('Tirar da rota de hoje?', `${nome} sai do roteiro de hoje e do seu Planejamento. Dá para pôr de novo com "+ Rota de hoje".`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Tirar', style: 'destructive', onPress: () => {
+          void fieldOps.removeStop.mutateAsync(parada)
+            .then(() => Toast.mostrar(`${nome} saiu da rota de hoje`, 'ok'))
+            .catch((e) => Toast.mostrar('Não consegui tirar da rota: ' + String((e as Error)?.message ?? e), 'erro'));
+        },
+      },
+    ]);
+  };
+
   const roteirizarPlano = async () => {
     if (roteirizando) return;
     if (isMonitoringRoute) { Toast.mostrar('Esta é a rota de outra pessoa: só ela roteiriza.', 'fila'); return; }
@@ -5047,6 +5084,7 @@ function MainApp() {
         },
         // "É meu" (Julyan 26/09): lead sem dono na rota de hoje entra no meu funil.
         onEMeu: isViewer ? undefined : () => { void assumirDoMapa(selectedClient); },
+        onTirarDaRota: isViewer || isMonitoringRoute ? undefined : () => tirarDoRoteiro(selectedClient),
         ...(() => {
           // A cobrança do card é a MESMA tarefa do HubSpot da aba Tarefas:
           // Liguei aqui some de lá, e vice-versa.
@@ -5785,6 +5823,8 @@ function MainApp() {
           onAbrir={handleMarkerPress}
           onCheguei={(c) => handleMarkAsVisited(c)}
           aoRoteirizar={isViewer ? undefined : () => { void roteirizarPlano(); }}
+          aoMover={isViewer || isMonitoringRoute ? undefined : (c, delta) => { void moverNoRoteiro(c, delta); }}
+          aoTirar={isViewer || isMonitoringRoute ? undefined : tirarDoRoteiro}
           roteirizando={roteirizando}
           aoPlanejar={podePlanejar ? abrirPlanejar : undefined}
         />
@@ -7612,6 +7652,8 @@ function MainApp() {
           }}
           visitadoHoje={(c) => visitadoHoje(c.visited_at)}
           aoRoteirizar={isViewer ? undefined : () => { void roteirizarPlano(); }}
+          aoMover={isViewer || isMonitoringRoute ? undefined : (c, delta) => { void moverNoRoteiro(c, delta); }}
+          aoTirar={isViewer || isMonitoringRoute ? undefined : tirarDoRoteiro}
           roteirizando={roteirizando}
           aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
           montandoDia={montandoDia}
@@ -9092,7 +9134,7 @@ function ClientBottomSheet({
   novo,
 }: {
   /** Mapa novo (prancha §7): troca o topo e o peek; abas e alertas continuam. */
-  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onAvancar?: (destino: string, preenchido?: Record<string, string>) => void }) | null;
+  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onTirarDaRota?: () => void; onAvancar?: (destino: string, preenchido?: Record<string, string>) => void }) | null;
   /** Mapa novo: o cartão subiu para a meia altura (60%) — o mapa leva o pino para a faixa de cima. */
   aoAbrirMeia?: () => void;
   client: Client;
@@ -9474,6 +9516,7 @@ function ClientBottomSheet({
     onExpandir: () => setEstagio('cheia'),
     onLiguei: novo?.onLiguei,
     onEMeu: novo?.onEMeu,
+    onTirarDaRota: novo?.onTirarDaRota,
     onMoverPino: onEditLocation,
     onAvancar: novo?.onAvancar,
   };

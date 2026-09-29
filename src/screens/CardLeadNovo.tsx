@@ -34,6 +34,8 @@ export type AcoesCardNovo = {
   onLiguei?: () => void;
   /** "É meu": assume o lead sem dono que está na rota de hoje (assumirLead). */
   onEMeu?: () => void;
+  /** "✓ Rota de hoje" tocado: pergunta e tira a parada (29/09/2026). */
+  onTirarDaRota?: () => void;
   /** "Mover o pino": abre a edição de localização. */
   onMoverPino?: () => void;
   /** Botão de avanço do bloco NEGÓCIO: abre Mudar etapa já na etapa destino. */
@@ -293,10 +295,10 @@ function GradeMais({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
         : <Botao rotulo="Editar dados" onPress={a.onEdit} estilo={s.botaoMeia} />}
       <Botao
         rotulo={d.naRota ? '✓ Rota de hoje' : '+ Rota de hoje'}
-        onPress={d.naRota ? () => Toast.mostrar('Já está na rota de hoje', 'ok') : a.onAddToRoute}
+        onPress={d.naRota ? (a.onTirarDaRota ?? (() => Toast.mostrar('Já está na rota de hoje', 'ok'))) : a.onAddToRoute}
         estilo={[s.botaoMeia, d.naRota && s.naRota]}
         texto={d.naRota ? s.naRotaTexto : undefined}
-        acessivel={d.naRota ? 'Já está na rota de hoje' : 'Adicionar à rota de hoje'}
+        acessivel={d.naRota ? (a.onTirarDaRota ? 'Na rota de hoje: tocar para tirar' : 'Já está na rota de hoje') : 'Adicionar à rota de hoje'}
       />
       <Botao rotulo="Mover o pino" onPress={a.onMoverPino} estilo={s.botaoMeia} />
       <Botao rotulo="Não vale" onPress={() => naoVale(d, a)} desabilitado={!(d.pino.tipo === 'alvo' ? a.onDismissContaAlvo : a.onChangeStage)} estilo={s.botaoMeia} texto={s.naoValeTexto} />

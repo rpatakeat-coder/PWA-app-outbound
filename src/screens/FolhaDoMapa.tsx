@@ -13,6 +13,7 @@ import { Toast } from '../components/Toast';
 import { ORIGEM, origemDoFiltro } from '../utils/lentes';
 import type { Pino } from '../utils/pinoP2';
 import { distanciaTexto, ir } from './CardLeadNovo';
+import { IconArrowDown, IconArrowUp, useIconColors } from '../components/icons';
 
 import { ordenarItens, quedaCurta, type ItemFolha } from '../utils/cardNovo';
 
@@ -50,7 +51,13 @@ type Props = {
   roteirizando?: boolean;
   /** Liga o modo Planejar: escolher os leads de um dia tocando nos pinos. */
   aoPlanejar?: () => void;
+  /** Meu roteiro (29/09/2026): subir ou descer uma parada na sequência de hoje. */
+  aoMover?: (c: Client, delta: -1 | 1) => void;
+  /** Meu roteiro: tirar a parada de hoje (sai também do Planejamento). */
+  aoTirar?: (c: Client) => void;
 };
+
+type Modo = 'prioridade' | 'distancia' | 'roteiro';
 
 // Andando na rua: ~80 m por minuto, contando esquina e sinal.
 function aPe(m: number | null): string | null {
@@ -93,7 +100,8 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, embutida, aoRoteirizar, roteirizando, aoPlanejar }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar }: Props) {
+  const cores = useIconColors();
   const visitasFeitas = feitasMedidas ?? 0;
   const feitasTexto = feitasMedidas == null ? "—" : String(feitasMedidas);
   const emAberto = Math.max(0, planoTotal - planoFeito);
@@ -112,14 +120,24 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
   }), [quadra]);
   // A ordem escolhida fica no aparelho (28/09/2026): quem anda por distância não
   // quer escolher de novo a cada vez que a lista abre.
-  const [modo, setModoEstado] = useState<'prioridade' | 'distancia'>(() => {
-    try { return window.localStorage.getItem('takeat-folha-ordem') === 'distancia' ? 'distancia' : 'prioridade'; } catch { return 'prioridade'; }
+  const [modoEscolhido, setModoEstado] = useState<Modo>(() => {
+    try {
+      const m = window.localStorage.getItem('takeat-folha-ordem');
+      return m === 'distancia' || m === 'roteiro' ? m : 'prioridade';
+    } catch { return 'prioridade'; }
   });
-  const setModo = (m: 'prioridade' | 'distancia') => {
+  // MEU ROTEIRO (29/09/2026, Julyan: "acho legal ter o roteiro, mas dá pra escolher as
+  // sequências"): o plano de hoje na ordem da rota, com subir, descer e tirar. Sem plano
+  // (ou sem permissão de mexer), a opção some e a lista volta para Prioridade.
+  const podeRoteiro = !!aoMover && planoTotal > 0;
+  const modo: Modo = modoEscolhido === 'roteiro' && !podeRoteiro ? 'prioridade' : modoEscolhido;
+  const setModo = (m: Modo) => {
     setModoEstado(m);
     try { window.localStorage.setItem('takeat-folha-ordem', m); } catch { /* sem storage: só não lembra */ }
   };
-  const ordenados = useMemo(() => ordenarItens(itens, modo), [itens, modo]);
+  const ordenados = useMemo(() => (modo === 'roteiro'
+    ? itens.filter((it) => it.plano != null).sort((a, b) => (a.plano ?? 0) - (b.plano ?? 0))
+    : ordenarItens(itens, modo)), [itens, modo]);
   const proxima = useMemo(() => ordenarItens(itens, 'prioridade').find((it) => it.plano && !it.feito) ?? null, [itens]);
   // Arrastar a pílula para cima abre a lista da área (handoff v4.1, xama1).
   const arrasto = useMemo(() => PanResponder.create({
@@ -264,16 +282,48 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
       {aberta && (
         <>
           <View style={s.ordem}>
-            {(['prioridade', 'distancia'] as const).map((m) => (
+            {((podeRoteiro ? ['roteiro', 'prioridade', 'distancia'] : ['prioridade', 'distancia']) as Modo[]).map((m) => (
               <Pressable key={m} accessibilityRole="button" accessibilityState={{ selected: modo === m }} onPress={() => setModo(m)}
                 style={[s.ordemBtn, modo === m && s.ordemBtnAtivo]}>
-                <Text style={[s.ordemTexto, modo === m && s.ordemTextoAtivo]}>{m === 'prioridade' ? 'Prioridade' : 'Distância'}</Text>
+                <Text style={[s.ordemTexto, modo === m && s.ordemTextoAtivo]}>{m === 'roteiro' ? 'Meu roteiro' : m === 'prioridade' ? 'Prioridade' : 'Distância'}</Text>
               </Pressable>
             ))}
           </View>
+          {modo === 'roteiro' && (
+            <Text style={s.roteiroAjuda}>A próxima porta segue esta ordem. Pode ir a qualquer outro pino antes: o Cheguei fora do plano conta igual.</Text>
+          )}
           <ScrollView style={embutida ? s.listaEmbutida : [s.lista, cheia && s.listaCheia]} contentContainerStyle={{ paddingBottom: 8 }}>
             {ordenados.length === 0 && <Text style={s.semProxima}>Nada desta lente na área. Troque de lente ou afaste o mapa.</Text>}
-            {ordenados.slice(0, 80).map((it) => (
+            {modo === 'roteiro' && ordenados.map((it, i) => {
+              const nome = it.c.empresa?.trim() || it.c.nome;
+              const podeSubir = !it.feito && i > 0 && !ordenados[i - 1].feito;
+              const podeDescer = !it.feito && i < ordenados.length - 1;
+              return (
+                <View key={it.c.id} style={s.linha}>
+                  <PinoMini p={it.p} plano={it.plano} />
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${nome}`} onPress={() => onAbrir(it.c)} style={{ flex: 1, minWidth: 0, minHeight: 48, justifyContent: 'center' }}>
+                    <Text style={[s.nome, it.feito && s.nomeFeito]} numberOfLines={1}>{nome}</Text>
+                    <Text style={s.sub} numberOfLines={1}>{it.feito ? 'visitada hoje' : [distanciaTexto(it.distanciaM), aPe(it.distanciaM)].filter(Boolean).join(' · ') || ' '}</Text>
+                  </Pressable>
+                  {!it.feito && (
+                    <View style={s.roteiroAcoes}>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Subir ${nome} na sequência`} disabled={!podeSubir} onPress={() => aoMover?.(it.c, -1)} style={[s.roteiroBtn, !podeSubir && s.roteiroBtnOff]}>
+                        <IconArrowUp width={18} height={18} fill={cores.onSurface} />
+                      </Pressable>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Descer ${nome} na sequência`} disabled={!podeDescer} onPress={() => aoMover?.(it.c, 1)} style={[s.roteiroBtn, !podeDescer && s.roteiroBtnOff]}>
+                        <IconArrowDown width={18} height={18} fill={cores.onSurface} />
+                      </Pressable>
+                      {aoTirar && (
+                        <Pressable accessibilityRole="button" accessibilityLabel={`Tirar ${nome} do roteiro de hoje`} onPress={() => aoTirar(it.c)} style={s.roteiroTirar}>
+                          <Text style={s.roteiroTirarTexto}>Tirar</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+            {modo !== 'roteiro' && ordenados.slice(0, 80).map((it) => (
               <Pressable key={it.c.id} accessibilityRole="button" onPress={() => onAbrir(it.c)} style={s.linha}>
                 <PinoMini p={it.p} plano={it.plano} />
                 <View style={{ flex: 1, minWidth: 0 }}>
@@ -295,7 +345,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
                 ) : <Etiquetas it={it} />}
               </Pressable>
             ))}
-            {ordenados.length > 80 && <Text style={s.semProxima}>{`Mais ${ordenados.length - 80} — aproxime o mapa para ver.`}</Text>}
+            {modo !== 'roteiro' && ordenados.length > 80 && <Text style={s.semProxima}>{`Mais ${ordenados.length - 80} — aproxime o mapa para ver.`}</Text>}
           </ScrollView>
         </>
       )}
@@ -361,7 +411,14 @@ const s = StyleSheet.create({
   nestaAreaTexto: { fontSize: 13, fontWeight: '800', color: 'var(--text)' },
   nestaAreaSub: { fontSize: 11, color: 'var(--text-muted)' },
   ordem: { flexDirection: 'row', gap: 8 },
-  ordemBtn: { minHeight: 36, paddingHorizontal: 14, borderRadius: 18, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center' },
+  roteiroAjuda: { fontSize: 12, lineHeight: 17, color: 'var(--text-muted)', paddingHorizontal: 16, paddingBottom: 6 },
+  roteiroAcoes: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
+  roteiroBtn: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center' },
+  roteiroBtnOff: { opacity: 0.3 },
+  roteiroTirar: { height: 44, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center' },
+  roteiroTirarTexto: { fontSize: 13, fontWeight: '600', color: 'var(--vermelho-texto)' },
+  nomeFeito: { color: 'var(--text-muted)', textDecorationLine: 'line-through' },
+  ordemBtn: { minHeight: 44, paddingHorizontal: 14, borderRadius: 18, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center' },
   ordemBtnAtivo: { backgroundColor: 'var(--text)', borderColor: 'var(--text)' },
   ordemTexto: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)' },
   ordemTextoAtivo: { color: 'var(--bg)' },
