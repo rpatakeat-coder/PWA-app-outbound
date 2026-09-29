@@ -8711,7 +8711,18 @@ function MainApp() {
           destinoInicial={etapaNovaPara.destinoInicial ?? null}
           preenchido={etapaNovaPara.preenchido ?? null}
           onFechar={() => setEtapaNovaPara(null)}
-          onMudou={(codigo) => aplicarEtapaNoLead(etapaNovaPara.client.id, codigo, etapaNovaPara.client)}
+          onMudou={(codigo, props) => {
+            // O TELEFONE DIGITADO NA ETAPA VAI PARA O LEAD (auditoria 28/09): ia só ao HubSpot e o
+            // card seguia "sem telefone", sem o Ligar. Mesmo campo do cadastro (clients.telefone).
+            const cel = props && typeof props.celular === 'string' ? props.celular.trim() : '';
+            const alvo = cel ? { ...etapaNovaPara.client, telefone: cel } : etapaNovaPara.client;
+            if (cel) {
+              queryClient.setQueriesData({ queryKey: ['clients'] }, (velho: unknown) =>
+                Array.isArray(velho) ? velho.map((c: Client) => (c.id === alvo.id ? { ...c, telefone: cel } : c)) : velho);
+              void supabase.from('clients').update({ telefone: cel }).eq('id', alvo.id).then(({ error }) => { if (error) console.warn('[telefone no lead]', error.message); });
+            }
+            aplicarEtapaNoLead(alvo.id, codigo, alvo);
+          }}
         />
       )}
       {desfechoPendente && (

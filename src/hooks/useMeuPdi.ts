@@ -66,7 +66,8 @@ export function useMeuPdi(enabled: boolean) {
             const estado = estadoDoAcordo(i, r.estado);
             return {
               id: String(i),
-              texto,
+              // a análise escreve <b>…</b> para o Cockpit (HTML); no app o Text mostrava as tags cruas
+              texto: texto.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&'),
               feito: !!(r.estado && r.estado.checked && r.estado.checked[i]),
               estado,
               devolvidoMotivo: (r.estado && r.estado.devolvido_motivo && r.estado.devolvido_motivo[i]) || null,

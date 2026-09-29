@@ -98,7 +98,7 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
 
   return (
     <Painel visivel aoFechar={aoFechar} rotulo="Registrar a tarefa" topo={
-      <View style={{ gap: 2 }}>
+      <View style={{ gap: 2, paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }}>
         <Text style={s.titulo} numberOfLines={2}>{tarefa.nome ?? 'Tarefa'}</Text>
         <Text style={s.sub} numberOfLines={2}>{tarefa.assunto}</Text>
       </View>
@@ -155,7 +155,8 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
 const s = StyleSheet.create({
   titulo: { fontSize: 18, fontWeight: '700', color: 'var(--text)' },
   sub: { fontSize: 13, color: 'var(--text-muted)' },
-  corpo: { gap: 10, paddingBottom: 16 },
+  // o Painel não põe margem nas faixas (cada tela põe a sua): sem isto o texto encostava na borda
+  corpo: { gap: 10, paddingBottom: 16, paddingHorizontal: 16 },
   ligar: { minHeight: 48, borderRadius: 12, backgroundColor: 'var(--verde-acao)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 14 },
   ligarTexto: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   secao: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: 'var(--text-muted)', marginTop: 4 },

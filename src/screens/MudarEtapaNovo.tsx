@@ -28,7 +28,8 @@ type Props = {
   client: Client;
   etapaAtual: string | null;
   onFechar: () => void;
-  onMudou: (codigo: string) => void;
+  /** `propriedades`: o que foi ao HubSpot junto (o telefone também vai para o lead do app). */
+  onMudou: (codigo: string, propriedades?: Record<string, unknown>) => void;
   /** Botão de avanço do bloco NEGÓCIO: já abre na etapa escolhida. */
   destinoInicial?: string | null;
   /** Campos que já chegam preenchidos (o "Não vale" traz o motivo do Perdido). */
@@ -89,7 +90,7 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
     const corpo = { op: 'mudar-etapa', dealId, novaEtapa: destino, propriedades };
     try {
       await negocioAcao(corpo);
-      onMudou(destino);
+      onMudou(destino, propriedades as Record<string, unknown>);
       Toast.mostrar(`✓ ${nome} → ${ROTULO_ETAPA[destino]} · HubSpot + Cockpit`, 'ok');
       onFechar();
     } catch (err) {
