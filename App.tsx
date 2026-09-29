@@ -6038,6 +6038,8 @@ function MainApp() {
         embutida
         chao={0}
         aoRoteirizar={isViewer ? undefined : () => { void roteirizarPlano(); }}
+        aoMover={isViewer || isMonitoringRoute ? undefined : (c, delta) => { void moverNoRoteiro(c, delta); }}
+        aoTirar={isViewer || isMonitoringRoute ? undefined : tirarDoRoteiro}
         roteirizando={roteirizando}
         aoPlanejar={podePlanejar ? abrirPlanejar : undefined}
         itens={quadraAberta ? itensFolha.filter((it) => quadraAberta.ids.has(it.c.id)) : itensFolha}
@@ -7652,8 +7654,6 @@ function MainApp() {
           }}
           visitadoHoje={(c) => visitadoHoje(c.visited_at)}
           aoRoteirizar={isViewer ? undefined : () => { void roteirizarPlano(); }}
-          aoMover={isViewer || isMonitoringRoute ? undefined : (c, delta) => { void moverNoRoteiro(c, delta); }}
-          aoTirar={isViewer || isMonitoringRoute ? undefined : tirarDoRoteiro}
           roteirizando={roteirizando}
           aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
           montandoDia={montandoDia}

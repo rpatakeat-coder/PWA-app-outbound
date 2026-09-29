@@ -11,6 +11,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { CampoData } from '../components/CampoData';
 import { Painel } from '../components/Painel';
 import { Toast } from '../components/Toast';
 import { supabase } from '../integrations/supabase/client';
@@ -121,15 +122,22 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
               </Pressable>
             ))}
           </View>
+        ) : tipo === 'data' ? (
+          // abre o calendário do aparelho (o TextInput descartava type="date")
+          <CampoData
+            valor={digitado[k] ?? ''}
+            aoMudar={(v) => setDigitado((d) => ({ ...d, [k]: v }))}
+            rotulo={(ROTULO_PROP[k] ?? k).replace(/^./, (c) => c.toUpperCase())}
+            estilo={s.input}
+          />
         ) : (
           <TextInput
             style={s.input}
             value={digitado[k] ?? ''}
             onChangeText={(v) => setDigitado((d) => ({ ...d, [k]: v }))}
-            placeholder={tipo === 'data' ? 'AAAA-MM-DD' : tipo === 'numero' ? 'R$ por mês' : tipo === 'tel' ? '(27) 99999-9999' : ''}
+            placeholder={tipo === 'numero' ? 'R$ por mês' : tipo === 'tel' ? '(27) 99999-9999' : ''}
             placeholderTextColor="#8B919C"
             keyboardType={tipo === 'numero' ? 'decimal-pad' : tipo === 'tel' ? 'phone-pad' : 'default'}
-            {...(tipo === 'data' ? ({ type: 'date' } as Record<string, unknown>) : {})}
           />
         )}
         {!!erros[k] && <Text style={s.erro}>{erros[k]}</Text>}

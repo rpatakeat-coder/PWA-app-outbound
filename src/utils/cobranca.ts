@@ -105,7 +105,9 @@ export function faltaNoPasso(c: Cobranca, passo: 1 | 2 | 3): string[] {
     if (!c.qual_maior_desafio_) f.push('maior desafio');
     if (c.informacoes_sobre_o_maior_desafio.trim().length < MINIMO_DESAFIO) f.push(`detalhe do desafio (mín. ${MINIMO_DESAFIO})`);
   }
-  if (passo === 3 && !c.deseja_criar_perfil_no_asaas_) f.push('criar perfil no Asaas');
+  // "Criar perfil no Asaas" NÃO é obrigatório (29/09/2026, Julyan: "não é obrigatório
+  // criar no Asaas caso não precise"). O servidor aceita true e false; desligado, a
+  // propriedade vai 'false' no HubSpot e o resto da emissão segue igual.
   return f;
 }
 

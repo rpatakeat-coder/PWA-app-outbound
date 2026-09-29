@@ -199,7 +199,7 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
                 <View style={s.chave}>
                   <View style={{ flex: 1 }}>
                     <Text style={s.rotulo}>Criar perfil no Asaas</Text>
-                    <Text style={s.ajuda}>obrigatório para gerar o link</Text>
+                    <Text style={s.ajuda}>{c.deseja_criar_perfil_no_asaas_ ? 'ligado: cria o cliente no Asaas · desligue se não precisar' : 'desligado: não cria perfil no Asaas'}</Text>
                   </View>
                   <Switch value={c.deseja_criar_perfil_no_asaas_} onValueChange={(v) => set({ deseja_criar_perfil_no_asaas_: v })} accessibilityLabel="Criar perfil no Asaas" />
                 </View>
