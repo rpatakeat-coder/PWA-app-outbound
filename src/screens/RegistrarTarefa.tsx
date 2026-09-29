@@ -15,6 +15,7 @@ import { Painel } from '../components/Painel';
 import { Toast } from '../components/Toast';
 import { IconCall, useIconColors } from '../components/icons';
 import { concluirComDesfazer } from '../utils/concluirTarefa';
+import { novoAcaoId } from '../utils/filaOffline';
 import { diaBRT } from '../utils/abaTarefas';
 import {
   COMO_FOI, PROXIMOS, diaUtilDepois, notaDoRegistro, pedidoDoProximo, proximoSugerido, type ComoFoi,
@@ -78,7 +79,8 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
     if (!t.presencial) aoSumir?.(t.id);
     aoFechar();
     concluirComDesfazer({
-      pedido: { taskId: t.id, nota: t.dealId ? { dealId: t.dealId, texto } : null, proximo: passo, manterAberta: !!t.presencial },
+      pedido: { taskId: t.id, nota: t.dealId ? { dealId: t.dealId, texto } : null, proximo: passo, manterAberta: !!t.presencial,
+        contato: { canal: 'ligacao', acaoId: novoAcaoId(), dealId: t.dealId, resultado: comoFoi } },
       rotulo: `Registro · ${t.nome ?? t.assunto}`,
       textoToast: t.presencial ? '✓ Ligação registrada · a visita continua aberta até o Cheguei'
         : !t.dealId ? '✓ Tarefa concluída · sem negócio ligado, o como foi não fica registrado'

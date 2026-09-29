@@ -268,7 +268,7 @@ function GradeEspiada({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       {temTel && (
         <View style={s.grade}>
           <Botao rotulo="Ligar" onPress={() => ligar(c)} estilo={s.botao48} acessivel={`Ligar para ${c.telefone}`} />
-          <Botao rotulo="WhatsApp" onPress={() => openWhatsapp(c.telefone)} desabilitado={!zap} estilo={[s.botao48, s.zapBotao]} texto={s.zapTexto} acessivel="Abrir conversa no WhatsApp" />
+          <Botao rotulo="WhatsApp" onPress={() => openWhatsapp(c.telefone, { clientId: c.id, dealId: c.id_hubspot ?? null })} desabilitado={!zap} estilo={[s.botao48, s.zapBotao]} texto={s.zapTexto} acessivel="Abrir conversa no WhatsApp" />
         </View>
       )}
       <View style={s.grade}>

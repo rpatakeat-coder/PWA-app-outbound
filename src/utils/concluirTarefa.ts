@@ -12,6 +12,7 @@ import { supabase } from '../integrations/supabase/client';
 import { Toast } from '../components/Toast';
 import { ehErroDeRede, enfileirar, novoAcaoId } from './filaOffline';
 import { negocioAcao, RecusaDoServidor } from './negocioAcao';
+import { gravarContato, type Contato } from './contatoDeCampo';
 
 export type PedidoConclusao = {
   taskId: string;
@@ -23,6 +24,9 @@ export type PedidoConclusao = {
    *  passo, mas NÃO conclui — no Cockpit, visita COMPLETED conta como visita feita, e
    *  visita só se prova pelo Cheguei (GPS ou foto). Auditoria de 28/09/2026. */
   manterAberta?: boolean;
+  /** Ponto de contato do dossiê de campo (0144). Gravado depois do registro, idempotente
+   *  pelo acaoId — a fila repete o pedido inteiro e não duplica. */
+  contato?: Contato | null;
 };
 
 export const JANELA_DESFAZER_MS = 5000;
@@ -39,6 +43,7 @@ export async function enviarConclusao(p: PedidoConclusao): Promise<void> {
         await enfileirar({ acaoId: novoAcaoId(), tipo: 'negocio', rotulo: 'Próximo passo do registro', payload: { corpo: p.proximo } });
       }
     }
+    if (p.contato) await gravarContato(p.contato);
     return;
   }
   const { data, error } = await supabase.functions.invoke('hubspot-sync', {
@@ -75,6 +80,7 @@ export async function enviarConclusao(p: PedidoConclusao): Promise<void> {
       }
     }
   }
+  if (p.contato) await gravarContato(p.contato);
 }
 
 type Pendente = { pedido: PedidoConclusao; rotulo: string; timer: ReturnType<typeof setTimeout> };

@@ -1,5 +1,6 @@
 import { Linking } from 'react-native';
 import { Alert } from '../components/Alert';
+import { gravarContato } from './contatoDeCampo';
 
 // Helpers de WhatsApp, movidos do App.tsx na extracao das telas (prompt 02).
 export function toWhatsappNumber(raw: string | null | undefined): string | null {
@@ -11,13 +12,16 @@ export function toWhatsappNumber(raw: string | null | undefined): string | null 
   return `55${d}`;
 }
 
-export function openWhatsapp(rawPhone: string | null | undefined): boolean {
+/** `contato`: quando vem do cartão de um lead, abrir a conversa conta como ponto de contato
+ *  no dossiê de campo do gestor (0144). O app não vê a conversa: o que se mede é o toque. */
+export function openWhatsapp(rawPhone: string | null | undefined, contato?: { clientId?: string | null; dealId?: string | null }): boolean {
   const num = toWhatsappNumber(rawPhone);
   if (!num) {
     Alert.alert('Telefone invalido', 'O telefone do cliente nao tem formato valido pra abrir o WhatsApp.');
     return false;
   }
   const url = `https://wa.me/${num}`;
+  if (contato) void gravarContato({ canal: 'whatsapp', clientId: contato.clientId, dealId: contato.dealId });
   Linking.openURL(url).catch(() =>
     Alert.alert('Erro', 'Nao foi possivel abrir o WhatsApp. Verifique se o aplicativo esta instalado.'),
   );
