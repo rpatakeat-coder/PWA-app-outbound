@@ -5798,7 +5798,7 @@ function MainApp() {
 
       {/* "+" do mapa novo: botão flutuante acima da folha (C10); o rodapé fica sem botão central. */}
       {/* Com a lista aberta (folha alta) o "+" sairia do mapa e cobriria as lentes: some. */}
-      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !isViewer && !selectedClient && !telaCheia && !(folhaDeBaixo && alturaFolha > janelaTela.height * 0.36)
+      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !isViewer && !selectedClient && !telaCheia && !planejarVisivel && !(folhaDeBaixo && alturaFolha > janelaTela.height * 0.36)
         // só depois de medir a folha: no primeiro quadro (sem a tela cheia de carregando desde 28/09) ele caía sobre o Planejar
         && !(folhaDeBaixo && topoFolha == null) && (
         <TouchableOpacity

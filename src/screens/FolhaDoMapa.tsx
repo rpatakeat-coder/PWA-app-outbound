@@ -268,7 +268,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
               </Pressable>
             ))}
           </View>
-          <ScrollView style={embutida ? s.listaEmbutida : s.lista} contentContainerStyle={{ paddingBottom: 8 }}>
+          <ScrollView style={embutida ? s.listaEmbutida : [s.lista, cheia && s.listaCheia]} contentContainerStyle={{ paddingBottom: 8 }}>
             {ordenados.length === 0 && <Text style={s.semProxima}>Nada desta lente na área. Troque de lente ou afaste o mapa.</Text>}
             {ordenados.slice(0, 80).map((it) => (
               <Pressable key={it.c.id} accessibilityRole="button" onPress={() => onAbrir(it.c)} style={s.linha}>
@@ -318,7 +318,9 @@ const s = StyleSheet.create({
   pilulaCheguei: { height: 48, paddingHorizontal: 18, borderRadius: 13, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   pilulaLista: { height: 48, paddingHorizontal: 16, borderRadius: 13, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   pilulaListaTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
-  folhaCheia: { maxHeight: '88%' },
+  // cheia = altura fixa (não só um teto maior): sem isso a lista não tinha por que crescer
+  folhaCheia: { maxHeight: '88%', height: '88%' },
+  listaCheia: { maxHeight: '100%', flex: 1, minHeight: 0 },
   folha: {
     position: 'absolute', left: 0, right: 0, zIndex: 20,
     backgroundColor: 'var(--surface)', borderTopLeftRadius: 22, borderTopRightRadius: 22,

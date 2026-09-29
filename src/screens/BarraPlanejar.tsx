@@ -117,7 +117,7 @@ export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, a
         </Text>
       )}
 
-      <ScrollView style={embutida ? s.listaEmbutida : s.lista} contentContainerStyle={{ paddingBottom: 6 }}>
+      <ScrollView style={embutida ? s.listaEmbutida : [s.lista, cheia && s.listaCheia]} contentContainerStyle={{ paddingBottom: 6 }}>
         {!carregando && paradas.length === 0 && entram.length === 0 && (
           <Text style={s.vazio}>Nada neste dia ainda. Escolha no mapa os leads perto uns dos outros.</Text>
         )}
@@ -180,7 +180,9 @@ const s = StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, gap: 8, maxHeight: '46%',
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 18, shadowOffset: { width: 0, height: -4 }, elevation: 10,
   },
-  folhaCheia: { maxHeight: '88%' },
+  // cheia = altura fixa (não só um teto maior): sem isso a lista não tinha por que crescer
+  folhaCheia: { maxHeight: '88%', height: '88%' },
+  listaCheia: { maxHeight: '100%', flex: 1, minHeight: 0 },
   alca: { alignSelf: 'stretch', height: 22, marginTop: -8, alignItems: 'center', justifyContent: 'center' },
   alcaTraco: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'var(--stroke-default)' },
   painel: { flex: 1, minHeight: 0, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, gap: 8, backgroundColor: 'var(--surface)' },

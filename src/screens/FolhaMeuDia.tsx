@@ -132,7 +132,7 @@ export default function FolhaMeuDia({ visivel, aoFechar, dados, carregando, meta
 
             <View style={s.linha}>
               <Text style={s.linhaRotulo}>Reuniões</Text>
-              <Text style={s.linhaValor}>{`${dados.reunioesMarcadasHoje} marcadas hoje · ${dados.reunioesParaHoje} na agenda de hoje`}</Text>
+              <Text style={s.linhaValor}>{`${dados.reunioesMarcadasHoje} ${dados.reunioesMarcadasHoje === 1 ? "marcada" : "marcadas"} hoje · ${dados.reunioesParaHoje} na agenda de hoje`}</Text>
             </View>
             <View style={s.linha}>
               <Text style={s.linhaRotulo}>Daily</Text>
