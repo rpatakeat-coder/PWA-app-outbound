@@ -7838,7 +7838,7 @@ function MainApp() {
       /* RODAPE DO MAPA NOVO (prompt final §B2): Mapa · Agenda · Tarefas ·
          Playbook, iguais para todos. A Rota mora na Agenda, o "+" e' botao do
          mapa e a Gestao fica no menu do avatar, para o time inteiro. */
-      <View style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]} onLayout={(e) => setAlturaRodape(Math.round(e.nativeEvent.layout.height))}>
+      <View testID="rodape-app" style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]} onLayout={(e) => setAlturaRodape(Math.round(e.nativeEvent.layout.height))}>
         {abasDoRodape.map((a) => {
           const ativo = a.ativa;
           return (
@@ -8665,6 +8665,8 @@ function MainApp() {
           visivel
           client={fichaPendente.client}
           ownerId={myHubspotId}
+          donoColega={fichaPendente.client.vendedor_id_hubspot && myHubspotId && String(fichaPendente.client.vendedor_id_hubspot) !== String(myHubspotId)
+            ? (vendorById.get(fichaPendente.client.vendedor_id_hubspot)?.full_name ?? 'o dono') : null}
           checkinEm={fichaPendente.checkinEm}
           etapaAtual={fichaPendente.etapaAtual}
           primeiraVisita={fichaPendente.primeiraVisita}

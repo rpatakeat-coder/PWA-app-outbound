@@ -466,12 +466,38 @@ Deno.serve(async (req) => {
       const rt = (globalThis as any).EdgeRuntime;
       if (rt && typeof rt.waitUntil === 'function') rt.waitUntil(tarefa);
     } catch { /* nunca derruba o Cockpit */ }
-    const completo = montarDadosCompletos();
-    const dados: any = removerNulosRecursivo(filtrarParaPapel(completo, usuario));
+    const completo: any = montarDadosCompletos();
+    /* VISÃO DE EXECUTIVO PARA O GESTOR (28/09/2026, Julyan: "eu queria uma tela como se
+       fosse do executivo pra mim"). ?visao=executivo, só para quem já é gestor e tem dono
+       no HubSpot: o recorte sai como o de um executivo com o funil dele. Não abre nada que
+       o gestor já não veja — é menos, não mais. */
+    const visaoExecutivo = usuario.role === 'manager' && !!usuario.ownerId && url.searchParams.get('visao') === 'executivo';
+    const quem: any = visaoExecutivo ? { ...usuario, role: 'rep' } : usuario;
+    /* GESTOR NÃO É EXECUTIVO DO TIME ("tirar do cockpit p n sujar"): o dono do HubSpot de
+       um gestor entrou em narrativas por causa do login de teste e virava o 10º executivo —
+       Daily, placar, pódio, Visitas com prova. Sai da lista do time para todo mundo, menos
+       na própria visão de executivo dele. Os negócios dele continuam no funil. */
+    const donosGestores = new Set(cadastro.filter((c: any) => c.pessoa.role === 'manager' && c.pessoa.ownerId).map((c: any) => String(c.pessoa.ownerId)));
+    const meuDono = String(quem.ownerId ?? '');
+    const fica = (o: unknown) => { const k = String(o ?? ''); return !donosGestores.has(k) || (quem.role === 'rep' && k === meuDono); };
+    // CÓPIAS, nunca no lugar: partes do objeto vêm do snapshot em cache e seriam cortadas
+    // também para o próximo pedido (inclusive a visão de executivo do próprio gestor).
+    const semObjeto = (obj: any) => { const o: any = {}; Object.keys(obj || {}).forEach((k) => { if (fica(k)) o[k] = obj[k]; }); return o; };
+    const recorte: any = { ...completo };
+    if (Array.isArray(completo.reps)) recorte.reps = completo.reps.filter((r: any) => fica(r && r.ownerId));
+    if (completo.vendasMes && Array.isArray(completo.vendasMes.porRep)) recorte.vendasMes = { ...completo.vendasMes, porRep: completo.vendasMes.porRep.filter((r: any) => fica(r && r.ownerId)) };
+    const rs = completo.resumoSemanal;
+    if (rs) {
+      recorte.resumoSemanal = { ...rs,
+        ...(Array.isArray(rs.ranking) ? { ranking: rs.ranking.filter((r: any) => fica(r && r.ownerId)) } : {}),
+        ...(rs.porRep && typeof rs.porRep === 'object' ? { porRep: semObjeto(rs.porRep) } : {}),
+        ...(rs.snapshotReps && typeof rs.snapshotReps === 'object' ? { snapshotReps: semObjeto(rs.snapshotReps) } : {}) };
+    }
+    const dados: any = removerNulosRecursivo(filtrarParaPapel(recorte, quem));
     const pwaDeepLink = String(Deno.env.get('PWA_DEEP_LINK') || '').trim();
     if (/^https?:\/\//i.test(pwaDeepLink)) dados.pwa = { deepLink: pwaDeepLink };
     return json(200, {
-      sessao: { email: usuario.email, role: usuario.role, ownerId: usuario.ownerId, nome: usuario.nome, aComecar: !!usuario.aComecar },
+      sessao: { email: usuario.email, role: quem.role, ownerId: usuario.ownerId, nome: usuario.nome, aComecar: !!usuario.aComecar, ...(visaoExecutivo ? { visaoDeGestor: true } : {}) },
       procedencia: { fonte: procedencia.fonte, motivo: procedencia.motivo || null,
         chaves: procedencia.chaves || [], atualizadoEm: procedencia.atualizadoEm || null,
         espelho: procedencia.espelho || null },

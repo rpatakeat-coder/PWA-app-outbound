@@ -50,6 +50,8 @@ type Props = {
   fotoProva?: Blob | null;
   /** id_hubspot de quem registra (pasta da foto e dono no Cockpit). */
   ownerId?: string | null;
+  /** Negócio de COLEGA: o próximo passo vira tarefa do dono, na Agenda dele (28/09/2026). */
+  donoColega?: string | null;
 };
 
 type Resultado = { rotulo: string; estado: 'ok' | 'fila' | 'falhou' | 'pulado'; detalhe?: string };
@@ -59,7 +61,7 @@ const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 
 const diaMes = (iso: string) => iso.split('-').reverse().slice(0, 2).join('/');
 const JANELA_DESFAZER_MS = 5000;
 
-export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, declarada = false, ownerId = null, fotoProva = null }: Props) {
+export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, declarada = false, ownerId = null, fotoProva = null, donoColega = null }: Props) {
   const [f, setF] = useState<Ficha>(FICHA_VAZIA);
   const [opcao, setOpcao] = useState<string | null>(null);
   const [completar, setCompletar] = useState(false);
@@ -107,7 +109,8 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     : f.proximo === 'sem_interesse'
       ? (f.motivoPerdido ? 'O negócio vai para Perdido, com o motivo' : 'Escolha o motivo')
       : passoPrevisto
-        ? `${passoPrevisto.texto} em ${diaMes(passoPrevisto.data)} vai para a Agenda`
+        // negócio de colega: a tarefa é do dono no HubSpot — dizer isso, não "vai para a Agenda"
+        ? `${passoPrevisto.texto} em ${diaMes(passoPrevisto.data)} vai para a Agenda ${donoColega ? `de ${donoColega} (dono do negócio)` : ''}`.trim()
         : 'Salva a visita no HubSpot e no Cockpit';
 
   function escolherComoFoi(id: Ficha['comoFoi']) {
@@ -434,7 +437,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
               </View>
               <Text style={s.ajuda}>
                 {passoSalvo
-                  ? `${passoSalvo.texto} · ${diaMes(passoSalvo.data)} · ${passoSalvo.virouTarefa ? 'na Agenda e nas Tarefas' : 'sem negócio no HubSpot, não virou tarefa'}`
+                  ? `${passoSalvo.texto} · ${diaMes(passoSalvo.data)} · ${passoSalvo.virouTarefa ? (donoColega ? `na Agenda de ${donoColega}, dono do negócio` : 'na Agenda e nas Tarefas') : 'sem negócio no HubSpot, não virou tarefa'}`
                   : f.proximo === 'sem_interesse' ? 'Sem interesse: o negócio vai para Perdido.' : 'Sem próximo passo com data.'}
               </Text>
               {fase === 'salvo' && (

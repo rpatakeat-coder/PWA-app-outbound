@@ -2,8 +2,9 @@
 // ligado: o dia escolhido, as paradas dele em ordem e o Pronto. Tocar num pino do mapa
 // põe ou tira daquele dia (quem faz é o App); aqui só se escolhe o dia, abre a ficha ou
 // tira da lista. O que entra vai para o Planejamento do Cockpit pelo rota_para_plano.
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useAcimaDoRodape } from '../hooks/useAcimaDoRodape';
 
 import type { Client } from '../types/client';
 import { vaiAoCockpit, type DiaPlanejavel } from '../utils/planoNoMapa';
@@ -40,9 +41,24 @@ export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, a
   const soNoApp = paradas.filter((p) => p.noCockpit === false);
   const semNegocio = soNoApp.filter((p) => !vaiAoCockpit(p.client)).length;
   const cheio = soNoApp.length - semNegocio;
+  // 28/09/2026 (Julyan: "quando eu clicar nessa janela, ela tem que subir pra tudo cheio ou
+  // descer pra sair da tela, não pode ficar estática"): a alça abre cheia, arrastar para
+  // baixo recolhe e, recolhida, fecha. Com marcas não confirmadas ela só recolhe — fechar
+  // confirmaria sem a pessoa ver.
+  const acima = useAcimaDoRodape(chao, 0);
+  const [cheia, setCheia] = useState(false);
+  const temPendentes = pendentes.length > 0;
+  const arrasto = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 12 && Math.abs(g.dy) > Math.abs(g.dx),
+    onPanResponderRelease: (_e, g) => {
+      if (g.dy < -30) setCheia(true);
+      else if (g.dy > 40) setCheia((c) => { if (!c && !temPendentes) aoFechar(); return false; });
+    },
+  }), [temPendentes, aoFechar]);
   return (
     <View
-      style={embutida ? s.painel : [s.folha, { bottom: chao }]}
+      ref={embutida ? undefined : acima.ref}
+      style={embutida ? s.painel : [s.folha, { bottom: chao + acima.ajuste }, cheia && s.folhaCheia]}
       accessibilityLabel="Planejar pelo mapa"
       onLayout={embutida ? undefined : (e) => {
         const alvo = (e.nativeEvent as unknown as { target?: { getBoundingClientRect?: () => DOMRect } }).target;
@@ -50,7 +66,13 @@ export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, a
         aoMedir?.({ y: Math.round(topo), altura: Math.round(e.nativeEvent.layout.height) });
       }}
     >
-      <View style={s.topo}>
+      {!embutida && (
+        <Pressable accessibilityRole="button" accessibilityLabel={cheia ? 'Recolher o planejamento' : 'Abrir o planejamento em tela cheia'}
+          onPress={() => setCheia((c) => !c)} style={s.alca} {...arrasto.panHandlers}>
+          <View style={s.alcaTraco} />
+        </Pressable>
+      )}
+      <View style={s.topo} {...(embutida ? {} : arrasto.panHandlers)}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={s.kicker} numberOfLines={1}>PLANEJAR PELO MAPA</Text>
           <Text style={s.titulo} numberOfLines={1}>
@@ -158,6 +180,9 @@ const s = StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, gap: 8, maxHeight: '46%',
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 18, shadowOffset: { width: 0, height: -4 }, elevation: 10,
   },
+  folhaCheia: { maxHeight: '88%' },
+  alca: { alignSelf: 'stretch', height: 22, marginTop: -8, alignItems: 'center', justifyContent: 'center' },
+  alcaTraco: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'var(--stroke-default)' },
   painel: { flex: 1, minHeight: 0, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, gap: 8, backgroundColor: 'var(--surface)' },
   topo: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   kicker: { fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: 'var(--vermelho-texto)' },

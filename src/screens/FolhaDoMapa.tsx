@@ -8,6 +8,7 @@ import React, { useMemo, useState } from 'react';
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { Client } from '../types/client';
+import { useAcimaDoRodape } from '../hooks/useAcimaDoRodape';
 import { Toast } from '../components/Toast';
 import { ORIGEM, origemDoFiltro } from '../utils/lentes';
 import type { Pino } from '../utils/pinoP2';
@@ -95,6 +96,17 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
   const emAberto = Math.max(0, planoTotal - planoFeito);
   const [abertaPeloToque, setAberta] = useState(false);
   const aberta = !!embutida || abertaPeloToque || !!quadra;
+  // a pílula e a folha nunca cobrem o rodapé (useAcimaDoRodape)
+  const acima = useAcimaDoRodape(chao, aberta ? 0 : 8, aberta);
+  // Folha aberta: cheia (quase a tela toda) ou normal; arrastar para baixo recolhe e fecha.
+  const [cheia, setCheia] = useState(false);
+  const arrastoFolha = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 12 && Math.abs(g.dy) > Math.abs(g.dx),
+    onPanResponderRelease: (_e, g) => {
+      if (g.dy < -30) setCheia(true);
+      else if (g.dy > 40) { setCheia((c) => { if (!c) { setAberta(false); quadra?.aoFechar(); } return false; }); }
+    },
+  }), [quadra]);
   // A ordem escolhida fica no aparelho (28/09/2026): quem anda por distância não
   // quer escolher de novo a cada vez que a lista abre.
   const [modo, setModoEstado] = useState<'prioridade' | 'distancia'>(() => {
@@ -126,7 +138,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
   if (!aberta) {
     const meta = Math.max(1, metaVisitas);
     return (
-      <View style={[s.pilula, { bottom: chao + 8 }]} accessibilityLabel="Próxima porta" onLayout={medir} {...arrasto.panHandlers}>
+      <View ref={acima.ref} style={[s.pilula, { bottom: chao + 8 + acima.ajuste }]} accessibilityLabel="Próxima porta" onLayout={medir} {...arrasto.panHandlers}>
         {proxima ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${proxima.c.empresa?.trim() || proxima.c.nome}`} onPress={() => onAbrir(proxima.c)} style={s.pilulaTexto}>
             <Text style={s.pilulaNome} numberOfLines={1}>{proxima.c.empresa?.trim() || proxima.c.nome}</Text>
@@ -166,7 +178,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
   }
 
   return (
-    <View style={embutida ? s.painel : [s.folha, { bottom: chao }]} accessibilityLabel="Agora, perto de você" onLayout={embutida ? undefined : (e) => {
+    <View ref={embutida ? undefined : acima.ref} style={embutida ? s.painel : [s.folha, { bottom: chao + acima.ajuste }, cheia && s.folhaCheia]} accessibilityLabel="Agora, perto de você" onLayout={embutida ? undefined : (e) => {
       // No navegador o evento traz o próprio elemento: o topo vem na régua da
       // TELA, a mesma do mapa (o layout.y é relativo ao pai, que não é o do mapa).
       const alvo = (e.nativeEvent as unknown as { target?: { getBoundingClientRect?: () => DOMRect } }).target;
@@ -174,7 +186,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
       aoMedir?.({ y: Math.round(topo), altura: Math.round(e.nativeEvent.layout.height) });
     }}>
       {!embutida && (
-        <Pressable accessibilityRole="button" accessibilityLabel={aberta ? 'Recolher a lista' : 'Abrir a lista desta área'} onPress={() => setAberta((v) => !v)} style={s.alca}>
+        <Pressable accessibilityRole="button" accessibilityLabel={cheia ? 'Recolher a lista' : 'Abrir a lista em tela cheia'} onPress={() => setCheia((c) => !c)} style={s.alca} {...arrastoFolha.panHandlers}>
           <View style={s.alcaBarra} />
         </Pressable>
       )}
@@ -306,6 +318,7 @@ const s = StyleSheet.create({
   pilulaCheguei: { height: 48, paddingHorizontal: 18, borderRadius: 13, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   pilulaLista: { height: 48, paddingHorizontal: 16, borderRadius: 13, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   pilulaListaTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
+  folhaCheia: { maxHeight: '88%' },
   folha: {
     position: 'absolute', left: 0, right: 0, zIndex: 20,
     backgroundColor: 'var(--surface)', borderTopLeftRadius: 22, borderTopRightRadius: 22,
