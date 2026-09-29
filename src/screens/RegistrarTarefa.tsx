@@ -80,7 +80,7 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
     aoFechar();
     concluirComDesfazer({
       pedido: { taskId: t.id, nota: t.dealId ? { dealId: t.dealId, texto } : null, proximo: passo, manterAberta: !!t.presencial,
-        contato: { canal: 'ligacao', acaoId: novoAcaoId(), dealId: t.dealId, resultado: comoFoi } },
+        contato: { canal: 'ligacao', acaoId: novoAcaoId(), dealId: t.dealId, resultado: comoFoi, em: new Date().toISOString() } },
       rotulo: `Registro · ${t.nome ?? t.assunto}`,
       textoToast: t.presencial ? '✓ Ligação registrada · a visita continua aberta até o Cheguei'
         : !t.dealId ? '✓ Tarefa concluída · sem negócio ligado, o como foi não fica registrado'

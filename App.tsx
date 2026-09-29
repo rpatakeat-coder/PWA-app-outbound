@@ -5068,7 +5068,7 @@ function MainApp() {
               setCobrancasEmJanela((s) => new Set(s).add(t.id));
               concluirComDesfazer({
                 pedido: { taskId: t.id, nota: t.dealId ? { dealId: String(t.dealId), texto: `Ligação · tarefa encerrada: ${t.assunto}` } : null,
-                  contato: { canal: 'ligacao', acaoId: novoAcaoId(), clientId: c.id, dealId: t.dealId ? String(t.dealId) : c.id_hubspot ?? null, resultado: 'cobranca' } },
+                  contato: { canal: 'ligacao', acaoId: novoAcaoId(), clientId: c.id, dealId: t.dealId ? String(t.dealId) : c.id_hubspot ?? null, resultado: 'cobranca', em: new Date().toISOString() } },
                 rotulo: `Liguei · ${getClientPrimaryName(c)}`,
                 textoToast: '✓ Ligação registrada · HubSpot + Cockpit',
                 aoVoltar: soltar,

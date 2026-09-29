@@ -16,6 +16,9 @@ export type Contato = {
   dealId?: string | null;
   ownerId?: string | null;
   resultado?: string | null;
+  /** Quando o contato aconteceu. Vai no pedido desde o toque: a fila offline pode subir no
+   *  dia seguinte, e o contato cairia no dia errado do dossiê. */
+  em?: string | null;
 };
 
 export async function gravarContato(c: Contato): Promise<void> {
@@ -27,6 +30,7 @@ export async function gravarContato(c: Contato): Promise<void> {
       deal_id: c.dealId ? String(c.dealId) : null,
       owner_id: c.ownerId ? String(c.ownerId) : null,
       resultado: c.resultado ?? null,
+      ocorrido_em: c.em ?? new Date().toISOString(),
     };
     if (linha.acao_id) await supabase.from('contatos_de_campo').upsert(linha, { onConflict: 'acao_id', ignoreDuplicates: true });
     else await supabase.from('contatos_de_campo').insert(linha);
