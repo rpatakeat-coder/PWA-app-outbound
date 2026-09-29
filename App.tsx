@@ -2634,7 +2634,7 @@ function MainApp() {
           ? 'OpenRouteService'
           : optimizationProvider === 'osrm' ? 'OSRM (ORS fora)' : '';
         const tripInfo = tripDistanceMeters != null && tripDurationSeconds != null
-          ? `\n\n${(tripDistanceMeters / 1000).toFixed(1)} km • ~${Math.round(tripDurationSeconds / 60)} min de carro`
+          ? `\n\n${(tripDistanceMeters / 1000).toFixed(1).replace('.', ',')} km • ~${Math.round(tripDurationSeconds / 60)} min de carro`
             + (providerLabel ? `\n(Otimizado via ${providerLabel})` : '')
           : '';
         const lines = [
@@ -2772,7 +2772,7 @@ function MainApp() {
           ? 'OpenRouteService'
           : optimizationProvider === 'osrm' ? 'OSRM (ORS fora)' : '';
         const tripInfo = tripDistanceMeters != null && tripDurationSeconds != null
-          ? `\n${(tripDistanceMeters / 1000).toFixed(1)} km • ~${Math.round(tripDurationSeconds / 60)} min de carro`
+          ? `\n${(tripDistanceMeters / 1000).toFixed(1).replace('.', ',')} km • ~${Math.round(tripDurationSeconds / 60)} min de carro`
             + (providerLabel ? ` (via ${providerLabel})` : '')
           : '';
         const lines = [
@@ -3935,7 +3935,7 @@ function MainApp() {
     if (!buscaAberta || searchTerm.length < 2) return [];
     const origem = userLocation ?? { latitude: mapCenter.latitude, longitude: mapCenter.longitude };
     const metros = (c: Client) => haversineMeters(origem.latitude, origem.longitude, Number(c.latitude), Number(c.longitude));
-    const fmt = (m: number) => (m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1).replace('.', ',')} km`);
+    const fmt = (m: number) => distanciaTexto(m) ?? '';
     const tipoDe = (c: Client) => (c.status === 'cliente' ? 'Cliente Takeat' : c.status === 'churn' ? 'Ex-cliente' : normalizeStage(c.etapa));
     const subDe = (c: Client) => [tipoDe(c), c.bairro].filter(Boolean).join(' · ') || (c.cidade ?? '');
     const locais = [...achadosDaBusca].map((c) => ({ c, m: metros(c) })).sort((a, b) => a.m - b.m).slice(0, 30);
@@ -4589,7 +4589,7 @@ function MainApp() {
               item.latitude as number,
               item.longitude as number,
             );
-            return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
+            return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1).replace('.', ',')} km`;
           })()
         : null;
     // Tints do badge: fundo tonal claro com texto escuro. Sao superficies
@@ -4817,7 +4817,7 @@ function MainApp() {
     const navStatusColor = statusConfig[navigationCurrentStop.status]?.color || '#3b82f6';
     const distLabel = navigationDistanceMeters != null
       ? (navigationDistanceMeters >= 1000
-          ? `${(navigationDistanceMeters / 1000).toFixed(1)} km`
+          ? `${(navigationDistanceMeters / 1000).toFixed(1).replace('.', ',')} km`
           : `${Math.round(navigationDistanceMeters)} m`)
       : null;
     const noCoords = navigationCurrentStop.latitude == null || navigationCurrentStop.longitude == null;
@@ -7011,7 +7011,7 @@ function MainApp() {
                 {[
                   { v: String(routeDisplayClients.length), r: routeDisplayClients.length === 1 ? 'PARADA' : 'PARADAS' },
                   {
-                    v: routeGeometry.data ? `${(routeGeometry.data.distanceMeters / 1000).toFixed(1)} km` : '—',
+                    v: routeGeometry.data ? `${(routeGeometry.data.distanceMeters / 1000).toFixed(1).replace('.', ',')} km` : '—',
                     r: 'DISTÂNCIA',
                   },
                   {

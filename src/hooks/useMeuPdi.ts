@@ -81,7 +81,8 @@ export function useMeuPdi(enabled: boolean) {
     mutationFn: async ({ id, feito }: { id: string; feito: boolean }) => {
       const r = query.data?.bruto;
       const { data: s } = await usuarioDaSessao();
-      const { data: perfil } = await supabase.from('profiles').select('id_hubspot').eq('id', s?.user?.id ?? '').maybeSingle();
+      if (!s?.user?.id) throw new Error('Sua sessão não está pronta. Tente de novo em instantes.');
+      const { data: perfil } = await supabase.from('profiles').select('id_hubspot').eq('id', s.user.id).maybeSingle();
       const ownerId = (perfil as { id_hubspot?: string | null } | null)?.id_hubspot;
       if (!r || !r.versaoAnalise || !ownerId) throw new Error('PDI indisponível agora.');
       const n = (r.compromissos || []).length;

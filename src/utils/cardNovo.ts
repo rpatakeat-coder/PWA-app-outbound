@@ -7,6 +7,8 @@ export type ItemFolha = { c: Client; p: Pino; plano: number | null; distanciaM: 
 
 export function distanciaTexto(m: number | null): string | null {
   if (m == null) return null;
+  // de 100 km para cima a casa decimal é ruído ("1408,0 km" → "1.408 km")
+  if (m >= 100000) return `${Math.round(m / 1000).toLocaleString('pt-BR')} km`;
   return m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} km` : `${Math.round(m / 10) * 10} m`;
 }
 

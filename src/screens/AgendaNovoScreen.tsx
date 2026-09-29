@@ -353,17 +353,21 @@ export default function AgendaNovoScreen({
           {paradasDoDia(dia).map((p, i) => {
             const c = p.client;
             const nome = c ? nomeDoLead(c) : 'Parada';
+            // A MESMA PORTA NÃO APARECE SOLTA DUAS VEZES (auditoria 28/09): reunião combinada na
+            // ficha entra no plano E em Reuniões — aqui a linha do plano diz que é a reunião e a hora.
+            const reuniao = compromissos.find((k) => k.clientId === p.client_id && k.tipo === 'reunião');
             // A hora que o Planejamento marcou (plano_para_rota grava planned_at no dia);
             // parada sem hora mostra a ordem.
             const hora = p.planned_at && dia === diaBRT(new Date(p.planned_at))
-              ?new Date(p.planned_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : null;
+              ? new Date(p.planned_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+              : (reuniao?.hora ?? null);
             return (
               <TouchableOpacity key={p.id} accessibilityRole="button" style={s.compromisso} onPress={() => aoAbrirLead(p.client_id)}>
                 <Text style={s.hora}>{hora ?? String(i + 1)}</Text>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={s.paradaNome} numberOfLines={1}>{nome}</Text>
                   {!!ruaDo(c) && <Text style={s.paradaSub} numberOfLines={1}>{[ruaDo(c), distanciaAte(p.client_id)].filter(Boolean).join(' · ')}</Text>}
-                  <View style={s.chips}><Text style={s.chip}>Visita do plano</Text></View>
+                  <View style={s.chips}><Text style={s.chip}>{reuniao ? 'Reunião do plano' : 'Visita do plano'}</Text></View>
                 </View>
                 <IconChevronRight width={20} height={20} fill={cores.muted} />
               </TouchableOpacity>

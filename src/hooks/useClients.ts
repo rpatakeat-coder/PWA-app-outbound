@@ -4,7 +4,7 @@ import { origemDoLeadHs } from '../utils/origemDoLead';
 import { useAuth } from '../context/AuthContext';
 import type { Client, ClientFormData } from '../types/client';
 import { bboxAround, boundsKey, roundCoordsForKey, type Bounds } from '../utils/area';
-import { createVisitTask, sendHubspotEvent } from '../utils/hubspotSync';
+import { concluirTarefaHubspot, createVisitTask, sendHubspotEvent } from '../utils/hubspotSync';
 import { FUNNEL_STAGE_IDS, STAGES, VISITA_STAGE_ID, VISITA_STAGE_LABEL } from '../constants/stages';
 
 const mapRow = (row: any): Client => row as Client;
@@ -718,7 +718,37 @@ export function useClients(
       // AWAITADO de proposito: o bottom sheet fecha logo apos o check-in e uma
       // Promise solta morria junto (mesma licao do agendamento). Erro NAO
       // quebra a visita — ela ja esta registrada no banco.
-      if (client.id_hubspot) {
+      // O CHEGUEI CUMPRE A VISITA PENDENTE (28/09/2026, auditoria na rua): havia tarefa
+      // "Visita - Voltar no horário do dono" vencida de ontem, o check-in de hoje criava OUTRA
+      // tarefa "Visita - X" concluída e a pendente ficava atrasada para sempre em Tarefas.
+      // Agora, se o negócio tem tarefa de visita aberta vencendo até hoje (a lista que o app
+      // já tem carregada), o check-in conclui ESSA — continua sendo uma COMPLETED por visita,
+      // e o Cockpit não conta a mesma visita duas vezes. Sem pendente, cria como antes.
+      const pendente = (() => {
+        if (!client.id_hubspot) return null;
+        const fim = Date.parse(new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }) + 'T23:59:59-03:00');
+        const achadas: Array<{ id: string; venceEm: string | null }> = [];
+        for (const [, d] of queryClient.getQueriesData<{ tarefas?: Array<{ id: string; dealId?: string | null; tipo: string; assunto: string; venceEm: string | null }> }>({ queryKey: ['tarefas_crm'] })) {
+          (d?.tarefas ?? []).forEach((t) => {
+            if (String(t.dealId ?? '') === String(client.id_hubspot) && t.tipo === 'visita' && !/reuni|demo/i.test(t.assunto)
+              && (!t.venceEm || Date.parse(t.venceEm) <= fim)) achadas.push(t);
+          });
+        }
+        achadas.sort((a, b) => Date.parse(a.venceEm ?? '1970-01-01') - Date.parse(b.venceEm ?? '1970-01-01'));
+        return achadas[0] ?? null;
+      })();
+      let cumpriuPendente = false;
+      if (pendente) {
+        try {
+          await concluirTarefaHubspot(pendente.id);
+          cumpriuPendente = true;
+          queryClient.setQueriesData<{ tarefas?: Array<{ id: string }> }>({ queryKey: ['tarefas_crm'] }, (d) =>
+            d && Array.isArray(d.tarefas) ? { ...d, tarefas: d.tarefas.filter((t) => t.id !== pendente.id) } : d);
+        } catch (err) {
+          console.warn('[HUBSPOT] concluir a visita pendente falhou, cria a do check-in:', err);
+        }
+      }
+      if (client.id_hubspot && !cumpriuPendente) {
         try {
           await createVisitTask({
             id_hubspot: client.id_hubspot,

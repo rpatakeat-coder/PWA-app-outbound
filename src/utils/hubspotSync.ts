@@ -254,6 +254,11 @@ export async function rescheduleAgendaEngagement(input: {
 // e' fato consumado, entao a task e' registro de atividade, nao pendencia (nao
 // entra na fila do vendedor). Sem update/cancel — por isso o id nao vai pro banco.
 // ============================================================================
+/** Conclui uma tarefa que já existe no HubSpot (a visita pendente que o Cheguei cumpriu). */
+export async function concluirTarefaHubspot(engagementId: string): Promise<void> {
+  await invokeHubspotSync({ type: 'update_task', engagement_id: engagementId, concluir: true });
+}
+
 export async function createVisitTask(input: {
   id_hubspot: string;
   lead_nome: string;            // empresa (ou nome, se nao houver empresa)

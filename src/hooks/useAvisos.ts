@@ -54,7 +54,10 @@ export function useAvisos(ativo: boolean) {
       // a RLS devolve só os meus (owner_id = meu_owner_hubspot()); o gestor vê todos, e
       // para ele isto não é recado: fica de fora.
       const { data: s0 } = await usuarioDaSessao();
-      const { data: perfil } = await supabase.from('profiles').select('id_hubspot').eq('id', s0?.user?.id ?? '').maybeSingle();
+      // Sessão ainda não restaurada na abertura: ia `id=eq.` (400) e o vazio ficava guardado
+      // 10 min — recado do gestor sumia do sino. Sem sessão, falha e o react-query tenta de novo.
+      if (!s0?.user?.id) throw new Error('sessão ainda não restaurada');
+      const { data: perfil } = await supabase.from('profiles').select('id_hubspot').eq('id', s0.user.id).maybeSingle();
       const meu = (perfil as { id_hubspot?: string | null } | null)?.id_hubspot;
       if (!meu) return [];
       const { data, error } = await supabase.from('sugestoes_planos')

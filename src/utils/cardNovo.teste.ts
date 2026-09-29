@@ -72,7 +72,7 @@ ok(ordenarItens([it('sem', { distanciaM: null }), it('com', { distanciaM: 5000 }
 }
 
 // fatos
-ok(distanciaTexto(null) === null && distanciaTexto(1234) === '1,2 km' && distanciaTexto(87) === '90 m', 'distância em m/km, nula sem GPS');
+ok(distanciaTexto(null) === null && distanciaTexto(1234) === '1,2 km' && distanciaTexto(87) === '90 m' && distanciaTexto(1408012) === '1.408 km', 'distância em m/km, nula sem GPS');
 const semGps = fatosDoCard({ client: cli({}), pino: pino({}), distanciaM: null }).map((f) => f.texto);
 ok(!semGps.some((t) => /\d+ m$/.test(t)), 'sem GPS o card não inventa distância');
 ok(semGps.includes('sem telefone'), 'sem telefone vira aviso');

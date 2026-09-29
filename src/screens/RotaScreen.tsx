@@ -571,7 +571,7 @@ export function RotaScreen({
               <Text style={styles.panelHint} numberOfLines={2}>
                 {routeDisplayClients.length} leads planejados
                 {geometriaDaRota && geometriaDaRota.coordinates.length > 1 && (
-                  ` · ${(geometriaDaRota!.distanceMeters / 1000).toFixed(1)} km`
+                  ` · ${(geometriaDaRota!.distanceMeters / 1000).toFixed(1).replace('.', ',')} km`
                   + ` · ~${Math.round(geometriaDaRota!.durationSeconds / 60)} min`
                 )}
                 {geometriaCarregando && ' · calculando rota...'}
