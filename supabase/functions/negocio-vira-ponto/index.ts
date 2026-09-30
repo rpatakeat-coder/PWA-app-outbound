@@ -88,14 +88,23 @@ const noBrasil = (lat: number | null, lng: number | null) =>
   lat !== null && lng !== null && lat < 6 && lat > -34 && lng < -28 && lng > -74;
 
 async function hubspot(token: string, path: string, body?: unknown) {
-  const r = await fetch(`https://api.hubapi.com${path}`, {
-    method: body ? 'POST' : 'GET',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const j = await r.json().catch(() => null);
-  if (!r.ok) throw new Error(`HubSpot ${r.status}: ${j?.message ?? 'sem detalhe'}`);
-  return j;
+  // 429 = limite POR SEGUNDO do HubSpot (29/09/2026: 3 voltas do robô morreram assim,
+  // porque outros robôs chamavam no mesmo segundo). Espera e tenta de novo, até 3 vezes;
+  // qualquer outro erro sobe na hora.
+  for (let tentativa = 0; ; tentativa++) {
+    const r = await fetch(`https://api.hubapi.com${path}`, {
+      method: body ? 'POST' : 'GET',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const j = await r.json().catch(() => null);
+    if (r.status === 429 && tentativa < 3) {
+      await new Promise((ok) => setTimeout(ok, 1200 * (tentativa + 1)));
+      continue;
+    }
+    if (!r.ok) throw new Error(`HubSpot ${r.status}: ${j?.message ?? 'sem detalhe'}`);
+    return j;
+  }
 }
 
 async function negociosAtivos(token: string) {
