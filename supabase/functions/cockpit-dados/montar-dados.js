@@ -481,6 +481,8 @@ function montarDadosCompletos() {
     perdidoVisivel: hubspot.perdidoVisivel || null,
     onboardingVisivel: hubspot.onboardingVisivel || null,
     leadsReciclagem60: hubspot.leadsReciclagem60 || [],
+    /* todos os reciclados, para a coluna Reciclagem do kanban (01/10/26) */
+    leadsReciclagem: hubspot.leadsReciclagem || null,
     vendasMes,
     temperatura: temperaturaComPraca,
     stageMeta: hubspot.stageMeta || { slaDays: {}, descriptions: {}, labels: {} },
@@ -794,6 +796,7 @@ function filtrarParaPapel(dados, usuario) {
     perdidoVisivel,
     onboardingVisivel,
     leadsReciclagem60: soMeu(dados.leadsReciclagem60 || []),
+    leadsReciclagem: dados.leadsReciclagem ? soMeu(dados.leadsReciclagem) : null,
     vendasMes,
     resumoSemanal: resumoSemanalFiltrado,
     agenda,
