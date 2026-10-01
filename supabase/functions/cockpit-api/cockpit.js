@@ -166,7 +166,12 @@ const PROPS_PERMITIDAS = ['dealname', 'email', 'cnpj_cpf', 'celular', 'cep', 'ba
      que precisam concordar, e nada as comparava (agora a guarda 19 compara).
      A propriedade existe no HubSpot com este nome exato, label "Observacao Perdido" —
      nao houve mudanca la. */
-  'observacao__desqualificado'];
+  'observacao__desqualificado',
+  /* 01/10/26 — a janela 'Enviar para onboarding' do kanban (cockpit-unificado #670). A
+     propriedade existe no HubSpot com este nome exato, label 'Cliente vai montar ou
+     clonar cardápio?'. Nada criado lá. Acrescentada à mão: regenerar este arquivo
+     apagaria o que foi editado direto aqui (o sinal 'tarefa', 28/09). */
+  'cliente_vai_montar_ou_clonar_cardapio_'];
 
 // Exigências para ENTRAR em cada etapa. Este mapa é a barreira de integridade do
 // servidor; o mapa equivalente no template existe só para orientar a interface.
