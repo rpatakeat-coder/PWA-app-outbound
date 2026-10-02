@@ -18,13 +18,33 @@ const CACHE = `takeat-rpa-${BUILD_VERSION}`;
 // pra lista-los aqui — eles entram no cache sob demanda (stale-while-revalidate).
 const SHELL = ['/', '/manifest.json'];
 
+// P#2 (desempenho, 02/10/26): o código desta versão, listado pelo build
+// (scripts/build-web.js troca o comentário abaixo pela lista de _expo/static).
+// A versão nova baixa o bundle ENQUANTO espera, antes do SKIP_WAITING — antes, a
+// primeira abertura depois de cada deploy baixava 1,9 MB de novo, já com o app na mão.
+// Fora do build (dev) a lista fica vazia e nada muda.
+const PRECODIGO = [/* __PRECODIGO__ */];
+
+// Mesma regra do fetch: código que chega como HTML (a borda ainda na versão antiga
+// reescreve para o index.html com 200) NÃO é guardado — foi a tela branca de 26/09.
+async function guardarCodigo(cache, url) {
+  try {
+    const res = await fetch(url, { cache: 'reload' });
+    const tipo = res.headers.get('content-type') || '';
+    if (res.ok && res.type === 'basic' && !tipo.includes('text/html')) await cache.put(url, res);
+  } catch (e) { /* sem rede: entra sob demanda, como antes */ }
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
       // Sem catch, UMA url que falhe aborta o install inteiro e o app fica
       // sem service worker nenhum.
-      .then((cache) => cache.addAll(SHELL).catch((err) => console.warn('[SW] precache:', err))),
+      .then(async (cache) => {
+        await cache.addAll(SHELL).catch((err) => console.warn('[SW] precache:', err));
+        await Promise.all(PRECODIGO.map((url) => guardarCodigo(cache, url)));
+      }),
   );
   // De proposito SEM skipWaiting: quem decide a hora de trocar de versao e' o
   // app (utils/updates.ts), pra a troca acontecer junto com o reload e nao no

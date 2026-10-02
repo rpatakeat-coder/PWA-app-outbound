@@ -109,7 +109,21 @@ if (!sw.includes('__BUILD_VERSION__')) {
   process.exit(1);
 }
 
-fs.writeFileSync(swPath, sw.replace('__BUILD_VERSION__', version));
+// P#2 (02/10/26): a lista do código desta versão vai para o sw.js, que o baixa na
+// instalação (validando que não é HTML). Só JS e CSS de _expo/static: fonte e imagem
+// continuam sob demanda.
+const precodigo = files
+  .map((f) => f.split(path.sep).join('/'))
+  .filter((f) => f.startsWith('_expo/static/') && /\.(js|css)$/.test(f))
+  .map((f) => '/' + f);
+if (!sw.includes('/* __PRECODIGO__ */')) {
+  console.error('ERRO: placeholder __PRECODIGO__ ausente em dist/sw.js.');
+  process.exit(1);
+}
+fs.writeFileSync(swPath, sw
+  .replace('__BUILD_VERSION__', version)
+  .replace('/* __PRECODIGO__ */', precodigo.map((u) => JSON.stringify(u)).join(', ')));
+console.log('> service worker pré-carrega ' + precodigo.length + ' arquivos de código');
 
 console.log(`> service worker carimbado: ${version} (${files.length} arquivos)`);
 console.log('> build pronto em dist/');

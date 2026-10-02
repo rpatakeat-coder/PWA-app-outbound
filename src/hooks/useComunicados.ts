@@ -36,21 +36,25 @@ export function useComunicadosNaoLidos(enabled: boolean) {
       const meuId = sessao?.user?.id;
       if (!meuId) return [];
 
-      const publicados = await supabase
-        .from('comunicados')
-        .select('id, titulo, mensagem, publicado_em, created_by_name')
-        .not('publicado_em', 'is', null)
-        .order('publicado_em', { ascending: false })
-        .limit(20);
+      // P#7 (02/10/26): as duas leituras não dependem uma da outra — em paralelo,
+      // um ida-e-volta ao banco (~200 ms de Oregon) a menos na abertura.
+      const [publicados, lidos] = await Promise.all([
+        supabase
+          .from('comunicados')
+          .select('id, titulo, mensagem, publicado_em, created_by_name')
+          .not('publicado_em', 'is', null)
+          .order('publicado_em', { ascending: false })
+          .limit(20),
+        supabase
+          .from('comunicados_lidos')
+          .select('comunicado_id')
+          .eq('leitor_id', meuId),
+      ]);
       if (publicados.error) {
         if (publicados.error.code === TABELA_AUSENTE) return [];
         throw publicados.error;
       }
 
-      const lidos = await supabase
-        .from('comunicados_lidos')
-        .select('comunicado_id')
-        .eq('leitor_id', meuId);
       if (lidos.error) {
         if (lidos.error.code === TABELA_AUSENTE) return [];
         throw lidos.error;

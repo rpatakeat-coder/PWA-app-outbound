@@ -724,6 +724,20 @@ function RouteMarker({
   );
 }
 
+// P#9 (desempenho, 02/10/26): o texto normalizado da busca é calculado uma vez
+// por objeto de cliente. Antes, cada tecla rodava normalize('NFD') em todos os
+// clientes da tela. A WeakMap solta a entrada quando o cliente sai do cache.
+const PALHEIRO_DA_BUSCA = new WeakMap<Client, string>();
+function palheiroDaBusca(c: Client): string {
+  let p = PALHEIRO_DA_BUSCA.get(c);
+  if (p === undefined) {
+    p = `${c.nome ?? ''} ${c.empresa ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''} ${c.endereco ?? ''} ${c.etapa ?? ''}`
+      .normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase();
+    PALHEIRO_DA_BUSCA.set(c, p);
+  }
+  return p;
+}
+
 function MainApp() {
   const insets = useSafeAreaInsets();
   // O tema em si e' aplicado por CSS no <html>; daqui so' sai o estado do
@@ -1041,6 +1055,11 @@ function MainApp() {
     const vistos = new Set(clientsNaArea.map((c) => c.id));
     return [...clientsNaArea, ...resultadosBusca.filter((c) => !vistos.has(c.id))];
   }, [clientsNaArea, resultadosBusca]);
+  // P#10 (desempenho, 02/10/26): Tarefas e Agenda procuravam o cliente de CADA linha
+  // com clients.find a cada render do MainApp — tarefas × clientes. Um mapa por id,
+  // refeito só quando a lista muda.
+  const clientsById = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients]);
+  const clientePorId = (id: string | null | undefined) => (id ? clientsById.get(id) : undefined);
   const { meetings, upcomingByClient, meetingsByClient, deleteMeeting } = useMeetings();
   // Nomes dos leads das reunioes da agenda, POR ID. A lista `clients` cobre
   // so' a area visivel do mapa; sem isto a agenda mostrava "Lead" em tudo.
@@ -1193,7 +1212,7 @@ function MainApp() {
     isLoading: heatLoading,
     nomes: heatNomes,
     semGps30d: heatSemGps30d,
-  } = useVisitsHeatmap((canViewGestor || modoNovo) && heatOn);
+  } = useVisitsHeatmap((canViewGestor || modoNovo) && heatOn, modoNovo ? 30 : null);
   // Mapa novo (prompt §5): a mancha é dos ÚLTIMOS 30 DIAS, do time ou só minha.
   const pontosCalor = useMemo(() => {
     if (!modoNovo) return heatPoints;
@@ -1752,9 +1771,7 @@ function MainApp() {
     }
     if (!matchesVisitFilterCom(c.visited_at, f.visitFilter)) return false;
     if (searchTerm) {
-      const haystack = `${c.nome ?? ''} ${c.empresa ?? ''} ${c.cidade ?? ''} ${c.bairro ?? ''} ${c.endereco ?? ''} ${c.etapa ?? ''}`
-        .normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase();
-      if (!haystack.includes(searchTerm)) return false;
+      if (!palheiroDaBusca(c).includes(searchTerm)) return false;
     }
     return true;
   }, [searchTerm, mostrarTestes]);
@@ -7555,13 +7572,13 @@ function MainApp() {
           email={profile?.email}
           sugestoes={visibleTasks}
           nomeDaSugestao={(t) => {
-            const c = clients.find((x) => x.id === t.client_id);
+            const c = clientePorId(t.client_id);
             return c ? getClientPrimaryName(c) : (nomesTarefas.get(t.client_id) ?? 'lead');
           }}
           aoConcluirSugestao={(task) => {
             // Mesmo caminho da tela antiga: com o lead carregado, o menu de
             // destino; sem ele, a confirmação simples.
-            const c = clients.find((x) => x.id === task.client_id);
+            const c = clientePorId(task.client_id);
             if (c) { setCompletingTask({ task, client: c }); return; }
             Alert.alert('Concluir sugestão', `Marcar "${task.title}" como concluída?`, [
               { text: 'Cancelar', style: 'cancel' },
@@ -7575,9 +7592,9 @@ function MainApp() {
             void openClientById(id);
           }}
           aoPosicionar={isViewer ? undefined : iniciarPosicionar}
-          clienteDe={(id) => clients.find((x) => x.id === id) ?? routeStops.find((st) => st.client_id === id)?.client ?? null}
+          clienteDe={(id) => clientePorId(id) ?? routeStops.find((st) => st.client_id === id)?.client ?? null}
           distanciaAte={(id) => {
-            const c = id ? clients.find((x) => x.id === id) : null;
+            const c = id ? clientePorId(id) : null;
             if (!c || !userLocation || c.latitude == null || c.longitude == null) return null;
             return distanciaTexto(haversineMeters(userLocation.latitude, userLocation.longitude, Number(c.latitude), Number(c.longitude)));
           }}
@@ -7660,11 +7677,11 @@ function MainApp() {
           metaVisitasDia={metaDeHoje}
           nomeDoLead={getClientPrimaryName}
           nomePorId={(id) => {
-            const c = clients.find((x) => x.id === id);
+            const c = clientePorId(id);
             return c ? getClientPrimaryName(c) : (nomesReunioes.get(id) ?? null);
           }}
           distanciaAte={(id) => {
-            const c = id ? clients.find((x) => x.id === id) ?? routeStops.find((st) => st.client_id === id)?.client ?? null : null;
+            const c = id ? clientePorId(id) ?? routeStops.find((st) => st.client_id === id)?.client ?? null : null;
             if (!c || !userLocation || c.latitude == null || c.longitude == null) return null;
             return distanciaTexto(haversineMeters(userLocation.latitude, userLocation.longitude, Number(c.latitude), Number(c.longitude)));
           }}
@@ -7674,7 +7691,7 @@ function MainApp() {
           aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
           montandoDia={montandoDia}
           base={userLocation ? { latitude: userLocation.latitude, longitude: userLocation.longitude } : null}
-          telefoneDe={(id) => (id ? (clients.find((x) => x.id === id) ?? routeStops.find((st) => st.client_id === id)?.client ?? null)?.telefone ?? null : null)}
+          telefoneDe={(id) => (id ? (clientePorId(id) ?? routeStops.find((st) => st.client_id === id)?.client ?? null)?.telefone ?? null : null)}
           dailyValidadaEm={meuDia.data?.prometido?.validadaEm ?? null}
           // Mesmo check-in do mapa: vai ao mapa com o card aberto e roda o
           // fluxo de lá (GPS novo, "Está na porta?", ficha de rua).
@@ -7684,7 +7701,7 @@ function MainApp() {
             void handleMarkAsVisited(c);
           }}
           aoAbrirLead={(id) => {
-            const c = routeStops.find((st) => st.client_id === id)?.client ?? clients.find((x) => x.id === id);
+            const c = routeStops.find((st) => st.client_id === id)?.client ?? clientePorId(id);
             setTab('map');
             if (c) openClientDetails(c);
             else void openClientById(id);
@@ -7725,7 +7742,7 @@ function MainApp() {
             let perto = 0;
             for (const t of tarefasDoCrmParaContagem) {
               if (grupoDaTarefa(t.venceEm, new Date()) !== 'atrasadas' || !t.clientId) continue;
-              const c = clients.find((x) => x.id === t.clientId);
+              const c = clientePorId(t.clientId);
               if (c && c.latitude != null && c.longitude != null
                 && haversineMeters(userLocation.latitude, userLocation.longitude, Number(c.latitude), Number(c.longitude)) < 1000) perto += 1;
             }

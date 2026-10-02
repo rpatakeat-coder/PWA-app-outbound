@@ -29,16 +29,20 @@ export interface VisitSeller {
 const PAGE = 1000;
 const MAX_POINTS = 8000;
 
-export function useVisitsHeatmap(enabled: boolean) {
+// P#14 (desempenho, 02/10/26): o mapa novo só desenha os últimos 30 dias, então
+// pede só eles ao banco (desdeDias = 30) em vez de paginar o histórico inteiro e
+// jogar fora no celular. O mapa antigo continua pedindo tudo (desdeDias = null).
+export function useVisitsHeatmap(enabled: boolean, desdeDias: number | null = null) {
   const query = useQuery({
-    queryKey: ['visits_heatmap'],
+    queryKey: ['visits_heatmap', desdeDias],
     queryFn: async () => {
+      const desdeIso = desdeDias != null ? new Date(Date.now() - desdeDias * 86400000).toISOString() : null;
       const points: VisitPoint[] = [];
       let from = 0;
       let capped = false;
 
       for (;;) {
-        const { data, error } = await supabase
+        let q = supabase
           .from('client_visits')
           // cidade/bairro vem do lead (embed clients via client_id). RLS de
           // clients aplica no embed — ok, o heatmap so' roda pro gestor.
@@ -47,7 +51,9 @@ export function useVisitsHeatmap(enabled: boolean) {
           .not('visited_at_lon', 'is', null)
           // Visita declarada (0109) guarda o GPS de onde o executivo ESTAVA,
           // longe do lead: na mancha ela pintaria o lugar errado.
-          .eq('declarada', false)
+          .eq('declarada', false);
+        if (desdeIso) q = q.gte('visited_at', desdeIso);
+        const { data, error } = await q
           .order('visited_at', { ascending: false })
           .range(from, from + PAGE - 1);
         if (error) throw error;

@@ -109,3 +109,15 @@ export function loadGoogleMaps(): Promise<typeof google.maps> {
   );
   return loadPromise;
 }
+
+/**
+ * P#1 (desempenho, 02/10/26): começa a baixar a API do Maps junto com o bundle, em vez
+ * de esperar sessão → perfil → setores → clientes → montar o MapView. Só baixa o
+ * script (o que a Google cobra é o new Map, que continua no MapView). Se falhar — sinal
+ * ruim na abertura —, a promessa é esquecida para o MapView tentar de novo, em vez de
+ * herdar a rejeição para sempre.
+ */
+export function preaquecerGoogleMaps(): void {
+  if (loadPromise || !API_KEY) return;
+  loadGoogleMaps().catch(() => { loadPromise = null; });
+}

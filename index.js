@@ -4,6 +4,7 @@ import App from './App';
 import { BarreiraDeErro } from './src/components/BarreiraDeErro';
 import { initTheme } from './src/theme';
 import { registerServiceWorker } from './src/utils/updates';
+import { preaquecerGoogleMaps } from './src/map/loader';
 
 // Antes de montar o app: aplica o tema salvo direto no <html> e arma o
 // acompanhamento da preferencia do aparelho. Se ficasse pra depois do primeiro
@@ -24,6 +25,14 @@ const AppProtegido = () => (
 
 // registerRootComponent monta no #root do public/index.html.
 registerRootComponent(AppProtegido);
+
+// P#1 (02/10/26): com sessão salva, o mapa é a primeira tela — o script do Google Maps
+// começa a descer agora, em paralelo com a cadeia de leituras do login. Sem sessão (tela
+// de login) não baixa nada.
+try {
+  const temSessao = Object.keys(window.localStorage).some((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
+  if (temSessao) preaquecerGoogleMaps();
+} catch { /* sem localStorage: o MapView carrega quando montar, como antes */ }
 
 // Service worker: entrega de versao nova (no lugar do OTA do expo-updates) e
 // casca offline. Registrado depois do mount pra nao competir com o primeiro
