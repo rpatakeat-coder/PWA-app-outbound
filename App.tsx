@@ -110,6 +110,7 @@ import { lerColunaDoPlano, porNoDia, tirarDoDia } from './src/utils/paradaDoDia'
 import { diasDaFaixa } from './src/utils/agendaNovo';
 import { abrirGestao } from './src/utils/abrirGestao';
 import TopoCampo, { ALTURA_TOPO_CAMPO } from './src/screens/TopoCampo';
+import FaixaDaRua, { ALTURA_FAIXA_RUA } from './src/screens/FaixaDaRua';
 import FolhaLentes, { COR_LENTE } from './src/screens/FolhaLentes';
 import AvisoSemSinal from './src/screens/AvisoSemSinal';
 import FolhaMeuDia from './src/screens/FolhaMeuDia';
@@ -1598,6 +1599,9 @@ function MainApp() {
   const metaDoTime = routeConfig.meta_visitas_dia > 0 ? routeConfig.meta_visitas_dia : 6;
   const metaMinha = (profile?.id && metasPorVendedor.get(profile.id)) || metaDoTime;
   const metaDeHoje = meuDia.data?.prometido?.visitas || metaMinha;
+  // FAIXA DA RUA (02/10/26): só o executivo, só em dia útil (field sales é seg–sex).
+  const diaDaSemanaBRT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })).getDay();
+  const faixaDaRuaPode = modoNovo && !isViewer && !isGestor && !!profile?.id && diaDaSemanaBRT !== 0 && diaDaSemanaBRT !== 6;
 
   // Recorte de tarefas por vendedor. Gestor (canViewGestor: admin ou Julyan) ve
   // TODAS; vendedor comum ve so as dos leads dele (match por vendedor_id_hubspot).
@@ -5593,7 +5597,7 @@ function MainApp() {
         // `top` contado do Y REAL do mapa, igual aos botoes: este overlay e'
         // absoluto contra a RAIZ DA TELA, e o `top: 8` cru punha a pill em
         // cima da busca do header (valia ja' pra de carregamento).
-        style={[styles.areaStatusWrap, { top: modoNovo && !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 8 : (mapLayout?.y ?? 0) + 8 }]}
+        style={[styles.areaStatusWrap, { top: modoNovo && !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + (faixaDaRuaPode && tab === 'map' && !creationMode ? ALTURA_FAIXA_RUA + 8 : 0) : (mapLayout?.y ?? 0) + 8 }]}
         pointerEvents="none"
       >
         {modoNovo && !layout.ehLargo && <AvisoSemSinal />}
@@ -5765,6 +5769,16 @@ function MainApp() {
           aoSino={() => { setAvisosAbertos(true); avisos.marcarRecadosVistos(); }}
           avatar={{ url: profile?.avatar_url, nome: profile?.full_name, email: profile?.email }}
           aoAvatar={() => setPerfilAberto(true)}
+        />
+      )}
+      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && faixaDaRuaPode && (
+        <FaixaDaRua
+          top={insets.top + 7 + ALTURA_TOPO_CAMPO + 8}
+          feitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
+          meta={metaDeHoje}
+          temRota={routeDisplayClients.length > 0}
+          // com rota montada, a rota do dia; sem rota, o Montar meu dia
+          aoIr={() => { if (routeDisplayClients.length > 0 || !podePlanejar) irParaAba('route'); else abrirPlanejar(); }}
         />
       )}
       {modoNovo && !layout.ehLargo && (
