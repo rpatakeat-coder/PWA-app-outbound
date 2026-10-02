@@ -69,10 +69,12 @@ export interface PainelProps {
    */
   indicesGrudados?: number[];
   /**
-   * Celular: o topo rola junto com o corpo em vez de ficar fixo. O card do
+   * O topo rola junto com o corpo em vez de ficar fixo. O card do
    * mapa novo tem topo alto (Cheguei + duas grades + dono + origem): fixo, ele
    * comia ~70% da tela e as abas rolavam numa faixa estreita embaixo (print
    * do Julyan, 26/09). Os índices grudados andam uma casa (o topo vira o 0).
+   * Desde 02/10 vale também no painel lateral (desktop e tela larga): lá o topo
+   * fixo deixava só a metade de baixo rolar, e ele tinha de rolar desde o início.
    */
   topoRola?: boolean;
   /**
@@ -292,16 +294,16 @@ export function Painel({
             <View {...panResponder.panHandlers}>{peek}</View>
           ) : (
             <>
-              {!(topoRola && !ehDesktop) && topo}
+              {!topoRola && topo}
               <ScrollView
                 ref={corpoRef}
                 style={[estilos.corpo, estiloCorpo]}
                 contentContainerStyle={estiloConteudoCorpo}
-                stickyHeaderIndices={topoRola && !ehDesktop ? indicesGrudados?.map((i) => i + 1) : indicesGrudados}
+                stickyHeaderIndices={topoRola ? indicesGrudados?.map((i) => i + 1) : indicesGrudados}
                 showsVerticalScrollIndicator
                 keyboardShouldPersistTaps="handled"
               >
-                {topoRola && !ehDesktop
+                {topoRola
                   ? [
                       <View key="painel-topo">{topo}</View>,
                       // chave por posição, sem Children.toArray: ele descarta os
