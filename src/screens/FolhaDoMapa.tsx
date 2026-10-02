@@ -4,7 +4,7 @@
 // dia e a próxima porta com Cheguei. Tocar na alça abre a lista da área
 // (ou da quadra), por Prioridade (plano › cobrança › quente › morno ›
 // distância) ou Distância. O mapa é o produto: em repouso ele fica com ~73%.
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { Client } from '../types/client';
@@ -46,6 +46,8 @@ type Props = {
   aoProgresso?: () => void;
   /** Desktop (28/09/2026): a mesma folha vira o painel lateral, sempre aberta, sem alça. */
   embutida?: boolean;
+  /** id do pino aberto no mapa: tocar num pino traz a pílula recolhida de volta */
+  pinoAberto?: string | null;
   /** Põe as paradas em aberto na melhor ordem a partir de onde a pessoa está. */
   aoRoteirizar?: () => void;
   roteirizando?: boolean;
@@ -102,12 +104,22 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
   const cores = useIconColors();
   const visitasFeitas = feitasMedidas ?? 0;
   const feitasTexto = feitasMedidas == null ? "—" : String(feitasMedidas);
   const emAberto = Math.max(0, planoTotal - planoFeito);
   const [abertaPeloToque, setAberta] = useState(false);
+  // RECOLHER A PÍLULA (02/10/26, Julyan: "manter no mapa, mas recolhível"). Recolhida vira um
+  // botão pequeno com o placar do dia; a escolha fica no aparelho, e tocar num pino a traz de volta.
+  const [recolhida, setRecolhidaEstado] = useState<boolean>(() => {
+    try { return localStorage.getItem('folha-pilula-recolhida') === '1'; } catch { return false; }
+  });
+  const setRecolhida = (v: boolean) => {
+    setRecolhidaEstado(v);
+    try { localStorage.setItem('folha-pilula-recolhida', v ? '1' : '0'); } catch { /* só nesta sessão */ }
+  };
+  useEffect(() => { if (pinoAberto) setRecolhidaEstado(false); }, [pinoAberto]);
   const aberta = !!embutida || abertaPeloToque || !!quadra;
   // a pílula e a folha nunca cobrem o rodapé (useAcimaDoRodape)
   const acima = useAcimaDoRodape(chao, aberta ? 0 : 8, aberta);
@@ -158,10 +170,23 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
   // flutua a 8 px do rodapé, tem 60 px e nenhum rótulo: nome e distância, o
   // progresso em tracinhos e o Cheguei. "Dono às 15h" e "decisor ?" já estão na
   // etiqueta do pino, não se repetem aqui.
+  if (!aberta && recolhida) {
+    const metaR = Math.max(1, metaVisitas);
+    return (
+      <Pressable ref={acima.ref} accessibilityRole="button" accessibilityLabel={`Mostrar a próxima porta. ${feitasTexto} de ${metaR} visitas hoje`}
+        onPress={() => setRecolhida(false)} onLayout={medir} style={[s.pilulaMini, { bottom: chao + 8 + acima.ajuste }]}>
+        <Text style={s.pilulaMiniTexto}>{`${feitasTexto}/${metaR}`}</Text>
+        <Text style={s.pilulaMiniSeta}>▴</Text>
+      </Pressable>
+    );
+  }
   if (!aberta) {
     const meta = Math.max(1, metaVisitas);
     return (
       <View ref={acima.ref} style={[s.pilula, { bottom: chao + 8 + acima.ajuste }]} accessibilityLabel="Próxima porta" onLayout={medir} {...arrasto.panHandlers}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Recolher a barra da próxima porta" onPress={() => setRecolhida(true)} hitSlop={8} style={s.pilulaRecolher}>
+          <Text style={s.pilulaMiniSeta}>▾</Text>
+        </Pressable>
         {proxima ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${proxima.c.empresa?.trim() || proxima.c.nome}`} onPress={() => onAbrir(proxima.c)} style={s.pilulaTexto}>
             <Text style={s.pilulaNome} numberOfLines={1}>{proxima.c.empresa?.trim() || proxima.c.nome}</Text>
@@ -357,6 +382,14 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
 }
 
 const s = StyleSheet.create({
+  pilulaRecolher: { width: 28, height: 40, alignItems: 'center', justifyContent: 'center', marginLeft: -8, flexShrink: 0 },
+  pilulaMini: {
+    position: 'absolute', left: 10, zIndex: 20, height: 44, borderRadius: 22, paddingHorizontal: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)',
+  },
+  pilulaMiniTexto: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
+  pilulaMiniSeta: { fontSize: 14, color: 'var(--text-muted)' },
   pilula: {
     position: 'absolute', left: 10, right: 10, zIndex: 20, height: 60, borderRadius: 18,
     flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 14, paddingRight: 6,

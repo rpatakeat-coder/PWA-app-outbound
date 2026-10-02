@@ -1601,7 +1601,8 @@ function MainApp() {
   const metaDeHoje = meuDia.data?.prometido?.visitas || metaMinha;
   // FAIXA DA RUA (02/10/26): só o executivo, só em dia útil (field sales é seg–sex).
   const diaDaSemanaBRT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })).getDay();
-  const faixaDaRuaPode = modoNovo && !isViewer && !isGestor && !!profile?.id && diaDaSemanaBRT !== 0 && diaDaSemanaBRT !== 6;
+  // o gestor também vê (Julyan, 02/10/26: "eu não tenho conta de nenhum executivo, não consigo ver")
+  const faixaDaRuaPode = modoNovo && !isViewer && !!profile?.id && diaDaSemanaBRT !== 0 && diaDaSemanaBRT !== 6;
 
   // Recorte de tarefas por vendedor. Gestor (canViewGestor: admin ou Julyan) ve
   // TODAS; vendedor comum ve so as dos leads dele (match por vendedor_id_hubspot).
@@ -5845,6 +5846,7 @@ function MainApp() {
       {folhaVisivel && (
         <FolhaDoMapa
           aoMedir={({ y, altura }) => { setAlturaFolha(altura); setTopoFolha(y); }}
+          pinoAberto={selectedClient?.id ?? null}
           itens={quadraAberta ? itensFolha.filter((it) => quadraAberta.ids.has(it.c.id)) : itensFolha}
           quadra={quadraAberta ? { area: quadraAberta.area, aoFechar: () => setQuadraAberta(null) } : null}
           // Prompt §5: nas lentes Sem dono e Reconquista a linha tem "É meu" sem abrir o card.
