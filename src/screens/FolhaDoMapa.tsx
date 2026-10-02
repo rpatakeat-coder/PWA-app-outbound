@@ -73,29 +73,31 @@ function PinoMini({ p, plano }: { p: Pino; plano: number | null }) {
   );
 }
 
+// A4 (handoff v6): a 375 px as duas etiquetas ao lado do nome deixavam ~100 px para ele.
+// Agora elas moram na linha de baixo, dentro da coluna do nome: a primeira aparece e as
+// outras viram "+1" (o nome inteiro de cada uma fica no rótulo de acessibilidade).
 function Etiquetas({ it }: { it: ItemFolha }) {
   // Cliente em queda: o que importa na linha é quanto caiu e o tamanho dele, não a
   // origem (que é coisa de lead).
-  if (it.p.queda) {
-    return (
-      <View style={s.etiquetas}>
-        <View style={[s.tag, { backgroundColor: 'var(--tint-red)' }]}>
-          <Text style={[s.tagTexto, { color: 'var(--vermelho-texto)' }]} numberOfLines={1}>{quedaCurta(it.p.queda)}</Text>
-        </View>
-      </View>
-    );
+  const lista: { texto: string; fundo: string; tinta: string }[] = [];
+  if (it.p.queda) lista.push({ texto: quedaCurta(it.p.queda), fundo: 'var(--tint-red)', tinta: 'var(--vermelho-texto)' });
+  else {
+    if (it.p.etiqueta) lista.push({ texto: it.p.etiqueta.texto, fundo: it.p.etiqueta.fundo, tinta: it.p.etiqueta.tinta });
+    const o = ORIGEM[origemDoFiltro(it.p)];
+    lista.push({ texto: o.rotulo, fundo: o.fundo, tinta: o.tinta });
   }
-  const o = ORIGEM[origemDoFiltro(it.p)];
+  if (!lista.length) return null;
+  const [primeira, ...resto] = lista;
   return (
-    <View style={s.etiquetas}>
-      {it.p.etiqueta && (
-        <View style={[s.tag, { backgroundColor: it.p.etiqueta.fundo }]}>
-          <Text style={[s.tagTexto, { color: it.p.etiqueta.tinta }]}>{it.p.etiqueta.texto}</Text>
+    <View style={s.etiquetas} accessibilityLabel={lista.map((e) => e.texto).join(', ')}>
+      <View style={[s.tag, { backgroundColor: primeira.fundo }]}>
+        <Text style={[s.tagTexto, { color: primeira.tinta }]} numberOfLines={1}>{primeira.texto}</Text>
+      </View>
+      {resto.length > 0 && (
+        <View style={[s.tag, s.tagMais]}>
+          <Text style={[s.tagTexto, { color: 'var(--text-muted)' }]}>{`+${resto.length}`}</Text>
         </View>
       )}
-      <View style={[s.tag, { backgroundColor: o.fundo }]}>
-        <Text style={[s.tagTexto, { color: o.tinta }]} numberOfLines={1}>{o.rotulo}</Text>
-      </View>
     </View>
   );
 }
@@ -327,11 +329,12 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
               <Pressable key={it.c.id} accessibilityRole="button" onPress={() => onAbrir(it.c)} style={s.linha}>
                 <PinoMini p={it.p} plano={it.plano} />
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={s.nome} numberOfLines={1}>{`${it.plano ? `${it.plano} · ` : ''}${it.c.empresa?.trim() || it.c.nome}`}</Text>
+                  <Text style={s.nome} numberOfLines={2}>{`${it.plano ? `${it.plano} · ` : ''}${it.c.empresa?.trim() || it.c.nome}`}</Text>
                   <Text style={s.sub} numberOfLines={1}>
                     {[distanciaTexto(it.distanciaM), it.c.telefone?.trim() ? null : 'sem tel.',
                       it.c.conta_alvo_rating != null ? `${Number(it.c.conta_alvo_rating).toFixed(1).replace('.', ',')}★` : null].filter(Boolean).join(' · ') || ' '}
                   </Text>
+                  <Etiquetas it={it} />
                 </View>
                 {eMeu && it.p.dono === 'sem' ? (
                   <Pressable
@@ -342,7 +345,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
                   >
                     <Text style={[s.eMeuTexto, !eMeu.naRota.has(it.c.id) && s.eMeuTextoFora]}>É meu</Text>
                   </Pressable>
-                ) : <Etiquetas it={it} />}
+                ) : null}
               </Pressable>
             ))}
             {modo !== 'roteiro' && ordenados.length > 80 && <Text style={s.semProxima}>{`Mais ${ordenados.length - 80} — aproxime o mapa para ver.`}</Text>}
@@ -396,8 +399,9 @@ const s = StyleSheet.create({
   miniTexto: { fontSize: 12, fontWeight: '900' },
   nome: { fontSize: 16, fontWeight: '600', color: 'var(--text)' },
   sub: { fontSize: 13, fontWeight: '500', color: 'var(--text-muted)', marginTop: 1 },
-  etiquetas: { flexDirection: 'row', gap: 4, marginTop: 3, flexShrink: 0 },
-  tag: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, maxWidth: 120 },
+  etiquetas: { flexDirection: 'row', gap: 4, marginTop: 4, minWidth: 0, alignItems: 'center' },
+  tag: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, maxWidth: '85%', flexShrink: 1 },
+  tagMais: { backgroundColor: 'var(--surface-2)', flexShrink: 0 },
   tagTexto: { fontSize: 10, fontWeight: '800' },
   semProxima: { fontSize: 13, color: 'var(--text-muted)', paddingVertical: 6 },
   nestaArea: { minHeight: 44, justifyContent: 'center' },

@@ -1116,6 +1116,11 @@ function MainApp() {
   // de contextoPino já se protege de null), e se a RPC falhar o contexto vem
   // vazio (useContextoDoPino), para o pino nunca sumir.
   const modoNovo = mapaNovo;
+  // A14 (handoff v6): com o mapa na tela, a fila aparece só na pílula (ver Toast.mapaNaTela)
+  useEffect(() => {
+    Toast.mapaNaTela(modoNovo && tab === 'map' && !layout.ehLargo);
+    return () => Toast.mapaNaTela(false);
+  }, [modoNovo, tab, layout.ehLargo]);
   // Lente ativa (uma por vez; "Meu dia" é o padrão) e filtros do mapa novo.
   const [lente, setLente] = useState<Lente>('dia');
   const [filtrosNovos, setFiltrosNovos] = useState<FiltrosNovos>(FILTROS_VAZIOS);
@@ -4846,7 +4851,7 @@ function MainApp() {
     const remainingWithCoords = remaining.filter(c => c.latitude != null && c.longitude != null);
     const navTitle = getClientPrimaryName(navigationCurrentStop);
     const navSubtitle = [navigationCurrentStop.cidade, navigationCurrentStop.estado].filter(Boolean).join(' • ');
-    const distKm = navigationDistanceMeters != null ? (navigationDistanceMeters / 1000).toFixed(1) : null;
+    const distKm = navigationDistanceMeters != null ? (navigationDistanceMeters / 1000).toFixed(1).replace('.', ',') : null;
     const isLast = currentStopIndex === routeDisplayClients.length - 1;
 
     const navigationStop = routeStops.find(s => s.client_id === navigationCurrentStop.id);
@@ -7059,6 +7064,17 @@ function MainApp() {
         {tab === 'route' && (
           <View style={{ gap: 12 }}>
             <View style={styles.headerLinha}>
+              {/* A9 (handoff v6): a Rota abre pela pílula da Agenda e não tinha como voltar */}
+              {modoNovo && (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Voltar para a Agenda"
+                  style={styles.rotaVoltar}
+                  onPress={() => irParaAba('agenda')}
+                >
+                  <IconChevronLeft width={20} height={20} fill={iconColors.onSurface} />
+                </TouchableOpacity>
+              )}
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.rotaKicker}>ROTA DE HOJE</Text>
                 <Text style={styles.rotaData} numberOfLines={1}>
@@ -10898,6 +10914,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     color: '#FFFFFF',
   },
+  /* A9: voltar da Rota para a Agenda, 44 px */
+  rotaVoltar: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center', marginRight: 10, flexShrink: 0 },
   rotaKicker: {
     fontSize: 11,
     lineHeight: 16,

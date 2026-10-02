@@ -33,6 +33,12 @@ const PLANO_PARA_PACOTE: Record<string, string> = { Inovação: 'Inovação', Pr
 export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmitida }: Props) {
   const [c, setC] = useState<Cobranca>(COBRANCA_VAZIA);
   const [passo, setPasso] = useState<1 | 2 | 3 | 4>(1);
+  /* A7 (handoff v6): o passo 4 dizia "Link gerado no Asaas ✓" sem nada confirmar — o app
+     só muda a etapa, e quem gera o link é a automação. Agora o ✓ só aparece quando o
+     asaas_id do negócio surge (ou muda) depois do envio. Só leitura: nada no Asaas muda. */
+  const [asaasAntes, setAsaasAntes] = useState<string | null>(null);
+  const [asaasConfirmado, setAsaasConfirmado] = useState<string | null>(null);
+  const [asaasDesistiu, setAsaasDesistiu] = useState(false);
   const [todosPacotes, setTodosPacotes] = useState(false);
   const [todosAdicionais, setTodosAdicionais] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -94,6 +100,11 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
     if (!dealId || enviando || falta.length || !online) return;
     setEnviando(true); setErro(null);
     try {
+      try {
+        const antes = await negocioAcao({ op: 'ler-etapa', dealId }) as { asaasId?: string | null };
+        setAsaasAntes(antes && antes.asaasId ? String(antes.asaasId) : null);
+      } catch { setAsaasAntes(null); }
+      setAsaasConfirmado(null); setAsaasDesistiu(false);
       await negocioAcao({ op: 'mudar-etapa', dealId, novaEtapa: ETAPA_AG_PAGAMENTO, propriedades: props });
       onEmitida(ETAPA_AG_PAGAMENTO);
       setPasso(4);
@@ -103,6 +114,27 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
       setEnviando(false);
     }
   }
+
+  // depois do envio, pergunta ao HubSpot pelo asaas_id a cada 8 s, por até 4 minutos
+  useEffect(() => {
+    if (passo !== 4 || !visivel || !dealId || asaasConfirmado || asaasDesistiu) return;
+    let vivo = true, voltas = 0;
+    const real = (x: unknown) => typeof x === 'string' && /^cus_[0-9]{6,}$/.test(x);
+    const olhar = async () => {
+      if (!vivo) return;
+      voltas++;
+      try {
+        const r = await negocioAcao({ op: 'ler-etapa', dealId }) as { asaasId?: string | null };
+        const id = r && r.asaasId ? String(r.asaasId) : null;
+        if (vivo && real(id) && id !== asaasAntes) { setAsaasConfirmado(id); return; }
+      } catch { /* sem resposta agora: tenta na próxima */ }
+      if (!vivo) return;
+      if (voltas >= 30) { setAsaasDesistiu(true); return; }
+      timer = setTimeout(olhar, 8000);
+    };
+    let timer: ReturnType<typeof setTimeout> = setTimeout(olhar, 4000);
+    return () => { vivo = false; clearTimeout(timer); };
+  }, [passo, visivel, dealId, asaasConfirmado, asaasDesistiu, asaasAntes]);
 
   const chip = (chave: string, rotulo: string, ativo: boolean, aoTocar: () => void) => (
     <Pressable key={chave} accessibilityRole="button" accessibilityState={{ selected: ativo }} onPress={aoTocar} style={[s.chip, ativo && s.ativo]}>
@@ -210,7 +242,10 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
             {passo === 4 && (
               <>
                 {[
-                  { t: 'Link gerado no Asaas', e: 'ok' }, { t: 'Enviado para o contato do negócio', e: 'ok' },
+                  asaasConfirmado
+                    ? { t: 'Link gerado no Asaas', e: 'ok' }
+                    : { t: asaasDesistiu ? 'Link no Asaas · ainda não confirmado — confira no HubSpot em alguns minutos' : 'Link no Asaas', e: 'espera' },
+                  { t: asaasConfirmado ? 'Enviado para o contato do negócio' : 'Envio ao contato · o Asaas manda junto do link', e: asaasConfirmado ? 'ok' : 'depois' },
                   { t: 'Pagamento do setup', e: 'espera' }, { t: 'Ganho · o Asaas marca sozinho', e: 'depois' },
                   { t: 'Enviado Onboarding · você move depois do pago', e: 'depois' },
                 ].map((l) => (

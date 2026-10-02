@@ -55,7 +55,14 @@ export function LoginScreen() {
       setLoading(true);
       await login(email, password);
     } catch (err) {
-      Alert.alert('Erro ao fazer login', error || 'Verifique suas credenciais');
+      /* A15 (handoff v6): `error` é o estado de ANTES desta tentativa (o setError ainda não
+         chegou à tela) — o alerta mostrava o erro velho ou nenhum. A mensagem vem da falha. */
+      const bruta = err instanceof Error ? err.message : '';
+      const msg = /invalid login credentials/i.test(bruta) ? 'E-mail ou senha incorretos.'
+        : /email not confirmed/i.test(bruta) ? 'Este e-mail ainda não foi confirmado.'
+        : /network|fetch/i.test(bruta) ? 'Sem conexão. Confira a internet e tente de novo.'
+        : bruta || 'Verifique suas credenciais';
+      Alert.alert('Erro ao fazer login', msg);
     } finally {
       setLoading(false);
     }

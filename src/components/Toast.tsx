@@ -23,10 +23,19 @@ type Pedido = {
 };
 
 let atual: Pedido | null = null;
+/* A14 (handoff v6): no mapa a fila já tem a pílula (AvisoSemSinal) e as falhas, o sino —
+   a faixa fixa cobria o topo e dizia a mesma coisa pela terceira vez. O MainApp avisa
+   quando o mapa está na tela, e a faixa só aparece fora dele. */
+let mapaComPilula = false;
 let notificar: (() => void) | null = null;
 let proximoId = 1;
 
 export const Toast = {
+  mapaNaTela(v: boolean) {
+    if (mapaComPilula === v) return;
+    mapaComPilula = v;
+    notificar?.();
+  },
   mostrar(texto: string, tipo: TipoToast = 'ok', acao?: Pedido['acao']) {
     atual = { id: proximoId++, texto, tipo, acao, duracaoMs: acao ? 5000 : 3500 };
     notificar?.();
@@ -77,7 +86,7 @@ export function ToastHost() {
 
   const naFila = fila.filter((i) => i.estado === 'na_fila');
   const falhas = fila.filter((i) => i.estado === 'falhou');
-  const temFaixa = naFila.length > 0 || falhas.length > 0;
+  const temFaixa = !mapaComPilula && (naFila.length > 0 || falhas.length > 0);
   const maisAntigo = fila[0]?.criadoEm;
 
   const tentar = async () => {

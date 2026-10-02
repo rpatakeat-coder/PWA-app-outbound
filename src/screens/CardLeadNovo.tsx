@@ -276,7 +276,10 @@ function GradeEspiada({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       <View style={s.grade}>
         {podeAssumir
           ? <Botao rotulo="É meu" onPress={() => assumir(d, a)} estilo={[s.botao48, s.eMeuBotao]} texto={s.eMeuTexto} acessivel="É meu: colocar no meu funil" />
-          : !temTel && <Botao rotulo="+ Telefone" onPress={a.onEdit} estilo={s.botao48} tracejado acessivel="Adicionar telefone" />}
+          : !temTel && (d.etapaCodigo === ETAPA.pagamento
+            /* A6 (handoff v6): em Ag. Pagamento a cobrança já saiu — nenhum dado muda até o Pago */
+            ? <Botao rotulo="+ Telefone" desabilitado estilo={s.botao48} tracejado acessivel="Dados travados: cobrança emitida, nada muda até o Pago" />
+            : <Botao rotulo="+ Telefone" onPress={a.onEdit} estilo={s.botao48} tracejado acessivel="Adicionar telefone" />)}
         <Botao rotulo="Ir" onPress={() => ir(c)} desabilitado={c.latitude == null} estilo={s.botao48} />
         <Botao rotulo="Agendar" onPress={a.onScheduleMeeting} estilo={s.botao48} />
         {a.onExpandir && <Botao rotulo="…" onPress={a.onExpandir} estilo={[s.botao48, s.botaoMais]} acessivel="Mais: abrir o cartão" />}
@@ -300,7 +303,9 @@ function GradeMais({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
         texto={d.naRota ? s.naRotaTexto : undefined}
         acessivel={d.naRota ? (a.onTirarDaRota ? 'Na rota de hoje: tocar para tirar' : 'Já está na rota de hoje') : 'Adicionar à rota de hoje'}
       />
-      <Botao rotulo="Mover o pino" onPress={a.onMoverPino} estilo={s.botaoMeia} />
+      {d.etapaCodigo === ETAPA.pagamento
+        ? <Botao rotulo="Mover o pino" desabilitado estilo={s.botaoMeia} acessivel="Dados travados: cobrança emitida, o pino não muda até o Pago" />
+        : <Botao rotulo="Mover o pino" onPress={a.onMoverPino} estilo={s.botaoMeia} />}
       <Botao rotulo="Não vale" onPress={() => naoVale(d, a)} desabilitado={!(d.pino.tipo === 'alvo' ? a.onDismissContaAlvo : a.onChangeStage)} estilo={s.botaoMeia} texto={s.naoValeTexto} />
     </View>
   );

@@ -2116,7 +2116,7 @@ module.exports = async function lerEtapaNegocio(req, res) {
 
   try {
     const guard = await buscarDealAutorizado({
-      token, dealId, usuario, propriedades: ['dealstage', 'dealname']
+      token, dealId, usuario, propriedades: ['dealstage', 'dealname', 'asaas_id']
     });
     if (guard.erro) return res.status(guard.erro.status).json({ erro: guard.erro.mensagem });
     const props = (guard.deal && guard.deal.properties) || {};
@@ -2124,7 +2124,10 @@ module.exports = async function lerEtapaNegocio(req, res) {
       ok: true,
       id: String(dealId),
       etapa: String(props.dealstage || ''),
-      nome: props.dealname || null
+      nome: props.dealname || null,
+      /* A7 do handoff v6 (02/10/26): o app só mostra "Link gerado no Asaas ✓" quando este
+         id aparece depois do envio. Só leitura — nada no Asaas muda. */
+      asaasId: props.asaas_id || null
     });
   } catch (e) {
     return res.status(500).json({ erro: 'Falha ao ler a etapa no HubSpot: ' + String(e.message || e) });
