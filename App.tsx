@@ -5597,7 +5597,7 @@ function MainApp() {
         // `top` contado do Y REAL do mapa, igual aos botoes: este overlay e'
         // absoluto contra a RAIZ DA TELA, e o `top: 8` cru punha a pill em
         // cima da busca do header (valia ja' pra de carregamento).
-        style={[styles.areaStatusWrap, { top: modoNovo && !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + (faixaDaRuaPode && tab === 'map' && !creationMode ? ALTURA_FAIXA_RUA + 8 : 0) : (mapLayout?.y ?? 0) + 8 }]}
+        style={[styles.areaStatusWrap, { top: modoNovo && !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + (faixaDaRuaPode && tab === 'map' && !creationMode ? ALTURA_FAIXA_RUA + 8 : 0) : (mapLayout?.y ?? 0) + 8 + (modoNovo && faixaDaRuaPode && tab === 'map' && !creationMode ? ALTURA_FAIXA_RUA + 12 : 0) }]}
         pointerEvents="none"
       >
         {modoNovo && !layout.ehLargo && <AvisoSemSinal />}
@@ -5771,9 +5771,11 @@ function MainApp() {
           aoAvatar={() => setPerfilAberto(true)}
         />
       )}
-      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && faixaDaRuaPode && (
+      {/* no PC também (02/10/26, "no desktop não abre"): no topo da área do mapa */}
+      {modoNovo && tab === 'map' && !creationMode && faixaDaRuaPode && (
         <FaixaDaRua
-          top={insets.top + 7 + ALTURA_TOPO_CAMPO + 8}
+          largo={layout.ehLargo}
+          top={layout.ehLargo ? 12 : insets.top + 7 + ALTURA_TOPO_CAMPO + 8}
           feitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
           meta={metaDeHoje}
           temRota={routeDisplayClients.length > 0}
