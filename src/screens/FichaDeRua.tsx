@@ -18,14 +18,15 @@ import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Tex
 import type { Client } from '../types/client';
 import { enfileirar, ehErroDeRede, novoAcaoId } from '../utils/filaOffline';
 import {
-  COMO_FOI, FICHA_VAZIA, GARGALOS, HORARIOS, MOTIVOS_PERDIDO, PAPEIS, ROTULO_ETAPA, ROTULO_PROP, SISTEMAS, TIPOS,
-  etapaSugerida, faltandoParaEtapa, notaDaVisita, opcoesAgora, pareceNomeDePessoa, proximoPassoDaFicha, rotuloSalvar,
+  COMO_FOI, DIAS_VOLTA, FICHA_VAZIA, GARGALOS, HORARIOS, MOTIVOS_PERDIDO, PAPEIS, ROTULO_ETAPA, ROTULO_PROP, SISTEMAS, TIPOS,
+  ehVolta, etapaSugerida, faltandoParaEtapa, notaDaVisita, opcoesAgora, pareceNomeDePessoa, proximoDiaUtil, proximoPassoDaFicha, rotuloSalvar,
   type Ficha,
 } from '../utils/fichaDeRua';
 import { ehRecusa, negocioAcao } from '../utils/negocioAcao';
 import { supabase } from '../integrations/supabase/client';
 import { comprimir, enviarFoto, escolherFoto } from '../utils/fotoVisita';
 import { gravarFichaNoBanco, linhaDaFicha, type LinhaFicha } from '../utils/fichaNoBanco';
+import { CampoData } from '../components/CampoData';
 
 export type CamposCadastro = { empresa?: string; telefone?: string; categoria?: string };
 
@@ -66,6 +67,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   const [opcao, setOpcao] = useState<string | null>(null);
   const [completar, setCompletar] = useState(false);
   const [outroSistema, setOutroSistema] = useState(false);
+  const [outraDataVolta, setOutraDataVolta] = useState(false);
   // Foto da fachada/cardápio: comprimida na hora, sobe junto com a visita.
   const [foto, setFoto] = useState<{ blob: Blob; url: string } | null>(null);
   const [preparandoFoto, setPreparandoFoto] = useState(false);
@@ -76,7 +78,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
 
   useEffect(() => {
     if (!visivel) return;
-    setF(FICHA_VAZIA); setOpcao(null); setCompletar(false); setOutroSistema(false);
+    setF(FICHA_VAZIA); setOpcao(null); setCompletar(false); setOutroSistema(false); setOutraDataVolta(false);
     setFoto(fotoProva ? { blob: fotoProva, url: URL.createObjectURL(fotoProva) } : null);
     setFase('form'); setResultados([]); setPassoSalvo(null);
   }, [visivel, client.id]);
@@ -106,6 +108,8 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   ].filter(Boolean).length;
   const legenda = !f.comoFoi || !f.proximo
     ? 'Escolha como foi e o que vem agora'
+    : ehVolta(f.proximo) && !f.dataVolta
+      ? 'Escolha o dia da volta'
     : f.proximo === 'sem_interesse'
       ? (f.motivoPerdido ? 'O negócio vai para Perdido, com o motivo' : 'Escolha o motivo')
       : passoPrevisto
@@ -114,8 +118,9 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
         : 'Salva a visita no HubSpot e no Cockpit';
 
   function escolherComoFoi(id: Ficha['comoFoi']) {
-    set({ comoFoi: id, proximo: null, diasReuniao: null, motivoPerdido: null });
+    set({ comoFoi: id, proximo: null, diasReuniao: null, motivoPerdido: null, dataVolta: null });
     setOpcao(null);
+    setOutraDataVolta(false);
     // Maior ralo do funil: visita que não chega em quem decide. Sai com nome e horário.
     if (id === 'decisor_ausente') setCompletar(true);
   }
@@ -311,9 +316,36 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                     <View style={s.grade}>
                       {opcoesAgora(f.comoFoi).map((o) => opcaoGrade(o.id, o.rotulo, opcao === o.id, () => {
                         setOpcao(o.id);
-                        set({ proximo: o.proximo, diasReuniao: o.dias ?? null, motivoPerdido: o.proximo === 'sem_interesse' ? f.motivoPerdido : null });
+                        set({
+                          proximo: o.proximo, diasReuniao: o.dias ?? null, motivoPerdido: o.proximo === 'sem_interesse' ? f.motivoPerdido : null,
+                          /* "Voltar amanhã" já diz o dia; as outras voltas esperam o executivo escolher */
+                          dataVolta: o.proximo === 'voltar_amanha' ? proximoDiaUtil(hojeBRT(), 1) : (ehVolta(o.proximo) ? f.dataVolta : null),
+                        });
+                        if (o.proximo === 'voltar_amanha') setOutraDataVolta(false);
                       }))}
                     </View>
+                  </>
+                )}
+                {ehVolta(f.proximo) && (
+                  <>
+                    <Text style={s.secao}>QUANDO VOLTAR?</Text>
+                    <View style={s.chips}>
+                      {DIAS_VOLTA.map((d) => {
+                        const dia = proximoDiaUtil(hojeBRT(), d.dias);
+                        return chip('volta' + d.dias, d.rotulo, !outraDataVolta && f.dataVolta === dia, () => { setOutraDataVolta(false); set({ dataVolta: dia }); });
+                      })}
+                      {chip('volta-outro', 'Outro dia', outraDataVolta, () => { setOutraDataVolta(true); set({ dataVolta: null }); })}
+                    </View>
+                    {outraDataVolta && (
+                      <CampoData valor={f.dataVolta ?? ''} minimo={hojeBRT()} rotulo="Dia da volta"
+                        aoMudar={(v) => set({ dataVolta: /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null })} />
+                    )}
+                    {!!f.dataVolta && (
+                      <Text style={s.ajuda}>
+                        {`Volta em ${diaMes(f.dataVolta)} (${['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][new Date(`${f.dataVolta}T12:00:00Z`).getUTCDay()]})`
+                          + ([0, 6].includes(new Date(`${f.dataVolta}T12:00:00Z`).getUTCDay()) ? ' · cai no fim de semana' : '')}
+                      </Text>
+                    )}
                   </>
                 )}
                 {f.proximo === 'sem_interesse' && (

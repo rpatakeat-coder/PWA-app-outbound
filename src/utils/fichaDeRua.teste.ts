@@ -8,7 +8,7 @@
 import {
   opcoesAgora, HORARIOS,
   ETAPA, FICHA_VAZIA, etapaSugerida, faltandoParaEtapa, montarPropriedades, movimentoPermitido, notaDaVisita,
-  pareceNomeDePessoa, proximoPassoDaFicha, rotuloSalvar, type Ficha,
+  pareceNomeDePessoa, proximoPassoDaFicha, rotuloSalvar, proximoDiaUtil, type Ficha,
 } from './fichaDeRua';
 
 let falhas = 0;
@@ -47,14 +47,14 @@ ok(faltandoParaEtapa(ETAPA.prospeccao, {}).join() === 'origem_do_lead', 'Prospec
 ok(!rotuloSalvar(F({})).pode && rotuloSalvar(F({})).texto === 'Falta como foi e o próximo passo', 'vazio: diz os dois obrigatórios');
 ok(rotuloSalvar(F({ comoFoi: 'decisor_ausente', proximo: 'reuniao' })).texto === 'Falta o dia da reunião', 'reunião pede o dia');
 ok(rotuloSalvar(F({ comoFoi: 'sem_interesse', proximo: 'sem_interesse' })).texto === 'Falta o motivo', 'sem interesse pede o motivo');
-ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'voltar7' }), ['nome_do_sistema']).texto === 'Falta sistema que usa hoje', 'mover etapa pede o campo que ela exige');
-ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'voltar7', moverEtapa: false }), ['nome_do_sistema']).pode, 'sem mover a etapa, o campo dela não trava');
+ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'voltar7', dataVolta: '2026-09-29' }), ['nome_do_sistema']).texto === 'Falta sistema que usa hoje', 'mover etapa pede o campo que ela exige');
+ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'voltar7', dataVolta: '2026-09-29', moverEtapa: false }), ['nome_do_sistema']).pode, 'sem mover a etapa, o campo dela não trava');
 
 // próximo passo e nota
 const hoje = '2026-09-25'; // sexta
 ok(proximoPassoDaFicha(F({ proximo: 'ligar_amanha' }), hoje)?.data === '2026-09-28', 'Ligar amanhã numa sexta cai na segunda');
 ok(proximoPassoDaFicha(F({ proximo: 'sem_interesse' }), hoje) === null, 'Sem interesse não cria tarefa (vira Perdido)');
-const nota = notaDaVisita(F({ comoFoi: 'decisor_ausente', proximo: 'voltar7', dor: 'Fila', sistema: 'Consumer' }), { cliente: 'Bar do Zé', ocorridoEm: '2026-09-25T15:00:00Z', hoje });
+const nota = notaDaVisita(F({ comoFoi: 'decisor_ausente', proximo: 'voltar7', dataVolta: '2026-10-02', dor: 'Fila', sistema: 'Consumer' }), { cliente: 'Bar do Zé', ocorridoEm: '2026-09-25T15:00:00Z', hoje });
 ok(nota.startsWith('DESFECHO_VISITA v1\n'), 'nota começa com a linha do contrato');
 ok(/\ndecisor_alcancado: \n/.test(nota), 'decisor ausente: decisor_alcancado VAZIO, nunca "nao"');
 ok(/\nproximo_passo: visita \| 2026-10-02 \| Voltar para nova visita\n/.test(nota), 'proximo_passo no formato canal | data | ação');
@@ -83,8 +83,8 @@ ok(!opcoesAgora('estabelecimento_fechado').some((o) => o.proximo === 'sem_intere
 ok(opcoesAgora('falou_com_decisor').filter((o) => o.proximo === 'reuniao').map((o) => o.dias).join() === '1,3,5', 'falou com quem decide: reunião em 1, 3 e 5 dias úteis');
 ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
 {
-  const p = proximoPassoDaFicha({ ...FICHA_VAZIA, comoFoi: 'decisor_ausente', proximo: 'voltar_horario', horario: '14h30_17h30' }, '2026-09-25');
-  ok(!!p && p.tipo === 'visita' && p.texto.includes('14h30–17h30') && p.data === '2026-09-28', 'voltar no horário do dono: visita no próximo dia útil com o horário');
+  const p = proximoPassoDaFicha({ ...FICHA_VAZIA, comoFoi: 'decisor_ausente', proximo: 'voltar_horario', horario: '14h30_17h30', dataVolta: '2026-09-29' }, '2026-09-25');
+  ok(!!p && p.tipo === 'visita' && p.texto.includes('14h30–17h30') && p.data === '2026-09-29', 'voltar no horário do dono: visita no dia que o executivo escolheu, com o horário');
   ok(HORARIOS.length === 4, 'quatro faixas de horário');
 }
 
@@ -97,6 +97,18 @@ ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
   const trecho = i >= 0 ? edge.slice(i, edge.indexOf('])', i)) : '';
   const aceitos = (trecho.match(/'([^']*)'/g) ?? []).map((x: string) => x.slice(1, -1));
   ok(aceitos.length === 4 && HORARIOS.every((h) => aceitos.includes(h.hs)), 'os 4 horários do app são os valores aceitos pela hubspot-sync');
+}
+
+// ---- 03/10/26: a volta à porta tem o dia escolhido pelo executivo, não 7 dias fixos ----
+{
+  ok(!opcoesAgora('decisor_ausente').some((o) => /7 dias/.test(o.rotulo)), 'nenhuma opção promete "7 dias" fixo');
+  for (const proximo of ['voltar7', 'voltar_horario', 'voltar_amanha'] as const) {
+    ok(proximoPassoDaFicha(F({ comoFoi: 'decisor_ausente', proximo }), hoje) === null, proximo + ' sem dia escolhido não vira tarefa');
+    ok(rotuloSalvar(F({ comoFoi: 'decisor_ausente', proximo, moverEtapa: false })).texto === 'Falta o dia da volta', proximo + ' sem dia: o Salvar pede o dia da volta');
+    ok(proximoPassoDaFicha(F({ comoFoi: 'decisor_ausente', proximo, dataVolta: '2026-09-30' }), hoje)?.data === '2026-09-30', proximo + ': a tarefa cai no dia escolhido');
+  }
+  ok(rotuloSalvar(F({ comoFoi: 'decisor_ausente', proximo: 'voltar7', dataVolta: '2026-09-29', moverEtapa: false })).pode, 'com o dia escolhido, salva');
+  ok(proximoDiaUtil('2026-09-25', 2) === '2026-09-29', '"Em 2 dias" numa sexta cai na terça (pula o fim de semana)');
 }
 
 if (falhas) {

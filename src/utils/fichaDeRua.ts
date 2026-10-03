@@ -26,10 +26,22 @@ export const COMO_FOI: { id: Desfecho; rotulo: string }[] = [
 export type Proximo = 'reuniao' | 'voltar7' | 'ligar_amanha' | 'sem_interesse' | 'voltar_horario' | 'voltar_amanha';
 export const PROXIMOS: { id: Proximo; rotulo: string }[] = [
   { id: 'reuniao', rotulo: 'Reunião' },
-  { id: 'voltar7', rotulo: 'Voltar em 7 dias' },
+  { id: 'voltar7', rotulo: 'Voltar outro dia' },
   { id: 'ligar_amanha', rotulo: 'Ligar amanhã' },
   { id: 'sem_interesse', rotulo: 'Sem interesse' },
 ];
+/* Toda volta à porta pede o DIA, escolhido por quem esteve lá: o dono que "volta à tarde"
+   e o que "só segunda" não cabem num prazo fixo. Dias úteis, como a reunião. */
+export const PROXIMOS_DE_VOLTA: Proximo[] = ['voltar7', 'voltar_horario', 'voltar_amanha'];
+export const ehVolta = (p: Proximo | null | undefined): boolean => !!p && PROXIMOS_DE_VOLTA.includes(p);
+export const DIAS_VOLTA = [
+  { dias: 1, rotulo: 'Amanhã' },
+  { dias: 2, rotulo: 'Em 2 dias' },
+  { dias: 3, rotulo: 'Em 3 dias' },
+  { dias: 5, rotulo: 'Em 1 semana' },
+] as const;
+export { proximoDiaUtil };
+
 export const DIAS_REUNIAO = [
   { dias: 1, rotulo: 'Amanhã' },
   { dias: 3, rotulo: 'Em 3 dias' },
@@ -44,7 +56,10 @@ const REUNIOES: OpcaoAgora[] = [
   { id: 'reuniao3', rotulo: 'Reunião em 3 dias', proximo: 'reuniao', dias: 3 },
   { id: 'reuniao5', rotulo: 'Reunião em 1 semana', proximo: 'reuniao', dias: 5 },
 ];
-const VOLTAR7: OpcaoAgora = { id: 'voltar7', rotulo: 'Voltar em 7 dias', proximo: 'voltar7' };
+/* "Voltar em 7 dias" virou "Voltar outro dia" (03/10/26, Julyan: "o executivo tem que
+   escolher a data de retorno, 7 dias talvez seja demais"). O id 'voltar7' fica: é o que já
+   está gravado em visitas_fichas e o que o Cockpit lê. */
+const VOLTAR7: OpcaoAgora = { id: 'voltar7', rotulo: 'Voltar outro dia', proximo: 'voltar7' };
 const LIGAR: OpcaoAgora = { id: 'ligar_amanha', rotulo: 'Ligar amanhã', proximo: 'ligar_amanha' };
 const SEM: OpcaoAgora = { id: 'sem_interesse', rotulo: 'Sem interesse', proximo: 'sem_interesse' };
 export function opcoesAgora(comoFoi: Desfecho | null): OpcaoAgora[] {
@@ -200,11 +215,13 @@ export type Ficha = {
   tipo: (typeof TIPOS)[number] | null;
   moverEtapa: boolean;
   horario: HorarioDecisor | null;
+  /** Dia da volta (AAAA-MM-DD), escolhido pelo executivo; só vale quando ehVolta(proximo). */
+  dataVolta: string | null;
 };
 
 export const FICHA_VAZIA: Ficha = {
   comoFoi: null, proximo: null, diasReuniao: null, motivoPerdido: null, nomeDoLugar: '', decisor: '', papel: null,
-  sistema: '', dor: null, telefone: '', tipo: null, moverEtapa: true, horario: null,
+  sistema: '', dor: null, telefone: '', tipo: null, moverEtapa: true, horario: null, dataVolta: null,
 };
 
 /** Botão Salvar: diz o que falta, ou "Salvar". */
@@ -213,6 +230,7 @@ export function rotuloSalvar(f: Ficha, faltaEtapa: string[] = []): { pode: boole
   if (!f.comoFoi) falta.push('como foi');
   if (!f.proximo) falta.push('o próximo passo');
   else if (f.proximo === 'reuniao' && !f.diasReuniao) falta.push('o dia da reunião');
+  else if (ehVolta(f.proximo) && !f.dataVolta) falta.push('o dia da volta');
   else if (f.proximo === 'sem_interesse' && !f.motivoPerdido) falta.push('o motivo');
   if (f.moverEtapa) for (const k of faltaEtapa) if (!falta.includes(ROTULO_PROP[k] ?? k)) falta.push(ROTULO_PROP[k] ?? k);
   if (!falta.length) return { pode: true, texto: 'Salvar' };
@@ -222,12 +240,14 @@ export function rotuloSalvar(f: Ficha, faltaEtapa: string[] = []): { pode: boole
 /** Tarefa do próximo passo (op 'nota' + 'proximo-passo'); null = sem tarefa. */
 export function proximoPassoDaFicha(f: Ficha, hoje: string): { data: string; tipo: 'reuniao' | 'visita' | 'follow-up'; texto: string; canal: 'visita' | 'ligacao' } | null {
   if (f.proximo === 'reuniao' && f.diasReuniao) return { data: proximoDiaUtil(hoje, f.diasReuniao), tipo: 'reuniao', texto: 'Reunião combinada na visita', canal: 'visita' };
-  if (f.proximo === 'voltar7') return { data: proximoDiaUtil(hoje, 5), tipo: 'visita', texto: 'Voltar para nova visita', canal: 'visita' };
+  /* volta sem o dia escolhido não vira tarefa: o Salvar já pede "o dia da volta" */
+  if (ehVolta(f.proximo) && !f.dataVolta) return null;
+  if (f.proximo === 'voltar7') return { data: f.dataVolta as string, tipo: 'visita', texto: 'Voltar para nova visita', canal: 'visita' };
   if (f.proximo === 'ligar_amanha') return { data: proximoDiaUtil(hoje, 1), tipo: 'follow-up', texto: 'Ligar', canal: 'ligacao' };
-  if (f.proximo === 'voltar_amanha') return { data: proximoDiaUtil(hoje, 1), tipo: 'visita', texto: 'Voltar: estava fechado', canal: 'visita' };
+  if (f.proximo === 'voltar_amanha') return { data: f.dataVolta as string, tipo: 'visita', texto: 'Voltar: estava fechado', canal: 'visita' };
   if (f.proximo === 'voltar_horario') {
     const h = HORARIOS.find((x) => x.valor === f.horario);
-    return { data: proximoDiaUtil(hoje, 1), tipo: 'visita', texto: h ? `Voltar no horário do dono (${h.curto})` : 'Voltar no horário do dono', canal: 'visita' };
+    return { data: f.dataVolta as string, tipo: 'visita', texto: h ? `Voltar no horário do dono (${h.curto})` : 'Voltar no horário do dono', canal: 'visita' };
   }
   return null;
 }
