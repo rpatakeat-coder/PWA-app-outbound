@@ -349,7 +349,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                         aoMudar={(v) => set({ dataVolta: /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null })} />
                     )}
                     {!!f.dataVolta && (
-                      <Text style={s.ajuda}>
+                      <Text style={[s.ajuda, { textAlign: 'center' }]}>
                         {`Volta em ${diaMes(f.dataVolta)} (${['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][new Date(`${f.dataVolta}T12:00:00Z`).getUTCDay()]})`
                           + ([0, 6].includes(new Date(`${f.dataVolta}T12:00:00Z`).getUTCDay()) ? ' · cai no fim de semana' : '')}
                       </Text>
