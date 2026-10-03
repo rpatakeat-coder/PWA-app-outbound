@@ -4170,9 +4170,26 @@ function MainApp() {
       const chave = textoNormalizado(client.etapa);
       const pelaTabela = chave ? contextoPino.etapaDePara.get(chave) ?? null : null;
       const peloSnapshot = client.id_hubspot ? contextoPino.tempoPorNegocio.get(String(client.id_hubspot))?.etapaCodigo ?? null : null;
+      /* A reabertura também diz como a visita foi (auditoria 03/10/26): sem isto a ficha
+         gravava "com GPS, sem foto" para a visita declarada com foto da manhã. */
+      let declaradaDaVisita = false;
+      let fotoNoCheckin = false;
+      try {
+        const { data: ult } = await supabase.from('client_visits').select('declarada, visited_at')
+          .eq('client_id', client.id).order('visited_at', { ascending: false }).limit(1);
+        const v = ult?.[0];
+        if (v) {
+          declaradaDaVisita = v.declarada === true;
+          const desde = new Date(new Date(v.visited_at as string).getTime() - 60000).toISOString();
+          const { data: fotos } = await supabase.from('fotos_visita').select('id').eq('client_id', client.id).gte('criado_em', desde).limit(1);
+          fotoNoCheckin = !!fotos?.length;
+        }
+      } catch { /* sem a leitura, a ficha abre como antes */ }
       setFichaPendente({
         client, checkinEm: client.visited_at ?? new Date().toISOString(), etapaAtual: pelaTabela ?? peloSnapshot,
         primeiraVisita: (client.visit_count ?? 0) <= 1,
+        declarada: declaradaDaVisita,
+        fotoNoCheckin,
       });
       onDone?.();
       return;
