@@ -27,7 +27,6 @@ import { supabase } from '../integrations/supabase/client';
 import { comprimir, enviarFoto, escolherFoto } from '../utils/fotoVisita';
 import { gravarFichaNoBanco, linhaDaFicha, type LinhaFicha } from '../utils/fichaNoBanco';
 import { CampoData } from '../components/CampoData';
-import { useLayout } from '../hooks/useLayout';
 
 export type CamposCadastro = { empresa?: string; telefone?: string; categoria?: string };
 
@@ -72,7 +71,6 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   const [outroSistema, setOutroSistema] = useState(false);
   const [outraDataVolta, setOutraDataVolta] = useState(false);
   const [confirmarSaida, setConfirmarSaida] = useState(false);
-  const layout = useLayout();
   // Foto da fachada/cardápio: comprimida na hora, sobe junto com a visita.
   const [foto, setFoto] = useState<{ blob: Blob; url: string } | null>(null);
   const [preparandoFoto, setPreparandoFoto] = useState(false);
@@ -298,7 +296,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   return (
     <Modal visible={visivel} transparent animationType="slide" onRequestClose={fechar}>
       <View style={s.fundo}>
-        <View style={[s.folha, fase !== 'form' && s.folhaSalvo, layout.ehLargo && s.folhaLarga]}>
+        <View style={[s.folha, fase !== 'form' && s.folhaSalvo]}>
           <View style={s.alca}><View style={s.alcaBarra} /></View>
 
           {fase === 'form' ? (
@@ -539,9 +537,6 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 24, shadowOffset: { width: 0, height: -8 },
   },
   folhaSalvo: { height: 'auto' as unknown as number },
-  /* tela larga (03/10/26, Julyan: "podia ficar mais centralizado"): a folha não estica de
-     ponta a ponta — fica numa coluna no meio, sobre o mapa. O celular não muda. */
-  folhaLarga: { width: '100%', maxWidth: 560, alignSelf: 'center', borderLeftWidth: 1, borderRightWidth: 1 },
   alca: { height: 18, alignItems: 'center', justifyContent: 'center' },
   alcaBarra: { width: 40, height: 5, borderRadius: 3, backgroundColor: 'var(--stroke-strong)' },
   topo: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 16, paddingBottom: 6 },
