@@ -4152,6 +4152,8 @@ function MainApp() {
     client: Client; checkinEm: string; etapaAtual: string | null; primeiraVisita: boolean; declarada?: boolean;
     /** Foto de prova que não subiu na hora: a ficha tenta de novo ao salvar. */
     fotoProva?: Blob | null;
+    /** A foto de prova JÁ subiu (no check-in, ou no da mesma visita mais cedo). */
+    fotoNoCheckin?: boolean;
   } | null>(null);
   const [desfechoPendente, setDesfechoPendente] = useState<{
     idHubspot: string;
@@ -4464,7 +4466,7 @@ function MainApp() {
       let fotoProvaPendente: Blob | null = null;
       if (fotoProva) {
         try {
-          await enviarFotoVisita({ blob: fotoProva, ownerId: myHubspotId, dealId: client.id_hubspot ?? null, clientId: client.id, lat: userLat, lng: userLon });
+          await enviarFotoVisita({ blob: fotoProva, ownerId: myHubspotId, dealId: visitado.id_hubspot ?? client.id_hubspot ?? null, clientId: client.id, lat: userLat, lng: userLon });
         } catch {
           fotoProvaPendente = fotoProva;
         }
@@ -4502,13 +4504,34 @@ function MainApp() {
         const chave = textoNormalizado(visitado.etapa);
         const pelaTabela = chave ? contextoPino.etapaDePara.get(chave) ?? null : null;
         const peloSnapshot = visitado.id_hubspot ? contextoPino.tempoPorNegocio.get(String(visitado.id_hubspot))?.etapaCodigo ?? null : null;
+        /* A FICHA DIZ COMO FOI A VISITA, NÃO A ÚLTIMA TENTATIVA (auditoria 03/10/26). O
+           "Cheguei" repetido no mesmo dia não grava visita nova (0113): o servidor devolve a
+           da manhã. A ficha herdava a marca da tentativa nova — visita declarada com foto
+           virava "GPS confere, sem foto" no histórico do Cockpit. Aqui ela lê a visita que
+           ficou. Falhou a leitura, fica a tentativa, como antes. */
+        let declaradaDaVisita = declarada;
+        let fotoNoCheckin = !!fotoProva && !fotoProvaPendente;
+        try {
+          const { data: ult } = await supabase.from('client_visits').select('acao_id, declarada, visited_at')
+            .eq('client_id', client.id).order('visited_at', { ascending: false }).limit(1);
+          const v = ult?.[0];
+          if (v && v.acao_id !== acaoId) {
+            declaradaDaVisita = v.declarada === true;
+            if (!fotoNoCheckin) {
+              const desde = new Date(new Date(v.visited_at as string).getTime() - 60000).toISOString();
+              const { data: fotos } = await supabase.from('fotos_visita').select('id').eq('client_id', client.id).gte('criado_em', desde).limit(1);
+              fotoNoCheckin = !!fotos?.length;
+            }
+          }
+        } catch { /* fica a marca da tentativa */ }
         setFichaPendente({
           client: visitado,
           checkinEm: visitado.visited_at ?? new Date().toISOString(),
           etapaAtual: pelaTabela ?? peloSnapshot,
           primeiraVisita: (client.visit_count ?? 0) === 0,
-          declarada,
+          declarada: declaradaDaVisita,
           fotoProva: fotoProvaPendente,
+          fotoNoCheckin,
         });
       } else if (visitado.status === 'lead' && visitado.id_hubspot) {
         setDesfechoPendente({
@@ -8802,6 +8825,7 @@ function MainApp() {
           onProxima={(c) => handleMarkerPress(c)}
           declarada={fichaPendente.declarada}
           fotoProva={fichaPendente.fotoProva ?? null}
+          fotoNoCheckin={fichaPendente.fotoNoCheckin === true}
           // Depois da visita: a Agenda no dia do passo combinado.
           onAgenda={(dia) => { void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] }); void queryClient.invalidateQueries({ queryKey: ['client_meetings'] }); setSelectedClient(null); setAgendaDiaInicial(dia); setTab('agenda'); }}
           onSalvarCadastro={async (campos: CamposCadastro) => {

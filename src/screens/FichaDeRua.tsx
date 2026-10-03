@@ -49,6 +49,8 @@ type Props = {
   declarada?: boolean;
   /** Foto de prova (GPS falhou) que não subiu no check-in: entra já escolhida. */
   fotoProva?: Blob | null;
+  /** A foto de prova já subiu no check-in: a ficha grava com_foto mesmo sem foto nova. */
+  fotoNoCheckin?: boolean;
   /** id_hubspot de quem registra (pasta da foto e dono no Cockpit). */
   ownerId?: string | null;
   /** Negócio de COLEGA: o próximo passo vira tarefa do dono, na Agenda dele (28/09/2026). */
@@ -62,12 +64,13 @@ const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 
 const diaMes = (iso: string) => iso.split('-').reverse().slice(0, 2).join('/');
 const JANELA_DESFAZER_MS = 5000;
 
-export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, declarada = false, ownerId = null, fotoProva = null, donoColega = null }: Props) {
+export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, declarada = false, ownerId = null, fotoProva = null, fotoNoCheckin = false, donoColega = null }: Props) {
   const [f, setF] = useState<Ficha>(FICHA_VAZIA);
   const [opcao, setOpcao] = useState<string | null>(null);
   const [completar, setCompletar] = useState(false);
   const [outroSistema, setOutroSistema] = useState(false);
   const [outraDataVolta, setOutraDataVolta] = useState(false);
+  const [confirmarSaida, setConfirmarSaida] = useState(false);
   // Foto da fachada/cardápio: comprimida na hora, sobe junto com a visita.
   const [foto, setFoto] = useState<{ blob: Blob; url: string } | null>(null);
   const [preparandoFoto, setPreparandoFoto] = useState(false);
@@ -78,7 +81,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
 
   useEffect(() => {
     if (!visivel) return;
-    setF(FICHA_VAZIA); setOpcao(null); setCompletar(false); setOutroSistema(false); setOutraDataVolta(false);
+    setF(FICHA_VAZIA); setOpcao(null); setCompletar(false); setOutroSistema(false); setOutraDataVolta(false); setConfirmarSaida(false);
     setFoto(fotoProva ? { blob: fotoProva, url: URL.createObjectURL(fotoProva) } : null);
     setFase('form'); setResultados([]); setPassoSalvo(null);
   }, [visivel, client.id]);
@@ -251,7 +254,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     const linha = linhaDaFicha(f, {
       ownerId, clientId: client.id ?? null, dealId, ocorridoEm: checkinEm, declarada,
       etapaAntes: etapaAtual ?? null, etapaDepois: dealId && sugerida && f.moverEtapa ? sugerida : null,
-      comFoto: !!foto, bairro: client.bairro, cidade: client.cidade, hoje,
+      comFoto: !!foto || fotoNoCheckin, bairro: client.bairro, cidade: client.cidade, hoje,
     });
     pendente.current = { campos, envios, foto: foto?.blob ?? null, linha, timer: setTimeout(() => { void executar(); }, JANELA_DESFAZER_MS) };
     setFase('desfazer');
@@ -266,6 +269,11 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   }
 
   function fechar() {
+    /* Fechar com o desfecho marcado e não salvo descartava tudo em silêncio — o "voltar"
+       do aparelho bastava — e o check-in ficava sem desfecho (auditoria de 03/10/26). O
+       primeiro toque avisa; o segundo fecha. Avisar, não travar. */
+    if (fase === 'form' && (f.comoFoi || f.proximo) && !confirmarSaida) { setConfirmarSaida(true); return; }
+    setConfirmarSaida(false);
     // Fechar dentro da janela do Desfazer não cancela: manda na hora.
     if (pendente.current) void executar();
     onFechar();
@@ -451,6 +459,19 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                 {!dealId && <Text style={s.aviso}>Este lead ainda não tem negócio no HubSpot: a visita salva o cadastro, e a nota e a etapa ficam para quando o negócio existir.</Text>}
               </ScrollView>
               <View style={s.rodape}>
+                {confirmarSaida && (
+                  <View style={{ gap: 8 }}>
+                    <Text style={[s.ajuda, { color: 'var(--text)', textAlign: 'center' }]}>Sair sem salvar? O check-in fica, mas sem o desfecho nem o próximo passo.</Text>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <Pressable accessibilityRole="button" style={s.secundario} onPress={() => setConfirmarSaida(false)}>
+                        <Text style={s.secundarioTexto}>Continuar registrando</Text>
+                      </Pressable>
+                      <Pressable accessibilityRole="button" style={s.secundario} onPress={fechar}>
+                        <Text style={s.secundarioTexto}>Sair sem salvar</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
                 <Pressable accessibilityRole="button" style={[s.salvar, !salvar.pode && s.salvarDesligado]} onPress={aoSalvar} disabled={!salvar.pode}>
                   <Text style={[s.salvarTexto, !salvar.pode && s.salvarTextoDesligado]}>{salvar.pode ? 'Salvar visita' : salvar.texto}</Text>
                 </Pressable>
