@@ -9,7 +9,7 @@ import React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Painel } from './Painel';
-import { IconClose, IconTrophy, useIconColors } from './icons';
+import { IconChevronRight, IconClose, IconTrophy, useIconColors } from './icons';
 import { reais, textoDoPiso, type Placar } from '../hooks/useUmApp';
 
 const VERDE = 'var(--verde-acao)';
@@ -81,10 +81,15 @@ export function PlacarFechado({ dados, carregando, aoAbrir, aoAbrirRanking, larg
         {m && m.variavel != null ? (
           <Text style={s.linha2Valor} numberOfLines={1}>{`${reais(m.variavel)}${m.proxima_venda ? ` · próxima +${Math.round(m.proxima_venda)}` : ''}`}</Text>
         ) : null}
-        <Text style={s.chevron} accessibilityElementsHidden>›</Text>
+        <ChevronDoPlacar />
       </View>
     </Pressable>
   );
+}
+
+function ChevronDoPlacar() {
+  const cores = useIconColors();
+  return <IconChevronRight width={18} height={18} fill={cores.muted} />;
 }
 
 function Linha({ rot, sub, valor, fraco }: { rot: string; sub?: string | null; valor: string; fraco?: boolean }) {

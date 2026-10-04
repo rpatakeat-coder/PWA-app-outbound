@@ -95,8 +95,8 @@ export default function FunilScreen({ aoAbrirLead, aoMudarEtapa, aoNovoNegocio, 
       </View>
 
       <View style={s.filtros}>
-        {([['todos', 'Todos'], ['regua', 'Passou da régua'], ['semdata', 'Sem data']] as Array<[Filtro, string]>).map(([f, r]) => (
-          <Pressable key={f} accessibilityRole="tab" accessibilityState={{ selected: filtro === f }} onPress={() => setFiltro(f)} style={[s.filtro, filtro === f && s.filtroAtivo]}>
+        {([['todos', 'Todos', 0.8], ['regua', 'Passou da régua', 1.5], ['semdata', 'Sem data', 1]] as Array<[Filtro, string, number]>).map(([f, r, peso]) => (
+          <Pressable key={f} accessibilityRole="tab" accessibilityState={{ selected: filtro === f }} onPress={() => setFiltro(f)} style={[s.filtro, { flex: peso }, filtro === f && s.filtroAtivo]}>
             <Text style={[s.filtroTexto, filtro === f && s.filtroTextoAtivo]} numberOfLines={1}>{r}</Text>
           </Pressable>
         ))}

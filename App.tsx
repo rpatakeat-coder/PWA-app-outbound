@@ -4171,7 +4171,7 @@ function MainApp() {
   // Sobe logo depois do check-in bem-sucedido: o que aconteceu DENTRO da visita
   // (ver DesfechoVisitaSheet). Puravel — o check-in ja' gravou.
   // Mudar etapa do mapa novo (porta única): lead + etapa atual no código do Cockpit.
-  const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null } | null>(null);
+  const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null; semReabrir?: boolean } | null>(null);
   const codigoDaEtapa = (c: Client): string | null => {
     if (!contextoPino) return null;
     const chave = textoNormalizado(c.etapa);
@@ -5914,28 +5914,6 @@ function MainApp() {
           foraFalhou={buscaNegocios.isError}
         />
       )}
-      {umApp && (
-        <FolhaPlacar
-          visivel={placarAberto}
-          aoFechar={() => setPlacarAberto(false)}
-          dados={placar.data}
-          carregando={placar.isFetching}
-          aoAbrirRanking={() => { setPlacarAberto(false); setTimeout(() => setRankingDoPlacar(true), 350); }}
-        />
-      )}
-      {propostaPara && (
-        <PropostaSheet
-          visivel
-          negocio={propostaPara === 'simular' ? null : propostaPara}
-          aoFechar={() => setPropostaPara(null)}
-          aoAvancarComProposta={isViewer ? undefined : (n, destino, preenchido) => {
-            const c = (n.clientId ? clientePorId(n.clientId) : undefined)
-              ?? ({ id: n.clientId ?? '', id_hubspot: n.dealId, nome: n.nome, empresa: n.nome, telefone: n.telefone } as unknown as Client);
-            setTimeout(() => setEtapaNovaPara({ client: c, etapaAtual: n.etapaId, destinoInicial: destino, preenchido }), 350);
-          }}
-        />
-      )}
-      {umApp && rankingDoPlacar && <FolhaRanking visivel={rankingDoPlacar} aoFechar={() => setRankingDoPlacar(false)} />}
       {modoNovo && (
         <FolhaMeuDia
           visivel={meuDiaAberto}
@@ -6821,7 +6799,7 @@ function MainApp() {
       { aba: 'agenda' as AppTab, rotulo: 'Agenda', Icone: IconCalendar, ativa: tab === 'agenda' || tab === 'route', selo: seloAgenda || null, seloClaro: true },
       { aba: 'tasks' as AppTab, rotulo: 'Tarefas', Icone: IconClipboardCheck, ativa: tab === 'tasks', selo: (naFila ?? seloTarefas) || null },
       umApp
-        ? { aba: 'funil' as AppTab, rotulo: 'Funil', Icone: IconArray as typeof IconLocation, ativa: tab === 'funil', selo: null }
+        ? { aba: 'funil' as AppTab, rotulo: 'Funil', Icone: IconFilterList as typeof IconLocation, ativa: tab === 'funil', selo: null }
         : { aba: 'playbook' as AppTab, rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, ativa: tab === 'playbook', selo: null },
     ]),
   ];
@@ -6852,7 +6830,7 @@ function MainApp() {
     { aba: 'map', rotulo: 'Mapa', Icone: IconLocation, visivel: true },
     { aba: 'agenda', rotulo: 'Agenda', Icone: IconCalendar, visivel: !isViewer },
     { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: naFila ?? undefined, visivel: !isViewer },
-    { aba: 'funil', rotulo: 'Funil', Icone: IconArray as typeof IconLocation, visivel: !isViewer },
+    { aba: 'funil', rotulo: 'Funil', Icone: IconFilterList as typeof IconLocation, visivel: !isViewer },
     { aba: 'dev', rotulo: 'Desenvolvimento', Icone: IconTrendingUp, visivel: !isViewer, grupo: 'NO MENU' },
     { aba: 'playbook', rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, visivel: true },
     { aba: 'simular', rotulo: 'Simular proposta', Icone: IconBill as typeof IconLocation, visivel: !isViewer },
@@ -7139,7 +7117,7 @@ function MainApp() {
                deixa de ser aba e mora aqui (prompt final §B1). */
             modoNovo ? (
               <View style={styles.headerLinha}>
-                <Text style={styles.headerTitulo}>Agenda</Text>
+                <Text style={[styles.headerTitulo, umApp && { flex: 1 }]}>Agenda</Text>
                 {!isViewer && !umApp && (
                   <TouchableOpacity
                     accessibilityRole="button"
@@ -7158,7 +7136,7 @@ function MainApp() {
           ) : tab === 'funil' ? (
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.headerTitulo}>Funil</Text>
-              <Text style={styles.headerSublinha} numberOfLines={1}>Seus negócios abertos · ao vivo, igual ao mapa</Text>
+              <Text style={styles.headerSublinha} numberOfLines={1}>Seus negócios · ao vivo</Text>
             </View>
           ) : tab === 'playbook' && !umApp ? (
             <Text style={styles.headerTitulo}>Playbook</Text>
@@ -7765,7 +7743,7 @@ function MainApp() {
           aoMudarEtapa={isViewer ? undefined : (n: NegocioDoFunil, destino: string) => {
             const c = (n.clientId ? clientePorId(n.clientId) : undefined)
               ?? ({ id: n.clientId ?? '', id_hubspot: n.dealId, nome: n.nome, empresa: n.nome, telefone: n.telefone } as unknown as Client);
-            setEtapaNovaPara({ client: c, etapaAtual: n.etapaId, destinoInicial: destino });
+            setEtapaNovaPara({ client: c, etapaAtual: n.etapaId, destinoInicial: destino, semReabrir: true });
           }}
           aoProposta={isViewer ? undefined : (n: NegocioDoFunil) => setPropostaPara({ dealId: n.dealId, nome: n.nome, etapaId: n.etapaId, telefone: n.telefone, clientId: n.clientId })}
           aoNovoNegocio={isViewer ? undefined : () => { setTab('map'); setTimeout(() => setShowCepStep(true), 300); }}
@@ -7934,6 +7912,28 @@ function MainApp() {
 
       {selectedClientSheet}
 
+      {umApp && (
+        <FolhaPlacar
+          visivel={placarAberto}
+          aoFechar={() => setPlacarAberto(false)}
+          dados={placar.data}
+          carregando={placar.isFetching}
+          aoAbrirRanking={() => { setPlacarAberto(false); setTimeout(() => setRankingDoPlacar(true), 350); }}
+        />
+      )}
+      {propostaPara && (
+        <PropostaSheet
+          visivel
+          negocio={propostaPara === 'simular' ? null : propostaPara}
+          aoFechar={() => setPropostaPara(null)}
+          aoAvancarComProposta={isViewer ? undefined : (n, destino, preenchido) => {
+            const c = (n.clientId ? clientePorId(n.clientId) : undefined)
+              ?? ({ id: n.clientId ?? '', id_hubspot: n.dealId, nome: n.nome, empresa: n.nome, telefone: n.telefone } as unknown as Client);
+            setTimeout(() => setEtapaNovaPara({ client: c, etapaAtual: n.etapaId, destinoInicial: destino, preenchido, semReabrir: true }), 350);
+          }}
+        />
+      )}
+      {umApp && rankingDoPlacar && <FolhaRanking visivel={rankingDoPlacar} aoFechar={() => setRankingDoPlacar(false)} />}
       {avisosAbertos && (
         <AvisosPainel
           aoFechar={() => setAvisosAbertos(false)}
@@ -9040,7 +9040,8 @@ function MainApp() {
                 Array.isArray(velho) ? velho.map((c: Client) => (c.id === alvo.id ? { ...c, telefone: cel } : c)) : velho);
               void supabase.from('clients').update({ telefone: cel }).eq('id', alvo.id).then(({ error }) => { if (error) console.warn('[telefone no lead]', error.message); });
             }
-            if (alvo.id) aplicarEtapaNoLead(alvo.id, codigo, alvo);
+            // do Funil e da Proposta não reabre o cartão do lead por cima da tela de onde veio
+            if (alvo.id) aplicarEtapaNoLead(alvo.id, codigo, etapaNovaPara.semReabrir ? undefined : alvo);
             void queryClient.invalidateQueries({ queryKey: ['funil'] });
             void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] });
           }}

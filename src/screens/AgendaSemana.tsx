@@ -10,6 +10,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import CockpitEmbutido from '../components/CockpitEmbutido';
 import { PROPOSITOS, segundaDaSemana, useMunicao, useSemanaDoPlano } from '../hooks/useSemanaDoPlano';
 import { useQueryClient } from '@tanstack/react-query';
+import { IconChevronLeft, IconChevronRight, useIconColors } from '../components/icons';
 
 const SEMANA = ['seg', 'ter', 'qua', 'qui', 'sex'];
 const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
@@ -17,6 +18,7 @@ const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 export default function AgendaSemana({ ownerId, aoEscolherNoMapa, hoje }: {
   ownerId: string | null; aoEscolherNoMapa?: () => void; hoje: string;
 }) {
+  const cores = useIconColors();
   const [desloc, setDesloc] = useState(0);
   const [editando, setEditando] = useState(false);
   const queryClient = useQueryClient();
@@ -33,14 +35,14 @@ export default function AgendaSemana({ ownerId, aoEscolherNoMapa, hoje }: {
     <View style={{ gap: 12 }}>
       <View style={s.cab}>
         <Pressable accessibilityRole="button" accessibilityLabel="Semana anterior" disabled={desloc <= 0} onPress={() => setDesloc((d) => d - 1)} style={[s.seta, desloc <= 0 && { opacity: 0.35 }]}>
-          <Text style={s.setaTexto}>‹</Text>
+          <IconChevronLeft width={22} height={22} fill={cores.onSurface} />
         </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={s.titulo}>{`Semana ${ddmm(segunda)} a ${ddmm(sexta)}`}</Text>
           <Text style={s.sub}>a mesma rota do mapa, nos dois sentidos</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Próxima semana" disabled={desloc >= 1} onPress={() => setDesloc((d) => d + 1)} style={[s.seta, desloc >= 1 && { opacity: 0.35 }]}>
-          <Text style={s.setaTexto}>›</Text>
+          <IconChevronRight width={22} height={22} fill={cores.onSurface} />
         </Pressable>
       </View>
 
