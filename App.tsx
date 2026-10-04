@@ -6941,7 +6941,8 @@ function MainApp() {
               accessibilityLabel={item.rotulo}
               style={[styles.sbItem, ativo && styles.sbItemAtivo]}
               {...ds(ativo ? { trans: '1' } : { trans: '1', hover: 'surface2' })}
-              onPress={() => (item.aba === 'cockpit' ? irParaOCockpit() : item.aba === 'simular' ? setPropostaPara('simular') : setTab(item.aba))}
+              // a mesma troca de aba do rodapé: fecha o cartão aberto e guarda as marcas do Planejar
+              onPress={() => (item.aba === 'cockpit' ? irParaOCockpit() : item.aba === 'simular' ? setPropostaPara('simular') : irParaAba(item.aba as AppTab))}
             >
               <View style={styles.sbItemIcone}>
                 <item.Icone width={24} height={24} fill={ativo ? iconColors.tintRedText : iconColors.muted} />
