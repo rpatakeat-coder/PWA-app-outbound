@@ -263,9 +263,15 @@ export default function ListaCarteiraWeb({ ownerHubspot, sellerId, aoAbrirLead, 
                       )}
                     </View>
                     <Text style={[st.td, { width: cols.ult }]} numberOfLines={2}>{l.ultimoContato ? `${CANAL[l.canalUltimo ?? ''] ?? 'contato'} ${fmtCurto(l.ultimoContato)}` : 'nenhum'}</Text>
-                    <Text style={[st.td, { flex: cols.prox }, !l.proximoPasso && l.etapaId !== 'alvo' && { color: 'var(--ambar-texto)' }]} numberOfLines={1}>
-                      {l.proximoPasso ? fmtCurto(l.proximoPasso) : l.etapaId === 'alvo' ? '—' : 'sem próximo passo'}
-                    </Text>
+                    {(() => {
+                      // próximo passo vencido em vermelho ("venceu"), faltando em âmbar (docs/12 §4)
+                      const venceu = !!l.proximoPasso && l.proximoPasso.slice(0, 10) < hoje;
+                      return (
+                        <Text style={[st.td, { flex: cols.prox }, !l.proximoPasso && l.etapaId !== 'alvo' && { color: 'var(--ambar-texto)' }, venceu && { color: 'var(--vermelho-texto)', fontWeight: '600' }]} numberOfLines={1}>
+                          {l.proximoPasso ? `${venceu ? 'venceu ' : ''}${fmtCurto(l.proximoPasso)}` : l.etapaId === 'alvo' ? '—' : 'sem próximo passo'}
+                        </Text>
+                      );
+                    })()}
                     <View style={{ width: cols.tmp, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       {letra ? <><View style={[st.ponto, { backgroundColor: corTemp(l.temperatura) }]} /><Text style={st.td}>{`${letra} ${Math.round(l.temperatura!)}`}</Text></> : <Text style={st.fraco}>—</Text>}
                     </View>

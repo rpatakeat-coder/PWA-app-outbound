@@ -306,7 +306,7 @@ function CardFila({ item, aberto, selecionado, aoVerbo, aoFechar, aoAdiar, aoSel
         <Pressable onPress={aoSelecionar} disabled={!aoSelecionar} style={{ gap: 3 }} accessibilityRole={aoSelecionar ? 'button' : undefined}>
           <View style={s.cardTopo}>
             <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-              <Text style={s.cardTitulo} numberOfLines={1}>{item.titulo}</Text>
+              <Text style={s.cardTitulo} numberOfLines={2}>{item.titulo}</Text>
               <View style={s.cardLinha2}>
                 <Text style={s.cardNegocio} numberOfLines={1}>{item.negocio}</Text>
                 <View style={s.pilulaEtapa}><View style={[s.ponto, { backgroundColor: etapa.cor }]} /><Text style={s.pilulaTexto} numberOfLines={1}>{etapa.rotulo}</Text></View>

@@ -105,8 +105,8 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
 
   // ---- 1 · o variável ----
   const variavel = (
-    <View style={st.faixa}>
-      <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+    <View style={[st.faixa, !duas && { flexDirection: 'column' }]}>
+      <View style={{ flex: duas ? 1 : undefined, minWidth: 0, gap: 4 }}>
         <Text style={st.faixaRotulo}>{`VARIÁVEL DE ${mesNome.toUpperCase()}`}</Text>
         <Text style={st.faixaValor}>{mes.variavel == null ? 'não medido' : reais(mes.variavel)}</Text>
         <Text style={st.faixaSub}>
@@ -139,11 +139,11 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
   // ---- 3 · semana ----
   const blocoSemana = (
     <View style={st.cartao}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Text style={[st.secao, { flex: 1 }]}>SEMANA DA TEMPORADA</Text>
-        <View style={[st.selo, noPiso ? st.seloOk : st.seloAviso]}>
+      <Text style={st.secao}>SEMANA DA TEMPORADA</Text>
+      <View style={{ flexDirection: 'row' }}>
+        <View style={[st.selo, noPiso ? st.seloOk : st.seloAviso, { flexShrink: 1 }]}>
           {noPiso && <IconCheck width={12} height={12} fill="var(--tint-green-text)" />}
-          <Text style={[st.seloTexto, { color: noPiso ? 'var(--tint-green-text)' : 'var(--tint-amber-text)' }]}>{textoPiso}</Text>
+          <Text style={[st.seloTexto, { flexShrink: 1, color: noPiso ? 'var(--tint-green-text)' : 'var(--tint-amber-text)' }]}>{textoPiso}</Text>
         </View>
       </View>
       <View style={st.tres}>
@@ -258,7 +258,7 @@ const st = StyleSheet.create({
   nota: { fontSize: 12, lineHeight: 17, color: 'var(--text-faint)' },
   tracos: { flexDirection: 'row', gap: 4 },
   traco: { flex: 1, height: 6, borderRadius: 3, backgroundColor: 'var(--border)' },
-  selo: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, minHeight: 26, borderRadius: 13 },
+  selo: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, minHeight: 26, borderRadius: 13 },
   seloOk: { backgroundColor: 'var(--tint-green)' },
   seloAviso: { backgroundColor: 'var(--tint-amber)' },
   seloTexto: { fontSize: 12, fontWeight: '700' },

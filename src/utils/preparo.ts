@@ -33,6 +33,9 @@ export type Preparo = {
   contatos: number;
   /** "Para Conversa com decisor: telefone, maior dor" — null quando não há o que pedir. */
   falta: string | null;
+  /** true = conferido nos campos do negócio (mapa_negocio); false = o negócio não está no robô e
+   *  o texto é o que a etapa PEDE, não o que falta (não afirmar o que não se sabe). */
+  faltaConferida: boolean;
   decide: string;
 };
 
@@ -46,6 +49,8 @@ const COMO_FOI: Record<string, string> = {
 export function montarPreparo(p: {
   codigo: string | null; diasNaEtapa: number | null; reguaDias: number | null;
   telefone: string | null; fichas: FichaDoPreparo[]; toques: ToqueDoPreparo[];
+  /** Campos do negócio no funil do robô (mapa_negocio). null/{} = negócio fora do snapshot. */
+  negocio?: Record<string, unknown> | null;
 }): Preparo {
   const indice = p.codigo ? (FUNIL8 as readonly string[]).indexOf(p.codigo) : -1;
   const etapa = p.codigo ? ROTULO_ETAPA[p.codigo] ?? null : null;
@@ -72,12 +77,18 @@ export function montarPreparo(p: {
   let falta: string | null = null;
   const prox = p.codigo ? PROXIMA[p.codigo] : undefined;
   if (prox) {
+    const ng = p.negocio ?? {};
+    const doNegocio = (k: string) => { const v = ng[k]; return v == null || String(v).trim() === '' ? null : String(v); };
     const tem: Record<string, string | null> = {
-      celular: p.telefone && p.telefone.replace(/\D/g, '').length >= 10 ? p.telefone : null,
-      gargalo_operacional: fichas.find((f) => f.dor)?.dor ?? null,
-      nome_do_sistema: fichas.find((f) => f.sistema)?.sistema ?? null,
+      celular: doNegocio('celular') ?? (p.telefone && p.telefone.replace(/\D/g, '').length >= 10 ? p.telefone : null),
+      gargalo_operacional: doNegocio('gargalo_operacional') ?? fichas.find((f) => f.dor)?.dor ?? null,
+      nome_do_sistema: doNegocio('nome_do_sistema') ?? fichas.find((f) => f.sistema)?.sistema ?? null,
+      valor_de_mrr: doNegocio('valor_de_mrr'),
+      plano_apresentado: doNegocio('plano_apresentado'),
+      data_da_reuniao: doNegocio('data_da_reuniao'),
+      origem_do_lead: doNegocio('origem_do_lead'),
     };
-    const pede = (PROPS_OBRIGATORIAS_POR_ETAPA[prox] ?? []).filter((k) => !(k in tem) || !tem[k]);
+    const pede = (PROPS_OBRIGATORIAS_POR_ETAPA[prox] ?? []).filter((k) => !tem[k]);
     if (pede.length) falta = `Para ${ROTULO_ETAPA[prox]}: ${pede.map((k) => ROTULO_PROP[k] ?? k).join(', ')}`;
     if (prox === ETAPA.decisor && !fichas.some((f) => f.como_foi === 'falou_com_decisor')) {
       falta = falta ? `${falta} · e falar com quem decide` : `Para ${ROTULO_ETAPA[prox]}: falar com quem decide`;
@@ -91,28 +102,31 @@ export function montarPreparo(p: {
     ? `${comDecisor.decisor_nome!.trim()}${comDecisor.decisor_papel ? ` (${comDecisor.decisor_papel.toLowerCase()})` : ''}${horario ? ` · melhor horário ${horario}` : ''}`
     : `Decisor não conhecido${horario ? ` · dono costuma estar ${horario}` : ''}`;
 
-  return { indice, etapa, etapaTexto, regua, ultimo, contatos: Math.min(MINIMO_CONTATOS, toques.length), falta, decide };
+  const faltaConferida = !!p.negocio && Object.keys(p.negocio).length > 0;
+  return { indice, etapa, etapaTexto, regua, ultimo, contatos: Math.min(MINIMO_CONTATOS, toques.length), falta, faltaConferida, decide };
 }
 
 /** Lê fichas, contatos e visitas do lead (120 dias, como a fila). */
-export function usePreparo(clientId: string | null, ativo = true) {
-  return useQuery<{ fichas: FichaDoPreparo[]; toques: ToqueDoPreparo[] }>({
-    queryKey: ['preparo', clientId],
+export function usePreparo(clientId: string | null, ativo = true, dealId: string | null = null) {
+  return useQuery<{ fichas: FichaDoPreparo[]; toques: ToqueDoPreparo[]; negocio: Record<string, unknown> | null }>({
+    queryKey: ['preparo', clientId, dealId],
     enabled: ativo && !!clientId,
     staleTime: 2 * 60_000,
     queryFn: async () => {
       const desde = new Date(Date.now() - 120 * 86400000).toISOString();
-      const [f, c, v] = await Promise.all([
+      const [f, c, v, n] = await Promise.all([
         supabase.from('fichas_de_rua').select('ocorrido_em, como_foi, decisor_nome, decisor_papel, horario_dono, sistema, dor')
           .eq('client_id', clientId!).order('ocorrido_em', { ascending: false }).limit(10),
         supabase.from('contatos_de_campo').select('ocorrido_em, canal, resultado').eq('client_id', clientId!).gte('ocorrido_em', desde),
         supabase.from('client_visits').select('visited_at').eq('client_id', clientId!).gte('visited_at', desde),
+        // os campos que a próxima etapa exige, do funil do robô (o mesmo que o Playbook e o cartão leem)
+        dealId ? supabase.rpc('mapa_negocio', { p_deal: dealId }) : Promise.resolve({ data: null }),
       ]);
       const toques: ToqueDoPreparo[] = [
         ...((c.data ?? []) as Array<{ ocorrido_em: string; canal: string; resultado: string | null }>).map((x) => ({ em: x.ocorrido_em, canal: x.canal, resultado: x.resultado })),
         ...((v.data ?? []) as Array<{ visited_at: string }>).map((x) => ({ em: x.visited_at, canal: 'visita' })),
       ];
-      return { fichas: (f.data ?? []) as FichaDoPreparo[], toques };
+      return { fichas: (f.data ?? []) as FichaDoPreparo[], toques, negocio: (n.data as Record<string, unknown> | null) ?? null };
     },
   });
 }

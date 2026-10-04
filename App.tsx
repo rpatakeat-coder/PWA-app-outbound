@@ -7098,19 +7098,10 @@ function MainApp() {
                48px vazia: o titulo ocupa o lugar dela. No mapa novo a Rota
                deixa de ser aba e mora aqui (prompt final §B1). */
             modoNovo ? (
+              // R1 opção A (handoff das abas): a pílula "Rota de hoje" saiu — o caminho do dia é o
+              // "Mapa do dia" do seletor da própria Agenda. A data e o propósito ficam na faixa.
               <View style={styles.headerLinha}>
                 <Text style={styles.headerTitulo}>Agenda</Text>
-                {!isViewer && (
-                  <TouchableOpacity
-                    accessibilityRole="button"
-                    accessibilityLabel="Abrir a rota de hoje"
-                    style={styles.headerPilula}
-                    onPress={() => setTab('route')}
-                  >
-                    <IconCar width={18} height={18} fill="#FFFFFF" />
-                    <Text style={styles.headerPilulaTexto}>Rota de hoje</Text>
-                  </TouchableOpacity>
-                )}
               </View>
             ) : (
               <Text style={styles.headerTitulo}>Agenda</Text>

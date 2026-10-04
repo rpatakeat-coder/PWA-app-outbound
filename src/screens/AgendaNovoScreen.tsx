@@ -89,9 +89,9 @@ const corRegua = (r: 'ok' | 'perto' | 'passou' | null) => (r === 'passou' ? 'var
 /** O preparo de 10 s (docs/12 §1.5): barra de 8, etapa na cor da régua, último contato, contatos,
  *  o que falta e quem decide. */
 function Preparo({ c, contextoDe, telefone }: { c: Client; contextoDe?: Props['contextoDe']; telefone: string | null }) {
-  const q = usePreparo(c.id);
+  const q = usePreparo(c.id, true, c.id_hubspot ? String(c.id_hubspot) : null);
   const ctx = contextoDe?.(c) ?? { codigo: null, diasNaEtapa: null, regua: null };
-  const p = montarPreparo({ codigo: ctx.codigo, diasNaEtapa: ctx.diasNaEtapa, reguaDias: ctx.regua, telefone, fichas: q.data?.fichas ?? [], toques: q.data?.toques ?? [] });
+  const p = montarPreparo({ codigo: ctx.codigo, diasNaEtapa: ctx.diasNaEtapa, reguaDias: ctx.regua, telefone, fichas: q.data?.fichas ?? [], toques: q.data?.toques ?? [], negocio: q.data?.negocio ?? null });
   return (
     <View style={{ gap: 8 }}>
       {p.indice >= 0 && (
@@ -110,7 +110,7 @@ function Preparo({ c, contextoDe, telefone }: { c: Client; contextoDe?: Props['c
       </View>
       {!!p.falta && (
         <View style={[s.caixa, s.caixaAmbar]}>
-          <Text style={[s.caixaRotulo, { color: 'var(--tint-amber-text)' }]}>O QUE FALTA</Text>
+          <Text style={[s.caixaRotulo, { color: 'var(--tint-amber-text)' }]}>{p.faltaConferida ? 'O QUE FALTA' : 'A PRÓXIMA ETAPA PEDE'}</Text>
           <Text style={[s.caixaValor, { color: 'var(--tint-amber-text)' }]}>{p.falta}</Text>
         </View>
       )}
@@ -678,7 +678,8 @@ export default function AgendaNovoScreen({
               )}
               {linhasDepois.length > 0 && momento !== 'noite' && <Text style={s.secao}>{semRota ? 'COMPROMISSOS DE HOJE' : 'DEPOIS'}</Text>}
               {momento !== 'noite' && linhasDepois.map(linhaDepois)}
-              {momento !== 'noite' && portaUnica}
+              {/* dia sem rota: "Montar meu dia" é a ação principal em qualquer hora (docs/12 §8) */}
+              {(momento !== 'noite' || semRota) && portaUnica}
             </>
           )}
         </>
