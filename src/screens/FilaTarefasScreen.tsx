@@ -20,6 +20,7 @@ import { Toast } from '../components/Toast';
 import { IconCalendar, IconCall, IconCheck, IconClose, IconWhatsapp, IconClipboardCheck, IconLocation, useIconColors } from '../components/icons';
 import { useLayout } from '../hooks/useLayout';
 import { useMeuPdi } from '../hooks/useMeuPdi';
+import FolhaRanking, { SeloPosicao } from './FolhaRanking';
 import { concluirComDesfazer } from '../utils/concluirTarefa';
 import { gravarContato } from '../utils/contatoDeCampo';
 import { ehErroDeRede, enfileirar, novoAcaoId } from '../utils/filaOffline';
@@ -349,6 +350,18 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   const [pulso, setPulso] = useState(false);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine !== false);
   const { pdi, marcar: marcarAcordo } = useMeuPdi(true);
+  const [rankingAberto, setRankingAberto] = useState(false);
+  // Contrato fechado hoje: o cartão verde no topo da fila (docs/10 §2.6 D). Do livro de pontos.
+  const contratosHoje = useQuery<Array<{ negocio_id: string; valor: number | null; ref_em: string }>>({
+    queryKey: ['contratos_hoje', ownerId],
+    enabled: !!ownerId,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const desde = new Date(Date.now() - 24 * 3600000).toISOString();
+      const { data } = await supabase.from('pontos_eventos').select('negocio_id, valor, ref_em').eq('tipo', 'contrato').eq('owner_id', ownerId!).gte('ref_em', desde);
+      return (data ?? []) as Array<{ negocio_id: string; valor: number | null; ref_em: string }>;
+    },
+  });
   const acordos = (pdi?.compromissos ?? []).filter((c) => c.estado !== 'validado');
 
   useEffect(() => {
@@ -373,6 +386,14 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   const zerada = !!q.data && !q.data.semMedicao && fila.length === 0;
   const totalDia = feitas.length + fila.length;
   const doSelecionado = layout.ehDesktop ? (fila.find((i) => i.dealId === selecionado) ?? fila[0] ?? null) : null;
+
+  // fila zerada: grava o dia (conquista "Fila zerada 5 dias"), uma vez por dia
+  useEffect(() => {
+    if (!zerada) return;
+    const chave = `fila-zerada-gravada-${hoje}`;
+    try { if (window.localStorage.getItem(chave)) return; window.localStorage.setItem(chave, '1'); } catch { /* sem armazenamento */ }
+    void supabase.rpc('registrar_fila_zerada');
+  }, [zerada, hoje]);
 
   const pulsar = () => { setPulso(true); setTimeout(() => setPulso(false), 450); };
   const esconder = (d: string) => setEscondidos((e) => new Set(e).add(d));
@@ -477,7 +498,10 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
       <View style={s.topoA}>
         <Anel feitas={feitas.length} total={totalDia} zerada={zerada} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={s.topoTitulo}>Tarefas</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={s.topoTitulo}>Tarefas</Text>
+            <SeloPosicao aoAbrir={() => setRankingAberto(true)} />
+          </View>
           <Text style={[s.topoSub, pulso && s.topoSubPulso]} numberOfLines={1}>
             {zerada ? `Fila zerada · ${feitas.length} feitas` : `${feitas.length} feitas · ${fila.length} na fila`}
           </Text>
@@ -604,6 +628,12 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
     <ScrollView style={{ flex: 1 }} contentContainerStyle={s.lista}
       refreshControl={<RefreshControl refreshing={q.isFetching && !!q.data} onRefresh={() => q.refetch()} />}>
       {!online && <View style={s.semSinal}><Text style={s.semSinalTexto}>Sem sinal. As ações vão para a fila e sobem sozinhas.</Text></View>}
+      {aba === 'fila' && (contratosHoje.data ?? []).map((k) => (
+        <View key={k.negocio_id} style={s.contrato}>
+          <Text style={s.contratoTitulo}>Contrato fechado</Text>
+          <Text style={s.contratoTexto}>{`${k.valor ? `R$ ${Math.round(k.valor)}/mês · ` : ''}+200 na temporada`}</Text>
+        </View>
+      ))}
       {corpo}
       {acordosBloco}
     </ScrollView>
@@ -621,6 +651,7 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
           </View>
         </View>
       ) : (<>{topo}{lista}</>)}
+      <FolhaRanking visivel={rankingAberto} aoFechar={() => setRankingAberto(false)} />
       {foco && <ModoFoco fila={fila} hoje={hoje} feriados={feriados} discou={discou} aoVerbo={tocarVerbo}
         aoSalvar={salvar} aoSair={() => { pedidoDeSaidaAtual = null; setAberto(null); setFoco(false); }} aberto={aberto} setAberto={setAberto} />}
     </View>
@@ -817,6 +848,9 @@ const s = StyleSheet.create({
   circulo: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: 'var(--stroke-strong)', alignItems: 'center', justifyContent: 'center' },
   circuloFeito: { backgroundColor: 'var(--verde-acao)', borderColor: 'var(--verde-acao)' },
   blocoPainel: { gap: 10, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface)' },
+  contrato: { gap: 2, padding: 14, borderRadius: 14, backgroundColor: 'var(--tint-green)', borderWidth: 1, borderColor: 'var(--tint-green-border)' },
+  contratoTitulo: { fontSize: 15, fontWeight: '700', color: 'var(--tint-green-text)' },
+  contratoTexto: { fontSize: 13, color: 'var(--tint-green-text)' },
   caixaFato: { flex: 1, padding: 10, borderRadius: 10, backgroundColor: 'var(--surface-2)', gap: 2 },
 });
 

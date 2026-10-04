@@ -179,6 +179,7 @@ import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
 import PlaybookScreen from './src/screens/PlaybookScreen';
 import FilaTarefasScreen from './src/screens/FilaTarefasScreen';
+import { avisarSeVisitaProvada, type Ranking } from './src/screens/FolhaRanking';
 import AgendaNovoScreen from './src/screens/AgendaNovoScreen';
 import { concluirComDesfazer, enviarConclusao, type PedidoConclusao } from './src/utils/concluirTarefa';
 import { diaBRT, diasDeAtraso, ehCobranca, grupoDaTarefa } from './src/utils/abaTarefas';
@@ -4513,6 +4514,16 @@ function MainApp() {
         : corrigirPino
         ? `✓ Check-in em ${nomeDoLead} · pino corrigido (estava a ${Math.round(distance)} m)`
         : `✓ Check-in em ${nomeDoLead} registrado`, 'ok');
+      // +20 só quando o servidor confirma a prova (a temporada, docs/10 §2.6 D)
+      if (modoNovo) {
+        void avisarSeVisitaProvada(client.id, (t) => Toast.mostrar(t, 'ok'), async () => {
+          await queryClient.invalidateQueries({ queryKey: ['ranking_executivo'] });
+          return queryClient.fetchQuery({ queryKey: ['ranking_executivo', 'semana'], queryFn: async () => {
+            const { data } = await supabase.rpc('ranking_executivo', { p_periodo: 'semana' });
+            return (data && !(data as { erro?: string }).erro ? data : null) as Ranking | null;
+          } });
+        });
+      }
       // O "x/6" da pílula e o Meu dia contam check-ins reais: atualiza na hora.
       void queryClient.invalidateQueries({ queryKey: ['meu_dia'] });
       if (modoNovo && contextoPino && visitado.status === 'lead') {
