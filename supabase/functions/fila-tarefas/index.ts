@@ -186,24 +186,25 @@ Deno.serve(async (req: Request) => {
 
   // 3) o lead de cada negócio, contatos, decisor, visitas de hoje
   const { data: clientes } = meus.length
-    ? await svc.from('clients').select('id, id_hubspot, nome, telefone, latitude, longitude').in('id_hubspot', meus)
+    ? await svc.from('clients').select('id, id_hubspot, nome, telefone, latitude, longitude, bairro').in('id_hubspot', meus)
     : { data: [] as Array<Record<string, unknown>> };
-  const clientePorDeal = new Map<string, { id: string; nome: string | null; telefone: string | null; lat: number | null; lng: number | null }>();
-  for (const c of clientes ?? []) clientePorDeal.set(String(c.id_hubspot), { id: String(c.id), nome: (c.nome as string) ?? null, telefone: (c.telefone as string) ?? null, lat: c.latitude != null ? Number(c.latitude) : null, lng: c.longitude != null ? Number(c.longitude) : null });
+  const clientePorDeal = new Map<string, { id: string; nome: string | null; telefone: string | null; lat: number | null; lng: number | null; bairro: string | null }>();
+  for (const c of clientes ?? []) clientePorDeal.set(String(c.id_hubspot), { id: String(c.id), nome: (c.nome as string) ?? null, telefone: (c.telefone as string) ?? null, lat: c.latitude != null ? Number(c.latitude) : null, lng: c.longitude != null ? Number(c.longitude) : null, bairro: (c.bairro as string) ?? null });
   const dealPorCliente = new Map<string, string>();
   for (const [d, c] of clientePorDeal) dealPorCliente.set(c.id, d);
   const clienteIds = Array.from(dealPorCliente.keys());
 
   const desde = new Date(Date.now() - 120 * 86400000).toISOString();
   const contatos: Record<string, { n: number; ultimo: string | null }> = {};
-  const soma = (deal: string | undefined | null, em: string | null) => {
+  const canalDoUltimo: Record<string, string> = {};
+  const soma = (deal: string | undefined | null, em: string | null, canal = 'visita') => {
     if (!deal || !em) return;
     const c = contatos[deal] ?? (contatos[deal] = { n: 0, ultimo: null });
-    c.n++; if (!c.ultimo || em > c.ultimo) c.ultimo = em;
+    c.n++; if (!c.ultimo || em > c.ultimo) { c.ultimo = em; canalDoUltimo[deal] = canal; }
   };
   if (meus.length) {
-    const { data: cc } = await svc.from('contatos_de_campo').select('deal_id, client_id, ocorrido_em').in('deal_id', meus).gte('ocorrido_em', desde);
-    for (const x of cc ?? []) soma(String(x.deal_id), x.ocorrido_em as string);
+    const { data: cc } = await svc.from('contatos_de_campo').select('deal_id, client_id, ocorrido_em, canal').in('deal_id', meus).gte('ocorrido_em', desde);
+    for (const x of cc ?? []) soma(String(x.deal_id), x.ocorrido_em as string, String(x.canal ?? 'contato'));
   }
   let visitasHoje: Array<{ client_id: string; visited_at: string }> = [];
   if (clienteIds.length) {
@@ -257,8 +258,28 @@ Deno.serve(async (req: Request) => {
   }).map((i) => ({ ...i, titulo: tituloDoCard(i), ultimoContatoTexto: textoUltimoContato(i.ultimoContato, hoje),
     telefone: i.temTelefone ? clientePorDeal.get(i.dealId)?.telefone ?? null : null }));
 
+  // A CARTEIRA (Fase 4 das abas, 04/10/26): todos os negócios abertos do dono, com os mesmos
+  // números da fila (etapa ao vivo, dias e temperatura do snapshot, contatos), para a Lista do
+  // computador abrir em "Minha carteira" sem depender da área do mapa.
+  const proximoPorDeal = new Map<string, string>();
+  for (const t of tarefas) {
+    if (!t.dealId || !t.venceEm) continue;
+    const atual = proximoPorDeal.get(t.dealId);
+    if (!atual || t.venceEm < atual) proximoPorDeal.set(t.dealId, t.venceEm);
+  }
+  const carteira = negocios.filter((n) => ['1395880469', '1396005401', '1395880470', '1395880471', '1395880472', '1395880473'].includes(n.etapaId)).map((n) => {
+    const c = clientePorDeal.get(n.dealId);
+    return {
+      dealId: n.dealId, clientId: n.clientId, negocio: n.nome, etapaId: n.etapaId, diasNaEtapa: n.diasNaEtapa,
+      temperatura: n.temperatura, mrr: n.mrr, contato: n.pessoa, bairro: c?.bairro ?? null, temTelefone: n.temTelefone,
+      ultimoContato: contatos[n.dealId]?.ultimo ?? null, canalUltimo: canalDoUltimo[n.dealId] ?? null,
+      contatos: Math.min(4, contatos[n.dealId]?.n ?? 0), proximoPasso: proximoPorDeal.get(n.dealId) ?? null,
+    };
+  });
+
   return json(200, {
     itens,
+    carteira,
     grupos: ORDEM_GRUPOS.map((g) => ({ id: g, rotulo: ROTULO_GRUPO[g] })),
     mrrEmJogo: itens.reduce((s, i) => s + (i.mrr ?? 0), 0),
     hoje,

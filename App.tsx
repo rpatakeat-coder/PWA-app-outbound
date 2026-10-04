@@ -179,6 +179,7 @@ import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
 import PlaybookScreen from './src/screens/PlaybookScreen';
 import FilaTarefasScreen, { buscarFila } from './src/screens/FilaTarefasScreen';
+import ListaCarteiraWeb from './src/screens/ListaCarteiraWeb';
 import { BarreiraDaAba } from './src/components/BarreiraDaAba';
 import { avisarSeVisitaProvada, type Ranking } from './src/screens/FolhaRanking';
 import AgendaNovoScreen from './src/screens/AgendaNovoScreen';
@@ -6681,6 +6682,7 @@ function MainApp() {
       case 'map':
         return { titulo: 'Mapa comercial', sub: `${filteredMapMarkers.length} leads na área visível` };
       case 'list':
+        if (modoNovo && layout.ehLargo) return { titulo: 'Minha carteira', sub: 'negócios abertos · contas-alvo · escolha as contas da semana' };
         return { titulo: 'Leads', sub: `${filteredClients.length} resultados · ${activeFilterCount} ${activeFilterCount === 1 ? 'filtro ativo' : 'filtros ativos'}` };
       case 'route':
         return { titulo: 'Rota do dia', sub: `${routeDisplayClients.length} ${routeDisplayClients.length === 1 ? 'parada' : 'paradas'}` };
@@ -7596,7 +7598,17 @@ function MainApp() {
         )
       ) : tab === 'list' || (tab === 'map' && vistaMapa === 'lista') ? (
         layout.ehLargo ? (
-          listaTabelaWeb
+          // L1 (handoff das abas): no mapa novo a Lista abre em Minha carteira; a tabela de antes
+          // (que segue a área do mapa) vira o terceiro recorte.
+          modoNovo ? (
+            <ListaCarteiraWeb
+              ownerHubspot={myHubspotId}
+              sellerId={profile?.id ?? null}
+              aoAbrirLead={(id) => { setTab('map'); void openClientById(id); }}
+              reguaDe={(etapaId) => { const r = slaForStage(ROTULO_ETAPA[etapaId] ?? null, routeSlaDays); return r >= 999 ? null : r; }}
+              tabelaDaArea={listaTabelaWeb}
+            />
+          ) : listaTabelaWeb
         ) : (
         <>
           <FlatList
