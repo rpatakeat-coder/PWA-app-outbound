@@ -166,12 +166,16 @@ export function objecoesDoPlaybook(pb: Playbook, paginaId = 'objecoes'): Objecao
     if (!resposta) continue;
     const fs = frases(resposta);
     const pergunta = semAspas(titulo);
+    // A fala curta aprovada pelo Julyan (04/10/26) mora na própria página, em "Fala pronta" e
+    // "Se ele insistir"; sem elas, cai nas frases da Resposta Direta.
+    const falaAprovada = item(/Fala pronta:/);
+    const insistirAprovado = item(/Se ele insistir:/);
     out.push({
       id: ancora ?? pergunta,
       pergunta,
       curta: pergunta.split(/\s[/]\s|[.]\s/)[0].replace(/[.]$/, ''),
-      fala: fs.slice(0, 2).join(' '),
-      seInsistir: fs.slice(2, 5),
+      fala: falaAprovada ?? fs.slice(0, 2).join(' '),
+      seInsistir: insistirAprovado ? frases(insistirAprovado) : fs.slice(2, 5),
       diagnostico: item(/O diagn[óo]stico:/),
       followUp: item(/No follow-up/),
       paginaId,

@@ -31,5 +31,15 @@ ok(buscarObjecoes(l, 'xyzabc').length === 0, 'sem resultado devolve vazio');
 ok(frases('Um. Dois? Três!').length === 3, 'frases');
 ok(objecoesDoPlaybook({ categorias: [], paginas: [] }).length === 0, 'sem a página não quebra');
 
+// a fala curta aprovada (bullets "Fala pronta" e "Se ele insistir" na página) vence a derivada
+const comAprovada = html.replace('<ul><li><strong>No follow-up',
+  '<ul><li><strong>Fala pronta:</strong> <em>&quot;Caro é perder margem. Se paga no fim de semana.&quot;</em></li>'
+  + '<li><strong>Se ele insistir:</strong> <em>&quot;Fazemos a conta agora. Se pagar, ativamos.&quot;</em></li></ul>\n<ul><li><strong>No follow-up');
+const l2 = objecoesDoPlaybook({ categorias: [], paginas: [{ id: 'objecoes', titulo: 'Objeções', categoria: 'x', html: comAprovada }] });
+ok(l2[0].fala === 'Caro é perder margem. Se paga no fim de semana.', 'fala aprovada vence a derivada');
+ok(l2[0].seInsistir.join(' | ') === 'Fazemos a conta agora. | Se pagar, ativamos.', 'se insistir aprovado, em frases');
+ok(l2[0].followUp === 'Passo terça às 15h.', 'follow-up continua lido');
+ok(l2[1].fala === 'A operação segue no 4G. Recomendo fibra dedicada.', 'objeção sem fala aprovada continua derivada');
+
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nobjeções: tudo certo');
