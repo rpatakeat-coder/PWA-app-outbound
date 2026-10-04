@@ -36,6 +36,8 @@ export type NegocioEntrada = {
   diasNaEtapa: number | null;
   pessoa: string | null;
   papel: string | null;
+  /** Por que o título usa o negócio e não o contato (A2, handoff das abas 04/10/26). */
+  tituloPorque?: string | null;
   temTelefone: boolean;
   clientId: string | null;
   lat: number | null;
@@ -67,6 +69,7 @@ export type ItemFila = {
   verbo: Verbo;
   pessoa: string | null;
   papel: string | null;
+  tituloPorque: string | null;
   negocio: string;
   etapaId: string;
   temperatura: number | null;
@@ -259,7 +262,7 @@ export function montarFila(negocios: NegocioEntrada[], tarefas: TarefaEntrada[],
     const p = prazoTexto(prazoDia, motivo === 'visita_sem_registro' ? null : horaT, ctx);
     itens.push({
       dealId: n.dealId, clientId: n.clientId, grupo, motivo, porque: PORQUE[motivo](f), verbo,
-      pessoa: n.pessoa, papel: n.papel, negocio: n.nome, etapaId: n.etapaId, temperatura: n.temperatura,
+      pessoa: n.pessoa, papel: n.papel, tituloPorque: n.tituloPorque ?? null, negocio: n.nome, etapaId: n.etapaId, temperatura: n.temperatura,
       mrr: n.mrr, ultimoContato: c.ultimo, contatos: Math.min(MINIMO_CONTATOS, c.n),
       prazo: prazoDia, prazoTexto: p.texto, venceu: p.venceu,
       agendaHoje: ctx.agendaHoje[n.dealId] ?? null, temTelefone: n.temTelefone,
@@ -271,9 +274,29 @@ export function montarFila(negocios: NegocioEntrada[], tarefas: TarefaEntrada[],
     ORDEM_GRUPOS.indexOf(a.grupo) - ORDEM_GRUPOS.indexOf(b.grupo) || b.score - a.score || a.negocio.localeCompare(b.negocio));
 }
 
-/** A frase do card: "Ligar para Ana (sócia)", "Registrar visita · Joana (dona)". */
+/** O contato do CRM só vira título quando é confiável (A2, handoff das abas 04/10/26): tem
+ *  letra, não repete o negócio, não é o dono da conta e tem papel (Dono, Sócio, Gerente).
+ *  Fora disso o título usa o negócio, e `porque` diz o motivo quando há algo a explicar. */
+export function pessoaDoCard(contato: string | null | undefined, negocio: string, dono: string | null | undefined, papel: string | null | undefined):
+  { pessoa: string | null; porque: string | null } {
+  const c = (contato ?? '').trim();
+  if (!c) return { pessoa: null, porque: null };
+  const baixo = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const primeiro = c.split(/\s+/)[0];
+  const cita = `contato no CRM: "${c.length > 24 ? c.slice(0, 23) + '…' : c}"`;
+  if (!/[A-Za-zÀ-ÿ]/.test(c)) return { pessoa: null, porque: `${cita} · sem nome` };
+  const n = baixo(negocio);
+  const d = baixo((dono ?? '').split(/\s+/)[0] ?? '');
+  if (d && baixo(primeiro) === d) return { pessoa: null, porque: `${cita} · igual ao dono da conta` };
+  if (baixo(c) === n || n.startsWith(baixo(c) + ' ') || baixo(primeiro) === n) return { pessoa: null, porque: `${cita} · igual ao negócio` };
+  if (!papel || !papel.trim()) return { pessoa: primeiro, porque: `contato: ${primeiro}` };
+  return { pessoa: primeiro, porque: null };
+}
+
+/** A frase do card: "Ligar para Ana (sócia)", "Registrar visita · Joana (dona)". Sem papel,
+ *  o contato não é confiável e o título usa o negócio ("Visitar Julyan House"). */
 export function tituloDoCard(i: Pick<ItemFila, 'verbo' | 'pessoa' | 'papel' | 'negocio'>): string {
-  const quem = i.pessoa ? `${i.pessoa}${i.papel ? ` (${i.papel.toLowerCase()})` : ''}` : i.negocio;
+  const quem = i.pessoa && i.papel ? `${i.pessoa} (${i.papel.toLowerCase()})` : i.negocio;
   if (i.verbo === 'Registrar') return `Registrar visita · ${quem}`;
   if (i.verbo === 'WhatsApp') return `WhatsApp para ${quem}`;
   if (i.verbo === 'Visitar') return `Visitar ${quem}`;

@@ -27,6 +27,8 @@ import { ehErroDeRede, enfileirar, novoAcaoId } from '../utils/filaOffline';
 import { ehRecusa, negocioAcao } from '../utils/negocioAcao';
 import { apagarPendente, desfazerFeita, lerFeitas, marcarGravada, registrarFeita, type FeitaServidor } from '../utils/filaFeitas';
 import { ehDiaUtil, proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
+import { porNoDia } from '../utils/paradaDoDia';
+import { lerSemanaDoPlano, type DiaDoPlano } from '../utils/semanaDoPlano';
 import {
   COMO_FOI_FILA, DIAS_FILA, MOTIVOS_SEM_INTERESSE, dataDoChip, diaCurto, diasSugeridos, fraseDaVolta, notaDaFila,
   pedidoDaVolta, rotuloComoFoi, textoDoSalvar, type ComoFoiFila,
@@ -41,6 +43,8 @@ export type CardDaFila = {
   prazo: string | null; prazoTexto: string; venceu: boolean; agendaHoje: string | null; temTelefone: boolean;
   telefone: string | null; tarefaId: string | null; presencial: boolean; lat: number | null; lng: number | null;
   titulo: string;
+  /** Por que o título usa o negócio (A2): "contato no CRM: 'Julyan' · igual ao dono da conta". */
+  tituloPorque?: string | null;
 };
 type RespostaFila = {
   itens: CardDaFila[]; grupos: Array<{ id: CardDaFila['grupo']; rotulo: string }>; mrrEmJogo: number;
@@ -52,7 +56,7 @@ type Feita = FeitaServidor;
 const ETAPA: Record<string, { rotulo: string; cor: string }> = {
   '1395880469': { rotulo: 'Prospecção', cor: '#7A8494' },
   '1396005401': { rotulo: 'Visita', cor: '#E51A31' },
-  '1395880470': { rotulo: 'Diagnóstico', cor: '#B07C1F' },
+  '1395880470': { rotulo: 'Conversa com decisor', cor: '#B07C1F' },
   '1395880471': { rotulo: 'Demo/Proposta', cor: '#8E3B5C' },
   '1395880472': { rotulo: 'Negociação', cor: '#2B3440' },
   '1395880473': { rotulo: 'Ag. Pagamento', cor: '#1E9E7B' },
@@ -258,9 +262,11 @@ let pedidoDeSaidaAtual: (() => boolean) | null = null;
 const podeSair = () => (pedidoDeSaidaAtual ? pedidoDeSaidaAtual() : true);
 
 // ---- o card ----------------------------------------------------------------------------
-function CardFila({ item, aberto, selecionado, aoVerbo, aoFechar, aoAdiar, aoSelecionar, children }: {
+function CardFila({ item, aberto, selecionado, aoVerbo, aoFechar, aoAdiar, aoSelecionar, semTelefone, children }: {
   item: CardDaFila; aberto: boolean; selecionado?: boolean; aoVerbo: () => void; aoFechar: () => void; aoAdiar: () => void;
   aoSelecionar?: () => void; children?: React.ReactNode;
+  /** A4: cartão de visita sem telefone e fora do plano — Pôr no plano + Telefone no lugar de "Visitar". */
+  semTelefone?: { aoPorNoPlano: () => void; aoTelefone: () => void; noPlano: string | null } | null;
 }) {
   const cores = useIconColors();
   const etapa = ETAPA[item.etapaId] ?? { rotulo: 'Etapa', cor: 'var(--text-faint)' };
@@ -302,15 +308,27 @@ function CardFila({ item, aberto, selecionado, aoVerbo, aoFechar, aoAdiar, aoSel
                 {item.temperatura != null && <View style={s.temp}><View style={[s.ponto, { backgroundColor: corDaTemp(item.temperatura) }]} /><Text style={s.tempTexto}>{Math.round(item.temperatura)}</Text></View>}
               </View>
               <Text style={s.cardPorque} numberOfLines={1}>{item.porque}</Text>
+              {!!item.tituloPorque && <Text style={s.cardTituloPorque} numberOfLines={1}>{item.tituloPorque}</Text>}
             </View>
             {aberto ? (
               <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={aoFechar} style={s.botaoX}>
                 <IconClose width={20} height={20} fill={cores.onSurface} />
               </Pressable>
+            ) : semTelefone && !semTelefone.noPlano ? (
+              <View style={{ gap: 6, alignItems: 'stretch' }}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Pôr no plano: ${item.negocio}`} onPress={semTelefone.aoPorNoPlano} style={[s.botaoVerbo, { backgroundColor: 'var(--vermelho-acao)' }]}>
+                  <IconCalendar width={18} height={18} fill="#FFFFFF" />
+                  <Text style={s.botaoVerboTexto}>Pôr no plano</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Adicionar telefone: ${item.negocio}`} onPress={semTelefone.aoTelefone} style={s.botaoTelefone}>
+                  <IconCall width={16} height={16} fill={cores.onSurface} />
+                  <Text style={s.botaoTelefoneTexto}>Telefone</Text>
+                </Pressable>
+              </View>
             ) : (
-              <Pressable accessibilityRole="button" accessibilityLabel={`${item.verbo}: ${item.negocio}`} onPress={aoVerbo} style={[s.botaoVerbo, { backgroundColor: corVerbo }]}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`${item.agendaHoje && item.verbo === 'Visitar' ? 'Cheguei' : item.verbo}: ${item.negocio}`} onPress={aoVerbo} style={[s.botaoVerbo, { backgroundColor: corVerbo }]}>
                 <Icone width={18} height={18} fill="#FFFFFF" />
-                <Text style={s.botaoVerboTexto}>{item.verbo}</Text>
+                <Text style={s.botaoVerboTexto}>{item.agendaHoje && item.verbo === 'Visitar' && item.clientId ? 'Cheguei' : item.verbo}</Text>
               </Pressable>
             )}
           </View>
@@ -318,7 +336,9 @@ function CardFila({ item, aberto, selecionado, aoVerbo, aoFechar, aoAdiar, aoSel
             <Text style={s.rodapeTexto} numberOfLines={1}>{item.ultimoContatoTexto}</Text>
             <View style={s.segmentos}>{[0, 1, 2, 3].map((i) => <View key={i} style={[s.segmento, i < item.contatos && { backgroundColor: item.contatos >= 4 ? 'var(--verde-acao)' : 'var(--text-muted)' }]} />)}</View>
             <Text style={s.rodapeFixo}>{`${item.contatos} de 4`}</Text>
-            {!item.temTelefone && (item.verbo === 'Visitar') ? <Text style={[s.rodapeFixo, { color: 'var(--ambar-texto)' }]} numberOfLines={1}>sem telefone no CRM</Text>
+            {semTelefone?.noPlano && !item.agendaHoje ? (
+                <View style={s.seloAgenda}><IconCalendar width={12} height={12} fill="var(--tint-green-text)" /><Text style={s.seloAgendaTexto}>{`no plano · ${semTelefone.noPlano}`}</Text></View>
+              ) : !item.temTelefone && (item.verbo === 'Visitar') && !item.agendaHoje ? <Text style={[s.rodapeFixo, { color: 'var(--ambar-texto)' }]} numberOfLines={1}>sem telefone no CRM</Text>
               : item.agendaHoje ? (
                 <View style={s.seloAgenda}><IconCalendar width={12} height={12} fill="var(--tint-green-text)" /><Text style={s.seloAgendaTexto}>{`hoje ${item.agendaHoje}`}</Text></View>
               ) : <Text style={[s.rodapeFixo, s.prazo, item.venceu && { color: 'var(--vermelho-texto)' }]}>{item.prazoTexto}</Text>}
@@ -336,6 +356,10 @@ type Props = {
   aoAbrirLead: (clientId: string) => void;
   aoPosicionar?: (dealId: string, nome: string) => void;
   aoRegistrarVisita: (clientId: string) => void;
+  /** A4: abre o cadastro do lead no campo telefone. */
+  aoEditarTelefone?: (clientId: string) => void;
+  /** O id do executivo no app (field_routes.seller_id), para o Pôr no plano. */
+  sellerId?: string | null;
   /** GPS atual; "Perto de mim" = até 1 km (D13, Julyan 04/10/26). */
   posicao: { latitude: number; longitude: number } | null;
 };
@@ -348,7 +372,7 @@ function metros(a: { latitude: number; longitude: number }, lat: number, lng: nu
 }
 type Filtro = 'tudo' | 'ligar' | 'visitar' | 'whatsapp' | 'perto';
 
-export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, aoRegistrarVisita, posicao }: Props) {
+export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, aoRegistrarVisita, aoEditarTelefone, sellerId, posicao }: Props) {
   const layout = useLayout();
   const queryClient = useQueryClient();
   const q = useFila();
@@ -379,6 +403,29 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
     },
   });
   const acordos = (pdi?.compromissos ?? []).filter((c) => c.estado !== 'validado');
+  // A4: o plano desta semana e da próxima (o mesmo planos_semanais do Planejamento do Cockpit),
+  // para saber se o negócio já está no plano e qual é o próximo dia de Rua.
+  const plano = useQuery<DiaDoPlano[]>({
+    queryKey: ['plano_semana_fila', ownerId, hoje],
+    enabled: !!ownerId,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const seguinte = proximoDiaUtil(hoje, 5, []);
+      const [a, b] = await Promise.all([lerSemanaDoPlano(ownerId!, hoje), lerSemanaDoPlano(ownerId!, seguinte)]);
+      return [...a, ...b];
+    },
+  });
+  const [postosNoPlano, setPostosNoPlano] = useState<Record<string, string>>({});
+  const diaNoPlano = (dealId: string): string | null => {
+    if (postosNoPlano[dealId]) return postosNoPlano[dealId];
+    const d = (plano.data ?? []).find((x) => x.iso >= hoje && x.faixas.some((f) => f.id === `c-${dealId}` || f.id === `r-${dealId}`));
+    return d ? d.iso : null;
+  };
+  // Decisão 4 do handoff: o próximo dia de Rua do plano; sem Rua marcada, o próximo dia útil.
+  const proximoDiaDeRua = (): string => {
+    const rua = (plano.data ?? []).find((x) => x.iso > hoje && ehDiaUtil(x.iso, feriados) && x.proposito === 'rua');
+    return rua ? rua.iso : proximoDiaUtil(hoje, 1, feriados);
+  };
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -515,6 +562,29 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
     }
   }
 
+  // A4: Pôr no plano. Grava na rota do dia (field_route_stops), que o espelho 0150 leva ao
+  // planos_semanais do Planejamento do Cockpit. 5 s de Desfazer antes de gravar, como o Adiar.
+  function porNoPlano(i: CardDaFila) {
+    if (!i.clientId || !sellerId) { Toast.mostrar('Este negócio ainda não tem pino no mapa.', 'erro'); return; }
+    const dia = proximoDiaDeRua();
+    setPostosNoPlano((p) => ({ ...p, [i.dealId]: dia }));
+    let desfeito = false;
+    const timer = setTimeout(async () => {
+      if (desfeito) return;
+      try {
+        await porNoDia(sellerId, dia, i.clientId!);
+        void queryClient.invalidateQueries({ queryKey: ['plano_semana_fila'] });
+      } catch {
+        setPostosNoPlano((p) => { const n = { ...p }; delete n[i.dealId]; return n; });
+        Toast.mostrar('Não consegui pôr no plano. Tente de novo.', 'erro');
+      }
+    }, 5000);
+    Toast.mostrar(`No plano · ${i.negocio} · ${diaCurto(dia)}`, 'ok', { rotulo: 'Desfazer', onPress: () => {
+      desfeito = true; clearTimeout(timer);
+      setPostosNoPlano((p) => { const n = { ...p }; delete n[i.dealId]; return n; });
+    } });
+  }
+
   function adiar(i: CardDaFila) {
     const amanha = proximoDiaUtil(hoje, 1, feriados);
     esconder(i.dealId);
@@ -565,13 +635,16 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
           ))}
         </View>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsFiltro}>
-        {([['tudo', 'Tudo'], ['ligar', 'Ligar'], ['visitar', 'Visitar'], ['whatsapp', 'WhatsApp'], ['perto', 'Perto de mim']] as Array<[Filtro, string]>).map(([f, r]) => (
-          <Pressable key={f} accessibilityRole="button" accessibilityState={{ selected: filtro === f }} onPress={() => setFiltro(f)} style={[s.chipFiltro, filtro === f && s.chipFiltroAtivo]}>
-            <Text style={[s.chipFiltroTexto, filtro === f && s.chipFiltroTextoAtivo]}>{r} <Text style={s.chipFiltroN}>{contagem(f)}</Text></Text>
+      {/* A3 (handoff das abas): 4 colunas fixas, rótulo em cima e contagem embaixo, 52 px —
+          nada corta em 390. "Perto de mim" fica só no computador. */}
+      <View style={s.filtrosGrade}>
+        {((layout.ehDesktop ? [['tudo', 'Tudo'], ['ligar', 'Ligar'], ['visitar', 'Visitar'], ['whatsapp', 'WhatsApp'], ['perto', 'Perto de mim']] : [['tudo', 'Tudo'], ['ligar', 'Ligar'], ['visitar', 'Visitar'], ['whatsapp', 'WhatsApp']]) as Array<[Filtro, string]>).map(([f, r]) => (
+          <Pressable key={f} accessibilityRole="button" accessibilityState={{ selected: filtro === f }} accessibilityLabel={`${r}: ${contagem(f)}`} onPress={() => setFiltro(f)} style={[s.filtroCelula, filtro === f && s.chipFiltroAtivo]}>
+            <Text style={[s.filtroRotulo, filtro === f && s.chipFiltroTextoAtivo]} numberOfLines={1}>{r}</Text>
+            <Text style={s.filtroN}>{contagem(f)}</Text>
           </Pressable>
         ))}
-      </ScrollView>
+      </View>
     </View>
   );
 
@@ -589,7 +662,12 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
         {doGrupo.map((i) => (
           <CardFila key={i.dealId} item={i} aberto={aberto === i.dealId} selecionado={layout.ehDesktop && doSelecionado?.dealId === i.dealId}
             aoVerbo={() => tocarVerbo(i)} aoFechar={fecharCard} aoAdiar={() => adiar(i)}
-            aoSelecionar={layout.ehDesktop ? () => setSelecionado(i.dealId) : undefined}>
+            aoSelecionar={layout.ehDesktop ? () => setSelecionado(i.dealId) : undefined}
+            semTelefone={i.verbo === 'Visitar' && !i.temTelefone && !i.agendaHoje && i.clientId ? {
+              noPlano: (() => { const d = diaNoPlano(i.dealId); return d ? diaCurto(d) : null; })(),
+              aoPorNoPlano: () => porNoPlano(i),
+              aoTelefone: () => aoEditarTelefone?.(i.clientId!),
+            } : null}>
             {!layout.ehDesktop && registroDe(i)}
           </CardFila>
         ))}
@@ -820,6 +898,13 @@ const s = StyleSheet.create({
   abaTexto: { fontSize: 13, color: 'var(--text-muted)' },
   abaAtiva: { color: 'var(--text)', fontWeight: '700', textDecorationLine: 'underline', textDecorationColor: 'var(--vermelho-acao)' },
   chipsFiltro: { gap: 8, paddingBottom: 10 },
+  filtrosGrade: { flexDirection: 'row', gap: 6 },
+  filtroCelula: { flex: 1, minWidth: 0, height: 52, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  filtroRotulo: { fontSize: 13, fontWeight: '600', color: 'var(--text)' },
+  filtroN: { fontSize: 12, fontWeight: '500', color: 'var(--text-muted)', marginTop: 1 },
+  cardTituloPorque: { fontSize: 12, color: 'var(--text-faint)' },
+  botaoTelefone: { minHeight: 44, borderRadius: 10, borderWidth: 1, borderColor: 'var(--border)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 10 },
+  botaoTelefoneTexto: { fontSize: 13, fontWeight: '600', color: 'var(--text)' },
   chipFiltro: { minHeight: 44, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center', backgroundColor: 'var(--surface-2)' },
   chipFiltroAtivo: { borderColor: 'var(--vermelho-acao)', backgroundColor: 'var(--tint-red)' },
   chipFiltroTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },

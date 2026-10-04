@@ -7716,6 +7716,14 @@ function MainApp() {
           aoAbrirLead={(id) => { setTab('map'); void openClientById(id); }}
           aoRegistrarVisita={(id) => { setTab('map'); void openClientById(id); }}
           aoPosicionar={isViewer ? undefined : iniciarPosicionar}
+          sellerId={profile?.id ?? null}
+          // A4 (handoff das abas): "+ Telefone" abre o cadastro do lead, onde está o telefone
+          aoEditarTelefone={async (id) => {
+            const local = clients.find((c) => c.id === id);
+            if (local) { openEditClient(local); return; }
+            const { data } = await supabase.from('clients').select('*').eq('id', id).maybeSingle();
+            if (data) openEditClient(data as Client); else Toast.mostrar('Não encontrei este lead.', 'erro');
+          }}
         />
         </BarreiraDaAba>
       ) : tab === 'tasks' ? (

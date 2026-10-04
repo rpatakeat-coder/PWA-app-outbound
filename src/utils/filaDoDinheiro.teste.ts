@@ -1,6 +1,6 @@
 // Teste da fila do dinheiro (docs/10 §1). Roda: npx tsx src/utils/filaDoDinheiro.teste.ts
 import {
-  diasUteisEntre, feriadosNacionais, montarFila, oQuePulou, proximoDiaUtil, textoUltimoContato, tipoDaTarefa, tituloDoCard,
+  diasUteisEntre, feriadosNacionais, montarFila, pessoaDoCard, oQuePulou, proximoDiaUtil, textoUltimoContato, tipoDaTarefa, tituloDoCard,
   type Contexto, type NegocioEntrada, type TarefaEntrada,
 } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
 import { dataDoChip, diaCurto, diasSugeridos, fraseDaVolta, notaDaFila, pedidoDaVolta, textoDoSalvar } from './registroDaFila';
@@ -93,6 +93,15 @@ ok(fer.includes('2026-04-03') && fer.includes('2026-02-17') && fer.includes('202
   const p = pedidoDaVolta({ dealId: 'd1', volta, pessoa: 'Ana', canal: 'ligacao' });
   ok(p.op === 'nota' && p.tipoAcao === 'proximo-passo' && p.data === '2026-10-27' && p.texto === 'Ligar Ana', 'próximo passo pela porta única, na data escolhida');
 }
+
+// A2 (handoff das abas, 04/10/26): o contato só vira título quando é confiável
+ok(pessoaDoCard('Julyan', 'Julyan House', 'Julyan Ribeiro', null).pessoa === null && pessoaDoCard('Julyan', 'Julyan House', 'Julyan Ribeiro', null).porque === 'contato no CRM: "Julyan" · igual ao dono da conta', 'A2: contato = dono da conta → usa o negócio e diz por quê');
+ok(pessoaDoCard('Teste', 'Teste', 'Bruno', null).porque?.endsWith('igual ao negócio'), 'A2: contato = negócio');
+ok(pessoaDoCard('.', 'Bar do Zé', 'Bruno', null).pessoa === null && pessoaDoCard('.', 'Bar do Zé', 'Bruno', null).porque?.endsWith('sem nome'), 'A2: "." não é nome');
+ok(pessoaDoCard('Ana Paula', 'Cantina', 'Bruno', null).pessoa === 'Ana' && pessoaDoCard('Ana Paula', 'Cantina', 'Bruno', null).porque === 'contato: Ana', 'A2: sem papel guarda a pessoa só como linha de apoio');
+ok(pessoaDoCard('Ana', 'Cantina', 'Bruno', 'Sócia').porque === null, 'A2: com papel é confiável');
+ok(pessoaDoCard(null, 'Cantina', 'Bruno', null).porque === null, 'A2: sem contato não explica nada');
+ok(tituloDoCard({ verbo: 'Visitar', pessoa: 'Ana', papel: null, negocio: 'Cantina' }) === 'Visitar Cantina', 'A2: sem papel o título usa o negócio');
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nfila do dinheiro: tudo certo');

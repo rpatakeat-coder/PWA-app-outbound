@@ -16,7 +16,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
-  feriadosNacionais, montarFila, ORDEM_GRUPOS, ROTULO_GRUPO, textoUltimoContato, tituloDoCard,
+  feriadosNacionais, montarFila, ORDEM_GRUPOS, ROTULO_GRUPO, pessoaDoCard, textoUltimoContato, tituloDoCard,
   type NegocioEntrada, type TarefaEntrada,
 } from '../_compartilhado/filaDoDinheiro.ts';
 
@@ -121,7 +121,7 @@ Deno.serve(async (req: Request) => {
   const { data: quem } = await svc.auth.getUser(jwt);
   const uid = quem?.user?.id;
   if (!uid) return json(401, { erro: 'Sessão inválida. Entre de novo.' });
-  const { data: perfil } = await svc.from('profiles').select('id, id_hubspot').eq('id', uid).maybeSingle();
+  const { data: perfil } = await svc.from('profiles').select('id, id_hubspot, full_name').eq('id', uid).maybeSingle();
   const owner = perfil?.id_hubspot ? String(perfil.id_hubspot) : null;
   if (!owner) return json(200, { itens: [], semMedicao: 'Seu usuário não está ligado a um dono no HubSpot: não há carteira para montar a fila.' });
   let corpo: Record<string, unknown> = {};
@@ -243,11 +243,12 @@ Deno.serve(async (req: Request) => {
   const negocios: NegocioEntrada[] = meus.map((id) => {
     const v = vivos.get(id)!; const s = doSnap.get(id); const c = clientePorDeal.get(id);
     const temp = s?.temperatura != null ? Number(s.temperatura) : null;
-    const pessoa = c?.nome && c.nome.trim() && c.nome.trim().toLowerCase() !== v.nome.trim().toLowerCase() ? c.nome.trim().split(/\s+/)[0] : null;
+    // A2 (handoff das abas): o contato só vira título quando é confiável; sem papel no CRM, é o negócio.
+    const { pessoa, porque: tituloPorque } = pessoaDoCard(c?.nome, v.nome || s?.name || '', perfil?.full_name, null);
     return {
       dealId: id, nome: v.nome || s?.name || 'Negócio', etapaId: v.etapa, mrr: v.mrr ?? (Number(s?.mrr) || null),
       temperatura: Number.isFinite(temp as number) ? temp : null, diasNaEtapa: s?.stageId === v.etapa && s?.dias != null ? Number(s.dias) : null,
-      pessoa, papel: null, temTelefone: !!(c?.telefone && String(c.telefone).replace(/\D/g, '').length >= 10),
+      pessoa, papel: null, tituloPorque, temTelefone: !!(c?.telefone && String(c.telefone).replace(/\D/g, '').length >= 10),
       clientId: c?.id ?? null, lat: c?.lat ?? null, lng: c?.lng ?? null,
     };
   });
