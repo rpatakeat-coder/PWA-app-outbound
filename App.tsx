@@ -6582,7 +6582,7 @@ function MainApp() {
                 </View>
               </View>
               {layout.ehDesktop && (
-                <Text style={[styles.ltwColContato, styles.ltwCelula]} numberOfLines={1}>{contatoDoLead(c) || c.telefone || '—'}</Text>
+                <Text style={[styles.ltwColContato, styles.ltwCelula]} numberOfLines={1}>{contatoDoLead(c) || 'sem contato'}</Text>
               )}
               <View style={styles.ltwColEtapa}>
                 {c.etapa ? (
@@ -6769,6 +6769,10 @@ function MainApp() {
     const g = grupoDaTarefa(t.venceEm, new Date());
     return g === 'atrasadas' || g === 'hoje';
   }).length;
+  // UM NÚMERO SÓ (Fase 0 das abas, 04/10/26): selo, lateral, cabeçalho e Meu desempenho contam a
+  // fila. Enquanto ela não chega, sem número (antes piscava o 5 do CRM e virava 3); a contagem
+  // do CRM só entra se a fila falhar.
+  const totalDaFila = naFila ?? (filaNaTela.isError ? seloTarefas : null);
   // O NÚMERO DA AGENDA (28/09/2026, Julyan: "coloco na agenda e na rota do dia e o
   // rodapé fica travado sem atualizar o número"). Contava só as paradas da rota: o que
   // se agendava (demo, retorno) não mexia no número. Agora soma os agendamentos de hoje
@@ -6782,7 +6786,7 @@ function MainApp() {
     { aba: 'map', rotulo: 'Mapa', Icone: tab === 'map' ? IconLocationFilled : IconLocation, ativa: tab === 'map' || tab === 'list', selo: null },
     ...(isViewer ? [] : [
       { aba: 'agenda' as AppTab, rotulo: 'Agenda', Icone: IconCalendar, ativa: tab === 'agenda' || tab === 'route', selo: seloAgenda || null, seloClaro: true },
-      { aba: 'tasks' as AppTab, rotulo: 'Tarefas', Icone: IconClipboardCheck, ativa: tab === 'tasks', selo: (naFila ?? seloTarefas) || null },
+      { aba: 'tasks' as AppTab, rotulo: 'Tarefas', Icone: IconClipboardCheck, ativa: tab === 'tasks', selo: totalDaFila || null },
       { aba: 'playbook' as AppTab, rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, ativa: tab === 'playbook', selo: null },
     ]),
   ];
@@ -6814,7 +6818,7 @@ function MainApp() {
     { aba: 'route', rotulo: 'Rota', Icone: IconCar, visivel: !isViewer },
     { aba: 'agenda', rotulo: 'Agenda', Icone: IconCalendar, visivel: !isViewer },
     // N5 (handoff v6): um número de tarefas só, "atrasadas + hoje", igual ao selo do rodapé
-    { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: modoNovo ? (naFila ?? seloTarefas) : visibleTasksCount, visivel: !isViewer },
+    { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: modoNovo ? (totalDaFila ?? undefined) : visibleTasksCount, visivel: !isViewer },
     // No computador o Playbook não aparecia (auditoria das abas, 04/10/26); a tela já existia.
     { aba: 'playbook', rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, visivel: !isViewer },
     { aba: 'cockpit', rotulo: 'Gestão', Icone: IconBarGraph, visivel: verGestao },
@@ -7779,7 +7783,7 @@ function MainApp() {
       ) : tab === 'meu' ? (
         <MeuDesempenhoScreen
           enabled={tab === 'meu'}
-          tarefasPendentes={modoNovo ? seloTarefas : visibleTasksCount}
+          tarefasPendentes={modoNovo ? (totalDaFila ?? undefined) : visibleTasksCount}
           aoAbrirTarefas={() => setTab('tasks')}
           ehGestor={canViewGestor}
         />
@@ -7851,7 +7855,7 @@ function MainApp() {
         <AvisosPainel
           aoFechar={() => setAvisosAbertos(false)}
           falhas={avisos.falhas}
-          cobrancasAtrasadas={vencidasNaFila ?? tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'atrasadas').length}
+          cobrancasAtrasadas={vencidasNaFila ?? (filaNaTela.isError ? tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'atrasadas').length : 0)}
           atrasadasPerto={(() => {
             if (!userLocation) return null;
             let perto = 0;
