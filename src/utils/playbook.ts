@@ -113,3 +113,82 @@ export function rotuloProgresso(p: Progresso[string] | undefined): string | null
   if (p.pct > 0) return `${Math.round(p.pct)}%`;
   return null;
 }
+
+// ---- "O dono disse…" (handoff "Abas do app", 04/10/2026 — docs/12 §5) ----------------------
+// Resposta antes de biblioteca. As objeções saem do TEXTO OFICIAL da página "objecoes" (cada
+// <h3> entre aspas, com "O diagnóstico", "A Resposta Direta" e "No follow-up"): nada é escrito
+// no app. A fala pronta são as duas primeiras frases da Resposta Direta; "Se ele insistir", as
+// seguintes. Mudar a página no Cockpit muda a resposta aqui.
+export type Objecao = {
+  id: string;
+  /** A objeção como o dono diz (o título da seção). */
+  pergunta: string;
+  /** Rótulo curto para a lista ("O sistema de vocês é caro"). */
+  curta: string;
+  fala: string;
+  seInsistir: string[];
+  diagnostico: string | null;
+  followUp: string | null;
+  paginaId: string;
+  ancora: string | null;
+};
+
+const textoDe = (html: string) => html
+  .replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, ' ')
+  .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+const semAspas = (t: string) => t.replace(/^["“”\s]+|["“”\s]+$/g, '').trim();
+/** Frases de um texto corrido (ponto, exclamação ou interrogação seguidos de espaço). */
+export function frases(t: string): string[] {
+  return (t.match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g) ?? []).map((f) => f.trim()).filter(Boolean);
+}
+
+export function objecoesDoPlaybook(pb: Playbook, paginaId = 'objecoes'): Objecao[] {
+  const pagina = pb.paginas.find((p) => p.id === paginaId);
+  const html = pagina?.html ?? '';
+  if (!html) return [];
+  const partes = html.split(/<h3\b/i).slice(1);
+  const out: Objecao[] = [];
+  for (const parte of partes) {
+    const fimTitulo = parte.indexOf('</h3>');
+    if (fimTitulo < 0) continue;
+    const abre = parte.slice(0, fimTitulo);
+    const ancora = (abre.match(/id="([^"]+)"/) ?? [])[1] ?? null;
+    const titulo = textoDe(abre.slice(abre.indexOf('>') + 1));
+    if (!/^["“]/.test(titulo)) continue;
+    const corpo = parte.slice(fimTitulo + 5);
+    const item = (rotulo: RegExp) => {
+      const m = corpo.match(new RegExp(String.raw`<li>\s*<strong>\s*` + rotulo.source + String.raw`[^<]*</strong>([\s\S]*?)</li>`, 'i'));
+      const t = m ? textoDe(m[1]) : '';
+      return t ? semAspas(t) : null;
+    };
+    const resposta = semAspas(textoDe((corpo.match(/<blockquote>([\s\S]*?)<\/blockquote>/i) ?? [])[1] ?? ''));
+    if (!resposta) continue;
+    const fs = frases(resposta);
+    const pergunta = semAspas(titulo);
+    out.push({
+      id: ancora ?? pergunta,
+      pergunta,
+      curta: pergunta.split(/\s[/]\s|[.]\s/)[0].replace(/[.]$/, ''),
+      fala: fs.slice(0, 2).join(' '),
+      seInsistir: fs.slice(2, 5),
+      diagnostico: item(/O diagn[óo]stico:/),
+      followUp: item(/No follow-up/),
+      paginaId,
+      ancora,
+    });
+  }
+  return out;
+}
+
+/** Busca pela palavra do dono ("caro", "sistema", "internet"), sem acento. */
+export function buscarObjecoes(lista: Objecao[], termo: string): Objecao[] {
+  const palavras = semAcento(termo).split(/\s+/).filter((p) => p.length >= 3);
+  if (!palavras.length) return lista;
+  const pontos = (o: Objecao) => {
+    const titulo = semAcento(o.pergunta);
+    const resto = semAcento(`${o.fala} ${o.seInsistir.join(' ')} ${o.diagnostico ?? ''}`);
+    return palavras.reduce((n, p) => n + (titulo.includes(p) ? 3 : 0) + (resto.includes(p) ? 1 : 0), 0);
+  };
+  return lista.map((o) => ({ o, n: pontos(o) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n).map((x) => x.o);
+}

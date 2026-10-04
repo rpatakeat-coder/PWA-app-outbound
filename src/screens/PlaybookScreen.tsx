@@ -12,13 +12,15 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOp
 import { useQuery } from '@tanstack/react-query';
 
 import { supabase } from '../integrations/supabase/client';
-import { IconChevronLeft, IconChevronRight, IconClose, IconSearch, useIconColors } from '../components/icons';
+import { IconBook, IconCheck, IconChevronLeft, IconChevronRight, IconClose, IconSearch, useIconColors } from '../components/icons';
+import { useLayout } from '../hooks/useLayout';
 import {
-  cartaoContextual, continuarLendo, filtrarPaginas, rotuloProgresso, sugestoesDaEtapa,
-  type PaginaPlaybook, type Playbook, type Progresso,
+  buscarObjecoes, cartaoContextual, continuarLendo, filtrarPaginas, objecoesDoPlaybook, rotuloProgresso, sugestoesDaEtapa,
+  type Objecao, type PaginaPlaybook, type Playbook, type Progresso,
 } from '../utils/playbook';
 
 const CHAVE_CACHE = 'takeat-playbook-cache';
+const CHAVE_LIDAS_PENDENTES = 'takeat-playbook-lidas-pendentes';
 const chaveProgresso = (email: string) => `takeat-playbook-progresso:${email.toLowerCase()}`;
 
 const ler = <T,>(k: string): T | null => {
@@ -46,6 +48,8 @@ type Props = {
 
 export default function PlaybookScreen({ email, proximaParada }: Props) {
   const cores = useIconColors();
+  const layout = useLayout();
+  const duas = layout.ehDesktop;
   const cache = useMemo(() => ler<Playbook>(CHAVE_CACHE), []);
   const { data: pb, isLoading, isError, refetch } = useQuery({
     queryKey: ['playbook'],
@@ -59,6 +63,8 @@ export default function PlaybookScreen({ email, proximaParada }: Props) {
   const [termo, setTermo] = useState('');
   const [categoria, setCategoria] = useState<string | null>(null);
   const [aberta, setAberta] = useState<{ id: string; ancora?: string } | null>(null);
+  const [resposta, setResposta] = useState<Objecao | null>(null);
+  const [biblioteca, setBiblioteca] = useState(false);
   const [prog, setProg] = useState<Progresso>(() => (email ? ler<Progresso>(chaveProgresso(email)) ?? {} : {}));
   // O que o negócio da próxima porta já tem (dor, sistema, celular do decisor):
   // escolhe o cartão do topo. Sem negócio ou sem sinal, fica vazio e o cartão
@@ -94,13 +100,30 @@ export default function PlaybookScreen({ email, proximaParada }: Props) {
 
   useEffect(() => { if (email) gravar(chaveProgresso(email), prog); }, [email, prog]);
 
+  // SEM SINAL, A "LIDA" ESPERA NA FILA (docs/12 §5): grava no aparelho e sobe quando a rede volta.
+  const enviarLidas = useCallback(async () => {
+    const pend = ler<Array<{ user_email: string; guia_slug: string; tipo: string; concluido_em: string }>>(CHAVE_LIDAS_PENDENTES) ?? [];
+    if (!pend.length) return;
+    const { error } = await supabase.from('playbook_progresso').upsert(pend, { onConflict: 'user_email,guia_slug' });
+    if (!error) gravar(CHAVE_LIDAS_PENDENTES, []);
+  }, []);
+  useEffect(() => {
+    void enviarLidas();
+    if (typeof window === 'undefined') return;
+    const on = () => { void enviarLidas(); };
+    window.addEventListener('online', on);
+    return () => window.removeEventListener('online', on);
+  }, [enviarLidas]);
+
   const marcarLida = useCallback((id: string) => {
-    setProg((p) => ({ ...p, [id]: { pct: 100, lida: true, em: Date.now() } }));
+    setProg((p) => (p[id]?.lida ? p : { ...p, [id]: { pct: 100, lida: true, em: Date.now() } }));
     if (!email) return;
-    void supabase.from('playbook_progresso').upsert(
-      { user_email: email.toLowerCase(), guia_slug: id, tipo: 'leitura', concluido_em: new Date().toISOString() },
-      { onConflict: 'user_email,guia_slug' },
-    );
+    const linha = { user_email: email.toLowerCase(), guia_slug: id, tipo: 'leitura', concluido_em: new Date().toISOString() };
+    void supabase.from('playbook_progresso').upsert(linha, { onConflict: 'user_email,guia_slug' }).then(({ error }) => {
+      if (!error) return;
+      const pend = ler<Array<typeof linha>>(CHAVE_LIDAS_PENDENTES) ?? [];
+      gravar(CHAVE_LIDAS_PENDENTES, [...pend.filter((x) => x.guia_slug !== id), linha]);
+    });
   }, [email]);
 
   const anotarRolagem = useCallback((id: string, pct: number) => {
@@ -111,12 +134,14 @@ export default function PlaybookScreen({ email, proximaParada }: Props) {
     });
   }, []);
 
+  const objecoes = useMemo(() => (pb ? objecoesDoPlaybook(pb) : []), [pb]);
+
   if (!pb) {
     return (
       <View style={s.centro}>
         {isLoading ? <ActivityIndicator color="#C8131B" /> : null}
         <Text style={s.vazio}>
-          {isError ? 'Não consegui carregar o Playbook. Sem sinal, ele aparece depois da primeira carga.' : 'Carregando o Playbook…'}
+          {isError ? 'Não consegui carregar o Playbook. Sem sinal, ele aparece depois da primeira carga.' : 'Abrindo o Playbook salvo…'}
         </Text>
         {isError && (
           <TouchableOpacity accessibilityRole="button" style={s.botaoSec} onPress={() => void refetch()}>
@@ -127,23 +152,28 @@ export default function PlaybookScreen({ email, proximaParada }: Props) {
     );
   }
 
-  const pagina = aberta ? pb.paginas.find((p) => p.id === aberta.id) ?? null : null;
-  if (pagina) {
-    return (
-      <Leitor
-        pagina={pagina}
-        ancora={aberta?.ancora}
-        progresso={prog[pagina.id]}
-        aoVoltar={() => setAberta(null)}
-        aoAbrir={(id, ancora) => { if (pb.paginas.some((p) => p.id === id)) setAberta({ id, ancora }); }}
-        aoRolar={(pct) => anotarRolagem(pagina.id, pct)}
-        aoMarcarLida={() => marcarLida(pagina.id)}
-      />
-    );
-  }
+  const abrirResposta = (o: Objecao) => { setAberta(null); setResposta(o); marcarLida(o.paginaId); };
+  const abrirPagina = (id: string, ancora?: string) => { setResposta(null); setAberta({ id, ancora }); };
 
-  const lista = filtrarPaginas(pb, termo, categoria);
+  const pagina = aberta ? pb.paginas.find((p) => p.id === aberta.id) ?? null : null;
+  const leitor = pagina ? (
+    <Leitor
+      pagina={pagina}
+      ancora={aberta?.ancora}
+      progresso={prog[pagina.id]}
+      aoVoltar={() => setAberta(null)}
+      semVoltar={duas}
+      aoAbrir={(id, ancora) => { if (pb.paginas.some((p) => p.id === id)) setAberta({ id, ancora }); }}
+      aoRolar={(pct) => anotarRolagem(pagina.id, pct)}
+      aoMarcarLida={() => marcarLida(pagina.id)}
+    />
+  ) : null;
+  // Celular: a página ou a resposta ocupam a tela; computador: ficam na coluna da direita.
+  if (!duas && leitor) return leitor;
+
   const buscando = termo.trim().length > 0;
+  const objecoesVistas = buscando ? buscarObjecoes(objecoes, termo) : objecoes;
+  const lista = filtrarPaginas(pb, termo, categoria);
   const sugeridas = proximaParada && !buscando ? sugestoesDaEtapa(pb, proximaParada.etapa) : [];
   const cartao = proximaParada && !buscando
     ? cartaoContextual(pb, { etapa: proximaParada.etapa, temNegocio: !!proximaParada.dealId, celular: jaTem.celular, gargalo: jaTem.gargalo_operacional, sistema: jaTem.nome_do_sistema })
@@ -151,38 +181,63 @@ export default function PlaybookScreen({ email, proximaParada }: Props) {
   const outras = cartao ? sugeridas.filter((p) => p.id !== cartao.pagina.id) : sugeridas;
   const continuar = !buscando ? continuarLendo(pb, prog) : null;
   const categorias = pb.categorias.filter((c) => pb.paginas.some((p) => p.categoria === c));
+  const lidas = pb.paginas.filter((p) => prog[p.id]?.lida).length;
+  const salvo = !!cache || !!pb;
 
-  return (
-    <ScrollView style={s.tela} contentContainerStyle={s.conteudo} keyboardShouldPersistTaps="handled">
-      <Text style={s.subtitulo}>{`${pb.paginas.length} páginas · fonte oficial do Field Sales`}</Text>
-
-      {/* CARTÃO DA PRÓXIMA PORTA (§6.16), acima de tudo: uma leitura escolhida
-          pelo que falta naquela casa (decisor, dor, sistema), e as outras da etapa. */}
-      {cartao && proximaParada && (
-        <View style={s.proxima}>
-          <Text style={s.proximaKicker}>{`PRÓXIMA PORTA · ${proximaParada.nome}`.toUpperCase()}</Text>
-          <TouchableOpacity accessibilityRole="button" onPress={() => setAberta({ id: cartao.pagina.id })} style={{ gap: 2 }}>
-            <Text style={s.proximaTitulo} numberOfLines={2}>{cartao.titulo}</Text>
-            <Text style={s.proximaMotivo} numberOfLines={2}>{cartao.motivo}</Text>
-          </TouchableOpacity>
-          {outras.map((p) => (
-            <TouchableOpacity key={p.id} accessibilityRole="button" style={s.proximaLinha} onPress={() => setAberta({ id: p.id })}>
-              <Text style={s.proximaLinhaTexto} numberOfLines={1}>{p.titulo}</Text>
-              <IconChevronRight width={20} height={20} fill="#FFFFFF" />
-            </TouchableOpacity>
-          ))}
+  const respostaVista = resposta ? (
+    <ScrollView style={s.tela} contentContainerStyle={s.conteudo}>
+      {!duas && (
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar ao Playbook" style={s.voltar} onPress={() => setResposta(null)}>
+          <IconChevronLeft width={24} height={24} fill={cores.onSurface} />
+          <Text style={s.voltarTexto}>Playbook</Text>
+        </TouchableOpacity>
+      )}
+      <Text style={s.secao}>O DONO DISSE</Text>
+      <Text style={s.respPergunta}>{`“${resposta.pergunta}”`}</Text>
+      <View style={s.fala}>
+        <Text style={s.falaRotulo}>FALA PRONTA</Text>
+        <Text style={s.falaTexto}>{resposta.fala}</Text>
+      </View>
+      {resposta.seInsistir.length > 0 && (
+        <View style={s.bloco}>
+          <Text style={s.secao}>SE ELE INSISTIR</Text>
+          {resposta.seInsistir.map((f, i) => <Text key={i} style={s.blocoTexto}>{f}</Text>)}
         </View>
       )}
+      {!!resposta.diagnostico && (
+        <View style={s.bloco}>
+          <Text style={s.secao}>POR QUE ELE DIZ ISSO</Text>
+          <Text style={s.blocoTexto}>{resposta.diagnostico}</Text>
+        </View>
+      )}
+      {!!resposta.followUp && (
+        <View style={s.bloco}>
+          <Text style={s.secao}>SE NÃO FECHAR NA HORA · FOLLOW-UP</Text>
+          <Text style={s.blocoTexto}>{`“${resposta.followUp}”`}</Text>
+        </View>
+      )}
+      <View style={s.bloco}>
+        <Text style={s.secao}>NO REGISTRO DA VISITA</Text>
+        <Text style={s.blocoTexto}>Anote qual objeção apareceu. Objeção que se repete no território vira assunto do 1:1.</Text>
+      </View>
+      <TouchableOpacity accessibilityRole="button" style={s.botaoSec} onPress={() => abrirPagina(resposta.paginaId, resposta.ancora ?? undefined)}>
+        <Text style={s.botaoSecTexto}>Ler a página completa</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  ) : null;
+  if (!duas && respostaVista) return respostaVista;
 
+  const inicio = (
+    <ScrollView style={s.tela} contentContainerStyle={s.conteudo} keyboardShouldPersistTaps="handled">
       <View style={s.busca}>
         <IconSearch width={20} height={20} fill={cores.muted} />
         <TextInput
           style={s.buscaCampo}
           value={termo}
           onChangeText={setTermo}
-          placeholder="Buscar objeção, produto, etapa"
+          placeholder="Qual a objeção? “tá caro”, “já tenho sistema”…"
           placeholderTextColor="var(--text-faint)"
-          accessibilityLabel="Buscar no Playbook"
+          accessibilityLabel="Buscar uma objeção ou página no Playbook"
         />
         {buscando && (
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Limpar busca" onPress={() => setTermo('')} style={s.alvo44}>
@@ -190,47 +245,119 @@ export default function PlaybookScreen({ email, proximaParada }: Props) {
           </TouchableOpacity>
         )}
       </View>
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
-        {[null, ...categorias].map((c) => {
-          const ativo = categoria === c;
-          return (
-            <TouchableOpacity
-              key={c ?? 'todas'}
-              accessibilityRole="button"
-              accessibilityState={{ selected: ativo }}
-              style={[s.chip, ativo && s.chipAtivo]}
-              onPress={() => setCategoria(c)}
-            >
-              <Text style={[s.chipTexto, ativo && s.chipTextoAtivo]}>{c ?? 'Todas'}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      {continuar && (
-        <TouchableOpacity accessibilityRole="button" style={s.continuar} onPress={() => setAberta({ id: continuar.pagina.id })}>
-          <Text style={s.secao}>CONTINUAR LENDO</Text>
-          <Text style={s.linhaTitulo} numberOfLines={1}>{continuar.pagina.titulo}</Text>
-          <View style={s.barra}><View style={[s.barraCheia, { width: `${continuar.pct}%` }]} /></View>
-        </TouchableOpacity>
+      {salvo && (
+        <View style={s.salvo}>
+          <IconCheck width={14} height={14} fill="var(--tint-green-text)" />
+          <Text style={s.salvoTexto}>Salvo no celular · funciona sem sinal</Text>
+        </View>
       )}
 
-      {lista.length === 0 && <Text style={s.vazio}>Nada encontrado. Tente outra palavra.</Text>}
+      {/* CARTÃO DA PRÓXIMA PORTA (§6.16): uma leitura escolhida pelo que falta naquela casa. */}
+      {cartao && proximaParada && (
+        <View style={s.proxima}>
+          <Text style={s.proximaKicker}>{`PRÓXIMA PORTA · ${proximaParada.nome}`.toUpperCase()}</Text>
+          <TouchableOpacity accessibilityRole="button" onPress={() => abrirPagina(cartao.pagina.id)} style={{ gap: 2 }}>
+            <Text style={s.proximaTitulo} numberOfLines={2}>{cartao.titulo}</Text>
+            <Text style={s.proximaMotivo} numberOfLines={2}>{cartao.motivo}</Text>
+          </TouchableOpacity>
+          {outras.map((p) => (
+            <TouchableOpacity key={p.id} accessibilityRole="button" style={s.proximaLinha} onPress={() => abrirPagina(p.id)}>
+              <Text style={s.proximaLinhaTexto} numberOfLines={1}>{p.titulo}</Text>
+              <IconChevronRight width={20} height={20} fill="#FFFFFF" />
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
-      {(categoria ? [categoria] : categorias).map((cat) => {
-        const doGrupo = lista.filter((p) => p.categoria === cat);
-        if (!doGrupo.length) return null;
-        return (
-          <View key={cat} style={s.grupo}>
-            <Text style={s.secao}>{cat.toUpperCase()}</Text>
-            {doGrupo.map((p) => (
-              <LinhaPagina key={p.id} pagina={p} rotulo={rotuloProgresso(prog[p.id])} aoAbrir={() => setAberta({ id: p.id })} />
-            ))}
-          </View>
-        );
-      })}
+      {/* RESPOSTA ANTES DE BIBLIOTECA (docs/12 §5): as objeções do texto oficial. */}
+      {objecoesVistas.length > 0 && (
+        <View style={s.grupo}>
+          <Text style={s.secao}>O DONO DISSE…</Text>
+          {objecoesVistas.map((o) => (
+            <TouchableOpacity key={o.id} accessibilityRole="button" style={[s.linha, duas && resposta?.id === o.id && s.linhaSel]} onPress={() => abrirResposta(o)}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={s.linhaTitulo} numberOfLines={2}>{`“${o.curta}”`}</Text>
+                <Text style={s.linhaResumo} numberOfLines={1}>{o.fala}</Text>
+              </View>
+              <IconChevronRight width={20} height={20} fill={cores.muted} />
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {buscando && (
+        <View style={s.grupo}>
+          <Text style={s.secao}>PÁGINAS</Text>
+          {lista.length === 0 && objecoesVistas.length === 0 && (
+            <Text style={s.vazio}>{`Nada para “${termo.trim()}”. Tente uma palavra do dono: caro, sistema, internet, pequeno.`}</Text>
+          )}
+          {lista.map((p) => <LinhaPagina key={p.id} pagina={p} rotulo={rotuloProgresso(prog[p.id])} aoAbrir={() => abrirPagina(p.id)} />)}
+        </View>
+      )}
+
+      {!buscando && (
+        <View style={s.grupo}>
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ expanded: biblioteca }} style={s.bibCabeca} onPress={() => setBiblioteca((v) => !v)}>
+            <IconBook width={20} height={20} fill={cores.onSurface} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={s.linhaTitulo}>Biblioteca</Text>
+              <Text style={s.linhaResumo}>{`${pb.paginas.length} páginas · ${lidas} lidas`}</Text>
+            </View>
+            <Text style={s.bibAcao}>{biblioteca ? 'fechar' : 'abrir'}</Text>
+          </TouchableOpacity>
+          {biblioteca && (
+            <>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
+                {[null, ...categorias].map((c) => {
+                  const ativo = categoria === c;
+                  return (
+                    <TouchableOpacity key={c ?? 'todas'} accessibilityRole="button" accessibilityState={{ selected: ativo }}
+                      style={[s.chip, ativo && s.chipAtivo]} onPress={() => setCategoria(c)}>
+                      <Text style={[s.chipTexto, ativo && s.chipTextoAtivo]}>{c ?? 'Todas'}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              {continuar && (
+                <TouchableOpacity accessibilityRole="button" style={s.continuar} onPress={() => abrirPagina(continuar.pagina.id)}>
+                  <Text style={s.secao}>CONTINUAR LENDO</Text>
+                  <Text style={s.linhaTitulo} numberOfLines={1}>{continuar.pagina.titulo}</Text>
+                  <View style={s.barra}><View style={[s.barraCheia, { width: `${continuar.pct}%` }]} /></View>
+                </TouchableOpacity>
+              )}
+              {(categoria ? [categoria] : categorias).map((cat) => {
+                const doGrupo = lista.filter((p) => p.categoria === cat);
+                if (!doGrupo.length) return null;
+                return (
+                  <View key={cat} style={s.grupo}>
+                    <Text style={s.secao}>{cat.toUpperCase()}</Text>
+                    {doGrupo.map((p) => (
+                      <LinhaPagina key={p.id} pagina={p} rotulo={rotuloProgresso(prog[p.id])} aoAbrir={() => abrirPagina(p.id)} />
+                    ))}
+                  </View>
+                );
+              })}
+            </>
+          )}
+        </View>
+      )}
     </ScrollView>
+  );
+
+  if (!duas) return inicio;
+  // Computador (P1): perguntas à esquerda, resposta (ou página) à direita.
+  const direita = respostaVista ?? leitor;
+  return (
+    <View style={{ flex: 1, flexDirection: 'row' }}>
+      <View style={{ width: layout.largura >= 1500 ? 420 : 380, borderRightWidth: 1, borderRightColor: 'var(--border)' }}>{inicio}</View>
+      <View style={{ flex: 1 }}>
+        {direita ?? (
+          <View style={s.centro}>
+            <Text style={s.vazio}>Escolha uma objeção ou uma página à esquerda.</Text>
+          </View>
+        )}
+      </View>
+    </View>
   );
 }
 
@@ -266,8 +393,10 @@ const CSS_LEITOR = `
 .pb-leitor .pb-ir{display:inline-flex;align-items:center;min-height:36px;margin:2px 0;padding:6px 12px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);font:inherit;font-size:14px;cursor:pointer}
 `;
 
-function Leitor({ pagina, ancora, progresso, aoVoltar, aoAbrir, aoRolar, aoMarcarLida }: {
+function Leitor({ pagina, ancora, progresso, aoVoltar, aoAbrir, aoRolar, aoMarcarLida, semVoltar = false }: {
   pagina: PaginaPlaybook;
+  /** Computador: o leitor mora na coluna da direita, sem o Voltar. */
+  semVoltar?: boolean;
   ancora?: string;
   progresso: Progresso[string] | undefined;
   aoVoltar: () => void;
@@ -309,10 +438,12 @@ function Leitor({ pagina, ancora, progresso, aoVoltar, aoAbrir, aoRolar, aoMarca
   return (
     <View style={s.tela}>
       <View style={s.leitorTopo}>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar ao Playbook" style={s.voltar} onPress={aoVoltar}>
-          <IconChevronLeft width={24} height={24} fill={cores.onSurface} />
-          <Text style={s.voltarTexto}>Playbook</Text>
-        </TouchableOpacity>
+        {!semVoltar && (
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Voltar ao Playbook" style={s.voltar} onPress={aoVoltar}>
+            <IconChevronLeft width={24} height={24} fill={cores.onSurface} />
+            <Text style={s.voltarTexto}>Playbook</Text>
+          </TouchableOpacity>
+        )}
         <View style={s.barra}><View style={[s.barraCheia, { width: `${lida ? 100 : pct}%` }]} /></View>
       </View>
       <ScrollView
@@ -340,7 +471,8 @@ function Leitor({ pagina, ancora, progresso, aoVoltar, aoAbrir, aoRolar, aoMarca
           style={[s.botaoLida, lida && s.botaoLidaFeito]}
           onPress={aoMarcarLida}
         >
-          <Text style={[s.botaoLidaTexto, lida && s.botaoLidaTextoFeito]}>{lida ? 'Lida ✓' : 'Marcar como lida'}</Text>
+          {lida && <IconCheck width={18} height={18} fill="var(--tint-green-text)" />}
+          <Text style={[s.botaoLidaTexto, lida && s.botaoLidaTextoFeito]}>{lida ? 'Lida' : 'Marcar como lida'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -400,7 +532,18 @@ const s = StyleSheet.create({
   leitorCategoria: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: 'var(--vermelho-texto)' },
   leitorTitulo: { fontSize: 26, lineHeight: 32, fontWeight: '800', color: 'var(--text)', marginTop: 6 },
   leitorResumo: { fontSize: 15, lineHeight: 22, color: 'var(--text-muted)', marginTop: 8, marginBottom: 8 },
-  botaoLida: { marginTop: 24, minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--vermelho-acao)' },
+  botaoLida: { marginTop: 24, minHeight: 48, borderRadius: 12, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--vermelho-acao)' },
+  salvo: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: -8 },
+  salvoTexto: { fontSize: 12, color: 'var(--text-muted)' },
+  linhaSel: { borderColor: 'var(--vermelho-acao)', backgroundColor: 'var(--tint-red)' },
+  respPergunta: { fontSize: 22, lineHeight: 28, fontWeight: '800', color: 'var(--text)' },
+  fala: { padding: 16, gap: 6, borderRadius: 16, backgroundColor: 'var(--tint-red)', borderWidth: 1.5, borderColor: 'var(--vermelho-acao)' },
+  falaRotulo: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: 'var(--vermelho-texto)' },
+  falaTexto: { fontSize: 18, lineHeight: 26, fontWeight: '700', color: 'var(--text)' },
+  bloco: { padding: 14, gap: 6, borderRadius: 14, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border-soft)' },
+  blocoTexto: { fontSize: 15, lineHeight: 22, color: 'var(--text)' },
+  bibCabeca: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, paddingHorizontal: 14, borderRadius: 12, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)' },
+  bibAcao: { fontSize: 14, fontWeight: '600', color: 'var(--text-muted)' },
   botaoLidaFeito: { backgroundColor: 'var(--tint-green)' },
   botaoLidaTexto: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   botaoLidaTextoFeito: { color: 'var(--tint-green-text)' },

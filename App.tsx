@@ -6676,7 +6676,6 @@ function MainApp() {
   // ---- Shell web (>= 768px): sidebar colapsavel + header neutro ----
   // Recriacao do handoff em design_handoff_desktop_web/. No celular (< 768)
   // nada disso monta: header vermelho + bottom nav seguem intactos.
-  const mesAno = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   const cabecalhoWeb = (() => {
     switch (tab) {
       case 'map':
@@ -6703,8 +6702,10 @@ function MainApp() {
       }
       case 'config':
         return { titulo: 'Configurações', sub: 'Conta, aparência e administração' };
+      case 'playbook':
+        return { titulo: 'Playbook', sub: 'Resposta primeiro · funciona sem sinal' };
       default:
-        return { titulo: 'Meu desempenho', sub: profile?.full_name ? `${mesAno} · ${profile.full_name}` : mesAno };
+        return { titulo: 'Meu desempenho', sub: 'Os mesmos números do Cockpit' };
     }
   })();
 
