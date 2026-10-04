@@ -178,7 +178,7 @@ import { TarefasScreen, baldeDeVencimento, baldeDaTarefaDoCrm } from './src/scre
 import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
 import PlaybookScreen from './src/screens/PlaybookScreen';
-import FilaTarefasScreen from './src/screens/FilaTarefasScreen';
+import FilaTarefasScreen, { buscarFila } from './src/screens/FilaTarefasScreen';
 import { BarreiraDaAba } from './src/components/BarreiraDaAba';
 import { avisarSeVisitaProvada, type Ranking } from './src/screens/FolhaRanking';
 import AgendaNovoScreen from './src/screens/AgendaNovoScreen';
@@ -1072,6 +1072,10 @@ function MainApp() {
   );
   const nomesReunioes = useNomesDeClientes(idsClientesDasReunioes, tab === 'agenda');
   const queryClient = useQueryClient();
+  // A fila de Tarefas (docs/10): o cabeçalho e o selo da aba contam o MESMO que a tela.
+  // Só lê o cache que a aba já carregou — não busca nada sozinho (enabled: false).
+  const filaNaTela = useQuery({ queryKey: ['fila_tarefas'], enabled: false, staleTime: 60_000, queryFn: buscarFila });
+  const naFila = Array.isArray(filaNaTela.data?.itens) ? filaNaTela.data!.itens!.length : null;
   // Config editável pelo gestor (meta/dia, SLAs, params da Conta Alvo).
   const { config: routeConfig } = useRouteConfig();
   const routeSlaDays: SlaDays = {
@@ -6633,7 +6637,8 @@ function MainApp() {
           const agora = new Date();
           const atr = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, agora) === 'atrasadas').length;
           const hj = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, agora) === 'hoje').length;
-          return { titulo: 'Tarefas', sub: tarefasSemMedicao ? `sem medição · ${tarefasSemMedicao}` : tarefasErro ? 'não consegui ler o HubSpot agora' : !tarefasMedidas ? 'lendo as tarefas do HubSpot…' : `${atr} atrasadas · ${hj} para hoje` };
+          void atr; void hj;
+          return { titulo: 'Tarefas', sub: naFila != null ? `${naFila} na fila · valor × urgência` : 'a fila do dinheiro · um card por negócio' };
         }
         return { titulo: 'Tarefas', sub: `${visibleTasksCount} ${visibleTasksCount === 1 ? 'cobrança aberta' : 'cobranças abertas'} · escalonamento D2 → D5` };
       }
@@ -6720,7 +6725,7 @@ function MainApp() {
     { aba: 'map', rotulo: 'Mapa', Icone: tab === 'map' ? IconLocationFilled : IconLocation, ativa: tab === 'map' || tab === 'list', selo: null },
     ...(isViewer ? [] : [
       { aba: 'agenda' as AppTab, rotulo: 'Agenda', Icone: IconCalendar, ativa: tab === 'agenda' || tab === 'route', selo: seloAgenda || null, seloClaro: true },
-      { aba: 'tasks' as AppTab, rotulo: 'Tarefas', Icone: IconClipboardCheck, ativa: tab === 'tasks', selo: seloTarefas || null },
+      { aba: 'tasks' as AppTab, rotulo: 'Tarefas', Icone: IconClipboardCheck, ativa: tab === 'tasks', selo: (naFila ?? seloTarefas) || null },
       { aba: 'playbook' as AppTab, rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, ativa: tab === 'playbook', selo: null },
     ]),
   ];
@@ -6752,7 +6757,7 @@ function MainApp() {
     { aba: 'route', rotulo: 'Rota', Icone: IconCar, visivel: !isViewer },
     { aba: 'agenda', rotulo: 'Agenda', Icone: IconCalendar, visivel: !isViewer },
     // N5 (handoff v6): um número de tarefas só, "atrasadas + hoje", igual ao selo do rodapé
-    { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: modoNovo ? seloTarefas : visibleTasksCount, visivel: !isViewer },
+    { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: modoNovo ? (naFila ?? seloTarefas) : visibleTasksCount, visivel: !isViewer },
     { aba: 'cockpit', rotulo: 'Gestão', Icone: IconBarGraph, visivel: verGestao },
     { aba: 'meu', rotulo: 'Meu desempenho', Icone: IconTrendingUp, visivel: !canViewGestor && !isViewer },
   ];
@@ -7082,6 +7087,7 @@ function MainApp() {
                       if (tarefasSemMedicao) return 'sem medição · ' + tarefasSemMedicao;
                       if (tarefasErro) return 'não consegui ler o HubSpot agora';
                       if (!tarefasMedidas) return 'lendo as tarefas do HubSpot…';
+                      if (naFila != null) return `${naFila} na fila · valor × urgência`;
                       const atr = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'atrasadas').length;
                       return `${atr} atrasadas · ${seloTarefas - atr} para hoje`;
                     })()

@@ -64,16 +64,18 @@ const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 
 const agoraHHMM = () => { const b = new Date(Date.now() - 3 * 3600000); return `${String(b.getUTCHours()).padStart(2, '0')}:${String(b.getUTCMinutes()).padStart(2, '0')}`; };
 const reduzirMovimento = () => { try { return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
 
+/** A busca da fila. Exportada: o App lê o mesmo cache para o cabeçalho e o selo da aba. */
+export async function buscarFila(): Promise<RespostaFila> {
+  const { data, error } = await supabase.functions.invoke('fila-tarefas', { body: {} });
+  if (error) throw error;
+  return data as RespostaFila;
+}
 function useFila() {
   return useQuery<RespostaFila>({
     queryKey: ['fila_tarefas'],
     staleTime: 60_000,
     placeholderData: (anterior) => anterior,
-    queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('fila-tarefas', { body: {} });
-      if (error) throw error;
-      return data as RespostaFila;
-    },
+    queryFn: buscarFila,
   });
 }
 
@@ -661,7 +663,8 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
 // ---- computador: painel do negócio ------------------------------------------------------
 function PainelDoNegocio({ item, aberto, aoVerbo, aoFechar, children }: { item: CardDaFila; aberto: boolean; aoVerbo: () => void; aoFechar: () => void; children: React.ReactNode }) {
   const etapa = ETAPA[item.etapaId];
-  const trilha = Object.keys(ETAPA);
+  // a ordem do funil, explícita: chaves numéricas fazem o objeto se reordenar (Visita ia para o fim)
+  const trilha = ['1395880469', '1396005401', '1395880470', '1395880471', '1395880472', '1395880473'];
   const idx = trilha.indexOf(item.etapaId);
   return (
     <ScrollView contentContainerStyle={{ padding: 28, gap: 16, maxWidth: 720 }}>
