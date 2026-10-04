@@ -134,7 +134,7 @@ export function OutboundCadastroScreen({ profile, onClose }: OutboundCadastroScr
             <View style={[styles.card, layout.ehLargo && styles.cardWeb]}>
               <View style={styles.headerRow}>
                 <IconText Icone={IconDownload} style={styles.title} tone="onSurface">Cadastro Outbound</IconText>
-                <TouchableOpacity onPress={onClose} disabled={submitting} accessibilityRole="button" accessibilityLabel="Fechar">
+                <TouchableOpacity onPress={onClose} disabled={submitting} accessibilityRole="button" accessibilityLabel="Fechar" style={{ padding: 12, margin: -12 }}>
                   <IconClose width={20} height={20} fill={iconColors.muted} />
                 </TouchableOpacity>
               </View>

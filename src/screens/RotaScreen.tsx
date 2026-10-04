@@ -505,7 +505,7 @@ export function RotaScreen({
           autoCapitalize="none"
         />
         {routeManualSearch.length > 0 && (
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setRouteManualSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setRouteManualSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 12, margin: -12 }}>
             <IconClose width={15} height={15} fill={iconColors.muted} />
           </TouchableOpacity>
         )}

@@ -407,7 +407,7 @@ export function ScheduleMeetingModal({ client, onClose, meetingType = 'reuniao',
           >
             <View style={styles.headerRow}>
               <Text style={styles.title}>{isReschedule ? copy.rescheduleTitle : copy.title}</Text>
-              <TouchableOpacity onPress={onClose} disabled={isPending} accessibilityRole="button" accessibilityLabel="Fechar">
+              <TouchableOpacity onPress={onClose} disabled={isPending} accessibilityRole="button" accessibilityLabel="Fechar" style={{ padding: 12, margin: -12 }}>
                 <IconClose width={20} height={20} fill={iconColors.muted} />
               </TouchableOpacity>
             </View>

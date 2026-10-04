@@ -241,8 +241,9 @@ const styles = StyleSheet.create({
   celulaNum: { fontSize: 15, fontWeight: '800' },
   celulaDen: { fontSize: 10, color: 'var(--text-faint)' },
 
+  // 44 px de toque sem mudar o desenho (auditoria 04/10/26)
   destino: {
-    marginTop: 12, fontSize: 12, fontWeight: '700',
+    marginTop: -1, marginBottom: -13, paddingVertical: 13, fontSize: 12, fontWeight: '700',
     color: 'var(--brand-text)', textDecorationLine: 'none',
   },
   destinoTexto: { marginTop: 12, fontSize: 12, color: 'var(--text-subtle)' },

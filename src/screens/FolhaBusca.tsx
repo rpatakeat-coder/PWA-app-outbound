@@ -63,7 +63,7 @@ export default function FolhaBusca({ visivel, aoFechar, busca, aoBuscar, linhas,
             />
             {carregando && <ActivityIndicator size="small" color="#AEB4BE" />}
             {busca.length > 0 && !carregando && (
-              <Pressable accessibilityRole="button" accessibilityLabel="Limpar busca" onPress={() => aoBuscar('')} hitSlop={12}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Limpar busca" onPress={() => aoBuscar('')} hitSlop={12} style={{ padding: 12, margin: -12 }}>
                 <IconClose width={16} height={16} fill="#AEB4BE" />
               </Pressable>
             )}

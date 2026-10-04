@@ -909,7 +909,7 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
               <Text style={styles.title}>
                 {lockedStage ? 'Mover para perdido' : 'Mover para etapa'}
               </Text>
-              <TouchableOpacity onPress={onClose} disabled={submitting} accessibilityRole="button" accessibilityLabel="Fechar">
+              <TouchableOpacity onPress={onClose} disabled={submitting} accessibilityRole="button" accessibilityLabel="Fechar" style={{ padding: 12, margin: -12 }}>
                 <IconClose width={20} height={20} fill={iconColors.muted} />
               </TouchableOpacity>
             </View>

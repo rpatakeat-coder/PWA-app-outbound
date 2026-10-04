@@ -242,7 +242,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
         <Text style={s.kicker} numberOfLines={1}>
           {proxima ? `PRÓXIMA PORTA · ${proxima.plano} DO PLANO` : planoTotal ? 'PLANO DE HOJE' : 'AGORA, PERTO DE VOCÊ'}
         </Text>
-        <Pressable accessibilityRole="button" accessibilityLabel={`${feitasTexto} de ${metaVisitas} visitas hoje`} onPress={aoProgresso} hitSlop={10}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${feitasTexto} de ${metaVisitas} visitas hoje`} onPress={aoProgresso} hitSlop={10} style={{ paddingVertical: 13, marginVertical: -13 }}>
           <Text style={s.progresso}>{`${feitasTexto} de ${metaVisitas} visitas${visitasProvadas != null && visitasFeitas > 0 ? ` · ${visitasProvadas} ${visitasProvadas === 1 ? 'provada' : 'provadas'}` : ''} ›`}</Text>
         </Pressable>
       </View>
@@ -418,7 +418,8 @@ const s = StyleSheet.create({
     paddingHorizontal: 16, paddingBottom: 10, gap: 6, maxHeight: '52%',
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 18, shadowOffset: { width: 0, height: -4 }, elevation: 10,
   },
-  alca: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', height: 18 },
+  // 18 px de alça, 44 de toque (auditoria 04/10/26): a área cresce sem mexer no desenho
+  alca: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', height: 44, marginVertical: -13 },
   alcaBarra: { width: 40, height: 5, borderRadius: 3, backgroundColor: 'var(--stroke-strong)' },
   linhaTopo: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },
   kicker: { flex: 1, fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: 'var(--vermelho-texto)' },

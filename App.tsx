@@ -1076,6 +1076,8 @@ function MainApp() {
   // Só lê o cache que a aba já carregou — não busca nada sozinho (enabled: false).
   const filaNaTela = useQuery({ queryKey: ['fila_tarefas'], enabled: false, staleTime: 60_000, queryFn: buscarFila });
   const naFila = Array.isArray(filaNaTela.data?.itens) ? filaNaTela.data!.itens!.length : null;
+  // o sino conta o mesmo que a aba: negócios da fila com promessa vencida (auditoria 04/10/26)
+  const vencidasNaFila = Array.isArray(filaNaTela.data?.itens) ? (filaNaTela.data!.itens as Array<{ venceu?: boolean }>).filter((i) => i.venceu).length : null;
   // Config editável pelo gestor (meta/dia, SLAs, params da Conta Alvo).
   const { config: routeConfig } = useRouteConfig();
   const routeSlaDays: SlaDays = {
@@ -5033,7 +5035,7 @@ function MainApp() {
         {/* Header overlay translucido (nao consome MapView clicks) */}
         <View style={[navStyles.headerOverlay, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
           <View style={navStyles.headerPill} pointerEvents="auto">
-            <TouchableOpacity onPress={exitNavigation} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessibilityRole="button" accessibilityLabel="Fechar">
+            <TouchableOpacity onPress={exitNavigation} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessibilityRole="button" accessibilityLabel="Fechar" style={{ padding: 12, margin: -12 }}>
               <IconClose width={20} height={20} fill={iconColors.onBrand} />
             </TouchableOpacity>
             <View style={{ flex: 1, alignItems: 'center' }}>
@@ -6924,7 +6926,7 @@ function MainApp() {
             {buscando ? (
               <ActivityIndicator size="small" color="#94a3b8" />
             ) : searchQuery.length > 0 ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="Limpar busca" onPress={() => setSearchQuery('')}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Limpar busca" onPress={() => setSearchQuery('')} style={{ padding: 12, margin: -12 }}>
                 <IconClose width={14} height={14} fill={iconColors.muted} />
               </Pressable>
             ) : (
@@ -7792,7 +7794,7 @@ function MainApp() {
         <AvisosPainel
           aoFechar={() => setAvisosAbertos(false)}
           falhas={avisos.falhas}
-          cobrancasAtrasadas={tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'atrasadas').length}
+          cobrancasAtrasadas={vencidasNaFila ?? tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'atrasadas').length}
           atrasadasPerto={(() => {
             if (!userLocation) return null;
             let perto = 0;
@@ -8429,7 +8431,7 @@ function MainApp() {
               <>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Filtros</Text>
-                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setIsFiltersOpen(false)}>
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setIsFiltersOpen(false)} style={{ padding: 12, margin: -12 }}>
                     <IconClose width={20} height={20} fill={iconColors.muted} />
                   </TouchableOpacity>
                 </View>
@@ -8752,7 +8754,7 @@ function MainApp() {
           <Pressable style={[styles.filtersSheet, layout.ehLargo && styles.modalCartaoMedioWeb]} onPress={() => {}}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Selecione o vendedor</Text>
-              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setIsPickingRouteVendor(false)}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => setIsPickingRouteVendor(false)} style={{ padding: 12, margin: -12 }}>
                 <IconClose width={20} height={20} fill={iconColors.muted} />
               </TouchableOpacity>
             </View>
@@ -8992,7 +8994,7 @@ function MainApp() {
                     <Text style={styles.modalTitle}>{editingClient ? 'Editar Cliente' : 'Novo lead'}</Text>
                     {!editingClient && <Text style={styles.m9Subtitulo}>Passo 2 de 2</Text>}
                   </View>
-                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => { setIsFormOpen(false); resetForm(); setEditingClient(null); }}>
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" onPress={() => { setIsFormOpen(false); resetForm(); setEditingClient(null); }} style={{ padding: 12, margin: -12 }}>
                     <IconClose width={20} height={20} fill={iconColors.muted} />
                   </TouchableOpacity>
                 </View>
