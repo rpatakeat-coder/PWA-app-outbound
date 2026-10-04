@@ -84,7 +84,9 @@ export default function PlaybookScreen({ email, proximaParada }: Props) {
     if (!email) return;
     let vivo = true;
     void supabase.from('playbook_progresso').select('guia_slug, tipo, concluido_em')
-      .eq('user_email', email.toLowerCase()).eq('tipo', 'leitura')
+      // "prova" é a marca antiga (setembro) de guia concluído: o Cockpit do gestor conta como lida,
+      // e o app precisa contar igual (auditoria 04/10/26: André tinha 30 no Cockpit e 0 aqui).
+      .eq('user_email', email.toLowerCase()).in('tipo', ['leitura', 'prova'])
       .then(({ data }) => {
         if (!vivo || !data?.length) return;
         setProg((p) => {
