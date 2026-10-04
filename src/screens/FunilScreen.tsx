@@ -56,8 +56,10 @@ const diaCurto = (iso: string, hoje: string) => {
 
 type Filtro = 'todos' | 'regua' | 'semdata';
 
-export default function FunilScreen({ aoAbrirLead, aoMudarEtapa, aoNovoNegocio, aoProposta }: {
+export default function FunilScreen({ aoAbrirLead, aoMudarEtapa, aoNovoNegocio, aoProposta, kanbanNoComputador = true }: {
   aoAbrirLead: (clientId: string) => void;
+  /** o kanban do Cockpit é o Meu funil do EXECUTIVO; o gestor no app fica com a lista */
+  kanbanNoComputador?: boolean;
   aoProposta?: (n: NegocioDoFunil) => void;
   aoMudarEtapa?: (n: NegocioDoFunil, destino: string) => void;
   aoNovoNegocio?: () => void;
@@ -66,7 +68,8 @@ export default function FunilScreen({ aoAbrirLead, aoMudarEtapa, aoNovoNegocio, 
   const cores = useIconColors();
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [abertas, setAbertas] = useState<Set<string>>(new Set());
-  const q = useQuery<RespostaFunil>({ queryKey: ['funil'], staleTime: 60_000, queryFn: buscarFunil, enabled: !layout.ehDesktop });
+  const embutido = layout.ehDesktop && kanbanNoComputador;
+  const q = useQuery<RespostaFunil>({ queryKey: ['funil'], staleTime: 60_000, queryFn: buscarFunil, enabled: !embutido });
 
   const negocios = q.data?.negocios ?? [];
   const passa = (n: NegocioDoFunil, f: Filtro) => f === 'todos' || (f === 'regua' && n.passouRegua) || (f === 'semdata' && !n.proximoPasso?.dia);
@@ -74,7 +77,7 @@ export default function FunilScreen({ aoAbrirLead, aoMudarEtapa, aoNovoNegocio, 
   const passaram = negocios.filter((n) => n.passouRegua).length;
   const semData = negocios.filter((n) => !n.proximoPasso?.dia).length;
 
-  if (layout.ehDesktop) {
+  if (embutido) {
     // computador: o kanban do Cockpit, igual (docs-v6/09)
     return <View style={{ flex: 1 }}><QuadroEmbutido aba="funil" /></View>;
   }

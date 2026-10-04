@@ -102,6 +102,10 @@ export default function PropostaSheet({ visivel, aoFechar, negocio, aoAvancarCom
     const plano = planoApresentadoHubSpot(estado.tipoPlano, (calculo as { tier: string }).tier);
     const preenchido = { plano_apresentado: plano, valor_de_mrr: String(mensal) };
     if ((negocio.etapaId === ETAPA.decisor || negocio.etapaId === ETAPA.demo) && aoAvancarComProposta) {
+      // a nota vai sempre: se o negócio já tinha plano e MRR, o Mudar etapa não pede nada e o valor
+      // desta proposta ficaria só na tela (medido na auditoria de 04/10)
+      void negocioAcao({ op: 'nota', dealId: negocio.dealId, texto: `Proposta apresentada pelo app
+${resumo()}` }).catch(() => { /* o avanço segue; a nota é complemento */ });
       aoFechar();
       aoAvancarComProposta(negocio, negocio.etapaId === ETAPA.decisor ? ETAPA.demo : ETAPA.negociacao, preenchido);
       return;
@@ -186,11 +190,12 @@ export default function PropostaSheet({ visivel, aoFechar, negocio, aoAvancarCom
               })}
             </View>
             <Text style={s.rotulo}>PERÍODO</Text>
-            <View style={s.periodos}>
+            {/* 8 períodos não cabem numa régua de 390 px: viram botões que quebram linha (auditoria 04/10) */}
+            <View style={s.chips}>
               {cfg!.periodicidades.map((p) => (
-                <Pressable key={p.id} accessibilityRole="tab" accessibilityState={{ selected: estado.periodicidade === p.id }}
-                  onPress={() => setEstado((e) => e && ({ ...e, periodicidade: p.id }))} style={[s.periodo, estado.periodicidade === p.id && s.periodoAtivo]}>
-                  <Text style={[s.periodoTexto, estado.periodicidade === p.id && s.chipTextoAtivo]} numberOfLines={1}>{p.label}</Text>
+                <Pressable key={p.id} accessibilityRole="radio" accessibilityState={{ selected: estado.periodicidade === p.id }}
+                  onPress={() => setEstado((e) => e && ({ ...e, periodicidade: p.id }))} style={[s.chip, estado.periodicidade === p.id && s.chipAtivo]}>
+                  <Text style={[s.chipTexto, estado.periodicidade === p.id && s.chipTextoAtivo]}>{p.label}</Text>
                 </Pressable>
               ))}
             </View>

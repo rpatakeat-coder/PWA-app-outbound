@@ -58,7 +58,7 @@ export function PlacarFechado({ dados, carregando, aoAbrir, aoAbrirRanking, larg
     return (
       <View style={s.celulas}>
         {cel('HOJE', `${h.provadas} de ${h.meta}`, `visitas provadas${h.sem_prova ? ` · ${h.sem_prova} sem prova à parte` : ''}`)}
-        {cel('PISO DA SEMANA', piso?.replace('Piso: ', '') ?? '—', dados.semana ? `${dados.semana.provadas} visitas provadas · ${dados.semana.demos} ${dados.semana.demos === 1 ? 'demo' : 'demos'}` : null)}
+        {cel('PISO DA SEMANA', !dados.semana ? '—' : dados.semana.piso_faltam_provadas + dados.semana.piso_faltam_demos <= 0 ? 'batido' : `faltam ${dados.semana.piso_faltam_provadas + dados.semana.piso_faltam_demos}`, piso ? piso.replace('Piso: ', '') : null)}
         {cel('TEMPORADA', t?.pos ? `${t.pos}º` : '—', t?.faltam ?? null, aoAbrirRanking)}
         {cel('VARIÁVEL DO MÊS', reais(m?.variavel), m ? `${m.fechados} de ${m.meta} clientes${m.proxima_venda ? ` · a próxima vale ${reais(m.proxima_venda)}` : ''}` : null)}
       </View>
@@ -197,8 +197,9 @@ const s = StyleSheet.create({
   linha2Valor: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   chevron: { fontSize: 20, color: 'var(--text-muted)', marginLeft: 2 },
   semCarteira: { fontSize: 15, fontWeight: '700', color: 'var(--text)' },
-  celulas: { flexDirection: 'row', gap: 10 },
-  celula: { flex: 1, minWidth: 0, borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface)', padding: 14, gap: 3, minHeight: 96 },
+  // computador: 2 × 2 na coluna da fila (4 lado a lado cortavam "0 d…" a 1536 px, auditoria 04/10)
+  celulas: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  celula: { flexGrow: 1, flexBasis: '45%', minWidth: 0, borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface)', padding: 14, gap: 3, minHeight: 96 },
   celRot: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, color: 'var(--text-muted)' },
   celValor: { fontSize: 22, fontWeight: '800', color: 'var(--text)' },
   celSub: { fontSize: 12, color: 'var(--text-muted)' },

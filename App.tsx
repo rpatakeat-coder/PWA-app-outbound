@@ -6886,7 +6886,7 @@ function MainApp() {
           const ativo = tab === item.aba;
           return (
             <React.Fragment key={item.aba}>
-            {item.grupo ? <Text style={styles.sbGrupo}>{item.grupo}</Text> : null}
+            {item.grupo ? <View style={styles.sbGrupoLinha}><Text style={styles.sbGrupo} numberOfLines={1} {...ds({ rotulo: '1' })}>{item.grupo}</Text></View> : null}
             <Pressable
               key={item.aba}
               accessibilityRole="button"
@@ -7739,6 +7739,7 @@ function MainApp() {
         // Funil (Um app só, PR 3): lista por etapa no celular, o kanban do Cockpit no computador.
         <BarreiraDaAba nome="Funil">
         <FunilScreen
+          kanbanNoComputador={!canViewGestor}
           aoAbrirLead={(id) => { setTab('map'); void openClientById(id); }}
           aoMudarEtapa={isViewer ? undefined : (n: NegocioDoFunil, destino: string) => {
             const c = (n.clientId ? clientePorId(n.clientId) : undefined)
@@ -11766,6 +11767,7 @@ const styles = StyleSheet.create({
   sbMarcaTitulo: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '700', color: 'var(--text)' },
   sbMarcaSub: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-faint)' },
   sbItens: { flex: 1, paddingVertical: 12, paddingHorizontal: 8, gap: 2 },
+  sbGrupoLinha: { borderTopWidth: 1, borderTopColor: 'var(--border-soft)', marginTop: 10 },
   sbGrupo: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, color: 'var(--text-faint)', paddingHorizontal: 12, paddingTop: 14, paddingBottom: 4 },
   sbItem: {
     height: 44,

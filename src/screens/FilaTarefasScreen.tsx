@@ -95,6 +95,13 @@ function useFeitas(hoje: string) {
   const noServidor = new Set(doServidor.map((f) => f.acaoId));
   const feitas = [...locais.filter((l) => !noServidor.has(l.acaoId)), ...doServidor];
   const recarregar = () => qc.invalidateQueries({ queryKey: ['fila_feitas', hoje] });
+  // a cópia local sai assim que o servidor tem a linha: sem isso, desfeita no servidor, a
+  // linha local reaparecia como "subindo" (auditoria 04/10)
+  useEffect(() => {
+    if (!q.data) return;
+    const ids = new Set(q.data.map((x) => x.acaoId));
+    setLocais((l) => (l.some((x) => ids.has(x.acaoId)) ? l.filter((x) => !ids.has(x.acaoId)) : l));
+  }, [q.data]);
   return {
     feitas,
     recarregar,
