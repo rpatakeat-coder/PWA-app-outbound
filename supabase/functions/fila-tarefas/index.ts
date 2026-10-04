@@ -171,6 +171,15 @@ Deno.serve(async (req: Request) => {
   const regua = ((snap?.conteudo as { stageMeta?: { slaDays?: Record<string, number> } } | null)?.stageMeta?.slaDays ?? {}) as Record<string, number>;
   const abertos = (snap?.conteudo as { reps?: Record<string, { abertos?: unknown[] }> } | null)?.reps?.[owner]?.abertos ?? [];
   for (const d of abertos as Array<{ id?: string | number }>) if (d?.id != null) doSnap.set(String(d.id), d as never);
+  // quem está fora do time (o gestor com carteira de teste) não vem em reps: a carteira dele vem na
+  // gaveta funilForaDoTime[dono][etapa] — mesmos campos, com temp no lugar de temperatura
+  if (!abertos.length) {
+    const fora = ((snap?.conteudo as { funilForaDoTime?: Record<string, Record<string, Array<Record<string, unknown>>>> } | null)?.funilForaDoTime ?? {})[owner] ?? {};
+    for (const [etapa, lista] of Object.entries(fora)) for (const d of (Array.isArray(lista) ? lista : [])) {
+      if (d?.id == null) continue;
+      doSnap.set(String(d.id), { name: d.name as string, stageId: etapa, dias: d.dias as number, mrr: d.mrr as number, temperatura: (d.temperatura ?? d.temp) as number });
+    }
+  }
   const ids = Array.from(new Set([...doSnap.keys(), ...tarefas.map((t) => t.dealId).filter(Boolean) as string[]]));
   const vivos = new Map<string, { nome: string; etapa: string; mrr: number | null; owner: string | null; pipeline: string | null; entrada: string | null }>();
   for (let i = 0; i < ids.length; i += 100) {
