@@ -33,7 +33,7 @@ export function fatosDoCard(d: { client: Client; pino: Pino; distanciaM: number 
   if (dist) f.push({ texto: dist });
   if (pino.etiqueta && !pino.queda) f.push({ texto: textoDoToque(pino.etiqueta.texto), aviso: pino.etiqueta.texto === 'cobrar' || pino.etiqueta.texto.includes('parado') });
   f.push((d.aproximado ?? c.geo_approximate) ? { texto: '≈ posição aproximada', aviso: true } : { texto: 'posição exata' });
-  f.push(c.telefone?.trim() ? { texto: `☎ ${c.telefone.trim()}` } : { texto: 'sem telefone', aviso: true });
+  f.push(c.telefone?.trim() ? { texto: c.telefone.trim() } : { texto: 'sem telefone', aviso: true });
   if (c.conta_alvo_rating != null) {
     const nota = Number(c.conta_alvo_rating).toFixed(1).replace('.', ',');
     f.push({ texto: c.conta_alvo_reviews != null ? `${nota}★ · ${c.conta_alvo_reviews} no Google` : `${nota}★ no Google` });

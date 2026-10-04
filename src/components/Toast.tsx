@@ -92,7 +92,7 @@ export function ToastHost() {
 
   const tentar = async () => {
     const n = await subirFila(true);
-    if (n > 0) Toast.mostrar(`✓ ${n === 1 ? '1 item enviado' : `${n} itens enviados`} · HubSpot + Cockpit`, 'ok');
+    if (n > 0) Toast.mostrar(`${n === 1 ? '1 item enviado' : `${n} itens enviados`} · HubSpot + Cockpit`, 'ok');
   };
 
   return (

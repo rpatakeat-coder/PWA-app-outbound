@@ -2194,7 +2194,7 @@ function MainApp() {
       if (sairam) partes.push(`${sairam} ${sairam === 1 ? 'saiu' : 'saíram'}`);
       if (falhas.length) Toast.mostrar(`Não gravei ${falhas.length}: ${falhas[0]}`, 'erro');
       else if (partes.length) {
-        Toast.mostrar(`✓ ${partes.join(' · ')}`, 'ok', {
+        Toast.mostrar(`${partes.join(' · ')}`, 'ok', {
           rotulo: 'Desfazer',
           onPress: () => {
             void gravarNoDia(dia, feitos.map((f) => ({ client: f.client, entrar: !f.entrar })))
@@ -2232,7 +2232,7 @@ function MainApp() {
     if (!dia || !lista.length) return;
     const noCockpit = lista.filter((p) => p.noCockpit).length;
     const fora = lista.filter((p) => p.noCockpit === false).length;
-    Toast.mostrar(`✓ ${lista.length} ${lista.length === 1 ? 'parada' : 'paradas'} em ${rotuloDoDia(dia)} · na Agenda`
+    Toast.mostrar(`${lista.length} ${lista.length === 1 ? 'parada' : 'paradas'} em ${rotuloDoDia(dia)} · na Agenda`
       + (noCockpit ? ` · ${noCockpit} no Planejamento do Cockpit` : '')
       + (fora ? ` · ${fora} só no app` : ''), 'ok');
   };
@@ -3144,7 +3144,7 @@ function MainApp() {
       // null = não escreveu (já estava): sem ✓ falso.
       .then((pos) => pos == null
         ? Toast.mostrar('Não entrou: esse lead já está na rota de hoje.', 'fila')
-        : Toast.mostrar(`✓ ${client.empresa?.trim() || client.nome} na rota de hoje`, 'ok'))
+        : Toast.mostrar(`${client.empresa?.trim() || client.nome} na rota de hoje`, 'ok'))
       .catch((e) => Alert.alert('Não entrou na rota', String((e as Error)?.message ?? e)));
   }, [routeStopClientIds, isMonitoringRoute, fieldOps.adicionarParada]);
 
@@ -3224,7 +3224,7 @@ function MainApp() {
       });
       if (!confirmou) return;
       const out = await fieldOps.montarDia.mutateAsync(ordemClientes);
-      Toast.mostrar(`✓ Dia montado · ${out.total} paradas em ${r.micros.length} ${r.micros.length === 1 ? 'microrrota' : 'microrrotas'}`, 'ok');
+      Toast.mostrar(`Dia montado · ${out.total} paradas em ${r.micros.length} ${r.micros.length === 1 ? 'microrrota' : 'microrrotas'}`, 'ok');
     } catch (e) {
       Alert.alert('Não deu para montar o dia', String((e as Error)?.message ?? e));
     } finally {
@@ -3306,7 +3306,7 @@ function MainApp() {
         km = ` · ${(g.distanceMeters / 1000).toFixed(1).replace('.', ',')} km · ~${Math.round(g.durationSeconds / 60)} min de carro`;
       } catch { /* sem o serviço de rotas: a ordem já foi gravada */ }
       const nMicro = r.micros.length;
-      Toast.mostrar(`✓ ${ordem.length + faltando.length} paradas em ${nMicro} ${nMicro === 1 ? 'microrrota' : 'microrrotas'}${km}`, 'ok');
+      Toast.mostrar(`${ordem.length + faltando.length} paradas em ${nMicro} ${nMicro === 1 ? 'microrrota' : 'microrrotas'}${km}`, 'ok');
       // QUALIDADE: grupos longe um do outro = o dia mistura regiões. A ordem já é a
       // melhor possível; o que resolve é o plano — tirar o grupo solto para outro dia.
       const entreKm = r.metrosEntreMicros / 1000;
@@ -3834,7 +3834,7 @@ function MainApp() {
       // de outra folha — auditoria 26/09). Abre o cartão do lead novo: o próximo
       // passo na rua é o Cheguei, e o Agendar está ali no cartão.
       if (modoNovo) {
-        Toast.mostrar(`✓ Lead cadastrado · ${created.empresa?.trim() || created.nome}`, 'ok');
+        Toast.mostrar(`Lead cadastrado · ${created.empresa?.trim() || created.nome}`, 'ok');
         setTimeout(() => setSelectedClient(created), 350);
         return;
       }
@@ -4562,11 +4562,11 @@ function MainApp() {
       // ciclo fechado em vez de entrar torta.
       Toast.mostrar(declarada
         ? (fotoProva
-          ? `✓ Visita com foto em ${nomeDoLead}${semLeitura ? ' · sem GPS agora' : ''}`
-          : `✓ Visita declarada em ${nomeDoLead} (você estava a ${Math.round(distance)} m)`)
+          ? `Visita com foto em ${nomeDoLead}${semLeitura ? ' · sem GPS agora' : ''}`
+          : `Visita declarada em ${nomeDoLead} (você estava a ${Math.round(distance)} m)`)
         : corrigirPino
-        ? `✓ Check-in em ${nomeDoLead} · pino corrigido (estava a ${Math.round(distance)} m)`
-        : `✓ Check-in em ${nomeDoLead} registrado`, 'ok');
+        ? `Check-in em ${nomeDoLead} · pino corrigido (estava a ${Math.round(distance)} m)`
+        : `Check-in em ${nomeDoLead} registrado`, 'ok');
       // +20 só quando o servidor confirma a prova (a temporada, docs/10 §2.6 D)
       if (modoNovo) {
         void avisarSeVisitaProvada(client.id, (t) => Toast.mostrar(t, 'ok'), async () => {
@@ -4669,7 +4669,7 @@ function MainApp() {
     const tirarFicha = registrarExecutor('ficha', (item) => subirFichaDaFila(item.payload as unknown as LinhaFichaDaFila));
     const subir = () => {
       void subirFila().then((n) => {
-        if (n > 0) Toast.mostrar(`✓ Sinal voltou · ${n === 1 ? '1 item enviado' : `${n} itens enviados`}`, 'ok');
+        if (n > 0) Toast.mostrar(`Sinal voltou · ${n === 1 ? '1 item enviado' : `${n} itens enviados`}`, 'ok');
       });
     };
     subir();
@@ -5156,7 +5156,7 @@ function MainApp() {
               onPress={() => {
                 if (!navigationCurrentStop) return;
                 void handleMarkAsVisitedRef.current(navigationCurrentStop, () => {
-                  if (isLast) { setIsNavigating(false); Toast.mostrar('✓ Última parada da rota com check-in', 'ok'); }
+                  if (isLast) { setIsNavigating(false); Toast.mostrar('Última parada da rota com check-in', 'ok'); }
                   else setCurrentStopIndex((idx) => idx + 1);
                 });
               }}
@@ -5251,7 +5251,7 @@ function MainApp() {
                 pedido: { taskId: t.id, nota: t.dealId ? { dealId: String(t.dealId), texto: `Ligação · tarefa encerrada: ${t.assunto}` } : null,
                   contato: { canal: 'ligacao', acaoId: novoAcaoId(), clientId: c.id, dealId: t.dealId ? String(t.dealId) : c.id_hubspot ?? null, resultado: 'cobranca', em: new Date().toISOString() } },
                 rotulo: `Liguei · ${getClientPrimaryName(c)}`,
-                textoToast: '✓ Ligação registrada · HubSpot + Cockpit',
+                textoToast: 'Ligação registrada · HubSpot + Cockpit',
                 aoVoltar: soltar,
                 aoGravar: () => { void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] }).then(soltar); },
               });
@@ -6750,7 +6750,7 @@ function MainApp() {
     if (!r.ok) { Alert.alert('Não deu para assumir', r.erro); return; }
     if (selectedClient?.id === c.id) setSelectedClient({ ...c, vendedor_id_hubspot: myHubspotId, ...(r.etapa ? { etapa: r.etapa } : {}) });
     void queryClient.invalidateQueries({ queryKey: ['clients'] });
-    Toast.mostrar(r.aviso ? `✓ É seu · ${r.aviso}` : `✓ É seu · no seu funil${r.etapa ? ` (${r.etapa})` : ''} · HubSpot + Cockpit`, 'ok');
+    Toast.mostrar(r.aviso ? `É seu · ${r.aviso}` : `É seu · no seu funil${r.etapa ? ` (${r.etapa})` : ''} · HubSpot + Cockpit`, 'ok');
   };
 
   // Rodape do mapa novo (prompt final §B2). Nada aqui e' hook: vive depois dos
@@ -7926,7 +7926,7 @@ function MainApp() {
           paraAgora={Array.isArray(filaNaTela.data?.itens) ? (filaNaTela.data!.itens as Array<{ grupo?: string }>).filter((i) => i.grupo === 'agora').length : null}
           gestor={avisos.gestor}
           carregando={avisos.carregando}
-          aoTentarDeNovo={() => { void subirFila(true).then((n) => Toast.mostrar(n > 0 ? `✓ ${n} ${n === 1 ? 'envio subiu' : 'envios subiram'}` : 'Ainda não subiu — confira o sinal', n > 0 ? 'ok' : 'erro')); }}
+          aoTentarDeNovo={() => { void subirFila(true).then((n) => Toast.mostrar(n > 0 ? `${n} ${n === 1 ? 'envio subiu' : 'envios subiram'}` : 'Ainda não subiu — confira o sinal', n > 0 ? 'ok' : 'erro')); }}
           aoAbrirTarefas={() => { setAvisosAbertos(false); setTab('tasks'); }}
         />
       )}

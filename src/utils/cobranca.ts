@@ -47,8 +47,8 @@ function cnpjOk(d: string): boolean {
 export function conferirDocumento(texto: string): { ok: boolean; texto: string } | null {
   const d = soDigitos(texto);
   if (!d) return null;
-  if (d.length === 11) return cpfOk(d) ? { ok: true, texto: 'CPF confere ✓' } : { ok: false, texto: 'CPF inválido · confira o número' };
-  if (d.length === 14) return cnpjOk(d) ? { ok: true, texto: 'CNPJ confere ✓' } : { ok: false, texto: 'CNPJ inválido · confira o número' };
+  if (d.length === 11) return cpfOk(d) ? { ok: true, texto: 'CPF confere' } : { ok: false, texto: 'CPF inválido · confira o número' };
+  if (d.length === 14) return cnpjOk(d) ? { ok: true, texto: 'CNPJ confere' } : { ok: false, texto: 'CNPJ inválido · confira o número' };
   return { ok: false, texto: `${d.length} dígitos · CPF tem 11, CNPJ tem 14` };
 }
 

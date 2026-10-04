@@ -368,7 +368,12 @@ function LinhaPagina({ pagina, rotulo, aoAbrir }: { pagina: PaginaPlaybook; rotu
         <Text style={s.linhaTitulo} numberOfLines={2}>{pagina.titulo}</Text>
         {!!pagina.resumo && <Text style={s.linhaResumo} numberOfLines={1}>{pagina.resumo}</Text>}
       </View>
-      {rotulo && <Text style={[s.linhaProg, rotulo.startsWith('lida') && s.linhaProgLida]}>{rotulo}</Text>}
+      {rotulo && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          {rotulo === 'lida' && <IconCheck width={14} height={14} fill="var(--tint-green-text)" />}
+          <Text style={[s.linhaProg, rotulo === 'lida' && s.linhaProgLida]}>{rotulo}</Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 }

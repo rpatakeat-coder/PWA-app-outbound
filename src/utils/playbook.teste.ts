@@ -50,7 +50,7 @@ const c = continuarLendo(PB, {
 });
 ok(c?.pagina.id === 'objecoes' && c.pct === 35, 'continuar lendo = a mais recente começada, não lida, que ainda existe');
 ok(continuarLendo(PB, { objecoes: { pct: 99, em: 1 } }) === null, 'rolou até o fim: não oferece continuar');
-ok(rotuloProgresso({ pct: 35.4, em: 1 }) === '35%' && rotuloProgresso({ pct: 10, em: 1, lida: true }) === 'lida ✓' && rotuloProgresso(undefined) === null, 'rótulo do progresso');
+ok(rotuloProgresso({ pct: 35.4, em: 1 }) === '35%' && rotuloProgresso({ pct: 10, em: 1, lida: true }) === 'lida' && rotuloProgresso(undefined) === null, 'rótulo do progresso');
 
 // cartão contextual da próxima porta (§6.16)
 ok(cartaoContextual(PB, { etapa: null, temNegocio: false })?.pagina.id === 'acesso-decisor', 'conta-alvo sem negócio: achar o decisor');

@@ -109,7 +109,7 @@ export function continuarLendo(pb: Playbook, prog: Progresso): { pagina: PaginaP
 
 export function rotuloProgresso(p: Progresso[string] | undefined): string | null {
   if (!p) return null;
-  if (p.lida) return 'lida ✓';
+  if (p.lida) return 'lida';
   if (p.pct > 0) return `${Math.round(p.pct)}%`;
   return null;
 }
