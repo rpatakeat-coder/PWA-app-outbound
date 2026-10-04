@@ -178,7 +178,7 @@ import { TarefasScreen, baldeDeVencimento, baldeDaTarefaDoCrm } from './src/scre
 import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
 import PlaybookScreen from './src/screens/PlaybookScreen';
-import TarefasNovoScreen from './src/screens/TarefasNovoScreen';
+import FilaTarefasScreen from './src/screens/FilaTarefasScreen';
 import AgendaNovoScreen from './src/screens/AgendaNovoScreen';
 import { concluirComDesfazer, enviarConclusao, type PedidoConclusao } from './src/utils/concluirTarefa';
 import { diaBRT, diasDeAtraso, ehCobranca, grupoDaTarefa } from './src/utils/abaTarefas';
@@ -7626,36 +7626,14 @@ function MainApp() {
           suggestRoute={suggestRoute}
         />
       ) : tab === 'tasks' && modoNovo ? (
-        <TarefasNovoScreen
-          email={profile?.email}
-          sugestoes={visibleTasks}
-          nomeDaSugestao={(t) => {
-            const c = clientePorId(t.client_id);
-            return c ? getClientPrimaryName(c) : (nomesTarefas.get(t.client_id) ?? 'lead');
-          }}
-          aoConcluirSugestao={(task) => {
-            // Mesmo caminho da tela antiga: com o lead carregado, o menu de
-            // destino; sem ele, a confirmação simples.
-            const c = clientePorId(task.client_id);
-            if (c) { setCompletingTask({ task, client: c }); return; }
-            Alert.alert('Concluir sugestão', `Marcar "${task.title}" como concluída?`, [
-              { text: 'Cancelar', style: 'cancel' },
-              { text: 'Concluir', onPress: () => resolveTask.mutate({ id: task.id, status: 'concluida' }) },
-            ]);
-          }}
-          aoAbrirSugestao={(task) => { setTab('map'); void openClientById(task.client_id); }}
-          aoAbrirLead={(id, tarefa) => {
-            setTarefaDaFicha(tarefa);
-            setTab('map');
-            void openClientById(id);
-          }}
+        // A fila do dinheiro (docs/10 §1, 04/10/2026): um card por negócio, valor × urgência.
+        // Visitar e Registrar levam ao lead no mapa (o Cheguei é a prova da visita).
+        <FilaTarefasScreen
+          ownerId={myHubspotId}
+          posicao={userLocation}
+          aoAbrirLead={(id) => { setTab('map'); void openClientById(id); }}
+          aoRegistrarVisita={(id) => { setTab('map'); void openClientById(id); }}
           aoPosicionar={isViewer ? undefined : iniciarPosicionar}
-          clienteDe={(id) => clientePorId(id) ?? routeStops.find((st) => st.client_id === id)?.client ?? null}
-          distanciaAte={(id) => {
-            const c = id ? clientePorId(id) : null;
-            if (!c || !userLocation || c.latitude == null || c.longitude == null) return null;
-            return distanciaTexto(haversineMeters(userLocation.latitude, userLocation.longitude, Number(c.latitude), Number(c.longitude)));
-          }}
         />
       ) : tab === 'tasks' ? (
         <TarefasScreen

@@ -3,6 +3,7 @@ import {
   diasUteisEntre, feriadosNacionais, montarFila, oQuePulou, proximoDiaUtil, textoUltimoContato, tipoDaTarefa, tituloDoCard,
   type Contexto, type NegocioEntrada, type TarefaEntrada,
 } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
+import { dataDoChip, diaCurto, diasSugeridos, fraseDaVolta, notaDaFila, pedidoDaVolta, textoDoSalvar } from './registroDaFila';
 
 let falhas = 0;
 const ok = (cond: unknown, msg: string) => { if (cond) console.log('OK   ', msg); else { falhas++; console.log('FALHA', msg); } };
@@ -73,6 +74,25 @@ ok(oQuePulou('2026-10-22', '2026-10-27', fer) === 'pula o fim de semana', 'diz q
 ok(oQuePulou('2026-10-22', '2026-10-23', fer) === 'em dia útil', 'dia útil seguido');
 ok(diasUteisEntre('2026-10-16', '2026-10-22', fer) === 4, 'dias úteis entre sexta e quinta = 4');
 ok(fer.includes('2026-04-03') && fer.includes('2026-02-17') && fer.includes('2026-06-04'), 'Sexta Santa, Carnaval e Corpus Christi de 2026');
+
+// 5 · o registro em 3 toques
+{
+  ok(diasSugeridos('pediu_retorno') === 3 && diasSugeridos('nao_atendeu') === 1 && diasSugeridos('decisor') === 2 && diasSugeridos('sem_interesse') === null,
+    'sugestão do próximo passo: pediu retorno 3, não atendeu 1, decisor 2, sem interesse nenhum');
+  const volta = dataDoChip(hoje, 3, fer);
+  const f = fraseDaVolta(hoje, volta, fer);
+  ok(f.frase === 'Volta em 27/10 (terça)' && f.pulo === 'pula o fim de semana', 'pediu retorno numa quinta: "Volta em 27/10 (terça)" + pula o fim de semana');
+  ok(diaCurto(volta) === 'ter 27/10', 'dia curto da barra: "ter 27/10"');
+  ok(textoDoSalvar({ comoFoi: null, volta: null, outroDia: false, motivo: null, detalhe: '' }).texto === 'Marque como foi', 'Salvar sem nada: "Marque como foi"');
+  ok(textoDoSalvar({ comoFoi: 'decisor', volta: null, outroDia: true, motivo: null, detalhe: '' }).texto === 'Escolha o dia', 'Outro dia sem data: "Escolha o dia"');
+  ok(textoDoSalvar({ comoFoi: 'sem_interesse', volta: null, outroDia: false, motivo: null, detalhe: '' }).texto === 'Escolha o motivo', 'sem interesse sem motivo: "Escolha o motivo"');
+  ok(!textoDoSalvar({ comoFoi: 'sem_interesse', volta: null, outroDia: false, motivo: 'Outros', detalhe: ' ' }).pode, '"Outros" exige o texto');
+  ok(textoDoSalvar({ comoFoi: 'pediu_retorno', volta, outroDia: false, motivo: null, detalhe: '' }).pode, 'com como foi e dia, salva');
+  const nota = notaDaFila({ canal: 'ligacao', comoFoi: 'pediu_retorno', volta, assunto: 'Ligar - retorno' });
+  ok(nota.startsWith('Ligação · Pediu retorno · Próximo: ligar em 27/10'), 'nota no negócio no formato da Agenda');
+  const p = pedidoDaVolta({ dealId: 'd1', volta, pessoa: 'Ana', canal: 'ligacao' });
+  ok(p.op === 'nota' && p.tipoAcao === 'proximo-passo' && p.data === '2026-10-27' && p.texto === 'Ligar Ana', 'próximo passo pela porta única, na data escolhida');
+}
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nfila do dinheiro: tudo certo');
