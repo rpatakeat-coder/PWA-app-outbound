@@ -8,8 +8,7 @@
 //     com a ETAPA conferida ao vivo no HubSpot (o que foi para Perdido hoje não aparece);
 //   - pessoa e telefone do lead (clients), contatos (contatos_de_campo + client_visits),
 //     quem já falou com o decisor (fichas_de_rua), visita de hoje sem registro e agenda.
-// Duas leituras — a fila (padrão) e op funil (os negócios abertos do dono por etapa, para a
-// aba Funil do app, 04/10/2026) — e uma escrita: op desfazer (ver desfazer()). Feriados: nacionais (decisão do Julyan, 03/10/26), calculados no módulo.
+// Leitura, e uma escrita: op desfazer (ver desfazer()). Feriados: nacionais (decisão do Julyan, 03/10/26), calculados no módulo.
 //
 // Deploy: verify_jwt LIGADO. Secrets: HUBSPOT_TOKEN; SUPABASE_URL e
 // SUPABASE_SERVICE_ROLE_KEY vêm da plataforma.
@@ -167,19 +166,8 @@ Deno.serve(async (req: Request) => {
   // 2) negócios abertos: snapshot (temperatura, dias) + etapa ao vivo
   const { data: snap } = await svc.from('cockpit_snapshot').select('conteudo, atualizado_em').eq('chave', 'hubspot').maybeSingle();
   const doSnap = new Map<string, { name?: string; stageId?: string; dias?: number; mrr?: number | string; temperatura?: number | string }>();
-  // a régua (SLA em dias por etapa) é a do robô, a mesma do kanban do Cockpit
-  const regua = ((snap?.conteudo as { stageMeta?: { slaDays?: Record<string, number> } } | null)?.stageMeta?.slaDays ?? {}) as Record<string, number>;
   const abertos = (snap?.conteudo as { reps?: Record<string, { abertos?: unknown[] }> } | null)?.reps?.[owner]?.abertos ?? [];
   for (const d of abertos as Array<{ id?: string | number }>) if (d?.id != null) doSnap.set(String(d.id), d as never);
-  // quem está fora do time (o gestor com carteira de teste) não vem em reps: a carteira dele vem na
-  // gaveta funilForaDoTime[dono][etapa] — mesmos campos, com temp no lugar de temperatura
-  if (!abertos.length) {
-    const fora = ((snap?.conteudo as { funilForaDoTime?: Record<string, Record<string, Array<Record<string, unknown>>>> } | null)?.funilForaDoTime ?? {})[owner] ?? {};
-    for (const [etapa, lista] of Object.entries(fora)) for (const d of (Array.isArray(lista) ? lista : [])) {
-      if (d?.id == null) continue;
-      doSnap.set(String(d.id), { name: d.name as string, stageId: etapa, dias: d.dias as number, mrr: d.mrr as number, temperatura: (d.temperatura ?? d.temp) as number });
-    }
-  }
   const ids = Array.from(new Set([...doSnap.keys(), ...tarefas.map((t) => t.dealId).filter(Boolean) as string[]]));
   const vivos = new Map<string, { nome: string; etapa: string; mrr: number | null; owner: string | null; pipeline: string | null; entrada: string | null }>();
   for (let i = 0; i < ids.length; i += 100) {
@@ -202,30 +190,6 @@ Deno.serve(async (req: Request) => {
     : { data: [] as Array<Record<string, unknown>> };
   const clientePorDeal = new Map<string, { id: string; nome: string | null; telefone: string | null; lat: number | null; lng: number | null }>();
   for (const c of clientes ?? []) clientePorDeal.set(String(c.id_hubspot), { id: String(c.id), nome: (c.nome as string) ?? null, telefone: (c.telefone as string) ?? null, lat: c.latitude != null ? Number(c.latitude) : null, lng: c.longitude != null ? Number(c.longitude) : null });
-  if (corpo?.op === 'funil') {
-    const ABERTAS = ['1395880469', '1396005401', '1395880470', '1395880471', '1395880472', '1395880473'];
-    const proximaTarefa = new Map<string, { assunto: string; venceEm: string | null }>();
-    for (const t of tarefas) {
-      if (!t.dealId) continue;
-      const atual = proximaTarefa.get(t.dealId);
-      if (!atual || (t.venceEm ?? '9') < (atual.venceEm ?? '9')) proximaTarefa.set(t.dealId, { assunto: t.assunto, venceEm: t.venceEm });
-    }
-    const negociosDoFunil = meus.filter((id) => ABERTAS.includes(vivos.get(id)!.etapa)).map((id) => {
-      const v = vivos.get(id)!; const sn = doSnap.get(id); const c = clientePorDeal.get(id);
-      const temp = sn?.temperatura != null ? Number(sn.temperatura) : null;
-      const dias = sn?.stageId === v.etapa && sn?.dias != null ? Number(sn.dias) : null;
-      const r = regua[v.etapa] ?? null;
-      const pt = proximaTarefa.get(id) ?? null;
-      return {
-        dealId: id, nome: v.nome || sn?.name || 'Negócio', etapaId: v.etapa,
-        mrr: v.mrr ?? (Number(sn?.mrr) || null), temperatura: Number.isFinite(temp as number) ? temp : null,
-        diasNaEtapa: dias, regua: r, passouRegua: dias != null && r != null && dias > r,
-        proximoPasso: pt ? { assunto: pt.assunto, dia: pt.venceEm ? new Date(new Date(pt.venceEm).getTime() - 3 * 3600000).toISOString().slice(0, 10) : null } : null,
-        clientId: c?.id ?? null, telefone: c?.telefone ?? null,
-      };
-    });
-    return json(200, { negocios: negociosDoFunil, regua, hoje, snapshotLidoEm: snap?.atualizado_em ?? null });
-  }
   const dealPorCliente = new Map<string, string>();
   for (const [d, c] of clientePorDeal) dealPorCliente.set(c.id, d);
   const clienteIds = Array.from(dealPorCliente.keys());
@@ -289,14 +253,8 @@ Deno.serve(async (req: Request) => {
   });
   const itens = montarFila(negocios, tarefas.filter((t) => t.dealId && meus.includes(t.dealId)), {
     hoje, feriados, contatos, decisorAlcancado, visitaHojeSemRegistro, agendaHoje,
-  }).map((i) => {
-    const n = negocios.find((x) => x.dealId === i.dealId);
-    const r = regua[i.etapaId] ?? null;
-    const dias = n?.diasNaEtapa ?? null;
-    return { ...i, titulo: tituloDoCard(i), ultimoContatoTexto: textoUltimoContato(i.ultimoContato, hoje),
-      telefone: i.temTelefone ? clientePorDeal.get(i.dealId)?.telefone ?? null : null,
-      diasNaEtapa: dias, regua: r, passouRegua: dias != null && r != null && dias > r };
-  });
+  }).map((i) => ({ ...i, titulo: tituloDoCard(i), ultimoContatoTexto: textoUltimoContato(i.ultimoContato, hoje),
+    telefone: i.temTelefone ? clientePorDeal.get(i.dealId)?.telefone ?? null : null }));
 
   return json(200, {
     itens,

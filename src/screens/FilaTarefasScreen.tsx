@@ -21,8 +21,6 @@ import { IconCalendar, IconCall, IconCheck, IconClose, IconWhatsapp, IconClipboa
 import { useLayout } from '../hooks/useLayout';
 import { useMeuPdi } from '../hooks/useMeuPdi';
 import FolhaRanking, { SeloPosicao } from './FolhaRanking';
-import { PlacarFechado } from '../components/Placar';
-import { usePlacar } from '../hooks/useUmApp';
 import { concluirComDesfazer } from '../utils/concluirTarefa';
 import { gravarContato } from '../utils/contatoDeCampo';
 import { ehErroDeRede, enfileirar, novoAcaoId } from '../utils/filaOffline';
@@ -43,8 +41,6 @@ export type CardDaFila = {
   prazo: string | null; prazoTexto: string; venceu: boolean; agendaHoje: string | null; temTelefone: boolean;
   telefone: string | null; tarefaId: string | null; presencial: boolean; lat: number | null; lng: number | null;
   titulo: string;
-  /** régua do robô (dias por etapa) e se o negócio já passou dela (fila-tarefas, 04/10/26) */
-  diasNaEtapa?: number | null; regua?: number | null; passouRegua?: boolean;
 };
 type RespostaFila = {
   itens: CardDaFila[]; grupos: Array<{ id: CardDaFila['grupo']; rotulo: string }>; mrrEmJogo: number;
@@ -95,13 +91,6 @@ function useFeitas(hoje: string) {
   const noServidor = new Set(doServidor.map((f) => f.acaoId));
   const feitas = [...locais.filter((l) => !noServidor.has(l.acaoId)), ...doServidor];
   const recarregar = () => qc.invalidateQueries({ queryKey: ['fila_feitas', hoje] });
-  // a cópia local sai assim que o servidor tem a linha: sem isso, desfeita no servidor, a
-  // linha local reaparecia como "subindo" (auditoria 04/10)
-  useEffect(() => {
-    if (!q.data) return;
-    const ids = new Set(q.data.map((x) => x.acaoId));
-    setLocais((l) => (l.some((x) => ids.has(x.acaoId)) ? l.filter((x) => !ids.has(x.acaoId)) : l));
-  }, [q.data]);
   return {
     feitas,
     recarregar,
@@ -269,9 +258,9 @@ let pedidoDeSaidaAtual: (() => boolean) | null = null;
 const podeSair = () => (pedidoDeSaidaAtual ? pedidoDeSaidaAtual() : true);
 
 // ---- o card ----------------------------------------------------------------------------
-function CardFila({ item, aberto, selecionado, aoVerbo, aoFechar, aoAdiar, aoSelecionar, aoProposta, children }: {
+function CardFila({ item, aberto, selecionado, aoVerbo, aoFechar, aoAdiar, aoSelecionar, children }: {
   item: CardDaFila; aberto: boolean; selecionado?: boolean; aoVerbo: () => void; aoFechar: () => void; aoAdiar: () => void;
-  aoSelecionar?: () => void; aoProposta?: () => void; children?: React.ReactNode;
+  aoSelecionar?: () => void; children?: React.ReactNode;
 }) {
   const cores = useIconColors();
   const etapa = ETAPA[item.etapaId] ?? { rotulo: 'Etapa', cor: 'var(--text-faint)' };
@@ -332,15 +321,9 @@ function CardFila({ item, aberto, selecionado, aoVerbo, aoFechar, aoAdiar, aoSel
             {!item.temTelefone && (item.verbo === 'Visitar') ? <Text style={[s.rodapeFixo, { color: 'var(--ambar-texto)' }]} numberOfLines={1}>sem telefone no CRM</Text>
               : item.agendaHoje ? (
                 <View style={s.seloAgenda}><IconCalendar width={12} height={12} fill="var(--tint-green-text)" /><Text style={s.seloAgendaTexto}>{`hoje ${item.agendaHoje}`}</Text></View>
-              ) : item.passouRegua && !item.venceu ? <Text style={[s.rodapeFixo, s.prazo, { color: 'var(--vermelho-texto)' }]}>passou da régua</Text>
-              : <Text style={[s.rodapeFixo, s.prazo, item.venceu && { color: 'var(--vermelho-texto)' }]}>{item.prazoTexto}</Text>}
+              ) : <Text style={[s.rodapeFixo, s.prazo, item.venceu && { color: 'var(--vermelho-texto)' }]}>{item.prazoTexto}</Text>}
           </View>
         </Pressable>
-        {aoProposta && ['1395880470', '1395880471', '1395880472'].includes(item.etapaId) && (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Proposta para ${item.negocio}`} onPress={aoProposta} style={s.linkProposta}>
-            <Text style={s.linkPropostaTexto}>Proposta</Text>
-          </Pressable>
-        )}
         {aberto && children}
       </Animated.View>
     </View>
@@ -355,17 +338,6 @@ type Props = {
   aoRegistrarVisita: (clientId: string) => void;
   /** GPS atual; "Perto de mim" = até 1 km (D13, Julyan 04/10/26). */
   posicao: { latitude: number; longitude: number } | null;
-  /** Um app só (chave por pessoa): placar no topo e filtro "Passou da régua". */
-  umApp?: boolean;
-  /** abre a folha "Como estou indo" (a mesma da pílula do Mapa; mora no App) */
-  aoAbrirPlacar?: () => void;
-  nomeDoExecutivo?: string | null;
-  /** abre direto em Feitas hoje (o "Revisar" do encerramento da Agenda) */
-  abaInicial?: 'fila' | 'feitas';
-  /** Um app só: a proposta dentro do negócio */
-  aoProposta?: (i: CardDaFila) => void;
-  /** "Como passar de <etapa>": o Playbook no contexto do negócio */
-  aoPlaybook?: () => void;
 };
 const PERTO_M = 1000;
 function metros(a: { latitude: number; longitude: number }, lat: number, lng: number) {
@@ -374,9 +346,9 @@ function metros(a: { latitude: number; longitude: number }, lat: number, lng: nu
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.latitude * rad) * Math.cos(lat * rad) * Math.sin(dLng / 2) ** 2;
   return 2 * r * Math.asin(Math.sqrt(h));
 }
-type Filtro = 'tudo' | 'regua' | 'ligar' | 'visitar' | 'whatsapp' | 'perto';
+type Filtro = 'tudo' | 'ligar' | 'visitar' | 'whatsapp' | 'perto';
 
-export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, aoRegistrarVisita, posicao, umApp = false, aoAbrirPlacar, nomeDoExecutivo, abaInicial = 'fila', aoProposta, aoPlaybook }: Props) {
+export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, aoRegistrarVisita, posicao }: Props) {
   const layout = useLayout();
   const queryClient = useQueryClient();
   const q = useFila();
@@ -388,7 +360,7 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   const [aberto, setAberto] = useState<string | null>(null);
   const [discou, setDiscou] = useState<Record<string, string>>({});
   const [filtro, setFiltro] = useState<Filtro>('tudo');
-  const [aba, setAba] = useState<'fila' | 'feitas'>(abaInicial);
+  const [aba, setAba] = useState<'fila' | 'feitas'>('fila');
   const [foco, setFoco] = useState(false);
   const [selecionado, setSelecionado] = useState<string | null>(null);
   const [pulso, setPulso] = useState(false);
@@ -422,7 +394,7 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   }, [q.data]);
 
   const fila = useMemo(() => (q.data?.itens ?? []).filter((i) => !escondidos.has(i.dealId)), [q.data, escondidos]);
-  const passa = (i: CardDaFila, f: Filtro) => f === 'tudo' || (f === 'regua' && !!i.passouRegua) || (f === 'ligar' && i.verbo === 'Ligar') || (f === 'visitar' && (i.verbo === 'Visitar' || i.verbo === 'Registrar'))
+  const passa = (i: CardDaFila, f: Filtro) => f === 'tudo' || (f === 'ligar' && i.verbo === 'Ligar') || (f === 'visitar' && (i.verbo === 'Visitar' || i.verbo === 'Registrar'))
     || (f === 'whatsapp' && i.verbo === 'WhatsApp') || (f === 'perto' && !!posicao && i.lat != null && i.lng != null && metros(posicao, i.lat, i.lng) <= PERTO_M);
   const visiveis = fila.filter((i) => passa(i, filtro));
   const contagem = (f: Filtro) => fila.filter((i) => passa(i, f)).length;
@@ -566,25 +538,8 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   }
 
   // ---- topo (120 px) ----
-  const placar = usePlacar(umApp);
-  const saudacao = (() => {
-    if (!umApp || !fila.length) return null;
-    const h = Number(new Date(Date.now() - 3 * 3600000).toISOString().slice(11, 13));
-    const ola = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
-    const nome = (nomeDoExecutivo ?? '').trim().split(/\s+/)[0];
-    const a = fila[0];
-    const peso = [a.negocio, a.agendaHoje ? `na agenda às ${a.agendaHoje}` : a.venceu ? a.prazoTexto : null].filter(Boolean).join(', ');
-    return `${ola}${nome ? `, ${nome}` : ''}. O que mais pesa agora: ${peso}.`;
-  })();
   const topo = (
     <View style={s.topo}>
-      {umApp && (
-        <View style={{ gap: 8 }}>
-          <PlacarFechado dados={placar.data} carregando={placar.isFetching} largo={layout.ehDesktop}
-            aoAbrir={() => aoAbrirPlacar?.()} aoAbrirRanking={() => setRankingAberto(true)} />
-          {saudacao ? <Text style={s.saudacao} numberOfLines={2}>{saudacao}</Text> : null}
-        </View>
-      )}
       <View style={s.topoA}>
         <Anel feitas={feitas.length} total={totalDia} zerada={zerada} />
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -593,7 +548,7 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
             <Text style={[s.topoPlacar, pulso && s.topoSubPulso]} numberOfLines={1}>
               {zerada ? `Fila zerada · ${feitas.length} feitas` : `${feitas.length} feitas · ${fila.length} na fila`}
             </Text>
-            {!umApp && <SeloPosicao aoAbrir={() => setRankingAberto(true)} />}
+            <SeloPosicao aoAbrir={() => setRankingAberto(true)} />
           </View>
         </View>
         <Pressable accessibilityRole="button" disabled={fila.length === 0} onPress={() => setFoco(true)} style={[s.botaoFoco, fila.length === 0 && { opacity: 0.5 }]}>
@@ -611,7 +566,7 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
         </View>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsFiltro}>
-        {([['tudo', 'Tudo'], ...(umApp ? [['regua', 'Passou da régua']] : []), ['ligar', 'Ligar'], ['visitar', 'Visitar'], ['whatsapp', 'WhatsApp'], ['perto', 'Perto de mim']] as Array<[Filtro, string]>).map(([f, r]) => (
+        {([['tudo', 'Tudo'], ['ligar', 'Ligar'], ['visitar', 'Visitar'], ['whatsapp', 'WhatsApp'], ['perto', 'Perto de mim']] as Array<[Filtro, string]>).map(([f, r]) => (
           <Pressable key={f} accessibilityRole="button" accessibilityState={{ selected: filtro === f }} onPress={() => setFiltro(f)} style={[s.chipFiltro, filtro === f && s.chipFiltroAtivo]}>
             <Text style={[s.chipFiltroTexto, filtro === f && s.chipFiltroTextoAtivo]}>{r} <Text style={s.chipFiltroN}>{contagem(f)}</Text></Text>
           </Pressable>
@@ -634,8 +589,7 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
         {doGrupo.map((i) => (
           <CardFila key={i.dealId} item={i} aberto={aberto === i.dealId} selecionado={layout.ehDesktop && doSelecionado?.dealId === i.dealId}
             aoVerbo={() => tocarVerbo(i)} aoFechar={fecharCard} aoAdiar={() => adiar(i)}
-            aoSelecionar={layout.ehDesktop ? () => setSelecionado(i.dealId) : undefined}
-            aoProposta={umApp && aoProposta && !layout.ehDesktop ? () => aoProposta(i) : undefined}>
+            aoSelecionar={layout.ehDesktop ? () => setSelecionado(i.dealId) : undefined}>
             {!layout.ehDesktop && registroDe(i)}
           </CardFila>
         ))}
@@ -696,7 +650,7 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
       </View>
     );
   } else if (visiveis.length === 0) {
-    const nome = { tudo: 'Tudo', regua: 'Passou da régua', ligar: 'Ligar', visitar: 'Visitar', whatsapp: 'WhatsApp', perto: 'Perto de mim' }[filtro];
+    const nome = { tudo: 'Tudo', ligar: 'Ligar', visitar: 'Visitar', whatsapp: 'WhatsApp', perto: 'Perto de mim' }[filtro];
     corpo = (
       <View style={s.estadoCaixa}>
         <Text style={s.ajuda}>{`Nada em '${nome}' agora.`}</Text>
@@ -707,8 +661,7 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
     corpo = <View style={{ gap: 18 }}>{cards(visiveis)}</View>;
   }
 
-  // Um app só (PR 5): os acordos do 1:1 moram no Desenvolvimento (menu do avatar)
-  const acordosBloco = acordos.length > 0 && aba === 'fila' && !umApp ? (
+  const acordosBloco = acordos.length > 0 && aba === 'fila' ? (
     <View style={{ gap: 8, marginTop: 8 }}>
       <View style={s.grupoCab}><Text style={s.grupoRotulo}>DO SEU 1:1</Text><View style={s.grupoN}><Text style={s.grupoNTexto}>{acordos.length}</Text></View><View style={s.grupoLinha} /></View>
       {acordos.map((c) => (
@@ -745,9 +698,7 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
         <View style={{ flex: 1, flexDirection: 'row' }}>
           <View style={s.colunaFila}>{topo}{lista}</View>
           <View style={s.painel}>
-            {doSelecionado ? <PainelDoNegocio item={doSelecionado} aoVerbo={() => tocarVerbo(doSelecionado)} aberto={aberto === doSelecionado.dealId} aoFechar={fecharCard}
-              aoProposta={umApp && aoProposta ? () => aoProposta(doSelecionado) : undefined}
-              aoPlaybook={umApp ? aoPlaybook : undefined}>
+            {doSelecionado ? <PainelDoNegocio item={doSelecionado} aoVerbo={() => tocarVerbo(doSelecionado)} aberto={aberto === doSelecionado.dealId} aoFechar={fecharCard}>
               {registroDe(doSelecionado)}
             </PainelDoNegocio> : <View style={s.estadoCaixa}><Text style={s.ajuda}>Escolha um negócio da fila.</Text></View>}
           </View>
@@ -761,7 +712,7 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
 }
 
 // ---- computador: painel do negócio ------------------------------------------------------
-function PainelDoNegocio({ item, aberto, aoVerbo, aoFechar, aoProposta, aoPlaybook, children }: { item: CardDaFila; aberto: boolean; aoVerbo: () => void; aoFechar: () => void; aoProposta?: () => void; aoPlaybook?: () => void; children: React.ReactNode }) {
+function PainelDoNegocio({ item, aberto, aoVerbo, aoFechar, children }: { item: CardDaFila; aberto: boolean; aoVerbo: () => void; aoFechar: () => void; children: React.ReactNode }) {
   const etapa = ETAPA[item.etapaId];
   // a ordem do funil, explícita: chaves numéricas fazem o objeto se reordenar (Visita ia para o fim)
   const trilha = ['1395880469', '1396005401', '1395880470', '1395880471', '1395880472', '1395880473'];
@@ -785,12 +736,6 @@ function PainelDoNegocio({ item, aberto, aoVerbo, aoFechar, aoProposta, aoPlaybo
           <Pressable accessibilityRole="button" onPress={aoVerbo} style={[s.salvar, { backgroundColor: item.verbo === 'WhatsApp' ? 'var(--whatsapp)' : 'var(--vermelho-acao)' }]}>
             <Text style={s.salvarTexto}>{item.titulo}</Text>
           </Pressable>
-        )}
-        {(aoProposta || aoPlaybook) && (
-          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-            {aoProposta && <Pressable accessibilityRole="button" onPress={aoProposta} style={s.botaoSec}><Text style={s.botaoSecTexto}>Proposta</Text></Pressable>}
-            {aoPlaybook && <Pressable accessibilityRole="button" onPress={aoPlaybook} style={s.botaoSec}><Text style={s.botaoSecTexto}>{`Como passar de ${etapa?.rotulo ?? 'etapa'}`}</Text></Pressable>}
-          </View>
         )}
       </View>
       <View style={s.blocoPainel}>
@@ -858,9 +803,6 @@ function ModoFoco({ fila, hoje, feriados, discou, aberto, setAberto, aoVerbo, ao
 }
 
 const s = StyleSheet.create({
-  linkProposta: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', marginBottom: -8, marginTop: -4 },
-  linkPropostaTexto: { fontSize: 14, fontWeight: '700', color: 'var(--vermelho-texto)' },
-  saudacao: { fontSize: 13, color: 'var(--text-muted)', lineHeight: 18 },
   tela: { flex: 1, backgroundColor: 'var(--bg)' },
   colunaFila: { width: 440, borderRightWidth: 1, borderRightColor: 'var(--border-soft)' },
   painel: { flex: 1 },
