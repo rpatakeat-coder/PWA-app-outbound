@@ -19,22 +19,14 @@ import { Painel } from './Painel';
 import { Toast } from './Toast';
 import { IconClose, IconWhatsapp, useIconColors } from './icons';
 import { negocioAcao } from '../utils/negocioAcao';
+import { planoApresentadoHubSpot } from '../utils/umApp';
 import { pc9Alertas, pc9BRL, pc9Calcular, pc9EstadoInicial, pc9SituacaoDoAdicional, pc9TextoDoInvestimento, pc9TierValido } from '../utils/calculadoraPlanos';
 
 export type NegocioDaProposta = { dealId: string; nome: string; etapaId: string | null; telefone: string | null; clientId: string | null };
 
 const ETAPA = { decisor: '1395880470', demo: '1395880471', negociacao: '1395880472', pagamento: '1395880473' };
 
-/** de/para do plano para a lista do HubSpot (a mesma do Cockpit: prcPlanoApresentadoHubSpot) */
-export function planoApresentadoHubSpot(tipoPlano: string, tier: string): string {
-  const tipoAntigo = tipoPlano === 'completo' ? 'mesas' : tipoPlano;
-  const planoAntigo = tier === 'intermediario' ? 'inovacao' : tier;
-  const mapa: Record<string, string> = {
-    basico: tipoAntigo === 'mesas' ? 'Básico (PDV + mesa + delivery)' : 'Básico (PDV + delivery)',
-    inovacao: 'Inovação', profissional: 'Pro', enterprise: 'Enterprise',
-  };
-  return mapa[planoAntigo] ?? '';
-}
+export { planoApresentadoHubSpot } from '../utils/umApp';
 
 type Config = {
   planos: Record<string, { label: string; tiers: Array<{ id: string; name: string; price: number }> }>;

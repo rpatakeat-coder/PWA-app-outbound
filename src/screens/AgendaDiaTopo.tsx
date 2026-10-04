@@ -17,15 +17,8 @@ import { Toast } from '../components/Toast';
 import { useMinhaDaily } from '../hooks/useMinhaDaily';
 import { IconCar, IconCheckCircle, IconClock, useIconColors } from '../components/icons';
 
-export type MomentoDoDia = 'manha' | 'rua' | 'noite';
-
-/** manhã = antes do 1º check-in e antes das 11h; noite = depois das 18h; o resto é rua (docs/11 §1). */
-export function momentoDoDia(provadasOuFeitasHoje: number, agora = new Date()): MomentoDoDia {
-  const h = Number(new Date(agora.getTime() - 3 * 3600000).toISOString().slice(11, 13));
-  if (h >= 18) return 'noite';
-  if (h < 11 && provadasOuFeitasHoje === 0) return 'manha';
-  return 'rua';
-}
+import { momentoDoDia } from '../utils/umApp';
+export { momentoDoDia, type MomentoDoDia } from '../utils/umApp';
 
 const hhmm = (iso: string | null | undefined) => {
   if (!iso) return null;

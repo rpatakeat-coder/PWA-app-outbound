@@ -16,6 +16,7 @@ import { supabase } from '../integrations/supabase/client';
 import { useLayout } from '../hooks/useLayout';
 import { QuadroEmbutido } from '../components/CockpitEmbutido';
 import { IconArrowFoward, IconCall, IconPlus, useIconColors } from '../components/icons';
+import { ETAPAS_DO_FUNIL, proximaEtapa } from '../utils/umApp';
 
 export type NegocioDoFunil = {
   dealId: string; nome: string; etapaId: string; mrr: number | null; temperatura: number | null;
@@ -25,19 +26,8 @@ export type NegocioDoFunil = {
 };
 type RespostaFunil = { negocios: NegocioDoFunil[]; hoje: string; snapshotLidoEm: string | null; semMedicao?: string };
 
-export const ETAPAS_DO_FUNIL: Array<{ id: string; rotulo: string; cor: string }> = [
-  { id: '1395880469', rotulo: 'Prospecção', cor: '#7A8494' },
-  { id: '1396005401', rotulo: 'Visita', cor: '#E51A31' },
-  { id: '1395880470', rotulo: 'Conversa com decisor', cor: '#B07C1F' },
-  { id: '1395880471', rotulo: 'Demo/Proposta', cor: '#8E3B5C' },
-  { id: '1395880472', rotulo: 'Negociação', cor: '#2B3440' },
-  { id: '1395880473', rotulo: 'Ag. Pagamento', cor: '#1E9E7B' },
-];
+export { ETAPAS_DO_FUNIL, proximaEtapa } from '../utils/umApp';
 const AG_PAGAMENTO = '1395880473';
-export const proximaEtapa = (id: string) => {
-  const i = ETAPAS_DO_FUNIL.findIndex((e) => e.id === id);
-  return i >= 0 && i < ETAPAS_DO_FUNIL.length - 1 ? ETAPAS_DO_FUNIL[i + 1] : null;
-};
 
 export async function buscarFunil(): Promise<RespostaFunil> {
   const { data, error } = await supabase.functions.invoke('fila-tarefas', { body: { op: 'funil' } });

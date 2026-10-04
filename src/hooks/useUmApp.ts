@@ -75,18 +75,7 @@ export function usePlacar(ativo: boolean) {
   });
 }
 
-/** "faltam 3 provadas" / "faltam 1 demo" / "piso batido" — o que falta para o piso da semana. */
-export function textoDoPiso(p: Placar | undefined): string | null {
-  const s = p?.semana;
-  if (!s) return null;
-  const v = s.piso_faltam_provadas, d = s.piso_faltam_demos;
-  if (v <= 0 && d <= 0) return 'Piso da semana batido';
-  const partes = [
-    v > 0 ? `${v} ${v === 1 ? 'provada' : 'provadas'}` : null,
-    d > 0 ? `${d} demo` : null,
-  ].filter(Boolean);
-  return `Piso: faltam ${partes.join(' e ')}`;
-}
+export { textoDoPiso } from '../utils/umApp';
 
 export const reais = (v: number | null | undefined) =>
   v == null ? '—' : `R$ ${Math.round(v).toLocaleString('pt-BR')}`;

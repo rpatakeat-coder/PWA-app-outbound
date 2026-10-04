@@ -183,7 +183,7 @@ import FilaTarefasScreen, { buscarFila } from './src/screens/FilaTarefasScreen';
 import { FolhaPlacar } from './src/components/Placar';
 import FunilScreen, { type NegocioDoFunil } from './src/screens/FunilScreen';
 import DesenvolvimentoScreen from './src/screens/DesenvolvimentoScreen';
-import { momentoDoDia } from './src/screens/AgendaDiaTopo';
+import { momentoDoDia } from './src/utils/umApp';
 import PropostaSheet, { type NegocioDaProposta } from './src/components/PropostaSheet';
 import { usePlacar, useUmApp } from './src/hooks/useUmApp';
 import { BarreiraDaAba } from './src/components/BarreiraDaAba';

@@ -31,15 +31,7 @@ export type SemanaDoPlano = {
 };
 
 const DIA_MS = 86400000;
-const isoBRT = (d: Date) => new Date(d.getTime() - 3 * 3600000).toISOString().slice(0, 10);
-
-/** A segunda da "esta semana" do Planejamento: no sábado e no domingo, já é a próxima (igual ao Cockpit). */
-export function segundaDaSemana(agora = new Date(), deslocar = 0): string {
-  const hoje = new Date(`${isoBRT(agora)}T12:00:00Z`);
-  const dow = hoje.getUTCDay();
-  const ate = dow === 0 ? 1 : dow === 6 ? 2 : 1 - dow;
-  return new Date(hoje.getTime() + (ate + deslocar * 7) * DIA_MS).toISOString().slice(0, 10);
-}
+export { segundaDaSemana } from '../utils/umApp';
 
 export function useSemanaDoPlano(ownerId: string | null, segunda: string, ativo: boolean) {
   return useQuery<SemanaDoPlano>({
