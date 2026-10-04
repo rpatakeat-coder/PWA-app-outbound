@@ -500,13 +500,13 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
       <View style={s.topoA}>
         <Anel feitas={feitas.length} total={totalDia} zerada={zerada} />
         <View style={{ flex: 1, minWidth: 0 }}>
+          {/* o cabeçalho do app já diz "Tarefas" (auditoria 04/10/26): aqui só o placar do dia e o selo */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={s.topoTitulo}>Tarefas</Text>
+            <Text style={[s.topoPlacar, pulso && s.topoSubPulso]} numberOfLines={1}>
+              {zerada ? `Fila zerada · ${feitas.length} feitas` : `${feitas.length} feitas · ${fila.length} na fila`}
+            </Text>
             <SeloPosicao aoAbrir={() => setRankingAberto(true)} />
           </View>
-          <Text style={[s.topoSub, pulso && s.topoSubPulso]} numberOfLines={1}>
-            {zerada ? `Fila zerada · ${feitas.length} feitas` : `${feitas.length} feitas · ${fila.length} na fila`}
-          </Text>
         </View>
         <Pressable accessibilityRole="button" disabled={fila.length === 0} onPress={() => setFoco(true)} style={[s.botaoFoco, fila.length === 0 && { opacity: 0.5 }]}>
           <Text style={s.botaoFocoTexto}>Modo foco</Text>
@@ -759,6 +759,7 @@ const s = StyleSheet.create({
   topoA: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
   topoTitulo: { fontSize: 20, fontWeight: '700', color: 'var(--text)' },
   topoSub: { fontSize: 12, color: 'var(--text-muted)' },
+  topoPlacar: { fontSize: 16, fontWeight: '700', color: 'var(--text)', flexShrink: 1 },
   topoSubPulso: { color: 'var(--vermelho-acao)', transform: [{ scale: 1.08 }] },
   botaoFoco: { minHeight: 44, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center' },
   botaoFocoTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
