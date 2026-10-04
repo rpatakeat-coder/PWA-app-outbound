@@ -1,26 +1,39 @@
-// Aba Agenda do mapa novo (prompt final, Parte B §B3).
+// Aba Agenda do mapa novo — "O que eu tenho hoje, a que horas, e estou no ritmo?"
+// Handoff "Abas do app" (Claude Design, 04/10/2026), pranchas G1/G2/R1 e docs/12 §1–2.
 //
-// A mesma agenda que o gestor vê no Planejamento: as paradas da rota de hoje,
-// as tarefas do HubSpot (visitas e retornos que o Cockpit põe na semana) e as
-// reuniões/follow-ups agendados pelo app. Nenhum dado próprio.
+// De cima para baixo: a semana com o propósito de cada dia (o planos_semanais do
+// Planejamento do Cockpit), Lista | Mapa do dia, o ritmo numa linha (o ÚNICO lugar do app que
+// pede a promessa do dia), "N feitas hoje", a próxima ação com o preparo de 10 s já aberto, o
+// resto do dia em ordem, e uma porta só para montar ou refazer o dia. Nenhum dado próprio: as
+// paradas da rota (field_route_stops), as tarefas do HubSpot e as reuniões do app.
 //
-// `Cheguei` na próxima parada é o MESMO check-in do mapa (GPS novo, "Está na
-// porta?", ficha de rua): a tela só leva ao mapa e dispara o fluxo de lá.
+// `Cheguei` na próxima parada é o MESMO check-in do mapa (GPS novo, "Está na porta?", ficha de
+// rua): a tela só leva ao mapa e dispara o fluxo de lá.
 import React, { useMemo, useState } from 'react';
-import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { Alert } from '../components/Alert';
+import { Painel } from '../components/Painel';
 import { supabase } from '../integrations/supabase/client';
 import RegistrarTarefa, { type TarefaParaRegistrar } from './RegistrarTarefa';
 import { fetchOptimizedTrip } from '../utils/routing';
 import { Toast } from '../components/Toast';
 
 import { useTarefasDoCrm } from '../hooks/useTarefasDoCrm';
+import { useMinhaDaily } from '../hooks/useMinhaDaily';
+import { useMeuDia } from '../hooks/useMeuDia';
 import { ir } from './CardLeadNovo';
-import { IconChevronRight, useIconColors } from '../components/icons';
+import {
+  IconBook, IconCalendar, IconCall, IconCar, IconCheck, IconChevronRight, IconLocation, IconRefresh, IconSquareMenu, IconWhatsapp, useIconColors,
+} from '../components/icons';
 import { acaoRapida, diaBRT, ehCobranca } from '../utils/abaTarefas';
-import { compromissosDoDia, diasDaFaixa, estadoDasParadas, rotuloDoDia } from '../utils/agendaNovo';
+import { compromissosDoDia, estadoDasParadas } from '../utils/agendaNovo';
+import { proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
+import { porNoDia } from '../utils/paradaDoDia';
+import { lerSemanaDoPlano, PROPOSITOS, type DiaDoPlano } from '../utils/semanaDoPlano';
+import { montarPreparo, usePreparo } from '../utils/preparo';
+import { stageTemperature } from '../constants/stages';
 import type { Client, ClientMeeting, FieldRouteStopWithClient } from '../types/client';
 
 type Props = {
@@ -34,7 +47,7 @@ type Props = {
   distanciaAte: (clientId: string | null) => string | null;
   visitadoHoje: (c: Client) => boolean;
   aoCheguei: (c: Client) => void;
-  /** Hora em que a Daily de hoje foi registrada (dailies.created_at). */
+  /** Mantido por compatibilidade: a hora da promessa agora vem do useMeuDia. */
   dailyValidadaEm?: string | null;
   aoAbrirLead: (clientId: string) => void;
   /** Põe as paradas em aberto na melhor ordem a partir de onde a pessoa está (App.tsx). */
@@ -43,10 +56,20 @@ type Props = {
   /** Monta o dia com microrrotas a partir da carteira (App.tsx). */
   aoMontarDia?: () => void;
   montandoDia?: boolean;
-  /** Telefone do lead, para o "Ligar agora" do registro. */
+  /** Telefone do lead, para Ligar e Confirmar no WhatsApp. */
   telefoneDe?: (clientId: string | null) => string | null;
   /** Onde a pessoa está: o ponto de partida do roteirizar dos outros dias. */
   base?: { latitude: number; longitude: number } | null;
+  /** O dono no HubSpot: chave do planos_semanais (a faixa da semana). */
+  ownerHubspot?: string | null;
+  /** Etapa (código) e dias na etapa do snapshot, e a régua da etapa — o mesmo do cartão. */
+  contextoDe?: (c: Client) => { codigo: string | null; diasNaEtapa: number | null; regua: number | null };
+  /** Lista | Mapa do dia (opção A da Rota): abre o mapa do dia. Sem ela, sem seletor. */
+  aoMapaDoDia?: () => void;
+  /** Playbook pela etapa do lead. */
+  aoPlaybook?: () => void;
+  /** Computador: o mapa fica na coluna da direita, sem seletor. */
+  largo?: boolean;
 };
 
 const ruaDo = (c: Client | null) => {
@@ -54,28 +77,81 @@ const ruaDo = (c: Client | null) => {
   const rua = [c.endereco, c.numero].filter(Boolean).join(', ');
   return rua || c.bairro || null;
 };
+const SEMANA = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'];
+const SEMANA_LONGA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+const dowDe = (iso: string) => new Date(`${iso}T12:00:00Z`).getUTCDay();
+const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const horaBRT = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+const soDigitos = (t: string) => t.replace(/\D+/g, '');
+const com55 = (t: string) => { const d = soDigitos(t); return d.length <= 11 ? `55${d}` : d; };
+const corRegua = (r: 'ok' | 'perto' | 'passou' | null) => (r === 'passou' ? 'var(--vermelho-texto)' : r === 'perto' ? 'var(--ambar-texto)' : 'var(--tint-green-text)');
+
+/** O preparo de 10 s (docs/12 §1.5): barra de 8, etapa na cor da régua, último contato, contatos,
+ *  o que falta e quem decide. */
+function Preparo({ c, contextoDe, telefone }: { c: Client; contextoDe?: Props['contextoDe']; telefone: string | null }) {
+  const q = usePreparo(c.id);
+  const ctx = contextoDe?.(c) ?? { codigo: null, diasNaEtapa: null, regua: null };
+  const p = montarPreparo({ codigo: ctx.codigo, diasNaEtapa: ctx.diasNaEtapa, reguaDias: ctx.regua, telefone, fichas: q.data?.fichas ?? [], toques: q.data?.toques ?? [] });
+  return (
+    <View style={{ gap: 8 }}>
+      {p.indice >= 0 && (
+        <View style={s.segs8}>{[0, 1, 2, 3, 4, 5, 6, 7].map((i) => <View key={i} style={[s.seg8, i <= p.indice && { backgroundColor: 'var(--vermelho-acao)' }]} />)}</View>
+      )}
+      {!!p.etapaTexto && <Text style={[s.etapaTexto, { color: corRegua(p.regua) }]}>{p.etapaTexto}</Text>}
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={[s.caixa, { flex: 1.4 }]}>
+          <Text style={s.caixaRotulo}>ÚLTIMO CONTATO</Text>
+          <Text style={s.caixaValor}>{q.isLoading ? '…' : p.ultimo}</Text>
+        </View>
+        <View style={[s.caixa, { flex: 1 }]}>
+          <Text style={s.caixaRotulo}>CONTATOS</Text>
+          <Text style={s.caixaValor}>{q.isLoading ? '…' : `${p.contatos} de 4`}</Text>
+        </View>
+      </View>
+      {!!p.falta && (
+        <View style={[s.caixa, s.caixaAmbar]}>
+          <Text style={[s.caixaRotulo, { color: 'var(--tint-amber-text)' }]}>O QUE FALTA</Text>
+          <Text style={[s.caixaValor, { color: 'var(--tint-amber-text)' }]}>{p.falta}</Text>
+        </View>
+      )}
+      <View style={s.caixa}>
+        <Text style={s.caixaRotulo}>QUEM DECIDE</Text>
+        <Text style={s.caixaValor}>{q.isLoading ? '…' : p.decide}</Text>
+      </View>
+    </View>
+  );
+}
+
+type Linha =
+  | { k: string; tipo: 'parada'; ordem: number; hora: string | null; numero: number; p: FieldRouteStopWithClient }
+  | { k: string; tipo: 'compromisso'; ordem: number; hora: string | null; comp: ReturnType<typeof compromissosDoDia>[number] };
 
 export default function AgendaNovoScreen({
-  diaInicial, paradas, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead, dailyValidadaEm,
-  aoRoteirizar, roteirizando, aoMontarDia, montandoDia, telefoneDe, base,
+  diaInicial, paradas, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead,
+  aoRoteirizar, roteirizando, aoMontarDia, montandoDia, telefoneDe, base, ownerHubspot, contextoDe, aoMapaDoDia, aoPlaybook, largo,
 }: Props) {
   const [roteirizandoDia, setRoteirizandoDia] = useState(false);
   const [registrando, setRegistrando] = useState<TarefaParaRegistrar | null>(null);
+  const [aberto, setAberto] = useState<string | null>(null);
+  const [feitasAbertas, setFeitasAbertas] = useState(false);
+  const [porta, setPorta] = useState(false);
   const queryClient = useQueryClient();
   // Concluídas nesta sessão: somem da lista na hora (o Desfazer as devolve).
   const [concluidas, setConcluidas] = useState<Set<string>>(new Set());
   const cores = useIconColors();
   const agora = new Date();
   const hoje = diaBRT(agora)!;
-  const dias = useMemo(() => diasDaFaixa(agora), [hoje]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [dia, setDia] = useState(diaInicial && diaInicial >= hoje ? diaInicial : hoje);
+  const horaAgora = Number(agora.toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Sao_Paulo' })) % 24;
+  // Hoje + 4 dias úteis (docs/12 §1.1).
+  const dias = useMemo(() => [hoje, proximoDiaUtil(hoje, 1), proximoDiaUtil(hoje, 2), proximoDiaUtil(hoje, 3), proximoDiaUtil(hoje, 4)], [hoje]);
+  const [dia, setDia] = useState(diaInicial && dias.includes(diaInicial) ? diaInicial : hoje);
   const { tarefas } = useTarefasDoCrm(true);
   const { user } = useAuth();
+  const { prometer } = useMinhaDaily(true);
+  const meuDia = useMeuDia(true, user?.id ?? null);
 
-  /* O PLANO DOS OUTROS DIAS (28/09/2026, Julyan: "a munição não está indo pra agenda").
-     O que se põe no Planejamento vira parada da rota DAQUELE dia (plano_para_rota), mas
-     a Agenda só mostrava a rota de hoje: amanhã em diante aparecia só tarefa e reunião,
-     e o planejado sumia. Uma consulta traz as rotas da faixa inteira. */
+  /* O PLANO DOS OUTROS DIAS (28/09/2026). O que se põe no Planejamento vira parada da rota
+     DAQUELE dia (plano_para_rota): uma consulta traz as rotas da faixa inteira. */
   const planoDaFaixa = useQuery({
     queryKey: ['field_route_stops', 'faixa', user?.id, dias[0], dias[dias.length - 1]],
     enabled: !!user?.id,
@@ -87,36 +163,52 @@ export default function AgendaNovoScreen({
       if (error) throw error;
       const porDia = new Map<string, FieldRouteStopWithClient[]>();
       for (const r of (data ?? []) as unknown as Array<{ route_date: string; stops: FieldRouteStopWithClient[] }>) {
-        const vivas = (r.stops ?? []).filter((s) => s.status !== 'removed' && s.status !== 'skipped').sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+        const vivas = (r.stops ?? []).filter((x) => x.status !== 'removed' && x.status !== 'skipped').sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
         porDia.set(r.route_date, [...(porDia.get(r.route_date) ?? []), ...vivas]);
       }
       return porDia;
     },
   });
+  // O propósito de cada dia: o mesmo planos_semanais do Planejamento (Fase 0).
+  const semana = useQuery<Map<string, DiaDoPlano>>({
+    queryKey: ['plano_semana_agenda', ownerHubspot, dias[0], dias[4]],
+    enabled: !!ownerHubspot,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const [a, b] = await Promise.all([lerSemanaDoPlano(ownerHubspot!, dias[0]), lerSemanaDoPlano(ownerHubspot!, dias[4])]);
+      return new Map([...a, ...b].map((d) => [d.iso, d]));
+    },
+  });
+  // Demos realizadas de hoje (livro da temporada, a mesma régua do Cockpit) — para a noite.
+  const demosHoje = useQuery<number>({
+    queryKey: ['demos_hoje', ownerHubspot, hoje],
+    enabled: !!ownerHubspot && horaAgora >= 18,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { count } = await supabase.from('pontos_eventos').select('id', { count: 'exact', head: true })
+        .eq('owner_id', ownerHubspot!).eq('tipo', 'demo_realizada').gte('ref_em', `${hoje}T03:00:00.000Z`);
+      return count ?? 0;
+    },
+  });
+
   const horaDe = (p: FieldRouteStopWithClient, d: string) => (p.planned_at && diaBRT(new Date(p.planned_at)) === d ? Date.parse(p.planned_at) : null);
   const paradasDoDia = (d: string) => {
     if (d === hoje) return paradas;
-    const l = [...(planoDaFaixa.data?.get(d) ?? [])];
-    // Na ORDEM DA ROTA: é ela que o Percurso segue. O Roteirizar grava essa ordem pela
-    // melhor rota ou pela hora combinada no Planejamento.
-    return l.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    return [...(planoDaFaixa.data?.get(d) ?? [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   };
 
-  const estado = estadoDasParadas(
-    paradas.map((p) => ({ ...p, visitadoHoje: !!p.client && visitadoHoje(p.client) })),
-  );
-  const feitas = estado.filter((p) => p.estado === 'feito').length;
+  const estado = estadoDasParadas(paradas.map((p) => ({ ...p, visitadoHoje: !!p.client && visitadoHoje(p.client) })));
+  const feitasLista = estado.filter((p) => p.estado === 'feito');
+  const proxima = estado.find((p) => p.estado === 'proxima') ?? null;
   const noPlano = new Set(paradas.map((p) => p.client_id));
   const cobrar = new Set(tarefas.filter((t) => ehCobranca({ assunto: t.assunto, origem: t.marcador?.origem }) && t.clientId).map((t) => t.clientId!));
   const doDia = (d: string) => compromissosDoDia(d, tarefas, reunioes, nomePorId, d === hoje ? noPlano : new Set(paradasDoDia(d).map((p) => p.client_id)));
   const compromissos = doDia(dia).filter((k) => !concluidas.has(k.id)
     && !(k.fonte === 'app' && reunioes.some((r) => `app-${r.id}` === k.id && r.status === 'realizada')));
 
-  /* TERMINAR AS ATIVIDADES DO DIA (28/09/2026, Julyan). A visita se termina no Cheguei
-     (GPS, foto, ficha). O que é SÓ LIGAÇÃO — retorno, cobrança, follow-up — se confirma
-     aqui com "Liguei", e só isso: visita e reunião não ganham o botão (a mesma regra da
-     aba Tarefas, acaoRapida). No HubSpot a tarefa conclui com uma nota da ligação e 5 s
-     para desfazer; o follow-up agendado no app vira "realizada". */
+  /* TERMINAR AS ATIVIDADES DO DIA (28/09/2026). A visita se termina no Cheguei. O que é SÓ
+     LIGAÇÃO — retorno, cobrança, follow-up — se confirma com o registro (a mesma regra da aba
+     Tarefas, acaoRapida). */
   const podeLigar = (k: (typeof compromissos)[number]) => {
     if (k.fonte === 'hubspot') {
       const t = tarefas.find((x) => `hs-${x.id}` === k.id);
@@ -124,12 +216,11 @@ export default function AgendaNovoScreen({
     }
     return k.tipo === 'retorno';
   };
-  const liguei = (k: (typeof compromissos)[number]) => {
-    setConcluidas((s) => new Set(s).add(k.id));
-    const voltar = () => setConcluidas((s) => { const n = new Set(s); n.delete(k.id); return n; });
+  const registrar = (k: (typeof compromissos)[number]) => {
+    setConcluidas((st) => new Set(st).add(k.id));
+    const voltar = () => setConcluidas((st) => { const n = new Set(st); n.delete(k.id); return n; });
     if (k.fonte === 'hubspot') {
       const t = tarefas.find((x) => `hs-${x.id}` === k.id);
-      // O mesmo registro da aba Tarefas: como foi, o que vem agora, uma linha.
       voltar();
       if (!t) return;
       setRegistrando({ id: t.id, assunto: t.assunto, dealId: t.dealId, nome: k.nome ?? t.nomeDoCliente, telefone: telefoneDe?.(k.clientId) ?? null });
@@ -142,13 +233,22 @@ export default function AgendaNovoScreen({
       void queryClient.invalidateQueries({ queryKey: ['client_meetings'] });
     })();
   };
+  const ligar = (clientId: string | null, k?: (typeof compromissos)[number]) => {
+    const tel = telefoneDe?.(clientId);
+    if (!tel) { Toast.mostrar('Sem telefone no CRM para este lead.', 'fila'); return; }
+    void Linking.openURL(`tel:+${com55(tel)}`);
+    // Ao voltar da ligação, o registro em 3 toques (a tarefa do HubSpot conclui com a nota).
+    if (k && podeLigar(k)) setTimeout(() => registrar(k), 600);
+  };
+  const confirmarNoWhatsApp = (k: (typeof compromissos)[number]) => {
+    const tel = telefoneDe?.(k.clientId);
+    if (!tel) { Toast.mostrar('Sem telefone no CRM para confirmar.', 'fila'); return; }
+    const msg = `Olá! Confirmando nossa conversa${k.hora ? ` de hoje às ${k.hora}` : ''}. Tudo certo?`;
+    void Linking.openURL(`https://wa.me/${com55(tel)}?text=${encodeURIComponent(msg)}`);
+  };
 
-  /* O PERCURSO: as paradas em aberto, na ordem do plano, no Google Maps (até 10 — o
-     limite de pontos do Maps no celular). Roteirizar antes põe na melhor ordem. */
+  /* O PERCURSO COMPLETO, A PÉ OU DE CARRO (28/09/2026): 10 pontos por vez no Google Maps. */
   const abertasComPonto = estado.filter((p) => p.estado !== 'feito' && p.client?.latitude != null && p.client?.longitude != null);
-  /* O PERCURSO COMPLETO, A PÉ OU DE CARRO (28/09/2026). O Google Maps aceita 10
-     pontos por vez: com mais paradas, o percurso sai em partes (1–10, 11–20…), cada
-     uma continuando de onde a anterior parou. */
   const abrirPercursoDe = (lista: FieldRouteStopWithClient[]) => {
     const pts = lista.filter((p) => p.client?.latitude != null && p.client?.longitude != null)
       .map((p) => `${p.client!.latitude},${p.client!.longitude}`);
@@ -177,11 +277,9 @@ export default function AgendaNovoScreen({
       { text: 'Cancelar', style: 'cancel' },
     ]);
   };
-  const abrirPercurso = () => abrirPercursoDe(abertasComPonto);
 
-  /* ROTEIRIZAR QUALQUER DIA: a melhor ordem das paradas do dia (ORS, OSRM de reserva),
-     a partir de onde a pessoa está — ou da primeira parada, sem GPS. Só a posição muda;
-     a hora combinada no Planejamento continua a mesma. */
+  /* ROTEIRIZAR QUALQUER DIA: a melhor ordem (ORS, OSRM de reserva) a partir de onde a pessoa
+     está. Só a posição muda; a hora combinada no Planejamento continua a mesma. */
   const gravarOrdem = async (final: FieldRouteStopWithClient[]) => {
     for (const [i, p] of final.entries()) {
       const { error } = await supabase.from('field_route_stops').update({ position: i + 1 }).eq('id', p.id);
@@ -189,20 +287,16 @@ export default function AgendaNovoScreen({
     }
     void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
   };
-  const perguntarRoteirizar = (lista: FieldRouteStopWithClient[], d: string) => {
+  const pelaHoraDoPlano = (lista: FieldRouteStopWithClient[], d: string) => {
     const comHora = lista.filter((p) => horaDe(p, d) != null).length;
-    Alert.alert('Roteirizar o dia', comHora ? `${comHora} de ${lista.length} paradas têm hora combinada no Planejamento.` : undefined, [
-      { text: 'Pela melhor rota', onPress: () => { void roteirizarDia(lista); } },
-      ...(comHora ? [{ text: 'Pela hora combinada', onPress: () => {
-        const ord = [...lista].sort((a, b) => (horaDe(a, d) ?? Infinity) - (horaDe(b, d) ?? Infinity) || (a.position ?? 0) - (b.position ?? 0));
-        void gravarOrdem(ord).then(() => Toast.mostrar('✓ Na ordem da hora combinada', 'ok')).catch((e) => Alert.alert('Não deu para reordenar', String((e as Error)?.message ?? e)));
-      } }] : []),
-      { text: 'Cancelar', style: 'cancel' as const },
-    ]);
+    if (!comHora) { Toast.mostrar('O plano deste dia não tem hora marcada: a ordem já é a do Planejamento.', 'fila'); return; }
+    const ord = [...lista].sort((a, b) => (horaDe(a, d) ?? Infinity) - (horaDe(b, d) ?? Infinity) || (a.position ?? 0) - (b.position ?? 0));
+    void gravarOrdem(ord).then(() => Toast.mostrar(`Na ordem do plano · ${comHora} com hora marcada`, 'ok'))
+      .catch((e) => Alert.alert('Não deu para reordenar', String((e as Error)?.message ?? e)));
   };
   const roteirizarDia = async (lista: FieldRouteStopWithClient[]) => {
     const abertas = lista.filter((p) => p.status !== 'done' && p.client?.latitude != null && p.client?.longitude != null);
-    if (abertas.length < 2 || roteirizandoDia) return;
+    if (abertas.length < 2 || roteirizandoDia) { Toast.mostrar('Com menos de 2 paradas em aberto não há o que reordenar.', 'fila'); return; }
     const ponto = (p: FieldRouteStopWithClient) => ({ latitude: Number(p.client!.latitude), longitude: Number(p.client!.longitude) });
     const partida = base ?? ponto(abertas[0]);
     setRoteirizandoDia(true);
@@ -213,269 +307,479 @@ export default function AgendaNovoScreen({
       const final = [...lista.filter((p) => p.status === 'done'), ...ordem, ...resto.filter((p) => p.status !== 'done')];
       await gravarOrdem(final);
       const km = (trip.distanceMeters / 1000).toFixed(1).replace('.', ',');
-      Toast.mostrar(`✓ Roteirizado · ${ordem.length} paradas · ${km} km · ~${Math.round(trip.durationSeconds / 60)} min de carro`, 'ok');
+      Toast.mostrar(`Roteirizado · ${ordem.length} paradas · ${km} km · ~${Math.round(trip.durationSeconds / 60)} min de carro`, 'ok');
     } catch (e) {
       Alert.alert('Não deu para roteirizar', 'O cálculo ou a gravação da ordem falhou; confira a lista antes de sair.\n' + String((e as Error)?.message ?? ''));
     } finally {
       setRoteirizandoDia(false);
     }
   };
-  const meta = metaVisitasDia > 0 ? metaVisitasDia : 6;
+
+  // ---- o ritmo (docs/12 §1.3): o único lugar do app que pede a promessa ----
+  const md = meuDia.data;
+  const prometido = md?.prometido?.visitas ?? null;
+  const alvo = prometido ?? (metaVisitasDia > 0 ? metaVisitasDia : 6);
+  const provadas = md?.provadasHoje ?? md?.visitasHoje ?? feitasLista.length;
+  const momento: 'manha' | 'rua' | 'noite' = horaAgora >= 18 ? 'noite' : horaAgora < 11 && provadas === 0 ? 'manha' : 'rua';
+  const pedePromessa = prometido == null && horaAgora < 12 && !!md;
+  const prometer_ = (n: number) => {
+    prometer.mutate(n, {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: ['meu_dia'] });
+        Toast.mostrar(`Prometido: ${n} visitas · vai para a Daily do time no Cockpit`, 'ok');
+      },
+      onError: (e) => Alert.alert('Não consegui gravar a promessa', String((e as Error)?.message ?? e)),
+    });
+  };
+
+  // ---- a linha do tempo de hoje: próxima em destaque, o resto em ordem de hora ----
+  const linhasDepois: Linha[] = [];
+  estado.forEach((p, i) => {
+    if (p.estado !== 'pendente') return;
+    const h = horaDe(p, hoje);
+    linhasDepois.push({ k: `p-${p.id}`, tipo: 'parada', ordem: h ?? Infinity, hora: h ? horaBRT(p.planned_at!) : null, numero: i + 1, p });
+  });
+  compromissos.forEach((k) => {
+    const [hh, mm] = (k.hora ?? '').split(':').map(Number);
+    const ord = Number.isFinite(hh) ? Date.parse(`${hoje}T${String(hh).padStart(2, '0')}:${String(mm || 0).padStart(2, '0')}:00-03:00`) : Infinity;
+    linhasDepois.push({ k: `c-${k.id}`, tipo: 'compromisso', ordem: ord, hora: k.hora, comp: k });
+  });
+  linhasDepois.sort((a, b) => a.ordem - b.ordem);
+  const semRota = estado.length === 0;
+
+  // Dia fechado (noite): o que ficou para trás, com "Pôr amanhã".
+  const amanha = proximoDiaUtil(hoje, 1);
+  const ficaram = estado.filter((p) => p.estado !== 'feito');
+  const porAmanha = (p: FieldRouteStopWithClient) => {
+    if (!user?.id) return;
+    void porNoDia(user.id, amanha, p.client_id)
+      .then((r) => {
+        void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
+        Toast.mostrar(r === 'ja' ? 'Já estava no plano de amanhã' : `No plano de ${SEMANA_LONGA[dowDe(amanha)]} ${ddmm(amanha)} · aparece no Planejamento do Cockpit`, 'ok');
+      })
+      .catch((e) => Alert.alert('Não consegui pôr amanhã', String((e as Error)?.message ?? e)));
+  };
+
+  const rotuloDia = (d: string) => {
+    const pl = semana.data?.get(d);
+    const n = (d === hoje ? estado.length : paradasDoDia(d).length) + doDia(d).length;
+    if (pl?.proposito) return `${PROPOSITOS[pl.proposito] ?? pl.proposito}${n ? ` · ${n}` : ''}`;
+    return n ? `${n} ${n === 1 ? 'item' : 'itens'}` : '—';
+  };
+
+  // ---- blocos ----
+  const faixa = (
+    <View style={s.faixa}>
+      {dias.map((d) => {
+        const ativo = d === dia;
+        const rot = d === hoje ? 'HOJE' : SEMANA[dowDe(d)];
+        return (
+          <Pressable key={d} accessibilityRole="button" accessibilityState={{ selected: ativo }}
+            accessibilityLabel={`${rot} ${d.slice(8)}: ${rotuloDia(d)}`}
+            style={[s.dia, ativo && s.diaAtivo]} onPress={() => { setDia(d); setAberto(null); }}>
+            <Text style={[s.diaSemana, ativo && { color: 'var(--vermelho-texto)' }]}>{rot}</Text>
+            <Text style={s.diaNumero}>{String(Number(d.slice(8)))}</Text>
+            <Text style={s.diaProposito} numberOfLines={1}>{rotuloDia(d)}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+
+  const seletor = !largo && aoMapaDoDia && dia === hoje && !semRota ? (
+    <View style={s.seg}>
+      <View style={[s.segItem, s.segItemAtivo]} accessibilityRole="tab" accessibilityState={{ selected: true }}>
+        <IconSquareMenu width={18} height={18} fill={cores.onSurface} />
+        <Text style={s.segTexto}>Lista</Text>
+      </View>
+      <Pressable accessibilityRole="tab" accessibilityState={{ selected: false }} style={s.segItem} onPress={aoMapaDoDia}>
+        <IconLocation width={18} height={18} fill={cores.muted} />
+        <Text style={[s.segTexto, { color: 'var(--text-muted)' }]}>Mapa do dia</Text>
+      </Pressable>
+    </View>
+  ) : null;
+
+  const ritmo = pedePromessa ? (
+    <View style={s.promessa}>
+      <Text style={s.promessaTitulo}>Quantas visitas você faz hoje?</Text>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        {[4, 6, 8, 10].map((n) => (
+          <Pressable key={n} accessibilityRole="button" accessibilityLabel={`Prometer ${n} visitas`} disabled={prometer.isPending}
+            style={[s.promessaChip, prometer.isPending && { opacity: 0.5 }]} onPress={() => prometer_(n)}>
+            <Text style={s.promessaChipTexto}>{n}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Text style={s.promessaNota}>Uma vez por dia, só aqui. Vai para a Daily do time no Cockpit.</Text>
+    </View>
+  ) : (
+    <View style={s.ritmo}>
+      <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+        <Text style={s.ritmoLinha} numberOfLines={1}>
+          <Text style={s.ritmoNumero}>{`${provadas} de ${alvo}`}</Text>
+          <Text style={s.ritmoRotulo}>  visitas provadas</Text>
+        </Text>
+        <View style={s.tracos}>
+          {Array.from({ length: Math.max(1, Math.min(alvo, 12)) }, (_, i) => (
+            <View key={i} style={[s.traco, i < provadas && { backgroundColor: 'var(--verde-acao)' }]} />
+          ))}
+        </View>
+      </View>
+      <Text style={s.ritmoPromessa} numberOfLines={2}>
+        {md?.prometido?.validadaEm && prometido != null ? `prometeu ${prometido} às ${horaBRT(md.prometido.validadaEm)}` : 'sem promessa hoje'}
+      </Text>
+    </View>
+  );
+
+  const feitas = feitasLista.length > 0 ? (
+    <View>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: feitasAbertas }} style={s.feitasLinha} onPress={() => setFeitasAbertas((v) => !v)}>
+        <View style={s.feitasIcone}><IconCheck width={14} height={14} fill="var(--tint-green-text)" /></View>
+        <Text style={s.feitasTexto}>{`${feitasLista.length} ${feitasLista.length === 1 ? 'feita' : 'feitas'} hoje`}</Text>
+        <Text style={s.feitasAcao}>{feitasAbertas ? 'ocultar' : 'ver'}</Text>
+      </Pressable>
+      {feitasAbertas && feitasLista.map((p) => (
+        <Pressable key={p.id} accessibilityRole="button" style={s.feitaItem} onPress={() => aoAbrirLead(p.client_id)}>
+          <Text style={s.hora}>{p.client?.visited_at ? horaBRT(p.client.visited_at) : '—'}</Text>
+          <Text style={[s.nomeLinha, { color: 'var(--text-muted)', flex: 1 }]} numberOfLines={1}>{p.client ? nomeDoLead(p.client) : 'Parada'}</Text>
+        </Pressable>
+      ))}
+    </View>
+  ) : null;
+
+  const heroi = proxima && proxima.client && momento !== 'noite' ? (() => {
+    const c = proxima.client!;
+    const numero = estado.indexOf(proxima) + 1;
+    const temp = stageTemperature(c.etapa);
+    const manha = momento === 'manha';
+    const tel = telefoneDe?.(c.id) ?? c.telefone ?? null;
+    return (
+      <View style={s.heroi}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.heroiOlho}>{`${manha ? 'PRIMEIRA PARADA' : 'AGORA'} · ${numero} DO PLANO`}</Text>
+            <Pressable accessibilityRole="button" onPress={() => aoAbrirLead(c.id)}>
+              <Text style={s.heroiNome} numberOfLines={2}>{nomeDoLead(c)}</Text>
+            </Pressable>
+            <Text style={s.heroiSub} numberOfLines={2}>{[ruaDo(c), distanciaAte(c.id)].filter(Boolean).join(' · ')}</Text>
+          </View>
+          {temp && (
+            <View style={s.tempChip}><View style={[s.ponto, { backgroundColor: temp.color }]} /><Text style={s.tempTexto}>{temp.label}</Text></View>
+          )}
+        </View>
+        <Preparo c={c} contextoDe={contextoDe} telefone={tel} />
+        <Pressable accessibilityRole="button" accessibilityLabel={manha ? `Ir agora até ${nomeDoLead(c)}` : `Cheguei em ${nomeDoLead(c)}`}
+          style={s.botao56} onPress={() => (manha ? ir(c) : aoCheguei(c))}>
+          {manha ? <IconCar width={20} height={20} fill="#FFFFFF" /> : <IconLocation width={20} height={20} fill="#FFFFFF" />}
+          <Text style={s.botao56Texto}>{manha ? 'Ir agora' : 'Cheguei'}</Text>
+        </Pressable>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pressable accessibilityRole="button" style={s.botaoSec} onPress={() => ligar(c.id)}>
+            <IconCall width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoSecTexto}>Ligar</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" style={s.botaoSec} onPress={() => (manha ? aoAbrirLead(c.id) : ir(c))}>
+            {manha ? <IconLocation width={16} height={16} fill={cores.onSurface} /> : <IconCar width={16} height={16} fill={cores.onSurface} />}
+            <Text style={s.botaoSecTexto}>{manha ? 'Cartão' : 'Ir'}</Text>
+          </Pressable>
+          {aoPlaybook && (
+            <Pressable accessibilityRole="button" style={s.botaoSec} onPress={aoPlaybook}>
+              <IconBook width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoSecTexto}>Playbook</Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
+    );
+  })() : null;
+
+  const linhaDepois = (l: Linha) => {
+    const open = aberto === l.k;
+    if (l.tipo === 'parada') {
+      const c = l.p.client;
+      const nome = c ? nomeDoLead(c) : 'Parada';
+      const temp = c ? stageTemperature(c.etapa) : null;
+      return (
+        <View key={l.k} style={[s.linha, open && s.linhaAberta]}>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} style={s.linhaTopo} onPress={() => setAberto(open ? null : l.k)}>
+            <Text style={s.hora}>{l.hora ?? '~'}</Text>
+            <View style={[s.disco, { backgroundColor: temp?.color ?? 'var(--surface-3)' }]}><Text style={s.discoTexto}>{l.numero}</Text></View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={s.nomeLinha} numberOfLines={1}>{nome}</Text>
+              <Text style={s.subLinha} numberOfLines={1}>{[distanciaAte(l.p.client_id), cobrar.has(l.p.client_id) ? 'cobrar' : null].filter(Boolean).join(' · ') || 'visita do plano'}</Text>
+            </View>
+            {c && (
+              <Pressable accessibilityRole="button" accessibilityLabel={`Ir até ${nome}`} style={s.botaoLinha} onPress={() => ir(c)}>
+                <IconCar width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoLinhaTexto}>Ir</Text>
+              </Pressable>
+            )}
+          </Pressable>
+          {open && c && <View style={s.linhaPreparo}><Preparo c={c} contextoDe={contextoDe} telefone={telefoneDe?.(c.id) ?? c.telefone ?? null} /></View>}
+        </View>
+      );
+    }
+    const k = l.comp;
+    const reuniao = k.tipo === 'reunião';
+    const nome = k.nome ?? 'cliente não identificado';
+    return (
+      <View key={l.k} style={[s.linha, open && s.linhaAberta]}>
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} style={s.linhaTopo} onPress={() => setAberto(open ? null : l.k)}>
+          <Text style={s.hora}>{k.hora ?? '—'}</Text>
+          <View style={[s.disco, { backgroundColor: 'var(--surface-3)' }]}>
+            {reuniao ? <IconCalendar width={14} height={14} fill={cores.onSurface} /> : <IconCall width={14} height={14} fill={cores.onSurface} />}
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.nomeLinha} numberOfLines={1}>{nome}</Text>
+            <Text style={s.subLinha} numberOfLines={1}>{[reuniao ? 'Reunião' : k.tipo === 'retorno' ? 'Retorno' : 'Visita', k.titulo].filter(Boolean).join(' · ')}</Text>
+          </View>
+          {reuniao ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={`Confirmar no WhatsApp: ${nome}`} style={[s.botaoLinha, s.botaoWhats]} onPress={() => confirmarNoWhatsApp(k)}>
+              <IconWhatsapp width={16} height={16} fill="#FFFFFF" /><Text style={[s.botaoLinhaTexto, { color: '#FFFFFF' }]}>Confirmar</Text>
+            </Pressable>
+          ) : dia <= hoje && podeLigar(k) ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={`Ligar: ${nome}`} style={s.botaoLinha} onPress={() => ligar(k.clientId, k)}>
+              <IconCall width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoLinhaTexto}>Ligar</Text>
+            </Pressable>
+          ) : k.clientId ? <IconChevronRight width={20} height={20} fill={cores.muted} /> : null}
+        </Pressable>
+        {open && (() => {
+          const c = k.clientId ? paradas.find((p) => p.client_id === k.clientId)?.client ?? null : null;
+          return (
+            <View style={s.linhaPreparo}>
+              {c ? <Preparo c={c} contextoDe={contextoDe} telefone={telefoneDe?.(c.id) ?? c.telefone ?? null} /> : null}
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {k.clientId && (
+                  <Pressable accessibilityRole="button" style={s.botaoSec} onPress={() => aoAbrirLead(k.clientId!)}>
+                    <IconLocation width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoSecTexto}>Abrir o cartão</Text>
+                  </Pressable>
+                )}
+                {dia <= hoje && podeLigar(k) && (
+                  <Pressable accessibilityRole="button" style={s.botaoSec} onPress={() => registrar(k)}>
+                    <IconCheck width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoSecTexto}>Registrar</Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          );
+        })()}
+      </View>
+    );
+  };
+
+  const portaUnica = (
+    <Pressable accessibilityRole="button" disabled={montandoDia || roteirizando || roteirizandoDia}
+      style={semRota ? [s.botao56, (montandoDia) && { opacity: 0.6 }] : s.refazer} onPress={() => setPorta(true)}>
+      <IconRefresh width={18} height={18} fill={semRota ? '#FFFFFF' : cores.muted} />
+      <Text style={semRota ? s.botao56Texto : s.refazerTexto}>
+        {montandoDia ? 'Montando o dia…' : roteirizando || roteirizandoDia ? 'Calculando…' : semRota ? 'Montar meu dia' : 'Refazer meu dia'}
+      </Text>
+    </Pressable>
+  );
+
+  const noite = momento === 'noite' && dia === hoje && !semRota ? (
+    <View style={s.noite}>
+      <Text style={s.heroiOlho}>DIA FECHADO</Text>
+      <Text style={s.noiteTitulo}>
+        {`${provadas} ${provadas === 1 ? 'visita provada' : 'visitas provadas'}${demosHoje.data ? ` e ${demosHoje.data} ${demosHoje.data === 1 ? 'demo realizada' : 'demos realizadas'}` : ''}`}
+      </Text>
+      <Text style={s.subLinha}>Os mesmos números do placar da semana no Cockpit.</Text>
+      {ficaram.map((p) => (
+        <View key={p.id} style={s.ficou}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.nomeLinha} numberOfLines={1}>{`${p.client ? nomeDoLead(p.client) : 'Parada'} ficou para trás`}</Text>
+            <Text style={s.subLinha} numberOfLines={1}>{`parada ${estado.indexOf(p) + 1} do plano · sem visita hoje`}</Text>
+          </View>
+          <Pressable accessibilityRole="button" style={s.botaoLinha} onPress={() => porAmanha(p)}>
+            <Text style={s.botaoLinhaTexto}>Pôr amanhã</Text>
+          </Pressable>
+        </View>
+      ))}
+      <Pressable accessibilityRole="button" style={s.botaoSec} onPress={() => setDia(amanha)}>
+        <Text style={s.botaoSecTexto}>{`Ver ${SEMANA_LONGA[dowDe(amanha)]}`}</Text>
+      </Pressable>
+    </View>
+  ) : null;
+
+  const outroDia = dia !== hoje ? (() => {
+    const lista = paradasDoDia(dia);
+    const pl = semana.data?.get(dia);
+    return (
+      <View style={{ gap: 10 }}>
+        <View>
+          <Text style={s.outroTitulo}>{`${SEMANA_LONGA[dowDe(dia)][0].toUpperCase()}${SEMANA_LONGA[dowDe(dia)].slice(1)}, ${ddmm(dia)}`}</Text>
+          <Text style={s.subLinha}>
+            {[pl?.proposito ? PROPOSITOS[pl.proposito] ?? pl.proposito : null, lista.length ? `${lista.length} ${lista.length === 1 ? 'conta do plano' : 'contas do plano'}` : null].filter(Boolean).join(' · ') || 'Nada no plano deste dia'}
+          </Text>
+        </View>
+        {lista.map((p, i) => {
+          const c = p.client;
+          const nome = c ? nomeDoLead(c) : 'Parada';
+          const reuniao = compromissos.find((k) => k.clientId === p.client_id && k.tipo === 'reunião');
+          const hora = p.planned_at && dia === diaBRT(new Date(p.planned_at)) ? horaBRT(p.planned_at) : (reuniao?.hora ?? null);
+          return (
+            <Pressable key={p.id} accessibilityRole="button" style={s.bloco} onPress={() => aoAbrirLead(p.client_id)}>
+              <Text style={s.hora}>{hora ?? String(i + 1)}</Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={s.nomeLinha} numberOfLines={1}>{nome}</Text>
+                <Text style={s.subLinha} numberOfLines={1}>{[reuniao ? 'Reunião do plano' : 'Visita do plano', ruaDo(c), distanciaAte(p.client_id)].filter(Boolean).join(' · ')}</Text>
+              </View>
+              <IconChevronRight width={20} height={20} fill={cores.muted} />
+            </Pressable>
+          );
+        })}
+        {lista.length >= 2 && (
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable accessibilityRole="button" style={s.botaoSec} disabled={roteirizandoDia} onPress={() => { void roteirizarDia(lista); }}>
+              <IconRefresh width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoSecTexto}>{roteirizandoDia ? 'Calculando…' : 'Reordenar'}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" style={s.botaoSec} onPress={() => abrirPercursoDe(lista)}>
+              <IconCar width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoSecTexto}>{`Percurso · ${lista.length}`}</Text>
+            </Pressable>
+          </View>
+        )}
+        {compromissos.length > 0 && <Text style={s.secao}>REUNIÕES E RETORNOS</Text>}
+        {compromissos.map((k) => linhaDepois({ k: `c-${k.id}`, tipo: 'compromisso', ordem: 0, hora: k.hora, comp: k }))}
+        {lista.length === 0 && compromissos.length === 0 && (
+          <Text style={s.vazio}>Nada marcado neste dia. O Planejamento do Cockpit, o "Agendar" do cartão e o próximo passo do registro caem aqui.</Text>
+        )}
+        <Text style={s.nota}>Este é o plano que você e o gestor fecharam no Planejamento.</Text>
+      </View>
+    );
+  })() : null;
+
+  const carregando = planoDaFaixa.isLoading && paradas.length === 0 && dia === hoje;
 
   return (
-    <ScrollView style={s.tela} contentContainerStyle={s.conteudo}>
+    <ScrollView style={s.tela} contentContainerStyle={[s.conteudo, largo && { paddingHorizontal: 0 }]}>
       <RegistrarTarefa
         tarefa={registrando}
         aoFechar={() => setRegistrando(null)}
         aoSumir={(id) => setConcluidas((st) => new Set(st).add(`hs-${id}`))}
         aoVoltar={(id) => setConcluidas((st) => { const n = new Set(st); n.delete(`hs-${id}`); return n; })}
       />
-      <Text style={s.subtitulo}>A mesma do Planejamento do Cockpit</Text>
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.faixa}>
-        {dias.map((d) => {
-          const r = rotuloDoDia(d, hoje);
-          const n = (d === hoje ? estado.length : paradasDoDia(d).length) + doDia(d).length;
-          const ativo = d === dia;
-          return (
-            <TouchableOpacity
-              key={d}
-              accessibilityRole="button"
-              accessibilityState={{ selected: ativo }}
-              accessibilityLabel={`${r.semana} ${r.numero}${n ? `, ${n} ${n === 1 ? 'item' : 'itens'}` : ''}`}
-              style={[s.dia, ativo && s.diaAtivo]}
-              onPress={() => setDia(d)}
-            >
-              <Text style={[s.diaSemana, ativo && s.diaTextoAtivo]}>{r.semana}</Text>
-              <Text style={[s.diaNumero, ativo && s.diaTextoAtivo]}>{r.numero}</Text>
-              {n > 0 && <View style={[s.diaSelo, ativo && s.diaSeloAtivo]}><Text style={[s.diaSeloTexto, ativo && s.diaSeloTextoAtivo]}>{n}</Text></View>}
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      {dia === hoje && (
+      {faixa}
+      {dia === hoje ? (
         <>
-          <View style={s.progresso}>
-            {/* Handoff v4.1 §6.14: "Plano de hoje · x de 6", barra verde e a hora da Daily. */}
-            <Text style={s.progressoTitulo}>{`Plano de hoje · ${feitas} de ${meta}`}</Text>
-            <View style={s.barraPlano}><View style={[s.barraPlanoCheia, { width: `${Math.min(100, Math.round((feitas / meta) * 100))}%` }]} /></View>
-            <Text style={s.progressoMeta}>
-              {dailyValidadaEm
-                ? `Daily registrada às ${new Date(dailyValidadaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}`
-                : 'Daily de hoje ainda não registrada'}
-            </Text>
-          </View>
-
-          {aoMontarDia && (
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Montar meu dia com microrrotas" disabled={montandoDia}
-              style={[s.montarDia, montandoDia && { opacity: 0.6 }]} onPress={aoMontarDia}>
-              <Text style={s.montarDiaTitulo}>{montandoDia ? 'Montando o dia…' : 'Montar meu dia'}</Text>
-              <Text style={s.montarDiaSub}>microrrotas a pé, a partir de onde você está · o plano do Cockpit continua</Text>
-            </TouchableOpacity>
-          )}
-
-          {abertasComPonto.length > 0 && (
-            <View style={s.acoesRota}>
-              {aoRoteirizar && abertasComPonto.length >= 2 && (
-                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Roteirizar as paradas em aberto" disabled={roteirizando}
-                  style={[s.acaoRota, roteirizando && { opacity: 0.6 }]} onPress={aoRoteirizar}>
-                  <Text style={s.acaoRotaTexto}>{roteirizando ? 'Calculando…' : 'Roteirizar'}</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Abrir o percurso no Google Maps" style={[s.acaoRota, s.acaoRotaPrim]} onPress={abrirPercurso}>
-                <Text style={[s.acaoRotaTexto, { color: '#FFFFFF' }]}>{`Percurso · ${abertasComPonto.length}`}</Text>
-              </TouchableOpacity>
+          {seletor}
+          {ritmo}
+          {carregando ? (
+            <View style={{ gap: 10 }}>
+              <Text style={s.subLinha}>Montando o dia pelo plano e pela hora…</Text>
+              {[96, 120, 96].map((h, i) => <View key={i} style={[s.esqueleto, { height: h }]} />)}
             </View>
-          )}
-
-          {estado.length === 0 && (
-            <Text style={s.vazio}>Sem rota hoje. Toque em "Montar meu dia" ou ponha leads com "+ Rota de hoje" no cartão.</Text>
-          )}
-
-          {estado.map((p, i) => {
-            const c = p.client;
-            const nome = c ? nomeDoLead(c) : 'Parada';
-            const sub = [ruaDo(c), distanciaAte(p.client_id)].filter(Boolean).join(' · ');
-            const proxima = p.estado === 'proxima';
-            return (
-              <View key={p.id} style={[s.parada, proxima && s.paradaProxima]}>
-                <TouchableOpacity accessibilityRole="button" style={s.paradaLinha} onPress={() => aoAbrirLead(p.client_id)}>
-                  <View style={[s.numero, p.estado === 'feito' && s.numeroFeito, proxima && s.numeroProxima]}>
-                    <Text style={[s.numeroTexto, (p.estado === 'feito' || proxima) && s.numeroTextoClaro]}>{i + 1}</Text>
-                  </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={[s.paradaNome, p.estado === 'feito' && s.paradaNomeFeita]} numberOfLines={1}>{nome}</Text>
-                    {!!sub && <Text style={s.paradaSub} numberOfLines={1}>{sub}</Text>}
-                    <View style={s.chips}>
-                      <Text style={s.chip}>Visita do plano</Text>
-                      {cobrar.has(p.client_id) && <Text style={[s.chip, s.chipCobrar]}>cobrar</Text>}
-                    </View>
-                  </View>
-                  {p.estado === 'feito' ? (
-                    <Text style={[s.status, s.statusFeito]}>Feito</Text>
-                  ) : proxima ? (
-                    <Text style={[s.status, s.statusProxima]}>próxima</Text>
-                  ) : c ? (
-                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Ir até ${nome}`} style={s.ir} onPress={() => ir(c)}>
-                      <Text style={s.irTexto}>Ir</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </TouchableOpacity>
-                {proxima && c && (
-                  <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Cheguei em ${nome}`} style={s.cheguei} onPress={() => aoCheguei(c)}>
-                    <Text style={s.chegueiTexto}>Cheguei</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            );
-          })}
-        </>
-      )}
-
-      {dia !== hoje && paradasDoDia(dia).length > 0 && (
-        <View style={s.acoesRota}>
-          {paradasDoDia(dia).length >= 2 && (
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Roteirizar este dia" disabled={roteirizandoDia}
-              style={[s.acaoRota, roteirizandoDia && { opacity: 0.6 }]} onPress={() => perguntarRoteirizar(paradasDoDia(dia), dia)}>
-              <Text style={s.acaoRotaTexto}>{roteirizandoDia ? 'Calculando…' : 'Roteirizar'}</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Abrir o percurso deste dia no Google Maps" style={[s.acaoRota, s.acaoRotaPrim]} onPress={() => abrirPercursoDe(paradasDoDia(dia))}>
-            <Text style={[s.acaoRotaTexto, { color: '#FFFFFF' }]}>{`Percurso · ${paradasDoDia(dia).length}`}</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {dia !== hoje && paradasDoDia(dia).length > 0 && (
-        <View style={s.grupo}>
-          <Text style={s.secao}>{`PLANO DO DIA · ${paradasDoDia(dia).length}`}</Text>
-          {paradasDoDia(dia).map((p, i) => {
-            const c = p.client;
-            const nome = c ? nomeDoLead(c) : 'Parada';
-            // A MESMA PORTA NÃO APARECE SOLTA DUAS VEZES (auditoria 28/09): reunião combinada na
-            // ficha entra no plano E em Reuniões — aqui a linha do plano diz que é a reunião e a hora.
-            const reuniao = compromissos.find((k) => k.clientId === p.client_id && k.tipo === 'reunião');
-            // A hora que o Planejamento marcou (plano_para_rota grava planned_at no dia);
-            // parada sem hora mostra a ordem.
-            const hora = p.planned_at && dia === diaBRT(new Date(p.planned_at))
-              ? new Date(p.planned_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
-              : (reuniao?.hora ?? null);
-            return (
-              <TouchableOpacity key={p.id} accessibilityRole="button" style={s.compromisso} onPress={() => aoAbrirLead(p.client_id)}>
-                <Text style={s.hora}>{hora ?? String(i + 1)}</Text>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={s.paradaNome} numberOfLines={1}>{nome}</Text>
-                  {!!ruaDo(c) && <Text style={s.paradaSub} numberOfLines={1}>{[ruaDo(c), distanciaAte(p.client_id)].filter(Boolean).join(' · ')}</Text>}
-                  <View style={s.chips}><Text style={s.chip}>{reuniao ? 'Reunião do plano' : 'Visita do plano'}</Text></View>
+          ) : (
+            <>
+              {noite}
+              {feitas}
+              {heroi}
+              {semRota && (
+                <View style={s.vazioCaixa}>
+                  <Text style={s.vazioTitulo}>{compromissos.length ? 'Sem rota hoje' : 'Nada marcado hoje'}</Text>
+                  <Text style={s.vazio}>O próximo passo do registro e o Agendar do cartão caem aqui. Sem plano do Cockpit para hoje: monte a microrrota a partir de onde você está.</Text>
                 </View>
-                <IconChevronRight width={20} height={20} fill={cores.muted} />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
+              )}
+              {linhasDepois.length > 0 && momento !== 'noite' && <Text style={s.secao}>{semRota ? 'COMPROMISSOS DE HOJE' : 'DEPOIS'}</Text>}
+              {momento !== 'noite' && linhasDepois.map(linhaDepois)}
+              {momento !== 'noite' && portaUnica}
+            </>
+          )}
+        </>
+      ) : outroDia}
 
-      {compromissos.length > 0 && (
-        <View style={s.grupo}>
-          <Text style={s.secao}>{dia === hoje ? 'REUNIÕES E RETORNOS DE HOJE' : 'REUNIÕES E RETORNOS'}</Text>
-          {compromissos.map((k) => (
-            <TouchableOpacity
-              key={k.id}
-              accessibilityRole="button"
-              disabled={!k.clientId}
-              style={s.compromisso}
-              onPress={() => k.clientId && aoAbrirLead(k.clientId)}
-            >
-              <Text style={s.hora}>{k.hora ?? '—'}</Text>
+      <Painel visivel={porta} aoFechar={() => setPorta(false)} rotulo={semRota ? 'Montar meu dia' : 'Refazer meu dia'}>
+        <View style={{ gap: 10, paddingBottom: 8 }}>
+          {[
+            aoMontarDia ? { t: 'Microrrota a pé a partir daqui', s2: 'portas boas perto de onde você está · o plano do Cockpit continua', Ic: IconLocation, fn: aoMontarDia } : null,
+            !semRota ? { t: `Seguir o plano de ${SEMANA_LONGA[dowDe(hoje)]}`, s2: 'na ordem da hora marcada no Planejamento', Ic: IconCalendar, fn: () => pelaHoraDoPlano(paradas, hoje) } : null,
+            !semRota ? { t: 'Reordenar o que falta', s2: 'pela distância a partir de onde você está', Ic: IconRefresh, fn: () => (aoRoteirizar ? aoRoteirizar() : void roteirizarDia(paradas)) } : null,
+            abertasComPonto.length ? { t: `Abrir o percurso no Maps · ${abertasComPonto.length}`, s2: 'a pé ou de carro, na ordem do plano', Ic: IconCar, fn: () => abrirPercursoDe(abertasComPonto) } : null,
+          ].filter((o): o is { t: string; s2: string; Ic: typeof IconLocation; fn: () => void } => !!o).map((o) => (
+            <Pressable key={o.t} accessibilityRole="button" style={s.opcao} onPress={() => { setPorta(false); setTimeout(o.fn, 350); }}>
+              <o.Ic width={20} height={20} fill={cores.onSurface} />
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={s.paradaNome} numberOfLines={1}>{`${k.tipo[0].toUpperCase()}${k.tipo.slice(1)} · ${k.nome ?? 'cliente não identificado'}`}</Text>
-                {(() => {
-                  const sub = [k.titulo, distanciaAte(k.clientId)].filter(Boolean).join(' · ');
-                  return sub ? <Text style={s.paradaSub} numberOfLines={1}>{sub}</Text> : null;
-                })()}
-                <View style={s.chips}><Text style={s.chip}>{k.fonte === 'hubspot' ? 'Planejamento' : 'Agendado no app'}</Text></View>
+                <Text style={s.nomeLinha}>{o.t}</Text>
+                <Text style={s.subLinha}>{o.s2}</Text>
               </View>
-              {dia <= hoje && podeLigar(k) ? (
-                <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Liguei: ${k.nome ?? k.titulo ?? 'retorno'}`} style={s.liguei} onPress={() => liguei(k)}>
-                  <Text style={s.ligueiTexto}>{k.fonte === 'hubspot' ? 'Registrar' : 'Liguei'}</Text>
-                </TouchableOpacity>
-              ) : (!!k.clientId && <IconChevronRight width={20} height={20} fill={cores.muted} />)}
-            </TouchableOpacity>
+              <IconChevronRight width={20} height={20} fill={cores.muted} />
+            </Pressable>
           ))}
+          <Text style={s.nota}>Uma porta só para o dia. O que você montar grava a rota de hoje, e o Planejamento do gestor mostra igual.</Text>
         </View>
-      )}
-
-      {dia !== hoje && compromissos.length === 0 && paradasDoDia(dia).length === 0 && (
-        <Text style={s.vazio}>Nada marcado neste dia. O “Agendar” do cartão e o próximo passo do registro caem aqui.</Text>
-      )}
+      </Painel>
     </ScrollView>
   );
 }
 
 const s = StyleSheet.create({
   tela: { flex: 1, backgroundColor: 'var(--bg)' },
-  acoesRota: { flexDirection: 'row', gap: 8 },
-  montarDia: { minHeight: 56, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--vermelho-acao)', justifyContent: 'center', gap: 2 },
-  montarDiaTitulo: { fontSize: 16, fontWeight: '700', color: 'var(--text)' },
-  montarDiaSub: { fontSize: 12, color: 'var(--text-muted)' },
-  acaoRota: { flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  acaoRotaPrim: { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
-  acaoRotaTexto: { fontSize: 15, fontWeight: '700', color: 'var(--text)' },
-  liguei: { minHeight: 44, minWidth: 72, paddingHorizontal: 12, borderRadius: 10, backgroundColor: 'var(--tint-green)', borderWidth: 1, borderColor: 'var(--tint-green-border)', alignItems: 'center', justifyContent: 'center' },
-  ligueiTexto: { fontSize: 14, fontWeight: '700', color: 'var(--tint-green-text)' },
   conteudo: { padding: 16, paddingBottom: 32, gap: 12 },
-  subtitulo: { fontSize: 13, lineHeight: 18, color: 'var(--text-muted)' },
-  // paddingTop: o selo do dia sai 6px acima da caixa, e o scroll horizontal corta o que passa.
-  faixa: { gap: 8, paddingRight: 16, paddingTop: 8 },
-  dia: {
-    width: 54, minHeight: 60, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 2,
-    backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)',
-  },
-  diaAtivo: { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
-  diaSemana: { fontSize: 11, fontWeight: '700', color: 'var(--text-muted)' },
+  faixa: { flexDirection: 'row', gap: 6 },
+  dia: { flex: 1, minWidth: 0, minHeight: 72, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 1, paddingHorizontal: 2, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)' },
+  diaAtivo: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--vermelho-acao)', borderWidth: 1.5 },
+  diaSemana: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, color: 'var(--text-muted)' },
   diaNumero: { fontSize: 18, fontWeight: '800', color: 'var(--text)' },
-  diaTextoAtivo: { color: '#FFFFFF' },
-  diaSelo: { position: 'absolute', top: -6, right: -4, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: 'var(--text)', alignItems: 'center', justifyContent: 'center' },
-  diaSeloAtivo: { backgroundColor: '#FFFFFF' },
-  diaSeloTexto: { fontSize: 10, fontWeight: '800', color: 'var(--surface)' },
-  diaSeloTextoAtivo: { color: 'var(--vermelho-texto)' },
-  progresso: { padding: 16, gap: 8, borderRadius: 16, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)' },
-  progressoTitulo: { fontSize: 16, fontWeight: '700', color: 'var(--text)' },
-  segmentos: { flexDirection: 'row', gap: 4 },
-  segmento: { flex: 1, height: 6, borderRadius: 3, backgroundColor: 'var(--border)' },
-  segmentoFeito: { backgroundColor: 'var(--tint-green-text)' },
-  progressoLinha: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
-  progressoMeta: { fontSize: 12, color: 'var(--text-faint)' },
-  vazio: { fontSize: 14, lineHeight: 20, color: 'var(--text-muted)', textAlign: 'center', paddingVertical: 16 },
-  parada: { borderRadius: 12, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border-soft)', overflow: 'hidden' },
-  paradaProxima: { borderColor: 'var(--vermelho-acao)', borderWidth: 2 },
-  paradaLinha: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 72, paddingHorizontal: 12, paddingVertical: 10 },
-  numero: { width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: 'var(--stroke-strong)', alignItems: 'center', justifyContent: 'center' },
-  numeroFeito: { backgroundColor: 'var(--tint-green-text)', borderColor: 'var(--tint-green-text)' },
-  numeroProxima: { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
-  numeroTexto: { fontSize: 13, fontWeight: '800', color: 'var(--text)' },
-  numeroTextoClaro: { color: '#FFFFFF' },
-  paradaNome: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: 'var(--text)' },
-  paradaNomeFeita: { color: 'var(--text-muted)' },
-  paradaSub: { fontSize: 13, lineHeight: 18, color: 'var(--text-muted)' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
-  chip: { fontSize: 11, fontWeight: '700', color: 'var(--text-muted)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, borderWidth: 1, borderColor: 'var(--border)', overflow: 'hidden' },
-  chipCobrar: { color: 'var(--tint-red-text)', borderColor: 'var(--tint-red-border)' },
-  status: { fontSize: 12, fontWeight: '700', color: 'var(--text-faint)' },
-  statusFeito: { color: 'var(--tint-green-text)' },
-  statusProxima: { color: 'var(--vermelho-texto)' },
-  barraPlano: { height: 8, borderRadius: 4, backgroundColor: 'var(--surface-3, #3A3F47)', overflow: 'hidden', marginTop: 8 },
-  barraPlanoCheia: { height: 8, borderRadius: 4, backgroundColor: 'var(--verde-acao)' },
-  ir: { minHeight: 44, minWidth: 56, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center' },
-  irTexto: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
-  cheguei: { marginHorizontal: 12, marginBottom: 12, minHeight: 48, borderRadius: 12, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center' },
-  chegueiTexto: { fontSize: 16, fontWeight: '800', color: '#FFFFFF' },
-  grupo: { gap: 8, marginTop: 4 },
-  secao: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: 'var(--text-faint)' },
-  compromisso: {
-    flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, paddingHorizontal: 12, paddingVertical: 10,
-    borderRadius: 12, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border-soft)',
-  },
+  diaProposito: { fontSize: 11, color: 'var(--text-muted)', maxWidth: '100%' },
+  seg: { flexDirection: 'row', gap: 4, padding: 4, borderRadius: 14, backgroundColor: 'var(--surface-2)' },
+  segItem: { flex: 1, minHeight: 44, borderRadius: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: 'transparent' },
+  segItemAtivo: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--vermelho-acao)' },
+  segTexto: { fontSize: 15, fontWeight: '700', color: 'var(--text)' },
+  ritmo: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
+  ritmoLinha: { color: 'var(--text)' },
+  ritmoNumero: { fontSize: 22, fontWeight: '800', color: 'var(--text)' },
+  ritmoRotulo: { fontSize: 14, fontWeight: '500', color: 'var(--text-muted)' },
+  ritmoPromessa: { fontSize: 13, color: 'var(--text-muted)', textAlign: 'right', maxWidth: 150 },
+  tracos: { flexDirection: 'row', gap: 4 },
+  traco: { flex: 1, height: 6, borderRadius: 3, backgroundColor: 'var(--border)' },
+  promessa: { padding: 14, gap: 10, borderRadius: 16, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)' },
+  promessaTitulo: { fontSize: 16, fontWeight: '700', color: 'var(--text)' },
+  promessaChip: { flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)', alignItems: 'center', justifyContent: 'center' },
+  promessaChipTexto: { fontSize: 17, fontWeight: '800', color: 'var(--text)' },
+  promessaNota: { fontSize: 12, color: 'var(--text-faint)' },
+  feitasLinha: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
+  feitasIcone: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'var(--tint-green)', alignItems: 'center', justifyContent: 'center' },
+  feitasTexto: { flex: 1, fontSize: 14, fontWeight: '600', color: 'var(--text-muted)' },
+  feitasAcao: { fontSize: 14, fontWeight: '600', color: 'var(--text-muted)' },
+  feitaItem: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingLeft: 36 },
+  heroi: { padding: 14, gap: 10, borderRadius: 16, backgroundColor: 'var(--surface)', borderWidth: 1.5, borderColor: 'var(--vermelho-acao)' },
+  heroiOlho: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: 'var(--vermelho-texto)' },
+  heroiNome: { fontSize: 22, lineHeight: 28, fontWeight: '800', color: 'var(--text)' },
+  heroiSub: { fontSize: 14, lineHeight: 20, color: 'var(--text-muted)' },
+  tempChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, minHeight: 30, borderRadius: 15, backgroundColor: 'var(--surface-2)' },
+  tempTexto: { fontSize: 13, fontWeight: '700', color: 'var(--text)' },
+  ponto: { width: 8, height: 8, borderRadius: 4 },
+  segs8: { flexDirection: 'row', gap: 4 },
+  seg8: { flex: 1, height: 5, borderRadius: 3, backgroundColor: 'var(--border)' },
+  etapaTexto: { fontSize: 13, fontWeight: '700' },
+  caixa: { padding: 12, gap: 4, borderRadius: 12, backgroundColor: 'var(--surface-2)' },
+  caixaAmbar: { backgroundColor: 'var(--tint-amber)' },
+  caixaRotulo: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: 'var(--text-faint)' },
+  caixaValor: { fontSize: 14, lineHeight: 20, fontWeight: '600', color: 'var(--text)' },
+  botao56: { minHeight: 56, borderRadius: 16, backgroundColor: 'var(--vermelho-acao)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  botao56Texto: { fontSize: 16, fontWeight: '800', color: '#FFFFFF' },
+  botaoSec: { flex: 1, minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 8 },
+  botaoSecTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
+  secao: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: 'var(--text-faint)', marginTop: 4 },
+  linha: { borderRadius: 12, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border-soft)' },
+  linhaAberta: { borderColor: 'var(--border)' },
+  linhaTopo: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 64, paddingHorizontal: 12, paddingVertical: 8 },
+  linhaPreparo: { paddingHorizontal: 12, paddingBottom: 12, gap: 10 },
   hora: { width: 44, fontSize: 14, fontWeight: '800', color: 'var(--text)', fontVariant: ['tabular-nums'] },
+  disco: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  discoTexto: { fontSize: 13, fontWeight: '800', color: '#111418' },
+  nomeLinha: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: 'var(--text)' },
+  subLinha: { fontSize: 13, lineHeight: 18, color: 'var(--text-muted)' },
+  botaoLinha: { minHeight: 44, minWidth: 56, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  botaoWhats: { backgroundColor: '#128C4A', borderColor: '#128C4A' },
+  botaoLinhaTexto: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
+  refazer: { minHeight: 48, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: 'var(--border)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4 },
+  refazerTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text-muted)' },
+  noite: { padding: 14, gap: 10, borderRadius: 16, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)' },
+  noiteTitulo: { fontSize: 20, lineHeight: 26, fontWeight: '800', color: 'var(--text)' },
+  ficou: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 12, backgroundColor: 'var(--surface-2)' },
+  outroTitulo: { fontSize: 18, fontWeight: '800', color: 'var(--text)' },
+  bloco: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border-soft)' },
+  vazio: { fontSize: 14, lineHeight: 20, color: 'var(--text-muted)' },
+  vazioCaixa: { padding: 16, gap: 6, borderRadius: 16, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)' },
+  vazioTitulo: { fontSize: 17, fontWeight: '700', color: 'var(--text)' },
+  nota: { fontSize: 12, lineHeight: 17, color: 'var(--text-faint)' },
+  esqueleto: { borderRadius: 16, backgroundColor: 'var(--surface-2)' },
+  opcao: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, padding: 12, borderRadius: 14, backgroundColor: 'var(--surface-2)' },
 });

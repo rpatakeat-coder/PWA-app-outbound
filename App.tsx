@@ -198,7 +198,7 @@ import { useSellerClassification, precisaDeIdHubspot } from './src/hooks/useSell
 import { buildHeatCells, celulasNinguemFoi, heatColor, heatIntensity, HEAT_CELL_M, HEAT_LEGEND_STOPS } from './src/utils/heatmap';
 import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type MandatoryReason } from './src/utils/dailyRoute';
 import { fetchSlaCandidate } from './src/utils/slaCandidate';
-import { slaStatus, type SlaDays } from './src/utils/sla';
+import { slaForStage, slaStatus, type SlaDays } from './src/utils/sla';
 import { useRouteConfig } from './src/hooks/useRouteConfig';
 import { useSellerGoals } from './src/hooks/useSellerGoals';
 
@@ -6685,7 +6685,7 @@ function MainApp() {
       case 'route':
         return { titulo: 'Rota do dia', sub: `${routeDisplayClients.length} ${routeDisplayClients.length === 1 ? 'parada' : 'paradas'}` };
       case 'agenda':
-        return { titulo: 'Agenda', sub: 'Rotas, demos e follow-ups da semana' };
+        return { titulo: 'Agenda', sub: modoNovo ? (() => { const d = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }); return d.charAt(0).toUpperCase() + d.slice(1) + ' · o dia e a semana do Planejamento'; })() : 'Rotas, demos e follow-ups da semana' };
       case 'tasks': {
         // O MESMO NÚMERO DO CELULAR (auditoria 28/09): no computador o cabeçalho dizia "12
         // cobranças abertas · D2 → D5" (as do modo antigo) ao lado de "Abertas · 9". Calculado
@@ -6815,7 +6815,8 @@ function MainApp() {
   const itensNavWeb: Array<{ aba: AppTab | 'cockpit'; rotulo: string; Icone: typeof IconLocation; badge?: number; visivel: boolean }> = [
     { aba: 'map', rotulo: 'Mapa', Icone: IconLocation, visivel: true },
     { aba: 'list', rotulo: 'Lista', Icone: IconSquareMenu, visivel: true },
-    { aba: 'route', rotulo: 'Rota', Icone: IconCar, visivel: !isViewer },
+    // R1 opção A: no mapa novo a Rota é o mapa da Agenda (coluna da direita), não uma aba.
+    { aba: 'route', rotulo: 'Rota', Icone: IconCar, visivel: !isViewer && !modoNovo },
     { aba: 'agenda', rotulo: 'Agenda', Icone: IconCalendar, visivel: !isViewer },
     // N5 (handoff v6): um número de tarefas só, "atrasadas + hoje", igual ao selo do rodapé
     { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: modoNovo ? (totalDaFila ?? undefined) : visibleTasksCount, visivel: !isViewer },
@@ -7217,7 +7218,34 @@ function MainApp() {
         {/* Rota: kicker, data e os tres KPIs. A sequencia e' o objeto de
             trabalho da tela, entao o cabecalho responde "quanto tem pela
             frente" antes de o vendedor rolar. */}
-        {tab === 'route' && (
+        {/* R1 · opção A (handoff das abas, 04/10): no mapa novo a Rota é o "Mapa do dia" da Agenda —
+            o mesmo seletor Lista | Mapa do dia, e o resumo do caminho numa linha. */}
+        {tab === 'route' && modoNovo && (() => {
+          const faltam = routeDisplayClients.filter((c) => routeStops.find((st) => st.client_id === c.id)?.status !== 'done').length;
+          const km = routeGeometry.data ? `${(routeGeometry.data.distanceMeters / 1000).toFixed(1).replace('.', ',')} km` : null;
+          const min = routeGeometry.data ? `~${Math.round(routeGeometry.data.durationSeconds / 60)} min` : null;
+          return (
+            <View style={{ gap: 10 }}>
+              <View style={{ flexDirection: 'row', gap: 4, padding: 4, borderRadius: 14, backgroundColor: 'var(--surface-2)' }}>
+                <TouchableOpacity accessibilityRole="tab" accessibilityState={{ selected: false }} onPress={() => irParaAba('agenda')}
+                  style={{ flex: 1, minHeight: 44, borderRadius: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <IconSquareMenu width={18} height={18} fill={iconColors.muted} />
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: 'var(--text-muted)' }}>Lista</Text>
+                </TouchableOpacity>
+                <View accessibilityRole="tab" accessibilityState={{ selected: true }}
+                  style={{ flex: 1, minHeight: 44, borderRadius: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'var(--tint-red)', borderWidth: 1.5, borderColor: 'var(--vermelho-acao)' }}>
+                  <IconLocation width={18} height={18} fill={iconColors.onSurface} />
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: 'var(--text)' }}>Mapa do dia</Text>
+                </View>
+              </View>
+              <Text style={{ fontSize: 14, color: 'var(--text-muted)' }} numberOfLines={1}>
+                {routeDisplayClients.length === 0 ? 'Sem rota hoje · monte a microrrota a partir de onde você está'
+                  : [`${faltam} ${faltam === 1 ? 'parada faltando' : 'paradas faltando'}`, km, min].filter(Boolean).join(' · ')}
+              </Text>
+            </View>
+          );
+        })()}
+        {tab === 'route' && !modoNovo && (
           <View style={{ gap: 12 }}>
             <View style={styles.headerLinha}>
               {/* A9 (handoff v6): a Rota abre pela pílula da Agenda e não tinha como voltar */}
@@ -7796,8 +7824,23 @@ function MainApp() {
           ehGestor={canViewGestor}
         />
       ) : modoNovo ? (
+        (() => { const agendaNova = (
         <AgendaNovoScreen
           key={agendaDiaInicial ?? 'hoje'}
+          ownerHubspot={myHubspotId}
+          largo={layout.ehLargo}
+          // Etapa e dias na etapa do snapshot (o mesmo do cartão do lead) e a régua da etapa.
+          contextoDe={(c) => {
+            const regua = slaForStage(c.etapa, routeSlaDays);
+            return {
+              codigo: codigoDaEtapa(c),
+              diasNaEtapa: c.id_hubspot ? contextoPino?.tempoPorNegocio.get(String(c.id_hubspot))?.diasNaEtapa ?? null : null,
+              regua: regua >= 999 ? null : regua,
+            };
+          }}
+          // Opção A da Rota (decidida em 04/10): o Mapa do dia é um modo da Agenda.
+          aoMapaDoDia={() => setTab('route')}
+          aoPlaybook={() => setTab('playbook')}
           diaInicial={agendaDiaInicial}
           paradas={routeStops}
           reunioes={meetings}
@@ -7834,6 +7877,15 @@ function MainApp() {
             else void openClientById(id);
           }}
         />
+        );
+        // G2 (handoff das abas): no computador, duas colunas — a linha do tempo à esquerda e o
+        // mapa do caminho à direita (é a Rota do computador; o mesmo conteudoMapa do Mapa).
+        return layout.ehLargo ? (
+          <View style={sharedStyles.mapaLinhaWeb}>
+            <View style={{ width: layout.largura >= 1500 ? 560 : 470, paddingHorizontal: 24, borderRightWidth: 1, borderRightColor: 'var(--border)' }}>{agendaNova}</View>
+            <View style={sharedStyles.mapaAreaWeb}>{conteudoMapa}</View>
+          </View>
+        ) : agendaNova; })()
       ) : (
         <AgendaScreen
           clients={clients}

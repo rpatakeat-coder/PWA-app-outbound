@@ -303,7 +303,9 @@ export function RotaScreen({
         "Meu" (e no Gestor, pra gestor que faz campo); os tres leem e
         escrevem a mesma linha de `dailies`, entao nao ha' duas verdades.
         O numero declarado aqui e' o que o cockpit de gestao cobra. */}
-    {!isMonitoringRoute && <MinhaDailyCard enabled={true} />}
+    {/* Handoff das abas (04/10/26): a promessa é pedida só na Agenda, de manhã. No mapa novo
+        (montaSemApagar) a Rota é o Mapa do dia e não repete a Minha Daily. */}
+    {!isMonitoringRoute && !montaSemApagar && <MinhaDailyCard enabled={true} />}
     </>
   );
   // O botao e' UM so' — o que muda por largura e' a moldura em volta dele.
