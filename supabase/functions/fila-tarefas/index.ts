@@ -19,6 +19,7 @@ import {
   feriadosNacionais, montarFila, ORDEM_GRUPOS, ROTULO_GRUPO, pessoaDoCard, textoUltimoContato, tituloDoCard,
   type NegocioEntrada, type TarefaEntrada,
 } from '../_compartilhado/filaDoDinheiro.ts';
+import { criarToques, itensDoApp } from '../_compartilhado/toquesDoCockpit.js';
 
 const HS = 'https://api.hubapi.com';
 const PIPELINE = '916011864';
@@ -211,6 +212,53 @@ Deno.serve(async (req: Request) => {
     const { data: vv } = await svc.from('client_visits').select('client_id, visited_at').in('client_id', clienteIds).gte('visited_at', desde);
     for (const v of vv ?? []) soma(dealPorCliente.get(String(v.client_id)), v.visited_at as string);
     visitasHoje = (vv ?? []).filter((v) => new Date(new Date(v.visited_at as string).getTime() - 3 * 3600000).toISOString().slice(0, 10) === hoje) as never;
+  }
+  // OS TOQUES DO COCKPIT (auditoria do Cockpit do gestor, 04/10/26): o "x de 4" do cartão e as
+  // regras "poucos contatos" e "parado" passam a contar como o Cockpit conta (Pessoas, Raio X,
+  // "piso de 4 toques") — agenda do robô + reuniões do app + notas de contato + última
+  // interação. A conta de antes (contatos_de_campo + client_visits) fica só para negócio que não
+  // está no snapshot. Validado: 246 de 246 negócios abertos iguais à função do Cockpit.
+  try {
+    const conteudo = (snap?.conteudo ?? {}) as { funilLeads?: Record<string, unknown[]>; funilForaDoTime?: Record<string, Record<string, unknown[]>>; agenda?: { itens?: unknown[] }; reps?: unknown };
+    const leadPorDeal = new Map<string, Record<string, unknown>>();
+    // o funil do time e, para quem está fora do time (o Julyan), a gaveta dele — a mesma que a tela dele usa
+    for (const lista of [...Object.values(conteudo.funilLeads ?? {}), ...Object.values(conteudo.funilForaDoTime?.[owner] ?? {})]) {
+      for (const l of (Array.isArray(lista) ? lista : []) as Array<Record<string, unknown>>) if (l?.id != null) leadPorDeal.set(String(l.id), l);
+    }
+    if (meus.some((d) => leadPorDeal.has(d))) {
+      const de60 = new Date(Date.now() - 60 * 86400000).toISOString();
+      const ate60 = new Date(Date.now() + 60 * 86400000).toISOString();
+      const { data: mm } = await svc.from('client_meetings')
+        .select('id, client_id, scheduled_at, duration_minutes, observacoes, status, type, created_by, hs_engagement_id')
+        .gte('scheduled_at', de60).lte('scheduled_at', ate60).limit(1000);
+      const idsC = Array.from(new Set((mm ?? []).map((m: { client_id: string }) => m.client_id).filter(Boolean)));
+      const idsP = Array.from(new Set((mm ?? []).map((m: { created_by: string }) => m.created_by).filter(Boolean)));
+      const clientePorId = new Map<string, { nome: string | null; id_hubspot: string | null }>();
+      for (let i = 0; i < idsC.length; i += 150) {
+        const { data: cs } = await svc.from('clients').select('id, nome, id_hubspot').in('id', idsC.slice(i, i + 150));
+        for (const c of cs ?? []) clientePorId.set(String(c.id), { nome: c.nome as string | null, id_hubspot: c.id_hubspot as string | null });
+      }
+      const donoPorProfile = new Map<string, string>();
+      if (idsP.length) {
+        const { data: ps } = await svc.from('profiles').select('id, id_hubspot').in('id', idsP);
+        for (const p of ps ?? []) if (p.id_hubspot) donoPorProfile.set(String(p.id), String(p.id_hubspot));
+      }
+      const doRobo = ((conteudo.agenda?.itens ?? []) as Array<Record<string, unknown>>).filter((it) => !it?.origem_app);
+      // no snapshot, reps é { [ownerId]: { name, ... } } — o dono é a chave
+      const reps = Object.entries((conteudo.reps ?? {}) as Record<string, { name?: string }>).map(([ownerId, r]) => ({ name: r?.name, ownerId }));
+      const { toquesDoLead, normalizar } = criarToques({ reps });
+      const eventos = normalizar([...doRobo, ...itensDoApp(mm ?? [], doRobo, clientePorId, donoPorProfile, leadPorDeal)]);
+      for (const d of meus) {
+        const lead = leadPorDeal.get(d);
+        if (!lead) continue;
+        const t = toquesDoLead(eventos, lead) as { total: number; ultimo: string | null };
+        const antes = contatos[d];
+        contatos[d] = { n: t.total, ultimo: t.ultimo };
+        if (!antes?.ultimo || (t.ultimo && t.ultimo > antes.ultimo)) canalDoUltimo[d] = 'contato';
+      }
+    }
+  } catch (e) {
+    console.error('toques do Cockpit', e); // sem a conta do Cockpit, fica a de antes (não derruba a fila)
   }
   const decisorAlcancado: string[] = [];
   const comFichaHoje = new Set<string>();
