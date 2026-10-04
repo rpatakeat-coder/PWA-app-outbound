@@ -179,6 +179,7 @@ import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
 import PlaybookScreen from './src/screens/PlaybookScreen';
 import FilaTarefasScreen from './src/screens/FilaTarefasScreen';
+import { BarreiraDaAba } from './src/components/BarreiraDaAba';
 import { avisarSeVisitaProvada, type Ranking } from './src/screens/FolhaRanking';
 import AgendaNovoScreen from './src/screens/AgendaNovoScreen';
 import { concluirComDesfazer, enviarConclusao, type PedidoConclusao } from './src/utils/concluirTarefa';
@@ -7639,6 +7640,7 @@ function MainApp() {
       ) : tab === 'tasks' && modoNovo ? (
         // A fila do dinheiro (docs/10 §1, 04/10/2026): um card por negócio, valor × urgência.
         // Visitar e Registrar levam ao lead no mapa (o Cheguei é a prova da visita).
+        <BarreiraDaAba nome="Tarefas">
         <FilaTarefasScreen
           ownerId={myHubspotId}
           posicao={userLocation}
@@ -7646,6 +7648,7 @@ function MainApp() {
           aoRegistrarVisita={(id) => { setTab('map'); void openClientById(id); }}
           aoPosicionar={isViewer ? undefined : iniciarPosicionar}
         />
+        </BarreiraDaAba>
       ) : tab === 'tasks' ? (
         <TarefasScreen
           visibleTasks={visibleTasks}
