@@ -25,6 +25,7 @@ import { concluirComDesfazer } from '../utils/concluirTarefa';
 import { gravarContato } from '../utils/contatoDeCampo';
 import { ehErroDeRede, enfileirar, novoAcaoId } from '../utils/filaOffline';
 import { ehRecusa, negocioAcao } from '../utils/negocioAcao';
+import { apagarPendente, desfazerFeita, lerFeitas, marcarGravada, registrarFeita, type FeitaServidor } from '../utils/filaFeitas';
 import { ehDiaUtil, proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
 import {
   COMO_FOI_FILA, DIAS_FILA, MOTIVOS_SEM_INTERESSE, dataDoChip, diaCurto, diasSugeridos, fraseDaVolta, notaDaFila,
@@ -45,7 +46,7 @@ type RespostaFila = {
   itens: CardDaFila[]; grupos: Array<{ id: CardDaFila['grupo']; rotulo: string }>; mrrEmJogo: number;
   hoje: string; feriados: string[]; semMedicao?: string;
 };
-type Feita = { dealId: string; hora: string; negocio: string; resultado: string; volta: string | null; perdido?: string | null };
+type Feita = FeitaServidor;
 
 // Cores de etapa são DADO (docs/10: o STAGE_COLORS do Meu funil) — não cromo.
 const ETAPA: Record<string, { rotulo: string; cor: string }> = {
@@ -79,17 +80,29 @@ function useFila() {
   });
 }
 
-// Feitas hoje ficam no aparelho (por dia): é a lista curta da sessão, com Desfazer na janela.
+// Feitas hoje moram em fila_feitas (0155, 04/10/2026): a mesma lista no celular e no
+// computador, e com Desfazer até o fim do dia. A linha entra na tela na hora (local) e a
+// do servidor a substitui quando chega, casadas pelo acaoId.
 function useFeitas(hoje: string) {
-  const chave = `fila-feitas-${hoje}`;
-  const [feitas, setFeitas] = useState<Feita[]>(() => {
-    try { return JSON.parse(window.localStorage.getItem(chave) ?? '[]') as Feita[]; } catch { return []; }
-  });
-  const gravar = (f: Feita[]) => { setFeitas(f); try { window.localStorage.setItem(chave, JSON.stringify(f)); } catch { /* sem armazenamento */ } };
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['fila_feitas', hoje], queryFn: () => lerFeitas(hoje), staleTime: 30_000 });
+  const [locais, setLocais] = useState<Feita[]>([]);
+  const doServidor = q.data ?? [];
+  const noServidor = new Set(doServidor.map((f) => f.acaoId));
+  const feitas = [...locais.filter((l) => !noServidor.has(l.acaoId)), ...doServidor];
+  const recarregar = () => qc.invalidateQueries({ queryKey: ['fila_feitas', hoje] });
   return {
     feitas,
-    somar: (f: Feita) => gravar([f, ...feitas.filter((x) => x.dealId !== f.dealId)]),
-    tirar: (dealId: string) => gravar(feitas.filter((x) => x.dealId !== dealId)),
+    recarregar,
+    somar: (f: Feita, extra: { etapaAnterior?: string | null; tarefaId?: string | null }) => {
+      setLocais((l) => [f, ...l.filter((x) => x.dealId !== f.dealId)]);
+      void registrarFeita({ ...f, dia: hoje, ...extra }).then(recarregar);
+    },
+    tirar: (dealId: string) => {
+      const f = feitas.find((x) => x.dealId === dealId && x.estado === 'pendente');
+      setLocais((l) => l.filter((x) => x.dealId !== dealId));
+      if (f) void apagarPendente(f.acaoId).then(recarregar);
+    },
   };
 }
 
@@ -341,7 +354,8 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   const q = useFila();
   const hoje = q.data?.hoje ?? hojeBRT();
   const feriados = q.data?.feriados ?? [];
-  const { feitas, somar, tirar } = useFeitas(hoje);
+  const { feitas, somar, tirar, recarregar: recarregarFeitas } = useFeitas(hoje);
+  const [desfazendo, setDesfazendo] = useState<{ id: string; fase: 'confirmar' | 'indo' } | null>(null);
   const [escondidos, setEscondidos] = useState<Set<string>>(new Set());
   const [aberto, setAberto] = useState<string | null>(null);
   const [discou, setDiscou] = useState<Record<string, string>>({});
@@ -354,14 +368,14 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   const { pdi, marcar: marcarAcordo } = useMeuPdi(true);
   const [rankingAberto, setRankingAberto] = useState(false);
   // Contrato fechado hoje: o cartão verde no topo da fila (docs/10 §2.6 D). Do livro de pontos.
-  const contratosHoje = useQuery<Array<{ negocio_id: string; valor: number | null; ref_em: string }>>({
+  const contratosHoje = useQuery<Array<{ negocio_id: string; negocio_nome: string | null; valor: number | null; ref_em: string }>>({
     queryKey: ['contratos_hoje', ownerId],
     enabled: !!ownerId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
       const desde = new Date(Date.now() - 24 * 3600000).toISOString();
-      const { data } = await supabase.from('pontos_eventos').select('negocio_id, valor, ref_em').eq('tipo', 'contrato').eq('owner_id', ownerId!).gte('ref_em', desde);
-      return (data ?? []) as Array<{ negocio_id: string; valor: number | null; ref_em: string }>;
+      const { data } = await supabase.from('pontos_eventos').select('negocio_id, negocio_nome, valor, ref_em').eq('tipo', 'contrato').eq('owner_id', ownerId!).gte('ref_em', desde);
+      return (data ?? []) as Array<{ negocio_id: string; negocio_nome: string | null; valor: number | null; ref_em: string }>;
     },
   });
   const acordos = (pdi?.compromissos ?? []).filter((c) => c.estado !== 'validado');
@@ -432,7 +446,8 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
     pedidoDeSaidaAtual = null;
     setAberto(null); esconder(i.dealId); pulsar();
     if (d.comoFoi === 'sem_interesse') {
-      somar({ dealId: i.dealId, hora, negocio: i.negocio, resultado: `Sem interesse · ${d.motivo}`, volta: null, perdido: d.motivo });
+      somar({ id: null, acaoId, estado: 'pendente', dealId: i.dealId, hora, negocio: i.negocio, resultado: `Sem interesse · ${d.motivo}`, volta: null, perdido: d.motivo },
+        { etapaAnterior: i.etapaId, tarefaId: i.tarefaId ?? null });
       const corpo = { op: 'mudar-etapa', dealId: i.dealId, novaEtapa: PERDIDO,
         propriedades: { motivo_do_perdido: d.motivo, ...(d.motivo === 'Outros' ? { observacao__desqualificado: d.detalhe.trim() } : {}) } };
       let desfeito = false;
@@ -441,6 +456,7 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
         try {
           await negocioAcao(corpo);
           void gravarContato({ canal, acaoId, clientId: i.clientId, dealId: i.dealId, ownerId, resultado: 'sem_interesse', em });
+          void marcarGravada(acaoId, {}).then(recarregarFeitas);
           void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] });
         } catch (e) {
           if (ehErroDeRede(e)) { await enfileirar({ acaoId, tipo: 'negocio', rotulo: `Perdido · ${i.negocio}`, payload: { corpo } }); return; }
@@ -452,7 +468,8 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
       return;
     }
     const volta = d.volta!;
-    somar({ dealId: i.dealId, hora, negocio: i.negocio, resultado: rotuloComoFoi(d.comoFoi), volta });
+    somar({ id: null, acaoId, estado: 'pendente', dealId: i.dealId, hora, negocio: i.negocio, resultado: rotuloComoFoi(d.comoFoi), volta },
+      { etapaAnterior: i.etapaId, tarefaId: i.tarefaId ?? null });
     concluirComDesfazer({
       pedido: {
         taskId: i.tarefaId ?? `negocio-${i.dealId}`,
@@ -468,8 +485,34 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
       aoGravar: () => {
         void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] });
         void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] });
+        void recarregarFeitas();
       },
     });
+  }
+
+  // Desfazer depois dos 5 s (mesmo dia): dois toques, porque arquiva a nota no HubSpot.
+  async function desfazerDepois(f: Feita) {
+    if (!f.id) return;
+    if (!desfazendo || desfazendo.id !== f.id) {
+      const id = f.id;
+      setDesfazendo({ id, fase: 'confirmar' });
+      setTimeout(() => setDesfazendo((x) => (x && x.id === id && x.fase === 'confirmar' ? null : x)), 5000);
+      return;
+    }
+    if (desfazendo.fase === 'indo') return;
+    setDesfazendo({ id: f.id, fase: 'indo' });
+    try {
+      const r = await desfazerFeita(f.id);
+      mostrar(f.dealId);
+      Toast.mostrar(r.falhou.length ? `Desfeito em parte · ${f.negocio} · confira no HubSpot: ${r.falhou.join(', ')}` : `Desfeito · ${f.negocio} voltou para a fila`, r.falhou.length ? 'erro' : 'ok');
+      void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] });
+      void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] });
+    } catch (e) {
+      Toast.mostrar((e as Error).message, 'erro');
+    } finally {
+      setDesfazendo(null);
+      void recarregarFeitas();
+    }
   }
 
   function adiar(i: CardDaFila) {
@@ -561,13 +604,21 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
         <Text style={s.grupoRotulo}>{`${feitas.length} FEITAS HOJE · CADA UMA COM O PRÓXIMO PASSO`}</Text>
         {feitas.length === 0 && <Text style={s.vazio}>Nada registrado hoje ainda.</Text>}
         {feitas.map((f) => (
-          <View key={f.dealId + f.hora} style={s.feita}>
+          <View key={f.acaoId} style={s.feita}>
             <Text style={s.feitaHora}>{f.hora}</Text>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={s.feitaNegocio} numberOfLines={1}>{f.negocio}</Text>
               <Text style={s.feitaResultado} numberOfLines={1}>{f.resultado}</Text>
-              <Text style={s.feitaVolta} numberOfLines={1}>{f.perdido ? 'foi para Perdido' : f.volta ? `volta ${diaCurto(f.volta)}` : ''}{!online ? ' · aguardando sinal para subir' : ''}</Text>
+              <Text style={s.feitaVolta} numberOfLines={1}>{f.perdido ? 'foi para Perdido' : f.volta ? `volta ${diaCurto(f.volta)}` : ''}{f.estado === 'pendente' ? (online ? ' · subindo' : ' · aguardando sinal para subir') : ''}</Text>
             </View>
+            {f.estado === 'gravada' && f.id && (
+              <Pressable accessibilityRole="button" accessibilityLabel={`Desfazer o registro de ${f.negocio}`} onPress={() => void desfazerDepois(f)}
+                disabled={desfazendo?.id === f.id && desfazendo.fase === 'indo'} style={[s.botaoSec, desfazendo?.id === f.id && { borderColor: 'var(--vermelho-acao)' }]}>
+                <Text style={[s.botaoSecTexto, desfazendo?.id === f.id && { color: 'var(--vermelho-acao)' }]}>
+                  {desfazendo?.id === f.id ? (desfazendo.fase === 'indo' ? 'Desfazendo…' : 'Confirmar') : 'Desfazer'}
+                </Text>
+              </Pressable>
+            )}
           </View>
         ))}
       </View>
@@ -632,7 +683,7 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
       {!online && <View style={s.semSinal}><Text style={s.semSinalTexto}>Sem sinal. As ações vão para a fila e sobem sozinhas.</Text></View>}
       {aba === 'fila' && (contratosHoje.data ?? []).map((k) => (
         <View key={k.negocio_id} style={s.contrato}>
-          <Text style={s.contratoTitulo}>Contrato fechado</Text>
+          <Text style={s.contratoTitulo} numberOfLines={2}>{k.negocio_nome ? `Contrato fechado · ${k.negocio_nome}` : 'Contrato fechado'}</Text>
           <Text style={s.contratoTexto}>{`${k.valor ? `R$ ${Math.round(k.valor)}/mês · ` : ''}+200 na temporada`}</Text>
         </View>
       ))}

@@ -13,6 +13,9 @@ import { Toast } from '../components/Toast';
 import { ehErroDeRede, enfileirar, novoAcaoId } from './filaOffline';
 import { negocioAcao, RecusaDoServidor } from './negocioAcao';
 import { gravarContato, type Contato } from './contatoDeCampo';
+import { marcarGravada } from './filaFeitas';
+
+const idDe = (r: unknown) => (r && typeof r === 'object' && (r as { id?: unknown }).id != null ? String((r as { id: unknown }).id) : null);
 
 export type PedidoConclusao = {
   taskId: string;
@@ -33,17 +36,21 @@ export const JANELA_DESFAZER_MS = 5000;
 
 /** O envio de verdade. É também o executor da fila offline. */
 export async function enviarConclusao(p: PedidoConclusao): Promise<void> {
+  // os ids que o registro cria no HubSpot vão para fila_feitas (0155): é com eles que o
+  // Desfazer da aba Tarefas funciona depois dos 5 s. Pedido de outra tela casa zero linhas.
+  let notaId: string | null = null; let proximoId: string | null = null; let proximoJaExistia = false;
   if (p.manterAberta) {
     // Sem conclusão: a nota é o registro. Rede cai → a fila repete o pedido inteiro.
-    if (p.nota?.dealId) await negocioAcao({ op: 'nota', dealId: p.nota.dealId, texto: p.nota.texto });
+    if (p.nota?.dealId) notaId = idDe(await negocioAcao({ op: 'nota', dealId: p.nota.dealId, texto: p.nota.texto }));
     if (p.proximo) {
-      try { await negocioAcao(p.proximo); } catch (e) {
+      try { const rp = await negocioAcao(p.proximo); proximoId = idDe(rp); proximoJaExistia = !!(rp as { jaExistia?: boolean }).jaExistia; } catch (e) {
         // a nota já foi: só o próximo passo vai para a fila (não duplica a nota)
         if (!ehErroDeRede(e)) throw e;
         await enfileirar({ acaoId: novoAcaoId(), tipo: 'negocio', rotulo: 'Próximo passo do registro', payload: { corpo: p.proximo } });
       }
     }
     if (p.contato) await gravarContato(p.contato);
+    await marcarGravada(p.contato?.acaoId, { notaId, proximoId, proximoJaExistia, concluiu: false });
     return;
   }
   const { data, error } = await supabase.functions.invoke('hubspot-sync', {
@@ -61,7 +68,7 @@ export async function enviarConclusao(p: PedidoConclusao): Promise<void> {
     // A nota é complemento: a tarefa já foi concluída. Negócio que não é da
     // pessoa (403) fica sem a nota, sem desfazer a conclusão.
     try {
-      await negocioAcao({ op: 'nota', dealId: p.nota.dealId, texto: p.nota.texto });
+      notaId = idDe(await negocioAcao({ op: 'nota', dealId: p.nota.dealId, texto: p.nota.texto }));
     } catch (e) {
       if (ehErroDeRede(e)) throw e;
     }
@@ -71,7 +78,8 @@ export async function enviarConclusao(p: PedidoConclusao): Promise<void> {
   // Se só ele falhar por rede, entra sozinho na fila (a conclusão e a nota já foram).
   if (p.proximo) {
     try {
-      await negocioAcao(p.proximo);
+      const rp = await negocioAcao(p.proximo);
+      proximoId = idDe(rp); proximoJaExistia = !!(rp as { jaExistia?: boolean }).jaExistia;
     } catch (e) {
       if (ehErroDeRede(e)) {
         await enfileirar({ acaoId: novoAcaoId(), tipo: 'negocio', rotulo: 'Próximo passo do registro', payload: { corpo: p.proximo } });
@@ -81,6 +89,7 @@ export async function enviarConclusao(p: PedidoConclusao): Promise<void> {
     }
   }
   if (p.contato) await gravarContato(p.contato);
+  await marcarGravada(p.contato?.acaoId, { notaId, proximoId, proximoJaExistia, concluiu: true });
 }
 
 type Pendente = { pedido: PedidoConclusao; rotulo: string; timer: ReturnType<typeof setTimeout> };

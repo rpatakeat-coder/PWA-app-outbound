@@ -8,7 +8,7 @@
 //     com a ETAPA conferida ao vivo no HubSpot (o que foi para Perdido hoje não aparece);
 //   - pessoa e telefone do lead (clients), contatos (contatos_de_campo + client_visits),
 //     quem já falou com o decisor (fichas_de_rua), visita de hoje sem registro e agenda.
-// Só leitura. Feriados: nacionais (decisão do Julyan, 03/10/26), calculados no módulo.
+// Leitura, e uma escrita: op desfazer (ver desfazer()). Feriados: nacionais (decisão do Julyan, 03/10/26), calculados no módulo.
 //
 // Deploy: verify_jwt LIGADO. Secrets: HUBSPOT_TOKEN; SUPABASE_URL e
 // SUPABASE_SERVICE_ROLE_KEY vêm da plataforma.
@@ -46,6 +46,70 @@ async function hs(token: string, method: string, path: string, body?: unknown) {
   return { ok: r.ok, status: r.status, dados };
 }
 
+// ---- desfazer um registro da fila depois dos 5 s (0155, 04/10/2026) ----------------------
+// O app grava em fila_feitas os ids que o registro criou no HubSpot. Aqui cada id é
+// conferido contra o NEGÓCIO (associação) e o DONO antes de mexer: a linha é do cliente,
+// e um id trocado não pode arquivar a nota de outra pessoa. Só no mesmo dia (Brasília).
+// Nota e próximo passo são ARQUIVADOS (o HubSpot guarda 90 dias), nunca apagados de vez.
+// Perdido volta para a etapa anterior — exceto Ag. Pagamento e as de ganho: a entrada em
+// Ag. Pagamento dispara a cobrança automática, e isso o app não refaz.
+const VOLTA_PERMITIDA = new Set(['1395880469', '1396005401', '1395880470', '1395880471', '1395880472']);
+const PERDIDO_ID = '1396006164';
+const diaBRTde = (iso: string | null | undefined) => iso ? new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) : null;
+
+async function associadoAo(token: string, tipo: 'notes' | 'tasks', id: string, dealId: string) {
+  const a = await hs(token, 'GET', `/crm/v4/objects/${tipo}/${id}/associations/deals`);
+  return a.ok && (a.dados?.results ?? []).some((r: { toObjectId?: string | number }) => String(r.toObjectId) === dealId);
+}
+
+// deno-lint-ignore no-explicit-any
+async function desfazer(svc: any, token: string, uid: string, owner: string, id: string): Promise<Response> {
+  if (!id) return json(400, { erro: 'Falta o id do registro.' });
+  const { data: f } = await svc.from('fila_feitas').select('*').eq('id', id).eq('user_id', uid).maybeSingle();
+  if (!f) return json(404, { erro: 'Registro não encontrado.' });
+  if (f.estado === 'desfeita') return json(200, { ok: true, jaDesfeito: true });
+  if (f.estado !== 'gravada') return json(409, { erro: 'Este registro ainda está subindo. Tente de novo em instantes.' });
+  if (f.dia !== hojeBRT()) return json(409, { erro: 'Só dá para desfazer no mesmo dia. Corrija pelo HubSpot.' });
+  const dealId = String(f.deal_id);
+  const d = await hs(token, 'GET', `/crm/v3/objects/deals/${dealId}?properties=hubspot_owner_id,dealstage`);
+  if (!d.ok) return json(502, { erro: 'O HubSpot não respondeu sobre o negócio. Tente de novo.' });
+  if (String(d.dados?.properties?.hubspot_owner_id ?? '') !== owner) return json(403, { erro: 'Este negócio não está mais com você.' });
+  const feito: string[] = []; const falhou: string[] = [];
+
+  if (f.perdido) {
+    const anterior = f.etapa_anterior ? String(f.etapa_anterior) : '';
+    if (!VOLTA_PERMITIDA.has(anterior)) return json(409, { erro: 'Este negócio estava numa etapa que o app não reabre (pagamento ou ganho). Reabra pelo HubSpot.' });
+    if (String(d.dados?.properties?.dealstage ?? '') === PERDIDO_ID) {
+      const m = await hs(token, 'PATCH', `/crm/v3/objects/deals/${dealId}`, { properties: { dealstage: anterior } });
+      if (m.ok) feito.push('etapa'); else return json(502, { erro: 'O HubSpot recusou reabrir o negócio: ' + (m.dados?.message ?? m.status) });
+    }
+  }
+  if (f.nota_id && await associadoAo(token, 'notes', String(f.nota_id), dealId)) {
+    const n = await hs(token, 'GET', `/crm/v3/objects/notes/${f.nota_id}?properties=hs_createdate`);
+    if (n.ok && diaBRTde(n.dados?.properties?.hs_createdate ?? n.dados?.createdAt) === f.dia) {
+      const x = await hs(token, 'DELETE', `/crm/v3/objects/notes/${f.nota_id}`);
+      (x.ok || x.status === 204 ? feito : falhou).push('nota');
+    }
+  }
+  if (f.proximo_id && !f.proximo_ja_existia && await associadoAo(token, 'tasks', String(f.proximo_id), dealId)) {
+    const t = await hs(token, 'GET', `/crm/v3/objects/tasks/${f.proximo_id}?properties=hs_task_status,hs_createdate`);
+    if (t.ok && t.dados?.properties?.hs_task_status === 'NOT_STARTED' && diaBRTde(t.dados?.properties?.hs_createdate ?? t.dados?.createdAt) === f.dia) {
+      const x = await hs(token, 'DELETE', `/crm/v3/objects/tasks/${f.proximo_id}`);
+      (x.ok || x.status === 204 ? feito : falhou).push('próximo passo');
+    }
+  }
+  if (f.concluiu_tarefa && f.tarefa_id && /^\d+$/.test(String(f.tarefa_id)) && await associadoAo(token, 'tasks', String(f.tarefa_id), dealId)) {
+    const t = await hs(token, 'GET', `/crm/v3/objects/tasks/${f.tarefa_id}?properties=hs_task_status`);
+    if (t.ok && t.dados?.properties?.hs_task_status === 'COMPLETED') {
+      const x = await hs(token, 'PATCH', `/crm/v3/objects/tasks/${f.tarefa_id}`, { properties: { hs_task_status: 'NOT_STARTED' } });
+      (x.ok ? feito : falhou).push('tarefa reaberta');
+    }
+  }
+  if (f.acao_id) await svc.from('contatos_de_campo').delete().eq('acao_id', f.acao_id).eq('seller_id', uid);
+  await svc.from('fila_feitas').update({ estado: 'desfeita', desfeita_em: new Date().toISOString() }).eq('id', id);
+  return json(200, { ok: true, feito, falhou });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json(405, { erro: 'Método não permitido' });
@@ -60,6 +124,9 @@ Deno.serve(async (req: Request) => {
   const { data: perfil } = await svc.from('profiles').select('id, id_hubspot').eq('id', uid).maybeSingle();
   const owner = perfil?.id_hubspot ? String(perfil.id_hubspot) : null;
   if (!owner) return json(200, { itens: [], semMedicao: 'Seu usuário não está ligado a um dono no HubSpot: não há carteira para montar a fila.' });
+  let corpo: Record<string, unknown> = {};
+  try { corpo = await req.json(); } catch { /* sem corpo: é a leitura da fila */ }
+  if (corpo?.op === 'desfazer') return await desfazer(svc, token, uid, owner, String(corpo.id ?? ''));
 
   const hoje = hojeBRT();
   const ano = Number(hoje.slice(0, 4));
