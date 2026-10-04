@@ -6,6 +6,7 @@ import {
 } from '../components/icons';
 import { Alert } from '../components/Alert';
 import { useDismissedContaAlvo } from '../hooks/useDismissedContaAlvo';
+import { IconChevronDown as SiDown } from '../components/icons';
 
 // "🚫 Contas Alvo dispensadas" (Configuracoes → "Area do gestor"): lista as conta-alvo que os
 // vendedores marcaram "Não interessa" (quem/quando), com FILTRO por período e
@@ -62,7 +63,7 @@ export function DismissedContaAlvoCard() {
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
         <IconText Icone={IconCloseCircle} style={styles.title} tone="onSurface">Contas Alvo dispensadas{data.length ? ` · ${data.length}` : ''}</IconText>
-        <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
+        <View style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}><SiDown width={18} height={18} fill="var(--text-muted)" /></View>
       </TouchableOpacity>
 
       {open && (

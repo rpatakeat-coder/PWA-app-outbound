@@ -1,666 +1,284 @@
-import React, { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import {
-  useMyMetrics,
-  useMyMetricLeads,
-  type GestorPeriod,
-  type GestorPeriodPreset,
-  type MetricLead,
-  type MyMetricLeadsParams,
-} from '../hooks/useGestorMetrics';
-import { MinhaDailyCard } from './MinhaDailyCard';
-import { useMeuPdi } from '../hooks/useMeuPdi';
-import { SellerGoalsCard } from './SellerGoalsCard';
-import { useLayout } from '../hooks/useLayout';
-import { useMinhaDaily } from '../hooks/useMinhaDaily';
+// Meu desempenho — "Como estou indo e o que muda o meu mês?" (handoff "Abas do app",
+// 04/10/2026, prancha D1 e docs/12 §6). UMA tela só: substitui o "Meu dia em números" e o
+// "Meu desempenho" antigo.
+//
+// Tudo vem de meu_desempenho() (0159), com as definições do Cockpit e da temporada — o gestor
+// cobra pelo número dele, então o executivo vê o mesmo número:
+//   visita provada = GPS perto do pino ou foto (ao vivo) · demo realizada = o negócio entrou em
+//   Demo/Proposta · contrato = negócio ganho · variável = clientes do mês × a faixa da tabela de
+//   comissão (retroativa) · piso = 10 provadas + 1 demo realizada na semana da temporada.
+// O que saiu: a Minha Daily (a promessa é pedida só na Agenda), "demos marcadas"/reuniões (viraram
+// demo realizada) e as metas por vendedor (são do gestor, no Cockpit).
+import React, { useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 
-interface Props {
+import { supabase } from '../integrations/supabase/client';
+import { useLayout } from '../hooks/useLayout';
+import { IconCheck, IconChevronRight, IconTrophy, useIconColors } from '../components/icons';
+import FolhaRanking, { Avatar } from './FolhaRanking';
+
+type Dia = { dia: string; provadas: number; demos: number; contratos: number };
+type Desempenho = {
+  erro?: string;
+  sem_carteira?: boolean;
+  hoje?: { provadas: number; sem_prova: number; meta: number; dia: string };
+  semana?: { de: string; ate: string; provadas: number; meta: number; demos: number; contratos: number; pts: number; meta_pts: number; piso_faltam_provadas: number; piso_faltam_demos: number };
+  mes?: { fechados: number; meta: number; variavel: number | null; por_cliente: number | null; proxima_venda: number | null; degrau: { clientes: number; faltam: number; por_cliente: number; extra: number } | null };
+  temporada?: { pos: number | null; total: number | null; pct: number | null; pts: number | null; faltam: string | null; proximo: string | null; podio: Array<{ pos: number; nome: string; avatar_url: string | null; pct: number; pts: number }> } | null;
+  dias?: Dia[];
+  historico?: { semanas: Array<{ de: string; provadas: number; demos: number; contratos: number }>; meses: Array<{ mes: string; provadas: number; demos: number; contratos: number }> };
+  hubspot_em?: string | null;
+};
+
+type Props = {
   enabled: boolean;
-  /** Pendencias do proprio vendedor — mesmo numero do badge da nav. */
+  /** Mantidos por compatibilidade com o App (a fila e o gestor não aparecem mais aqui). */
   tarefasPendentes?: number;
   aoAbrirTarefas?: () => void;
-  /** Só o gestor edita a meta de cada um (RLS); o executivo via o editor e levava "Erro ao salvar". */
   ehGestor?: boolean;
-}
-
-const PERIOD_OPTIONS: { value: GestorPeriodPreset; label: string }[] = [
-  { value: 'today', label: 'Hoje' },
-  { value: '7d', label: '7 dias' },
-  { value: '30d', label: '30 dias' },
-  { value: 'all', label: 'Tudo' },
-];
-
-const STATUS_COLOR: Record<string, string> = {
-  lead: '#3b82f6', lead_visitado: '#a855f7', cliente: '#22c55e',
-  em_integracao: '#f97316', churn: '#E03A41', ex_cliente: '#E03A41',
-};
-const STATUS_LABEL: Record<string, string> = {
-  lead: 'Leads', lead_visitado: 'Visitados', cliente: 'Clientes',
-  em_integracao: 'Em integração', churn: 'Churn', ex_cliente: 'Ex-cliente',
 };
 
-function formatLeadDate(iso: string | null): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
-}
+const reais = (v: number) => `R$ ${Math.round(v).toLocaleString('pt-BR')}`;
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const MES_CURTO = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const SEM = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
 
-// Modal com os leads por trás de uma métrica (carregado sob demanda).
-function LeadsModal({
-  title, params, enabled, onClose,
-}: { title: string; params: MyMetricLeadsParams | null; enabled: boolean; onClose: () => void }) {
-  const q = useMyMetricLeads(params, enabled);
-  const layoutModal = useLayout();
-  const leads = q.data ?? [];
-  return (
-    <Modal visible={params !== null} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
-        <View style={[styles.modalPanel, layoutModal.ehLargo && styles.modalPanelWeb]}>
-          <View style={styles.modalHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.modalTitle} numberOfLines={2}>{title}</Text>
-              <Text style={styles.modalSubtitle}>
-                {q.isLoading ? 'Carregando...' : `${leads.length} ${leads.length === 1 ? 'lead' : 'leads'}`}
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.modalClose} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Text style={styles.modalCloseText}>Fechar</Text>
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={leads}
-            keyExtractor={(item, i) => `${item.client_id}-${i}`}
-            contentContainerStyle={{ paddingBottom: 24 }}
-            ListEmptyComponent={q.isLoading
-              ? <View style={{ paddingVertical: 30, alignItems: 'center' }}><ActivityIndicator color="var(--brand-text)" /></View>
-              : <Text style={styles.modalEmpty}>Nenhum lead nesse recorte.</Text>}
-            renderItem={({ item }) => {
-              const when = formatLeadDate(item.at);
-              return (
-                <View style={styles.leadRow}>
-                  <View style={[styles.leadDot, { backgroundColor: (item.status && STATUS_COLOR[item.status]) || '#94a3b8' }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.leadName} numberOfLines={1}>{item.name}</Text>
-                    <Text style={styles.leadMeta}>
-                      {(item.status && (STATUS_LABEL[item.status] ?? item.status)) || 'Sem status'}
-                      {when ? ` • ${when}` : ''}
-                    </Text>
-                    {item.note?.trim() ? <Text style={styles.leadNote}>{item.note.trim()}</Text> : null}
-                  </View>
-                </View>
-              );
-            }}
-          />
+export function MeuDesempenhoScreen({ enabled }: Props) {
+  const layout = useLayout();
+  const cores = useIconColors();
+  const duas = layout.ehDesktop;
+  const [periodo, setPeriodo] = useState<'7' | '30' | 'tudo'>('7');
+  const [rankingAberto, setRankingAberto] = useState(false);
+  const q = useQuery<Desempenho>({
+    queryKey: ['meu_desempenho'],
+    enabled,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('meu_desempenho');
+      if (error) throw error;
+      return data as Desempenho;
+    },
+  });
+  const d = q.data;
+  const mesNome = MESES[new Date(Date.now() - 3 * 3600000).getUTCMonth()];
+
+  if (q.isLoading) {
+    return (
+      <View style={st.tela}>
+        <View style={st.conteudo}>
+          <Text style={st.fraco}>Somando os números do Cockpit…</Text>
+          {[120, 96, 120, 96].map((h, i) => <View key={i} style={[st.esqueleto, { height: h }]} />)}
         </View>
       </View>
-    </Modal>
-  );
-}
-
-// Anatomia de KPI do M6, compartilhada com o Gestor: rotulo 12/16/0.5 peso
-// 600 --text-faint sobre valor 18/24 peso 700 tabular-nums. O 28/36 do
-// desktop nao cabe em meia largura de 390.
-function Kpi({ rotulo, valor, sub, corValor, onPress }: {
-  rotulo: string; valor: string; sub?: string; corValor?: string; onPress?: () => void;
-}) {
-  const corpo = (
-    <>
-      <Text style={styles.kpiRotulo}>{rotulo}</Text>
-      <Text style={[styles.kpiValor, corValor ? { color: corValor } : null]}>{valor}</Text>
-      {sub ? <Text style={styles.kpiSub}>{sub}</Text> : null}
-    </>
-  );
-  if (!onPress) return <View style={styles.kpiCartao}>{corpo}</View>;
-  return (
-    <TouchableOpacity accessibilityRole="button" style={styles.kpiCartao} onPress={onPress} activeOpacity={0.85}>
-      {corpo}
-    </TouchableOpacity>
-  );
-}
-
-function Stat({ value, label, color, onPress }: { value: number; label: string; color: string; onPress?: () => void }) {
-  const inner = (
-    <>
-      <Text style={[styles.statValue, { color }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </>
-  );
-  if (onPress && value > 0) {
-    return <TouchableOpacity style={styles.statCard} onPress={onPress} activeOpacity={0.7}>{inner}</TouchableOpacity>;
+    );
   }
-  return <View style={styles.statCard}>{inner}</View>;
-}
+  if (q.isError || !d || d.erro) {
+    return (
+      <View style={[st.tela, st.centro]}>
+        <Text style={st.vazioTitulo}>Não carreguei seus números agora</Text>
+        <Text style={st.fraco}>Nada foi perdido: o placar do Cockpit continua contando.</Text>
+        <Pressable accessibilityRole="button" style={st.botao} onPress={() => void q.refetch()}><Text style={st.botaoTexto}>Tentar de novo</Text></Pressable>
+      </View>
+    );
+  }
+  if (d.sem_carteira) {
+    return (
+      <View style={[st.tela, st.centro]}>
+        <Text style={st.vazioTitulo}>Sem carteira para medir</Text>
+        <Text style={st.fraco}>Seu usuário não está ligado a um dono no HubSpot. Fale com o gestor.</Text>
+      </View>
+    );
+  }
 
-export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas, ehGestor }: Props) {
-  const { pdi, marcar: marcarPdi } = useMeuPdi(enabled);
-  const layout = useLayout();
-  const [preset, setPreset] = useState<GestorPeriodPreset>('30d');
-  const [modal, setModal] = useState<{ title: string; params: MyMetricLeadsParams } | null>(null);
+  const mes = d.mes!;
+  const sem = d.semana!;
+  const hoje = d.hoje!;
+  const tmp = d.temporada ?? null;
+  const noPiso = sem.piso_faltam_provadas === 0 && sem.piso_faltam_demos === 0;
+  const textoPiso = noPiso ? 'no piso da semana'
+    : `falta${sem.piso_faltam_provadas + sem.piso_faltam_demos > 1 ? 'm' : ''} ${[
+      sem.piso_faltam_provadas ? plural(sem.piso_faltam_provadas, 'visita provada', 'visitas provadas') : null,
+      sem.piso_faltam_demos ? plural(sem.piso_faltam_demos, 'demo realizada', 'demos realizadas') : null,
+    ].filter(Boolean).join(' e ')} para o piso`;
 
-  const period = useMemo<GestorPeriod>(() => ({ preset: preset === 'custom' ? '30d' : preset }), [preset]);
-  const query = useMyMetrics(period, enabled);
-  const m = query.data;
-  // Banner web (handoff, tela 7): a promessa de HOJE em destaque — e' a
-  // pergunta que a aba responde. Mesmos dados do MinhaDailyCard.
-  // Antes so' carregava no desktop (pro banner). O heatmap da semana do
-  // celular sai do mesmo `daily.semana`, entao passa a carregar sempre.
-  const { daily } = useMinhaDaily(enabled);
-
-  const open = (title: string, metric: MyMetricLeadsParams['metric']) =>
-    setModal({ title, params: { metric, period } });
-
-  const periodLabel =
-    preset === 'all' ? 'no total'
-    : preset === 'today' ? 'de hoje'
-    : `nos últimos ${preset === '7d' ? '7' : '30'} dias`;
-
-  const statusEntries = m ? Object.entries(m.status_breakdown).sort((a, b) => b[1] - a[1]) : [];
-
-  return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[styles.content, layout.ehLargo && estilosWeb.contentWeb]}
-      refreshControl={<RefreshControl refreshing={query.isFetching && !query.isLoading} onRefresh={() => query.refetch()} />}
-    >
-      {/* A Daily fica SEPARADA do seletor de periodo de proposito: ela e'
-          sempre de HOJE, e ficaria mentindo se parecesse responder ao filtro
-          de 7/30 dias. No desktop ela ancora a coluna esquerda; as metricas
-          historicas ficam a direita. No celular: Daily em cima, como sempre. */}
-      {layout.ehLargo && daily?.souDeCampo && daily.hoje && (
-        <View style={estilosWeb.banner}>
-          <View style={{ flexShrink: 1, minWidth: 220, gap: 4 }}>
-            <Text style={estilosWeb.bannerKicker}>Promessa de hoje</Text>
-            <Text style={estilosWeb.bannerTitulo}>
-              {daily.hoje.prometido == null
-                ? `${daily.hoje.visitas} ${daily.hoje.visitas === 1 ? 'visita feita' : 'visitas feitas'} — sem promessa declarada`
-                : `${daily.hoje.visitas} de ${daily.hoje.prometido} visitas`}
-            </Text>
-            <Text style={estilosWeb.bannerSub}>
-              {daily.hoje.prometido == null
-                ? 'Declare a promessa do dia no cartão da Daily aqui embaixo.'
-                : daily.hoje.cumpriu
-                  ? 'Palavra cumprida. O que passar daqui é saldo.'
-                  : `Faltam ${Math.max(daily.hoje.prometido - daily.hoje.visitas, 0)} pra cumprir a palavra.`}
-            </Text>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 32 }}>
-            {daily.hoje.prometido != null && (
-              <View style={estilosWeb.bannerNumeroBloco}>
-                <Text style={estilosWeb.bannerNumero}>
-                  {`${Math.min(Math.round((daily.hoje.visitas / Math.max(daily.hoje.prometido, 1)) * 100), 999)}%`}
-                </Text>
-                <Text style={estilosWeb.bannerNumeroRotulo}>da promessa</Text>
-              </View>
-            )}
-            <View style={estilosWeb.bannerNumeroBloco}>
-              <Text style={estilosWeb.bannerNumero}>{daily.sequencia}</Text>
-              <Text style={estilosWeb.bannerNumeroRotulo}>{daily.sequencia === 1 ? 'dia seguido' : 'dias seguidos'}</Text>
-            </View>
-          </View>
+  // ---- 1 · o variável ----
+  const variavel = (
+    <View style={st.faixa}>
+      <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+        <Text style={st.faixaRotulo}>{`VARIÁVEL DE ${mesNome.toUpperCase()}`}</Text>
+        <Text style={st.faixaValor}>{mes.variavel == null ? 'não medido' : reais(mes.variavel)}</Text>
+        <Text style={st.faixaSub}>
+          {`${plural(mes.fechados, 'contrato', 'contratos')} de ${mes.meta} no mês${mes.por_cliente ? ` · faixa de ${reais(mes.por_cliente)} por cliente` : ''}`}
+        </Text>
+      </View>
+      {mes.proxima_venda != null && (
+        <View style={st.proxima}>
+          <Text style={st.faixaRotulo}>PRÓXIMA VENDA</Text>
+          <Text style={st.proximaValor}>{`+${reais(mes.proxima_venda)}`}</Text>
+          {mes.degrau && mes.degrau.faltam > 1 && (
+            <Text style={st.faixaSub}>{`a ${mes.degrau.clientes}ª muda a faixa: +${reais(mes.degrau.extra - (mes.proxima_venda ?? 0) * (mes.degrau.faltam - 1))}`}</Text>
+          )}
+          {mes.degrau && mes.degrau.faltam === 1 && <Text style={st.faixaSub}>muda a sua faixa</Text>}
         </View>
       )}
+    </View>
+  );
 
-      {layout.ehLargo && m && (
-        <View style={estilosWeb.kpis}>
-          {/* Os quatro do prompt 10: Visitas, Demos, conversao (fechados /
-              visitados — dado real) e tarefas pendentes (mesmo numero do
-              badge da nav). Fechamentos continua acessivel no modal de
-              Visitas/na lista abaixo. */}
-          <TouchableOpacity style={estilosWeb.kpiCartao} onPress={() => open('Visitas', 'visited')}>
-            <Text style={estilosWeb.kpiRotulo}>{`Visitas ${periodLabel}`}</Text>
-            <Text style={estilosWeb.kpiValor}>{m.visited.toLocaleString('pt-BR')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={estilosWeb.kpiCartao} onPress={() => open('Demos agendadas', 'meetings')}>
-            <Text style={estilosWeb.kpiRotulo}>{`Demos marcadas ${periodLabel}`}</Text>
-            <Text style={estilosWeb.kpiValor}>{m.meetings_scheduled.toLocaleString('pt-BR')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={estilosWeb.kpiCartao} onPress={() => open('Fechamentos', 'won')}>
-            <Text style={estilosWeb.kpiRotulo}>{`Conversão ${periodLabel}`}</Text>
-            <Text style={estilosWeb.kpiValor}>
-              {m.visited > 0 ? `${Math.round((m.won_in_period / m.visited) * 100)}%` : '—'}
-            </Text>
-            <Text style={estilosWeb.kpiSub}>{`${m.won_in_period} ${m.won_in_period === 1 ? 'fechado' : 'fechados'} / ${m.visited} visitados`}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={estilosWeb.kpiCartao}
-            disabled={!aoAbrirTarefas}
-            onPress={aoAbrirTarefas}
-          >
-            <Text style={estilosWeb.kpiRotulo}>Tarefas pendentes</Text>
-            <Text style={[estilosWeb.kpiValor, (tarefasPendentes ?? 0) > 0 && { color: 'var(--tint-red-text)' }]}>
-              {(tarefasPendentes ?? 0).toLocaleString('pt-BR')}
-            </Text>
-          </TouchableOpacity>
+  // ---- 2 · hoje ----
+  const blocoHoje = (
+    <View style={st.cartao}>
+      <Text style={st.secao}>HOJE</Text>
+      <Text style={st.linhaGrande}><Text style={st.numero}>{`${hoje.provadas} de ${hoje.meta}`}</Text><Text style={st.fraco}>  visitas provadas</Text></Text>
+      <View style={st.tracos}>{Array.from({ length: Math.max(1, Math.min(hoje.meta, 12)) }, (_, i) => <View key={i} style={[st.traco, i < hoje.provadas && { backgroundColor: 'var(--verde-acao)' }]} />)}</View>
+      {hoje.sem_prova > 0 && <Text style={st.fraco}>{`${plural(hoje.sem_prova, 'visita sem prova', 'visitas sem prova')} hoje: longe do pino e sem foto não conta`}</Text>}
+    </View>
+  );
+
+  // ---- 3 · semana ----
+  const blocoSemana = (
+    <View style={st.cartao}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Text style={[st.secao, { flex: 1 }]}>SEMANA DA TEMPORADA</Text>
+        <View style={[st.selo, noPiso ? st.seloOk : st.seloAviso]}>
+          {noPiso && <IconCheck width={12} height={12} fill="var(--tint-green-text)" />}
+          <Text style={[st.seloTexto, { color: noPiso ? 'var(--tint-green-text)' : 'var(--tint-amber-text)' }]}>{textoPiso}</Text>
         </View>
-      )}
-
-      {/* Coluna unica (prompt 10c): banner, KPIs, Daily como bloco, e as
-          metricas historicas abaixo. A composicao de duas colunas era o
-          layout antigo e brigava com o teto de 1200px. */}
-      <View>
-      {/* No DESKTOP a Daily ancora o topo (e' a promessa de hoje, e a coluna
-          esquerda existe pra ela). No CELULAR ela desce pra depois do
-          heatmap: em cima, empurrava os KPIs e o calor — que sao a resposta
-          da tela — pra fora da primeira dobra. */}
-      {layout.ehLargo && (
-        <View style={{ gap: 16 }}>
-          <MinhaDailyCard enabled={enabled} />
-        </View>
-      )}
-      <View>
-
-      <View style={[styles.periodRow, layout.ehLargo && estilosWeb.periodoLinha]}>
-        {PERIOD_OPTIONS.map(opt => (
-          <TouchableOpacity
-            key={opt.value}
-            style={[styles.periodChip, layout.ehLargo && estilosWeb.periodoChip, preset === opt.value && styles.periodChipActive]}
-            onPress={() => setPreset(opt.value)}
-          >
-            <Text style={[styles.periodChipText, preset === opt.value && styles.periodChipTextActive]}>{opt.label}</Text>
-          </TouchableOpacity>
+      </View>
+      <View style={st.tres}>
+        {[[sem.provadas, sem.provadas === 1 ? 'visita provada' : 'visitas provadas'], [sem.demos, sem.demos === 1 ? 'demo realizada' : 'demos realizadas'], [sem.contratos, sem.contratos === 1 ? 'contrato' : 'contratos']].map(([v, r]) => (
+          <View key={String(r)} style={st.kpi}><Text style={st.kpiValor}>{String(v)}</Text><Text style={st.kpiRotulo}>{String(r)}</Text></View>
         ))}
       </View>
+      <Text style={st.nota}>Piso: 10 visitas provadas e 1 demo realizada. Visita declarada sem GPS perto do pino ou foto não conta.</Text>
+    </View>
+  );
 
-      {/* ---- M6: KPIs 2x2 + heatmap da semana (so' no celular) ---- */}
-      {!layout.ehLargo && m && (
-        <View style={styles.kpiGrade}>
-          <Kpi rotulo={`Visitas ${periodLabel}`} valor={m.visited.toLocaleString('pt-BR')} onPress={() => open('Minhas visitas', 'visited')} />
-          <Kpi rotulo={`Demos marcadas ${periodLabel}`} valor={m.meetings_scheduled.toLocaleString('pt-BR')} onPress={() => open('Minhas reuniões', 'meetings')} />
-          <Kpi
-            rotulo={`Conversão ${periodLabel}`}
-            valor={m.visited > 0 ? `${Math.round((m.won_in_period / m.visited) * 100)}%` : '—'}
-            sub={`${m.won_in_period} / ${m.visited} visitados`}
-            onPress={() => open('Clientes que fechei', 'won')}
-          />
-          {/* O numero e' o de tarefas PENDENTES (o mesmo do badge da barra) —
-              "atrasadas" nao existe como campo separado; ver relatorio. */}
-          <Kpi
-            rotulo="Tarefas pendentes"
-            valor={(tarefasPendentes ?? 0).toLocaleString('pt-BR')}
-            corValor={(tarefasPendentes ?? 0) > 0 ? 'var(--tint-red-text)' : undefined}
-            onPress={aoAbrirTarefas}
-          />
-        </View>
-      )}
-
-      {!layout.ehLargo && daily?.souDeCampo && daily.estaSemana.length > 0 && (() => {
-        const total = daily.estaSemana.reduce((n, d) => n + d.visitas, 0);
-        return (
-          <View style={styles.calorCartao}>
-            <View style={styles.calorCabecalho}>
-              <Text style={styles.calorTitulo}>VISITAS NA SEMANA</Text>
-              <Text style={styles.calorTotal}>{total}</Text>
-            </View>
-            {/* Celulas FLUIDAS (aspect-ratio 1). A serie e' `daily.estaSemana`: de segunda ate'
-                hoje, a mesma janela do meu_placar (o total bate com o Meu dia). Sabado e
-                domingo so' entram quando teve visita: vazio ali seria "nao medido", nao zero. */}
-            <View style={styles.calorGrade}>
-              {daily.estaSemana.map((d) => {
-                const ehHoje = d.dia === daily.hoje.dia;
-                const vazio = d.visitas === 0;
-                const claro = d.visitas >= 1 && d.visitas <= 2;
-                const cor = vazio ? 'var(--surface-3)' : claro ? '#8FE0D5' : '#1D9688';
-                return (
-                  <View
-                    key={d.dia}
-                    style={[
-                      styles.calorCelula,
-                      { backgroundColor: cor },
-                      // Hoje ainda sem visita: tracejado, pra distinguir "dia
-                      // que nao teve" de "dia que ainda pode ter".
-                      ehHoje && vazio && styles.calorCelulaHoje,
-                    ]}
-                  >
-                    {/* O numero dentro da celula: a cor sozinha diz "muito ou
-                        pouco", nao "quantas". Escuro sobre o teal claro,
-                        branco sobre o escuro. */}
-                    {!vazio && (
-                      <Text style={[styles.calorCelulaNumero, { color: claro ? '#0C3B36' : '#FFFFFF' }]}>
-                        {d.visitas}
-                      </Text>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-            <View style={styles.calorLegenda}>
-              {daily.estaSemana.map((d) => {
-                const ehHoje = d.dia === daily.hoje.dia;
-                return (
-                  <Text key={d.dia} style={[styles.calorDia, ehHoje && styles.calorDiaHoje]}>
-                    {new Date(`${d.dia}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}
-                  </Text>
-                );
-              })}
-            </View>
-            {/* Sem a legenda os dois tons de teal nao se explicam. */}
-            <View style={styles.calorEscala}>
-              {[
-                { cor: 'var(--surface-3)', rotulo: 'nenhuma' },
-                { cor: '#8FE0D5', rotulo: '1–2' },
-                { cor: '#1D9688', rotulo: '3+' },
-              ].map((degrau) => (
-                <View key={degrau.rotulo} style={styles.calorEscalaItem}>
-                  <View style={[styles.calorEscalaAmostra, { backgroundColor: degrau.cor }]} />
-                  <Text style={styles.calorEscalaTexto}>{degrau.rotulo}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        );
-      })()}
-
-      {/* O meu plano de desenvolvimento. Só aparece se existir: uma seção
-          "Plano" vazia em toda tela cobraria algo que o gestor ainda não
-          escreveu. Quem marca "feito" sou eu — o gestor valida ou devolve, e
-          o botão dele não existe aqui. */}
-      {pdi && pdi.compromissos.length > 0 && (
-        <View style={{ marginTop: 8 }}>
-          <Text style={styles.sectionTitle}>Meu plano de desenvolvimento</Text>
-          <View style={styles.assignedCard}>
-            {pdi.compromissos.map((c) => (
-              <TouchableOpacity
-                key={c.id}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: c.feito }}
-                disabled={c.estado === 'validado' || marcarPdi.isPending}
-                onPress={() => marcarPdi.mutate({ id: c.id, feito: !c.feito })}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'flex-start',
-                  gap: 10,
-                  paddingVertical: 10,
-                  opacity: c.estado === 'validado' ? 0.65 : 1,
-                }}
-              >
-                <View
-                  style={{
-                    width: 20,
-                    height: 20,
-                    borderRadius: 5,
-                    borderWidth: 1.5,
-                    marginTop: 1,
-                    borderColor: c.feito ? 'var(--vermelho-acao)' : 'var(--border)',
-                    backgroundColor: c.feito ? 'var(--vermelho-acao)' : 'transparent',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  {c.feito && <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>✓</Text>}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 14, color: 'var(--text)', lineHeight: 20 }}>{c.texto}</Text>
-                  {c.estado === 'validado' && (
-                    <Text style={{ fontSize: 12, color: 'var(--tint-green-text)', marginTop: 2 }}>
-                      Validado pela gestão.
-                    </Text>
-                  )}
-                  {c.estado === 'devolvido' && (
-                    <Text style={{ fontSize: 12, color: 'var(--tint-amber-text)', marginTop: 2, lineHeight: 16 }}>
-                      Devolvido: {c.devolvidoMotivo}
-                    </Text>
-                  )}
-                  {c.estado === 'feito' && (
-                    <Text style={{ fontSize: 12, color: 'var(--text-subtle)', marginTop: 2 }}>
-                      Marcado — aguardando a gestão olhar.
-                    </Text>
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
-            <Text style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 8, lineHeight: 15 }}>
-              Só você marca aqui. A gestão valida ou devolve dizendo o que falta.
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {/* F · auxiliares, DEPOIS do heatmap. Nenhum sai de cena: a Daily e' a
-          promessa do dia e o SellerGoalsCard traz a meta — que ate' o M6 so'
-          o Gestor via. */}
-      {!layout.ehLargo && (
-        <View style={{ gap: 16 }}>
-          <MinhaDailyCard enabled={enabled} />
-          {ehGestor && <SellerGoalsCard />}
-        </View>
-      )}
-
-      {query.isLoading ? (
-        <View style={styles.loadingBlock}><ActivityIndicator size="large" color="var(--brand-text)" /><Text style={styles.loadingText}>Carregando...</Text></View>
-      ) : query.isError ? (
-        <View style={styles.loadingBlock}>
-          <Text style={styles.errorText}>Erro ao carregar suas métricas.</Text>
-          <TouchableOpacity style={styles.retry} onPress={() => query.refetch()}><Text style={styles.retryText}>Tentar novamente</Text></TouchableOpacity>
-        </View>
-      ) : m ? (
-        <>
-          <Text style={styles.sectionTitle}>Minha atividade {periodLabel}</Text>
-          <View style={styles.grid}>
-            <Stat value={m.visited} label="Visitas (check-in)" color="#a855f7" onPress={() => open('Minhas visitas', 'visited')} />
-            <Stat value={m.created} label="Pins criados" color="#3b82f6" onPress={() => open('Pins que criei', 'created')} />
-            <Stat value={m.meetings_scheduled} label="Reuniões" color="#f97316" onPress={() => open('Minhas reuniões', 'meetings')} />
-            <Stat value={m.follow_ups_scheduled} label="Follow-ups" color="#0891b2" onPress={() => open('Meus follow-ups', 'follow_ups')} />
-            <Stat value={m.stage_changes} label="Mudanças etapa" color="#0ea5e9" onPress={() => open('Mudanças de etapa', 'stage_changes')} />
-            <Stat value={m.notes_created} label="Notas" color="#FFD966" onPress={() => open('Minhas notas', 'notes')} />
-            <Stat value={m.won_in_period} label="Fechados" color="#16a34a" onPress={() => open('Clientes que fechei', 'won')} />
-          </View>
-
-          <Text style={styles.sectionTitle}>Meus leads (snapshot atual)</Text>
-          <View style={styles.assignedCard}>
-            <TouchableOpacity disabled={m.leads_assigned === 0} onPress={() => open('Meus leads atribuídos', 'assigned')}>
-              <Text style={styles.assignedNumber}>{m.leads_assigned}</Text>
-              <Text style={styles.assignedLabel}>{m.leads_assigned === 1 ? 'lead atribuído a mim' : 'leads atribuídos a mim'}</Text>
-            </TouchableOpacity>
-            {statusEntries.length > 0 && (
-              <View style={styles.statusBreakdown}>
-                {statusEntries.map(([status, count]) => (
-                  <View key={status} style={styles.statusChip}>
-                    <View style={[styles.statusDot, { backgroundColor: STATUS_COLOR[status] ?? '#94a3b8' }]} />
-                    <Text style={styles.statusChipText}>{STATUS_LABEL[status] ?? status} {count}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-
-          <Text style={styles.footerHint}>Toque num número pra ver os leads por trás dele. Puxe pra baixo pra atualizar.</Text>
-        </>
-      ) : null}
-
-      <LeadsModal
-        title={modal?.title ?? ''}
-        params={modal?.params ?? null}
-        enabled={enabled}
-        onClose={() => setModal(null)}
-      />
+  // ---- 4 · temporada ----
+  const blocoTemporada = tmp?.pos ? (
+    <Pressable accessibilityRole="button" accessibilityLabel="Abrir o ranking da temporada" style={st.cartao} onPress={() => setRankingAberto(true)}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <IconTrophy width={20} height={20} fill={cores.onSurface} />
+        <Text style={[st.secao, { flex: 1 }]}>TEMPORADA</Text>
+        <IconChevronRight width={20} height={20} fill={cores.muted} />
       </View>
+      <Text style={st.linhaGrande}><Text style={st.numero}>{`${tmp.pos}º`}</Text><Text style={st.fraco}>{`  de ${tmp.total ?? '—'} · ${tmp.pts ?? 0} pts`}</Text></Text>
+      {!!tmp.faltam && <Text style={st.texto}>{tmp.faltam}</Text>}
+      {!!tmp.proximo && <Text style={st.fraco}>{tmp.proximo}</Text>}
+      <View style={{ gap: 6, marginTop: 4 }}>
+        {(tmp.podio ?? []).map((p) => (
+          <View key={p.pos} style={[st.podio, p.pos === tmp.pos && st.podioEu]}>
+            <Text style={st.podioPos}>{`${p.pos}º`}</Text>
+            <Avatar nome={p.nome} url={p.avatar_url} tamanho={28} />
+            <Text style={[st.texto, { flex: 1 }]} numberOfLines={1}>{p.pos === tmp.pos ? 'Você' : p.nome}</Text>
+            <Text style={st.fraco}>{`${p.pts} pts`}</Text>
+          </View>
+        ))}
       </View>
+    </Pressable>
+  ) : null;
+
+  // ---- 5 · histórico (7 dias = a semana da temporada, dia a dia: soma igual ao bloco 3) ----
+  const barras: Array<{ r: string; v: number; destaque?: boolean }> = periodo === '7'
+    ? (d.dias ?? []).map((x) => ({ r: SEM[new Date(`${x.dia}T12:00:00Z`).getUTCDay()], v: x.provadas }))
+    : periodo === '30'
+      ? [...(d.historico?.semanas ?? []).map((w) => ({ r: `${w.de.slice(8, 10)}/${w.de.slice(5, 7)}`, v: w.provadas })), { r: 'esta', v: sem.provadas, destaque: true }]
+      : (d.historico?.meses ?? []).map((m, i, a) => ({ r: MES_CURTO[Number(m.mes.slice(5, 7)) - 1], v: m.provadas, destaque: i === a.length - 1 }));
+  const totais = periodo === '7'
+    ? { p: sem.provadas, d: sem.demos, c: sem.contratos }
+    : periodo === '30'
+      ? (d.historico?.semanas ?? []).reduce((a, w) => ({ p: a.p + w.provadas, d: a.d + w.demos, c: a.c + w.contratos }), { p: sem.provadas, d: sem.demos, c: sem.contratos })
+      : (d.historico?.meses ?? []).reduce((a, m) => ({ p: a.p + m.provadas, d: a.d + m.demos, c: a.c + m.contratos }), { p: 0, d: 0, c: 0 });
+  const max = Math.max(1, ...barras.map((b) => b.v));
+  const blocoHistorico = (
+    <View style={st.cartao}>
+      <Text style={st.secao}>HISTÓRICO</Text>
+      <View style={st.seg}>
+        {([['7', 'Esta semana'], ['30', '5 semanas'], ['tudo', '5 meses']] as const).map(([k, r]) => (
+          <Pressable key={k} accessibilityRole="tab" accessibilityState={{ selected: periodo === k }} style={[st.segItem, periodo === k && st.segAtivo]} onPress={() => setPeriodo(k)}>
+            <Text style={[st.segTexto, periodo !== k && { color: 'var(--text-muted)' }]}>{r}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <View style={st.tres}>
+        {[[totais.p, 'provadas'], [totais.d, 'demos realizadas'], [totais.c, 'contratos']].map(([v, r]) => (
+          <View key={String(r)} style={st.kpi}><Text style={st.kpiValor}>{String(v)}</Text><Text style={st.kpiRotulo}>{String(r)}</Text></View>
+        ))}
+      </View>
+      <View style={st.barras}>
+        {barras.map((b, i) => (
+          <View key={i} style={st.barraCol}>
+            <Text style={st.barraValor}>{b.v ? String(b.v) : ''}</Text>
+            <View style={[st.barra, { height: Math.max(4, Math.round((b.v / max) * 56)), backgroundColor: b.destaque ? 'var(--vermelho-acao)' : b.v ? 'var(--verde-acao)' : 'var(--border)' }]} />
+            <Text style={st.barraRotulo}>{b.r}</Text>
+          </View>
+        ))}
+      </View>
+      <Text style={st.nota}>{periodo === '7' ? 'Visitas provadas por dia, ao vivo. A soma é a mesma da semana acima.' : 'Pelo livro da temporada, o mesmo do ranking do Cockpit.'}</Text>
+    </View>
+  );
+
+  return (
+    <ScrollView style={st.tela} contentContainerStyle={[st.conteudo, duas && st.conteudoLargo]}
+      refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => void q.refetch()} />}>
+      {variavel}
+      {duas ? (
+        <View style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
+          <View style={{ flex: 1, gap: 12 }}>{blocoHoje}{blocoSemana}</View>
+          <View style={{ flex: 1, gap: 12 }}>{blocoTemporada}{blocoHistorico}</View>
+        </View>
+      ) : (
+        <>{blocoHoje}{blocoSemana}{blocoTemporada}{blocoHistorico}</>
+      )}
+      <Text style={st.nota}>Os mesmos números do Cockpit. Contratos e demos atualizam a cada 10 min; visitas, na hora.</Text>
+      <FolhaRanking visivel={rankingAberto} aoFechar={() => setRankingAberto(false)} />
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  // ---- KPI e heatmap (M6) ----
-  kpiGrade: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  kpiCartao: {
-    // 1fr 1fr com gap 12: em 390 (menos 32 de padding) cada um fica com ~173.
-    flexBasis: '47%',
-    flexGrow: 1,
-    minWidth: 0,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: 'var(--surface)',
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  kpiRotulo: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)' },
-  // 18/24 e' o maior tipo do celular. 28/36 e' desktop.
-  kpiValor: {
-    fontSize: 18,
-    lineHeight: 24,
-    fontWeight: '700',
-    color: 'var(--text)',
-    fontVariant: ['tabular-nums'],
-    marginTop: 4,
-  },
-  kpiSub: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)', marginTop: 2 },
-  calorCartao: {
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: 'var(--surface)',
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-    gap: 8,
-  },
-  calorTitulo: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '700', color: 'var(--text-muted)' },
-  calorCabecalho: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  calorTotal: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)', fontVariant: ['tabular-nums'] },
-  calorGrade: { flexDirection: 'row', gap: 4 },
-  calorCelulaNumero: { fontSize: 12, lineHeight: 16, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  calorDiaHoje: { color: 'var(--tint-red-text)', fontWeight: '700' },
-  calorEscala: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
-  calorEscalaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  calorEscalaAmostra: { width: 12, height: 12, borderRadius: 4 },
-  calorEscalaTexto: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, color: 'var(--text-faint)' },
-  // `aspectRatio: 1` com `flex: 1`: a celula acompanha a largura da tela em
-  // vez dos 28px fixos do desktop.
-  calorCelula: { flex: 1, aspectRatio: 1, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
-  calorCelulaHoje: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: 'var(--vermelho-acao)' },
-  calorLegenda: { flexDirection: 'row', gap: 4 },
-  calorDia: { flex: 1, textAlign: 'center', fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)' },
-  container: { flex: 1, backgroundColor: 'var(--bg)' },
-  // Sem barra inferior nesta tela (nao e' aba; chega pelo menu do perfil e
-  // sai pelo arrow_back), entao nao ha' o que reservar: 16, nao 120.
-  content: { padding: 16, paddingBottom: 16, gap: 16 },
-  periodRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  // 48 de altura e raio 12: era ~36 com raio 10, os dois fora da escala.
-  periodChip: {
-    flex: 1,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: 'var(--surface)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-  },
-  periodChipActive: { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
-  periodChipText: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
-  periodChipTextActive: { color: '#fff' },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 8, marginBottom: 10 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  statCard: { flexBasis: '48%', flexGrow: 1, backgroundColor: 'var(--surface)', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: 'var(--border)' },
-  statValue: { fontSize: 24, fontWeight: '800' },
-  statLabel: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2, fontWeight: '600' },
-  assignedCard: { backgroundColor: 'var(--surface)', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: 'var(--border)' },
-  assignedNumber: { fontSize: 28, fontWeight: '800', color: 'var(--text)' },
-  assignedLabel: { fontSize: 13, color: 'var(--text-muted)', fontWeight: '600' },
-  statusBreakdown: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 },
-  statusChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'var(--surface-2)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, gap: 4 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  statusChipText: { fontSize: 11, color: 'var(--text-muted)', fontWeight: '600' },
-  loadingBlock: { paddingVertical: 60, alignItems: 'center', gap: 12 },
-  loadingText: { color: 'var(--text-muted)', fontSize: 13 },
-  errorText: { color: 'var(--brand-text)', fontSize: 15, fontWeight: '700' },
-  retry: { marginTop: 12, backgroundColor: '#222222', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
-  retryText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  footerHint: { marginTop: 20, textAlign: 'center', fontSize: 11, color: 'var(--text-subtle)', fontStyle: 'italic' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', justifyContent: 'flex-end' },
-  // Web: o sheet de leads vira painel de largura contida, nao full-bleed.
-  modalPanelWeb: { width: '100%', maxWidth: 640, alignSelf: 'center', borderTopLeftRadius: 8, borderTopRightRadius: 8 },
-  modalPanel: { maxHeight: '75%', backgroundColor: 'var(--surface)', borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 },
-  modalHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 10, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: 'var(--border-soft)' },
-  modalTitle: { fontSize: 16, fontWeight: '800', color: 'var(--text)' },
-  modalSubtitle: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
-  modalClose: { backgroundColor: 'var(--surface-2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  modalCloseText: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)' },
-  modalEmpty: { textAlign: 'center', color: 'var(--text-muted)', fontSize: 13, paddingVertical: 24 },
-  leadRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: 'var(--border-soft)' },
-  leadDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
-  leadName: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
-  leadMeta: { fontSize: 11, color: 'var(--text-muted)', marginTop: 1 },
-  leadNote: { fontSize: 13, color: 'var(--text)', marginTop: 6, lineHeight: 18, backgroundColor: 'var(--bg)', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, borderLeftWidth: 3, borderLeftColor: '#FFD966' },
-});
-
-// Estilos da superficie web (handoff, tela 7). O banner e' o UNICO bloco
-// vermelho chapado da tela — nao repetir o padrao.
-const estilosWeb = StyleSheet.create({
-  contentWeb: { padding: 24, maxWidth: 1200, width: '100%', alignSelf: 'center' },
-  periodoLinha: { flexWrap: 'wrap', marginBottom: 12 },
-  periodoChip: {
-    flexGrow: 0,
-    flexShrink: 0,
-    flexBasis: 'auto',
-    width: 'auto',
-    height: 36,
-    justifyContent: 'center',
-    paddingVertical: 0,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  banner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 24,
-    padding: 24,
-    borderRadius: 8,
-    backgroundColor: 'var(--vermelho-acao)',
-    marginBottom: 24,
-  },
-  bannerKicker: {
-    fontSize: 11,
-    lineHeight: 16,
-    letterSpacing: 1.3,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    color: 'rgba(255,255,255,0.75)',
-  },
-  bannerTitulo: { fontSize: 28, lineHeight: 36, fontWeight: '700', color: '#FFFFFF' },
-  bannerSub: { fontSize: 14, lineHeight: 20, letterSpacing: 0.25, fontWeight: '500', color: 'rgba(255,255,255,0.85)' },
-  bannerNumeroBloco: { alignItems: 'flex-end', gap: 2 },
-  bannerNumero: { fontSize: 28, lineHeight: 36, fontWeight: '700', color: '#FFFFFF', fontVariant: ['tabular-nums'] },
-  bannerNumeroRotulo: {
-    fontSize: 11,
-    lineHeight: 16,
-    letterSpacing: 0.5,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.75)',
-  },
-  kpis: { flexDirection: 'row', gap: 16, flexWrap: 'wrap', marginBottom: 24 },
-  kpiCartao: {
-    flex: 1,
-    minWidth: 170,
-    backgroundColor: 'var(--surface)',
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-    borderRadius: 8,
-    padding: 16,
-    gap: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.14,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-  },
-  kpiRotulo: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '500', color: 'var(--text-muted)' },
-  kpiValor: { fontSize: 24, lineHeight: 32, fontWeight: '600', color: 'var(--text)', fontVariant: ['tabular-nums'] },
-  kpiSub: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, color: 'var(--text-faint)' },
+const st = StyleSheet.create({
+  tela: { flex: 1, backgroundColor: 'var(--bg)' },
+  centro: { alignItems: 'center', justifyContent: 'center', padding: 24, gap: 8 },
+  conteudo: { padding: 16, paddingBottom: 40, gap: 12 },
+  conteudoLargo: { padding: 28, maxWidth: 1100, width: '100%', alignSelf: 'center' },
+  esqueleto: { borderRadius: 16, backgroundColor: 'var(--surface-2)' },
+  faixa: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, padding: 18, borderRadius: 18, backgroundColor: '#111418' },
+  faixaRotulo: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: 'rgba(255,255,255,0.6)' },
+  faixaValor: { fontSize: 30, lineHeight: 36, fontWeight: '800', color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  faixaSub: { fontSize: 13, lineHeight: 18, color: 'rgba(255,255,255,0.72)' },
+  proxima: { minWidth: 150, gap: 4, padding: 12, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.08)' },
+  proximaValor: { fontSize: 22, fontWeight: '800', color: '#7BE0A6', fontVariant: ['tabular-nums'] },
+  cartao: { padding: 16, gap: 8, borderRadius: 16, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)' },
+  secao: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: 'var(--text-faint)' },
+  linhaGrande: { color: 'var(--text)' },
+  numero: { fontSize: 24, fontWeight: '800', color: 'var(--text)' },
+  texto: { fontSize: 14, lineHeight: 20, fontWeight: '600', color: 'var(--text)' },
+  fraco: { fontSize: 13, lineHeight: 18, color: 'var(--text-muted)' },
+  nota: { fontSize: 12, lineHeight: 17, color: 'var(--text-faint)' },
+  tracos: { flexDirection: 'row', gap: 4 },
+  traco: { flex: 1, height: 6, borderRadius: 3, backgroundColor: 'var(--border)' },
+  selo: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, minHeight: 26, borderRadius: 13 },
+  seloOk: { backgroundColor: 'var(--tint-green)' },
+  seloAviso: { backgroundColor: 'var(--tint-amber)' },
+  seloTexto: { fontSize: 12, fontWeight: '700' },
+  tres: { flexDirection: 'row', gap: 8 },
+  kpi: { flex: 1, minWidth: 0, padding: 12, borderRadius: 12, backgroundColor: 'var(--surface-2)', gap: 2 },
+  kpiValor: { fontSize: 24, fontWeight: '800', color: 'var(--text)', fontVariant: ['tabular-nums'] },
+  kpiRotulo: { fontSize: 12, color: 'var(--text-muted)' },
+  podio: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1.5, borderColor: 'transparent' },
+  podioEu: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--vermelho-acao)' },
+  podioPos: { width: 28, fontSize: 14, fontWeight: '800', color: 'var(--text)' },
+  seg: { flexDirection: 'row', gap: 4, padding: 4, borderRadius: 12, backgroundColor: 'var(--surface-2)' },
+  segItem: { flex: 1, minHeight: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'transparent' },
+  segAtivo: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--vermelho-acao)' },
+  segTexto: { fontSize: 13, fontWeight: '700', color: 'var(--text)' },
+  barras: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, minHeight: 96, marginTop: 4 },
+  barraCol: { flex: 1, alignItems: 'center', gap: 4 },
+  barra: { width: '70%', borderRadius: 4 },
+  barraValor: { fontSize: 11, fontWeight: '700', color: 'var(--text-muted)' },
+  barraRotulo: { fontSize: 11, color: 'var(--text-muted)' },
+  vazioTitulo: { fontSize: 17, fontWeight: '700', color: 'var(--text)', textAlign: 'center' },
+  botao: { minHeight: 44, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center', marginTop: 8 },
+  botaoTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
 });

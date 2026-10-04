@@ -183,7 +183,12 @@ function RegistroInline({ item, hoje, feriados, grande = false, discouEm, aoSalv
 
   return (
     <View style={s.registro}>
-      {!!discouEm && <Text style={s.discou}><Text style={{ color: 'var(--verde-acao)' }}>● </Text>{discouEm}</Text>}
+      {!!discouEm && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: 'var(--verde-acao)' }} />
+          <Text style={[s.discou, { flex: 1 }]}>{discouEm}</Text>
+        </View>
+      )}
       <Text style={s.rotuloSecao}>COMO FOI?</Text>
       <View style={s.grade2}>{COMO_FOI_FILA.map((c) => chip(c.id, c.rotulo, comoFoi === c.id, () => escolherComoFoi(c.id), true))}</View>
 

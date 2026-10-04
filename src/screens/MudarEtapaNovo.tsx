@@ -92,7 +92,7 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
     try {
       await negocioAcao(corpo);
       onMudou(destino, propriedades as Record<string, unknown>);
-      Toast.mostrar(`✓ ${nome} → ${ROTULO_ETAPA[destino]} · HubSpot + Cockpit`, 'ok');
+      Toast.mostrar(`${nome} foi para ${ROTULO_ETAPA[destino]} · HubSpot + Cockpit`, 'ok');
       onFechar();
     } catch (err) {
       if (ehErroDeRede(err)) {
@@ -176,7 +176,9 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
                 {separa && <View style={s.divisor} />}
                 <Pressable accessibilityRole="button" accessibilityState={{ disabled: atual || !mov.ok, selected: atual }}
                   disabled={atual || !mov.ok} onPress={() => setDestino(id)} style={[s.linha, (atual || !mov.ok) && s.linhaInativa]}>
-                  <Text style={[s.linhaNum, atual && s.linhaAtual]}>{atual ? '●' : i < 8 ? String(i + 1) : '·'}</Text>
+                  {atual
+                    ? <View style={[s.linhaNum, { alignItems: 'center', justifyContent: 'center' }]}><View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: 'var(--vermelho-acao)' }} /></View>
+                    : <Text style={s.linhaNum}>{i < 8 ? String(i + 1) : ''}</Text>}
                   <View style={{ flex: 1 }}>
                     <Text style={[s.linhaRotulo, atual && s.linhaAtual]}>{ROTULO_ETAPA[id]}{atual ? ' · atual' : ''}</Text>
                     <Text style={s.linhaMotivo}>{atual ? 'atual' : !mov.ok ? mov.motivo : pedeTexto(id)}</Text>

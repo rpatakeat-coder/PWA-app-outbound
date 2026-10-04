@@ -9,6 +9,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 
 import { Painel } from '../components/Painel';
 import { IconClose, IconSearch } from '../components/icons';
+import { IconChevronRight as SiRight } from '../components/icons';
 
 export type LinhaBusca = {
   chave: string;
@@ -91,8 +92,10 @@ export default function FolhaBusca({ visivel, aoFechar, busca, aoBuscar, linhas,
               </View>
               {l.acao === 'posicionar' ? (
                 <View style={s.posicionar}><Text style={s.posicionarTexto}>Posicionar</Text></View>
+              ) : l.distancia ? (
+                <Text style={s.distancia}>{l.distancia}</Text>
               ) : (
-                <Text style={s.distancia}>{l.distancia ?? '›'}</Text>
+                <SiRight width={18} height={18} fill="var(--text-muted)" />
               )}
             </Pressable>
           ))

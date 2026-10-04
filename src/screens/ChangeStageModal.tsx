@@ -35,6 +35,7 @@ import { useClientStageChanges } from '../hooks/useClientStageChanges';
 import { useClientNotes } from '../hooks/useClientNotes';
 import { supabase } from '../integrations/supabase/client';
 import { ehFalhaDeTransporte, sendHubspotEvent } from '../utils/hubspotSync';
+import { IconCheck as SiCheck } from '../components/icons';
 
 interface Props {
   client: Client;
@@ -168,8 +169,9 @@ function MultiSelectField({
               onPress={() => onToggle(opt.value)}
               disabled={disabled}
             >
+              {selected && <SiCheck width={14} height={14} fill="#FFFFFF" />}
               <Text style={[styles.subOptionChipText, selected && { color: '#fff' }]}>
-                {selected ? '✓ ' : ''}{opt.label}
+                {opt.label}
               </Text>
             </TouchableOpacity>
           );

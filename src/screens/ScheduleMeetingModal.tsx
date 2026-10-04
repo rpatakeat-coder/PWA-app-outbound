@@ -18,6 +18,7 @@ import { Alert } from '../components/Alert';
 import { IconClose, useIconColors } from '../components/icons';
 import type { Client, ClientMeeting, MeetingType } from '../types/client';
 import { useMeetings } from '../hooks/useMeetings';
+import { IconChevronLeft as SiLeft, IconChevronRight as SiRight } from '../components/icons';
 
 interface ScheduleMeetingModalProps {
   /** Contexto quando aberto a partir de um card de tarefa (prompt M2):
@@ -145,11 +146,11 @@ function Calendar({
     <View style={calStyles.wrap}>
       <View style={calStyles.header}>
         <TouchableOpacity onPress={goPrev} style={calStyles.navBtn}>
-          <Text style={calStyles.navTxt}>‹</Text>
+          <SiLeft width={22} height={22} fill="var(--text)" />
         </TouchableOpacity>
         <Text style={calStyles.title}>{MESES[month]} {year}</Text>
         <TouchableOpacity onPress={goNext} style={calStyles.navBtn}>
-          <Text style={calStyles.navTxt}>›</Text>
+          <SiRight width={22} height={22} fill="var(--text)" />
         </TouchableOpacity>
       </View>
       <View style={calStyles.weekRow}>

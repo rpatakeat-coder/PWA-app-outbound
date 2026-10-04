@@ -16,6 +16,7 @@ import { openGoogleMaps, type TravelMode } from '../utils/navigation';
 import type { Pino } from '../utils/pinoP2';
 import { distanciaTexto, fatosDoCard, sinaisDoCliente } from '../utils/cardNovo';
 import { ETAPA, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA, ROTULO_PROP, pareceNomeDePessoa } from '../utils/fichaDeRua';
+import { IconClose as SiClose } from '../components/icons';
 
 export { distanciaTexto };
 import { openWhatsapp, toWhatsappNumber } from '../utils/whatsapp';
@@ -71,7 +72,7 @@ function kicker(d: DadosCardNovo): string {
   else partes.push(ROTULO_TEMP[pino.temp ?? '?']);
   if (d.planoNumero) partes.push(`PLANO ${d.planoNumero}`);
   if (!partes.length) partes.push((client.status ?? '').toUpperCase());
-  return `● ${partes.join(' · ')}`;
+  return partes.join(' · ');
 }
 
 function subtitulo(c: Client): string | null {
@@ -206,7 +207,7 @@ function Cabecalho({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; com
         </Pressable>
       )}
       <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={a.onClose} style={s.fechar}>
-        <Text style={s.fecharTexto}>✕</Text>
+        <SiClose width={20} height={20} fill="var(--text-muted)" />
       </Pressable>
     </View>
   );
@@ -297,7 +298,7 @@ function GradeMais({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
         ? <Botao rotulo="Dados travados" desabilitado estilo={s.botaoMeia} acessivel="Dados travados: cobrança emitida, nada muda até o Pago" />
         : <Botao rotulo="Editar dados" onPress={a.onEdit} estilo={s.botaoMeia} />}
       <Botao
-        rotulo={d.naRota ? '✓ Rota de hoje' : '+ Rota de hoje'}
+        rotulo={d.naRota ? 'Na rota de hoje' : '+ Rota de hoje'}
         onPress={d.naRota ? (a.onTirarDaRota ?? (() => Toast.mostrar('Já está na rota de hoje', 'ok'))) : a.onAddToRoute}
         estilo={[s.botaoMeia, d.naRota && s.naRota]}
         texto={d.naRota ? s.naRotaTexto : undefined}

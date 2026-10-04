@@ -4,6 +4,7 @@ import { IconText, IconUserGroup, IconCheckbox, IconCheckboxChecked} from '../co
 import { Alert } from '../components/Alert';
 import { useSellerClassification, precisaDeIdHubspot } from '../hooks/useSellerClassification';
 import type { SellerStatus } from '../hooks/useAllSellers';
+import { IconChevronDown as SiDown } from '../components/icons';
 
 // "👥 Vendedores & usuários" (Configuracoes → "Area do gestor"): o gestor define quem é vendedor
 // ativo, quem é usuário comum (sem meta) e quem não é vendedor. Aplica nos
@@ -47,7 +48,7 @@ export function SellerClassificationCard() {
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
         <IconText Icone={IconUserGroup} style={styles.title} tone="onSurface">Vendedores & usuários</IconText>
-        <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
+        <View style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}><SiDown width={18} height={18} fill="var(--text-muted)" /></View>
       </TouchableOpacity>
 
       {open && (

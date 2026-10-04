@@ -27,6 +27,7 @@ import { supabase } from '../integrations/supabase/client';
 import { comprimir, enviarFoto, escolherFoto } from '../utils/fotoVisita';
 import { gravarFichaNoBanco, linhaDaFicha, type LinhaFicha } from '../utils/fichaNoBanco';
 import { CampoData } from '../components/CampoData';
+import { IconClose as SiClose, IconCheck as SiCheck, IconChevronDown as SiDown } from '../components/icons';
 
 export type CamposCadastro = { empresa?: string; telefone?: string; categoria?: string };
 
@@ -307,7 +308,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                   <Text style={s.subtitulo} numberOfLines={1}>{`${nome} · toque ${toque} de 3`}</Text>
                 </View>
                 <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={fechar} style={s.fechar}>
-                  <Text style={s.fecharTexto}>✕</Text>
+                  <SiClose width={20} height={20} fill="var(--text-muted)" />
                 </Pressable>
               </View>
               <ScrollView contentContainerStyle={s.corpo} keyboardShouldPersistTaps="handled">
@@ -365,7 +366,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
 
                 {sugerida && (
                   <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: f.moverEtapa }} onPress={() => set({ moverEtapa: !f.moverEtapa })} style={s.etapa}>
-                    <View style={[s.caixa, f.moverEtapa && s.caixaMarcada]}>{f.moverEtapa && <Text style={s.caixaV}>✓</Text>}</View>
+                    <View style={[s.caixa, f.moverEtapa && s.caixaMarcada]}>{f.moverEtapa && <SiCheck width={14} height={14} fill="#FFFFFF" />}</View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={s.etapaTitulo}>{`Mover para ${ROTULO_ETAPA[sugerida]}`}</Text>
                       <Text style={s.ajuda}>
@@ -384,7 +385,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                       ? <Text style={s.completarAlerta}>Saia com nome e horário de quem decide</Text>
                       : <Text style={s.ajuda}>opcional · nunca trava a visita</Text>}
                   </View>
-                  <Text style={s.seta}>{completar ? '▴' : '▾'}</Text>
+                  <View style={{ transform: [{ rotate: completar ? '180deg' : '0deg' }] }}><SiDown width={18} height={18} fill="var(--text-muted)" /></View>
                 </Pressable>
 
                 {completar && (
@@ -481,7 +482,8 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
           ) : (
             <View style={s.salvo}>
               <View style={s.salvoTopo}>
-                <Text style={s.salvoTitulo} numberOfLines={1}>{`✓ Visita registrada · ${nome}`}</Text>
+                <SiCheck width={18} height={18} fill="var(--tint-green-text)" />
+                <Text style={[s.salvoTitulo, { flex: 1 }]} numberOfLines={1}>{`Visita registrada · ${nome}`}</Text>
                 {fase === 'desfazer' ? (
                   <Pressable accessibilityRole="button" onPress={desfazer} style={s.desfazer}>
                     <Text style={s.desfazerTexto}>Desfazer</Text>
@@ -497,7 +499,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                 <Text style={[s.ajuda, { color: problemas.some((p) => p.estado === 'falhou') ? 'var(--vermelho-texto)' : 'var(--verde-texto)' }]}>
                   {problemas.length === 0
                     ? 'Salvo · HubSpot e Cockpit atualizados'
-                    : problemas.map((p) => `${p.estado === 'fila' ? '↑' : p.estado === 'falhou' ? '✕' : '–'} ${p.rotulo}${p.detalhe ? `: ${p.detalhe}` : ''}`).join('\n')}
+                    : problemas.map((p) => `${p.estado === 'fila' ? 'Na fila' : p.estado === 'falhou' ? 'Falhou' : 'Pendente'} · ${p.rotulo}${p.detalhe ? `: ${p.detalhe}` : ''}`).join('\n')}
                 </Text>
               )}
               {proxima && (

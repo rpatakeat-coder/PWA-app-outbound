@@ -202,6 +202,7 @@ import { fetchSlaCandidate } from './src/utils/slaCandidate';
 import { slaForStage, slaStatus, type SlaDays } from './src/utils/sla';
 import { useRouteConfig } from './src/hooks/useRouteConfig';
 import { useSellerGoals } from './src/hooks/useSellerGoals';
+import { IconCheck as SiCheck, IconChevronDown as SiDown, IconChevronLeft as SiLeft } from './src/components/icons';
 
 // Sem essas opcoes valem os padroes do react-query — `staleTime: 0` e
 // `refetchOnWindowFocus: true` —, que num PWA de celular sao o pior caso:
@@ -731,7 +732,7 @@ function RouteMarker({
     >
       <View style={markerStyles.container}>
         <View style={[markerStyles.routePin, { backgroundColor: cor }]}>
-          <Text style={markerStyles.routePinNumber}>{done ? '✓' : position}</Text>
+          {done ? <SiCheck width={16} height={16} fill="#FFFFFF" /> : <Text style={markerStyles.routePinNumber}>{position}</Text>}
         </View>
         <View style={[markerStyles.routeArrow, { borderTopColor: cor }]} />
       </View>
@@ -1089,8 +1090,6 @@ function MainApp() {
   // até a pessoa abrir a aba, e o da fila (3) depois. Mesmo cache e mesma chave da tela.
   const filaNaTela = useQuery({ queryKey: ['fila_tarefas'], enabled: !!profile && profile.role !== 'view', staleTime: 60_000, queryFn: buscarFila });
   const naFila = Array.isArray(filaNaTela.data?.itens) ? filaNaTela.data!.itens!.length : null;
-  // o sino conta o mesmo que a aba: negócios da fila com promessa vencida (auditoria 04/10/26)
-  const vencidasNaFila = Array.isArray(filaNaTela.data?.itens) ? (filaNaTela.data!.itens as Array<{ venceu?: boolean }>).filter((i) => i.venceu).length : null;
   // Config editável pelo gestor (meta/dia, SLAs, params da Conta Alvo).
   const { config: routeConfig } = useRouteConfig();
   const routeSlaDays: SlaDays = {
@@ -4880,7 +4879,7 @@ function MainApp() {
           <Text style={sharedStyles.stageAccordionTitle}>{item.title}</Text>
           <Text style={sharedStyles.stageAccordionMeta}>{item.count} leads</Text>
         </View>
-        <Text style={sharedStyles.stageAccordionChevron}>{item.expanded ? '▲' : '▼'}</Text>
+        <View style={{ marginLeft: 10 }}><View style={{ transform: [{ rotate: item.expanded ? '180deg' : '0deg' }] }}><SiDown width={18} height={18} fill="var(--text-muted)" /></View></View>
       </TouchableOpacity>
     );
   }, [renderClientItem]);
@@ -5135,7 +5134,10 @@ function MainApp() {
               {navSubtitle ? <Text style={navStyles.bottomCardSubtitle} numberOfLines={1}>{navSubtitle}</Text> : null}
               <View style={navStyles.bottomCardMetaRow}>
                 {distLabel && <IconText Icone={IconLocation} style={navStyles.bottomCardMeta} tone="onSurface">{distLabel}</IconText>}
-                <Text style={[navStyles.bottomCardMeta, { color: navStatusColor }]}>● {navStatusLabel}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: navStatusColor }} />
+                  <Text style={[navStyles.bottomCardMeta, { color: navStatusColor }]}>{navStatusLabel}</Text>
+                </View>
               </View>
               {noCoords && (
                 <Text style={navStyles.bottomCardWarning}>Este destino nao possui localizacao cadastrada.</Text>
@@ -7928,18 +7930,9 @@ function MainApp() {
         <AvisosPainel
           aoFechar={() => setAvisosAbertos(false)}
           falhas={avisos.falhas}
-          cobrancasAtrasadas={vencidasNaFila ?? (filaNaTela.isError ? tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'atrasadas').length : 0)}
-          atrasadasPerto={(() => {
-            if (!userLocation) return null;
-            let perto = 0;
-            for (const t of tarefasDoCrmParaContagem) {
-              if (grupoDaTarefa(t.venceEm, new Date()) !== 'atrasadas' || !t.clientId) continue;
-              const c = clientePorId(t.clientId);
-              if (c && c.latitude != null && c.longitude != null
-                && haversineMeters(userLocation.latitude, userLocation.longitude, Number(c.latitude), Number(c.longitude)) < 1000) perto += 1;
-            }
-            return perto;
-          })()}
+          // S1: o mesmo número do selo da aba Tarefas (a fila), e quantos estão em "Agora"
+          naFila={totalDaFila}
+          paraAgora={Array.isArray(filaNaTela.data?.itens) ? (filaNaTela.data!.itens as Array<{ grupo?: string }>).filter((i) => i.grupo === 'agora').length : null}
           gestor={avisos.gestor}
           carregando={avisos.carregando}
           aoTentarDeNovo={() => { void subirFila(true).then((n) => Toast.mostrar(n > 0 ? `✓ ${n} ${n === 1 ? 'envio subiu' : 'envios subiram'}` : 'Ainda não subiu — confira o sinal', n > 0 ? 'ok' : 'erro')); }}
@@ -8028,16 +8021,10 @@ function MainApp() {
             // Modo sol (chave) · Configurações · Sair. "Cockpit" e "Gestão" são o
             // mesmo /gestao: fica uma entrada só.
             // Escondido pro viewer, que o guard de papel ja' redireciona.
+            // S1 (handoff das abas, 04/10/26): UMA entrada de desempenho. O "Meu dia em números"
+            // foi absorvido pelo Meu desempenho (variável, hoje, semana, temporada, histórico).
             !isViewer
-              ? modoNovo
-                // Depois do menu fechar: o history.back() do Painel fecharia o novo (CLAUDE.md).
-                ? { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu dia em números', aoTocar: () => { setPerfilAberto(false); setTimeout(() => setMeuDiaAberto(true), 350); } }
-                : { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu desempenho', aoTocar: () => irParaTelaDePerfil('meu') }
-              : null,
-            // D10 (handoff v6): no mapa novo o item acima abre o Meu dia, e o Meu desempenho
-            // ficava sem caminho no celular. Entra logo abaixo.
-            !isViewer && modoNovo
-              ? { chave: 'desempenho', Icone: IconTrendingUp, rotulo: 'Meu desempenho', aoTocar: () => irParaTelaDePerfil('meu') }
+              ? { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu desempenho', aoTocar: () => irParaTelaDePerfil('meu') }
               : null,
             // "Gestão" leva pro cockpit (para a equipe inteira, ver verGestao);
             // "Meu desempenho" e a entrada que faltava no celular, onde nada
@@ -8520,7 +8507,7 @@ function MainApp() {
               <>
                 <View style={styles.modalHeader}>
                   <TouchableOpacity onPress={() => setIsPickingVendor(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Text style={styles.backButton}>‹ Voltar</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}><SiLeft width={20} height={20} fill="var(--text)" /><Text style={styles.backButton}>Voltar</Text></View>
                   </TouchableOpacity>
                   <Text style={styles.modalTitle}>Selecione o vendedor</Text>
                   <View style={{ width: 60 }} />
@@ -8596,7 +8583,7 @@ function MainApp() {
                     ]}>
                       {vendorLabel(vendorFilterHubspotId)}
                     </Text>
-                    <Text style={sharedStyles.dropdownChevron}>▾</Text>
+                    <SiDown width={18} height={18} fill="var(--text-muted)" />
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
@@ -8621,10 +8608,9 @@ function MainApp() {
                     ]}>
                       {vendorFilterHubspotId === myHubspotId ? 'Somente meus leads' : 'Todos os leads visiveis'}
                     </Text>
-                    <Text style={[
-                      sharedStyles.dropdownChevron,
-                      vendorFilterHubspotId === myHubspotId && { color: 'var(--brand-text)' },
-                    ]}>{vendorFilterHubspotId === myHubspotId ? '✓' : '○'}</Text>
+                    {vendorFilterHubspotId === myHubspotId
+                      ? <SiCheck width={18} height={18} fill="var(--brand-text)" />
+                      : <View style={{ width: 16, height: 16, borderRadius: 8, borderWidth: 1.5, borderColor: 'var(--text-muted)' }} />}
                   </TouchableOpacity>
                 )}
 

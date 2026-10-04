@@ -5,6 +5,7 @@ import { Alert } from '../components/Alert';
 import { useAllSellers } from '../hooks/useAllSellers';
 import { useSellerGoals } from '../hooks/useSellerGoals';
 import { useRouteConfig } from '../hooks/useRouteConfig';
+import { IconChevronDown as SiDown } from '../components/icons';
 
 // "🎯 Metas por vendedor" (Configuracoes → "Area do gestor", e tambem no
 // "Meu desempenho" do celular): meta DIÁRIA de visitas de cada vendedor.
@@ -48,7 +49,7 @@ export function SellerGoalsCard() {
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
         <IconText Icone={IconStar} style={styles.title} tone="onSurface">Metas por vendedor</IconText>
-        <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
+        <View style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}><SiDown width={18} height={18} fill="var(--text-muted)" /></View>
       </TouchableOpacity>
 
       {open && (

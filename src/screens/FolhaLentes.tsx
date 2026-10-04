@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Painel } from '../components/Painel';
 import type { Lente } from '../utils/lentes';
+import { IconClose as SiClose } from '../components/icons';
 
 export const COR_LENTE: Record<Lente, string> = {
   dia: '#E51A31', carteira: '#F5A524', clientes: '#16A34A', alvo: '#8B5CF6', rec: '#EC4899', queda: '#84CC16', semdono: '#FACC15', calor: '#F97316',
@@ -49,7 +50,7 @@ export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolh
       <View style={s.topo}>
         <Text style={s.titulo}>O que o mapa destaca</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={aoFechar} style={s.fechar}>
-          <Text style={s.fecharTexto}>✕</Text>
+          <SiClose width={20} height={20} fill="var(--text-muted)" />
         </Pressable>
       </View>
     }>

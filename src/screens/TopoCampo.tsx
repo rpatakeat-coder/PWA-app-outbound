@@ -10,6 +10,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { Avatar } from '../components/Avatar';
 import { IconBell, IconClose, IconSearch } from '../components/icons';
+import { IconChevronDown as SiDown } from '../components/icons';
 
 export const ALTURA_TOPO_CAMPO = 48;
 
@@ -35,7 +36,7 @@ export default function TopoCampo({ top, lente, aoAbrirLentes, busca, aoBuscar, 
         <View style={s.lente}>
           <View style={[s.bolinha, { backgroundColor: lente.cor }]} />
           <Text style={s.lenteTexto} numberOfLines={1}>{lente.rotulo}</Text>
-          <Text style={s.seta}>▾</Text>
+          <SiDown width={16} height={16} fill="var(--text-muted)" />
         </View>
       </Pressable>
       <View style={s.busca}>

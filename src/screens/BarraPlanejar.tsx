@@ -8,6 +8,7 @@ import { useAcimaDoRodape } from '../hooks/useAcimaDoRodape';
 
 import type { Client } from '../types/client';
 import { vaiAoCockpit, type DiaPlanejavel } from '../utils/planoNoMapa';
+import { IconClose as SiClose, IconUndo as SiUndo } from '../components/icons';
 
 /** noCockpit: lido na grade do Planejamento (null enquanto não leu). compromisso: a hora
  *  da visita marcada (Agenda do app ou próximo passo do CRM); null quando não é. */
@@ -140,7 +141,7 @@ export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, a
               </Pressable>
               {p.status !== 'done' && p.compromisso == null && (
                 <Pressable accessibilityRole="button" accessibilityLabel={sai ? `Manter ${nome} no dia` : `Marcar ${nome} para sair do dia`} onPress={() => aoTirar(p)} style={s.tirar} hitSlop={4}>
-                  <Text style={s.tirarTexto}>{sai ? '↺' : '✕'}</Text>
+                  {sai ? <SiUndo width={18} height={18} fill="var(--text-muted)" /> : <SiClose width={18} height={18} fill="var(--text-muted)" />}
                 </Pressable>
               )}
             </View>
@@ -156,7 +157,7 @@ export default function BarraPlanejar({ dias, dia, aoDia, paradas, carregando, a
                 <Text style={s.sub} numberOfLines={1}>{[x.client.bairro?.trim() || null, 'a confirmar', !vaiAoCockpit(x.client) ? 'sem negócio: só no app' : null].filter(Boolean).join(' · ')}</Text>
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel={`Desmarcar ${nome}`} onPress={() => aoTirar({ id: x.client.id, client: x.client, status: 'planned', noCockpit: null, compromisso: null })} style={s.tirar} hitSlop={4}>
-                <Text style={s.tirarTexto}>✕</Text>
+                <SiClose width={18} height={18} fill="var(--text-muted)" />
               </Pressable>
             </View>
           );

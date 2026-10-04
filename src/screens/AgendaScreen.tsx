@@ -28,6 +28,7 @@ import { ds, sharedStyles } from './sharedStyles';
 import { useTarefasDoCrm, type TarefaDoCrmNaTela, type TarefaParaAFicha } from '../hooks/useTarefasDoCrm';
 import { TarefaSemLeadSheet } from './TarefaSemLeadSheet';
 import { useAuth } from '../context/AuthContext';
+import { IconChevronLeft as SiLeft, IconChevronRight as SiRight } from '../components/icons';
 
 // Tela de Agenda, extraida do App.tsx (prompt 02 do handoff) — refactor puro.
 // Os estados que so' a agenda usava (semana visivel, filtro de tipo, acordeao
@@ -505,7 +506,7 @@ export function AgendaScreen({
             <>
               <View style={styles.calNav}>
                 <TouchableOpacity style={styles.calNavBotao} onPress={() => setCalSemanaOffset((v) => v - 1)}>
-                  <Text style={styles.calNavSeta}>‹</Text>
+                  <SiLeft width={22} height={22} fill="var(--text)" />
                 </TouchableOpacity>
                 <Text style={styles.calNavRotulo}>
                   {rotuloJanela}
@@ -517,7 +518,7 @@ export function AgendaScreen({
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity style={styles.calNavBotao} onPress={() => setCalSemanaOffset((v) => v + 1)}>
-                  <Text style={styles.calNavSeta}>›</Text>
+                  <SiRight width={22} height={22} fill="var(--text)" />
                 </TouchableOpacity>
                 {contagemTipo.length > 1 && contagemTipo.map(({ tipo, total }) => {
                   const ativo = agendaTypeFilter === tipo;

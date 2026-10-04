@@ -11,6 +11,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { descartar, ouvirFila, subirFila, type ItemFila } from '../utils/filaOffline';
+import { IconCheckCircle as SiOk } from './icons';
 
 export type TipoToast = 'ok' | 'fila' | 'erro';
 
@@ -133,7 +134,9 @@ export function ToastHost() {
       {pedido && (
         <View style={[styles.toast, { position: FIXO }, pedido.tipo === 'erro' ? styles.toastErro : pedido.tipo === 'fila' ? styles.toastFila : styles.toastOk]}
           accessibilityRole="alert" accessibilityLiveRegion="polite">
-          <Text style={styles.toastTexto} numberOfLines={2}>{pedido.texto}</Text>
+          {/* S1 (handoff das abas): o "✓" que vinha no texto vira o ícone do toast de sucesso */}
+          {pedido.tipo === 'ok' && <SiOk width={20} height={20} fill="var(--tint-green-text)" />}
+          <Text style={styles.toastTexto} numberOfLines={2}>{pedido.texto.replace(/^✓\s*/, '')}</Text>
           {pedido.acao && (
             <Pressable onPress={() => { const a = pedido.acao; atual = null; render((n) => n + 1); a?.onPress(); }} style={styles.toastBotao}>
               <Text style={styles.toastBotaoTexto}>{pedido.acao.rotulo}</Text>

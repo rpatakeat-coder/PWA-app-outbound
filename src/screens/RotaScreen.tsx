@@ -45,6 +45,7 @@ import {
 } from '../components/icons';
 import { MinhaDailyCard } from './MinhaDailyCard';
 import { ds, sharedStyles } from './sharedStyles';
+import { IconCheck as SiCheck, IconChevronDown as SiDown } from '../components/icons';
 
 // Tela de Rota, extraida do App.tsx (prompt 02 do handoff) — refactor puro.
 // O estado da rota (stops, filtros, geracao) continua no App.tsx porque o
@@ -440,7 +441,7 @@ export function RotaScreen({
           ]}>
             {vendorLabel(routeVendorFilterHubspotId)}
           </Text>
-          <Text style={sharedStyles.dropdownChevron}>▾</Text>
+          <SiDown width={18} height={18} fill="var(--text-muted)" />
         </TouchableOpacity>
       ) : (
         <TouchableOpacity
@@ -465,10 +466,9 @@ export function RotaScreen({
           ]}>
             {routeVendorFilterHubspotId === myHubspotId ? 'Somente meus leads' : 'Todos os leads do recorte'}
           </Text>
-          <Text style={[
-            sharedStyles.dropdownChevron,
-            routeVendorFilterHubspotId === myHubspotId && { color: 'var(--brand-text)' },
-          ]}>{routeVendorFilterHubspotId === myHubspotId ? '✓' : '○'}</Text>
+          {routeVendorFilterHubspotId === myHubspotId
+            ? <SiCheck width={18} height={18} fill="var(--brand-text)" />
+            : <View style={{ width: 16, height: 16, borderRadius: 8, borderWidth: 1.5, borderColor: 'var(--text-muted)' }} />}
         </TouchableOpacity>
       )}
 

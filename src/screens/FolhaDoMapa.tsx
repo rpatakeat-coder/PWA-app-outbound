@@ -16,6 +16,7 @@ import { distanciaTexto, ir } from './CardLeadNovo';
 import { IconArrowDown, IconArrowUp, useIconColors } from '../components/icons';
 
 import { ordenarItens, quedaCurta, type ItemFolha } from '../utils/cardNovo';
+import { IconChevronDown as SiDown, IconClose as SiClose, IconChevronRight as SiRight } from '../components/icons';
 
 export type { ItemFolha };
 
@@ -176,7 +177,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
       <Pressable ref={acima.ref} accessibilityRole="button" accessibilityLabel={`Mostrar a próxima porta. ${feitasTexto} de ${metaR} visitas hoje`}
         onPress={() => setRecolhida(false)} onLayout={medir} style={[s.pilulaMini, { bottom: chao + 8 + acima.ajuste }]}>
         <Text style={s.pilulaMiniTexto}>{`${feitasTexto}/${metaR}`}</Text>
-        <Text style={s.pilulaMiniSeta}>▴</Text>
+        <View style={{ transform: [{ rotate: true ? '180deg' : '0deg' }] }}><SiDown width={18} height={18} fill="var(--text-muted)" /></View>
       </Pressable>
     );
   }
@@ -185,7 +186,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
     return (
       <View ref={acima.ref} style={[s.pilula, { bottom: chao + 8 + acima.ajuste }]} accessibilityLabel="Próxima porta" onLayout={medir} {...arrasto.panHandlers}>
         <Pressable accessibilityRole="button" accessibilityLabel="Recolher a barra da próxima porta" onPress={() => setRecolhida(true)} hitSlop={8} style={s.pilulaRecolher}>
-          <Text style={s.pilulaMiniSeta}>▾</Text>
+          <SiDown width={18} height={18} fill="var(--text-muted)" />
         </Pressable>
         {proxima ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${proxima.c.empresa?.trim() || proxima.c.nome}`} onPress={() => onAbrir(proxima.c)} style={s.pilulaTexto}>
@@ -243,7 +244,10 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
           {proxima ? `PRÓXIMA PORTA · ${proxima.plano} DO PLANO` : planoTotal ? 'PLANO DE HOJE' : 'AGORA, PERTO DE VOCÊ'}
         </Text>
         <Pressable accessibilityRole="button" accessibilityLabel={`${feitasTexto} de ${metaVisitas} visitas hoje`} onPress={aoProgresso} hitSlop={10} style={{ paddingVertical: 13, marginVertical: -13 }}>
-          <Text style={s.progresso}>{`${feitasTexto} de ${metaVisitas} visitas${visitasProvadas != null && visitasFeitas > 0 ? ` · ${visitasProvadas} ${visitasProvadas === 1 ? 'provada' : 'provadas'}` : ''} ›`}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+            <Text style={s.progresso}>{`${feitasTexto} de ${metaVisitas} visitas${visitasProvadas != null && visitasFeitas > 0 ? ` · ${visitasProvadas} ${visitasProvadas === 1 ? 'provada' : 'provadas'}` : ''}`}</Text>
+            <SiRight width={16} height={16} fill="var(--text-muted)" />
+          </View>
         </Pressable>
       </View>
 
@@ -284,7 +288,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
             <Text style={s.nestaAreaSub}>{`Lente ${rotuloLente} · melhor candidato primeiro`}</Text>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Fechar a lista da quadra" onPress={quadra.aoFechar} style={s.quadraFechar}>
-            <Text style={s.quadraFecharTexto}>✕</Text>
+            <SiClose width={20} height={20} fill="var(--text-muted)" />
           </Pressable>
         </View>
       ) : (
@@ -300,7 +304,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
           )}
           {!embutida && (
             <Pressable accessibilityRole="button" accessibilityLabel="Recolher a lista" onPress={() => setAberta(false)} style={s.quadraFechar}>
-              <Text style={s.quadraFecharTexto}>✕</Text>
+              <SiClose width={20} height={20} fill="var(--text-muted)" />
             </Pressable>
           )}
         </View>

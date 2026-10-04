@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View 
 import { IconText, IconSettings } from '../components/icons';
 import { Alert } from '../components/Alert';
 import { useRouteConfig, type RouteConfig } from '../hooks/useRouteConfig';
+import { IconChevronDown as SiDown } from '../components/icons';
 
 // Card "⚙️ Config Rota do dia" (Configuracoes → "Area do gestor"): edita raio/nota/avaliações da
 // Conta Alvo, meta de visitas/dia e os SLAs por etapa. Salva na route_config
@@ -77,7 +78,7 @@ export function RouteConfigCard() {
     <View style={styles.card}>
       <TouchableOpacity style={styles.header} onPress={() => setOpen((o) => !o)} activeOpacity={0.7}>
         <IconText Icone={IconSettings} style={styles.title} tone="onSurface">Config Rota do dia</IconText>
-        <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
+        <View style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}><SiDown width={18} height={18} fill="var(--text-muted)" /></View>
       </TouchableOpacity>
 
       {open && (

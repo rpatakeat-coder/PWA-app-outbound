@@ -18,6 +18,7 @@ import {
   type Cobranca,
 } from '../utils/cobranca';
 import { negocioAcao } from '../utils/negocioAcao';
+import { IconClose as SiClose } from '../components/icons';
 
 type Props = {
   visivel: boolean;
@@ -159,7 +160,7 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
               <Text style={s.sub} numberOfLines={1}>{passo === 4 ? c.dealname : `${c.dealname || 'Negócio'} · passo ${passo} de 3 · ${['Cliente', 'Contrato', 'Emitir'][passo - 1]}`}</Text>
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={onFechar} style={s.fechar}>
-              <Text style={s.fecharTexto}>✕</Text>
+              <SiClose width={20} height={20} fill="var(--text-muted)" />
             </Pressable>
           </View>
           {passo <= 3 && (
@@ -191,12 +192,12 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
                 <Text style={s.rotulo}>Pacote contratado</Text>
                 <View style={s.chips}>
                   {(todosPacotes ? PACOTES : PACOTES_MAIS_USADOS).map((p) => chip(p, p, c.pacote_contratado === p, () => set({ pacote_contratado: p })))}
-                  {!todosPacotes && chip('todos', 'Ver todos ›', false, () => setTodosPacotes(true))}
+                  {!todosPacotes && chip('todos', 'Ver todos', false, () => setTodosPacotes(true))}
                 </View>
                 <Text style={s.rotulo}>Adicionais</Text>
                 <View style={s.chips}>
                   {(todosAdicionais ? ADICIONAIS : ADICIONAIS_MAIS_USADOS).map((a) => chip(a, a, c.adicional.includes(a), () => set({ adicional: alternarAdicional(c.adicional, a) })))}
-                  {!todosAdicionais && chip('todos', 'Ver todos ›', false, () => setTodosAdicionais(true))}
+                  {!todosAdicionais && chip('todos', 'Ver todos', false, () => setTodosAdicionais(true))}
                 </View>
                 <Text style={s.rotulo}>Período</Text>
                 <View style={s.segmento}>{PERIODOS.map((p) => chip(p, p, c.periodo_contratado === p, () => set({ periodo_contratado: p })))}</View>
