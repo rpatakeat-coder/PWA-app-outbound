@@ -160,7 +160,11 @@ export function subirFila(incluirFalhas = false): Promise<number> {
         await remover(item.acaoId);
         enviados++;
       } catch (err) {
-        if (ehErroDeRede(err)) {
+        // sessão vencida durante o sem-sinal (o evento online chega antes do token renovar): tenta de
+        // novo depois, não marca como falha (auditoria do GPS, 04/10)
+        const msg = String((err as { message?: string; code?: string })?.message ?? err) + ' ' + String((err as { code?: string })?.code ?? '');
+        const sessaoVencida = /jwt expired|JWT|PGRST301|28000|não autenticado|nao autenticado|401/i.test(msg);
+        if (ehErroDeRede(err) || sessaoVencida) {
           await gravar({ ...item, tentativas: item.tentativas + 1, estado: 'na_fila' });
           break; // sem sinal: o resto também não sobe agora, e a ordem se mantém
         }

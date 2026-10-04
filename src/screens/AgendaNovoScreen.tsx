@@ -24,6 +24,7 @@ import { compromissosDoDia, diasDaFaixa, estadoDasParadas, rotuloDoDia } from '.
 import type { Client, ClientMeeting, FieldRouteStopWithClient } from '../types/client';
 import AgendaDiaTopo from './AgendaDiaTopo';
 import AgendaSemana from './AgendaSemana';
+import { useLayout } from '../hooks/useLayout';
 
 type Props = {
   /** Dia que abre selecionado (o "Ver na Agenda" da ficha de rua). */
@@ -70,7 +71,11 @@ export default function AgendaNovoScreen({
   aoRoteirizar, roteirizando, aoMontarDia, montandoDia, telefoneDe, base,
   umApp = false, ownerId = null, provadasHoje = null, visitasHoje = 0, hubspotEm = null, aoAbrirFeitas, aoEscolherNoMapa,
 }: Props) {
-  const [vista, setVista] = useState<'dia' | 'semana'>('dia');
+  const [vistaEscolhida, setVista] = useState<'dia' | 'semana'>('dia');
+  // computador: Dia e Semana lado a lado (docs/11 §1); no celular, a alternância
+  const layout = useLayout();
+  const ladoALado = umApp && layout.ehDesktop;
+  const vista = ladoALado ? 'dia' : vistaEscolhida;
   const [roteirizandoDia, setRoteirizandoDia] = useState(false);
   const [registrando, setRegistrando] = useState<TarefaParaRegistrar | null>(null);
   const queryClient = useQueryClient();
@@ -234,7 +239,7 @@ export default function AgendaNovoScreen({
   };
   const meta = metaVisitasDia > 0 ? metaVisitasDia : 6;
 
-  return (
+  const telaDoDia = (
     <ScrollView style={s.tela} contentContainerStyle={s.conteudo}>
       <RegistrarTarefa
         tarefa={registrando}
@@ -242,7 +247,7 @@ export default function AgendaNovoScreen({
         aoSumir={(id) => setConcluidas((st) => new Set(st).add(`hs-${id}`))}
         aoVoltar={(id) => setConcluidas((st) => { const n = new Set(st); n.delete(`hs-${id}`); return n; })}
       />
-      {umApp && (
+      {umApp && !ladoALado && (
         <View style={s.alternancia} accessibilityRole="tablist">
           {(['dia', 'semana'] as const).map((v) => (
             <TouchableOpacity key={v} accessibilityRole="tab" accessibilityState={{ selected: vista === v }} onPress={() => setVista(v)}
@@ -448,6 +453,15 @@ export default function AgendaNovoScreen({
         <Text style={s.vazio}>Nada marcado neste dia. O “Agendar” do cartão e o próximo passo do registro caem aqui.</Text>
       )}
     </ScrollView>
+  );
+  if (!ladoALado) return telaDoDia;
+  return (
+    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: 'var(--bg)' }}>
+      <View style={{ flex: 1, minWidth: 0 }}>{telaDoDia}</View>
+      <ScrollView style={{ flex: 1, minWidth: 0, borderLeftWidth: 1, borderLeftColor: 'var(--border-soft)' }} contentContainerStyle={s.conteudo}>
+        <AgendaSemana ownerId={ownerId} hoje={hoje} aoEscolherNoMapa={aoEscolherNoMapa} />
+      </ScrollView>
+    </View>
   );
 }
 

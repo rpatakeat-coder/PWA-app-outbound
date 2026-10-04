@@ -381,6 +381,11 @@ const TASK_RULES: TaskRuleDoc[] = [
 // Abre o WhatsApp no telefone do cliente. Em mobile, o link wa.me redireciona
 // pro app nativo via universal link (whatsapp://send). Em web cai no whatsapp web.
 
+/** Espera no máximo `ms`: estourou, devolve undefined (não lança) — o que sobra roda solto. */
+function comPrazo<T>(p: Promise<T>, ms: number): Promise<T | undefined> {
+  return Promise.race([p, new Promise<undefined>((r) => setTimeout(() => r(undefined), ms))]);
+}
+
 const getClientPrimaryName = (client: Client) => client.empresa?.trim() || client.nome;
 
 // Cor de texto legivel sobre um fundo qualquer (decisao M1-DECISOES-3 §2).
@@ -4105,6 +4110,7 @@ function MainApp() {
     if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.geolocation) {
       return new Promise((resolve, reject) => {
         let melhor: GeolocationPosition | null = null;
+        let ultimoErro: GeolocationPositionError | undefined;
         let terminou = false;
         const fim = (erro?: GeolocationPositionError) => {
           if (terminou) return;
@@ -4127,10 +4133,12 @@ function MainApp() {
             if (!melhor || pos.coords.accuracy < melhor.coords.accuracy) melhor = pos;
             if (pos.coords.accuracy <= 20) fim();
           },
-          (erro) => { if (erro.code === erro.PERMISSION_DENIED || !melhor) fim(erro); },
+          // só a permissão negada encerra na hora: no iPhone o primeiro aviso costuma ser
+          // POSITION_UNAVAILABLE e o fix chega 1–2 s depois (auditoria do GPS, 04/10). O resto espera o teto.
+          (erro) => { ultimoErro = erro; if (erro.code === erro.PERMISSION_DENIED) fim(erro); },
           { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 },
         );
-        const teto = setTimeout(() => fim(), 10000);
+        const teto = setTimeout(() => fim(ultimoErro), 10000);
         // Aos 4 s, com ±40 m ou melhor, já dá: não segura o vendedor na porta.
         setTimeout(() => { if (melhor && melhor.coords.accuracy <= 40) fim(); }, 4000);
       });
@@ -4293,7 +4301,18 @@ function MainApp() {
       // fazer o check-in. Só como saída, no mapa novo, registra com foto de
       // prova: visita declarada, sem lugar.
       let semGps = false;
-      const { status: permStatus } = await Location.requestForegroundPermissionsAsync();
+      // NO NAVEGADOR (o PWA) a permissão se lê sem pedir uma leitura inteira: o expo-location faz um
+      // getCurrentPosition sem prazo aqui e o Cheguei podia girar sem fim (auditoria do GPS, 04/10).
+      // 'prompt' segue: o getBestFix abre o pedido do navegador e trata a recusa.
+      let permStatus: string = 'granted';
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && (navigator as Navigator & { permissions?: Permissions }).permissions?.query) {
+        try {
+          const p = await comPrazo((navigator as Navigator & { permissions: Permissions }).permissions.query({ name: 'geolocation' as PermissionName }), 2000);
+          if (p && p.state === 'denied') permStatus = 'denied';
+        } catch { /* sem a API: o getBestFix decide */ }
+      } else {
+        permStatus = (await Location.requestForegroundPermissionsAsync()).status;
+      }
       if (permStatus !== 'granted') {
         // requestForegroundPermissionsAsync só abre o prompt do sistema na
         // primeira vez. Se o usuário já negou antes, ele só retorna 'denied'
@@ -4353,7 +4372,7 @@ function MainApp() {
       let position: Location.LocationObject | null = null;
       let semLeitura = semGps;
       try {
-        if (!semGps) position = await getBestFix();
+        if (!semGps) { Toast.mostrar('Lendo o GPS…', 'fila'); position = await getBestFix(); }
       } catch (err: any) {
         // Sem GPS agora: vale a última posição que o mapa leu; sem nenhuma,
         // vai sem lugar (0115). Nos dois casos, declarada e com foto.
@@ -4369,7 +4388,10 @@ function MainApp() {
         if (r !== 'foto') return;
         fotoProva = await tirarFotoDeProva();
         if (!fotoProva) return;
-        if (userLocation) position = { coords: { latitude: userLocation.latitude, longitude: userLocation.longitude, accuracy: null } } as unknown as Location.LocationObject;
+        // SEM LEITURA, SEM POSIÇÃO (auditoria do GPS, 04/10): antes ia a posição de quando o app abriu —
+        // horas e quilômetros de diferença — e, caindo dentro do raio, o servidor contava como visita
+        // provada por GPS. Vai sem coordenada: visita com foto (declarada), como o servidor já aceita.
+        position = null;
         semLeitura = true;
       }
 
@@ -4433,11 +4455,13 @@ function MainApp() {
               + (modoNovo ? 'Ou registre com uma foto da porta como prova.' : 'Depois volte pro app e tente de novo.'),
               [
                 { text: 'Fechar', valor: 'nao', style: 'cancel' },
+                { text: 'Tentar de novo', valor: 'denovo' },
                 { text: 'Abrir configurações', valor: 'config' },
                 ...(modoNovo ? [{ text: 'Registrar com foto', valor: 'foto' }] : []),
               ],
             );
             if (r === 'config') { abrirAjustesDeLocalizacao(); return; }
+            if (r === 'denovo') { setTimeout(() => { void handleMarkAsVisitedRef.current(client, onDone); }, 50); return; }
             if (r !== 'foto') return;
             fotoProva = await tirarFotoDeProva();
             if (!fotoProva) return;
@@ -4530,15 +4554,29 @@ function MainApp() {
         ]);
       } catch (err) {
         if (!ehErroDeRede(err)) throw err;
-        await enfileirar({
-          acaoId, tipo: 'checkin', rotulo: `Check-in · ${nomeDoLead}`, criadoEm: feitoEm,
-          payload: { clientId: client.id, latitude: userLat, longitude: userLon, accuracyM: fixAccuracy, feitoEm, corrigirPino, declarada },
-        });
-        Toast.mostrar(`Sem sinal · check-in em ${nomeDoLead} na fila, sobe sozinho`, 'fila');
-        marcarUltimoCheckin(client.id, userLat, userLon);
-        if (fotoProva) Toast.mostrar('A foto de prova não subiu sem sinal: tire de novo no registro da visita quando voltar o sinal.', 'erro');
-        onDone?.();
-        return;
+        // O PRAZO MEDE TAMBÉM O HUBSPOT (auditoria do GPS, 04/10): a RPC grava em ~1 s, mas a mesma
+        // chamada espera a tarefa e a etapa no HubSpot. Estourou o prazo com sinal? Confere no banco
+        // pelo acaoId: gravou, segue como sucesso (foto e ficha) e o HubSpot termina em segundo plano.
+        let gravouNoBanco = false;
+        if (!(typeof navigator !== 'undefined' && navigator.onLine === false) && /timeout do check-in/.test(String((err as Error)?.message ?? ''))) {
+          const r = await comPrazo(Promise.resolve(supabase.from('client_visits').select('id').eq('acao_id', acaoId).limit(1)), 4000);
+          gravouNoBanco = !!(r && Array.isArray(r.data) && r.data.length > 0);
+        }
+        if (gravouNoBanco) {
+          visitado = { ...client, visited_at: feitoEm } as Client;
+        } else {
+          await enfileirar({
+            acaoId, tipo: 'checkin', rotulo: `Check-in · ${nomeDoLead}`, criadoEm: feitoEm,
+            // A FOTO VAI JUNTO (auditoria do GPS, 04/10): antes ela era descartada aqui e a visita ficava
+            // "declarada sem foto" — não provada, sem os +20. O IndexedDB guarda o Blob.
+            payload: { clientId: client.id, latitude: userLat, longitude: userLon, accuracyM: fixAccuracy, feitoEm, corrigirPino, declarada,
+              dealId: client.id_hubspot ?? null, ...(fotoProva ? { foto: fotoProva } : {}) },
+          });
+          Toast.mostrar(`Sem sinal · check-in em ${nomeDoLead}${fotoProva ? ' com a foto' : ''} na fila, sobe sozinho`, 'fila');
+          marcarUltimoCheckin(client.id, userLat, userLon);
+          onDone?.();
+          return;
+        }
       }
       marcarUltimoCheckin(client.id, userLat, userLon);
       // A foto de prova sobe já, sem depender da ficha: é ela que sustenta a
@@ -4546,7 +4584,8 @@ function MainApp() {
       let fotoProvaPendente: Blob | null = null;
       if (fotoProva) {
         try {
-          await enviarFotoVisita({ blob: fotoProva, ownerId: myHubspotId, dealId: visitado.id_hubspot ?? client.id_hubspot ?? null, clientId: client.id, lat: userLat, lng: userLon });
+          const subiu = await comPrazo(enviarFotoVisita({ blob: fotoProva, ownerId: myHubspotId, dealId: visitado.id_hubspot ?? client.id_hubspot ?? null, clientId: client.id, lat: userLat, lng: userLon }).then(() => true), 8000);
+          if (subiu !== true) fotoProvaPendente = fotoProva;
         } catch {
           fotoProvaPendente = fotoProva;
         }
@@ -4558,11 +4597,11 @@ function MainApp() {
       if (!isMonitoringRoute) {
         const stop = fieldOps.stops.find((s) => s.client_id === client.id && s.status !== 'done');
         if (stop) {
-          try { await fieldOps.markStopDone.mutateAsync(stop); } catch { /* não bloqueia o check-in */ }
+          try { await comPrazo(fieldOps.markStopDone.mutateAsync(stop), 6000); } catch { /* não bloqueia o check-in */ }
         } else if (modoNovo && !fieldOps.stops.some((s) => s.client_id === client.id)) {
           // Mapa novo: check-in fora do plano entra na rota de hoje como parada
           // feita (a Agenda e o "X de N feito" passam a contar essa visita).
-          try { await fieldOps.adicionarParadaFeita.mutateAsync(client); } catch { /* não bloqueia o check-in */ }
+          try { await comPrazo(fieldOps.adicionarParadaFeita.mutateAsync(client), 6000); } catch { /* não bloqueia o check-in */ }
         }
       }
       // O desfecho so' faz sentido pra LEAD com deal: visitar cliente/churn e'
@@ -4603,14 +4642,17 @@ function MainApp() {
         let declaradaDaVisita = declarada;
         let fotoNoCheckin = !!fotoProva && !fotoProvaPendente;
         try {
-          const { data: ult } = await supabase.from('client_visits').select('acao_id, declarada, visited_at')
-            .eq('client_id', client.id).order('visited_at', { ascending: false }).limit(1);
+          // com prazo: sinal ruim não segura a ficha (auditoria do GPS, 04/10)
+          const lido = await comPrazo(Promise.resolve(supabase.from('client_visits').select('acao_id, declarada, visited_at')
+            .eq('client_id', client.id).order('visited_at', { ascending: false }).limit(1)), 4000);
+          const ult = lido?.data;
           const v = ult?.[0];
           if (v && v.acao_id !== acaoId) {
             declaradaDaVisita = v.declarada === true;
             if (!fotoNoCheckin) {
               const desde = new Date(new Date(v.visited_at as string).getTime() - 60000).toISOString();
-              const { data: fotos } = await supabase.from('fotos_visita').select('id').eq('client_id', client.id).gte('criado_em', desde).limit(1);
+              const lidas = await comPrazo(Promise.resolve(supabase.from('fotos_visita').select('id').eq('client_id', client.id).gte('criado_em', desde).limit(1)), 4000);
+              const fotos = lidas?.data;
               fotoNoCheckin = !!fotos?.length;
             }
           }
@@ -4653,6 +4695,12 @@ function MainApp() {
       corrigirPino: p.corrigirPino === true,
       declarada: p.declarada === true,
     });
+    // a foto de prova que ficou no aparelho sem sinal: sobe agora (falhar por rede devolve o item à
+    // fila; o check-in repetido não duplica — o acaoId já está gravado)
+    if (typeof Blob !== 'undefined' && p.foto instanceof Blob) {
+      await enviarFotoVisita({ blob: p.foto, ownerId: myHubspotId, dealId: (p.dealId as string | null) ?? null, clientId,
+        lat: p.latitude == null ? null : Number(p.latitude), lng: p.longitude == null ? null : Number(p.longitude) });
+    }
     if (!isMonitoringRoute) {
       const stop = fieldOps.stops.find((s) => s.client_id === clientId && s.status !== 'done');
       if (stop) {
