@@ -617,7 +617,7 @@ export default function AgendaNovoScreen({
       {ficaram.map((p) => (
         <View key={p.id} style={s.ficou}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={s.nomeLinha} numberOfLines={1}>{`${p.client ? nomeDoLead(p.client) : 'Parada'} ficou para trás`}</Text>
+            <Text style={s.nomeLinha} numberOfLines={2}>{`${p.client ? nomeDoLead(p.client) : 'Parada'} ficou para trás`}</Text>
             <Text style={s.subLinha} numberOfLines={1}>{`parada ${estado.indexOf(p) + 1} do plano · sem visita hoje`}</Text>
           </View>
           <Pressable accessibilityRole="button" style={s.botaoLinha} onPress={() => porAmanha(p)}>

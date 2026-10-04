@@ -504,7 +504,8 @@ const s = StyleSheet.create({
   chipTexto: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
   chipTextoAtivo: { color: '#FFFFFF' },
   proxima: { backgroundColor: '#5B0A10', borderRadius: 16, padding: 16, gap: 8 },
-  proximaKicker: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: 'var(--vermelho-texto)' },
+  // fundo vinho fixo nos dois temas: o rótulo usa um rosa fixo (no sol, --vermelho-texto sumia)
+  proximaKicker: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#FCA5A5' },
   proximaMotivo: { fontSize: 13, lineHeight: 18, color: '#FECACA' },
   proximaTitulo: { fontSize: 15, lineHeight: 21, fontWeight: '700', color: '#FFFFFF' },
   proximaLinha: {

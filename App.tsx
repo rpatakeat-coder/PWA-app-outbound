@@ -6828,7 +6828,8 @@ function MainApp() {
     // No computador o Playbook não aparecia (auditoria das abas, 04/10/26); a tela já existia.
     { aba: 'playbook', rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, visivel: !isViewer },
     { aba: 'cockpit', rotulo: 'Gestão', Icone: IconBarGraph, visivel: verGestao },
-    { aba: 'meu', rotulo: 'Meu desempenho', Icone: IconTrendingUp, visivel: !canViewGestor && !isViewer },
+    // D1: na lateral para todos (o gestor que vende também tem variável e temporada); só o "view" não
+    { aba: 'meu', rotulo: 'Meu desempenho', Icone: IconTrendingUp, visivel: !isViewer },
   ];
 
   // As duas constantes de iniciais que viviam aqui (`iniciaisWeb` da sidebar e

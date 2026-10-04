@@ -643,13 +643,21 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
       {/* A3 (handoff das abas): 4 colunas fixas, rótulo em cima e contagem embaixo, 52 px —
           nada corta em 390. "Perto de mim" fica só no computador. */}
       <View style={s.filtrosGrade}>
-        {((layout.ehDesktop ? [['tudo', 'Tudo'], ['ligar', 'Ligar'], ['visitar', 'Visitar'], ['whatsapp', 'WhatsApp'], ['perto', 'Perto de mim']] : [['tudo', 'Tudo'], ['ligar', 'Ligar'], ['visitar', 'Visitar'], ['whatsapp', 'WhatsApp']]) as Array<[Filtro, string]>).map(([f, r]) => (
+        {([['tudo', 'Tudo'], ['ligar', 'Ligar'], ['visitar', 'Visitar'], ['whatsapp', 'WhatsApp']] as Array<[Filtro, string]>).map(([f, r]) => (
           <Pressable key={f} accessibilityRole="button" accessibilityState={{ selected: filtro === f }} accessibilityLabel={`${r}: ${contagem(f)}`} onPress={() => setFiltro(f)} style={[s.filtroCelula, filtro === f && s.chipFiltroAtivo]}>
             <Text style={[s.filtroRotulo, filtro === f && s.chipFiltroTextoAtivo]} numberOfLines={1}>{r}</Text>
             <Text style={s.filtroN}>{contagem(f)}</Text>
           </Pressable>
         ))}
       </View>
+      {/* No computador, "Perto de mim" fica numa pílula embaixo: cinco colunas cortavam o
+          WhatsApp a 1280 (auditoria 04/10/26). */}
+      {layout.ehDesktop && (
+        <Pressable accessibilityRole="button" accessibilityState={{ selected: filtro === 'perto' }} onPress={() => setFiltro(filtro === 'perto' ? 'tudo' : 'perto')}
+          style={[s.chipFiltro, { alignSelf: 'flex-start', minHeight: 36 }, filtro === 'perto' && s.chipFiltroAtivo]}>
+          <Text style={s.chipFiltroTexto}>Perto de mim <Text style={s.chipFiltroN}>{contagem('perto')}</Text></Text>
+        </Pressable>
+      )}
     </View>
   );
 
