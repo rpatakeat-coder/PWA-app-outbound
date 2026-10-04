@@ -223,7 +223,7 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas,
             <Text style={estilosWeb.kpiValor}>{m.visited.toLocaleString('pt-BR')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={estilosWeb.kpiCartao} onPress={() => open('Demos agendadas', 'meetings')}>
-            <Text style={estilosWeb.kpiRotulo}>{`Demos ${periodLabel}`}</Text>
+            <Text style={estilosWeb.kpiRotulo}>{`Demos marcadas ${periodLabel}`}</Text>
             <Text style={estilosWeb.kpiValor}>{m.meetings_scheduled.toLocaleString('pt-BR')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={estilosWeb.kpiCartao} onPress={() => open('Fechamentos', 'won')}>
@@ -277,7 +277,7 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas,
       {!layout.ehLargo && m && (
         <View style={styles.kpiGrade}>
           <Kpi rotulo={`Visitas ${periodLabel}`} valor={m.visited.toLocaleString('pt-BR')} onPress={() => open('Minhas visitas', 'visited')} />
-          <Kpi rotulo={`Demos ${periodLabel}`} valor={m.meetings_scheduled.toLocaleString('pt-BR')} onPress={() => open('Minhas reuniões', 'meetings')} />
+          <Kpi rotulo={`Demos marcadas ${periodLabel}`} valor={m.meetings_scheduled.toLocaleString('pt-BR')} onPress={() => open('Minhas reuniões', 'meetings')} />
           <Kpi
             rotulo={`Conversão ${periodLabel}`}
             valor={m.visited > 0 ? `${Math.round((m.won_in_period / m.visited) * 100)}%` : '—'}
@@ -295,20 +295,19 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas,
         </View>
       )}
 
-      {!layout.ehLargo && daily?.souDeCampo && daily.semana.length > 0 && (() => {
-        const total = daily.semana.reduce((n, d) => n + d.visitas, 0);
+      {!layout.ehLargo && daily?.souDeCampo && daily.estaSemana.length > 0 && (() => {
+        const total = daily.estaSemana.reduce((n, d) => n + d.visitas, 0);
         return (
           <View style={styles.calorCartao}>
             <View style={styles.calorCabecalho}>
               <Text style={styles.calorTitulo}>VISITAS NA SEMANA</Text>
               <Text style={styles.calorTotal}>{total}</Text>
             </View>
-            {/* Celulas FLUIDAS (aspect-ratio 1), nao os 28px fixos do desktop.
-                A serie e' `daily.semana`: os ultimos dias UTEIS, entao sao 5 e
-                nao os 7 do desenho — nao ha' dado de fim de semana, e desenhar
-                sabado e domingo vazios faria "nao medido" parecer "zero". */}
+            {/* Celulas FLUIDAS (aspect-ratio 1). A serie e' `daily.estaSemana`: de segunda ate'
+                hoje, a mesma janela do meu_placar (o total bate com o Meu dia). Sabado e
+                domingo so' entram quando teve visita: vazio ali seria "nao medido", nao zero. */}
             <View style={styles.calorGrade}>
-              {daily.semana.map((d) => {
+              {daily.estaSemana.map((d) => {
                 const ehHoje = d.dia === daily.hoje.dia;
                 const vazio = d.visitas === 0;
                 const claro = d.visitas >= 1 && d.visitas <= 2;
@@ -337,7 +336,7 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas,
               })}
             </View>
             <View style={styles.calorLegenda}>
-              {daily.semana.map((d) => {
+              {daily.estaSemana.map((d) => {
                 const ehHoje = d.dia === daily.hoje.dia;
                 return (
                   <Text key={d.dia} style={[styles.calorDia, ehHoje && styles.calorDiaHoje]}>

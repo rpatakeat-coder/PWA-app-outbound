@@ -26,6 +26,19 @@ const fmtDia = new Intl.DateTimeFormat('en-CA', {
 export const diaBRT = (quando: string | Date = new Date()) => fmtDia.format(new Date(quando));
 
 /** Dias uteis de `hoje` pra tras, hoje primeiro. */
+// Segunda-feira da semana de `hoje` até `hoje`, em ordem (inclui fim de semana).
+function diasDaSemanaAte(hoje: string): string[] {
+  const cursor = new Date(`${hoje}T12:00:00Z`);
+  const voltar = (cursor.getUTCDay() + 6) % 7;
+  cursor.setUTCDate(cursor.getUTCDate() - voltar);
+  const dias: string[] = [];
+  for (let i = 0; i <= voltar; i++) {
+    dias.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return dias;
+}
+
 function diasUteisAte(hoje: string, quantos: number): string[] {
   const dias: string[] = [];
   const cursor = new Date(`${hoje}T12:00:00Z`);
@@ -53,6 +66,9 @@ export interface MinhaDaily {
   hoje: DiaDaMinhaDaily;
   /** Os 5 ultimos dias uteis, do mais antigo pro mais novo. */
   semana: DiaDaMinhaDaily[];
+  /** A semana corrente (segunda até hoje), com sábado/domingo só quando houve visita:
+   *  a mesma janela do meu_placar, então o total bate com o "Meu dia em números". */
+  estaSemana: DiaDaMinhaDaily[];
   /** Dias uteis seguidos cumprindo, contando de ONTEM pra tras — o dia de hoje
    *  ainda esta' acontecendo e zera-lo de manha faria o numero mentir. */
   sequencia: number;
@@ -131,6 +147,7 @@ export function useMinhaDaily(enabled: boolean) {
         souDeCampo: ((classificacao.data as any)?.status ?? 'ativo') !== 'nao_vendedor',
         hoje: monta(hoje),
         semana: diasUteisAte(hoje, 5).reverse().map(monta),
+        estaSemana: diasDaSemanaAte(hoje).map(monta).filter((d) => ehDiaUtil(d.dia) || d.visitas > 0),
         sequencia,
         notaDeHoje: notaPorDia.get(hoje) ?? null,
       };

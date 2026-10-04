@@ -380,6 +380,12 @@ function comPrazo<T>(p: Promise<T>, ms: number): Promise<T | undefined> {
 }
 
 const getClientPrimaryName = (client: Client) => client.empresa?.trim() || client.nome;
+// Nome da pessoa de contato, quando diz algo alem do restaurante (o CRM traz "." e o proprio nome do lugar).
+const contatoDoLead = (client: Client) => {
+  const n = (client.nome ?? '').trim();
+  if (!/[A-Za-zÀ-ÿ0-9]/.test(n)) return '';
+  return n.toLowerCase() === (client.empresa ?? '').trim().toLowerCase() ? '' : n;
+};
 
 // Cor de texto legivel sobre um fundo qualquer (decisao M1-DECISOES-3 §2).
 // O badge de status usa a cor cadastrada em `client_statuses`, que e' hex
@@ -1078,8 +1084,9 @@ function MainApp() {
   const nomesReunioes = useNomesDeClientes(idsClientesDasReunioes, tab === 'agenda');
   const queryClient = useQueryClient();
   // A fila de Tarefas (docs/10): o cabeçalho e o selo da aba contam o MESMO que a tela.
-  // Só lê o cache que a aba já carregou — não busca nada sozinho (enabled: false).
-  const filaNaTela = useQuery({ queryKey: ['fila_tarefas'], enabled: false, staleTime: 60_000, queryFn: buscarFila });
+  // Busca já na abertura (04/10/26): com enabled:false o selo mostrava a contagem do CRM (5)
+  // até a pessoa abrir a aba, e o da fila (3) depois. Mesmo cache e mesma chave da tela.
+  const filaNaTela = useQuery({ queryKey: ['fila_tarefas'], enabled: !!profile && profile.role !== 'view', staleTime: 60_000, queryFn: buscarFila });
   const naFila = Array.isArray(filaNaTela.data?.itens) ? filaNaTela.data!.itens!.length : null;
   // o sino conta o mesmo que a aba: negócios da fila com promessa vencida (auditoria 04/10/26)
   const vencidasNaFila = Array.isArray(filaNaTela.data?.itens) ? (filaNaTela.data!.itens as Array<{ venceu?: boolean }>).filter((i) => i.venceu).length : null;
@@ -6402,7 +6409,7 @@ function MainApp() {
         case 'cidade': return c.cidade ?? '';
         case 'visita': return c.visited_at ?? '';
         case 'reunioes': return meetingsByClient[c.id]?.length ?? 0;
-        default: return c.nome ?? '';
+        default: return getClientPrimaryName(c) ?? '';
       }
     };
     return [...filteredClients].sort((a, b) => {
@@ -6427,9 +6434,9 @@ function MainApp() {
   // Exportacao client-side: CSV (separador ;) da selecao filtrada inteira.
   const baixarPlanilha = () => {
     if (typeof document === 'undefined') return;
-    const cab = ['Nome', 'Contato', 'Telefone', 'Etapa', 'Temperatura', 'Status', 'Cidade', 'UF', 'Ultima visita', 'Visitas', 'Reunioes'];
+    const cab = ['Restaurante', 'Contato', 'Telefone', 'Etapa', 'Temperatura', 'Status', 'Cidade', 'UF', 'Ultima visita', 'Visitas', 'Reunioes'];
     const linhas = linhasTabela.map(c => [
-      c.nome, c.empresa, c.telefone, c.etapa, stageTemperature(c.etapa)?.label,
+      getClientPrimaryName(c), contatoDoLead(c), c.telefone, c.etapa, stageTemperature(c.etapa)?.label,
       c.status, c.cidade, c.estado,
       c.visited_at ? new Date(c.visited_at).toLocaleDateString('pt-BR') : '',
       c.visit_count, meetingsByClient[c.id]?.length ?? 0,
@@ -6559,7 +6566,7 @@ function MainApp() {
             )}
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={c.nome ?? 'Lead'}
+              accessibilityLabel={getClientPrimaryName(c) || 'Lead'}
               style={styles.ltwLinha}
               {...ds({ hover: 'surface2', trans: '1' })}
               onPress={() => setSelectedClient(c)}
@@ -6567,7 +6574,7 @@ function MainApp() {
               <View style={[styles.ltwColRestaurante, { flexDirection: 'row', gap: 12, alignItems: 'center' }]}>
                 <View style={[styles.ltwBarraTemp, { backgroundColor: corBarra }]} />
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.ltwNome} numberOfLines={1}>{c.nome}</Text>
+                  <Text style={styles.ltwNome} numberOfLines={1}>{getClientPrimaryName(c) || 'Sem nome'}</Text>
                   <Text style={styles.ltwSub} numberOfLines={1}>
                     {statusConfig[c.status]?.label ?? c.status}
                     {c.visit_count > 0 ? ` · ${c.visit_count} ${c.visit_count === 1 ? 'visita' : 'visitas'}` : ''}
@@ -6575,7 +6582,7 @@ function MainApp() {
                 </View>
               </View>
               {layout.ehDesktop && (
-                <Text style={[styles.ltwColContato, styles.ltwCelula]} numberOfLines={1}>{c.empresa ?? c.telefone ?? '—'}</Text>
+                <Text style={[styles.ltwColContato, styles.ltwCelula]} numberOfLines={1}>{contatoDoLead(c) || c.telefone || '—'}</Text>
               )}
               <View style={styles.ltwColEtapa}>
                 {c.etapa ? (
@@ -6808,6 +6815,8 @@ function MainApp() {
     { aba: 'agenda', rotulo: 'Agenda', Icone: IconCalendar, visivel: !isViewer },
     // N5 (handoff v6): um número de tarefas só, "atrasadas + hoje", igual ao selo do rodapé
     { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: modoNovo ? (naFila ?? seloTarefas) : visibleTasksCount, visivel: !isViewer },
+    // No computador o Playbook não aparecia (auditoria das abas, 04/10/26); a tela já existia.
+    { aba: 'playbook', rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, visivel: !isViewer },
     { aba: 'cockpit', rotulo: 'Gestão', Icone: IconBarGraph, visivel: verGestao },
     { aba: 'meu', rotulo: 'Meu desempenho', Icone: IconTrendingUp, visivel: !canViewGestor && !isViewer },
   ];
