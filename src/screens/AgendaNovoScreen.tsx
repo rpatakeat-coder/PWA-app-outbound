@@ -9,7 +9,7 @@
 //
 // `Cheguei` na próxima parada é o MESMO check-in do mapa (GPS novo, "Está na porta?", ficha de
 // rua): a tela só leva ao mapa e dispara o fluxo de lá.
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
@@ -135,6 +135,13 @@ export default function AgendaNovoScreen({
   const [aberto, setAberto] = useState<string | null>(null);
   const [feitasAbertas, setFeitasAbertas] = useState(false);
   const [porta, setPorta] = useState(false);
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine !== false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const on = () => setOnline(true); const off = () => setOnline(false);
+    window.addEventListener('online', on); window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
   const queryClient = useQueryClient();
   // Concluídas nesta sessão: somem da lista na hora (o Desfazer as devolve).
   const [concluidas, setConcluidas] = useState<Set<string>>(new Set());
@@ -334,10 +341,36 @@ export default function AgendaNovoScreen({
 
   // ---- a linha do tempo de hoje: próxima em destaque, o resto em ordem de hora ----
   const linhasDepois: Linha[] = [];
+  // HORA ESTIMADA (docs/12 §1.6): parada sem hora marcada ganha "~HH:MM" — a partir de agora,
+  // 20 min por visita e o deslocamento em linha reta × 1,3 a 25 km/h entre um ponto e o outro.
+  // Parada com hora do Planejamento mantém a hora dela e acerta o relógio da conta.
+  const VISITA_MS = 20 * 60000;
+  type Ponto = { latitude: number; longitude: number };
+  const pontoDe = (c: Client | null | undefined): Ponto | null => (c && c.latitude != null && c.longitude != null ? { latitude: Number(c.latitude), longitude: Number(c.longitude) } : null);
+  const viagemMs = (a: Ponto | null, b: Ponto | null) => {
+    if (!a || !b) return 10 * 60000;
+    const r = 6371, rad = Math.PI / 180;
+    const dLat = (b.latitude - a.latitude) * rad, dLng = (b.longitude - a.longitude) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.latitude * rad) * Math.cos(b.latitude * rad) * Math.sin(dLng / 2) ** 2;
+    const km = 2 * r * Math.asin(Math.sqrt(h)) * 1.3;
+    return Math.round((km / 25) * 3600000);
+  };
+  let relogio = Date.now();
+  let anterior: Ponto | null = base ?? null;
+  if (proxima?.client) {
+    const hp = horaDe(proxima, hoje);
+    relogio = Math.max(relogio + viagemMs(anterior, pontoDe(proxima.client)), hp ?? 0) + VISITA_MS;
+    anterior = pontoDe(proxima.client) ?? anterior;
+  }
   estado.forEach((p, i) => {
     if (p.estado !== 'pendente') return;
     const h = horaDe(p, hoje);
-    linhasDepois.push({ k: `p-${p.id}`, tipo: 'parada', ordem: h ?? Infinity, hora: h ? horaBRT(p.planned_at!) : null, numero: i + 1, p });
+    let hora: string;
+    if (h) { relogio = Math.max(relogio, h); hora = horaBRT(p.planned_at!); }
+    else { relogio += viagemMs(anterior, pontoDe(p.client)); hora = `~${horaBRT(new Date(relogio).toISOString())}`; }
+    linhasDepois.push({ k: `p-${p.id}`, tipo: 'parada', ordem: relogio, hora, numero: i + 1, p });
+    anterior = pontoDe(p.client) ?? anterior;
+    relogio += VISITA_MS;
   });
   compromissos.forEach((k) => {
     const [hh, mm] = (k.hora ?? '').split(':').map(Number);
@@ -646,6 +679,21 @@ export default function AgendaNovoScreen({
   })() : null;
 
   const carregando = planoDaFaixa.isLoading && paradas.length === 0 && dia === hoje;
+  // ESTADOS (docs/12 §8): sem sinal = faixa âmbar e o salvo continua na tela; erro de leitura =
+  // faixa vermelha com "Tentar de novo". As escritas sem sinal já vão para a fila do app.
+  const falhouLeitura = planoDaFaixa.isError || semana.isError || meuDia.isError;
+  const faixaEstado = !online ? (
+    <View style={[s.estado, s.estadoAviso]} accessibilityRole="alert">
+      <Text style={[s.estadoTexto, { color: 'var(--tint-amber-text)' }]}>Sem sinal. Mostrando o que já estava salvo · o que você registrar sobe sozinho quando o sinal voltar.</Text>
+    </View>
+  ) : falhouLeitura ? (
+    <View style={[s.estado, s.estadoErro]} accessibilityRole="alert">
+      <Text style={[s.estadoTexto, { color: 'var(--tint-red-text)', flex: 1 }]}>Não carreguei tudo agora. Mostrando o que foi salvo.</Text>
+      <Pressable accessibilityRole="button" style={s.estadoBotao} onPress={() => { void planoDaFaixa.refetch(); void semana.refetch(); void meuDia.refetch(); }}>
+        <Text style={[s.estadoTexto, { fontWeight: '800', color: 'var(--tint-red-text)' }]}>Tentar de novo</Text>
+      </Pressable>
+    </View>
+  ) : null;
 
   return (
     <ScrollView style={s.tela} contentContainerStyle={[s.conteudo, largo && { paddingHorizontal: 0 }]}>
@@ -655,6 +703,7 @@ export default function AgendaNovoScreen({
         aoSumir={(id) => setConcluidas((st) => new Set(st).add(`hs-${id}`))}
         aoVoltar={(id) => setConcluidas((st) => { const n = new Set(st); n.delete(`hs-${id}`); return n; })}
       />
+      {faixaEstado}
       {faixa}
       {dia === hoje ? (
         <>
@@ -782,5 +831,10 @@ const s = StyleSheet.create({
   vazioTitulo: { fontSize: 17, fontWeight: '700', color: 'var(--text)' },
   nota: { fontSize: 12, lineHeight: 17, color: 'var(--text-faint)' },
   esqueleto: { borderRadius: 16, backgroundColor: 'var(--surface-2)' },
+  estado: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 12, borderWidth: 1 },
+  estadoAviso: { backgroundColor: 'var(--tint-amber)', borderColor: 'var(--tint-amber-border)' },
+  estadoErro: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--tint-red-border)' },
+  estadoTexto: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  estadoBotao: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
   opcao: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, padding: 12, borderRadius: 14, backgroundColor: 'var(--surface-2)' },
 });

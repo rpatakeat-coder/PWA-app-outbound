@@ -61,6 +61,17 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
       return data as Desempenho;
     },
   });
+  // quem está logo acima e logo abaixo na temporada (0160)
+  const vizinhos = useQuery<Array<{ pos: number; nome: string; avatar_url: string | null; pts: number; pct: number | null; eu: boolean }>>({
+    queryKey: ['vizinhos_no_ranking'],
+    enabled,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('vizinhos_no_ranking', { p_periodo: 'semana' });
+      if (error) throw error;
+      return (data ?? []) as Array<{ pos: number; nome: string; avatar_url: string | null; pts: number; pct: number | null; eu: boolean }>;
+    },
+  });
   const d = q.data;
   const mesNome = MESES[new Date(Date.now() - 3 * 3600000).getUTCMonth()];
 
@@ -163,16 +174,18 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
         <Text style={[st.secao, { flex: 1 }]}>TEMPORADA</Text>
         <IconChevronRight width={20} height={20} fill={cores.muted} />
       </View>
-      <Text style={st.linhaGrande}><Text style={st.numero}>{`${tmp.pos}º`}</Text><Text style={st.fraco}>{`  de ${tmp.total ?? '—'} · ${tmp.pts ?? 0} pts`}</Text></Text>
+      <Text style={st.linhaGrande}><Text style={st.numero}>{`${tmp.pos}º`}</Text><Text style={st.fraco}>{`  de ${tmp.total ?? '—'} · ${tmp.pct != null ? `${Math.round(tmp.pct)}% da meta · ` : ''}${tmp.pts ?? 0} pts`}</Text></Text>
       {!!tmp.faltam && <Text style={st.texto}>{tmp.faltam}</Text>}
       {!!tmp.proximo && <Text style={st.fraco}>{tmp.proximo}</Text>}
+      {/* docs/12 §6.4: quem está logo acima e logo abaixo. A ordem é a % da meta de cada um
+          (a do ranking do Cockpit), por isso a % aparece junto dos pontos. */}
       <View style={{ gap: 6, marginTop: 4 }}>
-        {(tmp.podio ?? []).map((p) => (
-          <View key={p.pos} style={[st.podio, p.pos === tmp.pos && st.podioEu]}>
+        {((vizinhos.data && vizinhos.data.length ? vizinhos.data : (tmp.podio ?? []).map((p) => ({ ...p, eu: p.pos === tmp.pos })))).map((p) => (
+          <View key={p.pos} style={[st.podio, p.eu && st.podioEu]}>
             <Text style={st.podioPos}>{`${p.pos}º`}</Text>
             <Avatar nome={p.nome} url={p.avatar_url} tamanho={28} />
-            <Text style={[st.texto, { flex: 1 }]} numberOfLines={1}>{p.pos === tmp.pos ? 'Você' : p.nome}</Text>
-            <Text style={st.fraco}>{`${p.pts} pts`}</Text>
+            <Text style={[st.texto, { flex: 1 }]} numberOfLines={1}>{p.eu ? 'Você' : p.nome}</Text>
+            <Text style={st.fraco}>{`${p.pct != null ? `${Math.round(p.pct)}% · ` : ''}${p.pts} pts`}</Text>
           </View>
         ))}
       </View>

@@ -7889,7 +7889,42 @@ function MainApp() {
         return layout.ehLargo ? (
           <View style={sharedStyles.mapaLinhaWeb}>
             <View style={{ width: layout.largura >= 1500 ? 560 : 470, paddingHorizontal: 24, borderRightWidth: 1, borderRightColor: 'var(--border)' }}>{agendaNova}</View>
-            <View style={sharedStyles.mapaAreaWeb}>{conteudoMapa}</View>
+            <View style={sharedStyles.mapaAreaWeb}>
+              <View style={{ flex: 1 }}>{conteudoMapa}</View>
+              {/* G2: a ordem das paradas do dia ao lado do mapa (é a Rota do computador) */}
+              {(() => {
+                const vivas = routeStops.filter((st) => st.status !== 'removed' && st.status !== 'skipped');
+                if (!vivas.length) return null;
+                let achouProxima = false;
+                const km = routeGeometry.data && routeGeometry.data.coordinates.length > 1 ? `${(routeGeometry.data.distanceMeters / 1000).toFixed(1).replace('.', ',')} km` : null;
+                const min = routeGeometry.data && routeGeometry.data.coordinates.length > 1 ? `~${Math.round(routeGeometry.data.durationSeconds / 60)} min` : null;
+                const faltam = vivas.filter((st) => st.status !== 'done' && !(st.client && visitadoHoje(st.client.visited_at))).length;
+                return (
+                  <View style={{ maxHeight: 260, borderTopWidth: 1, borderTopColor: 'var(--border)', backgroundColor: 'var(--surface)' }}>
+                    <Text style={{ fontSize: 11, fontWeight: '800', letterSpacing: 1, color: 'var(--text-faint)', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6 }}>
+                      {['ORDEM DAS PARADAS', `${faltam} FALTANDO`, km, min].filter(Boolean).join(' · ')}
+                    </Text>
+                    <ScrollView contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 12, gap: 4 }}>
+                      {vivas.map((st, i) => {
+                        const feita = st.status === 'done' || (!!st.client && visitadoHoje(st.client.visited_at));
+                        const proxima = !feita && !achouProxima;
+                        if (proxima) achouProxima = true;
+                        return (
+                          <TouchableOpacity key={st.id} accessibilityRole="button" onPress={() => { if (st.client) { setTab('map'); openClientDetails(st.client); } }}
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 40, paddingHorizontal: 8, borderRadius: 10, backgroundColor: proxima ? 'var(--tint-red)' : 'transparent' }}>
+                            <View style={{ width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: feita ? 'var(--verde-acao)' : proxima ? 'var(--vermelho-acao)' : 'var(--surface-3)' }}>
+                              {feita ? <SiCheck width={14} height={14} fill="#FFFFFF" /> : <Text style={{ fontSize: 12, fontWeight: '800', color: proxima ? '#FFFFFF' : 'var(--text)' }}>{i + 1}</Text>}
+                            </View>
+                            <Text style={{ flex: 1, fontSize: 14, fontWeight: '600', color: feita ? 'var(--text-muted)' : 'var(--text)' }} numberOfLines={1}>{st.client ? getClientPrimaryName(st.client) : 'Parada'}</Text>
+                            <Text style={{ fontSize: 12, color: proxima ? 'var(--vermelho-texto)' : 'var(--text-muted)' }}>{feita ? 'feita' : proxima ? 'agora' : ''}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                );
+              })()}
+            </View>
           </View>
         ) : agendaNova; })()
       ) : (
