@@ -40,6 +40,9 @@ export type AcoesCardNovo = {
   onMoverPino?: () => void;
   /** Botão de avanço do bloco NEGÓCIO: abre Mudar etapa já na etapa destino. */
   onAvancar?: (destino: string, preenchido?: Record<string, string>) => void;
+  /** Um app só: a proposta dentro do negócio e o atalho para o funil */
+  onProposta?: () => void;
+  onVerNoFunil?: () => void;
 };
 
 export type DadosCardNovo = {
@@ -373,6 +376,12 @@ function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
         )}
         {a.onChangeStage && <Botao rotulo="Outra etapa" onPress={a.onChangeStage} estilo={[s.botao48, av.botao ? s.outra : null]} />}
       </View>
+      {(a.onProposta || a.onVerNoFunil) && (
+        <View style={s.grade}>
+          {a.onProposta && <Botao rotulo="Proposta" onPress={a.onProposta} estilo={[s.botao48]} />}
+          {a.onVerNoFunil && <Botao rotulo="Ver no funil" onPress={a.onVerNoFunil} estilo={[s.botao48, a.onProposta ? s.outra : null]} />}
+        </View>
+      )}
     </View>
   );
 }

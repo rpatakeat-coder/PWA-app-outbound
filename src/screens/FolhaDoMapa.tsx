@@ -57,6 +57,8 @@ type Props = {
   aoMover?: (c: Client, delta: -1 | 1) => void;
   /** Meu roteiro: tirar a parada de hoje (sai também do Planejamento). */
   aoTirar?: (c: Client) => void;
+  /** Um app só (docs/11 §1, abertura por horário): de manhã "Seu dia", à noite "Fechar o dia". Na rua, null. */
+  destaque?: { titulo: string; sub: string; acao: string; aoAcao: () => void } | null;
 };
 
 type Modo = 'prioridade' | 'distancia' | 'roteiro';
@@ -104,7 +106,7 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null, destaque = null }: Props) {
   const cores = useIconColors();
   const visitasFeitas = feitasMedidas ?? 0;
   const feitasTexto = feitasMedidas == null ? "—" : String(feitasMedidas);
@@ -187,7 +189,12 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
         <Pressable accessibilityRole="button" accessibilityLabel="Recolher a barra da próxima porta" onPress={() => setRecolhida(true)} hitSlop={8} style={s.pilulaRecolher}>
           <Text style={s.pilulaMiniSeta}>▾</Text>
         </Pressable>
-        {proxima ? (
+        {destaque ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={destaque.titulo} onPress={destaque.aoAcao} style={s.pilulaTexto}>
+            <Text style={s.pilulaNome} numberOfLines={1}>{destaque.titulo}</Text>
+            <Text style={s.pilulaSub} numberOfLines={1}>{destaque.sub}</Text>
+          </Pressable>
+        ) : proxima ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${proxima.c.empresa?.trim() || proxima.c.nome}`} onPress={() => onAbrir(proxima.c)} style={s.pilulaTexto}>
             <Text style={s.pilulaNome} numberOfLines={1}>{proxima.c.empresa?.trim() || proxima.c.nome}</Text>
             <Text style={s.pilulaSub} numberOfLines={1}>{[distanciaTexto(proxima.distanciaM), aPe(proxima.distanciaM)].filter(Boolean).join(' · ') || 'toque para ver o lead'}</Text>
@@ -208,7 +215,11 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
             </Text>
           )}
         </Pressable>
-        {proxima ? (
+        {destaque ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={destaque.acao} onPress={destaque.aoAcao} style={s.pilulaLista}>
+            <Text style={s.pilulaListaTexto}>{destaque.acao}</Text>
+          </Pressable>
+        ) : proxima ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Cheguei na próxima porta" onPress={() => onCheguei(proxima.c)} style={s.pilulaCheguei}>
             <Text style={s.btnChegueiTexto}>Cheguei</Text>
           </Pressable>

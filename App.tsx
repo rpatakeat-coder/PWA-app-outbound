@@ -85,6 +85,7 @@ import {
   IconTrendingDown,
   IconBook,
   IconSparkle,
+  IconArray,
 } from './src/components/icons';
 import { Avatar } from './src/components/Avatar';
 import { useFotoDePerfil } from './src/hooks/useFotoDePerfil';
@@ -179,8 +180,14 @@ import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
 import PlaybookScreen from './src/screens/PlaybookScreen';
 import FilaTarefasScreen, { buscarFila } from './src/screens/FilaTarefasScreen';
+import { FolhaPlacar } from './src/components/Placar';
+import FunilScreen, { type NegocioDoFunil } from './src/screens/FunilScreen';
+import DesenvolvimentoScreen from './src/screens/DesenvolvimentoScreen';
+import { momentoDoDia } from './src/screens/AgendaDiaTopo';
+import PropostaSheet, { type NegocioDaProposta } from './src/components/PropostaSheet';
+import { usePlacar, useUmApp } from './src/hooks/useUmApp';
 import { BarreiraDaAba } from './src/components/BarreiraDaAba';
-import { avisarSeVisitaProvada, type Ranking } from './src/screens/FolhaRanking';
+import FolhaRanking, { avisarSeVisitaProvada, type Ranking } from './src/screens/FolhaRanking';
 import AgendaNovoScreen from './src/screens/AgendaNovoScreen';
 import { concluirComDesfazer, enviarConclusao, type PedidoConclusao } from './src/utils/concluirTarefa';
 import { diaBRT, diasDeAtraso, ehCobranca, grupoDaTarefa } from './src/utils/abaTarefas';
@@ -318,7 +325,7 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
   { value: 'ex_cliente', label: 'Ex-cliente', color: 'var(--brand-text)' },
 ];
 
-type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'tasks' | 'playbook' | 'meu' | 'config';
+type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'tasks' | 'playbook' | 'meu' | 'config' | 'funil' | 'dev';
 
 // Documentacao das regras de geracao automatica de tarefas (motor
 // generate_client_tasks no Supabase). Isto e' so a explicacao mostrada no
@@ -1072,9 +1079,10 @@ function MainApp() {
   );
   const nomesReunioes = useNomesDeClientes(idsClientesDasReunioes, tab === 'agenda');
   const queryClient = useQueryClient();
-  // A fila de Tarefas (docs/10): o cabeçalho e o selo da aba contam o MESMO que a tela.
-  // Só lê o cache que a aba já carregou — não busca nada sozinho (enabled: false).
-  const filaNaTela = useQuery({ queryKey: ['fila_tarefas'], enabled: false, staleTime: 60_000, queryFn: buscarFila });
+  // A fila de Tarefas (docs/10): o cabeçalho, o selo da aba, o sino e o Meu desempenho contam o
+  // MESMO que a tela (Um app só, PR 1, 04/10/2026). Antes o selo lia só o cache da aba e, até a
+  // pessoa abrir a Tarefas, mostrava a conta das tarefas do CRM (5 no selo, 3 na tela).
+  const filaNaTela = useQuery({ queryKey: ['fila_tarefas'], enabled: !!profile?.id && !!profile?.id_hubspot && profile?.role !== 'view', staleTime: 60_000, refetchOnWindowFocus: false, queryFn: buscarFila });
   const naFila = Array.isArray(filaNaTela.data?.itens) ? filaNaTela.data!.itens!.length : null;
   // o sino conta o mesmo que a aba: negócios da fila com promessa vencida (auditoria 04/10/26)
   const vencidasNaFila = Array.isArray(filaNaTela.data?.itens) ? (filaNaTela.data!.itens as Array<{ venceu?: boolean }>).filter((i) => i.venceu).length : null;
@@ -1597,6 +1605,15 @@ function MainApp() {
   // Meu dia em números (handoff v4.1 §6.12): só o medido — check-ins de hoje,
   // Daily prometida, reuniões e sequência. Alimenta também o "x/6" da pílula.
   const [meuDiaAberto, setMeuDiaAberto] = useState(false);
+  // Um app só (handoff tizer, 04/10/2026): as fases novas ligam pela chave por pessoa (0156).
+  // Com a chave, a pílula do Mapa e o topo da Tarefas abrem a MESMA folha do placar.
+  const umApp = useUmApp(modoNovo && !!profile?.id && !isViewer);
+  const placar = usePlacar(umApp);
+  const [placarAberto, setPlacarAberto] = useState(false);
+  const [rankingDoPlacar, setRankingDoPlacar] = useState(false);
+  const [abaDaFila, setAbaDaFila] = useState<'fila' | 'feitas'>('fila');
+  // Proposta dentro do negócio (PR 4): o negócio da folha, ou 'simular' (menu, sem negócio)
+  const [propostaPara, setPropostaPara] = useState<NegocioDaProposta | 'simular' | null>(null);
   const meuDia = useMeuDia(modoNovo, profile?.id ?? null);
 
   // A META DE VISITAS É UMA SÓ (auditoria 28/09/2026): a Agenda, o Montar meu dia e a Rota
@@ -1968,6 +1985,44 @@ function MainApp() {
   }, [modoNovo, buscaAberta, searchTerm, buscando, achadosDaBusca, mapRegion]);
 
   const routeStops = fieldOps.stops;
+  // /?aba=… (Um app só, PR 6): o Cockpit manda o executivo para a aba equivalente do app
+  // (Hoje e Propostas → Tarefas, Meu funil → Funil, Planejamento → Agenda, Desenvolvimento e
+  // Playbook → menu). Lido uma vez, depois que a chave respondeu; o endereço fica limpo.
+  const abaDoEnderecoLida = useRef(false);
+  useEffect(() => {
+    if (abaDoEnderecoLida.current || !umApp || typeof window === 'undefined') return;
+    abaDoEnderecoLida.current = true;
+    try {
+      const u = new URL(window.location.href);
+      const pedida = u.searchParams.get('aba');
+      if (!pedida) return;
+      const mapa: Record<string, AppTab> = { tarefas: 'tasks', funil: 'funil', agenda: 'agenda', desenvolvimento: 'dev', playbook: 'playbook', mapa: 'map' };
+      if (mapa[pedida]) setTab(mapa[pedida]);
+      u.searchParams.delete('aba');
+      window.history.replaceState(window.history.state, '', u.pathname + (u.search ? u.search : '') + u.hash);
+    } catch { /* endereço estranho: fica no Mapa */ }
+  }, [umApp]);
+  // ABERTURA POR HORÁRIO (Um app só, docs/11 §1 e U6): o app abre sempre no Mapa; muda só o
+  // destaque da barra. Manhã (antes do 1º check-in e antes das 11h): o dia. Noite (depois das
+  // 18h): fechar o dia. Na rua, a próxima porta de sempre.
+  const destaqueDaBarra = (() => {
+    if (!umApp || isViewer) return null;
+    const feitasHoje = meuDia.data?.visitasHoje ?? 0;
+    const momento = momentoDoDia(feitasHoje);
+    if (momento === 'manha') {
+      const total = routeStops.filter((st) => st.status !== 'removed').length;
+      if (!total) return { titulo: 'Seu dia · sem rota ainda', sub: 'monte o dia na Agenda', acao: 'Ver Agenda', aoAcao: () => { setAgendaDiaInicial(null); setTab('agenda'); } };
+      const comHora = routeStops.filter((st) => st.planned_at).map((st) => st.planned_at as string).sort()[0];
+      const hora = comHora ? new Date(comHora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }) : null;
+      return { titulo: 'Seu dia', sub: `${total} ${total === 1 ? 'parada' : 'paradas'}${hora ? ` · a primeira às ${hora}` : ''}`, acao: 'Ver Agenda', aoAcao: () => { setAgendaDiaInicial(null); setTab('agenda'); } };
+    }
+    if (momento === 'noite') {
+      const pedem = (filaNaTela.data?.itens ?? []).filter((i: { verbo?: string }) => i.verbo === 'Registrar').length;
+      return { titulo: 'Fechar o dia', sub: pedem ? `${pedem} ${pedem === 1 ? 'registro pede' : 'registros pedem'} o próximo passo` : `${feitasHoje} ${feitasHoje === 1 ? 'visita' : 'visitas'} hoje · tudo registrado`,
+        acao: 'Revisar', aoAcao: () => { setAbaDaFila(pedem ? 'fila' : 'feitas'); setTab('tasks'); } };
+    }
+    return null;
+  })();
   const routeStopClientIds = useMemo(
     () => new Set(routeStops.map(stop => stop.client_id).concat(routeDraft.map(c => c.id))),
     [routeStops, routeDraft],
@@ -4533,6 +4588,7 @@ function MainApp() {
       }
       // O "x/6" da pílula e o Meu dia contam check-ins reais: atualiza na hora.
       void queryClient.invalidateQueries({ queryKey: ['meu_dia'] });
+      void queryClient.invalidateQueries({ queryKey: ['placar_executivo'] });
       if (modoNovo && contextoPino && visitado.status === 'lead') {
         // Etapa atual no código do Cockpit: texto do app pela etapa_de_para,
         // senão a do snapshot (0105).
@@ -5169,6 +5225,11 @@ function MainApp() {
         },
         // "É meu" (Julyan 26/09): lead sem dono na rota de hoje entra no meu funil.
         onEMeu: isViewer ? undefined : () => { void assumirDoMapa(selectedClient); },
+        onProposta: umApp && !isViewer && selectedClient.id_hubspot ? () => {
+          const c = selectedClient;
+          setPropostaPara({ dealId: String(c.id_hubspot), nome: c.empresa?.trim() || c.nome || 'Negócio', etapaId: codigoDaEtapa(c), telefone: c.telefone ?? null, clientId: c.id });
+        } : undefined,
+        onVerNoFunil: umApp && selectedClient.id_hubspot ? () => { setSelectedClient(null); setTab('funil'); } : undefined,
         onTirarDaRota: isViewer || isMonitoringRoute ? undefined : () => tirarDoRoteiro(selectedClient),
         ...(() => {
           // A cobrança do card é a MESMA tarefa do HubSpot da aba Tarefas:
@@ -5853,9 +5914,32 @@ function MainApp() {
           foraFalhou={buscaNegocios.isError}
         />
       )}
+      {umApp && (
+        <FolhaPlacar
+          visivel={placarAberto}
+          aoFechar={() => setPlacarAberto(false)}
+          dados={placar.data}
+          carregando={placar.isFetching}
+          aoAbrirRanking={() => { setPlacarAberto(false); setTimeout(() => setRankingDoPlacar(true), 350); }}
+        />
+      )}
+      {propostaPara && (
+        <PropostaSheet
+          visivel
+          negocio={propostaPara === 'simular' ? null : propostaPara}
+          aoFechar={() => setPropostaPara(null)}
+          aoAvancarComProposta={isViewer ? undefined : (n, destino, preenchido) => {
+            const c = (n.clientId ? clientePorId(n.clientId) : undefined)
+              ?? ({ id: n.clientId ?? '', id_hubspot: n.dealId, nome: n.nome, empresa: n.nome, telefone: n.telefone } as unknown as Client);
+            setTimeout(() => setEtapaNovaPara({ client: c, etapaAtual: n.etapaId, destinoInicial: destino, preenchido }), 350);
+          }}
+        />
+      )}
+      {umApp && rankingDoPlacar && <FolhaRanking visivel={rankingDoPlacar} aoFechar={() => setRankingDoPlacar(false)} />}
       {modoNovo && (
         <FolhaMeuDia
           visivel={meuDiaAberto}
+          demosRealizadas={placar.data?.semana?.demos ?? null}
           aoFechar={() => setMeuDiaAberto(false)}
           dados={meuDia.data}
           carregando={meuDia.isLoading}
@@ -5914,7 +5998,8 @@ function MainApp() {
           visitasFeitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
           visitasProvadas={meuDia.data?.provadasHoje ?? null}
           metaVisitas={metaDeHoje}
-          aoProgresso={() => setMeuDiaAberto(true)}
+          aoProgresso={() => (umApp ? setPlacarAberto(true) : setMeuDiaAberto(true))}
+          destaque={destaqueDaBarra}
           chao={alturaRodape ?? baseInferior}
           totalNaArea={visiveisMapaNovo.length}
           rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
@@ -6148,7 +6233,8 @@ function MainApp() {
         visitasFeitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
         visitasProvadas={meuDia.data?.provadasHoje ?? null}
         metaVisitas={metaDeHoje}
-        aoProgresso={() => setMeuDiaAberto(true)}
+        aoProgresso={() => (umApp ? setPlacarAberto(true) : setMeuDiaAberto(true))}
+        destaque={destaqueDaBarra}
         totalNaArea={visiveisMapaNovo.length}
         rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
         onAbrir={handleMarkerPress}
@@ -6646,6 +6732,12 @@ function MainApp() {
       }
       case 'config':
         return { titulo: 'Configurações', sub: 'Conta, aparência e administração' };
+      case 'funil':
+        return { titulo: 'Funil', sub: 'Seus negócios abertos · ao vivo, igual ao mapa' };
+      case 'dev':
+        return { titulo: 'Desenvolvimento', sub: 'Uma vez por semana, antes do 1:1' };
+      case 'playbook':
+        return { titulo: 'Playbook', sub: 'Consulta · também aparece no negócio' };
       default:
         return { titulo: 'Meu desempenho', sub: profile?.full_name ? `${mesAno} · ${profile.full_name}` : mesAno };
     }
@@ -6728,7 +6820,9 @@ function MainApp() {
     ...(isViewer ? [] : [
       { aba: 'agenda' as AppTab, rotulo: 'Agenda', Icone: IconCalendar, ativa: tab === 'agenda' || tab === 'route', selo: seloAgenda || null, seloClaro: true },
       { aba: 'tasks' as AppTab, rotulo: 'Tarefas', Icone: IconClipboardCheck, ativa: tab === 'tasks', selo: (naFila ?? seloTarefas) || null },
-      { aba: 'playbook' as AppTab, rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, ativa: tab === 'playbook', selo: null },
+      umApp
+        ? { aba: 'funil' as AppTab, rotulo: 'Funil', Icone: IconArray as typeof IconLocation, ativa: tab === 'funil', selo: null }
+        : { aba: 'playbook' as AppTab, rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, ativa: tab === 'playbook', selo: null },
     ]),
   ];
   // Trocar de aba fecha o card aberto; o mapa (lente, zoom, filtros) fica como
@@ -6748,12 +6842,22 @@ function MainApp() {
     if (aba !== 'map') setSelectedClient(null);
     // Pelo rodapé a Agenda abre em hoje (o dia da ficha vale só para o "Ver na Agenda").
     if (aba === 'agenda') setAgendaDiaInicial(null);
+    if (aba === 'tasks') setAbaDaFila('fila');
     setTab(aba);
   };
 
   // 'cockpit' nao e' aba: e' destino. Fica na mesma lista porque ocupa o mesmo
   // lugar na sidebar, mas nunca chega ao `tab` — o onPress navega pra fora.
-  const itensNavWeb: Array<{ aba: AppTab | 'cockpit'; rotulo: string; Icone: typeof IconLocation; badge?: number; visivel: boolean }> = [
+  const itensNavWeb: Array<{ aba: AppTab | 'cockpit' | 'simular'; rotulo: string; Icone: typeof IconLocation; badge?: number; visivel: boolean; grupo?: string }> = umApp ? [
+    { aba: 'map', rotulo: 'Mapa', Icone: IconLocation, visivel: true },
+    { aba: 'agenda', rotulo: 'Agenda', Icone: IconCalendar, visivel: !isViewer },
+    { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: naFila ?? undefined, visivel: !isViewer },
+    { aba: 'funil', rotulo: 'Funil', Icone: IconArray as typeof IconLocation, visivel: !isViewer },
+    { aba: 'dev', rotulo: 'Desenvolvimento', Icone: IconTrendingUp, visivel: !isViewer, grupo: 'NO MENU' },
+    { aba: 'playbook', rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, visivel: true },
+    { aba: 'simular', rotulo: 'Simular proposta', Icone: IconBill as typeof IconLocation, visivel: !isViewer },
+    { aba: 'cockpit', rotulo: 'Gestão', Icone: IconBarGraph, visivel: verGestao && canViewGestor },
+  ] : [
     { aba: 'map', rotulo: 'Mapa', Icone: IconLocation, visivel: true },
     { aba: 'list', rotulo: 'Lista', Icone: IconSquareMenu, visivel: true },
     { aba: 'route', rotulo: 'Rota', Icone: IconCar, visivel: !isViewer },
@@ -6803,13 +6907,15 @@ function MainApp() {
         {itensNavWeb.filter(i => i.visivel).map(item => {
           const ativo = tab === item.aba;
           return (
+            <React.Fragment key={item.aba}>
+            {item.grupo ? <Text style={styles.sbGrupo}>{item.grupo}</Text> : null}
             <Pressable
               key={item.aba}
               accessibilityRole="button"
               accessibilityLabel={item.rotulo}
               style={[styles.sbItem, ativo && styles.sbItemAtivo]}
               {...ds(ativo ? { trans: '1' } : { trans: '1', hover: 'surface2' })}
-              onPress={() => (item.aba === 'cockpit' ? irParaOCockpit() : setTab(item.aba))}
+              onPress={() => (item.aba === 'cockpit' ? irParaOCockpit() : item.aba === 'simular' ? setPropostaPara('simular') : setTab(item.aba))}
             >
               <View style={styles.sbItemIcone}>
                 <item.Icone width={24} height={24} fill={ativo ? iconColors.tintRedText : iconColors.muted} />
@@ -6823,6 +6929,7 @@ function MainApp() {
                 </View>
               ) : null}
             </Pressable>
+            </React.Fragment>
           );
         })}
       </View>
@@ -7033,7 +7140,7 @@ function MainApp() {
             modoNovo ? (
               <View style={styles.headerLinha}>
                 <Text style={styles.headerTitulo}>Agenda</Text>
-                {!isViewer && (
+                {!isViewer && !umApp && (
                   <TouchableOpacity
                     accessibilityRole="button"
                     accessibilityLabel="Abrir a rota de hoje"
@@ -7048,9 +7155,14 @@ function MainApp() {
             ) : (
               <Text style={styles.headerTitulo}>Agenda</Text>
             )
-          ) : tab === 'playbook' ? (
+          ) : tab === 'funil' ? (
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.headerTitulo}>Funil</Text>
+              <Text style={styles.headerSublinha} numberOfLines={1}>Seus negócios abertos · ao vivo, igual ao mapa</Text>
+            </View>
+          ) : tab === 'playbook' && !umApp ? (
             <Text style={styles.headerTitulo}>Playbook</Text>
-          ) : tab === 'meu' || tab === 'config' ? (
+          ) : tab === 'meu' || tab === 'config' || tab === 'dev' || tab === 'playbook' ? (
             /* Estas duas nao sao abas da barra: chegam pelo menu do perfil.
                Sem o arrow_back a tela fica sem saida — e' a unica volta.
                Configuracoes reabre o MENU (foi de la' que veio); Meu
@@ -7073,7 +7185,7 @@ function MainApp() {
               </TouchableOpacity>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.headerTitulo} numberOfLines={1}>
-                  {tab === 'meu' ? 'Meu desempenho' : 'Configurações'}
+                  {tab === 'meu' ? (umApp ? 'Entenda seus números' : 'Meu desempenho') : tab === 'dev' ? 'Desenvolvimento' : tab === 'playbook' ? 'Playbook' : 'Configurações'}
                 </Text>
               </View>
             </View>
@@ -7645,12 +7757,33 @@ function MainApp() {
           metaVisitasDia={metaDeHoje}
           suggestRoute={suggestRoute}
         />
+      ) : tab === 'funil' && modoNovo ? (
+        // Funil (Um app só, PR 3): lista por etapa no celular, o kanban do Cockpit no computador.
+        <BarreiraDaAba nome="Funil">
+        <FunilScreen
+          aoAbrirLead={(id) => { setTab('map'); void openClientById(id); }}
+          aoMudarEtapa={isViewer ? undefined : (n: NegocioDoFunil, destino: string) => {
+            const c = (n.clientId ? clientePorId(n.clientId) : undefined)
+              ?? ({ id: n.clientId ?? '', id_hubspot: n.dealId, nome: n.nome, empresa: n.nome, telefone: n.telefone } as unknown as Client);
+            setEtapaNovaPara({ client: c, etapaAtual: n.etapaId, destinoInicial: destino });
+          }}
+          aoProposta={isViewer ? undefined : (n: NegocioDoFunil) => setPropostaPara({ dealId: n.dealId, nome: n.nome, etapaId: n.etapaId, telefone: n.telefone, clientId: n.clientId })}
+          aoNovoNegocio={isViewer ? undefined : () => { setTab('map'); setTimeout(() => setShowCepStep(true), 300); }}
+        />
+        </BarreiraDaAba>
       ) : tab === 'tasks' && modoNovo ? (
         // A fila do dinheiro (docs/10 §1, 04/10/2026): um card por negócio, valor × urgência.
         // Visitar e Registrar levam ao lead no mapa (o Cheguei é a prova da visita).
         <BarreiraDaAba nome="Tarefas">
         <FilaTarefasScreen
+          key={abaDaFila}
+          abaInicial={abaDaFila}
           ownerId={myHubspotId}
+          umApp={umApp}
+          aoAbrirPlacar={() => setPlacarAberto(true)}
+          aoPlaybook={() => { setAbaAnterior('tasks'); setTab('playbook'); }}
+          aoProposta={isViewer ? undefined : (i) => setPropostaPara({ dealId: i.dealId, nome: i.negocio, etapaId: i.etapaId, telefone: i.telefone, clientId: i.clientId })}
+          nomeDoExecutivo={profile?.full_name ?? null}
           posicao={userLocation}
           aoAbrirLead={(id) => { setTab('map'); void openClientById(id); }}
           aoRegistrarVisita={(id) => { setTab('map'); void openClientById(id); }}
@@ -7704,6 +7837,10 @@ function MainApp() {
         />
       ) : tab === 'playbook' ? (
         <PlaybookScreen email={profile?.email} proximaParada={proximaParadaDoPlano} />
+      ) : tab === 'dev' ? (
+        <BarreiraDaAba nome="Desenvolvimento">
+          <DesenvolvimentoScreen aoAbrirNumeros={() => setTab('meu')} aoAbrirPlaybook={() => setTab('playbook')} />
+        </BarreiraDaAba>
       ) : tab === 'config' ? (
         <ConfiguracoesScreen
           profile={profile}
@@ -7722,7 +7859,7 @@ function MainApp() {
       ) : tab === 'meu' ? (
         <MeuDesempenhoScreen
           enabled={tab === 'meu'}
-          tarefasPendentes={modoNovo ? seloTarefas : visibleTasksCount}
+          tarefasPendentes={modoNovo ? (naFila ?? undefined) : visibleTasksCount}
           aoAbrirTarefas={() => setTab('tasks')}
           ehGestor={canViewGestor}
         />
@@ -7730,6 +7867,13 @@ function MainApp() {
         <AgendaNovoScreen
           key={agendaDiaInicial ?? 'hoje'}
           diaInicial={agendaDiaInicial}
+          umApp={umApp}
+          ownerId={myHubspotId}
+          provadasHoje={placar.data?.hoje?.provadas ?? meuDia.data?.provadasHoje ?? null}
+          visitasHoje={meuDia.data?.visitasHoje ?? 0}
+          hubspotEm={placar.data?.hubspot_em ?? null}
+          aoAbrirFeitas={() => { setAbaDaFila('feitas'); setTab('tasks'); }}
+          aoEscolherNoMapa={isViewer ? undefined : () => { setTab('map'); setTimeout(() => abrirPlanejar(), 300); }}
           paradas={routeStops}
           reunioes={meetings}
           metaVisitasDia={metaDeHoje}
@@ -7889,7 +8033,21 @@ function MainApp() {
             </View>
           </View>
 
-          {([
+          {((umApp ? [
+            // UM APP SÓ (docs/11 §1): Desenvolvimento · Playbook · Simular proposta · Modo sol ·
+            // Configurações · Sair. Gestão e Lente Calor aparecem só para quem é gestor.
+            !isViewer ? { chave: 'dev', Icone: IconTrendingUp, rotulo: 'Desenvolvimento', aoTocar: () => irParaTelaDePerfil('dev') } : null,
+            { chave: 'playbook', Icone: IconBook as typeof IconSettings, rotulo: 'Playbook', aoTocar: () => irParaTelaDePerfil('playbook') },
+            !isViewer ? { chave: 'simular', Icone: IconBill as typeof IconSettings, rotulo: 'Simular proposta', aoTocar: () => { setPerfilAberto(false); setTimeout(() => setPropostaPara('simular'), 350); } } : null,
+            verGestao && canViewGestor ? { chave: 'cockpit', Icone: IconBarGraph, rotulo: 'Gestão', aoTocar: () => { if (irParaOCockpit() === 'aba') setPerfilAberto(false); } } : null,
+            canViewGestor ? { chave: 'calor', Icone: IconBarGraph, rotulo: 'Lente Calor', aoTocar: () => { setPerfilAberto(false); setLente('calor'); } } : null,
+            { chave: 'sol', Icone: IconSparkle, rotulo: 'Modo sol · mapa claro', chaveLigada: modoSol, aoTocar: () => { alternarModoSol(); } },
+            { chave: 'config', Icone: IconSettings, rotulo: 'Configurações', aoTocar: () => irParaTelaDePerfil('config') },
+            { chave: 'sair', Icone: IconLogout, rotulo: 'Sair', perigo: true, aoTocar: () => Alert.alert('Sair da conta?', 'Você precisará entrar de novo com e-mail e senha.', [
+              { text: 'Cancelar', style: 'cancel' },
+              { text: 'Sair', style: 'destructive', onPress: () => { setPerfilAberto(false); logout(); } },
+            ]) },
+          ] : [
             // ORDEM DO HANDOFF v4.1 §6.17: Meu dia · Gestão · Lente Calor (gestor) ·
             // Modo sol (chave) · Configurações · Sair. "Cockpit" e "Gestão" são o
             // mesmo /gestao: fica uma entrada só.
@@ -7949,7 +8107,7 @@ function MainApp() {
                 ],
               ),
             },
-          ].filter(Boolean) as Array<{
+          ]).filter(Boolean) as Array<{
             chave: string;
             Icone: typeof IconSettings;
             rotulo: string;
@@ -8882,7 +9040,9 @@ function MainApp() {
                 Array.isArray(velho) ? velho.map((c: Client) => (c.id === alvo.id ? { ...c, telefone: cel } : c)) : velho);
               void supabase.from('clients').update({ telefone: cel }).eq('id', alvo.id).then(({ error }) => { if (error) console.warn('[telefone no lead]', error.message); });
             }
-            aplicarEtapaNoLead(alvo.id, codigo, alvo);
+            if (alvo.id) aplicarEtapaNoLead(alvo.id, codigo, alvo);
+            void queryClient.invalidateQueries({ queryKey: ['funil'] });
+            void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] });
           }}
         />
       )}
@@ -9226,7 +9386,7 @@ function ClientBottomSheet({
   novo,
 }: {
   /** Mapa novo (prancha §7): troca o topo e o peek; abas e alertas continuam. */
-  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onTirarDaRota?: () => void; onAvancar?: (destino: string, preenchido?: Record<string, string>) => void }) | null;
+  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onTirarDaRota?: () => void; onAvancar?: (destino: string, preenchido?: Record<string, string>) => void; onProposta?: () => void; onVerNoFunil?: () => void }) | null;
   /** Mapa novo: o cartão subiu para a meia altura (60%) — o mapa leva o pino para a faixa de cima. */
   aoAbrirMeia?: () => void;
   client: Client;
@@ -9611,6 +9771,8 @@ function ClientBottomSheet({
     onTirarDaRota: novo?.onTirarDaRota,
     onMoverPino: onEditLocation,
     onAvancar: novo?.onAvancar,
+    onProposta: novo?.onProposta,
+    onVerNoFunil: novo?.onVerNoFunil,
   };
 
   // ── Faixa de topo (M1c) ───────────────────────────────────────────────
@@ -11603,6 +11765,7 @@ const styles = StyleSheet.create({
   sbMarcaTitulo: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '700', color: 'var(--text)' },
   sbMarcaSub: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-faint)' },
   sbItens: { flex: 1, paddingVertical: 12, paddingHorizontal: 8, gap: 2 },
+  sbGrupo: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, color: 'var(--text-faint)', paddingHorizontal: 12, paddingTop: 14, paddingBottom: 4 },
   sbItem: {
     height: 44,
     flexDirection: 'row',

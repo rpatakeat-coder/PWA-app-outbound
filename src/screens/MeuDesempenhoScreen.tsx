@@ -223,7 +223,7 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas,
             <Text style={estilosWeb.kpiValor}>{m.visited.toLocaleString('pt-BR')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={estilosWeb.kpiCartao} onPress={() => open('Demos agendadas', 'meetings')}>
-            <Text style={estilosWeb.kpiRotulo}>{`Demos ${periodLabel}`}</Text>
+            <Text style={estilosWeb.kpiRotulo}>{`Reuniões marcadas ${periodLabel}`}</Text>
             <Text style={estilosWeb.kpiValor}>{m.meetings_scheduled.toLocaleString('pt-BR')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={estilosWeb.kpiCartao} onPress={() => open('Fechamentos', 'won')}>
@@ -238,7 +238,7 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas,
             disabled={!aoAbrirTarefas}
             onPress={aoAbrirTarefas}
           >
-            <Text style={estilosWeb.kpiRotulo}>Tarefas pendentes</Text>
+            <Text style={estilosWeb.kpiRotulo}>Na fila de Tarefas</Text>
             <Text style={[estilosWeb.kpiValor, (tarefasPendentes ?? 0) > 0 && { color: 'var(--tint-red-text)' }]}>
               {(tarefasPendentes ?? 0).toLocaleString('pt-BR')}
             </Text>
@@ -277,7 +277,7 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas,
       {!layout.ehLargo && m && (
         <View style={styles.kpiGrade}>
           <Kpi rotulo={`Visitas ${periodLabel}`} valor={m.visited.toLocaleString('pt-BR')} onPress={() => open('Minhas visitas', 'visited')} />
-          <Kpi rotulo={`Demos ${periodLabel}`} valor={m.meetings_scheduled.toLocaleString('pt-BR')} onPress={() => open('Minhas reuniões', 'meetings')} />
+          <Kpi rotulo={`Reuniões marcadas ${periodLabel}`} valor={m.meetings_scheduled.toLocaleString('pt-BR')} onPress={() => open('Minhas reuniões', 'meetings')} />
           <Kpi
             rotulo={`Conversão ${periodLabel}`}
             valor={m.visited > 0 ? `${Math.round((m.won_in_period / m.visited) * 100)}%` : '—'}
@@ -287,7 +287,7 @@ export function MeuDesempenhoScreen({ enabled, tarefasPendentes, aoAbrirTarefas,
           {/* O numero e' o de tarefas PENDENTES (o mesmo do badge da barra) —
               "atrasadas" nao existe como campo separado; ver relatorio. */}
           <Kpi
-            rotulo="Tarefas pendentes"
+            rotulo="Na fila de Tarefas"
             valor={(tarefasPendentes ?? 0).toLocaleString('pt-BR')}
             corValor={(tarefasPendentes ?? 0) > 0 ? 'var(--tint-red-text)' : undefined}
             onPress={aoAbrirTarefas}

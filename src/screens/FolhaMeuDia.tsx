@@ -23,6 +23,8 @@ type Props = {
   portasNaMicrorrota: number;
   proxima: { nome: string } | null;
   aoIrProxima: () => void;
+  /** demos REALIZADAS da semana (placar_executivo, 0156) — uma definição só (Um app só, PR 1) */
+  demosRealizadas?: number | null;
 };
 
 // tokens v6 por papel: preenchimento (acao) e texto, cada um certo nos dois temas
@@ -53,7 +55,7 @@ function Trilho({ feito, meta }: { feito: number; meta: number }) {
   );
 }
 
-export default function FolhaMeuDia({ visivel, aoFechar, dados, carregando, metaPadrao, portasNaMicrorrota, proxima, aoIrProxima }: Props) {
+export default function FolhaMeuDia({ visivel, aoFechar, dados, carregando, metaPadrao, portasNaMicrorrota, proxima, aoIrProxima, demosRealizadas }: Props) {
   const meta = dados?.prometido?.visitas && dados.prometido.visitas > 0 ? dados.prometido.visitas : metaPadrao;
   const metaSemana = metaPadrao * 5;
   const feitas = dados?.visitasHoje ?? 0;
@@ -111,8 +113,8 @@ export default function FolhaMeuDia({ visivel, aoFechar, dados, carregando, meta
                 <Trilho feito={sem.visitas} meta={metaSemana} />
                 <View style={s.blocos}>
                   <View style={s.bloco}>
-                    <Text style={s.blocoNum}>{sem.demos}</Text>
-                    <Text style={s.blocoRotulo}>{sem.demos === 1 ? 'demo marcada' : 'demos marcadas'}</Text>
+                    <Text style={s.blocoNum}>{demosRealizadas ?? '—'}</Text>
+                    <Text style={s.blocoRotulo}>{demosRealizadas === 1 ? 'demo realizada' : 'demos realizadas'}</Text>
                   </View>
                   <View style={[s.bloco, (sem.ganhos ?? 0) > 0 && s.blocoGanho]}>
                     <Text style={[s.blocoNum, (sem.ganhos ?? 0) > 0 && { color: VERDE_TEXTO }]}>{sem.ganhos ?? '—'}</Text>

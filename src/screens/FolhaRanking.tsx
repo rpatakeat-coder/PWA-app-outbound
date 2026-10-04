@@ -23,7 +23,7 @@ export type Ranking = {
     premio_texto: string | null; minha_pos: number | null; meu_pct: number | null };
   erro?: string;
 };
-type Conquista = { id: string; titulo: string; feito: boolean; progresso: number; alvo: number; unidade: string; medido?: boolean };
+export type Conquista = { id: string; titulo: string; feito: boolean; progresso: number; alvo: number; unidade: string; medido?: boolean };
 
 export function useRanking(periodo: 'semana' | 'mes', ativo = true) {
   return useQuery<Ranking | null>({
@@ -40,7 +40,7 @@ export function useRanking(periodo: 'semana' | 'mes', ativo = true) {
   });
 }
 
-function useConquistas(ativo: boolean) {
+export function useConquistas(ativo: boolean) {
   return useQuery<Conquista[]>({
     queryKey: ['minhas_conquistas'],
     enabled: ativo,

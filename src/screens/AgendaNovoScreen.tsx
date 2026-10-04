@@ -22,6 +22,8 @@ import { IconChevronRight, useIconColors } from '../components/icons';
 import { acaoRapida, diaBRT, ehCobranca } from '../utils/abaTarefas';
 import { compromissosDoDia, diasDaFaixa, estadoDasParadas, rotuloDoDia } from '../utils/agendaNovo';
 import type { Client, ClientMeeting, FieldRouteStopWithClient } from '../types/client';
+import AgendaDiaTopo from './AgendaDiaTopo';
+import AgendaSemana from './AgendaSemana';
 
 type Props = {
   /** Dia que abre selecionado (o "Ver na Agenda" da ficha de rua). */
@@ -47,6 +49,14 @@ type Props = {
   telefoneDe?: (clientId: string | null) => string | null;
   /** Onde a pessoa está: o ponto de partida do roteirizar dos outros dias. */
   base?: { latitude: number; longitude: number } | null;
+  /** Um app só (chave por pessoa): Dia · Semana, palavra de hoje, um botão de rota, script da daily. */
+  umApp?: boolean;
+  ownerId?: string | null;
+  provadasHoje?: number | null;
+  visitasHoje?: number;
+  hubspotEm?: string | null;
+  aoAbrirFeitas?: () => void;
+  aoEscolherNoMapa?: () => void;
 };
 
 const ruaDo = (c: Client | null) => {
@@ -58,7 +68,9 @@ const ruaDo = (c: Client | null) => {
 export default function AgendaNovoScreen({
   diaInicial, paradas, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead, dailyValidadaEm,
   aoRoteirizar, roteirizando, aoMontarDia, montandoDia, telefoneDe, base,
+  umApp = false, ownerId = null, provadasHoje = null, visitasHoje = 0, hubspotEm = null, aoAbrirFeitas, aoEscolherNoMapa,
 }: Props) {
+  const [vista, setVista] = useState<'dia' | 'semana'>('dia');
   const [roteirizandoDia, setRoteirizandoDia] = useState(false);
   const [registrando, setRegistrando] = useState<TarefaParaRegistrar | null>(null);
   const queryClient = useQueryClient();
@@ -230,9 +242,34 @@ export default function AgendaNovoScreen({
         aoSumir={(id) => setConcluidas((st) => new Set(st).add(`hs-${id}`))}
         aoVoltar={(id) => setConcluidas((st) => { const n = new Set(st); n.delete(`hs-${id}`); return n; })}
       />
-      <Text style={s.subtitulo}>A mesma do Planejamento do Cockpit</Text>
+      {umApp && (
+        <View style={s.alternancia} accessibilityRole="tablist">
+          {(['dia', 'semana'] as const).map((v) => (
+            <TouchableOpacity key={v} accessibilityRole="tab" accessibilityState={{ selected: vista === v }} onPress={() => setVista(v)}
+              style={[s.alternanciaOpcao, vista === v && s.alternanciaAtiva]}>
+              <Text style={[s.alternanciaTexto, vista === v && s.alternanciaTextoAtivo]}>{v === 'dia' ? 'Dia' : 'Semana'}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+      {umApp && vista === 'semana' && <AgendaSemana ownerId={ownerId} hoje={hoje} aoEscolherNoMapa={aoEscolherNoMapa} />}
+      {umApp && vista === 'dia' && (
+        <>
+          <Text style={s.diaTitulo}>{`Hoje · ${new Date(`${hoje}T12:00:00Z`).toLocaleDateString('pt-BR', { weekday: 'short', timeZone: 'UTC' }).replace('.', '')} ${hoje.slice(8, 10)}/${hoje.slice(5, 7)}`}</Text>
+          <AgendaDiaTopo
+            provadasHoje={provadasHoje} visitasHoje={visitasHoje}
+            paradasNoPlano={estado.length} paradasAbertas={estado.filter((p) => p.estado !== 'feito').length}
+            reunioesHoje={doDia(hoje).filter((k) => k.tipo === 'reunião').length}
+            metaPadrao={meta} hubspotEm={hubspotEm}
+            aoMontarDia={aoMontarDia} montandoDia={montandoDia}
+            aoRefazerRota={aoRoteirizar} refazendo={roteirizando}
+            aoAbrirFeitas={aoAbrirFeitas}
+          />
+        </>
+      )}
+      {!umApp && <Text style={s.subtitulo}>A mesma do Planejamento do Cockpit</Text>}
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.faixa}>
+      {!umApp && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.faixa}>
         {dias.map((d) => {
           const r = rotuloDoDia(d, hoje);
           const n = (d === hoje ? estado.length : paradasDoDia(d).length) + doDia(d).length;
@@ -252,11 +289,11 @@ export default function AgendaNovoScreen({
             </TouchableOpacity>
           );
         })}
-      </ScrollView>
+      </ScrollView>}
 
-      {dia === hoje && (
+      {(!umApp || vista === 'dia') && dia === hoje && (
         <>
-          <View style={s.progresso}>
+          {!umApp && <View style={s.progresso}>
             {/* Handoff v4.1 §6.14: "Plano de hoje · x de 6", barra verde e a hora da Daily. */}
             <Text style={s.progressoTitulo}>{`Plano de hoje · ${feitas} de ${meta}`}</Text>
             <View style={s.barraPlano}><View style={[s.barraPlanoCheia, { width: `${Math.min(100, Math.round((feitas / meta) * 100))}%` }]} /></View>
@@ -265,9 +302,9 @@ export default function AgendaNovoScreen({
                 ? `Daily registrada às ${new Date(dailyValidadaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}`
                 : 'Daily de hoje ainda não registrada'}
             </Text>
-          </View>
+          </View>}
 
-          {aoMontarDia && (
+          {!umApp && aoMontarDia && (
             <TouchableOpacity accessibilityRole="button" accessibilityLabel="Montar meu dia com microrrotas" disabled={montandoDia}
               style={[s.montarDia, montandoDia && { opacity: 0.6 }]} onPress={aoMontarDia}>
               <Text style={s.montarDiaTitulo}>{montandoDia ? 'Montando o dia…' : 'Montar meu dia'}</Text>
@@ -277,7 +314,7 @@ export default function AgendaNovoScreen({
 
           {abertasComPonto.length > 0 && (
             <View style={s.acoesRota}>
-              {aoRoteirizar && abertasComPonto.length >= 2 && (
+              {!umApp && aoRoteirizar && abertasComPonto.length >= 2 && (
                 <TouchableOpacity accessibilityRole="button" accessibilityLabel="Roteirizar as paradas em aberto" disabled={roteirizando}
                   style={[s.acaoRota, roteirizando && { opacity: 0.6 }]} onPress={aoRoteirizar}>
                   <Text style={s.acaoRotaTexto}>{roteirizando ? 'Calculando…' : 'Roteirizar'}</Text>
@@ -292,6 +329,7 @@ export default function AgendaNovoScreen({
           {estado.length === 0 && (
             <Text style={s.vazio}>Sem rota hoje. Toque em "Montar meu dia" ou ponha leads com "+ Rota de hoje" no cartão.</Text>
           )}
+          {umApp && estado.length > 0 && <Text style={s.secao}>{`PARADAS · ${feitas} DE ${estado.length} FEITAS`}</Text>}
 
           {estado.map((p, i) => {
             const c = p.client;
@@ -333,7 +371,7 @@ export default function AgendaNovoScreen({
         </>
       )}
 
-      {dia !== hoje && paradasDoDia(dia).length > 0 && (
+      {!umApp && dia !== hoje && paradasDoDia(dia).length > 0 && (
         <View style={s.acoesRota}>
           {paradasDoDia(dia).length >= 2 && (
             <TouchableOpacity accessibilityRole="button" accessibilityLabel="Roteirizar este dia" disabled={roteirizandoDia}
@@ -347,7 +385,7 @@ export default function AgendaNovoScreen({
         </View>
       )}
 
-      {dia !== hoje && paradasDoDia(dia).length > 0 && (
+      {!umApp && dia !== hoje && paradasDoDia(dia).length > 0 && (
         <View style={s.grupo}>
           <Text style={s.secao}>{`PLANO DO DIA · ${paradasDoDia(dia).length}`}</Text>
           {paradasDoDia(dia).map((p, i) => {
@@ -376,7 +414,7 @@ export default function AgendaNovoScreen({
         </View>
       )}
 
-      {compromissos.length > 0 && (
+      {(!umApp || vista === 'dia') && compromissos.length > 0 && (
         <View style={s.grupo}>
           <Text style={s.secao}>{dia === hoje ? 'REUNIÕES E RETORNOS DE HOJE' : 'REUNIÕES E RETORNOS'}</Text>
           {compromissos.map((k) => (
@@ -406,7 +444,7 @@ export default function AgendaNovoScreen({
         </View>
       )}
 
-      {dia !== hoje && compromissos.length === 0 && paradasDoDia(dia).length === 0 && (
+      {!umApp && dia !== hoje && compromissos.length === 0 && paradasDoDia(dia).length === 0 && (
         <Text style={s.vazio}>Nada marcado neste dia. O “Agendar” do cartão e o próximo passo do registro caem aqui.</Text>
       )}
     </ScrollView>
@@ -415,6 +453,12 @@ export default function AgendaNovoScreen({
 
 const s = StyleSheet.create({
   tela: { flex: 1, backgroundColor: 'var(--bg)' },
+  alternancia: { flexDirection: 'row', borderRadius: 14, backgroundColor: 'var(--surface-2)', padding: 4, gap: 4 },
+  alternanciaOpcao: { flex: 1, minHeight: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  alternanciaAtiva: { backgroundColor: 'var(--surface)' },
+  alternanciaTexto: { fontSize: 15, fontWeight: '600', color: 'var(--text-muted)' },
+  alternanciaTextoAtivo: { color: 'var(--text)', fontWeight: '700' },
+  diaTitulo: { fontSize: 20, fontWeight: '800', color: 'var(--text)' },
   acoesRota: { flexDirection: 'row', gap: 8 },
   montarDia: { minHeight: 56, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--vermelho-acao)', justifyContent: 'center', gap: 2 },
   montarDiaTitulo: { fontSize: 16, fontWeight: '700', color: 'var(--text)' },
