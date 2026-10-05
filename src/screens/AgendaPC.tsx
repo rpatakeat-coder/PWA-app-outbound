@@ -98,6 +98,8 @@ const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const minDe = (h: string | null) => { if (!h) return null; const m = /^(\d{1,2}):(\d{2})/.exec(h); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
 const pontoDe = (c: Client): Ponto | null => (c.latitude != null && c.longitude != null ? { latitude: Number(c.latitude), longitude: Number(c.longitude) } : null);
 const ordinal = (n: number) => `${n}ª`;
+/** Conta-alvo da munição ainda sem negócio não é "sem etapa": é a etapa antes do funil. */
+const etapaOuTipo = (c: Client, etapa: string | null) => etapa ?? (c.status === 'cliente' ? 'Cliente Takeat' : (c.lead_prospeccao_id || c.conta_alvo_place_id) ? 'Conta-alvo · sem negócio' : null);
 const soDigitos = (t: string) => t.replace(/\D+/g, '');
 const com55 = (t: string) => { const d = soDigitos(t); return d.length <= 11 ? `55${d}` : d; };
 const ROTULO_GRUPO: Record<GrupoSugestao, string> = {
@@ -142,7 +144,7 @@ function CartaoFoco({ c, item, numero, total, chega, props }: {
         {numero ? <View style={[s.disco, { backgroundColor: props.corDe(c) }]}><Text style={s.discoTexto}>{numero}</Text></View> : null}
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={s.focoNome} numberOfLines={2}>{props.nomeDe(c)}</Text>
-          <Text style={s.sub} numberOfLines={2}>{[ctx.etapa ?? (c.status === 'cliente' ? 'Cliente Takeat' : 'Sem etapa'), c.bairro ?? 'sem bairro no cadastro'].join(' · ')}</Text>
+          <Text style={s.sub} numberOfLines={2}>{[etapaOuTipo(c, ctx.etapa) ?? 'Sem etapa', c.bairro ?? 'sem bairro no cadastro'].join(' · ')}</Text>
         </View>
       </View>
       {p.indice >= 0 && (
@@ -326,6 +328,8 @@ export default function AgendaPC(props: Props) {
     },
   });
   const provaDe = (c: Client) => visitasQ.data?.get(c.id) ?? null;
+  // dia passado: o que se rodou de verdade é o caminho entre as visitas feitas
+  const rodado = passado ? resumo(rota.filter((_, k) => itens[k] && (itens[k].estado === 'feita' || !!provaDe(itens[k].client))), []) : null;
   const naoForam = passado ? itens.filter((i) => i.estado !== 'feita' && !provaDe(i.client)).map((i) => i.client) : [];
   const comProva = passado ? itens.filter((i) => { const v = provaDe(i.client); return v && !v.declarada && v.distancia != null; }).length : 0;
 
@@ -492,7 +496,7 @@ export default function AgendaPC(props: Props) {
     const feita = i.estado === 'feita' || !!v;
     const proxima = ehHoje && !feita && itens.slice(0, k).every((x) => x.estado === 'feita');
     const destaque = props.hover === c.id || foco?.id === c.id;
-    const semEtapa = !ctx.etapa && c.status !== 'cliente';
+    const semEtapa = !etapaOuTipo(c, ctx.etapa);
     const prox = itens[k + 1];
     const leg = prox ? perna(pontoDe(c), pontoDe(prox.client)) : null;
     const conflitoAqui = conf?.indice === k;
@@ -518,7 +522,7 @@ export default function AgendaPC(props: Props) {
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={s.nome} numberOfLines={2}>{props.nomeDe(c)}</Text>
             <Text style={s.sub} numberOfLines={1}>
-              <Text style={semEtapa ? { color: 'var(--ambar-texto)' } : null}>{ctx.etapa ?? (c.status === 'cliente' ? 'Cliente Takeat' : 'sem etapa')}</Text>
+              <Text style={semEtapa ? { color: 'var(--ambar-texto)' } : null}>{etapaOuTipo(c, ctx.etapa) ?? 'sem etapa'}</Text>
               {' · '}
               <Text style={!c.bairro ? { color: 'var(--ambar-texto)' } : null}>{c.bairro ?? 'sem bairro no cadastro'}</Text>
               {i.estado === 'entra' ? <Text style={{ color: 'var(--vermelho-texto)', fontWeight: '700' }}>{' · a confirmar'}</Text> : null}
@@ -578,7 +582,7 @@ export default function AgendaPC(props: Props) {
   const nSug = sugestoesComPosicao.filter((x) => !x.noDia).length;
   const titulo = tituloDoDia(dia, hoje);
   const resumoTexto = passado
-    ? `${itens.filter((i) => i.estado === 'feita' || provaDe(i.client)).length} de ${itens.length} visitadas · ${comProva} com prova de GPS · ${kmTexto(res.km * 1000)} rodados`
+    ? `${itens.filter((i) => i.estado === 'feita' || provaDe(i.client)).length} de ${itens.length} visitadas · ${comProva} com prova de GPS · ${kmTexto((rodado?.km ?? 0) * 1000)} rodados`
     : itens.length
       ? `${itens.length} ${itens.length === 1 ? 'parada' : 'paradas'} · meta ${meta} · ≈ ${duracao(res.minutos)} de rua · ${kmTexto(res.km * 1000)} · ${hhmm(res.inicio!)} → ${hhmm(res.fim!)}`
       : `Meta de ${meta} visitas · nada marcado ainda`;

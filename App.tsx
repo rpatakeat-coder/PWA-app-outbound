@@ -1362,6 +1362,7 @@ function MainApp() {
     setOrdemPlano(null);
     setFixosPlano((m) => (m.size ? new Map() : m));
     setFocoPC(null);
+    setAbaAgenda('plano');
   }, [planejarDia]);
   const opsOutroDia = useFieldOps(planejarDia ?? routeDate, isAuthenticated && !!planejarDia && planejarDia !== routeDate);
   const opsDoDia = planejarDia && planejarDia !== routeDate ? opsOutroDia : fieldOps;
@@ -2444,8 +2445,11 @@ function MainApp() {
   const [googleAgenda, setGoogleAgenda] = useState<{ chave: string; lugares: LugarPerto[] } | null>(null);
   const [carregandoGoogle, setCarregandoGoogle] = useState(false);
   const centroDoPlano = useMemo(() => {
-    const pts = clientesDoPlanoNoMapa.filter((c) => c.latitude != null && c.longitude != null);
-    if (pts.length) return { latitude: pts.reduce((s, c) => s + Number(c.latitude), 0) / pts.length, longitude: pts.reduce((s, c) => s + Number(c.longitude), 0) / pts.length };
+    // a parada "do meio" (a de menor soma de distâncias): a média de duas paradas longe uma da
+    // outra cai no meio do caminho, onde não há nada do dia
+    const pts = clientesDoPlanoNoMapa.filter((c) => c.latitude != null && c.longitude != null)
+      .map((c) => ({ latitude: Number(c.latitude), longitude: Number(c.longitude) }));
+    if (pts.length) return pts.reduce((m, p) => (pts.reduce((s, q) => s + metros(p, q), 0) < pts.reduce((s, q) => s + metros(m, q), 0) ? p : m), pts[0]);
     return mapRegion ? { latitude: mapRegion.latitude, longitude: mapRegion.longitude } : null;
   }, [clientesDoPlanoNoMapa, mapRegion]);
   const querGoogle = ehAgendaPC && agendaPlaneja && !!planejarDia && planejarDia >= routeDate && (abaAgenda === 'sugestoes' || camadasAgenda.has('google'));
@@ -2467,7 +2471,8 @@ function MainApp() {
       .map((c) => ({ latitude: Number(c.latitude), longitude: Number(c.longitude) }));
     const ref = plano.length ? plano : centroDoPlano ? [centroDoPlano] : [];
     const dist = (p: { latitude: number; longitude: number }) => ref.reduce((m, r) => Math.min(m, metros(r, p)), Infinity);
-    const LIMITE = plano.length ? 2000 : 4000;
+    // dia vazio: o que está na área visível do mapa (meia diagonal), no mínimo 2 km
+    const LIMITE = plano.length ? 2000 : Math.max(2000, mapRegion ? metros({ latitude: mapRegion.latitude, longitude: mapRegion.longitude }, { latitude: mapRegion.latitude + mapRegion.latitudeDelta / 2, longitude: mapRegion.longitude + mapRegion.longitudeDelta / 2 }) : 4000);
     const out: Array<SugestaoPC & { d: number }> = [];
     for (const { c, p } of itensMapaNovo) {
       if (c.latitude == null || c.longitude == null || c.is_teste) continue;
@@ -2490,13 +2495,14 @@ function MainApp() {
     for (const l of googleAgenda?.lugares ?? []) {
       if (jaNaBase(l, base)) continue;
       const ponto = { latitude: l.latitude, longitude: l.longitude };
+      if (dist(ponto) > LIMITE) continue;
       const nota = l.nota != null ? `Google ${l.nota.toFixed(1).replace('.', ',')}${l.avaliacoes ? ` (${l.avaliacoes})` : ''}` : 'sem nota';
       out.push({ chave: `g-${l.placeId}`, grupo: 'google', client: null, google: l, nome: l.nome, sub: `Fora da base · ${nota}`, ponto, d: dist(ponto) });
     }
     const porGrupo = new Map<string, number>();
     return out.sort((a, b) => a.d - b.d).filter((x) => { const n = porGrupo.get(x.grupo) ?? 0; porGrupo.set(x.grupo, n + 1); return n < 8; })
       .map(({ d: _d, ...x }) => x); // eslint-disable-line @typescript-eslint/no-unused-vars
-  }, [ehAgendaPC, planejarDia, clientesDoPlanoNoMapa, centroDoPlano, itensMapaNovo, routeSlaDays, googleAgenda]);
+  }, [ehAgendaPC, planejarDia, clientesDoPlanoNoMapa, centroDoPlano, itensMapaNovo, routeSlaDays, googleAgenda, mapRegion]);
   const idsSugestao = useMemo(() => {
     const m = new Map<string, SugestaoPC['grupo']>();
     for (const x of sugestoesAgenda) if (x.client) m.set(x.client.id, x.grupo);
