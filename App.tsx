@@ -3536,7 +3536,8 @@ function MainApp() {
     handleMarkerPress(c);
   }, [handleMarkerPress]);
   // Saiu do mapa: o modo Planejar desliga (senão o toque ficava armado nas outras abas).
-  useEffect(() => { if (tab !== 'map') setPlanejarDia(null); }, [tab]);
+  // a Agenda do computador planeja no mapa dela (05/10/26): só ela mantém o modo fora do Mapa
+  useEffect(() => { if (tab !== 'map' && !(tab === 'agenda' && layout.ehLargo && modoNovo)) setPlanejarDia(null); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // DEEP LINK DO COCKPIT (v5, 28/09/2026): "Abrir no mapa" chega aqui como
   // /mapa?pino=<negócio>&cartao=aberto, ?rua=… ou ?lente=…. Roda uma vez, depois do
