@@ -794,6 +794,7 @@ function MainApp() {
   const [enderecoEditavel, setEnderecoEditavel] = useState(false);
   // CEP na edição do endereço (05/10/26): o que a busca achou, para a pessoa saber o que aconteceu
   const [cepNaEdicao, setCepNaEdicao] = useState<'buscando' | 'achou' | 'nao' | 'falhou' | null>(null);
+  const cepPedidoRef = useRef<string | null>(null);
   // Duplicado (23505) passa a viver DENTRO da folha, no lugar do Alert seco.
   const [erroDuplicado, setErroDuplicado] = useState<string | null>(null);
   // Leads que PARECEM ser este, achados antes de gravar. O aviso nao trava: o
@@ -1093,6 +1094,19 @@ function MainApp() {
   );
   const nomesReunioes = useNomesDeClientes(idsClientesDasReunioes, tab === 'agenda');
   const queryClient = useQueryClient();
+  /* TROCOU A PESSOA, LIMPA O CACHE (auditoria 05/10/26). Várias chaves (a fila de tarefas, por
+     exemplo) não levam o usuário: quem entrava na mesma aba logo depois via por até 1 min a lista
+     de quem saiu — com o "limpar o funil" em lote, os negócios dele. */
+  const pessoaDoCache = useRef<string | null>(null);
+  useEffect(() => {
+    const atual = isAuthenticated ? (profile?.id ?? null) : null;
+    // saiu (tela de login no lugar do app) ou entrou outra pessoa: nada do cache anterior fica
+    if (pessoaDoCache.current && pessoaDoCache.current !== atual && (!isAuthenticated || atual)) {
+      queryClient.clear();
+      pessoaDoCache.current = null;
+    }
+    if (atual) pessoaDoCache.current = atual;
+  }, [isAuthenticated, profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // A fila de Tarefas (docs/10): o cabeçalho e o selo da aba contam o MESMO que a tela.
   // Busca já na abertura (04/10/26): com enabled:false o selo mostrava a contagem do CRM (5)
   // até a pessoa abrir a aba, e o da fila (3) depois. Mesmo cache e mesma chave da tela.
@@ -2257,6 +2271,12 @@ function MainApp() {
     if (!dia || !profile?.id || (!itens.length && !ordemFinal && !fixos.size) || confirmandoPlanoRef.current) return;
     confirmandoPlanoRef.current = true;
     setConfirmandoPlano(true);
+    // como o dia estava no banco antes de gravar: o Desfazer volta a ordem e os cadeados também
+    const antesNoBanco = opsDoDia.stops
+      .filter((st) => st.status === 'planned' || st.status === 'done')
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    const ordemAntes = antesNoBanco.map((st) => st.client_id);
+    const fixosAntes = new Map<string, string | null>(antesNoBanco.map((st) => [st.client_id, st.horario_fixo ?? null]));
     try {
       const { feitos, falhas } = await gravarNoDia(dia, itens);
       let reordenadas = 0;
@@ -2288,8 +2308,17 @@ function MainApp() {
         Toast.mostrar(`${partes.join(' · ')}`, 'ok', {
           rotulo: 'Desfazer',
           onPress: () => {
-            void gravarNoDia(dia, feitos.map((f) => ({ client: f.client, entrar: !f.entrar })))
-              .then((r) => Toast.mostrar(r.falhas.length ? `Não desfiz ${r.falhas.length}: ${r.falhas[0]}` : 'Desfeito.', r.falhas.length ? 'erro' : 'ok'));
+            void (async () => {
+              const r = await gravarNoDia(dia, feitos.map((f) => ({ client: f.client, entrar: !f.entrar })));
+              // a ordem e os cadeados de antes (quem voltou ao dia volta ao lugar e ao horário dele)
+              if (reordenadas || fixos.size || ordemFinal) {
+                try {
+                  await gravarOrdemDoDia(profile.id, dia, ordemAntes, fixosAntes);
+                  await queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
+                } catch (e) { r.falhas.push(`ordem do dia: ${String((e as Error)?.message ?? e)}`); }
+              }
+              Toast.mostrar(r.falhas.length ? `Não desfiz ${r.falhas.length}: ${r.falhas[0]}` : 'Desfeito.', r.falhas.length ? 'erro' : 'ok');
+            })();
           },
         });
       } else Toast.mostrar('Nada mudou: já estava assim no banco.', 'fila');
@@ -9901,11 +9930,14 @@ function MainApp() {
                     setForm(s => ({ ...s, cep: fmt }));
                     if (dig.length !== 8) { setCepNaEdicao(null); return; }
                     setCepNaEdicao('buscando');
+                    // só vale a resposta do ÚLTIMO CEP digitado: uma lenta de antes não sobrescreve
+                    cepPedidoRef.current = dig;
                     void fetchCepData(dig).then((r) => {
+                      if (cepPedidoRef.current !== dig) return;
                       if (!r) { setCepNaEdicao('nao'); return; }
                       setForm(s => ({ ...s, cep: r.cep, endereco: r.logradouro || s.endereco, cidade: r.cidade || s.cidade, estado: r.estado || s.estado, bairro: r.bairro || s.bairro }));
                       setCepNaEdicao('achou');
-                    }).catch(() => setCepNaEdicao('falhou'));
+                    }).catch(() => { if (cepPedidoRef.current === dig) setCepNaEdicao('falhou'); });
                   }, { keyboardType: 'phone-pad', maxLength: 9 })}
                   {cepNaEdicao && (
                     <Text style={{ fontSize: 12, color: cepNaEdicao === 'achou' ? 'var(--tint-green-text)' : cepNaEdicao === 'buscando' ? 'var(--text-muted)' : 'var(--tint-amber-text)', marginTop: -4, marginBottom: 8 }}>
