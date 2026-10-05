@@ -386,6 +386,7 @@ function comPrazo<T>(p: Promise<T>, ms: number): Promise<T | undefined> {
   return Promise.race([p, new Promise<undefined>((r) => setTimeout(() => r(undefined), ms))]);
 }
 
+const SEM_SUGESTOES: SugestaoPC[] = [];
 const getClientPrimaryName = (client: Client) => client.empresa?.trim() || client.nome;
 // Nome da pessoa de contato, quando diz algo alem do restaurante (o CRM traz "." e o proprio nome do lugar).
 const contatoDoLead = (client: Client) => {
@@ -1099,14 +1100,16 @@ function MainApp() {
   const naFila = Array.isArray(filaNaTela.data?.itens) ? filaNaTela.data!.itens!.length : null;
   // Config editável pelo gestor (meta/dia, SLAs, params da Conta Alvo).
   const { config: routeConfig } = useRouteConfig();
-  const routeSlaDays: SlaDays = {
+  // memorizado (auditoria 05/10/26): um objeto novo a cada render recalculava as sugestões da
+  // Agenda e, por elas, a camada inteira de pinos do mapa a cada render — no celular também
+  const routeSlaDays = useMemo<SlaDays>(() => ({
     prospeccao: routeConfig.sla_prospeccao,
     visita: routeConfig.sla_visita,
     conversa: routeConfig.sla_conversa,
     demo: routeConfig.sla_demo,
     negociacao: routeConfig.sla_negociacao,
     ag_pagamento: routeConfig.sla_ag_pagamento,
-  };
+  }), [routeConfig.sla_prospeccao, routeConfig.sla_visita, routeConfig.sla_conversa, routeConfig.sla_demo, routeConfig.sla_negociacao, routeConfig.sla_ag_pagamento]);
   // Tarefas geradas automaticamente (motor de regras no banco). O hook dispara
   // a geracao ao autenticar e le as pendentes. O badge do rodape usa a contagem
   // JA filtrada por vendedor (visibleTasksCount), nao o total global.
@@ -2344,9 +2347,13 @@ function MainApp() {
 
   // ===== AGENDA NO COMPUTADOR: as ações do painel (tudo vira rascunho, com Desfazer de 5 s) =====
   const comDesfazer = (texto: string | (() => string), acao: () => void) => {
-    const antes = { r: rascunhoRef.current, o: ordemRef.current, f: fixosRef.current };
+    const antes = { r: rascunhoRef.current, o: ordemRef.current, f: fixosRef.current, dia: planejarDiaRef.current };
     acao();
-    Toast.mostrar(typeof texto === 'function' ? texto() : texto, 'ok', { rotulo: 'Desfazer', onPress: () => { setRascunhoPlano(antes.r); setOrdemPlano(antes.o); setFixosPlano(antes.f); } });
+    Toast.mostrar(typeof texto === 'function' ? texto() : texto, 'ok', { rotulo: 'Desfazer', onPress: () => {
+      // trocou de dia antes de desfazer: o rascunho de lá não entra no dia novo
+      if (planejarDiaRef.current !== antes.dia) { Toast.mostrar('Esse desfazer era de outro dia.', 'fila'); return; }
+      setRascunhoPlano(antes.r); setOrdemPlano(antes.o); setFixosPlano(antes.f);
+    } });
   };
   const nomeCurto = (c: Client) => c.empresa?.trim() || c.nome;
   const porNoDiaPC = (cs: Client[]) => {
@@ -2429,6 +2436,8 @@ function MainApp() {
       setTimeout(() => mapRef.current?.animateToRegion({ latitude: lat, longitude: lng, latitudeDelta: 0.012, longitudeDelta: 0.012 }, 350), 40);
     }
   };
+  const focarPCRef = useRef<((c: Client | null) => void) | null>(null);
+  focarPCRef.current = focarPC;
   const abaAgendaRef = useRef(abaAgenda);
   abaAgendaRef.current = abaAgenda;
   // Toque no pino com a Agenda do computador aberta: abre o lead no painel; com a aba Sugestões
@@ -2453,20 +2462,24 @@ function MainApp() {
     return mapRegion ? { latitude: mapRegion.latitude, longitude: mapRegion.longitude } : null;
   }, [clientesDoPlanoNoMapa, mapRegion]);
   const querGoogle = ehAgendaPC && agendaPlaneja && !!planejarDia && planejarDia >= routeDate && (abaAgenda === 'sugestoes' || camadasAgenda.has('google'));
+  const buscasGoogle = useRef(0);
   useEffect(() => {
-    if (!querGoogle || !centroDoPlano) return;
+    if (!querGoogle || !centroDoPlano) { setCarregandoGoogle(false); return; }
     const chave = `${centroDoPlano.latitude.toFixed(2)},${centroDoPlano.longitude.toFixed(2)}`;
-    if (googleAgenda?.chave === chave) return;
+    if (googleAgenda?.chave === chave) { setCarregandoGoogle(false); return; }
+    // cada busca é uma chamada paga ao Google: arrastar o mapa num dia vazio não pode virar dezenas
+    if (buscasGoogle.current >= 15) { setCarregandoGoogle(false); return; }
+    buscasGoogle.current++;
     let vivo = true;
     setCarregandoGoogle(true);
     buscarGooglePerto(centroDoPlano)
       .then((lugares) => { if (vivo) setGoogleAgenda({ chave, lugares }); })
       .catch((e) => { console.warn('[agenda] google perto:', e); if (vivo) setGoogleAgenda({ chave, lugares: [] }); })
       .finally(() => { if (vivo) setCarregandoGoogle(false); });
-    return () => { vivo = false; };
+    return () => { vivo = false; setCarregandoGoogle(false); };
   }, [querGoogle, centroDoPlano?.latitude.toFixed(2), centroDoPlano?.longitude.toFixed(2)]); // eslint-disable-line react-hooks/exhaustive-deps
   const sugestoesAgenda = useMemo<SugestaoPC[]>(() => {
-    if (!ehAgendaPC || !planejarDia) return [];
+    if (!ehAgendaPC || !planejarDia) return SEM_SUGESTOES;
     const plano = clientesDoPlanoNoMapa.filter((c) => c.latitude != null && c.longitude != null)
       .map((c) => ({ latitude: Number(c.latitude), longitude: Number(c.longitude) }));
     const ref = plano.length ? plano : centroDoPlano ? [centroDoPlano] : [];
@@ -2527,7 +2540,9 @@ function MainApp() {
     // ABRIR A AGENDA JÁ PLANEJA: o aviso da coluna da esquerda pode chegar antes do modo existir
     // (medido como Sandro: hoje abria com a lista antiga e só o 2º dia entrava no modo)
     if (agendaPlaneja && !planejarDiaRef.current) {
-      const iso = (ehAgendaPC ? agendaDiaInicial : null) ?? ultimoDiaDaAgenda.current ?? routeDate;
+      let iso = (ehAgendaPC ? agendaDiaInicial : null) ?? ultimoDiaDaAgenda.current ?? routeDate;
+      // sábado e domingo não estão na grade: a Agenda abre no próximo dia útil (planejar a segunda)
+      if (ehAgendaPC && !diasDaAgendaPC.includes(iso)) iso = diasDaAgendaPC.find((d) => d >= routeDate) ?? diasDoPlanejar[0]?.iso ?? iso;
       if (!diasDoPlanejar.some((d) => d.iso === iso) && !(ehAgendaPC && diasDaAgendaPC.includes(iso))) return;
       planejarPelaAgenda.current = true;
       setQuadraAberta(null);
@@ -4379,6 +4394,9 @@ function MainApp() {
   const buscaNegocios = useBuscaNegocios(searchQuery, myHubspotId, modoNovo && buscaAberta);
   const abrirDaBusca = useCallback((c: Client) => {
     setBuscaAberta(false);
+    /* Na Agenda do computador planejando (auditoria 05/10/26): o achado abre no painel dela, e
+       não leva ao Mapa — sair da Agenda confirmava o rascunho do dia sem perguntar. */
+    if (ehAgendaPCRef.current && planejarDiaRef.current) { focarPCRef.current?.(c); return; }
     // a busca leva ao mapa (05/10/26): no computador ela podia estar na Lista, na Agenda, nas Tarefas
     setTab('map');
     buscaEnquadrada.current = searchTerm;

@@ -115,7 +115,10 @@ export default function LimparFunil({ visivel, dealInicial, reguaDe, onFechar, o
     const res: Resultado[] = [];
     // um por vez: o servidor confere dono e regra de cada negócio, e o HubSpot limita rajada
     for (const l of selecionadas) {
-      const corpo = { op: 'mudar-etapa', dealId: l.dealId, novaEtapa: destino, propriedades };
+      // etapaEsperada: se o negócio mudou de etapa desde a lista (foi para Ag. Pagamento, por
+      // exemplo), o servidor recusa em vez de tirar de lá. fecharTarefas: false: em lote não se
+      // concluem tarefas (concluída conta como toque realizado).
+      const corpo = { op: 'mudar-etapa', dealId: l.dealId, novaEtapa: destino, propriedades, etapaEsperada: l.etapaId, fecharTarefas: false };
       try {
         await negocioAcao(corpo);
         res.push({ dealId: l.dealId, ok: true });

@@ -575,6 +575,15 @@ export default function AgendaPC(props: Props) {
       out.push(linhaParada(i, k));
     });
     for (const k of ks) out.push(linhaCompromisso(k));
+    // soltar depois da última parada (arrastar para o fim)
+    if (arrastando != null) {
+      out.push(
+        <div key="fim-da-lista" onDragOver={(e) => { e.preventDefault(); setSobre(itens.length); }} onDrop={(e) => { e.preventDefault(); soltar(itens.length); }}
+          style={{ minHeight: 40, borderRadius: 12, border: sobre === itens.length ? '2px dashed var(--vermelho-acao)' : '2px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-faint)', fontSize: 12 }}>
+          soltar aqui para ir por último
+        </div>,
+      );
+    }
     return out;
   })();
 
@@ -743,7 +752,7 @@ export default function AgendaPC(props: Props) {
           />
           {busca ? <Pressable accessibilityRole="button" accessibilityLabel="Limpar a busca" onPress={() => setBusca('')}><IconClose width={14} height={14} fill={cores.muted} /></Pressable> : null}
         </View>
-        <Pressable accessibilityRole="button" onPress={() => aoDia(hoje)} style={s.botaoPeq}><Text style={s.botaoPeqTexto}>Hoje</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => { let d = hoje; while (dow(d) === 0 || dow(d) === 6) d = somaDias(d, 1); aoDia(d); }} style={s.botaoPeq}><Text style={s.botaoPeqTexto}>Hoje</Text></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Esconder o painel" onPress={props.aoEsconder} style={s.botaoIcone}>
           <IconShrink width={16} height={16} fill={cores.muted} />
         </Pressable>

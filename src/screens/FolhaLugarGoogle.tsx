@@ -48,11 +48,14 @@ export default function FolhaLugarGoogle({ lugar, aoFechar, aoVirarLead, aoAbrir
   const [det, setDet] = useState<Detalhe | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [jaTem, setJaTem] = useState<Client | null>(null);
+  // a conferência de "já está na base" tem de terminar antes do Virar lead (auditoria 05/10/26):
+  // um toque rápido criava a duplicata que ela existe para impedir
+  const [conferido, setConferido] = useState(false);
 
   useEffect(() => {
     if (!lugar) return;
     let vivo = true;
-    setDet(null); setErro(null); setJaTem(null);
+    setDet(null); setErro(null); setJaTem(null); setConferido(false);
     lerLugar(lugar.placeId).then((d) => { if (vivo) setDet(d); }).catch((e) => { if (vivo) setErro(String((e as Error)?.message ?? e)); });
     return () => { vivo = false; };
   }, [lugar?.placeId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -87,6 +90,7 @@ export default function FolhaLugarGoogle({ lugar, aoFechar, aoVirarLead, aoAbrir
         // cliente Takeat primeiro: \u00e9 ele que n\u00e3o pode virar lead de novo
         .sort((x, y) => (x.status === 'cliente' ? 0 : 1) - (y.status === 'cliente' ? 0 : 1))[0];
       setJaTem(doLugar ?? doNome ?? null);
+      setConferido(true);
     });
     return () => { vivo = false; };
   }, [lugar?.placeId, det?.nome]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -99,7 +103,7 @@ export default function FolhaLugarGoogle({ lugar, aoFechar, aoVirarLead, aoAbrir
       topo={<Text style={s.kicker}>DO GOOGLE MAPS</Text>}>
       <View style={s.corpo}>
         {!det && !erro ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null}
-        {erro && !det ? <Text style={s.aviso}>{`Não consegui ler este lugar no Google agora (${erro}). Dá para cadastrar pelo pino do mesmo jeito.`}</Text> : null}
+        {erro && !det ? <Text style={s.aviso}>{`Não consegui ler este lugar no Google agora (${erro}). Toque no lugar de novo daqui a pouco, ou cadastre pelo "+ Novo lead".`}</Text> : null}
         {det && (
           <View style={{ gap: 4 }}>
             <Text style={s.nome}>{det.nome}</Text>
@@ -114,7 +118,7 @@ export default function FolhaLugarGoogle({ lugar, aoFechar, aoVirarLead, aoAbrir
             <Text style={s.botaoSecTexto}>{`${jaTem.status === 'cliente' ? 'Já é cliente Takeat' : 'Já está no mapa'} · abrir ${jaTem.empresa?.trim() || jaTem.nome}`}</Text>
           </Pressable>
         ) : (
-          <Pressable accessibilityRole="button" style={[s.botao, s.botaoPrin, (criando || !det) && { opacity: 0.6 }]} disabled={!det || criando}
+          <Pressable accessibilityRole="button" style={[s.botao, s.botaoPrin, (criando || !det || !conferido) && { opacity: 0.6 }]} disabled={!det || criando || !conferido}
             onPress={async () => {
               setCriando(true);
               try { await aoVirarLead({ placeId: lugar.placeId, nome: det?.nome ?? '', telefone: det?.telefone ?? null, latitude: lugar.latitude, longitude: lugar.longitude }); }
