@@ -27,6 +27,18 @@ const NO_SLA = 999;
 
 const MS_DAY = 24 * 60 * 60 * 1000;
 
+/** Dias úteis entre dois instantes, contados por data de Brasília: os úteis em (início, fim]. */
+export function diasUteisEntre(inicioMs: number, fimMs: number): number {
+  if (!(inicioMs < fimMs)) return 0;
+  const dia = (ms: number) => Math.floor((ms - 3 * 3600000) / MS_DAY); // dia BRT, em dias desde 1970
+  let n = 0;
+  for (let d = dia(inicioMs) + 1; d <= dia(fimMs); d++) {
+    const dow = (d + 4) % 7; // 01/01/1970 foi quinta (4)
+    if (dow !== 0 && dow !== 6) n++;
+  }
+  return n;
+}
+
 export function slaForStage(etapa: string | null | undefined, sla: SlaDays = DEFAULT_SLA): number {
   const key = (etapa ?? '').trim().toUpperCase();
   switch (key) {
@@ -71,7 +83,9 @@ export function slaStatus(client: Client, slaDays: SlaDays = DEFAULT_SLA, now = 
     .filter((t) => Number.isFinite(t)) as number[];
   const base = times.length ? Math.max(...times) : now;
 
-  const diasParado = Math.max(0, Math.floor((now - base) / MS_DAY));
+  // Só dia útil (Julyan, 05/10/26: "não pode contar os finais de semana"), em Brasília —
+  // a mesma conta do robô do Cockpit (diasUteisEntre): sexta → segunda é 1 dia, não 3.
+  const diasParado = Math.max(0, diasUteisEntre(base, now));
   const breach = applies && diasParado > sla;
   const ratio = sla > 0 ? diasParado / sla : 0;
   return { diasParado, sla, breach, ratio, applies };
