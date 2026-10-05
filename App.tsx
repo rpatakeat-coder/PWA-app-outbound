@@ -3889,6 +3889,15 @@ function MainApp() {
     try {
       window.history.replaceState(window.history.state, '', semDeepLink(window.location.pathname, window.location.search, window.location.hash));
     } catch { /* barra de endereço fica como veio; nada quebra */ }
+    /* O MAPA DO PLANEJAMENTO É A AGENDA DO APP NAQUELE DIA (revisão geral, 05/10/26: "Cockpit
+       = semana, app = dia"). O executivo cai na Agenda já no dia; o gestor (pessoa=) segue para
+       o mapa do dia da pessoa, que é onde ele monitora. */
+    if (dl.agenda && !dl.pessoa) {
+      setAgendaDiaInicial(dl.agenda);
+      ultimoDiaDaAgenda.current = dl.agenda;
+      setTab('agenda');
+      return;
+    }
     setTab('map');
     if (dl.lente) setLente(dl.lente);
     // o gestor abre o dia de uma pessoa: a rota do mapa passa a ser a dela (monitoramento)

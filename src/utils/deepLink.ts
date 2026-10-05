@@ -15,6 +15,8 @@ export type DeepLinkMapa = {
   lente?: Lente;
   // gestor: a rota do dia desta pessoa (id do dono no HubSpot)
   pessoa?: string;
+  // o botão Mapa do Planejamento do Cockpit (05/10/26): abre a Agenda do app NESTE dia
+  agenda?: string;
 };
 
 const LENTES: Record<string, Lente> = {
@@ -29,7 +31,7 @@ const LENTES: Record<string, Lente> = {
 };
 // + as do link antigo do Cockpit (pwaLinkDeAcao: ?acao=ligar&dealId=...), que o app
 // ignorava: agora o dealId abre o cartão do negócio, onde Ligar/WhatsApp/Ir estão.
-const CHAVES = ['pino', 'cartao', 'rua', 'lente', 'dia', 'pessoa', 'semana',
+const CHAVES = ['pino', 'cartao', 'rua', 'lente', 'dia', 'pessoa', 'semana', 'agenda',
   'acao', 'dealId', 'telefone', 'lat', 'lng', 'cliente', 'quando', 'ownerId', 'origem'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -46,7 +48,9 @@ export function lerDeepLink(search: string): DeepLinkMapa | null {
   if (LENTES[lenteBruta]) out.lente = LENTES[lenteBruta];
   const pessoa = (q.get('pessoa') || '').trim();
   if (/^\d{1,20}$/.test(pessoa)) out.pessoa = pessoa;
-  return out.pino || out.rua || out.lente || out.pessoa ? out : null;
+  const agenda = (q.get('agenda') || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(agenda)) out.agenda = agenda;
+  return out.pino || out.rua || out.lente || out.pessoa || out.agenda ? out : null;
 }
 
 // A barra de endereço sem as chaves do deep link (as outras, como ?mapa=, ficam).

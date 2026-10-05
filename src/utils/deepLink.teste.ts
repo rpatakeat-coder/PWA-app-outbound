@@ -27,6 +27,9 @@ igual('e sai inteiro da barra', semDeepLink('/', '?acao=ligar&dealId=123&telefon
 
 igual('o dia de uma pessoa (gestor)', lerDeepLink('?lente=meu-dia&pessoa=86100505'), { cartaoAberto: false, lente: 'dia', pessoa: '86100505' });
 igual('pessoa com lixo é ignorada', lerDeepLink('?pessoa=abc'), null);
+igual('o Mapa do Planejamento abre a Agenda no dia', lerDeepLink('?agenda=2026-10-08'), { cartaoAberto: false, agenda: '2026-10-08' });
+igual('dia com lixo é ignorado', lerDeepLink('?agenda=amanha'), null);
+igual('e sai da barra', semDeepLink('/', '?agenda=2026-10-08', ''), '/');
 
 if (falhas) { console.log(falhas + ' falha(s)'); process.exit(1); }
 console.log('deep link: todos ok');
