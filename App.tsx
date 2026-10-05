@@ -196,7 +196,7 @@ import { assumirLead } from './src/utils/assumirLead';
 import { ConfiguracoesScreen } from './src/screens/ConfiguracoesScreen';
 import { ds, sharedStyles } from './src/screens/sharedStyles';
 import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
-import { fetchCepData, geocodeAddress, reverseGeocode } from './src/utils/geocoding';
+import { fetchCepData, geocodeAddress, geocodeStructured, reverseGeocode } from './src/utils/geocoding';
 import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingProvider } from './src/utils/routing';
 import { montarMicrorrotas } from './src/utils/microrrotas';
 import { useVisitsHeatmap } from './src/hooks/useVisitsHeatmap';
@@ -4248,17 +4248,51 @@ function MainApp() {
       return;
     }
 
-    const lat = form.latitude ? parseFloat(form.latitude) : null;
-    const lng = form.longitude ? parseFloat(form.longitude) : null;
+    let lat = form.latitude ? parseFloat(form.latitude) : null;
+    let lng = form.longitude ? parseFloat(form.longitude) : null;
 
     submittingRef.current = true;
     try {
-      await updateClient.mutateAsync({
+      /* ENDEREÇO NOVO, PINO NOVO (Julyan, 05/10/26: "alteramos o CEP desse cliente, só que o mapa
+         não atualiza no lugar novo"). Salvar gravava o endereço e mantinha a coordenada antiga. Se
+         mudou CEP, rua, número ou bairro e ninguém mexeu no pino à mão, busca o ponto do endereço
+         novo (Edge geocode: Google com o CEP; Nominatim só se ela cair). Não achou: o pino fica
+         onde está e o aviso aponta o "Mover o pino". */
+      const limpo = (v: unknown) => String(v ?? '').trim().toLowerCase();
+      const enderecoMudou = (['cep', 'endereco', 'numero', 'bairro', 'cidade', 'estado'] as const)
+        .some((k) => limpo((form as Record<string, unknown>)[k]) !== limpo((editingClient as unknown as Record<string, unknown>)[k]));
+      const pinoMexido = lat !== (editingClient.latitude != null ? Number(editingClient.latitude) : null)
+        || lng !== (editingClient.longitude != null ? Number(editingClient.longitude) : null);
+      let geo: { geo_source?: string; geo_approximate?: boolean } = {};
+      let avisoPino: string | null = null;
+      // pino confirmado na porta pelo GPS vence o endereço (gatilho 0104): não finge que moveu
+      const pinoConfirmado = (editingClient.geo_source === 'checkin' || editingClient.geo_source === 'coords') && !editingClient.geo_approximate && editingClient.latitude != null;
+      if (enderecoMudou && !pinoMexido && pinoConfirmado) {
+        avisoPino = 'O pino foi confirmado na porta pelo GPS e ficou onde está. Se o restaurante mudou de lugar, use "Mover o pino".';
+      } else if (enderecoMudou && !pinoMexido && form.endereco?.trim() && form.cidade?.trim() && form.estado?.trim()) {
+        const achou = await geocodeStructured({
+          logradouro: form.endereco.trim(), numero: form.numero ?? null, cidade: form.cidade.trim(), estado: form.estado.trim(),
+          cep: form.cep || null, bairro: form.bairro || null,
+        }).catch(() => null);
+        if (achou) {
+          lat = achou.latitude; lng = achou.longitude;
+          geo = { geo_source: 'geocode', geo_approximate: achou.approximate };
+          avisoPino = achou.approximate ? 'Pino movido para a rua do endereço novo (aproximado: confira no mapa).' : 'Pino movido para o endereço novo.';
+        } else avisoPino = 'Não achei o endereço novo no mapa: o pino ficou onde estava. Use "Mover o pino".';
+      }
+      const salvo = await updateClient.mutateAsync({
         id: editingClient.id,
         ...form,
         latitude: lat,
         longitude: lng,
+        ...geo,
       });
+      // o que o banco gravou é que vale ("sem erro não é gravou")
+      if (geo.geo_source && salvo && lat != null && Math.abs(Number(salvo.latitude) - lat) > 0.00001) {
+        avisoPino = 'O endereço foi salvo, mas o pino continuou no lugar antigo. Use "Mover o pino".';
+        geo = {};
+      }
+      if (avisoPino) Toast.mostrar(avisoPino, geo.geo_source ? 'ok' : 'fila');
       setEditingClient(null);
       resetForm();
       setIsFormOpen(false);
@@ -5566,7 +5600,9 @@ function MainApp() {
   const selectedClientSheet = selectedClient ? (
     <ClientBottomSheet
       client={selectedClient}
-      abrirPequeno={abertoPelaBusca === selectedClient.id}
+      // 05/10/26 (Julyan: "quando eu clicar no lead, tem que aparecer primeiro o mapa e depois a
+      // ficha se eu clicar"): no celular todo lead abre no cartão pequeno, com o pino à vista
+      abrirPequeno={!layout.ehLargo || abertoPelaBusca === selectedClient.id}
       aoAbrirMeia={() => {
         // O cartão cobre os 60% de baixo: o pino vai para ~22% da altura,
         // no meio da faixa de mapa que sobra (centro da tela = 50%).
