@@ -38,13 +38,22 @@ const horaBRT = (iso: string) => {
 };
 
 async function hs(token: string, method: string, path: string, body?: unknown) {
-  const r = await fetch(HS + path, {
-    method,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const dados = await r.json().catch(() => ({}));
-  return { ok: r.ok, status: r.status, dados };
+  // 429 = o HubSpot recusou por rajada (nada foi gravado): espera e tenta de novo, até 3 vezes.
+  // Com as ondas em paralelo (05/10/26), um lote de 100 negócios recusado sumia da fila calado.
+  for (let tentativa = 0; ; tentativa++) {
+    const r = await fetch(HS + path, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (r.status === 429 && tentativa < 3) {
+      await r.body?.cancel().catch(() => {});
+      await new Promise((ok) => setTimeout(ok, 700 * (tentativa + 1) + Math.random() * 300));
+      continue;
+    }
+    const dados = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, dados };
+  }
 }
 
 // ---- desfazer um registro da fila depois dos 5 s (0155, 04/10/2026) ----------------------
