@@ -275,7 +275,10 @@ export default function AgendaPC(props: Props) {
     if (d === dia) {
       const n = itens.length;
       if (passado) return n ? `${itens.filter((i) => i.estado === 'feita').length} de ${n}` : 'vazio';
-      return n ? (d === hoje ? `hoje · ${n}` : `${n} ${n === 1 ? 'parada' : 'paradas'}`) : 'vazio';
+      if (n) return d === hoje ? `hoje · ${n}` : `${n} ${n === 1 ? 'parada' : 'paradas'}`;
+      // sem parada, o dia ainda pode ter retorno marcado: o chip diz o mesmo selecionado ou não
+      const kSel = compromissosDe(d, new Set()).length;
+      return kSel ? `${kSel} ${kSel === 1 ? 'retorno' : 'retornos'}` : 'vazio';
     }
     const c = semanaQ.data?.get(d);
     if (d < hoje) return c?.vivas ? `${c.feitas} de ${c.vivas}` : '—';
@@ -594,7 +597,9 @@ export default function AgendaPC(props: Props) {
     ? `${itens.filter((i) => i.estado === 'feita' || provaDe(i.client)).length} de ${itens.length} visitadas · ${comProva} com prova de GPS · ${kmTexto((rodado?.km ?? 0) * 1000)} rodados`
     : itens.length
       ? `${itens.length} ${itens.length === 1 ? 'parada' : 'paradas'} · meta ${meta} · ≈ ${duracao(res.minutos)} de rua · ${kmTexto(res.km * 1000)} · ${hhmm(res.inicio!)} → ${hhmm(res.fim!)}`
-      : `Meta de ${meta} visitas · nada marcado ainda`;
+      : compromissos.length
+        ? `Meta de ${meta} visitas · ${compromissos.length} ${compromissos.length === 1 ? 'compromisso marcado' : 'compromissos marcados'}, nenhuma parada`
+        : `Meta de ${meta} visitas · nada marcado ainda`;
 
   let corpo: React.ReactNode;
   if (termo.length >= 2) {
@@ -658,9 +663,16 @@ export default function AgendaPC(props: Props) {
     corpo = (
       <View style={{ gap: 14 }}>
         <View style={{ gap: 4 }}>
-          <Text style={s.vazioTitulo}>{`${titulo} ainda está vazia`}</Text>
+          <Text style={s.vazioTitulo}>{compromissos.length ? `${titulo} ainda sem paradas` : `${titulo} ainda está vazia`}</Text>
           <Text style={s.sub}>Escolha um bairro da sua carteira. O mapa vai até lá e mostra o que vale a visita.</Text>
         </View>
+        {/* o que já está marcado vem antes dos bairros: é compromisso, não sugestão */}
+        {compromissos.length > 0 && (
+          <View style={{ gap: 4 }}>
+            <Text style={s.rotuloSecao}>JÁ MARCADO NESSE DIA</Text>
+            {compromissos.map(linhaCompromisso)}
+          </View>
+        )}
         <View style={s.bairros}>
           {bairrosQ.isLoading ? <ActivityIndicator /> : (bairrosQ.data ?? []).map(([b, x]) => (
             <Pressable key={b} accessibilityRole="button" onPress={() => props.aoBairro(b, x.pontos)} style={s.bairro}>
@@ -669,12 +681,6 @@ export default function AgendaPC(props: Props) {
             </Pressable>
           ))}
         </View>
-        {compromissos.length > 0 && (
-          <View style={{ gap: 4 }}>
-            <Text style={s.rotuloSecao}>JÁ MARCADO NESSE DIA</Text>
-            {compromissos.map(linhaCompromisso)}
-          </View>
-        )}
         {reguas.length > 0 && (
           <View style={{ gap: 4 }}>
             <Text style={s.rotuloSecao}>OU COMECE PELOS QUE MAIS PRECISAM</Text>
