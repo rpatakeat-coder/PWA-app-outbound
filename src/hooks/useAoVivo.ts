@@ -56,7 +56,10 @@ export function sinalMeInteressa(s: Sinal, meuOwnerId: string | null, ehGestor: 
 const RELER_BASE_NO_MAXIMO_A_CADA_MS = 60_000;
 // O contexto do mapa (mapa_contexto, que varre o snapshot do funil) no máximo 1 vez por
 // minuto: uma sincronização do robô de 30 s dava ~25 releituras seguidas por aparelho.
-const CONTEXTO_NO_MAXIMO_A_CADA_MS = 60_000;
+// 05/10/26 (Julyan: "o mapa tá carregando e piscando toda hora"): com o time na rua chega
+// sinal quase todo minuto, e cada releitura recalcula todos os pinos. 3 min basta: a cor
+// do pino é etapa e tempo parado, que não mudam de minuto em minuto.
+const CONTEXTO_NO_MAXIMO_A_CADA_MS = 180_000;
 
 /** Só as colunas mudaram de verdade? Evita recalcular todos os pinos por eco. */
 function mesmaLinha(a: Client, b: Partial<Client>) {
