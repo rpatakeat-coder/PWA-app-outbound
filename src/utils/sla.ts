@@ -78,7 +78,9 @@ export function slaStatus(client: Client, slaDays: SlaDays = DEFAULT_SLA, now = 
 
   // Data mais recente entre entrada na etapa, última atividade humana e criação
   // (ignora nulos). Interação humana reseta o contador.
-  const times = [client.hs_stage_entered_at, client.hs_last_activity_at, client.created_at]
+  // A visita pelo app também é toque (05/10/26): o cartão dizia "SLA estourado — 44 dias parado"
+  // num lead visitado havia 3 dias, porque hs_last_activity_at chega atrasado do HubSpot.
+  const times = [client.hs_stage_entered_at, client.hs_last_activity_at, client.created_at, client.visited_at]
     .map((v) => (v ? new Date(v).getTime() : NaN))
     .filter((t) => Number.isFinite(t)) as number[];
   const base = times.length ? Math.max(...times) : now;
