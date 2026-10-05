@@ -2260,7 +2260,7 @@ function MainApp() {
     setTimeout(() => {
       try {
         if (pts.length === 1) mapRef.current?.animateToRegion({ ...pts[0], latitudeDelta: 0.03, longitudeDelta: 0.03 }, 300);
-        else mapRef.current?.fitToCoordinates(pts, { edgePadding: { top: 90, right: 70, bottom: 90, left: 70 }, animated: true });
+        else mapRef.current?.fitToCoordinates(pts, { edgePadding: { top: 40, right: 50, bottom: 40, left: 50 }, animated: true });
       } catch (err) { console.warn('[agenda] enquadrar:', err); }
     }, 300);
   }, [agendaPlaneja, planejarDia, clientesDoPlanoNoMapa]);
@@ -8011,7 +8011,7 @@ function MainApp() {
               {/* 05/10/26: no computador a Agenda planeja — a barra do Planejar (o dia, as paradas, tirar,
                   Confirmar) fica embaixo do mapa no lugar da ordem das paradas */}
               {agendaPlaneja && planejarDia ? (
-                <View style={{ maxHeight: 300, borderTopWidth: 1, borderTopColor: 'var(--border)', backgroundColor: 'var(--surface)' }}>
+                <View style={{ maxHeight: Math.min(300, Math.round(layout.altura * 0.38)), borderTopWidth: 1, borderTopColor: 'var(--border)', backgroundColor: 'var(--surface)' }}>
                   <BarraPlanejar
                     embutida
                     chao={0}

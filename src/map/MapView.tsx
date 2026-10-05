@@ -421,18 +421,28 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
         if (!map || !ctx) return;
         const bounds = boundsForCoordinates(coords, ctx.maps);
         if (!bounds) return;
+        /* MARGEM NUNCA MAIOR QUE O MAPA (05/10/26). Na Agenda do computador, numa janela baixa,
+           o mapa tinha 249 px de altura e o enquadramento pedia 90 + 90 de margem: o mapa vetorial
+           do Google travou ("Hung Labeler"), sem fundo e sem zoom, até recarregar a página.
+           Cada lado fica em no máximo 15% do tamanho real do mapa; sem tamanho, não enquadra. */
+        const div = map.getDiv();
+        const W = div?.clientWidth ?? 0, H = div?.clientHeight ?? 0;
+        if (W < 40 || H < 40) return;
+        const lim = (v: number | undefined, total: number) => Math.max(0, Math.min(v ?? 0, Math.round(total * 0.15)));
         const p = options?.edgePadding;
         map.fitBounds(
           bounds,
           p
-            ? { top: p.top ?? 0, right: p.right ?? 0, bottom: p.bottom ?? 0, left: p.left ?? 0 }
-            : 40,
+            ? { top: lim(p.top, H), right: lim(p.right, W), bottom: lim(p.bottom, H), left: lim(p.left, W) }
+            : Math.min(40, Math.round(Math.min(W, H) * 0.15)),
         );
       },
 
       animateToRegion: (region) => {
         const map = mapInstanceRef.current;
         if (!map) return;
+        const div = map.getDiv();
+        if (!div || div.clientWidth < 40 || div.clientHeight < 40) return; // mapa sem tamanho: o Google trava
         // fitBounds respeita o delta pedido melhor que setZoom+panTo, que
         // arredondaria o zoom e mudaria a area enquadrada.
         map.fitBounds(regionToBounds(region), 0);
