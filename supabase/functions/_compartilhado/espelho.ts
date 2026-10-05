@@ -101,6 +101,12 @@ export async function espelharNegocio(token: string, svc: Svc, dealId: string, o
     .sort((a: any, b: any) => ((a.timestamp || '9999') < (b.timestamp || '9999') ? -1 : 1));
 
   const agora = new Date().toISOString();
+  // A visita do app também é toque (0164, 05/10/26): sem ela o card recém-espelhado voltava a
+  // dizer "estourado" logo depois do check-in, por cima do snapshot que já sabia da visita.
+  try {
+    const { data: uv } = await svc.from('ultima_visita_por_negocio').select('ultima_visita').eq('deal_id', String(dealId)).maybeSingle();
+    if (uv?.ultima_visita) (props as Record<string, unknown>)._ultima_visita_app = uv.ultima_visita;
+  } catch { /* sem a visita, a conta segue a do HubSpot */ }
   // O card pronto (0118): o mapa lê daqui a etapa, os dias parado e a temperatura.
   let card = null;
   try {
