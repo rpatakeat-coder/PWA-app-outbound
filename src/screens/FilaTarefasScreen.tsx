@@ -69,18 +69,43 @@ const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 
 const agoraHHMM = () => { const b = new Date(Date.now() - 3 * 3600000); return `${String(b.getUTCHours()).padStart(2, '0')}:${String(b.getUTCMinutes()).padStart(2, '0')}`; };
 const reduzirMovimento = () => { try { return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
 
+// A ÚLTIMA FILA FICA NO APARELHO (auditoria de velocidade, 05/10/26): a Edge leva ~2 s, e ao
+// abrir o app o selo e a aba esperavam esse tempo em branco — sem sinal, para sempre. Agora a
+// última resposta mostra na hora e a busca nova corre por trás (a data guardada a marca como
+// velha, então o React Query busca logo). Só vale para a mesma pessoa e o mesmo dia: a fila
+// depende do dia, e outro login no mesmo aparelho não vê a carteira de quem saiu.
+const CHAVE_FILA = 'takeat-fila-tarefas';
+function donoDaSessao(): string | null {
+  try {
+    const k = Object.keys(window.localStorage).find((x) => /^sb-.*-auth-token$/.test(x));
+    return k ? JSON.parse(window.localStorage.getItem(k) ?? 'null')?.user?.id ?? null : null;
+  } catch { return null; }
+}
+function filaGuardada(): { data: RespostaFila; em: number } | undefined {
+  try {
+    const g = JSON.parse(window.localStorage.getItem(CHAVE_FILA) ?? 'null');
+    if (!g?.data || !g.uid || g.uid !== donoDaSessao() || g.data.hoje !== hojeBRT()) return undefined;
+    return { data: g.data as RespostaFila, em: Number(g.em) || 0 };
+  } catch { return undefined; }
+}
+
 /** A busca da fila. Exportada: o App lê o mesmo cache para o cabeçalho e o selo da aba. */
 export async function buscarFila(): Promise<RespostaFila> {
   const { data, error } = await supabase.functions.invoke('fila-tarefas', { body: {} });
   if (error) throw error;
+  const uid = donoDaSessao();
+  if (uid) { try { window.localStorage.setItem(CHAVE_FILA, JSON.stringify({ uid, em: Date.now(), data })); } catch { /* sem armazenamento: só não guarda */ } }
   return data as RespostaFila;
+}
+/** As opções da fila, as mesmas nos três lugares que a leem (App, Tarefas, Lista do computador). */
+export function opcoesDaFila() {
+  const g = filaGuardada();
+  return { queryKey: ['fila_tarefas'], queryFn: buscarFila, staleTime: 60_000, initialData: g?.data, initialDataUpdatedAt: g?.em };
 }
 function useFila() {
   return useQuery<RespostaFila>({
-    queryKey: ['fila_tarefas'],
-    staleTime: 60_000,
+    ...opcoesDaFila(),
     placeholderData: (anterior) => anterior,
-    queryFn: buscarFila,
   });
 }
 

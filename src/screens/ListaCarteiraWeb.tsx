@@ -15,7 +15,7 @@ import { supabase } from '../integrations/supabase/client';
 import { Toast } from '../components/Toast';
 import { IconCalendar, IconCheck, IconClose, IconDownload, useIconColors } from '../components/icons';
 import { useLayout } from '../hooks/useLayout';
-import { buscarFila } from './FilaTarefasScreen';
+import { opcoesDaFila } from './FilaTarefasScreen';
 import { porNoDia } from '../utils/paradaDoDia';
 import { proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
 import { ROTULO_ETAPA } from '../utils/fichaDeRua';
@@ -68,7 +68,7 @@ export default function ListaCarteiraWeb({ ownerHubspot, sellerId, aoAbrirLead, 
   const [gravando, setGravando] = useState(false);
 
   // A mesma consulta (e o mesmo cache) da fila de Tarefas, que já carrega na abertura do app.
-  const fila = useQuery({ queryKey: ['fila_tarefas'], queryFn: buscarFila, staleTime: 60_000 });
+  const fila = useQuery(opcoesDaFila());
   const carteira = ((fila.data as { carteira?: LinhaCarteira[] } | undefined)?.carteira ?? []) as LinhaCarteira[];
   const alvos = useQuery<Client[]>({
     queryKey: ['contas_alvo_lista', ownerHubspot],

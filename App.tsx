@@ -178,7 +178,7 @@ import { TarefasScreen, baldeDeVencimento, baldeDaTarefaDoCrm } from './src/scre
 import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
 import PlaybookScreen from './src/screens/PlaybookScreen';
-import FilaTarefasScreen, { buscarFila } from './src/screens/FilaTarefasScreen';
+import FilaTarefasScreen, { opcoesDaFila } from './src/screens/FilaTarefasScreen';
 import ListaCarteiraWeb from './src/screens/ListaCarteiraWeb';
 import { BarreiraDaAba } from './src/components/BarreiraDaAba';
 import { avisarSeVisitaProvada, type Ranking } from './src/screens/FolhaRanking';
@@ -1088,7 +1088,7 @@ function MainApp() {
   // A fila de Tarefas (docs/10): o cabeçalho e o selo da aba contam o MESMO que a tela.
   // Busca já na abertura (04/10/26): com enabled:false o selo mostrava a contagem do CRM (5)
   // até a pessoa abrir a aba, e o da fila (3) depois. Mesmo cache e mesma chave da tela.
-  const filaNaTela = useQuery({ queryKey: ['fila_tarefas'], enabled: !!profile && profile.role !== 'view', staleTime: 60_000, queryFn: buscarFila });
+  const filaNaTela = useQuery({ ...opcoesDaFila(), enabled: !!profile && profile.role !== 'view' });
   const naFila = Array.isArray(filaNaTela.data?.itens) ? filaNaTela.data!.itens!.length : null;
   // Config editável pelo gestor (meta/dia, SLAs, params da Conta Alvo).
   const { config: routeConfig } = useRouteConfig();
