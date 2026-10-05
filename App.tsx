@@ -1344,7 +1344,8 @@ function MainApp() {
   // Os dias são os da faixa da Agenda (hoje + próximos úteis): tudo que ele planeja aqui
   // aparece lá. Passou da meia-noite com o modo aberto: o dia que virou passado sai.
   const diasDoPlanejar = useMemo(() => {
-    const agenda = new Set(diasDaFaixa(new Date()));
+    // até a semana que vem inteira (05/10/26: a Agenda mostra esta semana e a próxima)
+    const agenda = new Set(diasDaFaixa(new Date(), 11));
     return diasPlanejaveis(routeDate, 10).filter((d) => agenda.has(d.iso));
   }, [routeDate]);
   useEffect(() => {

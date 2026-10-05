@@ -153,12 +153,34 @@ export default function AgendaNovoScreen({
   const agora = new Date();
   const hoje = diaBRT(agora)!;
   const horaAgora = Number(agora.toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Sao_Paulo' })) % 24;
-  // Hoje + 4 dias úteis (docs/12 §1.1).
-  const dias = useMemo(() => [hoje, proximoDiaUtil(hoje, 1), proximoDiaUtil(hoje, 2), proximoDiaUtil(hoje, 3), proximoDiaUtil(hoje, 4)], [hoje]);
+  /* A SEMANA INTEIRA, A PASSADA E A QUE VEM (Julyan, 05/10/26: "preciso ver os outros dias da
+     semana também" — "os dois, passados e a semana que vem"). Era hoje + 4 dias úteis: na
+     quarta, segunda e terça sumiam, e a semana seguinte só aparecia aos pedaços. Agora é
+     segunda a sexta da semana escolhida, com o seletor Esta semana / Semana que vem. */
+  const segundaDe = (iso: string, mais: number) => {
+    const t = new Date(`${iso}T12:00:00Z`);
+    const dow = t.getUTCDay();
+    t.setUTCDate(t.getUTCDate() - (dow === 0 ? 6 : dow - 1) + 7 * mais + (dow === 6 || dow === 0 ? 7 : 0));
+    return t.toISOString().slice(0, 10);
+  };
+  const somaDias = (iso: string, n: number) => { const t = new Date(`${iso}T12:00:00Z`); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+  const semanaDoDia = (iso: string) => (iso >= segundaDe(hoje, 1) ? 1 : 0);
+  const [semanaVista, setSemanaVista] = useState(diaInicial ? semanaDoDia(diaInicial) : 0);
+  const dias = useMemo(() => { const seg = segundaDe(hoje, semanaVista); return [0, 1, 2, 3, 4].map((i) => somaDias(seg, i)); }, [hoje, semanaVista]); // eslint-disable-line react-hooks/exhaustive-deps
   const [dia, setDia] = useState(diaInicial && dias.includes(diaInicial) ? diaInicial : hoje);
+  const irParaSemana = (n: number) => {
+    setSemanaVista(n);
+    const seg = segundaDe(hoje, n);
+    const naSemana = [0, 1, 2, 3, 4].map((i) => somaDias(seg, i));
+    setDia(naSemana.includes(hoje) ? hoje : naSemana.find((d) => d >= hoje) ?? naSemana[0]);
+  };
   // o mapa do computador acompanha o dia daqui, e a barra do Planejar devolve o dia trocado lá
   useEffect(() => { aoMudarDia?.(dia); }, [dia]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (diaControlado && diaControlado !== dia && dias.includes(diaControlado)) setDia(diaControlado); }, [diaControlado]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!diaControlado || diaControlado === dia) return;
+    if (!dias.includes(diaControlado)) setSemanaVista(semanaDoDia(diaControlado));
+    setDia(diaControlado);
+  }, [diaControlado]); // eslint-disable-line react-hooks/exhaustive-deps
   const { tarefas } = useTarefasDoCrm(true);
   const { user } = useAuth();
   const { prometer } = useMinhaDaily(true);
@@ -408,15 +430,28 @@ export default function AgendaNovoScreen({
   };
 
   // ---- blocos ----
+  const seletorSemana = (
+    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+      {[{ n: 0, rot: 'Esta semana' }, { n: 1, rot: 'Semana que vem' }].map((o) => (
+        <Pressable key={o.n} accessibilityRole="button" accessibilityState={{ selected: semanaVista === o.n }}
+          onPress={() => irParaSemana(o.n)}
+          style={{ minHeight: 36, paddingHorizontal: 14, borderRadius: 18, justifyContent: 'center', borderWidth: 1,
+            borderColor: semanaVista === o.n ? 'var(--tint-red-border)' : 'var(--border)', backgroundColor: semanaVista === o.n ? 'var(--tint-red)' : 'transparent' }}>
+          <Text style={{ fontSize: 13, fontWeight: '800', color: semanaVista === o.n ? 'var(--tint-red-text)' : 'var(--text)' }}>{o.rot}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
   const faixa = (
     <View style={s.faixa}>
       {dias.map((d) => {
         const ativo = d === dia;
+        const passou = d < hoje;
         const rot = d === hoje ? 'HOJE' : SEMANA[dowDe(d)];
         return (
           <Pressable key={d} accessibilityRole="button" accessibilityState={{ selected: ativo }}
             accessibilityLabel={`${rot} ${d.slice(8)}: ${rotuloDia(d)}`}
-            style={[s.dia, ativo && s.diaAtivo]} onPress={() => { setDia(d); setAberto(null); }}>
+            style={[s.dia, ativo && s.diaAtivo, passou && !ativo && { opacity: 0.6 }]} onPress={() => { setDia(d); setAberto(null); }}>
             <Text style={[s.diaSemana, ativo && { color: 'var(--vermelho-texto)' }]}>{rot}</Text>
             <Text style={s.diaNumero}>{String(Number(d.slice(8)))}</Text>
             <Text style={s.diaProposito} numberOfLines={1}>{rotuloDia(d)}</Text>
@@ -711,6 +746,7 @@ export default function AgendaNovoScreen({
         aoVoltar={(id) => setConcluidas((st) => { const n = new Set(st); n.delete(`hs-${id}`); return n; })}
       />
       {faixaEstado}
+      {seletorSemana}
       {faixa}
       {dia === hoje ? (
         <>
