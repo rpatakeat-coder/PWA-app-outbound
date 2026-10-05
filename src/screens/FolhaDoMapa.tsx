@@ -226,8 +226,18 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
     );
   }
 
+  /* UMA ROLAGEM SÓ NO COMPUTADOR (06/10/26). O painel era uma caixa fixa e a lista rolava
+     por dentro com a SOBRA da altura: num notebook de 640 px de tela, os filtros, a próxima
+     porta e os botões comiam tudo e "Meu roteiro" ficava com 64 px — uma parada à vista, com
+     uma barra de rolagem de brinquedo. Agora o painel inteiro rola e a lista vai inteira
+     dentro dele. A folha do celular não muda. */
+  const Casca = embutida ? ScrollView : View;
+  const ListaCasca = embutida ? View : ScrollView;
   return (
-    <View ref={embutida ? undefined : acima.ref} style={embutida ? s.painel : [s.folha, { bottom: chao + acima.ajuste }, cheia && s.folhaCheia]} accessibilityLabel="Agora, perto de você" onLayout={embutida ? undefined : (e) => {
+    <Casca ref={embutida ? undefined : acima.ref}
+      style={embutida ? s.painelRola : [s.folha, { bottom: chao + acima.ajuste }, cheia && s.folhaCheia]}
+      {...(embutida ? { contentContainerStyle: s.painelConteudo } : {})}
+      accessibilityLabel="Agora, perto de você" onLayout={embutida ? undefined : (e) => {
       // No navegador o evento traz o próprio elemento: o topo vem na régua da
       // TELA, a mesma do mapa (o layout.y é relativo ao pai, que não é o do mapa).
       const alvo = (e.nativeEvent as unknown as { target?: { getBoundingClientRect?: () => DOMRect } }).target;
@@ -323,7 +333,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
           {modo === 'roteiro' && (
             <Text style={s.roteiroAjuda}>A próxima porta segue esta ordem. Pode ir a qualquer outro pino antes: o Cheguei fora do plano conta igual.</Text>
           )}
-          <ScrollView style={embutida ? s.listaEmbutida : [s.lista, cheia && s.listaCheia]} contentContainerStyle={{ paddingBottom: 8 }}>
+          <ListaCasca style={embutida ? s.listaEmbutida : [s.lista, cheia && s.listaCheia]} {...(embutida ? {} : { contentContainerStyle: { paddingBottom: 8 } })}>
             {ordenados.length === 0 && <Text style={s.semProxima}>Nada desta lente na área. Troque de lente ou afaste o mapa.</Text>}
             {modo === 'roteiro' && ordenados.map((it, i) => {
               const nome = it.c.empresa?.trim() || it.c.nome;
@@ -378,10 +388,10 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
               </Pressable>
             ))}
             {modo !== 'roteiro' && ordenados.length > 80 && <Text style={s.semProxima}>{`Mais ${ordenados.length - 80} — aproxime o mapa para ver.`}</Text>}
-          </ScrollView>
+          </ListaCasca>
         </>
       )}
-    </View>
+    </Casca>
   );
 }
 
@@ -470,6 +480,8 @@ const s = StyleSheet.create({
   planejar: { minHeight: 40, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   planejarTexto: { fontSize: 13, fontWeight: '700', color: 'var(--text)' },
   painel: { flex: 1, minHeight: 0, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, gap: 6, backgroundColor: 'var(--surface)' },
-  listaEmbutida: { flex: 1, minHeight: 0 },
+  listaEmbutida: { paddingBottom: 8 },
+  painelRola: { flex: 1, minHeight: 0, backgroundColor: 'var(--surface)', overscrollBehavior: 'contain' } as never,
+  painelConteudo: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, gap: 6 },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
 });
