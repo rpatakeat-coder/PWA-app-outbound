@@ -377,7 +377,7 @@ function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
         {a.onChangeStage && <Botao rotulo="Outra etapa" onPress={a.onChangeStage} estilo={[s.botao48, av.botao ? s.outra : null]} />}
         {/* vários de uma vez (Julyan, 05/10/26): Ag. Pagamento fica de fora, e fechado não tem o que limpar */}
         {a.onLimparFunil && codigo && [ETAPA.prospeccao, ETAPA.visita, ETAPA.decisor, ETAPA.demo, ETAPA.negociacao].includes(codigo as never) && (
-          <Botao rotulo="Vários para Perdido" onPress={a.onLimparFunil} estilo={[s.botao48, s.outra]} acessivel="Marcar vários negócios e mandar para Perdido ou Reciclagem" />
+          <Botao rotulo="Vários" onPress={a.onLimparFunil} estilo={[s.botao48, s.outra]} acessivel="Marcar vários negócios e mandar para Perdido ou Reciclagem" />
         )}
       </View>
     </View>

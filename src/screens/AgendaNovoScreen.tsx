@@ -70,6 +70,10 @@ type Props = {
   aoPlaybook?: () => void;
   /** Computador: o mapa fica na coluna da direita, sem seletor. */
   largo?: boolean;
+  /** Computador (05/10/26): o dia escolhido vai ao mapa da direita, que entra no modo Planejar dele. */
+  aoMudarDia?: (iso: string) => void;
+  /** O dia trocado pela barra do Planejar volta para cá. */
+  diaControlado?: string | null;
 };
 
 const ruaDo = (c: Client | null) => {
@@ -128,7 +132,7 @@ type Linha =
 
 export default function AgendaNovoScreen({
   diaInicial, paradas, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead,
-  aoRoteirizar, roteirizando, aoMontarDia, montandoDia, telefoneDe, base, ownerHubspot, contextoDe, aoMapaDoDia, aoPlaybook, largo,
+  aoRoteirizar, roteirizando, aoMontarDia, montandoDia, telefoneDe, base, ownerHubspot, contextoDe, aoMapaDoDia, aoPlaybook, largo, aoMudarDia, diaControlado,
 }: Props) {
   const [roteirizandoDia, setRoteirizandoDia] = useState(false);
   const [registrando, setRegistrando] = useState<TarefaParaRegistrar | null>(null);
@@ -152,6 +156,9 @@ export default function AgendaNovoScreen({
   // Hoje + 4 dias úteis (docs/12 §1.1).
   const dias = useMemo(() => [hoje, proximoDiaUtil(hoje, 1), proximoDiaUtil(hoje, 2), proximoDiaUtil(hoje, 3), proximoDiaUtil(hoje, 4)], [hoje]);
   const [dia, setDia] = useState(diaInicial && dias.includes(diaInicial) ? diaInicial : hoje);
+  // o mapa do computador acompanha o dia daqui, e a barra do Planejar devolve o dia trocado lá
+  useEffect(() => { aoMudarDia?.(dia); }, [dia]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (diaControlado && diaControlado !== dia && dias.includes(diaControlado)) setDia(diaControlado); }, [diaControlado]); // eslint-disable-line react-hooks/exhaustive-deps
   const { tarefas } = useTarefasDoCrm(true);
   const { user } = useAuth();
   const { prometer } = useMinhaDaily(true);

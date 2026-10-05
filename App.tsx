@@ -2209,6 +2209,22 @@ function MainApp() {
     }
   };
   const descartarPlano = () => setRascunhoPlano(new Map());
+  /* A AGENDA DO COMPUTADOR É ONDE ELE SE PLANEJA (Julyan, 05/10/26: "quando eu clico na agenda
+     pelo computador, eu preciso ter acesso à rota, ver onde os leads ficam"; "a agenda é onde o
+     executivo se planeja"). O mapa da direita abria parado onde estava, sem as paradas, e
+     trocar de dia não mudava nada nele. Agora o dia da Agenda é o dia do modo Planejar: os
+     pinos do plano numerados, um toque põe ou tira do plano, a barra do Planejar no lugar da
+     ordem das paradas, e o mapa vai até as paradas quando o dia muda. Sair da Agenda fecha o
+     modo (e grava o que estava marcado, como o Fechar). */
+  const planejarPelaAgenda = useRef(false);
+  const agendaPlaneja = modoNovo && layout.ehLargo && tab === 'agenda' && podePlanejar;
+  const aoDiaDaAgenda = (iso: string) => {
+    if (!agendaPlaneja || planejarDiaRef.current === iso || !diasDoPlanejar.some((d) => d.iso === iso)) return;
+    if (planejarDiaRef.current) { trocarDiaPlanejado(iso); return; }
+    planejarPelaAgenda.current = true;
+    setQuadraAberta(null);
+    setPlanejarDia(iso);
+  };
   const trocarDiaPlanejado = (iso: string) => {
     if (rascunhoRef.current.size) {
       Toast.mostrar(`Confirme ou descarte ${rascunhoRef.current.size === 1 ? 'a marca' : `as ${rascunhoRef.current.size} marcas`} antes de trocar de dia.`, 'fila');
@@ -2218,6 +2234,25 @@ function MainApp() {
   };
   const tirarDoDiaPlanejado = (p: ParadaDoDia) => marcarNoPlano(p.client);
   planejarToqueRef.current = planejarDia ? marcarNoPlano : null;
+  useEffect(() => {
+    if (!agendaPlaneja && planejarPelaAgenda.current && planejarDiaRef.current) fecharPlanejar();
+  }, [agendaPlaneja]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Enquadra as paradas quando o dia muda (não a cada toque: o mapa pularia no meio do plano).
+  const enquadrouAgenda = useRef('');
+  useEffect(() => {
+    if (!agendaPlaneja || !planejarDia) { enquadrouAgenda.current = ''; return; }
+    if (enquadrouAgenda.current === planejarDia) return;
+    const pts = clientesDoPlanoNoMapa.filter((c) => c.latitude != null && c.longitude != null)
+      .map((c) => ({ latitude: Number(c.latitude), longitude: Number(c.longitude) }));
+    if (!pts.length) return;
+    enquadrouAgenda.current = planejarDia;
+    setTimeout(() => {
+      try {
+        if (pts.length === 1) mapRef.current?.animateToRegion({ ...pts[0], latitudeDelta: 0.03, longitudeDelta: 0.03 }, 300);
+        else mapRef.current?.fitToCoordinates(pts, { edgePadding: { top: 90, right: 70, bottom: 90, left: 70 }, animated: true });
+      } catch (err) { console.warn('[agenda] enquadrar:', err); }
+    }, 300);
+  }, [agendaPlaneja, planejarDia, clientesDoPlanoNoMapa]);
   const abrirPlanejar = () => {
     const hora = Number(new Date().toLocaleString('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Sao_Paulo' }));
     setQuadraAberta(null);
@@ -2225,6 +2260,7 @@ function MainApp() {
     setPlanejarDia(diasDoPlanejar.some((d) => d.iso === inicial) ? inicial : (diasDoPlanejar[0]?.iso ?? null));
   };
   const fecharPlanejar = () => {
+    planejarPelaAgenda.current = false;
     if (rascunhoRef.current.size) { void confirmarPlano().then(() => setPlanejarDia(null)); return; }
     const dia = planejarDiaRef.current;
     const lista = paradasDoDiaRef.current;
@@ -7858,6 +7894,8 @@ function MainApp() {
           // Opção A da Rota (decidida em 04/10): o Mapa do dia é um modo da Agenda.
           aoMapaDoDia={() => setTab('route')}
           aoPlaybook={() => setTab('playbook')}
+          aoMudarDia={layout.ehLargo ? aoDiaDaAgenda : undefined}
+          diaControlado={layout.ehLargo && planejarPelaAgenda.current ? planejarDia : null}
           diaInicial={agendaDiaInicial}
           paradas={routeStops}
           reunioes={meetings}
@@ -7902,8 +7940,30 @@ function MainApp() {
             <View style={{ width: layout.largura >= 1500 ? 560 : 470, paddingHorizontal: 24, borderRightWidth: 1, borderRightColor: 'var(--border)' }}>{agendaNova}</View>
             <View style={sharedStyles.mapaAreaWeb}>
               <View style={{ flex: 1 }}>{conteudoMapa}</View>
+              {/* 05/10/26: no computador a Agenda planeja — a barra do Planejar (o dia, as paradas, tirar,
+                  Confirmar) fica embaixo do mapa no lugar da ordem das paradas */}
+              {agendaPlaneja && planejarDia ? (
+                <View style={{ maxHeight: 340, borderTopWidth: 1, borderTopColor: 'var(--border)', backgroundColor: 'var(--surface)' }}>
+                  <BarraPlanejar
+                    embutida
+                    chao={0}
+                    dias={diasDoPlanejar}
+                    dia={planejarDia}
+                    aoDia={trocarDiaPlanejado}
+                    pendentes={pendentesDoPlano}
+                    confirmando={confirmandoPlano}
+                    aoConfirmar={() => { void confirmarPlano(); }}
+                    aoDescartar={descartarPlano}
+                    paradas={paradasDoDiaPlanejado}
+                    carregando={opsDoDia.isLoading}
+                    aoAbrir={openClientDetails}
+                    aoTirar={tirarDoDiaPlanejado}
+                    aoFechar={fecharPlanejar}
+                  />
+                </View>
+              ) : null}
               {/* G2: a ordem das paradas do dia ao lado do mapa (é a Rota do computador) */}
-              {(() => {
+              {!(agendaPlaneja && planejarDia) && (() => {
                 const vivas = routeStops.filter((st) => st.status !== 'removed' && st.status !== 'skipped');
                 if (!vivas.length) return null;
                 let achouProxima = false;
