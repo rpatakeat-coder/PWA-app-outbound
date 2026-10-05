@@ -788,6 +788,8 @@ function MainApp() {
   // Endereco no passo 2 e' cartao, nao formulario. "Editar endereco" abre os
   // campos — e zera o flag de aproximado, como os outros fluxos de edicao.
   const [enderecoEditavel, setEnderecoEditavel] = useState(false);
+  // CEP na edição do endereço (05/10/26): o que a busca achou, para a pessoa saber o que aconteceu
+  const [cepNaEdicao, setCepNaEdicao] = useState<'buscando' | 'achou' | 'nao' | 'falhou' | null>(null);
   // Duplicado (23505) passa a viver DENTRO da folha, no lugar do Alert seco.
   const [erroDuplicado, setErroDuplicado] = useState<string | null>(null);
   // Leads que PARECEM ser este, achados antes de gravar. O aviso nao trava: o
@@ -9414,6 +9416,26 @@ function MainApp() {
               <Text style={styles.m9Secao}>Endereço</Text>
               {enderecoEditavel ? (
                 <>
+                  {/* PELO CEP (Julyan, 05/10/26: "quando eu for editar os dados/endereço tenho que puxar
+                      pelo CEP, que é mais fácil"). Oito números: rua, bairro, cidade e UF vêm sozinhos;
+                      o número fica com a pessoa e o pino no mapa não muda. */}
+                  {campoM9('CEP', form.cep, (v) => {
+                    const dig = v.replace(/\D/g, '').slice(0, 8);
+                    const fmt = dig.length > 5 ? `${dig.slice(0, 5)}-${dig.slice(5)}` : dig;
+                    setForm(s => ({ ...s, cep: fmt }));
+                    if (dig.length !== 8) { setCepNaEdicao(null); return; }
+                    setCepNaEdicao('buscando');
+                    void fetchCepData(dig).then((r) => {
+                      if (!r) { setCepNaEdicao('nao'); return; }
+                      setForm(s => ({ ...s, cep: r.cep, endereco: r.logradouro || s.endereco, cidade: r.cidade || s.cidade, estado: r.estado || s.estado, bairro: r.bairro || s.bairro }));
+                      setCepNaEdicao('achou');
+                    }).catch(() => setCepNaEdicao('falhou'));
+                  }, { keyboardType: 'phone-pad', maxLength: 9 })}
+                  {cepNaEdicao && (
+                    <Text style={{ fontSize: 12, color: cepNaEdicao === 'achou' ? 'var(--tint-green-text)' : cepNaEdicao === 'buscando' ? 'var(--text-muted)' : 'var(--tint-amber-text)', marginTop: -4, marginBottom: 8 }}>
+                      {cepNaEdicao === 'buscando' ? 'Buscando o CEP…' : cepNaEdicao === 'achou' ? 'Endereço preenchido pelo CEP. Confira o número.' : cepNaEdicao === 'nao' ? 'CEP não encontrado. Preencha à mão.' : 'Sem conexão para buscar o CEP agora. Preencha à mão.'}
+                    </Text>
+                  )}
                   {campoM9('Cidade', form.cidade, v => setForm(s => ({ ...s, cidade: v })))}
                   {campoM9('UF', form.estado, v => setForm(s => ({ ...s, estado: v })), { maxLength: 2, autoCapitalize: 'characters' })}
                   {campoM9('Endereço (rua)', form.endereco, v => setForm(s => ({ ...s, endereco: v })))}
@@ -9450,7 +9472,7 @@ function MainApp() {
                   <TouchableOpacity
                     accessibilityRole="button"
                     style={styles.m9CartaoRodape}
-                    onPress={() => { setEnderecoEditavel(true); setPendingGeoApproximate(false); }}
+                    onPress={() => { setEnderecoEditavel(true); setPendingGeoApproximate(false); setCepNaEdicao(null); }}
                   >
                     <Text style={styles.m9CartaoRodapeTexto}>Editar endereço</Text>
                   </TouchableOpacity>
