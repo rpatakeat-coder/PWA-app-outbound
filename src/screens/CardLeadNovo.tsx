@@ -41,6 +41,8 @@ export type AcoesCardNovo = {
   onMoverPino?: () => void;
   /** Botão de avanço do bloco NEGÓCIO: abre Mudar etapa já na etapa destino. */
   onAvancar?: (destino: string, preenchido?: Record<string, string>) => void;
+  /** Limpar o funil: marcar vários negócios e mandar para Perdido ou Reciclagem (05/10/2026). */
+  onLimparFunil?: () => void;
 };
 
 export type DadosCardNovo = {
@@ -373,6 +375,10 @@ function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
           <Botao rotulo={av.botao} onPress={() => a.onAvancar!(av.destino!)} estilo={[s.botao48, s.avancar]} texto={s.avancarTexto} />
         )}
         {a.onChangeStage && <Botao rotulo="Outra etapa" onPress={a.onChangeStage} estilo={[s.botao48, av.botao ? s.outra : null]} />}
+        {/* vários de uma vez (Julyan, 05/10/26): Ag. Pagamento fica de fora, e fechado não tem o que limpar */}
+        {a.onLimparFunil && codigo && [ETAPA.prospeccao, ETAPA.visita, ETAPA.decisor, ETAPA.demo, ETAPA.negociacao].includes(codigo as never) && (
+          <Botao rotulo="Vários para Perdido" onPress={a.onLimparFunil} estilo={[s.botao48, s.outra]} acessivel="Marcar vários negócios e mandar para Perdido ou Reciclagem" />
+        )}
       </View>
     </View>
   );

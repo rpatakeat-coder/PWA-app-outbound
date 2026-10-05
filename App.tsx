@@ -180,6 +180,7 @@ import { AgendaScreen } from './src/screens/AgendaScreen';
 import PlaybookScreen from './src/screens/PlaybookScreen';
 import FilaTarefasScreen, { opcoesDaFila } from './src/screens/FilaTarefasScreen';
 import ListaCarteiraWeb from './src/screens/ListaCarteiraWeb';
+import LimparFunil from './src/screens/LimparFunil';
 import { BarreiraDaAba } from './src/components/BarreiraDaAba';
 import { avisarSeVisitaProvada, type Ranking } from './src/screens/FolhaRanking';
 import AgendaNovoScreen from './src/screens/AgendaNovoScreen';
@@ -4131,6 +4132,8 @@ function MainApp() {
   // Sobe logo depois do check-in bem-sucedido: o que aconteceu DENTRO da visita
   // (ver DesfechoVisitaSheet). Puravel — o check-in ja' gravou.
   // Mudar etapa do mapa novo (porta única): lead + etapa atual no código do Cockpit.
+  // Limpar o funil em lote: o negócio do cartão de onde se abriu ('' = nenhum marcado)
+  const [limparFunilCom, setLimparFunilCom] = useState<string | null>(null);
   const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null } | null>(null);
   const codigoDaEtapa = (c: Client): string | null => {
     if (!contextoPino) return null;
@@ -5225,6 +5228,12 @@ function MainApp() {
           const atual = codigoDaEtapa(c);
           setSelectedClient(null);
           setTimeout(() => setEtapaNovaPara({ client: c, etapaAtual: atual, destinoInicial: destino, preenchido: preenchido ?? null }), 350);
+        },
+        // Limpar o funil (05/10/26): vários negócios para Perdido/Reciclagem, este já marcado.
+        onLimparFunil: isViewer || isMonitoringRoute ? undefined : () => {
+          const deal = selectedClient.id_hubspot ? String(selectedClient.id_hubspot) : '';
+          setSelectedClient(null);
+          setTimeout(() => setLimparFunilCom(deal), 350);
         },
         // "É meu" (Julyan 26/09): lead sem dono na rota de hoje entra no meu funil.
         onEMeu: isViewer ? undefined : () => { void assumirDoMapa(selectedClient); },
@@ -9012,6 +9021,15 @@ function MainApp() {
           onEtapaMudou={(codigo) => aplicarEtapaNoLead(fichaPendente.client.id, codigo, undefined, fichaPendente.client.etapa ?? null)}
         />
       )}
+      {limparFunilCom !== null && (
+        <LimparFunil
+          visivel
+          dealInicial={limparFunilCom || null}
+          reguaDe={(etapaId) => { const r = slaForStage(ROTULO_ETAPA[etapaId] ?? null, routeSlaDays); return r >= 999 ? null : r; }}
+          onFechar={() => setLimparFunilCom(null)}
+          onMudou={(clientId, codigo, antes) => aplicarEtapaNoLead(clientId, codigo, undefined, ROTULO_ETAPA[antes] ?? null)}
+        />
+      )}
       {etapaNovaPara && (
         <MudarEtapaNovo
           visivel
@@ -9374,7 +9392,7 @@ function ClientBottomSheet({
   novo,
 }: {
   /** Mapa novo (prancha §7): troca o topo e o peek; abas e alertas continuam. */
-  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onTirarDaRota?: () => void; onAvancar?: (destino: string, preenchido?: Record<string, string>) => void }) | null;
+  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onTirarDaRota?: () => void; onAvancar?: (destino: string, preenchido?: Record<string, string>) => void; onLimparFunil?: () => void }) | null;
   /** Mapa novo: o cartão subiu para a meia altura (60%) — o mapa leva o pino para a faixa de cima. */
   aoAbrirMeia?: () => void;
   client: Client;
@@ -9759,6 +9777,7 @@ function ClientBottomSheet({
     onTirarDaRota: novo?.onTirarDaRota,
     onMoverPino: onEditLocation,
     onAvancar: novo?.onAvancar,
+    onLimparFunil: novo?.onLimparFunil,
   };
 
   // ── Faixa de topo (M1c) ───────────────────────────────────────────────
