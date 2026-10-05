@@ -133,6 +133,48 @@ Deno.serve(async (req: Request) => {
   const ano = Number(hoje.slice(0, 4));
   const feriados = [...feriadosNacionais(ano), ...feriadosNacionais(ano + 1)];
 
+  // EM PARALELO (auditoria de velocidade, 05/10/26): a fila levava 2,3–3,1 s porque cada leitura
+  // esperava a anterior. O que não depende das tarefas do HubSpot (snapshot, reuniões do app, rota
+  // de hoje) sai já, enquanto a busca de tarefas roda. Do snapshot só as quatro chaves usadas.
+  const snapP = svc.from('cockpit_snapshot')
+    .select('atualizado_em, reps:conteudo->reps, funilLeads:conteudo->funilLeads, funilForaDoTime:conteudo->funilForaDoTime, agenda:conteudo->agenda')
+    .eq('chave', 'hubspot').maybeSingle();
+  const reunioesP = (async () => {
+    const de60 = new Date(Date.now() - 60 * 86400000).toISOString();
+    const ate60 = new Date(Date.now() + 60 * 86400000).toISOString();
+    const { data: mm } = await svc.from('client_meetings')
+      .select('id, client_id, scheduled_at, duration_minutes, observacoes, status, type, created_by, hs_engagement_id')
+      .gte('scheduled_at', de60).lte('scheduled_at', ate60).limit(1000);
+    const idsC = Array.from(new Set((mm ?? []).map((m: { client_id: string }) => m.client_id).filter(Boolean)));
+    const idsP = Array.from(new Set((mm ?? []).map((m: { created_by: string }) => m.created_by).filter(Boolean)));
+    const clientePorId = new Map<string, { nome: string | null; id_hubspot: string | null }>();
+    const donoPorProfile = new Map<string, string>();
+    const lotes: Promise<void>[] = [];
+    for (let i = 0; i < idsC.length; i += 150) {
+      lotes.push((async () => {
+        const { data: cs } = await svc.from('clients').select('id, nome, id_hubspot').in('id', idsC.slice(i, i + 150));
+        for (const c of cs ?? []) clientePorId.set(String(c.id), { nome: c.nome as string | null, id_hubspot: c.id_hubspot as string | null });
+      })());
+    }
+    if (idsP.length) {
+      lotes.push((async () => {
+        const { data: ps } = await svc.from('profiles').select('id, id_hubspot').in('id', idsP);
+        for (const p of ps ?? []) if (p.id_hubspot) donoPorProfile.set(String(p.id), String(p.id_hubspot));
+      })());
+    }
+    await Promise.all(lotes);
+    return { mm: mm ?? [], clientePorId, donoPorProfile };
+  })();
+  const paradasP = (async () => {
+    const { data: rotas } = await svc.from('field_routes').select('id').eq('seller_id', uid).eq('route_date', hoje);
+    const idsRota = (rotas ?? []).map((r: { id: string }) => r.id);
+    if (!idsRota.length) return [] as Array<{ client_id: string; planned_at: string | null; status: string }>;
+    const { data: paradas } = await svc.from('field_route_stops').select('client_id, planned_at, status').in('route_id', idsRota).neq('status', 'removed');
+    return (paradas ?? []) as Array<{ client_id: string; planned_at: string | null; status: string }>;
+  })();
+  // promessa que rejeita antes de alguém aguardar vira "unhandled rejection": já nascem com catch
+  reunioesP.catch(() => {}); paradasP.catch(() => {});
+
   // 1) tarefas abertas do dono
   const tarefas: TarefaEntrada[] = [];
   let after: string | undefined;
@@ -152,50 +194,63 @@ Deno.serve(async (req: Request) => {
     after = r.dados?.paging?.next?.after;
     if (!after) break;
   }
-  for (let i = 0; i < tarefas.length; i += 100) {
-    const lote = tarefas.slice(i, i + 100);
+  const lotesTarefa: TarefaEntrada[][] = [];
+  for (let i = 0; i < tarefas.length; i += 100) lotesTarefa.push(tarefas.slice(i, i + 100));
+  await Promise.all(lotesTarefa.map(async (lote) => {
     const a = await hs(token, 'POST', '/crm/v4/associations/tasks/deals/batch/read', { inputs: lote.map((t) => ({ id: t.id })) });
-    if (!a.ok) break;
+    if (!a.ok) return;
     const mapa = new Map<string, string>();
     for (const r of a.dados?.results ?? []) {
       const de = r?.from?.id ?? r?._from?.id; const para = (r?.to ?? [])[0]?.toObjectId;
       if (de && para) mapa.set(String(de), String(para));
     }
     for (const t of lote) t.dealId = mapa.get(t.id) ?? null;
-  }
+  }));
 
   // 2) negócios abertos: snapshot (temperatura, dias) + etapa ao vivo
-  const { data: snap } = await svc.from('cockpit_snapshot').select('conteudo, atualizado_em').eq('chave', 'hubspot').maybeSingle();
+  const { data: snapLido } = await snapP;
+  const snap = snapLido
+    ? { atualizado_em: snapLido.atualizado_em, conteudo: { reps: snapLido.reps, funilLeads: snapLido.funilLeads, funilForaDoTime: snapLido.funilForaDoTime, agenda: snapLido.agenda } }
+    : null;
   const doSnap = new Map<string, { name?: string; stageId?: string; dias?: number; mrr?: number | string; temperatura?: number | string }>();
   const abertos = (snap?.conteudo as { reps?: Record<string, { abertos?: unknown[] }> } | null)?.reps?.[owner]?.abertos ?? [];
   for (const d of abertos as Array<{ id?: string | number }>) if (d?.id != null) doSnap.set(String(d.id), d as never);
   const ids = Array.from(new Set([...doSnap.keys(), ...tarefas.map((t) => t.dealId).filter(Boolean) as string[]]));
   const vivos = new Map<string, { nome: string; etapa: string; mrr: number | null; owner: string | null; pipeline: string | null; entrada: string | null }>();
-  for (let i = 0; i < ids.length; i += 100) {
+  const lotesDeal: string[][] = [];
+  for (let i = 0; i < ids.length; i += 100) lotesDeal.push(ids.slice(i, i + 100));
+  await Promise.all(lotesDeal.map(async (lote) => {
     const r = await hs(token, 'POST', '/crm/v3/objects/deals/batch/read', {
-      inputs: ids.slice(i, i + 100).map((id) => ({ id })),
+      inputs: lote.map((id) => ({ id })),
       properties: ['dealname', 'dealstage', 'valor_de_mrr', 'hubspot_owner_id', 'pipeline'],
     });
-    if (!r.ok) continue;
+    if (!r.ok) return;
     for (const d of r.dados?.results ?? []) {
       const p = d.properties ?? {};
       vivos.set(String(d.id), { nome: p.dealname ?? '', etapa: String(p.dealstage ?? ''), mrr: Number(p.valor_de_mrr) || null, owner: p.hubspot_owner_id ? String(p.hubspot_owner_id) : null, pipeline: p.pipeline ? String(p.pipeline) : null, entrada: null });
     }
-  }
+  }));
   // fora do funil do Field Sales ou de outro dono não entra na fila desta pessoa
   const meus = ids.filter((id) => { const v = vivos.get(id); return v && v.pipeline === PIPELINE && v.owner === owner; });
 
-  // 3) o lead de cada negócio, contatos, decisor, visitas de hoje
-  const { data: clientes } = meus.length
-    ? await svc.from('clients').select('id, id_hubspot, nome, telefone, latitude, longitude, bairro').in('id_hubspot', meus)
-    : { data: [] as Array<Record<string, unknown>> };
+  // 3) o lead de cada negócio, contatos, decisor, visitas de hoje — as leituras que só dependem
+  // da carteira saem juntas; as visitas esperam só os clientes
+  const desde = new Date(Date.now() - 120 * 86400000).toISOString();
+  const vazio = { data: [] as Array<Record<string, unknown>> };
+  const [{ data: clientes }, { data: cc }, { data: ff }, { data: cd }] = meus.length
+    ? await Promise.all([
+      svc.from('clients').select('id, id_hubspot, nome, telefone, latitude, longitude, bairro').in('id_hubspot', meus),
+      svc.from('contatos_de_campo').select('deal_id, client_id, ocorrido_em, canal').in('deal_id', meus).gte('ocorrido_em', desde),
+      svc.from('fichas_de_rua').select('deal_id, como_foi, ocorrido_em, criado_em').in('deal_id', meus),
+      svc.from('contatos_de_campo').select('deal_id').in('deal_id', meus).eq('resultado', 'decisor'),
+    ])
+    : [vazio, vazio, vazio, vazio];
   const clientePorDeal = new Map<string, { id: string; nome: string | null; telefone: string | null; lat: number | null; lng: number | null; bairro: string | null }>();
   for (const c of clientes ?? []) clientePorDeal.set(String(c.id_hubspot), { id: String(c.id), nome: (c.nome as string) ?? null, telefone: (c.telefone as string) ?? null, lat: c.latitude != null ? Number(c.latitude) : null, lng: c.longitude != null ? Number(c.longitude) : null, bairro: (c.bairro as string) ?? null });
   const dealPorCliente = new Map<string, string>();
   for (const [d, c] of clientePorDeal) dealPorCliente.set(c.id, d);
   const clienteIds = Array.from(dealPorCliente.keys());
 
-  const desde = new Date(Date.now() - 120 * 86400000).toISOString();
   const contatos: Record<string, { n: number; ultimo: string | null }> = {};
   const canalDoUltimo: Record<string, string> = {};
   const soma = (deal: string | undefined | null, em: string | null, canal = 'visita') => {
@@ -203,10 +258,7 @@ Deno.serve(async (req: Request) => {
     const c = contatos[deal] ?? (contatos[deal] = { n: 0, ultimo: null });
     c.n++; if (!c.ultimo || em > c.ultimo) { c.ultimo = em; canalDoUltimo[deal] = canal; }
   };
-  if (meus.length) {
-    const { data: cc } = await svc.from('contatos_de_campo').select('deal_id, client_id, ocorrido_em, canal').in('deal_id', meus).gte('ocorrido_em', desde);
-    for (const x of cc ?? []) soma(String(x.deal_id), x.ocorrido_em as string, String(x.canal ?? 'contato'));
-  }
+  for (const x of cc ?? []) soma(String(x.deal_id), x.ocorrido_em as string, String(x.canal ?? 'contato'));
   let visitasHoje: Array<{ client_id: string; visited_at: string }> = [];
   if (clienteIds.length) {
     const { data: vv } = await svc.from('client_visits').select('client_id, visited_at').in('client_id', clienteIds).gte('visited_at', desde);
@@ -226,23 +278,7 @@ Deno.serve(async (req: Request) => {
       for (const l of (Array.isArray(lista) ? lista : []) as Array<Record<string, unknown>>) if (l?.id != null) leadPorDeal.set(String(l.id), l);
     }
     if (meus.some((d) => leadPorDeal.has(d))) {
-      const de60 = new Date(Date.now() - 60 * 86400000).toISOString();
-      const ate60 = new Date(Date.now() + 60 * 86400000).toISOString();
-      const { data: mm } = await svc.from('client_meetings')
-        .select('id, client_id, scheduled_at, duration_minutes, observacoes, status, type, created_by, hs_engagement_id')
-        .gte('scheduled_at', de60).lte('scheduled_at', ate60).limit(1000);
-      const idsC = Array.from(new Set((mm ?? []).map((m: { client_id: string }) => m.client_id).filter(Boolean)));
-      const idsP = Array.from(new Set((mm ?? []).map((m: { created_by: string }) => m.created_by).filter(Boolean)));
-      const clientePorId = new Map<string, { nome: string | null; id_hubspot: string | null }>();
-      for (let i = 0; i < idsC.length; i += 150) {
-        const { data: cs } = await svc.from('clients').select('id, nome, id_hubspot').in('id', idsC.slice(i, i + 150));
-        for (const c of cs ?? []) clientePorId.set(String(c.id), { nome: c.nome as string | null, id_hubspot: c.id_hubspot as string | null });
-      }
-      const donoPorProfile = new Map<string, string>();
-      if (idsP.length) {
-        const { data: ps } = await svc.from('profiles').select('id, id_hubspot').in('id', idsP);
-        for (const p of ps ?? []) if (p.id_hubspot) donoPorProfile.set(String(p.id), String(p.id_hubspot));
-      }
+      const { mm, clientePorId, donoPorProfile } = await reunioesP; // já lidas em paralelo, lá em cima
       const doRobo = ((conteudo.agenda?.itens ?? []) as Array<Record<string, unknown>>).filter((it) => !it?.origem_app);
       // no snapshot, reps é { [ownerId]: { name, ... } } — o dono é a chave
       const reps = Object.entries((conteudo.reps ?? {}) as Record<string, { name?: string }>).map(([ownerId, r]) => ({ name: r?.name, ownerId }));
@@ -262,15 +298,11 @@ Deno.serve(async (req: Request) => {
   }
   const decisorAlcancado: string[] = [];
   const comFichaHoje = new Set<string>();
-  if (meus.length) {
-    const { data: ff } = await svc.from('fichas_de_rua').select('deal_id, como_foi, ocorrido_em, criado_em').in('deal_id', meus);
-    for (const f of ff ?? []) {
-      if (f.como_foi === 'falou_com_decisor') decisorAlcancado.push(String(f.deal_id));
-      if (String(f.criado_em ?? '').length && new Date(new Date(f.criado_em as string).getTime() - 3 * 3600000).toISOString().slice(0, 10) === hoje) comFichaHoje.add(String(f.deal_id));
-    }
-    const { data: cd } = await svc.from('contatos_de_campo').select('deal_id').in('deal_id', meus).eq('resultado', 'decisor');
-    for (const x of cd ?? []) decisorAlcancado.push(String(x.deal_id));
+  for (const f of ff ?? []) {
+    if (f.como_foi === 'falou_com_decisor') decisorAlcancado.push(String(f.deal_id));
+    if (String(f.criado_em ?? '').length && new Date(new Date(f.criado_em as string).getTime() - 3 * 3600000).toISOString().slice(0, 10) === hoje) comFichaHoje.add(String(f.deal_id));
   }
+  for (const x of cd ?? []) decisorAlcancado.push(String(x.deal_id));
   const visitaHojeSemRegistro: Record<string, string> = {};
   for (const v of visitasHoje) {
     const d = dealPorCliente.get(String(v.client_id));
@@ -278,14 +310,9 @@ Deno.serve(async (req: Request) => {
   }
   // agenda de hoje: paradas da rota de hoje ainda não feitas
   const agendaHoje: Record<string, string> = {};
-  const { data: rotas } = await svc.from('field_routes').select('id').eq('seller_id', uid).eq('route_date', hoje);
-  const idsRota = (rotas ?? []).map((r: { id: string }) => r.id);
-  if (idsRota.length) {
-    const { data: paradas } = await svc.from('field_route_stops').select('client_id, planned_at, status').in('route_id', idsRota).neq('status', 'removed');
-    for (const p of paradas ?? []) {
-      const d = dealPorCliente.get(String(p.client_id));
-      if (d && p.status !== 'done') agendaHoje[d] = p.planned_at ? horaBRT(p.planned_at as string) : 'hoje';
-    }
+  for (const p of await paradasP.catch(() => [])) {
+    const d = dealPorCliente.get(String(p.client_id));
+    if (d && p.status !== 'done') agendaHoje[d] = p.planned_at ? horaBRT(p.planned_at as string) : 'hoje';
   }
 
   // 4) a fila
