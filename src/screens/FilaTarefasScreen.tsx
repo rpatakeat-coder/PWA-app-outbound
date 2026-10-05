@@ -71,8 +71,9 @@ const reduzirMovimento = () => { try { return typeof window !== 'undefined' && !
 
 // A ÚLTIMA FILA FICA NO APARELHO (auditoria de velocidade, 05/10/26): a Edge leva ~2 s, e ao
 // abrir o app o selo e a aba esperavam esse tempo em branco — sem sinal, para sempre. Agora a
-// última resposta mostra na hora e a busca nova corre por trás (a data guardada a marca como
-// velha, então o React Query busca logo). Só vale para a mesma pessoa e o mesmo dia: a fila
+// última resposta mostra na hora e a busca nova corre por trás (initialDataUpdatedAt 0 a marca
+// como velha: o React Query busca sempre ao abrir, mesmo que a guardada tenha 10 s — a tarefa
+// pode ter sido concluída no HubSpot). Só vale para a mesma pessoa e o mesmo dia: a fila
 // depende do dia, e outro login no mesmo aparelho não vê a carteira de quem saiu.
 const CHAVE_FILA = 'takeat-fila-tarefas';
 function donoDaSessao(): string | null {
@@ -81,11 +82,11 @@ function donoDaSessao(): string | null {
     return k ? JSON.parse(window.localStorage.getItem(k) ?? 'null')?.user?.id ?? null : null;
   } catch { return null; }
 }
-function filaGuardada(): { data: RespostaFila; em: number } | undefined {
+function filaGuardada(): RespostaFila | undefined {
   try {
     const g = JSON.parse(window.localStorage.getItem(CHAVE_FILA) ?? 'null');
     if (!g?.data || !g.uid || g.uid !== donoDaSessao() || g.data.hoje !== hojeBRT()) return undefined;
-    return { data: g.data as RespostaFila, em: Number(g.em) || 0 };
+    return g.data as RespostaFila;
   } catch { return undefined; }
 }
 
@@ -99,8 +100,7 @@ export async function buscarFila(): Promise<RespostaFila> {
 }
 /** As opções da fila, as mesmas nos três lugares que a leem (App, Tarefas, Lista do computador). */
 export function opcoesDaFila() {
-  const g = filaGuardada();
-  return { queryKey: ['fila_tarefas'], queryFn: buscarFila, staleTime: 60_000, initialData: g?.data, initialDataUpdatedAt: g?.em };
+  return { queryKey: ['fila_tarefas'], queryFn: buscarFila, staleTime: 60_000, initialData: filaGuardada(), initialDataUpdatedAt: 0 };
 }
 function useFila() {
   return useQuery<RespostaFila>({
