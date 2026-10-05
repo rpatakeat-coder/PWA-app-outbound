@@ -126,7 +126,26 @@ const waitUntil = (p: Promise<unknown>) => {
 
 type HsResult = { ok: boolean; status: number; body: any };
 
+/* LIMITE POR SEGUNDO DO HUBSPOT (auditoria 05/10/26). Com o time inteiro abrindo o app, a busca
+   de tarefas estourava o limite por segundo (429 "secondly limit", grupo crm:search): 11 respostas
+   502 numa manhã, e a lista de tarefas falhava de vez em quando. 429 quer dizer que o HubSpot
+   RECUSOU (nada foi gravado), então tentar de novo é seguro, inclusive em criação: espera ~1 s
+   (e um pouco mais a cada vez, com um sorteio para os aparelhos não voltarem juntos), até 3 vezes. */
 async function hsFetch(
+  token: string,
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT',
+  path: string,
+  payload?: unknown,
+): Promise<HsResult> {
+  let r = await hsFetchUmaVez(token, method, path, payload);
+  for (let tentativa = 1; r.status === 429 && tentativa <= 3; tentativa++) {
+    await new Promise((ok) => setTimeout(ok, 900 * tentativa + Math.floor(Math.random() * 400)));
+    r = await hsFetchUmaVez(token, method, path, payload);
+  }
+  return r;
+}
+
+async function hsFetchUmaVez(
   token: string,
   method: 'GET' | 'POST' | 'PATCH' | 'PUT',
   path: string,
