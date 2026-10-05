@@ -2218,7 +2218,9 @@ function MainApp() {
      modo (e grava o que estava marcado, como o Fechar). */
   const planejarPelaAgenda = useRef(false);
   const agendaPlaneja = modoNovo && layout.ehLargo && tab === 'agenda' && podePlanejar;
+  const ultimoDiaDaAgenda = useRef<string | null>(null);
   const aoDiaDaAgenda = (iso: string) => {
+    ultimoDiaDaAgenda.current = iso;
     if (!agendaPlaneja || planejarDiaRef.current === iso || !diasDoPlanejar.some((d) => d.iso === iso)) return;
     if (planejarDiaRef.current) { trocarDiaPlanejado(iso); return; }
     planejarPelaAgenda.current = true;
@@ -2235,7 +2237,16 @@ function MainApp() {
   const tirarDoDiaPlanejado = (p: ParadaDoDia) => marcarNoPlano(p.client);
   planejarToqueRef.current = planejarDia ? marcarNoPlano : null;
   useEffect(() => {
-    if (!agendaPlaneja && planejarPelaAgenda.current && planejarDiaRef.current) fecharPlanejar();
+    if (!agendaPlaneja && planejarPelaAgenda.current && planejarDiaRef.current) { fecharPlanejar(); return; }
+    // ABRIR A AGENDA JÁ PLANEJA: o aviso da coluna da esquerda pode chegar antes do modo existir
+    // (medido como Sandro: hoje abria com a lista antiga e só o 2º dia entrava no modo)
+    if (agendaPlaneja && !planejarDiaRef.current) {
+      const iso = ultimoDiaDaAgenda.current ?? routeDate;
+      if (!diasDoPlanejar.some((d) => d.iso === iso)) return;
+      planejarPelaAgenda.current = true;
+      setQuadraAberta(null);
+      setPlanejarDia(iso);
+    }
   }, [agendaPlaneja]); // eslint-disable-line react-hooks/exhaustive-deps
   // Enquadra as paradas quando o dia muda (não a cada toque: o mapa pularia no meio do plano).
   const enquadrouAgenda = useRef('');
@@ -4168,6 +4179,15 @@ function MainApp() {
   // Sobe logo depois do check-in bem-sucedido: o que aconteceu DENTRO da visita
   // (ver DesfechoVisitaSheet). Puravel — o check-in ja' gravou.
   // Mudar etapa do mapa novo (porta única): lead + etapa atual no código do Cockpit.
+  // RECOLHER A COLUNA DA ESQUERDA NO COMPUTADOR (Julyan, 05/10/26: "essa aba eu poderia recolher,
+  // pra deixar o mapa mais completo"). Vale para o Mapa e a Agenda; o aparelho lembra a escolha.
+  const [painelRecolhido, setPainelRecolhido] = useState<boolean>(() => {
+    try { return typeof window !== 'undefined' && window.localStorage.getItem('takeat-painel-recolhido') === '1'; } catch { return false; }
+  });
+  const alternarPainel = () => setPainelRecolhido((v) => {
+    try { window.localStorage.setItem('takeat-painel-recolhido', v ? '0' : '1'); } catch { /* só nesta sessão */ }
+    return !v;
+  });
   // Limpar o funil em lote: o negócio do cartão de onde se abriu ('' = nenhum marcado)
   const [limparFunilCom, setLimparFunilCom] = useState<string | null>(null);
   const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null } | null>(null);
@@ -5490,6 +5510,19 @@ function MainApp() {
   const rotaFaixaDeMapa = rotaMovel && !rotaMapaGrande;
 
 
+  const botaoRecolher = (
+    <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel={painelRecolhido ? 'Mostrar a coluna da esquerda' : 'Recolher a coluna e ampliar o mapa'}
+      onPress={alternarPainel}
+      style={{ position: 'absolute', left: 12, top: '50%', marginTop: -22, zIndex: 60, width: 44, height: 44, borderRadius: 22,
+        backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center' }}
+    >
+      {painelRecolhido
+        ? <IconChevronRight width={18} height={18} fill={iconColors.muted} />
+        : <IconChevronLeft width={18} height={18} fill={iconColors.muted} />}
+    </TouchableOpacity>
+  );
   const conteudoMapa = (
     <>
       <MapView
@@ -7631,8 +7664,8 @@ function MainApp() {
           /* Web: painel de trabalho fixo de 352px + mapa. O conteudo do mapa
              e' o MESMO JSX do celular (conteudoMapa) — so' a composicao muda. */
           <View style={sharedStyles.mapaLinhaWeb}>
-            {modoNovo ? painelMapaNovoWeb : painelMapaWeb}
-            <View style={sharedStyles.mapaAreaWeb}>{conteudoMapa}</View>
+            {!painelRecolhido && (modoNovo ? painelMapaNovoWeb : painelMapaWeb)}
+            <View style={sharedStyles.mapaAreaWeb}>{conteudoMapa}{botaoRecolher}</View>
           </View>
         ) : (
           conteudoMapa
@@ -7937,13 +7970,14 @@ function MainApp() {
         // mapa do caminho à direita (é a Rota do computador; o mesmo conteudoMapa do Mapa).
         return layout.ehLargo ? (
           <View style={sharedStyles.mapaLinhaWeb}>
-            <View style={{ width: layout.largura >= 1500 ? 560 : 470, paddingHorizontal: 24, borderRightWidth: 1, borderRightColor: 'var(--border)' }}>{agendaNova}</View>
+            {/* recolhida fica montada (display none): desmontar voltaria a Agenda para hoje */}
+            <View style={[{ width: layout.largura >= 1500 ? 560 : 470, paddingHorizontal: 24, borderRightWidth: 1, borderRightColor: 'var(--border)' }, painelRecolhido && { display: 'none' }]}>{agendaNova}</View>
             <View style={sharedStyles.mapaAreaWeb}>
-              <View style={{ flex: 1 }}>{conteudoMapa}</View>
+              <View style={{ flex: 1 }}>{conteudoMapa}{botaoRecolher}</View>
               {/* 05/10/26: no computador a Agenda planeja — a barra do Planejar (o dia, as paradas, tirar,
                   Confirmar) fica embaixo do mapa no lugar da ordem das paradas */}
               {agendaPlaneja && planejarDia ? (
-                <View style={{ maxHeight: 340, borderTopWidth: 1, borderTopColor: 'var(--border)', backgroundColor: 'var(--surface)' }}>
+                <View style={{ maxHeight: 300, borderTopWidth: 1, borderTopColor: 'var(--border)', backgroundColor: 'var(--surface)' }}>
                   <BarraPlanejar
                     embutida
                     chao={0}
