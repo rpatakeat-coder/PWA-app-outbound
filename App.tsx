@@ -4050,6 +4050,8 @@ function MainApp() {
   const buscaNegocios = useBuscaNegocios(searchQuery, myHubspotId, modoNovo && buscaAberta);
   const abrirDaBusca = useCallback((c: Client) => {
     setBuscaAberta(false);
+    // a busca leva ao mapa (05/10/26): no computador ela podia estar na Lista, na Agenda, nas Tarefas
+    setTab('map');
     buscaEnquadrada.current = searchTerm;
     setTimeout(() => {
       if (c.latitude != null && c.longitude != null) {
@@ -4188,6 +4190,8 @@ function MainApp() {
     try { window.localStorage.setItem('takeat-painel-recolhido', v ? '0' : '1'); } catch { /* só nesta sessão */ }
     return !v;
   });
+  // O lead tocado na Agenda do computador: o mapa vai até ele com o anel da microrota (05/10/26)
+  const [focoAgenda, setFocoAgenda] = useState<{ id: string; latitude: number; longitude: number } | null>(null);
   // Limpar o funil em lote: o negócio do cartão de onde se abriu ('' = nenhum marcado)
   const [limparFunilCom, setLimparFunilCom] = useState<string | null>(null);
   const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null } | null>(null);
@@ -5363,6 +5367,7 @@ function MainApp() {
       onDismissContaAlvo={isViewer ? undefined : () => handleDismissContaAlvo(selectedClient, () => setSelectedClient(null))}
       onScheduleMeeting={isViewer ? undefined : () => { setSchedulingFor({ client: selectedClient, type: 'reuniao' }); setSelectedClient(null); }}
       onFollowUp={isViewer ? undefined : () => { setSchedulingFor({ client: selectedClient, type: 'follow_up' }); setSelectedClient(null); }}
+      onVerNoPlano={(dia) => { setSelectedClient(null); setAgendaDiaInicial(dia); setTab('agenda'); }}
       onRescheduleMeeting={isViewer ? undefined : (m) => { setSchedulingFor({ client: selectedClient, type: m.type ?? 'reuniao', reschedule: m }); setSelectedClient(null); }}
       onCancelMeeting={isViewer ? undefined : (m) => confirmCancelMeeting(m)}
       onChangeStage={
@@ -5510,6 +5515,19 @@ function MainApp() {
   const rotaFaixaDeMapa = rotaMovel && !rotaMapaGrande;
 
 
+  /* CLICAR NUM LEAD DA AGENDA NÃO SAI DO MAPA (Julyan, 05/10/26: "quando eu clicar no lead da
+     agenda, tem que mostrar ele no mapa, não botar só o card"; "toda vez que eu clico na agenda,
+     ele sai do mapa"). No computador a Agenda fica: o mapa da direita vai até o lead (um pouco
+     à esquerda, porque o cartão abre à direita), o anel da microrota marca o que dá para bater
+     a pé, e o cartão abre ao lado. */
+  const focarNaAgenda = (c: Client) => {
+    if (c.latitude != null && c.longitude != null) {
+      const lat = Number(c.latitude), lng = Number(c.longitude);
+      setFocoAgenda({ id: c.id, latitude: lat, longitude: lng });
+      setTimeout(() => mapRef.current?.animateToRegion({ latitude: lat, longitude: lng + 0.004, latitudeDelta: 0.014, longitudeDelta: 0.014 }, 350), 60);
+    }
+    openClientDetails(c);
+  };
   const botaoRecolher = (
     <TouchableOpacity
       accessibilityRole="button"
@@ -5751,6 +5769,17 @@ function MainApp() {
             zIndex={2}
           />
         )}
+        {/* Agenda do computador: o lead tocado, com o anel da microrota (2–3 quarteirões) */}
+        {modoNovo && tab === 'agenda' && focoAgenda && (
+          <Circle
+            center={{ latitude: focoAgenda.latitude, longitude: focoAgenda.longitude }}
+            radius={250}
+            fillColor="rgba(229,26,49,0.07)"
+            strokeColor="rgba(229,26,49,0.85)"
+            strokeWidth={1.5}
+            zIndex={1}
+          />
+        )}
         {!heatOn && modoNovo && !planejarOutroDia && lente === 'dia' && (() => {
           const prox = routeDisplayClients.find((c) => c.id === idClienteParadaAtual);
           if (!prox || prox.latitude == null || prox.longitude == null) return null;
@@ -5979,7 +6008,7 @@ function MainApp() {
           aoIr={() => { if (routeDisplayClients.length > 0 || !podePlanejar) irParaAba('route'); else abrirPlanejar(); }}
         />
       )}
-      {modoNovo && !layout.ehLargo && (
+      {modoNovo && (
         <FolhaBusca
           visivel={buscaAberta}
           aoFechar={() => setBuscaAberta(false)}
@@ -7057,6 +7086,9 @@ function MainApp() {
               value={searchQuery}
               onChangeText={(v) => {
                 setSearchQuery(v);
+                // Mapa novo (05/10/26): a busca abre a folha de resultados, e escolher um leva
+                // ao mapa com o cartão aberto — como no celular. Antes ia para a Lista.
+                if (modoNovo) { if (v) setBuscaAberta(true); return; }
                 // Busca digitada fora de mapa/lista leva pra lista, onde o
                 // resultado e' visivel — a query varre a base no servidor.
                 if (v && tab !== 'map' && tab !== 'list') setTab('list');
@@ -7960,6 +7992,7 @@ function MainApp() {
           }}
           aoAbrirLead={(id) => {
             const c = routeStops.find((st) => st.client_id === id)?.client ?? clientePorId(id);
+            if (layout.ehLargo && c) { focarNaAgenda(c); return; }
             setTab('map');
             if (c) openClientDetails(c);
             else void openClientById(id);
@@ -7990,7 +8023,7 @@ function MainApp() {
                     aoDescartar={descartarPlano}
                     paradas={paradasDoDiaPlanejado}
                     carregando={opsDoDia.isLoading}
-                    aoAbrir={openClientDetails}
+                    aoAbrir={focarNaAgenda}
                     aoTirar={tirarDoDiaPlanejado}
                     aoFechar={fecharPlanejar}
                   />
@@ -8015,7 +8048,7 @@ function MainApp() {
                         const proxima = !feita && !achouProxima;
                         if (proxima) achouProxima = true;
                         return (
-                          <TouchableOpacity key={st.id} accessibilityRole="button" onPress={() => { if (st.client) { setTab('map'); openClientDetails(st.client); } }}
+                          <TouchableOpacity key={st.id} accessibilityRole="button" onPress={() => { if (st.client) focarNaAgenda(st.client); }}
                             style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 40, paddingHorizontal: 8, borderRadius: 10, backgroundColor: proxima ? 'var(--tint-red)' : 'transparent' }}>
                             <View style={{ width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: feita ? 'var(--verde-acao)' : proxima ? 'var(--vermelho-acao)' : 'var(--surface-3)' }}>
                               {feita ? <SiCheck width={14} height={14} fill="#FFFFFF" /> : <Text style={{ fontSize: 12, fontWeight: '800', color: proxima ? '#FFFFFF' : 'var(--text)' }}>{i + 1}</Text>}
@@ -9474,6 +9507,7 @@ function ClientBottomSheet({
   onDismissContaAlvo,
   onScheduleMeeting,
   onFollowUp,
+  onVerNoPlano,
   onChangeStage,
   onRescheduleMeeting,
   onCancelMeeting,
@@ -9506,6 +9540,8 @@ function ClientBottomSheet({
   onDismissContaAlvo?: () => void;
   onScheduleMeeting?: () => void;
   onFollowUp?: () => void;
+  /** O lead está no plano de um dia: abre esse dia na Agenda (05/10/2026). */
+  onVerNoPlano?: (dia: string) => void;
   onChangeStage?: () => void;
   onRescheduleMeeting?: (m: ClientMeeting) => void;
   onCancelMeeting?: (m: ClientMeeting) => void;
@@ -9858,6 +9894,33 @@ function ClientBottomSheet({
   // arraste) e a acessibilidade vivem no <Painel> — a casca unica do app
   // (M1b). Aqui fica so' o conteudo das faixas.
   const layout = useLayout();
+
+  /* O LEAD NO PLANO (Julyan, 05/10/26: "lead Hora Certa do Sandro está no planejamento, mas
+     quando clico no card dele, não aparece na aba agenda"). A aba lia só reuniões e follow-ups;
+     o plano é parada da rota daquele dia (o Planejamento do Cockpit vira field_route_stops,
+     0150). Aqui entram as paradas de hoje em diante, com o atalho para o dia na Agenda. */
+  const hojeBrt = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  const noPlanoQ = useQuery({
+    queryKey: ['no_plano_do_lead', client.id, hojeBrt],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('field_route_stops')
+        .select('id, status, route:field_routes!inner(route_date)')
+        .eq('client_id', client.id).in('status', ['planned', 'done'])
+        .gte('route.route_date', hojeBrt);
+      if (error) throw error;
+      return ((data ?? []) as unknown as Array<{ id: string; status: string; route: { route_date: string } | null }>)
+        .filter((x) => x.route?.route_date)
+        .map((x) => ({ id: x.id, status: x.status, dia: x.route!.route_date }))
+        .sort((a, b) => a.dia.localeCompare(b.dia));
+    },
+  });
+  const noPlano = noPlanoQ.data ?? [];
+  const rotuloDoDiaPlano = (iso: string) => {
+    if (iso === hojeBrt) return 'hoje';
+    const d = new Date(`${iso}T12:00:00Z`);
+    return `${['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d.getUTCDay()]} ${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+  };
 
   // Mapa novo: o card da prancha usa os MESMOS handlers deste painel.
   const dadosNovo: DadosCardNovo | null = novo
@@ -10964,6 +11027,26 @@ function ClientBottomSheet({
         {/* ─────────────────────────── ABA AGENDA ────────────────────────── */}
         {aba === 'agenda' && (
           <>
+          {/* No plano: as paradas deste lead de hoje em diante */}
+          <View style={styles.meetingsSection}>
+            <View style={styles.meetingsHeader}>
+              <Text style={sharedStyles.fieldLabel}>No plano</Text>
+            </View>
+            {noPlano.length === 0 ? (
+              <Text style={styles.meetingsEmpty}>{noPlanoQ.isLoading ? 'Lendo o plano…' : 'Fora do plano dos próximos dias.'}</Text>
+            ) : (
+              noPlano.map((p) => (
+                <TouchableOpacity key={p.id} accessibilityRole="button" disabled={!onVerNoPlano} onPress={() => onVerNoPlano?.(p.dia)}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)', marginBottom: 8 }}>
+                  <IconCalendar width={16} height={16} fill={iconColors.muted} />
+                  <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: 'var(--text)' }}>
+                    {`${p.status === 'done' ? 'Visitado' : 'Parada'} · ${rotuloDoDiaPlano(p.dia)}`}
+                  </Text>
+                  {onVerNoPlano && <Text style={{ fontSize: 13, fontWeight: '800', color: 'var(--brand-text)' }}>Ver na Agenda</Text>}
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
 {/* Reuniões agendadas */}
           <View style={styles.meetingsSection}>
             <View style={styles.meetingsHeader}>
