@@ -18,6 +18,9 @@ type Props = {
   largo?: boolean;
   feitas: number | null;
   meta: number;
+  /** O plano de hoje inteiro (05/10/26: "tem que ser tudo que está no planejamento, não só visita,
+   *  porque a agenda está cheia"): paradas da rota/Planejamento e quantas já foram. */
+  plano?: { total: number; feitas: number } | null;
   temRota: boolean;
   aoIr: () => void;
 };
@@ -35,8 +38,31 @@ function horaBRT(): number {
   return Number.isFinite(h) ? h : 12;
 }
 
-export default function FaixaDaRua({ top, largo, feitas, meta, temRota, aoIr }: Props) {
+export default function FaixaDaRua({ top, largo, feitas, meta, temRota, aoIr, plano }: Props) {
   const hora = horaBRT();
+  // Com plano montado, o alvo do dia é o plano (que pode passar da meta); a meta vira referência.
+  if (plano && plano.total > 0) {
+    const faltamP = Math.max(0, plano.total - plano.feitas);
+    const tomP = faltamP === 0 ? 'ok' : (plano.feitas === 0 && (feitas == null || feitas === 0) && hora >= 10) ? 'alerta' : 'andando';
+    const tituloP = faltamP === 0 ? `Plano de hoje feito: ${plano.feitas} de ${plano.total}` : `Plano de hoje: ${plano.feitas} de ${plano.total}`;
+    const subP = [
+      faltamP ? `faltam ${faltamP} ${faltamP === 1 ? 'parada' : 'paradas'}` : 'cada porta a mais é funil da semana que vem',
+      feitas != null ? `${feitas} ${feitas === 1 ? 'visita' : 'visitas'} no dia · meta ${meta}` : `meta ${meta}`,
+    ].join(' · ');
+    const rotuloP = tomP === 'ok' ? 'Ver rota' : 'Ir pra rua';
+    return (
+      <View style={[s.faixa, largo && s.faixaLarga, { top, borderLeftColor: COR[tomP] }]} accessibilityRole="summary">
+        <View style={s.txt}>
+          <Text style={[s.titulo, tomP === 'alerta' && { color: '#FF8A8D' }]} numberOfLines={1}>{tituloP}</Text>
+          <Text style={s.sub} numberOfLines={1}>{subP}</Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={rotuloP} onPress={aoIr}
+          style={[s.botao, { backgroundColor: tomP === 'ok' ? COR.ok : '#D30000' }]}>
+          <Text style={s.botaoTexto} numberOfLines={1}>{rotuloP} →</Text>
+        </Pressable>
+      </View>
+    );
+  }
   const tom = tomDaFaixa(feitas, meta, hora);
   const faltam = feitas == null ? null : Math.max(0, meta - feitas);
   const titulo = feitas == null

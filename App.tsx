@@ -6368,6 +6368,10 @@ function MainApp() {
           top={layout.ehLargo ? 12 : insets.top + 7 + ALTURA_TOPO_CAMPO + 8}
           feitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
           meta={metaDeHoje}
+          plano={(() => {
+            const vivas = routeStops.filter((st) => st.status === 'planned' || st.status === 'done');
+            return { total: vivas.length, feitas: vivas.filter((st) => st.status === 'done' || (!!st.client && visitadoHoje(st.client.visited_at))).length };
+          })()}
           temRota={routeDisplayClients.length > 0}
           // com rota montada, a rota do dia; sem rota, o Montar meu dia
           aoIr={() => { if (routeDisplayClients.length > 0 || !podePlanejar) irParaAba('route'); else abrirPlanejar(); }}
