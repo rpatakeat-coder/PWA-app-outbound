@@ -4549,11 +4549,12 @@ function MainApp() {
       if (!isMonitoringRoute) {
         const stop = fieldOps.stops.find((s) => s.client_id === client.id && s.status !== 'done');
         if (stop) {
-          try { await comPrazo(fieldOps.markStopDone.mutateAsync(stop), 6000); } catch { /* não bloqueia o check-in */ }
+          // em segundo plano: a ficha não espera a rota (auditoria de velocidade, 05/10/26)
+          void comPrazo(fieldOps.markStopDone.mutateAsync(stop), 6000).catch(() => { /* não bloqueia o check-in */ });
         } else if (modoNovo && !fieldOps.stops.some((s) => s.client_id === client.id)) {
           // Mapa novo: check-in fora do plano entra na rota de hoje como parada
           // feita (a Agenda e o "X de N feito" passam a contar essa visita).
-          try { await comPrazo(fieldOps.adicionarParadaFeita.mutateAsync(client), 6000); } catch { /* não bloqueia o check-in */ }
+          void comPrazo(fieldOps.adicionarParadaFeita.mutateAsync(client), 6000).catch(() => { /* não bloqueia o check-in */ });
         }
       }
       // O desfecho so' faz sentido pra LEAD com deal: visitar cliente/churn e'

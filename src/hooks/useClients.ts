@@ -724,44 +724,54 @@ export function useClients(
       // Agora, se o negócio tem tarefa de visita aberta vencendo até hoje (a lista que o app
       // já tem carregada), o check-in conclui ESSA — continua sendo uma COMPLETED por visita,
       // e o Cockpit não conta a mesma visita duas vezes. Sem pendente, cria como antes.
-      const pendente = (() => {
-        if (!client.id_hubspot) return null;
-        const fim = Date.parse(new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }) + 'T23:59:59-03:00');
-        const achadas: Array<{ id: string; venceEm: string | null }> = [];
-        for (const [, d] of queryClient.getQueriesData<{ tarefas?: Array<{ id: string; dealId?: string | null; tipo: string; assunto: string; venceEm: string | null }> }>({ queryKey: ['tarefas_crm'] })) {
-          (d?.tarefas ?? []).forEach((t) => {
-            if (String(t.dealId ?? '') === String(client.id_hubspot) && t.tipo === 'visita' && !/reuni|demo/i.test(t.assunto)
-              && (!t.venceEm || Date.parse(t.venceEm) <= fim)) achadas.push(t);
-          });
+      // O CHEGUEI NÃO ESPERA O HUBSPOT (auditoria de velocidade, 05/10/26): a ficha só abria
+      // depois da tarefa da visita criada/concluída no HubSpot — 1 a 3 s parado na porta. A
+      // visita já está no banco (a RPC acima); a tarefa termina em segundo plano enquanto o
+      // executivo preenche a ficha (10 s ou mais). No PWA a promessa não morre quando a folha
+      // fecha; o risco que sobra é fechar o app antes de ~2 s, e o Cockpit conta a visita pelo
+      // client_visits de qualquer jeito. Erro continua não quebrando a visita.
+      const visitaCli = client;
+      const tarefaDaVisita = async () => {
+        const pendente = (() => {
+          if (!visitaCli.id_hubspot) return null;
+          const fim = Date.parse(new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }) + 'T23:59:59-03:00');
+          const achadas: Array<{ id: string; venceEm: string | null }> = [];
+          for (const [, d] of queryClient.getQueriesData<{ tarefas?: Array<{ id: string; dealId?: string | null; tipo: string; assunto: string; venceEm: string | null }> }>({ queryKey: ['tarefas_crm'] })) {
+            (d?.tarefas ?? []).forEach((t) => {
+              if (String(t.dealId ?? '') === String(visitaCli.id_hubspot) && t.tipo === 'visita' && !/reuni|demo/i.test(t.assunto)
+                && (!t.venceEm || Date.parse(t.venceEm) <= fim)) achadas.push(t);
+            });
+          }
+          achadas.sort((a, b) => Date.parse(a.venceEm ?? '1970-01-01') - Date.parse(b.venceEm ?? '1970-01-01'));
+          return achadas[0] ?? null;
+        })();
+        let cumpriuPendente = false;
+        if (pendente) {
+          try {
+            await concluirTarefaHubspot(pendente.id);
+            cumpriuPendente = true;
+            queryClient.setQueriesData<{ tarefas?: Array<{ id: string }> }>({ queryKey: ['tarefas_crm'] }, (d) =>
+              d && Array.isArray(d.tarefas) ? { ...d, tarefas: d.tarefas.filter((t) => t.id !== pendente.id) } : d);
+          } catch (err) {
+            console.warn('[HUBSPOT] concluir a visita pendente falhou, cria a do check-in:', err);
+          }
         }
-        achadas.sort((a, b) => Date.parse(a.venceEm ?? '1970-01-01') - Date.parse(b.venceEm ?? '1970-01-01'));
-        return achadas[0] ?? null;
-      })();
-      let cumpriuPendente = false;
-      if (pendente) {
-        try {
-          await concluirTarefaHubspot(pendente.id);
-          cumpriuPendente = true;
-          queryClient.setQueriesData<{ tarefas?: Array<{ id: string }> }>({ queryKey: ['tarefas_crm'] }, (d) =>
-            d && Array.isArray(d.tarefas) ? { ...d, tarefas: d.tarefas.filter((t) => t.id !== pendente.id) } : d);
-        } catch (err) {
-          console.warn('[HUBSPOT] concluir a visita pendente falhou, cria a do check-in:', err);
+        if (visitaCli.id_hubspot && !cumpriuPendente) {
+          try {
+            await createVisitTask({
+              id_hubspot: visitaCli.id_hubspot,
+              lead_nome: visitaCli.empresa?.trim() || visitaCli.nome,
+              visited_at: (raw.visited_at as string | undefined) ?? new Date().toISOString(),
+              visita_numero: visitaCli.visit_count ?? null,
+              vendedor_nome: profile?.full_name ?? null,
+              owner_id: profile?.id_hubspot ?? null,
+            });
+          } catch (err) {
+            console.warn('[HUBSPOT] criar Task de visita falhou:', err);
+          }
         }
-      }
-      if (client.id_hubspot && !cumpriuPendente) {
-        try {
-          await createVisitTask({
-            id_hubspot: client.id_hubspot,
-            lead_nome: client.empresa?.trim() || client.nome,
-            visited_at: (raw.visited_at as string | undefined) ?? new Date().toISOString(),
-            visita_numero: client.visit_count ?? null,
-            vendedor_nome: profile?.full_name ?? null,
-            owner_id: profile?.id_hubspot ?? null,
-          });
-        } catch (err) {
-          console.warn('[HUBSPOT] criar Task de visita falhou:', err);
-        }
-      }
+      };
+      void tarefaDaVisita();
 
       if (isLead) {
         sendHubspotEvent({
