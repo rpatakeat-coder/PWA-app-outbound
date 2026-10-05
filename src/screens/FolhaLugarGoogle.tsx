@@ -39,7 +39,7 @@ async function lerLugar(placeId: string): Promise<Detalhe> {
 type Props = {
   lugar: LugarGoogle | null;
   aoFechar: () => void;
-  aoVirarLead: (d: { nome: string; telefone: string | null; latitude: number; longitude: number }) => void;
+  aoVirarLead: (d: { placeId: string; nome: string; telefone: string | null; latitude: number; longitude: number }) => Promise<void> | void;
   aoAbrirLead: (c: Client) => void;
 };
 
@@ -53,14 +53,30 @@ export default function FolhaLugarGoogle({ lugar, aoFechar, aoVirarLead, aoAbrir
     let vivo = true;
     setDet(null); setErro(null); setJaTem(null);
     lerLugar(lugar.placeId).then((d) => { if (vivo) setDet(d); }).catch((e) => { if (vivo) setErro(String((e as Error)?.message ?? e)); });
-    // já está na base? mesma conta-alvo (place_id) ou um pino a ~40 m
-    const d = 0.0004;
-    void supabase.from('clients').select('*')
-      .or(`conta_alvo_place_id.eq.${lugar.placeId},and(latitude.gte.${lugar.latitude - d},latitude.lte.${lugar.latitude + d},longitude.gte.${lugar.longitude - d},longitude.lte.${lugar.longitude + d})`)
-      .limit(1)
-      .then(({ data }) => { if (vivo && data && data[0]) setJaTem(data[0] as Client); });
     return () => { vivo = false; };
   }, [lugar?.placeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* JÁ ESTÁ NA BASE? (05/10/26: "os leads que puxamos do Google, ele já acusa como se fosse outros
+     leads"). Antes bastava um pino a 40 m — num quarteirão de bares, era o vizinho. Agora é o
+     MESMO lugar: o place_id do Google, ou um pino a ~60 m com nome parecido. */
+  useEffect(() => {
+    if (!lugar || !det) return;
+    let vivo = true;
+    const palavras = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !['restaurante', 'lanchonete', 'pizzaria', 'bar', 'ltda', 'comercio', 'alimentos'].includes(w));
+    const doGoogle = new Set(palavras(det.nome));
+    const d = 0.0006;
+    void supabase.from('clients').select('*')
+      .or(`conta_alvo_place_id.eq.${lugar.placeId},and(latitude.gte.${lugar.latitude - d},latitude.lte.${lugar.latitude + d},longitude.gte.${lugar.longitude - d},longitude.lte.${lugar.longitude + d})`)
+      .limit(30)
+      .then(({ data }) => {
+        if (!vivo || !data) return;
+        const achado = (data as Client[]).find((c) => c.conta_alvo_place_id === lugar.placeId
+          || palavras(`${c.empresa ?? ''} ${c.nome ?? ''}`).some((w) => doGoogle.has(w)));
+        setJaTem(achado ?? null);
+      });
+    return () => { vivo = false; };
+  }, [lugar?.placeId, det?.nome]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [criando, setCriando] = useState(false);
 
   if (!lugar) return null;
   const nota = det?.nota != null ? `${det.nota.toFixed(1).replace('.', ',')} ★${det.avaliacoes ? ` · ${det.avaliacoes} avaliações` : ''}` : null;
@@ -84,9 +100,13 @@ export default function FolhaLugarGoogle({ lugar, aoFechar, aoVirarLead, aoAbrir
             <Text style={s.botaoSecTexto}>{`Já está no mapa · abrir ${jaTem.empresa?.trim() || jaTem.nome}`}</Text>
           </Pressable>
         ) : (
-          <Pressable accessibilityRole="button" style={[s.botao, s.botaoPrin]} disabled={!det && !erro}
-            onPress={() => aoVirarLead({ nome: det?.nome ?? '', telefone: det?.telefone ?? null, latitude: lugar.latitude, longitude: lugar.longitude })}>
-            <Text style={s.botaoPrinTexto}>Virar lead</Text>
+          <Pressable accessibilityRole="button" style={[s.botao, s.botaoPrin, (criando || !det) && { opacity: 0.6 }]} disabled={!det || criando}
+            onPress={async () => {
+              setCriando(true);
+              try { await aoVirarLead({ placeId: lugar.placeId, nome: det?.nome ?? '', telefone: det?.telefone ?? null, latitude: lugar.latitude, longitude: lugar.longitude }); }
+              finally { setCriando(false); }
+            }}>
+            {criando ? <ActivityIndicator color="#fff" /> : <Text style={s.botaoPrinTexto}>Virar lead · entra em Prospecção</Text>}
           </Pressable>
         )}
         <Pressable accessibilityRole="link" style={[s.botao, s.botaoSec]}

@@ -9180,27 +9180,38 @@ function MainApp() {
           lugar={lugarGoogle}
           aoFechar={() => setLugarGoogle(null)}
           aoAbrirLead={(c) => { setLugarGoogle(null); openClientDetails(c); }}
-          aoVirarLead={(d) => {
-            setLugarGoogle(null);
-            // o mesmo cadastro do pino no mapa, já com o nome do restaurante, o telefone e o endereço
-            void reverseGeocode(d.latitude, d.longitude).catch(() => null).then((addr) => {
-              setForm({
-                ...initialFormState,
-                status: 'lead' as ClientStatus,
+          aoVirarLead={async (d) => {
+            /* VIRAR LEAD JÁ ENTRA NO FUNIL (Julyan, 05/10/26: "tem que botar pra Prospecção, criar o
+               lead e ir pro funil"). Antes abria o formulário vazio de contato; agora cria direto pelo
+               MESMO cadastro do app (pino + negócio em Prospecção no HubSpot, com quem tocou como dono),
+               com a origem GoogleMaps e o place_id — o mesmo lugar não vira lead duas vezes. O contato
+               (nome de quem decide) é perguntado depois, na visita: aqui vai o nome do restaurante. */
+            const addr = await reverseGeocode(d.latitude, d.longitude).catch(() => null);
+            try {
+              const created = await addClient.mutateAsync({
+                nome: d.nome,
                 empresa: d.nome,
-                telefone: d.telefone ?? '',
-                latitude: d.latitude.toString(),
-                longitude: d.longitude.toString(),
-                cep: addr?.cep ? `${addr.cep.slice(0, 5)}-${addr.cep.slice(5)}` : '',
-                endereco: addr?.endereco ?? '',
-                numero: addr?.numero ?? '',
-                cidade: addr?.cidade ?? '',
-                estado: addr?.estado ?? '',
-                bairro: addr?.bairro || undefined,
+                telefone: d.telefone ?? undefined,
+                status: 'lead' as ClientStatus,
+                latitude: d.latitude,
+                longitude: d.longitude,
+                cep: addr?.cep ? `${addr.cep.slice(0, 5)}-${addr.cep.slice(5)}` : undefined,
+                endereco: addr?.endereco ?? undefined,
+                numero: addr?.numero ?? null,
+                cidade: addr?.cidade ?? undefined,
+                estado: addr?.estado ?? undefined,
+                bairro: addr?.bairro || null,
+                observacoes: 'Do Google Maps',
+                geo_approximate: false,
+                origem_lead: 'google_maps_motor',
+                conta_alvo_place_id: d.placeId,
               });
-              setPendingGeoApproximate(false);
-              setIsFormOpen(true);
-            });
+              setLugarGoogle(null);
+              Toast.mostrar(`${created.empresa?.trim() || created.nome} · lead criado, entrando em Prospecção`, 'ok');
+              setTimeout(() => setSelectedClient(created), 350);
+            } catch (e) {
+              Alert.alert('Não consegui criar o lead', String((e as Error)?.message ?? e));
+            }
           }}
         />
       )}

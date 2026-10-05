@@ -357,6 +357,8 @@ export function useClients(
         // geo_approximate=true e a gente respeita (raio de check-in maior).
         geo_source: 'coords',
         geo_approximate: form.geo_approximate ?? false,
+        ...(form.origem_lead ? { origem_lead: form.origem_lead } : {}),
+        ...(form.conta_alvo_place_id ? { conta_alvo_place_id: form.conta_alvo_place_id } : {}),
       };
 
       const { data, error } = await supabase

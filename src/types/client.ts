@@ -170,6 +170,10 @@ export interface ClientFormData {
   // Origem da coordenada ('coords' pin no mapa, 'cep', 'google', etc.). Só
   // enviado quando a edição mexe na localização; edições de texto omitem.
   geo_source?: string;
+  // Lead criado de um restaurante do Google no mapa (05/10/2026): a origem vai ao HubSpot como
+  // GoogleMaps e o place_id impede o mesmo lugar de virar lead duas vezes.
+  origem_lead?: string;
+  conta_alvo_place_id?: string;
 }
 
 export interface FieldRoute {
