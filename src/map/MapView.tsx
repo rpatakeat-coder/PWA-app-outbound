@@ -236,6 +236,13 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
           scrollwheel: zoomEnabled,
           headingInteractionEnabled: rotateEnabled,
           tiltInteractionEnabled: pitchEnabled,
+          /* NO COMPUTADOR, MAPA EM IMAGEM (05/10/26). O mapa vetorial (WebGL) travava no Chrome
+             do computador com vídeo integrado Intel: "Hung Labeler", fundo e pinos sumindo, mapa
+             em branco até reiniciar o navegador — e entre um e outro, piscando. O raster desenha
+             por imagens, é leve e não trava; pino, cor e tema escuro são os mesmos. O celular
+             segue vetorial (é ele que gira o mapa no modo navegação). */
+          ...(typeof window !== 'undefined' && window.matchMedia?.('(pointer: fine)').matches && maps.RenderingType
+            ? { renderingType: maps.RenderingType.RASTER } : {}),
         });
 
         mapInstanceRef.current = map;
