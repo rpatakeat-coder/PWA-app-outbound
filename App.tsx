@@ -6285,6 +6285,11 @@ function MainApp() {
         <Pressable accessibilityRole="button" onPress={() => setFiltrosNovosAbertos(true)} style={styles.pmnLente}>
           <Text style={styles.pmnLenteTexto}>{quantosFiltros(filtrosNovos) ? `Filtros · ${quantosFiltros(filtrosNovos)}` : 'Filtros'}</Text>
         </Pressable>
+        {/* esconder também daqui, onde a mão já está (05/10/26: "tenho que esconder painel ali também") */}
+        <Pressable accessibilityRole="button" accessibilityLabel="Esconder o painel e ampliar o mapa" onPress={alternarPainel} style={[styles.pmnLente, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
+          <IconChevronLeft width={14} height={14} fill={iconColors.muted} />
+          <Text style={styles.pmnLenteTexto}>Esconder</Text>
+        </Pressable>
       </View>
       {planejarDia ? (
         <BarraPlanejar

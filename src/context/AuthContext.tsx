@@ -55,10 +55,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription?.unsubscribe();
   }, []);
 
+  /* O PERFIL DA ÚLTIMA VEZ ABRE NA HORA (auditoria de velocidade, 05/10/26). Medido como Sandro:
+     o perfil levava ~2 s, as regras do setor esperavam por ele, e só então saía a busca dos leads
+     da área — pinos aos ~6,4 s. O perfil guardado no aparelho (por pessoa) destrava tudo isso de
+     imediato; o do banco chega por trás e substitui. Sair da conta apaga a cópia. */
+  const CHAVE_PERFIL = 'takeat-perfil';
+  const perfilGuardado = (userId: string): Profile | null => {
+    try { const p = JSON.parse(window.localStorage.getItem(CHAVE_PERFIL) ?? 'null'); return p && p.id === userId ? (p as Profile) : null; } catch { return null; }
+  };
+  const guardarPerfil = (p: Profile | null) => {
+    try { if (p) window.localStorage.setItem(CHAVE_PERFIL, JSON.stringify(p)); else window.localStorage.removeItem(CHAVE_PERFIL); } catch { /* sem armazenamento */ }
+  };
+
   const loadProfile = async (userId: string) => {
     // Coalesce concurrent calls for the same user into a single request.
     if (loadingProfileFor.current === userId) return;
     loadingProfileFor.current = userId;
+    const guardado = typeof window !== 'undefined' ? perfilGuardado(userId) : null;
+    if (guardado) setProfile((atual) => atual ?? guardado);
     try {
       const { data, error: err } = await supabase
         .from('profiles')
@@ -85,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } else {
         setProfile(data);
+        if (typeof window !== 'undefined') guardarPerfil(data);
       }
     } catch (err) {
       console.error('[AUTH] Erro loadProfile:', err);
@@ -141,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await supabase.auth.signOut();
       setUser(null);
       setProfile(null);
+      if (typeof window !== 'undefined') guardarPerfil(null);
       console.log('[AUTH] Logout OK');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao fazer logout';

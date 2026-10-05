@@ -179,6 +179,10 @@ export function useClients(
   const isViewer = profile?.role === 'view';
 
   // Load visibility rules for user's sector
+  // As regras do setor da última vez destravam a busca dos leads na hora (05/10/26); a leitura
+  // nova sai junto e, se mudou, a busca refaz com ela.
+  const chaveVis = `takeat-visibilidade:${profile?.sector || 'Geral'}`;
+  const visibilidadeGuardada = (() => { try { const v = JSON.parse(window.localStorage.getItem(chaveVis) ?? 'null'); return Array.isArray(v) ? (v as string[]) : undefined; } catch { return undefined; } })();
   const visibilityQuery = useQuery<string[]>({
     queryKey: ['visibility', profile?.sector],
     queryFn: async () => {
@@ -187,8 +191,12 @@ export function useClients(
         .from('sector_visibility')
         .select('status_slug')
         .eq('sector', sector);
-      return (data || []).map((r: any) => r.status_slug);
+      const lista = (data || []).map((r: any) => r.status_slug);
+      try { window.localStorage.setItem(`takeat-visibilidade:${sector}`, JSON.stringify(lista)); } catch { /* sem armazenamento */ }
+      return lista;
     },
+    initialData: visibilidadeGuardada,
+    initialDataUpdatedAt: 0,
     // Viewer ignora sector_visibility, entao nem busca as regras.
     enabled: isAuthenticated && !!profile && !isViewer,
   });
@@ -302,7 +310,7 @@ export function useClients(
     placeholderData: (prev: Client[] | undefined) => prev,
     // Viewer nao espera o sector_visibility (desabilitado pra ele); os demais
     // so disparam depois que as regras de visibilidade chegaram.
-    enabled: callerEnabled && isAuthenticated && (isViewer || visibilityQuery.isFetched),
+    enabled: callerEnabled && isAuthenticated && (isViewer || visibilityQuery.isFetched || visibilityQuery.data !== undefined),
   });
 
   // SALVAR NAO ESPERA A BASE RECARREGAR (26/09/2026). O onSuccess devolvia a
