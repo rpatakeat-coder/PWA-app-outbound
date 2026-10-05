@@ -781,6 +781,12 @@ export default function AgendaPC(props: Props) {
         ))}
       </View>
 
+      {/* UMA ROLAGEM SÓ PARA O DIA (06/10/26). Num notebook de 640 px de tela, a semana, o
+          título do dia, as abas e o rodapé fixos deixavam a lista do plano com 256 px — três
+          paradas à vista. Agora o título, o aviso e a lista rolam juntos; as abas grudam no
+          topo da rolagem e a semana e o "Ir para a rua" continuam fixos. */}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }}
+        stickyHeaderIndices={!passado && !foco && termo.length < 2 ? [1] : undefined}>
       <View style={s.diaCabeca}>
         <Text style={s.diaTitulo}>{titulo}</Text>
         <Text style={s.proposito} numberOfLines={1}>{[proposito ? PROPOSITOS[proposito] ?? proposito : null, bairroDoDia].filter(Boolean).join(' · ') || (passado ? 'Dia passado · só leitura' : 'Sem propósito no Planejamento')}</Text>
@@ -788,6 +794,7 @@ export default function AgendaPC(props: Props) {
       </View>
 
       {!passado && !foco && termo.length < 2 && (
+        <View style={s.abasGrudadas}>
         <View style={s.abas}>
           {(['plano', 'sugestoes'] as const).map((a) => (
             <Pressable key={a} accessibilityRole="button" onPress={() => aoAba(a)} style={[s.aba, aba === a && s.abaAtiva]}>
@@ -795,6 +802,7 @@ export default function AgendaPC(props: Props) {
               <Text style={s.abaN}>{a === 'plano' ? itens.length : nSug}</Text>
             </Pressable>
           ))}
+        </View>
         </View>
       )}
 
@@ -810,7 +818,8 @@ export default function AgendaPC(props: Props) {
         </View>
       )}
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={s.conteudo}>{corpo}</ScrollView>
+      <View style={s.conteudo}>{corpo}</View>
+      </ScrollView>
       {rodape}
     </View>
   );
@@ -871,7 +880,9 @@ const s = StyleSheet.create({
   conflitoTexto: { flex: 1, fontSize: 12, lineHeight: 17, color: 'var(--tint-amber-text)', fontWeight: '600' },
   botaoEncaixar: { minHeight: 36, paddingHorizontal: 12, borderRadius: 10, backgroundColor: 'var(--surface)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'var(--border)' },
   botaoEncaixarTexto: { fontSize: 13, fontWeight: '800', color: 'var(--text)' },
-  conteudo: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 16, gap: 2 },
+  conteudo: { paddingHorizontal: 14, paddingTop: 10, gap: 2 },
+  /* as abas grudam no topo da rolagem: fundo opaco, senão a lista passa por baixo à vista */
+  abasGrudadas: { backgroundColor: 'var(--bg)', paddingBottom: 6 },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 56, paddingHorizontal: 6, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: 'transparent' },
   linhaDestaque: { backgroundColor: 'var(--surface)', borderColor: 'var(--border)' },
   linhaEntra: { borderColor: 'var(--vermelho-acao)', borderStyle: 'dashed' },
