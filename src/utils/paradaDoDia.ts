@@ -61,6 +61,29 @@ export async function tirarDoDia(sellerId: string, dia: string, clientId: string
   return (data ?? []).length;
 }
 
+/** A ordem e os cadeados do dia (Agenda do computador): `ordem` são os client_id na ordem nova;
+ *  `fixos` só os que mudaram (null = soltar). Não toca no status: entrar e sair é o porNoDia. */
+export async function gravarOrdemDoDia(sellerId: string, dia: string, ordem: string[], fixos: Map<string, string | null>): Promise<number> {
+  const rota = await rotaDoDia(sellerId, dia, false);
+  if (!rota) return 0;
+  const { data, error } = await supabase.from('field_route_stops')
+    .select('id, client_id, position, horario_fixo').eq('route_id', rota).neq('status', 'removed');
+  if (error) throw error;
+  const linhas = (data ?? []) as Array<{ id: string; client_id: string; position: number | null; horario_fixo: string | null }>;
+  let n = 0;
+  for (const l of linhas) {
+    const i = ordem.indexOf(l.client_id);
+    const mudar: { position?: number; horario_fixo?: string | null } = {};
+    if (i >= 0 && l.position !== i + 1) mudar.position = i + 1;
+    if (fixos.has(l.client_id) && (fixos.get(l.client_id) ?? null) !== (l.horario_fixo ?? null)) mudar.horario_fixo = fixos.get(l.client_id) ?? null;
+    if (!Object.keys(mudar).length) continue;
+    const { error: e } = await supabase.from('field_route_stops').update(mudar).eq('id', l.id);
+    if (e) throw e;
+    n++;
+  }
+  return n;
+}
+
 /** A coluna do dia no Planejamento do Cockpit (planos_semanais), já normalizada. */
 export async function lerColunaDoPlano(ownerHubspot: string, dia: string): Promise<FaixaDoPlano[]> {
   const { segunda, indice } = semanaDoDia(dia);

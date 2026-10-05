@@ -205,6 +205,8 @@ export interface FieldRouteStop {
   // Rota do dia: por que a parada é obrigatória ('sla' | 'relacionamento' |
   // 'conta_alvo'). NULL = parada normal (sugerida ou adicionada à mão).
   mandatory_reason: string | null;
+  // 0165: horário com cadeado posto na Agenda do computador ('HH:MM'); nulo = estimado.
+  horario_fixo?: string | null;
   created_at: string;
   updated_at: string;
 }

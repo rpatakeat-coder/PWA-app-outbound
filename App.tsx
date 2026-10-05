@@ -105,8 +105,11 @@ import FiltrosMapaNovo from './src/screens/FiltrosMapaNovo';
 import { PeekCardNovo, TopoCardNovo, type AcoesCardNovo, type DadosCardNovo } from './src/screens/CardLeadNovo';
 import FolhaDoMapa, { type ItemFolha } from './src/screens/FolhaDoMapa';
 import BarraPlanejar, { type ParadaDoDia } from './src/screens/BarraPlanejar';
+import AgendaPC, { CamadasAgenda, type CamadaAgenda, type ItemPC, type SugestaoPC } from './src/screens/AgendaPC';
+import { melhorPosicao, metros } from './src/utils/rotaDoDia';
+import { buscarGooglePerto, jaNaBase, type LugarPerto } from './src/utils/googlePerto';
 import { diaInicial, diasPlanejaveis, ehCompromisso, faixaDoLead, rotuloDoDia, vaiAoCockpit, type FaixaDoPlano } from './src/utils/planoNoMapa';
-import { lerColunaDoPlano, porNoDia, tirarDoDia } from './src/utils/paradaDoDia';
+import { gravarOrdemDoDia, lerColunaDoPlano, porNoDia, tirarDoDia } from './src/utils/paradaDoDia';
 import { diasDaFaixa } from './src/utils/agendaNovo';
 import { abrirGestao } from './src/utils/abrirGestao';
 import TopoCampo, { ALTURA_TOPO_CAMPO } from './src/screens/TopoCampo';
@@ -1339,6 +1342,27 @@ function MainApp() {
   // São de UM dia: trocar de dia, sair do modo ou virar a meia-noite as descarta.
   const [rascunhoPlano, setRascunhoPlano] = useState<Map<string, { client: Client; entrar: boolean }>>(() => new Map());
   useEffect(() => { setRascunhoPlano((m) => (m.size ? new Map() : m)); }, [planejarDia]);
+  /* AGENDA NO COMPUTADOR (Claude Design, 05/10/26). Além de entrar e sair, o rascunho do dia
+     guarda a ORDEM (arrastar, Encaixar, Pôr na melhor posição) e os CADEADOS de horário. Tudo
+     vale para o dia aberto e some ao trocar de dia, como as marcas. */
+  const ehAgendaPC = modoNovo && layout.ehLargo && tab === 'agenda';
+  const [ordemPlano, setOrdemPlano] = useState<string[] | null>(null);
+  const [fixosPlano, setFixosPlano] = useState<Map<string, string | null>>(() => new Map());
+  const [abaAgenda, setAbaAgenda] = useState<'plano' | 'sugestoes'>('plano');
+  const [focoPC, setFocoPC] = useState<Client | null>(null);
+  const [hoverAgenda, setHoverAgenda] = useState<string | null>(null);
+  // o hover passa por um respiro: cada troca redesenha o App inteiro e recalcula os pinos
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aoHoverAgenda = (id: string | null) => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => setHoverAgenda(id), id ? 120 : 80);
+  };
+  const [camadasAgenda, setCamadasAgenda] = useState<Set<CamadaAgenda>>(() => new Set(['regua', 'alvo', 'queda']));
+  useEffect(() => {
+    setOrdemPlano(null);
+    setFixosPlano((m) => (m.size ? new Map() : m));
+    setFocoPC(null);
+  }, [planejarDia]);
   const opsOutroDia = useFieldOps(planejarDia ?? routeDate, isAuthenticated && !!planejarDia && planejarDia !== routeDate);
   const opsDoDia = planejarDia && planejarDia !== routeDate ? opsOutroDia : fieldOps;
   const planejarOutroDia = !!planejarDia && planejarDia !== routeDate;
@@ -1351,9 +1375,21 @@ function MainApp() {
     const agenda = new Set(diasDaFaixa(new Date(), 11));
     return diasPlanejaveis(routeDate, 10).filter((d) => agenda.has(d.iso));
   }, [routeDate]);
+  // A Agenda do computador vai da segunda passada à sexta da próxima (o passado só para ler).
+  const diasDaAgendaPC = useMemo(() => {
+    const t = new Date(`${routeDate}T12:00:00Z`);
+    const dw = t.getUTCDay();
+    t.setUTCDate(t.getUTCDate() - (dw === 0 ? 6 : dw - 1) - 7);
+    const out: string[] = [];
+    for (let i = 0; i < 21; i++) {
+      const d = new Date(t.getTime() + i * 86400000);
+      if (d.getUTCDay() >= 1 && d.getUTCDay() <= 5) out.push(d.toISOString().slice(0, 10));
+    }
+    return out;
+  }, [routeDate]);
   useEffect(() => {
-    if (planejarDia && !diasDoPlanejar.some((d) => d.iso === planejarDia)) setPlanejarDia(diasDoPlanejar[0]?.iso ?? null);
-  }, [planejarDia, diasDoPlanejar]);
+    if (planejarDia && !diasDoPlanejar.some((d) => d.iso === planejarDia) && !(ehAgendaPC && diasDaAgendaPC.includes(planejarDia))) setPlanejarDia(diasDoPlanejar[0]?.iso ?? null);
+  }, [planejarDia, diasDoPlanejar, ehAgendaPC, diasDaAgendaPC]);
   // A coluna do dia no Planejamento do Cockpit: a folha diz o que está lá de verdade.
   const colunaDoPlanoQ = useQuery({
     queryKey: ['plano_do_dia', profile?.id_hubspot ?? null, planejarDia],
@@ -2103,11 +2139,17 @@ function MainApp() {
   const clientesDoPlanoNoMapa = useMemo(() => {
     if (!planejarDia) return routeDisplayClients;
     const saem = new Set(pendentesDoPlano.filter((x) => !x.entrar).map((x) => x.client.id));
-    return [
+    const lista = [
       ...paradasDoDiaPlanejado.filter((p) => !saem.has(p.client.id)).map((p) => p.client),
       ...pendentesDoPlano.filter((x) => x.entrar).map((x) => x.client),
     ];
-  }, [planejarDia, paradasDoDiaPlanejado, pendentesDoPlano, routeDisplayClients]);
+    if (!ordemPlano) return lista;
+    // a ordem do rascunho (arrastar, Encaixar, Pôr na melhor posição); quem não está nela vai no fim
+    const pos = new Map(ordemPlano.map((id, i) => [id, i]));
+    return lista.map((c, i) => ({ c, k: pos.get(c.id) ?? 10000 + i })).sort((a, b) => a.k - b.k).map((x) => x.c);
+  }, [planejarDia, paradasDoDiaPlanejado, pendentesDoPlano, routeDisplayClients, ordemPlano]);
+  const clientesDoPlanoRef = useRef<Client[]>([]);
+  clientesDoPlanoRef.current = clientesDoPlanoNoMapa;
   const itensMapaNovo = useMemo(() => {
     if (!modoNovo || !contextoPino) return [];
     const plano = new Map<string, number>();
@@ -2141,9 +2183,35 @@ function MainApp() {
   rascunhoRef.current = rascunhoPlano;
   const confirmandoPlanoRef = useRef(false);
   const [confirmandoPlano, setConfirmandoPlano] = useState(false);
+  const ordemRef = useRef(ordemPlano);
+  ordemRef.current = ordemPlano;
+  const fixosRef = useRef(fixosPlano);
+  fixosRef.current = fixosPlano;
+  const ehAgendaPCRef = useRef(false);
+  ehAgendaPCRef.current = ehAgendaPC;
+  /** Agenda do computador: quem entra vai para a melhor posição da rota, não para o fim. */
+  const porNaMelhorPosicao = (novos: Client[]) => {
+    const atual = clientesDoPlanoRef.current.map((x) => x.id);
+    const porId = new Map(clientesDoPlanoRef.current.map((x) => [x.id, x]));
+    for (const c of novos) porId.set(c.id, c);
+    const ids = (ordemRef.current ?? atual).filter((id) => porId.has(id));
+    for (const id of atual) if (!ids.includes(id)) ids.push(id);
+    const posicoes: number[] = [];
+    for (const c of novos) {
+      if (ids.includes(c.id)) continue;
+      const rota = ids.map((id) => { const x = porId.get(id)!; return { id, ponto: x.latitude != null && x.longitude != null ? { latitude: Number(x.latitude), longitude: Number(x.longitude) } : null, fixo: null }; });
+      const pt = c.latitude != null && c.longitude != null ? { latitude: Number(c.latitude), longitude: Number(c.longitude) } : null;
+      const i = pt ? melhorPosicao(rota, pt).indice : ids.length;
+      ids.splice(i, 0, c.id);
+      posicoes.push(i + 1);
+    }
+    setOrdemPlano(ids);
+    return posicoes;
+  };
   const marcarNoPlano = (c: Client) => {
     if (!planejarDiaRef.current || confirmandoPlanoRef.current) return;
     const nome = c.empresa?.trim() || c.nome;
+    if (planejarDiaRef.current < routeDate) { Toast.mostrar('Dia que já passou: só para ler. Use Remarcar para levar a outro dia.', 'fila'); return; }
     if (rascunhoRef.current.has(c.id)) {
       setRascunhoPlano((m) => { const n = new Map(m); n.delete(c.id); return n; });
       return;
@@ -2154,6 +2222,7 @@ function MainApp() {
       Toast.mostrar(`${nome} tem visita marcada${parada.compromisso ? ` às ${parada.compromisso}` : ''} nesse dia. Para desmarcar, mude na Agenda.`, 'fila');
       return;
     }
+    if (!parada && ehAgendaPCRef.current) porNaMelhorPosicao([c]);
     setRascunhoPlano((m) => new Map(m).set(c.id, { client: c, entrar: !parada }));
   };
   const gravarNoDia = async (dia: string, itens: { client: Client; entrar: boolean }[]) => {
@@ -2178,13 +2247,25 @@ function MainApp() {
   const confirmarPlano = async () => {
     const dia = planejarDiaRef.current;
     const itens = [...rascunhoRef.current.values()];
-    if (!dia || !profile?.id || !itens.length || confirmandoPlanoRef.current) return;
+    // ordem e cadeados da Agenda do computador: a ordem final é a que o mapa mostra agora
+    const ordemFinal = ordemRef.current ? clientesDoPlanoRef.current.map((c) => c.id) : null;
+    const fixos = new Map(fixosRef.current);
+    if (!dia || !profile?.id || (!itens.length && !ordemFinal && !fixos.size) || confirmandoPlanoRef.current) return;
     confirmandoPlanoRef.current = true;
     setConfirmandoPlano(true);
     try {
       const { feitos, falhas } = await gravarNoDia(dia, itens);
+      let reordenadas = 0;
+      if (ordemFinal || fixos.size) {
+        try {
+          reordenadas = await gravarOrdemDoDia(profile.id, dia, ordemFinal ?? clientesDoPlanoRef.current.map((c) => c.id), fixos);
+          await queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
+        } catch (e) { falhas.push(`ordem do dia: ${String((e as Error)?.message ?? e)}`); }
+      }
       const col = profile.id_hubspot ? await lerColunaDoPlano(String(profile.id_hubspot), dia).catch(() => null) : null;
       setRascunhoPlano(new Map());
+      setOrdemPlano(null);
+      setFixosPlano(new Map());
       const entraram = feitos.filter((f) => f.entrar);
       const sairam = feitos.length - entraram.length;
       const noCockpit = col ? entraram.filter((f) => faixaDoLead(col, f.client)).length : null;
@@ -2197,6 +2278,7 @@ function MainApp() {
                 : ` · ${noCockpit} no Cockpit, ${entraram.length - noCockpit} só no app`));
       }
       if (sairam) partes.push(`${sairam} ${sairam === 1 ? 'saiu' : 'saíram'}`);
+      if (reordenadas && !feitos.length) partes.push('ordem e horários salvos');
       if (falhas.length) Toast.mostrar(`Não gravei ${falhas.length}: ${falhas[0]}`, 'erro');
       else if (partes.length) {
         Toast.mostrar(`${partes.join(' · ')}`, 'ok', {
@@ -2212,7 +2294,16 @@ function MainApp() {
       setConfirmandoPlano(false);
     }
   };
-  const descartarPlano = () => setRascunhoPlano(new Map());
+  const descartarPlano = () => { setRascunhoPlano(new Map()); setOrdemPlano(null); setFixosPlano(new Map()); };
+  // Quantas mudanças o rodapé conta: cada entrada/saída, a ordem (uma) e cada cadeado.
+  const ordemMudou = !!ordemPlano && (() => {
+    const base = paradasDoDiaPlanejado.map((p) => p.client.id).filter((id) => !rascunhoPlano.has(id));
+    const agora = ordemPlano.filter((id) => base.includes(id));
+    return agora.some((id, i) => id !== base[i]);
+  })();
+  const mudancasPlano = rascunhoPlano.size + (ordemMudou ? 1 : 0) + fixosPlano.size;
+  const mudancasRef = useRef(0);
+  mudancasRef.current = mudancasPlano;
   /* A AGENDA DO COMPUTADOR É ONDE ELE SE PLANEJA (Julyan, 05/10/26: "quando eu clico na agenda
      pelo computador, eu preciso ter acesso à rota, ver onde os leads ficam"; "a agenda é onde o
      executivo se planeja"). O mapa da direita abria parado onde estava, sem as paradas, e
@@ -2232,6 +2323,16 @@ function MainApp() {
     setPlanejarDia(iso);
   };
   const trocarDiaPlanejado = (iso: string) => {
+    // Agenda do computador: o modal da prancha (Confirmar e ir / Descartar / Continuar aqui)
+    if (ehAgendaPCRef.current && mudancasRef.current > 0) {
+      const n = mudancasRef.current;
+      Alert.alert(`${n} ${n === 1 ? 'mudança não confirmada' : 'mudanças não confirmadas'}`, 'O que fazer com elas antes de trocar de dia?', [
+        { text: 'Continuar aqui', style: 'cancel' },
+        { text: 'Descartar', style: 'destructive', onPress: () => { descartarPlano(); setPlanejarDia(iso); } },
+        { text: 'Confirmar e ir', onPress: () => { void confirmarPlano().then(() => setPlanejarDia(iso)); } },
+      ]);
+      return;
+    }
     if (rascunhoRef.current.size) {
       Toast.mostrar(`Confirme ou descarte ${rascunhoRef.current.size === 1 ? 'a marca' : `as ${rascunhoRef.current.size} marcas`} antes de trocar de dia.`, 'fila');
       return;
@@ -2239,14 +2340,189 @@ function MainApp() {
     setPlanejarDia(iso);
   };
   const tirarDoDiaPlanejado = (p: ParadaDoDia) => marcarNoPlano(p.client);
-  planejarToqueRef.current = planejarDia ? marcarNoPlano : null;
+
+  // ===== AGENDA NO COMPUTADOR: as ações do painel (tudo vira rascunho, com Desfazer de 5 s) =====
+  const comDesfazer = (texto: string | (() => string), acao: () => void) => {
+    const antes = { r: rascunhoRef.current, o: ordemRef.current, f: fixosRef.current };
+    acao();
+    Toast.mostrar(typeof texto === 'function' ? texto() : texto, 'ok', { rotulo: 'Desfazer', onPress: () => { setRascunhoPlano(antes.r); setOrdemPlano(antes.o); setFixosPlano(antes.f); } });
+  };
+  const nomeCurto = (c: Client) => c.empresa?.trim() || c.nome;
+  const porNoDiaPC = (cs: Client[]) => {
+    const dia = planejarDiaRef.current;
+    if (!dia || confirmandoPlanoRef.current) return;
+    if (dia < routeDate) { Toast.mostrar('Dia que já passou: só para ler. Use Remarcar para levar a outro dia.', 'fila'); return; }
+    const noDia = new Set(clientesDoPlanoRef.current.map((c) => c.id));
+    const voltam = cs.filter((c) => rascunhoRef.current.get(c.id)?.entrar === false);
+    const novos = cs.filter((c) => !noDia.has(c.id) && !voltam.includes(c));
+    if (!novos.length && !voltam.length) { Toast.mostrar(`${nomeCurto(cs[0])} já está no dia.`, 'fila'); return; }
+    let posicoes: number[] = [];
+    comDesfazer(
+      () => (novos.length + voltam.length === 1
+        ? `${nomeCurto((novos[0] ?? voltam[0]))} entrou${posicoes[0] ? ` como ${posicoes[0]}ª` : ''} · confirme no rodapé`
+        : `${novos.length + voltam.length} entraram no dia · confirme no rodapé`),
+      () => {
+        if (novos.length) posicoes = porNaMelhorPosicao(novos);
+        setRascunhoPlano((m) => {
+          const n = new Map(m);
+          for (const c of voltam) n.delete(c.id);
+          for (const c of novos) n.set(c.id, { client: c, entrar: true });
+          return n;
+        });
+      },
+    );
+    void posicoes;
+  };
+  const tirarDoDiaPC = (c: Client) => {
+    if (!planejarDiaRef.current || planejarDiaRef.current < routeDate) return;
+    const marca = rascunhoRef.current.get(c.id);
+    if (marca?.entrar) { comDesfazer(`${nomeCurto(c)} saiu do rascunho`, () => setRascunhoPlano((m) => { const n = new Map(m); n.delete(c.id); return n; })); return; }
+    const parada = paradasDoDiaRef.current.find((p) => p.client.id === c.id);
+    if (!parada) return;
+    if (parada.status === 'done') { Toast.mostrar(`${nomeCurto(c)} já foi visitado nesse dia.`, 'fila'); return; }
+    if (parada.compromisso != null) { Toast.mostrar(`${nomeCurto(c)} tem horário marcado nesse dia. Para desmarcar, mude a reunião.`, 'fila'); return; }
+    comDesfazer(`${nomeCurto(c)} sai do dia · confirme no rodapé`, () => setRascunhoPlano((m) => new Map(m).set(c.id, { client: c, entrar: false })));
+  };
+  const ordemPC = (ids: string[], texto: string) => {
+    if (!planejarDiaRef.current || planejarDiaRef.current < routeDate) return;
+    comDesfazer(texto, () => setOrdemPlano(ids));
+  };
+  const fixarPC = (clientId: string, hora: string | null) => {
+    if (!planejarDiaRef.current || planejarDiaRef.current < routeDate) return;
+    const doBanco = opsDoDia.stops.find((st) => st.client_id === clientId)?.horario_fixo ?? null;
+    const c = clientesDoPlanoRef.current.find((x) => x.id === clientId);
+    comDesfazer(hora ? `${c ? nomeCurto(c) : 'Parada'} fixada às ${hora}` : 'Horário solto: volta a ser estimado', () => setFixosPlano((m) => {
+      const n = new Map(m);
+      if ((hora ?? null) === doBanco) n.delete(clientId); else n.set(clientId, hora);
+      return n;
+    }));
+  };
+  // Remarcar (dia passado): leva quem não foi para hoje, gravado na hora, com Desfazer.
+  const remarcarPC = async (cs: Client[]) => {
+    if (!profile?.id || !cs.length) return;
+    const destino = diasDoPlanejar[0]?.iso ?? routeDate;
+    const feitos: Client[] = [];
+    for (const c of cs) {
+      try { if ((await porNoDia(profile.id, destino, c.id)) === 'entrou') feitos.push(c); } catch (e) { Toast.mostrar(`Não remarquei ${nomeCurto(c)}: ${String((e as Error)?.message ?? e)}`, 'erro'); return; }
+    }
+    await queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
+    await queryClient.invalidateQueries({ queryKey: ['field_routes'] });
+    Toast.mostrar(feitos.length ? `${feitos.length === 1 ? nomeCurto(feitos[0]) : `${feitos.length} paradas`} remarcada${feitos.length === 1 ? '' : 's'} para ${rotuloDoDia(destino)}` : 'Já estavam no plano desse dia.', 'ok', feitos.length ? {
+      rotulo: 'Desfazer',
+      onPress: () => { void Promise.all(feitos.map((c) => tirarDoDia(profile.id, destino, c.id))).then(() => queryClient.invalidateQueries({ queryKey: ['field_route_stops'] })); },
+    } : undefined);
+  };
+  // O lead em foco no painel: o mapa desliza até ele, com o anel de 250 m. Nunca leva a outra aba.
+  const focarPC = (c: Client | null) => {
+    setFocoPC(c);
+    if (!c) {
+      setFocoAgenda(null);
+      // fechou o cartão: o mapa volta a mostrar o dia inteiro
+      const pts = clientesDoPlanoRef.current.filter((x) => x.latitude != null && x.longitude != null).map((x) => ({ latitude: Number(x.latitude), longitude: Number(x.longitude) }));
+      if (pts.length > 1) setTimeout(() => { try { mapRef.current?.fitToCoordinates(pts, { edgePadding: { top: 60, right: 50, bottom: 40, left: 50 }, animated: true }); } catch { /* fica onde está */ } }, 40);
+      return;
+    }
+    if (c.latitude != null && c.longitude != null) {
+      const lat = Number(c.latitude), lng = Number(c.longitude);
+      setFocoAgenda({ id: c.id, latitude: lat, longitude: lng });
+      setTimeout(() => mapRef.current?.animateToRegion({ latitude: lat, longitude: lng, latitudeDelta: 0.012, longitudeDelta: 0.012 }, 350), 40);
+    }
+  };
+  const abaAgendaRef = useRef(abaAgenda);
+  abaAgendaRef.current = abaAgenda;
+  // Toque no pino com a Agenda do computador aberta: abre o lead no painel; com a aba Sugestões
+  // aberta, o pino fora do dia entra (Pôr pelo pino vazado, como na prancha).
+  const tocarPinoPC = (c: Client) => {
+    const noDia = clientesDoPlanoRef.current.some((x) => x.id === c.id);
+    if (abaAgendaRef.current === 'sugestoes' && !noDia && planejarDiaRef.current && planejarDiaRef.current >= routeDate) { porNoDiaPC([c]); return; }
+    focarPC(c);
+  };
+  planejarToqueRef.current = planejarDia ? (ehAgendaPC && agendaPlaneja ? tocarPinoPC : marcarNoPlano) : null;
+
+  // As sugestões perto do plano: régua estourada, contas-alvo, clientes em queda (do que o mapa já
+  // carregou em volta do dia) e o Google fora da base (uma chamada, só quando pedida).
+  const [googleAgenda, setGoogleAgenda] = useState<{ chave: string; lugares: LugarPerto[] } | null>(null);
+  const [carregandoGoogle, setCarregandoGoogle] = useState(false);
+  const centroDoPlano = useMemo(() => {
+    const pts = clientesDoPlanoNoMapa.filter((c) => c.latitude != null && c.longitude != null);
+    if (pts.length) return { latitude: pts.reduce((s, c) => s + Number(c.latitude), 0) / pts.length, longitude: pts.reduce((s, c) => s + Number(c.longitude), 0) / pts.length };
+    return mapRegion ? { latitude: mapRegion.latitude, longitude: mapRegion.longitude } : null;
+  }, [clientesDoPlanoNoMapa, mapRegion]);
+  const querGoogle = ehAgendaPC && agendaPlaneja && !!planejarDia && planejarDia >= routeDate && (abaAgenda === 'sugestoes' || camadasAgenda.has('google'));
+  useEffect(() => {
+    if (!querGoogle || !centroDoPlano) return;
+    const chave = `${centroDoPlano.latitude.toFixed(2)},${centroDoPlano.longitude.toFixed(2)}`;
+    if (googleAgenda?.chave === chave) return;
+    let vivo = true;
+    setCarregandoGoogle(true);
+    buscarGooglePerto(centroDoPlano)
+      .then((lugares) => { if (vivo) setGoogleAgenda({ chave, lugares }); })
+      .catch((e) => { console.warn('[agenda] google perto:', e); if (vivo) setGoogleAgenda({ chave, lugares: [] }); })
+      .finally(() => { if (vivo) setCarregandoGoogle(false); });
+    return () => { vivo = false; };
+  }, [querGoogle, centroDoPlano?.latitude.toFixed(2), centroDoPlano?.longitude.toFixed(2)]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sugestoesAgenda = useMemo<SugestaoPC[]>(() => {
+    if (!ehAgendaPC || !planejarDia) return [];
+    const plano = clientesDoPlanoNoMapa.filter((c) => c.latitude != null && c.longitude != null)
+      .map((c) => ({ latitude: Number(c.latitude), longitude: Number(c.longitude) }));
+    const ref = plano.length ? plano : centroDoPlano ? [centroDoPlano] : [];
+    const dist = (p: { latitude: number; longitude: number }) => ref.reduce((m, r) => Math.min(m, metros(r, p)), Infinity);
+    const LIMITE = plano.length ? 2000 : 4000;
+    const out: Array<SugestaoPC & { d: number }> = [];
+    for (const { c, p } of itensMapaNovo) {
+      if (c.latitude == null || c.longitude == null || c.is_teste) continue;
+      const ponto = { latitude: Number(c.latitude), longitude: Number(c.longitude) };
+      const d = dist(ponto);
+      if (d > LIMITE) continue;
+      const nome = getClientPrimaryName(c);
+      if (p.dono === 'meu' && c.status === 'lead') {
+        const sla = slaStatus(c, routeSlaDays);
+        if (sla.breach) { out.push({ chave: `r-${c.id}`, grupo: 'regua', client: c, google: null, nome, sub: `${normalizeStage(c.etapa) ?? 'Lead'} há ${sla.diasParado} dias úteis · régua ${sla.sla}`, ponto, d }); continue; }
+      }
+      if (p.tipo === 'alvo' && !c.conta_alvo_dismissed) {
+        const nota = c.conta_alvo_rating != null ? `Google ${Number(c.conta_alvo_rating).toFixed(1).replace('.', ',')}${c.conta_alvo_reviews ? ` (${c.conta_alvo_reviews})` : ''}` : 'sem nota no Google';
+        out.push({ chave: `a-${c.id}`, grupo: 'alvo', client: c, google: null, nome, sub: `Conta-alvo · ${nota}`, ponto, d });
+        continue;
+      }
+      if (p.queda) out.push({ chave: `q-${c.id}`, grupo: 'queda', client: c, google: null, nome, sub: 'Cliente Takeat · em queda', ponto, d });
+    }
+    const base = itensMapaNovo.map((x) => x.c);
+    for (const l of googleAgenda?.lugares ?? []) {
+      if (jaNaBase(l, base)) continue;
+      const ponto = { latitude: l.latitude, longitude: l.longitude };
+      const nota = l.nota != null ? `Google ${l.nota.toFixed(1).replace('.', ',')}${l.avaliacoes ? ` (${l.avaliacoes})` : ''}` : 'sem nota';
+      out.push({ chave: `g-${l.placeId}`, grupo: 'google', client: null, google: l, nome: l.nome, sub: `Fora da base · ${nota}`, ponto, d: dist(ponto) });
+    }
+    const porGrupo = new Map<string, number>();
+    return out.sort((a, b) => a.d - b.d).filter((x) => { const n = porGrupo.get(x.grupo) ?? 0; porGrupo.set(x.grupo, n + 1); return n < 8; })
+      .map(({ d: _d, ...x }) => x); // eslint-disable-line @typescript-eslint/no-unused-vars
+  }, [ehAgendaPC, planejarDia, clientesDoPlanoNoMapa, centroDoPlano, itensMapaNovo, routeSlaDays, googleAgenda]);
+  const idsSugestao = useMemo(() => {
+    const m = new Map<string, SugestaoPC['grupo']>();
+    for (const x of sugestoesAgenda) if (x.client) m.set(x.client.id, x.grupo);
+    return m;
+  }, [sugestoesAgenda]);
+  // As linhas do painel: o dia como o mapa mostra (com o rascunho), o estado e o cadeado de cada uma.
+  const itensAgendaPC = useMemo<ItemPC[]>(() => {
+    if (!ehAgendaPC || !planejarDia) return [];
+    const ehHojeDia = planejarDia === routeDate;
+    return clientesDoPlanoNoMapa.map((c) => {
+      const parada = paradasDoDiaPlanejado.find((p) => p.client.id === c.id);
+      const doBanco = opsDoDia.stops.find((st) => st.client_id === c.id)?.horario_fixo ?? null;
+      const comp = parada?.compromisso ?? null;
+      const horaComp = comp && /^\d{1,2}:\d{2}$/.test(comp) ? comp.padStart(5, '0') : null;
+      const fixo = horaComp ?? (fixosPlano.has(c.id) ? fixosPlano.get(c.id) ?? null : doBanco);
+      const feita = parada?.status === 'done' || (ehHojeDia && visitadoHoje(c.visited_at));
+      return { client: c, estado: feita ? 'feita' : !parada ? 'entra' : 'planejada', compromisso: comp, fixo } as ItemPC;
+    });
+  }, [ehAgendaPC, planejarDia, routeDate, clientesDoPlanoNoMapa, paradasDoDiaPlanejado, opsDoDia.stops, fixosPlano]);
   useEffect(() => {
     if (!agendaPlaneja && planejarPelaAgenda.current && planejarDiaRef.current) { fecharPlanejar(); return; }
     // ABRIR A AGENDA JÁ PLANEJA: o aviso da coluna da esquerda pode chegar antes do modo existir
     // (medido como Sandro: hoje abria com a lista antiga e só o 2º dia entrava no modo)
     if (agendaPlaneja && !planejarDiaRef.current) {
-      const iso = ultimoDiaDaAgenda.current ?? routeDate;
-      if (!diasDoPlanejar.some((d) => d.iso === iso)) return;
+      const iso = (ehAgendaPC ? agendaDiaInicial : null) ?? ultimoDiaDaAgenda.current ?? routeDate;
+      if (!diasDoPlanejar.some((d) => d.iso === iso) && !(ehAgendaPC && diasDaAgendaPC.includes(iso))) return;
       planejarPelaAgenda.current = true;
       setQuadraAberta(null);
       setPlanejarDia(iso);
@@ -2276,7 +2552,7 @@ function MainApp() {
   };
   const fecharPlanejar = () => {
     planejarPelaAgenda.current = false;
-    if (rascunhoRef.current.size) { void confirmarPlano().then(() => setPlanejarDia(null)); return; }
+    if (mudancasRef.current > 0) { void confirmarPlano().then(() => setPlanejarDia(null)); return; }
     const dia = planejarDiaRef.current;
     const lista = paradasDoDiaRef.current;
     setPlanejarDia(null);
@@ -2312,8 +2588,16 @@ function MainApp() {
     // não só os da lente — quem aproxima quer ver o que tem na quadra sem
     // trocar de lente. Afastado, fora da lente vira ponto de 7 px.
     const zoomRua = !!mapRegion && mapRegion.latitudeDelta <= ZOOM_RUA_LAT_DELTA;
+    // Agenda do computador: pino inteiro = o plano, o lead em foco e as camadas ligadas no topo do
+    // mapa (Minha carteira, Régua estourada, Contas-alvo, Em queda); o resto vira ponto de 7 px.
+    const naCamada = (it: (typeof visiveisMapaNovo)[number]) => {
+      if (it.plano != null || it.c.id === focoPC?.id || it.c.id === hoverAgenda) return true;
+      if (camadasAgenda.has('carteira') && it.p.dono === 'meu') return true;
+      const g = idsSugestao.get(it.c.id);
+      return !!g && camadasAgenda.has(g);
+    };
     for (const it of visiveisMapaNovo) {
-      if ((zoomRua && lente !== 'calor') || noFoco(lente, it.p, it.plano) || it.c.id === selectedClient?.id) foco.push(it);
+      if (ehAgendaPC && planejarDia ? naCamada(it) : ((zoomRua && lente !== 'calor') || noFoco(lente, it.p, it.plano) || it.c.id === selectedClient?.id)) foco.push(it);
       else if (lente !== 'calor') pontos.push(it);
     }
     // Nomes: afastado (bairro/cidade) só plano e selecionado; de perto, os
@@ -2347,7 +2631,7 @@ function MainApp() {
     }
     const camada = pontos.map(({ c, p }) => ({ lat: c.latitude as number, lng: c.longitude as number, ...pontoDe(p) }));
     return { focoMapaNovo: foco, camadaPontos: camada, comNome: nomes, pilhaDe: pilhaDeId, janelaMapa: janela };
-  }, [visiveisMapaNovo, lente, selectedClient?.id, mapRegion, layout.ehLargo, janelaTela.width, janelaTela.height, pilhaAberta]);
+  }, [visiveisMapaNovo, lente, selectedClient?.id, mapRegion, layout.ehLargo, janelaTela.width, janelaTela.height, pilhaAberta, ehAgendaPC, planejarDia, focoPC?.id, hoverAgenda, camadasAgenda, idsSugestao]);
   // Pilha até 8: abre em leque. Maior: aproxima o mapa até os pinos se
   // separarem — a não ser que estejam todos no mesmo ponto (aí só o leque separa).
   const abrirPilha = useCallback((c: Client) => {
@@ -5716,7 +6000,7 @@ function MainApp() {
             // planejando outro dia, "feito" e "próxima" são os daquele dia, não os de hoje
             feito={plano != null && (planejarDia ? paradasDoDiaPlanejado.find((p) => p.client.id === c.id)?.status === 'done' : routeStops.find(s => s.client_id === c.id)?.status === 'done')}
             naFila={leadsNaFila.has(c.id)}
-            selecionado={selectedClient?.id === c.id || rascunhoPlano.has(c.id)}
+            selecionado={selectedClient?.id === c.id || rascunhoPlano.has(c.id) || (ehAgendaPC && (c.id === hoverAgenda || c.id === focoPC?.id))}
             papel={!planejarOutroDia && c.id === idClienteParadaAtual ? 'proxima' : plano != null ? 'plano' : 'lente'}
             lente={lente}
             foraDaLente={!noFoco(lente, p, plano) && selectedClient?.id !== c.id}
@@ -5782,7 +6066,7 @@ function MainApp() {
         {/* Handoff v4.1 §5: o plano é andado — trajeto pontilhado de 3 px
             (branco no escuro, preto no sol) e o anel da microrrota (2–3
             quarteirões) em volta da próxima porta, com o que dá para bater a pé. */}
-        {!heatOn && modoNovo && !planejarOutroDia && routeWaypoints.length >= 2 && (
+        {!heatOn && modoNovo && !planejarOutroDia && !(ehAgendaPC && planejarDia) && routeWaypoints.length >= 2 && (
           <Polyline
             coordinates={routeGeometry.data && routeGeometry.data.coordinates.length > 1 ? routeGeometry.data.coordinates : routeWaypoints}
             strokeColor={modoSol ? '#111418' : 'rgba(255,255,255,0.95)'}
@@ -5791,6 +6075,23 @@ function MainApp() {
             zIndex={2}
           />
         )}
+        {/* Agenda do computador (prancha 05/10): o trajeto do dia aberto, pontilhado pela ordem do
+            rascunho (linha reta entre as paradas: é o plano, não a navegação) */}
+        {modoNovo && ehAgendaPC && planejarDia && (() => {
+          const pts = clientesDoPlanoNoMapa.filter((c) => c.latitude != null && c.longitude != null)
+            .map((c) => ({ latitude: Number(c.latitude), longitude: Number(c.longitude) }));
+          return pts.length >= 2 ? (
+            <Polyline coordinates={pts} strokeColor={modoSol ? '#111418' : 'rgba(255,255,255,0.95)'} strokeWidth={3} lineDashPattern={[1, 7]} zIndex={2} />
+          ) : null;
+        })()}
+        {/* Google fora da base: pino vazado (sugestão); o toque abre a folha com "Virar lead" */}
+        {modoNovo && ehAgendaPC && planejarDia && camadasAgenda.has('google') && sugestoesAgenda.filter((x) => x.google).map((x) => (
+          <Marker key={x.chave} coordinate={x.ponto} anchor={{ x: 0.5, y: 0.5 }} cluster={false} zIndex={700}
+            onPress={() => { const l = x.google!; setLugarGoogle({ placeId: l.placeId, latitude: l.latitude, longitude: l.longitude }); }}>
+            <div aria-label={`Google: ${x.nome}`} title={x.nome}
+              style={{ width: hoverAgenda === x.chave ? 22 : 16, height: hoverAgenda === x.chave ? 22 : 16, borderRadius: 11, border: '2.5px solid #4285F4', background: 'rgba(66,133,244,0.15)', boxSizing: 'border-box', cursor: 'pointer' }} />
+          </Marker>
+        ))}
         {/* Agenda do computador: o lead tocado, com o anel da microrota (2–3 quarteirões) */}
         {modoNovo && focoAgenda && (tab === 'agenda' || (tab === 'map' && selectedClient?.id === focoAgenda.id)) && (
           <Circle
@@ -6935,6 +7236,15 @@ function MainApp() {
   const irParaAba = (aba: AppTab, jaDecidiu = false) => {
     // MARCAS DO PLANEJAR NÃO SOMEM CALADAS (contrato 33 / A21, handoff v6): trocar de aba
     // fecha o Planejar e jogava fora as marcas ainda não confirmadas.
+    if (!jaDecidiu && ehAgendaPC && aba !== 'agenda' && mudancasRef.current > 0) {
+      const n = mudancasRef.current;
+      Alert.alert(`${n} ${n === 1 ? 'mudança não confirmada' : 'mudanças não confirmadas'}`, 'O que fazer com elas antes de sair da Agenda?', [
+        { text: 'Continuar aqui', style: 'cancel' },
+        { text: 'Descartar', style: 'destructive', onPress: () => { descartarPlano(); irParaAba(aba, true); } },
+        { text: 'Confirmar e ir', onPress: () => { void confirmarPlano().then(() => irParaAba(aba, true)); } },
+      ]);
+      return;
+    }
     if (!jaDecidiu && aba !== 'map' && tab === 'map' && rascunhoRef.current.size > 0) {
       const n = rascunhoRef.current.size;
       Alert.alert(`${n} ${n === 1 ? 'marca não confirmada' : 'marcas não confirmadas'}`, 'Confirme no plano do dia ou descarte antes de sair do mapa.', [
@@ -8028,6 +8338,91 @@ function MainApp() {
         );
         // G2 (handoff das abas): no computador, duas colunas — a linha do tempo à esquerda e o
         // mapa do caminho à direita (é a Rota do computador; o mesmo conteudoMapa do Mapa).
+        /* AGENDA NO COMPUTADOR (Claude Design, 05/10/26): o painel de planejar à esquerda e o mapa na
+           altura toda. Sai a barra "Planejar pelo mapa" de baixo do mapa, o bloco de reuniões (vão para
+           a lista, no horário), o cartão da próxima parada e o cartão do lead por cima do mapa. */
+        if (agendaPlaneja) {
+          const larguraPainel = layout.largura >= 1440 ? 400 : 360;
+          const passadoNaAgenda = !!planejarDia && planejarDia < routeDate;
+          const contaGrupo = (g: SugestaoPC['grupo']) => sugestoesAgenda.filter((x) => x.grupo === g).length;
+          return (
+            <View style={sharedStyles.mapaLinhaWeb}>
+              <View style={painelRecolhido ? { position: 'absolute', left: 12, top: 60, zIndex: 70 } : null}>
+                <AgendaPC
+                  hoje={routeDate}
+                  dia={planejarDia ?? routeDate}
+                  aoDia={(iso) => {
+                    if (!diasDaAgendaPC.includes(iso) || iso === planejarDiaRef.current) return;
+                    ultimoDiaDaAgenda.current = iso;
+                    if (planejarDiaRef.current) { trocarDiaPlanejado(iso); return; }
+                    planejarPelaAgenda.current = true;
+                    setPlanejarDia(iso);
+                  }}
+                  itens={itensAgendaPC}
+                  carregando={!planejarDia || opsDoDia.isLoading}
+                  meta={metaDeHoje}
+                  ownerHubspot={myHubspotId}
+                  reunioes={meetings}
+                  nomePorId={(id) => { const c = clientePorId(id); return c ? getClientPrimaryName(c) : (nomesReunioes.get(id) ?? null); }}
+                  nomeDe={getClientPrimaryName}
+                  corDe={(c) => (contextoPino ? classificarPino(c, contextoPino).cor : (stageTemperature(c.etapa)?.color ?? '#6B7280'))}
+                  contextoDe={(c) => {
+                    const r = slaForStage(c.etapa, routeSlaDays);
+                    return {
+                      codigo: codigoDaEtapa(c),
+                      diasNaEtapa: c.id_hubspot ? contextoPino?.tempoPorNegocio.get(String(c.id_hubspot))?.diasNaEtapa ?? null : null,
+                      regua: r >= 999 ? null : r,
+                      temperatura: c.status === 'cliente' ? 'Cliente' : stageTemperature(c.etapa)?.label ?? null,
+                      etapa: normalizeStage(c.etapa),
+                    };
+                  }}
+                  sugestoes={sugestoesAgenda}
+                  carregandoGoogle={carregandoGoogle}
+                  aba={abaAgenda}
+                  aoAba={setAbaAgenda}
+                  foco={focoPC}
+                  aoFocar={focarPC}
+                  hover={hoverAgenda}
+                  aoHover={aoHoverAgenda}
+                  mudancas={mudancasPlano}
+                  confirmando={confirmandoPlano}
+                  aoConfirmar={() => { void confirmarPlano(); }}
+                  aoDescartar={descartarPlano}
+                  aoPor={porNoDiaPC}
+                  aoTirar={tirarDoDiaPC}
+                  aoOrdem={ordemPC}
+                  aoFixar={fixarPC}
+                  aoPorGoogle={(l) => setLugarGoogle({ placeId: l.placeId, latitude: l.latitude, longitude: l.longitude })}
+                  aoAbrirFicha={(c) => openClientDetails(c)}
+                  aoIrParaRua={() => { setLente('dia'); irParaAba('map'); }}
+                  aoRemarcar={(cs) => { void remarcarPC(cs); }}
+                  aoBairro={(_b, pts) => {
+                    setAbaAgenda('sugestoes');
+                    if (!pts.length) return;
+                    try { mapRef.current?.fitToCoordinates(pts, { edgePadding: { top: 60, right: 50, bottom: 40, left: 50 }, animated: true }); } catch (err) { console.warn('[agenda] bairro:', err); }
+                  }}
+                  recolhido={painelRecolhido}
+                  aoEsconder={alternarPainel}
+                  largura={larguraPainel}
+                />
+              </View>
+              <View style={sharedStyles.mapaAreaWeb}>
+                <View style={{ flex: 1 }}>
+                  {conteudoMapa}
+                  {!passadoNaAgenda && (
+                    <CamadasAgenda
+                      ativas={camadasAgenda}
+                      nPlano={clientesDoPlanoNoMapa.length}
+                      contagem={{ carteira: itensMapaNovo.filter((x) => x.p.dono === 'meu').length, regua: contaGrupo('regua'), alvo: contaGrupo('alvo'), queda: contaGrupo('queda'), google: contaGrupo('google') }}
+                      aoAlternar={(c) => setCamadasAgenda((m) => { const n = new Set(m); if (n.has(c)) n.delete(c); else n.add(c); return n; })}
+                    />
+                  )}
+                  {!painelRecolhido && botaoRecolher}
+                </View>
+              </View>
+            </View>
+          );
+        }
         return layout.ehLargo ? (
           <View style={sharedStyles.mapaLinhaWeb}>
             {/* recolhida fica montada (display none): desmontar voltaria a Agenda para hoje */}
@@ -9207,6 +9602,12 @@ function MainApp() {
                 conta_alvo_place_id: d.placeId,
               });
               setLugarGoogle(null);
+              // Agenda do computador planejando um dia: o lead novo já entra no dia (a confirmar)
+              if (ehAgendaPCRef.current && planejarDiaRef.current && planejarDiaRef.current >= routeDate) {
+                porNoDiaPC([created]);
+                focarPC(created);
+                return;
+              }
               Toast.mostrar(`${created.empresa?.trim() || created.nome} · lead criado, entrando em Prospecção`, 'ok');
               setTimeout(() => setSelectedClient(created), 350);
             } catch (e) {
