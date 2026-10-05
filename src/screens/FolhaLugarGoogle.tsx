@@ -12,6 +12,7 @@ import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'r
 import { Painel } from '../components/Painel';
 import { supabase } from '../integrations/supabase/client';
 import type { Client } from '../types/client';
+import { mesmoNome, padraoDoNome, pinoDeGps } from '../utils/mesmoLugar';
 
 export type LugarGoogle = { placeId: string; latitude: number; longitude: number };
 type Detalhe = { nome: string; nota: number | null; avaliacoes: number | null; telefone: string | null; endereco: string | null; tipo: string | null; comida: boolean };
@@ -65,15 +66,28 @@ export default function FolhaLugarGoogle({ lugar, aoFechar, aoVirarLead, aoAbrir
     const palavras = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !['restaurante', 'lanchonete', 'pizzaria', 'bar', 'ltda', 'comercio', 'alimentos'].includes(w));
     const doGoogle = new Set(palavras(det.nome));
     const d = 0.0006;
-    void supabase.from('clients').select('*')
+    // pelo nome tamb\u00e9m, num raio de ~5 km (0,045\u00b0): o pino da base pode estar errado (mesmoLugar.ts)
+    const r = 0.045;
+    const padrao = padraoDoNome(det.nome);
+    const perto = supabase.from('clients').select('*')
       .or(`conta_alvo_place_id.eq.${lugar.placeId},and(latitude.gte.${lugar.latitude - d},latitude.lte.${lugar.latitude + d},longitude.gte.${lugar.longitude - d},longitude.lte.${lugar.longitude + d})`)
-      .limit(30)
-      .then(({ data }) => {
-        if (!vivo || !data) return;
-        const achado = (data as Client[]).find((c) => c.conta_alvo_place_id === lugar.placeId
-          || palavras(`${c.empresa ?? ''} ${c.nome ?? ''}`).some((w) => doGoogle.has(w)));
-        setJaTem(achado ?? null);
-      });
+      .limit(30);
+    const peloNome = padrao
+      ? supabase.from('clients').select('*').eq('is_archived', false)
+        .or(`empresa.ilike.${padrao},nome.ilike.${padrao}`).limit(40)
+      : Promise.resolve({ data: [] as Client[] });
+    void Promise.all([perto, peloNome]).then(([a, b]) => {
+      if (!vivo) return;
+      const doLugar = ((a.data ?? []) as Client[]).find((c) => c.conta_alvo_place_id === lugar.placeId
+        || palavras(`${c.empresa ?? ''} ${c.nome ?? ''}`).some((w) => doGoogle.has(w))
+        || mesmoNome(c.empresa || c.nome, det.nome));
+      // mesmo nome: vale se o pino est\u00e1 a ~5 km, ou se o pino n\u00e3o \u00e9 de GPS (pode estar em qualquer lugar)
+      const doNome = ((b.data ?? []) as Client[]).filter((c) => mesmoNome(c.empresa || c.nome, det.nome)
+        && (!pinoDeGps(c) || (c.latitude != null && Math.abs(Number(c.latitude) - lugar.latitude) <= r && Math.abs(Number(c.longitude) - lugar.longitude) <= r)))
+        // cliente Takeat primeiro: \u00e9 ele que n\u00e3o pode virar lead de novo
+        .sort((x, y) => (x.status === 'cliente' ? 0 : 1) - (y.status === 'cliente' ? 0 : 1))[0];
+      setJaTem(doLugar ?? doNome ?? null);
+    });
     return () => { vivo = false; };
   }, [lugar?.placeId, det?.nome]); // eslint-disable-line react-hooks/exhaustive-deps
   const [criando, setCriando] = useState(false);
@@ -97,7 +111,7 @@ export default function FolhaLugarGoogle({ lugar, aoFechar, aoVirarLead, aoAbrir
         )}
         {jaTem ? (
           <Pressable accessibilityRole="button" style={[s.botao, s.botaoSec]} onPress={() => aoAbrirLead(jaTem)}>
-            <Text style={s.botaoSecTexto}>{`Já está no mapa · abrir ${jaTem.empresa?.trim() || jaTem.nome}`}</Text>
+            <Text style={s.botaoSecTexto}>{`${jaTem.status === 'cliente' ? 'Já é cliente Takeat' : 'Já está no mapa'} · abrir ${jaTem.empresa?.trim() || jaTem.nome}`}</Text>
           </Pressable>
         ) : (
           <Pressable accessibilityRole="button" style={[s.botao, s.botaoPrin, (criando || !det) && { opacity: 0.6 }]} disabled={!det || criando}

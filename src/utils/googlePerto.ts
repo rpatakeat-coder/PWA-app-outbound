@@ -2,6 +2,7 @@
 // que ainda não são pino nosso. UMA chamada por pedido (Places API New, searchNearby), só quando
 // a aba Sugestões ou a camada Google abre — nada roda sozinho.
 import type { Client } from '../types/client';
+import { mesmoNome } from './mesmoLugar';
 
 export type LugarPerto = { placeId: string; nome: string; latitude: number; longitude: number; nota: number | null; avaliacoes: number | null };
 
@@ -32,7 +33,7 @@ const palavras = (t: string) => t.normalize('NFD').replace(new RegExp(`[${String
 export function jaNaBase(l: LugarPerto, base: Client[]): boolean {
   const doGoogle = new Set(palavras(l.nome));
   const d = 0.0006;
-  return base.some((c) => c.conta_alvo_place_id === l.placeId || (
+  return base.some((c) => c.conta_alvo_place_id === l.placeId || mesmoNome(c.empresa || c.nome, l.nome) || (
     c.latitude != null && c.longitude != null
     && Math.abs(Number(c.latitude) - l.latitude) <= d && Math.abs(Number(c.longitude) - l.longitude) <= d
     && palavras(`${c.empresa ?? ''} ${c.nome ?? ''}`).some((w) => doGoogle.has(w))));
