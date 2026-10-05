@@ -4054,9 +4054,15 @@ function MainApp() {
     // a busca leva ao mapa (05/10/26): no computador ela podia estar na Lista, na Agenda, nas Tarefas
     setTab('map');
     buscaEnquadrada.current = searchTerm;
+    /* A BUSCA LEVA AO PINO E À ROTA (Julyan, 05/10/26: "quando pesquiso na barra de pesquisa, já
+       pode ir direto no pin e na rota, para o executivo planejar"). A ficha cheia cobria o mapa
+       inteiro; agora o achado abre no cartão pequeno, com o pino no centro do mapa que sobra e o
+       anel da microrota em volta. Arrastar o cartão para cima abre a ficha inteira, como sempre. */
+    if (c.latitude != null && c.longitude != null) setFocoAgenda({ id: c.id, latitude: Number(c.latitude), longitude: Number(c.longitude) });
+    setAbertoPelaBusca(layout.ehLargo ? null : c.id);
     setTimeout(() => {
       if (c.latitude != null && c.longitude != null) {
-        mapRef.current?.animateToRegion({ latitude: Number(c.latitude) - 0.002, longitude: Number(c.longitude), latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);
+        mapRef.current?.animateToRegion({ latitude: Number(c.latitude) - 0.002, longitude: Number(c.longitude), latitudeDelta: 0.012, longitudeDelta: 0.012 }, 400);
       }
       setSelectedClient(c);
     }, 350);
@@ -4065,7 +4071,7 @@ function MainApp() {
     // (auditoria 26/09). Troca pela linha atual do banco assim que ela chega.
     void supabase.from('clients').select(CLIENT_LIST_COLUMNS).eq('id', c.id).maybeSingle()
       .then(({ data }) => { if (data) setTimeout(() => setSelectedClient((atual) => (atual?.id === c.id ? ({ ...atual, ...(data as unknown as Client) }) : atual)), 360); });
-  }, [searchTerm]);
+  }, [searchTerm, layout.ehLargo]);
   const linhasBusca = useMemo<LinhaBusca[]>(() => {
     if (!buscaAberta || searchTerm.length < 2) return [];
     const origem = userLocation ?? { latitude: mapCenter.latitude, longitude: mapCenter.longitude };
@@ -4193,6 +4199,9 @@ function MainApp() {
   });
   // O lead tocado na Agenda do computador: o mapa vai até ele com o anel da microrota (05/10/26)
   const [focoAgenda, setFocoAgenda] = useState<{ id: string; latitude: number; longitude: number } | null>(null);
+  // O lead escolhido na BUSCA abre o cartão pequeno: o mapa fica à vista, com o pino e a microrota
+  const [abertoPelaBusca, setAbertoPelaBusca] = useState<string | null>(null);
+  useEffect(() => { if (!selectedClient) setAbertoPelaBusca(null); }, [selectedClient]);
   // Limpar o funil em lote: o negócio do cartão de onde se abriu ('' = nenhum marcado)
   const [limparFunilCom, setLimparFunilCom] = useState<string | null>(null);
   const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null } | null>(null);
@@ -5261,6 +5270,7 @@ function MainApp() {
   const selectedClientSheet = selectedClient ? (
     <ClientBottomSheet
       client={selectedClient}
+      abrirPequeno={abertoPelaBusca === selectedClient.id}
       aoAbrirMeia={() => {
         // O cartão cobre os 60% de baixo: o pino vai para ~22% da altura,
         // no meio da faixa de mapa que sobra (centro da tela = 50%).
@@ -5771,7 +5781,7 @@ function MainApp() {
           />
         )}
         {/* Agenda do computador: o lead tocado, com o anel da microrota (2–3 quarteirões) */}
-        {modoNovo && tab === 'agenda' && focoAgenda && (
+        {modoNovo && focoAgenda && (tab === 'agenda' || (tab === 'map' && selectedClient?.id === focoAgenda.id)) && (
           <Circle
             center={{ latitude: focoAgenda.latitude, longitude: focoAgenda.longitude }}
             radius={250}
@@ -9494,6 +9504,7 @@ function MainApp() {
 function ClientBottomSheet({
   client,
   aoAbrirMeia,
+  abrirPequeno = false,
   insets,
   statusConfig,
   slaDays,
@@ -9524,6 +9535,8 @@ function ClientBottomSheet({
   novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onTirarDaRota?: () => void; onAvancar?: (destino: string, preenchido?: Record<string, string>) => void; onLimparFunil?: () => void }) | null;
   /** Mapa novo: o cartão subiu para a meia altura (60%) — o mapa leva o pino para a faixa de cima. */
   aoAbrirMeia?: () => void;
+  /** Achado pela busca: abre no cartão pequeno, com o mapa à vista (05/10/2026). */
+  abrirPequeno?: boolean;
   client: Client;
   insets: { bottom: number };
   statusConfig: Record<string, { label: string; color: string }>;
@@ -9568,7 +9581,8 @@ function ClientBottomSheet({
   // de dois bairros. Arrastar pra cima (ou tocar a linha) expande; arrastar
   // pra baixo volta ao peek; de novo, fecha. Desktop abre completo direto.
   // 28/09/2026 (Julyan: "a ficha tem q abrir toda"): no mapa novo abre direto cheia.
-  const [estagio, setEstagio] = useState<'peek' | 'cheia'>(novo ? 'cheia' : 'peek');
+  const [estagio, setEstagio] = useState<'peek' | 'cheia'>(novo && !abrirPequeno ? 'cheia' : 'peek');
+  useEffect(() => { setEstagio(novo && !abrirPequeno ? 'cheia' : 'peek'); }, [client.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (novo && estagio === 'cheia') aoAbrirMeia?.(); }, [estagio]); // eslint-disable-line react-hooks/exhaustive-deps
   // M1d: timeline limitada a 6 — o painel passa de 1.800px e o rodape sai
   // do alcance com historico longo.
