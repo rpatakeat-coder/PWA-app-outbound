@@ -181,6 +181,7 @@ import PlaybookScreen from './src/screens/PlaybookScreen';
 import FilaTarefasScreen, { opcoesDaFila } from './src/screens/FilaTarefasScreen';
 import ListaCarteiraWeb from './src/screens/ListaCarteiraWeb';
 import LimparFunil from './src/screens/LimparFunil';
+import FolhaLugarGoogle, { type LugarGoogle } from './src/screens/FolhaLugarGoogle';
 import { BarreiraDaAba } from './src/components/BarreiraDaAba';
 import { avisarSeVisitaProvada, type Ranking } from './src/screens/FolhaRanking';
 import AgendaNovoScreen from './src/screens/AgendaNovoScreen';
@@ -4202,6 +4203,8 @@ function MainApp() {
   const [focoAgenda, setFocoAgenda] = useState<{ id: string; latitude: number; longitude: number } | null>(null);
   // O lead escolhido na BUSCA abre o cartão pequeno: o mapa fica à vista, com o pino e a microrota
   const [abertoPelaBusca, setAbertoPelaBusca] = useState<string | null>(null);
+  // O lugar do Google tocado no mapa (05/10/26: os restaurantes do Google Maps no nosso mapa)
+  const [lugarGoogle, setLugarGoogle] = useState<LugarGoogle | null>(null);
   useEffect(() => { if (!selectedClient) setAbertoPelaBusca(null); }, [selectedClient]);
   // Limpar o funil em lote: o negócio do cartão de onde se abriu ('' = nenhum marcado)
   const [limparFunilCom, setLimparFunilCom] = useState<string | null>(null);
@@ -5557,6 +5560,8 @@ function MainApp() {
     <>
       <MapView
         mapRef={(ref) => { mapRef.current = ref as unknown as RNMapView; }}
+        // restaurante do Google tocado: a folha dele, com "Virar lead" (05/10/26)
+        onPoiClick={modoNovo && !isViewer ? (e) => { setSelectedClient(null); setLugarGoogle({ placeId: e.nativeEvent.placeId, ...e.nativeEvent.coordinate }); } : undefined}
         // Modo sol: mapa claro com o app escuro (recria o mapa: colorScheme só vale na construção).
         claro={modoNovo && modoSol}
         style={[styles.map, folhaDeBaixo && margemMapa > 0 && { marginBottom: margemMapa }]}
@@ -9158,6 +9163,35 @@ function MainApp() {
             }
           }}
           onEtapaMudou={(codigo) => aplicarEtapaNoLead(fichaPendente.client.id, codigo, undefined, fichaPendente.client.etapa ?? null)}
+        />
+      )}
+      {lugarGoogle && (
+        <FolhaLugarGoogle
+          lugar={lugarGoogle}
+          aoFechar={() => setLugarGoogle(null)}
+          aoAbrirLead={(c) => { setLugarGoogle(null); openClientDetails(c); }}
+          aoVirarLead={(d) => {
+            setLugarGoogle(null);
+            // o mesmo cadastro do pino no mapa, já com o nome do restaurante, o telefone e o endereço
+            void reverseGeocode(d.latitude, d.longitude).catch(() => null).then((addr) => {
+              setForm({
+                ...initialFormState,
+                status: 'lead' as ClientStatus,
+                empresa: d.nome,
+                telefone: d.telefone ?? '',
+                latitude: d.latitude.toString(),
+                longitude: d.longitude.toString(),
+                cep: addr?.cep ? `${addr.cep.slice(0, 5)}-${addr.cep.slice(5)}` : '',
+                endereco: addr?.endereco ?? '',
+                numero: addr?.numero ?? '',
+                cidade: addr?.cidade ?? '',
+                estado: addr?.estado ?? '',
+                bairro: addr?.bairro || undefined,
+              });
+              setPendingGeoApproximate(false);
+              setIsFormOpen(true);
+            });
+          }}
         />
       )}
       {limparFunilCom !== null && (

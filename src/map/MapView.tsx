@@ -68,6 +68,8 @@ export interface MapViewProps {
   onRegionChange?: (region: Region) => void;
   onRegionChangeComplete?: (region: Region) => void;
   onPress?: (e: { nativeEvent: { coordinate: LatLng } }) => void;
+  /** Toque num lugar do próprio Google (restaurante, loja…). Sem ela, os lugares não são clicáveis. */
+  onPoiClick?: (e: { nativeEvent: { placeId: string; coordinate: LatLng } }) => void;
 
   rotateEnabled?: boolean;
   pitchEnabled?: boolean;
@@ -150,6 +152,7 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
     onRegionChange,
     onRegionChangeComplete,
     onPress,
+  onPoiClick,
     rotateEnabled = false,
     pitchEnabled = false,
     scrollEnabled = true,
@@ -177,8 +180,8 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
   // Callbacks em ref: os listeners da Google sao registrados UMA vez na
   // criacao do mapa. Sem isso, cada troca de handler exigiria recriar o
   // mapa — e recriar o mapa e' exatamente o evento cobrado (Dynamic Maps).
-  const handlers = useRef({ onPanDrag, onRegionChange, onRegionChangeComplete, onPress });
-  handlers.current = { onPanDrag, onRegionChange, onRegionChangeComplete, onPress };
+  const handlers = useRef({ onPanDrag, onRegionChange, onRegionChangeComplete, onPress, onPoiClick });
+  handlers.current = { onPanDrag, onRegionChange, onRegionChangeComplete, onPress, onPoiClick };
 
   // A recusa da chave chega DEPOIS do script carregar, por callback global —
   // sem isto o usuario so' veria o mapa cinza da Google, sem saber o motivo.
@@ -229,7 +232,8 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
           // UI propria do app: os controles padrao da Google brigariam com os
           // botoes flutuantes (centralizar, calor, rota) desenhados por cima.
           disableDefaultUI: true,
-          clickableIcons: false,
+          // lugares do Google clicáveis só quando a tela trata o toque (05/10/26: restaurantes)
+          clickableIcons: !!onPoiClick,
           gestureHandling: scrollEnabled ? 'greedy' : 'none',
           zoomControl: false,
           rotateControl: rotateEnabled,
@@ -266,6 +270,13 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
 
         map.addListener('click', (e: google.maps.MapMouseEvent) => {
           if (!e.latLng) return;
+          /* lugar do Google: a janela padrão do Google sai, e a tela mostra a dela */
+          const placeId = (e as google.maps.MapMouseEvent & { placeId?: string }).placeId;
+          if (placeId) {
+            e.stop();
+            handlers.current.onPoiClick?.({ nativeEvent: { placeId, coordinate: { latitude: e.latLng.lat(), longitude: e.latLng.lng() } } });
+            return;
+          }
           handlers.current.onPress?.({
             nativeEvent: {
               coordinate: { latitude: e.latLng.lat(), longitude: e.latLng.lng() },
