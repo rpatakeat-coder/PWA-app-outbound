@@ -5548,12 +5548,15 @@ function MainApp() {
       accessibilityRole="button"
       accessibilityLabel={painelRecolhido ? 'Mostrar a coluna da esquerda' : 'Recolher a coluna e ampliar o mapa'}
       onPress={alternarPainel}
-      style={{ position: 'absolute', left: 12, top: '50%', marginTop: -22, zIndex: 60, width: 44, height: 44, borderRadius: 22,
-        backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center' }}
+      // com texto (05/10/26: "por que o meu dia não sai da lateral? tenho que poder esconder e fazer
+      // aparecer" — o botão redondo só com a seta passava despercebido)
+      style={{ position: 'absolute', left: 12, bottom: 64, zIndex: 60, height: 40, borderRadius: 20, paddingLeft: 10, paddingRight: 14,
+        flexDirection: 'row', gap: 6, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center' }}
     >
       {painelRecolhido
-        ? <IconChevronRight width={18} height={18} fill={iconColors.muted} />
-        : <IconChevronLeft width={18} height={18} fill={iconColors.muted} />}
+        ? <IconChevronRight width={16} height={16} fill={iconColors.muted} />
+        : <IconChevronLeft width={16} height={16} fill={iconColors.muted} />}
+      <Text style={{ fontSize: 13, fontWeight: '800', color: 'var(--text)' }}>{painelRecolhido ? 'Mostrar painel' : 'Esconder painel'}</Text>
     </TouchableOpacity>
   );
   const conteudoMapa = (
