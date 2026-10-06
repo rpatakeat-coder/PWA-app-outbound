@@ -120,6 +120,50 @@ async function desfazer(svc: any, token: string, uid: string, owner: string, id:
   return json(200, { ok: true, feito, falhou });
 }
 
+// ---- remarcar a tarefa junto com a visita (um plano só, 06/10/2026) -----------------------
+// Mover um pino de dia (ou mudar a hora) no "Pôr no plano" deixava a tarefa do HubSpot no dia
+// antigo. Aqui: as tarefas ABERTAS do negócio, do mesmo dono, que vencem no dia `de` (Brasília)
+// passam para o dia `para`, com a hora nova ou mantendo a hora que tinham. Nada é criado nem
+// concluído (nunca em lote): só a data muda. Negócio de outro dono é recusado.
+const DIA = /^\d{4}-\d{2}-\d{2}$/;
+const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
+const horaHHMM = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+
+async function remarcar(token: string, owner: string, corpo: Record<string, unknown>): Promise<Response> {
+  const dealId = String(corpo.dealId ?? '');
+  const de = String(corpo.de ?? '');
+  const para = String(corpo.para ?? '');
+  const hora = corpo.hora == null || corpo.hora === '' ? null : String(corpo.hora);
+  if (!/^\d+$/.test(dealId) || !DIA.test(de) || !DIA.test(para) || (hora && !HORA.test(hora))) {
+    return json(400, { erro: 'Pedido de remarcar incompleto (negócio, dia de, dia para, hora HH:MM).' });
+  }
+  if (para < hojeBRT()) return json(400, { erro: 'Não dá para remarcar para um dia que já passou.' });
+  const d = await hs(token, 'GET', `/crm/v3/objects/deals/${dealId}?properties=hubspot_owner_id`);
+  if (!d.ok) return json(502, { erro: 'O HubSpot não respondeu sobre o negócio. Tente de novo.' });
+  if (String(d.dados?.properties?.hubspot_owner_id ?? '') !== owner) return json(403, { erro: 'Este negócio não está com você.' });
+  const a = await hs(token, 'GET', `/crm/v4/objects/deals/${dealId}/associations/tasks?limit=100`);
+  const ids = ((a.dados?.results ?? []) as Array<{ toObjectId?: string | number }>).map((r) => String(r.toObjectId)).filter((x) => /^\d+$/.test(x));
+  if (!ids.length) return json(200, { ok: true, remarcadas: [] });
+  const t = await hs(token, 'POST', '/crm/v3/objects/tasks/batch/read', {
+    inputs: ids.map((id) => ({ id })), properties: ['hs_task_status', 'hs_timestamp', 'hubspot_owner_id', 'hs_task_subject'],
+  });
+  if (!t.ok) return json(502, { erro: 'O HubSpot recusou a leitura das tarefas do negócio.' });
+  type T = { id: string; properties?: Record<string, string | null> };
+  const alvo = ((t.dados?.results ?? []) as T[]).filter((x) => {
+    const p = x.properties ?? {};
+    return p.hs_task_status === 'NOT_STARTED' && String(p.hubspot_owner_id ?? '') === owner && !!p.hs_timestamp && diaBRTde(p.hs_timestamp) === de;
+  });
+  const remarcadas: Array<{ id: string; assunto: string; quando: string }> = [];
+  const falhou: string[] = [];
+  for (const x of alvo) {
+    const hh = hora ?? horaHHMM(String(x.properties!.hs_timestamp));
+    const quando = new Date(`${para}T${hh}:00-03:00`).toISOString();
+    const r = await hs(token, 'PATCH', `/crm/v3/objects/tasks/${x.id}`, { properties: { hs_timestamp: quando } });
+    if (r.ok) remarcadas.push({ id: x.id, assunto: String(x.properties?.hs_task_subject ?? ''), quando }); else falhou.push(x.id);
+  }
+  return json(200, { ok: true, remarcadas, falhou });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json(405, { erro: 'Método não permitido' });
@@ -137,6 +181,7 @@ Deno.serve(async (req: Request) => {
   let corpo: Record<string, unknown> = {};
   try { corpo = await req.json(); } catch { /* sem corpo: é a leitura da fila */ }
   if (corpo?.op === 'desfazer') return await desfazer(svc, token, uid, owner, String(corpo.id ?? ''));
+  if (corpo?.op === 'remarcar') return await remarcar(token, owner, corpo);
 
   const hoje = hojeBRT();
   const ano = Number(hoje.slice(0, 4));

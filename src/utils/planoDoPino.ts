@@ -72,7 +72,7 @@ const isoBRT = (dia: string, hora: string) => new Date(`${dia}T${hora}:00-03:00`
  * Grava o pedido do "Pôr no plano". Ordem: tira do dia antigo (mover nunca duplica) → põe no
  * dia (parada de rua) com o chip e o cadeado → HubSpot só com hora. Devolve a posição.
  */
-export async function porNoPlano(p: PedidoDoPlano): Promise<{ ordem: number | null; hubspot: string | null }> {
+export async function porNoPlano(p: PedidoDoPlano): Promise<{ ordem: number | null; hubspot: string | null; remarcadas: number; avisoHubspot: string | null }> {
   const a = acaoPorId(p.acao)!;
   if (p.antes && p.antes.dia !== p.dia && !p.antes.feita) await tirarDoDia(p.uid, p.antes.dia, p.client.id);
   let ordem: number | null = null;
@@ -95,12 +95,33 @@ export async function porNoPlano(p: PedidoDoPlano): Promise<{ ordem: number | nu
      Agenda; e todo passo de negócio vira tarefa no HubSpot (o próximo passo com data, que
      é o que tira o negócio de "sem próximo passo" e do travado). */
   let hubspot: string | null = null;
+  /* A TAREFA VAI JUNTO (auditoria 06/10/26): mover de dia, ou mudar a hora no mesmo dia, remarca
+     a tarefa aberta do negócio que vencia no dia antigo (Edge fila-tarefas, op remarcar). Havendo
+     o que remarcar, não se cria tarefa nova: o próximo passo é o mesmo, em outra data. Falhar
+     aqui não desfaz o plano: volta como aviso. */
+  let remarcadas = 0;
+  let avisoHubspot: string | null = null;
+  const mudouDia = !!p.antes && p.antes.dia !== p.dia && !p.antes.feita;
+  const mudouHora = !!p.antes && p.antes.dia === p.dia && !!p.hora && p.hora !== p.antes.hora;
+  if (p.client.id_hubspot && (mudouDia || mudouHora)) {
+    try {
+      const { data, error } = await supabase.functions.invoke('fila-tarefas', {
+        body: { op: 'remarcar', dealId: String(p.client.id_hubspot), de: p.antes!.dia, para: p.dia, hora: p.hora },
+      });
+      if (error) throw error;
+      remarcadas = Array.isArray((data as { remarcadas?: unknown[] })?.remarcadas) ? (data as { remarcadas: unknown[] }).remarcadas.length : 0;
+    } catch (e) {
+      avisoHubspot = `não remarquei a tarefa do HubSpot (${String((e as Error)?.message ?? e)})`;
+    }
+  }
   if (p.hora) {
     const quando = isoBRT(p.dia, p.hora);
     if ((p.acao === 'reuniao' || p.acao === 'demo' || p.acao === 'ligar') && p.criarCompromisso) {
       await p.criarCompromisso({ tipo: p.acao === 'ligar' ? 'follow_up' : 'reuniao', acao: p.acao, quando });
     }
-    if (p.client.id_hubspot) {
+    if (p.client.id_hubspot && remarcadas > 0) {
+      hubspot = `tarefa remarcada para ${p.dia.slice(8, 10)}/${p.dia.slice(5, 7)} ${p.hora}`;
+    } else if (p.client.id_hubspot) {
       await negocioAcao({ op: 'nota', tipoAcao: 'proximo-passo', dealId: String(p.client.id_hubspot), tipo: tipoDoPasso(p.acao),
         data: p.dia, hora: p.hora, texto: `${a.rotulo} · ${p.client.empresa?.trim() || p.client.nome}` });
       hubspot = `${a.hubspot} ${p.dia.slice(8, 10)}/${p.dia.slice(5, 7)} ${p.hora}`;
@@ -109,7 +130,7 @@ export async function porNoPlano(p: PedidoDoPlano): Promise<{ ordem: number | nu
     /* Ligar sem hora: a ligação do dia fica na Agenda (09:00 é a convenção do "sem hora") */
     await p.criarCompromisso({ tipo: 'follow_up', acao: 'ligar', quando: isoBRT(p.dia, '09:00') });
   }
-  return { ordem, hubspot };
+  return { ordem, hubspot, remarcadas, avisoHubspot };
 }
 
 /** Tira do plano (o pino continua no mapa; parada feita não se tira). */

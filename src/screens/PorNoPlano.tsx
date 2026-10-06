@@ -103,10 +103,9 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
         },
       });
       const onde = a.ehParada ? `${r.ordem ? ordinal(r.ordem) + ' de ' : ''}${nomeDoDia(diaFinal)}` : `Ligar · ${nomeDoDia(diaFinal)}`;
-      /* MOVER NÃO LEVA A TAREFA DO HUBSPOT (o Cockpit faz igual e também avisa): a tarefa do dia
-         antigo, se havia, fica lá e aparece em "Fora do plano" naquele dia da Agenda. */
-      const moveu = !!antes && antes.dia !== diaFinal && !!client.id_hubspot;
-      Toast.mostrar(`${nome} · ${onde} · ${vaiAoCockpit(client) ? 'já no Planejamento do Cockpit' : 'na rota do app'}${moveu ? ` · se havia tarefa no HubSpot para ${nomeDoDia(antes!.dia)}, ela ficou lá: feche na Agenda` : ''}`, moveu ? 'aviso' : 'ok');
+      /* A TAREFA VAI JUNTO: mover (ou mudar a hora) remarca a tarefa aberta do negócio no HubSpot */
+      const extra = r.avisoHubspot ? ` · ${r.avisoHubspot}` : r.remarcadas ? ` · tarefa do HubSpot remarcada${r.remarcadas > 1 ? ` (${r.remarcadas})` : ''}` : r.hubspot ? ` · HubSpot: ${r.hubspot}` : '';
+      Toast.mostrar(`${nome} · ${onde} · ${vaiAoCockpit(client) ? 'já no Planejamento do Cockpit' : 'na rota do app'}${extra}`, r.avisoHubspot ? 'aviso' : 'ok');
       avisarQueOPlanoMudou();
       onFeito?.(diaFinal);
       onFechar();
@@ -228,7 +227,7 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
                   {vaiAoCockpit(client) && a.ehParada && <Text style={s.linhaSub}>{`Propósito na grade: ${propositoDaAcao(acao, contaAlvo)}${antes && antes.dia !== escolhido ? ` · sai de ${nomeDoDia(antes.dia)}` : ''}`}</Text>}
                   <Text style={s.linha}>{!hora ? 'Sem hora: nada novo no HubSpot' : client.id_hubspot ? `HubSpot · ${a.hubspot} ${diaFinal ? rotuloDoDia(diaFinal).slice(4) : ''} ${hora}` : 'Sem negócio no HubSpot: a hora fica só no plano'}</Text>
                   <Text style={s.linhaSub}>{antes && antes.dia !== escolhido && client.id_hubspot
-                    ? `a tarefa do HubSpot de ${nomeDoDia(antes.dia)}, se houver, fica lá: feche na Agenda`
+                    ? `a tarefa aberta de ${nomeDoDia(antes.dia)}, se houver, vai junto para ${nomeDoDia(escolhido)}`
                     : !hora ? `com hora, vira ${a.hubspot}` : 'vira o próximo passo do negócio'}</Text>
                 </View>
               </>
