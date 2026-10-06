@@ -4880,7 +4880,8 @@ function MainApp() {
           }
           const r = await perguntar(
             'Você está longe do pino',
-            `Distância: ${Math.round(distance)} m (limite: ${maxDistance} m).`
+            // "415259 m" não se lê (auditoria 06/10/26): de 1 km para cima, em km
+            `Distância: ${distance >= 1000 ? `${(distance / 1000).toFixed(distance >= 10000 ? 0 : 1).replace('.', ',')} km` : `${Math.round(distance)} m`} (limite: ${maxDistance} m).`
             + (fixAccuracy != null ? ` Precisão do GPS: ±${Math.round(fixAccuracy)} m.` : '')
             + (pinoConfirmado ? '\nEsse pino já foi confirmado no local por GPS. Se o lugar mudou, mova o pino.' : '\nAproxime-se para marcar a visita.'),
             [

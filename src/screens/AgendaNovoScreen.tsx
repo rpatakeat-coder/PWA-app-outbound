@@ -435,7 +435,7 @@ export default function AgendaNovoScreen({
       {[{ n: 0, rot: 'Esta semana' }, { n: 1, rot: 'Semana que vem' }].map((o) => (
         <Pressable key={o.n} accessibilityRole="button" accessibilityState={{ selected: semanaVista === o.n }}
           onPress={() => irParaSemana(o.n)}
-          style={{ minHeight: 36, paddingHorizontal: 14, borderRadius: 18, justifyContent: 'center', borderWidth: 1,
+          style={{ minHeight: 44, paddingHorizontal: 14, borderRadius: 22, justifyContent: 'center', borderWidth: 1,
             borderColor: semanaVista === o.n ? 'var(--tint-red-border)' : 'var(--border)', backgroundColor: semanaVista === o.n ? 'var(--tint-red)' : 'transparent' }}>
           <Text style={{ fontSize: 13, fontWeight: '800', color: semanaVista === o.n ? 'var(--tint-red-text)' : 'var(--text)' }}>{o.rot}</Text>
         </Pressable>
