@@ -85,7 +85,9 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
   const cheio = !jaNoDia && (contagem[escolhido] ?? 0) >= LIMITE_DO_DIA && a.ehParada;
   const alternativo = cheio ? diaComEspaco(isos, contagem, escolhido) : null;
   const diaFinal = cheio ? alternativo : escolhido;
-  const mudou = !!antes && (antes.dia !== escolhido || (antes.acao ?? null) !== acao || (antes.hora ?? null) !== hora);
+  // parada sem chip gravado (anterior a 0175): o chip que a folha mostra é o sugerido, e isso não é mudança
+  const acaoAntes = antes && acaoPorId(antes.acao) ? antes.acao : sugerida.id;
+  const mudou = !!antes && (antes.dia !== escolhido || acaoAntes !== acao || (antes.hora ?? null) !== hora);
   const ordemPrevista = jaNoDia ? antes!.ordem : (diaFinal ? (contagem[diaFinal] ?? 0) + 1 : null);
 
   async function confirmar() {
