@@ -159,20 +159,20 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
   }
 
   const rotuloBotao = !diaFinal ? 'Nenhum dia com espaço'
-    : cheio ? `Pôr no plano de ${nomeDoDia(diaFinal)} · ${contagem[diaFinal] ?? 0} paradas`
+    : cheio ? `Marcar para ${nomeDoDia(diaFinal)} · ${contagem[diaFinal] ?? 0} paradas`
       : antes && antes.dia !== escolhido ? `Mover para ${nomeDoDia(escolhido)}`
-        : antes && !mudou ? `Já está no plano de ${nomeDoDia(escolhido)}`
-          : antes ? `Atualizar o plano de ${nomeDoDia(escolhido)}`
-            : `Pôr no plano de ${nomeDoDia(escolhido)}`;
+        : antes && !mudou ? `Já está marcado para ${nomeDoDia(escolhido)}`
+          : antes ? `Salvar a mudança para ${nomeDoDia(escolhido)}`
+            : `Marcar para ${nomeDoDia(escolhido)}`;
   const inativo = !diaFinal || (!!antes && !mudou && !cheio);
 
   return (
-    <Painel visivel={visivel} aoFechar={onFechar} rotulo="Pôr no plano"
+    <Painel visivel={visivel} aoFechar={onFechar} rotulo="Próximo passo"
       topo={(
         <View style={s.topo}>
           <View style={[s.bola, { backgroundColor: cor }]} />
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={s.titulo}>{antes ? 'Mudar no plano' : 'Pôr no plano'}</Text>
+            <Text style={s.titulo}>{antes ? 'Mudar o próximo passo' : 'Marcar o próximo passo'}</Text>
             <Text style={s.sub} numberOfLines={1}>{nome}</Text>
           </View>
         </View>
@@ -196,7 +196,7 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
               <>
                 {antes && (
                   <View style={s.faixaAzul}>
-                    <Text style={s.faixaAzulTitulo}>{`Já está no plano de ${nomeDoDia(antes.dia)}, ${rotuloDoDia(antes.dia).slice(4)}`}</Text>
+                    <Text style={s.faixaAzulTitulo}>{`Já está marcado para ${nomeDoDia(antes.dia)}, ${rotuloDoDia(antes.dia).slice(4)}`}</Text>
                     <Text style={s.faixaAzulSub}>{`${ordinal(antes.ordem)} parada${antes.acao ? ` · ${acaoPorId(antes.acao)?.rotulo}` : ''}${antes.hora ? ` às ${antes.hora} com cadeado` : ''}. Outro dia move, não duplica.`}</Text>
                   </View>
                 )}

@@ -677,8 +677,8 @@ export default function AgendaNovoScreen({
             <View key={k.id} style={{ gap: 6 }}>
               {linhaDepois({ k: `c-${k.id}`, tipo: 'compromisso', ordem: 0, hora: k.hora, comp: k })}
               {k.clientId && (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Pôr no plano: ${k.nome ?? 'lead'}`} style={s.botaoSec} onPress={() => aoAbrirLead(k.clientId!)}>
-                  <IconLocation width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoSecTexto}>Pôr no plano</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Marcar o próximo passo: ${k.nome ?? 'lead'}`} style={s.botaoSec} onPress={() => aoAbrirLead(k.clientId!)}>
+                  <IconLocation width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoSecTexto}>Marcar o próximo passo</Text>
                 </Pressable>
               )}
             </View>
@@ -763,7 +763,7 @@ export default function AgendaNovoScreen({
         )}
         {blocosSoltos}
         {lista.length === 0 && soltos.length === 0 && (
-          <Text style={s.vazio}>Nada no plano deste dia. O plano se monta no mapa: toque no pino e "Pôr no plano". O Planejamento do Cockpit também cai aqui.</Text>
+          <Text style={s.vazio}>Nada no plano deste dia. O plano se monta no mapa: toque no pino e "Marcar o próximo passo". O Planejamento do Cockpit também cai aqui.</Text>
         )}
         <Text style={s.nota}>Este é o plano que você e o gestor fecharam no Planejamento.</Text>
       </View>
@@ -815,7 +815,7 @@ export default function AgendaNovoScreen({
               {semRota && (
                 <View style={s.vazioCaixa}>
                   <Text style={s.vazioTitulo}>{soltos.length ? 'Sem rota hoje' : 'Nada marcado hoje'}</Text>
-                  <Text style={s.vazio}>O plano se monta no mapa: toque no pino e "Pôr no plano". Sem plano para hoje: monte a microrrota a partir de onde você está.</Text>
+                  <Text style={s.vazio}>O plano se monta no mapa: toque no pino e "Marcar o próximo passo". Sem plano para hoje: monte a microrrota a partir de onde você está.</Text>
                 </View>
               )}
               {linhasDepois.length > 0 && momento !== 'noite' && <Text style={s.secao}>DEPOIS</Text>}

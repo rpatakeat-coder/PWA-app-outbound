@@ -10692,14 +10692,14 @@ function ClientBottomSheet({
           {onScheduleMeeting && (
             <TouchableOpacity
               accessibilityRole="button"
-              accessibilityLabel={planoUnico ? 'Pôr no plano' : 'Agendar'}
+              accessibilityLabel={planoUnico ? 'Próximo passo' : 'Agendar'}
               style={layout.ehDesktop ? styles.drawerAcaoVazada : styles.fichaAcaoMobileVazada}
               {...(layout.ehDesktop ? ds({ hover: 'tintred', trans: '1' }) : {})}
               onPress={onScheduleMeeting}
             >
               <IconCalendar width={24} height={24} fill={iconColors.brandText} />
               <Text style={layout.ehDesktop ? styles.drawerAcaoVazadaTexto : styles.fichaAcaoMobileVazadaTexto}>
-                {planoUnico ? 'Pôr no plano' : 'Agendar'}
+                {planoUnico ? 'Próximo passo' : 'Agendar'}
               </Text>
             </TouchableOpacity>
           )}
@@ -11708,7 +11708,7 @@ function ClientBottomSheet({
                 style={styles.scheduleButton}
                 onPress={onScheduleMeeting}
               >
-                <IconText Icone={IconCalendar} style={styles.scheduleButtonText} tone="onSurface">{planoUnico ? 'Pôr no plano · Reunião ou Demo' : 'Agendar reunião'}</IconText>
+                <IconText Icone={IconCalendar} style={styles.scheduleButtonText} tone="onSurface">{planoUnico ? 'Próximo passo · Reunião ou Demo' : 'Agendar reunião'}</IconText>
               </TouchableOpacity>
             )}
             {onScheduleMeeting && !canScheduleMeeting && !planoUnico && (
@@ -11735,7 +11735,7 @@ function ClientBottomSheet({
                 style={styles.followUpButton}
                 onPress={onFollowUp}
               >
-                <IconText Icone={IconRefresh} style={styles.followUpButtonText} tone="onSurface">{planoUnico ? 'Pôr no plano · Follow-up' : 'Marcar follow-up'}</IconText>
+                <IconText Icone={IconRefresh} style={styles.followUpButtonText} tone="onSurface">{planoUnico ? 'Próximo passo · Follow-up' : 'Marcar follow-up'}</IconText>
               </TouchableOpacity>
             )}
           </View>

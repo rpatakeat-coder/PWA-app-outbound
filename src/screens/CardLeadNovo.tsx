@@ -215,9 +215,9 @@ function AcaoPrincipal({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   return (
     <View style={{ gap: 6 }}>
       {linha}
-      <Pressable accessibilityRole="button" accessibilityLabel={onde ? 'Mudar no plano' : 'Pôr no plano'} onPress={a.onPorNoPlano}
+      <Pressable accessibilityRole="button" accessibilityLabel={onde ? 'Mudar o próximo passo' : 'Marcar o próximo passo'} onPress={a.onPorNoPlano}
         style={({ pressed }) => [s.cheguei, pressed && { opacity: 0.85 }]}>
-        <Text style={s.chegueiTexto}>{onde && !onde.feita ? 'Mudar no plano' : 'Pôr no plano'}</Text>
+        <Text style={s.chegueiTexto}>{onde && !onde.feita ? 'Mudar o próximo passo' : 'Marcar o próximo passo'}</Text>
         <Text style={s.chegueiSub}>o que vai fazer, o dia e, se quiser, a hora</Text>
       </Pressable>
     </View>
@@ -333,7 +333,7 @@ function GradeEspiada({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
         {!a.onPorNoPlano
           ? <Botao rotulo="Agendar" onPress={a.onScheduleMeeting} estilo={s.botao48} />
           : perto(d)
-            ? <Botao rotulo="Plano" onPress={a.onPorNoPlano} estilo={s.botao48} acessivel="Pôr ou mudar no plano" />
+            ? <Botao rotulo="Próximo passo" onPress={a.onPorNoPlano} estilo={s.botao48} acessivel="Marcar ou mudar o próximo passo" />
             : <Botao rotulo={d.visitadoHoje ? 'Registrar' : 'Cheguei'} onPress={a.onMarkVisited} desabilitado={!a.onMarkVisited || d.isMarkingVisited} estilo={s.botao48} acessivel="Cheguei: fazer check-in" />}
         {a.onExpandir && <Botao rotulo="…" onPress={a.onExpandir} estilo={[s.botao48, s.botaoMais]} acessivel="Mais: abrir o cartão" />}
       </View>
