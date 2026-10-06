@@ -590,7 +590,26 @@ export default function AgendaNovoScreen({
               </Pressable>
             )}
           </Pressable>
-          {open && c && <View style={s.linhaPreparo}><Preparo c={c} contextoDe={contextoDe} telefone={telefoneDe?.(c.id) ?? c.telefone ?? null} /></View>}
+          {open && c && (
+            <View style={s.linhaPreparo}>
+              {/* A RUA É DINÂMICA (Julyan 06/10): chegou antes da hora, ou fora da ordem, faz o
+                  check-in daqui mesmo — o mesmo Cheguei do cartão (GPS + registro). */}
+              {dia === hoje && (
+                <Pressable accessibilityRole="button" accessibilityLabel={`Cheguei em ${nome}`} style={s.botao56} onPress={() => aoCheguei(c)}>
+                  <IconLocation width={20} height={20} fill="#FFFFFF" /><Text style={s.botao56Texto}>{visitadoHoje(c) ? 'Registrar de novo' : 'Cheguei'}</Text>
+                </Pressable>
+              )}
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Pressable accessibilityRole="button" style={s.botaoSec} onPress={() => aoAbrirLead(c.id)}>
+                  <IconLocation width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoSecTexto}>Abrir o cartão</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" style={s.botaoSec} onPress={() => ligar(c.id)}>
+                  <IconCall width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoSecTexto}>Ligar</Text>
+                </Pressable>
+              </View>
+              <Preparo c={c} contextoDe={contextoDe} telefone={telefoneDe?.(c.id) ?? c.telefone ?? null} />
+            </View>
+          )}
         </View>
       );
     }
