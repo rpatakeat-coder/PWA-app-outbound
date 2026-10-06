@@ -105,6 +105,7 @@ export function useMeetings() {
         duration_minutes: form.duration_minutes,
         observacoes: form.observacoes ?? null,
         type: form.type,
+        acao: form.acao ?? null,
         created_by: user?.id ?? null,
       };
 

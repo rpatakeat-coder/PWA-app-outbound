@@ -129,6 +129,7 @@ import AvisosPainel from './src/screens/AvisosPainel';
 import { useAvisos } from './src/hooks/useAvisos';
 import FichaDeRua, { type CamposCadastro } from './src/screens/FichaDeRua';
 import MudarEtapaNovo from './src/screens/MudarEtapaNovo';
+import PorNoPlano from './src/screens/PorNoPlano';
 import { ROTULO_ETAPA } from './src/utils/fichaDeRua';
 import { negocioAcao } from './src/utils/negocioAcao';
 import { textoNormalizado } from './src/utils/pinoP2';
@@ -2561,7 +2562,8 @@ function MainApp() {
       const horaComp = comp && /^\d{1,2}:\d{2}$/.test(comp) ? comp.padStart(5, '0') : null;
       const fixo = horaComp ?? (fixosPlano.has(c.id) ? fixosPlano.get(c.id) ?? null : doBanco);
       const feita = parada?.status === 'done' || (ehHojeDia && visitadoHoje(c.visited_at));
-      return { client: c, estado: feita ? 'feita' : !parada ? 'entra' : 'planejada', compromisso: comp, fixo } as ItemPC;
+      const acao = opsDoDia.stops.find((st) => st.client_id === c.id)?.acao ?? null;
+      return { client: c, estado: feita ? 'feita' : !parada ? 'entra' : 'planejada', compromisso: comp, fixo, acao } as ItemPC;
     });
   }, [ehAgendaPC, planejarDia, routeDate, clientesDoPlanoNoMapa, paradasDoDiaPlanejado, opsDoDia.stops, fixosPlano]);
   useEffect(() => {
@@ -4590,6 +4592,8 @@ function MainApp() {
   useEffect(() => { if (!selectedClient) setAbertoPelaBusca(null); }, [selectedClient]);
   // Limpar o funil em lote: o negócio do cartão de onde se abriu ('' = nenhum marcado)
   const [limparFunilCom, setLimparFunilCom] = useState<string | null>(null);
+  // Pôr no plano (um plano só, 06/10/26): o pino que abriu a folha
+  const [porNoPlanoPara, setPorNoPlanoPara] = useState<{ client: Client; etapaAtual: string | null; tipoPino: string | null; cor: string } | null>(null);
   const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null; soArmas?: boolean } | null>(null);
   const codigoDaEtapa = (c: Client): string | null => {
     if (!contextoPino) return null;
@@ -5688,6 +5692,14 @@ function MainApp() {
           const atual = codigoDaEtapa(c);
           setSelectedClient(null);
           setTimeout(() => setEtapaNovaPara({ client: c, etapaAtual: atual, destinoInicial: destino, preenchido: preenchido ?? null }), 350);
+        },
+        // Pôr no plano (06/10/26): o mapa planeja. Só o plano de quem está logado.
+        onPorNoPlano: isViewer || isMonitoringRoute ? undefined : () => {
+          const c = selectedClient;
+          const p = classificarPino(c, contextoPino);
+          const atual = codigoDaEtapa(c);
+          setSelectedClient(null);
+          setTimeout(() => setPorNoPlanoPara({ client: c, etapaAtual: atual, tipoPino: p.tipo ?? null, cor: p.cor }), 350);
         },
         // Suas armas pra Demo (06/10/26): "falta · tocar para completar" abre a folha só das armas.
         onCompletarArmas: isViewer ? undefined : () => {
@@ -7269,7 +7281,7 @@ function MainApp() {
 
   // Versão nova do app só entra quando nada está aberto (src/utils/updates.ts):
   // recarregar no meio da ficha ou do cadastro perdia o trabalho do executivo.
-  definirOcupado(() => telaCheia || !!selectedClient || !!fichaPendente || !!etapaNovaPara || !!schedulingFor
+  definirOcupado(() => telaCheia || !!selectedClient || !!fichaPendente || !!etapaNovaPara || !!porNoPlanoPara || !!schedulingFor
     || !!changingStageFor || !!completingTask || avisosAbertos || perfilAberto || isVisiting);
 
   // "É meu" (Julyan 26/09): o card e a linha da lista (lentes Sem dono e
@@ -9735,6 +9747,16 @@ function MainApp() {
           onMudou={(clientId, codigo, antes) => aplicarEtapaNoLead(clientId, codigo, undefined, ROTULO_ETAPA[antes] ?? null)}
         />
       )}
+      {porNoPlanoPara && (
+        <PorNoPlano
+          visivel
+          client={porNoPlanoPara.client}
+          etapaCodigo={porNoPlanoPara.etapaAtual}
+          tipoPino={porNoPlanoPara.tipoPino}
+          cor={porNoPlanoPara.cor}
+          onFechar={() => setPorNoPlanoPara(null)}
+        />
+      )}
       {etapaNovaPara && (
         <MudarEtapaNovo
           visivel
@@ -10123,7 +10145,7 @@ function ClientBottomSheet({
   novo,
 }: {
   /** Mapa novo (prancha §7): troca o topo e o peek; abas e alertas continuam. */
-  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onTirarDaRota?: () => void; onAvancar?: (destino: string, preenchido?: Record<string, string>) => void; onLimparFunil?: () => void; onCompletarArmas?: () => void }) | null;
+  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onTirarDaRota?: () => void; onAvancar?: (destino: string, preenchido?: Record<string, string>) => void; onLimparFunil?: () => void; onCompletarArmas?: () => void; onPorNoPlano?: () => void }) | null;
   /** Mapa novo: o cartão subiu para a meia altura (60%) — o mapa leva o pino para a faixa de cima. */
   aoAbrirMeia?: () => void;
   /** Achado pela busca: abre no cartão pequeno, com o mapa à vista (05/10/2026). */
@@ -10530,7 +10552,7 @@ function ClientBottomSheet({
 
   // Mapa novo: o card da prancha usa os MESMOS handlers deste painel.
   const dadosNovo: DadosCardNovo | null = novo
-    ? { ...novo, client, isMarkingVisited, responsavelNome: responsavelNome ?? null, aproximado: isApprox }
+    ? { ...novo, client, isMarkingVisited, responsavelNome: responsavelNome ?? null, aproximado: isApprox, uid: user?.id ?? null }
     : null;
   const acoesNovo: AcoesCardNovo = {
     onMarkVisited, onChangeStage, onScheduleMeeting, onAddToRoute, onDismissContaAlvo, onEdit, onClose,
@@ -10542,6 +10564,7 @@ function ClientBottomSheet({
     onAvancar: novo?.onAvancar,
     onLimparFunil: novo?.onLimparFunil,
     onCompletarArmas: novo?.onCompletarArmas,
+    onPorNoPlano: novo?.onPorNoPlano,
   };
 
   // ── Faixa de topo (M1c) ───────────────────────────────────────────────

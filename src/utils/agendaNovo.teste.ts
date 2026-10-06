@@ -1,7 +1,7 @@
 // Teste da aba Agenda (mapa novo): faixa de dias úteis, próxima parada, compromissos.
 //
 // Rode com:  npx tsx src/utils/agendaNovo.teste.ts
-import { compromissosDoDia, diasDaFaixa, estadoDasParadas, rotuloDoDia, tituloUtil } from './agendaNovo';
+import { compromissosDoDia, diasDaFaixa, estadoDasParadas, paradaParaCasar, rotuloDoDia, seloDoCompromisso, separarCompromissos, tituloUtil } from './agendaNovo';
 
 let falhas = 0;
 const ok = (c: boolean, m: string) => {
@@ -35,6 +35,48 @@ ok(compromissosDoDia('2026-09-29', tarefas, reunioes, () => null).length === 0, 
 
 ok(tituloUtil('Visita - Alemão pizzas', 'visita', 'Alemão Pizzas') === null, '"Visita - Alemão pizzas" não repete o nome na linha');
 ok(tituloUtil('Follow-up - Identificar o nome do decisor', 'retorno', 'Ferro Xis') === 'Follow-up - Identificar o nome do decisor', 'assunto com a ação fica');
+
+
+// ── UM PLANO SÓ (06/10/26): a Agenda nunca mostra a mesma coisa duas vezes ──────────────
+{
+  const dia = '2026-10-07';
+  const paradas = [
+    paradaParaCasar({ client_id: 'c-mada-cliente', client: { id_hubspot: null, empresa: 'Mada Restaurante e lanches', nome: 'Mada', bairro: 'Bom Fim' } }),
+    paradaParaCasar({ client_id: 'c-armazem', client: { id_hubspot: '777', empresa: 'Armazém da Redenção', nome: 'x', bairro: 'Farroupilha' } }),
+  ];
+  const tarefas = [
+    // follow-up do Armazém ligado ao NEGÓCIO, sem cadastro
+    { id: 't1', assunto: 'Follow up - Armazém', venceEm: '2026-10-07T17:00:00Z', tipo: 'follow_up' as const, clientId: null, nomeDoCliente: 'Armazém', dealId: '777' },
+    // tarefa de cobrança que não é parada: fora do plano
+    { id: 't2', assunto: 'Cobrar pagamento - Purple', venceEm: '2026-10-07T18:30:00Z', tipo: 'outro' as const, clientId: 'c-purple', nomeDoCliente: 'Purple Drinkeria', dealId: '888' },
+    // visita do Planejamento para quem já é parada: é a própria parada
+    { id: 't3', assunto: 'Visita - Mada', venceEm: '2026-10-07T12:00:00Z', tipo: 'visita' as const, clientId: 'c-mada-cliente', nomeDoCliente: 'Mada', dealId: null },
+  ];
+  const reunioes = [
+    // reunião do Mada no OUTRO cadastro (lead): casa pelo nome
+    { id: 'r1', client_id: 'c-mada-lead', scheduled_at: '2026-10-07T18:00:00Z', type: 'reuniao', status: 'agendada', acao: 'demo' },
+    // ligação: nunca vira parada nem selo
+    { id: 'r2', client_id: 'c-armazem', scheduled_at: '2026-10-07T12:00:00Z', type: 'follow_up', status: 'agendada', acao: 'ligar' },
+    // cancelada sai
+    { id: 'r3', client_id: 'c-armazem', scheduled_at: '2026-10-07T19:00:00Z', type: 'reuniao', status: 'cancelada', acao: 'reuniao' },
+  ];
+  const nomes: Record<string, string> = { 'c-mada-lead': 'Mada Restaurante e Lanches', 'c-armazem': 'Armazém da Redenção' };
+  const ks = compromissosDoDia(dia, tarefas, reunioes, (id) => nomes[id] ?? null, paradas);
+  const sep = separarCompromissos(ks);
+  ok((sep.casados.get('c-mada-cliente') ?? []).map((k) => k.id).join() === 'app-r1', 'Mada: a reunião do outro cadastro vira selo na parada (uma vez só)');
+  ok((sep.casados.get('c-armazem') ?? []).map((k) => k.id).join() === 'hs-t1', 'Armazém: o follow-up ligado ao negócio vira selo na parada');
+  ok(!ks.some((k) => k.id === 'hs-t3'), 'a visita do Planejamento de quem já é parada não aparece de novo');
+  ok(sep.ligacoes.map((k) => k.id).join() === 'app-r2' && sep.ligacoes[0].casado === null, 'Ligar fica nas Ligações do dia, sem casar com parada (sem posição de rota)');
+  ok(sep.fora.map((k) => k.id).join() === 'hs-t2' && sep.fora[0].acao === 'cobrar', 'a cobrança do HubSpot fica em Fora do plano, com o chip Cobrar pagamento');
+  ok(!ks.some((k) => k.id === 'app-r3'), 'o cancelado sai do plano');
+  ok(seloDoCompromisso(sep.casados.get('c-mada-cliente')![0], 'c-mada-cliente') === 'Demo 15:00 · Agenda do app · mesmo restaurante, outro cadastro', 'o selo diz o quê, a hora, a origem e o porquê do casamento');
+  ok(seloDoCompromisso(sep.casados.get('c-armazem')![0], 'c-armazem') === 'Follow-up 14:00 · HubSpot · ligado pelo negócio', 'o selo do Armazém');
+  const total = sep.ligacoes.length + sep.fora.length + [...sep.casados.values()].reduce((n, l) => n + l.length, 0);
+  ok(total === ks.length, 'cada compromisso aparece em exatamente um lugar');
+  // linhas antigas de client_meetings (sem acao): reunião continua reunião, follow_up continua follow-up
+  const antigos = compromissosDoDia(dia, [], [{ id: 'v1', client_id: 'z', scheduled_at: '2026-10-07T13:00:00Z', type: 'reuniao', status: 'agendada' }, { id: 'v2', client_id: 'z', scheduled_at: '2026-10-07T14:00:00Z', type: 'follow_up', status: 'agendada' }], () => 'Z', []);
+  ok(antigos.map((k) => k.acao).join() === 'reuniao,follow', 'client_meetings antigas (sem acao) continuam lidas certo');
+}
 
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);

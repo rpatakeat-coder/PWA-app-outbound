@@ -28,7 +28,8 @@ import {
   IconBook, IconCalendar, IconCall, IconCar, IconCheck, IconChevronRight, IconLocation, IconRefresh, IconSquareMenu, IconWhatsapp, useIconColors,
 } from '../components/icons';
 import { acaoRapida, diaBRT, ehCobranca } from '../utils/abaTarefas';
-import { compromissosDoDia, estadoDasParadas } from '../utils/agendaNovo';
+import { compromissosDoDia, estadoDasParadas, paradaParaCasar, seloDoCompromisso, separarCompromissos } from '../utils/agendaNovo';
+import { acaoPorId } from '../utils/acoesDoPlano';
 import { proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
 import { porNoDia } from '../utils/paradaDoDia';
 import { lerSemanaDoPlano, PROPOSITOS, type DiaDoPlano } from '../utils/semanaDoPlano';
@@ -194,7 +195,7 @@ export default function AgendaNovoScreen({
     staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase.from('field_routes')
-        .select('route_date, stops:field_route_stops(id, client_id, status, position, planned_at, client:clients(*))')
+        .select('route_date, stops:field_route_stops(id, client_id, status, position, planned_at, acao, horario_fixo, client:clients(*))')
         .eq('seller_id', user!.id).gte('route_date', dias[0]).lte('route_date', dias[dias.length - 1]);
       if (error) throw error;
       const porDia = new Map<string, FieldRouteStopWithClient[]>();
@@ -236,11 +237,17 @@ export default function AgendaNovoScreen({
   const estado = estadoDasParadas(paradas.map((p) => ({ ...p, visitadoHoje: !!p.client && visitadoHoje(p.client) })));
   const feitasLista = estado.filter((p) => p.estado === 'feito');
   const proxima = estado.find((p) => p.estado === 'proxima') ?? null;
-  const noPlano = new Set(paradas.map((p) => p.client_id));
   const cobrar = new Set(tarefas.filter((t) => ehCobranca({ assunto: t.assunto, origem: t.marcador?.origem }) && t.clientId).map((t) => t.clientId!));
-  const doDia = (d: string) => compromissosDoDia(d, tarefas, reunioes, nomePorId, d === hoje ? noPlano : new Set(paradasDoDia(d).map((p) => p.client_id)));
+  // UM PLANO SÓ (06/10/26): o compromisso que casa com uma parada (negócio, nome no bairro,
+  // cadastro) vira selo nela; Ligar vai às Ligações do dia; o resto fica em "Fora do plano".
+  const doDia = (d: string) => compromissosDoDia(d, tarefas, reunioes, nomePorId, paradasDoDia(d).map(paradaParaCasar));
   const compromissos = doDia(dia).filter((k) => !concluidas.has(k.id)
     && !(k.fonte === 'app' && reunioes.some((r) => `app-${r.id}` === k.id && r.status === 'realizada')));
+  const sep = separarCompromissos(compromissos);
+  const soltos = [...sep.ligacoes, ...sep.fora];
+  /** o chip da parada (0175) e os selos dos compromissos casados com ela */
+  const chipDaParada = (p: FieldRouteStopWithClient) => acaoPorId(p.acao)?.rotulo ?? null;
+  const selosDa = (clientId: string) => (sep.casados.get(clientId) ?? []).map((k) => seloDoCompromisso(k, clientId));
 
   /* TERMINAR AS ATIVIDADES DO DIA (28/09/2026). A visita se termina no Cheguei. O que é SÓ
      LIGAÇÃO — retorno, cobrança, follow-up — se confirma com o registro (a mesma regra da aba
@@ -400,11 +407,6 @@ export default function AgendaNovoScreen({
     linhasDepois.push({ k: `p-${p.id}`, tipo: 'parada', ordem: relogio, hora, numero: i + 1, p });
     anterior = pontoDe(p.client) ?? anterior;
     relogio += VISITA_MS;
-  });
-  compromissos.forEach((k) => {
-    const [hh, mm] = (k.hora ?? '').split(':').map(Number);
-    const ord = Number.isFinite(hh) ? Date.parse(`${hoje}T${String(hh).padStart(2, '0')}:${String(mm || 0).padStart(2, '0')}:00-03:00`) : Infinity;
-    linhasDepois.push({ k: `c-${k.id}`, tipo: 'compromisso', ordem: ord, hora: k.hora, comp: k });
   });
   linhasDepois.sort((a, b) => a.ordem - b.ordem);
   const semRota = estado.length === 0;
@@ -579,7 +581,8 @@ export default function AgendaNovoScreen({
             <View style={[s.disco, { backgroundColor: temp?.color ?? 'var(--surface-3)' }]}><Text style={s.discoTexto}>{l.numero}</Text></View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={s.nomeLinha} numberOfLines={1}>{nome}</Text>
-              <Text style={s.subLinha} numberOfLines={1}>{[distanciaAte(l.p.client_id), cobrar.has(l.p.client_id) ? 'cobrar' : null].filter(Boolean).join(' · ') || 'visita do plano'}</Text>
+              <Text style={s.subLinha} numberOfLines={1}>{[chipDaParada(l.p), distanciaAte(l.p.client_id), cobrar.has(l.p.client_id) ? 'cobrar' : null].filter(Boolean).join(' · ') || 'visita do plano'}</Text>
+              {selosDa(l.p.client_id).map((x) => <Text key={x} style={s.selo} numberOfLines={1}>{x}</Text>)}
             </View>
             {c && (
               <Pressable accessibilityRole="button" accessibilityLabel={`Ir até ${nome}`} style={s.botaoLinha} onPress={() => ir(c)}>
@@ -603,7 +606,7 @@ export default function AgendaNovoScreen({
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={s.nomeLinha} numberOfLines={1}>{nome}</Text>
-            <Text style={s.subLinha} numberOfLines={1}>{[reuniao ? 'Reunião' : k.tipo === 'retorno' ? 'Retorno' : 'Visita', k.titulo].filter(Boolean).join(' · ')}</Text>
+            <Text style={s.subLinha} numberOfLines={1}>{[acaoPorId(k.acao)?.rotulo ?? (reuniao ? 'Reunião' : k.tipo === 'retorno' ? 'Retorno' : 'Visita'), k.titulo, k.fonte === 'hubspot' ? 'HubSpot' : 'Agenda do app'].filter(Boolean).join(' · ')}</Text>
           </View>
           {reuniao ? (
             <Pressable accessibilityRole="button" accessibilityLabel={`Confirmar no WhatsApp: ${nome}`} style={[s.botaoLinha, s.botaoWhats]} onPress={() => confirmarNoWhatsApp(k)}>
@@ -638,6 +641,33 @@ export default function AgendaNovoScreen({
       </View>
     );
   };
+
+  /* LIGAÇÕES DO DIA e FORA DO PLANO (§4.3). Ligar não é parada de rua: fica sem número. O que
+     não casou com nenhuma parada fica à parte, tracejado, com o caminho para pôr no plano
+     (abre o pino, onde o "Pôr no plano" é a ação principal). */
+  const casadosTotal = [...sep.casados.values()].reduce((n, l) => n + l.length, 0);
+  const blocosSoltos = (
+    <>
+      {casadosTotal > 0 && <Text style={s.casadosAviso}>{`${casadosTotal} ${casadosTotal === 1 ? 'compromisso do HubSpot e do app já está' : 'compromissos do HubSpot e do app já estão'} nas paradas, sem repetir`}</Text>}
+      {sep.ligacoes.length > 0 && <Text style={s.secao}>LIGAÇÕES DO DIA · NÃO É PARADA DE RUA</Text>}
+      {sep.ligacoes.map((k) => linhaDepois({ k: `c-${k.id}`, tipo: 'compromisso', ordem: 0, hora: k.hora, comp: k }))}
+      {sep.fora.length > 0 && <Text style={s.secao}>FORA DO PLANO</Text>}
+      {sep.fora.length > 0 && (
+        <View style={s.fora}>
+          {sep.fora.map((k) => (
+            <View key={k.id} style={{ gap: 6 }}>
+              {linhaDepois({ k: `c-${k.id}`, tipo: 'compromisso', ordem: 0, hora: k.hora, comp: k })}
+              {k.clientId && (
+                <Pressable accessibilityRole="button" accessibilityLabel={`Pôr no plano: ${k.nome ?? 'lead'}`} style={s.botaoSec} onPress={() => aoAbrirLead(k.clientId!)}>
+                  <IconLocation width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoSecTexto}>Pôr no plano</Text>
+                </Pressable>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
+    </>
+  );
 
   const portaUnica = (
     <Pressable accessibilityRole="button" disabled={montandoDia || roteirizando || roteirizandoDia}
@@ -687,14 +717,16 @@ export default function AgendaNovoScreen({
         {lista.map((p, i) => {
           const c = p.client;
           const nome = c ? nomeDoLead(c) : 'Parada';
-          const reuniao = compromissos.find((k) => k.clientId === p.client_id && k.tipo === 'reunião');
+          const casados = sep.casados.get(p.client_id) ?? [];
+          const reuniao = casados.find((k) => k.hora && k.hora !== '09:00');
           const hora = p.planned_at && dia === diaBRT(new Date(p.planned_at)) ? horaBRT(p.planned_at) : (reuniao?.hora ?? null);
           return (
             <Pressable key={p.id} accessibilityRole="button" style={s.bloco} onPress={() => aoAbrirLead(p.client_id)}>
               <Text style={s.hora}>{hora ?? String(i + 1)}</Text>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={s.nomeLinha} numberOfLines={1}>{nome}</Text>
-                <Text style={s.subLinha} numberOfLines={1}>{[reuniao ? 'Reunião do plano' : 'Visita do plano', ruaDo(c), distanciaAte(p.client_id)].filter(Boolean).join(' · ')}</Text>
+                <Text style={s.subLinha} numberOfLines={1}>{[chipDaParada(p) ?? 'Visita do plano', ruaDo(c), distanciaAte(p.client_id)].filter(Boolean).join(' · ')}</Text>
+                {casados.map((k) => <Text key={k.id} style={s.selo} numberOfLines={1}>{seloDoCompromisso(k, p.client_id)}</Text>)}
               </View>
               <IconChevronRight width={20} height={20} fill={cores.muted} />
             </Pressable>
@@ -710,10 +742,9 @@ export default function AgendaNovoScreen({
             </Pressable>
           </View>
         )}
-        {compromissos.length > 0 && <Text style={s.secao}>REUNIÕES E RETORNOS</Text>}
-        {compromissos.map((k) => linhaDepois({ k: `c-${k.id}`, tipo: 'compromisso', ordem: 0, hora: k.hora, comp: k }))}
-        {lista.length === 0 && compromissos.length === 0 && (
-          <Text style={s.vazio}>Nada marcado neste dia. O Planejamento do Cockpit, o "Agendar" do cartão e o próximo passo do registro caem aqui.</Text>
+        {blocosSoltos}
+        {lista.length === 0 && soltos.length === 0 && (
+          <Text style={s.vazio}>Nada no plano deste dia. O plano se monta no mapa: toque no pino e "Pôr no plano". O Planejamento do Cockpit também cai aqui.</Text>
         )}
         <Text style={s.nota}>Este é o plano que você e o gestor fecharam no Planejamento.</Text>
       </View>
@@ -764,12 +795,13 @@ export default function AgendaNovoScreen({
               {heroi}
               {semRota && (
                 <View style={s.vazioCaixa}>
-                  <Text style={s.vazioTitulo}>{compromissos.length ? 'Sem rota hoje' : 'Nada marcado hoje'}</Text>
-                  <Text style={s.vazio}>O próximo passo do registro e o Agendar do cartão caem aqui. Sem plano do Cockpit para hoje: monte a microrrota a partir de onde você está.</Text>
+                  <Text style={s.vazioTitulo}>{soltos.length ? 'Sem rota hoje' : 'Nada marcado hoje'}</Text>
+                  <Text style={s.vazio}>O plano se monta no mapa: toque no pino e "Pôr no plano". Sem plano para hoje: monte a microrrota a partir de onde você está.</Text>
                 </View>
               )}
-              {linhasDepois.length > 0 && momento !== 'noite' && <Text style={s.secao}>{semRota ? 'COMPROMISSOS DE HOJE' : 'DEPOIS'}</Text>}
+              {linhasDepois.length > 0 && momento !== 'noite' && <Text style={s.secao}>DEPOIS</Text>}
               {momento !== 'noite' && linhasDepois.map(linhaDepois)}
+              {momento !== 'noite' && blocosSoltos}
               {/* dia sem rota: "Montar meu dia" é a ação principal em qualquer hora (docs/12 §8) */}
               {(momento !== 'noite' || semRota) && portaUnica}
             </>
@@ -849,6 +881,9 @@ const s = StyleSheet.create({
   botao56Texto: { fontSize: 16, fontWeight: '800', color: '#FFFFFF' },
   botaoSec: { flex: 1, minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 8 },
   botaoSecTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
+  selo: { fontSize: 12, fontWeight: '700', color: 'var(--tint-blue-text)', marginTop: 2 },
+  casadosAviso: { fontSize: 12.5, fontWeight: '600', color: 'var(--tint-green-text)' },
+  fora: { gap: 10, padding: 10, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: 'var(--border)' },
   secao: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: 'var(--text-faint)', marginTop: 4 },
   linha: { borderRadius: 12, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border-soft)' },
   linhaAberta: { borderColor: 'var(--border)' },

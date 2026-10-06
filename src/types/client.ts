@@ -128,6 +128,8 @@ export interface ClientMeeting {
   observacoes: string | null;
   status: string;
   type: MeetingType;
+  /** O chip do "o que vai fazer" (0175). Linhas antigas: 'reuniao' ou 'follow' (backfill). */
+  acao?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -146,6 +148,8 @@ export interface ClientMeetingFormData {
   duration_minutes: number;
   observacoes?: string | null;
   type: MeetingType;
+  /** O chip do "o que vai fazer" (0175): prosp · follow · reuniao · demo · ligar · cobrar · rel. */
+  acao?: string | null;
 }
 
 export interface ClientFormData {
@@ -207,6 +211,8 @@ export interface FieldRouteStop {
   mandatory_reason: string | null;
   // 0165: horário com cadeado posto na Agenda do computador ('HH:MM'); nulo = estimado.
   horario_fixo?: string | null;
+  // 0175: o chip do "o que vai fazer" (prosp · follow · reuniao · demo · cobrar · rel).
+  acao?: string | null;
   created_at: string;
   updated_at: string;
 }

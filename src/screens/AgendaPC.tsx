@@ -17,7 +17,8 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../integrations/supabase/client';
 import { useTarefasDoCrm } from '../hooks/useTarefasDoCrm';
 import { useClientSearch } from '../hooks/useClients';
-import { compromissosDoDia, type Compromisso } from '../utils/agendaNovo';
+import { compromissosDoDia, paradaParaCasar, seloDoCompromisso, separarCompromissos, type Compromisso } from '../utils/agendaNovo';
+import { acaoPorId } from '../utils/acoesDoPlano';
 import { lerSemanaDoPlano, PROPOSITOS } from '../utils/semanaDoPlano';
 import { montarPreparo, usePreparo } from '../utils/preparo';
 import { conflito, duracao, ehOutraCidade, encaixar, hhmm, horarios, kmTexto, melhorPosicao, metros, perna, resumo, temOutraCidade, type ParadaRota, type Ponto } from '../utils/rotaDoDia';
@@ -35,6 +36,8 @@ export type ItemPC = {
   compromisso: string | null;
   /** Hora com cadeado em vigor (compromisso, ou o cadeado posto na Agenda). */
   fixo: string | null;
+  /** O chip do "o que vai fazer" (0175), o mesmo rótulo do Planejamento do Cockpit. */
+  acao?: string | null;
 };
 
 export type GrupoSugestao = 'regua' | 'alvo' | 'queda' | 'google';
@@ -270,7 +273,7 @@ export default function AgendaPC(props: Props) {
     },
   });
   const { tarefas } = useTarefasDoCrm(true);
-  const compromissosDe = (d: string, jaNoPlano: Set<string>) => compromissosDoDia(d, tarefas, props.reunioes, props.nomePorId, jaNoPlano);
+  const compromissosDe = (d: string, jaNoPlano: Set<string> | ReturnType<typeof paradaParaCasar>[]) => compromissosDoDia(d, tarefas, props.reunioes, props.nomePorId, jaNoPlano);
   const rotuloChip = (d: string) => {
     if (d === dia) {
       const n = itens.length;
@@ -339,8 +342,11 @@ export default function AgendaPC(props: Props) {
   const comProva = passado ? itens.filter((i) => { const v = provaDe(i.client); return v && !v.declarada && v.distancia != null; }).length : 0;
 
   // ---- compromissos (reuniões e retornos do HubSpot e do app) na lista pelo horário ----
+  // UM PLANO SÓ (06/10/26): casado com parada vira selo nela; Ligar e "Fora do plano" à parte.
   const noPlano = useMemo(() => new Set(itens.map((i) => i.client.id)), [itens]);
-  const compromissos = useMemo(() => compromissosDe(dia, noPlano), [dia, noPlano, tarefas, props.reunioes]); // eslint-disable-line react-hooks/exhaustive-deps
+  const compromissosTodos = useMemo(() => compromissosDe(dia, itens.map((i) => paradaParaCasar({ client_id: i.client.id, client: i.client }))), [dia, itens, tarefas, props.reunioes]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sep = useMemo(() => separarCompromissos(compromissosTodos), [compromissosTodos]);
+  const compromissos = useMemo(() => [...sep.ligacoes, ...sep.fora], [sep]);
 
   // ---- busca ----
   const [busca, setBusca] = useState('');
@@ -530,6 +536,7 @@ export default function AgendaPC(props: Props) {
               <Text style={semEtapa ? { color: 'var(--ambar-texto)' } : null}>{etapaOuTipo(c, ctx.etapa) ?? 'sem etapa'}</Text>
               {' · '}
               <Text style={!c.bairro ? { color: 'var(--ambar-texto)' } : null}>{c.bairro ?? 'sem bairro no cadastro'}</Text>
+              {acaoPorId(i.acao) ? <Text style={{ fontWeight: '700' }}>{` · ${acaoPorId(i.acao)!.rotulo}`}</Text> : null}
               {i.estado === 'entra' ? <Text style={{ color: 'var(--vermelho-texto)', fontWeight: '700' }}>{' · a confirmar'}</Text> : null}
             </Text>
           </View>
@@ -555,31 +562,37 @@ export default function AgendaPC(props: Props) {
             <Pressable accessibilityRole="button" onPress={() => props.aoRemarcar([c])} style={s.botaoPorPeq}><Text style={s.botaoPorTexto}>Remarcar</Text></Pressable>
           )}
         </Pressable>
+        {(sep.casados.get(c.id) ?? []).map((x) => <Text key={x.id} style={s.selo} numberOfLines={1}>{seloDoCompromisso(x, c.id)}</Text>)}
         {leg && <Text style={s.perna}>{ehOutraCidade(leg) ? `outra cidade · ${kmTexto(leg.m)}` : `${leg.min} min · ${kmTexto(leg.m)}`}</Text>}
       </div>
     );
   };
 
   const linhaCompromisso = (k: Compromisso) => (
-    <View key={k.id} style={s.compromisso}>
+    <View key={k.id} style={[s.compromisso, k.acao === 'ligar' && s.ligacao]}>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={s.nome} numberOfLines={2}>{`${k.tipo === 'reunião' ? 'Reunião' : k.tipo === 'retorno' ? 'Ligar' : 'Visita'} · ${k.nome ?? k.titulo ?? 'sem lead'}`}</Text>
+        <Text style={s.nome} numberOfLines={2}>{`${acaoPorId(k.acao)?.rotulo ?? (k.tipo === 'reunião' ? 'Reunião' : k.tipo === 'retorno' ? 'Ligar' : 'Visita')} · ${k.nome ?? k.titulo ?? 'sem lead'}`}</Text>
         <Text style={s.sub} numberOfLines={1}>{[k.titulo && k.nome ? k.titulo : null, k.fonte === 'hubspot' ? 'HubSpot' : 'Agenda do app'].filter(Boolean).join(' · ')}</Text>
       </View>
       <Text style={s.hora}>{k.hora ?? 'sem hora'}</Text>
     </View>
   );
 
-  // Paradas e compromissos intercalados pelo horário.
+  // As paradas numeradas; o compromisso casado é selo dentro delas (linhaParada). Ligações do
+  // dia e "Fora do plano" vêm depois, nunca misturadas na lista numerada (§4.3).
+  const casadosTotal = [...sep.casados.values()].reduce((n, l) => n + l.length, 0);
   const lista = (() => {
     const out: React.ReactNode[] = [];
-    const ks = [...compromissos];
-    itens.forEach((i, k) => {
-      const t = hs[k]?.chega ?? 0;
-      while (ks.length && (minDe(ks[0].hora) ?? 99999) <= t) out.push(linhaCompromisso(ks.shift()!));
-      out.push(linhaParada(i, k));
-    });
-    for (const k of ks) out.push(linhaCompromisso(k));
+    if (casadosTotal > 0) out.push(<Text key="casados" style={s.casadosAviso}>{`${casadosTotal} ${casadosTotal === 1 ? 'compromisso do HubSpot e do app já está' : 'compromissos do HubSpot e do app já estão'} nas paradas, sem repetir`}</Text>);
+    itens.forEach((i, k) => { out.push(linhaParada(i, k)); });
+    if (sep.ligacoes.length) {
+      out.push(<Text key="lig-rot" style={s.rotuloSecao}>LIGAÇÕES DO DIA · NÃO É PARADA DE RUA</Text>);
+      for (const k of sep.ligacoes) out.push(linhaCompromisso(k));
+    }
+    if (sep.fora.length) {
+      out.push(<Text key="fora-rot" style={s.rotuloSecao}>FORA DO PLANO</Text>);
+      for (const k of sep.fora) out.push(linhaCompromisso(k));
+    }
     // soltar depois da última parada (arrastar para o fim)
     if (arrastando != null) {
       out.push(
@@ -895,6 +908,9 @@ const s = StyleSheet.create({
   abasGrudadas: { backgroundColor: 'var(--bg)', paddingBottom: 6 },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 56, paddingHorizontal: 6, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: 'transparent' },
   linhaDestaque: { backgroundColor: 'var(--surface)', borderColor: 'var(--border)' },
+  selo: { fontSize: 12, fontWeight: '700', color: 'var(--tint-blue-text)', marginLeft: 70, marginTop: -2, marginBottom: 4 },
+  casadosAviso: { fontSize: 12.5, fontWeight: '600', color: 'var(--tint-green-text)', marginBottom: 4 },
+  ligacao: { borderStyle: 'solid' },
   linhaEntra: { borderColor: 'var(--vermelho-acao)', borderStyle: 'dashed' },
   linhaProxima: { backgroundColor: 'var(--tint-red)' },
   alca: { width: 16, alignItems: 'center', cursor: 'grab' } as never,

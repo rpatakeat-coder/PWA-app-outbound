@@ -18,6 +18,9 @@ import { distanciaTexto, fatosDoCard, sinaisDoCliente } from '../utils/cardNovo'
 import { ETAPA, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA, ROTULO_PROP, pareceNomeDePessoa } from '../utils/fichaDeRua';
 import { IconClose as SiClose } from '../components/icons';
 import ArmasDoNegocio from '../components/ArmasDoNegocio';
+import { useOndeNoPlano } from '../hooks/useOndeNoPlano';
+import { acaoPorId } from '../utils/acoesDoPlano';
+import type { OndeEsta } from '../utils/planoDoPino';
 
 export { distanciaTexto };
 import { openWhatsapp, toWhatsappNumber } from '../utils/whatsapp';
@@ -46,6 +49,8 @@ export type AcoesCardNovo = {
   onLimparFunil?: () => void;
   /** Suas armas pra Demo: "falta · tocar para completar" abre a folha só das armas (06/10/2026). */
   onCompletarArmas?: () => void;
+  /** Pôr no plano (Claude Design "um plano só", 06/10/2026): o mapa planeja. */
+  onPorNoPlano?: () => void;
 };
 
 export type DadosCardNovo = {
@@ -64,6 +69,8 @@ export type DadosCardNovo = {
   aproximado?: boolean;
   /** Tarefa de cobrança (SLA) aberta no HubSpot para este lead — a MESMA da aba Tarefas. */
   cobranca?: { texto: string; assunto: string } | null;
+  /** Quem está logado: o status do plano do pino é o plano DELE. */
+  uid?: string | null;
 };
 
 const ROTULO_TEMP: Record<string, string> = { Q: 'LEAD QUENTE', M: 'LEAD MORNO', F: 'LEAD FRIO', X: 'PERDIDO', '?': 'ETAPA NÃO RECONHECIDA' };
@@ -182,6 +189,41 @@ function BotaoCheguei({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   );
 }
 
+// UM PLANO SÓ (06/10/2026). O status do plano e a ação principal: perto do pino (300 m),
+// o Cheguei manda — o time faz check-in em lead criado na hora, e o Cheguei nunca some; longe,
+// "Pôr no plano" (ou "Mudar no plano") é a principal e o Cheguei vai para a grade.
+const PERTO_M = 300;
+const SEMANA_LONGA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+function nomeDoDiaDoPlano(iso: string): string {
+  const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  const amanha = new Date(Date.parse(`${hoje}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  return iso === hoje ? 'hoje' : iso === amanha ? 'amanhã' : SEMANA_LONGA[new Date(`${iso}T12:00:00Z`).getUTCDay()];
+}
+export function textoDoPlano(onde: OndeEsta | null): string {
+  if (!onde) return 'Ainda não está no plano';
+  const a = acaoPorId(onde.acao);
+  if (onde.feita) return `Feito ${nomeDoDiaDoPlano(onde.dia)}${a ? ` · ${a.rotulo}` : ''}`;
+  return `No plano de ${nomeDoDiaDoPlano(onde.dia)} · ${onde.ordem}ª parada${a ? ` · ${a.rotulo}` : ''}${onde.hora ? ` ${onde.hora} com cadeado` : ''}`;
+}
+function perto(d: DadosCardNovo) { return d.distanciaM != null && d.distanciaM <= PERTO_M; }
+
+function AcaoPrincipal({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
+  const { lido, onde } = useOndeNoPlano(d.uid, d.client.id);
+  const status = lido ? textoDoPlano(onde) : null;
+  const linha = status ? <Text style={[s.statusPlano, onde && !onde.feita && s.statusPlanoNo]} numberOfLines={2}>{status}</Text> : null;
+  if (!a.onPorNoPlano || perto(d)) return <View style={{ gap: 6 }}>{linha}<BotaoCheguei d={d} a={a} /></View>;
+  return (
+    <View style={{ gap: 6 }}>
+      {linha}
+      <Pressable accessibilityRole="button" accessibilityLabel={onde ? 'Mudar no plano' : 'Pôr no plano'} onPress={a.onPorNoPlano}
+        style={({ pressed }) => [s.cheguei, pressed && { opacity: 0.85 }]}>
+        <Text style={s.chegueiTexto}>{onde && !onde.feita ? 'Mudar no plano' : 'Pôr no plano'}</Text>
+        <Text style={s.chegueiSub}>o que vai fazer, o dia e, se quiser, a hora</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function Cabecalho({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; compacto: boolean }) {
   const cadastrado = d.client.empresa?.trim() || d.client.nome || 'Sem nome';
   const endereco = subtitulo(d.client);
@@ -287,7 +329,12 @@ function GradeEspiada({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
             ? <Botao rotulo="+ Telefone" desabilitado estilo={s.botao48} tracejado acessivel="Dados travados: cobrança emitida, nada muda até o Pago" />
             : <Botao rotulo="+ Telefone" onPress={a.onEdit} estilo={s.botao48} tracejado acessivel="Adicionar telefone" />)}
         <Botao rotulo="Ir" onPress={() => ir(c)} desabilitado={c.latitude == null} estilo={s.botao48} />
-        <Botao rotulo="Agendar" onPress={a.onScheduleMeeting} estilo={s.botao48} />
+        {/* Agendar saiu (um plano só): o plano nasce do Pôr no plano. A grade leva a ação que não é a principal. */}
+        {!a.onPorNoPlano
+          ? <Botao rotulo="Agendar" onPress={a.onScheduleMeeting} estilo={s.botao48} />
+          : perto(d)
+            ? <Botao rotulo="Plano" onPress={a.onPorNoPlano} estilo={s.botao48} acessivel="Pôr ou mudar no plano" />
+            : <Botao rotulo={d.visitadoHoje ? 'Registrar' : 'Cheguei'} onPress={a.onMarkVisited} desabilitado={!a.onMarkVisited || d.isMarkingVisited} estilo={s.botao48} acessivel="Cheguei: fazer check-in" />}
         {a.onExpandir && <Botao rotulo="…" onPress={a.onExpandir} estilo={[s.botao48, s.botaoMais]} acessivel="Mais: abrir o cartão" />}
       </View>
     </View>
@@ -394,7 +441,7 @@ export function PeekCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
     <View style={s.peek}>
       <Cabecalho d={d} a={a} compacto />
       <LinhaCliente d={d} />
-      <BotaoCheguei d={d} a={a} />
+      <AcaoPrincipal d={d} a={a} />
       <GradeEspiada d={d} a={a} />
     </View>
   );
@@ -445,7 +492,7 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
           )}
         </View>
       )}
-      <BotaoCheguei d={d} a={a} />
+      <AcaoPrincipal d={d} a={a} />
       <GradeEspiada d={d} a={{ ...a, onExpandir: undefined }} />
       <Fatos d={d} />
       <BlocoNegocio d={d} a={a} />
@@ -500,6 +547,8 @@ const s = StyleSheet.create({
   fatoAvisoTexto: { color: 'var(--tint-amber-text)' },
   cheguei: { minHeight: 56, borderRadius: 16, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
   chegueiTexto: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  statusPlano: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
+  statusPlanoNo: { color: 'var(--tint-blue-text)' },
   chegueiSub: { fontSize: 13, fontWeight: '500', color: 'rgba(255,255,255,.85)', marginTop: 1 },
   // flex:0 no RN web vira '0 1 0%' e espreme o botão a 9 px: base e encolhimento explícitos.
   botaoMais: { flexGrow: 0, flexShrink: 0, flexBasis: 56, width: 56 },
