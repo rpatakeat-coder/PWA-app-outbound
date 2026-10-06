@@ -17,6 +17,7 @@ import type { Pino } from '../utils/pinoP2';
 import { distanciaTexto, fatosDoCard, sinaisDoCliente } from '../utils/cardNovo';
 import { ETAPA, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA, ROTULO_PROP, pareceNomeDePessoa } from '../utils/fichaDeRua';
 import { IconClose as SiClose } from '../components/icons';
+import ArmasDoNegocio from '../components/ArmasDoNegocio';
 
 export { distanciaTexto };
 import { openWhatsapp, toWhatsappNumber } from '../utils/whatsapp';
@@ -43,6 +44,8 @@ export type AcoesCardNovo = {
   onAvancar?: (destino: string, preenchido?: Record<string, string>) => void;
   /** Limpar o funil: marcar vários negócios e mandar para Perdido ou Reciclagem (05/10/2026). */
   onLimparFunil?: () => void;
+  /** Suas armas pra Demo: "falta · tocar para completar" abre a folha só das armas (06/10/2026). */
+  onCompletarArmas?: () => void;
 };
 
 export type DadosCardNovo = {
@@ -370,6 +373,7 @@ function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       <View style={s.barra8}>{FUNIL8.map((e, k) => <View key={e} style={[s.seg, k <= i && s.segFeito]} />)}</View>
       <Text style={s.negocioEtapa}>{codigo ? ROTULO_ETAPA[codigo] ?? d.etapaRotulo : d.etapaRotulo ?? 'Etapa não reconhecida'}</Text>
       <Text style={s.negocioNota}>{av.nota}</Text>
+      {codigo && <ArmasDoNegocio client={d.client} etapa={codigo} onCompletar={a.onCompletarArmas} />}
       <View style={s.grade}>
         {av.botao && av.destino && a.onAvancar && (
           <Botao rotulo={av.botao} onPress={() => a.onAvancar!(av.destino!)} estilo={[s.botao48, s.avancar]} texto={s.avancarTexto} />

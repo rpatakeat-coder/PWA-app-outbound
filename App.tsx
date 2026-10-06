@@ -4590,7 +4590,7 @@ function MainApp() {
   useEffect(() => { if (!selectedClient) setAbertoPelaBusca(null); }, [selectedClient]);
   // Limpar o funil em lote: o negócio do cartão de onde se abriu ('' = nenhum marcado)
   const [limparFunilCom, setLimparFunilCom] = useState<string | null>(null);
-  const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null } | null>(null);
+  const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null; soArmas?: boolean } | null>(null);
   const codigoDaEtapa = (c: Client): string | null => {
     if (!contextoPino) return null;
     const chave = textoNormalizado(c.etapa);
@@ -5688,6 +5688,13 @@ function MainApp() {
           const atual = codigoDaEtapa(c);
           setSelectedClient(null);
           setTimeout(() => setEtapaNovaPara({ client: c, etapaAtual: atual, destinoInicial: destino, preenchido: preenchido ?? null }), 350);
+        },
+        // Suas armas pra Demo (06/10/26): "falta · tocar para completar" abre a folha só das armas.
+        onCompletarArmas: isViewer ? undefined : () => {
+          const c = selectedClient;
+          const atual = codigoDaEtapa(c);
+          setSelectedClient(null);
+          setTimeout(() => setEtapaNovaPara({ client: c, etapaAtual: atual, soArmas: true }), 350);
         },
         // Limpar o funil (05/10/26): vários negócios para Perdido/Reciclagem, este já marcado.
         onLimparFunil: isViewer || isMonitoringRoute ? undefined : () => {
@@ -9735,6 +9742,7 @@ function MainApp() {
           etapaAtual={etapaNovaPara.etapaAtual}
           destinoInicial={etapaNovaPara.destinoInicial ?? null}
           preenchido={etapaNovaPara.preenchido ?? null}
+          soArmas={!!etapaNovaPara.soArmas}
           onFechar={() => setEtapaNovaPara(null)}
           onMudou={(codigo, props) => {
             // O TELEFONE DIGITADO NA ETAPA VAI PARA O LEAD (auditoria 28/09): ia só ao HubSpot e o
@@ -10115,7 +10123,7 @@ function ClientBottomSheet({
   novo,
 }: {
   /** Mapa novo (prancha §7): troca o topo e o peek; abas e alertas continuam. */
-  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onTirarDaRota?: () => void; onAvancar?: (destino: string, preenchido?: Record<string, string>) => void; onLimparFunil?: () => void }) | null;
+  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onTirarDaRota?: () => void; onAvancar?: (destino: string, preenchido?: Record<string, string>) => void; onLimparFunil?: () => void; onCompletarArmas?: () => void }) | null;
   /** Mapa novo: o cartão subiu para a meia altura (60%) — o mapa leva o pino para a faixa de cima. */
   aoAbrirMeia?: () => void;
   /** Achado pela busca: abre no cartão pequeno, com o mapa à vista (05/10/2026). */
@@ -10533,6 +10541,7 @@ function ClientBottomSheet({
     onMoverPino: onEditLocation,
     onAvancar: novo?.onAvancar,
     onLimparFunil: novo?.onLimparFunil,
+    onCompletarArmas: novo?.onCompletarArmas,
   };
 
   // ── Faixa de topo (M1c) ───────────────────────────────────────────────

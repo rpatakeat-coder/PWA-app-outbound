@@ -13,7 +13,8 @@ import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'rea
 import { descartar, ouvirFila, subirFila, type ItemFila } from '../utils/filaOffline';
 import { IconCheckCircle as SiOk } from './icons';
 
-export type TipoToast = 'ok' | 'fila' | 'erro';
+/** 'aviso': âmbar, para o que andou mas ficou devendo (ex.: Avançar sem preencher). */
+export type TipoToast = 'ok' | 'fila' | 'erro' | 'aviso';
 
 type Pedido = {
   id: number;
@@ -132,7 +133,7 @@ export function ToastHost() {
         </View>
       )}
       {pedido && (
-        <View style={[styles.toast, { position: FIXO }, pedido.tipo === 'erro' ? styles.toastErro : pedido.tipo === 'fila' ? styles.toastFila : styles.toastOk]}
+        <View style={[styles.toast, { position: FIXO }, pedido.tipo === 'erro' ? styles.toastErro : pedido.tipo === 'fila' || pedido.tipo === 'aviso' ? styles.toastFila : styles.toastOk]}
           accessibilityRole="alert" accessibilityLiveRegion="polite">
           {/* S1 (handoff das abas): o "✓" que vinha no texto vira o ícone do toast de sucesso */}
           {pedido.tipo === 'ok' && <SiOk width={20} height={20} fill="var(--tint-green-text)" />}
