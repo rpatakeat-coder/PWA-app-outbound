@@ -127,7 +127,8 @@ export async function porNoPlano(p: PedidoDoPlano): Promise<{ ordem: number | nu
       hubspot = `tarefa remarcada para ${p.dia.slice(8, 10)}/${p.dia.slice(5, 7)} ${p.hora}`;
     } else if (p.client.id_hubspot) {
       await negocioAcao({ op: 'nota', tipoAcao: 'proximo-passo', dealId: String(p.client.id_hubspot), tipo: tipoDoPasso(p.acao),
-        data: p.dia, hora: p.hora, texto: `${a.rotulo} · ${p.client.empresa?.trim() || p.client.nome}` });
+        /* o servidor já prefixa o tipo ("Demo - "): o texto é só o nome */
+        data: p.dia, hora: p.hora, texto: p.client.empresa?.trim() || p.client.nome });
       hubspot = `${a.hubspot} ${p.dia.slice(8, 10)}/${p.dia.slice(5, 7)} ${p.hora}`;
     }
   } else if (p.acao === 'ligar' && p.criarCompromisso) {
