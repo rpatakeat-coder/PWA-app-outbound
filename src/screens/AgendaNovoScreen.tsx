@@ -30,6 +30,7 @@ import {
 import { acaoRapida, diaBRT, ehCobranca } from '../utils/abaTarefas';
 import { compromissosDoDia, estadoDasParadas, paradaParaCasar, seloDoCompromisso, separarCompromissos } from '../utils/agendaNovo';
 import { acaoPorId } from '../utils/acoesDoPlano';
+import { montarFeitoNoDia, type FichaDoDia, type RegistroDoDia, type VisitaDoDia } from '../utils/feitoNoDia';
 import { proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
 import { porNoDia } from '../utils/paradaDoDia';
 import { lerSemanaDoPlano, PROPOSITOS, type DiaDoPlano } from '../utils/semanaDoPlano';
@@ -138,7 +139,7 @@ export default function AgendaNovoScreen({
   const [roteirizandoDia, setRoteirizandoDia] = useState(false);
   const [registrando, setRegistrando] = useState<TarefaParaRegistrar | null>(null);
   const [aberto, setAberto] = useState<string | null>(null);
-  const [feitasAbertas, setFeitasAbertas] = useState(false);
+  const [feitasAbertas, setFeitasAbertas] = useState(true);
   const [porta, setPorta] = useState(false);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine !== false);
   useEffect(() => {
@@ -186,6 +187,34 @@ export default function AgendaNovoScreen({
   const { user } = useAuth();
   const { prometer } = useMinhaDaily(true);
   const meuDia = useMeuDia(true, user?.id ?? null);
+
+  /* FEITO NO DIA (06/10/26): os check-ins, o registro de cada visita e o que foi registrado na
+     Tarefas, do dia aberto (hoje ou um que já passou). Três leituras em paralelo, só as dele. */
+  const feitoQ = useQuery({
+    queryKey: ['feito_no_dia', user?.id, dia],
+    enabled: !!user?.id && dia <= hoje,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    queryFn: async () => {
+      const ini = new Date(`${dia}T00:00:00-03:00`).toISOString();
+      const fim = new Date(`${dia}T23:59:59.999-03:00`).toISOString();
+      const [v, fi, r] = await Promise.all([
+        supabase.from('client_visits').select('id, client_id, visited_at, distance_m, declarada, client:clients(empresa, nome)')
+          .eq('visited_by', user!.id).gte('visited_at', ini).lte('visited_at', fim),
+        supabase.from('fichas_de_rua').select('client_id, ocorrido_em, como_foi, proximo, proximo_em, proximo_tipo, etapa_antes, etapa_depois, decisor_nome, motivo_perdido, client:clients(empresa, nome)')
+          .eq('criado_por', user!.id).gte('ocorrido_em', ini).lte('ocorrido_em', fim),
+        supabase.from('fila_feitas').select('id, deal_id, negocio, hora, resultado, volta, perdido, criada_em')
+          .eq('user_id', user!.id).eq('dia', dia).neq('estado', 'desfeita'),
+      ]);
+      if (v.error) throw v.error;
+      if (fi.error) throw fi.error;
+      const nomes = new Map<string, string>();
+      for (const x of [...(v.data ?? []), ...(fi.data ?? [])] as Array<{ client_id: string | null; client?: { empresa?: string | null; nome?: string | null } | null }>) {
+        if (x.client_id && x.client) nomes.set(x.client_id, (x.client.empresa?.trim() || x.client.nome || '').trim());
+      }
+      return { visitas: (v.data ?? []) as unknown as VisitaDoDia[], fichas: (fi.data ?? []) as unknown as FichaDoDia[], registros: (r.error ? [] : (r.data ?? [])) as RegistroDoDia[], nomes };
+    },
+  });
 
   /* O PLANO DOS OUTROS DIAS (28/09/2026). O que se põe no Planejamento vira parada da rota
      DAQUELE dia (plano_para_rota): uma consulta traz as rotas da faixa inteira. */
@@ -508,17 +537,36 @@ export default function AgendaNovoScreen({
     </View>
   );
 
-  const feitas = feitasLista.length > 0 ? (
-    <View>
+  /* FEITO NO DIA: aberto, com o resumo de cada item — como foi, a etapa e o próximo passo com o
+     dia —, para ninguém esquecer o que combinou. Check-in sem registro aparece em âmbar e abre o
+     cartão para registrar. Tocar em qualquer item abre o lead. */
+  const itensFeitos = feitoQ.data ? montarFeitoNoDia({
+    visitas: feitoQ.data.visitas, fichas: feitoQ.data.fichas, registros: feitoQ.data.registros,
+    nomeDe: (id) => feitoQ.data!.nomes.get(id) || nomePorId(id) || null,
+    noPlano: new Set(paradasDoDia(dia).map((p) => p.client_id)),
+  }) : [];
+  const faltamRegistro = itensFeitos.filter((i) => i.faltaRegistro).length;
+  const feitas = itensFeitos.length > 0 ? (
+    <View style={{ gap: 8 }}>
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: feitasAbertas }} style={s.feitasLinha} onPress={() => setFeitasAbertas((v) => !v)}>
         <View style={s.feitasIcone}><IconCheck width={14} height={14} fill="var(--tint-green-text)" /></View>
-        <Text style={s.feitasTexto}>{`${feitasLista.length} ${feitasLista.length === 1 ? 'feita' : 'feitas'} hoje`}</Text>
+        <Text style={s.feitasTexto}>{`${dia === hoje ? 'FEITO HOJE' : 'FEITO NO DIA'} · ${itensFeitos.length}${faltamRegistro ? ` · ${faltamRegistro} sem registro` : ''}`}</Text>
         <Text style={s.feitasAcao}>{feitasAbertas ? 'ocultar' : 'ver'}</Text>
       </Pressable>
-      {feitasAbertas && feitasLista.map((p) => (
-        <Pressable key={p.id} accessibilityRole="button" style={s.feitaItem} onPress={() => aoAbrirLead(p.client_id)}>
-          <Text style={s.hora}>{p.client?.visited_at ? horaBRT(p.client.visited_at) : '—'}</Text>
-          <Text style={[s.nomeLinha, { color: 'var(--text-muted)', flex: 1 }]} numberOfLines={1}>{p.client ? nomeDoLead(p.client) : 'Parada'}</Text>
+      {feitasAbertas && itensFeitos.map((i) => (
+        <Pressable key={i.chave} accessibilityRole="button" disabled={!i.clientId} style={[s.feitoItem, i.faltaRegistro && s.feitoFalta]} onPress={() => i.clientId && aoAbrirLead(i.clientId)}>
+          <Text style={s.hora}>{i.hora}</Text>
+          <View style={[s.disco, { backgroundColor: i.faltaRegistro ? 'var(--tint-amber)' : 'var(--tint-green)' }]}>
+            {i.tipo === 'tarefa' ? <IconCall width={14} height={14} fill="var(--tint-green-text)" /> : <IconCheck width={14} height={14} fill={i.faltaRegistro ? 'var(--tint-amber-text)' : 'var(--tint-green-text)'} />}
+          </View>
+          <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+            <Text style={s.nomeLinha} numberOfLines={1}>{i.nome}</Text>
+            <Text style={s.subLinha} numberOfLines={1}>{i.linha1}</Text>
+            {i.linha2 ? <Text style={s.feitoResumo} numberOfLines={2}>{i.linha2}</Text> : null}
+            {i.faltaRegistro
+              ? <Text style={s.feitoFaltaTexto}>Falta registrar como foi · toque para abrir o cartão</Text>
+              : i.proximo ? <Text style={s.feitoProximo} numberOfLines={2}>{`Próximo passo: ${i.proximo}`}</Text> : null}
+          </View>
         </Pressable>
       ))}
     </View>
@@ -762,6 +810,7 @@ export default function AgendaNovoScreen({
           </View>
         )}
         {blocosSoltos}
+        {feitas}
         {lista.length === 0 && soltos.length === 0 && (
           <Text style={s.vazio}>Nada no plano deste dia. O plano se monta no mapa: toque no pino e "Marcar o próximo passo". O Planejamento do Cockpit também cai aqui.</Text>
         )}
@@ -810,7 +859,6 @@ export default function AgendaNovoScreen({
           ) : (
             <>
               {noite}
-              {feitas}
               {heroi}
               {semRota && (
                 <View style={s.vazioCaixa}>
@@ -821,6 +869,7 @@ export default function AgendaNovoScreen({
               {linhasDepois.length > 0 && momento !== 'noite' && <Text style={s.secao}>DEPOIS</Text>}
               {momento !== 'noite' && linhasDepois.map(linhaDepois)}
               {momento !== 'noite' && blocosSoltos}
+              {feitas}
               {/* dia sem rota: "Montar meu dia" é a ação principal em qualquer hora (docs/12 §8) */}
               {(momento !== 'noite' || semRota) && portaUnica}
             </>
@@ -854,7 +903,8 @@ export default function AgendaNovoScreen({
 
 const s = StyleSheet.create({
   tela: { flex: 1, backgroundColor: 'var(--bg)' },
-  conteudo: { padding: 16, paddingBottom: 32, gap: 12 },
+  // a barra de baixo (Mapa · Agenda · Tarefas) cobria o fim da lista: folga da barra + área segura
+  conteudo: { padding: 16, paddingBottom: 'calc(120px + env(safe-area-inset-bottom))' as unknown as number, gap: 12 },
   faixa: { flexDirection: 'row', gap: 6 },
   dia: { flex: 1, minWidth: 0, minHeight: 72, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 1, paddingHorizontal: 2, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)' },
   diaAtivo: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--vermelho-acao)', borderWidth: 1.5 },
@@ -881,6 +931,11 @@ const s = StyleSheet.create({
   feitasIcone: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'var(--tint-green)', alignItems: 'center', justifyContent: 'center' },
   feitasTexto: { flex: 1, fontSize: 14, fontWeight: '600', color: 'var(--text-muted)' },
   feitasAcao: { fontSize: 14, fontWeight: '600', color: 'var(--text-muted)' },
+  feitoItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, minHeight: 56, padding: 12, borderRadius: 12, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border-soft)' },
+  feitoFalta: { borderColor: 'var(--tint-amber-text)', borderStyle: 'dashed' },
+  feitoResumo: { fontSize: 13, color: 'var(--text)' },
+  feitoProximo: { fontSize: 13, fontWeight: '700', color: 'var(--tint-blue-text)' },
+  feitoFaltaTexto: { fontSize: 13, fontWeight: '700', color: 'var(--tint-amber-text)' },
   feitaItem: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingLeft: 36 },
   heroi: { padding: 14, gap: 10, borderRadius: 16, backgroundColor: 'var(--surface)', borderWidth: 1.5, borderColor: 'var(--vermelho-acao)' },
   heroiOlho: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: 'var(--vermelho-texto)' },
