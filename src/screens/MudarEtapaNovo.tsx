@@ -18,9 +18,10 @@ import { supabase } from '../integrations/supabase/client';
 import type { Client } from '../types/client';
 import { enfileirar, ehErroDeRede, novoAcaoId } from '../utils/filaOffline';
 import {
-  ETAPA, ETAPAS_DA_FOLHA, MOTIVOS_PERDIDO, MOTIVOS_QUE_EXIGEM_TEXTO, PICKLIST, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA,
-  ROTULO_PROP, TIPO_CAMPO, montarPropriedades, movimentoPermitido,
+  ETAPA, ETAPAS_DA_FOLHA, GARGALOS, HORARIOS, MOTIVOS_PERDIDO, MOTIVOS_QUE_EXIGEM_TEXTO, PAPEIS, PICKLIST, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA,
+  ROTULO_PROP, SISTEMAS, TIPO_CAMPO, montarPropriedades, movimentoPermitido,
 } from '../utils/fichaDeRua';
+import { ETAPAS_COM_ARMAS, armasConhecidas, armasQueFaltam, enviosDasArmas, resumoDasArmas, type Armas, type FichaArmas } from '../utils/armasDaDemo';
 import { negocioAcao } from '../utils/negocioAcao';
 import EmitirCobranca from './EmitirCobranca';
 
@@ -53,12 +54,25 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
   const [erros, setErros] = useState<Record<string, string>>({});
   const [recusa, setRecusa] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  /* as armas para a demo: o que se sabe (negócio + fichas) e o que está na tela */
+  const [fichas, setFichas] = useState<FichaArmas[] | null>(null);
+  const [armas, setArmas] = useState<Armas | null>(null);
+  const [conhecidas, setConhecidas] = useState<Armas | null>(null);
+  const [editandoArmas, setEditandoArmas] = useState(false);
+  const [outroSistema, setOutroSistema] = useState(false);
+  const [jaTemPronto, setJaTemPronto] = useState(false);
   const dealId = client.id_hubspot ? String(client.id_hubspot) : null;
   const nome = client.empresa?.trim() || client.nome;
 
   useEffect(() => {
     if (!visivel) return;
     setDestino(destinoInicial); setDigitado(preenchido ? { ...preenchido } : {}); setErros({}); setRecusa(null);
+    setArmas(null); setConhecidas(null); setEditandoArmas(false); setOutroSistema(false); setJaTemPronto(false); setFichas(null);
+    if (client.id) {
+      void supabase.from('fichas_de_rua').select('ocorrido_em, decisor_nome, decisor_papel, horario_dono, sistema, dor')
+        .eq('client_id', client.id).order('ocorrido_em', { ascending: false }).limit(10)
+        .then(({ data }) => setFichas((data ?? []) as FichaArmas[]), () => setFichas([]));
+    } else setFichas([]);
     if (!dealId) return;
     // Snapshot do Cockpit (mapa_negocio) + leitura AO VIVO do HubSpot (ler_negocio):
     // o snapshot atrasa até 2 h e pedia de novo o que o registro acabou de gravar
@@ -72,9 +86,18 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
         ? supabase.functions.invoke('hubspot-sync', { body: { type: 'ler_negocio', id_hubspot: dealId, owner_id: String(client.vendedor_id_hubspot) } })
             .then(({ data }) => ((data as { propriedades?: Record<string, unknown> } | null)?.propriedades ?? {}), () => ({}))
         : Promise.resolve({}),
-    ]).then(([snap, aoVivo]) => { if (vivo) setJaTem({ ...base, ...snap, ...aoVivo }); });
+    ]).then(([snap, aoVivo]) => { if (vivo) { setJaTem({ ...base, ...snap, ...aoVivo }); setJaTemPronto(true); } });
     return () => { vivo = false; };
   }, [visivel, dealId, destinoInicial]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const comArmas = !!destino && ETAPAS_COM_ARMAS.includes(destino) && !!dealId;
+  /* as armas nascem quando o negócio e as fichas chegaram: preenchidas com o que se sabe */
+  useEffect(() => {
+    if (!comArmas || armas || !jaTemPronto || fichas == null) return;
+    const k = armasConhecidas(jaTem, fichas);
+    setArmas(k); setConhecidas(k);
+    setOutroSistema(!!k.sistema && !(SISTEMAS as readonly string[]).includes(k.sistema));
+  }, [comArmas, armas, jaTemPronto, fichas, jaTem]);
 
   const exigidos = destino
     ? [...(PROPS_OBRIGATORIAS_POR_ETAPA[destino] ?? []),
@@ -92,7 +115,19 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
     try {
       await negocioAcao(corpo);
       onMudou(destino, propriedades as Record<string, unknown>);
-      Toast.mostrar(`${nome} foi para ${ROTULO_ETAPA[destino]} · HubSpot + Cockpit`, 'ok');
+      /* AS ARMAS VÃO DEPOIS DA ETAPA, pelas rotas da ficha de visita: a etapa é o que o
+         executivo pediu; as armas são complemento e não podem segurá-la */
+      const envios = comArmas && armas && conhecidas
+        ? enviosDasArmas({ dealId, ownerId: client.vendedor_id_hubspot ? String(client.vendedor_id_hubspot) : null, negocio: jaTem, armas,
+            decisorNoNegocio: !armas.decisor || armas.decisor === conhecidas.decisor })
+        : [];
+      const faltam = comArmas && armas ? armasQueFaltam(armas) : [];
+      Toast.mostrar(`${nome} foi para ${ROTULO_ETAPA[destino]} · HubSpot + Cockpit${envios.length ? ' · armas no negócio' : ''}${faltam.length ? ` · falta ${faltam.join(', ')}` : ''}`, 'ok');
+      for (const e of envios) {
+        void supabase.functions.invoke('hubspot-sync', { body: e.corpo }).then(({ error }) => {
+          if (error) Toast.mostrar(`${e.rotulo} não foi ao HubSpot: ${error.message}`, 'erro');
+        });
+      }
       onFechar();
     } catch (err) {
       if (ehErroDeRede(err)) {
@@ -199,6 +234,8 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
           <View style={{ gap: 12 }}>
             <Text style={s.ajuda}>{exigidos.length ? 'Esta etapa pede:' : 'Nada a preencher — é só confirmar.'}</Text>
             {exigidos.map(campo)}
+            {comArmas && <SecaoArmas armas={armas} editando={editandoArmas} aoEditar={() => setEditandoArmas(true)}
+              outroSistema={outroSistema} aoOutro={setOutroSistema} mudar={(m) => setArmas((a) => (a ? { ...a, ...m } : a))} />}
             {!!recusa && <Text style={s.recusa}>{`O servidor recusou: ${recusa}`}</Text>}
           </View>
         )}
@@ -207,7 +244,62 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
   );
 }
 
+/* ══ AS ARMAS PARA A DEMO ══ completo vira uma linha; faltando, os chips aparecem e o aviso
+   diz o que o gestor não vai ver. Nunca trava o Mover. */
+function SecaoArmas({ armas, editando, aoEditar, outroSistema, aoOutro, mudar }: {
+  armas: Armas | null; editando: boolean; aoEditar: () => void; outroSistema: boolean;
+  aoOutro: (v: boolean) => void; mudar: (m: Partial<Armas>) => void;
+}) {
+  if (!armas) return <View style={s.armas}><Text style={s.armasTitulo}>Armas para a demo</Text><ActivityIndicator /></View>;
+  const faltam = armasQueFaltam(armas);
+  const chip = (chave: string, rotulo: string, ativo: boolean, aoTocar: () => void) => (
+    <Pressable key={chave} accessibilityRole="button" accessibilityState={{ selected: ativo }} onPress={aoTocar} style={[s.chip, ativo && s.chipAtivo]}>
+      <Text style={[s.chipTexto, ativo && s.chipTextoAtivo]}>{rotulo}</Text>
+    </Pressable>
+  );
+  if (!faltam.length && !editando) {
+    return (
+      <View style={s.armas}>
+        <Text style={s.armasTitulo}>Armas para a demo</Text>
+        <View style={s.armasResumo}>
+          <Text style={s.armasResumoTexto} numberOfLines={2}>{resumoDasArmas(armas)}</Text>
+          <Pressable accessibilityRole="button" onPress={aoEditar} style={s.armasEditar}><Text style={s.armasEditarTexto}>Editar</Text></Pressable>
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View style={s.armas}>
+      <Text style={s.armasTitulo}>Armas para a demo</Text>
+      <Text style={s.ajuda}>O que você sabe do restaurante. Vai para o negócio e para o gestor.</Text>
+      <Text style={s.campoRotulo}>Sistema que usa hoje</Text>
+      <View style={s.chips}>
+        {SISTEMAS.map((sis) => chip(sis, sis, sis === 'Outro' ? outroSistema : !outroSistema && armas.sistema === sis, () => {
+          if (sis === 'Outro') { aoOutro(true); mudar({ sistema: '' }); } else { aoOutro(false); mudar({ sistema: armas.sistema === sis ? '' : sis }); }
+        }))}
+      </View>
+      {outroSistema && (
+        <TextInput style={s.input} value={armas.sistema} onChangeText={(v) => mudar({ sistema: v })} placeholder="Qual sistema? (ex.: Colibri, Anota Aí)" placeholderTextColor="#8B919C" />
+      )}
+      <Text style={s.campoRotulo}>Maior dor</Text>
+      <View style={s.chips}>{GARGALOS.map((g) => chip(g, g, armas.dor === g, () => mudar({ dor: armas.dor === g ? '' : g })))}</View>
+      <Text style={s.campoRotulo}>Quem decide</Text>
+      <TextInput style={s.input} value={armas.decisor} onChangeText={(v) => mudar({ decisor: v })} placeholder="Nome de quem decide" placeholderTextColor="#8B919C" />
+      <View style={s.chips}>{PAPEIS.map((p) => chip(p, p, armas.papel === p, () => mudar({ papel: armas.papel === p ? '' : p })))}</View>
+      <Text style={s.campoRotulo}>Melhor horário para achar</Text>
+      <View style={s.chips}>{HORARIOS.map((h) => chip(h.valor, h.rotulo, armas.horario === h.valor, () => mudar({ horario: armas.horario === h.valor ? '' : h.valor })))}</View>
+      {!!faltam.length && <Text style={s.aviso}>{`Falta ${faltam.join(', ')}. Dá para mover assim — o gestor vê o que ficou faltando.`}</Text>}
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
+  armas: { gap: 8, marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
+  armasTitulo: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
+  armasResumo: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingHorizontal: 12, borderRadius: 12, backgroundColor: 'var(--surface-2)' },
+  armasResumoTexto: { flex: 1, fontSize: 14, fontWeight: '700', color: 'var(--text)' },
+  armasEditar: { minHeight: 44, minWidth: 64, alignItems: 'center', justifyContent: 'center' },
+  armasEditarTexto: { fontSize: 14, fontWeight: '800', color: 'var(--brand-text)' },
   titulo: { fontSize: 18, fontWeight: '800', color: 'var(--text)', paddingHorizontal: 16, paddingVertical: 12 },
   corpo: { paddingHorizontal: 16, paddingBottom: 16, gap: 4 },
   linha: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, paddingVertical: 6 },
