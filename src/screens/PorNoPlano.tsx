@@ -139,15 +139,20 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
       /* TIRAR DESFAZ O QUE O PÔR FEZ (teste de 06/10): a reunião agendada naquele dia sai pelo mesmo
          caminho do Cancelar da ficha (o evento do Google vai junto). A tarefa do HubSpot não se
          conclui por aqui (concluir é toque): o aviso manda fechar na Agenda. */
-      const ini = new Date(`${antes.dia}T00:00:00-03:00`).toISOString();
-      const fim = new Date(`${antes.dia}T23:59:59-03:00`).toISOString();
-      const { data: ms } = await supabase.from('client_meetings').select('*').eq('client_id', client.id).eq('created_by', uid)
-        .eq('status', 'agendada').gte('scheduled_at', ini).lte('scheduled_at', fim);
-      for (const m of (ms ?? []) as ClientMeeting[]) await deleteMeeting.mutateAsync(m);
+      /* velocidade: o plano já saiu; a reunião e o evento do Google saem em segundo plano */
       avisarQueOPlanoMudou();
-      const extra = (ms ?? []).length ? ' · reunião cancelada' : '';
-      Toast.mostrar(`${nome} saiu do plano de ${nomeDoDia(antes.dia)}${extra}${client.id_hubspot && antes.hora ? ' · a tarefa do HubSpot continua: feche na Agenda' : ''}`, 'ok');
+      Toast.mostrar(`${nome} saiu do plano de ${nomeDoDia(antes.dia)}${client.id_hubspot && antes.hora ? ' · a tarefa do HubSpot continua: feche na Agenda' : ''}`, 'ok');
       onFechar();
+      const dia = antes.dia;
+      void (async () => {
+        const ini = new Date(`${dia}T00:00:00-03:00`).toISOString();
+        const fim = new Date(`${dia}T23:59:59-03:00`).toISOString();
+        const { data: ms, error } = await supabase.from('client_meetings').select('*').eq('client_id', client.id).eq('created_by', uid)
+          .eq('status', 'agendada').gte('scheduled_at', ini).lte('scheduled_at', fim);
+        if (error) throw error;
+        for (const m of (ms ?? []) as ClientMeeting[]) await deleteMeeting.mutateAsync(m);
+        if ((ms ?? []).length) avisarQueOPlanoMudou();
+      })().catch((e) => Toast.mostrar(`${nome} saiu do plano, mas a reunião desse dia não foi cancelada: ${String((e as Error)?.message ?? e)}`, 'aviso'));
     }
     catch (e) { Toast.mostrar(`Não saiu do plano: ${String((e as Error)?.message ?? e)}`, 'erro'); }
     finally { setEnviando(false); }
