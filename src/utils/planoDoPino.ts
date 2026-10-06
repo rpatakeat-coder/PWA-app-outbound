@@ -64,6 +64,8 @@ export type PedidoDoPlano = {
   antes: OndeEsta | null;
   /** cria a reunião/ligação na Agenda do app (useMeetings.addMeeting), quando é o caso. */
   criarCompromisso?: (p: { tipo: 'reuniao' | 'follow_up'; acao: AcaoId; quando: string }) => Promise<void>;
+  /** remarca o compromisso que já existe no dia antigo (true = remarcou; aí não se cria outro). */
+  remarcarCompromisso?: (p: { de: string; quando: string }) => Promise<boolean>;
 };
 
 const isoBRT = (dia: string, hora: string) => new Date(`${dia}T${hora}:00-03:00`).toISOString();
@@ -117,7 +119,9 @@ export async function porNoPlano(p: PedidoDoPlano): Promise<{ ordem: number | nu
   if (p.hora) {
     const quando = isoBRT(p.dia, p.hora);
     if ((p.acao === 'reuniao' || p.acao === 'demo' || p.acao === 'ligar') && p.criarCompromisso) {
-      await p.criarCompromisso({ tipo: p.acao === 'ligar' ? 'follow_up' : 'reuniao', acao: p.acao, quando });
+      /* mover uma Demo com hora REMARCA a reunião que já existia; não cria a segunda */
+      const remarcou = p.antes && p.remarcarCompromisso ? await p.remarcarCompromisso({ de: p.antes.dia, quando }) : false;
+      if (!remarcou) await p.criarCompromisso({ tipo: p.acao === 'ligar' ? 'follow_up' : 'reuniao', acao: p.acao, quando });
     }
     if (p.client.id_hubspot && remarcadas > 0) {
       hubspot = `tarefa remarcada para ${p.dia.slice(8, 10)}/${p.dia.slice(5, 7)} ${p.hora}`;

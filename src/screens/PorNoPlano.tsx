@@ -12,7 +12,8 @@ import { Painel } from '../components/Painel';
 import { Toast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
 import { useMeetings } from '../hooks/useMeetings';
-import type { Client } from '../types/client';
+import { supabase } from '../integrations/supabase/client';
+import type { Client, ClientMeeting } from '../types/client';
 import { ACOES, LIMITE_DO_DIA, acaoPorId, acaoSugerida, diaComEspaco, diaSugerido, propositoDaAcao, type AcaoId } from '../utils/acoesDoPlano';
 import { ehErroDeRede } from '../utils/filaOffline';
 import { diasPlanejaveis, rotuloDoDia, vaiAoCockpit } from '../utils/planoNoMapa';
@@ -39,7 +40,7 @@ const ordinal = (n: number) => `${n}ª`;
 
 export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor, onFechar, onFeito, acaoInicial }: Props) {
   const { user } = useAuth();
-  const { addMeeting } = useMeetings();
+  const { addMeeting, rescheduleMeeting } = useMeetings();
   const uid = user?.id ?? null;
   const hoje = agoraBRT().toISOString().slice(0, 10);
   const horaAgora = agoraBRT().getUTCHours();
@@ -100,6 +101,16 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
         uid, client, dia: diaFinal, acao, hora, antes,
         criarCompromisso: async ({ tipo, acao: ac, quando }) => {
           await addMeeting.mutateAsync({ form: { client_id: client.id, scheduled_at: quando, duration_minutes: 30, observacoes: null, type: tipo, acao: ac }, client });
+        },
+        remarcarCompromisso: async ({ de, quando }) => {
+          const ini = new Date(`${de}T00:00:00-03:00`).toISOString();
+          const fim = new Date(`${de}T23:59:59-03:00`).toISOString();
+          const { data } = await supabase.from('client_meetings').select('*').eq('client_id', client.id).eq('created_by', uid!)
+            .eq('status', 'agendada').gte('scheduled_at', ini).lte('scheduled_at', fim).order('scheduled_at').limit(1);
+          const m = (data ?? [])[0] as ClientMeeting | undefined;
+          if (!m) return false;
+          await rescheduleMeeting.mutateAsync({ meeting: m, client, scheduled_at: quando, duration_minutes: m.duration_minutes ?? 30 });
+          return true;
         },
       });
       const onde = a.ehParada ? `${r.ordem ? ordinal(r.ordem) + ' de ' : ''}${nomeDoDia(diaFinal)}` : `Ligar · ${nomeDoDia(diaFinal)}`;
