@@ -114,10 +114,15 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
         },
       });
       const onde = a.ehParada ? `${r.ordem ? ordinal(r.ordem) + ' de ' : ''}${nomeDoDia(diaFinal)}` : `Ligar · ${nomeDoDia(diaFinal)}`;
-      /* A TAREFA VAI JUNTO: mover (ou mudar a hora) remarca a tarefa aberta do negócio no HubSpot */
-      const extra = r.avisoHubspot ? ` · ${r.avisoHubspot}` : r.remarcadas ? ` · tarefa do HubSpot remarcada${r.remarcadas > 1 ? ` (${r.remarcadas})` : ''}` : r.hubspot ? ` · HubSpot: ${r.hubspot}` : '';
-      Toast.mostrar(`${nome} · ${onde} · ${vaiAoCockpit(client) ? 'já no Planejamento do Cockpit' : 'na rota do app'}${extra}`, r.avisoHubspot ? 'aviso' : 'ok');
+      /* O PLANO JÁ ESTÁ GRAVADO: a folha fecha agora. Agenda do app, Google e HubSpot terminam em
+         segundo plano; se algum falhar, um segundo aviso diz o quê (nada falha calado). */
+      const vaiAoCrm = !!client.id_hubspot && (!!hora || (!!antes && antes.dia !== diaFinal));
+      Toast.mostrar(`${nome} · ${onde} · ${vaiAoCockpit(client) ? 'já no Planejamento do Cockpit' : 'na rota do app'}${vaiAoCrm ? ' · HubSpot a caminho' : ''}`, 'ok');
       avisarQueOPlanoMudou();
+      void r.depois.then((d) => {
+        avisarQueOPlanoMudou();
+        if (d.avisos.length) Toast.mostrar(`${nome}: o plano está gravado, mas ${d.avisos.join(' e ')}`, 'aviso');
+      });
       onFeito?.(diaFinal);
       onFechar();
     } catch (e) {
