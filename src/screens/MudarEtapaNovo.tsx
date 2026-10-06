@@ -28,7 +28,7 @@ import {
   ROTULO_PROP, TIPO_CAMPO, montarPropriedades, movimentoPermitido,
 } from '../utils/fichaDeRua';
 import {
-  SISTEMAS_ARMAS, armasConhecidas, armasQueFaltam, enviosDasArmas, fichasDaFolha, registroDoAvanco, rotuloDasFaltas,
+  SISTEMAS_ARMAS, armasConhecidas, chipDoSistema, armasQueFaltam, enviosDasArmas, fichasDaFolha, registroDoAvanco, rotuloDasFaltas,
   type Armas, type FichaArmas,
 } from '../utils/armasDaDemo';
 import { negocioAcao } from '../utils/negocioAcao';
@@ -123,7 +123,7 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
     if (!comArmas || armas || !jaTemPronto || todasFichas == null) return;
     const k = armasConhecidas(jaTem, todasFichas);
     setArmas(k); setConhecidas(k);
-    setOutroSistema(!!k.sistema && !(SISTEMAS_ARMAS as readonly string[]).includes(k.sistema));
+    setOutroSistema(chipDoSistema(k.sistema) === 'Outro');
   }, [comArmas, armas, jaTemPronto, todasFichas, jaTem]);
 
   const exigidos = destino
@@ -419,7 +419,7 @@ function SecaoArmas({ armas, etiqueta, outroSistema, aoOutro, mudar }: {
     <View style={s.armas}>
       {rotulo('sistema', 'Sistema que usa hoje')}
       <View style={s.chips}>
-        {SISTEMAS_ARMAS.map((sis) => chip(sis, sis, sis === 'Outro' ? outroSistema : !outroSistema && armas.sistema === sis, () => {
+        {SISTEMAS_ARMAS.map((sis) => chip(sis, sis, sis === 'Outro' ? outroSistema : !outroSistema && chipDoSistema(armas.sistema) === sis, () => {
           if (sis === 'Outro') { aoOutro(true); mudar({ sistema: '' }); } else { aoOutro(false); mudar({ sistema: armas.sistema === sis ? '' : sis }); }
         }))}
       </View>

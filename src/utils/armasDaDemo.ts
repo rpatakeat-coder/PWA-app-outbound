@@ -185,3 +185,19 @@ export function rotuloDasFaltas(a: Armas): string {
   const R: Record<string, string> = { sistema: 'sistema', dor: 'dor', decisor: 'decisor', horario: 'horário' };
   return (['sistema', 'dor', 'decisor', 'horario'] as const).filter((k) => !a[k]).map((k) => R[k]).join(', ');
 }
+
+/** O chip da folha para um sistema como veio ("Caderno" → Nenhum, "SAIPOS" → Saipos). O valor
+ *  cru continua o mesmo até o executivo tocar num chip: o HubSpot não é reescrito à toa. */
+export function chipDoSistema(v: unknown): string | null {
+  const s = String(v ?? '').trim();
+  if (!s) return null;
+  const n = normalizarSistema(s);
+  return n && n !== 'Outro' && (SISTEMAS_ARMAS as readonly string[]).includes(n) ? n : 'Outro';
+}
+
+/** O nome que a tela mostra: o normalizado quando é conhecido, senão o que foi escrito. */
+export function nomeDoSistema(v: unknown): string {
+  const s = String(v ?? '').trim();
+  const n = normalizarSistema(s);
+  return n && n !== 'Outro' ? n : s;
+}

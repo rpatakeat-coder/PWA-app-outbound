@@ -10,7 +10,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { supabase } from '../integrations/supabase/client';
 import type { Client } from '../types/client';
-import { argumentoDoSistema, armasConhecidas, fichasDaFolha, linhaDaPraca, type Armas, type DadosDaPraca, type FichaArmas } from '../utils/armasDaDemo';
+import { argumentoDoSistema, armasConhecidas, nomeDoSistema, fichasDaFolha, linhaDaPraca, type Armas, type DadosDaPraca, type FichaArmas } from '../utils/armasDaDemo';
 import { ETAPA, HORARIOS } from '../utils/fichaDeRua';
 
 export const ETAPAS_DO_BLOCO: string[] = [ETAPA.decisor, ETAPA.demo, ETAPA.negociacao, ETAPA.pagamento];
@@ -61,7 +61,7 @@ export default function ArmasDoNegocio({ client, etapa, onCompletar }: { client:
   }
   const horario = HORARIOS.find((h) => h.valor === armas.horario)?.curto ?? '';
   const tiles: { rot: string; v: string }[] = [
-    { rot: 'Sistema hoje', v: armas.sistema },
+    { rot: 'Sistema hoje', v: nomeDoSistema(armas.sistema) },
     { rot: 'Maior dor', v: armas.dor },
     { rot: 'Quem decide', v: armas.decisor ? `${armas.decisor}${armas.papel ? ` · ${armas.papel.toLowerCase()}` : ''}` : '' },
     { rot: 'Achar o dono', v: horario },

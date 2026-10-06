@@ -1,5 +1,5 @@
 // Teste das armas para a demo. Roda: npx tsx src/utils/armasDaDemo.teste.ts
-import { argumentoDoSistema, armasConhecidas, armasQueFaltam, enviosDasArmas, fichasDaFolha, linhaDaPraca, normalizarSistema, registroDoAvanco, resumoDasArmas, rotuloDasFaltas } from './armasDaDemo';
+import { chipDoSistema, nomeDoSistema, argumentoDoSistema, armasConhecidas, armasQueFaltam, enviosDasArmas, fichasDaFolha, linhaDaPraca, normalizarSistema, registroDoAvanco, resumoDasArmas, rotuloDasFaltas } from './armasDaDemo';
 
 let falhas = 0;
 const ok = (c: unknown, m: string) => { console.log((c ? 'OK    ' : 'FALHA ') + m); if (!c) falhas++; };
@@ -71,6 +71,10 @@ ok(f2.sistema === 'Goomer' && f2.decisor === 'Ana' && f2.horario === 'noite_apos
 const reg = registroDoAvanco({ dealId: '7', execId: '9', etapa: 'Demo/Proposta', armas: { sistema: 'Saipos', dor: 'Fila', decisor: '', papel: '', horario: '' } });
 ok(reg.faltou.join() === 'decisor,horario' && reg.armas.sistema === 'Saipos' && reg.armas.decisor === null, 'faltou = o que ficou vazio; armas = o que se sabia');
 ok(rotuloDasFaltas({ sistema: 'Saipos', dor: 'Fila', decisor: '', papel: '', horario: '' }) === 'decisor, horário', 'o toast diz o que faltou');
+
+// o chip da folha segue o sistema normalizado, sem reescrever o valor
+ok(chipDoSistema('Caderno') === 'Nenhum' && chipDoSistema('SAIPOS') === 'Saipos' && chipDoSistema('Yooga') === 'Outro' && chipDoSistema('') === null, 'Caderno marca Nenhum; Yooga marca Outro');
+ok(nomeDoSistema('anotai') === 'Anota Aí' && nomeDoSistema('Sistema da casa') === 'Sistema da casa', 'o cartão mostra o nome normalizado ou o escrito');
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\narmas da demo: tudo certo');
