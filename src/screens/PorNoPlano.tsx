@@ -28,6 +28,8 @@ type Props = {
   onFechar: () => void;
   /** depois de gravar: o dia, para a Agenda abrir nele */
   onFeito?: (dia: string) => void;
+  /** o chip já escolhido por quem abriu (o "Reunião" ou o "Follow-up" da ficha) */
+  acaoInicial?: AcaoId;
 };
 
 const HORAS = ['09:00', '10:00', '11:00', '14:00', '15:00', '15:30', '16:00', '17:00'];
@@ -35,7 +37,7 @@ const SEMANA_LONGA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta
 const agoraBRT = () => new Date(Date.now() - 3 * 3600000);
 const ordinal = (n: number) => `${n}ª`;
 
-export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor, onFechar, onFeito }: Props) {
+export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor, onFechar, onFeito, acaoInicial }: Props) {
   const { user } = useAuth();
   const { addMeeting } = useMeetings();
   const uid = user?.id ?? null;
@@ -49,7 +51,7 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
   const [plano, setPlano] = useState<PlanoLido | null>(null);
   const [erroLeitura, setErroLeitura] = useState<string | null>(null);
   const [antes, setAntes] = useState<OndeEsta | null>(null);
-  const [acao, setAcao] = useState<AcaoId>(sugerida.id);
+  const [acao, setAcao] = useState<AcaoId>(acaoInicial ?? sugerida.id);
   const [dia, setDia] = useState<string | null>(null);
   const [hora, setHora] = useState<string | null>(null);
   const [outraHora, setOutraHora] = useState('');
@@ -58,7 +60,7 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
   useEffect(() => {
     if (!visivel || !uid) return;
     let vivo = true;
-    setPlano(null); setErroLeitura(null); setAntes(null); setAcao(sugerida.id); setHora(null); setOutraHora(''); setDia(null);
+    setPlano(null); setErroLeitura(null); setAntes(null); setAcao(acaoInicial ?? sugerida.id); setHora(null); setOutraHora(''); setDia(null);
     lerPlanoDosDias(uid, isos).then((p) => {
       if (!vivo) return;
       setPlano(p);
@@ -66,7 +68,7 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
       setAntes(onde);
       if (onde) {
         setDia(onde.dia);
-        if (onde.acao && acaoPorId(onde.acao)) setAcao(onde.acao as AcaoId);
+        if (!acaoInicial && onde.acao && acaoPorId(onde.acao)) setAcao(onde.acao as AcaoId);
         setHora(onde.hora);
       }
     }, (e) => { if (vivo) setErroLeitura(String((e as Error)?.message ?? e)); });

@@ -130,6 +130,7 @@ import { useAvisos } from './src/hooks/useAvisos';
 import FichaDeRua, { type CamposCadastro } from './src/screens/FichaDeRua';
 import MudarEtapaNovo from './src/screens/MudarEtapaNovo';
 import PorNoPlano from './src/screens/PorNoPlano';
+import type { AcaoId } from './src/utils/acoesDoPlano';
 import { ROTULO_ETAPA } from './src/utils/fichaDeRua';
 import { negocioAcao } from './src/utils/negocioAcao';
 import { textoNormalizado } from './src/utils/pinoP2';
@@ -4593,7 +4594,7 @@ function MainApp() {
   // Limpar o funil em lote: o negócio do cartão de onde se abriu ('' = nenhum marcado)
   const [limparFunilCom, setLimparFunilCom] = useState<string | null>(null);
   // Pôr no plano (um plano só, 06/10/26): o pino que abriu a folha
-  const [porNoPlanoPara, setPorNoPlanoPara] = useState<{ client: Client; etapaAtual: string | null; tipoPino: string | null; cor: string } | null>(null);
+  const [porNoPlanoPara, setPorNoPlanoPara] = useState<{ client: Client; etapaAtual: string | null; tipoPino: string | null; cor: string; acao?: AcaoId } | null>(null);
   const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null; soArmas?: boolean } | null>(null);
   const codigoDaEtapa = (c: Client): string | null => {
     if (!contextoPino) return null;
@@ -4601,6 +4602,15 @@ function MainApp() {
     const pelaTabela = chave ? contextoPino.etapaDePara.get(chave) ?? null : null;
     const peloSnapshot = c.id_hubspot ? contextoPino.tempoPorNegocio.get(String(c.id_hubspot))?.etapaCodigo ?? null : null;
     return pelaTabela ?? peloSnapshot;
+  };
+  /* UM PLANO SÓ (06/10/26): o "Pôr no plano" abre daqui, do cartão e da ficha (onde ficava o
+     Agendar). Fecha o que estiver aberto antes: o history.back() do Painel que fecha mataria o novo. */
+  const abrirPorNoPlano = (c: Client, acao?: AcaoId) => {
+    if (!contextoPino) return;
+    const p = classificarPino(c, contextoPino);
+    const atual = codigoDaEtapa(c);
+    setSelectedClient(null);
+    setTimeout(() => setPorNoPlanoPara({ client: c, etapaAtual: atual, tipoPino: p.tipo ?? null, cor: p.cor, acao }), 350);
   };
   const aplicarEtapaNoLead = (clientId: string, codigo: string, reabrir?: Client, etapaAntes?: string | null) => {
     // O HubSpot já gravou. O cartão e o pino mudam NA HORA (cache local + cartão
@@ -5694,13 +5704,7 @@ function MainApp() {
           setTimeout(() => setEtapaNovaPara({ client: c, etapaAtual: atual, destinoInicial: destino, preenchido: preenchido ?? null }), 350);
         },
         // Pôr no plano (06/10/26): o mapa planeja. Só o plano de quem está logado.
-        onPorNoPlano: isViewer || isMonitoringRoute ? undefined : () => {
-          const c = selectedClient;
-          const p = classificarPino(c, contextoPino);
-          const atual = codigoDaEtapa(c);
-          setSelectedClient(null);
-          setTimeout(() => setPorNoPlanoPara({ client: c, etapaAtual: atual, tipoPino: p.tipo ?? null, cor: p.cor }), 350);
-        },
+        onPorNoPlano: isViewer || isMonitoringRoute ? undefined : () => abrirPorNoPlano(selectedClient),
         // Suas armas pra Demo (06/10/26): "falta · tocar para completar" abre a folha só das armas.
         onCompletarArmas: isViewer ? undefined : () => {
           const c = selectedClient;
@@ -5784,8 +5788,12 @@ function MainApp() {
       onEditLocation={isViewer ? undefined : () => { setEditingLocationFor(selectedClient); setSelectedClient(null); }}
       onMarkVisited={isViewer ? undefined : () => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
       onDismissContaAlvo={isViewer ? undefined : () => handleDismissContaAlvo(selectedClient, () => setSelectedClient(null))}
-      onScheduleMeeting={isViewer ? undefined : () => { setSchedulingFor({ client: selectedClient, type: 'reuniao' }); setSelectedClient(null); }}
-      onFollowUp={isViewer ? undefined : () => { setSchedulingFor({ client: selectedClient, type: 'follow_up' }); setSelectedClient(null); }}
+      /* UM PLANO SÓ (Julyan 06/10: "substituir por pôr no plano"): no mapa novo, o Agendar e o
+         Marcar follow-up da ficha abrem o Pôr no plano com o chip já escolhido. Reunião com hora
+         continua criando o compromisso (e o evento); sem hora, vira parada do plano. */
+      planoUnico={modoNovo && !!contextoPino && !isMonitoringRoute}
+      onScheduleMeeting={isViewer ? undefined : modoNovo && contextoPino && !isMonitoringRoute ? () => abrirPorNoPlano(selectedClient, 'reuniao') : () => { setSchedulingFor({ client: selectedClient, type: 'reuniao' }); setSelectedClient(null); }}
+      onFollowUp={isViewer ? undefined : modoNovo && contextoPino && !isMonitoringRoute ? () => abrirPorNoPlano(selectedClient, 'follow') : () => { setSchedulingFor({ client: selectedClient, type: 'follow_up' }); setSelectedClient(null); }}
       onVerNoPlano={(dia) => { setSelectedClient(null); setAgendaDiaInicial(dia); setTab('agenda'); }}
       onRescheduleMeeting={isViewer ? undefined : (m) => { setSchedulingFor({ client: selectedClient, type: m.type ?? 'reuniao', reschedule: m }); setSelectedClient(null); }}
       onCancelMeeting={isViewer ? undefined : (m) => confirmCancelMeeting(m)}
@@ -9754,6 +9762,7 @@ function MainApp() {
           etapaCodigo={porNoPlanoPara.etapaAtual}
           tipoPino={porNoPlanoPara.tipoPino}
           cor={porNoPlanoPara.cor}
+          acaoInicial={porNoPlanoPara.acao}
           onFechar={() => setPorNoPlanoPara(null)}
         />
       )}
@@ -10132,6 +10141,7 @@ function ClientBottomSheet({
   onDismissContaAlvo,
   onScheduleMeeting,
   onFollowUp,
+  planoUnico,
   onVerNoPlano,
   onChangeStage,
   onRescheduleMeeting,
@@ -10167,6 +10177,8 @@ function ClientBottomSheet({
   onDismissContaAlvo?: () => void;
   onScheduleMeeting?: () => void;
   onFollowUp?: () => void;
+  /** Mapa novo: os botões de agendar viram "Pôr no plano" (um plano só, 06/10/26). */
+  planoUnico?: boolean;
   /** O lead está no plano de um dia: abre esse dia na Agenda (05/10/2026). */
   onVerNoPlano?: (dia: string) => void;
   onChangeStage?: () => void;
@@ -10680,14 +10692,14 @@ function ClientBottomSheet({
           {onScheduleMeeting && (
             <TouchableOpacity
               accessibilityRole="button"
-              accessibilityLabel="Agendar"
+              accessibilityLabel={planoUnico ? 'Pôr no plano' : 'Agendar'}
               style={layout.ehDesktop ? styles.drawerAcaoVazada : styles.fichaAcaoMobileVazada}
               {...(layout.ehDesktop ? ds({ hover: 'tintred', trans: '1' }) : {})}
               onPress={onScheduleMeeting}
             >
               <IconCalendar width={24} height={24} fill={iconColors.brandText} />
               <Text style={layout.ehDesktop ? styles.drawerAcaoVazadaTexto : styles.fichaAcaoMobileVazadaTexto}>
-                Agendar
+                {planoUnico ? 'Pôr no plano' : 'Agendar'}
               </Text>
             </TouchableOpacity>
           )}
@@ -11691,15 +11703,15 @@ function ClientBottomSheet({
             )}
             {/* Agendar reuniao: so de "Conversa com decisor" em diante no
                 funil — antes disso a cadencia ainda nao pede demo. */}
-            {onScheduleMeeting && canScheduleMeeting && (
+            {onScheduleMeeting && (canScheduleMeeting || planoUnico) && (
               <TouchableOpacity
                 style={styles.scheduleButton}
                 onPress={onScheduleMeeting}
               >
-                <IconText Icone={IconCalendar} style={styles.scheduleButtonText} tone="onSurface">Agendar reunião</IconText>
+                <IconText Icone={IconCalendar} style={styles.scheduleButtonText} tone="onSurface">{planoUnico ? 'Pôr no plano · Reunião ou Demo' : 'Agendar reunião'}</IconText>
               </TouchableOpacity>
             )}
-            {onScheduleMeeting && !canScheduleMeeting && (
+            {onScheduleMeeting && !canScheduleMeeting && !planoUnico && (
               <Text style={[styles.meetingsEmpty, { fontStyle: 'italic' }]}>
                 Agendamento libera na etapa "Conversa com decisor".
               </Text>
@@ -11723,7 +11735,7 @@ function ClientBottomSheet({
                 style={styles.followUpButton}
                 onPress={onFollowUp}
               >
-                <IconText Icone={IconRefresh} style={styles.followUpButtonText} tone="onSurface">Marcar follow-up</IconText>
+                <IconText Icone={IconRefresh} style={styles.followUpButtonText} tone="onSurface">{planoUnico ? 'Pôr no plano · Follow-up' : 'Marcar follow-up'}</IconText>
               </TouchableOpacity>
             )}
           </View>
