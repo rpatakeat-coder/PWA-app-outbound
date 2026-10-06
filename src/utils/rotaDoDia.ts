@@ -66,6 +66,18 @@ export function conflito(paradas: ParadaRota[], hs: Horario[]): { indice: number
   return null;
 }
 
+/** Trecho longo demais para ser o mesmo dia de rua (auditoria 06/10/26: um plano com Vila Velha
+ *  e Flamengo virava "≈ 22h37 de rua · 540 km" e horários que passavam da meia-noite). */
+export const KM_OUTRA_CIDADE = 120;
+export function ehOutraCidade(l: { m: number } | null | undefined): boolean {
+  return !!l && l.m / 1000 > KM_OUTRA_CIDADE;
+}
+/** O dia tem paradas em cidades diferentes: horas de rua e horário estimado deixam de valer. */
+export function temOutraCidade(paradas: ParadaRota[]): boolean {
+  for (let i = 1; i < paradas.length; i++) if (ehOutraCidade(perna(paradas[i - 1].ponto, paradas[i].ponto))) return true;
+  return false;
+}
+
 export function resumo(paradas: ParadaRota[], hs: Horario[]) {
   let m = 0;
   for (let i = 1; i < paradas.length; i++) m += perna(paradas[i - 1].ponto, paradas[i].ponto)?.m ?? 0;

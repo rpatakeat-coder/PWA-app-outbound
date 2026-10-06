@@ -20,7 +20,7 @@ import { useClientSearch } from '../hooks/useClients';
 import { compromissosDoDia, type Compromisso } from '../utils/agendaNovo';
 import { lerSemanaDoPlano, PROPOSITOS } from '../utils/semanaDoPlano';
 import { montarPreparo, usePreparo } from '../utils/preparo';
-import { conflito, duracao, encaixar, hhmm, horarios, kmTexto, melhorPosicao, metros, perna, resumo, type ParadaRota, type Ponto } from '../utils/rotaDoDia';
+import { conflito, duracao, ehOutraCidade, encaixar, hhmm, horarios, kmTexto, melhorPosicao, metros, perna, resumo, temOutraCidade, type ParadaRota, type Ponto } from '../utils/rotaDoDia';
 import type { LugarPerto } from '../utils/googlePerto';
 import type { Client, ClientMeeting } from '../types/client';
 import {
@@ -309,7 +309,9 @@ export default function AgendaPC(props: Props) {
   }, [rota]);
   const hs = useMemo(() => horarios(rota, inicio), [rota, inicio]);
   const res = resumo(rota, hs);
-  const conf = passado ? null : conflito(rota, hs);
+  /* paradas em cidades diferentes: horas de rua e horário estimado deixam de valer */
+  const outraCidade = useMemo(() => temOutraCidade(rota), [rota]);
+  const conf = passado || outraCidade ? null : conflito(rota, hs);
 
   // ---- dia passado: a prova de cada visita ----
   const visitasQ = useQuery({
@@ -543,9 +545,9 @@ export default function AgendaPC(props: Props) {
               <>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   {i.fixo ? <IconLock width={12} height={12} fill={conflitoAqui ? '#B45309' : cores.muted} /> : null}
-                  <Text style={[s.hora, conflitoAqui && { color: 'var(--ambar-texto)' }]}>{i.fixo ?? (h ? hhmm(h.chega) : '')}</Text>
+                  <Text style={[s.hora, conflitoAqui && { color: 'var(--ambar-texto)' }]}>{i.fixo ?? (h && !outraCidade ? hhmm(h.chega) : '—')}</Text>
                 </View>
-                <Text style={s.horaSub}>{feita ? 'feita' : i.fixo ? (i.compromisso ? 'marcado' : 'fixado') : 'estimado'}</Text>
+                <Text style={s.horaSub}>{feita ? 'feita' : i.fixo ? (i.compromisso ? 'marcado' : 'fixado') : outraCidade ? 'sem estimativa' : 'estimado'}</Text>
               </>
             )}
           </View>
@@ -553,7 +555,7 @@ export default function AgendaPC(props: Props) {
             <Pressable accessibilityRole="button" onPress={() => props.aoRemarcar([c])} style={s.botaoPorPeq}><Text style={s.botaoPorTexto}>Remarcar</Text></Pressable>
           )}
         </Pressable>
-        {leg && <Text style={s.perna}>{`${leg.min} min · ${kmTexto(leg.m)}`}</Text>}
+        {leg && <Text style={s.perna}>{ehOutraCidade(leg) ? `outra cidade · ${kmTexto(leg.m)}` : `${leg.min} min · ${kmTexto(leg.m)}`}</Text>}
       </div>
     );
   };
@@ -596,7 +598,9 @@ export default function AgendaPC(props: Props) {
   const resumoTexto = passado
     ? `${itens.filter((i) => i.estado === 'feita' || provaDe(i.client)).length} de ${itens.length} visitadas · ${comProva} com prova de GPS · ${kmTexto((rodado?.km ?? 0) * 1000)} rodados`
     : itens.length
-      ? `${itens.length} ${itens.length === 1 ? 'parada' : 'paradas'} · meta ${meta} · ≈ ${duracao(res.minutos)} de rua · ${kmTexto(res.km * 1000)} · ${hhmm(res.inicio!)} → ${hhmm(res.fim!)}`
+      ? (outraCidade
+        ? `${itens.length} ${itens.length === 1 ? 'parada' : 'paradas'} · meta ${meta} · paradas em cidades diferentes · confira o plano`
+        : `${itens.length} ${itens.length === 1 ? 'parada' : 'paradas'} · meta ${meta} · ≈ ${duracao(res.minutos)} de rua · ${kmTexto(res.km * 1000)} · ${hhmm(res.inicio!)} → ${hhmm(res.fim!)}`)
       : compromissos.length
         ? `Meta de ${meta} visitas · ${compromissos.length} ${compromissos.length === 1 ? 'compromisso marcado' : 'compromissos marcados'}, nenhuma parada`
         : `Meta de ${meta} visitas · nada marcado ainda`;

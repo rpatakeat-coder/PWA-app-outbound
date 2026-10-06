@@ -1,7 +1,7 @@
 // Teste da conta da rota do dia (Agenda no computador).
 //
 // Rode com:  npx tsx src/utils/rotaDoDia.teste.ts
-import { conflito, encaixar, horarios, hhmm, melhorPosicao, perna, resumo, type ParadaRota } from './rotaDoDia';
+import { conflito, encaixar, horarios, hhmm, melhorPosicao, perna, resumo, temOutraCidade, type ParadaRota } from './rotaDoDia';
 
 let falhas = 0;
 const ok = (c: boolean, m: string) => {
@@ -52,6 +52,11 @@ ok(melhorPosicao([], meio).indice === 0, 'dia vazio: entra em primeiro');
 // Parada sem coordenada não quebra a conta.
 const semPonto: ParadaRota[] = [P('a', 0), { id: 'x', ponto: null, fixo: null }, P('b', 1)];
 ok(horarios(semPonto, 540).length === 3 && encaixar(semPonto, 540).length === 3, 'parada sem coordenada entra com 10 min de caminho e não some');
+
+// paradas em cidades diferentes (auditoria 06/10/26: Vila Velha + Flamengo viravam 540 km e 22h de rua)
+const vv = { latitude: -20.33, longitude: -40.29 }, rio = { latitude: -22.93, longitude: -43.17 };
+ok(temOutraCidade([{ id: 'a', ponto: vv, fixo: null }, { id: 'b', ponto: rio, fixo: null }]), 'Vila Velha → Rio é outra cidade: sem horas de rua inventadas');
+ok(!temOutraCidade([{ id: 'a', ponto: vv, fixo: null }, { id: 'b', ponto: { latitude: -20.35, longitude: -40.31 }, fixo: null }]), 'paradas no mesmo bairro seguem com a estimativa');
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\ntudo certo');
