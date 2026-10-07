@@ -249,8 +249,15 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
                       </Pressable>
                     );
                   })}
-                  <TextInput style={[s.pilula, s.outraHora, hora && !HORAS.includes(hora) && s.pilulaAtiva]} value={outraHora} placeholder="outra" placeholderTextColor="#8B919C" maxLength={5}
-                    onChangeText={(v) => { const t = v.replace(/[^0-9:]/g, ''); setOutraHora(t); if (/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) setHora(t); }} accessibilityLabel="Outra hora (HH:MM)" />
+                  <TextInput style={[s.pilula, s.outraHora, hora && !HORAS.includes(hora) && s.outraHoraAtiva]} value={outraHora} placeholder="outra" placeholderTextColor="#8B919C" maxLength={5}
+                    keyboardType="number-pad" inputMode="numeric"
+                    onChangeText={(v) => {
+                      /* o teclado numérico do iPhone não tem ':' — 1330 vira 13:30 */
+                      const d = v.replace(/[^0-9]/g, '').slice(0, 4);
+                      const t = d.length > 2 ? `${d.slice(0, 2)}:${d.slice(2)}` : d;
+                      setOutraHora(t);
+                      if (/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) setHora(t);
+                    }} accessibilityLabel="Outra hora (HH:MM)" />
                 </View>
                 <Text style={s.ajuda}>{hora ? `Com cadeado: ${hora} combinado com o cliente. Prende o horário, não a posição.` : 'Sem hora: entra na ordem da rota e a hora é estimada pelo caminho.'}</Text>
 
@@ -309,7 +316,9 @@ const s = StyleSheet.create({
   pilulaAtiva: { backgroundColor: 'var(--text)', borderColor: 'var(--text)' },
   pilulaTexto: { fontSize: 13.5, fontWeight: '700', color: 'var(--text)' },
   pilulaTextoAtivo: { color: 'var(--bg)' },
-  outraHora: { width: 84, fontSize: 13.5, color: 'var(--text)', textAlign: 'center' },
+  // fonte 16: abaixo disso o iPhone dá zoom ao focar; e o selecionado NÃO usa o fundo da cor do texto (ficava um bloco preto, letra e fundo iguais)
+  outraHora: { width: 92, fontSize: 16, fontWeight: '700', color: 'var(--text)', textAlign: 'center', backgroundColor: 'var(--surface)' },
+  outraHoraAtiva: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--tint-red-border)', color: 'var(--tint-red-text)' },
   acontece: { marginTop: 10, padding: 12, borderRadius: 12, backgroundColor: 'var(--surface-2)', gap: 2 },
   aconteceRot: { fontSize: 11, fontWeight: '800', letterSpacing: 0.6, color: 'var(--text-muted)', marginBottom: 4 },
   linha: { fontSize: 13.5, fontWeight: '700', color: 'var(--text)', marginTop: 4 },

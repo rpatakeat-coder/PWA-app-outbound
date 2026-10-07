@@ -80,6 +80,34 @@
         }
       })();
     </script>
+    <!--
+      TECLADO DO iPHONE DESLOCA OS TOQUES (Kelly, 06/10/26: "Registrar visita", passo 3 — depois
+      de digitar o nome de quem decide, nenhum chip de horário, sistema ou dor marcava; a ficha
+      salvou sem os três). Ao focar um campo dentro de uma folha fixa, o Safari ROLA A PÁGINA
+      para mostrar o campo; quando o teclado fecha, a página não volta, e dali em diante o toque
+      cai deslocado do que se vê. O app nunca usa a rolagem da página (body overflow:hidden; quem
+      rola são as listas): sempre que nenhum campo está em foco, ela volta para o zero.
+    -->
+    <script>
+      (function () {
+        try {
+          var emCampo = function () {
+            var a = document.activeElement;
+            return !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable);
+          };
+          var zerar = function () {
+            if (emCampo()) return;
+            if (window.scrollY || document.documentElement.scrollTop || document.body.scrollTop) {
+              window.scrollTo(0, 0);
+              document.documentElement.scrollTop = 0;
+              document.body.scrollTop = 0;
+            }
+          };
+          document.addEventListener('focusout', function () { setTimeout(zerar, 60); setTimeout(zerar, 400); }, true);
+          if (window.visualViewport) window.visualViewport.addEventListener('resize', function () { setTimeout(zerar, 60); });
+        } catch (e) { /* sem a API: fica o comportamento de antes */ }
+      })();
+    </script>
 
     <!--
       Paleta em variáveis CSS.

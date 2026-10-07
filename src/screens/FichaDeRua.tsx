@@ -280,8 +280,10 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     onFechar();
   }
 
+  /* o toque num chip fecha o teclado na hora: com ele aberto no iPhone, o toque seguinte caía deslocado */
+  const fecharTeclado = () => { try { const el = document.activeElement as HTMLElement | null; if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) el.blur(); } catch { /* fora do navegador */ } };
   const chip = (chave: string, rotulo: string, ativo: boolean, aoTocar: () => void) => (
-    <Pressable key={chave} accessibilityRole="button" accessibilityState={{ selected: ativo }} onPress={aoTocar}
+    <Pressable key={chave} accessibilityRole="button" accessibilityState={{ selected: ativo }} onPress={() => { fecharTeclado(); aoTocar(); }}
       style={[s.chip, ativo && s.opcaoAtiva]}>
       <Text style={[s.chipTexto, ativo && s.opcaoAtivaTexto]}>{rotulo}</Text>
     </Pressable>
@@ -397,7 +399,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                       </>
                     )}
                     <Text style={s.rotulo}>Quem decide</Text>
-                    <TextInput style={s.campo} value={f.decisor} onChangeText={(v) => set({ decisor: v })} placeholder="Nome" placeholderTextColor="#8B919C" />
+                    <TextInput style={s.campo} value={f.decisor} onChangeText={(v) => set({ decisor: v })} placeholder="Nome" placeholderTextColor="#8B919C" autoComplete="off" textContentType="none" returnKeyType="done" blurOnSubmit />
                     <View style={s.chips}>{PAPEIS.map((p) => chip(p, p, f.papel === p, () => set({ papel: f.papel === p ? null : p })))}</View>
 
                     <Text style={s.rotulo}>Melhor horário para achar</Text>
