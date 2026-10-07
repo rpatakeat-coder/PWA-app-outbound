@@ -107,7 +107,7 @@ import FolhaDoMapa, { type ItemFolha } from './src/screens/FolhaDoMapa';
 import BarraPlanejar, { type ParadaDoDia } from './src/screens/BarraPlanejar';
 import AgendaPC, { CamadasAgenda, type CamadaAgenda, type ItemPC, type SugestaoPC } from './src/screens/AgendaPC';
 import { melhorPosicao, metros } from './src/utils/rotaDoDia';
-import { buscarGooglePerto, jaNaBase, type LugarPerto } from './src/utils/googlePerto';
+import { BUSCA_GOOGLE_PAUSADA, buscarGooglePerto, jaNaBase, type LugarPerto } from './src/utils/googlePerto';
 import { diaInicial, diasPlanejaveis, ehCompromisso, faixaDoLead, rotuloDoDia, vaiAoCockpit, type FaixaDoPlano } from './src/utils/planoNoMapa';
 import { gravarOrdemDoDia, lerColunaDoPlano, porNoDia, tirarDoDia } from './src/utils/paradaDoDia';
 import { diasDaFaixa } from './src/utils/agendaNovo';
@@ -2493,7 +2493,7 @@ function MainApp() {
     if (pts.length) return pts.reduce((m, p) => (pts.reduce((s, q) => s + metros(p, q), 0) < pts.reduce((s, q) => s + metros(m, q), 0) ? p : m), pts[0]);
     return mapRegion ? { latitude: mapRegion.latitude, longitude: mapRegion.longitude } : null;
   }, [clientesDoPlanoNoMapa, mapRegion]);
-  const querGoogle = ehAgendaPC && agendaPlaneja && !!planejarDia && planejarDia >= routeDate && (abaAgenda === 'sugestoes' || camadasAgenda.has('google'));
+  const querGoogle = !BUSCA_GOOGLE_PAUSADA && ehAgendaPC && agendaPlaneja && !!planejarDia && planejarDia >= routeDate && (abaAgenda === 'sugestoes' || camadasAgenda.has('google'));
   const buscasGoogle = useRef(0);
   useEffect(() => {
     if (!querGoogle || !centroDoPlano) { setCarregandoGoogle(false); return; }

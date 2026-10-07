@@ -23,7 +23,7 @@ import { acaoPorId } from '../utils/acoesDoPlano';
 import { lerSemanaDoPlano, PROPOSITOS } from '../utils/semanaDoPlano';
 import { montarPreparo, usePreparo } from '../utils/preparo';
 import { conflito, duracao, ehOutraCidade, encaixar, hhmm, horarios, kmTexto, melhorPosicao, metros, perna, resumo, temOutraCidade, type ParadaRota, type Ponto } from '../utils/rotaDoDia';
-import type { LugarPerto } from '../utils/googlePerto';
+import { BUSCA_GOOGLE_PAUSADA, type LugarPerto } from '../utils/googlePerto';
 import type { Client, ClientMeeting } from '../types/client';
 import {
   IconCall, IconChevronLeft, IconChevronRight, IconClose, IconLock, IconMenu, IconSearch, IconShrink, IconWarning, IconWhatsapp, useIconColors,
@@ -606,7 +606,7 @@ export default function AgendaPC(props: Props) {
     return out;
   })();
 
-  const grupos: GrupoSugestao[] = ['regua', 'alvo', 'queda', 'google'];
+  const grupos: GrupoSugestao[] = BUSCA_GOOGLE_PAUSADA ? ['regua', 'alvo', 'queda'] : ['regua', 'alvo', 'queda', 'google'];
   const nSug = sugestoesComPosicao.filter((x) => !x.noDia).length;
   const titulo = tituloDoDia(dia, hoje);
   const resumoTexto = passado
@@ -855,10 +855,11 @@ export type CamadaAgenda = 'carteira' | 'regua' | 'alvo' | 'queda' | 'google';
 export function CamadasAgenda({ ativas, contagem, nPlano, aoAlternar }: {
   ativas: Set<CamadaAgenda>; contagem: Record<CamadaAgenda, number>; nPlano: number; aoAlternar: (c: CamadaAgenda) => void;
 }) {
-  const itens: { id: CamadaAgenda; rotulo: string }[] = [
+  const todas: { id: CamadaAgenda; rotulo: string }[] = [
     { id: 'carteira', rotulo: 'Minha carteira' }, { id: 'regua', rotulo: 'Régua estourada' }, { id: 'alvo', rotulo: 'Contas-alvo' },
     { id: 'queda', rotulo: 'Em queda' }, { id: 'google', rotulo: 'Google' },
   ];
+  const itens = todas.filter((x) => !(BUSCA_GOOGLE_PAUSADA && x.id === 'google'));
   return (
     <View style={s.camadas} pointerEvents="box-none">
       <View style={[s.camada, s.camadaFixa]}><Text style={s.camadaTexto}>Plano</Text><Text style={s.camadaN}>{nPlano}</Text></View>

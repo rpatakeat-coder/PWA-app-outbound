@@ -4,11 +4,21 @@
 import type { Client } from '../types/client';
 import { mesmoNome } from './mesmoLugar';
 
+// PAUSADA em 07/10/2026. O Google desligou a cobrança do projeto que paga Maps e Places, e a
+// busca de contas-alvo vai mudar para outra API. Com isto em `true`: nenhuma chamada ao Places
+// sai daqui, a aba Sugestões mostra só o que já está na nossa base (régua, contas-alvo, em queda)
+// e a camada "Google" some do mapa da Agenda — em vez de ficar ligável e sempre vazia, o que
+// pareceria "não há restaurante por perto". O motor diário também está parado (migration 0178).
+// Para religar: `false` aqui.
+export const BUSCA_GOOGLE_PAUSADA = true;
+
 export type LugarPerto = { placeId: string; nome: string; latitude: number; longitude: number; nota: number | null; avaliacoes: number | null };
 
 type PlaceNovo = { id: string; displayName?: string; location?: { lat: () => number; lng: () => number }; rating?: number | null; userRatingCount?: number | null };
 
 export async function buscarGooglePerto(centro: { latitude: number; longitude: number }, raioM = 1200): Promise<LugarPerto[]> {
+  // Rede de segurança: mesmo que alguém chame direto, a pausa vale.
+  if (BUSCA_GOOGLE_PAUSADA) return [];
   const g = (globalThis as { google?: { maps?: { importLibrary?: (n: string) => Promise<unknown> } } }).google;
   if (!g?.maps?.importLibrary) throw new Error('mapa do Google não carregou');
   const { Place } = (await g.maps.importLibrary('places')) as { Place: { searchNearby: (o: unknown) => Promise<{ places: PlaceNovo[] }> } };
