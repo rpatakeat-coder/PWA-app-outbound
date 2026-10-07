@@ -7354,7 +7354,7 @@ function MainApp() {
   // ainda não feitos, sem contar duas vezes quem já está na rota.
   const hojeNoRodape = diaBRT(new Date());
   const naRotaDeHoje = new Set(paradasQueFaltam.map((st) => st.client_id));
-  const agendadosDeHoje = meetings.filter((m) => m.status !== 'realizada' && m.status !== 'cancelada'
+  const agendadosDeHoje = meetings.filter((m) => m.status !== 'realizada' && m.status !== 'cancelada' && m.status !== 'nao_aconteceu'
     && diaBRT(new Date(m.scheduled_at)) === hojeNoRodape && !naRotaDeHoje.has(m.client_id)).length;
   const seloAgenda = paradasQueFaltam.length + agendadosDeHoje;
   const abasDoRodape: Array<{ aba: AppTab; rotulo: string; Icone: typeof IconLocation; ativa: boolean; selo: number | null; seloClaro?: boolean }> = [

@@ -271,7 +271,7 @@ export default function AgendaNovoScreen({
   // cadastro) vira selo nela; Ligar vai às Ligações do dia; o resto fica em "Fora do plano".
   const doDia = (d: string) => compromissosDoDia(d, tarefas, reunioes, nomePorId, paradasDoDia(d).map(paradaParaCasar));
   const compromissos = doDia(dia).filter((k) => !concluidas.has(k.id)
-    && !(k.fonte === 'app' && reunioes.some((r) => `app-${r.id}` === k.id && r.status === 'realizada')));
+    && !(k.fonte === 'app' && reunioes.some((r) => `app-${r.id}` === k.id && (r.status === 'realizada' || r.status === 'nao_aconteceu'))));
   const sep = separarCompromissos(compromissos);
   const soltos = [...sep.ligacoes, ...sep.fora];
   /** o chip da parada (0175) e os selos dos compromissos casados com ela */

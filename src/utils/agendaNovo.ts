@@ -122,7 +122,8 @@ export function compromissosDoDia(
       acao, casado: acao === 'ligar' ? null : casado, dealId: t.dealId ?? null });
   }
   for (const r of reunioes) {
-    if (r.status === 'cancelada' || r.status === 'cancelled' || r.status === 'canceled') continue;
+    // nao_aconteceu (0176): o gestor fechou a reunião que passou; sai da Agenda como a cancelada
+    if (r.status === 'cancelada' || r.status === 'cancelled' || r.status === 'canceled' || r.status === 'nao_aconteceu') continue;
     if (diaBRT(r.scheduled_at) !== dia) continue;
     const tipo = r.type === 'follow_up' ? 'retorno' : 'reunião';
     const acao: AcaoId = acaoPorId(r.acao)?.id ?? (r.type === 'follow_up' ? 'follow' : 'reuniao');
