@@ -141,11 +141,34 @@ Deno.serve(async (req) => {
 
   const corpo = await req.json().catch(() => ({}));
   const dryRun = corpo?.dry_run === true;
-  const limite = Math.max(1, Math.min(300, Number(corpo?.limite) || 120));
+  /* CUSTO (07/10/26): conferir 120 contas-alvo por dia, todas, dava 3.600–7.000 chamadas pagas da
+     Places API por mês, e o Google desligou a cobrança do projeto (o mapa caiu junto). Agora só
+     confere quem está NO PLANO dos próximos 7 dias (field_route_stops planejadas) — a pergunta do
+     motor é "a rota vai mandar alguém a um lugar fechado?", e isso só importa para quem vai.
+     { todas: true } no corpo volta ao comportamento antigo, à mão. Limite padrão 40. */
+  const limite = Math.max(1, Math.min(300, Number(corpo?.limite) || 40));
   const antes = new Date(Date.now() - 30 * 86400000).toISOString();
+  let noPlano: string[] | null = null;
+  if (corpo?.todas !== true) {
+    const dia = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    const hoje = dia(new Date()), ate = dia(new Date(Date.now() + 7 * 86400000));
+    const { data: rotas, error: eR } = await svc.from('field_routes').select('id').gte('route_date', hoje).lte('route_date', ate).limit(2000);
+    if (eR) return json(500, { error: eR.message });
+    const idsRota = ((rotas ?? []) as { id: string }[]).map((r) => r.id);
+    const ids = new Set<string>();
+    for (let i = 0; i < idsRota.length; i += 200) {
+      const { data: ps, error: eP } = await svc.from('field_route_stops').select('client_id').in('route_id', idsRota.slice(i, i + 200)).eq('status', 'planned');
+      if (eP) return json(500, { error: eP.message });
+      for (const p of (ps ?? []) as { client_id: string }[]) ids.add(p.client_id);
+    }
+    noPlano = [...ids];
+    if (!noPlano.length) return json(200, { ok: true, conferidas: 0, motivo: 'nenhuma conta-alvo no plano dos próximos 7 dias' });
+  }
 
-  const { data: fila, error } = await svc.from('clients')
-    .select('id, empresa, nome, endereco, bairro, cidade, latitude, longitude, conta_alvo_place_id, motor_google_place_id, conta_alvo_dismissed, is_teste, lead_prospeccao_id')
+  let q = svc.from('clients')
+    .select('id, empresa, nome, endereco, bairro, cidade, latitude, longitude, conta_alvo_place_id, motor_google_place_id, conta_alvo_dismissed, is_teste, lead_prospeccao_id');
+  if (noPlano) q = q.in('id', noPlano.slice(0, 900));
+  const { data: fila, error } = await q
     .not('conta_alvo_place_id', 'is', null)
     .eq('status', 'lead')
     // um .or() só: descartado e teste saem logo abaixo, no código

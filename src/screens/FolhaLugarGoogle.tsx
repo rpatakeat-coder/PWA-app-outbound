@@ -19,21 +19,35 @@ type Detalhe = { nome: string; nota: number | null; avaliacoes: number | null; t
 
 const COMIDA = ['restaurant', 'food', 'bar', 'cafe', 'bakery', 'meal_takeaway', 'meal_delivery', 'pizza_restaurant', 'hamburger_restaurant', 'brazilian_restaurant', 'fast_food_restaurant', 'coffee_shop', 'ice_cream_shop', 'sandwich_shop', 'steak_house', 'sushi_restaurant', 'japanese_restaurant', 'italian_restaurant', 'pub', 'snack_bar'];
 
-async function lerLugar(placeId: string): Promise<Detalhe> {
+/* CUSTO (07/10/26): o Google cobra o Place Details pela faixa do campo mais caro pedido. Nota,
+   avaliações e telefone são da faixa Enterprise (a mais cara); nome, tipo e endereço não. O toque
+   no lugar lê só os baratos; nota e telefone vêm quando alguém pede ("Ver nota e telefone") ou no
+   "Virar lead" (aí o telefone vale o custo: é lead novo). Antes, cada toque pagava a faixa cara. */
+async function lugarDoGoogle(placeId: string, fields: string[]) {
   const g = (globalThis as { google?: { maps?: { importLibrary?: (n: string) => Promise<unknown> } } }).google;
   if (!g?.maps?.importLibrary) throw new Error('mapa do Google não carregou');
   const { Place } = (await g.maps.importLibrary('places')) as { Place: new (o: { id: string }) => { fetchFields: (o: { fields: string[] }) => Promise<unknown>; [k: string]: unknown } };
   const p = new Place({ id: placeId });
-  await p.fetchFields({ fields: ['displayName', 'rating', 'userRatingCount', 'nationalPhoneNumber', 'formattedAddress', 'types', 'primaryTypeDisplayName'] });
+  await p.fetchFields({ fields });
+  return p;
+}
+async function lerLugar(placeId: string): Promise<Detalhe> {
+  const p = await lugarDoGoogle(placeId, ['displayName', 'formattedAddress', 'types', 'primaryTypeDisplayName']);
   const tipos = (p.types as string[] | undefined) ?? [];
   return {
     nome: String(p.displayName ?? 'Lugar do Google'),
-    nota: typeof p.rating === 'number' ? (p.rating as number) : null,
-    avaliacoes: typeof p.userRatingCount === 'number' ? (p.userRatingCount as number) : null,
-    telefone: (p.nationalPhoneNumber as string | null) ?? null,
+    nota: null, avaliacoes: null, telefone: null,
     endereco: (p.formattedAddress as string | null) ?? null,
     tipo: (p.primaryTypeDisplayName as string | null) ?? null,
     comida: tipos.some((t) => COMIDA.includes(t) || t.endsWith('_restaurant')),
+  };
+}
+async function lerContato(placeId: string): Promise<Pick<Detalhe, 'nota' | 'avaliacoes' | 'telefone'>> {
+  const p = await lugarDoGoogle(placeId, ['rating', 'userRatingCount', 'nationalPhoneNumber']);
+  return {
+    nota: typeof p.rating === 'number' ? (p.rating as number) : null,
+    avaliacoes: typeof p.userRatingCount === 'number' ? (p.userRatingCount as number) : null,
+    telefone: (p.nationalPhoneNumber as string | null) ?? null,
   };
 }
 
@@ -95,6 +109,19 @@ export default function FolhaLugarGoogle({ lugar, aoFechar, aoVirarLead, aoAbrir
     return () => { vivo = false; };
   }, [lugar?.placeId, det?.nome]); // eslint-disable-line react-hooks/exhaustive-deps
   const [criando, setCriando] = useState(false);
+  // nota e telefone: só quando alguém pede (faixa cara do Google)
+  const [contato, setContato] = useState<'nao' | 'lendo' | 'ok' | 'erro'>('nao');
+  useEffect(() => { setContato('nao'); }, [lugar?.placeId]);
+  const pedirContato = async (): Promise<string | null> => {
+    if (!lugar) return null;
+    setContato('lendo');
+    try {
+      const c = await lerContato(lugar.placeId);
+      setDet((d) => (d ? { ...d, ...c } : d));
+      setContato('ok');
+      return c.telefone;
+    } catch { setContato('erro'); return null; }
+  };
 
   if (!lugar) return null;
   const nota = det?.nota != null ? `${det.nota.toFixed(1).replace('.', ',')} ★${det.avaliacoes ? ` · ${det.avaliacoes} avaliações` : ''}` : null;
@@ -110,6 +137,14 @@ export default function FolhaLugarGoogle({ lugar, aoFechar, aoVirarLead, aoAbrir
             {!!(det.tipo || nota) && <Text style={s.sub}>{[det.tipo, nota].filter(Boolean).join(' · ')}</Text>}
             {!!det.endereco && <Text style={s.sub}>{det.endereco}</Text>}
             {!!det.telefone && <Text style={s.sub}>{det.telefone}</Text>}
+            {contato === 'ok' && !det.telefone && <Text style={s.sub}>Sem telefone no Google.</Text>}
+            {contato === 'erro' && <Text style={s.aviso}>Não consegui ler nota e telefone agora.</Text>}
+            {(contato === 'nao' || contato === 'erro') && (
+              <Pressable accessibilityRole="button" style={[s.botao, s.botaoSec, { minHeight: 44 }]} onPress={() => { void pedirContato(); }}>
+                <Text style={s.botaoSecTexto}>Ver nota e telefone</Text>
+              </Pressable>
+            )}
+            {contato === 'lendo' && <ActivityIndicator style={{ marginVertical: 6 }} />}
             {!det.comida && <Text style={s.aviso}>Pelo Google, este lugar não é de comida.</Text>}
           </View>
         )}
@@ -121,7 +156,11 @@ export default function FolhaLugarGoogle({ lugar, aoFechar, aoVirarLead, aoAbrir
           <Pressable accessibilityRole="button" style={[s.botao, s.botaoPrin, (criando || !det || !conferido) && { opacity: 0.6 }]} disabled={!det || criando || !conferido}
             onPress={async () => {
               setCriando(true);
-              try { await aoVirarLead({ placeId: lugar.placeId, nome: det?.nome ?? '', telefone: det?.telefone ?? null, latitude: lugar.latitude, longitude: lugar.longitude }); }
+              try {
+                // virar lead busca o telefone (uma vez): aí a faixa cara do Google vale o custo
+                const tel = contato === 'ok' ? (det?.telefone ?? null) : await pedirContato();
+                await aoVirarLead({ placeId: lugar.placeId, nome: det?.nome ?? '', telefone: tel, latitude: lugar.latitude, longitude: lugar.longitude });
+              }
               finally { setCriando(false); }
             }}>
             {criando ? <ActivityIndicator color="#fff" /> : <Text style={s.botaoPrinTexto}>Virar lead · entra em Prospecção</Text>}
