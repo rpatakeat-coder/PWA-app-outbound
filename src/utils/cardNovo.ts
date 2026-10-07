@@ -12,6 +12,15 @@ export function distanciaTexto(m: number | null): string | null {
   return m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} km` : `${Math.round(m / 10) * 10} m`;
 }
 
+/** "27996183875" → "(27) 99618-3875"; fixo de 10 dígitos e o 55 na frente também. O resto fica como veio. */
+export function telefoneTexto(t: string): string {
+  let n = t.replace(/\D/g, '');
+  if (n.length >= 12 && n.startsWith('55')) n = n.slice(2);
+  if (n.length === 11) return `(${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7)}`;
+  if (n.length === 10) return `(${n.slice(0, 2)}) ${n.slice(2, 6)}-${n.slice(6)}`;
+  return t.trim();
+}
+
 type Fato = { texto: string; aviso?: boolean };
 
 // O pino diz só "hoje / 5d / 12d parado" (cabe ao lado do nome); no card o
@@ -33,7 +42,7 @@ export function fatosDoCard(d: { client: Client; pino: Pino; distanciaM: number 
   if (dist) f.push({ texto: dist });
   if (pino.etiqueta && !pino.queda) f.push({ texto: textoDoToque(pino.etiqueta.texto), aviso: pino.etiqueta.texto === 'cobrar' || pino.etiqueta.texto.includes('parado') });
   f.push((d.aproximado ?? c.geo_approximate) ? { texto: '≈ posição aproximada', aviso: true } : { texto: 'posição exata' });
-  f.push(c.telefone?.trim() ? { texto: c.telefone.trim() } : { texto: 'sem telefone', aviso: true });
+  f.push(c.telefone?.trim() ? { texto: telefoneTexto(c.telefone) } : { texto: 'sem telefone', aviso: true });
   if (c.conta_alvo_rating != null) {
     const nota = Number(c.conta_alvo_rating).toFixed(1).replace('.', ',');
     f.push({ texto: c.conta_alvo_reviews != null ? `${nota}★ · ${c.conta_alvo_reviews} no Google` : `${nota}★ no Google` });

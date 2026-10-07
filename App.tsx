@@ -7750,7 +7750,7 @@ function MainApp() {
           {tab === 'tasks' && !isViewer && (
             <TouchableOpacity
               accessibilityRole="button"
-              accessibilityLabel="Como as tarefas são geradas"
+              accessibilityLabel={modoNovo ? 'Como a fila funciona' : 'Como as tarefas são geradas'}
               style={styles.headerAjuda}
               onPress={() => setIsTaskRulesOpen(true)}
             >
@@ -9053,7 +9053,7 @@ function MainApp() {
         <View style={[styles.modalOverlay, layout.ehLargo && styles.modalOverlayWeb]}>
           <View style={[styles.taskRulesCard, layout.ehLargo && styles.modalCartaoMedioWeb]}>
             <View style={styles.taskRulesHeader}>
-              <Text style={styles.taskRulesTitle}>Como as tarefas são geradas</Text>
+              <Text style={styles.taskRulesTitle}>{modoNovo ? 'Como a fila funciona' : 'Como as tarefas são geradas'}</Text>
               <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar"
                 style={styles.taskRulesClose}
                 onPress={() => setIsTaskRulesOpen(false)}
@@ -11330,11 +11330,8 @@ function ClientBottomSheet({
                   estão no topo (e o Mudar etapa daqui é o modal antigo, fora da
                   porta única). Na aba Dados ficam só Editar · Mover pino ·
                   Remover (prompt final §7.11). */}
-              {novo && onEdit && (
-                <TouchableOpacity style={[styles.acaoSecundaria, { marginBottom: 8 }]} onPress={onEdit}>
-                  <IconText Icone={IconPencil} style={styles.acaoSecundariaTexto} tone="onSurface">Editar dados</IconText>
-                </TouchableOpacity>
-              )}
+              {/* Card novo: Editar dados e Mover o pino moram na grade do topo (GradeMais), que respeita a
+                  trava de Ag. Pagamento. Os daqui repetiam os dois e passavam por cima da trava (auditoria 06/10). */}
               {!novo && (onMarkVisited || onEdit) && (
                 <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
                   {onMarkVisited && (
@@ -11441,12 +11438,12 @@ function ClientBottomSheet({
                   (acoes mais usadas em campo — sem precisar rolar ate aqui). */}
 
               {/* Actions */}
-              {onEditLocation && (
+              {!novo && onEditLocation && (
                 <TouchableOpacity
                   style={[styles.acaoSecundaria, { marginBottom: 8 }]}
                   onPress={onEditLocation}
                 >
-                  <IconText Icone={IconPencil} style={styles.acaoSecundariaTexto} tone="onSurface">{novo ? 'Mover pino' : 'Editar localização (mover pin)'}</IconText>
+                  <IconText Icone={IconPencil} style={styles.acaoSecundariaTexto} tone="onSurface">Editar localização (mover pin)</IconText>
                 </TouchableOpacity>
               )}
               {onDelete && (

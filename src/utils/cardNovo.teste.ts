@@ -6,7 +6,7 @@
 // passando lead frio perto na frente da cobrança; o card dizendo "0 m" ou
 // "posição exata" quando não sabe; e telefone ausente sem aviso.
 import type { Client } from '../types/client';
-import { distanciaTexto, faturamentoTexto, fatosDoCard, ordenarItens, quedaCurta, sinaisDoCliente, textoDoToque, type ItemFolha } from './cardNovo';
+import { distanciaTexto, faturamentoTexto, fatosDoCard, ordenarItens, quedaCurta, sinaisDoCliente, telefoneTexto, textoDoToque, type ItemFolha } from './cardNovo';
 import type { Pino } from './pinoP2';
 
 let falhas = 0;
@@ -77,6 +77,11 @@ ok(distanciaTexto(null) === null && distanciaTexto(1234) === '1,2 km' && distanc
 const semGps = fatosDoCard({ client: cli({}), pino: pino({}), distanciaM: null }).map((f) => f.texto);
 ok(!semGps.some((t) => /\d+ m$/.test(t)), 'sem GPS o card não inventa distância');
 ok(semGps.includes('sem telefone'), 'sem telefone vira aviso');
+// telefone legível (auditoria 06/10: o chip mostrava "27996183875")
+ok(telefoneTexto('27996183875') === '(27) 99618-3875', 'celular com DDD formatado');
+ok(telefoneTexto('+55 21 3333-4444') === '(21) 3333-4444', 'fixo com +55 formatado');
+ok(telefoneTexto('5521999998888') === '(21) 99999-8888', '55 colado tirado');
+ok(telefoneTexto('ramal 12') === 'ramal 12', 'o que não é telefone fica como veio');
 ok(fatosDoCard({ client: cli({ geo_approximate: true }), pino: pino({}), distanciaM: 10 }).some((f) => f.texto === '≈ posição aproximada' && f.aviso), 'aproximada vira aviso');
 ok(fatosDoCard({ client: cli({ conta_alvo_rating: 4.5 as never, conta_alvo_reviews: 475 as never }), pino: pino({ tipo: 'alvo' }), distanciaM: null })
   .some((f) => f.texto === '4,5★ · 475 no Google'), 'nota do Google no formato da prancha');
