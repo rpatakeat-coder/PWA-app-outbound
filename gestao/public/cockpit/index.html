@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@39eac6e.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@ef29cdb.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* /gestao E O COCKPIT desde 25/09/2026. As tres telas que so a gestao antiga
@@ -11740,7 +11740,8 @@ function h8FilaCardHTML(r, diag) {
 
   const FILTROS = [
     ['todas', 'todas · ' + pendentes.length],
-    ['sla', 'régua estourada · ' + nCat('sla')],
+
+    ['sla', 'atrasados · ' + nCat('sla')],
     ['quente', 'quentes · ' + nCat('quente')],
     ['follow', 'follow-ups · ' + nCat('follow')],
     ['feitas', 'feitas ✓ · ' + feitos.length]
