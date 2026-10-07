@@ -17,6 +17,7 @@ import { Alert } from '../components/Alert';
 import { Painel } from '../components/Painel';
 import { supabase } from '../integrations/supabase/client';
 import RegistrarTarefa, { type TarefaParaRegistrar } from './RegistrarTarefa';
+import SemDesfecho from './SemDesfecho';
 import { fetchOptimizedTrip } from '../utils/routing';
 import { Toast } from '../components/Toast';
 
@@ -853,6 +854,7 @@ export default function AgendaNovoScreen({
         <>
           {seletor}
           {ritmo}
+          <SemDesfecho userId={user?.id ?? null} />
           {carregando ? (
             <View style={{ gap: 10 }}>
               <Text style={s.subLinha}>Montando o dia pelo plano e pela hora…</Text>
