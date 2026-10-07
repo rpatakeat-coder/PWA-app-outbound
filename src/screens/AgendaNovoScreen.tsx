@@ -453,10 +453,12 @@ export default function AgendaNovoScreen({
       .catch((e) => Alert.alert('Não consegui pôr amanhã', String((e as Error)?.message ?? e)));
   };
 
+  // o chip do dia tem ~60 px a 390: "Relacionamento · 4" saía "Relacion…" (auditoria 06/10)
+  const CURTO: Record<string, string> = { relac: 'Relac.', follow: 'Follow', nova: 'Nova' };
   const rotuloDia = (d: string) => {
     const pl = semana.data?.get(d);
     const n = (d === hoje ? estado.length : paradasDoDia(d).length) + doDia(d).length;
-    if (pl?.proposito) return `${PROPOSITOS[pl.proposito] ?? pl.proposito}${n ? ` · ${n}` : ''}`;
+    if (pl?.proposito) return `${CURTO[pl.proposito] ?? PROPOSITOS[pl.proposito] ?? pl.proposito}${n ? ` · ${n}` : ''}`;
     return n ? `${n} ${n === 1 ? 'item' : 'itens'}` : '—';
   };
 

@@ -372,6 +372,14 @@
       #root div, #root span, #root p, #root a, #root input, #root textarea, #root button {
         font-family: Poppins, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
+      /*
+        O Modal do RNW abre num portal FORA do #root (filho direto do body): o Modo foco e as
+        folhas saíam na fonte do sistema (auditoria 06/10). :not(#root) dá a mesma força 1-0-x.
+      */
+      body > div:not(#root) div, body > div:not(#root) span, body > div:not(#root) p, body > div:not(#root) a,
+      body > div:not(#root) input, body > div:not(#root) textarea, body > div:not(#root) button {
+        font-family: Poppins, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
 
       body {
         background-color: var(--bg);

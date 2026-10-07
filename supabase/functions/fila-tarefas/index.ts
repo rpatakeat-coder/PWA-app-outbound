@@ -227,9 +227,9 @@ Deno.serve(async (req: Request) => {
   const paradasP = (async () => {
     const { data: rotas } = await svc.from('field_routes').select('id').eq('seller_id', uid).eq('route_date', hoje);
     const idsRota = (rotas ?? []).map((r: { id: string }) => r.id);
-    if (!idsRota.length) return [] as Array<{ client_id: string; planned_at: string | null; status: string }>;
-    const { data: paradas } = await svc.from('field_route_stops').select('client_id, planned_at, status').in('route_id', idsRota).neq('status', 'removed');
-    return (paradas ?? []) as Array<{ client_id: string; planned_at: string | null; status: string }>;
+    if (!idsRota.length) return [] as Array<{ client_id: string; horario_fixo: string | null; status: string }>;
+    const { data: paradas } = await svc.from('field_route_stops').select('client_id, horario_fixo, status').in('route_id', idsRota).eq('status', 'planned');
+    return (paradas ?? []) as Array<{ client_id: string; horario_fixo: string | null; status: string }>;
   })();
   // promessa que rejeita antes de alguém aguardar vira "unhandled rejection": já nascem com catch
   reunioesP.catch(() => {}); paradasP.catch(() => {});
@@ -371,7 +371,9 @@ Deno.serve(async (req: Request) => {
   const agendaHoje: Record<string, string> = {};
   for (const p of await paradasP.catch(() => [])) {
     const d = dealPorCliente.get(String(p.client_id));
-    if (d && p.status !== 'done') agendaHoje[d] = p.planned_at ? horaBRT(p.planned_at as string) : 'hoje';
+    // a hora é a do cadeado (horario_fixo); planned_at é QUANDO a parada entrou no plano, e saía como
+    // hora da visita (auditoria 06/10). Sem cadeado: 'hoje' (a tela não repete a palavra).
+    if (d) agendaHoje[d] = p.horario_fixo ? String(p.horario_fixo).slice(0, 5) : 'hoje';
   }
 
   // 4) a fila

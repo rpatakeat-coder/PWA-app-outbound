@@ -334,11 +334,13 @@ function CardFila({ item, aberto, selecionado, aoVerbo, aoFechar, aoAdiar, aoSel
             <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
               <Text style={s.cardTitulo} numberOfLines={2}>{item.titulo}</Text>
               <View style={s.cardLinha2}>
-                <Text style={s.cardNegocio} numberOfLines={1}>{item.negocio}</Text>
+                {/* o título já diz o nome ("Visitar FERRO XIS BRASA"): repetido, ele só espremia a etapa a 390 px */}
+                {!item.titulo.toLowerCase().includes(item.negocio.toLowerCase()) && <Text style={s.cardNegocio} numberOfLines={1}>{item.negocio}</Text>}
                 <View style={s.pilulaEtapa}><View style={[s.ponto, { backgroundColor: etapa.cor }]} /><Text style={s.pilulaTexto} numberOfLines={1}>{etapa.rotulo}</Text></View>
                 {item.temperatura != null && <View style={s.temp}><View style={[s.ponto, { backgroundColor: corDaTemp(item.temperatura) }]} /><Text style={s.tempTexto}>{Math.round(item.temperatura)}</Text></View>}
               </View>
-              <Text style={s.cardPorque} numberOfLines={1}>{item.porque}</Text>
+              {/* o porquê é a razão de estar na fila: em duas linhas, não cortado em 15 letras ao lado do botão */}
+              <Text style={s.cardPorque} numberOfLines={2}>{item.porque}</Text>
               {!!item.tituloPorque && <Text style={s.cardTituloPorque} numberOfLines={1}>{item.tituloPorque}</Text>}
             </View>
             {aberto ? (
@@ -371,7 +373,7 @@ function CardFila({ item, aberto, selecionado, aoVerbo, aoFechar, aoAdiar, aoSel
                 <View style={s.seloAgenda}><IconCalendar width={12} height={12} fill="var(--tint-green-text)" /><Text style={s.seloAgendaTexto}>{`próximo passo · ${semTelefone.noPlano}`}</Text></View>
               ) : !item.temTelefone && (item.verbo === 'Visitar') && !item.agendaHoje ? <Text style={[s.rodapeFixo, { color: 'var(--ambar-texto)' }]} numberOfLines={1}>sem telefone no CRM</Text>
               : item.agendaHoje ? (
-                <View style={s.seloAgenda}><IconCalendar width={12} height={12} fill="var(--tint-green-text)" /><Text style={s.seloAgendaTexto}>{`hoje ${item.agendaHoje}`}</Text></View>
+                <View style={s.seloAgenda}><IconCalendar width={12} height={12} fill="var(--tint-green-text)" /><Text style={s.seloAgendaTexto}>{item.agendaHoje === 'hoje' ? 'no plano de hoje' : `hoje ${item.agendaHoje}`}</Text></View>
               ) : <Text style={[s.rodapeFixo, s.prazo, item.venceu && { color: 'var(--vermelho-texto)' }]}>{item.prazoTexto}</Text>}
           </View>
         </Pressable>
@@ -851,7 +853,7 @@ function PainelDoNegocio({ item, aberto, aoVerbo, aoFechar, children }: { item: 
       <View style={s.blocoPainel}>
         <Text style={s.rotuloSecao}>AGORA</Text>
         <Text style={[s.cardPorque, { fontSize: 16 }]}>{item.porque}</Text>
-        <Text style={s.ajuda}>{`${item.ultimoContatoTexto} · ${item.contatos} de 4 contatos · ${item.agendaHoje ? `na agenda hoje ${item.agendaHoje}` : item.prazoTexto}`}</Text>
+        <Text style={s.ajuda}>{`${item.ultimoContatoTexto} · ${item.contatos} de 4 contatos · ${item.agendaHoje ? (item.agendaHoje === 'hoje' ? 'no plano de hoje' : `na agenda hoje ${item.agendaHoje}`) : item.prazoTexto}`}</Text>
         {aberto ? (
           <View style={{ gap: 8 }}>
             <Pressable accessibilityRole="button" onPress={aoFechar} style={[s.botaoSec, { alignSelf: 'flex-end' }]}><Text style={s.botaoSecTexto}>Fechar</Text></Pressable>
@@ -901,7 +903,7 @@ function ModoFoco({ fila, hoje, feriados, discou, aberto, setAberto, aoVerbo, ao
             <Text style={s.cardNegocio}>{`${atual.negocio} · ${etapa?.rotulo ?? ''}${atual.temperatura != null ? ` · ${Math.round(atual.temperatura)}` : ''}`}</Text>
             <Text style={{ fontSize: 17, fontWeight: '600', color: 'var(--text)' }}>{atual.porque}</Text>
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              {[['Último contato', atual.ultimoContatoTexto.replace(/^contato /, '')], ['Contatos', `${atual.contatos} de 4`], ['Prazo', atual.agendaHoje ? `hoje ${atual.agendaHoje}` : atual.prazoTexto]].map(([r, v]) => (
+              {[['Último contato', atual.ultimoContatoTexto.replace(/^contato /, '')], ['Contatos', `${atual.contatos} de 4`], ['Prazo', atual.agendaHoje ? (atual.agendaHoje === 'hoje' ? 'no plano de hoje' : `hoje ${atual.agendaHoje}`) : atual.prazoTexto]].map(([r, v]) => (
                 <View key={r} style={s.caixaFato}><Text style={s.ajudaMiuda}>{r}</Text><Text style={[s.feitaNegocio, r === 'Prazo' && atual.venceu && { color: 'var(--vermelho-texto)' }]}>{v}</Text></View>
               ))}
             </View>

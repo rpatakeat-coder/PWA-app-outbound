@@ -87,17 +87,19 @@ const s = StyleSheet.create({
   // ALVOS DE 48 (handoff v4.1 §13): a barra tem 48 contando a borda; o alvo
   // ocupa a altura toda (margem -1 sobre a borda) e o desenho segue com 40.
   // hitSlop não vale no navegador: o "limpar" tinha 16 px de toque.
-  lenteAlvo: { height: 48, marginVertical: -1, justifyContent: 'center', flexShrink: 0, maxWidth: 140 },
+  // 160: com 140 "Contas-alvo" saía "Contas-al…" (auditoria 06/10)
+  lenteAlvo: { height: 48, marginVertical: -1, justifyContent: 'center', flexShrink: 0, maxWidth: 160 },
   limpar: { width: 48, height: 48, marginVertical: -1, alignItems: 'center', justifyContent: 'center' },
   lente: {
     height: 40, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12,
-    borderRadius: 20, backgroundColor: '#262A31', flexShrink: 0, maxWidth: 140,
+    borderRadius: 20, backgroundColor: '#262A31', flexShrink: 0, maxWidth: 160,
   },
   bolinha: { width: 8, height: 8, borderRadius: 4 },
   lenteTexto: { fontSize: 13, fontWeight: '700', color: '#F4F5F7', flexShrink: 1 },
   seta: { fontSize: 11, color: '#AEB4BE' },
   busca: { flex: 1, minWidth: 0, height: 40, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 6 },
-  buscaCampo: { flex: 1, minWidth: 0, fontSize: 13, color: '#F4F5F7', height: 40 },
+  // era estilo de campo (flex 1 + altura 40) num texto: o "Lead ou rua" ficava grudado no topo da pílula
+  buscaCampo: { fontSize: 13, lineHeight: 18, color: '#F4F5F7' },
   buscaAbrir: { flex: 1, minWidth: 0, minHeight: 48, marginVertical: -1, justifyContent: 'center' },
   buscaVazia: { color: '#8B919C' },
   icone: { width: 48, height: 48, marginVertical: -1, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },

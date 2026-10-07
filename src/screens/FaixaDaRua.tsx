@@ -46,7 +46,7 @@ export default function FaixaDaRua({ top, largo, feitas, meta, temRota, aoIr, pl
     const tomP = faltamP === 0 ? 'ok' : (plano.feitas === 0 && (feitas == null || feitas === 0) && hora >= 10) ? 'alerta' : 'andando';
     const tituloP = faltamP === 0 ? `Plano de hoje feito: ${plano.feitas} de ${plano.total}` : `Plano de hoje: ${plano.feitas} de ${plano.total}`;
     const subP = [
-      faltamP ? `faltam ${faltamP} ${faltamP === 1 ? 'parada' : 'paradas'}` : 'cada porta a mais é funil da semana que vem',
+      faltamP ? `${faltamP === 1 ? 'falta 1 parada' : `faltam ${faltamP} paradas`}` : 'cada porta a mais é funil da semana que vem',
       feitas != null ? `${feitas} ${feitas === 1 ? 'visita' : 'visitas'} no dia · meta ${meta}` : `meta ${meta}`,
     ].join(' · ');
     const rotuloP = tomP === 'ok' ? 'Ver rota' : 'Ir pra rua';
@@ -76,7 +76,7 @@ export default function FaixaDaRua({ top, largo, feitas, meta, temRota, aoIr, pl
     ? 'o placar não carregou — a meta vale'
     : faltam === 0
       ? 'cada porta a mais é funil da semana que vem'
-      : `faltam ${faltam} ${faltam === 1 ? 'porta' : 'portas'}`;
+      : `${faltam === 1 ? 'falta 1 porta' : `faltam ${faltam} portas`}`;
   const rotulo = tom === 'ok' ? 'Ver rota' : temRota ? 'Ir pra rua' : 'Montar a rota';
   return (
     <View style={[s.faixa, largo && s.faixaLarga, { top, borderLeftColor: COR[tom] }]} accessibilityRole="summary">

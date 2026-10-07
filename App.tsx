@@ -7676,14 +7676,16 @@ function MainApp() {
                 </TouchableOpacity>
               )}
             </View>
-          ) : tab === 'agenda' ? (
-            /* A Agenda nao tem busca, mas tambem nao pode ter uma faixa de
+          ) : tab === 'agenda' || (tab === 'route' && modoNovo) ? (
+            /* (route no mapa novo é o "Mapa do dia" da Agenda: sem isto o "Ir pra rua" abria a tela
+               sem título — auditoria 06/10) A Agenda nao tem busca, mas tambem nao pode ter uma faixa de
                48px vazia: o titulo ocupa o lugar dela. No mapa novo a Rota
                deixa de ser aba e mora aqui (prompt final §B1). */
             modoNovo ? (
               // R1 opção A (handoff das abas): a pílula "Rota de hoje" saiu — o caminho do dia é o
               // "Mapa do dia" do seletor da própria Agenda. A data e o propósito ficam na faixa.
-              <View style={styles.headerLinha}>
+              // flex 1: sem ele a linha tinha a largura do título e o sino e o avatar colavam nele (auditoria 06/10)
+              <View style={[styles.headerLinha, { flex: 1, minWidth: 0 }]}>
                 <Text style={styles.headerTitulo}>Agenda</Text>
               </View>
             ) : (
@@ -9064,16 +9066,32 @@ function MainApp() {
                 Cockpit movimenta); as regras abaixo valem so' para as sugestoes do
                 app. Sem este paragrafo o modal dizia "voce nao cria manualmente"
                 sobre tarefas que o gestor e o proprio executivo criam. */}
-            {modoNovo && (
-              <Text style={styles.taskRulesIntro}>
-                A lista principal são as suas tarefas do HubSpot: o que o Cockpit
-                planeja, o funil e a ficha de rua criam, e as cobranças de SLA. Elas
-                seguem o prazo de cada uma e somem quando você conclui (círculo ou
-                Liguei).
-                {'\n\n'}Abaixo, em "Sugestões do app", ficam as geradas pelas regras
-                a seguir. O Cockpit não cobra estas.
-              </Text>
-            )}
+            {/* A FILA DO DINHEIRO (auditoria 06/10): no mapa novo a aba não tem mais as regras D2/D5 nem
+                "Sugestões do app"; o painel explicava a tela antiga. Agora explica a fila que está na tela. */}
+            {modoNovo ? (
+              <ScrollView style={{ maxHeight: 440 }} showsVerticalScrollIndicator>
+                <Text style={styles.taskRulesIntro}>
+                  Um cartão por negócio, com o motivo de ele estar aqui. A ordem é valor × urgência: dentro de cada
+                  grupo, quem tem mais MRR e o prazo mais apertado vem primeiro.
+                </Text>
+                {[
+                  ['Agora', 'Tarefa do HubSpot vencida ou para hoje, visita de hoje sem registro, e cobrança de Ag. Pagamento até o próximo dia útil.'],
+                  ['Proteger', 'Lead quente sem próximo passo marcado, e proposta (Demo) parada há dias sem retorno.'],
+                  ['Destravar', 'Prospecção ou Visita sem decisor identificado, e negócio com menos de 4 contatos.'],
+                  ['Reativar', 'Negócio sem contato há muitos dias e sem passo futuro.'],
+                ].map(([t, x]) => (
+                  <View key={t} style={styles.ruleCard}>
+                    <Text style={styles.ruleTitle}>{t}</Text>
+                    <Text style={styles.ruleText}>{x}</Text>
+                  </View>
+                ))}
+                <Text style={styles.taskRulesIntro}>
+                  Negócio com próximo passo para outro dia não aparece: ele volta no dia do passo.
+                  {'\n\n'}Registrar grava em "Feitas hoje" (o mesmo da Agenda e do Cockpit) e dá para desfazer.
+                  Arrastar para a direita registra; para a esquerda, adia para amanhã.
+                </Text>
+              </ScrollView>
+            ) : (<>
             <Text style={styles.taskRulesIntro}>
               {modoNovo ? 'As sugestões do app' : 'As tarefas'} são criadas automaticamente pelo sistema a partir do
               estado dos seus leads. Você não cria manualmente — só conclui ou
@@ -9111,6 +9129,7 @@ function MainApp() {
                 </View>
               ))}
             </ScrollView>
+            </>)}
             <TouchableOpacity
               style={styles.taskRulesDoneButton}
               onPress={() => setIsTaskRulesOpen(false)}
@@ -13189,6 +13208,8 @@ const styles = StyleSheet.create({
     padding: 18,
     paddingBottom: 24,
     width: '100%',
+    // mais alto que a tela, o topo (título e o X) ficava fora do alcance (auditoria 06/10)
+    maxHeight: '92%',
   },
   taskRulesHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

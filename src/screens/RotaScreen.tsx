@@ -742,18 +742,19 @@ export function RotaScreen({
           const mreason = stop?.mandatory_reason as MandatoryReason | undefined;
           // Tag: uma so', na ordem de quem manda mais na decisao.
           const tag = isDone
-            ? { t: 'Visitado', bg: '#EAF7EE', fg: '#167532' }
+            // tons por token: os hex claros acendiam pílulas brancas no tema escuro (auditoria 06/10)
+            ? { t: 'Visitado', bg: 'var(--tint-green)', fg: 'var(--tint-green-text)' }
             : ehAtual
               ? { t: 'Agora', bg: 'var(--tint-red)', fg: 'var(--tint-red-text)' }
               : mreason === 'sla'
-                ? { t: 'SLA', bg: '#FFF8EB', fg: '#99670F' }
+                ? { t: 'SLA', bg: 'var(--tint-amber)', fg: 'var(--tint-amber-text)' }
                 : mreason === 'conta_alvo'
-                  ? { t: 'Alvo', bg: '#F1EBFE', fg: '#5B32C4' }
+                  ? { t: 'Alvo', bg: 'var(--tint-blue)', fg: 'var(--tint-blue-text)' }
                   : mreason === 'relacionamento'
-                    ? { t: 'Relacion.', bg: '#F1EBFE', fg: '#5B32C4' }
+                    ? { t: 'Relacion.', bg: 'var(--tint-blue)', fg: 'var(--tint-blue-text)' }
                     : null;
           const indiceCor = isDone
-            ? { bg: '#EAF7EE', fg: '#167532' }
+            ? { bg: 'var(--tint-green)', fg: 'var(--tint-green-text)' }
             : ehAtual
               ? { bg: 'var(--vermelho-acao)', fg: 'var(--vermelho-acao-tinta)' }
               : { bg: 'var(--surface-2)', fg: 'var(--text-muted)' };
@@ -812,7 +813,8 @@ export function RotaScreen({
                 </View>
                 {/* Subir/Descer ficam: reordenar e' acao de rua, e dois toques
                     a mais custam caro em movimento. */}
-                {!isMonitoringRoute && (
+                {/* com uma parada só não há o que reordenar: as setas mortas cortavam o nome em "VASCO RES…" */}
+                {!isMonitoringRoute && routeDisplayClients.length > 1 && (
                   <View style={styles.paradaMover}>
                     <TouchableOpacity
                       accessibilityRole="button"

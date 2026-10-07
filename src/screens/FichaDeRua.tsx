@@ -382,7 +382,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
 
                 <Pressable accessibilityRole="button" accessibilityState={{ expanded: completar }} onPress={() => setCompletar((v) => !v)} style={s.completarTopo}>
                   <View style={{ flex: 1 }}>
-                    <Text style={s.completarTitulo}>{`Completar agora${faltamCompletar ? ` · faltam ${faltamCompletar}` : ''}`}</Text>
+                    <Text style={s.completarTitulo}>{`Completar agora${faltamCompletar ? ` · ${faltamCompletar === 1 ? 'falta' : 'faltam'} ${faltamCompletar}` : ''}`}</Text>
                     {f.comoFoi === 'decisor_ausente'
                       ? <Text style={s.completarAlerta}>Saia com nome e horário de quem decide</Text>
                       : <Text style={s.ajuda}>opcional · nunca trava a visita</Text>}

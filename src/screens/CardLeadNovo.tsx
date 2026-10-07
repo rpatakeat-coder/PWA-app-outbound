@@ -234,7 +234,8 @@ function Cabecalho({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; com
   const posicao = (d.aproximado ?? d.client.geo_approximate) ? '≈ posição aproximada' : 'posição exata';
   const sub = ehPessoa
     ? `cadastrado como "${cadastrado}"`
-    : [endereco, distanciaTexto(d.distanciaM), posicao].filter(Boolean).join(' · ');
+    // número e unidade sem quebra ("110" numa linha e "m" na outra, auditoria 06/10)
+    : [endereco, distanciaTexto(d.distanciaM)?.replace(/ (k?m)$/, String.fromCharCode(160) + '$1'), posicao].filter(Boolean).join(' · ');
   return (
     <View style={s.cabecalho}>
       <Pressable
@@ -561,12 +562,13 @@ const s = StyleSheet.create({
   barra8: { flexDirection: 'row', gap: 3 },
   seg: { flex: 1, height: 6, borderRadius: 3, backgroundColor: 'var(--border)' },
   segFeito: { backgroundColor: 'var(--vermelho-acao)' },
-  avancar: { flexGrow: 2, backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
+  // pisos de largura + grade que quebra linha: a 390 px os três dividiam 326 px e "Outra etapa" virava "Outra e…"
+  avancar: { flexGrow: 2, minWidth: 150, backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
   avancarTexto: { color: '#FFFFFF', fontWeight: '700' },
-  outra: { flexGrow: 1 },
+  outra: { flexGrow: 1, minWidth: 104 },
   negocioEtapa: { fontSize: 16, fontWeight: '600', color: 'var(--text)' },
   negocioNota: { fontSize: 13, fontWeight: '500', color: 'var(--text-muted)' },
-  grade: { flexDirection: 'row', gap: 8 },
+  grade: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   botao: {
     flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 12,
     borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)', paddingHorizontal: 4,
