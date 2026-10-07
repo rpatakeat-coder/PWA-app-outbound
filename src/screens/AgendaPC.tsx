@@ -15,6 +15,7 @@ import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, Te
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import SemDesfecho from './SemDesfecho';
+import SemLugarNoMapa from './SemLugarNoMapa';
 import { supabase } from '../integrations/supabase/client';
 import { useTarefasDoCrm } from '../hooks/useTarefasDoCrm';
 import { useClientSearch } from '../hooks/useClients';
@@ -844,6 +845,7 @@ export default function AgendaPC(props: Props) {
 
       {ehHoje && !foco && termo.length < 2 && <View style={{ paddingHorizontal: 14, paddingTop: 10 }}><SemDesfecho userId={user?.id ?? null} /></View>}
       <View style={s.conteudo}>{corpo}</View>
+      {!foco && termo.length < 2 && <View style={{ paddingHorizontal: 14, paddingTop: 10 }}><SemLugarNoMapa dia={dia} /></View>}
       </ScrollView>
       {rodape}
     </View>

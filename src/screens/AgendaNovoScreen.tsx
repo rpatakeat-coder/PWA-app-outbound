@@ -18,6 +18,7 @@ import { Painel } from '../components/Painel';
 import { supabase } from '../integrations/supabase/client';
 import RegistrarTarefa, { type TarefaParaRegistrar } from './RegistrarTarefa';
 import SemDesfecho from './SemDesfecho';
+import SemLugarNoMapa from './SemLugarNoMapa';
 import { fetchOptimizedTrip } from '../utils/routing';
 import { Toast } from '../components/Toast';
 
@@ -880,6 +881,7 @@ export default function AgendaNovoScreen({
           )}
         </>
       ) : outroDia}
+      <SemLugarNoMapa dia={dia} />
 
       <Painel visivel={porta} aoFechar={() => setPorta(false)} rotulo={semRota ? 'Montar meu dia' : 'Refazer meu dia'}>
         <View style={{ gap: 10, paddingBottom: 8 }}>
