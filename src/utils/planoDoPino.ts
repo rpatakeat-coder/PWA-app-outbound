@@ -131,42 +131,93 @@ export async function porNoPlano(p: PedidoDoPlano): Promise<{ ordem: number | nu
     const avisos: string[] = [];
     let remarcadas = 0;
     let hubspot: string | null = null;
+    /* À PROVA DE FECHAR O APP (06/10/26): o que vai à Agenda do app e ao HubSpot entra na fila do
+       aparelho ANTES de sair, em voo. Terminou, sai; caiu o sinal, espera o sinal; o app fechou no
+       meio (medido no Chrome: recarregar 0,7 s depois perdia a tarefa E a reunião), sobe ao reabrir
+       pelo executor 'plano' do App.tsx, que confere o que já existe antes de escrever. */
+    const pedido: PedidoDepois = { crm: pedidoCrm(p, mudouDia || mudouHora), reuniao: p.criarCompromisso ? reuniaoDoPedido(p) : null };
+    const acaoId = novoAcaoId();
+    const guardado = !!(pedido.crm || pedido.reuniao);
+    if (guardado) {
+      await enfileirar({ acaoId, tipo: 'plano', payload: pedido as unknown as Record<string, unknown>,
+        rotulo: `Próximo passo · ${p.client.empresa?.trim() || p.client.nome}`,
+        naoAntesDe: new Date(Date.now() + 2 * 60_000).toISOString() }).catch(() => undefined);
+    }
     /* A AGENDA DO APP: a reunião só depois da parada (se entrasse antes, o gatilho dela poria a
        parada sozinho e esta bateria na duplicata). Mover uma Demo com hora REMARCA a reunião. */
+    let agendaSemSinal = false;
     const agenda = (async () => {
-      if (!p.criarCompromisso) return;
-      if (p.hora && (p.acao === 'reuniao' || p.acao === 'demo' || p.acao === 'ligar')) {
-        const quando = isoBRT(p.dia, p.hora);
-        const remarcou = p.antes && p.remarcarCompromisso ? await p.remarcarCompromisso({ de: p.antes.dia, quando }) : false;
-        if (!remarcou) await p.criarCompromisso({ tipo: p.acao === 'ligar' ? 'follow_up' : 'reuniao', acao: p.acao, quando });
-      } else if (!p.hora && p.acao === 'ligar') {
-        /* Ligar sem hora: a ligação do dia fica na Agenda (09:00 é a convenção do "sem hora") */
-        await p.criarCompromisso({ tipo: 'follow_up', acao: 'ligar', quando: isoBRT(p.dia, '09:00') });
-      }
-    })().catch((e) => { avisos.push(`a Agenda do app não gravou o compromisso (${String((e as Error)?.message ?? e)})`); });
-    /* O HUBSPOT, À PROVA DE FECHAR O APP (06/10/26): o pedido entra na fila do aparelho ANTES de
-       sair, em voo. Se o app fechar no meio, ele sobe ao reabrir (executor 'plano' no App.tsx);
-       se terminar, sai da fila; se cair por sinal, fica esperando o sinal como os outros. */
+      const r = pedido.reuniao;
+      if (!r || !p.criarCompromisso) return;
+      const remarcou = r.de && p.remarcarCompromisso ? await p.remarcarCompromisso({ de: r.de, quando: r.quando }) : false;
+      if (!remarcou) await p.criarCompromisso({ tipo: r.tipo, acao: r.acao, quando: r.quando });
+    })().catch((e) => {
+      if (ehErroDeRede(e)) { agendaSemSinal = true; return; }
+      avisos.push(`a Agenda do app não gravou o compromisso (${String((e as Error)?.message ?? e)})`);
+    });
+    let crmSemSinal = false;
     const crm = (async () => {
-      const c = pedidoCrm(p, mudouDia || mudouHora);
-      if (!c) return;
-      const acaoId = novoAcaoId();
-      await enfileirar({ acaoId, tipo: 'plano', payload: c as unknown as Record<string, unknown>, rotulo: `Próximo passo · ${c.nome}`,
-        naoAntesDe: new Date(Date.now() + 2 * 60_000).toISOString() });
-      const r = await crmDoPlano(c, false);
+      if (!pedido.crm) return;
+      const r = await crmDoPlano(pedido.crm, false);
       remarcadas = r.remarcadas;
       avisos.push(...r.avisos);
-      if (r.semSinal) { await liberar(acaoId); hubspot = 'na fila: sobe quando o sinal voltar'; return; }
-      await descartar(acaoId);
+      if (r.semSinal) { crmSemSinal = true; hubspot = 'na fila: sobe quando o sinal voltar'; return; }
       hubspot = r.hubspot;
     })().catch((e) => { avisos.push(`o HubSpot não recebeu o próximo passo (${String((e as Error)?.message ?? e)})`); });
     await Promise.all([agenda, crm]);
+    if (guardado) {
+      if (agendaSemSinal || crmSemSinal) {
+        await liberar(acaoId, { crm: crmSemSinal ? pedido.crm : null, reuniao: agendaSemSinal ? pedido.reuniao : null } as unknown as Record<string, unknown>).catch(() => undefined);
+      } else await descartar(acaoId).catch(() => undefined);
+    }
     return { hubspot, remarcadas, avisos };
   })();
   return { ordem, depois };
 }
 
-/** O que vai ao HubSpot, sem nada da tela: é o que a fila guarda e reenvia. */
+/** A reunião (ou ligação) da Agenda do app que o pedido cria ou remarca. */
+export type ReuniaoDoPlano = { clientId: string; tipo: 'reuniao' | 'follow_up'; acao: AcaoId; quando: string; de: string | null };
+/** O que a fila guarda e reenvia (sem nada da tela). */
+export type PedidoDepois = { crm: PedidoCrm | null; reuniao: ReuniaoDoPlano | null };
+
+function reuniaoDoPedido(p: PedidoDoPlano): ReuniaoDoPlano | null {
+  const de = p.antes ? p.antes.dia : null;
+  if (p.hora && (p.acao === 'reuniao' || p.acao === 'demo' || p.acao === 'ligar')) {
+    return { clientId: p.client.id, tipo: p.acao === 'ligar' ? 'follow_up' : 'reuniao', acao: p.acao, quando: isoBRT(p.dia, p.hora), de };
+  }
+  /* Ligar sem hora: a ligação do dia fica na Agenda (09:00 é a convenção do "sem hora") */
+  if (!p.hora && p.acao === 'ligar') return { clientId: p.client.id, tipo: 'follow_up', acao: 'ligar', quando: isoBRT(p.dia, '09:00'), de: null };
+  return null;
+}
+
+const faixaDoDia = (dia: string) => [new Date(`${dia}T00:00:00-03:00`).toISOString(), new Date(`${dia}T23:59:59-03:00`).toISOString()];
+
+/** Retomada da Agenda: se já existe a reunião no dia novo, nada; se existe no antigo, move; senão, cria. */
+async function garantirReuniao(r: ReuniaoDoPlano): Promise<void> {
+  const { data: sessao } = await supabase.auth.getSession();
+  const uid = sessao.session?.user?.id;
+  if (!uid) throw new Error('JWT expired');
+  const diaNovo = new Date(new Date(r.quando).getTime() - 3 * 3600_000).toISOString().slice(0, 10);
+  const achar = async (dia: string) => {
+    const [a, b] = faixaDoDia(dia);
+    const { data, error } = await supabase.from('client_meetings').select('id').eq('client_id', r.clientId).eq('created_by', uid)
+      .eq('status', 'agendada').gte('scheduled_at', a).lte('scheduled_at', b).limit(1);
+    if (error) throw error;
+    return (data ?? [])[0] as { id: string } | undefined;
+  };
+  if (await achar(diaNovo)) return;
+  const velha = r.de && r.de !== diaNovo ? await achar(r.de) : undefined;
+  if (velha) {
+    const { error } = await supabase.from('client_meetings').update({ scheduled_at: r.quando }).eq('id', velha.id);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await supabase.from('client_meetings').insert({ client_id: r.clientId, scheduled_at: r.quando, duration_minutes: 30,
+    observacoes: null, type: r.tipo, acao: r.acao, created_by: uid });
+  if (error) throw error;
+}
+
+/** O que vai ao HubSpot, sem nada da tela. */
 export type PedidoCrm = { dealId: string; nome: string; acao: AcaoId; de: string | null; para: string; hora: string | null };
 
 function pedidoCrm(p: PedidoDoPlano, mudou: boolean): PedidoCrm | null {
@@ -221,9 +272,15 @@ export async function crmDoPlano(c: PedidoCrm, retomada: boolean): Promise<Depoi
 
 /** Executor da fila para o tipo 'plano': sem sinal continua na fila; recusa vira "falhou" com o motivo. */
 export async function subirPlanoDaFila(payload: Record<string, unknown>): Promise<void> {
-  const r = await crmDoPlano(payload as unknown as PedidoCrm, true);
-  if (r.semSinal) throw new Error('Failed to fetch');
-  if (r.avisos.length) throw new Error(r.avisos.join(' e '));
+  // item do primeiro formato (só o HubSpot, publicado no mesmo dia): ainda sobe
+  const ped = ((payload as { dealId?: string }).dealId ? { crm: payload, reuniao: null } : payload) as unknown as PedidoDepois;
+  // a reunião primeiro: a parada já existe, e o gatilho dela não duplica
+  if (ped.reuniao) await garantirReuniao(ped.reuniao);
+  if (ped.crm) {
+    const r = await crmDoPlano(ped.crm, true);
+    if (r.semSinal) throw new Error('Failed to fetch');
+    if (r.avisos.length) throw new Error(r.avisos.join(' e '));
+  }
   avisarQueOPlanoMudou();
 }
 

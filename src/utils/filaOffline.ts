@@ -151,10 +151,11 @@ export async function descartar(acaoId: string) {
 }
 
 /** O envio em voo caiu por falta de sinal: o item passa a esperar o sinal como os outros. */
-export async function liberar(acaoId: string) {
+export async function liberar(acaoId: string, payload?: Record<string, unknown>) {
   await carregar();
   const item = memoria.find((x) => x.acaoId === acaoId);
-  if (item) await gravar({ ...item, naoAntesDe: undefined });
+  // payload: só o que ainda falta (o que já foi não sobe de novo)
+  if (item) await gravar({ ...item, ...(payload ? { payload } : {}), naoAntesDe: undefined });
 }
 
 // Sobe o que está "na_fila", na ordem. Devolve quantos subiram. Um só por vez:
