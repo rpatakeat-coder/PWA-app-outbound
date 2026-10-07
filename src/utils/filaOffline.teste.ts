@@ -7,7 +7,7 @@
 // sem sinal nada some e nada pula a ordem; a mesma ação nunca sobe duas vezes;
 // erro de regra (longe demais) não fica tentando para sempre. Conferido
 // vermelho em 25/09/2026 tirando o `break` e a trava de subida simultânea.
-import { descartar, ehErroDeRede, enfileirar, itensDaFila, novoAcaoId, registrarExecutor, subirFila } from './filaOffline';
+import { descartar, ehErroDeRede, enfileirar, itensDaFila, liberar, novoAcaoId, registrarExecutor, subirFila } from './filaOffline';
 
 let falhas = 0;
 const ok = (c: boolean, m: string) => {
@@ -54,6 +54,24 @@ registrarExecutor('checkin', async (i) => {
 
   await descartar(b);
   ok(itensDaFila().length === 0, 'descartar tira da fila');
+
+  // EM VOO (06/10/26): o HubSpot do "Marcar o próximo passo" entra antes do envio. Enquanto a
+  // tela envia, a fila não sobe nem mostra; se o app fechar, sobe depois; se cair por sinal, liberar.
+  const v = novoAcaoId();
+  chamadas = [];
+  await enfileirar({ acaoId: v, tipo: 'checkin', rotulo: 'V', payload: {}, naoAntesDe: new Date(Date.now() + 60_000).toISOString() });
+  ok(itensDaFila().length === 0, 'em voo: não aparece na fila');
+  await subirFila();
+  ok(chamadas.length === 0, 'em voo: a fila não sobe o que a tela ainda está enviando');
+  await liberar(v);
+  ok(itensDaFila().length === 1, 'liberar (caiu o sinal): passa a aparecer');
+  n = await subirFila();
+  ok(n === 1 && chamadas.length === 1 && itensDaFila().length === 0, 'liberado: sobe na próxima subida');
+  const w = novoAcaoId();
+  await enfileirar({ acaoId: w, tipo: 'checkin', rotulo: 'W', payload: {}, naoAntesDe: new Date(Date.now() - 1000).toISOString() });
+  chamadas = [];
+  n = await subirFila();
+  ok(n === 1 && chamadas.length === 1, 'app fechou no meio: passada a hora, sobe sozinho');
 
   ok(ehErroDeRede(new TypeError('Load failed')) && !ehErroDeRede(new Error('Lead não encontrado')),
     'separa erro de rede de erro de regra');

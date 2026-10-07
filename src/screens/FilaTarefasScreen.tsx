@@ -28,6 +28,7 @@ import { ehRecusa, negocioAcao } from '../utils/negocioAcao';
 import { apagarPendente, desfazerFeita, lerFeitas, marcarGravada, registrarFeita, type FeitaServidor } from '../utils/filaFeitas';
 import { ehDiaUtil, proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
 import { porNoDia } from '../utils/paradaDoDia';
+import { aoMudarOPlano } from '../utils/planoDoPino';
 import { lerSemanaDoPlano, type DiaDoPlano } from '../utils/semanaDoPlano';
 import {
   COMO_FOI_FILA, DIAS_FILA, MOTIVOS_SEM_INTERESSE, dataDoChip, diaCurto, diasSugeridos, fraseDaVolta, notaDaFila,
@@ -346,9 +347,9 @@ function CardFila({ item, aberto, selecionado, aoVerbo, aoFechar, aoAdiar, aoSel
               </Pressable>
             ) : semTelefone && !semTelefone.noPlano ? (
               <View style={{ gap: 6, alignItems: 'stretch' }}>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Pôr no plano: ${item.negocio}`} onPress={semTelefone.aoPorNoPlano} style={[s.botaoVerbo, { backgroundColor: 'var(--vermelho-acao)' }]}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Marcar o próximo passo: ${item.negocio}`} onPress={semTelefone.aoPorNoPlano} style={[s.botaoVerbo, { backgroundColor: 'var(--vermelho-acao)' }]}>
                   <IconCalendar width={18} height={18} fill="#FFFFFF" />
-                  <Text style={s.botaoVerboTexto}>Pôr no plano</Text>
+                  <Text style={s.botaoVerboTexto}>Próximo passo</Text>
                 </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel={`Adicionar telefone: ${item.negocio}`} onPress={semTelefone.aoTelefone} style={s.botaoTelefone}>
                   <IconCall width={16} height={16} fill={cores.onSurface} />
@@ -367,7 +368,7 @@ function CardFila({ item, aberto, selecionado, aoVerbo, aoFechar, aoAdiar, aoSel
             <View style={s.segmentos}>{[0, 1, 2, 3].map((i) => <View key={i} style={[s.segmento, i < item.contatos && { backgroundColor: item.contatos >= 4 ? 'var(--verde-acao)' : 'var(--text-muted)' }]} />)}</View>
             <Text style={s.rodapeFixo}>{`${item.contatos} de 4`}</Text>
             {semTelefone?.noPlano && !item.agendaHoje ? (
-                <View style={s.seloAgenda}><IconCalendar width={12} height={12} fill="var(--tint-green-text)" /><Text style={s.seloAgendaTexto}>{`no plano · ${semTelefone.noPlano}`}</Text></View>
+                <View style={s.seloAgenda}><IconCalendar width={12} height={12} fill="var(--tint-green-text)" /><Text style={s.seloAgendaTexto}>{`próximo passo · ${semTelefone.noPlano}`}</Text></View>
               ) : !item.temTelefone && (item.verbo === 'Visitar') && !item.agendaHoje ? <Text style={[s.rodapeFixo, { color: 'var(--ambar-texto)' }]} numberOfLines={1}>sem telefone no CRM</Text>
               : item.agendaHoje ? (
                 <View style={s.seloAgenda}><IconCalendar width={12} height={12} fill="var(--tint-green-text)" /><Text style={s.seloAgendaTexto}>{`hoje ${item.agendaHoje}`}</Text></View>
@@ -388,6 +389,8 @@ type Props = {
   aoRegistrarVisita: (clientId: string) => void;
   /** A4: abre o cadastro do lead no campo telefone. */
   aoEditarTelefone?: (clientId: string) => void;
+  /** Abre a folha "Marcar o próximo passo" do app (a mesma do pino): tipo, dia, hora e HubSpot. */
+  aoMarcarProximoPasso?: (clientId: string) => void;
   /** O id do executivo no app (field_routes.seller_id), para o Pôr no plano. */
   sellerId?: string | null;
   /** GPS atual; "Perto de mim" = até 1 km (D13, Julyan 04/10/26). */
@@ -402,7 +405,7 @@ function metros(a: { latitude: number; longitude: number }, lat: number, lng: nu
 }
 type Filtro = 'tudo' | 'ligar' | 'visitar' | 'whatsapp' | 'perto';
 
-export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, aoRegistrarVisita, aoEditarTelefone, sellerId, posicao }: Props) {
+export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, aoRegistrarVisita, aoEditarTelefone, aoMarcarProximoPasso, sellerId, posicao }: Props) {
   const layout = useLayout();
   const queryClient = useQueryClient();
   const q = useFila();
@@ -451,6 +454,8 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
     const d = (plano.data ?? []).find((x) => x.iso >= hoje && x.faixas.some((f) => f.id === `c-${dealId}` || f.id === `r-${dealId}`));
     return d ? d.iso : null;
   };
+  // a folha "Marcar o próximo passo" grava fora daqui: o selo "próximo passo · dia" relê quando o plano muda
+  useEffect(() => aoMudarOPlano(() => { void queryClient.invalidateQueries({ queryKey: ['plano_semana_fila'] }); }), [queryClient]);
   // Decisão 4 do handoff: o próximo dia de Rua do plano; sem Rua marcada, o próximo dia útil.
   const proximoDiaDeRua = (): string => {
     const rua = (plano.data ?? []).find((x) => x.iso > hoje && ehDiaUtil(x.iso, feriados) && x.proposito === 'rua');
@@ -595,7 +600,11 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   // A4: Pôr no plano. Grava na rota do dia (field_route_stops), que o espelho 0150 leva ao
   // planos_semanais do Planejamento do Cockpit. 5 s de Desfazer antes de gravar, como o Adiar.
   function porNoPlano(i: CardDaFila) {
-    if (!i.clientId || !sellerId) { Toast.mostrar('Este negócio ainda não tem pino no mapa.', 'erro'); return; }
+    if (!i.clientId) { Toast.mostrar('Este negócio ainda não tem pino no mapa.', 'erro'); return; }
+    /* A MESMA FOLHA DO PINO (06/10/26): aqui o botão punha no próximo dia de rua sem tipo, sem
+       hora e sem HubSpot. Agora abre o "Marcar o próximo passo"; o atalho antigo só sobra sem ela. */
+    if (aoMarcarProximoPasso) { aoMarcarProximoPasso(i.clientId); return; }
+    if (!sellerId) return;
     const dia = proximoDiaDeRua();
     setPostosNoPlano((p) => ({ ...p, [i.dealId]: dia }));
     let desfeito = false;

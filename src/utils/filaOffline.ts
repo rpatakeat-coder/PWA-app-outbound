@@ -14,7 +14,9 @@
 // 'negocio': um envio da porta única do Cockpit (negocio-acao) que ficou sem sinal.
 // 'tarefa': concluir uma tarefa do HubSpot (aba Tarefas / Liguei) sem sinal.
 // 'ficha': a linha da ficha de rua em fichas_de_rua (0120), idempotente pelo acaoId.
-export type TipoAcao = 'checkin' | 'negocio' | 'tarefa' | 'ficha';
+// 'plano': o HubSpot do "Marcar o próximo passo" (planoDoPino.ts). Entra ANTES do envio, em voo
+// (naoAntesDe): se o app fechar no meio, sobe ao reabrir; se o envio terminar, sai da fila.
+export type TipoAcao = 'checkin' | 'negocio' | 'tarefa' | 'ficha' | 'plano';
 
 export type ItemFila = {
   acaoId: string;
@@ -25,7 +27,11 @@ export type ItemFila = {
   tentativas: number;
   estado: 'na_fila' | 'falhou';
   erro?: string;
+  /** em voo: a tela ainda está enviando; a fila não sobe nem mostra antes desta hora (ISO). */
+  naoAntesDe?: string;
 };
+
+const emVoo = (i: ItemFila) => !!i.naoAntesDe && i.naoAntesDe > new Date().toISOString();
 
 export type Executor = (item: ItemFila) => Promise<void>;
 
@@ -89,7 +95,7 @@ async function comLoja<T>(modo: IDBTransactionMode, fn: (loja: IDBObjectStore) =
 }
 
 function avisar() {
-  const copia = [...memoria];
+  const copia = memoria.filter((i) => !emVoo(i));
   ouvintes.forEach((fn) => { try { fn(copia); } catch { /* ouvinte não derruba a fila */ } });
 }
 
@@ -119,13 +125,13 @@ async function remover(acaoId: string) {
 }
 
 export function itensDaFila(): ItemFila[] {
-  return [...memoria];
+  return memoria.filter((i) => !emVoo(i));
 }
 
 export function ouvirFila(fn: (itens: ItemFila[]) => void): () => void {
   ouvintes.add(fn);
   void carregar();
-  fn([...memoria]);
+  fn(memoria.filter((i) => !emVoo(i)));
   return () => { ouvintes.delete(fn); };
 }
 
@@ -144,6 +150,13 @@ export async function descartar(acaoId: string) {
   await remover(acaoId);
 }
 
+/** O envio em voo caiu por falta de sinal: o item passa a esperar o sinal como os outros. */
+export async function liberar(acaoId: string) {
+  await carregar();
+  const item = memoria.find((x) => x.acaoId === acaoId);
+  if (item) await gravar({ ...item, naoAntesDe: undefined });
+}
+
 // Sobe o que está "na_fila", na ordem. Devolve quantos subiram. Um só por vez:
 // chamadas simultâneas (evento online + intervalo) esperam a mesma promessa.
 export function subirFila(incluirFalhas = false): Promise<number> {
@@ -153,6 +166,7 @@ export function subirFila(incluirFalhas = false): Promise<number> {
     let enviados = 0;
     for (const item of [...memoria]) {
       if (item.estado === 'falhou' && !incluirFalhas) continue;
+      if (emVoo(item)) continue; // a tela ainda está enviando este
       const exec = executores.get(item.tipo);
       if (!exec) continue;
       try {

@@ -133,6 +133,7 @@ import PorNoPlano from './src/screens/PorNoPlano';
 import type { AcaoId } from './src/utils/acoesDoPlano';
 import { ROTULO_ETAPA } from './src/utils/fichaDeRua';
 import { negocioAcao } from './src/utils/negocioAcao';
+import { subirPlanoDaFila } from './src/utils/planoDoPino';
 import { textoNormalizado } from './src/utils/pinoP2';
 import { FILTROS_VAZIOS, LENTES, noFoco, passaNosFiltros, pontoDe, quantosFiltros, type FiltrosNovos, type Lente } from './src/utils/lentes';
 import CamadaDePontos from './src/map/CamadaDePontos';
@@ -4606,7 +4607,8 @@ function MainApp() {
   /* UM PLANO SÓ (06/10/26): o "Pôr no plano" abre daqui, do cartão e da ficha (onde ficava o
      Agendar). Fecha o que estiver aberto antes: o history.back() do Painel que fecha mataria o novo. */
   const abrirPorNoPlano = (c: Client, acao?: AcaoId) => {
-    if (!contextoPino) return;
+    // sem o contexto dos pinos ainda (1º segundo do app): avisa em vez de clique morto
+    if (!contextoPino) { Toast.mostrar('O mapa ainda está carregando. Tente de novo em um instante.', 'aviso'); return; }
     const p = classificarPino(c, contextoPino);
     const atual = codigoDaEtapa(c);
     setSelectedClient(null);
@@ -5142,6 +5144,7 @@ function MainApp() {
     const tirarNegocio = registrarExecutor('negocio', async (item) => { await negocioAcao((item.payload as { corpo: Record<string, unknown> }).corpo); });
     const tirarTarefa = registrarExecutor('tarefa', (item) => enviarConclusao(item.payload as unknown as PedidoConclusao));
     const tirarFicha = registrarExecutor('ficha', (item) => subirFichaDaFila(item.payload as unknown as LinhaFichaDaFila));
+    const tirarPlano = registrarExecutor('plano', (item) => subirPlanoDaFila(item.payload));
     const subir = () => {
       void subirFila().then((n) => {
         if (n > 0) Toast.mostrar(`Sinal voltou · ${n === 1 ? '1 item enviado' : `${n} itens enviados`}`, 'ok');
@@ -5155,6 +5158,7 @@ function MainApp() {
       tirarNegocio();
       tirarTarefa();
       tirarFicha();
+      tirarPlano();
       clearInterval(intervalo);
       if (typeof window !== 'undefined') window.removeEventListener('online', subir);
     };
@@ -8328,6 +8332,12 @@ function MainApp() {
           posicao={userLocation}
           aoAbrirLead={(id) => { setTab('map'); void openClientById(id); }}
           aoRegistrarVisita={(id) => { setTab('map'); void openClientById(id); }}
+          // o mesmo "Marcar o próximo passo" do pino (tipo, dia, hora e HubSpot), sem sair da aba
+          aoMarcarProximoPasso={async (id) => {
+            const local = clients.find((c) => c.id === id);
+            const c = local ?? ((await supabase.from('clients').select('*').eq('id', id).maybeSingle()).data as Client | null);
+            if (c) abrirPorNoPlano(c); else Toast.mostrar('Não encontrei este lead.', 'erro');
+          }}
           aoPosicionar={isViewer ? undefined : iniciarPosicionar}
           sellerId={profile?.id ?? null}
           // A4 (handoff das abas): "+ Telefone" abre o cadastro do lead, onde está o telefone

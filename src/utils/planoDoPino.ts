@@ -8,7 +8,7 @@ import type { Client } from '../types/client';
 import { tirarDoDia } from './paradaDoDia';
 import { acaoPorId, type AcaoId } from './acoesDoPlano';
 import { negocioAcao } from './negocioAcao';
-import { ehErroDeRede, enfileirar, novoAcaoId } from './filaOffline';
+import { descartar, ehErroDeRede, enfileirar, liberar, novoAcaoId } from './filaOffline';
 
 export type ParadaLida = { clientId: string; position: number | null; status: string; acao: string | null; horarioFixo: string | null; lat: number | null; lng: number | null };
 export type PlanoLido = { contagem: Record<string, number>; paradas: Record<string, ParadaLida[]> };
@@ -144,40 +144,87 @@ export async function porNoPlano(p: PedidoDoPlano): Promise<{ ordem: number | nu
         await p.criarCompromisso({ tipo: 'follow_up', acao: 'ligar', quando: isoBRT(p.dia, '09:00') });
       }
     })().catch((e) => { avisos.push(`a Agenda do app não gravou o compromisso (${String((e as Error)?.message ?? e)})`); });
-    /* O HUBSPOT: a tarefa aberta vai junto ao mudar de dia ou de hora (Edge fila-tarefas, op
-       remarcar); sem o que remarcar e com hora, nasce o próximo passo. Sem hora, nada novo. */
+    /* O HUBSPOT, À PROVA DE FECHAR O APP (06/10/26): o pedido entra na fila do aparelho ANTES de
+       sair, em voo. Se o app fechar no meio, ele sobe ao reabrir (executor 'plano' no App.tsx);
+       se terminar, sai da fila; se cair por sinal, fica esperando o sinal como os outros. */
     const crm = (async () => {
-      if (!p.client.id_hubspot) return;
-      if (mudouDia || mudouHora) {
-        try {
-          const { data, error } = await supabase.functions.invoke('fila-tarefas', {
-            body: { op: 'remarcar', dealId: String(p.client.id_hubspot), de: p.antes!.dia, para: p.dia, hora: p.hora },
-          });
-          if (error) throw error;
-          remarcadas = Array.isArray((data as { remarcadas?: unknown[] })?.remarcadas) ? (data as { remarcadas: unknown[] }).remarcadas.length : 0;
-        } catch (e) {
-          avisos.push(`não remarquei a tarefa do HubSpot (${String((e as Error)?.message ?? e)})`);
-        }
-      }
-      if (!p.hora) return;
-      if (remarcadas > 0) { hubspot = `tarefa remarcada para ${p.dia.slice(8, 10)}/${p.dia.slice(5, 7)} ${p.hora}`; return; }
-      const corpo = { op: 'nota', tipoAcao: 'proximo-passo', dealId: String(p.client.id_hubspot), tipo: tipoDoPasso(p.acao),
-        /* o servidor já prefixa o tipo ("Demo - "): o texto é só o nome */
-        data: p.dia, hora: p.hora, texto: p.client.empresa?.trim() || p.client.nome };
-      try {
-        await negocioAcao(corpo);
-        hubspot = `${a.hubspot} ${p.dia.slice(8, 10)}/${p.dia.slice(5, 7)} ${p.hora}`;
-      } catch (e) {
-        if (ehErroDeRede(e)) {
-          await enfileirar({ acaoId: novoAcaoId(), tipo: 'negocio', payload: { corpo }, rotulo: `Próximo passo · ${p.client.empresa?.trim() || p.client.nome}` });
-          hubspot = 'na fila: sobe quando o sinal voltar';
-        } else avisos.push(`o HubSpot recusou o próximo passo (${String((e as Error)?.message ?? e)})`);
-      }
-    })();
+      const c = pedidoCrm(p, mudouDia || mudouHora);
+      if (!c) return;
+      const acaoId = novoAcaoId();
+      await enfileirar({ acaoId, tipo: 'plano', payload: c as unknown as Record<string, unknown>, rotulo: `Próximo passo · ${c.nome}`,
+        naoAntesDe: new Date(Date.now() + 2 * 60_000).toISOString() });
+      const r = await crmDoPlano(c, false);
+      remarcadas = r.remarcadas;
+      avisos.push(...r.avisos);
+      if (r.semSinal) { await liberar(acaoId); hubspot = 'na fila: sobe quando o sinal voltar'; return; }
+      await descartar(acaoId);
+      hubspot = r.hubspot;
+    })().catch((e) => { avisos.push(`o HubSpot não recebeu o próximo passo (${String((e as Error)?.message ?? e)})`); });
     await Promise.all([agenda, crm]);
     return { hubspot, remarcadas, avisos };
   })();
   return { ordem, depois };
+}
+
+/** O que vai ao HubSpot, sem nada da tela: é o que a fila guarda e reenvia. */
+export type PedidoCrm = { dealId: string; nome: string; acao: AcaoId; de: string | null; para: string; hora: string | null };
+
+function pedidoCrm(p: PedidoDoPlano, mudou: boolean): PedidoCrm | null {
+  if (!p.client.id_hubspot) return null;
+  if (!mudou && !p.hora) return null;
+  return { dealId: String(p.client.id_hubspot), nome: p.client.empresa?.trim() || p.client.nome, acao: p.acao,
+    de: mudou ? p.antes!.dia : null, para: p.dia, hora: p.hora };
+}
+
+const ddmm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+
+/**
+ * A tarefa aberta vai junto ao mudar de dia ou de hora (Edge fila-tarefas, op remarcar); sem o que
+ * remarcar e com hora, nasce o próximo passo. Sem hora, nada novo.
+ * RETOMADA (a fila reenviando depois do app fechar no meio): a remarcação já pode ter andado, e aí
+ * não sobra nada no dia antigo. Se o dia novo já tem tarefa aberta dele, é ela; não cria outra. O
+ * próximo passo novo é seguro de repetir: o servidor recusa a gêmea (mesmo assunto, mesmo dia).
+ */
+export async function crmDoPlano(c: PedidoCrm, retomada: boolean): Promise<DepoisDoPlano & { semSinal: boolean }> {
+  const avisos: string[] = [];
+  let remarcadas = 0;
+  let jaNoDia = 0;
+  if (c.de) {
+    try {
+      const { data, error } = await supabase.functions.invoke('fila-tarefas', {
+        body: { op: 'remarcar', dealId: c.dealId, de: c.de, para: c.para, hora: c.hora },
+      });
+      if (error) throw error;
+      const d = data as { remarcadas?: unknown[]; jaNoDia?: number } | null;
+      remarcadas = Array.isArray(d?.remarcadas) ? d!.remarcadas!.length : 0;
+      jaNoDia = Number(d?.jaNoDia ?? 0) || 0;
+    } catch (e) {
+      if (ehErroDeRede(e)) return { hubspot: null, remarcadas: 0, avisos, semSinal: true };
+      avisos.push(`não remarquei a tarefa do HubSpot (${String((e as Error)?.message ?? e)})`);
+    }
+  }
+  if (!c.hora) return { hubspot: null, remarcadas, avisos, semSinal: false };
+  if (remarcadas > 0) return { hubspot: `tarefa remarcada para ${ddmm(c.para)} ${c.hora}`, remarcadas, avisos, semSinal: false };
+  if (retomada && c.de && jaNoDia > 0) return { hubspot: `tarefa já em ${ddmm(c.para)}`, remarcadas, avisos, semSinal: false };
+  const corpo = { op: 'nota', tipoAcao: 'proximo-passo', dealId: c.dealId, tipo: tipoDoPasso(c.acao),
+    /* o servidor já prefixa o tipo ("Demo - "): o texto é só o nome */
+    data: c.para, hora: c.hora, texto: c.nome };
+  try {
+    await negocioAcao(corpo);
+    return { hubspot: `${acaoPorId(c.acao)?.hubspot ?? 'Próximo passo'} ${ddmm(c.para)} ${c.hora}`, remarcadas, avisos, semSinal: false };
+  } catch (e) {
+    if (ehErroDeRede(e)) return { hubspot: null, remarcadas, avisos, semSinal: true };
+    avisos.push(`o HubSpot recusou o próximo passo (${String((e as Error)?.message ?? e)})`);
+    return { hubspot: null, remarcadas, avisos, semSinal: false };
+  }
+}
+
+/** Executor da fila para o tipo 'plano': sem sinal continua na fila; recusa vira "falhou" com o motivo. */
+export async function subirPlanoDaFila(payload: Record<string, unknown>): Promise<void> {
+  const r = await crmDoPlano(payload as unknown as PedidoCrm, true);
+  if (r.semSinal) throw new Error('Failed to fetch');
+  if (r.avisos.length) throw new Error(r.avisos.join(' e '));
+  avisarQueOPlanoMudou();
 }
 
 /** Tira do plano (o pino continua no mapa; parada feita não se tira). */

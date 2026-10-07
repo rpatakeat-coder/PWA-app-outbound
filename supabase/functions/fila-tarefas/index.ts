@@ -149,10 +149,15 @@ async function remarcar(token: string, owner: string, corpo: Record<string, unkn
   });
   if (!t.ok) return json(502, { erro: 'O HubSpot recusou a leitura das tarefas do negócio.' });
   type T = { id: string; properties?: Record<string, string | null> };
-  const alvo = ((t.dados?.results ?? []) as T[]).filter((x) => {
+  const abertaDele = (x: T, dia: string) => {
     const p = x.properties ?? {};
-    return p.hs_task_status === 'NOT_STARTED' && String(p.hubspot_owner_id ?? '') === owner && !!p.hs_timestamp && diaBRTde(p.hs_timestamp) === de;
-  });
+    return p.hs_task_status === 'NOT_STARTED' && String(p.hubspot_owner_id ?? '') === owner && !!p.hs_timestamp && diaBRTde(p.hs_timestamp) === dia;
+  };
+  const lidas = (t.dados?.results ?? []) as T[];
+  const alvo = lidas.filter((x) => abertaDele(x, de));
+  // jaNoDia: o app reenviando depois de fechar no meio (fila do aparelho) — se a remarcação já
+  // andou, a tarefa está no dia novo, e o app não cria outra (planoDoPino.crmDoPlano).
+  const jaNoDia = de === para ? 0 : lidas.filter((x) => abertaDele(x, para)).length;
   const remarcadas: Array<{ id: string; assunto: string; quando: string }> = [];
   const falhou: string[] = [];
   for (const x of alvo) {
@@ -161,7 +166,7 @@ async function remarcar(token: string, owner: string, corpo: Record<string, unkn
     const r = await hs(token, 'PATCH', `/crm/v3/objects/tasks/${x.id}`, { properties: { hs_timestamp: quando } });
     if (r.ok) remarcadas.push({ id: x.id, assunto: String(x.properties?.hs_task_subject ?? ''), quando }); else falhou.push(x.id);
   }
-  return json(200, { ok: true, remarcadas, falhou });
+  return json(200, { ok: true, remarcadas, falhou, jaNoDia });
 }
 
 Deno.serve(async (req: Request) => {
