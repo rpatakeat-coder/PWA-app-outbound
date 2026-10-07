@@ -76,7 +76,7 @@ export default function SemDesfecho({ userId }: { userId: string | null }) {
     const hoje = diaBRT(new Date());
     return [1, 2, 5].map((n) => {
       const d = proximoDiaUtil(hoje, n, []);
-      return { rot: n === 1 ? `amanhã ${h}` : `${DIAS[new Date(`${d}T12:00:00Z`).getUTCDay()]} ${d.slice(8, 10)}/${d.slice(5, 7)}`, quando: new Date(`${d}T${h}:00-03:00`).toISOString() };
+      return { rot: n === 1 ? `amanhã ${h}` : `${DIAS[new Date(`${d}T12:00:00Z`).getUTCDay()]} ${d.slice(8, 10)}/${d.slice(5, 7)} ${h}`, quando: new Date(`${d}T${h}:00-03:00`).toISOString() };
     });
   };
   const visiveis = (abertas ? recentes : recentes.slice(0, 3)).concat(antigas ? velhas : []);

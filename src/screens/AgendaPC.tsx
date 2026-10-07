@@ -14,6 +14,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
+import SemDesfecho from './SemDesfecho';
 import { supabase } from '../integrations/supabase/client';
 import { useTarefasDoCrm } from '../hooks/useTarefasDoCrm';
 import { useClientSearch } from '../hooks/useClients';
@@ -841,6 +842,7 @@ export default function AgendaPC(props: Props) {
         </View>
       )}
 
+      {ehHoje && !foco && termo.length < 2 && <View style={{ paddingHorizontal: 14, paddingTop: 10 }}><SemDesfecho userId={user?.id ?? null} /></View>}
       <View style={s.conteudo}>{corpo}</View>
       </ScrollView>
       {rodape}
