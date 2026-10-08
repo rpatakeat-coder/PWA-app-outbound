@@ -23,6 +23,21 @@ export function telefoneTexto(t: string): string {
 
 type Fato = { texto: string; aviso?: boolean };
 
+/** O nome de quem atende (08/10/26: "além do número ter o nome"). `nome` é o contato e `empresa`
+ *  o restaurante; não mostra quando repete o restaurante ou é texto de preenchimento. Curto, para
+ *  caber no chip a 375 px: as duas primeiras palavras. */
+export function contatoNome(c: { nome?: string | null; empresa?: string | null }): string | null {
+  const n = String(c.nome ?? '').replace(/\s+/g, ' ').trim();
+  if (n.length < 2) return null;
+  const semAcento = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const chave = (x: string) => semAcento(x).replace(/[^a-z0-9]/g, '');
+  if (c.empresa && chave(n) === chave(String(c.empresa))) return null;
+  // texto de preenchimento que o cadastro deixou no campo do contato
+  if (/^(ainda nao|nao tenho|nao sei|sem nome|teste|dono|gerente|responsavel|-+$)/.test(semAcento(n))) return null;
+  if (/\d{4,}/.test(n)) return null;
+  return n.split(' ').slice(0, 2).join(' ').slice(0, 24);
+}
+
 // O pino diz só "hoje / 5d / 12d parado" (cabe ao lado do nome); no card o
 // mesmo número ganha o que ele mede — dias SEM TOQUE — porque logo abaixo o
 // alerta de SLA fala em dias NA ETAPA, e "hoje" ao lado de "78 dias parado"
@@ -42,7 +57,8 @@ export function fatosDoCard(d: { client: Client; pino: Pino; distanciaM: number 
   if (dist) f.push({ texto: dist });
   if (pino.etiqueta && !pino.queda) f.push({ texto: textoDoToque(pino.etiqueta.texto), aviso: pino.etiqueta.texto === 'cobrar' || pino.etiqueta.texto.includes('parado') });
   f.push((d.aproximado ?? c.geo_approximate) ? { texto: '≈ posição aproximada', aviso: true } : { texto: 'posição exata' });
-  f.push(c.telefone?.trim() ? { texto: telefoneTexto(c.telefone) } : { texto: 'sem telefone', aviso: true });
+  const quem = contatoNome(c);
+  f.push(c.telefone?.trim() ? { texto: (quem ? quem + ' · ' : '') + telefoneTexto(c.telefone) } : { texto: quem ? quem + ' · sem telefone' : 'sem telefone', aviso: true });
   if (c.conta_alvo_rating != null) {
     const nota = Number(c.conta_alvo_rating).toFixed(1).replace('.', ',');
     f.push({ texto: c.conta_alvo_reviews != null ? `${nota}★ · ${c.conta_alvo_reviews} no Google` : `${nota}★ no Google` });

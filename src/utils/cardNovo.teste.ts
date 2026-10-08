@@ -99,3 +99,11 @@ if (falhas) {
   process.exit(1);
 }
 console.log('\ncard e folha: tudo certo');
+
+// o nome do contato junto do telefone (08/10/26)
+import { contatoNome } from './cardNovo';
+ok(contatoNome({ nome: 'Ailton Dias da Silva', empresa: 'Churrascaria gaucho raiz' }) === 'Ailton Dias', 'contato: duas primeiras palavras');
+ok(contatoNome({ nome: 'Top Gourmet', empresa: 'Top Gourmet ' }) === null, 'contato igual ao restaurante não aparece');
+ok(contatoNome({ nome: 'Ainda não tenho', empresa: 'X' }) === null, 'preenchimento não aparece');
+ok(contatoNome({ nome: '21999998888', empresa: 'X' }) === null, 'número no campo do nome não aparece');
+ok(fatosDoCard({ client: cli({ nome: 'José', empresa: 'Bar do Zé', telefone: '21964014604' }), pino: pino({}), distanciaM: null }).some((f) => f.texto === 'José · (21) 96401-4604'), 'chip mostra nome e telefone');
