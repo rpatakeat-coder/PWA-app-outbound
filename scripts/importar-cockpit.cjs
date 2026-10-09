@@ -105,6 +105,37 @@ const camada = `<script>
     var q = m[2] || '';
     return original(FN + fn + q + (q ? '&' : '?') + 'forceFunctionRegion=us-west-2', init);
   };
+  /* VERSAO NOVA (09/10/2026): a aba do gestor fica aberta o dia inteiro e os dados se
+     atualizam sozinhos, mas o CODIGO so' muda recarregando. O Julyan viu "Por pessoa"
+     cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
+     o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
+     mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
+  var VERSAO = ${JSON.stringify(commit)};
+  var avisada = false;
+  function conferirVersao() {
+    if (avisada) return;
+    original('/gestao/cockpit/versao.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (v) {
+        if (!v || !v.commit || v.commit === VERSAO || avisada) return;
+        avisada = true;
+        var faixa = document.createElement('div');
+        faixa.setAttribute('role', 'status');
+        faixa.style.cssText = 'position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483000;display:flex;align-items:center;gap:12px;padding:10px 12px 10px 16px;border-radius:12px;background:#111827;color:#fff;font:600 13px/1.3 Poppins,system-ui,sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.35);max-width:calc(100vw - 32px);';
+        faixa.innerHTML = '<span>Saiu uma versão nova do cockpit.</span>';
+        var bt = document.createElement('button');
+        bt.type = 'button';
+        bt.textContent = 'Atualizar';
+        bt.style.cssText = 'height:34px;padding:0 14px;border:0;border-radius:8px;background:#E51A31;color:#fff;font:700 13px Poppins,system-ui,sans-serif;cursor:pointer;';
+        bt.addEventListener('click', function () { location.reload(); });
+        faixa.appendChild(bt);
+        document.body.appendChild(faixa);
+      })
+      .catch(function () { /* sem rede: confere na proxima */ });
+  }
+  setInterval(conferirVersao, 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') conferirVersao(); });
+  window.addEventListener('focus', conferirVersao);
 })();
 </script>`;
 // Logo DEPOIS do charset: o navegador so procura o charset nos primeiros 1024
@@ -170,6 +201,8 @@ if (mapasV5 === 0) {
 fs.rmSync(DESTINO, { recursive: true, force: true });
 fs.mkdirSync(path.join(DESTINO, 'assets'), { recursive: true });
 fs.writeFileSync(path.join(DESTINO, 'index.html'), html);
+// o commit publicado: a pagina aberta compara o dela com este para avisar que ha versao nova
+fs.writeFileSync(path.join(DESTINO, 'versao.json'), JSON.stringify({ commit: commit }) + '\n');
 const assets = git('ls-tree --name-only ' + REF + ' public/assets/').toString().split('\n').filter(Boolean);
 assets.forEach((a) => {
   fs.writeFileSync(path.join(DESTINO, 'assets', path.basename(a)), git('show ' + REF + ':' + a));
