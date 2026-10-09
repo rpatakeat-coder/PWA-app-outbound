@@ -124,6 +124,7 @@ import { useBuscaNegocios } from './src/hooks/useBuscaNegocios';
 // check-in abria o seletor do avatar.
 import { comprimir as comprimirFotoVisita, enviarFoto as enviarFotoVisita, escolherFoto as escolherFotoVisita } from './src/utils/fotoVisita';
 import { useMeuDia } from './src/hooks/useMeuDia';
+import { ehNoite, lerSemanaMedida } from './src/utils/planoMedido';
 import FolhaCalor from './src/screens/FolhaCalor';
 import AvisosPainel from './src/screens/AvisosPainel';
 import { useAvisos } from './src/hooks/useAvisos';
@@ -1672,6 +1673,19 @@ function MainApp() {
   // Daily prometida, reuniões e sequência. Alimenta também o "x/6" da pílula.
   const [meuDiaAberto, setMeuDiaAberto] = useState(false);
   const meuDia = useMeuDia(modoNovo, profile?.id ?? null);
+  // OS DOIS NÚMEROS DO DIA (08/10/26, "os mesmos números em tudo"): Plano e Visitas da mesma fonte
+  // do cockpit do gestor (planejamento_do_time). Ver src/utils/planoMedido.ts.
+  const hojeMedidoIso = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const planoMedido = useQuery({
+    queryKey: ['plano_medido', profile?.id_hubspot ?? null, hojeMedidoIso],
+    enabled: modoNovo && !!profile?.id_hubspot,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    queryFn: () => lerSemanaMedida(String(profile!.id_hubspot), hojeMedidoIso),
+  });
+  const hojeMedido = planoMedido.data?.get(hojeMedidoIso) ?? null;
+  /* Visitas = toda visita COM PROVA do dia (a pílula e a faixa contavam também as sem prova) */
+  const visitasComProva = meuDia.data?.medido ? (meuDia.data.provadasHoje ?? meuDia.data.visitasHoje) : null;
 
   // A META DE VISITAS É UMA SÓ (auditoria 28/09/2026): a Agenda, o Montar meu dia e a Rota
   // liam só a do time, a pílula lia a promessa, e a meta de cada um (seller_visit_goals)
@@ -5056,6 +5070,7 @@ function MainApp() {
       }
       // O "x/6" da pílula e o Meu dia contam check-ins reais: atualiza na hora.
       void queryClient.invalidateQueries({ queryKey: ['meu_dia'] });
+      void queryClient.invalidateQueries({ queryKey: ['plano_medido'] });
       if (modoNovo && contextoPino && visitado.status === 'lead') {
         // Etapa atual no código do Cockpit: texto do app pela etapa_de_para,
         // senão a do snapshot (0105).
@@ -6454,12 +6469,11 @@ function MainApp() {
         <FaixaDaRua
           largo={layout.ehLargo}
           top={layout.ehLargo ? 12 : insets.top + 7 + ALTURA_TOPO_CAMPO + 8}
-          feitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
+          feitas={visitasComProva}
           meta={metaDeHoje}
-          plano={(() => {
-            const vivas = routeStops.filter((st) => st.status === 'planned' || st.status === 'done');
-            return { total: vivas.length, feitas: vivas.filter((st) => st.status === 'done' || (!!st.client && visitadoHoje(st.client.visited_at))).length };
-          })()}
+          plano={hojeMedido ? { total: hojeMedido.planejadas, feitas: hojeMedido.feitasDoPlano, semLugar: hojeMedido.semLugar, fora: hojeMedido.fora } : null}
+          noite={ehNoite()}
+          aoMontarAmanha={() => irParaAba('agenda')}
           temRota={routeDisplayClients.length > 0}
           // com rota montada, a rota do dia; sem rota, o Montar meu dia
           aoIr={() => { if (routeDisplayClients.length > 0 || !podePlanejar) irParaAba('route'); else abrirPlanejar(); }}
@@ -6532,9 +6546,9 @@ function MainApp() {
           quadra={quadraAberta ? { area: quadraAberta.area, aoFechar: () => setQuadraAberta(null) } : null}
           // Prompt §5: nas lentes Sem dono e Reconquista a linha tem "É meu" sem abrir o card.
           eMeu={!isViewer && (lente === 'semdono' || lente === 'rec') ? { naRota: routeStopClientIds, aoAssumir: (c) => { void assumirDoMapa(c); } } : null}
-          planoTotal={routeDisplayClients.length}
-          planoFeito={routeStops.filter((s) => s.status === 'done').length}
-          visitasFeitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
+          planoTotal={hojeMedido ? hojeMedido.planejadas : routeDisplayClients.length}
+          planoFeito={hojeMedido ? hojeMedido.feitasDoPlano : routeStops.filter((s) => s.status === 'done').length}
+          visitasFeitas={visitasComProva}
           visitasProvadas={meuDia.data?.provadasHoje ?? null}
           metaVisitas={metaDeHoje}
           aoProgresso={() => setMeuDiaAberto(true)}
@@ -6771,9 +6785,9 @@ function MainApp() {
         itens={quadraAberta ? itensFolha.filter((it) => quadraAberta.ids.has(it.c.id)) : itensFolha}
         quadra={quadraAberta ? { area: quadraAberta.area, aoFechar: () => setQuadraAberta(null) } : null}
         eMeu={!isViewer && (lente === 'semdono' || lente === 'rec') ? { naRota: routeStopClientIds, aoAssumir: (c) => { void assumirDoMapa(c); } } : null}
-        planoTotal={routeDisplayClients.length}
-        planoFeito={routeStops.filter((s) => s.status === 'done').length}
-        visitasFeitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
+        planoTotal={hojeMedido ? hojeMedido.planejadas : routeDisplayClients.length}
+        planoFeito={hojeMedido ? hojeMedido.feitasDoPlano : routeStops.filter((s) => s.status === 'done').length}
+        visitasFeitas={visitasComProva}
         visitasProvadas={meuDia.data?.provadasHoje ?? null}
         metaVisitas={metaDeHoje}
         aoProgresso={() => setMeuDiaAberto(true)}

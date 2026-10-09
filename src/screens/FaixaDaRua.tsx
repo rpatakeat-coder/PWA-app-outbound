@@ -20,9 +20,14 @@ type Props = {
   meta: number;
   /** O plano de hoje inteiro (05/10/26: "tem que ser tudo que está no planejamento, não só visita,
    *  porque a agenda está cheia"): paradas da rota/Planejamento e quantas já foram. */
-  plano?: { total: number; feitas: number } | null;
+  /** 08/10/26 ("os mesmos números em tudo"): o PLANO do cockpit do gestor (planejamento_do_time):
+   *  paradas do plano com visita provada de paradas do plano; sem lugar e fora do plano à parte. */
+  plano?: { total: number; feitas: number; semLugar?: number; fora?: number } | null;
   temRota: boolean;
   aoIr: () => void;
+  /** Depois das 18h: o convite é montar amanhã, nunca "Ir pra rua" (auditoria 08/10, E8). */
+  noite?: boolean;
+  aoMontarAmanha?: () => void;
 };
 
 export function tomDaFaixa(feitas: number | null, meta: number, hora: number): 'ok' | 'alerta' | 'andando' {
@@ -38,26 +43,29 @@ function horaBRT(): number {
   return Number.isFinite(h) ? h : 12;
 }
 
-export default function FaixaDaRua({ top, largo, feitas, meta, temRota, aoIr, plano }: Props) {
+export default function FaixaDaRua({ top, largo, feitas, meta, temRota, aoIr, plano, noite, aoMontarAmanha }: Props) {
   const hora = horaBRT();
-  // Com plano montado, o alvo do dia é o plano (que pode passar da meta); a meta vira referência.
+  // À noite o botão é "Montar amanhã" (o mesmo corte das 18h do Hoje do cockpit do executivo).
+  const montar = !!noite && !!aoMontarAmanha;
+  // Com plano montado, o título é o PLANO e a linha de baixo, as VISITAS com prova contra a meta.
   if (plano && plano.total > 0) {
     const faltamP = Math.max(0, plano.total - plano.feitas);
-    const tomP = faltamP === 0 ? 'ok' : (plano.feitas === 0 && (feitas == null || feitas === 0) && hora >= 10) ? 'alerta' : 'andando';
+    const tomP = faltamP === 0 ? 'ok' : (!montar && plano.feitas === 0 && (feitas == null || feitas === 0) && hora >= 10) ? 'alerta' : 'andando';
     const tituloP = faltamP === 0 ? `Plano de hoje feito: ${plano.feitas} de ${plano.total}` : `Plano de hoje: ${plano.feitas} de ${plano.total}`;
     const subP = [
-      faltamP ? `${faltamP === 1 ? 'falta 1 parada' : `faltam ${faltamP} paradas`}` : 'cada porta a mais é funil da semana que vem',
-      feitas != null ? `${feitas} ${feitas === 1 ? 'visita' : 'visitas'} no dia · meta ${meta}` : `meta ${meta}`,
-    ].join(' · ');
-    const rotuloP = tomP === 'ok' ? 'Ver rota' : 'Ir pra rua';
+      feitas != null ? `${feitas} de ${meta} ${meta === 1 ? 'visita' : 'visitas'} com prova` : `meta ${meta} visitas`,
+      plano.semLugar ? `${plano.semLugar} sem lugar no mapa` : null,
+      plano.fora ? `+${plano.fora} fora do plano` : null,
+    ].filter(Boolean).join(' · ');
+    const rotuloP = montar ? 'Montar amanhã' : tomP === 'ok' ? 'Ver rota' : 'Ir pra rua';
     return (
       <View style={[s.faixa, largo && s.faixaLarga, { top, borderLeftColor: COR[tomP] }]} accessibilityRole="summary">
         <View style={s.txt}>
           <Text style={[s.titulo, tomP === 'alerta' && { color: '#FF8A8D' }]} numberOfLines={1}>{tituloP}</Text>
           <Text style={s.sub} numberOfLines={1}>{subP}</Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel={rotuloP} onPress={aoIr}
-          style={[s.botao, { backgroundColor: tomP === 'ok' ? COR.ok : '#D30000' }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={rotuloP} onPress={montar ? aoMontarAmanha : aoIr}
+          style={[s.botao, { backgroundColor: tomP === 'ok' || montar ? COR.ok : '#D30000' }]}>
           <Text style={s.botaoTexto} numberOfLines={1}>{rotuloP} →</Text>
         </Pressable>
       </View>
@@ -77,14 +85,14 @@ export default function FaixaDaRua({ top, largo, feitas, meta, temRota, aoIr, pl
     : faltam === 0
       ? 'cada porta a mais é funil da semana que vem'
       : `${faltam === 1 ? 'falta 1 porta' : `faltam ${faltam} portas`}`;
-  const rotulo = tom === 'ok' ? 'Ver rota' : temRota ? 'Ir pra rua' : 'Montar a rota';
+  const rotulo = montar ? 'Montar amanhã' : tom === 'ok' ? 'Ver rota' : temRota ? 'Ir pra rua' : 'Montar a rota';
   return (
     <View style={[s.faixa, largo && s.faixaLarga, { top, borderLeftColor: COR[tom] }]} accessibilityRole="summary">
       <View style={s.txt}>
         <Text style={[s.titulo, tom === 'alerta' && { color: '#FF8A8D' }]} numberOfLines={1}>{titulo}</Text>
         <Text style={s.sub} numberOfLines={1}>{sub}</Text>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={rotulo} onPress={aoIr}
+      <Pressable accessibilityRole="button" accessibilityLabel={rotulo} onPress={montar ? aoMontarAmanha : aoIr}
         style={[s.botao, { backgroundColor: tom === 'ok' ? COR.ok : '#D30000' }]}>
         <Text style={s.botaoTexto} numberOfLines={1}>{rotulo} →</Text>
       </Pressable>

@@ -36,6 +36,7 @@ import { montarFeitoNoDia, type FichaDoDia, type RegistroDoDia, type VisitaDoDia
 import { proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
 import { porNoDia } from '../utils/paradaDoDia';
 import { lerSemanaDoPlano, PROPOSITOS, type DiaDoPlano } from '../utils/semanaDoPlano';
+import { lerSemanaMedida, segundaDe as segundaDaSemana, type DiaMedido } from '../utils/planoMedido';
 import { montarPreparo, usePreparo } from '../utils/preparo';
 import { stageTemperature } from '../constants/stages';
 import type { Client, ClientMeeting, FieldRouteStopWithClient } from '../types/client';
@@ -245,6 +246,19 @@ export default function AgendaNovoScreen({
     queryFn: async () => {
       const [a, b] = await Promise.all([lerSemanaDoPlano(ownerHubspot!, dias[0]), lerSemanaDoPlano(ownerHubspot!, dias[4])]);
       return new Map([...a, ...b].map((d) => [d.iso, d]));
+    },
+  });
+  /* O PLANO MEDIDO de cada dia (08/10/26, "os mesmos números em tudo"): o chip diz quantas paradas
+     o plano tem, a mesma conta do cockpit do gestor (o restaurante uma vez por dia, sem lugar incluso).
+     Antes somava as paradas da rota com os compromissos do HubSpot: "Funil · 14" para um plano de 13. */
+  const medida = useQuery<Map<string, DiaMedido>>({
+    queryKey: ['plano_medido_agenda', ownerHubspot, dias[0], dias[4]],
+    enabled: !!ownerHubspot,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const semanas = Array.from(new Set([segundaDaSemana(dias[0]), segundaDaSemana(dias[dias.length - 1])]));
+      const mapas = await Promise.all(semanas.map((seg) => lerSemanaMedida(ownerHubspot!, seg)));
+      return new Map(mapas.flatMap((m) => [...m]));
     },
   });
   // Demos realizadas de hoje (livro da temporada, a mesma régua do Cockpit) — para a noite.
@@ -459,7 +473,8 @@ export default function AgendaNovoScreen({
   const CURTO: Record<string, string> = { relac: 'Relac.', follow: 'Follow', nova: 'Nova' };
   const rotuloDia = (d: string) => {
     const pl = semana.data?.get(d);
-    const n = (d === hoje ? estado.length : paradasDoDia(d).length) + doDia(d).length;
+    const m = medida.data?.get(d);
+    const n = m ? m.planejadas : (d === hoje ? estado.length : paradasDoDia(d).length) + doDia(d).length;
     if (pl?.proposito) return `${CURTO[pl.proposito] ?? PROPOSITOS[pl.proposito] ?? pl.proposito}${n ? ` · ${n}` : ''}`;
     return n ? `${n} ${n === 1 ? 'item' : 'itens'}` : '—';
   };
