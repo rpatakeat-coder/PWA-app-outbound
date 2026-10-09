@@ -811,7 +811,8 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
       {aba === 'fila' && (contratosHoje.data ?? []).map((k) => (
         <View key={k.negocio_id} style={s.contrato}>
           <Text style={s.contratoTitulo} numberOfLines={2}>{k.negocio_nome ? `Contrato fechado · ${k.negocio_nome}` : 'Contrato fechado'}</Text>
-          <Text style={s.contratoTexto}>{`${k.valor ? `R$ ${Math.round(k.valor)}/mês · ` : ''}+200 na temporada`}</Text>
+          {/* 0192 (09/10/26): a venda vale 100 no placar da semana (o bônus de R$ 250) e segue valendo 200 no ranking do mês */}
+          <Text style={s.contratoTexto}>{`${k.valor ? `R$ ${Math.round(k.valor)}/mês · ` : ''}+100 no placar da semana`}</Text>
         </View>
       ))}
       {corpo}

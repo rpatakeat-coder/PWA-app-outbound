@@ -12,11 +12,15 @@ import { supabase } from '../integrations/supabase/client';
 import { Painel } from '../components/Painel';
 import { IconCheckCircle, IconTrophy, IconTrendingUp, IconTrendingDown } from '../components/icons';
 
+// 09/10/26 (0192): a SEMANA é o placar do bônus de R$ 250 (regra 'bonus': venda 100 · reunião com
+// desfecho 25 · visita com prova 3, até 6 por dia), a mesma conta do cockpit do gestor. O MÊS segue
+// a temporada (% da meta). Os campos novos são opcionais: o app antigo e o banco novo convivem.
 export type Ranking = {
-  periodo: 'semana' | 'mes'; de: string; ate: string;
-  podio: Array<{ pos: number; nome: string; avatar_url: string | null; pct: number | null; pts: number }>;
-  eu: null | { pos: number; total: number; movimento: number | null; pct: number | null; pts: number; meta_pts: number;
-    faltam: string | null; proximo: string | null; provadas: number; declaradas: number; demos: number; contratos: number; mrr: number };
+  periodo: 'semana' | 'mes'; de: string; ate: string; regra?: 'bonus'; premio?: number;
+  podio: Array<{ pos: number; nome: string; avatar_url: string | null; pct: number | null; pts: number; vendas?: number; reunioes?: number; visitas?: number }>;
+  eu: null | { pos: number; total: number; movimento: number | null; pct: number | null; pts: number; meta_pts: number | null;
+    faltam: string | null; proximo: string | null; provadas: number; declaradas: number; demos: number; contratos: number; mrr: number;
+    vendas?: number; reunioes?: number; visitas?: number; nao_pontuaram?: number };
   destaques: Array<null | { titulo: string; nome: string; valor: number; mrr?: number }>;
   meta_coletiva: { feitos: number; meta: number } | null;
   campeao: null | { semana: string; inicio: string; fim: string; fechada_em: string; nome: string; pct: number; pts: number; contratos: number;
@@ -56,6 +60,10 @@ function useConquistas(ativo: boolean) {
 const iniciais = (n: string) => n.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('');
 const primeiro = (n: string) => n.split(/\s+/)[0];
 const pct = (v: number | null | undefined) => (v == null ? '—' : `${Math.round(Number(v))}%`);
+const pl = (n: number | undefined, um: string, varios: string) => `${n ?? 0} ${(n ?? 0) === 1 ? um : varios}`;
+/** "1 venda · 2 reuniões · 18 visitas": a conta de cada um no placar da semana */
+export const contaDoPlacar = (x: { vendas?: number; reunioes?: number; visitas?: number }) =>
+  `${pl(x.vendas, 'venda', 'vendas')} · ${pl(x.reunioes, 'reunião', 'reuniões')} · ${pl(x.visitas, 'visita', 'visitas')}`;
 const mesNome = (iso: string) => ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'][new Date(iso).getUTCMonth()];
 const ddmm = (iso: string) => { const d = new Date(new Date(iso).getTime() - 3 * 3600000); return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`; };
 
@@ -106,6 +114,14 @@ export async function avisarSeVisitaProvada(clientId: string, mostrar: (texto: s
       .filter((v) => v.client_id === clientId).sort((a, b) => b.visited_at.localeCompare(a.visited_at))[0];
     if (!daqui?.provada) return;
     const r = await buscarRanking();
+    if (r?.regra === 'bonus') {
+      // o placar da semana é lido ao vivo (a visita já entrou): conta até 6 por dia, e em lead
+      // criado na hora só com foto — por isso o toast não promete +3, diz a regra
+      const provadasHoje = ((data ?? []) as Array<{ provada: boolean }>).filter((v) => v.provada).length;
+      const base = provadasHoje > 6 ? `Visita com prova · já são ${provadasHoje} hoje: o placar conta 6 por dia` : 'Visita com prova · conta no placar da semana';
+      mostrar(r.eu?.faltam ? `${base} · ${r.eu.faltam.replace(/^Faltam/, 'faltam')}` : base);
+      return;
+    }
     const falta = faltamDepoisDe(r, 20);
     mostrar(falta ? `+20 · visita provada · ${falta}` : '+20 · visita provada');
   } catch { /* o toast é um extra: nunca derruba o check-in */ }
@@ -137,9 +153,20 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
     const eu = r.eu;
     const podio = r.podio;
     const ordemPodio = [podio[1], podio[0], podio[2]].filter(Boolean);
+    const bonus = r.regra === 'bonus';
     corpo = (
       <View style={{ gap: 16 }}>
-        <Text style={s.ajuda}>{periodo === 'semana' ? `Semana · ${ddmm(r.de)} a ${ddmm(new Date(new Date(r.ate).getTime() - 86400000).toISOString())} · fecha segunda 9h` : `Mês · ${mesNome(r.de)}`}</Text>
+        <Text style={s.ajuda}>{periodo === 'semana'
+          ? `Semana · ${ddmm(r.de)} a ${ddmm(new Date(new Date(r.ate).getTime() - 86400000).toISOString())} · ${bonus ? `fecha sexta às 23:59 · 1º leva R$ ${r.premio ?? 250}` : 'fecha segunda 9h'}`
+          : `Mês · ${mesNome(r.de)}`}</Text>
+
+        {bonus && !!r.campeao && (
+          <View style={s.bloco}>
+            <Text style={s.rotulo}>SEMANA PASSADA</Text>
+            <Text style={s.forte}>{`${primeiro(r.campeao.nome)} levou ${r.campeao.premio_texto ?? 'o bônus'} · ${r.campeao.pts} pts`}</Text>
+            {r.campeao.minha_pos != null && <Text style={s.ajuda}>{`Você ficou em ${r.campeao.minha_pos}º`}</Text>}
+          </View>
+        )}
 
         {!!r.meta_coletiva && r.meta_coletiva.meta > 0 && (
           <View style={s.bloco}>
@@ -157,8 +184,8 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
                 <View style={[s.podioNum, p.pos === 1 && { backgroundColor: 'var(--vermelho-acao)' }]}><Text style={s.podioNumTexto}>{p.pos}</Text></View>
               </View>
               <Text style={s.podioNome} numberOfLines={1}>{primeiro(p.nome)}</Text>
-              <Text style={s.podioPct}>{pct(p.pct)}</Text>
-              <Text style={s.miuda}>{`${p.pts} pts`}</Text>
+              {bonus ? <Text style={s.podioPct}>{`${p.pts} pts`}</Text> : <Text style={s.podioPct}>{pct(p.pct)}</Text>}
+              <Text style={s.miuda} numberOfLines={2}>{bonus ? contaDoPlacar(p) : `${p.pts} pts`}</Text>
             </View>
           ))}
         </View>
@@ -168,7 +195,7 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <Text style={s.posGrande}>{`${eu.pos}º`}</Text>
               <View style={{ flex: 1 }}>
-                <Text style={s.forte}>{`${pct(eu.pct)} da meta · ${eu.pts} de ${eu.meta_pts} pts`}</Text>
+                <Text style={s.forte}>{bonus ? `${eu.pts} pts · ${contaDoPlacar(eu)}` : `${pct(eu.pct)} da meta · ${eu.pts} de ${eu.meta_pts} pts`}</Text>
                 {eu.movimento != null && eu.movimento !== 0 && (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                     {eu.movimento > 0 ? <IconTrendingUp width={14} height={14} fill="var(--verde-texto)" /> : <IconTrendingDown width={14} height={14} fill="var(--text-muted)" />}
@@ -180,11 +207,14 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
             {!!eu.faltam && <Text style={s.forte}>{eu.faltam}</Text>}
             {!!eu.proximo && <Text style={s.ajuda}>{eu.proximo}</Text>}
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              {[['Visitas provadas', String(eu.provadas)], ['Demos realizadas', String(eu.demos)], ['Contratos', `${eu.contratos}${eu.mrr ? ` · R$ ${Math.round(eu.mrr)}` : ''}`]].map(([rot, v]) => (
+              {(bonus
+                ? [['Vendas', `${eu.vendas ?? 0} × 100`], ['Reuniões com desfecho', `${eu.reunioes ?? 0} × 25`], ['Visitas com prova', `${eu.visitas ?? 0} × 3`]]
+                : [['Visitas provadas', String(eu.provadas)], ['Demos realizadas', String(eu.demos)], ['Contratos', `${eu.contratos}${eu.mrr ? ` · R$ ${Math.round(eu.mrr)}` : ''}`]]).map(([rot, v]) => (
                 <View key={rot} style={s.caixa}><Text style={s.miuda}>{rot}</Text><Text style={s.forte}>{v}</Text></View>
               ))}
             </View>
-            {eu.declaradas > 0 && <Text style={[s.miuda, { color: 'var(--text-faint)' }]}>{`${eu.declaradas} ${eu.declaradas === 1 ? 'visita declarada' : 'visitas declaradas'}, sem GPS nem foto: não pontuam`}</Text>}
+            {bonus && (eu.nao_pontuaram ?? 0) > 0 && <Text style={[s.miuda, { color: 'var(--text-faint)' }]}>{`${eu.nao_pontuaram} ${eu.nao_pontuaram === 1 ? 'visita não pontuou' : 'visitas não pontuaram'}: acima de 6 no dia, ou em lead criado na hora sem foto da fachada`}</Text>}
+            {!bonus && eu.declaradas > 0 && <Text style={[s.miuda, { color: 'var(--text-faint)' }]}>{`${eu.declaradas} ${eu.declaradas === 1 ? 'visita declarada' : 'visitas declaradas'}, sem GPS nem foto: não pontuam`}</Text>}
           </View>
         )}
 
@@ -215,7 +245,9 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
           {c.isLoading && <Text style={s.ajuda}>lendo…</Text>}
         </View>
 
-        <Text style={s.regras}>Pontos: visita provada 20 (GPS ou foto) · demo realizada 50 (o negócio entrou em Demo/Proposta) · contrato 200. Visita declarada não pontua. O ranking é pela % da sua meta; desempate por contratos e MRR. A semana fecha segunda às 9h.</Text>
+        <Text style={s.regras}>{bonus
+          ? 'Placar da semana (o mesmo do cockpit): venda 100 (negócio em Fechado no HubSpot; Ag. Pagamento não conta) · reunião com desfecho registrado no app 25 (uma por restaurante na semana) · visita com prova 3 (GPS até 200 m ou foto; até 6 por dia; em lead criado na hora, só com foto da fachada). Desempate: vendas, reuniões, visitas. A semana fecha sexta às 23:59 e o ganhador aparece na segunda às 08:00; o pagamento é com o financeiro.'
+          : 'Pontos: visita provada 20 (GPS ou foto) · demo realizada 50 (o negócio entrou em Demo/Proposta) · contrato 200. Visita declarada não pontua. O ranking é pela % da sua meta; desempate por contratos e MRR. A semana fecha segunda às 9h.'}</Text>
       </View>
     );
   }

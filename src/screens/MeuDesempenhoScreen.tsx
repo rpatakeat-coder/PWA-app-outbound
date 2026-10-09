@@ -25,7 +25,9 @@ type Desempenho = {
   hoje?: { provadas: number; sem_prova: number; meta: number; dia: string };
   semana?: { de: string; ate: string; provadas: number; meta: number; demos: number; contratos: number; pts: number; meta_pts: number; piso_faltam_provadas: number; piso_faltam_demos: number };
   mes?: { fechados: number; meta: number; variavel: number | null; por_cliente: number | null; proxima_venda: number | null; degrau: { clientes: number; faltam: number; por_cliente: number; extra: number } | null };
-  temporada?: { pos: number | null; total: number | null; pct: number | null; pts: number | null; faltam: string | null; proximo: string | null; podio: Array<{ pos: number; nome: string; avatar_url: string | null; pct: number; pts: number }> } | null;
+  // 0192 (09/10/26): regra 'bonus' = a semana é o placar do bônus de R$ 250 (o mesmo do cockpit)
+  temporada?: { pos: number | null; total: number | null; pct: number | null; pts: number | null; faltam: string | null; proximo: string | null; podio: Array<{ pos: number; nome: string; avatar_url: string | null; pct: number | null; pts: number }>;
+    regra?: 'bonus' | null; premio?: number | null; vendas?: number | null; reunioes?: number | null; visitas?: number | null; nao_pontuaram?: number | null } | null;
   dias?: Dia[];
   historico?: { semanas: Array<{ de: string; provadas: number; demos: number; contratos: number }>; meses: Array<{ mes: string; provadas: number; demos: number; contratos: number }> };
   hubspot_em?: string | null;
@@ -148,7 +150,27 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
   );
 
   // ---- 3 · semana ----
-  const blocoSemana = (
+  // 0192: com o placar do bônus, a semana é a conta dele (o "piso" era da temporada antiga e não decide mais nada)
+  const bonus = tmp?.regra === 'bonus';
+  const blocoSemana = bonus ? (
+    <View style={st.cartao}>
+      <Text style={st.secao}>SEMANA</Text>
+      {tmp?.pos ? (
+        <View style={{ flexDirection: 'row' }}>
+          <View style={[st.selo, tmp.pos === 1 ? st.seloOk : st.seloAviso, { flexShrink: 1 }]}>
+            <Text style={[st.seloTexto, { flexShrink: 1, color: tmp.pos === 1 ? 'var(--tint-green-text)' : 'var(--tint-amber-text)' }]}>{`${tmp.pos}º no placar · ${tmp.pts ?? 0} pts`}</Text>
+          </View>
+        </View>
+      ) : null}
+      <View style={st.tres}>
+        {[[tmp?.vendas ?? 0, (tmp?.vendas ?? 0) === 1 ? 'venda' : 'vendas'], [tmp?.reunioes ?? 0, (tmp?.reunioes ?? 0) === 1 ? 'reunião com desfecho' : 'reuniões com desfecho'], [tmp?.visitas ?? 0, (tmp?.visitas ?? 0) === 1 ? 'visita com prova' : 'visitas com prova']].map(([v, r]) => (
+          <View key={String(r)} style={st.kpi}><Text style={st.kpiValor}>{String(v)}</Text><Text style={st.kpiRotulo}>{String(r)}</Text></View>
+        ))}
+      </View>
+      {(tmp?.nao_pontuaram ?? 0) > 0 && <Text style={st.fraco}>{`${tmp?.nao_pontuaram} ${tmp?.nao_pontuaram === 1 ? 'visita não pontuou' : 'visitas não pontuaram'}: acima de 6 no dia, ou em lead criado na hora sem foto da fachada`}</Text>}
+      <Text style={st.nota}>{`Placar da semana: venda 100 · reunião com desfecho 25 · visita com prova 3 (até 6 por dia). O 1º leva R$ ${tmp?.premio ?? 250}. Visita declarada sem GPS perto do pino ou foto não conta.`}</Text>
+    </View>
+  ) : (
     <View style={st.cartao}>
       <Text style={st.secao}>SEMANA DA TEMPORADA</Text>
       <View style={{ flexDirection: 'row' }}>
@@ -168,10 +190,10 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
 
   // ---- 4 · temporada ----
   const blocoTemporada = tmp?.pos ? (
-    <Pressable accessibilityRole="button" accessibilityLabel="Abrir o ranking da temporada" style={st.cartao} onPress={() => setRankingAberto(true)}>
+    <Pressable accessibilityRole="button" accessibilityLabel={bonus ? 'Abrir o placar da semana' : 'Abrir o ranking da temporada'} style={st.cartao} onPress={() => setRankingAberto(true)}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <IconTrophy width={20} height={20} fill={cores.onSurface} />
-        <Text style={[st.secao, { flex: 1 }]}>TEMPORADA</Text>
+        <Text style={[st.secao, { flex: 1 }]}>{bonus ? `MELHOR DA SEMANA · 1º LEVA R$ ${tmp?.premio ?? 250}` : 'TEMPORADA'}</Text>
         <IconChevronRight width={20} height={20} fill={cores.muted} />
       </View>
       <Text style={st.linhaGrande}><Text style={st.numero}>{`${tmp.pos}º`}</Text><Text style={st.fraco}>{`  de ${tmp.total ?? '—'} · ${tmp.pct != null ? `${Math.round(tmp.pct)}% da meta · ` : ''}${tmp.pts ?? 0} pts`}</Text></Text>
