@@ -56,10 +56,7 @@ function Trilho({ feito, meta }: { feito: number; meta: number }) {
 export default function FolhaMeuDia({ visivel, aoFechar, dados, carregando, metaPadrao, portasNaMicrorrota, proxima, aoIrProxima }: Props) {
   const meta = dados?.prometido?.visitas && dados.prometido.visitas > 0 ? dados.prometido.visitas : metaPadrao;
   const metaSemana = metaPadrao * 5;
-  // VISITAS = só as COM PROVA (08/10/26, "os mesmos números em tudo"): a sem prova aparece à parte e
-  // não conta, igual no cockpit do gestor e no Meu desempenho.
-  const checkins = dados?.visitasHoje ?? 0;
-  const feitas = dados?.provadasHoje ?? checkins;
+  const feitas = dados?.visitasHoje ?? 0;
   const bateu = !!dados && feitas >= meta;
   const faltam = dados ? Math.max(0, meta - feitas) : null;
   const frase = faltam == null ? null
@@ -84,18 +81,18 @@ export default function FolhaMeuDia({ visivel, aoFechar, dados, carregando, meta
             {/* HOJE: o número que se cobra, grande e com cor */}
             <View style={[s.hero, bateu ? s.heroVerde : s.heroVermelho]}>
               <Text style={[s.heroRotulo, { color: bateu ? 'var(--tint-green-text)' : 'var(--tint-red-text)' }]}>
-                {`VISITAS COM PROVA HOJE · ${p?.visitas ? 'PROMETIDO NA DAILY' : 'META DO DIA'}`}
+                {`VISITAS COM CHECK-IN HOJE · ${p?.visitas ? 'PROMETIDO NA DAILY' : 'META DO DIA'}`}
               </Text>
               <View style={s.heroLinha}>
                 <Text style={[s.heroNum, { color: bateu ? VERDE_TEXTO : VERMELHO_TEXTO }]}>{dados.medido ? feitas : '—'}</Text>
                 <Text style={s.heroDe}>{dados.medido ? `de ${meta}` : 'não medido agora'}</Text>
               </View>
               {/* D1: a meta conta a visita feita; a prova, com o mesmo peso, é a mesma do Cockpit */}
-              {dados.provadasHoje != null && checkins > 0 && (
-                <Text style={[s.prova, dados.provadasHoje < checkins && { color: 'var(--tint-amber-text)' }]}>
-                  {dados.provadasHoje < checkins
-                    ? `${checkins - dados.provadasHoje} ${checkins - dados.provadasHoje === 1 ? 'check-in sem prova não conta' : 'check-ins sem prova não contam'} (GPS longe, em série ou sem foto)`
-                    : 'todas com prova · GPS na porta ou foto'}
+              {dados.provadasHoje != null && feitas > 0 && (
+                <Text style={[s.prova, dados.provadasHoje < feitas && { color: 'var(--tint-amber-text)' }]}>
+                  {dados.provadasHoje < feitas
+                    ? `${dados.provadasHoje} ${dados.provadasHoje === 1 ? 'provada' : 'provadas'} · ${feitas - dados.provadasHoje} sem prova (GPS longe, em série ou sem foto)`
+                    : `${dados.provadasHoje} ${dados.provadasHoje === 1 ? 'provada' : 'provadas'} · GPS na porta ou foto`}
                 </Text>
               )}
               <Casas feito={feitas} meta={meta} />

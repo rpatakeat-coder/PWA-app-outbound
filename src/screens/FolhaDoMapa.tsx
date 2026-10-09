@@ -195,7 +195,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
           </Pressable>
         ) : (
           <Pressable accessibilityRole="button" accessibilityLabel="Abrir a lista desta área" onPress={() => setAberta(true)} style={s.pilulaTexto}>
-            <Text style={s.pilulaNome} numberOfLines={1}>{planoTotal ? `${planoFeito >= planoTotal ? 'Plano concluído' : 'Plano de hoje'} · ${planoFeito} de ${planoTotal}` : 'Nada planejado hoje'}</Text>
+            <Text style={s.pilulaNome} numberOfLines={1}>{planoTotal ? `Plano concluído · ${planoFeito}/${planoTotal}` : 'Nada planejado hoje'}</Text>
             <Text style={s.pilulaSub} numberOfLines={1}>{`${totalNaArea} na área · ver a lista`}</Text>
           </Pressable>
         )}
@@ -205,7 +205,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
           {/* D1 (handoff v6): a meta conta a visita feita; a prova vem logo embaixo, igual ao Cockpit */}
           {visitasProvadas != null && visitasFeitas > 0 && (
             <Text style={[s.pilulaProva, visitasProvadas < visitasFeitas && s.pilulaProvaFalta]} numberOfLines={1}>
-              {visitasProvadas < visitasFeitas ? `${visitasFeitas - visitasProvadas} sem prova` : 'com prova'}
+              {visitasProvadas < visitasFeitas ? `${visitasFeitas - visitasProvadas} sem prova` : `${visitasProvadas} prov.`}
             </Text>
           )}
         </Pressable>
@@ -255,7 +255,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
         </Text>
         <Pressable accessibilityRole="button" accessibilityLabel={`${feitasTexto} de ${metaVisitas} visitas hoje`} onPress={aoProgresso} hitSlop={10} style={{ paddingVertical: 13, marginVertical: -13 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-            <Text style={s.progresso}>{`${feitasTexto} de ${metaVisitas} visitas com prova${planoTotal ? ` · plano ${planoFeito} de ${planoTotal}` : ''}`}</Text>
+            <Text style={s.progresso}>{`${feitasTexto} de ${metaVisitas} visitas${visitasProvadas != null && visitasFeitas > 0 ? ` · ${visitasProvadas} ${visitasProvadas === 1 ? 'provada' : 'provadas'}` : ''}`}</Text>
             <SiRight width={16} height={16} fill="var(--text-muted)" />
           </View>
         </Pressable>
@@ -277,7 +277,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
         <Pressable accessibilityRole="button" onPress={() => setAberta((v) => !v)} style={s.proxima}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={s.nome} numberOfLines={1}>
-              {planoTotal ? `${planoFeito >= planoTotal ? 'Plano de hoje concluído' : 'Plano de hoje'} · ${planoFeito} de ${planoTotal}` : 'Nada no plano de hoje'}
+              {planoTotal ? `Plano de hoje concluído · ${planoFeito} de ${planoTotal}` : 'Nada no plano de hoje'}
             </Text>
             <Text style={s.sub} numberOfLines={2}>{planoTotal ? `${totalNaArea} na área · lente ${rotuloLente}` : (aoPlanejar ? 'Toque em Planejar e escolha os leads no mapa' : 'Ponha leads com + Rota de hoje (no card) ou monte no Planejamento')}</Text>
           </View>
