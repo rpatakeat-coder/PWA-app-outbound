@@ -99,6 +99,8 @@ export interface Client {
   hs_stage_entered_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+  /** quem cadastrou (CLIENT_LIST_COLUMNS já traz): a ficha reconhece o lead criado na hora (0193) */
+  created_by?: string | null;
 }
 
 // Uma visita (check-in com GPS). O mesmo lead pode ter varias.
