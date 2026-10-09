@@ -185,7 +185,8 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
               </View>
               <Text style={s.podioNome} numberOfLines={1}>{primeiro(p.nome)}</Text>
               {bonus ? <Text style={s.podioPct}>{`${p.pts} pts`}</Text> : <Text style={s.podioPct}>{pct(p.pct)}</Text>}
-              <Text style={s.miuda} numberOfLines={2}>{bonus ? contaDoPlacar(p) : `${p.pts} pts`}</Text>
+              {/* no bônus, o pódio fica com nome e pontos: a conta não cabe em 88 px e cortava; ela está no seu bloco */}
+              {!bonus && <Text style={s.miuda}>{`${p.pts} pts`}</Text>}
             </View>
           ))}
         </View>

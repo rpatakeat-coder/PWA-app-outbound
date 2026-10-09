@@ -250,7 +250,11 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
           </View>
         ))}
       </View>
-      <Text style={st.nota}>{periodo === '7' ? 'Visitas provadas por dia, ao vivo. A soma é a mesma da semana acima.' : 'Pelo livro da temporada, o mesmo do ranking do Cockpit.'}</Text>
+      <Text style={st.nota}>{periodo === '7'
+        ? (bonus
+          ? 'Visitas provadas por dia, ao vivo. O placar da semana pode contar menos: até 6 por dia, um restaurante por dia, e lead criado na hora só com foto da fachada.'
+          : 'Visitas provadas por dia, ao vivo. A soma é a mesma da semana acima.')
+        : 'Pelo livro da temporada, o mesmo do ranking do Cockpit.'}</Text>
     </View>
   );
 
