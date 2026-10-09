@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@1edeeed.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@a43bb0a.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* /gestao E O COCKPIT desde 25/09/2026. As tres telas que so a gestao antiga
@@ -40,7 +40,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "1edeeed";
+  var VERSAO = "a43bb0a";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -13892,8 +13892,8 @@ function fn2Hero(r, itens, movimentos) {
       + '</span></span>';
   };
 
-  const mrrSemPasso = itens.filter(function (x) { return x.semPasso; })
-    .reduce(function (a, x) { return a + (x.valor || 0); }, 0);
+  const mrrSemPasso = itens.filter(function (x) { return !(x.est && x.est.passo); })
+    .reduce(function (a, x) { return a + (x.valor > 0 ? x.valor : 0); }, 0);
   const manchete = total === 0
     ? 'Seu funil está vazio — as contas-alvo estão no Planejamento.'
     : (valorTotal > 0
@@ -15730,7 +15730,7 @@ function kb7Coluna(col, itens, acesos) {
     ? '<i class="is-ok" style="width:' + (ok / total * 100) + '%"></i><i class="is-aviso" style="width:' + (aviso / total * 100) + '%"></i><i class="is-erro" style="width:' + (erro / total * 100) + '%"></i>'
     : '';
   const vazio = !n
-    ? (col.ganho ? 'Ninguém pago esperando envio.' : col.onb ? 'Nada enviado ao onboarding ainda.' : col.recic ? 'Nada em reciclagem.' : 'Vazio. Puxe da munição no Planejamento.')
+    ? (col.ganho ? 'Ninguém pago esperando envio.' : col.onb ? 'Nada enviado ao onboarding ainda.' : col.recic ? 'Nada em reciclagem.' : col.pagto ? 'Os negócios que aceitarem a proposta em Negociação chegam aqui.' : 'Vazio. Puxe da munição no Planejamento.')
     : 'Nada neste filtro.';
   const aberta = KB7.abertas.has(col.id);
   const visiveis = aberta ? filtrados : filtrados.slice(0, KB7_POR_COLUNA);
