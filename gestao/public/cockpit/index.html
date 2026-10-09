@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@80a41f9.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@1c1ef93.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* /gestao E O COCKPIT desde 25/09/2026. As tres telas que so a gestao antiga
@@ -40,7 +40,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "80a41f9";
+  var VERSAO = "1c1ef93";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -8635,7 +8635,7 @@ body.gv2-mapa-cheio{overflow:hidden;}
   
 
   <div id="appRoot" style="display:none;">
-                                                                                                                                                                                                                                                                                <div id="gv2Raiz" hidden></div><!-- /gv2Raiz -->
+                                                                                                                                                                                                                                                                                  <div id="gv2Raiz" hidden></div><!-- /gv2Raiz -->
   <div style="min-height:100vh;background:var(--bg);display:flex;flex-direction:column;">
 
   <header class="app-header">
@@ -59830,7 +59830,7 @@ GV2.v5HojeComando = function (cmd, parte) {
   return false;
 };
 
-GV2.V5_HS_API = 'https://fieldsalestakeat.vercel.app/api/atualizar-hubspot';
+GV2.V5_HS_API = 'https://fieldsalestakeat.vercel.app/api/hubspot-webhook?acao=atualizar';
 GV2.v5TokenHs = async function () {
   const s = await supa.auth.getSession();
   return s && s.data && s.data.session ? s.data.session.access_token : null;
@@ -59871,7 +59871,7 @@ GV2.v5AcompanharHs = function () {
     let j = null;
     try {
       const tk = await GV2.v5TokenHs();
-      const r = await fetch(GV2.V5_HS_API + '?desde=' + st.desde, { headers: { Authorization: 'Bearer ' + tk } });
+      const r = await fetch(GV2.V5_HS_API + '&desde=' + st.desde, { headers: { Authorization: 'Bearer ' + tk } });
       j = r.ok ? await r.json() : null;
     } catch (e) { j = null; }
     if (j && j.estado === 'pronto') {
