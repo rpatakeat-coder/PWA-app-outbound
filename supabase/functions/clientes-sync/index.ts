@@ -109,7 +109,7 @@ async function criarPinosQueFaltam(svc: ReturnType<typeof createClient>) {
   const { data: faltam } = await svc.from('clientes_takeat')
     .select('deal_id, nome, cnpj, celular, logradouro, numero, bairro, cidade, estado, cep, latitude, longitude, executivo_owner_id')
     .is('client_id', null).in('situacao', ['ativo', 'em_risco']).limit(PINOS_POR_RODADA);
-  let criados = 0, semEndereco = 0;
+  let criados = 0, semEndereco = 0, ligados = 0;
   for (const c of faltam ?? []) {
     // Já existe pino deste negócio (arquivado ou criado agora por outro caminho)? Não duplica.
     const { data: ja } = await svc.from('clients').select('id').eq('id_hubspot', c.deal_id).limit(1);
@@ -118,6 +118,16 @@ async function criarPinosQueFaltam(svc: ReturnType<typeof createClient>) {
     if (!geo && chave) geo = await localizar(chave, c);
     if (!geo) { semEndereco++; continue; }
     const nome = String(c.nome ?? '').trim() || 'Cliente Takeat';
+    // O MESMO RESTAURANTE JÁ TEM PINO (0187, 09/10/26)? O pino do executivo está ligado ao
+    // negócio de Field Sales, não ao de Onboarding/Sucesso, e o id_hubspot acima não o acha.
+    // Criar outro deixou o Mesma Turma com dois pinos, o do robô a 424 m do lugar, e o check-in
+    // do Marco "sem prova". Liga ao que existe; gravar_clientes_takeat mantém a ligação.
+    const { data: gemeo } = await svc.rpc('pino_existente_do_cliente', { p_nome: nome, p_lat: geo.lat, p_lng: geo.lng });
+    if (gemeo) {
+      const { error: eLiga } = await svc.from('clientes_takeat').update({ client_id: gemeo }).eq('deal_id', c.deal_id);
+      if (eLiga) console.warn('[clientes-sync] ligar', c.deal_id, eLiga.message); else ligados++;
+      continue;
+    }
     const { error } = await svc.from('clients').insert({
       nome, empresa: nome, status: 'cliente', origem: 'api', tags: ['clientes_sync'],
       id_hubspot: c.deal_id, telefone: c.celular, endereco: c.logradouro, numero: c.numero, bairro: c.bairro,
@@ -128,7 +138,7 @@ async function criarPinosQueFaltam(svc: ReturnType<typeof createClient>) {
     if (error) { console.warn('[clientes-sync] pino', c.deal_id, error.message); continue; }
     criados++;
   }
-  return { criados, semEndereco };
+  return { criados, semEndereco, ligados };
 }
 
 Deno.serve(async (req) => {
@@ -199,13 +209,13 @@ Deno.serve(async (req) => {
   }
   // Pinos novos entram no mapa já nesta rodada; o vínculo client_id se acerta na próxima
   // gravação (a subconsulta por id_hubspot em gravar_clientes_takeat).
-  let pinosNovos: { criados: number; semEndereco: number } | null = null;
+  let pinosNovos: { criados: number; semEndereco: number; ligados: number } | null = null;
   if (!erro) {
     try { pinosNovos = await criarPinosQueFaltam(svc); } catch (e) { console.warn('[clientes-sync] pinos novos', (e as Error).message); }
   }
   const porSituacao = linhas.reduce((a: Record<string, number>, l) => { const s = String(l.situacao); a[s] = (a[s] ?? 0) + 1; return a; }, {});
   const resumo = {
-    negocios: linhas.length, pinos, por_situacao: { ...porSituacao, ...(pinosNovos ? { pinos_criados: pinosNovos.criados, sem_endereco: pinosNovos.semEndereco } : {}) },
+    negocios: linhas.length, pinos, por_situacao: { ...porSituacao, ...(pinosNovos ? { pinos_criados: pinosNovos.criados, sem_endereco: pinosNovos.semEndereco, pinos_ligados: pinosNovos.ligados } : {}) },
     etapas_sem_classificacao: Object.keys(semClassificacao).length ? semClassificacao : null,
     erro, duracao_ms: Date.now() - inicio,
   };
