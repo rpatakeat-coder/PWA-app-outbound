@@ -27,7 +27,6 @@ import { supabase } from '../integrations/supabase/client';
 import { comprimir, enviarFoto, escolherFoto } from '../utils/fotoVisita';
 import { gravarFichaNoBanco, linhaDaFicha, type LinhaFicha } from '../utils/fichaNoBanco';
 import { CampoData } from '../components/CampoData';
-import { useAuth } from '../context/AuthContext';
 import { IconClose as SiClose, IconCheck as SiCheck, IconChevronDown as SiDown } from '../components/icons';
 
 export type CamposCadastro = { empresa?: string; telefone?: string; categoria?: string };
@@ -90,26 +89,6 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
 
   const nome = client.empresa?.trim() || client.nome || 'Lead';
   const pedeNome = pareceNomeDePessoa(client.empresa?.trim() || client.nome);
-  // LEAD CRIADO NA HORA (0193, 09/10/26 — Julyan: "app pede a foto"): o pino nasceu onde a pessoa
-  // está, então o GPS sempre bate e não prova que existe um restaurante ali; a foto da fachada prova.
-  // A ficha PEDE a foto (dá para pular): com ela a visita conta no placar da semana e não vira aviso
-  // no 1:1. Mesma régua do banco (lead_criado_na_hora): cadastrado por ela, à mão, com o pino no GPS,
-  // até 2 h antes do check-in.
-  const { user } = useAuth();
-  const leadNovo = (() => {
-    if (!user?.id || client.created_by !== user.id || client.origem !== 'manual' || client.geo_source !== 'coords' || !client.created_at) return false;
-    const criado = Date.parse(client.created_at), ci = Date.parse(checkinEm);
-    return Number.isFinite(criado) && Number.isFinite(ci) && criado > ci - 2 * 3600000 && criado <= ci + 5 * 60000;
-  })();
-  async function tirarFoto() {
-    const arq = await escolherFoto();
-    if (!arq) return;
-    setPreparandoFoto(true);
-    try {
-      const blob = await comprimir(arq);
-      setFoto({ blob, url: URL.createObjectURL(blob) });
-    } catch { /* foto ilegível: segue sem */ } finally { setPreparandoFoto(false); }
-  }
   const temTelefone = !!client.telefone?.trim();
   const dealId = client.id_hubspot ? String(client.id_hubspot) : null;
 
@@ -339,22 +318,6 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                   <Text style={[s.gpsTexto, declarada && s.gpsDeclaradaTexto]}>{declarada ? 'Visita declarada · o gestor vê que foi sem GPS' : 'GPS confere · check-in feito'}</Text>
                 </View>
 
-                {leadNovo && !foto && !fotoNoCheckin && (
-                  <View style={s.leadNovo}>
-                    <Text style={s.leadNovoTitulo}>Lead novo: tire a foto da fachada</Text>
-                    <Text style={s.leadNovoTexto}>O pino nasceu onde você está, então o GPS sozinho não prova a porta. Com a foto, esta visita conta no placar da semana.</Text>
-                    <Pressable accessibilityRole="button" disabled={preparandoFoto} onPress={() => { void tirarFoto(); }} style={s.leadNovoBotao}>
-                      {preparandoFoto ? <ActivityIndicator /> : <Text style={s.leadNovoBotaoTexto}>Tirar foto da fachada</Text>}
-                    </Pressable>
-                  </View>
-                )}
-                {leadNovo && !!foto && (
-                  <View style={[s.gps, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-                    <Image source={{ uri: foto.url }} style={s.fotoMini} accessibilityLabel="Foto da fachada" />
-                    <Text style={s.gpsTexto}>Foto da fachada pronta · sobe quando você salvar</Text>
-                  </View>
-                )}
-
                 <Text style={s.secao}>1 · COMO FOI?</Text>
                 <View style={s.grade}>{COMO_FOI.map((c) => opcaoGrade(c.id, c.rotulo, f.comoFoi === c.id, () => escolherComoFoi(c.id)))}</View>
 
@@ -462,7 +425,15 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                       <Pressable
                         accessibilityRole="button"
                         disabled={preparandoFoto}
-                        onPress={() => { void tirarFoto(); }}
+                        onPress={async () => {
+                          const arq = await escolherFoto();
+                          if (!arq) return;
+                          setPreparandoFoto(true);
+                          try {
+                            const blob = await comprimir(arq);
+                            setFoto({ blob, url: URL.createObjectURL(blob) });
+                          } catch { /* foto ilegível: segue sem */ } finally { setPreparandoFoto(false); }
+                        }}
                         style={s.chip}
                       >
                         {preparandoFoto ? <ActivityIndicator /> : <Text style={s.chipTexto}>{foto ? 'Trocar foto' : 'Tirar foto'}</Text>}
@@ -581,11 +552,6 @@ const s = StyleSheet.create({
   gps: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: 'var(--tint-green)' },
   gpsTexto: { fontSize: 12, fontWeight: '600', color: 'var(--tint-green-text)' },
   gpsDeclarada: { backgroundColor: 'var(--tint-amber)' },
-  leadNovo: { gap: 6, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: 'var(--tint-amber-border)', backgroundColor: 'var(--tint-amber)' },
-  leadNovoTitulo: { fontSize: 14, fontWeight: '700', color: 'var(--tint-amber-text)' },
-  leadNovoTexto: { fontSize: 13, color: 'var(--tint-amber-text)', lineHeight: 18 },
-  leadNovoBotao: { alignSelf: 'flex-start', minHeight: 44, paddingHorizontal: 16, borderRadius: 22, backgroundColor: 'var(--vermelho-acao)', justifyContent: 'center' },
-  leadNovoBotaoTexto: { fontSize: 14, fontWeight: '700', color: '#fff' },
   gpsDeclaradaTexto: { color: 'var(--tint-amber-text)' },
   secao: { fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: 'var(--text-faint)', marginTop: 4 },
   grade: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

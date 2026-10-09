@@ -167,7 +167,7 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
           <View key={String(r)} style={st.kpi}><Text style={st.kpiValor}>{String(v)}</Text><Text style={st.kpiRotulo}>{String(r)}</Text></View>
         ))}
       </View>
-      {(tmp?.nao_pontuaram ?? 0) > 0 && <Text style={st.fraco}>{`${tmp?.nao_pontuaram} ${tmp?.nao_pontuaram === 1 ? 'visita não pontuou' : 'visitas não pontuaram'}: acima de 6 no dia, ou em lead criado na hora sem foto da fachada`}</Text>}
+      {(tmp?.nao_pontuaram ?? 0) > 0 && <Text style={st.fraco}>{`${tmp?.nao_pontuaram} ${tmp?.nao_pontuaram === 1 ? 'visita não pontuou' : 'visitas não pontuaram'}: acima de 6 no dia`}</Text>}
       <Text style={st.nota}>{`Placar da semana: venda 100 · reunião com desfecho 25 · visita com prova 3 (até 6 por dia). O 1º leva R$ ${tmp?.premio ?? 250}. Visita declarada sem GPS perto do pino ou foto não conta.`}</Text>
     </View>
   ) : (
@@ -252,7 +252,7 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
       </View>
       <Text style={st.nota}>{periodo === '7'
         ? (bonus
-          ? 'Visitas provadas por dia, ao vivo. O placar da semana pode contar menos: até 6 por dia, um restaurante por dia, e lead criado na hora só com foto da fachada.'
+          ? 'Visitas provadas por dia, ao vivo. O placar da semana pode contar menos: até 6 por dia e um restaurante por dia.'
           : 'Visitas provadas por dia, ao vivo. A soma é a mesma da semana acima.')
         : 'Pelo livro da temporada, o mesmo do ranking do Cockpit.'}</Text>
     </View>

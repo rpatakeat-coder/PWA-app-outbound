@@ -115,8 +115,8 @@ export async function avisarSeVisitaProvada(clientId: string, mostrar: (texto: s
     if (!daqui?.provada) return;
     const r = await buscarRanking();
     if (r?.regra === 'bonus') {
-      // o placar da semana é lido ao vivo (a visita já entrou): conta até 6 por dia, e em lead
-      // criado na hora só com foto — por isso o toast não promete +3, diz a regra
+      // o placar da semana é lido ao vivo (a visita já entrou): conta até 6 por dia e um restaurante
+      // por dia — por isso o toast não promete +3, diz a regra
       const provadasHoje = ((data ?? []) as Array<{ provada: boolean }>).filter((v) => v.provada).length;
       const base = provadasHoje > 6 ? `Visita com prova · já são ${provadasHoje} hoje: o placar conta 6 por dia` : 'Visita com prova · conta no placar da semana';
       mostrar(r.eu?.faltam ? `${base} · ${r.eu.faltam.replace(/^Faltam/, 'faltam')}` : base);
@@ -214,7 +214,7 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
                 <View key={rot} style={s.caixa}><Text style={s.miuda}>{rot}</Text><Text style={s.forte}>{v}</Text></View>
               ))}
             </View>
-            {bonus && (eu.nao_pontuaram ?? 0) > 0 && <Text style={[s.miuda, { color: 'var(--text-faint)' }]}>{`${eu.nao_pontuaram} ${eu.nao_pontuaram === 1 ? 'visita não pontuou' : 'visitas não pontuaram'}: acima de 6 no dia, ou em lead criado na hora sem foto da fachada`}</Text>}
+            {bonus && (eu.nao_pontuaram ?? 0) > 0 && <Text style={[s.miuda, { color: 'var(--text-faint)' }]}>{`${eu.nao_pontuaram} ${eu.nao_pontuaram === 1 ? 'visita não pontuou' : 'visitas não pontuaram'}: acima de 6 no dia`}</Text>}
             {!bonus && eu.declaradas > 0 && <Text style={[s.miuda, { color: 'var(--text-faint)' }]}>{`${eu.declaradas} ${eu.declaradas === 1 ? 'visita declarada' : 'visitas declaradas'}, sem GPS nem foto: não pontuam`}</Text>}
           </View>
         )}
@@ -247,7 +247,7 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
         </View>
 
         <Text style={s.regras}>{bonus
-          ? 'Placar da semana (o mesmo do cockpit): venda 100 (negócio em Fechado no HubSpot; Ag. Pagamento não conta) · reunião com desfecho registrado no app 25 (uma por restaurante na semana) · visita com prova 3 (GPS até 200 m ou foto; até 6 por dia; em lead criado na hora, só com foto da fachada). Desempate: vendas, reuniões, visitas. A semana fecha sexta às 23:59 e o ganhador aparece na segunda às 08:00; o pagamento é com o financeiro.'
+          ? 'Placar da semana (o mesmo do cockpit): venda 100 (negócio em Fechado no HubSpot; Ag. Pagamento não conta) · reunião com desfecho registrado no app 25 (uma por restaurante na semana) · visita com prova 3 (GPS até 200 m; foto só quando o GPS não confirma; até 6 por dia). Desempate: vendas, reuniões, visitas. A semana fecha sexta às 23:59 e o ganhador aparece na segunda às 08:00; o pagamento é com o financeiro.'
           : 'Pontos: visita provada 20 (GPS ou foto) · demo realizada 50 (o negócio entrou em Demo/Proposta) · contrato 200. Visita declarada não pontua. O ranking é pela % da sua meta; desempate por contratos e MRR. A semana fecha segunda às 9h.'}</Text>
       </View>
     );
