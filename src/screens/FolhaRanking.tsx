@@ -157,7 +157,7 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
     corpo = (
       <View style={{ gap: 16 }}>
         <Text style={s.ajuda}>{periodo === 'semana'
-          ? `Semana · ${ddmm(r.de)} a ${ddmm(new Date(new Date(r.ate).getTime() - 86400000).toISOString())} · ${bonus ? `fecha sexta às 23:59 · 1º leva R$ ${r.premio ?? 250}` : 'fecha segunda 9h'}`
+          ? `Semana · ${ddmm(r.de)} a ${ddmm(new Date(new Date(r.ate).getTime() - 86400000).toISOString())} · ${bonus ? `visita e demo até sexta, venda até domingo · 1º leva R$ ${r.premio ?? 250}` : 'fecha segunda 9h'}`
           : `Mês · ${mesNome(r.de)}`}</Text>
 
         {bonus && !!r.campeao && (
@@ -247,7 +247,7 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
         </View>
 
         <Text style={s.regras}>{bonus
-          ? 'Placar da semana (o mesmo do cockpit): venda 100 (negócio em Fechado no HubSpot; Ag. Pagamento não conta) · demo 25 (negócio que entrou em Demo/Proposta no HubSpot; um por negócio na semana) · visita com prova 3 (GPS até 200 m; foto só quando o GPS não confirma; até 6 por dia). Desempate: vendas, demos, visitas. A semana fecha sexta às 23:59 e o ganhador aparece na segunda às 08:00; o pagamento é com o financeiro.'
+          ? 'Placar da semana (o mesmo do cockpit): venda 100 (negócio em Fechado no HubSpot; Ag. Pagamento não conta) · demo 25 (negócio que entrou em Demo/Proposta no HubSpot; um por negócio na semana) · visita com prova 3 (GPS até 200 m; foto só quando o GPS não confirma; até 6 por dia). Desempate: vendas, demos, visitas. Visita e demo contam até sexta às 23:59; venda, até domingo às 23:59 (a do fim de semana entra na semana que terminou). O ganhador aparece na segunda às 08:00; o pagamento é com o financeiro.'
           : 'Pontos: visita provada 20 (GPS ou foto) · demo realizada 50 (o negócio entrou em Demo/Proposta) · contrato 200. Visita declarada não pontua. O ranking é pela % da sua meta; desempate por contratos e MRR. A semana fecha segunda às 9h.'}</Text>
       </View>
     );
