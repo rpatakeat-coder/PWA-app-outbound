@@ -12,8 +12,8 @@ import { supabase } from '../integrations/supabase/client';
 import { Painel } from '../components/Painel';
 import { IconCheckCircle, IconTrophy, IconTrendingUp, IconTrendingDown } from '../components/icons';
 
-// 09/10/26 (0192): a SEMANA é o placar do bônus de R$ 250 (regra 'bonus': venda 100 · reunião com
-// desfecho 25 · visita com prova 3, até 6 por dia), a mesma conta do cockpit do gestor. O MÊS segue
+// 09/10/26 (0192): a SEMANA é o placar do bônus de R$ 250 (regra 'bonus': venda 100 · demo
+// 25 (negócio entrou em Demo/Proposta, 0197) · visita com prova 3, até 6 por dia), a mesma conta do cockpit do gestor. O MÊS segue
 // a temporada (% da meta). Os campos novos são opcionais: o app antigo e o banco novo convivem.
 export type Ranking = {
   periodo: 'semana' | 'mes'; de: string; ate: string; regra?: 'bonus'; premio?: number;
@@ -61,9 +61,9 @@ const iniciais = (n: string) => n.split(/\s+/).filter(Boolean).slice(0, 2).map((
 const primeiro = (n: string) => n.split(/\s+/)[0];
 const pct = (v: number | null | undefined) => (v == null ? '—' : `${Math.round(Number(v))}%`);
 const pl = (n: number | undefined, um: string, varios: string) => `${n ?? 0} ${(n ?? 0) === 1 ? um : varios}`;
-/** "1 venda · 2 reuniões · 18 visitas": a conta de cada um no placar da semana */
+/** "1 venda · 2 demos · 18 visitas": a conta de cada um no placar da semana */
 export const contaDoPlacar = (x: { vendas?: number; reunioes?: number; visitas?: number }) =>
-  `${pl(x.vendas, 'venda', 'vendas')} · ${pl(x.reunioes, 'reunião', 'reuniões')} · ${pl(x.visitas, 'visita', 'visitas')}`;
+  `${pl(x.vendas, 'venda', 'vendas')} · ${pl(x.reunioes, 'demo', 'demos')} · ${pl(x.visitas, 'visita', 'visitas')}`;
 const mesNome = (iso: string) => ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'][new Date(iso).getUTCMonth()];
 const ddmm = (iso: string) => { const d = new Date(new Date(iso).getTime() - 3 * 3600000); return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`; };
 
@@ -209,7 +209,7 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
             {!!eu.proximo && <Text style={s.ajuda}>{eu.proximo}</Text>}
             <View style={{ flexDirection: 'row', gap: 8 }}>
               {(bonus
-                ? [['Vendas', `${eu.vendas ?? 0} × 100`], ['Reuniões com desfecho', `${eu.reunioes ?? 0} × 25`], ['Visitas com prova', `${eu.visitas ?? 0} × 3`]]
+                ? [['Vendas', `${eu.vendas ?? 0} × 100`], ['Demos', `${eu.reunioes ?? 0} × 25`], ['Visitas com prova', `${eu.visitas ?? 0} × 3`]]
                 : [['Visitas provadas', String(eu.provadas)], ['Demos realizadas', String(eu.demos)], ['Contratos', `${eu.contratos}${eu.mrr ? ` · R$ ${Math.round(eu.mrr)}` : ''}`]]).map(([rot, v]) => (
                 <View key={rot} style={s.caixa}><Text style={s.miuda}>{rot}</Text><Text style={s.forte}>{v}</Text></View>
               ))}
@@ -247,7 +247,7 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
         </View>
 
         <Text style={s.regras}>{bonus
-          ? 'Placar da semana (o mesmo do cockpit): venda 100 (negócio em Fechado no HubSpot; Ag. Pagamento não conta) · reunião com desfecho registrado no app 25 (uma por restaurante na semana) · visita com prova 3 (GPS até 200 m; foto só quando o GPS não confirma; até 6 por dia). Desempate: vendas, reuniões, visitas. A semana fecha sexta às 23:59 e o ganhador aparece na segunda às 08:00; o pagamento é com o financeiro.'
+          ? 'Placar da semana (o mesmo do cockpit): venda 100 (negócio em Fechado no HubSpot; Ag. Pagamento não conta) · demo 25 (negócio que entrou em Demo/Proposta no HubSpot; um por negócio na semana) · visita com prova 3 (GPS até 200 m; foto só quando o GPS não confirma; até 6 por dia). Desempate: vendas, demos, visitas. A semana fecha sexta às 23:59 e o ganhador aparece na segunda às 08:00; o pagamento é com o financeiro.'
           : 'Pontos: visita provada 20 (GPS ou foto) · demo realizada 50 (o negócio entrou em Demo/Proposta) · contrato 200. Visita declarada não pontua. O ranking é pela % da sua meta; desempate por contratos e MRR. A semana fecha segunda às 9h.'}</Text>
       </View>
     );

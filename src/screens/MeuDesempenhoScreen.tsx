@@ -163,12 +163,12 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
         </View>
       ) : null}
       <View style={st.tres}>
-        {[[tmp?.vendas ?? 0, (tmp?.vendas ?? 0) === 1 ? 'venda' : 'vendas'], [tmp?.reunioes ?? 0, (tmp?.reunioes ?? 0) === 1 ? 'reunião com desfecho' : 'reuniões com desfecho'], [tmp?.visitas ?? 0, (tmp?.visitas ?? 0) === 1 ? 'visita com prova' : 'visitas com prova']].map(([v, r]) => (
+        {[[tmp?.vendas ?? 0, (tmp?.vendas ?? 0) === 1 ? 'venda' : 'vendas'], [tmp?.reunioes ?? 0, (tmp?.reunioes ?? 0) === 1 ? 'demo' : 'demos'], [tmp?.visitas ?? 0, (tmp?.visitas ?? 0) === 1 ? 'visita com prova' : 'visitas com prova']].map(([v, r]) => (
           <View key={String(r)} style={st.kpi}><Text style={st.kpiValor}>{String(v)}</Text><Text style={st.kpiRotulo}>{String(r)}</Text></View>
         ))}
       </View>
       {(tmp?.nao_pontuaram ?? 0) > 0 && <Text style={st.fraco}>{`${tmp?.nao_pontuaram} ${tmp?.nao_pontuaram === 1 ? 'visita não pontuou' : 'visitas não pontuaram'}: acima de 6 no dia`}</Text>}
-      <Text style={st.nota}>{`Placar da semana: venda 100 · reunião com desfecho 25 · visita com prova 3 (até 6 por dia). O 1º leva R$ ${tmp?.premio ?? 250}. Visita declarada sem GPS perto do pino ou foto não conta.`}</Text>
+      <Text style={st.nota}>{`Placar da semana: venda 100 · demo (negócio entrou em Demo/Proposta no HubSpot) 25 · visita com prova 3 (até 6 por dia). O 1º leva R$ ${tmp?.premio ?? 250}. Visita declarada sem GPS perto do pino ou foto não conta.`}</Text>
     </View>
   ) : (
     <View style={st.cartao}>
