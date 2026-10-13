@@ -23,11 +23,16 @@ export function ComunicadoSheet({
   comunicado,
   restantes,
   aoConfirmar,
+  etiqueta = 'Recado da gestão',
+  rodape = 'Ao tocar em “Entendi”, fica registrado que você leu. Ninguém marca isso por você.',
 }: {
   comunicado: ComunicadoNaoLido;
   /** Quantos ainda vêm depois deste. Zero = é o último. */
   restantes: number;
   aoConfirmar: (id: string) => Promise<void> | void;
+  /** A cobrança do gestor usa a mesma folha (13/10/26), com outra etiqueta e sem a promessa de leitura medida. */
+  etiqueta?: string;
+  rodape?: string;
 }) {
   const layout = useLayout();
   const [ocupado, setOcupado] = useState(false);
@@ -48,7 +53,7 @@ export function ComunicadoSheet({
         >
           <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 28 }}>
             <Text style={estilos.etiqueta}>
-              Recado da gestão
+              {etiqueta}
               {restantes > 0 ? ` · mais ${restantes} depois deste` : ''}
             </Text>
             <Text style={estilos.titulo}>{comunicado.titulo}</Text>
@@ -84,9 +89,7 @@ export function ComunicadoSheet({
                 Não consegui registrar agora (sem sinal?). Toque em “Entendi” de novo quando a internet voltar.
               </Text>
             )}
-            <Text style={estilos.rodape}>
-              Ao tocar em “Entendi”, fica registrado que você leu. Ninguém marca isso por você.
-            </Text>
+            <Text style={estilos.rodape}>{rodape}</Text>
           </ScrollView>
         </KeyboardAvoidingView>
       </View>

@@ -173,6 +173,7 @@ import { ComunicadoSheet } from './src/screens/ComunicadoSheet';
 import { EditLocationModal } from './src/screens/EditLocationModal';
 import { MinhaDailyCard } from './src/screens/MinhaDailyCard';
 import { useComunicadosNaoLidos } from './src/hooks/useComunicados';
+import { useCobrancasNaoVistas } from './src/hooks/useCobrancasNaoVistas';
 import { useTarefasDoCrm } from './src/hooks/useTarefasDoCrm';
 import { useLayout } from './src/hooks/useLayout';
 import { useNomesDeClientes } from './src/hooks/useNomesDeClientes';
@@ -11786,12 +11787,28 @@ function ClientBottomSheet({
 function AvisoDeComunicado() {
   const { profile } = useAuth();
   const { naoLidos, confirmar } = useComunicadosNaoLidos(!!profile);
-  if (naoLidos.length === 0) return null;
+  // A cobrança do gestor (13/10/26): o "Cobrar" do Cockpit grava em sugestoes_planos e,
+  // em vez de esperar o executivo abrir o sino, sobe aqui na tela inicial. Os dois hooks
+  // ficam ANTES de qualquer return (ver hook-depois-de-return no MainApp).
+  const cobrancas = useCobrancasNaoVistas(!!profile);
+  if (naoLidos.length > 0) {
+    return (
+      <ComunicadoSheet
+        comunicado={naoLidos[0]}
+        restantes={naoLidos.length - 1 + cobrancas.naoVistas.length}
+        aoConfirmar={(id) => confirmar.mutateAsync(id)}
+      />
+    );
+  }
+  const c = cobrancas.naoVistas[0];
+  if (!c) return null;
   return (
     <ComunicadoSheet
-      comunicado={naoLidos[0]}
-      restantes={naoLidos.length - 1}
-      aoConfirmar={(id) => confirmar.mutateAsync(id)}
+      comunicado={{ id: c.id, titulo: c.texto, mensagem: '', publicadoEm: c.em, autor: c.autor ? 'Do ' + c.autor : 'Do gestor' }}
+      restantes={cobrancas.naoVistas.length - 1}
+      aoConfirmar={(id) => cobrancas.confirmar(id)}
+      etiqueta="Cobrança do gestor"
+      rodape="Também fica no sino, para você reler."
     />
   );
 }
