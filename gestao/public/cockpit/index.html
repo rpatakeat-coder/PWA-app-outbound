@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@321c43f.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@c46aef4.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* /gestao E O COCKPIT desde 25/09/2026. As tres telas que so a gestao antiga
@@ -40,7 +40,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "321c43f";
+  var VERSAO = "c46aef4";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -21197,6 +21197,7 @@ function nomesQueConcentramSla(leads) {
 }
 
 async function renderDecisoes() {
+  if (typeof gv2CobreGestor === 'function' && gv2CobreGestor()) return;
   const bloco = document.getElementById('decisoesBloco');
   const lista = document.getElementById('decisoesLista');
   const contagemEl = document.getElementById('decisoesContagem');
@@ -24764,7 +24765,11 @@ function tm2Ligar() {
   });
 }
 
+function gv2CobreGestor() {
+  return typeof GV2 !== 'undefined' && !!GV2.ligado && GV2.ligado() && !!sessaoAtual && sessaoAtual.role === 'manager';
+}
 async function tl5Iniciar() {
+  if (typeof gv2CobreGestor === 'function' && gv2CobreGestor()) return;
   if (!sessaoAtual || sessaoAtual.role !== 'manager') return;
 
   if (typeof tm2Ligar === 'function') tm2Ligar();
@@ -30933,6 +30938,7 @@ const GS_DIF_QUE_CONTA = 0.10;
 const FUNIL_STAGE_IDS = [null, "1395880469", "1396005401", "1395880470", "1395880471", "1395880472", "1395880473", null, null, null];
 
 function renderFunilBarras() {
+  if (typeof gv2CobreGestor === 'function' && gv2CobreGestor()) return;
   const el = document.getElementById('funilBarras');
   if (!el) return;
   const idxAbertas = [1, 2, 3, 4, 5, 6];
@@ -31037,6 +31043,7 @@ function cadenciaSugeridaDoLead(lead) {
 
 let quentesVitrineExpandida = false;
 function renderLeadsPrioritarios() {
+  if (typeof gv2CobreGestor === 'function' && gv2CobreGestor()) return;
   const listaEl = document.getElementById('leadsQuentesLista');
   const countEl = document.getElementById('leadsQuentesCount');
   if (!listaEl) return;
@@ -53740,6 +53747,7 @@ document.addEventListener('click', ev => {
 });
 
 async function sm9Iniciar() {
+  if (typeof gv2CobreGestor === 'function' && gv2CobreGestor()) return;
   if (!sessaoAtual || sessaoAtual.role !== 'manager') return;
 
   if (typeof sm4Ligar === 'function') sm4Ligar();
