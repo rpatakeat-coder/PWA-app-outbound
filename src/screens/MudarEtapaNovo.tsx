@@ -144,7 +144,10 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
       ...(destino === ETAPA.perdido && digitado.motivo_do_perdido ? ['observacao__desqualificado'] : [])]
       .filter((k) => k === 'motivo_do_perdido' || k === 'observacao__desqualificado' || !(jaTem[k] != null && String(jaTem[k]).trim()))
     : [];
-  const faltamArmas = armas ? armasQueFaltam(armas).length : 4;
+  /* SÓ CONTA ARMA ONDE HÁ ARMA (14/10/26). Negociação usa o mesmo rodapé da Demo, mas não
+     tem armas: contava 4 que nunca apareciam e o botão ficava em "Faltam 4" para sempre —
+     nenhum negócio avançou para Negociação pelo mapa novo desde 06/10 (Snack Paradise). */
+  const faltamArmas = !comArmas ? 0 : armas ? armasQueFaltam(armas).length : 4;
   const faltamExig = exigidos.filter((k) => !String(digitado[k] ?? '').trim()).length;
 
   /* COMPLETO NÃO ABRE: sistema, dor, decisor e horário já sabidos e nada que a etapa peça */
