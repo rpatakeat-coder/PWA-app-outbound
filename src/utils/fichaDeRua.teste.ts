@@ -9,6 +9,7 @@ import {
   opcoesAgora, HORARIOS,
   ETAPA, FICHA_VAZIA, etapaSugerida, faltandoParaEtapa, montarPropriedades, movimentoPermitido, notaDaVisita,
   pareceNomeDePessoa, proximoPassoDaFicha, rotuloSalvar, proximoDiaUtil, type Ficha,
+  degrausDaFicha, escadaAte, horaLivre, valorValido,
   GARGALO_OUTRA, HORARIO_OUTRO, MOTIVOS_PERDIDO, dorDaFicha, horarioDaFicha, papelDaFicha, papelParaHubspot, rotuloDoHorario, rotuloDoMotivo, tipoDaFicha,
 } from './fichaDeRua';
 import { MOTIVOS_SEM_INTERESSE } from './registroDaFila';
@@ -49,8 +50,8 @@ ok(faltandoParaEtapa(ETAPA.prospeccao, {}).join() === 'origem_do_lead', 'Prospec
 ok(!rotuloSalvar(F({})).pode && rotuloSalvar(F({})).texto === 'Falta como foi e o próximo passo', 'vazio: diz os dois obrigatórios');
 ok(rotuloSalvar(F({ comoFoi: 'decisor_ausente', proximo: 'reuniao' })).texto === 'Falta o dia da reunião', 'reunião pede o dia');
 ok(rotuloSalvar(F({ comoFoi: 'sem_interesse', proximo: 'sem_interesse' })).texto === 'Falta o motivo', 'sem interesse pede o motivo');
-ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'voltar7', dataVolta: '2026-09-29' }), ['nome_do_sistema']).texto === 'Falta sistema que usa hoje', 'mover etapa pede o campo que ela exige');
-ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'voltar7', dataVolta: '2026-09-29', moverEtapa: false }), ['nome_do_sistema']).pode, 'sem mover a etapa, o campo dela não trava');
+// 14/10/26 (handoff "app menos tela"): o que a ETAPA pede nunca trava a visita — vira aviso
+ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'voltar7', dataVolta: '2026-09-29' })).pode, 'o campo que a etapa exige não trava o Salvar');
 
 // próximo passo e nota
 const hoje = '2026-09-25'; // sexta
@@ -82,7 +83,7 @@ ok(!Object.keys(montarPropriedades(ETAPA.perdido, { motivo_do_perdido: 'Preço' 
 // ---- v4.1: "E agora?" depende do "Como foi?" ----
 ok(opcoesAgora('decisor_ausente')[0].proximo === 'voltar_horario', 'quem decide não estava: primeira opção é voltar no horário do dono');
 ok(!opcoesAgora('estabelecimento_fechado').some((o) => o.proximo === 'sem_interesse'), 'estava fechado: não oferece sem interesse');
-ok(opcoesAgora('falou_com_decisor').filter((o) => o.proximo === 'reuniao').map((o) => o.dias).join() === '1,3,5', 'falou com quem decide: reunião em 1, 3 e 5 dias úteis');
+ok(opcoesAgora('falou_com_decisor').filter((o) => o.proximo === 'reuniao').map((o) => o.dias).join() === '0,1,3,5', 'falou com quem decide: reunião hoje e em 1, 3 e 5 dias úteis');
 ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
 {
   const p = proximoPassoDaFicha({ ...FICHA_VAZIA, comoFoi: 'decisor_ausente', proximo: 'voltar_horario', horario: '14h30_17h30', dataVolta: '2026-09-29' }, '2026-09-25');
@@ -147,6 +148,35 @@ ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
   }
   ok(rotuloSalvar(F({ comoFoi: 'decisor_ausente', proximo: 'voltar7', dataVolta: '2026-09-29', moverEtapa: false })).pode, 'com o dia escolhido, salva');
   ok(proximoDiaUtil('2026-09-25', 2) === '2026-09-29', '"Em 2 dias" numa sexta cai na terça (pula o fim de semana)');
+}
+
+// ── 14/10/26: "Apresentei agora", "Reunião hoje", degraus e valor de lixo ──
+{
+  const op = opcoesAgora('falou_com_decisor');
+  ok(op[0].proximo === 'apresentei' && op[1].dias === 0, 'falou com quem decide: Apresentei agora e Reunião hoje vêm primeiro');
+  ok(!opcoesAgora('decisor_ausente').some((o) => o.proximo === 'apresentei'), 'sem quem decide, não há "apresentei"');
+  ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'reuniao', diasReuniao: 0 })).texto === 'Falta a hora da reunião', 'reunião hoje pede a hora');
+  const rh = proximoPassoDaFicha(F({ comoFoi: 'falou_com_decisor', proximo: 'reuniao', diasReuniao: 0, horaReuniao: '15:00' }), hoje);
+  ok(rh?.data === hoje && rh?.hora === '15:00' && rh?.tipo === 'reuniao', 'reunião hoje: tarefa de hoje, na hora escolhida');
+  ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'apresentei' })).pode, 'apresentei agora salva sem plano/MRR (a etapa é que espera)');
+  ok(proximoPassoDaFicha(F({ comoFoi: 'falou_com_decisor', proximo: 'apresentei' }), hoje)?.texto === 'Retorno da proposta', 'apresentei: próximo passo é o retorno da proposta');
+  ok(escadaAte(ETAPA.visita, ETAPA.demo).join() === [ETAPA.decisor, ETAPA.demo].join(), 'de Visita até Demo: Decisor e Demo, nessa ordem');
+  ok(escadaAte(ETAPA.prospeccao, ETAPA.demo).length === 3, 'de Prospecção até Demo: três degraus');
+  ok(escadaAte(ETAPA.negociacao, ETAPA.demo).length === 0 && escadaAte(null, ETAPA.demo).length === 0, 'já além, ou etapa desconhecida: nenhum degrau');
+  ok(!valorValido('.') && !valorValido('VERIFICAR') && !valorValido('x') && valorValido('Saipos') && valorValido('449'), 'o "." e o "VERIFICAR" contam como vazio');
+  const val = { celular: '27999990000', gargalo_operacional: 'Fila', nome_do_sistema: 'Saipos', plano_apresentado: 'Pro', valor_de_mrr: '449', motivo_do_perdido: '' };
+  const tudo = degrausDaFicha({ degraus: [ETAPA.decisor, ETAPA.demo], valores: val, negocio: {}, digitado: new Set(['plano_apresentado', 'valor_de_mrr']), dorLivre: '', hoje });
+  ok(tudo.vai.length === 2 && !tudo.paraEm, 'com tudo, sobe Decisor e Demo no mesmo toque');
+  ok(tudo.vai[1].propriedades.data_da_reuniao === String(Date.UTC(2026, 8, 25)), 'a data da reunião é hoje (meia-noite UTC)');
+  const semSis = degrausDaFicha({ degraus: [ETAPA.decisor, ETAPA.demo], valores: { ...val, nome_do_sistema: '.' }, negocio: { nome_do_sistema: '.' }, digitado: new Set(), dorLivre: '', hoje });
+  ok(semSis.vai.length === 0 && semSis.paraEm === ETAPA.decisor && semSis.falta.join() === 'nome_do_sistema', 'sistema "." no negócio: para em Decisor e diz que falta o sistema');
+  const jaTem = degrausDaFicha({ degraus: [ETAPA.decisor], valores: { ...val, celular: '2733334444' }, negocio: { celular: '27999990000', gargalo_operacional: 'Fila', nome_do_sistema: 'Saipos' }, digitado: new Set(), dorLivre: '', hoje });
+  ok(jaTem.vai.length === 1 && !('celular' in jaTem.vai[0].propriedades), 'o celular do cadastro não sobrescreve o do negócio');
+  const livre = degrausDaFicha({ degraus: [ETAPA.decisor], valores: { ...val, gargalo_operacional: '' }, negocio: {}, digitado: new Set(), dorLivre: 'Cozinha lenta', hoje });
+  ok(livre.vai[0]?.gargaloOutro === 'Cozinha lenta', 'a dor escrita vale para Decisor (gargaloOutro)');
+  const mrrRuim = degrausDaFicha({ degraus: [ETAPA.demo], valores: { ...val, valor_de_mrr: 'abc' }, negocio: {}, digitado: new Set(), dorLivre: '', hoje });
+  ok(mrrRuim.paraEm === ETAPA.demo && mrrRuim.falta.join() === 'valor_de_mrr', 'MRR que não é número: não vai a Demo');
+  ok(horaLivre('18h30') === '18:30' && horaLivre('940') === '09:40' && horaLivre('25') === null, 'a hora digitada vira HH:MM');
 }
 
 if (falhas) {

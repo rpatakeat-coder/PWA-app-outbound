@@ -23,7 +23,9 @@ export const COMO_FOI: { id: Desfecho; rotulo: string }[] = [
   { id: 'estabelecimento_fechado', rotulo: 'Estava fechado' },
 ];
 
-export type Proximo = 'reuniao' | 'voltar7' | 'ligar_amanha' | 'sem_interesse' | 'voltar_horario' | 'voltar_amanha';
+/* 'apresentei' (14/10/26, handoff "app menos tela"): a demo foi feita na hora. Não existe em
+   fichas_de_rua.proximo (check da 0120): no banco a linha vai com proximo null e etapa_depois. */
+export type Proximo = 'reuniao' | 'voltar7' | 'ligar_amanha' | 'sem_interesse' | 'voltar_horario' | 'voltar_amanha' | 'apresentei';
 export const PROXIMOS: { id: Proximo; rotulo: string }[] = [
   { id: 'reuniao', rotulo: 'Reunião' },
   { id: 'voltar7', rotulo: 'Voltar outro dia' },
@@ -50,7 +52,26 @@ export const DIAS_REUNIAO = [
 
 // "E agora?" depende do "Como foi?" (handoff v4.1 §6.4). Reunião vem em três
 // chips (amanhã, 3 dias, 1 semana) para caber nos 3 toques.
-export type OpcaoAgora = { id: string; rotulo: string; proximo: Proximo; dias?: number };
+export type OpcaoAgora = { id: string; rotulo: string; proximo: Proximo; dias?: number; sub?: string };
+/* As duas que faltavam (Julyan, 14/10/26: "ele pode ter criado na hora e feito a reunião no
+   dia"). Vêm primeiro e maiores, com uma linha dizendo o que acontece. */
+const APRESENTEI: OpcaoAgora = { id: 'apresentei', rotulo: 'Apresentei agora', proximo: 'apresentei', sub: 'vai a Demo/Proposta' };
+const REUNIAO_HOJE: OpcaoAgora = { id: 'reuniao0', rotulo: 'Reunião hoje, mais tarde', proximo: 'reuniao', dias: 0, sub: 'só a hora' };
+export const HORAS_REUNIAO_HOJE = ['14:00', '15:00', '16:00', '17:00'] as const;
+/** A hora como se escreve no WhatsApp ("9", "9h", "9:40", "940", "14h30") → "HH:MM"; null se não é hora. A MESMA regra do Planejamento do Cockpit. */
+export function horaLivre(txt: string | null | undefined): string | null {
+  const t = String(txt ?? '').trim().toLowerCase().replace(/\s+/g, '');
+  if (!t) return null;
+  let h: number; let m = 0;
+  if (/^[0-9]{3,4}$/.test(t)) { h = Number(t.slice(0, -2)); m = Number(t.slice(-2)); } else {
+    const p = /^([0-9]{1,2})(?:[:h.,]([0-9]{0,2}))?(?:min)?$/.exec(t);
+    if (!p) return null;
+    h = Number(p[1]);
+    m = p[2] ? Number(p[2].length === 1 ? `${p[2]}0` : p[2]) : 0;
+  }
+  if (!(h >= 0 && h <= 23 && m >= 0 && m <= 59)) return null;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
 const REUNIOES: OpcaoAgora[] = [
   { id: 'reuniao1', rotulo: 'Reunião amanhã', proximo: 'reuniao', dias: 1 },
   { id: 'reuniao3', rotulo: 'Reunião em 3 dias', proximo: 'reuniao', dias: 3 },
@@ -64,7 +85,7 @@ const LIGAR: OpcaoAgora = { id: 'ligar_amanha', rotulo: 'Ligar amanhã', proximo
 const SEM: OpcaoAgora = { id: 'sem_interesse', rotulo: 'Sem interesse', proximo: 'sem_interesse' };
 export function opcoesAgora(comoFoi: Desfecho | null): OpcaoAgora[] {
   switch (comoFoi) {
-    case 'falou_com_decisor': return [...REUNIOES, VOLTAR7, LIGAR, SEM];
+    case 'falou_com_decisor': return [APRESENTEI, REUNIAO_HOJE, ...REUNIOES, VOLTAR7, LIGAR, SEM];
     case 'decisor_ausente': return [{ id: 'voltar_horario', rotulo: 'Voltar no horário do dono', proximo: 'voltar_horario' }, VOLTAR7, LIGAR, SEM];
     case 'sem_interesse': return [VOLTAR7, LIGAR, SEM];
     case 'estabelecimento_fechado': return [{ id: 'voltar_amanha', rotulo: 'Voltar amanhã', proximo: 'voltar_amanha' }, VOLTAR7, LIGAR];
@@ -180,6 +201,24 @@ function degrauRumo(atual: string | null, alvo: string): string | null {
 }
 
 /**
+ * Os degraus de `atual` até `alvo`, um por vez, como o servidor aceita (não pula fase).
+ * Vazio quando já está nele ou além, ou quando a etapa atual é desconhecida.
+ */
+export function escadaAte(atual: string | null, alvo: string): string[] {
+  if (!atual) return [];
+  const iAtual = ESCADA.indexOf(atual);
+  const iAlvo = ESCADA.indexOf(alvo);
+  if (iAtual < 0 || iAlvo < 0 || iAtual >= iAlvo) return [];
+  return ESCADA.slice(iAtual + 1, iAlvo + 1);
+}
+
+/** O valor do CRM conta como resposta? "." , "-", "verificar" e 1 letra são o lixo de quem só queria passar. */
+export function valorValido(v: unknown): boolean {
+  const s = v == null ? '' : String(v).trim();
+  return s.length >= 2 && !/^(verificar|a verificar|n\/a|na|nao sei|não sei|\.+|-+|x+|\?+)$/i.test(s);
+}
+
+/**
  * Etapa sugerida (prompt corrigido): Sem interesse → Perdido; "Falei com quem
  * decide" + Reunião → Conversa com Decisor; 1ª visita → Visita; Ligar amanhã /
  * Voltar em 7 dias → mantém. Sempre o degrau que o servidor aceita.
@@ -190,6 +229,7 @@ export function etapaSugerida(p: {
   const { atual } = p;
   let alvo: string | null = null;
   if (p.proximo === 'sem_interesse') alvo = ETAPA.perdido;
+  else if (p.proximo === 'apresentei') alvo = ETAPA.demo;
   else if (p.comoFoi === 'falou_com_decisor' && p.proximo === 'reuniao') alvo = ETAPA.decisor;
   else if (p.primeiraVisita) alvo = ETAPA.visita;
   if (!alvo) return null;
@@ -205,9 +245,59 @@ export function etapaSugerida(p: {
   return degrau && degrau !== atual ? degrau : null;
 }
 
+export type Degrau = { etapa: string; propriedades: Record<string, string>; gargaloOutro?: string };
+/**
+ * O que a ficha manda de etapa, degrau por degrau (14/10/26). Sobe enquanto cada degrau tem o
+ * que o servidor exige; no primeiro que falta, PARA e devolve o que faltou — a visita grava do
+ * mesmo jeito. Só vai ao HubSpot o que o negócio ainda não tem válido ou o que foi digitado
+ * agora: o celular do cadastro nunca sobrescreve o do negócio.
+ */
+export function degrausDaFicha(p: {
+  degraus: string[]; valores: Record<string, string>; negocio: Record<string, unknown>;
+  digitado: Set<string>; dorLivre: string; hoje: string; motivoTexto?: string;
+  /** o negócio foi lido do HubSpot? Sem a leitura, só vai o que foi digitado agora (o servidor
+      confere contra o que o negócio tem): nada do cadastro ou de ficha velha sobrescreve o CRM */
+  negocioLido?: boolean;
+}): { vai: Degrau[]; paraEm: string | null; falta: string[] } {
+  const vai: Degrau[] = [];
+  for (const etapa of p.degraus) {
+    const propriedades: Record<string, string> = {};
+    const falta: string[] = [];
+    let gargaloOutro: string | undefined;
+    for (const k of PROPS_OBRIGATORIAS_POR_ETAPA[etapa] ?? []) {
+      const manda = p.digitado.has(k) || (p.negocioLido !== false && !valorValido(p.negocio[k]));
+      if (k === 'data_da_reuniao') {
+        /* a demo foi agora: a reunião é hoje (meia-noite UTC em ms, como o Cockpit grava) */
+        propriedades[k] = String(new Date(`${p.hoje}T00:00:00Z`).getTime());
+        continue;
+      }
+      const v = (p.valores[k] ?? '').trim();
+      if (k === 'gargalo_operacional') {
+        if ((GARGALOS as readonly string[]).includes(v)) { if (manda) propriedades[k] = v; continue; }
+        if (valorValido(p.negocio[k])) continue;
+        if (p.dorLivre.trim()) { gargaloOutro = p.dorLivre.trim().slice(0, 200); continue; }
+        falta.push(k); continue;
+      }
+      if (k === 'valor_de_mrr') {
+        const n = Number(v.replace(',', '.'));
+        if (!(isFinite(n) && n > 0)) { if (!valorValido(p.negocio[k])) falta.push(k); continue; }
+        if (manda) propriedades[k] = String(n);
+        continue;
+      }
+      if (k === 'plano_apresentado' && v && !(PICKLIST[k] ?? []).includes(v)) { if (!valorValido(p.negocio[k])) falta.push(k); continue; }
+      if (!valorValido(v)) { if (!valorValido(p.negocio[k])) falta.push(k); continue; }
+      if (manda) propriedades[k] = v;
+    }
+    if (falta.length) return { vai, paraEm: etapa, falta };
+    if (etapa === ETAPA.perdido && p.motivoTexto?.trim()) propriedades.observacao__desqualificado = p.motivoTexto.trim().slice(0, MAX_O_QUE_PESOU);
+    vai.push({ etapa, propriedades, ...(gargaloOutro ? { gargaloOutro } : {}) });
+  }
+  return { vai, paraEm: null, falta: [] };
+}
+
 /** Campos que a etapa destino exige e a ficha ainda não tem. */
 export function faltandoParaEtapa(destino: string, tem: Record<string, string | null | undefined>): string[] {
-  return (PROPS_OBRIGATORIAS_POR_ETAPA[destino] ?? []).filter((k) => !(tem[k] ?? '').toString().trim());
+  return (PROPS_OBRIGATORIAS_POR_ETAPA[destino] ?? []).filter((k) => !valorValido(tem[k]));
 }
 
 export const ROTULO_PROP: Record<string, string> = {
@@ -253,6 +343,11 @@ export type Ficha = {
   tipo: (typeof TIPOS)[number] | null;
   moverEtapa: boolean;
   horario: HorarioDecisor | null;
+  /** "Reunião hoje, mais tarde": a hora (HH:MM). */
+  horaReuniao: string | null;
+  /** "Apresentei agora": plano e MRR (vêm do negócio quando ele já tem). */
+  plano: string;
+  mrr: string;
   /** Dia da volta (AAAA-MM-DD), escolhido pelo executivo; só vale quando ehVolta(proximo). */
   dataVolta: string | null;
   /* Os textos do "Outro"/"Outra" (14/10/26). dorOutra null = chip "Outra" desmarcado. */
@@ -266,7 +361,7 @@ export type Ficha = {
 
 export const FICHA_VAZIA: Ficha = {
   comoFoi: null, proximo: null, diasReuniao: null, motivoPerdido: null, nomeDoLugar: '', decisor: '', papel: null,
-  sistema: '', dor: null, telefone: '', tipo: null, moverEtapa: true, horario: null, dataVolta: null,
+  sistema: '', dor: null, telefone: '', tipo: null, moverEtapa: true, horario: null, horaReuniao: null, plano: '', mrr: '', dataVolta: null,
   dorOutra: null, horarioOutro: '', papelOutro: '', tipoOutro: '', motivoTexto: '',
 };
 
@@ -278,23 +373,33 @@ export const tipoDaFicha = (f: Ficha): string => (f.tipo === 'Outro' ? f.tipoOut
 /** horario_dono: o valor da faixa ('10h_11h30') ou o texto do "Outro horário". */
 export const horarioDaFicha = (f: Ficha): string => (f.horario === HORARIO_OUTRO ? f.horarioOutro.trim().slice(0, 80) : (f.horario ?? ''));
 
-/** Botão Salvar: diz o que falta, ou "Salvar". */
-export function rotuloSalvar(f: Ficha, faltaEtapa: string[] = []): { pode: boolean; texto: string } {
+/**
+ * Botão Salvar: diz o que falta, ou "Salvar". REGISTRAR A VISITA NUNCA TRAVA pelo que a etapa
+ * seguinte exige (14/10/26, handoff "app menos tela"): o "opcional · nunca trava" era mentira
+ * quando a ficha sugeria Decisor, e o time escrevia "." no sistema só para passar. O que a
+ * etapa pede vira aviso (a visita grava e a etapa fica). Só o que a VISITA precisa trava.
+ */
+export function rotuloSalvar(f: Ficha): { pode: boolean; texto: string } {
   const falta: string[] = [];
   if (!f.comoFoi) falta.push('como foi');
   if (!f.proximo) falta.push('o próximo passo');
-  else if (f.proximo === 'reuniao' && !f.diasReuniao) falta.push('o dia da reunião');
+  else if (f.proximo === 'reuniao' && f.diasReuniao === 0 && !f.horaReuniao) falta.push('a hora da reunião');
+  else if (f.proximo === 'reuniao' && f.diasReuniao == null) falta.push('o dia da reunião');
   else if (ehVolta(f.proximo) && !f.dataVolta) falta.push('o dia da volta');
   else if (f.proximo === 'sem_interesse' && !f.motivoPerdido) falta.push('o motivo');
   else if (f.proximo === 'sem_interesse' && MOTIVOS_QUE_EXIGEM_TEXTO.includes(f.motivoPerdido ?? '') && !f.motivoTexto.trim()) falta.push('o que pesou');
-  if (f.moverEtapa) for (const k of faltaEtapa) if (!falta.includes(ROTULO_PROP[k] ?? k)) falta.push(ROTULO_PROP[k] ?? k);
   if (!falta.length) return { pode: true, texto: 'Salvar' };
   return { pode: false, texto: `Falta ${falta.length > 1 ? `${falta.slice(0, -1).join(', ')} e ${falta[falta.length - 1]}` : falta[0]}` };
 }
 
 /** Tarefa do próximo passo (op 'nota' + 'proximo-passo'); null = sem tarefa. */
-export function proximoPassoDaFicha(f: Ficha, hoje: string): { data: string; tipo: 'reuniao' | 'visita' | 'follow-up'; texto: string; canal: 'visita' | 'ligacao' } | null {
+export function proximoPassoDaFicha(f: Ficha, hoje: string): { data: string; tipo: 'reuniao' | 'visita' | 'follow-up'; texto: string; canal: 'visita' | 'ligacao'; hora?: string } | null {
+  /* reunião HOJE: a data é hoje e a hora é a escolhida (proximoDiaUtil anda sempre 1 dia) */
+  if (f.proximo === 'reuniao' && f.diasReuniao === 0) return f.horaReuniao ? { data: hoje, tipo: 'reuniao', texto: 'Reunião combinada na visita', canal: 'visita', hora: f.horaReuniao } : null;
   if (f.proximo === 'reuniao' && f.diasReuniao) return { data: proximoDiaUtil(hoje, f.diasReuniao), tipo: 'reuniao', texto: 'Reunião combinada na visita', canal: 'visita' };
+  /* demo feita agora: o próximo passo é cobrar a resposta da proposta (sem ele, o negócio
+     aparece como "sem próximo passo" no Cockpit) */
+  if (f.proximo === 'apresentei') return { data: proximoDiaUtil(hoje, 2), tipo: 'follow-up', texto: 'Retorno da proposta', canal: 'ligacao' };
   /* volta sem o dia escolhido não vira tarefa: o Salvar já pede "o dia da volta" */
   if (ehVolta(f.proximo) && !f.dataVolta) return null;
   if (f.proximo === 'voltar7') return { data: f.dataVolta as string, tipo: 'visita', texto: 'Voltar para nova visita', canal: 'visita' };
@@ -322,7 +427,8 @@ export function notaDaVisita(f: Ficha, p: { cliente: string; ocorridoEm: string;
     // "sim" só quando falou com quem decide; nunca "nao" (vai vazio)
     decisorAlcancado: f.comoFoi === 'falou_com_decisor' ? 'sim' : 'desconhecido',
     dor: dorDaFicha(f) || null,
-    observacao: [f.sistema ? `sistema: ${f.sistema}` : null, tipoDaFicha(f) ? `tipo: ${tipoDaFicha(f)}` : null,
+    observacao: [f.proximo === 'apresentei' && (f.plano || f.mrr.trim()) ? `apresentou: ${[f.plano, f.mrr.trim() ? `MRR R$ ${f.mrr.trim()}` : ''].filter(Boolean).join(' · ')}` : null,
+      f.sistema ? `sistema: ${f.sistema}` : null, tipoDaFicha(f) ? `tipo: ${tipoDaFicha(f)}` : null,
       rotuloDoHorario(horarioDaFicha(f)) ? `dono costuma estar: ${rotuloDoHorario(horarioDaFicha(f))}` : null,
       f.proximo === 'sem_interesse' && f.motivoPerdido
         ? `sem interesse: ${f.motivoPerdido}${f.motivoTexto.trim() ? ` (${f.motivoTexto.trim().slice(0, MAX_O_QUE_PESOU)})` : ''}` : null].filter(Boolean).join(' · ') || null,

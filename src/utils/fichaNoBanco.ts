@@ -55,7 +55,10 @@ export function linhaDaFicha(f: Ficha, c: {
     ocorrido_em: c.ocorridoEm,
     declarada: c.declarada,
     como_foi: f.comoFoi,
-    proximo: f.proximo,
+    /* "Apresentei agora" não cabe no check da coluna (0120). Vai como 'reuniao': é uma reunião
+       com quem decide, e é assim que o placar, o ranking e o Planejamento contam demos
+       (_demos_com_decisor). O proximo_tipo (follow-up) e o etapa_depois dizem que foi agora. */
+    proximo: f.proximo === 'apresentei' ? 'reuniao' : f.proximo,
     proximo_em: passo ? passo.data : null,
     proximo_tipo: passo ? passo.tipo : null,
     etapa_antes: c.etapaAntes,
