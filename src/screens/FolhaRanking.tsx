@@ -13,7 +13,7 @@ import { Painel } from '../components/Painel';
 import { IconCheckCircle, IconTrophy, IconTrendingUp, IconTrendingDown } from '../components/icons';
 
 // 09/10/26 (0192): a SEMANA é o placar do bônus de R$ 250 (regra 'bonus': venda 100 · demo
-// 25 (negócio entrou em Demo/Proposta, 0197) · visita com prova 3, até 6 por dia), a mesma conta do cockpit do gestor. O MÊS segue
+// 25 (negócio entrou em Demo/Proposta, 0197) · visita com prova 3, sem teto por dia desde 14/10), a mesma conta do cockpit do gestor. O MÊS segue
 // a temporada (% da meta). Os campos novos são opcionais: o app antigo e o banco novo convivem.
 export type Ranking = {
   periodo: 'semana' | 'mes'; de: string; ate: string; regra?: 'bonus'; premio?: number;
@@ -115,10 +115,9 @@ export async function avisarSeVisitaProvada(clientId: string, mostrar: (texto: s
     if (!daqui?.provada) return;
     const r = await buscarRanking();
     if (r?.regra === 'bonus') {
-      // o placar da semana é lido ao vivo (a visita já entrou): conta até 6 por dia e um restaurante
-      // por dia — por isso o toast não promete +3, diz a regra
-      const provadasHoje = ((data ?? []) as Array<{ provada: boolean }>).filter((v) => v.provada).length;
-      const base = provadasHoje > 6 ? `Visita com prova · já são ${provadasHoje} hoje: o placar conta 6 por dia` : 'Visita com prova · conta no placar da semana';
+      // o placar da semana é lido ao vivo (a visita já entrou). Sem teto por dia (14/10/26); o
+      // restaurante conta uma vez na semana — por isso o toast não promete +3, diz a regra
+      const base = 'Visita com prova · conta no placar da semana (restaurante repetido na semana não soma)';
       mostrar(r.eu?.faltam ? `${base} · ${r.eu.faltam.replace(/^Faltam/, 'faltam')}` : base);
       return;
     }
@@ -247,7 +246,7 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
         </View>
 
         <Text style={s.regras}>{bonus
-          ? 'Placar da semana (o mesmo do cockpit): venda 100 (negócio em Fechado no HubSpot; Ag. Pagamento não conta) · demo 25 (negócio que entrou em Demo/Proposta no HubSpot; um por negócio na semana) · visita com prova 3 (GPS até 200 m; foto só quando o GPS não confirma; até 6 por dia; cada restaurante conta uma vez na semana). A demo do negócio que fechou na mesma semana não soma: conta só a venda. Desempate: vendas, demos, visitas. Visita e demo contam até sexta às 23:59; venda, até domingo às 23:59 (a do fim de semana entra na semana que terminou). O ganhador aparece na segunda às 08:00; o pagamento é com o financeiro.'
+          ? 'Placar da semana (o mesmo do cockpit): venda 100 (negócio em Fechado no HubSpot; Ag. Pagamento não conta) · demo 25 (negócio que entrou em Demo/Proposta no HubSpot; um por negócio na semana) · visita com prova 3 (GPS até 200 m; foto só quando o GPS não confirma; sem teto por dia; cada restaurante conta uma vez na semana). A demo do negócio que fechou na mesma semana não soma: conta só a venda. Desempate: vendas, demos, visitas. Visita e demo contam até sexta às 23:59; venda, até domingo às 23:59 (a do fim de semana entra na semana que terminou). O ganhador aparece na segunda às 08:00; o pagamento é com o financeiro.'
           : 'Pontos: visita provada 20 (GPS ou foto) · demo realizada 50 (o negócio entrou em Demo/Proposta) · contrato 200. Visita declarada não pontua. O ranking é pela % da sua meta; desempate por contratos e MRR. A semana fecha segunda às 9h.'}</Text>
       </View>
     );
