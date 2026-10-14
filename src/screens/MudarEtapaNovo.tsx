@@ -86,7 +86,7 @@ const juntar = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')}
 const UM_TOQUE: string[] = [ETAPA.demo, ETAPA.negociacao];
 const ddmm = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }) : '');
 
-export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, onMudou, destinoInicial = null, preenchido = null, soArmas = false }: Props) {
+export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPino, onFechar, onMudou, destinoInicial = null, preenchido = null, soArmas = false }: Props) {
   const [destino, setDestino] = useState<string | null>(null);
   const [digitado, setDigitado] = useState<Record<string, string>>({});
   const [jaTem, setJaTem] = useState<Record<string, unknown>>({});
@@ -107,6 +107,10 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
   const [armasAbertas, setArmasAbertas] = useState(false);
   const [outraData, setOutraData] = useState(false);
   const dealId = client.id_hubspot ? String(client.id_hubspot) : null;
+  /* A ETAPA QUE VALE: a do pino, senão a lida ao vivo do HubSpot. O mapa antigo e a lista de
+     tarefas não sabem a etapa do pino; sem isto a lista travava tudo menos Prospecção. */
+  const lidaAoVivo = String(jaTem.dealstage ?? '').trim();
+  const etapaAtual = etapaDoPino ?? (/^[0-9]+$/.test(lidaAoVivo) ? lidaAoVivo : null);
   const execId = client.vendedor_id_hubspot ? String(client.vendedor_id_hubspot) : null;
   const nome = client.empresa?.trim() || client.nome;
 
@@ -404,6 +408,8 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
             <Progresso texto="Sistema e dor são suas armas na Demo, e o gestor estuda a praça com elas." n={nDe4} de={4} />
             <SecaoArmas armas={armas} etiqueta={etiqueta} outroSistema={outroSistema} aoOutro={setOutroSistema} abertos={abertos} aoAbrir={(m) => setAbertos((a) => ({ ...a, ...m }))} mudar={mudar} />
           </View>
+        ) : !destino && !etapaAtual && !jaTemPronto ? (
+          <View style={{ paddingVertical: 24 }}><ActivityIndicator /></View>
         ) : !destino ? (
           [...ETAPAS_DA_FOLHA.slice(0, 7), ETAPA.ganho, ...ETAPAS_DA_FOLHA.slice(7)].map((id, i) => {
             const atual = id === etapaAtual;

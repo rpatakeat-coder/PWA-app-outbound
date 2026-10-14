@@ -4597,7 +4597,8 @@ function MainApp() {
   const [limparFunilCom, setLimparFunilCom] = useState<string | null>(null);
   // Pôr no plano (um plano só, 06/10/26): o pino que abriu a folha
   const [porNoPlanoPara, setPorNoPlanoPara] = useState<{ client: Client; etapaAtual: string | null; tipoPino: string | null; cor: string; acao?: AcaoId } | null>(null);
-  const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null; soArmas?: boolean } | null>(null);
+  /* taskId: veio da lista de tarefas antiga ("Avançar etapa"/"Mover p/ Perdido") — conclui a tarefa quando a etapa grava */
+  const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null; soArmas?: boolean; taskId?: string } | null>(null);
   const codigoDaEtapa = (c: Client): string | null => {
     if (!contextoPino) return null;
     const chave = textoNormalizado(c.etapa);
@@ -5813,7 +5814,14 @@ function MainApp() {
                 // Depois do card fechar: o history.back() do Painel do card
                 // fecharia na hora o Painel novo (armadilha do CLAUDE.md).
                 setTimeout(() => setEtapaNovaPara({ client: c, etapaAtual: atual }), 350);
+              } else if (selectedClient.id_hubspot) {
+                /* O MODAL ANTIGO GRAVAVA DIRETO NO HUBSPOT (14/10/26): pulava etapa e não pedia o
+                   que o servidor exige. Negócio que já existe vai pela folha nova, com as regras. */
+                const c = selectedClient;
+                setSelectedClient(null);
+                setTimeout(() => setEtapaNovaPara({ client: c, etapaAtual: codigoDaEtapa(c) }), 350);
               } else {
+                // sem negócio no HubSpot: o modal antigo é quem cria o negócio
                 setChangingStageFor({ client: selectedClient });
                 setSelectedClient(null);
               }
@@ -9171,7 +9179,9 @@ function MainApp() {
                     style={[styles.taskDoneOption, { backgroundColor: 'var(--verde-acao)' }]}
                     onPress={() => {
                       setCompletingTask(null);
-                      setChangingStageFor({ client, taskId: task.id });
+                      // negócio que já existe: folha nova (regras do servidor); sem negócio, o modal antigo cria
+                      if (client.id_hubspot) setTimeout(() => setEtapaNovaPara({ client, etapaAtual: codigoDaEtapa(client), taskId: task.id }), 350);
+                      else setChangingStageFor({ client, taskId: task.id });
                     }}
                   >
                     <IconText Icone={IconArrowFoward} style={styles.taskDoneOptionText} tone="onBrand">Avançar etapa</IconText>
@@ -9183,7 +9193,8 @@ function MainApp() {
                     style={[styles.taskDoneOption, { backgroundColor: '#E03A41' }]}
                     onPress={() => {
                       setCompletingTask(null);
-                      setChangingStageFor({ client, initialStageId: LOST_STAGE_ID, taskId: task.id });
+                      if (client.id_hubspot) setTimeout(() => setEtapaNovaPara({ client, etapaAtual: codigoDaEtapa(client), destinoInicial: LOST_STAGE_ID, taskId: task.id }), 350);
+                      else setChangingStageFor({ client, initialStageId: LOST_STAGE_ID, taskId: task.id });
                     }}
                   >
                     <IconText Icone={IconCloseCircle} style={styles.taskDoneOptionText} tone="onBrand">Mover p/ Perdido</IconText>
@@ -9816,6 +9827,8 @@ function MainApp() {
               void supabase.from('clients').update({ telefone: cel }).eq('id', alvo.id).then(({ error }) => { if (error) console.warn('[telefone no lead]', error.message); });
             }
             aplicarEtapaNoLead(alvo.id, codigo, alvo);
+            // veio da tarefa: a etapa gravou, a tarefa conclui (o que o modal antigo fazia no onDone)
+            if (etapaNovaPara.taskId) resolveTask.mutate({ id: etapaNovaPara.taskId, status: 'concluida' });
           }}
         />
       )}
