@@ -102,6 +102,7 @@ export function useClientSearch(term: string) {
       const { data, error } = await supabase
         .from('clients')
         .select(CLIENT_LIST_COLUMNS)
+        .eq('is_archived', false)
         // `or` com ilike: mesmos campos que o filtro em memória usa.
         .or(
           [
@@ -241,6 +242,9 @@ export function useClients(
         let q = supabase
           .from('clients')
           .select(CLIENT_MAP_COLUMNS, contar ? { count: 'exact' } : undefined)
+          // Pino ARQUIVADO (juntado com outro, ver pinos_juntados) não vai para o mapa: ficava
+          // empilhado em cima do pino certo e o Cheguei gravava a visita nele (14/10/26).
+          .eq('is_archived', false)
           .order('id', { ascending: true })
           .range(from, from + PAGE_SIZE - 1);
 
