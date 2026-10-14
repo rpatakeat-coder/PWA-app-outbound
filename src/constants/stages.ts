@@ -257,7 +257,23 @@ export const STAGES: Stage[] = [
       },
     ],
   },
-  { id: '1395880471', label: 'Demo/Proposta', color: '#FFB32F' },
+  /* Demo/Proposta pede o mesmo que o servidor do Cockpit (14/10/26): sem isto este caminho antigo
+     levava o negócio a Demo sem a data da reunião, e o avanço seguinte era recusado. */
+  {
+    id: '1395880471',
+    label: 'Demo/Proposta',
+    color: '#FFB32F',
+    subFields: [
+      {
+        field: 'plano_apresentado',
+        fieldLabel: 'Plano apresentado',
+        kind: 'select',
+        options: ['Básico (PDV + delivery)', 'Básico (PDV + mesa + delivery)', 'Inovação', 'Pro', 'Enterprise'],
+      },
+      { field: 'valor_de_mrr', fieldLabel: 'MRR (R$)', kind: 'currency', placeholder: 'Ex.: 350,00' },
+      { field: 'data_da_reuniao', fieldLabel: 'Data da reunião', kind: 'date' },
+    ],
+  },
   {
     id: '1395880472',
     label: 'Negociação',
@@ -270,7 +286,9 @@ export const STAGES: Stage[] = [
         options: ['Básico (PDV + delivery)', 'Básico (PDV + mesa + delivery)', 'Inovação', 'Pro', 'Enterprise'],
       },
       {
-        field: 'mrr',
+        /* valor_de_mrr é o que o servidor confere para Negociação; 'mrr' é o campo que o RPA/Asaas
+           lê na cobrança e só a etapa de Pagamento escreve (14/10/26) */
+        field: 'valor_de_mrr',
         fieldLabel: 'MRR (R$)',
         kind: 'currency',
         placeholder: 'Ex.: 350,00',
