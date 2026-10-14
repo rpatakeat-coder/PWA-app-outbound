@@ -29,7 +29,17 @@ type Props = {
   onEmitida: (codigoEtapa: string) => void;
 };
 
-const PLANO_PARA_PACOTE: Record<string, string> = { Inovação: 'Inovação', Pro: 'Profissional', Enterprise: 'Enterprise' };
+/* O pacote sai do plano apresentado, INCLUSIVE o Básico (14/10/26, handoff "app menos tela" D):
+   antes o Básico ficava de fora e era escolhido de novo. É só preenchimento: o executivo confere. */
+const PLANO_PARA_PACOTE: Record<string, string> = {
+  'Básico (PDV + delivery)': 'Básico (delivery e balcão)', 'Básico (PDV + mesa + delivery)': 'Básico',
+  Inovação: 'Inovação', Pro: 'Profissional', Enterprise: 'Enterprise',
+};
+/* O maior desafio sugerido pela dor já registrada (gargalo_operacional → qual_maior_desafio_). */
+const DOR_PARA_DESAFIO: Record<string, string> = {
+  Fila: 'Operação', 'Falta de Garçom': 'Problemas com Atendimento', 'Falta de Gestão': 'Problemas de Gestão',
+  'Sem fidelização': 'Problemas em Fidelizar o Cliente', 'Demora na divisão de contas': 'Operação', Estoque: 'Problemas de Gestão',
+};
 
 export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmitida }: Props) {
   const [c, setC] = useState<Cobranca>(COBRANCA_VAZIA);
@@ -42,6 +52,8 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
   const [asaasDesistiu, setAsaasDesistiu] = useState(false);
   const [todosPacotes, setTodosPacotes] = useState(false);
   const [todosAdicionais, setTodosAdicionais] = useState(false);
+  /* o contrato já conferido fica numa linha; "ver" abre os seletores */
+  const [verContrato, setVerContrato] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -60,8 +72,9 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
       numero: client.numero?.trim() || '',
       pacote_contratado: PLANO_PARA_PACOTE[plano] ?? '',
       mrr, amount: valorDoPeriodo(mrr, 'Mensal'),
+      qual_maior_desafio_: DOR_PARA_DESAFIO[String(jaTem.gargalo_operacional ?? '')] ?? '',
     });
-    setPasso(1); setErro(null); setTodosPacotes(false); setTodosAdicionais(false);
+    setPasso(1); setErro(null); setTodosPacotes(false); setTodosAdicionais(false); setVerContrato(false);
   }, [visivel, client.id]);
 
   // O que o negócio já tem chega um instante depois de abrir (leitura ao vivo do
@@ -75,6 +88,7 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
       ...x,
       celular: x.celular || String(jaTem.celular ?? '').trim(),
       pacote_contratado: x.pacote_contratado || (PLANO_PARA_PACOTE[plano] ?? ''),
+      qual_maior_desafio_: x.qual_maior_desafio_ || (DOR_PARA_DESAFIO[String(jaTem.gargalo_operacional ?? '')] ?? ''),
       ...(x.mrr ? {} : { mrr, amount: valorDoPeriodo(mrr, x.periodo_contratado || 'Mensal') }),
     }));
   }, [visivel, jaTem]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -187,11 +201,47 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
               </>
             )}
 
-            {passo === 2 && (
+            {passo === 2 && (() => {
+              /* CONFERIR × PREENCHER: com o contrato completo, ele vira uma linha ("ver" abre) e o
+                 que falta vem primeiro. A lista de campos e o mínimo de 50 não mudam (o Asaas lê). */
+              const contratoPronto = !!c.pacote_contratado && c.adicional.length > 0 && !!c.periodo_contratado && !!c.tipo_de_pagamento
+                && Number(String(c.mrr).replace(',', '.')) > 0 && Number(String(c.amount).replace(',', '.')) > 0;
+              const desafio = (
+                <>
+                  <Text style={s.rotulo}>{`Maior desafio do cliente${c.qual_maior_desafio_ && DOR_PARA_DESAFIO[String(jaTem.gargalo_operacional ?? '')] === c.qual_maior_desafio_ ? ' · sugerido da dor' : ''}`}</Text>
+                  <View style={s.chips}>{DESAFIOS.map((d) => chip(d, d, c.qual_maior_desafio_ === d, () => set({ qual_maior_desafio_: d })))}</View>
+                  <View style={s.campoBloco}>
+                    <Text style={s.rotulo}>Conte o desafio com as palavras do dono</Text>
+                    <TextInput style={[s.input, s.area, c.informacoes_sobre_o_maior_desafio.trim().length < MINIMO_DESAFIO && contratoPronto && s.inputFoco]} value={c.informacoes_sobre_o_maior_desafio}
+                      onChangeText={(v) => set({ informacoes_sobre_o_maior_desafio: v })} multiline placeholder="O que o dono contou, com as palavras dele" placeholderTextColor="#8B919C" />
+                    <Text style={[s.valida, c.informacoes_sobre_o_maior_desafio.trim().length >= MINIMO_DESAFIO ? s.validaOk : s.ajudaCor]}>
+                      {`${c.informacoes_sobre_o_maior_desafio.trim().length} de ${MINIMO_DESAFIO} caracteres${c.informacoes_sobre_o_maior_desafio.trim().length >= MINIMO_DESAFIO ? ' ✓' : ' · o Asaas lê esse texto'}`}
+                    </Text>
+                  </View>
+                </>
+              );
+              if (contratoPronto && !verContrato) {
+                return (
+                  <>
+                    <Text style={s.secaoPreencher}>PREENCHER</Text>
+                    {desafio}
+                    <Text style={s.secaoConferir}>CONFERIR · VEIO DO NEGÓCIO</Text>
+                    <Pressable accessibilityRole="button" onPress={() => setVerContrato(true)} style={s.conferir}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={s.conferirLinha} numberOfLines={1}>{`${c.pacote_contratado} · ${c.adicional.join(', ')} · ${c.periodo_contratado}`}</Text>
+                        <Text style={s.ajuda} numberOfLines={1}>{`${c.tipo_de_pagamento} · MRR R$ ${c.mrr} · período R$ ${c.amount}`}</Text>
+                      </View>
+                      <Text style={s.conferirVer}>ver</Text>
+                    </Pressable>
+                  </>
+                );
+              }
+              return (
               <>
                 <Text style={s.rotulo}>Pacote contratado</Text>
                 <View style={s.chips}>
-                  {(todosPacotes ? PACOTES : PACOTES_MAIS_USADOS).map((p) => chip(p, p, c.pacote_contratado === p, () => set({ pacote_contratado: p })))}
+                  {/* o pacote que veio do plano aparece mesmo fora dos mais usados */}
+                  {(todosPacotes ? PACOTES : [...PACOTES_MAIS_USADOS, ...(c.pacote_contratado && !PACOTES_MAIS_USADOS.includes(c.pacote_contratado) ? [c.pacote_contratado] : [])]).map((p) => chip(p, p, c.pacote_contratado === p, () => set({ pacote_contratado: p })))}
                   {!todosPacotes && chip('todos', 'Ver todos', false, () => setTodosPacotes(true))}
                 </View>
                 <Text style={s.rotulo}>Adicionais</Text>
@@ -208,17 +258,10 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
                   <View style={{ flex: 1 }}>{campo('Valor do período', c.amount, (v) => set({ amount: v, amountEditado: true }), { keyboardType: 'decimal-pad', placeholder: 'R$' })}</View>
                 </View>
                 <Text style={s.ajuda}>R$ 349 é o ticket ideal, não uma trava.</Text>
-                <Text style={s.rotulo}>Maior desafio do cliente</Text>
-                <View style={s.chips}>{DESAFIOS.map((d) => chip(d, d, c.qual_maior_desafio_ === d, () => set({ qual_maior_desafio_: d })))}</View>
-                <View style={s.campoBloco}>
-                  <Text style={s.rotulo}>Conte o desafio com as palavras do dono</Text>
-                  <TextInput style={[s.input, s.area]} value={c.informacoes_sobre_o_maior_desafio} onChangeText={(v) => set({ informacoes_sobre_o_maior_desafio: v })} multiline placeholderTextColor="#8B919C" />
-                  <Text style={[s.valida, c.informacoes_sobre_o_maior_desafio.trim().length >= MINIMO_DESAFIO ? s.validaOk : s.ajudaCor]}>
-                    {`${c.informacoes_sobre_o_maior_desafio.trim().length}/${MINIMO_DESAFIO} · o HubSpot recusa com menos`}
-                  </Text>
-                </View>
+                {desafio}
               </>
-            )}
+              );
+            })()}
 
             {passo === 3 && (
               <>
@@ -348,4 +391,10 @@ const s = StyleSheet.create({
   secundario: { flex: 1, height: 56, borderRadius: 16, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center' },
   secundarioTexto: { fontSize: 15, fontWeight: '600', color: 'var(--text)' },
   legenda: { fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' },
+  secaoPreencher: { fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: 'var(--tint-amber-text)', marginTop: 4 },
+  secaoConferir: { fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: 'var(--tint-green-text)', marginTop: 12 },
+  conferir: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)' },
+  conferirLinha: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
+  conferirVer: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)', textDecorationLine: 'underline', paddingHorizontal: 4 },
+  inputFoco: { borderWidth: 2, borderColor: 'var(--vermelho-acao)' },
 });

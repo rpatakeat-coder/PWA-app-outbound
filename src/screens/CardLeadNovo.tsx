@@ -5,7 +5,7 @@
 // dono e origem, e a grade de "mais". As abas Histórico · Agenda · Dados
 // continuam as do ClientBottomSheet (ficha cheia). Toda ação chama o MESMO
 // handler que o card já usava.
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Alert } from '../components/Alert';
@@ -15,7 +15,8 @@ import { ORIGEM, origemDoFiltro } from '../utils/lentes';
 import { openGoogleMaps, type TravelMode } from '../utils/navigation';
 import type { Pino } from '../utils/pinoP2';
 import { distanciaTexto, fatosDoCard, sinaisDoCliente } from '../utils/cardNovo';
-import { ETAPA, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA, ROTULO_PROP, pareceNomeDePessoa } from '../utils/fichaDeRua';
+import { ETAPA, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA, ROTULO_PROP, pareceNomeDePessoa, valorValido } from '../utils/fichaDeRua';
+import { supabase } from '../integrations/supabase/client';
 import { IconClose as SiClose } from '../components/icons';
 import ArmasDoNegocio from '../components/ArmasDoNegocio';
 import { useOndeNoPlano } from '../hooks/useOndeNoPlano';
@@ -388,7 +389,32 @@ function avancoDaEtapa(codigo: string | null | undefined): { botao: string | nul
   }
 }
 
+/* O QUE FALTA PARA O PRÓXIMO DEGRAU (handoff "app menos tela", E1/E2, 14/10/26): a nota diz só
+   o que falta, e o botão diz "pronto · 1 toque" quando o negócio já tem tudo. Lê o snapshot do
+   Cockpit (mapa_negocio); a folha confere ao vivo antes de gravar. null = ainda não sabe. */
+const ROTULO_CURTO: Record<string, string> = { plano_apresentado: 'o plano apresentado', valor_de_mrr: 'o MRR', data_da_reuniao: 'a data da reunião', celular: 'o celular', gargalo_operacional: 'a maior dor', nome_do_sistema: 'o sistema' };
+function useFaltaPara(dealId: string | null, destino: string | null): { falta: string[]; tem: string[] } | null {
+  const [r, setR] = useState<{ falta: string[]; tem: string[] } | null>(null);
+  useEffect(() => {
+    setR(null);
+    const pede = destino ? PROPS_OBRIGATORIAS_POR_ETAPA[destino] ?? [] : [];
+    if (!dealId || !pede.length) return;
+    let vivo = true;
+    void Promise.resolve(supabase.rpc('mapa_negocio', { p_deal: dealId }))
+      .then(({ data }) => {
+        if (!vivo) return;
+        const neg = (data as Record<string, unknown>) ?? {};
+        setR({ falta: pede.filter((k) => !valorValido(neg[k])), tem: pede.filter((k) => valorValido(neg[k])) });
+      }, () => undefined);
+    return () => { vivo = false; };
+  }, [dealId, destino]);
+  return r;
+}
+const juntarE = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} e ${xs[xs.length - 1]}` : xs[0] ?? '');
+
 function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
+  /* hook antes de qualquer return (regra dos hooks) */
+  const falta = useFaltaPara(d.client.id_hubspot && d.pino.tipo !== 'cliente' ? String(d.client.id_hubspot) : null, avancoDaEtapa(d.etapaCodigo ?? null).destino);
   if (d.pino.tipo === 'alvo' && !d.client.id_hubspot) {
     return (
       <View style={s.negocio}>
@@ -412,6 +438,14 @@ function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   const codigo = d.etapaCodigo ?? null;
   const i = codigo ? FUNIL8.indexOf(codigo) : -1;
   const av = avancoDaEtapa(codigo);
+  const pedeAlgo = !!av.destino && (PROPS_OBRIGATORIAS_POR_ETAPA[av.destino] ?? []).length > 0 && av.destino !== ETAPA.pagamento;
+  const nota = !pedeAlgo || !falta ? av.nota
+    : falta.falta.length
+      ? `Pede ${juntarE(falta.falta.map((k) => ROTULO_CURTO[k] ?? ROTULO_PROP[k] ?? k))}${falta.tem.length ? ` · ${juntarE(falta.tem.map((k) => (ROTULO_CURTO[k] ?? k).replace(/^(o|a) /, '')))} já no negócio` : ''}`
+      : '';
+  const pronto = pedeAlgo && !!falta && falta.falta.length === 0;
+  const umToque = av.destino === ETAPA.demo || av.destino === ETAPA.negociacao;
+  const subBotao = !pedeAlgo || !falta ? null : pronto ? (umToque ? 'pronto · 1 toque' : 'pronto · confirme') : `falta ${(ROTULO_CURTO[falta.falta[0]] ?? falta.falta[0]).replace(/^(o|a) /, '')}${falta.falta.length > 1 ? ` e mais ${falta.falta.length - 1}` : ''} · 2 toques`;
   return (
     <View style={s.negocio}>
       <View style={s.negocioTopo}>
@@ -420,11 +454,15 @@ function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       </View>
       <View style={s.barra8}>{FUNIL8.map((e, k) => <View key={e} style={[s.seg, k <= i && s.segFeito]} />)}</View>
       <Text style={s.negocioEtapa}>{codigo ? ROTULO_ETAPA[codigo] ?? d.etapaRotulo : d.etapaRotulo ?? 'Etapa não reconhecida'}</Text>
-      <Text style={s.negocioNota}>{av.nota}</Text>
+      {!!nota && <Text style={[s.negocioNota, pedeAlgo && !!falta && falta.falta.length > 0 && s.notaFalta]}>{nota}</Text>}
       {codigo && <ArmasDoNegocio client={d.client} etapa={codigo} onCompletar={a.onCompletarArmas} />}
       <View style={s.grade}>
         {av.botao && av.destino && a.onAvancar && (
-          <Botao rotulo={av.botao} onPress={() => a.onAvancar!(av.destino!)} estilo={[s.botao48, s.avancar]} texto={s.avancarTexto} />
+          <Pressable accessibilityRole="button" accessibilityLabel={`${av.botao}${subBotao ? ` · ${subBotao}` : ''}`} onPress={() => a.onAvancar!(av.destino!)}
+            style={({ pressed }) => [s.botao, s.avancarDuplo, pedeAlgo && !!falta && !pronto ? s.avancarFalta : s.avancar, pressed && { opacity: 0.8 }]}>
+            <Text style={[s.botaoTexto, pedeAlgo && !!falta && !pronto ? s.avancarFaltaTexto : s.avancarTexto]} numberOfLines={1}>{av.botao}</Text>
+            {!!subBotao && <Text style={[s.avancarSub, !pronto && s.avancarSubFalta]} numberOfLines={1}>{subBotao}</Text>}
+          </Pressable>
         )}
         {a.onChangeStage && <Botao rotulo="Outra etapa" onPress={a.onChangeStage} estilo={[s.botao48, av.botao ? s.outra : null]} />}
         {/* vários de uma vez (Julyan, 05/10/26): Ag. Pagamento fica de fora, e fechado não tem o que limpar */}
@@ -565,6 +603,12 @@ const s = StyleSheet.create({
   // pisos de largura + grade que quebra linha: a 390 px os três dividiam 326 px e "Outra etapa" virava "Outra e…"
   avancar: { flexGrow: 2, minWidth: 150, backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
   avancarTexto: { color: '#FFFFFF', fontWeight: '700' },
+  avancarDuplo: { minHeight: 50, flexDirection: 'column', paddingVertical: 4 },
+  avancarFalta: { flexGrow: 2, minWidth: 150, backgroundColor: 'var(--tint-red)', borderColor: 'var(--vermelho-acao)', borderWidth: 1.5 },
+  avancarFaltaTexto: { color: 'var(--tint-red-text)', fontWeight: '700' },
+  avancarSub: { fontSize: 11.5, fontWeight: '600', color: 'rgba(255,255,255,0.85)' },
+  avancarSubFalta: { color: 'var(--text-muted)' },
+  notaFalta: { color: 'var(--tint-amber-text)', backgroundColor: 'var(--tint-amber)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, overflow: 'hidden' },
   outra: { flexGrow: 1, minWidth: 104 },
   negocioEtapa: { fontSize: 16, fontWeight: '600', color: 'var(--text)' },
   negocioNota: { fontSize: 13, fontWeight: '500', color: 'var(--text-muted)' },
