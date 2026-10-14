@@ -29,7 +29,7 @@ import { espelharDepois } from '../_compartilhado/espelho.ts';
 // O pacote vem do proprio repositorio, FIXADO NO HASH do commit que o gerou: o que
 // roda e, por construcao, o arquivo versionado — sem copia manual no deploy.
 // Gerou de novo? Commit, e troque o hash aqui pelo do commit novo.
-import { carregador, ROTAS, ORIGEM } from 'https://raw.githubusercontent.com/rpatakeat-coder/PWA-app-outbound/2d36316f6a52f057baee6541c5888f11c17f723b/supabase/functions/cockpit-api/cockpit.js';
+import { carregador, ROTAS, ORIGEM } from 'https://raw.githubusercontent.com/rpatakeat-coder/PWA-app-outbound/d22136a5366c785d43d9edaccc56f46a2519d558/supabase/functions/cockpit-api/cockpit.js';
 
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -53,12 +53,21 @@ segredo('SERPER_API_KEY');
 segredo('PWA_DEEP_LINK');
 // A porta dos robos de leads (x-import-secret), o mesmo segredo do GitHub.
 segredo('IMPORT_SECRET');
+// "Buscar leads" importa chamando ${COCKPIT_URL}/api/importar-leads. Sem isto o
+// destino padrao do Cockpit e a Vercel antiga, que grava no banco antigo: a
+// importacao tem de cair aqui mesmo, na porta dos robos (o mesmo destino do
+// casa-dos-dados-semanal.yml).
+env['COCKPIT_URL'] = Deno.env.get('SUPABASE_URL') + '/functions/v1/cockpit-robo';
 
 // ---- os .json, vivos ----
 // Os modulos do Cockpit guardam a referencia no carregamento
 // (USUARIOS = Array.isArray(raw) ? raw : raw.usuarios), entao o que se entrega e
 // SEMPRE O MESMO objeto, com o conteudo trocado no lugar a cada chamada.
 const USUARIOS: any[] = [];
+// Quem saiu do time (equipe_cockpit ativo=false): so o ownerId. O territorio do
+// Cockpit le isto para nao dar conta a quem saiu; aqui USUARIOS so traz ativos,
+// entao a marca `desligado` do usuarios.json da Vercel nunca chega.
+const DESLIGADOS: any[] = [];
 const CHAVE_CONFIG: Record<string, string> = {
   'data/redes-excluidas.json': 'redes-excluidas',
   'data/maptiler-config.json': 'maptiler-config',
@@ -121,12 +130,22 @@ async function atualizarEquipe() {
     return x;
   });
   USUARIOS.splice(0, USUARIOS.length, ...lista);
+  const { data: fora, error: erroFora } = await svc
+    .from('equipe_cockpit')
+    .select('profiles!inner(id_hubspot)')
+    .eq('ativo', false);
+  // Falhou? Fica a lista anterior: o pior caso e o territorio de antes, nunca a rota fora do ar.
+  if (erroFora) { console.error('equipe_cockpit (desligados): ' + erroFora.message); return; }
+  const desligados = (fora ?? []).map((l: any) => (l.profiles ?? {}).id_hubspot).filter(Boolean)
+    .map((id: any) => ({ ownerId: String(id) }));
+  DESLIGADOS.splice(0, DESLIGADOS.length, ...desligados);
 }
 
 const carregar = carregador({
   process: { env },
   json(caminho: string) {
     if (caminho === 'data/usuarios.json') return USUARIOS;
+    if (caminho === 'data/desligados.json') return DESLIGADOS;
     if (caminho === 'data/supabase-config.json') return SUPABASE_CONFIG;
     if (CONFIG_JSON[caminho]) return CONFIG_JSON[caminho];
     // snapshot (hubspot.json, narrativas.json...): o Cockpit pede com requireOpcional
