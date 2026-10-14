@@ -38,6 +38,7 @@ import {
   type Gargalo,
 } from '../utils/desfechoVisita';
 import { enviarDesfechoDaVisita } from '../utils/hubspotSync';
+import { GARGALO_OUTRA } from '../utils/fichaDeRua';
 
 type Props = {
   idHubspot: string;
@@ -106,6 +107,8 @@ export function DesfechoVisitaSheet({ idHubspot, cliente, visitadoEm, ownerId, a
   const [desfecho, setDesfecho] = useState<Desfecho | null>(null);
   const [sistema, setSistema] = useState('');
   const [gargalo, setGargalo] = useState<Gargalo | null>(null);
+  // "Outra" (14/10/26): null = chip desmarcado. O texto nunca vai como gargalo (enum), só na nota.
+  const [dorOutra, setDorOutra] = useState<string | null>(null);
   const [canal, setCanal] = useState<Canal | null>(null);
   const [prazo, setPrazo] = useState<number | null>(null);
   const [acao, setAcao] = useState('');
@@ -135,6 +138,7 @@ export function DesfechoVisitaSheet({ idHubspot, cliente, visitadoEm, ownerId, a
           desfecho,
           nomeDoSistema: sistema.trim() || null,
           gargalo,
+          dorOutra: dorOutra?.trim() || null,
           proximoPasso: passo,
           observacao: observacao.trim() || null,
           ownerId,
@@ -221,11 +225,28 @@ export function DesfechoVisitaSheet({ idHubspot, cliente, visitadoEm, ownerId, a
                     key={g}
                     texto={g}
                     ativo={gargalo === g}
-                    aoTocar={() => setGargalo(gargalo === g ? null : g)}
+                    aoTocar={() => { setGargalo(gargalo === g ? null : g); setDorOutra(null); }}
                     altura={layout.alvo}
                   />
                 ))}
+                <Chip
+                  texto={GARGALO_OUTRA}
+                  ativo={dorOutra != null}
+                  aoTocar={() => { setGargalo(null); setDorOutra(dorOutra != null ? null : ''); }}
+                  altura={layout.alvo}
+                />
               </View>
+              {dorOutra != null ? (
+                <TextInput
+                  style={[estilos.campo, { marginTop: 8 }]}
+                  placeholder="Qual é a dor?"
+                  placeholderTextColor="var(--text-subtle)"
+                  value={dorOutra}
+                  onChangeText={setDorOutra}
+                  maxLength={200}
+                  autoCapitalize="sentences"
+                />
+              ) : null}
             </Secao>
 
             <Secao titulo="Próximo passo" opcional>

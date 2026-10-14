@@ -320,6 +320,7 @@ import {
   type Gargalo,
   type ProximoPasso,
 } from './desfechoVisita';
+import { sistemaParaGravar } from './armasDaDemo';
 
 export type ResultadoDesfecho = {
   qualificacao: 'gravada' | 'nada_a_gravar' | 'falhou';
@@ -337,6 +338,8 @@ export type EntradaDesfechoVisita = {
   desfecho: Desfecho;
   nomeDoSistema: string | null;
   gargalo: Gargalo | null;
+  /** Dor "Outra" (14/10/26): texto livre. Nunca vai como gargalo (enum); só na nota. */
+  dorOutra?: string | null;
   proximoPasso: ProximoPasso | null;
   observacao: string | null;
   ownerId: string | null;
@@ -352,7 +355,8 @@ export async function enviarDesfechoDaVisita(
   //    de proposito, mas nem vale a viagem se os dois estiverem em branco.
   let qualificacao: ResultadoDesfecho['qualificacao'] = 'nada_a_gravar';
   const propriedades: Record<string, string> = {};
-  if (e.nomeDoSistema?.trim()) propriedades.nome_do_sistema = e.nomeDoSistema.trim();
+  // nome_do_sistema com a grafia acertada quando é UM sistema conhecido (14/10/26).
+  if (e.nomeDoSistema?.trim()) propriedades.nome_do_sistema = sistemaParaGravar(e.nomeDoSistema);
   if (e.gargalo) propriedades.gargalo_operacional = e.gargalo;
   if (Object.keys(propriedades).length > 0) {
     try {
@@ -379,6 +383,8 @@ export async function enviarDesfechoDaVisita(
         canal: 'visita',
         desfecho: e.desfecho,
         decisorAlcancado: decisorDoDesfecho(e.desfecho),
+        // a dor "Outra" só existe aqui: o gargalo do negócio é enum e não a aceita
+        dor: e.dorOutra?.trim() || null,
         observacao: e.observacao,
         proximoPasso: e.proximoPasso,
       }),

@@ -9,7 +9,7 @@
 // `qualificar` (sistema, dor, horário) e `decisor` (vira contato do negócio).
 // Regras puras, sem React: testadas em armasDaDemo.teste.ts.
 
-import { ETAPA, GARGALOS, HORARIOS, type HorarioDecisor } from './fichaDeRua';
+import { ETAPA, GARGALOS, HORARIOS, papelParaHubspot } from './fichaDeRua';
 
 export const ETAPAS_COM_ARMAS: string[] = [ETAPA.demo, ETAPA.negociacao];
 
@@ -18,7 +18,9 @@ export type FichaArmas = {
   horario_dono: string | null; sistema: string | null; dor: string | null;
 };
 
-export type Armas = { sistema: string; dor: string; decisor: string; papel: string; horario: HorarioDecisor | '' };
+/* horario: o valor da faixa ('10h_11h30') ou o texto do "Outro horário" (14/10/26); dor e papel
+   também podem ser o texto do "Outra"/"Outro" — nada disso vai ao enum do HubSpot. */
+export type Armas = { sistema: string; dor: string; decisor: string; papel: string; horario: string };
 
 const limpo = (v: unknown): string => {
   const t = v == null ? '' : String(v).trim();
@@ -33,17 +35,20 @@ export function armasConhecidas(negocio: Record<string, unknown>, fichas: FichaA
   const daFicha = (k: keyof FichaArmas) => limpo(ord.find((f) => limpo(f[k]))?.[k]);
   const hsHorario = limpo(negocio.melhor_horario_do_decisor);
   const horarioNeg = HORARIOS.find((h) => h.hs === hsHorario)?.valor ?? '';
-  const horarioFicha = HORARIOS.find((h) => h.valor === daFicha('horario_dono'))?.valor ?? '';
+  const hFicha = daFicha('horario_dono');
+  const horarioFicha = HORARIOS.find((h) => h.hs && h.valor === hFicha)?.valor ?? '';
   const comDecisor = ord.find((f) => limpo(f.decisor_nome));
   const dorNeg = limpo(negocio.gargalo_operacional);
   const dorFicha = daFicha('dor');
   return {
     sistema: daFicha('sistema') || limpo(negocio.nome_do_sistema),
-    dor: (GARGALOS as readonly string[]).includes(dorFicha) ? dorFicha : ((GARGALOS as readonly string[]).includes(dorNeg) ? dorNeg : ''),
+    /* a dor da lista vence; a "Outra" digitada na ficha (14/10/26) só quando nenhuma da lista existe */
+    dor: (GARGALOS as readonly string[]).includes(dorFicha) ? dorFicha : ((GARGALOS as readonly string[]).includes(dorNeg) ? dorNeg : dorFicha),
     /* sem ficha com decisor: o contato Dono/Gerente do negócio (mapa_negocio, 0173) */
     decisor: comDecisor ? limpo(comDecisor.decisor_nome) : limpo(negocio.decisor_nome),
     papel: comDecisor ? limpo(comDecisor.decisor_papel) : limpo(negocio.decisor_papel),
-    horario: (horarioFicha || horarioNeg) as Armas['horario'],
+    /* idem o horário: a faixa (ficha ou HubSpot) vence; senão o texto livre da ficha */
+    horario: horarioFicha || horarioNeg || hFicha,
   };
 }
 
@@ -56,7 +61,7 @@ export function armasQueFaltam(a: Armas): string[] {
 
 /** Uma linha para o resumo quando está tudo conhecido. */
 export function resumoDasArmas(a: Armas): string {
-  const h = HORARIOS.find((x) => x.valor === a.horario)?.curto;
+  const h = HORARIOS.find((x) => x.hs && x.valor === a.horario)?.curto ?? a.horario;
   return [a.sistema, a.dor, a.decisor ? `${a.decisor}${a.papel ? ` (${a.papel.toLowerCase()})` : ''}` : '', h ?? ''].filter(Boolean).join(' · ');
 }
 
@@ -71,7 +76,8 @@ export function enviosDasArmas(p: { dealId: string; ownerId: string | null; nego
   const { armas: a, negocio } = p;
   const envios: EnvioArmas[] = [];
   const propriedades: Record<string, string> = {};
-  if (a.sistema && a.sistema !== limpo(negocio.nome_do_sistema)) propriedades.nome_do_sistema = a.sistema.slice(0, 120);
+  const sistema = sistemaParaGravar(a.sistema);
+  if (sistema && sistema !== limpo(negocio.nome_do_sistema)) propriedades.nome_do_sistema = sistema;
   if (a.dor && (GARGALOS as readonly string[]).includes(a.dor) && a.dor !== limpo(negocio.gargalo_operacional)) propriedades.gargalo_operacional = a.dor;
   const hs = HORARIOS.find((h) => h.valor === a.horario)?.hs;
   if (hs && hs !== limpo(negocio.melhor_horario_do_decisor)) propriedades.melhor_horario_do_decisor = hs;
@@ -80,7 +86,8 @@ export function enviosDasArmas(p: { dealId: string; ownerId: string | null; nego
   }
   if (a.decisor && !p.decisorNoNegocio) {
     envios.push({
-      corpo: { type: 'decisor', id_hubspot: p.dealId, nome: a.decisor.slice(0, 80), ...(a.papel ? { papel: a.papel } : {}), ...(p.ownerId ? { owner_id: p.ownerId } : {}) },
+      /* papel: a hubspot-sync só aceita Dono/Gerente (Sócio vai como Dono; o "Outro" digitado vai sem papel) */
+      corpo: { type: 'decisor', id_hubspot: p.dealId, nome: a.decisor.slice(0, 80), ...(papelParaHubspot(a.papel) ? { papel: papelParaHubspot(a.papel) } : {}), ...(p.ownerId ? { owner_id: p.ownerId } : {}) },
       rotulo: 'Quem decide no negócio',
     });
   }
@@ -93,7 +100,7 @@ export function enviosDasArmas(p: { dealId: string; ownerId: string | null; nego
    praça". Se mudar lá, muda aqui — os dois lados mostram o mesmo número. */
 
 /** Os chips da folha "Antes da Demo" (a ficha da visita continua com os dela). */
-export const SISTEMAS_ARMAS = ['Nenhum', 'Saipos', 'Goomer', 'Colibri', 'Anota Aí', 'Consumer', 'Outro'] as const;
+export const SISTEMAS_ARMAS = ['Nenhum', 'Saipos', 'Colibri', 'Anota Aí', 'Goomer', 'Frest', 'PDV Legal', 'Consumer', 'Outro'] as const;
 
 const semAcento = (s: unknown) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 const SISTEMAS_RE: [string, RegExp][] = [
@@ -101,7 +108,7 @@ const SISTEMAS_RE: [string, RegExp][] = [
   ['Consumer', /consumer/], ['Frest', /(^| )f ?rest( |$)/], ['Yooga', /yooga/], ['xMenu', /x ?menu/],
   ['Cardápio Web', /cardapio ?web/], ['Linx', /(^| )linx( |$)/],
   ['BitiBar', /bit ?i? ?bar/], ['Tronsoft', /tronsof/], ['Queops', /q(u)?eops/], ['Totvs', /totvs|tovs/], ['Teknisa', /teknisa/],
-  ['Cloudify', /cloudify/], ['Data Caixa', /data ?caixa/], ['PDV Legal', /pdv legal/],
+  ['Cloudify', /cloudify/], ['Data Caixa', /data ?caixa/], ['PDV Legal', /pdv ?legal/],
 ];
 const SEM_REGISTRO = /^(|verificar|a verificar|ver|nao sei|nao sabe|nao informado|nao informou|perguntar|sem informacao|desconhecido|n a|na|x+|\?+|-+|\.+|0|sem|fup|teste)$/;
 const NENHUM = /(^| )(nenhum|nenhuma|nao usa|nao utiliza|nao tem|nao possui|sem sistema|caderno|planilha|manual|na mao|papel|anota no papel)( |$)/;
@@ -116,6 +123,27 @@ export function normalizarSistema(v: unknown): string | null {
   if (melhor) return melhor;
   if (NENHUM.test(t)) return 'Nenhum';
   return 'Outro';
+}
+
+/* O QUE VAI PARA O HUBSPOT em nome_do_sistema (14/10/26). A propriedade é texto livre e a mesma
+   casa chegava como "SAIPOS", "saipos " e "Sai pos": o gestor contava três concorrentes. Aqui só
+   se acerta a grafia quando o texto é UM sistema conhecido (variação boba: caixa, acento, hífen,
+   "usa"/"sistema"); "não tem"/"não usa"/"sem sistema" viram 'Nenhum'. O resto — dois sistemas
+   ("Saipos e Jotaja"), nome que a lista não conhece, "caderno" — vai como foi escrito: reescrever o
+   que a pessoa disse apaga informação. Diferente de normalizarSistema (acima), que é leitura e
+   devolve 'Outro'/null; esta nunca inventa valor. */
+const ENCHIMENTO = /^(o|a|do|da|usa|usam|sistema|app|aplicativo)$/;
+const NENHUM_EXATO = /^(nenhum|nenhuma|nao tem|nao usa|sem sistema)( sistema)?$/;
+export function sistemaParaGravar(texto: unknown): string {
+  const cru = String(texto ?? '').trim().slice(0, 120);
+  const t = semAcento(cru).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return cru;
+  if (NENHUM_EXATO.test(t)) return 'Nenhum';
+  const achados = SISTEMAS_RE.filter(([, re]) => re.test(t));
+  if (achados.length !== 1) return cru;
+  const [nome, re] = achados[0];
+  const resto = t.replace(new RegExp(re.source, 'g'), ' ').split(' ').filter((p) => p && !ENCHIMENTO.test(p));
+  return resto.length ? cru : nome;
 }
 
 /** O argumento do Playbook ("Já tenho sistema", seção por tipo de sistema). */

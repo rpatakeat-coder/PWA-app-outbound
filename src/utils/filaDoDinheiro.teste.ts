@@ -87,6 +87,9 @@ ok(fer.includes('2026-04-03') && fer.includes('2026-02-17') && fer.includes('202
   ok(textoDoSalvar({ comoFoi: 'decisor', volta: null, outroDia: true, motivo: null, detalhe: '' }).texto === 'Escolha o dia', 'Outro dia sem data: "Escolha o dia"');
   ok(textoDoSalvar({ comoFoi: 'sem_interesse', volta: null, outroDia: false, motivo: null, detalhe: '' }).texto === 'Escolha o motivo', 'sem interesse sem motivo: "Escolha o motivo"');
   ok(!textoDoSalvar({ comoFoi: 'sem_interesse', volta: null, outroDia: false, motivo: 'Outros', detalhe: ' ' }).pode, '"Outros" exige o texto');
+  // 14/10/26: a mesma regra das outras telas — Funcionalidade também exige; Sem retorno não
+  ok(textoDoSalvar({ comoFoi: 'sem_interesse', volta: null, outroDia: false, motivo: 'Funcionalidade', detalhe: '' }).texto === 'Escreva o que pesou', '"Funcionalidade" exige o texto');
+  ok(textoDoSalvar({ comoFoi: 'sem_interesse', volta: null, outroDia: false, motivo: 'Sem retorno', detalhe: '' }).pode, '"Sem retorno": o texto é opcional');
   ok(textoDoSalvar({ comoFoi: 'pediu_retorno', volta, outroDia: false, motivo: null, detalhe: '' }).pode, 'com como foi e dia, salva');
   const nota = notaDaFila({ canal: 'ligacao', comoFoi: 'pediu_retorno', volta, assunto: 'Ligar - retorno' });
   ok(nota.startsWith('Ligação · Pediu retorno · Próximo: ligar em 27/10'), 'nota no negócio no formato da Agenda');

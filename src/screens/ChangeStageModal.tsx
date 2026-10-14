@@ -35,6 +35,13 @@ import { useClientStageChanges } from '../hooks/useClientStageChanges';
 import { useClientNotes } from '../hooks/useClientNotes';
 import { supabase } from '../integrations/supabase/client';
 import { ehFalhaDeTransporte, sendHubspotEvent } from '../utils/hubspotSync';
+import { AJUDA_MOTIVO, MAX_O_QUE_PESOU, MOTIVOS_PERDIDO, MOTIVOS_QUE_EXIGEM_TEXTO } from '../utils/fichaDeRua';
+
+// Perdido no modal antigo (14/10/26): a MESMA lista de motivos das outras telas (o banco
+// stage_property_options tinha outra ordem e "Reembolso" sem o rótulo Estorno) e o "O que pesou",
+// que vai em sub_values.observacao__desqualificado — a change_stage repassa sub_values ao HubSpot.
+const OPCOES_MOTIVO = MOTIVOS_PERDIDO.map((m) => ({ value: m.valor, label: m.rotulo }));
+const PESOU = 'observacao__desqualificado';
 import { IconCheck as SiCheck } from '../components/icons';
 
 interface Props {
@@ -628,7 +635,11 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
     if (sf.kind === 'boolean') return raw === 'true' || raw === 'false';
     return true;
   });
-  const ready = !!selectedStage && allFilled && !submitting && !waitingId;
+  // Outros/Funcionalidade não se explicam sozinhos: sem o "O que pesou" o botão não libera.
+  const ehPerdido = selectedStage?.id === LOST_STAGE_ID;
+  const pesouExigido = ehPerdido && MOTIVOS_QUE_EXIGEM_TEXTO.includes(subValues.motivo_do_perdido ?? '');
+  const faltaPesou = pesouExigido && !(subValues[PESOU] ?? '').trim();
+  const ready = !!selectedStage && allFilled && !faltaPesou && !submitting && !waitingId;
 
   const setSubValue = (field: string, value: string) =>
     setSubValues((prev) => ({ ...prev, [field]: value }));
@@ -738,6 +749,14 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
       } else {
         subValuesPayload[sf.field] = raw;
       }
+    }
+    if (ehPerdido) {
+      const pesou = (subValues[PESOU] ?? '').trim();
+      if (pesouExigido && !pesou) {
+        Alert.alert('Falta preencher', 'Este motivo não explica sozinho — escreva o que pesou.');
+        return;
+      }
+      if (pesou) subValuesPayload[PESOU] = pesou.slice(0, MAX_O_QUE_PESOU);
     }
 
     // Payload identico ao que o n8n recebia — a edge function hubspot-sync
@@ -877,9 +896,10 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
       if (stage.id === LOST_STAGE_ID) {
         const motivo = subPayload?.['motivo_do_perdido'];
         const motivoTxt = Array.isArray(motivo) ? motivo.join(', ') : (motivo ? String(motivo) : null);
+        const pesouTxt = subPayload?.[PESOU] ? String(subPayload[PESOU]) : '';
         if (motivoTxt) {
           try {
-            await addNote.mutateAsync(`Negócio perdido — motivo: ${motivoTxt}`);
+            await addNote.mutateAsync(`Negócio perdido — motivo: ${motivoTxt}${pesouTxt ? ` · o que pesou: ${pesouTxt}` : ''}`);
           } catch (err) {
             console.warn('Falhou ao registrar nota do motivo perdido', err);
           }
@@ -995,6 +1015,37 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
                                 dbOptions={dbGroup?.options}
                                 dbLabel={dbGroup?.label}
                               />
+                            );
+                          }
+                          if (sf.field === 'motivo_do_perdido') {
+                            const motivo = subValues[sf.field] ?? '';
+                            return (
+                              <View key={sf.field}>
+                                <SelectField
+                                  subField={sf}
+                                  value={motivo}
+                                  onChange={(v) => setSubValue(sf.field, v)}
+                                  color={stage.color}
+                                  disabled={submitting}
+                                  dbOptions={OPCOES_MOTIVO}
+                                  dbLabel={dbGroup?.label}
+                                />
+                                {!!AJUDA_MOTIVO[motivo] && <Text style={[styles.subOptionsLabel, { marginTop: -4 }]}>{AJUDA_MOTIVO[motivo]}</Text>}
+                                {!!motivo && (
+                                  <View style={{ marginBottom: 12 }}>
+                                    <Text style={styles.subOptionsLabel}>{pesouExigido ? 'O que pesou' : 'O que pesou (opcional)'}</Text>
+                                    <TextInput
+                                      style={styles.plainInput}
+                                      placeholder={pesouExigido ? 'Obrigatório para este motivo' : 'O que levou à perda'}
+                                      placeholderTextColor="var(--text-subtle)"
+                                      value={subValues[PESOU] ?? ''}
+                                      onChangeText={(v) => setSubValue(PESOU, v)}
+                                      maxLength={MAX_O_QUE_PESOU}
+                                      editable={!submitting}
+                                    />
+                                  </View>
+                                )}
+                              </View>
                             );
                           }
                           return (

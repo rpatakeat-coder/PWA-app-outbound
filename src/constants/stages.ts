@@ -234,7 +234,9 @@ export const STAGES: Stage[] = [
         field: 'origem_do_lead',
         fieldLabel: 'Origem do lead',
         kind: 'select',
-        options: ['Rua', 'Indicação', 'Casa dos Dados', 'Instagram', 'Ads', 'GoogleMaps', 'Família', 'Eventos'],
+        // 'Familia' SEM acento (14/10/26): é o valor interno do HubSpot (ORIGENS_DO_LEAD da
+        // hubspot-sync); com acento era só o rótulo e era recusado se o banco não carregasse.
+        options: ['Rua', 'Indicação', 'Casa dos Dados', 'Instagram', 'Ads', 'GoogleMaps', 'Familia', 'Eventos'],
       },
     ],
   },
@@ -284,7 +286,8 @@ export const STAGES: Stage[] = [
         field: 'motivo_do_perdido',
         fieldLabel: 'Motivo - Perda (Comercial)',
         kind: 'select',
-        options: ['Preço', 'Funcionalidade', 'Sem retorno', 'Reembolso', 'Não quer mudar de sistema', 'Outros'],
+        // a ordem de MOTIVOS_PERDIDO (utils/fichaDeRua), a lista única desde 14/10/26
+        options: ['Preço', 'Funcionalidade', 'Não quer mudar de sistema', 'Sem retorno', 'Reembolso', 'Outros'],
       },
     ],
   },

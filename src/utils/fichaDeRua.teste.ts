@@ -9,7 +9,9 @@ import {
   opcoesAgora, HORARIOS,
   ETAPA, FICHA_VAZIA, etapaSugerida, faltandoParaEtapa, montarPropriedades, movimentoPermitido, notaDaVisita,
   pareceNomeDePessoa, proximoPassoDaFicha, rotuloSalvar, proximoDiaUtil, type Ficha,
+  GARGALO_OUTRA, HORARIO_OUTRO, MOTIVOS_PERDIDO, dorDaFicha, horarioDaFicha, papelDaFicha, papelParaHubspot, rotuloDoHorario, rotuloDoMotivo, tipoDaFicha,
 } from './fichaDeRua';
+import { MOTIVOS_SEM_INTERESSE } from './registroDaFila';
 
 let falhas = 0;
 const ok = (c: boolean, m: string) => {
@@ -85,7 +87,7 @@ ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
 {
   const p = proximoPassoDaFicha({ ...FICHA_VAZIA, comoFoi: 'decisor_ausente', proximo: 'voltar_horario', horario: '14h30_17h30', dataVolta: '2026-09-29' }, '2026-09-25');
   ok(!!p && p.tipo === 'visita' && p.texto.includes('14h30–17h30') && p.data === '2026-09-29', 'voltar no horário do dono: visita no dia que o executivo escolheu, com o horário');
-  ok(HORARIOS.length === 4, 'quatro faixas de horário');
+  ok(HORARIOS.filter((h) => h.hs).length === 4 && HORARIOS.length === 5, 'quatro faixas de horário + "Outro horário"');
 }
 
 // ---- horário: os valores do app são os que a hubspot-sync aceita ----
@@ -96,7 +98,43 @@ ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
   const i = edge.indexOf('HORARIOS_DECISOR = new Set([');
   const trecho = i >= 0 ? edge.slice(i, edge.indexOf('])', i)) : '';
   const aceitos = (trecho.match(/'([^']*)'/g) ?? []).map((x: string) => x.slice(1, -1));
-  ok(aceitos.length === 4 && HORARIOS.every((h) => aceitos.includes(h.hs)), 'os 4 horários do app são os valores aceitos pela hubspot-sync');
+  ok(aceitos.length === 4 && HORARIOS.filter((h) => h.hs).every((h) => aceitos.includes(h.hs as string)), 'os 4 horários do app são os valores aceitos pela hubspot-sync');
+  ok(HORARIOS.filter((h) => !h.hs).map((h) => h.valor).join() === HORARIO_OUTRO, 'só o "Outro horário" fica sem valor do HubSpot');
+}
+
+// ---- 14/10/26: listas únicas e os "Outro"/"Outra" que nunca vão ao enum ----
+{
+  ok(MOTIVOS_PERDIDO.map((m) => m.valor).join('|') === 'Preço|Funcionalidade|Não quer mudar de sistema|Sem retorno|Reembolso|Outros', 'motivos: a lista única, na ordem');
+  ok(rotuloDoMotivo('Reembolso') === 'Estorno', 'Reembolso aparece como Estorno');
+  ok(MOTIVOS_SEM_INTERESSE.join('|') === MOTIVOS_PERDIDO.map((m) => m.valor).join('|'), 'a fila de Tarefas usa a mesma lista');
+  const fs = require('fs');
+  const stages = fs.readFileSync('src/constants/stages.ts', 'utf8');
+  ok(stages.includes(`'${MOTIVOS_PERDIDO.map((m) => m.valor).join("', '")}'`), 'o fallback do modal antigo (stages.ts) tem a mesma lista');
+  ok(stages.includes("'GoogleMaps', 'Familia', 'Eventos'") && !stages.includes("'Família'"), 'origem: Familia sem acento, o valor do servidor');
+
+  ok(rotuloSalvar(F({ comoFoi: 'sem_interesse', proximo: 'sem_interesse', motivoPerdido: 'Funcionalidade', moverEtapa: false })).texto === 'Falta o que pesou', 'Funcionalidade sem texto: pede o que pesou');
+  ok(rotuloSalvar(F({ comoFoi: 'sem_interesse', proximo: 'sem_interesse', motivoPerdido: 'Preço', moverEtapa: false })).pode, 'Preço: o que pesou é opcional');
+
+  const perdidoOpc = montarPropriedades(ETAPA.perdido, { motivo_do_perdido: 'Sem retorno', observacao__desqualificado: '  3 ligações, nada ' }, {});
+  ok(perdidoOpc.propriedades.observacao__desqualificado === '3 ligações, nada' && !Object.keys(perdidoOpc.erros).length, 'o que pesou opcional vai quando escrito');
+  ok(montarPropriedades(ETAPA.perdido, { motivo_do_perdido: 'Outros', observacao__desqualificado: 'x'.repeat(400) }, {}).propriedades.observacao__desqualificado.length === 300, 'o que pesou corta em 300');
+
+  const dorOutra = montarPropriedades(ETAPA.decisor, { celular: '27999', nome_do_sistema: 'Saipos', gargalo_operacional: GARGALO_OUTRA, gargalo_outro: ' Delivery atrasa ' }, {});
+  ok(!('gargalo_operacional' in dorOutra.propriedades) && dorOutra.gargaloOutro === 'Delivery atrasa' && !Object.keys(dorOutra.erros).length, 'dor "Outra": sai das propriedades e vai como gargaloOutro');
+  ok(montarPropriedades(ETAPA.decisor, { celular: '27999', nome_do_sistema: 'Saipos', gargalo_operacional: GARGALO_OUTRA }, {}).erros.gargalo_operacional === 'Escreva qual é a dor.', 'dor "Outra" sem texto: pede a dor');
+  ok(montarPropriedades(ETAPA.decisor, { celular: '27999', nome_do_sistema: 'Saipos', gargalo_operacional: 'Fila' }, {}).gargaloOutro === undefined, 'dor da lista: sem gargaloOutro');
+
+  ok(papelParaHubspot('Sócio') === 'Dono' && papelParaHubspot('Gerente') === 'Gerente' && papelParaHubspot('Chef') === undefined && papelParaHubspot('Outro') === undefined, 'papel: Sócio vai como Dono; o resto não vai');
+  ok(rotuloDoHorario('10h_11h30') === '10h–11h30' && rotuloDoHorario('Só sábado') === 'Só sábado' && rotuloDoHorario(HORARIO_OUTRO) === '', 'horário livre aparece como foi escrito');
+
+  const livre = F({ comoFoi: 'decisor_ausente', proximo: 'voltar_horario', dataVolta: '2026-10-20', dorOutra: 'Delivery atrasa', horario: 'outro', horarioOutro: 'Só sábado de manhã',
+    papel: 'Outro', papelOutro: 'Chef', decisor: 'Ana', tipo: 'Outro', tipoOutro: 'Food truck' });
+  ok(dorDaFicha(livre) === 'Delivery atrasa' && horarioDaFicha(livre) === 'Só sábado de manhã' && papelDaFicha(livre) === 'Chef' && tipoDaFicha(livre) === 'Food truck', 'os "Outro" gravam o texto');
+  const notaLivre = notaDaVisita(livre, { cliente: 'x', ocorridoEm: 'x', hoje });
+  ok(/\ndor: Delivery atrasa\n/.test(notaLivre) && /\npapel: Chef\n/.test(notaLivre) && /dono costuma estar: Só sábado de manhã/.test(notaLivre) && /tipo: Food truck/.test(notaLivre), 'a nota leva os textos livres');
+  ok(proximoPassoDaFicha(livre, hoje)?.texto === 'Voltar no horário do dono (Só sábado de manhã)', 'a volta usa o horário digitado');
+  const notaPesou = notaDaVisita(F({ comoFoi: 'sem_interesse', proximo: 'sem_interesse', motivoPerdido: 'Funcionalidade', motivoTexto: 'sem KDS' }), { cliente: 'x', ocorridoEm: 'x', hoje });
+  ok(/sem interesse: Funcionalidade \(sem KDS\)/.test(notaPesou), 'o que pesou vai na nota');
 }
 
 // ---- 03/10/26: a volta à porta tem o dia escolhido pelo executivo, não 7 dias fixos ----

@@ -34,6 +34,7 @@ import {
   COMO_FOI_FILA, DIAS_FILA, MOTIVOS_SEM_INTERESSE, dataDoChip, diaCurto, diasSugeridos, fraseDaVolta, notaDaFila,
   pedidoDaVolta, rotuloComoFoi, textoDoSalvar, type ComoFoiFila,
 } from '../utils/registroDaFila';
+import { AJUDA_MOTIVO, MOTIVOS_QUE_EXIGEM_TEXTO, rotuloDoMotivo } from '../utils/fichaDeRua';
 
 // ---- o que o servidor devolve ---------------------------------------------------------
 export type CardDaFila = {
@@ -221,9 +222,12 @@ function RegistroInline({ item, hoje, feriados, grande = false, discouEm, aoSalv
       {comoFoi === 'sem_interesse' ? (
         <>
           <Text style={s.rotuloSecao}>MOTIVO</Text>
-          <View style={s.linhaChips}>{MOTIVOS_SEM_INTERESSE.map((m) => chip(m, m, motivo === m, () => setMotivo(m)))}</View>
-          {motivo === 'Outros' && (
-            <TextInput value={detalhe} onChangeText={setDetalhe} placeholder="O que pesou (obrigatório)" placeholderTextColor="var(--text-faint)" style={s.campoTexto} maxLength={200} />
+          <View style={s.linhaChips}>{MOTIVOS_SEM_INTERESSE.map((m) => chip(m, rotuloDoMotivo(m), motivo === m, () => setMotivo(m)))}</View>
+          {!!motivo && !!AJUDA_MOTIVO[motivo ?? ''] && <Text style={s.ajudaMiuda}>{AJUDA_MOTIVO[motivo ?? '']}</Text>}
+          {/* aberto para todo motivo (14/10/26); obrigatório só em Outros/Funcionalidade */}
+          {!!motivo && (
+            <TextInput value={detalhe} onChangeText={setDetalhe} placeholder={MOTIVOS_QUE_EXIGEM_TEXTO.includes(motivo ?? '') ? 'O que pesou (obrigatório)' : 'O que pesou (opcional)'}
+              placeholderTextColor="var(--text-faint)" style={s.campoTexto} maxLength={200} />
           )}
           <Text style={s.ajuda}>O negócio vai para Perdido com o motivo, sem próximo passo.</Text>
         </>
@@ -533,7 +537,8 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
       somar({ id: null, acaoId, estado: 'pendente', dealId: i.dealId, hora, negocio: i.negocio, resultado: `Sem interesse · ${d.motivo}`, volta: null, perdido: d.motivo },
         { etapaAnterior: i.etapaId, tarefaId: i.tarefaId ?? null });
       const corpo = { op: 'mudar-etapa', dealId: i.dealId, novaEtapa: PERDIDO,
-        propriedades: { motivo_do_perdido: d.motivo, ...(d.motivo === 'Outros' ? { observacao__desqualificado: d.detalhe.trim() } : {}) } };
+        // "O que pesou" vai sempre que escrito (14/10/26), não só no Outros
+        propriedades: { motivo_do_perdido: d.motivo, ...(d.detalhe.trim() ? { observacao__desqualificado: d.detalhe.trim().slice(0, 200) } : {}) } };
       let desfeito = false;
       const timer = setTimeout(async () => {
         if (desfeito) return;

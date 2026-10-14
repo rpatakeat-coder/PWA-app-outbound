@@ -1,5 +1,5 @@
 // Teste das armas para a demo. Roda: npx tsx src/utils/armasDaDemo.teste.ts
-import { chipDoSistema, nomeDoSistema, argumentoDoSistema, armasConhecidas, armasQueFaltam, enviosDasArmas, fichasDaFolha, linhaDaPraca, normalizarSistema, registroDoAvanco, resumoDasArmas, rotuloDasFaltas } from './armasDaDemo';
+import { chipDoSistema, nomeDoSistema, argumentoDoSistema, armasConhecidas, armasQueFaltam, enviosDasArmas, fichasDaFolha, linhaDaPraca, normalizarSistema, registroDoAvanco, resumoDasArmas, rotuloDasFaltas, sistemaParaGravar } from './armasDaDemo';
 
 let falhas = 0;
 const ok = (c: unknown, m: string) => { console.log((c ? 'OK    ' : 'FALHA ') + m); if (!c) falhas++; };
@@ -75,6 +75,30 @@ ok(rotuloDasFaltas({ sistema: 'Saipos', dor: 'Fila', decisor: '', papel: '', hor
 // o chip da folha segue o sistema normalizado, sem reescrever o valor
 ok(chipDoSistema('Caderno') === 'Nenhum' && chipDoSistema('SAIPOS') === 'Saipos' && chipDoSistema('Yooga') === 'Outro' && chipDoSistema('') === null, 'Caderno marca Nenhum; Yooga marca Outro');
 ok(nomeDoSistema('anotai') === 'Anota Aí' && nomeDoSistema('Sistema da casa') === 'Sistema da casa', 'o cartão mostra o nome normalizado ou o escrito');
+
+// 14/10/26: o que vai ao HubSpot em nome_do_sistema só acerta a grafia de UM sistema conhecido
+ok(sistemaParaGravar('SAIPOS') === 'Saipos' && sistemaParaGravar(' sai pos ') === 'Saipos' && sistemaParaGravar('usa o Saipos') === 'Saipos', 'Saipos com variação boba vira Saipos');
+ok(sistemaParaGravar('f-rest') === 'Frest' && sistemaParaGravar('F rest') === 'Frest' && sistemaParaGravar('frest') === 'Frest', 'Frest: f rest, f-rest, frest');
+ok(sistemaParaGravar('pdv legal') === 'PDV Legal' && sistemaParaGravar('anota ai') === 'Anota Aí' && sistemaParaGravar('GOOMER') === 'Goomer' && sistemaParaGravar('colibri') === 'Colibri' && sistemaParaGravar('Consumer') === 'Consumer', 'os outros chips');
+ok(sistemaParaGravar('não tem') === 'Nenhum' && sistemaParaGravar('Nao usa') === 'Nenhum' && sistemaParaGravar('sem sistema') === 'Nenhum' && sistemaParaGravar('nenhum') === 'Nenhum', 'não tem / não usa / sem sistema viram Nenhum');
+ok(sistemaParaGravar('caderno') === 'caderno', 'caderno fica como escrito (não é "nenhum" dito)');
+ok(sistemaParaGravar('Saipos e Jotaja') === 'Saipos e Jotaja' && sistemaParaGravar('Saipos e Goomer') === 'Saipos e Goomer', 'dois sistemas ficam como escritos');
+ok(sistemaParaGravar('  Sistema da Casa  ') === 'Sistema da Casa' && sistemaParaGravar('x'.repeat(200)).length === 120 && sistemaParaGravar('') === '', 'desconhecido: aparado e no máximo 120');
+ok(sistemaParaGravar('não usa Saipos mais') === 'não usa Saipos mais', 'frase com sistema não é reescrita');
+
+// "Outra" dor, "Outro horário" e papel fora do enum: nunca vão como propriedade do HubSpot
+const livre = { sistema: 'saipos', dor: 'Delivery atrasa', decisor: 'Ana', papel: 'Chef', horario: 'Só sábado de manhã' };
+const eLivre = enviosDasArmas({ dealId: '1', ownerId: '9', negocio: {}, armas: livre });
+const qLivre = eLivre.find((e) => e.corpo.type === 'qualificar')?.corpo.propriedades as Record<string, string>;
+ok(qLivre.nome_do_sistema === 'Saipos' && !('gargalo_operacional' in qLivre) && !('melhor_horario_do_decisor' in qLivre), 'dor e horário livres não vão; o sistema vai com a grafia acertada');
+const dLivre = eLivre.find((e) => e.corpo.type === 'decisor')?.corpo;
+ok(!!dLivre && !('papel' in dLivre), 'papel "Outro" digitado: o decisor vai sem papel (a rota só aceita Dono/Gerente)');
+const dSocio = enviosDasArmas({ dealId: '1', ownerId: '9', negocio: {}, armas: { ...livre, papel: 'Sócio' } }).find((e) => e.corpo.type === 'decisor')?.corpo;
+ok(dSocio?.papel === 'Dono', 'Sócio vai como Dono');
+const aLivre = armasConhecidas({}, [{ ocorrido_em: '2026-10-10T12:00:00Z', decisor_nome: null, decisor_papel: null, horario_dono: 'Só sábado de manhã', sistema: null, dor: 'Delivery atrasa' }]);
+ok(aLivre.dor === 'Delivery atrasa' && aLivre.horario === 'Só sábado de manhã' && resumoDasArmas(aLivre).includes('Só sábado de manhã'), 'dor e horário livres da ficha aparecem nas armas');
+const aLista = armasConhecidas({ gargalo_operacional: 'Fila', melhor_horario_do_decisor: '10-11:30' }, [{ ocorrido_em: '2026-10-10T12:00:00Z', decisor_nome: null, decisor_papel: null, horario_dono: 'Só sábado', sistema: null, dor: 'Delivery atrasa' }]);
+ok(aLista.dor === 'Fila' && aLista.horario === '10h_11h30', 'a dor e o horário da lista (HubSpot) vencem o texto livre');
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\narmas da demo: tudo certo');

@@ -18,10 +18,13 @@ import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Tex
 import type { Client } from '../types/client';
 import { enfileirar, ehErroDeRede, novoAcaoId } from '../utils/filaOffline';
 import {
-  COMO_FOI, DIAS_VOLTA, FICHA_VAZIA, GARGALOS, HORARIOS, MOTIVOS_PERDIDO, PAPEIS, ROTULO_ETAPA, ROTULO_PROP, SISTEMAS, TIPOS,
-  ehVolta, etapaSugerida, faltandoParaEtapa, notaDaVisita, opcoesAgora, pareceNomeDePessoa, proximoDiaUtil, proximoPassoDaFicha, rotuloSalvar,
+  AJUDA_MOTIVO, COMO_FOI, DIAS_VOLTA, ETAPA, FICHA_VAZIA, GARGALOS, GARGALO_OUTRA, HORARIOS, HORARIO_OUTRO, MAX_O_QUE_PESOU, MOTIVOS_PERDIDO,
+  MOTIVOS_QUE_EXIGEM_TEXTO, PAPEIS, ROTULO_ETAPA, ROTULO_PROP, SISTEMAS, TIPOS,
+  dorDaFicha, ehVolta, etapaSugerida, faltandoParaEtapa, horarioDaFicha, notaDaVisita, opcoesAgora, papelDaFicha, papelParaHubspot, pareceNomeDePessoa,
+  proximoDiaUtil, proximoPassoDaFicha, rotuloSalvar, tipoDaFicha,
   type Ficha,
 } from '../utils/fichaDeRua';
+import { sistemaParaGravar } from '../utils/armasDaDemo';
 import { ehRecusa, negocioAcao } from '../utils/negocioAcao';
 import { supabase } from '../integrations/supabase/client';
 import { comprimir, enviarFoto, escolherFoto } from '../utils/fotoVisita';
@@ -99,30 +102,36 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   const valores: Record<string, string> = {
     celular: (f.telefone || client.telefone || '').trim(),
     gargalo_operacional: f.dor ?? '',
-    nome_do_sistema: f.sistema.trim(),
+    nome_do_sistema: sistemaParaGravar(f.sistema),
     motivo_do_perdido: f.motivoPerdido ?? '',
   };
-  const faltaEtapa = sugerida ? faltandoParaEtapa(sugerida, valores) : [];
+  /* Dor "Outra" (14/10/26): satisfaz o gargalo exigido pela Conversa com decisor — vai como
+     `gargaloOutro` no mudar-etapa —, mas nunca entra em `valores`, que vira propriedade do enum */
+  const dorLivre = f.dor ? '' : dorDaFicha(f);
+  const faltaEtapa = sugerida
+    ? faltandoParaEtapa(sugerida, { ...valores, gargalo_operacional: valores.gargalo_operacional || (sugerida === ETAPA.decisor ? dorLivre : '') })
+    : [];
   const salvar = rotuloSalvar(f, faltaEtapa);
   const set = (x: Partial<Ficha>) => setF((a) => ({ ...a, ...x }));
   const toque = 1 + (f.comoFoi ? 1 : 0) + (f.proximo ? 1 : 0);
   const passoPrevisto = proximoPassoDaFicha(f, hojeBRT());
   const faltamCompletar = [
-    !f.decisor.trim(), !f.horario, !f.sistema.trim(), !f.dor, !temTelefone && !f.telefone.trim(), !client.categoria && !f.tipo, pedeNome && !f.nomeDoLugar.trim(),
+    !f.decisor.trim(), !horarioDaFicha(f), !f.sistema.trim(), !dorDaFicha(f), !temTelefone && !f.telefone.trim(), !client.categoria && !tipoDaFicha(f), pedeNome && !f.nomeDoLugar.trim(),
   ].filter(Boolean).length;
   const legenda = !f.comoFoi || !f.proximo
     ? 'Escolha como foi e o que vem agora'
     : ehVolta(f.proximo) && !f.dataVolta
       ? 'Escolha o dia da volta'
     : f.proximo === 'sem_interesse'
-      ? (f.motivoPerdido ? 'O negócio vai para Perdido, com o motivo' : 'Escolha o motivo')
+      ? (!f.motivoPerdido ? 'Escolha o motivo'
+        : MOTIVOS_QUE_EXIGEM_TEXTO.includes(f.motivoPerdido) && !f.motivoTexto.trim() ? 'Escreva o que pesou' : 'O negócio vai para Perdido, com o motivo')
       : passoPrevisto
         // negócio de colega: a tarefa é do dono no HubSpot — dizer isso, não "vai para a Agenda"
         ? `${passoPrevisto.texto} em ${diaMes(passoPrevisto.data)} vai para a Agenda ${donoColega ? `de ${donoColega} (dono do negócio)` : ''}`.trim()
         : 'Salva a visita no HubSpot e no Cockpit';
 
   function escolherComoFoi(id: Ficha['comoFoi']) {
-    set({ comoFoi: id, proximo: null, diasReuniao: null, motivoPerdido: null, dataVolta: null });
+    set({ comoFoi: id, proximo: null, diasReuniao: null, motivoPerdido: null, motivoTexto: '', dataVolta: null });
     setOpcao(null);
     setOutraDataVolta(false);
     // Maior ralo do funil: visita que não chega em quem decide. Sai com nome e horário.
@@ -212,7 +221,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     const campos: CamposCadastro = {};
     if (pedeNome && f.nomeDoLugar.trim()) campos.empresa = f.nomeDoLugar.trim();
     if (!temTelefone && f.telefone.trim()) campos.telefone = f.telefone.trim();
-    if (f.tipo) campos.categoria = f.tipo;
+    if (tipoDaFicha(f)) campos.categoria = tipoDaFicha(f);
     const envios: Envio[] = [];
     const passo = proximoPassoDaFicha(f, hoje);
     setPassoSalvo(passo ? { data: passo.data, texto: passo.texto, virouTarefa: !!dealId } : null);
@@ -220,7 +229,8 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
       envios.push({ corpo: { op: 'nota', dealId, texto: notaDaVisita(f, { cliente: nome, ocorridoEm: checkinEm, hoje }) }, rotulo: 'Nota da visita' });
       if (passo) {
         const qualificacao: Record<string, string> = {};
-        if (f.sistema.trim()) qualificacao.nomeDoSistema = f.sistema.trim().slice(0, 120);
+        if (f.sistema.trim()) qualificacao.nomeDoSistema = sistemaParaGravar(f.sistema);
+        // só a dor da lista: a "Outra" vai na nota (o servidor recusa gargalo fora do enum)
         if (f.dor) qualificacao.gargalo = f.dor;
         envios.push({
           corpo: {
@@ -242,14 +252,18 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
           // Sem celular: o telefone da ficha é o da CASA, não o de quem decide. Mandá-lo
           // fazia a rota achar o contato do próprio negócio pelo número e "associar"
           // o decisor a ele — nome e papel sumiam (auditoria 26/09).
-          corpo: { type: 'decisor', id_hubspot: dealId, nome: f.decisor.trim(), papel: f.papel ?? undefined, owner_id: client.vendedor_id_hubspot ?? undefined },
+          // Papel: a rota só aceita Dono/Gerente (Sócio vai como Dono; o "Outro" vai sem papel e fica na nota).
+          corpo: { type: 'decisor', id_hubspot: dealId, nome: f.decisor.trim(), papel: papelParaHubspot(papelDaFicha(f)), owner_id: client.vendedor_id_hubspot ?? undefined },
           rotulo: 'Quem decide no negócio',
         });
       }
       if (sugerida && f.moverEtapa) {
         const propriedades: Record<string, string> = {};
         for (const k of ['celular', 'gargalo_operacional', 'nome_do_sistema', 'motivo_do_perdido']) if (valores[k]) propriedades[k] = valores[k];
-        envios.push({ corpo: { op: 'mudar-etapa', dealId, novaEtapa: sugerida, propriedades }, rotulo: `Etapa → ${ROTULO_ETAPA[sugerida]}`, etapa: sugerida });
+        // "O que pesou" do Sem interesse (14/10/26): texto livre do HubSpot, junto com o motivo
+        if (sugerida === ETAPA.perdido && f.motivoTexto.trim()) propriedades.observacao__desqualificado = f.motivoTexto.trim().slice(0, MAX_O_QUE_PESOU);
+        const gargaloOutro = sugerida === ETAPA.decisor && dorLivre ? { gargaloOutro: dorLivre } : {};
+        envios.push({ corpo: { op: 'mudar-etapa', dealId, novaEtapa: sugerida, propriedades, ...gargaloOutro }, rotulo: `Etapa → ${ROTULO_ETAPA[sugerida]}`, etapa: sugerida });
       }
     }
     const linha = linhaDaFicha(f, {
@@ -363,6 +377,12 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                   <>
                     <Text style={s.secao}>MOTIVO</Text>
                     <View style={s.chips}>{MOTIVOS_PERDIDO.map((m) => chip(m.valor, m.rotulo, f.motivoPerdido === m.valor, () => set({ motivoPerdido: m.valor })))}</View>
+                    {!!f.motivoPerdido && !!AJUDA_MOTIVO[f.motivoPerdido ?? ''] && <Text style={s.ajuda}>{AJUDA_MOTIVO[f.motivoPerdido ?? '']}</Text>}
+                    {/* "O que pesou" (14/10/26): para todo motivo; obrigatório só nos que não se explicam sozinhos */}
+                    {!!f.motivoPerdido && (
+                      <TextInput style={s.campo} value={f.motivoTexto} onChangeText={(v) => set({ motivoTexto: v })} maxLength={MAX_O_QUE_PESOU}
+                        placeholder={MOTIVOS_QUE_EXIGEM_TEXTO.includes(f.motivoPerdido ?? '') ? 'O que pesou (obrigatório)' : 'O que pesou (opcional)'} placeholderTextColor="#8B919C" />
+                    )}
                   </>
                 )}
 
@@ -401,9 +421,15 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                     <Text style={s.rotulo}>Quem decide</Text>
                     <TextInput style={s.campo} value={f.decisor} onChangeText={(v) => set({ decisor: v })} placeholder="Nome" placeholderTextColor="#8B919C" autoComplete="off" textContentType="none" returnKeyType="done" blurOnSubmit />
                     <View style={s.chips}>{PAPEIS.map((p) => chip(p, p, f.papel === p, () => set({ papel: f.papel === p ? null : p })))}</View>
+                    {f.papel === 'Outro' && (
+                      <TextInput style={s.campo} value={f.papelOutro} onChangeText={(v) => set({ papelOutro: v })} placeholder="Ex.: chef, filho do dono" placeholderTextColor="#8B919C" maxLength={40} />
+                    )}
 
                     <Text style={s.rotulo}>Melhor horário para achar</Text>
-                    <View style={s.chips}>{HORARIOS.map((h) => chip(h.valor, h.rotulo, f.horario === h.valor, () => set({ horario: f.horario === h.valor ? null : h.valor })))}</View>
+                    <View style={s.chips}>{HORARIOS.map((h) => chip(h.valor, h.rotulo, f.horario === h.valor, () => set({ horario: f.horario === h.valor ? null : h.valor as Ficha['horario'] })))}</View>
+                    {f.horario === HORARIO_OUTRO && (
+                      <TextInput style={s.campo} value={f.horarioOutro} onChangeText={(v) => set({ horarioOutro: v })} placeholder="Ex.: só sábado de manhã" placeholderTextColor="#8B919C" maxLength={80} />
+                    )}
 
                     <Text style={s.rotulo}>Sistema que usa hoje</Text>
                     <View style={s.chips}>
@@ -417,7 +443,13 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                     )}
 
                     <Text style={s.rotulo}>Maior dor</Text>
-                    <View style={s.chips}>{GARGALOS.map((g) => chip(g, g, f.dor === g, () => set({ dor: f.dor === g ? null : g })))}</View>
+                    <View style={s.chips}>
+                      {GARGALOS.map((g) => chip(g, g, f.dor === g, () => set({ dor: f.dor === g ? null : g, dorOutra: null })))}
+                      {chip(GARGALO_OUTRA, GARGALO_OUTRA, f.dorOutra != null, () => set({ dor: null, dorOutra: f.dorOutra != null ? null : '' }))}
+                    </View>
+                    {f.dorOutra != null && (
+                      <TextInput style={s.campo} value={f.dorOutra} onChangeText={(v) => set({ dorOutra: v })} placeholder="Qual é a dor?" placeholderTextColor="#8B919C" maxLength={200} />
+                    )}
 
                     <Text style={s.rotulo}>Foto da fachada ou do cardápio · vai para o gestor</Text>
                     <View style={s.fotoLinha}>
@@ -455,6 +487,9 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                       <>
                         <Text style={s.rotulo}>Tipo de casa</Text>
                         <View style={s.chips}>{TIPOS.map((t) => chip(t, t, f.tipo === t, () => set({ tipo: f.tipo === t ? null : t })))}</View>
+                        {f.tipo === 'Outro' && (
+                          <TextInput style={s.campo} value={f.tipoOutro} onChangeText={(v) => set({ tipoOutro: v })} placeholder="Que tipo de casa?" placeholderTextColor="#8B919C" maxLength={40} />
+                        )}
                       </>
                     )}
                   </View>

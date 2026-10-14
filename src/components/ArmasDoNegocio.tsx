@@ -59,7 +59,8 @@ export default function ArmasDoNegocio({ client, etapa, onCompletar }: { client:
       </View>
     );
   }
-  const horario = HORARIOS.find((h) => h.valor === armas.horario)?.curto ?? '';
+  // "Outro horário" (14/10/26): a ficha guarda o texto digitado, que aparece como veio
+  const horario = HORARIOS.find((h) => h.hs && h.valor === armas.horario)?.curto ?? armas.horario;
   const tiles: { rot: string; v: string }[] = [
     { rot: 'Sistema hoje', v: nomeDoSistema(armas.sistema) },
     { rot: 'Maior dor', v: armas.dor },

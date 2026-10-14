@@ -19,7 +19,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { IconCheck } from '../components/icons';
 import { Painel } from '../components/Painel';
 import { Toast } from '../components/Toast';
-import { ETAPA, MOTIVOS_PERDIDO, MOTIVOS_QUE_EXIGEM_TEXTO, ROTULO_ETAPA, montarPropriedades } from '../utils/fichaDeRua';
+import { AJUDA_MOTIVO, ETAPA, MAX_O_QUE_PESOU, MOTIVOS_PERDIDO, MOTIVOS_QUE_EXIGEM_TEXTO, ROTULO_ETAPA, montarPropriedades } from '../utils/fichaDeRua';
 import { enfileirar, ehErroDeRede, novoAcaoId } from '../utils/filaOffline';
 import { negocioAcao } from '../utils/negocioAcao';
 import { opcoesDaFila } from './FilaTarefasScreen';
@@ -109,8 +109,9 @@ export default function LimparFunil({ visivel, dealInicial, reguaDe, onFechar, o
 
   async function enviar() {
     setFase('enviando');
+    // "O que pesou" vai sempre que escrito (14/10/26), não só quando o motivo o exige
     const digitado: Record<string, string> = destino === ETAPA.perdido
-      ? { motivo_do_perdido: motivo, ...(pedeTexto ? { observacao__desqualificado: texto.trim() } : {}) } : {};
+      ? { motivo_do_perdido: motivo, ...(texto.trim() ? { observacao__desqualificado: texto.trim() } : {}) } : {};
     const { propriedades } = montarPropriedades(destino, digitado, {});
     const res: Resultado[] = [];
     // um por vez: o servidor confere dono e regra de cada negócio, e o HubSpot limita rajada
@@ -148,9 +149,11 @@ export default function LimparFunil({ visivel, dealInicial, reguaDe, onFechar, o
   const rodape = fase === 'escolher' ? (
     <View style={s.rodape}>
       <Pressable accessibilityRole="button" style={[s.botao, s.botaoPrin, !prontoParaEnviar && s.botaoOff]} disabled={!prontoParaEnviar} onPress={() => setFase('confirmar')}>
-        <Text style={s.botaoPrinTexto}>{selecionadas.length
-          ? `Mover ${selecionadas.length} para ${ROTULO_ETAPA[destino]}`
-          : 'Marque os negócios'}</Text>
+        <Text style={s.botaoPrinTexto}>{!selecionadas.length
+          ? 'Marque os negócios'
+          : destino === ETAPA.perdido && !motivo ? 'Escolha o motivo'
+            : pedeTexto && !texto.trim() ? 'Escreva o que pesou'
+              : `Mover ${selecionadas.length} para ${ROTULO_ETAPA[destino]}`}</Text>
       </Pressable>
     </View>
   ) : fase === 'confirmar' ? (
@@ -202,8 +205,11 @@ export default function LimparFunil({ visivel, dealInicial, reguaDe, onFechar, o
                     </Pressable>
                   ))}
                 </View>
-                {pedeTexto && (
-                  <TextInput style={s.input} value={texto} onChangeText={setTexto} placeholder="O que pesou (vai para todos)" placeholderTextColor="#8B919C" />
+                {!!AJUDA_MOTIVO[motivo] && <Text style={s.ajuda}>{AJUDA_MOTIVO[motivo]}</Text>}
+                {/* aberto para todo motivo (14/10/26); obrigatório só em Outros/Funcionalidade */}
+                {!!motivo && (
+                  <TextInput style={s.input} value={texto} onChangeText={setTexto} maxLength={MAX_O_QUE_PESOU}
+                    placeholder={pedeTexto ? 'O que pesou (obrigatório, vai para todos)' : 'O que pesou (opcional, vai para todos)'} placeholderTextColor="#8B919C" />
                 )}
               </View>
             ) : (

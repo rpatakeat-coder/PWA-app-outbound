@@ -75,27 +75,65 @@ export function opcoesAgora(comoFoi: Desfecho | null): OpcaoAgora[] {
 // Melhor horário para achar quem decide. O foodservice tem relógio próprio:
 // o dono não atende no rush. `hs` é o valor interno da propriedade
 // melhor_horario_do_decisor que o Julyan criou no HubSpot (26/09/2026).
-export const HORARIOS = [
+// "Outro horário" (14/10/26): o dono que "só aparece sábado de manhã" não cabe nas 4 faixas,
+// e a propriedade é lista fechada (a hubspot-sync recusa o resto). `hs: null` = não vai ao
+// HubSpot; o texto digitado fica na ficha (horario_dono) e na nota.
+export const HORARIOS: readonly { valor: string; rotulo: string; curto: string; hs: string | null }[] = [
   { valor: 'cedo_antes_10h', rotulo: 'Cedo, antes das 10h', curto: 'antes das 10h', hs: 'Cedo, antes das 10' },
   { valor: '10h_11h30', rotulo: '10h–11h30', curto: '10h–11h30', hs: '10-11:30' },
   { valor: '14h30_17h30', rotulo: '14h30–17h30', curto: '14h30–17h30', hs: '14:30-17:30' },
   { valor: 'noite_apos_17h', rotulo: 'Noite, após 17h', curto: 'após 17h', hs: 'Noite, após as 17' },
+  { valor: 'outro', rotulo: 'Outro horário', curto: 'outro', hs: null },
 ] as const;
-export type HorarioDecisor = (typeof HORARIOS)[number]['valor'];
+export type HorarioDecisor = 'cedo_antes_10h' | '10h_11h30' | '14h30_17h30' | 'noite_apos_17h' | 'outro';
+export const HORARIO_OUTRO = 'outro';
+/** O horário para a tela: o rótulo da faixa, ou o próprio texto quando foi digitado (horario_dono livre). */
+export function rotuloDoHorario(v: string | null | undefined, forma: 'rotulo' | 'curto' = 'rotulo'): string {
+  const t = (v ?? '').trim();
+  const h = HORARIOS.find((x) => x.valor === t && x.hs);
+  return h ? h[forma] : (t === HORARIO_OUTRO ? '' : t);
+}
 
-export const SISTEMAS = ['Nenhum', 'Saipos', 'Goomer', 'Consumer', 'Outro'] as const;
+// nome_do_sistema é texto livre no HubSpot; os chips são atalhos (14/10/26: os mais vistos na
+// rua do time). "Outro" abre o campo; o que vai ao HubSpot passa por sistemaParaGravar.
+export const SISTEMAS = ['Nenhum', 'Saipos', 'Colibri', 'Anota Aí', 'Goomer', 'Frest', 'PDV Legal', 'Consumer', 'Outro'] as const;
 
-export const TIPOS = ['Restaurante', 'Bar', 'Café / Padaria', 'Lanchonete', 'Pizzaria', 'Delivery'] as const;
-export const PAPEIS = ['Dono', 'Gerente'] as const;
+// "Outro" nos dois abre um campo curto (14/10/26). clients.categoria e fichas_de_rua.tipo_lugar
+// /decisor_papel são texto: o digitado é gravado como está.
+export const TIPOS = ['Restaurante', 'Bar', 'Café / Padaria', 'Lanchonete', 'Pizzaria', 'Hamburgueria', 'Japonês', 'Açaí / Sorveteria', 'Delivery', 'Outro'] as const;
+export const PAPEIS = ['Dono', 'Gerente', 'Sócio', 'Outro'] as const;
+/**
+ * O papel que a hubspot-sync `decisor` aceita (PAPEIS_DECISOR: só Dono e Gerente; outro valor é
+ * 400 e o contato nem nasce). Sócio é dono no papel; o "Outro" digitado não tem par e vai sem
+ * papel — o texto fica na ficha e na nota. 14/10/26.
+ */
+export function papelParaHubspot(p: string | null | undefined): 'Dono' | 'Gerente' | undefined {
+  if (p === 'Dono' || p === 'Gerente') return p;
+  if (p === 'Sócio') return 'Dono';
+  return undefined;
+}
 
-// motivo_do_perdido (VALORES_PERMITIDOS do servidor). "Sem retorno" saiu da tela.
+// motivo_do_perdido (VALORES_PERMITIDOS do servidor, enum do HubSpot). UMA lista para todas as
+// telas (14/10/26): Ficha, Mudar etapa, Limpar funil, Tarefas e o modal antigo. "Sem retorno"
+// voltou, com a regra das 3 tentativas escrita embaixo dos chips.
 export const MOTIVOS_PERDIDO: { valor: string; rotulo: string }[] = [
   { valor: 'Preço', rotulo: 'Preço' },
   { valor: 'Funcionalidade', rotulo: 'Funcionalidade' },
-  { valor: 'Reembolso', rotulo: 'Estorno' },
   { valor: 'Não quer mudar de sistema', rotulo: 'Não quer mudar de sistema' },
+  { valor: 'Sem retorno', rotulo: 'Sem retorno' },
+  { valor: 'Reembolso', rotulo: 'Estorno' },
   { valor: 'Outros', rotulo: 'Outros' },
 ];
+export const rotuloDoMotivo = (v: string | null | undefined): string => MOTIVOS_PERDIDO.find((m) => m.valor === v)?.rotulo ?? (v ?? '');
+/** A linha pequena sob os chips, quando o motivo escolhido tem regra. */
+export const AJUDA_MOTIVO: Record<string, string> = { 'Sem retorno': 'Só depois de 3 tentativas em dias diferentes.' };
+/** "O que pesou" (observacao__desqualificado, texto livre no HubSpot): o mesmo limite em toda tela. */
+export const MAX_O_QUE_PESOU = 300;
+
+// Maior dor: gargalo_operacional é enum de 6 no HubSpot e os três servidores recusam o resto.
+// "Outra" (14/10/26) abre "Qual é a dor?": o texto NUNCA vai como gargalo — fica na ficha, na
+// nota e, para a Conversa com decisor, no campo `gargaloOutro` do mudar-etapa.
+export const GARGALO_OUTRA = 'Outra';
 
 // ---- Etapas: espelho de lib/acoes-negocio/mudar-etapa-negocio.js ----------
 export const ETAPA = {
@@ -217,12 +255,28 @@ export type Ficha = {
   horario: HorarioDecisor | null;
   /** Dia da volta (AAAA-MM-DD), escolhido pelo executivo; só vale quando ehVolta(proximo). */
   dataVolta: string | null;
+  /* Os textos do "Outro"/"Outra" (14/10/26). dorOutra null = chip "Outra" desmarcado. */
+  dorOutra: string | null;
+  horarioOutro: string;
+  papelOutro: string;
+  tipoOutro: string;
+  /** "O que pesou" do Sem interesse: obrigatório em MOTIVOS_QUE_EXIGEM_TEXTO. */
+  motivoTexto: string;
 };
 
 export const FICHA_VAZIA: Ficha = {
   comoFoi: null, proximo: null, diasReuniao: null, motivoPerdido: null, nomeDoLugar: '', decisor: '', papel: null,
   sistema: '', dor: null, telefone: '', tipo: null, moverEtapa: true, horario: null, dataVolta: null,
+  dorOutra: null, horarioOutro: '', papelOutro: '', tipoOutro: '', motivoTexto: '',
 };
+
+/* O valor que a ficha GRAVA (banco e nota) de cada campo com "Outro": o texto digitado no lugar
+   do chip. Vazio = não respondido. */
+export const dorDaFicha = (f: Ficha): string => (f.dorOutra != null ? f.dorOutra.trim().slice(0, 200) : (f.dor ?? ''));
+export const papelDaFicha = (f: Ficha): string => (f.papel === 'Outro' ? f.papelOutro.trim().slice(0, 40) : (f.papel ?? ''));
+export const tipoDaFicha = (f: Ficha): string => (f.tipo === 'Outro' ? f.tipoOutro.trim().slice(0, 40) : (f.tipo ?? ''));
+/** horario_dono: o valor da faixa ('10h_11h30') ou o texto do "Outro horário". */
+export const horarioDaFicha = (f: Ficha): string => (f.horario === HORARIO_OUTRO ? f.horarioOutro.trim().slice(0, 80) : (f.horario ?? ''));
 
 /** Botão Salvar: diz o que falta, ou "Salvar". */
 export function rotuloSalvar(f: Ficha, faltaEtapa: string[] = []): { pode: boolean; texto: string } {
@@ -232,6 +286,7 @@ export function rotuloSalvar(f: Ficha, faltaEtapa: string[] = []): { pode: boole
   else if (f.proximo === 'reuniao' && !f.diasReuniao) falta.push('o dia da reunião');
   else if (ehVolta(f.proximo) && !f.dataVolta) falta.push('o dia da volta');
   else if (f.proximo === 'sem_interesse' && !f.motivoPerdido) falta.push('o motivo');
+  else if (f.proximo === 'sem_interesse' && MOTIVOS_QUE_EXIGEM_TEXTO.includes(f.motivoPerdido ?? '') && !f.motivoTexto.trim()) falta.push('o que pesou');
   if (f.moverEtapa) for (const k of faltaEtapa) if (!falta.includes(ROTULO_PROP[k] ?? k)) falta.push(ROTULO_PROP[k] ?? k);
   if (!falta.length) return { pode: true, texto: 'Salvar' };
   return { pode: false, texto: `Falta ${falta.length > 1 ? `${falta.slice(0, -1).join(', ')} e ${falta[falta.length - 1]}` : falta[0]}` };
@@ -246,8 +301,9 @@ export function proximoPassoDaFicha(f: Ficha, hoje: string): { data: string; tip
   if (f.proximo === 'ligar_amanha') return { data: proximoDiaUtil(hoje, 1), tipo: 'follow-up', texto: 'Ligar', canal: 'ligacao' };
   if (f.proximo === 'voltar_amanha') return { data: f.dataVolta as string, tipo: 'visita', texto: 'Voltar: estava fechado', canal: 'visita' };
   if (f.proximo === 'voltar_horario') {
-    const h = HORARIOS.find((x) => x.valor === f.horario);
-    return { data: f.dataVolta as string, tipo: 'visita', texto: h ? `Voltar no horário do dono (${h.curto})` : 'Voltar no horário do dono', canal: 'visita' };
+    /* "Outro horário": o texto digitado entra no lugar da faixa ("só sábado de manhã") */
+    const h = rotuloDoHorario(horarioDaFicha(f), 'curto');
+    return { data: f.dataVolta as string, tipo: 'visita', texto: h ? `Voltar no horário do dono (${h})` : 'Voltar no horário do dono', canal: 'visita' };
   }
   return null;
 }
@@ -261,13 +317,15 @@ export function notaDaVisita(f: Ficha, p: { cliente: string; ocorridoEm: string;
     canal: 'visita',
     desfecho: f.comoFoi ?? 'outro',
     pessoa: f.decisor || null,
-    papel: f.papel,
+    // os "Outro" (14/10/26) entram com o texto digitado: a nota é onde o gestor lê o que o enum não tem
+    papel: papelDaFicha(f) || null,
     // "sim" só quando falou com quem decide; nunca "nao" (vai vazio)
     decisorAlcancado: f.comoFoi === 'falou_com_decisor' ? 'sim' : 'desconhecido',
-    dor: f.dor,
-    observacao: [f.sistema ? `sistema: ${f.sistema}` : null, f.tipo ? `tipo: ${f.tipo}` : null,
-      f.horario ? `dono costuma estar: ${HORARIOS.find((x) => x.valor === f.horario)?.rotulo ?? f.horario}` : null,
-      f.proximo === 'sem_interesse' && f.motivoPerdido ? `sem interesse: ${f.motivoPerdido}` : null].filter(Boolean).join(' · ') || null,
+    dor: dorDaFicha(f) || null,
+    observacao: [f.sistema ? `sistema: ${f.sistema}` : null, tipoDaFicha(f) ? `tipo: ${tipoDaFicha(f)}` : null,
+      rotuloDoHorario(horarioDaFicha(f)) ? `dono costuma estar: ${rotuloDoHorario(horarioDaFicha(f))}` : null,
+      f.proximo === 'sem_interesse' && f.motivoPerdido
+        ? `sem interesse: ${f.motivoPerdido}${f.motivoTexto.trim() ? ` (${f.motivoTexto.trim().slice(0, MAX_O_QUE_PESOU)})` : ''}` : null].filter(Boolean).join(' · ') || null,
     proximoPasso: passo ? { canal: passo.canal, dia: passo.data, acao: passo.texto } : null,
   });
 }
@@ -304,15 +362,24 @@ export const ETAPAS_DA_FOLHA: string[] = [
  * (igual ao Cockpit); picklist só com valor da lista.
  */
 export function montarPropriedades(destino: string, digitado: Record<string, string>, jaTem: Record<string, unknown>):
-  { propriedades: Record<string, string>; erros: Record<string, string> } {
+  { propriedades: Record<string, string>; erros: Record<string, string>; gargaloOutro?: string } {
   const propriedades: Record<string, string> = {};
   const erros: Record<string, string> = {};
+  let gargaloOutro: string | undefined;
   const exigidos = [...(PROPS_OBRIGATORIAS_POR_ETAPA[destino] ?? [])];
   if (destino === ETAPA.perdido && MOTIVOS_QUE_EXIGEM_TEXTO.includes(digitado.motivo_do_perdido ?? '')) exigidos.push('observacao__desqualificado');
   for (const k of exigidos) {
     const v = (digitado[k] ?? '').trim();
     const temNoNegocio = jaTem[k] != null && String(jaTem[k]).trim() !== '';
     if (!v) { if (!temNoNegocio) erros[k] = k === 'observacao__desqualificado' ? 'Este motivo não explica sozinho — escreva o que pesou.' : 'Preencha para mudar a etapa.'; continue; }
+    /* Dor "Outra" (14/10/26): o texto vai como `gargaloOutro`, fora das propriedades — o
+       servidor aceita no lugar do gargalo obrigatório e o enum do HubSpot nunca recebe texto */
+    if (k === 'gargalo_operacional' && v === GARGALO_OUTRA) {
+      const t = (digitado.gargalo_outro ?? '').trim().slice(0, 200);
+      if (!t) erros[k] = 'Escreva qual é a dor.';
+      else gargaloOutro = t;
+      continue;
+    }
     const tipo = TIPO_CAMPO[k] ?? 'texto';
     if (tipo === 'selecao' && !(PICKLIST[k] ?? []).includes(v)) { erros[k] = 'Escolha uma das opções.'; continue; }
     if (tipo === 'numero') {
@@ -325,7 +392,11 @@ export function montarPropriedades(destino: string, digitado: Record<string, str
       if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(d.getTime())) { erros[k] = 'Data inválida.'; continue; }
       propriedades[k] = String(d.getTime()); continue;
     }
-    propriedades[k] = v;
+    propriedades[k] = k === 'observacao__desqualificado' ? v.slice(0, MAX_O_QUE_PESOU) : v;
   }
-  return { propriedades, erros };
+  /* "O que pesou" opcional (14/10/26): para os motivos que se explicam sozinhos o campo aparece
+     igual, e o que foi escrito vai junto — o gestor lê o porquê de todo Perdido, não só de Outros */
+  const pesou = (digitado.observacao__desqualificado ?? '').trim();
+  if (destino === ETAPA.perdido && pesou && !propriedades.observacao__desqualificado) propriedades.observacao__desqualificado = pesou.slice(0, MAX_O_QUE_PESOU);
+  return { propriedades, erros, ...(gargaloOutro ? { gargaloOutro } : {}) };
 }

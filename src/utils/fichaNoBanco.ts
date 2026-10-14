@@ -7,7 +7,7 @@
 
 import { supabase } from '../integrations/supabase/client';
 import { enfileirar, ehErroDeRede, novoAcaoId } from './filaOffline';
-import { proximoPassoDaFicha, type Ficha } from './fichaDeRua';
+import { dorDaFicha, horarioDaFicha, papelDaFicha, proximoPassoDaFicha, tipoDaFicha, type Ficha } from './fichaDeRua';
 
 export type LinhaFicha = {
   acao_id: string;
@@ -61,11 +61,13 @@ export function linhaDaFicha(f: Ficha, c: {
     etapa_antes: c.etapaAntes,
     etapa_depois: c.etapaDepois,
     decisor_nome: texto(f.decisor),
-    decisor_papel: f.papel ?? null,
-    horario_dono: f.horario ?? null,
+    /* "Outro"/"Outra" (14/10/26): as colunas são texto, e o digitado é a resposta — o
+       Cockpit e as armas mostram o texto como veio */
+    decisor_papel: texto(papelDaFicha(f)),
+    horario_dono: texto(horarioDaFicha(f)),
     sistema: texto(f.sistema),
-    dor: f.dor ?? null,
-    tipo_lugar: f.tipo ?? null,
+    dor: texto(dorDaFicha(f)),
+    tipo_lugar: texto(tipoDaFicha(f)),
     motivo_perdido: f.proximo === 'sem_interesse' ? (f.motivoPerdido ?? null) : null,
     com_foto: c.comFoto,
     bairro: texto(c.bairro),

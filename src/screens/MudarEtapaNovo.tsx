@@ -24,11 +24,11 @@ import { supabase } from '../integrations/supabase/client';
 import type { Client } from '../types/client';
 import { enfileirar, ehErroDeRede, novoAcaoId } from '../utils/filaOffline';
 import {
-  ETAPA, ETAPAS_DA_FOLHA, GARGALOS, HORARIOS, MOTIVOS_PERDIDO, MOTIVOS_QUE_EXIGEM_TEXTO, PAPEIS, PICKLIST, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA,
-  ROTULO_PROP, TIPO_CAMPO, montarPropriedades, movimentoPermitido,
+  AJUDA_MOTIVO, ETAPA, ETAPAS_DA_FOLHA, GARGALOS, GARGALO_OUTRA, HORARIOS, HORARIO_OUTRO, MAX_O_QUE_PESOU, MOTIVOS_PERDIDO, MOTIVOS_QUE_EXIGEM_TEXTO, PAPEIS,
+  PICKLIST, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA, ROTULO_PROP, TIPO_CAMPO, montarPropriedades, movimentoPermitido,
 } from '../utils/fichaDeRua';
 import {
-  SISTEMAS_ARMAS, armasConhecidas, chipDoSistema, armasQueFaltam, enviosDasArmas, fichasDaFolha, registroDoAvanco, rotuloDasFaltas,
+  SISTEMAS_ARMAS, armasConhecidas, chipDoSistema, armasQueFaltam, enviosDasArmas, fichasDaFolha, registroDoAvanco, rotuloDasFaltas, sistemaParaGravar,
   type Armas, type FichaArmas,
 } from '../utils/armasDaDemo';
 import { negocioAcao } from '../utils/negocioAcao';
@@ -58,6 +58,15 @@ function pedeTexto(id: string): string {
 
 const ROTULO_PICK: Record<string, string> = { Reembolso: 'Estorno', GoogleMaps: 'Google Maps', Familia: 'Família' };
 type ChaveArma = 'sistema' | 'dor' | 'decisor' | 'horario';
+/* Os "Outro"/"Outra" das armas que estão com o campo de texto aberto (14/10/26) */
+type Abertos = { dor: boolean; papel: boolean; horario: boolean };
+const NADA_ABERTO: Abertos = { dor: false, papel: false, horario: false };
+/** O que veio da ficha/HubSpot e não é chip: abre o campo com o texto (dor/papel/horário livres). */
+const abertosDe = (a: Armas): Abertos => ({
+  dor: !!a.dor && !(GARGALOS as readonly string[]).includes(a.dor),
+  papel: !!a.papel && !(PAPEIS as readonly string[]).includes(a.papel),
+  horario: !!a.horario && !HORARIOS.some((h) => h.hs && h.valor === a.horario),
+});
 const CHAVES: ChaveArma[] = ['sistema', 'dor', 'decisor', 'horario'];
 const ddmm = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }) : '');
 
@@ -75,6 +84,7 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
   const [conhecidas, setConhecidas] = useState<Armas | null>(null);
   const [tocadas, setTocadas] = useState<Record<string, boolean>>({});
   const [outroSistema, setOutroSistema] = useState(false);
+  const [abertos, setAbertos] = useState<Abertos>(NADA_ABERTO);
   const [jaTemPronto, setJaTemPronto] = useState(false);
   /* com tudo sabido, a folha nem abre: até decidir, o painel fica fechado */
   const [decidido, setDecidido] = useState(false);
@@ -85,7 +95,7 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
   useEffect(() => {
     if (!visivel) return;
     setDestino(soArmas ? null : destinoInicial); setDigitado(preenchido ? { ...preenchido } : {}); setErros({}); setRecusa(null);
-    setArmas(null); setConhecidas(null); setTocadas({}); setOutroSistema(false); setJaTemPronto(false); setFichas(null); setDaFolha([]);
+    setArmas(null); setConhecidas(null); setTocadas({}); setOutroSistema(false); setAbertos(NADA_ABERTO); setJaTemPronto(false); setFichas(null); setDaFolha([]);
     setDecidido(!(destinoInicial === ETAPA.demo || soArmas) || !dealId);
     if (client.id) {
       void supabase.from('fichas_de_rua').select('ocorrido_em, decisor_nome, decisor_papel, horario_dono, sistema, dor')
@@ -124,11 +134,14 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
     const k = armasConhecidas(jaTem, todasFichas);
     setArmas(k); setConhecidas(k);
     setOutroSistema(chipDoSistema(k.sistema) === 'Outro');
+    setAbertos(abertosDe(k));
   }, [comArmas, armas, jaTemPronto, todasFichas, jaTem]);
 
+  /* "O que pesou" aparece para QUALQUER motivo escolhido (14/10/26); só é exigido nos que não
+     se explicam sozinhos — montarPropriedades decide, e manda o opcional quando vem escrito */
   const exigidos = destino
     ? [...(PROPS_OBRIGATORIAS_POR_ETAPA[destino] ?? []),
-      ...(destino === ETAPA.perdido && MOTIVOS_QUE_EXIGEM_TEXTO.includes(digitado.motivo_do_perdido ?? '') ? ['observacao__desqualificado'] : [])]
+      ...(destino === ETAPA.perdido && digitado.motivo_do_perdido ? ['observacao__desqualificado'] : [])]
       .filter((k) => k === 'motivo_do_perdido' || k === 'observacao__desqualificado' || !(jaTem[k] != null && String(jaTem[k]).trim()))
     : [];
   const faltamArmas = armas ? armasQueFaltam(armas).length : 4;
@@ -171,11 +184,14 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
 
   async function confirmar(modo: 'com' | 'sem' | 'auto' = 'com') {
     if (!destino || !dealId || enviando) return;
-    const { propriedades, erros: e } = montarPropriedades(destino, digitado, jaTem);
+    // nome_do_sistema com a grafia acertada (14/10/26); a tela continua mostrando o que foi digitado
+    const paraGravar = digitado.nome_do_sistema ? { ...digitado, nome_do_sistema: sistemaParaGravar(digitado.nome_do_sistema) } : digitado;
+    const { propriedades, erros: e, gargaloOutro } = montarPropriedades(destino, paraGravar, jaTem);
     setErros(e);
     if (Object.keys(e).length) { setDecidido(true); return; }
     setEnviando(true); setRecusa(null);
-    const corpo = { op: 'mudar-etapa', dealId, novaEtapa: destino, propriedades };
+    /* dor "Outra": fora de `propriedades` (enum do HubSpot); o servidor aceita no lugar do gargalo */
+    const corpo = { op: 'mudar-etapa', dealId, novaEtapa: destino, propriedades, ...(gargaloOutro ? { gargaloOutro } : {}) };
     try {
       await negocioAcao(corpo);
       onMudou(destino, propriedades as Record<string, unknown>);
@@ -208,10 +224,13 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
 
   const campo = (k: string) => {
     const tipo = TIPO_CAMPO[k] ?? 'texto';
-    const opcoes = k === 'motivo_do_perdido' ? MOTIVOS_PERDIDO.map((m) => m.valor) : PICKLIST[k];
+    /* gargalo: "Outra" abre "Qual é a dor?" (14/10/26); o texto vai como gargaloOutro, nunca no enum */
+    const opcoes = k === 'motivo_do_perdido' ? MOTIVOS_PERDIDO.map((m) => m.valor)
+      : k === 'gargalo_operacional' && PICKLIST[k] ? [...PICKLIST[k], GARGALO_OUTRA] : PICKLIST[k];
+    const pesouOpcional = k === 'observacao__desqualificado' && !MOTIVOS_QUE_EXIGEM_TEXTO.includes(digitado.motivo_do_perdido ?? '');
     return (
       <View key={k} style={s.campoBloco}>
-        <Text style={s.campoRotulo}>{k === 'observacao__desqualificado' ? 'O que pesou' : (ROTULO_PROP[k] ?? k).replace(/^./, (c) => c.toUpperCase())}</Text>
+        <Text style={s.campoRotulo}>{k === 'observacao__desqualificado' ? (pesouOpcional ? 'O que pesou · opcional' : 'O que pesou') : (ROTULO_PROP[k] ?? k).replace(/^./, (c) => c.toUpperCase())}</Text>
         {tipo === 'selecao' && opcoes ? (
           <View style={s.chips}>
             {opcoes.map((o) => (
@@ -237,7 +256,13 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
             placeholder={tipo === 'numero' ? 'R$ por mês' : tipo === 'tel' ? '(27) 99999-9999' : ''}
             placeholderTextColor="#8B919C"
             keyboardType={tipo === 'numero' ? 'decimal-pad' : tipo === 'tel' ? 'phone-pad' : 'default'}
+            {...(k === 'observacao__desqualificado' ? { maxLength: MAX_O_QUE_PESOU } : {})}
           />
+        )}
+        {k === 'motivo_do_perdido' && !!AJUDA_MOTIVO[digitado[k] ?? ''] && <Text style={s.ajuda}>{AJUDA_MOTIVO[digitado[k] ?? '']}</Text>}
+        {k === 'gargalo_operacional' && digitado[k] === GARGALO_OUTRA && (
+          <TextInput style={s.input} value={digitado.gargalo_outro ?? ''} onChangeText={(v) => setDigitado((d) => ({ ...d, gargalo_outro: v }))}
+            placeholder="Qual é a dor?" placeholderTextColor="#8B919C" maxLength={200} />
         )}
         {!!erros[k] && <Text style={s.erro}>{erros[k]}</Text>}
       </View>
@@ -321,7 +346,7 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
         ) : soArmas ? (
           <View style={{ gap: 12 }}>
             <Progresso texto="Sistema e dor são suas armas na Demo, e o gestor estuda a praça com elas." n={nDe4} de={4} />
-            <SecaoArmas armas={armas} etiqueta={etiqueta} outroSistema={outroSistema} aoOutro={setOutroSistema} mudar={mudar} />
+            <SecaoArmas armas={armas} etiqueta={etiqueta} outroSistema={outroSistema} aoOutro={setOutroSistema} abertos={abertos} aoAbrir={(m) => setAbertos((a) => ({ ...a, ...m }))} mudar={mudar} />
           </View>
         ) : !destino ? (
           [...ETAPAS_DA_FOLHA.slice(0, 7), ETAPA.ganho, ...ETAPAS_DA_FOLHA.slice(7)].map((id, i) => {
@@ -359,7 +384,7 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
         ) : ehDemo ? (
           <View style={{ gap: 12 }}>
             <Progresso texto="Sistema e dor são suas armas na Demo, e o gestor estuda a praça com elas." n={nDe4} de={4} />
-            <SecaoArmas armas={armas} etiqueta={etiqueta} outroSistema={outroSistema} aoOutro={setOutroSistema} mudar={mudar} />
+            <SecaoArmas armas={armas} etiqueta={etiqueta} outroSistema={outroSistema} aoOutro={setOutroSistema} abertos={abertos} aoAbrir={(m) => setAbertos((a) => ({ ...a, ...m }))} mudar={mudar} />
             {!!exigidos.length && <Text style={s.secao}>{`O HubSpot pede para ${ROTULO_ETAPA[destino]}`}</Text>}
             {exigidos.map(campo)}
             {!!recusa && <Text style={s.recusa}>{`O servidor recusou: ${recusa}`}</Text>}
@@ -396,9 +421,12 @@ function Progresso({ texto, n, de }: { texto: string; n: number; de: number }) {
 }
 
 /* ══ AS 4 ARMAS ══ chips de 40 px, a etiqueta de origem à direita do rótulo; nunca trava o Avançar */
-function SecaoArmas({ armas, etiqueta, outroSistema, aoOutro, mudar }: {
+function SecaoArmas({ armas, etiqueta, outroSistema, aoOutro, abertos, aoAbrir, mudar }: {
   armas: Armas | null; etiqueta: (k: ChaveArma) => { texto: string; tom: 'ok' | 'falta' };
   outroSistema: boolean; aoOutro: (v: boolean) => void; mudar: (m: Partial<Armas>) => void;
+  /* "Outra"/"Outro" (14/10/26): com o campo aberto, a arma guarda o TEXTO digitado; o envio ao
+     HubSpot (enviosDasArmas) já só manda o que é do enum, então o texto fica na folha */
+  abertos: Abertos; aoAbrir: (m: Partial<Abertos>) => void;
 }) {
   if (!armas) return <View style={s.armas}><ActivityIndicator /></View>;
   const chip = (chave: string, rotulo: string, ativo: boolean, aoTocar: () => void) => (
@@ -427,14 +455,32 @@ function SecaoArmas({ armas, etiqueta, outroSistema, aoOutro, mudar }: {
         <TextInput style={[s.input, !armas.sistema && s.inputFalta]} value={armas.sistema} onChangeText={(v) => mudar({ sistema: v })} placeholder="Qual sistema? (ex.: Yooga, xMenu)" placeholderTextColor="#8B919C" />
       )}
       {rotulo('dor', 'Maior dor')}
-      <View style={s.chips}>{GARGALOS.map((g) => chip(g, g, armas.dor === g, () => mudar({ dor: armas.dor === g ? '' : g })))}</View>
+      <View style={s.chips}>
+        {GARGALOS.map((g) => chip(g, g, !abertos.dor && armas.dor === g, () => { aoAbrir({ dor: false }); mudar({ dor: !abertos.dor && armas.dor === g ? '' : g }); }))}
+        {chip(GARGALO_OUTRA, GARGALO_OUTRA, abertos.dor, () => { aoAbrir({ dor: !abertos.dor }); mudar({ dor: '' }); })}
+      </View>
+      {abertos.dor && (
+        <TextInput style={[s.input, !armas.dor && s.inputFalta]} value={armas.dor} onChangeText={(v) => mudar({ dor: v })} placeholder="Qual é a dor?" placeholderTextColor="#8B919C" maxLength={200} />
+      )}
       {rotulo('decisor', 'Quem decide')}
       <View style={s.decisorLinha}>
         <TextInput style={[s.input, s.decisorInput, !armas.decisor && s.inputFalta]} value={armas.decisor} onChangeText={(v) => mudar({ decisor: v })} placeholder="Nome de quem assina" placeholderTextColor="#8B919C" />
-        {PAPEIS.map((p) => chip(p, p, armas.papel === p, () => mudar({ papel: armas.papel === p ? '' : p })))}
+        {PAPEIS.map((p) => (p === 'Outro'
+          ? chip(p, p, abertos.papel, () => { aoAbrir({ papel: !abertos.papel }); mudar({ papel: '' }); })
+          : chip(p, p, !abertos.papel && armas.papel === p, () => { aoAbrir({ papel: false }); mudar({ papel: !abertos.papel && armas.papel === p ? '' : p }); })))}
       </View>
+      {abertos.papel && (
+        <TextInput style={s.input} value={armas.papel} onChangeText={(v) => mudar({ papel: v })} placeholder="Ex.: chef, filho do dono" placeholderTextColor="#8B919C" maxLength={40} />
+      )}
       {rotulo('horario', 'Melhor horário para achar')}
-      <View style={s.chips}>{HORARIOS.map((h) => chip(h.valor, h.rotulo, armas.horario === h.valor, () => mudar({ horario: armas.horario === h.valor ? '' : h.valor })))}</View>
+      <View style={s.chips}>
+        {HORARIOS.map((h) => (h.valor === HORARIO_OUTRO
+          ? chip(h.valor, h.rotulo, abertos.horario, () => { aoAbrir({ horario: !abertos.horario }); mudar({ horario: '' }); })
+          : chip(h.valor, h.rotulo, !abertos.horario && armas.horario === h.valor, () => { aoAbrir({ horario: false }); mudar({ horario: !abertos.horario && armas.horario === h.valor ? '' : h.valor }); })))}
+      </View>
+      {abertos.horario && (
+        <TextInput style={[s.input, !armas.horario && s.inputFalta]} value={armas.horario} onChangeText={(v) => mudar({ horario: v })} placeholder="Ex.: só sábado de manhã" placeholderTextColor="#8B919C" maxLength={80} />
+      )}
     </View>
   );
 }

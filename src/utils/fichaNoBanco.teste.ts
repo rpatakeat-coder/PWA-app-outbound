@@ -33,5 +33,12 @@ ok(l2.declarada === true && l2.deal_id === null, 'declarada e sem negócio');
 const semAcao = linhaDaFicha(reuniao, { ...base, acaoId: undefined })!;
 ok(typeof semAcao.acao_id === 'string' && semAcao.acao_id.length > 8, 'sem acaoId gera um');
 
+// 14/10/26: os "Outro"/"Outra" gravam o texto digitado (as colunas são texto, sem check)
+const livre = linhaDaFicha({ ...FICHA_VAZIA, comoFoi: 'falou_com_decisor', papel: 'Outro', papelOutro: ' Chef ', horario: 'outro', horarioOutro: 'Só sábado',
+  dorOutra: 'Delivery atrasa', tipo: 'Outro', tipoOutro: 'Food truck' }, base)!;
+ok(livre.decisor_papel === 'Chef' && livre.horario_dono === 'Só sábado' && livre.dor === 'Delivery atrasa' && livre.tipo_lugar === 'Food truck', 'Outro/Outra: a linha leva o texto');
+const outroVazio = linhaDaFicha({ ...FICHA_VAZIA, comoFoi: 'falou_com_decisor', papel: 'Outro', horario: 'outro', dorOutra: '' }, base)!;
+ok(outroVazio.decisor_papel === null && outroVazio.horario_dono === null && outroVazio.dor === null, '"Outro" marcado e sem texto: vazio, nunca a palavra "outro"');
+
 console.log(falhas ? `\n${falhas} falha(s)` : '\nficha no banco: tudo certo');
 if (falhas) process.exit(1);

@@ -2,6 +2,7 @@
 // src/utils/filaDoDinheiro.teste.ts. A gravação é a mesma de sempre (concluirTarefa:
 // 5 s de Desfazer, fila sem sinal); aqui só o que vai escrito e quando volta.
 import { oQuePulou, proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
+import { MOTIVOS_PERDIDO, MOTIVOS_QUE_EXIGEM_TEXTO } from './fichaDeRua';
 
 export type ComoFoiFila = 'decisor' | 'nao_atendeu' | 'pediu_retorno' | 'sem_interesse';
 
@@ -26,7 +27,9 @@ export function diasSugeridos(c: ComoFoiFila): number | null {
   return null;
 }
 
-export const MOTIVOS_SEM_INTERESSE = ['Preço', 'Funcionalidade', 'Não quer mudar de sistema', 'Outros'] as const;
+/* A MESMA lista do Perdido em todas as telas (14/10/26): era uma cópia de 4 que já tinha
+   divergido da Ficha (sem Estorno nem Sem retorno). Os valores são o enum do HubSpot. */
+export const MOTIVOS_SEM_INTERESSE: string[] = MOTIVOS_PERDIDO.map((m) => m.valor);
 
 const DIA_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 const SEM_CURTO = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
@@ -69,7 +72,7 @@ export function textoDoSalvar(o: { comoFoi: ComoFoiFila | null; volta: string | 
   if (!o.comoFoi) return { pode: false, texto: 'Marque como foi' };
   if (o.comoFoi === 'sem_interesse') {
     if (!o.motivo) return { pode: false, texto: 'Escolha o motivo' };
-    if (o.motivo === 'Outros' && !o.detalhe.trim()) return { pode: false, texto: 'Escreva o que pesou' };
+    if (MOTIVOS_QUE_EXIGEM_TEXTO.includes(o.motivo) && !o.detalhe.trim()) return { pode: false, texto: 'Escreva o que pesou' };
     return { pode: true, texto: 'Salvar' };
   }
   if (!o.volta) return { pode: false, texto: o.outroDia ? 'Escolha o dia' : 'Escolha o próximo passo' };
