@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@e925801.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@743fc3a.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* /gestao E O COCKPIT desde 25/09/2026. As tres telas que so a gestao antiga
@@ -40,7 +40,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "e925801";
+  var VERSAO = "743fc3a";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -28144,7 +28144,7 @@ function pfRelogioHTML(d, attr, rotBotao, variante) {
     +     'text-transform:uppercase;color:#E51A31;">que horas?</span>'
     +   cancelar
     +   '<b style="margin-left:auto;font:900 20px \'Poppins\',sans-serif;color:var(--ink);'
-    +     'font-variant-numeric:tabular-nums;letter-spacing:-.01em;">' + esc(d.horaRot) + '</b>'
+    +     'font-variant-numeric:tabular-nums;letter-spacing:-.01em;white-space:nowrap;">' + esc(d.horaRot) + '</b>'
     + '</span>'
     + caixaHoras
     + '<div style="display:flex;gap:3px;margin-top:5px;">' + mins + confirmar + '</div>'
@@ -28430,7 +28430,7 @@ function pl6DadosFinal(rep) {
   const pagina = Math.min(Math.max(1, Number(s.pagina) || 1), totalPaginas);
   const municaoPag = municaoOrd.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
-  const horaRot = s.hSel + ':' + s.mSel;
+  const horaRot = s.hSel ? s.hSel + ':' + s.mSel : '--:--';
   const selLead = s.sel ? s.sel.lead : null;
 
   const ficha = (typeof pl6Ficha !== 'undefined' && pl6Ficha) ? porId.get(pl6Ficha) : null;
@@ -29720,21 +29720,6 @@ function pl6Ligar(box, rep) {
 
   const primeiraVaga = di => pl6PrimeiraVaga(pl6GradeDoPlano(), di);
 
-  const pl6PorNoFimDoDia = async function (idPor, di) {
-    const lead = pl6LeadDaRef(rep, 'm:' + idPor);
-    const dias0 = pl6Dias(pl6SegundaEmFoco());
-    if (!lead || !dias0[di]) { pl6UI.toast = 'essa conta saiu da sua base — recarreguei a lista'; return redesenhar(); }
-    if (typeof pl6DiaPassou === 'function' && pl6DiaPassou(dias0[di].iso)) {
-      pl6UI.toast = dias0[di].rot + ' ' + dias0[di].data + ' já passou — compromisso é para frente';
-      return redesenhar();
-    }
-    const destino = primeiraVaga(di);
-    if (destino < 0) { pl6UI.toast = dias0[di].rot + ' está com ' + PL6_SLOTS + ' contas — tire uma para pôr outra'; return redesenhar(); }
-    pl6UI.sel = null; pl6UI.diaAtivo = null; pl6Ficha = null;
-    await redesenhar();
-    return agendarNoSlot(lead.id, di, destino, pl6HoraDaFaixa(destino) || '09:00');
-  };
-
   let ultimoArraste = 0;
   box.addEventListener('dragstart', function (ev) {
     const alvo = ev.target.closest && ev.target.closest('[data-pl6-arraste]');
@@ -29771,11 +29756,8 @@ function pl6Ligar(box, rep) {
     pl6UI.dragHover = null;
     if (!pl6UI.sel) { redesenhar(); return; }
 
-    if (pl6UI.sel.lead && pl6UI.sel.deDi == null && !pl6UI.sel.bloco) {
-      void pl6PorNoFimDoDia(pl6UI.sel.lead.id, Number(dia.getAttribute('data-pl6-dia-drop')));
-      return;
-    }
     pl6UI.diaAtivo = Number(dia.getAttribute('data-pl6-dia-drop'));
+    pl6UI.hSel = null; pl6UI.mSel = '00';
     pl6UI.toast = null;
     redesenhar();
   });
@@ -30174,7 +30156,12 @@ function pl6Ligar(box, rep) {
         const par = String(arg).split('|');
         const idPor = par[0], di = Number(par[1]);
         s.poremDe = null;
-        return pl6PorNoFimDoDia(idPor, di);
+
+        const leadPor = pl6LeadDaRef(rep, 'm:' + idPor);
+        if (!leadPor) { s.toast = 'essa conta saiu da sua base — recarreguei a lista'; return redesenhar(); }
+        s.sel = { lead: leadPor }; s.diaAtivo = di; s.hSel = null; s.mSel = '00'; s.toast = null;
+        pl6Ficha = null;
+        return redesenhar();
       }
       if (verbo === 'pegar') {
         const lead = pl6LeadDaRef(rep, 'm:' + arg);
@@ -30287,6 +30274,7 @@ function pl6Ligar(box, rep) {
       if (verbo === 'abrirdia') {
         if (!s.sel) { s.toast = 'escolha primeiro a conta na munição'; return redesenhar(); }
         s.diaAtivo = Number(arg);
+        s.hSel = null; s.mSel = '00';
         s.toast = null;
         return redesenhar();
       }
@@ -30310,6 +30298,10 @@ function pl6Ligar(box, rep) {
       if (verbo === 'agendar') {
         const di = Number(arg);
         if (!s.sel) { s.toast = 'escolha primeiro a conta na munição'; return redesenhar(); }
+        if (!s.hSel) {
+          if (typeof mostrarToast === 'function') mostrarToast('Escolha o horário antes de agendar.', 'atencao');
+          return;
+        }
         const hora = s.hSel + ':' + s.mSel;
         const dias0 = pl6Dias(pl6SegundaEmFoco());
         if (typeof pl6DiaPassou === 'function' && pl6DiaPassou(dias0[di].iso)) {
