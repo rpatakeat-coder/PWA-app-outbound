@@ -9,11 +9,13 @@
 // §7.3) — o contrato inteiro, pelo celular. Com a cobrança emitida, daqui só
 // se sai para Reciclagem ou Perdido (a mesma trava do servidor).
 //
-// ANTES DA DEMO (Raio X › Praça, 06/10/26): avançar para Demo/Proposta mostra as 4 armas
-// (sistema, dor, quem decide, horário) com a origem de cada uma. Completo, a folha nem
-// abre. Faltando, "Avançar sem preencher" move do mesmo jeito e grava a falta em
-// gv2_falta_etapa, que o gestor vê no Raio X ("obrigatório é avisar, não travar"). Os
-// campos que o HubSpot exige para a etapa (plano, MRR, data) continuam obrigatórios.
+// ANTES DA DEMO / DA NEGOCIAÇÃO (handoff "app menos tela", 14/10/26): o botão depende SÓ do
+// que o HubSpot exige (Demo: plano, MRR e data; Negociação: plano e MRR). Se o negócio já tem
+// tudo, a folha NÃO ABRE: avança com um toque e um Desfazer de 10 s. Faltando, mostra só o que
+// falta, e o botão apagado diz qual campo e onde. A data da reunião já vem em "Hoje". As 4
+// armas (sistema, dor, quem decide, horário) viram um bloco recolhido que nunca trava; o que
+// faltou é gravado em gv2_falta_etapa e o gestor vê no Raio X. "Avançar sem preencher" saiu:
+// o botão principal já faz isso.
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -25,10 +27,10 @@ import type { Client } from '../types/client';
 import { enfileirar, ehErroDeRede, novoAcaoId } from '../utils/filaOffline';
 import {
   AJUDA_MOTIVO, ETAPA, ETAPAS_DA_FOLHA, GARGALOS, GARGALO_OUTRA, HORARIOS, HORARIO_OUTRO, MAX_O_QUE_PESOU, MOTIVOS_PERDIDO, MOTIVOS_QUE_EXIGEM_TEXTO, PAPEIS,
-  PICKLIST, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA, ROTULO_PROP, TIPO_CAMPO, montarPropriedades, movimentoPermitido,
+  PICKLIST, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA, ROTULO_PROP, TIPO_CAMPO, montarPropriedades, movimentoPermitido, valorValido,
 } from '../utils/fichaDeRua';
 import {
-  SISTEMAS_ARMAS, armasConhecidas, chipDoSistema, armasQueFaltam, enviosDasArmas, fichasDaFolha, registroDoAvanco, rotuloDasFaltas, sistemaParaGravar,
+  SISTEMAS_ARMAS, armasConhecidas, chipDoSistema, armasQueFaltam, enviosDasArmas, fichasDaFolha, registroDoAvanco, resumoDasArmas, sistemaParaGravar,
   type Armas, type FichaArmas,
 } from '../utils/armasDaDemo';
 import { negocioAcao } from '../utils/negocioAcao';
@@ -68,6 +70,20 @@ const abertosDe = (a: Armas): Abertos => ({
   horario: !!a.horario && !HORARIOS.some((h) => h.hs && h.valor === a.horario),
 });
 const CHAVES: ChaveArma[] = ['sistema', 'dor', 'decisor', 'horario'];
+/* rede ruim na rua: o que não respondeu em 4 s não segura a folha */
+const comPrazo = <T,>(p: PromiseLike<T>, ms: number, padrao: T): Promise<T> =>
+  Promise.race([Promise.resolve(p).catch(() => padrao), new Promise<T>((r) => setTimeout(() => r(padrao), ms))]);
+/** data da reunião como vier (AAAA-MM-DD ou ms): "dd/mm" */
+const dataCurta = (v: unknown): string => {
+  const s = String(v ?? '').trim();
+  const d = /^[0-9]{10,}$/.test(s) ? new Date(Number(s)) : new Date(`${s.slice(0, 10)}T12:00:00Z`);
+  return Number.isNaN(d.getTime()) ? s : d.toISOString().slice(5, 10).split('-').reverse().join('/');
+};
+const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+const ontemBRT = () => new Date(Date.now() - 27 * 3600000).toISOString().slice(0, 10);
+const juntar = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} e ${xs[xs.length - 1]}` : xs[0] ?? '');
+/* as etapas que avançam com um toque quando o negócio já tem tudo */
+const UM_TOQUE: string[] = [ETAPA.demo, ETAPA.negociacao];
 const ddmm = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }) : '');
 
 export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, onMudou, destinoInicial = null, preenchido = null, soArmas = false }: Props) {
@@ -88,6 +104,8 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
   const [jaTemPronto, setJaTemPronto] = useState(false);
   /* com tudo sabido, a folha nem abre: até decidir, o painel fica fechado */
   const [decidido, setDecidido] = useState(false);
+  const [armasAbertas, setArmasAbertas] = useState(false);
+  const [outraData, setOutraData] = useState(false);
   const dealId = client.id_hubspot ? String(client.id_hubspot) : null;
   const execId = client.vendedor_id_hubspot ? String(client.vendedor_id_hubspot) : null;
   const nome = client.empresa?.trim() || client.nome;
@@ -96,11 +114,12 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
     if (!visivel) return;
     setDestino(soArmas ? null : destinoInicial); setDigitado(preenchido ? { ...preenchido } : {}); setErros({}); setRecusa(null);
     setArmas(null); setConhecidas(null); setTocadas({}); setOutroSistema(false); setAbertos(NADA_ABERTO); setJaTemPronto(false); setFichas(null); setDaFolha([]);
-    setDecidido(!(destinoInicial === ETAPA.demo || soArmas) || !dealId);
+    setDecidido(!(UM_TOQUE.includes(destinoInicial ?? '') || soArmas) || !dealId);
+    setArmasAbertas(false); setOutraData(false);
     if (client.id) {
-      void supabase.from('fichas_de_rua').select('ocorrido_em, decisor_nome, decisor_papel, horario_dono, sistema, dor')
+      void comPrazo(supabase.from('fichas_de_rua').select('ocorrido_em, decisor_nome, decisor_papel, horario_dono, sistema, dor')
         .eq('client_id', client.id).order('ocorrido_em', { ascending: false }).limit(10)
-        .then(({ data }) => setFichas((data ?? []) as FichaArmas[]), () => setFichas([]));
+        .then(({ data }) => (data ?? []) as FichaArmas[]), 4000, [] as FichaArmas[]).then(setFichas);
     } else setFichas([]);
     if (!dealId) return;
     /* o que a folha já gravou (gv2_falta_etapa.armas) vale como ficha, pela data */
@@ -112,12 +131,15 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
     let vivo = true;
     const base: Record<string, unknown> = client.telefone ? { celular: client.telefone } : {};
     setJaTem(base);
+    /* cada leitura com prazo de 4 s: a leitura ao vivo sem resposta deixava as armas girando
+       para sempre (auditoria 14/10/26) */
+    const vazio = {} as Record<string, unknown>;
     Promise.all([
-      supabase.rpc('mapa_negocio', { p_deal: dealId }).then(({ data }) => (data as Record<string, unknown>) ?? {}, () => ({})),
+      comPrazo(supabase.rpc('mapa_negocio', { p_deal: dealId }).then(({ data }) => (data as Record<string, unknown>) ?? {}), 4000, vazio),
       client.vendedor_id_hubspot
-        ? supabase.functions.invoke('hubspot-sync', { body: { type: 'ler_negocio', id_hubspot: dealId, owner_id: String(client.vendedor_id_hubspot) } })
-            .then(({ data }) => ((data as { propriedades?: Record<string, unknown> } | null)?.propriedades ?? {}), () => ({}))
-        : Promise.resolve({}),
+        ? comPrazo(supabase.functions.invoke('hubspot-sync', { body: { type: 'ler_negocio', id_hubspot: dealId, owner_id: String(client.vendedor_id_hubspot) } })
+            .then(({ data }) => ((data as { propriedades?: Record<string, unknown> } | null)?.propriedades ?? {})), 4000, vazio)
+        : Promise.resolve(vazio),
     ]).then(([snap, aoVivo]) => { if (vivo) { setJaTem({ ...base, ...snap, ...aoVivo }); setJaTemPronto(true); } });
     /* rede lenta: em 2,5 s a folha abre de qualquer jeito, com as armas carregando */
     const t = setTimeout(() => { if (vivo) setDecidido(true); }, 2500);
@@ -142,18 +164,29 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
   const exigidos = destino
     ? [...(PROPS_OBRIGATORIAS_POR_ETAPA[destino] ?? []),
       ...(destino === ETAPA.perdido && digitado.motivo_do_perdido ? ['observacao__desqualificado'] : [])]
-      .filter((k) => k === 'motivo_do_perdido' || k === 'observacao__desqualificado' || !(jaTem[k] != null && String(jaTem[k]).trim()))
+      /* valor de lixo ("." no sistema) conta como vazio: é o que se escrevia só para passar */
+      .filter((k) => k === 'motivo_do_perdido' || k === 'observacao__desqualificado' || !valorValido(jaTem[k]))
     : [];
+  /* A DATA DA REUNIÃO JÁ VEM EM "HOJE" (o executivo troca se foi ontem ou outro dia) */
+  useEffect(() => {
+    if (destino === ETAPA.demo && jaTemPronto && exigidos.includes('data_da_reuniao') && !digitado.data_da_reuniao) {
+      setDigitado((d) => ({ ...d, data_da_reuniao: hojeBRT() }));
+    }
+  }, [destino, jaTemPronto]); // eslint-disable-line react-hooks/exhaustive-deps
   /* SÓ CONTA ARMA ONDE HÁ ARMA (14/10/26). Negociação usa o mesmo rodapé da Demo, mas não
      tem armas: contava 4 que nunca apareciam e o botão ficava em "Faltam 4" para sempre —
      nenhum negócio avançou para Negociação pelo mapa novo desde 06/10 (Snack Paradise). */
   const faltamArmas = !comArmas ? 0 : armas ? armasQueFaltam(armas).length : 4;
-  const faltamExig = exigidos.filter((k) => !String(digitado[k] ?? '').trim()).length;
+  const faltando = exigidos.filter((k) => !String(digitado[k] ?? '').trim());
+  const faltamExig = faltando.length;
 
-  /* COMPLETO NÃO ABRE: sistema, dor, decisor e horário já sabidos e nada que a etapa peça */
+  /* COMPLETO NÃO ABRE (Demo e Negociação): o que o HubSpot exige já está no negócio → avança
+     com um toque e o Desfazer. As armas não contam: elas nunca travam. Na Demo espera as
+     fichas (4 s no máximo) para registrar as armas junto. */
   useEffect(() => {
-    if (!visivel || decidido || soArmas || destinoInicial !== ETAPA.demo || !armas || !jaTemPronto) return;
-    if (faltamArmas === 0 && exigidos.length === 0) void confirmar('auto');
+    if (!visivel || decidido || soArmas || !UM_TOQUE.includes(destinoInicial ?? '') || !jaTemPronto) return;
+    if (destinoInicial === ETAPA.demo && !armas) return;
+    if (exigidos.length === 0) void confirmar('auto');
     else setDecidido(true);
   }, [visivel, decidido, armas, jaTemPronto]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (soArmas && armas && !decidido) setDecidido(true); }, [soArmas, armas, decidido]);
@@ -185,7 +218,26 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
     onFechar();
   }
 
-  async function confirmar(modo: 'com' | 'sem' | 'auto' = 'com') {
+  /* DESFAZER (10 s): volta à etapa de antes pelo mesmo caminho. Voltar é sempre permitido no
+     servidor; fecharTarefas:false para não encerrar nada no caminho de volta. */
+  function oferecerDesfazer(texto: string, para: string) {
+    /* a etapa real é a lida ao vivo (o rótulo do pino pode estar velho); Desfazer só existe
+       nos avanços do funil — Perdido fecha tarefas, Onboarding não tem volta, Reciclagem é lateral */
+    const lida = String(jaTem.dealstage ?? '').trim();
+    const antes = /^[0-9]+$/.test(lida) ? lida : etapaAtual;
+    const avanco = [ETAPA.visita, ETAPA.decisor, ETAPA.demo, ETAPA.negociacao].includes(para as never);
+    if (!antes || !dealId || antes === para || !avanco) { Toast.mostrar(texto, 'ok'); return; }
+    Toast.mostrar(texto, 'ok', {
+      rotulo: 'Desfazer',
+      onPress: () => {
+        void negocioAcao({ op: 'mudar-etapa', dealId, novaEtapa: antes, propriedades: {}, fecharTarefas: false, etapaEsperada: para })
+          .then(() => { onMudou(antes); Toast.mostrar(`${nome} voltou para ${ROTULO_ETAPA[antes] ?? 'a etapa de antes'}`, 'ok'); })
+          .catch((err: unknown) => Toast.mostrar(`Não deu para desfazer: ${String((err as Error)?.message ?? err)}`, 'erro'));
+      },
+    }, 10000);
+  }
+
+  async function confirmar(modo: 'com' | 'auto' = 'com') {
     if (!destino || !dealId || enviando) return;
     // nome_do_sistema com a grafia acertada (14/10/26); a tela continua mostrando o que foi digitado
     const paraGravar = digitado.nome_do_sistema ? { ...digitado, nome_do_sistema: sistemaParaGravar(digitado.nome_do_sistema) } : digitado;
@@ -201,15 +253,12 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
       /* AS ARMAS VÃO DEPOIS DA ETAPA, pelas rotas da ficha de visita: a etapa é o que o
          executivo pediu; as armas são complemento e não podem segurá-la */
       if (ehDemo && armas) {
-        const n = mandarArmas();
+        mandarArmas();
         registrar(ROTULO_ETAPA[destino]);
-        const falta = rotuloDasFaltas(armas);
-        if (modo === 'auto') Toast.mostrar(`Movido para ${ROTULO_ETAPA[destino]} · as 4 armas já estavam na ficha`, 'ok');
-        else if (falta) Toast.mostrar(`Movido para ${ROTULO_ETAPA[destino]} sem ${falta} · o gestor vê a falta`, 'aviso');
-        else Toast.mostrar(`${nome} foi para ${ROTULO_ETAPA[destino]} · HubSpot + Cockpit${n ? ' · armas no negócio' : ''}`, 'ok');
-      } else {
-        Toast.mostrar(`${nome} foi para ${ROTULO_ETAPA[destino]} · HubSpot + Cockpit`, 'ok');
       }
+      oferecerDesfazer(modo === 'auto'
+        ? `Em ${ROTULO_ETAPA[destino]} · ${destino === ETAPA.demo ? 'plano, MRR e data' : 'plano e MRR'} já no negócio`
+        : `${nome} foi para ${ROTULO_ETAPA[destino]} · HubSpot + Cockpit`, destino);
       onFechar();
     } catch (err) {
       if (ehErroDeRede(err)) {
@@ -242,6 +291,16 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
                 <Text style={[s.chipTexto, digitado[k] === o && s.chipTextoAtivo]}>{ROTULO_PICK[o] ?? o}</Text>
               </Pressable>
             ))}
+          </View>
+        ) : tipo === 'data' && k === 'data_da_reuniao' && !outraData ? (
+          <View style={s.chips}>
+            {[{ v: hojeBRT(), r: `Hoje, ${hojeBRT().split('-').reverse().slice(0, 2).join('/')}` }, { v: ontemBRT(), r: 'Ontem' }].map((o) => (
+              <Pressable key={o.r} accessibilityRole="button" accessibilityState={{ selected: digitado[k] === o.v }}
+                onPress={() => setDigitado((d) => ({ ...d, [k]: o.v }))} style={[s.chip, digitado[k] === o.v && s.chipAtivo]}>
+                <Text style={[s.chipTexto, digitado[k] === o.v && s.chipTextoAtivo]}>{o.r}</Text>
+              </Pressable>
+            ))}
+            <Pressable accessibilityRole="button" onPress={() => setOutraData(true)} style={s.chip}><Text style={s.chipTexto}>Outra</Text></Pressable>
           </View>
         ) : tipo === 'data' ? (
           // abre o calendário do aparelho (o TextInput descartava type="date")
@@ -293,8 +352,8 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
   const titulo = soArmas ? 'Suas armas' : ehDemo ? 'Antes da Demo' : ehNeg ? 'Antes da Negociação' : `Mudar etapa · ${nome}`;
   const sub = soArmas ? `${nome} · ${de}` : (ehDemo || ehNeg) && destino ? `${nome} · ${de ? `${de} → ` : ''}${ROTULO_ETAPA[destino]}` : null;
   const nDe4 = 4 - faltamArmas;
-  const nPlano = 2 - exigidos.filter((k) => k === 'plano_apresentado' || k === 'valor_de_mrr').filter((k) => !String(digitado[k] ?? '').trim()).length;
-  const faltamTudo = faltamArmas + faltamExig;
+  const faltamTudo = faltamExig;
+  const rotuloFalta = (k: string) => (k === 'plano_apresentado' ? 'o plano' : k === 'valor_de_mrr' ? 'o MRR' : k === 'data_da_reuniao' ? 'a data' : ROTULO_PROP[k] ?? k);
 
   const rodapeArmas = (
     <View style={s.rodapeCol}>
@@ -308,17 +367,11 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
             onPress={() => confirmar('com')} disabled={enviando || faltamTudo > 0}>
             {enviando ? <ActivityIndicator color="#fff" /> : (
               <Text style={faltamTudo > 0 ? s.botaoInerteTexto : s.botaoPrinTexto}>
-                {faltamTudo > 0 ? `${faltamTudo === 1 ? 'Falta 1' : `Faltam ${faltamTudo}`} para avançar com isso` : 'Avançar com isso'}
+                {faltamTudo > 0 ? `Falta ${juntar(faltando.map(rotuloFalta))} · acima` : `Mover para ${ROTULO_ETAPA[destino ?? ''] ?? 'a etapa'}`}
               </Text>
             )}
           </Pressable>
-          {ehDemo && faltamArmas > 0 && (
-            <Pressable accessibilityRole="button" style={[s.botao48, s.bordaSec]} onPress={() => confirmar('sem')} disabled={enviando}
-              accessibilityHint="move a etapa e registra o que faltou; o gestor vê">
-              <Text style={s.botaoSecTexto}>Avançar sem preencher</Text>
-              <Text style={s.botaoSecNota}>a falta fica registrada e o gestor vê</Text>
-            </Pressable>
-          )}
+          {faltamTudo > 0 && <Text style={s.legendaRodape}>{`Com ${juntar(faltando.map(rotuloFalta))}, vira "Mover para ${ROTULO_ETAPA[destino ?? ''] ?? ''}"`}</Text>}
         </>
       )}
     </View>
@@ -386,19 +439,39 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual, onFechar, 
           />
         ) : ehDemo ? (
           <View style={{ gap: 12 }}>
-            <Progresso texto="Sistema e dor são suas armas na Demo, e o gestor estuda a praça com elas." n={nDe4} de={4} />
-            <SecaoArmas armas={armas} etiqueta={etiqueta} outroSistema={outroSistema} aoOutro={setOutroSistema} abertos={abertos} aoAbrir={(m) => setAbertos((a) => ({ ...a, ...m }))} mudar={mudar} />
-            {!!exigidos.length && <Text style={s.secao}>{`O HubSpot pede para ${ROTULO_ETAPA[destino]}`}</Text>}
+            {/* o que o negócio já tem vira linha de fato; só o que falta é campo */}
+            {(PROPS_OBRIGATORIAS_POR_ETAPA[destino] ?? []).filter((k) => !exigidos.includes(k)).map((k) => (
+              <View key={k} style={s.fatoLinha}>
+                <Text style={s.fatoRotulo}>{(ROTULO_PROP[k] ?? k).replace(/^./, (c) => c.toUpperCase())}</Text>
+                <Text style={s.fatoValor} numberOfLines={1}>{k === 'valor_de_mrr' ? `R$ ${String(jaTem[k])}` : k === 'data_da_reuniao' ? dataCurta(jaTem[k]) : String(jaTem[k])}</Text>
+                <Text style={s.fatoOrigem}>do negócio</Text>
+              </View>
+            ))}
             {exigidos.map(campo)}
+            {/* AS ARMAS, RECOLHIDAS: nunca travam; o que faltar fica registrado para o gestor */}
+            <Pressable accessibilityRole="button" accessibilityState={{ expanded: armasAbertas }} onPress={() => setArmasAbertas((v) => !v)} style={s.armasTopo}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={s.armasTitulo}>{`Armas da demo · ${nDe4} de 4`}</Text>
+                <Text style={s.ajuda} numberOfLines={1}>{armas ? (resumoDasArmas(armas) || 'sistema, dor, quem decide · opcional') : 'carregando…'}</Text>
+              </View>
+              <Text style={s.armasSeta}>{armasAbertas ? '–' : '+'}</Text>
+            </Pressable>
+            {armasAbertas && <SecaoArmas armas={armas} etiqueta={etiqueta} outroSistema={outroSistema} aoOutro={setOutroSistema} abertos={abertos} aoAbrir={(m) => setAbertos((a) => ({ ...a, ...m }))} mudar={mudar} />}
             {!!recusa && <Text style={s.recusa}>{`O servidor recusou: ${recusa}`}</Text>}
             {!destinoInicial && <Pressable accessibilityRole="button" onPress={() => setDestino(null)} style={s.trocar}><Text style={s.trocarTexto}>Escolher outra etapa</Text></Pressable>}
           </View>
         ) : (
           <View style={{ gap: 12 }}>
+            {/* Negociação: o que o negócio já tem vira linha de fato; só o que falta é campo */}
             {ehNeg
-              ? <Progresso texto="Plano e MRR alimentam a proposta e o link de cobrança." n={nPlano} de={2} />
+              ? (PROPS_OBRIGATORIAS_POR_ETAPA[ETAPA.negociacao] ?? []).filter((k) => !exigidos.includes(k)).map((k) => (
+                <View key={k} style={s.fatoLinha}>
+                  <Text style={s.fatoRotulo}>{(ROTULO_PROP[k] ?? k).replace(/^./, (c) => c.toUpperCase())}</Text>
+                  <Text style={s.fatoValor} numberOfLines={1}>{k === 'valor_de_mrr' ? `R$ ${String(jaTem[k])}` : String(jaTem[k])}</Text>
+                  <Text style={s.fatoOrigem}>do negócio</Text>
+                </View>
+              ))
               : <Text style={s.ajuda}>{exigidos.length ? 'Esta etapa pede:' : 'Nada a preencher — é só confirmar.'}</Text>}
-            {ehNeg && !exigidos.length && <Text style={s.ajuda}>Plano e MRR já estão no negócio — é só confirmar.</Text>}
             {exigidos.map(campo)}
             {!!recusa && <Text style={s.recusa}>{`O servidor recusou: ${recusa}`}</Text>}
             {ehNeg && !destinoInicial && <Pressable accessibilityRole="button" onPress={() => setDestino(null)} style={s.trocar}><Text style={s.trocarTexto}>Escolher outra etapa</Text></Pressable>}
@@ -546,5 +619,13 @@ const s = StyleSheet.create({
   fundoPrin: { backgroundColor: 'var(--vermelho-acao)' },
   bordaSec: { borderWidth: 1, borderColor: 'var(--border)' },
   botaoInerte: { backgroundColor: 'var(--surface-2)' },
+  legendaRodape: { fontSize: 12.5, fontWeight: '500', color: 'var(--text-muted)', textAlign: 'center' },
+  fatoLinha: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, borderBottomWidth: 1, borderBottomColor: 'var(--border-soft)' },
+  fatoRotulo: { width: 96, fontSize: 12.5, fontWeight: '500', color: 'var(--text-muted)' },
+  fatoValor: { flex: 1, fontSize: 14, fontWeight: '600', color: 'var(--text)' },
+  fatoOrigem: { fontSize: 11.5, fontWeight: '500', color: 'var(--text-muted)' },
+  armasTopo: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)', marginTop: 4 },
+  armasTitulo: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
+  armasSeta: { fontSize: 20, fontWeight: '600', color: 'var(--text-muted)', paddingHorizontal: 4 },
   botaoInerteTexto: { fontSize: 15, fontWeight: '700', color: 'var(--text-muted)', textAlign: 'center' },
 });

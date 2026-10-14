@@ -38,8 +38,9 @@ export const Toast = {
     mapaComPilula = v;
     notificar?.();
   },
-  mostrar(texto: string, tipo: TipoToast = 'ok', acao?: Pedido['acao']) {
-    atual = { id: proximoId++, texto, tipo, acao, duracaoMs: acao ? 5000 : 3500 };
+  /** `duracaoMs`: o Desfazer da troca de etapa fica 10 s (handoff "app menos tela", 14/10/26). */
+  mostrar(texto: string, tipo: TipoToast = 'ok', acao?: Pedido['acao'], duracaoMs?: number) {
+    atual = { id: proximoId++, texto, tipo, acao, duracaoMs: duracaoMs ?? (acao ? 5000 : 3500) };
     notificar?.();
   },
 };
