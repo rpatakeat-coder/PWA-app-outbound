@@ -1,9 +1,9 @@
-// GERADO por scripts/portar-cockpit-api.cjs a partir de cockpit-unificado@71659a6.
+// GERADO por scripts/portar-cockpit-api.cjs a partir de cockpit-unificado@cc90d55.
 // NAO EDITAR: cada funcao abaixo e um arquivo do Cockpit, byte a byte. Para mudar
 // uma regra, mude no Cockpit e gere de novo.
-export const ORIGEM = "71659a6";
+export const ORIGEM = "cc90d55";
 export const ROTAS = ["negocio-acao","criar-negocio","desfazer-negocio","criar-nota-negocio","criar-empresa-prospeccao","restaurantes-proximos","novidades-mercado","importar-leads","buscar-leads"];
-export const JSONS = ["data/cadencias.json","data/comissionamento.json","data/leads-referencia.json","data/maptiler-config.json","data/redes-excluidas.json","data/supabase-config.json","data/temperatura.json","data/territorios.json","data/usuarios.json"];
+export const JSONS = ["data/cadencias.json","data/comissionamento.json","data/desligados.json","data/leads-referencia.json","data/maptiler-config.json","data/redes-excluidas.json","data/supabase-config.json","data/temperatura.json","data/territorios.json","data/usuarios.json"];
 
 const FONTES = {
   "api/negocio-acao.js": function (module, exports, require, process) {
@@ -167,10 +167,9 @@ const PROPS_PERMITIDAS = ['dealname', 'email', 'cnpj_cpf', 'celular', 'cep', 'ba
      A propriedade existe no HubSpot com este nome exato, label "Observacao Perdido" —
      nao houve mudanca la. */
   'observacao__desqualificado',
-  /* 01/10/26 — a janela 'Enviar para onboarding' do kanban (cockpit-unificado #670). A
-     propriedade existe no HubSpot com este nome exato, label 'Cliente vai montar ou
-     clonar cardápio?'. Nada criado lá. Acrescentada à mão: regenerar este arquivo
-     apagaria o que foi editado direto aqui (o sinal 'tarefa', 28/09). */
+  /* 01/10/26 — a janela "Enviar para onboarding" do kanban (docs/09). A propriedade
+     existe no HubSpot com este nome exato, label "Cliente vai montar ou clonar
+     cardápio?", e é a que o pipeline de onboarding já lê. Nada criado lá. */
   'cliente_vai_montar_ou_clonar_cardapio_',
   /* 02/10/26 — a janela completa de "Enviar para onboarding": os MESMOS campos que o app
      manda nessa etapa (src/constants/stages.ts), conferidos no HubSpot. cardapio_da_loja
@@ -2954,6 +2953,7 @@ module.exports = async function handler(req, res) {
                   })
           });
           const buscaData = await buscaResp.json();
+          if (!buscaResp.ok) return res.status(502).json({ erro: 'O HubSpot não respondeu à conferência de empresa duplicada (HTTP ' + buscaResp.status + '). Tente de novo em instantes.' });
           if (buscaResp.ok && buscaData.results && buscaData.results.length > 0) {
                   // BUG REAL ENCONTRADO E CORRIGIDO (15/08/26): quando já existia uma Company
                   // com o mesmo nome, a rota só devolvia 409 e parava — o lead ficava pra
@@ -2978,7 +2978,10 @@ module.exports = async function handler(req, res) {
                   }
                   return res.status(409).json({ erro: 'Existe uma empresa chamada "' + lead.nome + '" no HubSpot (id ' + achado.id + '), mas em cidade diferente — confira manualmente antes de criar ou vincular.' });
           }
-    } catch (e) { }
+    } catch (e) {
+          /* sem conferir se a empresa já existe, não cria: criar às cegas fazia duplicada (14/10/26) */
+          return res.status(502).json({ erro: 'Não consegui conferir no HubSpot se a empresa já existe. Tente de novo em instantes.' });
+    }
 
     const linhasDesc = [
           lead.telefone ? 'Telefone: ' + lead.telefone : null,
@@ -3160,7 +3163,8 @@ module.exports = async function handler(req, res) {
     return res.status(401).json({ erro: 'Não foi possível validar a sessão.' });
   }
   if (!emailLogado) return res.status(401).json({ erro: 'Sessão sem e-mail associado.' });
-  if (USUARIOS.length && !USUARIOS.some(u => String(u.email).toLowerCase() === emailLogado)) {
+  /* lista vazia (o arquivo não carregou) não libera ninguém: fail-closed (14/10/26) */
+  if (!USUARIOS.some(u => String(u.email).toLowerCase() === emailLogado)) {
     return res.status(403).json({ erro: 'E-mail logado não está cadastrado no time.' });
   }
 
@@ -3626,7 +3630,8 @@ module.exports = async function handler(req, res) {
     return res.status(401).json({ erro: 'Não foi possível validar a sessão.' });
   }
   if (!emailLogado) return res.status(401).json({ erro: 'Sessão sem e-mail associado.' });
-  if (USUARIOS.length && !USUARIOS.some(u => String(u.email).toLowerCase() === emailLogado)) {
+  /* lista vazia (o arquivo não carregou) não libera ninguém: fail-closed (14/10/26) */
+  if (!USUARIOS.some(u => String(u.email).toLowerCase() === emailLogado)) {
     return res.status(403).json({ erro: 'E-mail logado não está cadastrado no time.' });
   }
 
@@ -4488,6 +4493,24 @@ function mesclarRestaurante(base, novo) {
    comeco de tres verdades — alguem corrige um bairro num lado, esquece nos outros, e o
    lead cai para quem nao pediu aquele territorio. Uma fonte: lib/territorios.js. */
 const { rotearTerritorio, semAcento } = require('../lib/territorios.js');
+let CACHE_NOMES_CRM = null;
+async function nomesDoCrmPeloSnapshot(url, chave) {
+  if (CACHE_NOMES_CRM && Date.now() - CACHE_NOMES_CRM.em < 10 * 60 * 1000) return CACHE_NOMES_CRM.nomes;
+  const nomes = new Set();
+  const poe = (l) => { if (l && l.name) nomes.add(String(l.name).toLowerCase().trim()); };
+  try {
+    const r = await fetch(url + '/rest/v1/cockpit_snapshot?select=f:conteudo->funilLeads,t:conteudo->temperatura&chave=eq.hubspot',
+      { headers: { apikey: chave, Authorization: 'Bearer ' + chave } });
+    if (!r.ok) return nomes;
+    const linha = ((await r.json()) || [])[0] || {};
+    Object.values(linha.f || {}).forEach(lista => (lista || []).forEach(poe));
+    ((linha.t || {}).quentes || []).forEach(poe);
+    ((linha.t || {}).frios || []).forEach(poe);
+  } catch (e) { return nomes; }
+  if (nomes.size) CACHE_NOMES_CRM = { em: Date.now(), nomes };
+  return nomes;
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -4589,6 +4612,11 @@ module.exports = async function handler(req, res) {
     (completo.temperatura.quentes || []).forEach(l => l.name && nomesNoHubspot.add(l.name.toLowerCase().trim()));
     (completo.temperatura.frios || []).forEach(l => l.name && nomesNoHubspot.add(l.name.toLowerCase().trim()));
   } catch (e) { /* dedup best-effort */ }
+  /* SEM O SNAPSHOT LOCAL (14/10/26): na Vercel e no APP os arquivos do CRM saíram do repositório
+     (02/09), então a montagem acima quebra e o conjunto ficava vazio — desde 26/09 nenhuma conta
+     importada saía marcada como já existente no HubSpot. Os nomes vêm agora do cockpit_snapshot
+     que o robô grava, só as duas partes que importam, com cache de 10 min por instância. */
+  if (!nomesNoHubspot.size) nomesNoHubspot = await nomesDoCrmPeloSnapshot(supaUrl, supaService);
 
   // Régua oficial: somente volume de avaliações. Nota é contexto, nunca corte nem
   // desempate. O mínimo pode ser ajustado por lote, sempre com relatório explícito.
@@ -4770,6 +4798,7 @@ module.exports = async function handler(req, res) {
   return res.status(200).json(resultado);
 };
 
+module.exports.nomesDoCrmPeloSnapshot = nomesDoCrmPeloSnapshot;
 
   },
   "scripts/montar-dados.js": function (module, exports, require, process) {
@@ -5222,6 +5251,8 @@ function montarDadosCompletos() {
     funil: hubspot.funil,
     /* SEM ISTO A TRILHA DE ETAPAS DA FICHA NAO DESENHA — ver comEtapaNoLead. */
     funilLeads: comEtapaNoLead(hubspot.funilLeads),
+    /* o funil de quem está fora do time (02/10/26): só a visão de executivo do dono o recebe */
+    funilForaDoTime: hubspot.funilForaDoTime || null,
     /* o numero de quem saiu do time viaja DENTRO de kpisHub, que a tela ja recebe
        inteiro — passar de novo no topo era um caminho que a lista branca do recorte por
        papel descartava em silencio. */
@@ -5231,6 +5262,8 @@ function montarDadosCompletos() {
     perdidoVisivel: hubspot.perdidoVisivel || null,
     onboardingVisivel: hubspot.onboardingVisivel || null,
     leadsReciclagem60: hubspot.leadsReciclagem60 || [],
+    /* todos os reciclados, para a coluna Reciclagem do kanban (01/10/26) */
+    leadsReciclagem: hubspot.leadsReciclagem || null,
     vendasMes,
     temperatura: temperaturaComPraca,
     stageMeta: hubspot.stageMeta || { slaDays: {}, descriptions: {}, labels: {} },
@@ -5388,7 +5421,12 @@ function resumoDeColega(r) {
 }
 
 function filtrarParaPapel(dados, usuario) {
-  if (!usuario || usuario.role === 'manager') return dados;
+  if (!usuario || usuario.role === 'manager') {
+    /* a gaveta de quem está fora do time não desce para o gestor: ele vê o time */
+    if (!dados || !dados.funilForaDoTime) return dados;
+    const { funilForaDoTime, ...semGaveta } = dados;
+    return semGaveta;
+  }
 
   const meuId = String(usuario.ownerId);
   const soMeu = lista => (lista || []).filter(x => String(x.ownerId) === meuId);
@@ -5430,6 +5468,15 @@ function filtrarParaPapel(dados, usuario) {
   Object.entries(dados.funilLeads || {}).forEach(([stage, leads]) => {
     funilLeads[stage] = soMeu(leads);
   });
+  /* QUEM ESTÁ FORA DO TIME (02/10/26) vê o próprio funil pela gaveta à parte; os ids já
+     vistos não se repetem, caso o mesmo negócio também esteja no funil do time */
+  const daGaveta = (dados.funilForaDoTime || {})[meuId];
+  if (daGaveta) {
+    Object.entries(comEtapaNoLead(daGaveta)).forEach(([stage, leads]) => {
+      const ja = new Set((funilLeads[stage] || []).map(l => String(l.id)));
+      funilLeads[stage] = (funilLeads[stage] || []).concat((leads || []).filter(l => !ja.has(String(l.id))));
+    });
+  }
   /* O corte de Perdido nao tem nome de ninguem: e a data em que o Cockpit passou a
      registrar perda. Vai inteiro para o executivo. */
   const perdidoVisivel = dados.perdidoVisivel || null;
@@ -5495,6 +5542,9 @@ function filtrarParaPapel(dados, usuario) {
 
   return {
     ...dados,
+    /* a gaveta de quem está fora do time nunca desce inteira para um executivo: o dono
+       a recebe já costurada em funilLeads, acima (02/10/26) */
+    funilForaDoTime: null,
     habitosTime,
     /* SEM ESTA LINHA o spread acima entregaria cadenciaDiaria.porOwner INTEIRO ao
        executivo — a atividade diária de cada colega no payload dele. Declarar
@@ -5544,6 +5594,7 @@ function filtrarParaPapel(dados, usuario) {
     perdidoVisivel,
     onboardingVisivel,
     leadsReciclagem60: soMeu(dados.leadsReciclagem60 || []),
+    leadsReciclagem: dados.leadsReciclagem ? soMeu(dados.leadsReciclagem) : null,
     vendasMes,
     resumoSemanal: resumoSemanalFiltrado,
     agenda,
@@ -5675,6 +5726,25 @@ const USUARIOS_PARA_ID = (() => {
     return m;
   } catch (e) { return {}; }
 })();
+
+/* QUEM SAIU DO TIME NÃO É DONO (02/10/26). `desligado:true` em data/usuarios.json tira a
+   pessoa das regras cravadas abaixo (centro de zona, zona escrita, lista de bairros): o
+   lead fica sem dono para o gestor atribuir, em vez de cair na carteira de quem não abre
+   mais o app. Foi o furo da saída do Luiz: o centro de zona dele no Rio seguia valendo.
+   No servidor do APP (14/10/26) a lista de usuários só traz quem está ativo, sem a marca; lá os
+   desativados chegam em data/desligados.json (equipe_cockpit ativo=false), que o index.ts entrega
+   vivo. Fora do APP esse arquivo não existe e vale só a marca. As duas fontes são lidas a cada
+   consulta, porque no APP elas são preenchidas depois do carregamento do módulo. */
+let FONTE_USUARIOS = null, FONTE_DESLIGADOS = null;
+try { FONTE_USUARIOS = require('../data/usuarios.json'); } catch (e) { /* sem lista: ninguém sai */ }
+try { FONTE_DESLIGADOS = require('../data/desligados.json'); } catch (e) { /* só existe no APP */ }
+function ehDesligado(owner) {
+  const u = FONTE_USUARIOS;
+  const lista = Array.isArray(u) ? u : ((u && u.usuarios) || []);
+  if (lista.some(x => x && x.desligado && x.ownerId && String(x.ownerId) === owner)) return true;
+  return Array.isArray(FONTE_DESLIGADOS) && FONTE_DESLIGADOS.some(x => x && x.ownerId && String(x.ownerId) === owner);
+}
+function ehDono(x) { return !!x && !ehDesligado(String(x.owner)); }
 
 function idDoNome(nome, fallback) {
   return USUARIOS_PARA_ID[semAcento(nome)] || fallback || null;
@@ -6028,7 +6098,7 @@ function kmEntre(lat1, lng1, lat2, lng2) {
 function donoPorProximidade(cidade, lat, lng) {
   if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return null;
   const cid = semAcento(cidade);
-  const candidatos = CENTROS_DE_ZONA.filter(c => cid.includes(c.cidade));
+  const candidatos = CENTROS_DE_ZONA.filter(c => cid.includes(c.cidade) && ehDono(c));
   if (!candidatos.length) return null;
   let melhor = null, menor = Infinity;
   for (const c of candidatos) {
@@ -6053,7 +6123,7 @@ function donoPorZonaEscrita(cidade, bairro) {
   const cid = semAcento(cidade);
   if (!cid.includes(SAOPAULO)) return null;
   const b = semAcento(bairro);
-  const z = ZONAS_ESCRITAS.find(x => x.marca.some(m => b.includes(m)));
+  const z = ZONAS_ESCRITAS.find(x => x.marca.some(m => b.includes(m)) && ehDono(x));
   return z
     ? { owner: z.owner, nome: z.nome, praca: z.nome + ' · zona escrita no nome do bairro', porZonaEscrita: true }
     : null;
@@ -6137,13 +6207,13 @@ function regraDoTerritorio(cidade, bairro, lat, lng) {
   const cidadeDetalhada = Object.keys(CIDADES_COM_BAIRRO_DECLARADO)
     .some(function (c) { return cid.indexOf(c) > -1; });
   if (cidadeDetalhada) return null;
-  const porNome = TERRITORIOS.find(x => (!x.cidade || cid.includes(x.cidade)) && x.teste(chave) && !x.sobra);
+  const porNome = TERRITORIOS.find(x => (!x.cidade || cid.includes(x.cidade)) && x.teste(chave) && !x.sobra && ehDono(x));
   if (porNome) return porNome;
   const porZona = donoPorZonaEscrita(cidade, bairro);
   if (porZona) return porZona;
   const porCoord = donoPorProximidade(cidade, lat, lng);
   if (porCoord) return porCoord;
-  return TERRITORIOS.find(x => (!x.cidade || cid.includes(x.cidade)) && x.teste(chave)) || null;
+  return TERRITORIOS.find(x => (!x.cidade || cid.includes(x.cidade)) && x.teste(chave) && ehDono(x)) || null;
 }
 
 module.exports = { TERRITORIOS, DECLARADOS, DIVISORES, donoPorMeridiano, FORA_DE_ROTA, estaForaDeRota, bairroLimpo, CIDADES_COM_BAIRRO_DECLARADO, SOBRAS_DE_MUNICIPIO, CENTROS_DE_ZONA, ZONAS_ESCRITAS, rotearTerritorio, regraDoTerritorio, donoPorProximidade, donoPorZonaEscrita, kmEntre, semAcento };
@@ -6185,7 +6255,15 @@ module.exports = { TERRITORIOS, DECLARADOS, DIVISORES, donoPorMeridiano, FORA_DE
 //   SUPABASE_URL / SUPABASE_ANON_KEY -> para validar a sessão do gestor
 
 const { CIDADES, buscarCidade, importarLote } = require('../scripts/backfill-casa-dos-dados.js');
-const { montarDadosCompletos } = require('../scripts/montar-dados.js');
+/* QUEM PODE DISPARAR (14/10/26): a lista vem de data/usuarios.json, como em criar-negocio e
+   desfazer-negocio. Antes vinha de montarDadosCompletos(), que abre o snapshot do CRM; sem ele
+   (Vercel e APP Outbound) a montagem quebrava e a rota respondia "Não foi possível validar a
+   sessão" a todo mundo desde 26/09. No APP este arquivo vem vivo de equipe_cockpit. */
+let USUARIOS = [];
+try {
+  const raw = require('../data/usuarios.json');
+  USUARIOS = Array.isArray(raw) ? raw : ((raw && raw.usuarios) || []);
+} catch (e) { USUARIOS = []; }
 
 /* teto de segurança: o botão é do gestor, mas uma requisição HTTP não pode paginar a
    Casa dos Dados por minutos. 100 é o topo que a própria tela oferece. */
@@ -6222,7 +6300,6 @@ module.exports = async (req, res) => {
     });
     if (!check.ok) return res.status(401).json({ erro: 'Sessão inválida ou expirada.' });
     const email = String(((await check.json()) || {}).email || '').toLowerCase();
-    const USUARIOS = (montarDadosCompletos().usuarios) || [];
     const u = email ? USUARIOS.find(x => String(x.email).toLowerCase() === email) : null;
     if (!u || u.role !== 'manager') {
       return res.status(403).json({ erro: 'Só o gestor dispara importação de praça.' });
@@ -6262,12 +6339,17 @@ module.exports = async (req, res) => {
       });
     }
     const r = await importarLote(leads, importSecret);
+    /* o lote que falhou não vira "0 inseridas" na tela: diz o motivo (14/10/26) */
+    if (r.erro && !(r.inseridos || r.duplicados)) {
+      return res.status(502).json({ erro: 'A busca trouxe ' + leads.length + ' contas, mas a importação falhou: ' + r.erro });
+    }
     return res.status(200).json({
       ok: true,
       municipio: cfgOriginal.municipio,
       encontrados: leads.length,
       inseridos: r.inseridos || 0,
       duplicados: r.duplicados || 0,
+      aviso: r.erro ? 'Parte do lote falhou: ' + r.erro : undefined,
       pedidoPor: quemPediu
     });
   } catch (e) {
@@ -6637,8 +6719,30 @@ async function buscarCidade(cidadeCfg, casaToken) {
   return { leads: leadsFinais, porMeta: contagemPorMeta() };
 }
 
+/* EM PEDAÇOS (06/10/26). Desde que a importação mora no APP Outbound (Edge Function
+   cockpit-robo), Rio (450 contas) e São Paulo (272) voltavam 546 e 503: a Edge estoura
+   memória/tempo num lote só, e as cidades pequenas passavam. Lotes de 80, cada um com uma
+   nova tentativa se a recusa for de limite (5xx); um lote que falha não derruba os outros. */
+const TAMANHO_DO_LOTE = 80;
 async function importarLote(leadsCidade, importSecret) {
   if (leadsCidade.length === 0) return { inseridos: 0, duplicados: 0 };
+  let inseridos = 0, duplicados = 0;
+  const erros = [];
+  for (let i = 0; i < leadsCidade.length; i += TAMANHO_DO_LOTE) {
+    const pedaco = leadsCidade.slice(i, i + TAMANHO_DO_LOTE);
+    let r = await importarPedaco(pedaco, importSecret);
+    if (r.erro && /^5\d\d$/.test(String(r.status))) {
+      await new Promise(ok => setTimeout(ok, 4000));
+      r = await importarPedaco(pedaco, importSecret);
+    }
+    if (r.erro) erros.push(`lote ${i / TAMANHO_DO_LOTE + 1}: ${r.erro}`);
+    inseridos += r.inseridos || 0;
+    duplicados += r.duplicados || 0;
+  }
+  return erros.length ? { inseridos, duplicados, erro: erros.join(' · ') } : { inseridos, duplicados };
+}
+
+async function importarPedaco(leadsCidade, importSecret) {
   const resp = await fetch(`${COCKPIT_URL}/api/importar-leads`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-import-secret': importSecret },
@@ -6650,7 +6754,7 @@ async function importarLote(leadsCidade, importSecret) {
     // Repassa o diagnóstico do endpoint (presença/tamanho/trim do segredo — nunca o
     // valor). Sem isto, "recusado" não distingue variável ausente de valor diferente.
     if (data.diagnosticoSegredo) console.log('[backfill-casa-dos-dados] Diagnóstico do segredo:', JSON.stringify(data.diagnosticoSegredo));
-    return { inseridos: 0, duplicados: 0, erro: data.erro || String(resp.status) };
+    return { inseridos: 0, duplicados: 0, erro: data.erro || String(resp.status), status: resp.status };
   }
   return data;
 }

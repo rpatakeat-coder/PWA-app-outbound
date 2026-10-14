@@ -43,7 +43,7 @@ const ROTAS = [
 // Os .json que o codigo pede e que o index.ts entrega vivos (equipe e configuracao).
 const JSON_SERVIDOS = ['data/usuarios.json', 'data/territorios.json', 'data/redes-excluidas.json', 'data/maptiler-config.json',
   'data/leads-referencia.json', 'data/cadencias.json', 'data/comissionamento.json', 'data/temperatura.json',
-  'data/supabase-config.json'];
+  'data/supabase-config.json', 'data/desligados.json'];
 // Os que o Cockpit pede com requireOpcional e que aqui NAO existem: o index.ts
 // lanca, o requireOpcional devolve null — o mesmo que acontece na Vercel, onde
 // esses arquivos sairam do repositorio em 02/09 (o snapshot vive no banco).
