@@ -4015,7 +4015,11 @@ function MainApp() {
     setPosicionarDeal({ dealId, nome });
     setCreationCenter({ latitude: centro.latitude, longitude: centro.longitude });
     setCreationMode(true);
+    /* 15/10/26 (Marco: "o mapa some"): o mapa abre SEMPRE perto da pessoa, no zoom de rua. O
+       animateToRegion agora espera o mapa ter tamanho; sem GPS, o lugar é o último conhecido e o
+       aviso diz para arrastar até a porta. */
     setTimeout(() => mapRef.current?.animateToRegion({ ...centro, latitudeDelta: 0.004, longitudeDelta: 0.004 }, 300), 400);
+    if (!userLocation) Toast.mostrar('Sem GPS agora: arraste o mapa até a porta do restaurante.', 'fila');
   }, [userLocation, mapCenter]);
   const irParaMim = useCallback(() => {
     if (!userLocation) { Toast.mostrar('Sem GPS agora: arraste o mapa até o lugar.', 'fila'); return; }
@@ -6335,7 +6339,8 @@ function MainApp() {
         pointerEvents="none"
       >
         {modoNovo && !layout.ehLargo && <AvisoSemSinal />}
-        {((showOnlyMyArea && viewportTooWide) || isLoading || waitingForLocation) && (
+        {/* posicionando um negócio, o aviso de carregar clientes só confunde (15/10/26) */}
+        {!creationMode && ((showOnlyMyArea && viewportTooWide) || isLoading || waitingForLocation) && (
           <View style={styles.areaStatusPill}>
             {showOnlyMyArea && viewportTooWide ? (
               <IconText Icone={IconSearch} style={styles.areaStatusText} tone="onSurface">Aproxime para carregar os clientes desta região</IconText>

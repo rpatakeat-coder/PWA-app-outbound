@@ -173,6 +173,8 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
+  /* destino pedido enquanto o mapa ainda não tinha tamanho (ver animateToRegion) */
+  const pedidoRegiao = useRef<Region | null>(null);
   const clustererRef = useRef<MarkerClusterer | null>(null);
   const [ctx, setCtx] = useState<MapChildContextValue | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -474,13 +476,27 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
       },
 
       animateToRegion: (region) => {
-        const map = mapInstanceRef.current;
-        if (!map) return;
-        const div = map.getDiv();
-        if (!div || div.clientWidth < 40 || div.clientHeight < 40) return; // mapa sem tamanho: o Google trava
-        // fitBounds respeita o delta pedido melhor que setZoom+panTo, que
-        // arredondaria o zoom e mudaria a area enquadrada.
-        map.fitBounds(regionToBounds(region), 0);
+        /* O MAPA NÃO DESISTE CALADO (15/10/26). Logo depois de fechar a busca ou trocar de aba o
+           mapa ainda não existe ou não tem tamanho, e a ida era descartada: o "Posicionar" do Marco
+           ficava no lugar e no zoom de antes (300 km longe, sem pinos). Agora o destino fica
+           guardado e é aplicado assim que o mapa tiver tamanho, tentando por até ~3 s; um pedido
+           novo substitui o anterior. */
+        pedidoRegiao.current = region;
+        let tentativas = 0;
+        const aplicar = () => {
+          if (pedidoRegiao.current !== region) return; // chegou um destino mais novo
+          const map = mapInstanceRef.current;
+          const div = map ? map.getDiv() : null;
+          if (!map || !div || div.clientWidth < 40 || div.clientHeight < 40) { // mapa sem tamanho: o Google trava
+            if (tentativas++ < 20) setTimeout(aplicar, 150);
+            return;
+          }
+          pedidoRegiao.current = null;
+          // fitBounds respeita o delta pedido melhor que setZoom+panTo, que
+          // arredondaria o zoom e mudaria a area enquadrada.
+          map.fitBounds(regionToBounds(region), 0);
+        };
+        aplicar();
       },
 
       animateCamera: (camera) => {
