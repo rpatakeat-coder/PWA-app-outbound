@@ -608,7 +608,7 @@ export function useClients(
             .from('clients').select(CLIENT_LIST_COLUMNS).eq('id', clientId).single();
           if (e2) throw e2;
           if (hubspotJaRodou(acaoId)) return mapRow(row);
-          repeticao = row as Record<string, unknown>;
+          repeticao = row as unknown as Record<string, unknown>;
         }
       }
       let { data, error } = repeticao ? { data: repeticao as unknown, error: null as { code?: string; message?: string } | null } : await supabase.rpc('mark_client_as_visited', {
