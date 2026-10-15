@@ -3,7 +3,7 @@
 // Julyan: "essas mensagens de leads sem próximo passo quero enviar automaticamente no
 // grupo do field sales todo dia às 18:00". A Vercel chama esta rota pelo cron do
 // vercel.json (21:00 UTC = 18:00 de Brasília, segunda a sexta) e ela manda, pelo Uazapi,
-// uma mensagem por executivo com os negócios dele que não têm próximo passo.
+// UMA mensagem no grupo, com um bloco por executivo e os negócios dele sem próximo passo.
 //
 // A REGRA É A MESMA DO COCKPIT (gv2-dados.js, semPasso): negócio aberto de Visita a
 // Negociação (Prospecção e Ag. Pagamento ficam fora), sem tarefa, reunião ou atividade
@@ -49,7 +49,7 @@ function segundaDe(iso) {
 }
 const reais = (n) => 'R$ ' + Math.round(n).toLocaleString('pt-BR');
 
-/** A conta inteira, sem rede: entra o que foi lido, sai uma mensagem por executivo.
+/** A conta inteira, sem rede: entra o que foi lido, sai UMA mensagem para o grupo (lista com 0 ou 1 item).
  *  Exportada para o teste (e para conferir contra o Cockpit). */
 function montarMensagens({ funilLeads, time, planos, paradas, hoje }) {
   const noPlano = new Set();
@@ -96,31 +96,32 @@ function montarMensagens({ funilLeads, time, planos, paradas, hoje }) {
     (porDono[String(l.ownerId)] = porDono[String(l.ownerId)] || []).push({ nome, rotulo: ROTULO[ordem], ordem, mrr, dias });
   });
 
-  const mensagens = [];
-  Object.keys(time)
+  /* UMA MENSAGEM SÓ PARA O GRUPO (Julyan, 15/10/26: "tem que ser uma mensagem só dos 7
+     executivos, não 1 por executivo"): um bloco por pessoa, de quem tem mais para quem tem menos */
+  const donos = Object.keys(time)
     .filter((o) => (porDono[o] || []).length)
-    .sort((a, b) => porDono[b].length - porDono[a].length)
-    .forEach((o) => {
-      const lista = porDono[o].sort((a, b) => b.ordem - a.ordem || b.mrr - a.mrr || b.dias - a.dias);
-      const prioridade = lista.filter((x) => x.ordem >= 3);
-      const deEtapa = (ordem) => lista.filter((x) => x.ordem === ordem).map((x) => x.nome);
-      const n = lista.length;
-      const linhas = [
-        `Fala, ${time[o].primeiro}! 👋`,
-        '',
-        `Fechamento do dia: *${n} ${n === 1 ? 'negócio' : 'negócios'} sem próximo passo marcado* (nada agendado no HubSpot, no Planejamento ou na rota do app).`,
-      ];
-      if (prioridade.length) {
-        linhas.push('', '🔥 *Prioridade:*');
-        prioridade.forEach((x) => linhas.push(`• *${x.nome}*: ${x.rotulo}${x.ordem === 4 ? ', quente' : ''}${x.mrr ? ', ' + reais(x.mrr) : ''}${x.dias >= 7 ? ` (${x.dias} dias parado)` : ''}`));
-      }
-      const dec = deEtapa(2), vis = deEtapa(1);
-      if (dec.length) linhas.push('', '*Decisor:*', dec.join(', '));
-      if (vis.length) linhas.push('', '*Visita:*', vis.join(', '));
-      linhas.push('', 'Para contar como próximo passo: tarefa ou reunião com data no HubSpot, ou o negócio num dia do Planejamento. Valeu! 💪');
-      mensagens.push({ dono: o, nome: time[o].nome, total: n, texto: linhas.join('\n') });
-    });
-  return mensagens;
+    .sort((a, b) => porDono[b].length - porDono[a].length);
+  if (!donos.length) return [];
+  const total = donos.reduce((s, o) => s + porDono[o].length, 0);
+  const [, mm, dd] = hoje.split('-');
+  const linhas = [
+    `📋 *Negócios sem próximo passo · ${dd}/${mm}*`,
+    `${total} ${total === 1 ? 'negócio' : 'negócios'} sem nada agendado no HubSpot, no Planejamento ou na rota do app.`,
+  ];
+  const por = [];
+  donos.forEach((o) => {
+    const lista = porDono[o].sort((a, b) => b.ordem - a.ordem || b.mrr - a.mrr || b.dias - a.dias);
+    const prioridade = lista.filter((x) => x.ordem >= 3);
+    const deEtapa = (ordem) => lista.filter((x) => x.ordem === ordem).map((x) => x.nome);
+    linhas.push('', '━━━━━━━━━━', `*${time[o].nome} (${lista.length})*`);
+    prioridade.forEach((x) => linhas.push(`🔥 *${x.nome}*: ${x.rotulo}${x.ordem === 4 ? ', quente' : ''}${x.mrr ? ', ' + reais(x.mrr) : ''}${x.dias >= 7 ? ` (${x.dias} dias parado)` : ''}`));
+    const dec = deEtapa(2), vis = deEtapa(1);
+    if (dec.length) linhas.push(`*Decisor:* ${dec.join(', ')}`);
+    if (vis.length) linhas.push(`*Visita:* ${vis.join(', ')}`);
+    por.push(time[o].nome + ' ' + lista.length);
+  });
+  linhas.push('', '━━━━━━━━━━', 'Para contar como próximo passo: tarefa ou reunião com data no HubSpot, ou o negócio num dia do Planejamento. Valeu, time! 💪');
+  return [{ total, por, texto: linhas.join('\n') }];
 }
 
 async function lerSupabase(caminho, chave) {
@@ -176,7 +177,7 @@ async function handler(req, res) {
       enviadas++;
       await new Promise((ok) => setTimeout(ok, 1500)); // uma por vez: o WhatsApp não gosta de rajada
     }
-    return res.status(200).json({ hoje, enviadas, por: mensagens.map((m) => m.nome + ' ' + m.total) });
+    return res.status(200).json({ hoje, enviadas, por: mensagens.length ? mensagens[0].por : [] });
   } catch (e) {
     console.error('avisos-sem-passo:', e);
     return res.status(500).json({ erro: String((e && e.message) || e) });
