@@ -72,9 +72,8 @@ type Desenho = {
 /** A função pin() da prancha, com +4 px. */
 export function desenhoDoPino(p: Props): Desenho {
   const { pino, papel, planoNumero, visitado, naFila, selecionado, pilhaN = 1, pilhaCor, discreto = false } = p;
-  /* o recém-aberto é limão neon nos dois temas (era preto e branco e sumia); o "oco" (61–90 dias)
-     inverte: fundo escuro, borda e número limão */
-  const rec = { bg: COR.rec, fg: COR.recTinta, bd: COR.recTinta, oco: '#121417' };
+  /* o recém-aberto é limão neon nos dois temas (era preto e branco e sumia) */
+  const rec = { bg: COR.rec, fg: COR.recTinta, bd: COR.recTinta };
   let s = 24; let bg: string = pino.cor; let fg = '#FFFFFF'; let tx = pino.glifo; let fs = 11; let diam = false;
   let bw = 2.5; let bst: 'solid' | 'dashed' = 'solid'; let bc = '#FFFFFF'; let op = 1; let logo = false; let lw = 0; let halo = false;
   const f = pino.familia;
@@ -82,7 +81,8 @@ export function desenhoDoPino(p: Props): Desenho {
   if (f === 'rec') {
     const d = pino.abertoHa ?? 0;
     diam = true; s = d <= 30 ? 23 : d <= 60 ? 20 : 18; bg = rec.bg; fg = rec.fg; bw = 2; bc = rec.bd; tx = String(d); fs = d <= 30 ? 12 : 11;
-    if (d > 60) { bg = rec.oco; fg = rec.bg; bc = rec.bg; bw = 2.5; }
+    /* o "oco" de 61–90 dias saiu (15/10/26): na rua quase todo recém-aberto tinha mais de 60 dias e
+       o mapa voltava a ficar escuro; a idade fica no número e no tamanho */
   }
   if (f === 'av' || f === 'alvo') { s = 26; tx = pino.nota != null ? pino.nota.toFixed(1).replace('.', ',') : ''; fs = 10; }
   if (f === 'cli') { s = 24; logo = true; lw = 13; tx = ''; }
