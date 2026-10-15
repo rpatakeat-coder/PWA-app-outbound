@@ -107,7 +107,8 @@ export function desenhoDoPino(p: Props): Desenho {
     if (f === 'cli') lw = 22;
   }
   // cliente é carteira da empresa (pinoP2 o marca como colega quando não tem vendedor): não desbota
-  if (pino.dono === 'colega' && f !== 'cli' && !selecionado && papel !== 'proxima') { op = Math.min(op, 0.55); bw = 1.5; s -= 2; }
+  // o recém-aberto não desbota (é o pino que tem de chamar o olho; o gestor vê os de todo o time)
+  if (pino.dono === 'colega' && f !== 'cli' && f !== 'rec' && !selecionado && papel !== 'proxima') { op = Math.min(op, 0.55); bw = 1.5; s -= 2; }
   if (pino.dono === 'sem' && f !== 'cli') { bst = 'dashed'; bc = '#FACC15'; bw = 2.5; }
   if (pilhaN > 1) { s = 32; bg = '#111418'; bw = 3; bst = 'solid'; bc = pilhaCor ?? pino.cor; tx = String(pilhaN); fs = 13; logo = false; diam = false; fg = '#FFFFFF'; op = 1; }
   /* CONTA-ALVO DISCRETA (Julyan, 15/10/26: "as contas-alvo podem ficar mais transparentes, mas

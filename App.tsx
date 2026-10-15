@@ -592,7 +592,8 @@ const MarkerP2 = React.memo(
           // "que círculo é esse?" (Julyan, 15/10/26): o halo vermelho se explica no próprio nome
           sinal={papel === 'proxima' ? ['próxima porta', sinalDoPino(pino)].filter(Boolean).join(' · ') : selecionado || rotulo ? sinalDoPino(pino) : null}
           pilhaN={pilhaN}
-          pilhaCor={pino.cor}
+          // pilha liderada por recém-aberto: anel limão (o recém-aberto tem de chamar o olho até empilhado)
+          pilhaCor={pino.familia === 'rec' ? COR_DO_PINO.rec : pino.cor}
           leque={leque}
           sol={sol}
           rotulo={rotulo}
@@ -2876,7 +2877,11 @@ function MainApp() {
     const janela = mapRegion ? { ...mapRegion, larguraPx, alturaPx } : null;
     // Pilhas (C11): corpos que se sobrepõem na tela viram um pino com número.
     const todos = foco.filter((it) => !quietos.has(it.c.id)).map((it) => ({ id: it.c.id, lat: it.c.latitude as number, lng: it.c.longitude as number, prioridade: prioridade(it) }));
-    const pilhas: Pilha[] = janela ? pilhasNaTela(todos, janela) : todos.map((t) => ({ lider: t.id, membros: [t.id] }));
+    /* clientes empilham só entre si (15/10/26): no Meu dia com clientes, o recém-aberto e o lead
+       sumiam dentro de uma pilha liderada pelo vizinho cliente */
+    const ehCli = new Set(foco.filter((it) => it.p.familia === 'cli' && it.plano == null && it.c.id !== selectedClient?.id).map((it) => it.c.id));
+    const empilhar = (xs: typeof todos): Pilha[] => (janela ? pilhasNaTela(xs, janela) : xs.map((t) => ({ lider: t.id, membros: [t.id] })));
+    const pilhas: Pilha[] = [...empilhar(todos.filter((t) => !ehCli.has(t.id))), ...empilhar(todos.filter((t) => ehCli.has(t.id)))];
     const pilhaDeId = new Map<string, Pilha>();
     for (const pl of pilhas) for (const m of pl.membros) pilhaDeId.set(m, pl);
     const focoPorId = new Map(foco.map((x) => [x.c.id, x]));
