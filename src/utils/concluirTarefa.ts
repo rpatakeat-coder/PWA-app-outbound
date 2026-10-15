@@ -58,7 +58,17 @@ export async function enviarConclusao(p: PedidoConclusao): Promise<void> {
   });
   if (error) {
     const ctx = (error as { context?: Response }).context;
-    if (ctx && typeof ctx.status === 'number') throw new RecusaDoServidor(error.message, ctx.status);
+    if (ctx && typeof ctx.status === 'number') {
+      // FunctionsHttpError: o motivo do servidor vem no corpo ({ error, detail } da hubspot-sync);
+      // sem ler, a tela mostrava "Edge Function returned a non-2xx status code".
+      let motivo = error.message;
+      try {
+        const j = await ctx.clone().json();
+        const base = j && (j.error || j.erro || j.message);
+        motivo = (base && j.detail ? `${base}: ${j.detail}` : base || j?.detail) || motivo;
+      } catch { /* corpo não-JSON */ }
+      throw new RecusaDoServidor(String(motivo), ctx.status);
+    }
     throw error;
   }
   if ((data as { error?: string } | null)?.error) {
