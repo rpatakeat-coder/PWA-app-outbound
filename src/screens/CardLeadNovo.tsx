@@ -13,7 +13,12 @@ import { Toast } from '../components/Toast';
 import type { Client } from '../types/client';
 import { ORIGEM, origemDoFiltro } from '../utils/lentes';
 import { openGoogleMaps, type TravelMode } from '../utils/navigation';
-import type { Pino } from '../utils/pinoP2';
+import type { Pino, TempoDoNegocio } from '../utils/pinoP2';
+import { useQuery } from '@tanstack/react-query';
+import { BlocoParaEntrar } from '../components/ParaEntrar';
+import { useArmaDoPino, useFatosDoNegocio } from '../hooks/useArmaDoPino';
+import { horarioParaFrase, linhaDeReferencia, type Arma } from '../utils/armasDoMapa';
+import { primeiroToque } from '../utils/eventosDoMapa';
 import { distanciaTexto, fatosDoCard, sinaisDoCliente } from '../utils/cardNovo';
 import { ETAPA, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA, ROTULO_PROP, pareceNomeDePessoa, valorValido } from '../utils/fichaDeRua';
 import { supabase } from '../integrations/supabase/client';
@@ -52,6 +57,10 @@ export type AcoesCardNovo = {
   onCompletarArmas?: () => void;
   /** Pôr no plano (Claude Design "um plano só", 06/10/2026): o mapa planeja. */
   onPorNoPlano?: () => void;
+  /** "Fala pronta ›" / "Playbook ›" do bloco Para entrar (prancha "Mapa do Executivo", 15/10/26). */
+  onFala?: (a: Arma) => void;
+  /** Linha "N clientes Takeat a 300 m": mostra só esses pinos por 10 s. */
+  onReferencias?: (ids: string[]) => void;
 };
 
 export type DadosCardNovo = {
@@ -72,20 +81,138 @@ export type DadosCardNovo = {
   cobranca?: { texto: string; assunto: string } | null;
   /** Quem está logado: o status do plano do pino é o plano DELE. */
   uid?: string | null;
+  /** O próximo passo combinado (a tarefa aberta do HubSpot que não é cobrança). */
+  combinado?: { texto: string; quando: string | null } | null;
+  /** Clientes Takeat a até 400 m, o mais perto primeiro (prancha §5). */
+  referencias?: { id: string; nome: string; d: number }[];
+  /** Tempo do negócio no snapshot do Cockpit (dias na etapa do gatilho "cobrar"). */
+  tempo?: TempoDoNegocio | null;
+  /** Cliente Takeat: quantos leads meus e recém-abertos estão a 400 m (a referência da conversa). */
+  pertoDoCliente?: { leads: number; recem: number } | null;
 };
 
 const ROTULO_TEMP: Record<string, string> = { Q: 'LEAD QUENTE', M: 'LEAD MORNO', F: 'LEAD FRIO', X: 'PERDIDO', '?': 'ETAPA NÃO RECONHECIDA' };
 
+// O KICKER POR FAMÍLIA (prancha "Mapa do Executivo", §6): caixa alta, na cor da família.
+// "LEAD MORNO · SEU · DEMO/PROPOSTA", "COBRAR · LEAD QUENTE…", "RECÉM-ABERTO · HÁ 9 DIAS",
+// "MAIS AVALIADO · GOOGLE", "CLIENTE TAKEAT · EM QUEDA", "EX-CLIENTE · RECONQUISTA".
 function kicker(d: DadosCardNovo): string {
   const { pino, client } = d;
   const partes: string[] = [];
-  if (pino.tipo === 'cliente') partes.push('CLIENTE TAKEAT');
-  else if (pino.tipo === 'ex') partes.push('EX-CLIENTE');
-  else if (pino.tipo === 'alvo') partes.push('CONTA-ALVO');
-  else partes.push(ROTULO_TEMP[pino.temp ?? '?']);
+  const f = pino.familia;
+  if (f === 'cli') partes.push(pino.queda ? 'CLIENTE TAKEAT · EM QUEDA' : 'CLIENTE TAKEAT');
+  else if (f === 'ex') partes.push('EX-CLIENTE · RECONQUISTA');
+  else if (f === 'rec') partes.push(pino.abertoHa === 0 ? 'RECÉM-ABERTO · ABRIU HOJE' : `RECÉM-ABERTO · HÁ ${pino.abertoHa} ${pino.abertoHa === 1 ? 'DIA' : 'DIAS'}`);
+  else if (f === 'av') partes.push('MAIS AVALIADO · GOOGLE');
+  else if (f === 'alvo') partes.push('CONTA-ALVO');
+  else {
+    if (pino.etiqueta?.texto === 'cobrar') partes.push('COBRAR');
+    partes.push(ROTULO_TEMP[pino.temp ?? '?']);
+    if (pino.dono === 'meu') partes.push('SEU');
+    const etapa = d.etapaCodigo ? ROTULO_ETAPA[d.etapaCodigo] : null;
+    if (etapa) partes.push(etapa.toUpperCase());
+  }
   if (d.planoNumero) partes.push(`PLANO ${d.planoNumero}`);
   if (!partes.length) partes.push((client.status ?? '').toUpperCase());
   return partes.join(' · ');
+}
+
+function corDoKicker(p: Pino): string {
+  return p.familia === 'rec' ? 'var(--text)' : p.cor;
+}
+
+const LINHA_DA_VISITA = (iso: string | null | undefined): string | null => {
+  if (!iso) return null;
+  const dia = (x: Date) => Math.floor((x.getTime() - 3 * 3600000) / 86400000);
+  const n = dia(new Date()) - dia(new Date(iso));
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n === 0 ? 'hoje' : n === 1 ? 'ontem' : `há ${n} dias`;
+};
+
+/** "54.812.330/0001-07". */
+function cnpjTexto(c: string | null | undefined): string | null {
+  const n = String(c ?? '').replace(/\D/g, '');
+  return n.length === 14 ? `${n.slice(0, 2)}.${n.slice(2, 5)}.${n.slice(5, 8)}/${n.slice(8, 12)}-${n.slice(12)}` : null;
+}
+
+/** O "Para entrar" do cartão: espiada só com o motivo, folha com motivo e fala (prancha §4). */
+function ArmaDoCartao({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; compacto: boolean }) {
+  const ref0 = d.referencias?.[0]?.nome ?? null;
+  const { arma } = useArmaDoPino(d.client, d.pino, {
+    tempo: d.tempo ?? null, etapaCodigo: d.etapaCodigo ?? null, proximo: d.combinado?.texto?.toLowerCase() ?? null, clientePerto: ref0,
+  });
+  if (!arma) return null;
+  return <BlocoParaEntrar arma={arma} compacto={compacto} aoAbrirFala={a.onFala} />;
+}
+
+/** As linhas do topo da folha por família (prancha §6). Nada de campo vazio nem "—". */
+function LinhasDaFamilia({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
+  const { pino: p, client: c } = d;
+  // a MESMA leitura do "Para entrar" (cache compartilhado pela chave): uma ida ao banco
+  const fatos = useFatosDoNegocio(c, p.familia === 'lead').data ?? null;
+  const rec = p.familia === 'rec';
+  const lp = rec && c.lead_prospeccao_id ? String(c.lead_prospeccao_id) : null;
+  const doCnpj = useQuery({
+    queryKey: ['recem-aberto', lp],
+    enabled: !!lp,
+    staleTime: 60 * 60 * 1000,
+    queryFn: async () => {
+      const { data } = await supabase.from('leads_prospeccao').select('cnpj, data_abertura').eq('id', lp!).maybeSingle();
+      return (data ?? null) as { cnpj: string | null; data_abertura: string | null } | null;
+    },
+  });
+  const linhas: { l: string; v: string }[] = [];
+  if (p.familia === 'lead') {
+    if (d.combinado) linhas.push({ l: 'Combinado', v: [d.combinado.texto, d.combinado.quando].filter(Boolean).join(' · ') });
+    if (fatos?.decisor) {
+      const h = horarioParaFrase(fatos.horario);
+      linhas.push({ l: 'Decisor', v: `${fatos.decisor}${fatos.papel ? `, ${fatos.papel.toLowerCase()}` : ''}${h ? ` · está ${h}` : ''}` });
+    }
+    if (fatos?.sistema || fatos?.dor) {
+      linhas.push({ l: 'Hoje usa', v: [fatos.sistema || null, fatos.dor ? `reclama de ${fatos.dor.toLowerCase()}` : null].filter(Boolean).join(' · ') });
+    }
+    const ult = LINHA_DA_VISITA(c.visited_at);
+    if (ult) linhas.push({ l: 'Última visita', v: ult });
+  }
+  if (rec) {
+    const ab = doCnpj.data?.data_abertura ? String(doCnpj.data.data_abertura).slice(0, 10) : null;
+    if (ab) linhas.push({ l: 'Abriu em', v: `${ab.slice(8, 10)}/${ab.slice(5, 7)}/${ab.slice(0, 4)}` });
+    const cn = cnpjTexto(doCnpj.data?.cnpj);
+    if (cn) linhas.push({ l: 'CNPJ', v: cn });
+  }
+  const refs = (d.referencias ?? []).map((r) => ({ id: r.id, nome: r.nome, distanciaM: r.d }));
+  const linhaRef = p.familia === 'cli'
+    ? (d.pertoDoCliente && (d.pertoDoCliente.leads || d.pertoDoCliente.recem)
+      ? `Referência para a conversa: ${[d.pertoDoCliente.leads ? `${d.pertoDoCliente.leads} ${d.pertoDoCliente.leads === 1 ? 'lead seu' : 'leads seus'}` : null, d.pertoDoCliente.recem ? `${d.pertoDoCliente.recem} ${d.pertoDoCliente.recem === 1 ? 'recém-aberto' : 'recém-abertos'}` : null].filter(Boolean).join(' e ')} a 400 m`
+      : null)
+    : linhaDeReferencia(refs);
+  const aproximado = d.aproximado ?? c.geo_approximate;
+  return (
+    <View style={{ gap: 8 }}>
+      {linhas.length > 0 && (
+        <View style={s.linhasFam}>
+          {linhas.map((x) => (
+            <View key={x.l} style={s.linhaFam}>
+              <Text style={s.linhaFamRotulo}>{x.l}</Text>
+              <Text style={s.linhaFamValor}>{x.v}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      {rec && <Text style={s.caixaNeutra}>Sem telefone: vá na porta e anote o celular do dono no registro.</Text>}
+      {p.familia === 'av' && p.dono !== 'meu' && <Text style={s.caixaNeutra}>Ninguém do time está com ele. Ao registrar a visita, ele vira seu lead.</Text>}
+      {aproximado && <Text style={s.caixaAviso}>{'Posição aproximada, pelo endereço. Confira o número na rua; no Cheguei, "Mover pino" corrige.'}</Text>}
+      {linhaRef && (
+        p.familia !== 'cli' && a.onReferencias ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`${linhaRef}. Mostrar esses clientes no mapa`}
+            onPress={() => a.onReferencias!(refs.filter((r) => r.distanciaM <= 400).map((r) => r.id))} style={s.linhaRef}>
+            <Text style={s.linhaRefTexto}>{linhaRef}</Text>
+            <Text style={s.linhaRefTexto}>›</Text>
+          </Pressable>
+        ) : <Text style={[s.linhaRefTexto, p.familia === 'cli' && { color: 'var(--text-muted)' }]}>{linhaRef}</Text>
+      )}
+    </View>
+  );
 }
 
 function subtitulo(c: Client): string | null {
@@ -164,7 +291,8 @@ function Botao({ rotulo, onPress, estilo, texto, desabilitado, tracejado, acessi
       onPress={onPress}
       style={({ pressed }) => [s.botao, estilo, tracejado && s.tracejado, (desabilitado || !onPress) && s.desabilitado, pressed && { opacity: 0.8 }]}
     >
-      <Text style={[s.botaoTexto, texto]} numberOfLines={1}>{rotulo}</Text>
+      {/* 2 linhas: a 390 px, "Próximo passo" num terço da fileira virava "Próximo pas…" */}
+      <Text style={[s.botaoTexto, { textAlign: 'center' }, texto]} numberOfLines={2}>{rotulo}</Text>
     </Pressable>
   );
 }
@@ -177,7 +305,7 @@ function BotaoCheguei({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       accessibilityRole="button"
       accessibilityLabel="Cheguei: fazer check-in"
       disabled={!a.onMarkVisited || d.isMarkingVisited}
-      onPress={a.onMarkVisited}
+      onPress={a.onMarkVisited ? () => { primeiroToque('cheguei'); a.onMarkVisited!(); } : undefined}
       style={({ pressed }) => [s.cheguei, (!a.onMarkVisited || d.isMarkingVisited) && s.desabilitado, pressed && { opacity: 0.85 }]}
     >
       {d.isMarkingVisited ? <ActivityIndicator color="#fff" /> : (
@@ -232,11 +360,9 @@ function Cabecalho({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; com
   // vira o título e o nome cadastrado fica na linha de baixo, com Corrigir.
   const ehPessoa = pareceNomeDePessoa(cadastrado) && !!endereco;
   const nome = ehPessoa ? endereco! : cadastrado;
-  const posicao = (d.aproximado ?? d.client.geo_approximate) ? '≈ posição aproximada' : 'posição exata';
-  const sub = ehPessoa
-    ? `cadastrado como "${cadastrado}"`
-    // número e unidade sem quebra ("110" numa linha e "m" na outra, auditoria 06/10)
-    : [endereco, distanciaTexto(d.distanciaM)?.replace(/ (k?m)$/, String.fromCharCode(160) + '$1'), posicao].filter(Boolean).join(' · ');
+  // prancha §6: a distância vai à direita do kicker; o "aproximado" virou a caixa âmbar da folha
+  const distancia = distanciaTexto(d.distanciaM)?.replace(/ (k?m)$/, String.fromCharCode(160) + '$1') ?? null;
+  const sub = ehPessoa ? `cadastrado como "${cadastrado}"` : endereco;
   return (
     <View style={s.cabecalho}>
       <Pressable
@@ -246,7 +372,10 @@ function Cabecalho({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; com
         onPress={a.onExpandir}
         style={{ flex: 1, minWidth: 0 }}
       >
-        <Text style={[s.kicker, { color: d.pino.cor }]} numberOfLines={1}>{kicker(d)}</Text>
+        <View style={s.kickerLinha}>
+          <Text style={[s.kicker, { color: corDoKicker(d.pino), flexShrink: 1 }]} numberOfLines={1}>{kicker(d)}</Text>
+          {!!distancia && <Text style={s.kickerDist} numberOfLines={1}>{distancia}</Text>}
+        </View>
         <Text style={[s.titulo, nome.length > 40 && s.tituloLongo]} numberOfLines={compacto ? 1 : 2}>{nome}</Text>
         <Text style={[s.sub, !sub && s.vazio]} numberOfLines={2}>{sub || 'endereço não informado'}</Text>
       </Pressable>
@@ -263,7 +392,9 @@ function Cabecalho({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; com
 }
 
 function Fatos({ d }: { d: DadosCardNovo }) {
-  // Distância e posição já estão no subtítulo; aqui ficam os sinais.
+  // recém-aberto e mais avaliado: sem telefone, nota, foto, horário nem sócio (prancha §6)
+  if (d.pino.familia === 'rec' || d.pino.familia === 'av') return null;
+  // Distância e posição já estão no topo; aqui ficam os sinais.
   const sinais = fatosDoCard(d).filter((f) => !f.texto.startsWith('≈') && f.texto !== 'posição exata' && f.texto !== distanciaTexto(d.distanciaM));
   if (!sinais.length) return null;
   return (
@@ -309,7 +440,8 @@ function assumir(d: DadosCardNovo, a: AcoesCardNovo) {
 
 function GradeEspiada({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   const c = d.client;
-  const temTel = !!c.telefone?.trim();
+  // recém-aberto: o telefone do CNPJ costuma ser o do contador; o certo é o celular do dono, pedido na porta
+  const temTel = !!c.telefone?.trim() && d.pino.familia !== 'rec';
   const podeAssumir = d.pino.dono === 'sem' && !!a.onEMeu;
   // LIGAR E WHATSAPP À MÃO (Julyan, 26/09): com telefone, uma fileira só de
   // contato, meia largura cada — "WhatsApp" não cabe legível em 64 px na
@@ -330,7 +462,7 @@ function GradeEspiada({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
             /* A6 (handoff v6): em Ag. Pagamento a cobrança já saiu — nenhum dado muda até o Pago */
             ? <Botao rotulo="+ Telefone" desabilitado estilo={s.botao48} tracejado acessivel="Dados travados: cobrança emitida, nada muda até o Pago" />
             : <Botao rotulo="+ Telefone" onPress={a.onEdit} estilo={s.botao48} tracejado acessivel="Adicionar telefone" />)}
-        <Botao rotulo="Ir" onPress={() => ir(c)} desabilitado={c.latitude == null} estilo={s.botao48} />
+        <Botao rotulo="Ir" onPress={() => { primeiroToque('ir'); ir(c); }} desabilitado={c.latitude == null} estilo={s.botao48} />
         {/* Agendar saiu (um plano só): o plano nasce do Pôr no plano. A grade leva a ação que não é a principal. */}
         {!a.onPorNoPlano
           ? <Botao rotulo="Agendar" onPress={a.onScheduleMeeting} estilo={s.botao48} />
@@ -479,6 +611,7 @@ export function PeekCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   return (
     <View style={s.peek}>
       <Cabecalho d={d} a={a} compacto />
+      <ArmaDoCartao d={d} a={a} compacto />
       <LinhaCliente d={d} />
       <AcaoPrincipal d={d} a={a} />
       <GradeEspiada d={d} a={a} />
@@ -501,6 +634,8 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   return (
     <View style={s.topo}>
       <Cabecalho d={d} a={a} compacto={false} />
+      <ArmaDoCartao d={d} a={a} compacto={false} />
+      <LinhasDaFamilia d={d} a={a} />
       <LinhaCliente d={d} />
       {/* Motor (prompt §7.4): a conta-alvo sumiu do Google ou está fechada. Descartar
           tira da rota antes de alguém perder a viagem até uma porta fechada. */}
@@ -570,7 +705,17 @@ const s = StyleSheet.create({
   alertaBotao: { minHeight: 44, minWidth: 72, paddingHorizontal: 12, borderRadius: 8, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center' },
   alertaBotaoTexto: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
   cabecalho: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  kicker: { fontSize: 11, fontWeight: '600', letterSpacing: 0.88 },
+  kicker: { fontSize: 11.5, fontWeight: '700', letterSpacing: 0.69 },
+  kickerLinha: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },
+  kickerDist: { fontSize: 12.5, fontWeight: '600', color: 'var(--text-muted)', flexShrink: 0 },
+  linhasFam: { gap: 6 },
+  linhaFam: { flexDirection: 'row', gap: 10, alignItems: 'baseline' },
+  linhaFamRotulo: { width: 96, flexShrink: 0, fontSize: 12.5, fontWeight: '600', color: 'var(--text-muted)' },
+  linhaFamValor: { flex: 1, minWidth: 0, fontSize: 13.5, lineHeight: 19, fontWeight: '600', color: 'var(--text)' },
+  caixaNeutra: { fontSize: 13, lineHeight: 18, fontWeight: '600', color: 'var(--text)', backgroundColor: 'var(--arma-fundo)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, overflow: 'hidden' },
+  caixaAviso: { fontSize: 13, lineHeight: 18, fontWeight: '600', color: 'var(--tint-amber-text)', backgroundColor: 'var(--tint-amber)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, overflow: 'hidden' },
+  linhaRef: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
+  linhaRefTexto: { flexShrink: 1, fontSize: 13, lineHeight: 18, fontWeight: '600', color: 'var(--ok-texto)' },
   titulo: { fontSize: 20, lineHeight: 24, fontWeight: '700', color: 'var(--text)', marginTop: 2 },
   tituloLongo: { fontSize: 18, lineHeight: 22 },
   sub: { fontSize: 13, color: 'var(--text-muted)', marginTop: 2 },

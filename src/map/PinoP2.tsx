@@ -1,144 +1,188 @@
-// Pino Takeat v4.1 "limpo" do app de campo (handoff §5). O nome do arquivo
-// ficou para não mexer em quem importa.
+// Pino do mapa do executivo (prancha "Mapa do Executivo", Claude Design, 15/10/26). O nome do
+// arquivo ficou para não mexer em quem importa.
 //
-// HTML puro dentro do conteúdo do AdvancedMarkerElement, e não Views do
-// react-native-web: com centenas de pinos na tela é o DOM que pesa no celular.
+// HTML puro dentro do conteúdo do AdvancedMarkerElement, e não Views do react-native-web: com
+// centenas de pinos na tela é o DOM que pesa no celular.
 //
-// O tamanho diz o PAPEL do pino, não a temperatura:
-//   próxima porta do plano 38 px (halo vermelho, nome + 1 sinal) ·
-//   parada do plano 30 px (selo com o nº) · qualquer outro da lente 24 px
-//   (sem selo, sem nome) · selecionado 42 px (halo branco + nome).
-// Visitado hoje fica a 55% com ✓; fora da lente, 22%.
-// No máximo UM selo, no canto superior direito, e ele depende da lente:
-//   Meu dia: ✓ feito › nº do plano › ↑ na fila · Carteira: Q/M/F ·
-//   Contas-alvo: ★ nota do Google. Nunca dois, nunca à esquerda.
+// É a função pin() da prancha (a especificação executável), com uma diferença de propósito: cada
+// tamanho tem +4 px. Em 26/09 o Julyan pediu os pinos maiores ("executivo de 40 anos, no sol, não
+// enxerga") e os da prancha (22–26 px) são os que sumiam. A hierarquia é a da prancha:
+//   próxima porta (halo vermelho) › selecionado › parada do plano › recém ≤ 30 d › lead Q › M/F ›
+//   recém 31–90 d. O tamanho diz o PAPEL.
+// Famílias: lead = círculo na cor da temperatura com a letra; recém-aberto = o ÚNICO losango, preto
+// e branco (o vértice de baixo é a ponta), com os dias dentro; mais avaliado = roxo com a nota;
+// cliente = verde com o T; ex-cliente = rosa com ↺.
+// Modificadores: colega 55% e anel fino; sem dono, anel tracejado amarelo; aproximado, círculo
+// tracejado em volta da coordenada; no máximo UM selo (cobrar › ↑ esperando sinal › ↓ em queda).
 //
-// Geometria: caixa de toque 48 × 52; a coordenada é a ponta branca, em
-// (24, 50). Quem usa passa anchor={ANCORA_PINO_P2}.
+// Geometria: caixa de toque 48 × 56; a coordenada é a ponta, em (24, 54). Quem usa passa
+// anchor={ANCORA_PINO_P2}.
 import React from 'react';
 import { Image } from 'react-native';
 
-import type { Lente } from '../utils/lentes';
 import type { Pino } from '../utils/pinoP2';
 
 const CAIXA_W = 48;
-const CAIXA_H = 52;
-const PONTA_Y = 50;
+const CAIXA_H = 56;
+const PONTA_Y = 54;
 export const ANCORA_PINO_P2 = { x: 0.5, y: PONTA_Y / CAIXA_H };
+
+/** +4 px em cada tamanho da prancha (ver o topo). */
+const MAIS = 4;
+const VERMELHO_ACAO = '#E51A31';
 
 export type PapelPino = 'proxima' | 'plano' | 'lente';
 
 type Props = {
   pino: Pino;
   papel: PapelPino;
-  lente: Lente;
   planoNumero?: number | null;
   visitado?: boolean;
   naFila?: boolean;
   selecionado?: boolean;
-  /** Fora da lente atual (zoom de rua mostra todos inteiros): 22%. */
-  foraDaLente?: boolean;
-  /** Zoom de rua: o nome cabe sem cobrir outro nome (rotulosSemSobrepor). */
+  /** O nome cabe sem cobrir outro nome (rotulosSemSobrepor). */
   rotulo?: boolean;
-  /** Segunda linha do rótulo (dono às 15h › cobrar › ICP › dias sem toque). */
+  /** Lado do nome: 'esq' quando à direita bateria em outro. */
+  lado?: 'dir' | 'esq';
+  /** Segunda linha do rótulo (dono às 15h · Demo, cobrar · 12 dias, aberto há 9 dias). */
   sinal?: string | null;
-  /** Pilha (C11): quantos pinos este representa. >1 mostra o número e "Nome +N". */
+  /** Pilha: quantos pinos este representa. >1 vira o círculo escuro com o número. */
   pilhaN?: number;
-  /** Leque aberto (C11): deslocamento do pino em relação ao ponto real. */
+  /** Cor do anel da pilha: a do membro mais prioritário. */
+  pilhaCor?: string;
+  /** Leque aberto: deslocamento do pino em relação ao ponto real. */
   leque?: { dx: number; dy: number } | null;
-  /** Modo sol: rótulo em fundo branco; o disco não muda. */
+  /** Tema claro do mapa (modo sol): o losango e o rótulo invertem. */
   sol?: boolean;
+  /** Mostra o círculo tracejado do "aproximado" (selecionado ou zoom de rua). */
+  aproximadoVisivel?: boolean;
 };
 
 const LOGO = require('../../assets/takeat-t-branco.png');
 
-type Selo = { texto: string; fundo: string; tinta: string };
+type Desenho = {
+  s: number; bg: string; fg: string; tx: string; fs: number; diam: boolean; bw: number; bst: 'solid' | 'dashed'; bc: string;
+  op: number; logo: boolean; lw: number; halo: boolean; badge: { t: string; bg: string; fg: string } | null;
+};
 
-function seloDoPino(p: Props): Selo | null {
-  const { pino, lente, planoNumero, visitado, naFila } = p;
-  if (lente === 'carteira') {
-    return pino.tipo === 'lead' && pino.temp && pino.temp !== 'X' && pino.temp !== '?'
-      ? { texto: pino.glifo, fundo: '#111418', tinta: '#FFFFFF' } : null;
+/** A função pin() da prancha, com +4 px. */
+export function desenhoDoPino(p: Props): Desenho {
+  const { pino, papel, planoNumero, visitado, naFila, selecionado, pilhaN = 1, pilhaCor, sol = false } = p;
+  const rec = { bg: sol ? '#111418' : '#FFFFFF', fg: sol ? '#FFFFFF' : '#111418', bd: '#FFFFFF', oco: sol ? '#FFFFFF' : '#121417' };
+  let s = 24; let bg: string = pino.cor; let fg = '#FFFFFF'; let tx = pino.glifo; let fs = 11; let diam = false;
+  let bw = 2.5; let bst: 'solid' | 'dashed' = 'solid'; let bc = '#FFFFFF'; let op = 1; let logo = false; let lw = 0; let halo = false;
+  const f = pino.familia;
+  if (f === 'lead') { s = pino.temp === 'Q' ? 26 : pino.temp === 'M' ? 24 : 22; fs = s >= 24 ? 11 : 10; }
+  if (f === 'rec') {
+    const d = pino.abertoHa ?? 0;
+    diam = true; s = d <= 30 ? 23 : d <= 60 ? 20 : 18; bg = rec.bg; fg = rec.fg; bw = 2; bc = rec.bd; tx = String(d); fs = d <= 30 ? 12 : 11;
+    if (d > 60) { bg = rec.oco; fg = rec.bg; bc = rec.bg; bw = 2.5; }
   }
-  if (lente === 'alvo') {
-    return pino.tipo === 'alvo' && pino.nota
-      ? { texto: `★${pino.nota.toFixed(1).replace('.', ',')}`, fundo: '#111418', tinta: '#FACC15' } : null;
+  if (f === 'av' || f === 'alvo') { s = 26; tx = pino.nota != null ? pino.nota.toFixed(1).replace('.', ',') : ''; fs = 10; }
+  if (f === 'cli') { s = 24; logo = true; lw = 13; tx = ''; }
+  if (f === 'ex') { s = 24; tx = '↺'; fs = 13; }
+  const feito = !!visitado;
+  if (planoNumero) {
+    s = feito ? 24 : 32; tx = feito ? '✓' : String(planoNumero); fs = feito ? 12 : 14; logo = false;
+    if (f === 'rec') { s = feito ? 18 : 25; bg = rec.bg; fg = rec.fg; bc = rec.bd; bw = 2; fs = feito ? 11 : 13; }
+  } else if (feito) {
+    // visitado hoje fora do plano: o mesmo desenho da parada feita
+    s = f === 'rec' ? 18 : 24; tx = '✓'; fs = f === 'rec' ? 11 : 12; logo = false;
+    if (f === 'rec') { bg = rec.bg; fg = rec.fg; bc = rec.bd; bw = 2; }
   }
-  if (visitado) return { texto: '✓', fundo: '#16A34A', tinta: '#FFFFFF' };
-  if (planoNumero) return { texto: String(planoNumero), fundo: '#FFFFFF', tinta: '#111418' };
-  if (naFila) return { texto: '↑', fundo: '#F5A524', tinta: '#111418' };
-  return null;
+  if (feito) op = 0.5;
+  if (papel === 'proxima') {
+    s = 40; fs = 16; halo = true; op = 1;
+    if (f === 'rec') { s = 30; bg = rec.bg; fg = rec.fg; bc = rec.bd; bw = 2; tx = planoNumero ? String(planoNumero) : String(pino.abertoHa ?? ''); fs = 15; }
+  }
+  if (selecionado) {
+    s = 44; fs = planoNumero ? 16 : f === 'rec' ? 13 : 14; op = 1;
+    if (f === 'rec') { s = 32; fs = 15; bg = rec.bg; fg = rec.fg; bc = rec.bd; bw = 2; }
+    if (f === 'cli') lw = 22;
+  }
+  // cliente é carteira da empresa (pinoP2 o marca como colega quando não tem vendedor): não desbota
+  if (pino.dono === 'colega' && f !== 'cli' && !selecionado && papel !== 'proxima') { op = Math.min(op, 0.55); bw = 1.5; s -= 2; }
+  if (pino.dono === 'sem' && f !== 'cli') { bst = 'dashed'; bc = '#FACC15'; bw = 2.5; }
+  if (pilhaN > 1) { s = 32; bg = '#111418'; bw = 3; bst = 'solid'; bc = pilhaCor ?? pino.cor; tx = String(pilhaN); fs = 13; logo = false; diam = false; fg = '#FFFFFF'; op = 1; }
+  let badge: Desenho['badge'] = null;
+  if (pilhaN <= 1) {
+    if (pino.etiqueta?.texto === 'cobrar') badge = { t: 'cobrar', bg: '#111418', fg: '#FCD34D' };
+    else if (naFila) badge = { t: '↑', bg: '#F59E0B', fg: '#111418' };
+    else if (pino.queda) badge = { t: '↓', bg: '#F59E0B', fg: '#111418' };
+  }
+  return { s: s + MAIS, bg, fg, tx, fs, diam, bw, bst, bc, op, logo, lw, halo, badge };
 }
 
 function PinoP2(props: Props) {
-  const { pino, papel, selecionado, foraDaLente, visitado, sinal, pilhaN = 1, leque = null, sol = false, rotulo = false } = props;
-  const emPilha = pilhaN > 1;
-  // LEGÍVEL NA RUA (Julyan, 26/09: "executivo de 40 anos, no sol, não enxerga"):
-  // os tamanhos do handoff (24/30/38/42) sumiam no celular. Subiram 4–6 px.
-  const d = selecionado ? 46 : papel === 'proxima' ? 42 : papel === 'plano' ? 34 : 30;
-  const semDono = pino.dono === 'sem' && pino.tipo !== 'alvo';
-  const aro = semDono ? '2.5px dashed #FACC15' : '2.5px solid #FFFFFF';
-  const halo = selecionado
-    ? '0 0 0 6px rgba(255,255,255,.35),'
-    : papel === 'proxima' ? '0 0 0 5px rgba(229,26,49,.45),' : '';
-  // Fora da lente fica mais quieto, não invisível: 0,22 virava fantasma no mapa.
-  const opacidade = foraDaLente && !selecionado ? 0.75 : visitado && !selecionado ? 0.8 : 1;
-  const selo = emPilha ? null : seloDoPino(props);
-  const comNome = !leque && (selecionado || papel === 'proxima' || rotulo);
-  const topoDisco = -8 - d; // ponta de 8 px + disco
-  const logoW = Math.round(d * 0.56);
-
+  const { pino, selecionado, sinal, pilhaN = 1, leque = null, sol = false, rotulo = false, lado = 'dir', aproximadoVisivel = false } = props;
+  const d = desenhoDoPino(props);
+  const hd = d.diam ? d.s * Math.SQRT1_2 : d.s / 2;
+  // centro do desenho em relação à coordenada (a ponta)
+  const cy = d.diam ? -hd - 1 : -7 - d.s / 2;
+  const comNome = !leque && (selecionado || props.papel === 'proxima' || rotulo);
+  const tipCor = d.bst === 'dashed' ? '#FFFFFF' : d.bc;
+  const halo = 66 + MAIS;
+  const aprox = 90;
   return (
     <div style={{ position: 'relative', width: CAIXA_W, height: CAIXA_H, cursor: 'pointer' }}>
       <div style={{ position: 'absolute', left: CAIXA_W / 2, top: PONTA_Y, width: 0, height: 0, zIndex: selecionado ? 5 : 2 }}>
-        {pino.aproximado && selecionado && (
+        {pino.aproximado && (aproximadoVisivel || selecionado) && !leque && (
           <div style={{
-            position: 'absolute', left: -30, top: -30, width: 60, height: 60, boxSizing: 'border-box',
-            borderRadius: '50%', background: 'rgba(250,204,21,.10)', border: '1.5px dashed rgba(250,204,21,.8)',
-            pointerEvents: 'none',
+            position: 'absolute', left: -aprox / 2, top: -aprox / 2, width: aprox, height: aprox, boxSizing: 'border-box',
+            borderRadius: '50%', background: 'rgba(140,140,140,.16)', border: `2px dashed ${sol ? '#111418' : '#F4F5F7'}`, pointerEvents: 'none',
           }} />
         )}
         {leque && (
           <div style={{
-            position: 'absolute', left: 0, top: 0, height: 1.5, background: 'rgba(255,255,255,.7)', transformOrigin: '0 0',
+            position: 'absolute', left: 0, top: 0, height: 1.5, background: sol ? 'rgba(17,20,24,.6)' : 'rgba(255,255,255,.7)', transformOrigin: '0 0',
             width: Math.hypot(leque.dx, leque.dy), transform: `rotate(${Math.atan2(leque.dy, leque.dx)}rad)`, pointerEvents: 'none',
           }} />
         )}
-        <div style={{ position: 'absolute', left: leque?.dx ?? 0, top: leque?.dy ?? 0, width: 0, height: 0, opacity: opacidade }}>
-          {/* ponta branca 10 × 8: o vértice é a coordenada */}
-          <div style={{
-            position: 'absolute', left: -5, top: -8, width: 0, height: 0,
-            borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: `8px solid ${semDono ? '#FACC15' : '#FFFFFF'}`,
-          }} />
-          <div style={{
-            position: 'absolute', left: -d / 2, top: topoDisco, width: d, height: d, boxSizing: 'border-box',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: '50%', background: pino.cor, border: aro,
-            boxShadow: `${halo}0 2px 6px rgba(0,0,0,.5)${sol ? ',0 0 0 1px #000' : ''}`,
-          }}>
-            {emPilha
-              ? <span style={{ fontWeight: 800, fontSize: 13, lineHeight: 1, color: '#fff' }}>{pilhaN}</span>
-              : <Image source={LOGO} style={{ width: logoW, height: Math.round(logoW * 288 / 227) }} resizeMode="contain" fadeDuration={0} accessibilityLabel="Takeat" />}
-          </div>
-          {selo && (
+        <div style={{ position: 'absolute', left: leque?.dx ?? 0, top: leque?.dy ?? 0, width: 0, height: 0, opacity: d.op }}>
+          {d.halo && (
             <div style={{
-              position: 'absolute', left: d / 2 - 8, top: topoDisco - 5, minWidth: 18, height: 18, padding: '0 4px', boxSizing: 'border-box',
-              borderRadius: 9, background: selo.fundo, color: selo.tinta, border: '1.5px solid #fff',
-              fontWeight: 700, fontSize: 10.5, lineHeight: '15px', textAlign: 'center', whiteSpace: 'nowrap',
-            }}>{selo.texto}</div>
+              position: 'absolute', left: -halo / 2, top: cy - halo / 2, width: halo, height: halo, boxSizing: 'border-box',
+              borderRadius: '50%', border: `3px solid ${VERMELHO_ACAO}`, background: 'rgba(229,26,49,.16)', pointerEvents: 'none',
+            }} />
+          )}
+          {!d.diam && (
+            <div style={{
+              position: 'absolute', left: -5, top: -8, width: 0, height: 0,
+              borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: `8px solid ${tipCor}`,
+            }} />
+          )}
+          <div style={{
+            position: 'absolute', left: -d.s / 2, top: cy - d.s / 2, width: d.s, height: d.s, boxSizing: 'border-box',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: d.diam ? 4 : '50%', background: d.bg, border: `${d.bw}px ${d.bst} ${d.bc}`, color: d.fg,
+            fontWeight: 700, fontSize: d.fs, lineHeight: 1, letterSpacing: '-.02em',
+            boxShadow: '0 2px 5px rgba(0,0,0,.4)', transform: d.diam ? 'rotate(45deg)' : undefined,
+          }}>
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', transform: d.diam ? 'rotate(-45deg)' : undefined }}>
+              {d.logo
+                ? <Image source={LOGO} style={{ width: d.lw + MAIS / 2, height: Math.round((d.lw + MAIS / 2) * 288 / 227) }} resizeMode="contain" fadeDuration={0} accessibilityLabel="Takeat" />
+                : d.tx}
+            </span>
+          </div>
+          {d.badge && (
+            <div style={{
+              position: 'absolute', left: hd - 9, top: cy - hd - 8, height: 18, padding: '0 6px', boxSizing: 'border-box',
+              borderRadius: 9, background: d.badge.bg, color: d.badge.fg, border: '1.5px solid #FFFFFF',
+              fontWeight: 700, fontSize: 11, lineHeight: '15px', whiteSpace: 'nowrap',
+            }}>{d.badge.t}</div>
           )}
           {comNome && (
             <div style={{
-              position: 'absolute', left: d / 2 + 8, top: topoDisco + d / 2 - (sinal ? 17 : 10),
-              display: 'flex', flexDirection: 'column', gap: 1, whiteSpace: 'nowrap', pointerEvents: 'none',
-              padding: '3px 7px', borderRadius: 7,
-              background: sol ? 'rgba(255,255,255,.95)' : 'rgba(10,12,15,.82)',
+              position: 'absolute', top: cy - (sinal ? 19 : 11), ...(lado === 'esq' ? { right: Math.round(hd + 6) } : { left: Math.round(hd + 6) }),
+              display: 'flex', flexDirection: 'column', whiteSpace: 'nowrap', pointerEvents: 'none',
+              padding: '3px 9px', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,.25)',
+              background: sol ? 'rgba(255,255,255,.96)' : 'rgba(23,25,29,.94)', border: `1px solid ${sol ? '#D9D4CA' : 'rgba(255,255,255,.14)'}`,
             }}>
-              <span style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.25, color: sol ? '#111418' : '#FFFFFF' }}>
-                {emPilha ? `${pino.nome} +${pilhaN - 1}` : pino.nome}
+              <span style={{ fontWeight: 700, fontSize: 13, lineHeight: 1.25, color: sol ? '#111418' : '#F4F5F7' }}>
+                {pilhaN > 1 ? `${pino.nome} +${pilhaN - 1}` : pino.nome}
               </span>
               {!!sinal && (
-                <span style={{ fontWeight: 600, fontSize: 11, lineHeight: 1.2, color: sol ? '#92400E' : '#FCD34D' }}>{sinal}</span>
+                <span style={{ fontWeight: 600, fontSize: 11.5, lineHeight: 1.25, color: sol ? '#414852' : 'rgba(255,255,255,.74)' }}>{sinal}</span>
               )}
             </div>
           )}
@@ -150,12 +194,11 @@ function PinoP2(props: Props) {
 
 export default React.memo(PinoP2);
 
-// Sinal do rótulo, na prioridade do handoff §5: dono às 15h › cobrar › ICP ›
-// dias sem toque, mais "decisor ?". Hoje o app sabe o "cobrar" e o tempo sem
-// toque; horário do dono, ICP e decisor entram com a colheita nova (fase 5).
+/** A segunda linha do rótulo: cobrar › dias sem toque (lead), "aberto há N dias" (recém-aberto). */
 export function sinalDoPino(p: Pino): string | null {
+  if (p.familia === 'rec' && p.abertoHa != null) return p.abertoHa === 0 ? 'abriu hoje' : `aberto há ${p.abertoHa} ${p.abertoHa === 1 ? 'dia' : 'dias'}`;
   const t = p.etiqueta?.texto ?? '';
-  if (t === 'cobrar') return 'cobrar · SLA estourado';
+  if (t === 'cobrar') return 'cobrar · prazo da etapa estourou';
   const m = t.match(/^(\d+)d parado$/);
   if (m) return `${m[1]} dias sem toque`;
   return null;

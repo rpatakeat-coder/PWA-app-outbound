@@ -1,6 +1,6 @@
-// Folha de lentes, filtros e legenda (handoff v4.1 §6.9). Saiu do topo: a
-// linha de pílulas roubava 56 px do mapa o dia inteiro para uma escolha que
-// se faz poucas vezes por dia.
+// Folha "Filtros e outras lentes" (prancha "Mapa do Executivo", §2, 15/10/26): o botão ≡ da
+// fileira de lentes abre aqui as lentes que não cabem a 390 px (Reconquista, Clientes, Em queda,
+// Sem dono e Calor, só gestor), os filtros e a legenda dos pinos.
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -13,24 +13,25 @@ export const COR_LENTE: Record<Lente, string> = {
 };
 
 const DESCRICAO: Record<Lente, string> = {
-  dia: 'plano + quentes + recém-abertos',
+  dia: 'plano + meus leads + recém-abertos',
   novos: 'CNPJ aberto há até 90 dias',
   carteira: 'meus leads por etapa',
   clientes: 'clientes ativos · relacionamento',
-  alvo: 'contas-alvo com nota 4,5+ no Google',
+  alvo: 'nota 4,5+ no Google',
   rec: 'ex-clientes',
   queda: 'faturamento caindo ou sem comanda',
   semdono: 'pode assumir: É meu',
   calor: 'só gestor · 30 dias',
 };
 
-const LEGENDA: { cor: string; rotulo: string; tracejado?: boolean }[] = [
+const LEGENDA: { cor: string; rotulo: string; tracejado?: boolean; losango?: boolean }[] = [
   { cor: '#E23B3B', rotulo: 'Quente' },
   { cor: '#F5A524', rotulo: 'Morno' },
   { cor: '#0EA5E9', rotulo: 'Frio' },
+  { cor: 'var(--text)', rotulo: 'Recém-aberto', losango: true },
+  { cor: '#8B5CF6', rotulo: 'Mais avaliado' },
   { cor: '#16A34A', rotulo: 'Cliente' },
   { cor: '#EC4899', rotulo: 'Ex-cliente' },
-  { cor: '#8B5CF6', rotulo: 'Conta-alvo' },
   { cor: '#4B5563', rotulo: 'Perdido' },
   { cor: '#FACC15', rotulo: 'Sem dono', tracejado: true },
 ];
@@ -47,9 +48,9 @@ type Props = {
 
 export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolher, filtrosAtivos, aoFiltros }: Props) {
   return (
-    <Painel visivel={visivel} aoFechar={aoFechar} rotulo="Lentes, filtros e legenda" topo={
+    <Painel visivel={visivel} aoFechar={aoFechar} rotulo="Filtros e outras lentes" topo={
       <View style={s.topo}>
-        <Text style={s.titulo}>O que o mapa destaca</Text>
+        <Text style={s.titulo}>Filtros e outras lentes</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={aoFechar} style={s.fechar}>
           <SiClose width={20} height={20} fill="var(--text-muted)" />
         </Pressable>
@@ -89,7 +90,7 @@ export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolh
             <View key={i.rotulo} style={s.legItem}>
               <View style={[s.legDisco, i.tracejado
                 ? { backgroundColor: 'transparent', borderWidth: 2, borderStyle: 'dashed', borderColor: i.cor }
-                : { backgroundColor: i.cor }]} />
+                : i.losango ? { backgroundColor: i.cor, borderRadius: 2, width: 12, height: 12, transform: [{ rotate: '45deg' }] } : { backgroundColor: i.cor }]} />
               <Text style={s.legTexto}>{i.rotulo}</Text>
             </View>
           ))}

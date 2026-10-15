@@ -12,7 +12,7 @@ const ok = (c: boolean, m: string) => {
 
 const pino = (x: Partial<Pino>): Pino => ({
   tipo: 'lead', temp: 'F', cor: '#fff', glifo: 'F', logo: false, dono: 'colega', aproximado: false,
-  nome: '', etiqueta: null, opacidade: 1, origem: null, ...x,
+  nome: '', etiqueta: null, opacidade: 1, origem: null, familia: x.tipo === 'alvo' ? 'alvo' : x.tipo === 'cliente' ? 'cli' : x.tipo === 'ex' ? 'ex' : 'lead', ...x,
 });
 const it = (id: string, p: Partial<Pino>, extra: Record<string, unknown> = {}, plano: number | null = null, distanciaM: number | null = 500) =>
   ({ c: { id, nome: id, bairro: 'Centro', cidade: 'Vitória', ...extra }, p: pino(p), plano, distanciaM });

@@ -1,76 +1,68 @@
-// Lentes e filtros do mapa novo (entrega 3; prancha §5 e §8.9).
+// Lentes e filtros do mapa do executivo.
 //
-// "Hierarquia, não filtro": a lente não esconde ninguém — decide quem ganha
-// pino inteiro (pede decisão agora) e quem vira ponto de 7 px. Quem tira do
-// mapa são os Filtros, que o vendedor escolhe e vê contados.
+// PRANCHA "MAPA DO EXECUTIVO" (15/10/26, Claude Design, aprovada pelo Julyan): a lente diz O QUE
+// ENTRA no mapa; o que não entra não aparece nem como ponto. "Vender mais e tocar menos": no Meu
+// dia ficam o plano, os MEUS leads com negócio e os recém-abertos da minha região — os 8.485
+// pinos que não decidem a próxima porta (clientes, ex-clientes, conta-alvo antiga, colega) saíram.
+// O que vira ponto agora é só o zoom afastado (a lente continua a mesma, o desenho encolhe).
+// Quem tira do mapa dentro da lente são os Filtros, que o vendedor escolhe e vê contados.
 
 import type { Client } from '../types/client';
 import type { OrigemPick, Pino } from './pinoP2';
 
 export type Lente = 'dia' | 'novos' | 'carteira' | 'clientes' | 'alvo' | 'rec' | 'queda' | 'semdono' | 'calor';
 
+/** Na ordem da prancha (§2). No celular, as 4 primeiras ficam na fileira; o resto, em Filtros. */
 export const LENTES: { id: Lente; rotulo: string }[] = [
   { id: 'dia', rotulo: 'Meu dia' },
   // RECÉM-ABERTOS (15/10/26, Julyan): CNPJ aberto há até 90 dias, que ainda não tem sistema.
   { id: 'novos', rotulo: 'Recém-abertos' },
   { id: 'carteira', rotulo: 'Carteira' },
-  // CLIENTES ATIVOS (28/09/2026, Julyan: "quero clientes ativos, não só reduzindo
-  // custo"). "Em queda" é só a parte com problema; esta é a base inteira que paga.
-  { id: 'clientes', rotulo: 'Clientes' },
-  // MAIS AVALIADOS (15/10/26): as contas-alvo do Google com nota 4,5+ ganham pino inteiro.
-  // Só aparece se o executivo escolher a lente (não polui o Meu dia).
+  // MAIS AVALIADOS (15/10/26): as contas-alvo do Google com nota 4,5+. Era "Contas-alvo".
   { id: 'alvo', rotulo: 'Mais avaliados' },
   { id: 'rec', rotulo: 'Reconquista' },
+  // CLIENTES ATIVOS (28/09/2026, Julyan: "quero clientes ativos, não só reduzindo custo").
+  { id: 'clientes', rotulo: 'Clientes' },
   { id: 'queda', rotulo: 'Em queda' },
   { id: 'semdono', rotulo: 'Sem dono' },
   { id: 'calor', rotulo: 'Calor' },
 ];
 
-/** MAPA MENOS POLUÍDO (15/10/26, Julyan: "não misturar a conta-alvo com os clientes, o mapa
- *  está poluído"). Medido: 10.173 pinos, mais da metade clientes e ex-clientes, e só 7% das
- *  visitas em conta-alvo. Diferente de noFoco (pino inteiro × ponto), isto TIRA do mapa:
- *  - a conta-alvo antiga da Casa dos Dados (CNPJ com mais de 90 dias) sai de todas as lentes;
- *  - cliente que já paga só aparece nas lentes Clientes e Em queda;
- *  - no Meu dia fica só o que é meu (sem conta-alvo) e os recém-abertos; o resto não vira nem ponto;
- *  - Recém-abertos e Mais avaliados mostram só o próprio grupo.
- *  O que está no plano e o pino aberto aparecem sempre. */
-export function visivelNaLente(lente: Lente, p: Pino, noPlano: boolean, aberto: boolean): boolean {
+/** As que cabem na fileira do celular (390 px); as outras moram em Filtros (≡). */
+export const LENTES_DA_FILEIRA: Lente[] = ['dia', 'novos', 'carteira', 'alvo'];
+
+/**
+ * Entra no mapa nesta lente? (prancha §2, quadro "Lente · Mostra").
+ * - Meu dia: o plano + os meus leads com negócio (perdido não) + os meus recém-abertos;
+ * - Recém-abertos: os recém-abertos da minha região + o plano;
+ * - Carteira: os meus leads, perdidos inclusive;
+ * - Mais avaliados: conta-alvo do Google com nota 4,5+ (de quem for);
+ * - Clientes / Em queda: só quem paga (Em queda: só os em queda); Reconquista: ex-clientes;
+ * - Sem dono: o que dá para assumir (lead, ex-cliente, recém-aberto, mais avaliado);
+ * - Calor: nenhum pino.
+ * Em qualquer lente: o plano do dia e o pino aberto. Conta-alvo antiga (CNPJ com mais de 90 dias,
+ * ou nota abaixo de 4,5) não aparece em lente nenhuma. `verTodos`: gestor e visualizador, que não
+ * têm carteira — veem os recém-abertos de todo mundo.
+ */
+export function visivelNaLente(lente: Lente, p: Pino, noPlano: boolean, aberto: boolean, verTodos = false): boolean {
   if (noPlano || aberto) return true;
-  if (p.alvoAntigo) return false;
-  if (p.tipo === 'cliente') return lente === 'clientes' || lente === 'queda' || lente === 'calor';
+  if (p.familia === 'alvo') return false;
+  const meu = p.dono === 'meu';
   switch (lente) {
-    // conta-alvo antiga do Google também sai do Meu dia (só na lente Mais avaliados)
-    case 'dia': return (p.dono === 'meu' && p.tipo !== 'alvo') || p.abertoHa != null;
-    case 'novos': return p.abertoHa != null;
-    case 'alvo': return p.tipo === 'alvo';
-    default: return true;
+    case 'dia': return meu && ((p.familia === 'lead' && p.temp !== 'X') || p.familia === 'rec');
+    case 'novos': return p.familia === 'rec' && (meu || verTodos);
+    case 'carteira': return meu && p.familia === 'lead';
+    case 'alvo': return p.familia === 'av';
+    case 'clientes': return p.familia === 'cli';
+    case 'queda': return p.familia === 'cli' && !!p.queda;
+    case 'rec': return p.familia === 'ex';
+    case 'semdono': return p.dono === 'sem' && p.familia !== 'cli';
+    case 'calor': return false;
   }
 }
 
-/** Pino inteiro nesta lente? (o resto vira ponto). Calor não mostra pino. */
-export function noFoco(lente: Lente, p: Pino, planoNumero: number | null | undefined): boolean {
-  if (lente === 'calor') return false;
-  if (planoNumero) return lente === 'dia' || lente === 'carteira' || p.dono === 'meu';
-  switch (lente) {
-    case 'dia':
-      // 15/10/26: cliente saiu do Meu dia (só na lente Clientes); o recém-aberto entrou
-      return (p.dono === 'meu' && (p.etiqueta?.texto === 'cobrar' || p.temp === 'Q' || p.temp === 'M')) || p.abertoHa != null;
-    case 'novos':
-      return p.abertoHa != null;
-    case 'carteira':
-      return p.dono === 'meu';
-    case 'clientes':
-      return p.tipo === 'cliente';
-    case 'alvo':
-      return p.tipo === 'alvo' && (p.nota ?? 0) >= 4.5;
-    case 'rec':
-      return p.tipo === 'ex';
-    case 'queda':
-      return !!p.queda;
-    case 'semdono':
-      return p.dono === 'sem';
-  }
-}
+/** Zoom afastado (bairro inteiro ou mais): o pino vira ponto, menos o plano, o aberto e a próxima porta. */
+export const DELTA_AFASTADO = 0.05;
 
 // ---- Filtros -------------------------------------------------------------
 
@@ -204,11 +196,12 @@ export function contarChips(itens: { c: Client; p: Pino }[], f: FiltrosNovos) {
   return { status, temp, origem, dono, etapa, visita };
 }
 
-/** Como o lead aparece fora da lente: ponto de 7 px na cor e forma da categoria. */
-export function pontoDe(p: Pino): { cor: string; forma: 'bola' | 'quadrado' | 'anel' | 'tracejado'; opacidade: number } {
-  // Pontos de 9 px a 0,85 (eram 7 px a 0,55 e sumiam no celular ao sol).
-  if (p.tipo === 'alvo') return { cor: '#C084FC', forma: 'anel', opacidade: 0.9 };
-  if (p.dono === 'sem') return { cor: '#FACC15', forma: 'tracejado', opacidade: 0.85 };
-  if (p.tipo === 'ex') return { cor: p.cor, forma: 'quadrado', opacidade: 0.85 };
-  return { cor: p.cor, forma: 'bola', opacidade: 0.85 };
+/** Zoom afastado (prancha §1, "Zoom afastado"): o recém-aberto vira losango de 9 px (preto e
+ *  branco, conforme o tema); o lead, ponto de 10 px na cor da temperatura; o resto, ponto de 9 px
+ *  na cor da família. `claro`: tema claro (o losango inverte). */
+export function pontoDe(p: Pino, claro = false): { cor: string; borda: string; forma: 'bola' | 'losango'; tamanho: number; opacidade: number } {
+  if (p.familia === 'rec') return claro
+    ? { cor: '#111418', borda: '#FFFFFF', forma: 'losango', tamanho: 9, opacidade: 1 }
+    : { cor: '#FFFFFF', borda: '#111418', forma: 'losango', tamanho: 9, opacidade: 1 };
+  return { cor: p.cor, borda: '#FFFFFF', forma: 'bola', tamanho: p.familia === 'lead' ? 10 : 9, opacidade: p.dono === 'colega' ? 0.55 : 1 };
 }

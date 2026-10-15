@@ -1,4 +1,6 @@
-// Camada de pontos de 7 px (mapa novo): tudo que está fora da lente ativa.
+// Camada de pontos do zoom afastado (prancha "Mapa do Executivo", 15/10/26): o que está na lente
+// vira ponto quando o mapa se afasta do bairro — o recém-aberto, losango de 9 px; o lead, ponto de
+// 10 px na cor da temperatura. O plano, o aberto e a próxima porta continuam pino inteiro.
 //
 // Um canvas só, por cima do mapa, em vez de um AdvancedMarkerElement por
 // lead. Com a lente certa são poucas dezenas de pinos inteiros e alguns
@@ -13,12 +15,14 @@ export type Ponto = {
   lat: number;
   lng: number;
   cor: string;
-  forma: 'bola' | 'quadrado' | 'anel' | 'tracejado';
+  borda: string;
+  forma: 'bola' | 'losango';
+  tamanho: number;
   opacidade: number;
 };
 
 // sol: modo sol (mapa claro) ganha contorno escuro nos pontos cheios, que sumiam no fundo claro.
-export default function CamadaDePontos({ pontos, sol = false }: { pontos: Ponto[]; sol?: boolean }) {
+export default function CamadaDePontos({ pontos }: { pontos: Ponto[]; sol?: boolean }) {
   const ctx = useMapContext();
   const pontosRef = useRef(pontos);
   pontosRef.current = pontos;
@@ -74,27 +78,20 @@ export default function CamadaDePontos({ pontos, sol = false }: { pontos: Ponto[
           const y = px.y - ne.y;
           if (x < -4 || y < -4 || x > w + 4 || y > h + 4) continue;
           g.globalAlpha = p.opacidade;
-          if (p.forma === 'quadrado') {
-            g.fillStyle = p.cor;
-            g.beginPath();
-            g.roundRect ? g.roundRect(x - 4.5, y - 4.5, 9, 9, 2) : g.rect(x - 4.5, y - 4.5, 9, 9);
-            g.fill();
-            g.strokeStyle = sol ? 'rgba(0,0,0,.7)' : 'rgba(0,0,0,.55)'; g.lineWidth = 1.2; g.stroke();
-          } else if (p.forma === 'bola') {
-            g.fillStyle = p.cor;
-            g.beginPath();
-            g.arc(x, y, 4.5, 0, Math.PI * 2);
-            g.fill();
-            g.strokeStyle = sol ? 'rgba(0,0,0,.7)' : 'rgba(0,0,0,.55)'; g.lineWidth = 1.2; g.stroke();
+          const r = p.tamanho / 2;
+          g.fillStyle = p.cor;
+          g.strokeStyle = p.borda;
+          g.lineWidth = 1.5;
+          g.beginPath();
+          if (p.forma === 'losango') {
+            // o quadrado girado 45°: a diagonal é o lado × 1,41
+            const dg = r * Math.SQRT2;
+            g.moveTo(x, y - dg); g.lineTo(x + dg, y); g.lineTo(x, y + dg); g.lineTo(x - dg, y); g.closePath();
           } else {
-            g.strokeStyle = p.cor;
-            g.lineWidth = 2.2;
-            g.setLineDash(p.forma === 'tracejado' ? [2, 1.5] : []);
-            g.beginPath();
-            g.arc(x, y, 3.8, 0, Math.PI * 2);
-            g.stroke();
-            g.setLineDash([]);
+            g.arc(x, y, r, 0, Math.PI * 2);
           }
+          g.fill();
+          g.stroke();
         }
         g.globalAlpha = 1;
       }

@@ -113,8 +113,7 @@ import { gravarOrdemDoDia, lerColunaDoPlano, porNoDia, tirarDoDia } from './src/
 import { diasDaFaixa } from './src/utils/agendaNovo';
 import { abrirGestao } from './src/utils/abrirGestao';
 import TopoCampo, { ALTURA_TOPO_CAMPO } from './src/screens/TopoCampo';
-import FaixaDaRua, { ALTURA_FAIXA_RUA } from './src/screens/FaixaDaRua';
-import FolhaLentes, { COR_LENTE } from './src/screens/FolhaLentes';
+import FolhaLentes from './src/screens/FolhaLentes';
 import AvisoSemSinal from './src/screens/AvisoSemSinal';
 import FolhaMeuDia from './src/screens/FolhaMeuDia';
 import FolhaBusca, { type LinhaBusca } from './src/screens/FolhaBusca';
@@ -135,7 +134,14 @@ import { ROTULO_ETAPA, ETAPA as ETAPA_FS } from './src/utils/fichaDeRua';
 import { negocioAcao } from './src/utils/negocioAcao';
 import { subirPlanoDaFila } from './src/utils/planoDoPino';
 import { textoNormalizado } from './src/utils/pinoP2';
-import { FILTROS_VAZIOS, LENTES, noFoco, passaNosFiltros, pontoDe, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
+import { DELTA_AFASTADO, FILTROS_VAZIOS, LENTES, LENTES_DA_FILEIRA, passaNosFiltros, pontoDe, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
+import FileiraDeLentes, { ALTURA_FILEIRA_LENTES } from './src/screens/FileiraDeLentes';
+import { contadorDaMeta, decisorEstaAgora, escolhidaPor, linhaDaMetaNaFolha, metros as metrosLL, portaSugerida, RAIO_REFERENCIA_M, RAIO_SUGESTAO_M, segundaOpcao, type Candidata } from './src/utils/armasDoMapa';
+import { mapaAbriu, primeiroToque, registrarEvento } from './src/utils/eventosDoMapa';
+import { useArmaDoPino } from './src/hooks/useArmaDoPino';
+import { placasDeBairro } from './src/utils/placasDeBairro';
+import { FolhaFalaPronta } from './src/components/ParaEntrar';
+import type { Arma } from './src/utils/armasDoMapa';
 import CamadaDePontos from './src/map/CamadaDePontos';
 import { pilhasNaTela, posicoesDoLeque, projetar, rotulosSemSobrepor, type Pilha } from './src/utils/rotulos';
 import { MINIMO_QUADRA, quadrasNaTela, resumoDaQuadra, type ResumoQuadra } from './src/utils/quadra';
@@ -184,7 +190,7 @@ import { useStages } from './src/hooks/useStages';
 import { TarefasScreen, baldeDeVencimento, baldeDaTarefaDoCrm } from './src/screens/TarefasScreen';
 import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
-import PlaybookScreen from './src/screens/PlaybookScreen';
+import PlaybookScreen, { buscarPlaybook } from './src/screens/PlaybookScreen';
 import FilaTarefasScreen, { opcoesDaFila } from './src/screens/FilaTarefasScreen';
 import ListaCarteiraWeb from './src/screens/ListaCarteiraWeb';
 import LimparFunil from './src/screens/LimparFunil';
@@ -556,14 +562,15 @@ function visitadoHoje(iso: string | null | undefined): boolean {
 // (src/utils/pinoP2.ts); o memo compara o que muda o desenho.
 const MarkerP2 = React.memo(
   function MarkerP2({
-    client, contexto, pino: pinoPronto, onPress, planoNumero, feito, naFila, selecionado, papel, lente, foraDaLente = false, agrupar = false, pilhaN = 1, leque = null, sol = false, rotulo = false,
+    client, contexto, pino: pinoPronto, onPress, planoNumero, feito, naFila, selecionado, papel, agrupar = false, pilhaN = 1, leque = null, sol = false, rotulo = false, lado = 'dir', aproximadoVisivel = false,
   }: {
     client: Client; contexto: ContextoPino; onPress: (client: Client) => void;
     /** A classificação já feita no itensMapaNovo (auditoria 28/09: rodava duas vezes por pino). */
     pino?: Pino;
     planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean;
-    papel: PapelPino; lente: Lente; foraDaLente?: boolean; agrupar?: boolean;
+    papel: PapelPino; agrupar?: boolean;
     pilhaN?: number; leque?: { dx: number; dy: number } | null; sol?: boolean; rotulo?: boolean;
+    lado?: 'dir' | 'esq'; aproximadoVisivel?: boolean;
   }) {
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
     const pino = pinoPronto ?? classificarPino(client, contexto);
@@ -572,23 +579,24 @@ const MarkerP2 = React.memo(
         coordinate={{ latitude: client.latitude as number, longitude: client.longitude as number }}
         onPress={handlePress}
         anchor={ANCORA_PINO_P2}
-        zIndex={selecionado ? 2000 : leque ? 1500 : papel === 'proxima' ? 1200 : planoNumero ? 1000 : rotulo ? 800 : foraDaLente ? 100 : 500}
+        zIndex={selecionado ? 2000 : leque ? 1500 : papel === 'proxima' ? 1200 : planoNumero ? 1000 : rotulo ? 800 : 500}
         cluster={agrupar && !planoNumero}
       >
         <PinoP2
           pino={pino}
           papel={papel}
-          lente={lente}
           planoNumero={planoNumero}
           visitado={feito || visitadoHoje(client.visited_at)}
           naFila={naFila}
           selecionado={selecionado}
-          foraDaLente={foraDaLente}
-          sinal={papel === 'proxima' || selecionado ? sinalDoPino(pino) : null}
+          sinal={papel === 'proxima' || selecionado || rotulo ? sinalDoPino(pino) : null}
           pilhaN={pilhaN}
+          pilhaCor={pino.cor}
           leque={leque}
           sol={sol}
           rotulo={rotulo}
+          lado={lado}
+          aproximadoVisivel={aproximadoVisivel}
         />
       </Marker>
     );
@@ -604,8 +612,8 @@ const MarkerP2 = React.memo(
     a.naFila === b.naFila &&
     a.selecionado === b.selecionado &&
     a.papel === b.papel &&
-    a.lente === b.lente &&
-    a.foraDaLente === b.foraDaLente &&
+    a.lado === b.lado &&
+    a.aproximadoVisivel === b.aproximadoVisivel &&
     a.agrupar === b.agrupar &&
     a.pilhaN === b.pilhaN &&
     a.sol === b.sol &&
@@ -1683,9 +1691,7 @@ function MainApp() {
   const metaMinha = (profile?.id && metasPorVendedor.get(profile.id)) || metaDoTime;
   const metaDeHoje = meuDia.data?.prometido?.visitas || metaMinha;
   // FAIXA DA RUA (02/10/26): só o executivo, só em dia útil (field sales é seg–sex).
-  const diaDaSemanaBRT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })).getDay();
   // o gestor também vê (Julyan, 02/10/26: "eu não tenho conta de nenhum executivo, não consigo ver")
-  const faixaDaRuaPode = modoNovo && !isViewer && !!profile?.id && diaDaSemanaBRT !== 0 && diaDaSemanaBRT !== 6;
 
   // Recorte de tarefas por vendedor. Gestor (canViewGestor: admin ou Julyan) ve
   // TODAS; vendedor comum ve so as dos leads dele (match por vendedor_id_hubspot).
@@ -2629,25 +2635,190 @@ function MainApp() {
     return celulasNinguemFoi(pinos, heat.pts ?? [], mapRegion.latitude);
   }, [modoNovo, heatOn, mapRegion, itensMapaNovo, heat]);
 
+  // A PRÓXIMA PORTA DO PLANO: a primeira parada ainda não feita (a mesma regra da RotaScreen).
+  // (as placas de bairro do zoom afastado moram logo depois do mapa: placasDoMapa)
+  // Mora aqui, antes do mapa, porque o zoom afastado precisa saber quem continua pino inteiro.
+  const idParadaPendente = useMemo(() => {
+    const atual = routeDisplayClients.find((c) => routeStops.find((s) => s.client_id === c.id)?.status !== 'done');
+    return atual?.id ?? null;
+  }, [routeDisplayClients, routeStops]);
+
+  /* A PORTA SUGERIDA DEPOIS DO PLANO (prancha §4b, 15/10/26). Sem parada pendente (plano feito ou
+     sem plano), o halo vai para a porta de maior chance de venda a até 1 km: recém-aberto novo,
+     dono que costuma estar agora, cobrar, quente/morno, dor registrada, cliente Takeat perto, menos
+     1 ponto a cada 300 m. Sem tela de fim de dia: 6 visitas é o mínimo, não o teto. */
+  const verTodosNoMapa = canViewGestor || isViewer;
+  const candidatasDaPorta = useMemo(() => {
+    if (!modoNovo || idParadaPendente || !userLocation || planejarDia) return [] as { c: Client; p: Pino; d: number }[];
+    const eu = { lat: userLocation.latitude, lng: userLocation.longitude };
+    return itensMapaNovo
+      .filter(({ c, p, plano }) => plano == null && !visitadoHoje(c.visited_at) && !feitosDaRota.has(c.id)
+        && ((p.familia === 'lead' && p.dono === 'meu' && p.temp !== 'X') || (p.familia === 'rec' && (p.dono === 'meu' || verTodosNoMapa))))
+      .map(({ c, p }) => ({ c, p, d: metrosLL(eu, { lat: Number(c.latitude), lng: Number(c.longitude) }) }))
+      .filter((x) => x.d <= RAIO_SUGESTAO_M)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 40);
+  }, [modoNovo, idParadaPendente, userLocation, planejarDia, itensMapaNovo, feitosDaRota, verTodosNoMapa]);
+  // horário do dono e dor: das fichas de rua das candidatas (uma leitura, só quando há candidata)
+  const idsCandidatas = candidatasDaPorta.map((x) => x.c.id).sort().join(',');
+  const fichasCandidatas = useQuery({
+    queryKey: ['fichas-das-candidatas', idsCandidatas],
+    enabled: !!idsCandidatas,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('fichas_de_rua').select('client_id, horario_dono, dor, ocorrido_em')
+        .in('client_id', idsCandidatas.split(',')).order('ocorrido_em', { ascending: false }).limit(400);
+      if (error) throw error;
+      const porCliente = new Map<string, { horario: string | null; dor: string | null }>();
+      for (const f of (data ?? []) as { client_id: string; horario_dono: string | null; dor: string | null }[]) {
+        const atual = porCliente.get(f.client_id) ?? { horario: null, dor: null };
+        porCliente.set(f.client_id, { horario: atual.horario ?? (f.horario_dono?.trim() || null), dor: atual.dor ?? (f.dor?.trim() || null) });
+      }
+      return porCliente;
+    },
+  });
+  const clientesTakeatNaArea = useMemo(
+    () => itensMapaNovo.filter(({ p }) => p.familia === 'cli').map(({ c }) => ({ id: c.id, nome: getClientPrimaryName(c), lat: Number(c.latitude), lng: Number(c.longitude) })),
+    [itensMapaNovo],
+  );
+  const sugestaoDePorta = useMemo(() => {
+    if (!candidatasDaPorta.length) return null;
+    const agora = new Date();
+    const fichas = fichasCandidatas.data;
+    const cands: Candidata[] = candidatasDaPorta.map(({ c, p, d }) => {
+      const pt = { lat: Number(c.latitude), lng: Number(c.longitude) };
+      const f = fichas?.get(c.id);
+      return {
+        id: c.id, nome: getClientPrimaryName(c), distanciaM: d, familia: p.familia, temp: p.temp, abertoHa: p.abertoHa ?? null, nota: p.nota ?? null,
+        cobrar: p.etiqueta?.texto === 'cobrar', decisorAgora: !!f?.horario && decisorEstaAgora(f.horario, agora), temDor: !!f?.dor,
+        clientesPerto: clientesTakeatNaArea.filter((x) => metrosLL(pt, x) <= RAIO_REFERENCIA_M).length,
+      };
+    });
+    const r = portaSugerida(cands);
+    if (!r) return null;
+    return {
+      id: r.melhor.c.id, pontos: r.melhor.pontos, parcelas: r.melhor.parcelas.map((x) => x.texto),
+      porque: escolhidaPor(r.melhor, distanciaTexto(r.melhor.c.distanciaM)),
+      segunda: r.segunda ? { id: r.segunda.c.id, texto: segundaOpcao(r.segunda, distanciaTexto(r.segunda.c.distanciaM)) } : null,
+    };
+  }, [candidatasDaPorta, fichasCandidatas.data, clientesTakeatNaArea]);
+  // halo_sugerido uma vez por porta; o Cheguei nela em até 30 min vira halo_aceito
+  const haloSugeridoRef = useRef<{ id: string; em: number } | null>(null);
+  useEffect(() => {
+    if (!sugestaoDePorta || haloSugeridoRef.current?.id === sugestaoDePorta.id) return;
+    haloSugeridoRef.current = { id: sugestaoDePorta.id, em: Date.now() };
+    registrarEvento('halo_sugerido', { porta: sugestaoDePorta.id, pontos: sugestaoDePorta.pontos, parcelas: sugestaoDePorta.parcelas });
+  }, [sugestaoDePorta]);
+  /** A porta do halo: a parada pendente do plano, ou a sugerida (só no Meu dia). */
+  const idPortaDoHalo = idParadaPendente ?? (lente === 'dia' ? sugestaoDePorta?.id ?? null : null);
+
+  /* O CONTADOR DA SEMANA (prancha §3): recém-abertos visitados com prova desde segunda, no botão da
+     lente. Na sexta à tarde abaixo da meta, também uma linha na folha com quantos estão a 1 km. */
+  const novosNaSemana = contextoPino?.novosVisitadosSemana ?? null;
+  const contadorDaSemana = useMemo(() => (novosNaSemana == null ? null : contadorDaMeta(novosNaSemana, new Date())), [novosNaSemana]);
+  const linhaDaMeta = useMemo(() => {
+    if (novosNaSemana == null) return null;
+    const segunda = (() => { const d = new Date(Date.now() - 3 * 3600000); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() || 7) - 1)); return d.toISOString().slice(0, 10); })();
+    const eu = userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : null;
+    const perto = eu ? itensMapaNovo.filter(({ c, p }) => p.familia === 'rec' && (p.dono === 'meu' || verTodosNoMapa)
+      && !(c.visited_at && new Date(Date.parse(c.visited_at) - 3 * 3600000).toISOString().slice(0, 10) >= segunda)
+      && metrosLL(eu, { lat: Number(c.latitude), lng: Number(c.longitude) }) <= 1000).length : null;
+    return linhaDaMetaNaFolha(novosNaSemana, perto, new Date());
+  }, [novosNaSemana, userLocation, itensMapaNovo, verTodosNoMapa]);
+
+  /* O COMBINADO (prancha §6): o próximo passo do negócio é a tarefa aberta do HubSpot que não é
+     cobrança — a mesma da aba Tarefas. Vai na linha "Combinado" e na fala do gatilho 2. */
+  const combinadoDe = useCallback((c: Client | null): { texto: string; quando: string | null } | null => {
+    if (!c) return null;
+    const ts = tarefasDoCrmParaContagem
+      .filter((x) => !ehCobranca({ assunto: x.assunto, origem: x.marcador?.origem })
+        && (x.clientId === c.id || (!!x.dealId && !!c.id_hubspot && String(x.dealId) === String(c.id_hubspot))))
+      .sort((a, b) => (a.venceEm ?? '9').localeCompare(b.venceEm ?? '9'));
+    const tf = ts[0];
+    if (!tf) return null;
+    const texto = tf.assunto.replace(/^(?:visita|follow.?up|tarefa)\s*[-–—:]\s*/i, '').trim();
+    if (!texto) return null;
+    const quando = tf.venceEm ? (() => {
+      const d = new Date(tf.venceEm);
+      const hojeK = diaBRT(new Date()); const k = diaBRT(d);
+      const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+      const comHora = hora !== '00:00' && hora !== '21:00' ? `, ${hora.replace(':00', 'h').replace(':', 'h')}` : '';
+      if (k === hojeK) return `hoje${comHora}`;
+      return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })}${comHora}`;
+    })() : null;
+    return { texto, quando };
+  }, [tarefasDoCrmParaContagem]);
+
+  // A ARMA DA PORTA DO HALO (prancha §4): o "Para entrar" da espiada e da folha
+  const itemDoHalo = useMemo(() => (idPortaDoHalo ? itensMapaNovo.find((it) => it.c.id === idPortaDoHalo) ?? null : null), [idPortaDoHalo, itensMapaNovo]);
+  const clientePertoDe = useCallback((c: Client | null) => {
+    if (!c || c.latitude == null) return null;
+    const pt = { lat: Number(c.latitude), lng: Number(c.longitude) };
+    return clientesTakeatNaArea.map((x) => ({ ...x, d: metrosLL(pt, x) })).filter((x) => x.d <= RAIO_REFERENCIA_M && x.id !== c.id)
+      .sort((a, b) => a.d - b.d);
+  }, [clientesTakeatNaArea]);
+  const { arma: armaDoHalo } = useArmaDoPino(itemDoHalo?.c ?? null, itemDoHalo?.p ?? null, {
+    tempo: itemDoHalo?.c.id_hubspot ? contextoPino?.tempoPorNegocio.get(String(itemDoHalo.c.id_hubspot)) ?? null : null,
+    proximo: combinadoDe(itemDoHalo?.c ?? null)?.texto?.toLowerCase() ?? null,
+    clientePerto: clientePertoDe(itemDoHalo?.c ?? null)?.[0]?.nome ?? null,
+  }, modoNovo && !!itemDoHalo);
+  // "Fala pronta ›" / "Playbook ›": a página do gatilho por cima do mapa (e o evento fala_aberta)
+  const [falaAberta, setFalaAberta] = useState<Arma | null>(null);
+  const abrirFala = useCallback((a: Arma) => {
+    registrarEvento('fala_aberta', { gatilho_id: a.gatilho });
+    setFalaAberta(a);
+  }, []);
+  // a lente Recém-abertos: quantos a pessoa tem na região (0 = estado vazio)
+  const recemNaRegiao = useMemo(() => {
+    const m = contextoPino?.aberturaPorLead;
+    if (!m) return null;
+    const hoje = Date.now();
+    let n = 0;
+    for (const ab of m.values()) if ((hoje - Date.parse(String(ab).slice(0, 10) + 'T12:00:00Z')) / 86400000 <= 90) n++;
+    return n;
+  }, [contextoPino?.aberturaPorLead]);
+  /* AS FALAS DO PLAYBOOK SEM ABRIR O PLAYBOOK: o "Para entrar" lê as 9 falas do cache do Playbook
+     (texto editável no Cockpit). Quem nunca abriu a aba não tem cache: 30 s depois de abrir o app,
+     uma carga por baixo — uma só, e só se faltar (o app tem a cópia v1 enquanto isso). */
+  useEffect(() => {
+    if (!modoNovo || !profile?.id) return;
+    let tem = false;
+    try { tem = !!window.localStorage.getItem('takeat-playbook-cache'); } catch { tem = true; }
+    if (tem) return;
+    const t = setTimeout(() => { void queryClient.prefetchQuery({ queryKey: ['playbook'], queryFn: buscarPlaybook, staleTime: 10 * 60 * 1000 }); }, 30000);
+    return () => clearTimeout(t);
+  }, [modoNovo, profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // o relógio do "primeiro toque" (prancha §4c): o mapa abre e conta até o 1º Ir ou Cheguei
+  useEffect(() => { if (modoNovo && tab === 'map') mapaAbriu(); }, [modoNovo, tab]);
+
+  /* CLIENTES TAKEAT PERTO (prancha §5): tocar na linha verde da folha mostra só esses pinos por
+     10 s e volta à lente atual. */
+  const [referenciasNaTela, setReferenciasNaTela] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    if (!referenciasNaTela) return;
+    const t = setTimeout(() => setReferenciasNaTela(null), 10000);
+    return () => clearTimeout(t);
+  }, [referenciasNaTela]);
+
   const visiveisMapaNovo = useMemo(
-    () => itensMapaNovo.filter(({ c, p, plano }) => visivelNaLente(lente, p, plano != null, c.id === selectedClient?.id)
-      && (plano != null || passaNosFiltros(c, p, filtrosNovos))),
-    [itensMapaNovo, filtrosNovos, lente, selectedClient?.id],
+    () => itensMapaNovo.filter(({ c, p, plano }) => (referenciasNaTela?.has(c.id)
+      || visivelNaLente(lente, p, plano != null, c.id === selectedClient?.id, verTodosNoMapa))
+      && (plano != null || passaNosFiltros(c, p, filtrosNovos) || !!referenciasNaTela?.has(c.id))),
+    [itensMapaNovo, filtrosNovos, lente, selectedClient?.id, verTodosNoMapa, referenciasNaTela],
   );
 
-  // Zoom 15 para dentro (~2,7 km de mapa no celular). Medido em 26/09: 0,012
-  // não disparava nem no zoom em que já se lê o nome da rua (o mapa do
-  // celular tem ~744 px de altura, ~0,014 de delta ali).
+  // Zoom 15 para dentro (~2,7 km de mapa no celular): o zoom de RUA, onde até 8 pinos ganham nome.
   const ZOOM_RUA_LAT_DELTA = 0.025;
   const { focoMapaNovo, camadaPontos, comNome, pilhaDe, janelaMapa } = useMemo(() => {
     const foco: typeof visiveisMapaNovo = [];
     const pontos: typeof visiveisMapaNovo = [];
-    // Zoom de rua (prompt final §5): de perto, todo pino da área é inteiro,
-    // não só os da lente — quem aproxima quer ver o que tem na quadra sem
-    // trocar de lente. Afastado, fora da lente vira ponto de 7 px.
+    // TRÊS ZOOMS (prancha §1 e §7): de rua, até 8 nomes; de bairro, pino inteiro e só a próxima
+    // porta (e o selecionado) com nome; afastado, o que está na lente vira ponto — menos o plano,
+    // o aberto e a próxima porta, que continuam pino inteiro.
     const zoomRua = !!mapRegion && mapRegion.latitudeDelta <= ZOOM_RUA_LAT_DELTA;
+    const afastado = !!mapRegion && mapRegion.latitudeDelta > DELTA_AFASTADO;
     // Agenda do computador: pino inteiro = o plano, o lead em foco e as camadas ligadas no topo do
-    // mapa (Minha carteira, Régua estourada, Contas-alvo, Em queda); o resto vira ponto de 7 px.
+    // mapa (Minha carteira, Régua estourada, Contas-alvo, Em queda); o resto vira ponto.
     const naCamada = (it: (typeof visiveisMapaNovo)[number]) => {
       if (it.plano != null || it.c.id === focoPC?.id || it.c.id === hoverAgenda) return true;
       if (camadasAgenda.has('carteira') && it.p.dono === 'meu') return true;
@@ -2655,19 +2826,23 @@ function MainApp() {
       return !!g && camadasAgenda.has(g);
     };
     for (const it of visiveisMapaNovo) {
-      if (ehAgendaPC && planejarDia ? naCamada(it) : ((zoomRua && lente !== 'calor') || noFoco(lente, it.p, it.plano) || it.c.id === selectedClient?.id)) foco.push(it);
+      const sempre = it.plano != null || it.c.id === selectedClient?.id || it.c.id === idPortaDoHalo || !!referenciasNaTela?.has(it.c.id);
+      if (ehAgendaPC && planejarDia ? naCamada(it) : (sempre || (!afastado && lente !== 'calor'))) foco.push(it);
       else if (lente !== 'calor') pontos.push(it);
     }
-    // Nomes: afastado (bairro/cidade) só plano e selecionado; de perto, os
-    // que cabem sem sobrepor, na ordem selecionado › plano › cobrar › Q › M.
+    // Nomes (prancha §1, "Rótulos"): de rua, até 8, na ordem plano › cobrar › recém ≤ 30 d ›
+    // meu Q › M › F › recém 31–90 d (empate: o mais perto); de bairro, só a próxima porta e o
+    // selecionado. Na lente Recém-abertos, os 3 mais novos e mais perto ganham nome.
     const nomes = new Map<string, 'dir' | 'esq'>();
-    const perto = !!mapRegion && mapRegion.latitudeDelta <= 0.08; // bairro para dentro; a regra de sobreposição cuida da leitura
-    const prioridade = (it: (typeof foco)[number]) =>
-      it.c.id === selectedClient?.id ? 0 : it.plano ? 1 : it.p.etiqueta?.texto === 'cobrar' ? 2
-        // prompt final C1: meu quente › meu morno › meu › colega › sem dono › conta-alvo
-        : it.p.tipo === 'alvo' ? 8
-        : it.p.dono === 'meu' ? (it.p.temp === 'Q' ? 3 : it.p.temp === 'M' ? 4 : 5)
-        : it.p.dono === 'colega' ? 6 : 7;
+    const prioridade = (it: (typeof foco)[number]) => {
+      if (it.c.id === selectedClient?.id) return 0;
+      if (it.c.id === idPortaDoHalo) return 1;
+      if (it.plano) return 2;
+      if (it.p.etiqueta?.texto === 'cobrar') return 3;
+      if (it.p.familia === 'rec') return (it.p.abertoHa ?? 99) <= 30 ? 4 : 8;
+      if (it.p.dono === 'meu') return it.p.temp === 'Q' ? 5 : it.p.temp === 'M' ? 6 : 7;
+      return 9;
+    };
     const larguraPx = layout.ehLargo ? Math.max(320, janelaTela.width - 352 - 240) : janelaTela.width;
     const alturaPx = layout.ehLargo ? janelaTela.height : Math.max(300, janelaTela.height - 250);
     const janela = mapRegion ? { ...mapRegion, larguraPx, alturaPx } : null;
@@ -2676,20 +2851,41 @@ function MainApp() {
     const pilhas: Pilha[] = janela ? pilhasNaTela(todos, janela) : todos.map((t) => ({ lider: t.id, membros: [t.id] }));
     const pilhaDeId = new Map<string, Pilha>();
     for (const pl of pilhas) for (const m of pl.membros) pilhaDeId.set(m, pl);
-    // Nome só para quem aparece como pino (líder de pilha fechada ou sozinho).
     const focoPorId = new Map(foco.map((x) => [x.c.id, x]));
+    const eu = userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : null;
+    const perto = (id: string) => {
+      const it = focoPorId.get(id);
+      return eu && it ? metrosLL(eu, { lat: Number(it.c.latitude), lng: Number(it.c.longitude) }) : 0;
+    };
+    // os 3 recém-abertos mais novos (até 30 dias) e mais perto, na lente Recém-abertos
+    const tresNovos = new Set(lente === 'novos'
+      ? foco.filter((it) => it.p.familia === 'rec' && (it.p.abertoHa ?? 99) <= 30).sort((a, b) => perto(a.c.id) - perto(b.c.id)).slice(0, 3).map((it) => it.c.id)
+      : []);
     const candidatos = todos.filter((t) => {
       const pl = pilhaDeId.get(t.id);
       const visivelComoPino = !pl || pl.membros.length === 1 || (pl.lider === t.id && pilhaAberta !== pl.lider);
-      const it = focoPorId.get(t.id);
-      return visivelComoPino && (perto || !!it?.plano || t.id === selectedClient?.id);
-    });
+      if (!visivelComoPino) return false;
+      if (zoomRua) return true;
+      return t.prioridade <= 1 || tresNovos.has(t.id);
+    }).map((t) => ({ ...t, prioridade: t.prioridade * 100000 + Math.min(99999, Math.round(perto(t.id))) }));
     if (janela && candidatos.length) {
       for (const [id, lado] of rotulosSemSobrepor(candidatos, janela)) nomes.set(id, lado);
     }
-    const camada = pontos.map(({ c, p }) => ({ lat: c.latitude as number, lng: c.longitude as number, ...pontoDe(p) }));
+    const camada = pontos.map(({ c, p }) => ({ lat: c.latitude as number, lng: c.longitude as number, ...pontoDe(p, modoSol) }));
     return { focoMapaNovo: foco, camadaPontos: camada, comNome: nomes, pilhaDe: pilhaDeId, janelaMapa: janela };
-  }, [visiveisMapaNovo, lente, selectedClient?.id, mapRegion, layout.ehLargo, janelaTela.width, janelaTela.height, pilhaAberta, ehAgendaPC, planejarDia, focoPC?.id, hoverAgenda, camadasAgenda, idsSugestao]);
+  }, [visiveisMapaNovo, lente, selectedClient?.id, mapRegion, layout.ehLargo, janelaTela.width, janelaTela.height, pilhaAberta, ehAgendaPC, planejarDia, focoPC?.id, hoverAgenda, camadasAgenda, idsSugestao, idPortaDoHalo, referenciasNaTela, userLocation, modoSol]);
+  /* PLACAS DE BAIRRO (prancha §5.1): no zoom afastado, "Praia do Canto · 18 novos" e, em verde,
+     "6 clientes Takeat" — a referência sem pôr os pinos de cliente no mapa. */
+  const placasDoMapa = useMemo(() => {
+    // entre o bairro e a cidade: no zoom de estado ou de país, bairro não diz nada (medido em 15/10/26)
+    if (!modoNovo || !mapRegion || mapRegion.latitudeDelta <= DELTA_AFASTADO || mapRegion.latitudeDelta > 0.6 || lente === 'calor' || (ehAgendaPC && planejarDia)) return [];
+    const itens = visiveisMapaNovo.filter((it) => it.plano == null)
+      .map(({ c, p }) => ({ id: c.id, bairro: c.bairro, cidade: c.cidade, lat: Number(c.latitude), lng: Number(c.longitude),
+        familia: (p.familia === 'rec' || p.familia === 'lead' || p.familia === 'cli' ? p.familia : 'outro') as 'rec' | 'lead' | 'cli' | 'outro' }));
+    const clientes = itensMapaNovo.filter(({ p }) => p.familia === 'cli').map(({ c }) => ({ bairro: c.bairro, cidade: c.cidade }));
+    return placasDeBairro(itens, clientes, 6, mapRegion.latitudeDelta * 0.12);
+  }, [modoNovo, mapRegion, lente, ehAgendaPC, planejarDia, visiveisMapaNovo, itensMapaNovo]);
+
   // Pilha até 8: abre em leque. Maior: aproxima o mapa até os pinos se
   // separarem — a não ser que estejam todos no mesmo ponto (aí só o leque separa).
   const abrirPilha = useCallback((c: Client) => {
@@ -2842,12 +3038,7 @@ function MainApp() {
   // A parada "de agora": a primeira ainda nao concluida. Mesma regra do
   // `idxAtual` da RotaScreen — se as duas divergissem, o pino vermelho do
   // mapa apontaria uma parada e a tag "Agora" do card apontaria outra.
-  const idClienteParadaAtual = useMemo(() => {
-    const atual = routeDisplayClients.find(
-      c => routeStops.find(s => s.client_id === c.id)?.status !== 'done',
-    );
-    return atual?.id ?? null;
-  }, [routeDisplayClients, routeStops]);
+  const idClienteParadaAtual = idParadaPendente;
 
   const [isOptimizing, setIsOptimizing] = useState(false);
   // Provider usado na ultima sugestao bem-sucedida. Persistido em memoria
@@ -4684,6 +4875,12 @@ function MainApp() {
 
   const handleMarkAsVisited = useCallback(async (client: Client, onDone?: () => void) => {
     if (visitingRef.current) return;
+    // a porta sugerida depois do plano virou Cheguei em até 30 min (prancha §4b, decisão 5)
+    const halo = haloSugeridoRef.current;
+    if (halo && halo.id === client.id && Date.now() - halo.em <= 30 * 60 * 1000) {
+      registrarEvento('halo_aceito', { porta: client.id, minutos: Math.round((Date.now() - halo.em) / 60000) });
+      haloSugeridoRef.current = { id: halo.id, em: 0 };
+    }
     // Handoff v4.1 §6.4: check-in repetido no mesmo dia não vira segunda
     // visita. Quem já fez check-in hoje neste lead vai direto ao registro —
     // sem gravar outra client_visits nem outra tarefa de visita no HubSpot.
@@ -5742,6 +5939,29 @@ function MainApp() {
           : null,
         etapaRotulo: selectedClient.etapa ?? null,
         etapaCodigo: codigoDaEtapa(selectedClient),
+        // prancha "Mapa do Executivo" (15/10/26): o combinado, os clientes Takeat perto e o tempo do negócio
+        combinado: combinadoDe(selectedClient),
+        referencias: (clientePertoDe(selectedClient) ?? []).map((x) => ({ id: x.id, nome: x.nome, d: x.d })),
+        tempo: selectedClient.id_hubspot ? contextoPino.tempoPorNegocio.get(String(selectedClient.id_hubspot)) ?? null : null,
+        pertoDoCliente: (() => {
+          if (selectedClient.latitude == null) return null;
+          const pt = { lat: Number(selectedClient.latitude), lng: Number(selectedClient.longitude) };
+          let leads = 0; let recem = 0;
+          for (const { c, p } of itensMapaNovo) {
+            if (c.id === selectedClient.id || p.dono !== 'meu' || (p.familia !== 'lead' && p.familia !== 'rec')) continue;
+            if (metrosLL(pt, { lat: Number(c.latitude), lng: Number(c.longitude) }) > RAIO_REFERENCIA_M) continue;
+            if (p.familia === 'lead') leads++; else recem++;
+          }
+          return { leads, recem };
+        })(),
+        onFala: abrirFala,
+        // a linha verde: só esses clientes no mapa por 10 s, e volta à lente
+        onReferencias: (ids: string[]) => {
+          if (!ids.length) return;
+          registrarEvento('referencia_tocada', { n: ids.length });
+          setReferenciasNaTela(new Set(ids));
+          Toast.mostrar(`${ids.length} ${ids.length === 1 ? 'cliente Takeat' : 'clientes Takeat'} no mapa por 10 s`, 'ok');
+        },
         // Botão de avanço do bloco NEGÓCIO: abre Mudar etapa já na etapa destino.
         onAvancar: isViewer ? undefined : (destino: string, preenchido?: Record<string, string>) => {
           const c = selectedClient;
@@ -6144,6 +6364,19 @@ function MainApp() {
         {/* Mapa novo: pino P2 para os leads da área e para as paradas da
             rota (com o número do plano no selo, no lugar do RouteMarker). */}
         {modoNovo && <CamadaDePontos key={modoSol ? 'sol' : 'noite'} pontos={camadaPontos} sol={modoSol} />}
+        {modoNovo && placasDoMapa.map((pl) => (
+          <Marker key={`placa-${pl.chave}`} coordinate={{ latitude: pl.lat, longitude: pl.lng }} anchor={{ x: 0.5, y: 0.5 }} cluster={false} zIndex={300}
+            onPress={() => mapRef.current?.animateToRegion({ latitude: pl.lat, longitude: pl.lng, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 300)}>
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', whiteSpace: 'nowrap', padding: '4px 10px', borderRadius: 10,
+              background: modoSol ? 'rgba(255,255,255,.96)' : 'rgba(23,25,29,.94)', border: `1px solid ${modoSol ? '#D9D4CA' : 'rgba(255,255,255,.14)'}`,
+              boxShadow: '0 2px 8px rgba(0,0,0,.25)', cursor: 'pointer',
+            }}>
+              <span style={{ fontWeight: 700, fontSize: 12.5, lineHeight: 1.3, color: modoSol ? '#111418' : '#F4F5F7' }}>{pl.titulo}</span>
+              {pl.clientes && <span style={{ fontWeight: 600, fontSize: 11.5, lineHeight: 1.3, color: modoSol ? '#14532D' : '#86EFAC' }}>{pl.clientes}</span>}
+            </div>
+          </Marker>
+        ))}
         {modoNovo && contextoPino && focoMapaNovo.map(({ c, p, plano }) => {
           // Pilha (C11): fechada mostra só o líder com o número; aberta, todos em leque.
           const pl = pilhaDe.get(c.id);
@@ -6191,9 +6424,7 @@ function MainApp() {
             feito={plano != null && (planejarDia ? paradasDoDiaPlanejado.find((p) => p.client.id === c.id)?.status === 'done' : feitosDaRota.has(c.id))}
             naFila={leadsNaFila.has(c.id)}
             selecionado={selectedClient?.id === c.id || rascunhoPlano.has(c.id) || (ehAgendaPC && (c.id === hoverAgenda || c.id === focoPC?.id))}
-            papel={!planejarOutroDia && c.id === idClienteParadaAtual ? 'proxima' : plano != null ? 'plano' : 'lente'}
-            lente={lente}
-            foraDaLente={!noFoco(lente, p, plano) && selectedClient?.id !== c.id}
+            papel={!planejarOutroDia && c.id === idPortaDoHalo ? 'proxima' : plano != null ? 'plano' : 'lente'}
             // Até a entrega de densidade: muitos pinos inteiros (lente Contas-alvo
             // numa cidade inteira) agrupam; o plano nunca.
             // pilhas (C11) já seguram o número de pinos: sem bolha de contagem
@@ -6201,9 +6432,11 @@ function MainApp() {
             pilhaN={n > 1 && !aberta ? n : 1}
             leque={leque}
             sol={modoSol}
-            // Nome no zoom de rua para quem cabe sem cobrir outro nome
-            // (rotulosSemSobrepor); afastado, só plano, próxima e selecionado.
-            rotulo={comNome.has(c.id) && (plano != null || (!!mapRegion && mapRegion.latitudeDelta <= 0.02))}
+            // Nome (prancha §1): de rua, até 8 que cabem sem cobrir outro nome; de bairro, só a
+            // próxima porta e o selecionado; na lente Recém-abertos, os 3 mais novos e perto.
+            rotulo={comNome.has(c.id)}
+            lado={comNome.get(c.id) ?? 'dir'}
+            aproximadoVisivel={!!mapRegion && mapRegion.latitudeDelta <= ZOOM_RUA_LAT_DELTA}
           />
           );
         })}
@@ -6335,7 +6568,7 @@ function MainApp() {
         // `top` contado do Y REAL do mapa, igual aos botoes: este overlay e'
         // absoluto contra a RAIZ DA TELA, e o `top: 8` cru punha a pill em
         // cima da busca do header (valia ja' pra de carregamento).
-        style={[styles.areaStatusWrap, { top: modoNovo && !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + (faixaDaRuaPode && tab === 'map' && !creationMode ? ALTURA_FAIXA_RUA + 8 : 0) : (mapLayout?.y ?? 0) + 8 + (modoNovo && faixaDaRuaPode && tab === 'map' && !creationMode ? ALTURA_FAIXA_RUA + 12 : 0) }]}
+        style={[styles.areaStatusWrap, { top: modoNovo && !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + (tab === 'map' && !creationMode ? ALTURA_FILEIRA_LENTES + 8 : 0) : (mapLayout?.y ?? 0) + 8 }]}
         pointerEvents="none"
       >
         {modoNovo && !layout.ehLargo && <AvisoSemSinal />}
@@ -6498,8 +6731,6 @@ function MainApp() {
       {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && (
         <TopoCampo
           top={insets.top + 7}
-          lente={{ rotulo: LENTES.find((l) => l.id === lente)?.rotulo ?? 'Meu dia', cor: COR_LENTE[lente] }}
-          aoAbrirLentes={() => { Keyboard.dismiss(); setLentesAbertas(true); }}
           busca={searchQuery}
           aoBuscar={setSearchQuery}
           aoAbrirBusca={() => setBuscaAberta(true)}
@@ -6510,20 +6741,19 @@ function MainApp() {
           aoAvatar={() => setPerfilAberto(true)}
         />
       )}
-      {/* no PC também (02/10/26, "no desktop não abre"): no topo da área do mapa */}
-      {modoNovo && tab === 'map' && !creationMode && faixaDaRuaPode && (
-        <FaixaDaRua
-          largo={layout.ehLargo}
-          top={layout.ehLargo ? 12 : insets.top + 7 + ALTURA_TOPO_CAMPO + 8}
-          feitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
-          meta={metaDeHoje}
-          plano={(() => {
-            const vivas = routeStops.filter((st) => st.status === 'planned' || st.status === 'done');
-            return { total: vivas.length, feitas: vivas.filter((st) => st.status === 'done' || (!!st.client && visitadoHoje(st.client.visited_at))).length };
-          })()}
-          temRota={routeDisplayClients.length > 0}
-          // com rota montada, a rota do dia; sem rota, o Montar meu dia
-          aoIr={() => { if (routeDisplayClients.length > 0 || !podePlanejar) irParaAba('route'); else abrirPlanejar(); }}
+      {/* A FILEIRA DE LENTES (prancha "Mapa do Executivo", §2, 15/10/26). Toma o lugar da faixa da
+          rua: o número do dia mora na folha ("N visitas hoje · mínimo 6") e a próxima porta, na
+          pílula. A 390 px cabem 4 lentes; o resto e os filtros ficam no ≡. */}
+      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && (
+        <FileiraDeLentes
+          top={insets.top + 7 + ALTURA_TOPO_CAMPO + 8}
+          lentes={LENTES.filter((l) => LENTES_DA_FILEIRA.includes(l.id))}
+          atual={lente}
+          aoEscolher={(l) => { setLente(l); setQuadraAberta(null); }}
+          contador={contadorDaSemana}
+          aoFiltros={() => { Keyboard.dismiss(); setLentesAbertas(true); }}
+          filtrosAtivos={quantosFiltros(filtrosNovos)}
+          lenteNosFiltros={!LENTES_DA_FILEIRA.includes(lente)}
         />
       )}
       {modoNovo && (
@@ -6560,13 +6790,16 @@ function MainApp() {
         <FolhaLentes
           visivel={lentesAbertas}
           aoFechar={() => setLentesAbertas(false)}
-          lentes={LENTES.filter((l) => l.id !== 'calor' || canViewGestor)}
+          lentes={LENTES.filter((l) => !LENTES_DA_FILEIRA.includes(l.id) && (l.id !== 'calor' || canViewGestor))}
           atual={lente}
-          aoEscolher={setLente}
+          aoEscolher={(l) => { setLente(l); setQuadraAberta(null); }}
           filtrosAtivos={quantosFiltros(filtrosNovos)}
           aoFiltros={() => setFiltrosNovosAbertos(true)}
         />
       )}
+
+      {/* A página do gatilho do Playbook ("Fala pronta ›"), por cima do mapa (prancha §4). */}
+      {modoNovo && <FolhaFalaPronta arma={falaAberta} aoFechar={() => setFalaAberta(null)} />}
 
       {/* Mapa novo: folha de baixo sem lead aberto (prancha §5). No
           desktop o painel lateral de 352px continua fazendo esse papel. */}
@@ -6598,8 +6831,13 @@ function MainApp() {
           visitasFeitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
           visitasProvadas={meuDia.data?.provadasHoje ?? null}
           metaVisitas={metaDeHoje}
-          novosSemana={contextoPino?.novosVisitadosSemana ?? null}
+          linhaMeta={linhaDaMeta}
           aoNovos={() => setLente('novos')}
+          idProxima={planejarOutroDia ? null : idPortaDoHalo}
+          armaDaProxima={armaDoHalo}
+          sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
+          aoFala={abrirFala}
+          recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
           aoProgresso={() => setMeuDiaAberto(true)}
           chao={alturaRodape ?? baseInferior}
           totalNaArea={visiveisMapaNovo.length}
@@ -6773,18 +7011,16 @@ function MainApp() {
   const painelMapaNovoWeb = (
     <View style={[styles.pmwContainer, { flexDirection: 'column' }]}>
       <View style={styles.pmnLentes}>
-        {LENTES.filter((l) => l.id !== 'calor' || canViewGestor).map((l) => {
-          const ativa = lente === l.id;
-          return (
-            <Pressable key={l.id} accessibilityRole="button" accessibilityState={{ selected: ativa }} onPress={() => { setLente(l.id); setQuadraAberta(null); }}
-              style={[styles.pmnLente, ativa && { backgroundColor: COR_LENTE[l.id], borderColor: COR_LENTE[l.id] }]}>
-              <Text style={[styles.pmnLenteTexto, ativa && { color: '#FFFFFF' }]}>{l.rotulo}</Text>
-            </Pressable>
-          );
-        })}
-        <Pressable accessibilityRole="button" onPress={() => setFiltrosNovosAbertos(true)} style={styles.pmnLente}>
-          <Text style={styles.pmnLenteTexto}>{quantosFiltros(filtrosNovos) ? `Filtros · ${quantosFiltros(filtrosNovos)}` : 'Filtros'}</Text>
-        </Pressable>
+        {/* Computador (prancha §9): todas as lentes na fileira, nesta ordem; Calor só para gestor */}
+        <FileiraDeLentes
+          largo
+          lentes={LENTES.filter((l) => l.id !== 'calor' || canViewGestor)}
+          atual={lente}
+          aoEscolher={(l) => { setLente(l); setQuadraAberta(null); }}
+          contador={contadorDaSemana}
+          aoFiltros={() => setFiltrosNovosAbertos(true)}
+          filtrosAtivos={quantosFiltros(filtrosNovos)}
+        />
         {/* esconder também daqui, onde a mão já está (05/10/26: "tenho que esconder painel ali também") */}
         <Pressable accessibilityRole="button" accessibilityLabel="Esconder o painel e ampliar o mapa" onPress={alternarPainel} style={[styles.pmnLente, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
           <IconChevronLeft width={14} height={14} fill={iconColors.muted} />
@@ -6839,8 +7075,13 @@ function MainApp() {
         visitasFeitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
         visitasProvadas={meuDia.data?.provadasHoje ?? null}
         metaVisitas={metaDeHoje}
-        novosSemana={contextoPino?.novosVisitadosSemana ?? null}
+        linhaMeta={linhaDaMeta}
         aoNovos={() => setLente('novos')}
+        idProxima={planejarOutroDia ? null : idPortaDoHalo}
+        armaDaProxima={armaDoHalo}
+        sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
+        aoFala={abrirFala}
+        recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
         aoProgresso={() => setMeuDiaAberto(true)}
         totalNaArea={visiveisMapaNovo.length}
         rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
@@ -9812,6 +10053,8 @@ function MainApp() {
       {lugarGoogle && (
         <FolhaLugarGoogle
           lugar={lugarGoogle}
+          eu={userLocation}
+          meuOwnerId={(profile as { id_hubspot?: string | null } | null)?.id_hubspot ?? null}
           aoFechar={() => setLugarGoogle(null)}
           aoAbrirLead={(c) => { setLugarGoogle(null); openClientDetails(c); }}
           aoVirarLead={async (d) => {
@@ -9839,6 +10082,8 @@ function MainApp() {
                 geo_approximate: false,
                 origem_lead: 'google_maps_motor',
                 conta_alvo_place_id: d.placeId,
+                // nota e avaliações já consultadas vão junto, sem nova cobrança (prancha §7)
+                ...(d.nota != null ? { conta_alvo_rating: d.nota, conta_alvo_reviews: d.avaliacoes } : {}),
               });
               setLugarGoogle(null);
               // Agenda do computador planejando um dia: o lead novo já entra no dia (a confirmar)
@@ -10266,7 +10511,7 @@ function ClientBottomSheet({
   novo,
 }: {
   /** Mapa novo (prancha §7): troca o topo e o peek; abas e alertas continuam. */
-  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onTirarDaRota?: () => void; onAvancar?: (destino: string, preenchido?: Record<string, string>) => void; onLimparFunil?: () => void; onCompletarArmas?: () => void; onPorNoPlano?: () => void }) | null;
+  novo?: (Omit<DadosCardNovo, 'client' | 'isMarkingVisited' | 'responsavelNome'> & { onLiguei?: () => void; onEMeu?: () => void; onTirarDaRota?: () => void; onAvancar?: (destino: string, preenchido?: Record<string, string>) => void; onLimparFunil?: () => void; onCompletarArmas?: () => void; onPorNoPlano?: () => void; onFala?: (a: Arma) => void; onReferencias?: (ids: string[]) => void }) | null;
   /** Mapa novo: o cartão subiu para a meia altura (60%) — o mapa leva o pino para a faixa de cima. */
   aoAbrirMeia?: () => void;
   /** Achado pela busca: abre no cartão pequeno, com o mapa à vista (05/10/2026). */
@@ -10688,6 +10933,8 @@ function ClientBottomSheet({
     onLimparFunil: novo?.onLimparFunil,
     onCompletarArmas: novo?.onCompletarArmas,
     onPorNoPlano: novo?.onPorNoPlano,
+    onFala: novo?.onFala,
+    onReferencias: novo?.onReferencias,
   };
 
   // ── Faixa de topo (M1c) ───────────────────────────────────────────────

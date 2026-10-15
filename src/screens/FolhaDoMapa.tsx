@@ -16,7 +16,11 @@ import { distanciaTexto, ir } from './CardLeadNovo';
 import { IconArrowDown, IconArrowUp, useIconColors } from '../components/icons';
 
 import { ordenarItens, quedaCurta, type ItemFolha } from '../utils/cardNovo';
-import { IconChevronDown as SiDown, IconClose as SiClose, IconChevronRight as SiRight } from '../components/icons';
+import { IconChevronDown as SiDown, IconClose as SiClose } from '../components/icons';
+import { BlocoParaEntrar } from '../components/ParaEntrar';
+import { visitasDoDia, type Arma } from '../utils/armasDoMapa';
+import { primeiroToque } from '../utils/eventosDoMapa';
+import { useComSinal } from './AvisoSemSinal';
 
 export type { ItemFolha };
 
@@ -45,10 +49,20 @@ type Props = {
   metaVisitas: number;
   /** Toque em "x de 6 visitas". */
   aoProgresso?: () => void;
-  /** Recém-abertos visitados com prova nesta semana (meta de 5). null = não medido. */
-  novosSemana?: number | null;
+  /** Sexta à tarde abaixo da meta de recém-abertos: a linha âmbar (prancha §3). */
+  linhaMeta?: string | null;
   /** Toque na linha da meta: abre a lente Recém-abertos. */
   aoNovos?: () => void;
+  /** A porta do halo (a parada pendente do plano ou a sugerida depois dele). */
+  idProxima?: string | null;
+  /** O "Para entrar" da próxima porta (prancha §4). */
+  armaDaProxima?: Arma | null;
+  /** A próxima porta é a sugerida depois do plano: o porquê e a 2ª opção (prancha §4b). */
+  sugestao?: { porque: string; segunda: { id: string; texto: string } | null } | null;
+  /** "Fala pronta ›" / "Playbook ›": abre a página do gatilho. */
+  aoFala?: (a: Arma) => void;
+  /** Lente Recém-abertos: quantos a pessoa tem na região (0 = estado vazio) e a volta ao Meu dia. */
+  recem?: { naRegiao: number | null; aoVoltar: () => void } | null;
   /** Desktop (28/09/2026): a mesma folha vira o painel lateral, sempre aberta, sem alça. */
   embutida?: boolean;
   /** id do pino aberto no mapa: tocar num pino traz a pílula recolhida de volta */
@@ -73,12 +87,24 @@ function aPe(m: number | null): string | null {
 }
 
 function PinoMini({ p, plano }: { p: Pino; plano: number | null }) {
+  // recém-aberto: o losango preto e branco com os dias (o mesmo do mapa)
+  if (p.familia === 'rec') {
+    return (
+      <View style={s.miniCaixa}>
+        <View style={s.miniLosango}>
+          <Text style={s.miniLosangoTexto}>{plano ?? p.abertoHa ?? ''}</Text>
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={[s.mini, { borderColor: p.dono === 'sem' ? '#FACC15' : p.cor, borderStyle: p.dono === 'sem' ? 'dashed' : 'solid' }]}>
-      <Text style={[s.miniTexto, { color: p.cor }]}>{plano ?? (p.glifo || '•')}</Text>
+      <Text style={[s.miniTexto, { color: p.cor }]}>{plano ?? (p.familia === 'av' && p.nota != null ? p.nota.toFixed(1).replace('.', ',') : p.glifo || '•')}</Text>
     </View>
   );
 }
+
+const diasTexto = (n: number | null | undefined) => (n == null ? null : n === 0 ? 'abriu hoje' : `aberto há ${n} ${n === 1 ? 'dia' : 'dias'}`);
 
 // A4 (handoff v6): a 375 px as duas etiquetas ao lado do nome deixavam ~100 px para ele.
 // Agora elas moram na linha de baixo, dentro da coluna do nome: a primeira aparece e as
@@ -109,10 +135,17 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, novosSemana = null, aoNovos, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima = null, sugestao = null, aoFala, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
   const cores = useIconColors();
+  const onCheguei = (c: Client) => { primeiroToque('cheguei'); chegueiBruto(c); };
+  const irAte = (c: Client) => { primeiroToque('ir'); ir(c, false); };
   const visitasFeitas = feitasMedidas ?? 0;
   const feitasTexto = feitasMedidas == null ? "—" : String(feitasMedidas);
+  // "N visitas hoje · mínimo 6" (prancha §3): passa de 6 normalmente, nunca "dia concluído"
+  const semProva = visitasProvadas != null && visitasFeitas > visitasProvadas ? visitasFeitas - visitasProvadas : 0;
+  const visitasTexto = visitasDoDia(feitasMedidas, metaVisitas) ?? `mínimo ${metaVisitas} visitas`;
+  const lenteRecem = !!recem;
+  const comSinal = useComSinal();
   const emAberto = Math.max(0, planoTotal - planoFeito);
   const [abertaPeloToque, setAberta] = useState(false);
   // RECOLHER A PÍLULA (02/10/26, Julyan: "manter no mapa, mas recolhível"). Recolhida vira um
@@ -154,10 +187,20 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
     setModoEstado(m);
     try { window.localStorage.setItem('takeat-folha-ordem', m); } catch { /* sem storage: só não lembra */ }
   };
-  const ordenados = useMemo(() => (modo === 'roteiro'
-    ? itens.filter((it) => it.plano != null).sort((a, b) => (a.plano ?? 0) - (b.plano ?? 0))
-    : ordenarItens(itens, modo)), [itens, modo]);
-  const proxima = useMemo(() => ordenarItens(itens, 'prioridade').find((it) => it.plano && !it.feito) ?? null, [itens]);
+  const ordenados = useMemo(() => {
+    if (modo === 'roteiro') return itens.filter((it) => it.plano != null).sort((a, b) => (a.plano ?? 0) - (b.plano ?? 0));
+    // LENTE RECÉM-ABERTOS (prancha §4): mais novo e mais perto primeiro (até 30 dias na frente)
+    if (lenteRecem && modo === 'prioridade') {
+      const d = (x: ItemFolha) => x.distanciaM ?? Number.POSITIVE_INFINITY;
+      const novo = (x: ItemFolha) => (x.p.familia === 'rec' ? ((x.p.abertoHa ?? 99) <= 30 ? 0 : 1) : 2);
+      return [...itens].sort((a, b) => novo(a) - novo(b) || d(a) - d(b));
+    }
+    return ordenarItens(itens, modo);
+  }, [itens, modo, lenteRecem]);
+  // a porta do halo: a que o App diz (plano pendente ou a sugerida); sem ela, a 1ª do plano em aberto
+  const proxima = useMemo(() => (idProxima ? itens.find((it) => it.c.id === idProxima) ?? null : null)
+    ?? ordenarItens(itens, 'prioridade').find((it) => it.plano && !it.feito) ?? null, [itens, idProxima]);
+  const ehSugerida = !!proxima && !proxima.plano && !!sugestao;
   // Arrastar a pílula para cima abre a lista da área (handoff v4.1, xama1).
   const arrasto = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 12 && Math.abs(g.dy) > Math.abs(g.dx),
@@ -187,43 +230,70 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
   }
   if (!aberta) {
     const meta = Math.max(1, metaVisitas);
+    const subProxima = proxima
+      ? (ehSugerida ? sugestao!.porque : [distanciaTexto(proxima.distanciaM), aPe(proxima.distanciaM)].filter(Boolean).join(' · ')) || 'toque para ver o lead'
+      : '';
     return (
       <View ref={acima.ref} style={[s.pilula, { bottom: chao + 8 + acima.ajuste }]} accessibilityLabel="Próxima porta" onLayout={medir} {...arrasto.panHandlers}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Recolher a barra da próxima porta" onPress={() => setRecolhida(true)} hitSlop={8} style={s.pilulaRecolher}>
-          <SiDown width={18} height={18} fill="var(--text-muted)" />
-        </Pressable>
-        {proxima ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${proxima.c.empresa?.trim() || proxima.c.nome}`} onPress={() => onAbrir(proxima.c)} style={s.pilulaTexto}>
-            <Text style={s.pilulaNome} numberOfLines={1}>{proxima.c.empresa?.trim() || proxima.c.nome}</Text>
-            <Text style={s.pilulaSub} numberOfLines={1}>{[distanciaTexto(proxima.distanciaM), aPe(proxima.distanciaM)].filter(Boolean).join(' · ') || 'toque para ver o lead'}</Text>
+        <View style={s.pilulaLinha}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Recolher a barra da próxima porta" onPress={() => setRecolhida(true)} hitSlop={8} style={s.pilulaRecolher}>
+            <SiDown width={18} height={18} fill="var(--text-muted)" />
           </Pressable>
-        ) : (
-          <Pressable accessibilityRole="button" accessibilityLabel="Abrir a lista desta área" onPress={() => setAberta(true)} style={s.pilulaTexto}>
-            <Text style={s.pilulaNome} numberOfLines={1}>{planoTotal ? `Plano concluído · ${planoFeito}/${planoTotal}` : 'Nada planejado hoje'}</Text>
-            <Text style={s.pilulaSub} numberOfLines={1}>{`${totalNaArea} na área · ver a lista`}</Text>
+          {proxima ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${proxima.c.empresa?.trim() || proxima.c.nome}`} onPress={() => onAbrir(proxima.c)} style={s.pilulaTexto}>
+              <Text style={s.pilulaNome} numberOfLines={1}>{proxima.c.empresa?.trim() || proxima.c.nome}</Text>
+              <Text style={s.pilulaSub} numberOfLines={1}>{subProxima}</Text>
+            </Pressable>
+          ) : lenteRecem && recem!.naRegiao === 0 ? (
+            /* prancha §8: a lente sem CNPJ novo na região diz isso, e o plano continua no mapa */
+            <Pressable accessibilityRole="button" accessibilityLabel="Nenhum recém-aberto na sua região. Abrir a lista" onPress={() => setAberta(true)} style={s.pilulaTexto}>
+              <Text style={s.pilulaNome} numberOfLines={1}>Nenhum recém-aberto na região</Text>
+              <Text style={s.pilulaSub} numberOfLines={1}>nova leva toda segunda</Text>
+            </Pressable>
+          ) : (
+            <Pressable accessibilityRole="button" accessibilityLabel="Abrir a lista desta área" onPress={() => setAberta(true)} style={s.pilulaTexto}>
+              {/* sem "concluído" (prancha §3): 6 é o mínimo, a rua continua */}
+              <Text style={s.pilulaNome} numberOfLines={1}>{planoTotal ? `Plano feito · ${planoFeito} de ${planoTotal}` : 'Nada planejado hoje'}</Text>
+              <Text style={s.pilulaSub} numberOfLines={1}>{`${totalNaArea} na área · ver a lista`}</Text>
+            </Pressable>
+          )}
+          <Pressable accessibilityRole="button" accessibilityLabel={`${feitasTexto} ${visitasFeitas === 1 ? 'visita' : 'visitas'} hoje, mínimo ${meta}`} onPress={aoProgresso} style={s.pilulaProgresso} hitSlop={6}>
+            <Text style={s.pilulaConta} numberOfLines={1}>{`${feitasTexto} hoje`}</Text>
+            <Text style={[s.pilulaProva, semProva > 0 && s.pilulaProvaFalta]} numberOfLines={1}>{semProva ? `${semProva} sem prova` : `mín. ${meta}`}</Text>
+          </Pressable>
+          {proxima ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Cheguei na próxima porta" onPress={() => onCheguei(proxima.c)} style={s.pilulaCheguei}>
+              <Text style={s.btnChegueiTexto}>Cheguei</Text>
+            </Pressable>
+          ) : lenteRecem && recem!.naRegiao === 0 ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Voltar ao Meu dia" onPress={recem!.aoVoltar} style={s.pilulaLista}>
+              <Text style={s.pilulaListaTexto}>Meu dia</Text>
+            </Pressable>
+          ) : aoPlanejar ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Planejar pelo mapa" onPress={aoPlanejar} style={s.pilulaLista}>
+              <Text style={s.pilulaListaTexto}>Planejar</Text>
+            </Pressable>
+          ) : (
+            <Pressable accessibilityRole="button" accessibilityLabel="Abrir a lista desta área" onPress={() => setAberta(true)} style={s.pilulaLista}>
+              <Text style={s.pilulaListaTexto}>Lista</Text>
+            </Pressable>
+          )}
+        </View>
+        {/* ESPIADA DA PRÓXIMA PORTA (prancha §4): só o motivo, em 1–2 linhas, com "Fala pronta ›" */}
+        {proxima && armaDaProxima && (
+          <Pressable accessibilityRole="button" accessibilityLabel={`Para entrar: ${armaDaProxima.motivo}. Fala pronta`}
+            onPress={aoFala ? () => aoFala(armaDaProxima) : () => onAbrir(proxima.c)} style={s.pilulaArma}>
+            <Text style={s.pilulaArmaTexto} numberOfLines={2}>
+              <Text style={s.pilulaArmaKicker}>{`${armaDaProxima.kicker}  `}</Text>
+              {armaDaProxima.motivo}
+            </Text>
+            <Text style={s.pilulaArmaLink}>Fala pronta ›</Text>
           </Pressable>
         )}
-        <Pressable accessibilityRole="button" accessibilityLabel={`${feitasTexto} de ${meta} visitas hoje`} onPress={aoProgresso} style={s.pilulaProgresso} hitSlop={6}>
-          <Text style={s.pilulaConta}>{`${feitasTexto}/${meta}`}</Text>
-          <View style={s.tracos}>{Array.from({ length: Math.min(meta, 8) }, (_, k) => <View key={k} style={[s.traco, k < visitasFeitas && s.tracoFeito]} />)}</View>
-          {/* D1 (handoff v6): a meta conta a visita feita; a prova vem logo embaixo, igual ao Cockpit */}
-          {visitasProvadas != null && visitasFeitas > 0 && (
-            <Text style={[s.pilulaProva, visitasProvadas < visitasFeitas && s.pilulaProvaFalta]} numberOfLines={1}>
-              {visitasProvadas < visitasFeitas ? `${visitasFeitas - visitasProvadas} sem prova` : `${visitasProvadas} prov.`}
-            </Text>
-          )}
-        </Pressable>
-        {proxima ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Cheguei na próxima porta" onPress={() => onCheguei(proxima.c)} style={s.pilulaCheguei}>
-            <Text style={s.btnChegueiTexto}>Cheguei</Text>
-          </Pressable>
-        ) : aoPlanejar ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Planejar pelo mapa" onPress={aoPlanejar} style={s.pilulaLista}>
-            <Text style={s.pilulaListaTexto}>Planejar</Text>
-          </Pressable>
-        ) : (
-          <Pressable accessibilityRole="button" accessibilityLabel="Abrir a lista desta área" onPress={() => setAberta(true)} style={s.pilulaLista}>
-            <Text style={s.pilulaListaTexto}>Lista</Text>
+        {!proxima && linhaMeta && (
+          <Pressable accessibilityRole="button" onPress={aoNovos} style={s.pilulaArma}>
+            <Text style={[s.pilulaArmaTexto, { color: 'var(--tint-amber-text)' }]} numberOfLines={2}>{linhaMeta}</Text>
+            <Text style={s.pilulaArmaLink}>Ver ›</Text>
           </Pressable>
         )}
       </View>
@@ -254,36 +324,71 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
         </Pressable>
       )}
       <View style={s.linhaTopo}>
-        <Text style={s.kicker} numberOfLines={1}>
-          {proxima ? `PRÓXIMA PORTA · ${proxima.plano} DO PLANO` : planoTotal ? 'PLANO DE HOJE' : 'AGORA, PERTO DE VOCÊ'}
+        <Text style={[s.kicker, lenteRecem && !proxima && s.kickerNeutro]} numberOfLines={2}>
+          {lenteRecem && !quadra ? 'RECÉM-ABERTOS · 0 A 90 DIAS'
+            : proxima ? (ehSugerida ? (planoTotal ? 'PLANO FEITO · PRÓXIMA PORTA PERTO' : 'PRÓXIMA PORTA PERTO') : `PRÓXIMA PORTA · ${proxima.plano} DO PLANO`)
+              : planoTotal ? 'PLANO DE HOJE' : 'AGORA, PERTO DE VOCÊ'}
         </Text>
-        <Pressable accessibilityRole="button" accessibilityLabel={`${feitasTexto} de ${metaVisitas} visitas hoje`} onPress={aoProgresso} hitSlop={10} style={{ paddingVertical: 13, marginVertical: -13 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={visitasTexto} onPress={aoProgresso} hitSlop={10} style={{ paddingVertical: 13, marginVertical: -13 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-            <Text style={s.progresso}>{`${feitasTexto} de ${metaVisitas} visitas${visitasProvadas != null && visitasFeitas > 0 ? ` · ${visitasProvadas} ${visitasProvadas === 1 ? 'provada' : 'provadas'}` : ''}`}</Text>
-            <SiRight width={16} height={16} fill="var(--text-muted)" />
+            <Text style={[s.progresso, feitasMedidas != null && feitasMedidas >= metaVisitas && s.progressoOk]}>{visitasTexto}</Text>
           </View>
         </Pressable>
       </View>
-      {/* META DOS RECÉM-ABERTOS (15/10/26): 5 por semana, visitados com prova. Toque abre a lente. */}
-      {novosSemana != null && (
-        <Pressable accessibilityRole="button" accessibilityLabel={`Recém-abertos visitados nesta semana: ${novosSemana} de 5. Ver os recém-abertos no mapa`} onPress={aoNovos} style={s.novosLinha}>
-          <View style={[s.novosPonto, { backgroundColor: novosSemana >= 5 ? "#16A34A" : "#14B8A6" }]} />
-          <Text style={s.novosTexto} numberOfLines={1}>{novosSemana >= 5 ? `Recém-abertos: ${novosSemana} na semana · meta batida` : `Recém-abertos: ${novosSemana} de 5 na semana`}</Text>
-          <SiRight width={14} height={14} fill="var(--text-muted)" />
+      {/* META DOS RECÉM-ABERTOS (prancha §3): a linha só entra na sexta à tarde abaixo da meta;
+          o resto da semana o contador mora no botão da lente. Toque abre a lente. */}
+      {!!linhaMeta && !lenteRecem && (
+        <Pressable accessibilityRole="button" accessibilityLabel={`${linhaMeta} Ver os recém-abertos no mapa`} onPress={aoNovos} style={s.metaLinha}>
+          <Text style={s.metaTexto}>{linhaMeta}</Text>
+          <Text style={s.metaVer}>Ver ›</Text>
         </Pressable>
       )}
 
-      {proxima ? (
-        <View style={s.proxima}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${proxima.c.empresa?.trim() || proxima.c.nome}`} onPress={() => onAbrir(proxima.c)} style={{ flex: 1, minWidth: 0 }}>
-            <Text style={s.nome} numberOfLines={1}>{proxima.c.empresa?.trim() || proxima.c.nome}</Text>
-            <Text style={s.sub} numberOfLines={1}>
-              {[distanciaTexto(proxima.distanciaM), aPe(proxima.distanciaM), proxima.c.bairro?.trim() || null].filter(Boolean).join(' · ') || 'toque para ver o lead'}
-            </Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Cheguei na próxima porta" onPress={() => onCheguei(proxima.c)} style={s.btnCheguei}>
-            <Text style={s.btnChegueiTexto}>Cheguei</Text>
-          </Pressable>
+      {lenteRecem && !quadra ? (
+        recem!.naRegiao === 0 ? (
+          <View style={{ gap: 8, paddingBottom: 4 }}>
+            <Text style={s.nome}>Nenhum CNPJ aberto nos últimos 90 dias na sua região</Text>
+            <Text style={s.sub}>Nova leva toda segunda. Até lá, seus leads perto estão no Meu dia.</Text>
+            <Pressable accessibilityRole="button" onPress={recem!.aoVoltar} style={s.voltarMeuDia}>
+              <Text style={s.voltarMeuDiaTexto}>Voltar ao Meu dia</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={{ gap: 2 }}>
+            <Text style={s.nome} numberOfLines={1}>{`${recem!.naRegiao ?? itens.filter((it) => it.p.familia === 'rec').length} na sua região`}</Text>
+            <Text style={s.sub} numberOfLines={2}>Mais novo e mais perto primeiro · nova leva toda segunda</Text>
+          </View>
+        )
+      ) : proxima ? (
+        <View style={{ gap: 8 }}>
+          <View style={s.proxima}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${proxima.c.empresa?.trim() || proxima.c.nome}`} onPress={() => onAbrir(proxima.c)} style={{ flex: 1, minWidth: 0 }}>
+              <Text style={s.nome} numberOfLines={1}>{proxima.c.empresa?.trim() || proxima.c.nome}</Text>
+              <Text style={s.sub} numberOfLines={1}>
+                {[proxima.p.familia === 'rec' ? diasTexto(proxima.p.abertoHa) : null, distanciaTexto(proxima.distanciaM), aPe(proxima.distanciaM), proxima.c.bairro?.trim() || null].filter(Boolean).join(' · ') || 'toque para ver o lead'}
+              </Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Ir até ${proxima.c.empresa?.trim() || proxima.c.nome}`} onPress={() => irAte(proxima.c)} style={s.btnIr}>
+              <Text style={s.btnIrTexto}>Ir</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Cheguei na próxima porta" onPress={() => onCheguei(proxima.c)} style={s.btnCheguei}>
+              <Text style={s.btnChegueiTexto}>Cheguei</Text>
+            </Pressable>
+          </View>
+          {/* "Para entrar" (prancha §4); na porta sugerida, "ESCOLHIDA POR" com as parcelas (§4b) */}
+          {ehSugerida ? (
+            <BlocoParaEntrar arma={armaDaProxima ?? { gatilho: 6, kicker: 'PARA ENTRAR', motivo: sugestao!.porque, fala: '' }} compacto
+              kicker="ESCOLHIDA POR" motivo={sugestao!.porque} aoAbrirFala={armaDaProxima ? aoFala : undefined} />
+          ) : armaDaProxima ? (
+            <BlocoParaEntrar arma={armaDaProxima} compacto={!embutida && !aberta} aoAbrirFala={aoFala} />
+          ) : null}
+          {!comSinal && <Text style={s.semSinal}>Cheguei funciona sem sinal: grava no celular com a hora e o GPS.</Text>}
+          {ehSugerida && sugestao!.segunda && (
+            <Pressable accessibilityRole="button" onPress={() => { const it = itens.find((x) => x.c.id === sugestao!.segunda!.id); if (it) onAbrir(it.c); }} style={s.segunda}>
+              <Text style={s.segundaTexto} numberOfLines={2}>{sugestao!.segunda.texto}</Text>
+              <Text style={s.segundaTexto}>›</Text>
+            </Pressable>
+          )}
         </View>
       ) : (
         <Pressable accessibilityRole="button" onPress={() => setAberta((v) => !v)} style={s.proxima}>
@@ -303,7 +408,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
         </Pressable>
       )}
 
-      {aberta && (quadra ? (
+      {aberta && !(lenteRecem && recem!.naRegiao === 0 && !quadra) && (quadra ? (
         <View style={s.quadraTopo}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={s.nestaAreaTexto} numberOfLines={1}>{`Quadra · ${quadra.area} · ${itens.length} ${itens.length === 1 ? 'pino' : 'pinos'}`}</Text>
@@ -316,8 +421,10 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
       ) : (
         <View style={s.quadraTopo}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={s.nestaAreaTexto} numberOfLines={1}>{`Nesta área · ${itens.length} ${itens.length === 1 ? 'pino' : 'pinos'} da lente`}</Text>
-            <Text style={s.nestaAreaSub}>{`Lente ${rotuloLente} · ${Math.max(0, totalNaArea - itens.length)} outros viram ponto`}</Text>
+            <Text style={s.nestaAreaTexto} numberOfLines={1}>{lenteRecem ? 'MAIS NOVOS PERTO' : `Nesta área · ${itens.length} ${itens.length === 1 ? 'pino' : 'pinos'}`}</Text>
+            <Text style={s.nestaAreaSub}>{totalNaArea > itens.length
+              ? `Lente ${rotuloLente} · ${totalNaArea - itens.length} viram ponto: aproxime para ver`
+              : `Lente ${rotuloLente}`}</Text>
           </View>
           {aoPlanejar && (
             <Pressable accessibilityRole="button" accessibilityLabel="Planejar pelo mapa" onPress={aoPlanejar} style={s.planejar}>
@@ -332,7 +439,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
         </View>
       ))}
 
-      {aberta && (
+      {aberta && !(lenteRecem && recem!.naRegiao === 0 && !quadra) && (
         <>
           <View style={s.ordem}>
             {((podeRoteiro ? ['roteiro', 'prioridade', 'distancia'] : ['prioridade', 'distancia']) as Modo[]).map((m) => (
@@ -382,11 +489,20 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={s.nome} numberOfLines={2}>{`${it.plano ? `${it.plano} · ` : ''}${it.c.empresa?.trim() || it.c.nome}`}</Text>
                   <Text style={s.sub} numberOfLines={1}>
-                    {[distanciaTexto(it.distanciaM), it.c.telefone?.trim() ? null : 'sem tel.',
-                      it.c.conta_alvo_rating != null ? `${Number(it.c.conta_alvo_rating).toFixed(1).replace('.', ',')}★` : null].filter(Boolean).join(' · ') || ' '}
+                    {/* recém-aberto e mais avaliado: sem telefone (não tem / seria consulta paga) */}
+                    {(it.p.familia === 'rec'
+                      ? [diasTexto(it.p.abertoHa), distanciaTexto(it.distanciaM)]
+                      : it.p.familia === 'av'
+                        ? [it.p.nota != null ? `★ ${it.p.nota.toFixed(1).replace('.', ',')}` : null, distanciaTexto(it.distanciaM)]
+                        : [distanciaTexto(it.distanciaM), it.c.telefone?.trim() ? null : 'sem tel.']).filter(Boolean).join(' · ') || ' '}
                   </Text>
-                  <Etiquetas it={it} />
+                  {it.p.familia !== 'rec' && it.p.familia !== 'av' && <Etiquetas it={it} />}
                 </View>
+                {!eMeu && it.c.latitude != null && (
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Ir até ${it.c.empresa?.trim() || it.c.nome}`} onPress={() => irAte(it.c)} style={s.linhaIr}>
+                    <Text style={s.linhaIrTexto}>Ir</Text>
+                  </Pressable>
+                )}
                 {eMeu && it.p.dono === 'sem' ? (
                   <Pressable
                     accessibilityRole="button"
@@ -408,9 +524,28 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
 }
 
 const s = StyleSheet.create({
-  novosLinha: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 32 },
-  novosPonto: { width: 8, height: 8, borderRadius: 4 },
-  novosTexto: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: "600", color: "var(--text)" },
+  metaLinha: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: 'var(--tint-amber)' },
+  metaTexto: { flex: 1, minWidth: 0, fontSize: 13, lineHeight: 18, fontWeight: '600', color: 'var(--tint-amber-text)' },
+  metaVer: { fontSize: 13, fontWeight: '700', color: 'var(--tint-amber-text)', flexShrink: 0 },
+  pilulaLinha: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 60 },
+  pilulaArma: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, borderTopWidth: 1, borderTopColor: 'var(--border-soft)', paddingRight: 8 },
+  pilulaArmaTexto: { flex: 1, minWidth: 0, fontSize: 13, lineHeight: 18, fontWeight: '600', color: 'var(--text)' },
+  pilulaArmaKicker: { fontSize: 11, fontWeight: '700', letterSpacing: 0.66, color: 'var(--arma-kicker)' },
+  pilulaArmaLink: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)', textDecorationLine: 'underline', flexShrink: 0 },
+  kickerNeutro: { color: 'var(--text)' },
+  semSinal: { fontSize: 13, lineHeight: 18, color: 'var(--text-muted)', backgroundColor: 'var(--arma-fundo)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, overflow: 'hidden' },
+  progressoOk: { color: 'var(--ok-texto)' },
+  btnIr: { height: 48, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  btnIrTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
+  linhaIr: { height: 44, minWidth: 48, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  linhaIrTexto: { fontSize: 13, fontWeight: '600', color: 'var(--text)' },
+  segunda: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 },
+  segundaTexto: { flexShrink: 1, fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
+  voltarMeuDia: { minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center' },
+  voltarMeuDiaTexto: { fontSize: 15, fontWeight: '700', color: 'var(--text)' },
+  miniCaixa: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+  miniLosango: { width: 21, height: 21, borderRadius: 3, transform: [{ rotate: '45deg' }], backgroundColor: 'var(--text)', borderWidth: 1.5, borderColor: 'var(--surface)', alignItems: 'center', justifyContent: 'center' },
+  miniLosangoTexto: { fontSize: 10, fontWeight: '700', color: 'var(--surface)', transform: [{ rotate: '-45deg' }] },
   pilulaRecolher: { width: 28, height: 40, alignItems: 'center', justifyContent: 'center', marginLeft: -8, flexShrink: 0 },
   pilulaMini: {
     position: 'absolute', left: 10, zIndex: 20, height: 44, borderRadius: 22, paddingHorizontal: 14,
@@ -419,20 +554,18 @@ const s = StyleSheet.create({
   },
   pilulaMiniTexto: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   pilulaMiniSeta: { fontSize: 14, color: 'var(--text-muted)' },
+  // a pílula ganhou a linha do "Para entrar" (prancha §4): coluna, não mais 60 px fixos
   pilula: {
-    position: 'absolute', left: 10, right: 10, zIndex: 20, height: 60, borderRadius: 18,
-    flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 14, paddingRight: 6,
+    position: 'absolute', left: 10, right: 10, zIndex: 20, minHeight: 60, borderRadius: 18,
+    flexDirection: 'column', paddingLeft: 14, paddingRight: 6,
     backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)',
     shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 18, shadowOffset: { width: 0, height: 6 }, elevation: 10,
   },
   pilulaTexto: { flex: 1, minWidth: 0, justifyContent: 'center', minHeight: 48 },
   pilulaNome: { fontSize: 15, fontWeight: '600', color: 'var(--text)' },
   pilulaSub: { fontSize: 13, fontWeight: '500', color: 'var(--text-muted)', marginTop: 1 },
-  pilulaProgresso: { alignItems: 'center', gap: 4, paddingHorizontal: 2, minHeight: 48, minWidth: 48, justifyContent: 'center' },
-  pilulaConta: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
-  tracos: { flexDirection: 'row', gap: 2 },
-  traco: { width: 5, height: 4, borderRadius: 1, backgroundColor: 'var(--stroke-strong)' },
-  tracoFeito: { backgroundColor: 'var(--vermelho-acao)' },
+  pilulaProgresso: { alignItems: 'center', gap: 1, paddingHorizontal: 2, minHeight: 48, minWidth: 52, justifyContent: 'center' },
+  pilulaConta: { fontSize: 13, fontWeight: '700', color: 'var(--text)' },
   pilulaCheguei: { height: 48, paddingHorizontal: 18, borderRadius: 13, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   pilulaLista: { height: 48, paddingHorizontal: 16, borderRadius: 13, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   pilulaListaTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
@@ -451,7 +584,7 @@ const s = StyleSheet.create({
   alca: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', height: 44, marginVertical: -13 },
   alcaBarra: { width: 40, height: 5, borderRadius: 3, backgroundColor: 'var(--stroke-strong)' },
   linhaTopo: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },
-  kicker: { flex: 1, fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: 'var(--vermelho-texto)' },
+  kicker: { flex: 1, minWidth: 0, fontSize: 11.5, lineHeight: 15, fontWeight: '700', letterSpacing: 0.5, color: 'var(--vermelho-texto)' },
   progresso: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)' },
   pilulaProva: { fontSize: 11, fontWeight: '600', color: 'var(--text-muted)', marginTop: 2 },
   pilulaProvaFalta: { color: 'var(--tint-amber-text)' },

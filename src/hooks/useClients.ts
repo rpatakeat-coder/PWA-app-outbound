@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 import { origemDoLeadHs } from '../utils/origemDoLead';
@@ -317,6 +318,55 @@ export function useClients(
     enabled: callerEnabled && isAuthenticated && (isViewer || visibilityQuery.isFetched || visibilityQuery.data !== undefined),
   });
 
+  /* O MAPA RELÊ SOZINHO (prancha "Mapa do Executivo", decisão 8, 15/10/26): ao voltar para a
+     tela e a cada 60 s com sinal. Recarregar a área inteira a cada minuto seria baixar milhares
+     de linhas no 4G; aqui vem só o que mudou (updated_at depois da última leitura), dentro da mesma
+     caixa, e entra no cache por cima — o que o Cockpit mudou aparece no mapa em até 60 s. Pino
+     arquivado no meio do caminho sai do cache. */
+  const ultimaLeituraRef = useRef<{ chave: string; em: string } | null>(null);
+  useEffect(() => {
+    const chaveAtual = JSON.stringify(['clients', allowedStatuses, recorteCacheKey]);
+    if (query.dataUpdatedAt && ultimaLeituraRef.current?.chave !== chaveAtual) {
+      ultimaLeituraRef.current = { chave: chaveAtual, em: new Date(query.dataUpdatedAt - 5000).toISOString() };
+    }
+  }, [query.dataUpdatedAt, allowedStatuses, recorteCacheKey]);
+  useEffect(() => {
+    if (!callerEnabled || !isAuthenticated) return;
+    let rodando = false;
+    const reler = async () => {
+      const marca = ultimaLeituraRef.current;
+      if (rodando || !marca || document.visibilityState !== 'visible' || !navigator.onLine) return;
+      rodando = true;
+      const agora = new Date(Date.now() - 5000).toISOString();
+      try {
+        const bbox = bounds ?? (areaFilter ? bboxAround(areaFilter.lat, areaFilter.lon, areaFilter.radiusKm) : null);
+        let q = supabase.from('clients').select(`${CLIENT_MAP_COLUMNS},is_archived`).gt('updated_at', marca.em).limit(500);
+        if (!isViewer && allowedStatuses && allowedStatuses.length > 0) q = q.in('status', allowedStatuses);
+        if (bbox) q = q.gte('latitude', bbox.latMin).lte('latitude', bbox.latMax).gte('longitude', bbox.lonMin).lte('longitude', bbox.lonMax);
+        const { data, error } = await q;
+        if (error || !data) return;
+        if (ultimaLeituraRef.current?.chave === marca.chave) ultimaLeituraRef.current = { chave: marca.chave, em: agora };
+        if (!data.length) return;
+        const linhas = data as unknown as Record<string, unknown>[];
+        const vivos = linhas.filter((r) => !r.is_archived).map((r) => mapRow(r));
+        const mortos = new Set(linhas.filter((r) => r.is_archived).map((r) => String(r.id)));
+        queryClient.setQueryData<Client[]>(['clients', allowedStatuses, recorteCacheKey], (lista) => {
+          if (!lista) return lista;
+          const porId = new Map(vivos.map((c) => [c.id, c]));
+          const nova = lista.filter((c) => !mortos.has(c.id)).map((c) => (porId.has(c.id) ? { ...c, ...porId.get(c.id)! } : c));
+          const ja = new Set(nova.map((c) => c.id));
+          for (const c of vivos) if (!ja.has(c.id)) nova.push(c);
+          return nova;
+        });
+      } finally { rodando = false; }
+    };
+    const t = setInterval(() => { void reler(); }, 60 * 1000);
+    const aoVoltar = () => { if (document.visibilityState === 'visible') void reler(); };
+    document.addEventListener('visibilitychange', aoVoltar);
+    window.addEventListener('online', aoVoltar);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', aoVoltar); window.removeEventListener('online', aoVoltar); };
+  }, [callerEnabled, isAuthenticated, isViewer, allowedStatuses, recorteCacheKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // SALVAR NAO ESPERA A BASE RECARREGAR (26/09/2026). O onSuccess devolvia a
   // promessa do invalidateQueries, e o mutateAsync so' resolvia depois do
   // refetch inteiro: "Salvando..." por 10 s no cadastro (a base do gestor sao
@@ -363,6 +413,7 @@ export function useClients(
         geo_approximate: form.geo_approximate ?? false,
         ...(form.origem_lead ? { origem_lead: form.origem_lead } : {}),
         ...(form.conta_alvo_place_id ? { conta_alvo_place_id: form.conta_alvo_place_id } : {}),
+        ...(form.conta_alvo_rating != null ? { conta_alvo_rating: form.conta_alvo_rating, conta_alvo_reviews: form.conta_alvo_reviews ?? null } : {}),
       };
 
       const { data, error } = await supabase

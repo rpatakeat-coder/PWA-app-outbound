@@ -30,7 +30,7 @@ const gravar = (k: string, v: unknown) => {
   try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* aparelho sem espaço: segue sem cache */ }
 };
 
-async function buscarPlaybook(): Promise<Playbook> {
+export async function buscarPlaybook(): Promise<Playbook> {
   const { data, error } = await supabase.functions.invoke('cockpit-dados?recurso=playbook', { method: 'GET' });
   if (error) throw error;
   const pb = (data as { playbook?: Playbook } | null)?.playbook;

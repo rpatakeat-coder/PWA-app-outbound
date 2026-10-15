@@ -11,6 +11,12 @@ import type { Client } from '../types/client';
 export type TipoPino = 'lead' | 'cliente' | 'ex' | 'alvo';
 export type Temperatura = 'Q' | 'M' | 'F' | 'X' | '?';
 export type Dono = 'meu' | 'colega' | 'sem';
+/** A FAMÍLIA DO PINO no mapa do executivo (prancha "Mapa do Executivo", 15/10/26): decide a forma,
+ *  a cor e em que lente ele aparece. 'alvo' = conta-alvo que não é recém-aberta nem mais avaliada
+ *  (CNPJ antigo ou nota abaixo de 4,5): não aparece em lente nenhuma, só no plano ou aberta. */
+export type Familia = 'lead' | 'rec' | 'av' | 'cli' | 'ex' | 'alvo';
+/** Nota mínima da lente Mais avaliados. */
+export const NOTA_MAIS_AVALIADO = 4.5;
 
 // etapaCodigo: a etapa do negócio no snapshot do Cockpit (0105) — vale quando o
 // texto de clients.etapa está vazio ou não casa na etapa_de_para.
@@ -76,6 +82,10 @@ export type Pino = {
   abertoHa?: number | null;
   /** Conta-alvo da Casa dos Dados com CNPJ de mais de 90 dias: não vai mais para o mapa. */
   alvoAntigo?: boolean;
+  /** Família da prancha de 15/10/26 (forma e lente). */
+  familia: Familia;
+  /** Avaliações no Google da conta-alvo (a arma "casa cheia"). */
+  avaliacoes?: number | null;
   /** Nota do Google da conta-alvo (selo ★ do Disco Takeat). */
   nota?: number | null;
   /** Cliente ativo em queda (lente "Clientes em queda"). */
@@ -213,10 +223,9 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
   if (abertura) {
     // a abertura é uma DATA (gravada como meia-noite UTC): meio-dia evita cair no dia anterior em Brasília
     const d = diasDesde(String(abertura).slice(0, 10) + "T12:00:00Z", ctx.agora);
-    if (d != null && d <= DIAS_RECEM_ABERTO) {
-      abertoHa = Math.max(0, d);
-      if (!etiqueta) etiqueta = { texto: abertoHa === 0 ? 'abriu hoje' : `aberto há ${abertoHa}d`, fundo: '#14532D', tinta: '#BBF7D0' };
-    } else if (d != null) alvoAntigo = true;
+    // o selo verde "aberto há Nd" saiu (15/10/26): verde é cliente; os dias vão dentro do losango
+    if (d != null && d <= DIAS_RECEM_ABERTO) abertoHa = Math.max(0, d);
+    else if (d != null) alvoAntigo = true;
   }
 
   const opacidade = dias != null && dias > ctx.limites[1] ? 0.72 : dono === 'colega' ? 0.8 : 1;
@@ -224,10 +233,15 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
   const origemHs = tempoHs?.origemHs && PICKLIST.has(tempoHs.origemHs) ? (tempoHs.origemHs as OrigemPick) : null;
   const origem: OrigemPick | null = origemHs ?? (c.origem_lead ? DERIVADA_PARA_PICKLIST[c.origem_lead] ?? null : null);
 
+  const nota = tipo === 'alvo' && c.conta_alvo_rating != null ? Number(c.conta_alvo_rating) : null;
+  const familia: Familia = tipo === 'cliente' ? 'cli' : tipo === 'ex' ? 'ex' : tipo === 'lead' ? 'lead'
+    : abertoHa != null ? 'rec' : !alvoAntigo && nota != null && nota >= NOTA_MAIS_AVALIADO ? 'av' : 'alvo';
+
   return {
-    origem,
+    origem, familia,
+    avaliacoes: tipo === 'alvo' && c.conta_alvo_reviews != null ? Number(c.conta_alvo_reviews) : null,
     tipo, temp, cor, glifo, logo: tipo === 'cliente', dono,
-    nota: tipo === 'alvo' && c.conta_alvo_rating != null ? Number(c.conta_alvo_rating) : null,
+    nota,
     aproximado: c.geo_approximate === true,
     nome: nomeCurto(c.empresa?.trim() || c.nome || ''),
     etiqueta, opacidade, queda, abertoHa, alvoAntigo,

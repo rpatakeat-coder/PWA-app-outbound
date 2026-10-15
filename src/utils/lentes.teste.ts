@@ -7,7 +7,7 @@
 // cruzar; e a contagem do chip prometendo um número que o toque não entrega.
 import type { Client } from '../types/client';
 import { classificarPino, type ContextoPino } from './pinoP2';
-import { contarChips, FILTROS_VAZIOS, noFoco, passaNosFiltros, quantosFiltros, visitaDoFiltro, visivelNaLente, type FiltrosNovos } from './lentes';
+import { contarChips, FILTROS_VAZIOS, passaNosFiltros, pontoDe, quantosFiltros, visitaDoFiltro, visivelNaLente, type FiltrosNovos } from './lentes';
 
 let falhas = 0;
 const ok = (c: boolean, m: string) => {
@@ -31,42 +31,47 @@ const L = (x: Partial<Client>): Client => ({
 } as unknown as Client);
 const P = (x: Partial<Client>) => classificarPino(L(x), ctx);
 
-// lentes
-ok(noFoco('dia', P({ etapa: 'Negociação' }), null), 'Meu dia: meu quente');
-ok(noFoco('dia', P({ etapa: 'Demo/Proposta' }), null), 'Meu dia: meu morno');
-ok(!noFoco('dia', P({ etapa: 'Prospecção' }), null), 'Meu dia: meu frio sem cobrança vira ponto');
-ok(noFoco('dia', P({ etapa: 'Prospecção', id_hubspot: 'sla' }), null), 'Meu dia: cobrança vencida');
-// 15/10/26: cliente saiu do Meu dia (só nas lentes Clientes e Em queda)
-ok(!noFoco('dia', P({ status: 'cliente' }), null) && !visivelNaLente('dia', P({ status: 'cliente' }), false, false), 'Meu dia: cliente não aparece nem como ponto');
-ok(visivelNaLente('clientes', P({ status: 'cliente' }), false, false), 'Clientes: o cliente aparece');
-ok(visivelNaLente('dia', P({ status: 'cliente' }), true, false) && visivelNaLente('dia', P({ status: 'cliente' }), false, true), 'Meu dia: cliente no plano ou aberto aparece');
-ok(!noFoco('dia', P({ etapa: 'Negociação', vendedor_id_hubspot: '2' }), null), 'Meu dia: quente do colega vira ponto');
-ok(noFoco('dia', P({ etapa: 'Prospecção', vendedor_id_hubspot: '2' }), 3), 'Meu dia: parada do plano sempre inteira');
-ok(noFoco('carteira', P({ etapa: 'Prospecção' }), null) && !noFoco('carteira', P({ vendedor_id_hubspot: '2' }), null), 'Carteira: só o que é meu');
-// 15/10/26: a lente vira Mais avaliados (nota 4,5+)
-ok(noFoco('alvo', P({ conta_alvo_place_id: 'a', lead_prospeccao_id: 'lp', conta_alvo_rating: 4.7 } as Partial<Client>), null) && !noFoco('alvo', P({ conta_alvo_place_id: 'a', lead_prospeccao_id: 'lp', conta_alvo_rating: 4.1 } as Partial<Client>), null) && !noFoco('alvo', P({}), null), 'Mais avaliados: só conta-alvo com nota 4,5+');
-// recém-aberto e conta-alvo antiga
+// lentes (prancha "Mapa do Executivo", 15/10/26: a lente diz o que ENTRA; o resto não aparece nem como ponto)
+const V = (l: Parameters<typeof visivelNaLente>[0], p: ReturnType<typeof P>, todos = false) => visivelNaLente(l, p, false, false, todos);
+const meuQuente = P({ etapa: 'Negociação' });
+const meuFrio = P({ etapa: 'Prospecção' });
+const meuPerdido = P({ etapa: 'Perdido' });
+const colegaQuente = P({ etapa: 'Negociação', vendedor_id_hubspot: '2' });
+const cliente = P({ status: 'cliente' });
+const ex = P({ status: 'churn' });
 const novo = P({ lead_prospeccao_id: 'lp-novo', conta_alvo_place_id: 'm' } as Partial<Client>);
+const novoColega = P({ lead_prospeccao_id: 'lp-novo', conta_alvo_place_id: 'm', vendedor_id_hubspot: '2' } as Partial<Client>);
 const velho = P({ lead_prospeccao_id: 'lp-velho', conta_alvo_place_id: 'm' } as Partial<Client>);
-ok(novo.abertoHa === 20 && novo.etiqueta?.texto === 'aberto há 20d', 'Recém-aberto: 20 dias e selo');
-ok(noFoco('dia', novo, null) && noFoco('novos', novo, null) && visivelNaLente('dia', novo, false, false), 'Recém-aberto: pino inteiro no Meu dia e na lente nova');
-ok(velho.alvoAntigo === true && !visivelNaLente('dia', velho, false, false) && !visivelNaLente('alvo', velho, false, false) && !visivelNaLente('carteira', velho, false, false), 'Conta-alvo antiga: some de todas as lentes');
-ok(visivelNaLente('dia', velho, true, false), 'Conta-alvo antiga no plano: aparece');
-ok(!visivelNaLente('novos', P({ etapa: 'Negociação' }), false, false), 'Recém-abertos: só o grupo');
-ok(!visivelNaLente('dia', P({ lead_prospeccao_id: 'lp-google', conta_alvo_place_id: 'g', conta_alvo_rating: 4.8 } as Partial<Client>), false, false), 'Meu dia: conta-alvo do Google (não recém-aberta) some');
-ok(noFoco('rec', P({ status: 'churn' }), null) && !noFoco('rec', P({ status: 'cliente' }), null), 'Reconquista: só ex-cliente');
-ok(noFoco('semdono', P({ vendedor_id_hubspot: '777' }), null) && !noFoco('semdono', P({}), null), 'Sem dono: dono fora do time');
-ok(!noFoco('calor', P({ etapa: 'Negociação' }), 1), 'Calor: nenhum pino');
+const avaliado = P({ lead_prospeccao_id: 'lp-google', conta_alvo_place_id: 'g', conta_alvo_rating: 4.8 } as Partial<Client>);
+const avaliadoBaixo = P({ lead_prospeccao_id: 'lp-google', conta_alvo_place_id: 'g', conta_alvo_rating: 4.1 } as Partial<Client>);
+ok(meuQuente.familia === 'lead' && novo.familia === 'rec' && avaliado.familia === 'av' && cliente.familia === 'cli' && ex.familia === 'ex', 'famílias do pino');
+ok(velho.familia === 'alvo' && avaliadoBaixo.familia === 'alvo', 'conta-alvo antiga e nota abaixo de 4,5 ficam sem família de lente');
+ok(V('dia', meuQuente) && V('dia', meuFrio), 'Meu dia: meus leads com negócio, de toda temperatura');
+ok(!V('dia', meuPerdido), 'Meu dia: negócio perdido não decide a próxima porta');
+ok(!V('dia', colegaQuente), 'Meu dia: pino de colega não aparece');
+ok(!V('dia', cliente) && !V('dia', ex), 'Meu dia: cliente e ex-cliente não aparecem nem como ponto');
+ok(V('dia', novo) && !V('dia', novoColega), 'Meu dia: meus recém-abertos, não os do colega');
+ok(!V('dia', avaliado) && !V('dia', velho), 'Meu dia: mais avaliado e conta-alvo antiga não entram');
+ok(visivelNaLente('dia', cliente, true, false) && visivelNaLente('dia', velho, false, true), 'qualquer lente: o plano e o pino aberto aparecem');
+ok(V('novos', novo) && !V('novos', meuQuente) && !V('novos', novoColega), 'Recém-abertos: só os meus recém-abertos');
+ok(V('novos', novoColega, true), 'Recém-abertos do gestor: os de todo mundo');
+ok(V('carteira', meuFrio) && V('carteira', meuPerdido) && !V('carteira', colegaQuente) && !V('carteira', novo), 'Carteira: meus leads, perdidos inclusive');
+ok(V('alvo', avaliado) && !V('alvo', avaliadoBaixo) && !V('alvo', novo), 'Mais avaliados: nota 4,5+');
+ok(V('clientes', cliente) && !V('clientes', meuQuente), 'Clientes: só quem paga');
+ok(V('rec', ex) && !V('rec', cliente), 'Reconquista: só ex-cliente');
+ok(V('semdono', P({ vendedor_id_hubspot: '777' })) && !V('semdono', meuFrio), 'Sem dono: dono fora do time');
+ok(!V('calor', meuQuente), 'Calor: nenhum pino');
+ok(pontoDe(novo).forma === 'losango' && pontoDe(novo, true).cor === '#111418', 'zoom afastado: recém-aberto vira losango, invertido no tema claro');
+ok(pontoDe(meuQuente).tamanho === 10 && pontoDe(meuQuente).cor === meuQuente.cor, 'zoom afastado: lead vira ponto de 10 px na cor da temperatura');
 
 // Em queda (clientes-sync, 0126): só cliente que está na lista de queda
 {
   const ctxQ: ContextoPino = { ...ctx, quedaPorCliente: new Map([['q', { motivo: 'faturamento -35% no bimestre', faturamento: 120000, dono: '1' }]]) };
   const Q = (x: Partial<Client>) => classificarPino(L(x), ctxQ);
-  ok(noFoco('queda', Q({ id: 'q', status: 'cliente' }), null), 'Em queda: cliente da lista ganha pino inteiro');
-  ok(!noFoco('queda', Q({ id: 'outro', status: 'cliente' }), null), 'Em queda: cliente fora da lista vira ponto');
-  ok(!noFoco('queda', Q({ id: 'q', status: 'lead' }), null), 'Em queda: lead com o mesmo id não entra');
+  ok(V('queda', Q({ id: 'q', status: 'cliente' })), 'Em queda: cliente da lista entra');
+  ok(!V('queda', Q({ id: 'outro', status: 'cliente' })), 'Em queda: cliente fora da lista não entra');
+  ok(!V('queda', Q({ id: 'q', status: 'lead' })), 'Em queda: lead com o mesmo id não entra');
   ok(Q({ id: 'q', status: 'cliente' }).etiqueta?.texto === 'em queda', 'Em queda: etiqueta no pino');
-  ok(!noFoco('queda', P({ status: 'cliente' }), null), 'Em queda: sem a lista (contexto antigo) ninguém entra');
 }
 
 // filtros

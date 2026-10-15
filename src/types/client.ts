@@ -178,6 +178,9 @@ export interface ClientFormData {
   // GoogleMaps e o place_id impede o mesmo lugar de virar lead duas vezes.
   origem_lead?: string;
   conta_alvo_place_id?: string;
+  /** Lugar do Google com nota já consultada (prancha "Mapa do Executivo" §7): vai junto, sem nova cobrança. */
+  conta_alvo_rating?: number | null;
+  conta_alvo_reviews?: number | null;
 }
 
 export interface FieldRoute {
