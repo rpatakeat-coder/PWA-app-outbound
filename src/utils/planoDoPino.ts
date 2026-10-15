@@ -63,6 +63,9 @@ export type PedidoDoPlano = {
   hora: string | null;
   /** onde ele já estava (mover tira de lá). */
   antes: OndeEsta | null;
+  /** dia (AAAA-MM-DD) da tarefa aberta que o negócio JÁ tem no HubSpot, se houver: ela é remarcada
+      em vez de nascer um segundo próximo passo (auditoria 14/10/26) */
+  tarefaAbertaEm?: string | null;
   /** cria a reunião/ligação na Agenda do app (useMeetings.addMeeting), quando é o caso. */
   criarCompromisso?: (p: { tipo: 'reuniao' | 'follow_up'; acao: AcaoId; quando: string }) => Promise<void>;
   /** remarca o compromisso que já existe no dia antigo (true = remarcou; aí não se cria outro). */
@@ -223,8 +226,11 @@ export type PedidoCrm = { dealId: string; nome: string; acao: AcaoId; de: string
 function pedidoCrm(p: PedidoDoPlano, mudou: boolean): PedidoCrm | null {
   if (!p.client.id_hubspot) return null;
   if (!mudou && !p.hora) return null;
+  /* UM PRÓXIMO PASSO SÓ: o pino não estava no plano, mas o negócio já tem tarefa aberta (de
+     qualquer dia) → remarca essa para o dia e a hora novos, em vez de criar outra */
+  const de = mudou ? p.antes!.dia : (p.tarefaAbertaEm ?? null);
   return { dealId: String(p.client.id_hubspot), nome: p.client.empresa?.trim() || p.client.nome, acao: p.acao,
-    de: mudou ? p.antes!.dia : null, para: p.dia, hora: p.hora };
+    de, para: p.dia, hora: p.hora };
 }
 
 const ddmm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;

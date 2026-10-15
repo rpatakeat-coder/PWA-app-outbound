@@ -6,6 +6,7 @@
 // já está no plano: outro dia MOVE, o mesmo dia ATUALIZA, e há "Tirar do plano". Grava pelas
 // funções de src/utils/planoDoPino.ts. Nada trava o salvar ("obrigatório é avisar").
 import React, { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Painel } from '../components/Painel';
@@ -41,6 +42,7 @@ const ordinal = (n: number) => `${n}ª`;
 export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor, onFechar, onFeito, acaoInicial }: Props) {
   const { user } = useAuth();
   const { addMeeting, rescheduleMeeting, deleteMeeting } = useMeetings();
+  const queryClient = useQueryClient();
   const uid = user?.id ?? null;
   const hoje = agoraBRT().toISOString().slice(0, 10);
   const horaAgora = agoraBRT().getUTCHours();
@@ -93,12 +95,26 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
   const mudou = !!antes && (antes.dia !== escolhido || acaoAntes !== acao || (antes.hora ?? null) !== hora);
   const ordemPrevista = jaNoDia ? antes!.ordem : (diaFinal ? (contagem[diaFinal] ?? 0) + 1 : null);
 
+  /* a tarefa aberta mais antiga deste negócio na lista do HubSpot que o app já tem (Tarefas) */
+  function tarefaAbertaDoNegocio(): string | null {
+    if (!client.id_hubspot) return null;
+    let melhor: string | null = null;
+    for (const [, d] of queryClient.getQueriesData<{ tarefas?: Array<{ dealId?: string | null; venceEm: string | null }> }>({ queryKey: ['tarefas_crm'] })) {
+      (d?.tarefas ?? []).forEach((t) => {
+        if (String(t.dealId ?? '') !== String(client.id_hubspot) || !t.venceEm) return;
+        const dia = new Date(new Date(t.venceEm).getTime() - 3 * 3600000).toISOString().slice(0, 10);
+        if (!melhor || dia < melhor) melhor = dia;
+      });
+    }
+    return melhor;
+  }
+
   async function confirmar() {
     if (!uid || !diaFinal || enviando) return;
     setEnviando(true);
     try {
       const r = await porNoPlano({
-        uid, client, dia: diaFinal, acao, hora, antes,
+        uid, client, dia: diaFinal, acao, hora, antes, tarefaAbertaEm: tarefaAbertaDoNegocio(),
         criarCompromisso: async ({ tipo, acao: ac, quando }) => {
           await addMeeting.mutateAsync({ form: { client_id: client.id, scheduled_at: quando, duration_minutes: 30, observacoes: null, type: tipo, acao: ac }, client });
         },
