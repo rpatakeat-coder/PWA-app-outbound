@@ -589,7 +589,8 @@ const MarkerP2 = React.memo(
           visitado={feito || visitadoHoje(client.visited_at)}
           naFila={naFila}
           selecionado={selecionado}
-          sinal={papel === 'proxima' || selecionado || rotulo ? sinalDoPino(pino) : null}
+          // "que círculo é esse?" (Julyan, 15/10/26): o halo vermelho se explica no próprio nome
+          sinal={papel === 'proxima' ? ['próxima porta', sinalDoPino(pino)].filter(Boolean).join(' · ') : selecionado || rotulo ? sinalDoPino(pino) : null}
           pilhaN={pilhaN}
           pilhaCor={pino.cor}
           leque={leque}
@@ -2800,12 +2801,24 @@ function MainApp() {
     return () => clearTimeout(t);
   }, [referenciasNaTela]);
 
+  /* FILTRO LIGADO MANDA (Julyan, 15/10/26: "caso ele filtre em clientes, tem que aparecer no mapa;
+     se clicar e desclicar tem que sumir"). Com algum filtro marcado, o mapa mostra o que o filtro
+     pede, em qualquer lente (cliente no Meu dia inclusive); sem filtro, vale a regra da lente. A
+     conta-alvo antiga continua fora, o plano e o pino aberto continuam sempre. */
+  const comFiltro = quantosFiltros(filtrosNovos) > 0;
   const visiveisMapaNovo = useMemo(
-    () => itensMapaNovo.filter(({ c, p, plano }) => (referenciasNaTela?.has(c.id)
-      || visivelNaLente(lente, p, plano != null, c.id === selectedClient?.id, verTodosNoMapa))
-      && (plano != null || passaNosFiltros(c, p, filtrosNovos) || !!referenciasNaTela?.has(c.id))),
-    [itensMapaNovo, filtrosNovos, lente, selectedClient?.id, verTodosNoMapa, referenciasNaTela],
+    () => itensMapaNovo.filter(({ c, p, plano }) => {
+      if (referenciasNaTela?.has(c.id) || plano != null || c.id === selectedClient?.id) return true;
+      if (comFiltro) return p.familia !== 'alvo' && lente !== 'calor' && passaNosFiltros(c, p, filtrosNovos);
+      return visivelNaLente(lente, p, false, false, verTodosNoMapa);
+    }),
+    [itensMapaNovo, filtrosNovos, comFiltro, lente, selectedClient?.id, verTodosNoMapa, referenciasNaTela],
   );
+  /** Tocar de novo na lente ativa volta ao Meu dia (liga e desliga). */
+  const escolherLente = useCallback((l: Lente) => {
+    setLente((atual) => (atual === l && l !== 'dia' ? 'dia' : l));
+    setQuadraAberta(null);
+  }, []);
 
   // Zoom 15 para dentro (~2,7 km de mapa no celular): o zoom de RUA, onde até 8 pinos ganham nome.
   const ZOOM_RUA_LAT_DELTA = 0.025;
@@ -2883,8 +2896,13 @@ function MainApp() {
       .map(({ c, p }) => ({ id: c.id, bairro: c.bairro, cidade: c.cidade, lat: Number(c.latitude), lng: Number(c.longitude),
         familia: (p.familia === 'rec' || p.familia === 'lead' || p.familia === 'cli' ? p.familia : 'outro') as 'rec' | 'lead' | 'cli' | 'outro' }));
     const clientes = itensMapaNovo.filter(({ p }) => p.familia === 'cli').map(({ c }) => ({ bairro: c.bairro, cidade: c.cidade }));
-    return placasDeBairro(itens, clientes, 6, mapRegion.latitudeDelta * 0.12);
-  }, [modoNovo, mapRegion, lente, ehAgendaPC, planejarDia, visiveisMapaNovo, itensMapaNovo]);
+    // a placa não cai em cima do que importa: a próxima porta, o plano e o pino aberto (print de 15/10/26)
+    const d = mapRegion.latitudeDelta * 0.12;
+    const evitar = visiveisMapaNovo.filter((it) => it.plano != null || it.c.id === idPortaDoHalo || it.c.id === selectedClient?.id)
+      .map((it) => ({ lat: Number(it.c.latitude), lng: Number(it.c.longitude) }));
+    return placasDeBairro(itens, clientes, 6, d)
+      .filter((pl) => !evitar.some((e) => Math.abs(e.lat - pl.lat) < d * 0.6 && Math.abs(e.lng - pl.lng) < d * 1.2));
+  }, [modoNovo, mapRegion, lente, ehAgendaPC, planejarDia, visiveisMapaNovo, itensMapaNovo, idPortaDoHalo, selectedClient?.id]);
 
   // Pilha até 8: abre em leque. Maior: aproxima o mapa até os pinos se
   // separarem — a não ser que estejam todos no mesmo ponto (aí só o leque separa).
@@ -4850,9 +4868,18 @@ function MainApp() {
     }
     queryClient.setQueriesData({ queryKey: ['clients'] }, (velho: unknown) =>
       Array.isArray(velho) ? velho.map((c: Client) => (c.id === clientId ? { ...c, etapa: rotulo } : c)) : velho);
-    setSelectedClient((atual) => (atual && atual.id === clientId ? { ...atual, etapa: rotulo } : atual));
-    // Mudar etapa fecha o cartão para abrir a folha: reabre já na etapa nova.
-    if (reabrir) setTimeout(() => setSelectedClient({ ...reabrir, etapa: rotulo }), 400);
+    /* PERDIDO E RECICLAGEM SAEM DA RUA (Julyan, 15/10/26: "movi pra perdido, a ficha do card tem
+       que sair"). O cartão fecha e o pino sai do Meu dia (negócio perdido não decide a próxima
+       porta); continua na Carteira. Nas outras etapas o cartão reabre já na etapa nova. */
+    const saiDaRua = codigo === ETAPA_FS.perdido || codigo === ETAPA_FS.reciclagem;
+    if (saiDaRua) {
+      setSelectedClient((atual) => (atual && atual.id === clientId ? null : atual));
+      Toast.mostrar(`${rotulo}: saiu do Meu dia · continua na Carteira`, 'ok');
+    } else {
+      setSelectedClient((atual) => (atual && atual.id === clientId ? { ...atual, etapa: rotulo } : atual));
+      // Mudar etapa fecha o cartão para abrir a folha: reabre já na etapa nova.
+      if (reabrir) setTimeout(() => setSelectedClient({ ...reabrir, etapa: rotulo }), 400);
+    }
     void supabase.from('clients').update({ etapa: rotulo }).eq('id', clientId).then(({ error }) => {
       if (error) console.warn('[etapa no lead]', error.message);
       void queryClient.invalidateQueries({ queryKey: ['clients'] });
@@ -6751,11 +6778,12 @@ function MainApp() {
           top={insets.top + 7 + ALTURA_TOPO_CAMPO + 8}
           lentes={LENTES.filter((l) => LENTES_DA_FILEIRA.includes(l.id))}
           atual={lente}
-          aoEscolher={(l) => { setLente(l); setQuadraAberta(null); }}
+          aoEscolher={escolherLente}
           contador={contadorDaSemana}
           aoFiltros={() => { Keyboard.dismiss(); setLentesAbertas(true); }}
           filtrosAtivos={quantosFiltros(filtrosNovos)}
           lenteNosFiltros={!LENTES_DA_FILEIRA.includes(lente)}
+          aoLimparFiltros={() => setFiltrosNovos(FILTROS_VAZIOS)}
         />
       )}
       {modoNovo && (
@@ -6794,7 +6822,9 @@ function MainApp() {
           aoFechar={() => setLentesAbertas(false)}
           lentes={LENTES.filter((l) => !LENTES_DA_FILEIRA.includes(l.id) && (l.id !== 'calor' || canViewGestor))}
           atual={lente}
-          aoEscolher={(l) => { setLente(l); setQuadraAberta(null); }}
+          aoEscolher={escolherLente}
+          filtros={filtrosNovos}
+          aoFiltrosRapidos={setFiltrosNovos}
           filtrosAtivos={quantosFiltros(filtrosNovos)}
           aoFiltros={() => setFiltrosNovosAbertos(true)}
         />
@@ -7018,10 +7048,11 @@ function MainApp() {
           largo
           lentes={LENTES.filter((l) => l.id !== 'calor' || canViewGestor)}
           atual={lente}
-          aoEscolher={(l) => { setLente(l); setQuadraAberta(null); }}
+          aoEscolher={escolherLente}
           contador={contadorDaSemana}
           aoFiltros={() => setFiltrosNovosAbertos(true)}
           filtrosAtivos={quantosFiltros(filtrosNovos)}
+          aoLimparFiltros={() => setFiltrosNovos(FILTROS_VAZIOS)}
         />
         {/* esconder também daqui, onde a mão já está (05/10/26: "tenho que esconder painel ali também") */}
         <Pressable accessibilityRole="button" accessibilityLabel="Esconder o painel e ampliar o mapa" onPress={alternarPainel} style={[styles.pmnLente, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>

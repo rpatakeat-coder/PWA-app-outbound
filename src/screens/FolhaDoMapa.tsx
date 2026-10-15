@@ -206,6 +206,20 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
     onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 12 && Math.abs(g.dy) > Math.abs(g.dx),
     onPanResponderRelease: (_e, g) => { if (g.dy < -30) setAberta(true); },
   }), []);
+  /* O VÃO ENTRE O MAPA E A PÍLULA (print do Julyan, 15/10/26): o onLayout do navegador só dispara
+     quando a pílula muda de TAMANHO. Quando ela muda de LUGAR (o rodapé mede depois, o ajuste do
+     useAcimaDoRodape), o mapa ficava com o topo velho e sobrava uma faixa escura embaixo dele.
+     Remede a cada mudança de lugar ou de conteúdo, no quadro seguinte. */
+  useEffect(() => {
+    if (aberta || !aoMedir) return;
+    const id = requestAnimationFrame(() => {
+      const el = acima.ref.current as unknown as HTMLElement | null;
+      if (!el || typeof el.getBoundingClientRect !== 'function') return;
+      const r = el.getBoundingClientRect();
+      if (r.height > 0) aoMedir({ y: Math.round(r.top), altura: Math.round(r.height) + 8 });
+    });
+    return () => cancelAnimationFrame(id);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
   const medir = (e: { nativeEvent: { layout: { y: number; height: number } } }) => {
     // No navegador o evento traz o próprio elemento: o topo vem na régua da TELA.
     const alvo = (e.nativeEvent as unknown as { target?: { getBoundingClientRect?: () => DOMRect } }).target;
@@ -279,6 +293,26 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
             </Pressable>
           )}
         </View>
+        {/* A BARRA GUIA O PLANEJAMENTO (Julyan, 15/10/26: "essa barra embaixo tem que guiar o
+            planejamento deles, sem travar"). Sem plano hoje, ou com o plano feito a partir das 15h,
+            uma linha leva ao Planejar (o dia de hoje ou o de amanhã). Durante o plano, nada: a
+            próxima porta já é o guia. Nunca bloqueia o Cheguei. */}
+        {(() => {
+          if (!aoPlanejar) return null;
+          const hora = Number(new Date().toLocaleString('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Sao_Paulo' }));
+          const semPlano = planoTotal === 0;
+          const feitoTarde = planoTotal > 0 && planoFeito >= planoTotal && hora >= 15;
+          if (!semPlano && !feitoTarde) return null;
+          const texto = semPlano
+            ? (hora >= 17 ? 'Sem plano hoje · deixe amanhã pronto' : `Sem plano hoje · monte as ${Math.max(1, metaVisitas)} portas em 1 minuto`)
+            : 'Plano de hoje feito · deixe amanhã pronto';
+          return (
+            <Pressable accessibilityRole="button" accessibilityLabel={`${texto}. Planejar`} onPress={aoPlanejar} style={s.pilulaArma}>
+              <Text style={s.pilulaArmaTexto} numberOfLines={1}>{texto}</Text>
+              <Text style={[s.pilulaArmaLink, { color: 'var(--vermelho-texto)' }]}>Planejar ›</Text>
+            </Pressable>
+          );
+        })()}
         {/* ESPIADA DA PRÓXIMA PORTA (prancha §4): só o motivo, em 1–2 linhas, com "Fala pronta ›" */}
         {proxima && armaDaProxima && (
           <Pressable accessibilityRole="button" accessibilityLabel={`Para entrar: ${armaDaProxima.motivo}. Fala pronta`}

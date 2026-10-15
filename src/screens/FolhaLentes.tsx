@@ -5,7 +5,21 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Painel } from '../components/Painel';
-import type { Lente } from '../utils/lentes';
+import type { FiltrosNovos, Lente } from '../utils/lentes';
+
+/* FILTROS DE UM TOQUE (Julyan, 15/10/26: "cadê os outros filtros? o que eles precisam pra vender mais
+   com menos cliques, sem poluir a tela"). Os que mais decidem a próxima porta ficam aqui, sem abrir
+   a tela de filtros: marcar põe no mapa, desmarcar tira. O resto continua em "Todos os filtros". */
+type Rapido = { id: string; rotulo: string; grupo: 'temp' | 'status' | 'visita'; valor: string };
+const RAPIDOS: Rapido[] = [
+  { id: 'q', rotulo: 'Quentes', grupo: 'temp', valor: 'Q' },
+  { id: 'm', rotulo: 'Mornos', grupo: 'temp', valor: 'M' },
+  { id: 'f', rotulo: 'Frios', grupo: 'temp', valor: 'F' },
+  { id: 'nunca', rotulo: 'Nunca visitados', grupo: 'visita', valor: 'nunca' },
+  { id: 'mais', rotulo: 'Sem visita há 30+ dias', grupo: 'visita', valor: 'mais' },
+  { id: 'cli', rotulo: 'Clientes', grupo: 'status', valor: 'cliente' },
+  { id: 'ex', rotulo: 'Ex-clientes', grupo: 'status', valor: 'ex' },
+];
 import { IconClose as SiClose } from '../components/icons';
 
 export const COR_LENTE: Record<Lente, string> = {
@@ -44,9 +58,19 @@ type Props = {
   aoEscolher: (l: Lente) => void;
   filtrosAtivos: number;
   aoFiltros: () => void;
+  /** Os filtros de agora e a troca direta (filtros de um toque). */
+  filtros?: FiltrosNovos;
+  aoFiltrosRapidos?: (f: FiltrosNovos) => void;
 };
 
-export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolher, filtrosAtivos, aoFiltros }: Props) {
+export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolher, filtrosAtivos, aoFiltros, filtros, aoFiltrosRapidos }: Props) {
+  const marcado = (r: Rapido) => !!filtros && (filtros[r.grupo] as Set<string>).has(r.valor);
+  const alternar = (r: Rapido) => {
+    if (!filtros || !aoFiltrosRapidos) return;
+    const conj = new Set(filtros[r.grupo] as Set<string>);
+    if (conj.has(r.valor)) conj.delete(r.valor); else conj.add(r.valor);
+    aoFiltrosRapidos({ ...filtros, [r.grupo]: conj } as FiltrosNovos);
+  };
   return (
     <Painel visivel={visivel} aoFechar={aoFechar} rotulo="Filtros e outras lentes" topo={
       <View style={s.topo}>
@@ -79,8 +103,25 @@ export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolh
           })}
         </View>
 
+        {filtros && aoFiltrosRapidos && (
+          <View style={{ gap: 8 }}>
+            <Text style={s.secao}>FILTRO DE UM TOQUE · MARCAR PÕE NO MAPA</Text>
+            <View style={s.rapidos}>
+              {RAPIDOS.map((r) => {
+                const on = marcado(r);
+                return (
+                  <Pressable key={r.id} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => alternar(r)}
+                    style={[s.rapido, on && s.rapidoOn]}>
+                    <Text style={[s.rapidoTexto, on && s.rapidoTextoOn]}>{on ? `${r.rotulo} ✓` : r.rotulo}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
         <Pressable accessibilityRole="button" onPress={() => { aoFechar(); aoFiltros(); }} style={s.filtros}>
-          <Text style={s.filtrosTexto}>{filtrosAtivos ? `Filtros · ${filtrosAtivos} ativos` : 'Filtros'}</Text>
+          <Text style={s.filtrosTexto}>{filtrosAtivos ? `Todos os filtros · ${filtrosAtivos} ${filtrosAtivos === 1 ? 'ativo' : 'ativos'}` : 'Todos os filtros'}</Text>
           <Text style={s.filtrosSub}>etapa, temperatura, tempo sem toque, origem, dono, visitado</Text>
         </Pressable>
 
@@ -122,6 +163,11 @@ const s = StyleSheet.create({
   },
   filtrosTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
   filtrosSub: { fontSize: 12, color: 'var(--text-muted)', marginTop: 2 },
+  rapidos: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  rapido: { minHeight: 44, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center', backgroundColor: 'var(--surface-2)' },
+  rapidoOn: { backgroundColor: 'var(--text)', borderColor: 'var(--text)' },
+  rapidoTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
+  rapidoTextoOn: { color: 'var(--bg)' },
   secao: { fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: 'var(--text-faint)' },
   legenda: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 10, columnGap: 14 },
   legItem: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 90 },

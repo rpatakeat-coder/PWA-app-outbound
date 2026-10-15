@@ -24,6 +24,8 @@ type Props = {
   filtrosAtivos?: number;
   /** A lente ativa mora no Filtros (Reconquista, Clientes…): o ≡ fica aceso. */
   lenteNosFiltros?: boolean;
+  /** Com filtro ligado, a pílula "N filtros · Limpar" logo abaixo da fileira (um toque desliga). */
+  aoLimparFiltros?: () => void;
   /** Computador: quebra em linhas em vez de rolar, e o Filtros vira um botão com texto. */
   largo?: boolean;
   top?: number;
@@ -41,7 +43,13 @@ function Contador({ c, ativa }: { c: NonNullable<Props['contador']>; ativa: bool
   );
 }
 
-export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, aoFiltros, filtrosAtivos = 0, lenteNosFiltros = false, largo = false, top }: Props) {
+export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, aoFiltros, filtrosAtivos = 0, lenteNosFiltros = false, aoLimparFiltros, largo = false, top }: Props) {
+  const limpar = filtrosAtivos > 0 && aoLimparFiltros ? (
+    <Pressable accessibilityRole="button" accessibilityLabel={`${filtrosAtivos} ${filtrosAtivos === 1 ? 'filtro ligado' : 'filtros ligados'}. Limpar`}
+      onPress={aoLimparFiltros} style={[s.limpar, largo && s.limparLargo]}>
+      <Text style={s.limparTexto}>{`${filtrosAtivos} ${filtrosAtivos === 1 ? 'filtro' : 'filtros'} · Limpar ✕`}</Text>
+    </Pressable>
+  ) : null;
   const botoes = lentes.map((l) => {
     const ativa = l.id === atual;
     const comContador = l.id === 'novos' && contador;
@@ -63,6 +71,7 @@ export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, a
             <Text style={[s.lenteTexto, s.lenteTextoLargo]}>{filtrosAtivos ? `Filtros · ${filtrosAtivos}` : 'Filtros'}</Text>
           </Pressable>
         )}
+        {limpar}
       </View>
     );
   }
@@ -82,6 +91,7 @@ export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, a
           {filtrosAtivos > 0 && <View style={s.pontoFiltro} />}
         </Pressable>
       )}
+      {limpar && <View style={s.limparLinha} pointerEvents="box-none">{limpar}</View>}
     </View>
   );
 }
@@ -123,5 +133,9 @@ const s = StyleSheet.create({
   l2: { width: 10, height: 2.2, borderRadius: 2, backgroundColor: 'var(--text)' },
   l3: { width: 4, height: 2.2, borderRadius: 2, backgroundColor: 'var(--text)' },
   lAceso: { backgroundColor: 'var(--text)' },
+  limparLinha: { position: 'absolute', top: ALTURA_FILEIRA_LENTES + 6, left: 12 },
+  limpar: { height: 34, paddingHorizontal: 12, borderRadius: 17, justifyContent: 'center', backgroundColor: 'var(--text)', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+  limparLargo: { height: 40, borderRadius: 20 },
+  limparTexto: { fontSize: 13, fontWeight: '700', color: 'var(--bg)' },
   pontoFiltro: { position: 'absolute', top: 6, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: 'var(--vermelho-acao)' },
 });
