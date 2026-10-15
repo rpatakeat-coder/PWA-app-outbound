@@ -98,7 +98,9 @@ export function desenhoDoPino(p: Props): Desenho {
   }
   if (feito) op = 0.5;
   if (papel === 'proxima') {
-    s = 40; fs = 16; halo = true; op = 1;
+    /* o círculo vermelho em volta da próxima porta saiu (Julyan, 15/10/26: "esse círculo tá feio";
+       vermelho ainda lia como "quente"). A próxima porta fica maior e com o nome "próxima porta". */
+    s = 40; fs = 16; op = 1;
     if (f === 'rec') { s = 30; bg = rec.bg; fg = rec.fg; bc = rec.bd; bw = 2; tx = planoNumero ? String(planoNumero) : String(pino.abertoHa ?? ''); fs = 15; }
   }
   if (selecionado) {
