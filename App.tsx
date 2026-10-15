@@ -7323,7 +7323,7 @@ function MainApp() {
           const atr = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, agora) === 'atrasadas').length;
           const hj = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, agora) === 'hoje').length;
           void atr; void hj;
-          return { titulo: 'Tarefas', sub: naFila != null ? `${naFila} na fila · valor × urgência` : 'a fila do dinheiro · um card por negócio' };
+          return { titulo: 'Tarefas', sub: naFila != null ? `${naFila} negócios precisam de você` : 'negócios que precisam de você' };
         }
         return { titulo: 'Tarefas', sub: `${visibleTasksCount} ${visibleTasksCount === 1 ? 'cobrança aberta' : 'cobranças abertas'} · escalonamento D2 → D5` };
       }
@@ -7787,7 +7787,7 @@ function MainApp() {
                       if (tarefasSemMedicao) return 'sem medição · ' + tarefasSemMedicao;
                       if (tarefasErro) return 'não consegui ler o HubSpot agora';
                       if (!tarefasMedidas) return 'lendo as tarefas do HubSpot…';
-                      if (naFila != null) return `${naFila} na fila · valor × urgência`;
+                      if (naFila != null) return `${naFila} negócios precisam de você`;
                       const atr = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'atrasadas').length;
                       return `${atr} atrasadas · ${seloTarefas - atr} para hoje`;
                     })()
@@ -7805,7 +7805,7 @@ function MainApp() {
           {tab === 'tasks' && !isViewer && (
             <TouchableOpacity
               accessibilityRole="button"
-              accessibilityLabel={modoNovo ? 'Como a fila funciona' : 'Como as tarefas são geradas'}
+              accessibilityLabel={modoNovo ? 'Como as tarefas funcionam' : 'Como as tarefas são geradas'}
               style={styles.headerAjuda}
               onPress={() => setIsTaskRulesOpen(true)}
             >
@@ -9108,7 +9108,7 @@ function MainApp() {
         <View style={[styles.modalOverlay, layout.ehLargo && styles.modalOverlayWeb]}>
           <View style={[styles.taskRulesCard, layout.ehLargo && styles.modalCartaoMedioWeb]}>
             <View style={styles.taskRulesHeader}>
-              <Text style={styles.taskRulesTitle}>{modoNovo ? 'Como a fila funciona' : 'Como as tarefas são geradas'}</Text>
+              <Text style={styles.taskRulesTitle}>{modoNovo ? 'Como as tarefas funcionam' : 'Como as tarefas são geradas'}</Text>
               <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar"
                 style={styles.taskRulesClose}
                 onPress={() => setIsTaskRulesOpen(false)}
@@ -9126,14 +9126,15 @@ function MainApp() {
             {modoNovo ? (
               <ScrollView style={{ maxHeight: 440 }} showsVerticalScrollIndicator>
                 <Text style={styles.taskRulesIntro}>
-                  Um cartão por negócio, com o motivo de ele estar aqui. A ordem é valor × urgência: dentro de cada
-                  grupo, quem tem mais MRR e o prazo mais apertado vem primeiro.
+                  Um cartão por negócio, com o motivo de ele estar aqui. Dentro de cada seção, quem vale mais
+                  e tem o prazo mais apertado vem primeiro.
                 </Text>
                 {[
-                  ['Agora', 'Tarefa do HubSpot vencida ou para hoje, visita de hoje sem registro, e cobrança de Ag. Pagamento até o próximo dia útil.'],
-                  ['Proteger', 'Lead quente sem próximo passo marcado, e proposta (Demo) parada há dias sem retorno.'],
-                  ['Destravar', 'Prospecção ou Visita sem decisor identificado, e negócio com menos de 4 contatos.'],
-                  ['Reativar', 'Negócio sem contato há muitos dias e sem passo futuro.'],
+                  ['Atrasados', 'O que você combinou e não fez: tarefa do HubSpot vencida e visita de hoje sem registro.'],
+                  ['Para hoje', 'Ligações, cobranças e visitas marcadas para hoje.'],
+                  ['Combinados com o gestor', 'Os acordos do seu 1:1. Marque quando fizer; o gestor valida.'],
+                  ['Sem próximo passo', 'Negócios parados: quente sem passo, proposta sem retorno, sem falar com quem decide, poucos contatos ou muito tempo sem contato.'],
+                  ['Feito hoje', 'O que você registrou hoje. Dá para desfazer até o fim do dia.'],
                 ].map(([t, x]) => (
                   <View key={t} style={styles.ruleCard}>
                     <Text style={styles.ruleTitle}>{t}</Text>
@@ -9142,8 +9143,7 @@ function MainApp() {
                 ))}
                 <Text style={styles.taskRulesIntro}>
                   Negócio com próximo passo para outro dia não aparece: ele volta no dia do passo.
-                  {'\n\n'}Registrar grava em "Feitas hoje" (o mesmo da Agenda e do Cockpit) e dá para desfazer.
-                  Arrastar para a direita registra; para a esquerda, adia para amanhã.
+                  {'\n\n'}"Adiar" (ou arrastar o cartão para a esquerda) passa para o próximo dia útil.
                 </Text>
               </ScrollView>
             ) : (<>

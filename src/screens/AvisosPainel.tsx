@@ -55,7 +55,7 @@ export default function AvisosPainel({
         {!!naFila && (
           <Pressable accessibilityRole="button" onPress={aoAbrirTarefas} style={[s.bloco, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
             <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-              <Text style={s.blocoTitulo}>{`${naFila} na fila de Tarefas${paraAgora ? ` · ${paraAgora} para agora` : ''}`}</Text>
+              <Text style={s.blocoTitulo}>{`${naFila} ${naFila === 1 ? 'negócio precisa' : 'negócios precisam'} de você em Tarefas${paraAgora ? ` · ${paraAgora} para hoje` : ''}`}</Text>
               <Text style={s.linhaPequena}>o mesmo número da aba</Text>
             </View>
             <IconChevronRight width={20} height={20} fill={cores.muted} />
