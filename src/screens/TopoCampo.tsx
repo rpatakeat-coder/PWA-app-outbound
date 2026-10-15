@@ -79,9 +79,9 @@ const s = StyleSheet.create({
     position: 'absolute', left: 12, right: 12, height: ALTURA_TOPO_CAMPO, zIndex: 30,
     flexDirection: 'row', alignItems: 'center', gap: 0, paddingLeft: 4, paddingRight: 0,
     borderRadius: 24, borderWidth: 1, borderColor: '#2E333B',
-    backgroundColor: 'rgba(20,22,26,.9)',
-    // @ts-expect-error — só existe no web; é o vidro do handoff (blur 12).
-    backdropFilter: 'blur(12px)',
+    /* sem o desfoque (14/10/26): a GPU refazia o blur a cada quadro do mapa, e com fundo
+       90% opaco ele quase não aparecia; o fundo sobe para 96% */
+    backgroundColor: 'rgba(20,22,26,.96)',
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 4 },
   },
   // ALVOS DE 48 (handoff v4.1 §13): a barra tem 48 contando a borda; o alvo

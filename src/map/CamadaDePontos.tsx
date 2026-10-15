@@ -61,7 +61,13 @@ export default function CamadaDePontos({ pontos, sol = false }: { pontos: Ponto[
         if (!g) return;
         g.setTransform(dpr, 0, 0, dpr, 0, 0);
         g.clearRect(0, 0, w, h);
+        /* só projeta o que está na tela (14/10/26): a carga traz milhares de pontos da cidade, e
+           projetar todos a cada quadro travava o celular; comparar lat/lng com a janela é barato */
+        const bs = b.getSouthWest(), bn = b.getNorthEast();
+        const mLat = (bn.lat() - bs.lat()) * 0.05, mLng = Math.abs(bn.lng() - bs.lng()) * 0.05;
+        const latMin = bs.lat() - mLat, latMax = bn.lat() + mLat, lngMin = bs.lng() - mLng, lngMax = bn.lng() + mLng;
         for (const p of pontosRef.current) {
+          if (p.lat < latMin || p.lat > latMax || (lngMin <= lngMax && (p.lng < lngMin || p.lng > lngMax))) continue;
           const px = proj.fromLatLngToDivPixel(new maps.LatLng(p.lat, p.lng));
           if (!px) continue;
           const x = px.x - sw.x;
@@ -99,9 +105,15 @@ export default function CamadaDePontos({ pontos, sol = false }: { pontos: Ponto[
     redesenharRef.current = () => camada.draw();
     // O overlayLayer anda junto no arraste, mas o canvas só cobre a janela
     // do último desenho: redesenha ao mexer para não aparecer borda vazia.
-    const l1 = map.addListener('bounds_changed', () => camada.draw());
+    /* no máximo um desenho por quadro (14/10/26): o bounds_changed dispara várias vezes por quadro */
+    let pedido = 0;
+    const l1 = map.addListener('bounds_changed', () => {
+      if (pedido) return;
+      pedido = requestAnimationFrame(() => { pedido = 0; camada.draw(); });
+    });
     return () => {
       l1.remove();
+      if (pedido) cancelAnimationFrame(pedido);
       camada.setMap(null);
       redesenharRef.current = () => {};
     };

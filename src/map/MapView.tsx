@@ -245,7 +245,11 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
              em branco até reiniciar o navegador — e entre um e outro, piscando. O raster desenha
              por imagens, é leve e não trava; pino, cor e tema escuro são os mesmos. O celular
              segue vetorial (é ele que gira o mapa no modo navegação). */
-          ...(typeof window !== 'undefined' && window.matchMedia?.('(pointer: fine)').matches && maps.RenderingType
+          /* 14/10/26: TAMBÉM NO CELULAR, menos onde o mapa gira (navegação). O vetorial com
+             centenas de pinos em HTML travou o celular do Marco: a cada quadro de arraste o WebGL
+             reposiciona todos os pinos. O raster é o mesmo desenho, sem giro nem inclinação, que
+             o mapa principal não usa. */
+          ...(typeof window !== 'undefined' && (window.matchMedia?.('(pointer: fine)').matches || !rotateEnabled) && maps.RenderingType
             ? { renderingType: maps.RenderingType.RASTER } : {}),
         });
 
@@ -377,6 +381,9 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
   // e cada re-aquisicao de GPS custa segundos e bateria no celular do campo.
   const followRef = useRef(followsUserLocation);
   followRef.current = followsUserLocation;
+  const ultimoPan = useRef<{ lat: number; lng: number; em: number } | null>(null);
+  /* voltou a seguir (tocou em centralizar): o próximo ponto recentraliza na hora */
+  if (!followsUserLocation) ultimoPan.current = null;
 
   useEffect(() => {
     if (!ctx || !showsUserLocation) return;
@@ -418,7 +425,17 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
         marker.position = p;
         halo.setCenter(p);
         halo.setRadius(Math.min(pos.coords.accuracy || 0, 500));
-        if (followRef.current) ctx.map.panTo(p);
+        /* SEGUIR SEM SACUDIR (14/10/26): cada panTo é uma parada do mapa, e cada parada redesenha
+           o app inteiro. Só recentraliza se andou mais de ~15 m e no máximo a cada 3 s. */
+        if (followRef.current) {
+          const ult = ultimoPan.current;
+          const agora = Date.now();
+          const andou = !ult ? Infinity : Math.hypot((p.lat - ult.lat) * 111320, (p.lng - ult.lng) * 111320 * Math.cos((p.lat * Math.PI) / 180));
+          if (!ult || (andou > 15 && agora - ult.em > 3000)) {
+            ultimoPan.current = { lat: p.lat, lng: p.lng, em: agora };
+            ctx.map.panTo(p);
+          }
+        }
       },
       (err) => console.warn('[MAP] geolocation:', err.message),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },

@@ -97,9 +97,8 @@ const s = StyleSheet.create({
     position: 'absolute', left: 12, right: 12, height: ALTURA_FAIXA_RUA, zIndex: 29,
     flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 12, paddingRight: 6,
     borderRadius: 16, borderWidth: 1, borderColor: '#2E333B', borderLeftWidth: 4,
-    backgroundColor: 'rgba(20,22,26,.92)',
-    // @ts-expect-error — só existe no web; o mesmo vidro do TopoCampo.
-    backdropFilter: 'blur(12px)',
+    /* sem o desfoque, como o TopoCampo (14/10/26): pesava a cada quadro do mapa */
+    backgroundColor: 'rgba(20,22,26,.96)',
   },
   faixaLarga: { right: 72, maxWidth: 640 },
   txt: { flex: 1, minWidth: 0 },

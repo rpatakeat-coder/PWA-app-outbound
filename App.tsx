@@ -597,7 +597,7 @@ const MarkerP2 = React.memo(
   // só redesenha o pino cuja classificação mudou — antes redesenhava todos.
   (a, b) =>
     a.client === b.client &&
-    (a.pino && b.pino ? JSON.stringify(a.pino) === JSON.stringify(b.pino) : a.contexto === b.contexto) &&
+    (a.pino && b.pino ? (a.pino === b.pino || JSON.stringify(a.pino) === JSON.stringify(b.pino)) : a.contexto === b.contexto) &&
     a.onPress === b.onPress &&
     a.planoNumero === b.planoNumero &&
     a.feito === b.feito &&
@@ -2043,6 +2043,8 @@ function MainApp() {
   }, [modoNovo, buscaAberta, searchTerm, buscando, achadosDaBusca, mapRegion]);
 
   const routeStops = fieldOps.stops;
+  /* o "feito" de cada pino num Set (antes um find na rota por pino, a cada render) */
+  const feitosDaRota = useMemo(() => new Set(routeStops.filter((s) => s.status === 'done').map((s) => s.client_id)), [routeStops]);
   const routeStopClientIds = useMemo(
     () => new Set(routeStops.map(stop => stop.client_id).concat(routeDraft.map(c => c.id))),
     [routeStops, routeDraft],
@@ -6056,11 +6058,22 @@ function MainApp() {
           // Assentamento do mapa = hora de conferir se a área visível
           // saiu do que já foi carregado. Só aqui, e não no onRegionChange
           // (que dispara a cada quadro do arraste).
-          setMapRegion({
-            latitude: region.latitude,
-            longitude: region.longitude,
-            latitudeDelta: region.latitudeDelta,
-            longitudeDelta: region.longitudeDelta,
+          /* PARADA SEM MUDANÇA REAL NÃO REDESENHA O APP (14/10/26): cada setMapRegion refaz as
+             pilhas de pinos (O(n²)) e o MainApp inteiro. Abaixo de ~3% de deslocamento e ~2% de
+             zoom, fica a região de antes. */
+          setMapRegion((prev) => {
+            if (prev) {
+              const dLat = Math.abs(prev.latitude - region.latitude) / Math.max(prev.latitudeDelta, 1e-6);
+              const dLng = Math.abs(prev.longitude - region.longitude) / Math.max(prev.longitudeDelta, 1e-6);
+              const dZoom = Math.abs(prev.latitudeDelta - region.latitudeDelta) / Math.max(prev.latitudeDelta, 1e-6);
+              if (dLat < 0.03 && dLng < 0.03 && dZoom < 0.02) return prev;
+            }
+            return {
+              latitude: region.latitude,
+              longitude: region.longitude,
+              latitudeDelta: region.latitudeDelta,
+              longitudeDelta: region.longitudeDelta,
+            };
           });
         }}
         showsBuildings={true}
@@ -6170,7 +6183,7 @@ function MainApp() {
             onPress={n > 1 && !aberta ? abrirPilha : aoTocarPino}
             planoNumero={plano}
             // planejando outro dia, "feito" e "próxima" são os daquele dia, não os de hoje
-            feito={plano != null && (planejarDia ? paradasDoDiaPlanejado.find((p) => p.client.id === c.id)?.status === 'done' : routeStops.find(s => s.client_id === c.id)?.status === 'done')}
+            feito={plano != null && (planejarDia ? paradasDoDiaPlanejado.find((p) => p.client.id === c.id)?.status === 'done' : feitosDaRota.has(c.id))}
             naFila={leadsNaFila.has(c.id)}
             selecionado={selectedClient?.id === c.id || rascunhoPlano.has(c.id) || (ehAgendaPC && (c.id === hoverAgenda || c.id === focoPC?.id))}
             papel={!planejarOutroDia && c.id === idClienteParadaAtual ? 'proxima' : plano != null ? 'plano' : 'lente'}
