@@ -568,6 +568,11 @@ export function useClients(
     onSuccess: recarregarPorBaixo,
   });
 
+  /* a sequência do HubSpot de um check-in (tarefa + Visita) já rodou neste aparelho? */
+  const CHAVE_HS = (acaoId: string) => `checkin-hs:${acaoId}`;
+  const hubspotJaRodou = (acaoId: string): boolean => { try { return window.localStorage.getItem(CHAVE_HS(acaoId)) === '1'; } catch { return false; } };
+  const marcarHubspotRodou = (acaoId: string) => { try { window.localStorage.setItem(CHAVE_HS(acaoId), '1'); } catch { /* sem armazenamento: segue */ } };
+
   const markAsVisited = useMutation({
     mutationFn: async ({
       clientId,
@@ -590,8 +595,11 @@ export function useClients(
       // visita; client_visits.declarada separa na medição (GPS × declarada).
       declarada?: boolean;
     }) => {
-      // Fila offline: se esta ação já foi gravada (a resposta se perdeu na
-      // volta), não repete nada — nem a visita nem a Task no HubSpot.
+      // Fila offline: se esta ação já foi gravada (a resposta se perdeu na volta), a visita não
+      // se repete. MAS O HUBSPOT SIM, SE NÃO RODOU (auditoria 14/10/26): a tarefa da visita e a ida
+      // para Visita rodam aqui no aparelho DEPOIS da RPC; com a resposta perdida elas nunca
+      // aconteciam, e o negócio ficava em Prospecção. A marca no aparelho diz se já rodaram.
+      let repeticao: Record<string, unknown> | null = null;
       if (acaoId) {
         const { data: ja } = await supabase
           .from('client_visits').select('id').eq('acao_id', acaoId).limit(1);
@@ -599,10 +607,11 @@ export function useClients(
           const { data: row, error: e2 } = await supabase
             .from('clients').select(CLIENT_LIST_COLUMNS).eq('id', clientId).single();
           if (e2) throw e2;
-          return mapRow(row);
+          if (hubspotJaRodou(acaoId)) return mapRow(row);
+          repeticao = row as Record<string, unknown>;
         }
       }
-      let { data, error } = await supabase.rpc('mark_client_as_visited', {
+      let { data, error } = repeticao ? { data: repeticao as unknown, error: null as { code?: string; message?: string } | null } : await supabase.rpc('mark_client_as_visited', {
         p_client_id: clientId,
         p_user_lat: latitude,
         p_user_lon: longitude,
@@ -613,7 +622,7 @@ export function useClients(
         ...(declarada ? { p_declarada: true } : {}),
       });
       // Banco sem a 0102 (função de 3 argumentos): grava do jeito antigo.
-      if (error && error.code === 'PGRST202') {
+      if (!repeticao && error && error.code === 'PGRST202') {
         ({ data, error } = await supabase.rpc('mark_client_as_visited', {
           p_client_id: clientId, p_user_lat: latitude, p_user_lon: longitude,
         }));
@@ -653,6 +662,8 @@ export function useClients(
       if (acaoId) {
         const { data: gravou } = await supabase.from('client_visits').select('id').eq('acao_id', acaoId).limit(1);
         if (!gravou || gravou.length === 0) return client;
+        // daqui para baixo vai ao HubSpot: marca antes, para a repetição pela fila não duplicar
+        marcarHubspotRodou(acaoId);
       }
 
       // Conta Alvo: o lead foi materializado localmente pela Rota do dia
