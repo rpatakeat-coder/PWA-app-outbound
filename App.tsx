@@ -4161,8 +4161,16 @@ function MainApp() {
     </View>
   );
 
+  // A trava entra no PRIMEIRO instante: antes ela só ligava depois da busca de
+  // parecidos, e dois toques durante o "Conferindo…" cadastravam o lead duas vezes
+  // (dois deals no HubSpot).
   const submitClient = async () => {
     if (submittingRef.current) return;
+    submittingRef.current = true;
+    try { await submitClientTravado(); } finally { submittingRef.current = false; }
+  };
+
+  const submitClientTravado = async () => {
     if (!form.nome.trim()) {
       Alert.alert('Nome do contato', 'Informe o nome do contato responsável.');
       return;
@@ -4230,7 +4238,6 @@ function MainApp() {
       setProcurandoParecidos(false);
     }
 
-    submittingRef.current = true;
     setErroDuplicado(null);
     try {
       const created = await addClient.mutateAsync(newClient);
@@ -4266,8 +4273,6 @@ function MainApp() {
       } else {
         Alert.alert('Erro ao cadastrar', err?.message || 'Tente novamente');
       }
-    } finally {
-      submittingRef.current = false;
     }
   };
 
@@ -10154,9 +10159,9 @@ function MainApp() {
               <View style={{ height: 16 }} />
                 </ScrollView>
                 <TouchableOpacity
-                  style={[sharedStyles.submitButton, styles.m9Cta, (!podeSalvar || isSaving) && { opacity: 0.5 }]}
+                  style={[sharedStyles.submitButton, styles.m9Cta, (!podeSalvar || isSaving || procurandoParecidos) && { opacity: 0.5 }]}
                   onPress={editingClient ? saveEditClient : submitClient}
-                  disabled={!podeSalvar || isSaving}
+                  disabled={!podeSalvar || isSaving || procurandoParecidos}
                 >
                   {procurandoParecidos ? (
                     <View style={styles.m9CtaLinha}>
