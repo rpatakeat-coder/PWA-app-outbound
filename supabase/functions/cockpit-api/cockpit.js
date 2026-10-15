@@ -1,7 +1,7 @@
-// GERADO por scripts/portar-cockpit-api.cjs a partir de cockpit-unificado@3d6a4ae.
+// GERADO por scripts/portar-cockpit-api.cjs a partir de cockpit-unificado@a5f9e592.
 // NAO EDITAR: cada funcao abaixo e um arquivo do Cockpit, byte a byte. Para mudar
 // uma regra, mude no Cockpit e gere de novo.
-export const ORIGEM = "3d6a4ae";
+export const ORIGEM = "a5f9e592";
 export const ROTAS = ["negocio-acao","criar-negocio","desfazer-negocio","criar-nota-negocio","criar-empresa-prospeccao","restaurantes-proximos","novidades-mercado","importar-leads","buscar-leads"];
 export const JSONS = ["data/cadencias.json","data/comissionamento.json","data/desligados.json","data/leads-referencia.json","data/maptiler-config.json","data/redes-excluidas.json","data/supabase-config.json","data/temperatura.json","data/territorios.json","data/usuarios.json"];
 
@@ -5607,7 +5607,13 @@ function filtrarParaPapel(dados, usuario) {
       velocidade: dados.historicoEtapas.velocidade || [],
       ciclo: dados.historicoEtapas.ciclo || null,
       agregado: dados.historicoEtapas.agregado || null,
-      porOwner: { [meuId]: (dados.historicoEtapas.porOwner || {})[meuId] || null }
+      porOwner: { [meuId]: (dados.historicoEtapas.porOwner || {})[meuId] || null },
+      /* passos do mês: a lista inteira só a dele; dos colegas, só quantos (o ranking de
+         totais é autorizado, a carteira não desce) */
+      passosDoMes: dados.historicoEtapas.passosDoMes ? Object.assign({}, dados.historicoEtapas.passosDoMes, {
+        porOwner: Object.fromEntries(Object.entries(dados.historicoEtapas.passosDoMes.porOwner || {}).map(([o, v]) => [o, o === String(meuId) ? v
+          : Object.fromEntries(Object.entries(v).map(([k, l]) => [k, l.map(x => ({ id: x.id, em: x.em }))]))]))
+      }) : null
     } : null,
     motivosPerda: dados.motivosPerda ? {
       dias: dados.motivosPerda.dias,
