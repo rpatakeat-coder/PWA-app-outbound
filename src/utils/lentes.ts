@@ -7,20 +7,45 @@
 import type { Client } from '../types/client';
 import type { OrigemPick, Pino } from './pinoP2';
 
-export type Lente = 'dia' | 'carteira' | 'clientes' | 'alvo' | 'rec' | 'queda' | 'semdono' | 'calor';
+export type Lente = 'dia' | 'novos' | 'carteira' | 'clientes' | 'alvo' | 'rec' | 'queda' | 'semdono' | 'calor';
 
 export const LENTES: { id: Lente; rotulo: string }[] = [
   { id: 'dia', rotulo: 'Meu dia' },
+  // RECÉM-ABERTOS (15/10/26, Julyan): CNPJ aberto há até 90 dias, que ainda não tem sistema.
+  { id: 'novos', rotulo: 'Recém-abertos' },
   { id: 'carteira', rotulo: 'Carteira' },
   // CLIENTES ATIVOS (28/09/2026, Julyan: "quero clientes ativos, não só reduzindo
   // custo"). "Em queda" é só a parte com problema; esta é a base inteira que paga.
   { id: 'clientes', rotulo: 'Clientes' },
-  { id: 'alvo', rotulo: 'Contas-alvo' },
+  // MAIS AVALIADOS (15/10/26): as contas-alvo do Google com nota 4,5+ ganham pino inteiro.
+  // Só aparece se o executivo escolher a lente (não polui o Meu dia).
+  { id: 'alvo', rotulo: 'Mais avaliados' },
   { id: 'rec', rotulo: 'Reconquista' },
   { id: 'queda', rotulo: 'Em queda' },
   { id: 'semdono', rotulo: 'Sem dono' },
   { id: 'calor', rotulo: 'Calor' },
 ];
+
+/** MAPA MENOS POLUÍDO (15/10/26, Julyan: "não misturar a conta-alvo com os clientes, o mapa
+ *  está poluído"). Medido: 10.173 pinos, mais da metade clientes e ex-clientes, e só 7% das
+ *  visitas em conta-alvo. Diferente de noFoco (pino inteiro × ponto), isto TIRA do mapa:
+ *  - a conta-alvo antiga da Casa dos Dados (CNPJ com mais de 90 dias) sai de todas as lentes;
+ *  - cliente que já paga só aparece nas lentes Clientes e Em queda;
+ *  - no Meu dia fica só o que é meu (sem conta-alvo) e os recém-abertos; o resto não vira nem ponto;
+ *  - Recém-abertos e Mais avaliados mostram só o próprio grupo.
+ *  O que está no plano e o pino aberto aparecem sempre. */
+export function visivelNaLente(lente: Lente, p: Pino, noPlano: boolean, aberto: boolean): boolean {
+  if (noPlano || aberto) return true;
+  if (p.alvoAntigo) return false;
+  if (p.tipo === 'cliente') return lente === 'clientes' || lente === 'queda' || lente === 'calor';
+  switch (lente) {
+    // conta-alvo antiga do Google também sai do Meu dia (só na lente Mais avaliados)
+    case 'dia': return (p.dono === 'meu' && p.tipo !== 'alvo') || p.abertoHa != null;
+    case 'novos': return p.abertoHa != null;
+    case 'alvo': return p.tipo === 'alvo';
+    default: return true;
+  }
+}
 
 /** Pino inteiro nesta lente? (o resto vira ponto). Calor não mostra pino. */
 export function noFoco(lente: Lente, p: Pino, planoNumero: number | null | undefined): boolean {
@@ -28,13 +53,16 @@ export function noFoco(lente: Lente, p: Pino, planoNumero: number | null | undef
   if (planoNumero) return lente === 'dia' || lente === 'carteira' || p.dono === 'meu';
   switch (lente) {
     case 'dia':
-      return p.dono === 'meu' && (p.etiqueta?.texto === 'cobrar' || p.temp === 'Q' || p.temp === 'M' || p.tipo === 'cliente');
+      // 15/10/26: cliente saiu do Meu dia (só na lente Clientes); o recém-aberto entrou
+      return (p.dono === 'meu' && (p.etiqueta?.texto === 'cobrar' || p.temp === 'Q' || p.temp === 'M')) || p.abertoHa != null;
+    case 'novos':
+      return p.abertoHa != null;
     case 'carteira':
       return p.dono === 'meu';
     case 'clientes':
       return p.tipo === 'cliente';
     case 'alvo':
-      return p.tipo === 'alvo';
+      return p.tipo === 'alvo' && (p.nota ?? 0) >= 4.5;
     case 'rec':
       return p.tipo === 'ex';
     case 'queda':

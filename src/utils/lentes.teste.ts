@@ -7,7 +7,7 @@
 // cruzar; e a contagem do chip prometendo um número que o toque não entrega.
 import type { Client } from '../types/client';
 import { classificarPino, type ContextoPino } from './pinoP2';
-import { contarChips, FILTROS_VAZIOS, noFoco, passaNosFiltros, quantosFiltros, visitaDoFiltro, type FiltrosNovos } from './lentes';
+import { contarChips, FILTROS_VAZIOS, noFoco, passaNosFiltros, quantosFiltros, visitaDoFiltro, visivelNaLente, type FiltrosNovos } from './lentes';
 
 let falhas = 0;
 const ok = (c: boolean, m: string) => {
@@ -22,6 +22,8 @@ const ctx: ContextoPino = {
   etapaDePara: new Map<string, string | null>([['prospeccao', '1395880469'], ['negociacao', '1395880472'], ['demo/proposta', '1395880471'], ['perdido', '1396006164']]),
   limites: [7, 30],
   agora: new Date('2026-09-25T15:00:00Z'),
+  // lp-novo abriu há 20 dias (recém-aberto); lp-velho há 400 (conta-alvo antiga da Casa dos Dados)
+  aberturaPorLead: new Map([['lp-novo', '2026-09-05T00:00:00Z'], ['lp-velho', '2025-08-21T00:00:00Z']]),
 };
 const L = (x: Partial<Client>): Client => ({
   id: 'x', nome: 'x', empresa: null, status: 'lead', etapa: 'Prospecção', vendedor_id_hubspot: '1', id_hubspot: null,
@@ -34,11 +36,24 @@ ok(noFoco('dia', P({ etapa: 'Negociação' }), null), 'Meu dia: meu quente');
 ok(noFoco('dia', P({ etapa: 'Demo/Proposta' }), null), 'Meu dia: meu morno');
 ok(!noFoco('dia', P({ etapa: 'Prospecção' }), null), 'Meu dia: meu frio sem cobrança vira ponto');
 ok(noFoco('dia', P({ etapa: 'Prospecção', id_hubspot: 'sla' }), null), 'Meu dia: cobrança vencida');
-ok(noFoco('dia', P({ status: 'cliente' }), null), 'Meu dia: meu cliente');
+// 15/10/26: cliente saiu do Meu dia (só nas lentes Clientes e Em queda)
+ok(!noFoco('dia', P({ status: 'cliente' }), null) && !visivelNaLente('dia', P({ status: 'cliente' }), false, false), 'Meu dia: cliente não aparece nem como ponto');
+ok(visivelNaLente('clientes', P({ status: 'cliente' }), false, false), 'Clientes: o cliente aparece');
+ok(visivelNaLente('dia', P({ status: 'cliente' }), true, false) && visivelNaLente('dia', P({ status: 'cliente' }), false, true), 'Meu dia: cliente no plano ou aberto aparece');
 ok(!noFoco('dia', P({ etapa: 'Negociação', vendedor_id_hubspot: '2' }), null), 'Meu dia: quente do colega vira ponto');
 ok(noFoco('dia', P({ etapa: 'Prospecção', vendedor_id_hubspot: '2' }), 3), 'Meu dia: parada do plano sempre inteira');
 ok(noFoco('carteira', P({ etapa: 'Prospecção' }), null) && !noFoco('carteira', P({ vendedor_id_hubspot: '2' }), null), 'Carteira: só o que é meu');
-ok(noFoco('alvo', P({ conta_alvo_place_id: 'a', origem_lead: 'casa_dos_dados', lead_prospeccao_id: 'lp' }), null) && !noFoco('alvo', P({}), null), 'Contas-alvo: só conta-alvo');
+// 15/10/26: a lente vira Mais avaliados (nota 4,5+)
+ok(noFoco('alvo', P({ conta_alvo_place_id: 'a', lead_prospeccao_id: 'lp', conta_alvo_rating: 4.7 } as Partial<Client>), null) && !noFoco('alvo', P({ conta_alvo_place_id: 'a', lead_prospeccao_id: 'lp', conta_alvo_rating: 4.1 } as Partial<Client>), null) && !noFoco('alvo', P({}), null), 'Mais avaliados: só conta-alvo com nota 4,5+');
+// recém-aberto e conta-alvo antiga
+const novo = P({ lead_prospeccao_id: 'lp-novo', conta_alvo_place_id: 'm' } as Partial<Client>);
+const velho = P({ lead_prospeccao_id: 'lp-velho', conta_alvo_place_id: 'm' } as Partial<Client>);
+ok(novo.abertoHa === 20 && novo.etiqueta?.texto === 'aberto há 20d', 'Recém-aberto: 20 dias e selo');
+ok(noFoco('dia', novo, null) && noFoco('novos', novo, null) && visivelNaLente('dia', novo, false, false), 'Recém-aberto: pino inteiro no Meu dia e na lente nova');
+ok(velho.alvoAntigo === true && !visivelNaLente('dia', velho, false, false) && !visivelNaLente('alvo', velho, false, false) && !visivelNaLente('carteira', velho, false, false), 'Conta-alvo antiga: some de todas as lentes');
+ok(visivelNaLente('dia', velho, true, false), 'Conta-alvo antiga no plano: aparece');
+ok(!visivelNaLente('novos', P({ etapa: 'Negociação' }), false, false), 'Recém-abertos: só o grupo');
+ok(!visivelNaLente('dia', P({ lead_prospeccao_id: 'lp-google', conta_alvo_place_id: 'g', conta_alvo_rating: 4.8 } as Partial<Client>), false, false), 'Meu dia: conta-alvo do Google (não recém-aberta) some');
 ok(noFoco('rec', P({ status: 'churn' }), null) && !noFoco('rec', P({ status: 'cliente' }), null), 'Reconquista: só ex-cliente');
 ok(noFoco('semdono', P({ vendedor_id_hubspot: '777' }), null) && !noFoco('semdono', P({}), null), 'Sem dono: dono fora do time');
 ok(!noFoco('calor', P({ etapa: 'Negociação' }), 1), 'Calor: nenhum pino');

@@ -45,7 +45,16 @@ export type ContextoPino = {
   atualizadoEm?: string | null;
   /** Clientes da Takeat em queda (clientes-sync, 0122/0126), por id do pino. */
   quedaPorCliente?: Map<string, QuedaDoCliente>;
+  /** RECÉM-ABERTOS (15/10/26): data de abertura do CNPJ por id do lead da Casa dos Dados
+   *  (leads_prospeccao.data_abertura). Até 90 dias é recém-aberto; mais que isso é a
+   *  conta-alvo antiga, que saiu do mapa. */
+  aberturaPorLead?: Map<string, string>;
+  /** Restaurantes recém-abertos que EU visitei com prova nesta semana (meta de 5). null = não medido. */
+  novosVisitadosSemana?: number | null;
 };
+
+/** Até quantos dias de CNPJ o lead é "recém-aberto" (Julyan, 15/10/26). */
+export const DIAS_RECEM_ABERTO = 90;
 
 /** Cliente em queda: o porquê (queda do faturamento ou dias sem comanda), o tamanho e o dono pelo território. */
 export type QuedaDoCliente = { motivo: string; faturamento: number | null; dono: string | null };
@@ -63,6 +72,10 @@ export type Pino = {
   opacidade: number;
   /** Origem na picklist do HubSpot; null = "origem não informada". */
   origem: OrigemPick | null;
+  /** Conta-alvo com CNPJ aberto há até 90 dias: há quantos dias abriu. null = não é recém-aberto. */
+  abertoHa?: number | null;
+  /** Conta-alvo da Casa dos Dados com CNPJ de mais de 90 dias: não vai mais para o mapa. */
+  alvoAntigo?: boolean;
   /** Nota do Google da conta-alvo (selo ★ do Disco Takeat). */
   nota?: number | null;
   /** Cliente ativo em queda (lente "Clientes em queda"). */
@@ -192,6 +205,20 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
   const queda = tipo === 'cliente' ? ctx.quedaPorCliente?.get(c.id) ?? null : null;
   if (queda && !etiqueta) etiqueta = { texto: 'em queda', fundo: '#4B1C1C', tinta: '#FCA5A5' };
 
+  // RECÉM-ABERTO (15/10/26): a casa que abriu há até 90 dias ainda não tem sistema. Selo
+  // verde com a idade; a conta-alvo antiga da Casa dos Dados (mais de 90 dias) sai do mapa.
+  let abertoHa: number | null = null;
+  let alvoAntigo = false;
+  const abertura = tipo === 'alvo' && c.lead_prospeccao_id ? ctx.aberturaPorLead?.get(String(c.lead_prospeccao_id)) : undefined;
+  if (abertura) {
+    // a abertura é uma DATA (gravada como meia-noite UTC): meio-dia evita cair no dia anterior em Brasília
+    const d = diasDesde(String(abertura).slice(0, 10) + "T12:00:00Z", ctx.agora);
+    if (d != null && d <= DIAS_RECEM_ABERTO) {
+      abertoHa = Math.max(0, d);
+      if (!etiqueta) etiqueta = { texto: abertoHa === 0 ? 'abriu hoje' : `aberto há ${abertoHa}d`, fundo: '#14532D', tinta: '#BBF7D0' };
+    } else if (d != null) alvoAntigo = true;
+  }
+
   const opacidade = dias != null && dias > ctx.limites[1] ? 0.72 : dono === 'colega' ? 0.8 : 1;
 
   const origemHs = tempoHs?.origemHs && PICKLIST.has(tempoHs.origemHs) ? (tempoHs.origemHs as OrigemPick) : null;
@@ -203,6 +230,6 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
     nota: tipo === 'alvo' && c.conta_alvo_rating != null ? Number(c.conta_alvo_rating) : null,
     aproximado: c.geo_approximate === true,
     nome: nomeCurto(c.empresa?.trim() || c.nome || ''),
-    etiqueta, opacidade, queda,
+    etiqueta, opacidade, queda, abertoHa, alvoAntigo,
   };
 }

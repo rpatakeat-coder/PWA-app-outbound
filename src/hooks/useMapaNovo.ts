@@ -12,7 +12,15 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import { ouvirFila, type ItemFila } from '../utils/filaOffline';
-import type { ContextoPino, QuedaDoCliente, TempoDoNegocio } from '../utils/pinoP2';
+import { DIAS_RECEM_ABERTO, type ContextoPino, type QuedaDoCliente, type TempoDoNegocio } from '../utils/pinoP2';
+
+/** Segunda-feira (Brasília) da semana de hoje, AAAA-MM-DD. */
+function segundaBRT(): string {
+  const d = new Date(Date.now() - 3 * 3600000);
+  const dow = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() - (dow - 1));
+  return d.toISOString().slice(0, 10);
+}
 
 const CHAVE = 'takeat-mapa-novo';
 const CHAVE_ANTIGO = 'takeat-mapa-antigo';
@@ -72,6 +80,48 @@ export function useContextoDoPino(ligado: boolean): Omit<ContextoPino, 'agora'> 
     },
   });
 
+  /* RECÉM-ABERTOS (15/10/26): a data de abertura do CNPJ de cada lead da Casa dos Dados. O
+     executivo só lê os leads dele (RLS de leads_prospeccao), que são exatamente os pinos dele.
+     Uma leitura a cada 30 min; falhou, o mapa segue sem selo (nada some por erro). */
+  const aberturas = useQuery<[string, string][]>({
+    queryKey: ['abertura-dos-leads'],
+    enabled: ligado && isAuthenticated,
+    staleTime: 30 * 60 * 1000,
+    queryFn: async () => {
+      const out: [string, string][] = [];
+      for (let de = 0; de < 20000; de += 1000) {
+        const { data, error } = await supabase.from('leads_prospeccao').select('id, data_abertura')
+          .ilike('fonte', '%Casa dos Dados%').not('data_abertura', 'is', null).range(de, de + 999);
+        if (error) throw error;
+        (data ?? []).forEach((l: { id: string; data_abertura: string }) => out.push([String(l.id), String(l.data_abertura)]));
+        if (!data || data.length < 1000) break;
+      }
+      return out;
+    },
+  });
+
+  /* A META DE 5 POR SEMANA: restaurantes recém-abertos que EU visitei com prova desde segunda.
+     Mesma régua de visita do Cockpit (visitas_com_prova); o pino diz se o lead é recém-aberto. */
+  const meuId = (profile as { id?: string } | null)?.id ?? null;
+  const visitasSemana = useQuery<{ client_id: string; dia: string }[]>({
+    queryKey: ['novos-visitados-semana', meuId],
+    enabled: ligado && isAuthenticated && !!meuId,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+      const { data, error } = await supabase.rpc('visitas_com_prova', { p_de: segundaBRT(), p_ate: hoje, p_pessoa: meuId });
+      if (error) throw error;
+      const minhas = ((data ?? []) as { client_id: string; dia: string; provada: boolean; visited_by?: string }[])
+        .filter((v) => v.provada && (!v.visited_by || v.visited_by === meuId));
+      if (!minhas.length) return [];
+      const ids = [...new Set(minhas.map((v) => v.client_id))];
+      const { data: cl, error: e2 } = await supabase.from('clients').select('id, lead_prospeccao_id').in('id', ids);
+      if (e2) throw e2;
+      const lead = new Map((cl ?? []).map((c: { id: string; lead_prospeccao_id: string | null }) => [c.id, c.lead_prospeccao_id]));
+      return minhas.filter((v) => lead.get(v.client_id)).map((v) => ({ client_id: String(lead.get(v.client_id)), dia: v.dia }));
+    },
+  });
+
   const meuOwnerId = (profile as { id_hubspot?: string | null } | null)?.id_hubspot ?? null;
 
   return useMemo(() => {
@@ -93,7 +143,22 @@ export function useContextoDoPino(ligado: boolean): Omit<ContextoPino, 'agora'> 
     for (const [id, motivo, fat, dono] of dadosCtx.queda ?? []) {
       quedaPorCliente.set(String(id), { motivo: motivo ?? 'em queda', faturamento: fat == null ? null : Number(fat), dono: dono ?? null });
     }
+    const aberturaPorLead = new Map<string, string>(aberturas.data ?? []);
+    // recém-aberto na data da visita (até 90 dias), cada restaurante uma vez na semana
+    let novosVisitadosSemana: number | null = null;
+    if (visitasSemana.data && aberturas.data) {
+      const vistos = new Set<string>();
+      for (const v of visitasSemana.data) {
+        const ab = aberturaPorLead.get(v.client_id);
+        if (!ab) continue;
+        const dias = (Date.parse(v.dia + 'T12:00:00Z') - Date.parse(String(ab).slice(0, 10) + 'T12:00:00Z')) / 86400000;
+        if (dias <= DIAS_RECEM_ABERTO) vistos.add(v.client_id);
+      }
+      novosVisitadosSemana = vistos.size;
+    }
     return {
+      aberturaPorLead,
+      novosVisitadosSemana,
       quedaPorCliente,
       meuOwnerId: meuOwnerId ? String(meuOwnerId) : null,
       donosDoTime: new Set((dadosCtx.donos ?? []).map(String)),
@@ -102,7 +167,7 @@ export function useContextoDoPino(ligado: boolean): Omit<ContextoPino, 'agora'> 
       limites: Array.isArray(lim) && lim.length === 2 ? [Number(lim[0]), Number(lim[1])] : [7, 30],
       atualizadoEm: dadosCtx.atualizado_em ?? null,
     };
-  }, [ligado, contexto.data, contexto.isError, etapas.data, etapas.isError, meuOwnerId]);
+  }, [ligado, contexto.data, contexto.isError, etapas.data, etapas.isError, meuOwnerId, aberturas.data, visitasSemana.data]);
 }
 
 /** Ids dos leads com check-in esperando sinal (selo ↑ âmbar no pino). */

@@ -9,14 +9,15 @@ import type { Lente } from '../utils/lentes';
 import { IconClose as SiClose } from '../components/icons';
 
 export const COR_LENTE: Record<Lente, string> = {
-  dia: '#E51A31', carteira: '#F5A524', clientes: '#16A34A', alvo: '#8B5CF6', rec: '#EC4899', queda: '#84CC16', semdono: '#FACC15', calor: '#F97316',
+  dia: '#E51A31', novos: '#14B8A6', carteira: '#F5A524', clientes: '#16A34A', alvo: '#8B5CF6', rec: '#EC4899', queda: '#84CC16', semdono: '#FACC15', calor: '#F97316',
 };
 
 const DESCRICAO: Record<Lente, string> = {
-  dia: 'plano + microrrota',
+  dia: 'plano + quentes + recém-abertos',
+  novos: 'CNPJ aberto há até 90 dias',
   carteira: 'meus leads por etapa',
   clientes: 'clientes ativos · relacionamento',
-  alvo: 'prospecção aprovada',
+  alvo: 'contas-alvo com nota 4,5+ no Google',
   rec: 'ex-clientes',
   queda: 'faturamento caindo ou sem comanda',
   semdono: 'pode assumir: É meu',

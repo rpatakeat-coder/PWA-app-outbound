@@ -45,6 +45,10 @@ type Props = {
   metaVisitas: number;
   /** Toque em "x de 6 visitas". */
   aoProgresso?: () => void;
+  /** Recém-abertos visitados com prova nesta semana (meta de 5). null = não medido. */
+  novosSemana?: number | null;
+  /** Toque na linha da meta: abre a lente Recém-abertos. */
+  aoNovos?: () => void;
   /** Desktop (28/09/2026): a mesma folha vira o painel lateral, sempre aberta, sem alça. */
   embutida?: boolean;
   /** id do pino aberto no mapa: tocar num pino traz a pílula recolhida de volta */
@@ -105,7 +109,7 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, novosSemana = null, aoNovos, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
   const cores = useIconColors();
   const visitasFeitas = feitasMedidas ?? 0;
   const feitasTexto = feitasMedidas == null ? "—" : String(feitasMedidas);
@@ -260,6 +264,14 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
           </View>
         </Pressable>
       </View>
+      {/* META DOS RECÉM-ABERTOS (15/10/26): 5 por semana, visitados com prova. Toque abre a lente. */}
+      {novosSemana != null && (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Recém-abertos visitados nesta semana: ${novosSemana} de 5. Ver os recém-abertos no mapa`} onPress={aoNovos} style={s.novosLinha}>
+          <View style={[s.novosPonto, { backgroundColor: novosSemana >= 5 ? "#16A34A" : "#14B8A6" }]} />
+          <Text style={s.novosTexto} numberOfLines={1}>{novosSemana >= 5 ? `Recém-abertos: ${novosSemana} visitados · meta da semana batida` : `Recém-abertos: ${novosSemana} de 5 visitados na semana`}</Text>
+          <SiRight width={14} height={14} fill="var(--text-muted)" />
+        </Pressable>
+      )}
 
       {proxima ? (
         <View style={s.proxima}>
@@ -396,6 +408,9 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
 }
 
 const s = StyleSheet.create({
+  novosLinha: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 32 },
+  novosPonto: { width: 8, height: 8, borderRadius: 4 },
+  novosTexto: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: "600", color: "var(--text)" },
   pilulaRecolher: { width: 28, height: 40, alignItems: 'center', justifyContent: 'center', marginLeft: -8, flexShrink: 0 },
   pilulaMini: {
     position: 'absolute', left: 10, zIndex: 20, height: 44, borderRadius: 22, paddingHorizontal: 14,

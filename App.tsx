@@ -135,7 +135,7 @@ import { ROTULO_ETAPA, ETAPA as ETAPA_FS } from './src/utils/fichaDeRua';
 import { negocioAcao } from './src/utils/negocioAcao';
 import { subirPlanoDaFila } from './src/utils/planoDoPino';
 import { textoNormalizado } from './src/utils/pinoP2';
-import { FILTROS_VAZIOS, LENTES, noFoco, passaNosFiltros, pontoDe, quantosFiltros, type FiltrosNovos, type Lente } from './src/utils/lentes';
+import { FILTROS_VAZIOS, LENTES, noFoco, passaNosFiltros, pontoDe, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
 import CamadaDePontos from './src/map/CamadaDePontos';
 import { pilhasNaTela, posicoesDoLeque, projetar, rotulosSemSobrepor, type Pilha } from './src/utils/rotulos';
 import { MINIMO_QUADRA, quadrasNaTela, resumoDaQuadra, type ResumoQuadra } from './src/utils/quadra';
@@ -2630,8 +2630,9 @@ function MainApp() {
   }, [modoNovo, heatOn, mapRegion, itensMapaNovo, heat]);
 
   const visiveisMapaNovo = useMemo(
-    () => itensMapaNovo.filter(({ c, p, plano }) => plano != null || passaNosFiltros(c, p, filtrosNovos)),
-    [itensMapaNovo, filtrosNovos],
+    () => itensMapaNovo.filter(({ c, p, plano }) => visivelNaLente(lente, p, plano != null, c.id === selectedClient?.id)
+      && (plano != null || passaNosFiltros(c, p, filtrosNovos))),
+    [itensMapaNovo, filtrosNovos, lente, selectedClient?.id],
   );
 
   // Zoom 15 para dentro (~2,7 km de mapa no celular). Medido em 26/09: 0,012
@@ -6592,6 +6593,8 @@ function MainApp() {
           visitasFeitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
           visitasProvadas={meuDia.data?.provadasHoje ?? null}
           metaVisitas={metaDeHoje}
+          novosSemana={contextoPino?.novosVisitadosSemana ?? null}
+          aoNovos={() => setLente('novos')}
           aoProgresso={() => setMeuDiaAberto(true)}
           chao={alturaRodape ?? baseInferior}
           totalNaArea={visiveisMapaNovo.length}
