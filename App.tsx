@@ -4054,7 +4054,14 @@ function MainApp() {
     };
     try {
       // Já existe ponto deste negócio (ex.: sem coordenada)? Atualiza; senão cria ligado a ele.
-      const { data: existente } = await supabase.from('clients').select('id').eq('id_hubspot', dealId).limit(1).maybeSingle();
+      // Pino arquivado (juntado a outro) nunca é alvo: mexer nele não aparece no mapa, e
+      // criar outro bate na chave única de id_hubspot (o arquivado guarda o id do negócio).
+      const { data: achados } = await supabase.from('clients').select('id, is_archived').eq('id_hubspot', dealId).order('is_archived', { ascending: true }).limit(1);
+      const existente = (achados ?? [])[0] as { id: string; is_archived: boolean | null } | undefined;
+      if (existente?.is_archived) {
+        Toast.mostrar(`${nome} tem um pino arquivado (juntado a outro). Procure o restaurante pelo nome no mapa.`, 'erro');
+        return;
+      }
       if (existente?.id) {
         const { error } = await supabase.from('clients').update(campos).eq('id', existente.id);
         if (error) throw error;

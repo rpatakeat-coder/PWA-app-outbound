@@ -40,7 +40,8 @@ export function useBuscaNegocios(termo: string, ownerId: string | null, ativo: b
       const { data: linhas } = await supabase
         .from('clients')
         .select(CLIENT_LIST_COLUMNS)
-        .in('id_hubspot', negocios.map((n) => n.id));
+        .in('id_hubspot', negocios.map((n) => n.id))
+        .eq('is_archived', false); // pino arquivado (juntado a outro) não é "já tem pino"
       const porDeal = new Map<string, Client>();
       for (const c of (linhas ?? []) as unknown as Client[]) {
         if (c.id_hubspot) porDeal.set(String(c.id_hubspot), c);
