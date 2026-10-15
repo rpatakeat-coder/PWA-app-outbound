@@ -2187,7 +2187,13 @@ function MainApp() {
     clientesDoPlanoNoMapa.forEach((c, i) => plano.set(c.id, i + 1));
     const vistos = new Set<string>();
     const base: Client[] = [];
-    for (const c of [...clientesDoPlanoNoMapa, ...clientsForCount]) {
+    /* O PINO MUDA DE LUGAR NA HORA (Julyan, 15/10/26: "pino se reposicionando na hora, pra não
+       termos erros"). O cliente do plano vem da rota, lida antes; o do cache da área é o que o
+       "Mover o pino" e o "Posicionar" acabaram de gravar. Quando os dois existem, vale o da área
+       (mais novo): antes o pino do plano ficava no lugar velho até a rota recarregar. */
+    const daArea = new Map(clientsForCount.map((x) => [x.id, x]));
+    for (const c0 of [...clientesDoPlanoNoMapa, ...clientsForCount]) {
+      const c = daArea.get(c0.id) ?? c0;
       if (vistos.has(c.id) || c.latitude == null || c.longitude == null) continue;
       if (!plano.has(c.id) && renderBounds) {
         const lat = c.latitude as number;
@@ -4278,19 +4284,32 @@ function MainApp() {
         Toast.mostrar(`${nome} tem um pino arquivado (juntado a outro). Procure o restaurante pelo nome no mapa.`, 'erro');
         return;
       }
+      let gravado: Client | null = null;
       if (existente?.id) {
-        const { error } = await supabase.from('clients').update(campos).eq('id', existente.id);
+        const { data, error } = await supabase.from('clients').update(campos).eq('id', existente.id).select('*').single();
         if (error) throw error;
+        gravado = data as Client;
       } else {
-        const { error } = await supabase.from('clients').insert({
+        const { data, error } = await supabase.from('clients').insert({
           ...campos, nome, empresa: nome, status: 'lead', id_hubspot: dealId,
           url_hubspot: `https://app.hubspot.com/contacts/24373118/record/0-3/${dealId}`,
           vendedor_id_hubspot: myHubspotId ?? null, created_by: profile?.id ?? null,
-        });
+        }).select('*').single();
         if (error) throw error;
+        gravado = data as Client;
+      }
+      // o pino aparece no lugar novo na hora: entra no cache da área (a releitura vem por baixo)
+      if (gravado) {
+        const g = gravado;
+        queryClient.setQueriesData({ queryKey: ['clients'] }, (velho: unknown) => {
+          if (!Array.isArray(velho)) return velho;
+          const lista = velho as Client[];
+          return lista.some((c) => c.id === g.id) ? lista.map((c) => (c.id === g.id ? { ...c, ...g } : c)) : [...lista, g];
+        });
       }
       Toast.mostrar(`${nome} no mapa · ligado ao negócio que já existia`, 'ok');
       void queryClient.invalidateQueries({ queryKey: ['clients'] });
+      void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
       void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] });
       setCreationMode(false); setCreationCenter(null); setPosicionarDeal(null);
     } catch (err: any) {
@@ -4622,8 +4641,11 @@ function MainApp() {
         geo_source: 'coords',
         geo_approximate: false,
       });
+      // o cartão aberto e a rota do dia também passam a usar a posição nova (o mapa já usa o cache)
+      setSelectedClient((atual) => (atual && atual.id === client.id ? { ...atual, latitude: payload.latitude, longitude: payload.longitude, geo_approximate: false } : atual));
+      void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
     },
-    [updateClient],
+    [updateClient, queryClient],
   );
 
   const confirmDeleteClient = useCallback((client: Client, onDone?: () => void) => {
