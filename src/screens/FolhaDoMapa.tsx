@@ -268,7 +268,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
       {novosSemana != null && (
         <Pressable accessibilityRole="button" accessibilityLabel={`Recém-abertos visitados nesta semana: ${novosSemana} de 5. Ver os recém-abertos no mapa`} onPress={aoNovos} style={s.novosLinha}>
           <View style={[s.novosPonto, { backgroundColor: novosSemana >= 5 ? "#16A34A" : "#14B8A6" }]} />
-          <Text style={s.novosTexto} numberOfLines={1}>{novosSemana >= 5 ? `Recém-abertos: ${novosSemana} visitados · meta da semana batida` : `Recém-abertos: ${novosSemana} de 5 visitados na semana`}</Text>
+          <Text style={s.novosTexto} numberOfLines={1}>{novosSemana >= 5 ? `Recém-abertos: ${novosSemana} na semana · meta batida` : `Recém-abertos: ${novosSemana} de 5 na semana`}</Text>
           <SiRight width={14} height={14} fill="var(--text-muted)" />
         </Pressable>
       )}
