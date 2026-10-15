@@ -134,7 +134,7 @@ import { ROTULO_ETAPA, ETAPA as ETAPA_FS } from './src/utils/fichaDeRua';
 import { negocioAcao } from './src/utils/negocioAcao';
 import { subirPlanoDaFila } from './src/utils/planoDoPino';
 import { textoNormalizado } from './src/utils/pinoP2';
-import { DELTA_AFASTADO, FILTROS_VAZIOS, LENTES, LENTES_DA_FILEIRA, passaNosFiltros, pontoDe, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
+import { contaAlvoDiscreta, DELTA_AFASTADO, FILTROS_VAZIOS, LENTES, LENTES_DA_FILEIRA, passaNosFiltros, pontoDe, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
 import FileiraDeLentes, { ALTURA_FILEIRA_LENTES } from './src/screens/FileiraDeLentes';
 import { contadorDaMeta, decisorEstaAgora, escolhidaPor, linhaDaMetaNaFolha, metros as metrosLL, portaSugerida, RAIO_REFERENCIA_M, RAIO_SUGESTAO_M, segundaOpcao, type Candidata } from './src/utils/armasDoMapa';
 import { mapaAbriu, primeiroToque, registrarEvento } from './src/utils/eventosDoMapa';
@@ -562,7 +562,7 @@ function visitadoHoje(iso: string | null | undefined): boolean {
 // (src/utils/pinoP2.ts); o memo compara o que muda o desenho.
 const MarkerP2 = React.memo(
   function MarkerP2({
-    client, contexto, pino: pinoPronto, onPress, planoNumero, feito, naFila, selecionado, papel, agrupar = false, pilhaN = 1, leque = null, sol = false, rotulo = false, lado = 'dir', aproximadoVisivel = false,
+    client, contexto, pino: pinoPronto, onPress, planoNumero, feito, naFila, selecionado, papel, agrupar = false, pilhaN = 1, leque = null, sol = false, rotulo = false, lado = 'dir', aproximadoVisivel = false, discreto = false,
   }: {
     client: Client; contexto: ContextoPino; onPress: (client: Client) => void;
     /** A classificação já feita no itensMapaNovo (auditoria 28/09: rodava duas vezes por pino). */
@@ -570,7 +570,7 @@ const MarkerP2 = React.memo(
     planoNumero?: number | null; feito?: boolean; naFila: boolean; selecionado: boolean;
     papel: PapelPino; agrupar?: boolean;
     pilhaN?: number; leque?: { dx: number; dy: number } | null; sol?: boolean; rotulo?: boolean;
-    lado?: 'dir' | 'esq'; aproximadoVisivel?: boolean;
+    lado?: 'dir' | 'esq'; aproximadoVisivel?: boolean; discreto?: boolean;
   }) {
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
     const pino = pinoPronto ?? classificarPino(client, contexto);
@@ -579,7 +579,7 @@ const MarkerP2 = React.memo(
         coordinate={{ latitude: client.latitude as number, longitude: client.longitude as number }}
         onPress={handlePress}
         anchor={ANCORA_PINO_P2}
-        zIndex={selecionado ? 2000 : leque ? 1500 : papel === 'proxima' ? 1200 : planoNumero ? 1000 : rotulo ? 800 : 500}
+        zIndex={selecionado ? 2000 : leque ? 1500 : papel === 'proxima' ? 1200 : planoNumero ? 1000 : rotulo ? 800 : discreto ? 200 : 500}
         cluster={agrupar && !planoNumero}
       >
         <PinoP2
@@ -598,6 +598,7 @@ const MarkerP2 = React.memo(
           rotulo={rotulo}
           lado={lado}
           aproximadoVisivel={aproximadoVisivel}
+          discreto={discreto}
         />
       </Marker>
     );
@@ -615,6 +616,7 @@ const MarkerP2 = React.memo(
     a.papel === b.papel &&
     a.lado === b.lado &&
     a.aproximadoVisivel === b.aproximadoVisivel &&
+    a.discreto === b.discreto &&
     a.agrupar === b.agrupar &&
     a.pilhaN === b.pilhaN &&
     a.sol === b.sol &&
@@ -2810,12 +2812,12 @@ function MainApp() {
   /* FILTRO LIGADO MANDA (Julyan, 15/10/26: "caso ele filtre em clientes, tem que aparecer no mapa;
      se clicar e desclicar tem que sumir"). Com algum filtro marcado, o mapa mostra o que o filtro
      pede, em qualquer lente (cliente no Meu dia inclusive); sem filtro, vale a regra da lente. A
-     conta-alvo antiga continua fora, o plano e o pino aberto continuam sempre. */
+     conta-alvo entra discreta (15/10/26), o plano e o pino aberto continuam sempre. */
   const comFiltro = quantosFiltros(filtrosNovos) > 0;
   const visiveisMapaNovo = useMemo(
     () => itensMapaNovo.filter(({ c, p, plano }) => {
       if (referenciasNaTela?.has(c.id) || plano != null || c.id === selectedClient?.id) return true;
-      if (comFiltro) return p.familia !== 'alvo' && lente !== 'calor' && passaNosFiltros(c, p, filtrosNovos);
+      if (comFiltro) return lente !== 'calor' && passaNosFiltros(c, p, filtrosNovos);
       return visivelNaLente(lente, p, false, false, verTodosNoMapa);
     }),
     [itensMapaNovo, filtrosNovos, comFiltro, lente, selectedClient?.id, verTodosNoMapa, referenciasNaTela],
@@ -2828,7 +2830,7 @@ function MainApp() {
 
   // Zoom 15 para dentro (~2,7 km de mapa no celular): o zoom de RUA, onde até 8 pinos ganham nome.
   const ZOOM_RUA_LAT_DELTA = 0.025;
-  const { focoMapaNovo, camadaPontos, comNome, pilhaDe, janelaMapa } = useMemo(() => {
+  const { focoMapaNovo, camadaPontos, comNome, pilhaDe, janelaMapa, quietosMapa } = useMemo(() => {
     const foco: typeof visiveisMapaNovo = [];
     const pontos: typeof visiveisMapaNovo = [];
     // TRÊS ZOOMS (prancha §1 e §7): de rua, até 8 nomes; de bairro, pino inteiro e só a próxima
@@ -2844,8 +2846,15 @@ function MainApp() {
       const g = idsSugestao.get(it.c.id);
       return !!g && camadasAgenda.has(g);
     };
+    // conta-alvo discreta (bolinha transparente): não vira ponto no zoom afastado e não entra em
+    // pilha — senão um lead aparecia como "pilha de 5" por causa de 4 contas-alvo em volta
+    const quietos = new Set<string>();
     for (const it of visiveisMapaNovo) {
       const sempre = it.plano != null || it.c.id === selectedClient?.id || it.c.id === idPortaDoHalo || !!referenciasNaTela?.has(it.c.id);
+      if (!sempre && contaAlvoDiscreta(lente, it.p)) {
+        if (afastado || lente === 'calor' || (ehAgendaPC && planejarDia)) continue;
+        quietos.add(it.c.id);
+      }
       if (ehAgendaPC && planejarDia ? naCamada(it) : (sempre || (!afastado && lente !== 'calor'))) foco.push(it);
       else if (lente !== 'calor') pontos.push(it);
     }
@@ -2866,7 +2875,7 @@ function MainApp() {
     const alturaPx = layout.ehLargo ? janelaTela.height : Math.max(300, janelaTela.height - 250);
     const janela = mapRegion ? { ...mapRegion, larguraPx, alturaPx } : null;
     // Pilhas (C11): corpos que se sobrepõem na tela viram um pino com número.
-    const todos = foco.map((it) => ({ id: it.c.id, lat: it.c.latitude as number, lng: it.c.longitude as number, prioridade: prioridade(it) }));
+    const todos = foco.filter((it) => !quietos.has(it.c.id)).map((it) => ({ id: it.c.id, lat: it.c.latitude as number, lng: it.c.longitude as number, prioridade: prioridade(it) }));
     const pilhas: Pilha[] = janela ? pilhasNaTela(todos, janela) : todos.map((t) => ({ lider: t.id, membros: [t.id] }));
     const pilhaDeId = new Map<string, Pilha>();
     for (const pl of pilhas) for (const m of pl.membros) pilhaDeId.set(m, pl);
@@ -2891,7 +2900,7 @@ function MainApp() {
       for (const [id, lado] of rotulosSemSobrepor(candidatos, janela)) nomes.set(id, lado);
     }
     const camada = pontos.map(({ c, p }) => ({ lat: c.latitude as number, lng: c.longitude as number, ...pontoDe(p, modoSol) }));
-    return { focoMapaNovo: foco, camadaPontos: camada, comNome: nomes, pilhaDe: pilhaDeId, janelaMapa: janela };
+    return { focoMapaNovo: foco, camadaPontos: camada, comNome: nomes, pilhaDe: pilhaDeId, janelaMapa: janela, quietosMapa: quietos };
   }, [visiveisMapaNovo, lente, selectedClient?.id, mapRegion, layout.ehLargo, janelaTela.width, janelaTela.height, pilhaAberta, ehAgendaPC, planejarDia, focoPC?.id, hoverAgenda, camadasAgenda, idsSugestao, idPortaDoHalo, referenciasNaTela, userLocation, modoSol]);
   /* PLACAS DE BAIRRO (prancha §5.1): no zoom afastado, "Praia do Canto · 18 novos" e, em verde,
      "6 clientes Takeat" — a referência sem pôr os pinos de cliente no mapa. */
@@ -6508,6 +6517,7 @@ function MainApp() {
             rotulo={comNome.has(c.id)}
             lado={comNome.get(c.id) ?? 'dir'}
             aproximadoVisivel={!!mapRegion && mapRegion.latitudeDelta <= ZOOM_RUA_LAT_DELTA}
+            discreto={quietosMapa.has(c.id)}
           />
           );
         })}
@@ -6725,8 +6735,8 @@ function MainApp() {
             { c: COR_DO_PINO.Q, l: 'Quente' },
             { c: COR_DO_PINO.M, l: 'Morno' },
             { c: COR_DO_PINO.F, l: 'Frio' },
-            // prancha 15/10/26: o recém-aberto é o losango preto e branco; "Contas-alvo" virou "Mais avaliado"
-            { c: modoSol ? '#111418' : '#FFFFFF', l: 'Recém-aberto', losango: true },
+            // 15/10/26: o recém-aberto é o losango limão (chama o olho); "Contas-alvo" virou "Mais avaliado"
+            { c: COR_DO_PINO.rec, l: 'Recém-aberto', losango: true },
             { c: COR_DO_PINO.alvo, l: 'Mais avaliado' },
             { c: COR_DO_PINO.cliente, l: 'Cliente' },
             { c: COR_DO_PINO.ex, l: 'Ex-cliente' },

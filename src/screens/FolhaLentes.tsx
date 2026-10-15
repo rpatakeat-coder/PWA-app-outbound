@@ -23,11 +23,11 @@ const RAPIDOS: Rapido[] = [
 import { IconClose as SiClose } from '../components/icons';
 
 export const COR_LENTE: Record<Lente, string> = {
-  dia: '#E51A31', novos: '#14B8A6', carteira: '#F5A524', clientes: '#16A34A', alvo: '#8B5CF6', rec: '#EC4899', queda: '#84CC16', semdono: '#FACC15', calor: '#F97316',
+  dia: '#E51A31', novos: '#C8F31D', carteira: '#F5A524', clientes: '#16A34A', alvo: '#8B5CF6', rec: '#EC4899', queda: '#84CC16', semdono: '#FACC15', calor: '#F97316',
 };
 
 const DESCRICAO: Record<Lente, string> = {
-  dia: 'plano + meus leads + recém-abertos',
+  dia: 'plano, meus leads, recém-abertos, clientes e contas-alvo (apagadas)',
   novos: 'CNPJ aberto há até 90 dias',
   carteira: 'meus leads por etapa',
   clientes: 'clientes ativos · relacionamento',
@@ -42,7 +42,7 @@ const LEGENDA: { cor: string; rotulo: string; tracejado?: boolean; losango?: boo
   { cor: '#E23B3B', rotulo: 'Quente' },
   { cor: '#F5A524', rotulo: 'Morno' },
   { cor: '#0EA5E9', rotulo: 'Frio' },
-  { cor: 'var(--text)', rotulo: 'Recém-aberto', losango: true },
+  { cor: '#C8F31D', rotulo: 'Recém-aberto', losango: true },
   { cor: '#8B5CF6', rotulo: 'Mais avaliado' },
   { cor: '#16A34A', rotulo: 'Cliente' },
   { cor: '#EC4899', rotulo: 'Ex-cliente' },

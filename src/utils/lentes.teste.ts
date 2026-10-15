@@ -7,7 +7,7 @@
 // cruzar; e a contagem do chip prometendo um número que o toque não entrega.
 import type { Client } from '../types/client';
 import { classificarPino, type ContextoPino } from './pinoP2';
-import { contarChips, FILTROS_VAZIOS, passaNosFiltros, pontoDe, quantosFiltros, visitaDoFiltro, visivelNaLente, type FiltrosNovos } from './lentes';
+import { contaAlvoDiscreta, contarChips, FILTROS_VAZIOS, passaNosFiltros, pontoDe, quantosFiltros, visitaDoFiltro, visivelNaLente, type FiltrosNovos } from './lentes';
 
 let falhas = 0;
 const ok = (c: boolean, m: string) => {
@@ -49,9 +49,12 @@ ok(velho.familia === 'alvo' && avaliadoBaixo.familia === 'alvo', 'conta-alvo ant
 ok(V('dia', meuQuente) && V('dia', meuFrio), 'Meu dia: meus leads com negócio, de toda temperatura');
 ok(!V('dia', meuPerdido), 'Meu dia: negócio perdido não decide a próxima porta');
 ok(!V('dia', colegaQuente), 'Meu dia: pino de colega não aparece');
-ok(!V('dia', cliente) && !V('dia', ex), 'Meu dia: cliente e ex-cliente não aparecem nem como ponto');
+// 15/10/26 (Julyan: "tirar tudo ficou meio ruim"): o cliente ativo volta ao Meu dia; o ex-cliente segue na Reconquista
+ok(V('dia', cliente) && !V('dia', ex), 'Meu dia: cliente ativo aparece, ex-cliente não');
 ok(V('dia', novo) && !V('dia', novoColega), 'Meu dia: meus recém-abertos, não os do colega');
-ok(!V('dia', avaliado) && !V('dia', velho), 'Meu dia: mais avaliado e conta-alvo antiga não entram');
+ok(V('dia', avaliado) && V('dia', velho) && contaAlvoDiscreta('dia', avaliado) && contaAlvoDiscreta('dia', velho), 'Meu dia: as contas-alvo entram, discretas');
+ok(!contaAlvoDiscreta('alvo', avaliado) && contaAlvoDiscreta('alvo', velho) && !contaAlvoDiscreta('dia', novo) && !contaAlvoDiscreta('dia', cliente), 'discreta: na lente Mais avaliados o avaliado é pino inteiro; recém-aberto e cliente nunca');
+ok(!V('novos', velho) && !V('clientes', velho), 'conta-alvo antiga fora das outras lentes');
 ok(visivelNaLente('dia', cliente, true, false) && visivelNaLente('dia', velho, false, true), 'qualquer lente: o plano e o pino aberto aparecem');
 ok(V('novos', novo) && !V('novos', meuQuente) && !V('novos', novoColega), 'Recém-abertos: só os meus recém-abertos');
 ok(V('novos', novoColega, true), 'Recém-abertos do gestor: os de todo mundo');
@@ -61,7 +64,7 @@ ok(V('clientes', cliente) && !V('clientes', meuQuente), 'Clientes: só quem paga
 ok(V('rec', ex) && !V('rec', cliente), 'Reconquista: só ex-cliente');
 ok(V('semdono', P({ vendedor_id_hubspot: '777' })) && !V('semdono', meuFrio), 'Sem dono: dono fora do time');
 ok(!V('calor', meuQuente), 'Calor: nenhum pino');
-ok(pontoDe(novo).forma === 'losango' && pontoDe(novo, true).cor === '#111418', 'zoom afastado: recém-aberto vira losango, invertido no tema claro');
+ok(pontoDe(novo).forma === 'losango' && pontoDe(novo).cor === '#C8F31D' && pontoDe(novo, true).cor === '#C8F31D', 'zoom afastado: recém-aberto vira losango limão nos dois temas');
 ok(pontoDe(meuQuente).tamanho === 10 && pontoDe(meuQuente).cor === meuQuente.cor, 'zoom afastado: lead vira ponto de 10 px na cor da temperatura');
 
 // Em queda (clientes-sync, 0126): só cliente que está na lista de queda

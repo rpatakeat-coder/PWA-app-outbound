@@ -97,6 +97,10 @@ export type Pino = {
 export const COR = {
   Q: '#E23B3B', M: '#F5A524', F: '#0EA5E9', X: '#4B5563', '?': '#6B7280',
   cliente: '#16A34A', ex: '#EC4899', alvo: '#8B5CF6', semDono: '#FACC15',
+  /* RECÉM-ABERTO (Julyan, 15/10/26: "ficou ruim, quero numa cor que chame a atenção"): o losango
+     preto e branco sumia no mapa. Limão neon: nenhuma etapa, temperatura ou família usa, e lê nos
+     dois temas. A tinta por cima é escura. */
+  rec: '#C8F31D', recTinta: '#111418',
 } as const;
 
 // Etapas canônicas do Cockpit por temperatura.

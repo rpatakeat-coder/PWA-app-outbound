@@ -20,7 +20,7 @@
 import React from 'react';
 import { Image } from 'react-native';
 
-import type { Pino } from '../utils/pinoP2';
+import { COR, type Pino } from '../utils/pinoP2';
 
 const CAIXA_W = 48;
 const CAIXA_H = 56;
@@ -56,6 +56,8 @@ type Props = {
   sol?: boolean;
   /** Mostra o círculo tracejado do "aproximado" (selecionado ou zoom de rua). */
   aproximadoVisivel?: boolean;
+  /** Conta-alvo no Meu dia: pino pequeno e transparente, para estar no mapa sem poluir. */
+  discreto?: boolean;
 };
 
 const LOGO = require('../../assets/takeat-t-branco.png');
@@ -63,12 +65,16 @@ const LOGO = require('../../assets/takeat-t-branco.png');
 type Desenho = {
   s: number; bg: string; fg: string; tx: string; fs: number; diam: boolean; bw: number; bst: 'solid' | 'dashed'; bc: string;
   op: number; logo: boolean; lw: number; halo: boolean; badge: { t: string; bg: string; fg: string } | null;
+  /** Brilho em volta do recém-aberto (chama o olho sem crescer o pino). */
+  brilho: boolean;
 };
 
 /** A função pin() da prancha, com +4 px. */
 export function desenhoDoPino(p: Props): Desenho {
-  const { pino, papel, planoNumero, visitado, naFila, selecionado, pilhaN = 1, pilhaCor, sol = false } = p;
-  const rec = { bg: sol ? '#111418' : '#FFFFFF', fg: sol ? '#FFFFFF' : '#111418', bd: '#FFFFFF', oco: sol ? '#FFFFFF' : '#121417' };
+  const { pino, papel, planoNumero, visitado, naFila, selecionado, pilhaN = 1, pilhaCor, discreto = false } = p;
+  /* o recém-aberto é limão neon nos dois temas (era preto e branco e sumia); o "oco" (61–90 dias)
+     inverte: fundo escuro, borda e número limão */
+  const rec = { bg: COR.rec, fg: COR.recTinta, bd: COR.recTinta, oco: '#121417' };
   let s = 24; let bg: string = pino.cor; let fg = '#FFFFFF'; let tx = pino.glifo; let fs = 11; let diam = false;
   let bw = 2.5; let bst: 'solid' | 'dashed' = 'solid'; let bc = '#FFFFFF'; let op = 1; let logo = false; let lw = 0; let halo = false;
   const f = pino.familia;
@@ -104,13 +110,19 @@ export function desenhoDoPino(p: Props): Desenho {
   if (pino.dono === 'colega' && f !== 'cli' && !selecionado && papel !== 'proxima') { op = Math.min(op, 0.55); bw = 1.5; s -= 2; }
   if (pino.dono === 'sem' && f !== 'cli') { bst = 'dashed'; bc = '#FACC15'; bw = 2.5; }
   if (pilhaN > 1) { s = 32; bg = '#111418'; bw = 3; bst = 'solid'; bc = pilhaCor ?? pino.cor; tx = String(pilhaN); fs = 13; logo = false; diam = false; fg = '#FFFFFF'; op = 1; }
+  /* CONTA-ALVO DISCRETA (Julyan, 15/10/26: "as contas-alvo podem ficar mais transparentes, mas
+     precisamos ter os pins, sem poluir"): bolinha de 16 px, sem número, a 40%. Ao tocar, no plano
+     ou como próxima porta, volta ao pino inteiro. */
+  const quieto = discreto && !planoNumero && !selecionado && papel !== 'proxima' && pilhaN <= 1;
+  if (quieto) { s = 12; tx = ''; op = 0.4; bw = 1.5; bst = 'solid'; bc = '#FFFFFF'; logo = false; }
+  const brilho = f === 'rec' && pilhaN <= 1 && !feito && !quieto;
   let badge: Desenho['badge'] = null;
-  if (pilhaN <= 1) {
+  if (pilhaN <= 1 && !quieto) {
     if (pino.etiqueta?.texto === 'cobrar') badge = { t: 'cobrar', bg: '#111418', fg: '#FCD34D' };
     else if (naFila) badge = { t: '↑', bg: '#F59E0B', fg: '#111418' };
     else if (pino.queda) badge = { t: '↓', bg: '#F59E0B', fg: '#111418' };
   }
-  return { s: s + MAIS, bg, fg, tx, fs, diam, bw, bst, bc, op, logo, lw, halo, badge };
+  return { s: s + MAIS, bg, fg, tx, fs, diam, bw, bst, bc, op, logo, lw, halo, badge, brilho };
 }
 
 function PinoP2(props: Props) {
@@ -156,7 +168,8 @@ function PinoP2(props: Props) {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             borderRadius: d.diam ? 4 : '50%', background: d.bg, border: `${d.bw}px ${d.bst} ${d.bc}`, color: d.fg,
             fontWeight: 700, fontSize: d.fs, lineHeight: 1, letterSpacing: '-.02em',
-            boxShadow: '0 2px 5px rgba(0,0,0,.4)', transform: d.diam ? 'rotate(45deg)' : undefined,
+            boxShadow: d.brilho ? '0 0 0 4px rgba(200,243,29,.35), 0 0 14px rgba(200,243,29,.55), 0 2px 5px rgba(0,0,0,.4)' : '0 2px 5px rgba(0,0,0,.4)',
+            transform: d.diam ? 'rotate(45deg)' : undefined,
           }}>
             <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', transform: d.diam ? 'rotate(-45deg)' : undefined }}>
               {d.logo

@@ -8,7 +8,7 @@
 // Quem tira do mapa dentro da lente são os Filtros, que o vendedor escolhe e vê contados.
 
 import type { Client } from '../types/client';
-import type { OrigemPick, Pino } from './pinoP2';
+import { COR, type OrigemPick, type Pino } from './pinoP2';
 
 export type Lente = 'dia' | 'novos' | 'carteira' | 'clientes' | 'alvo' | 'rec' | 'queda' | 'semdono' | 'calor';
 
@@ -46,10 +46,18 @@ export const LENTES_DA_FILEIRA: Lente[] = ['dia', 'novos', 'carteira', 'alvo'];
  */
 export function visivelNaLente(lente: Lente, p: Pino, noPlano: boolean, aberto: boolean, verTodos = false): boolean {
   if (noPlano || aberto) return true;
-  if (p.familia === 'alvo') return false;
   const meu = p.dono === 'meu';
+  /* MEU DIA COM O MAPA DE VERDADE (Julyan, 15/10/26: "quero os recém-abertos no mapa já quando
+     abre, junto com os clientes ativos; tirar tudo ficou meio ruim"). Ao abrir: o plano, os meus
+     leads com negócio, os recém-abertos, os clientes ativos (prova social na porta ao lado) e as
+     contas-alvo DISCRETAS (bolinha transparente, ver contaAlvoDiscreta). Colega, ex-cliente e
+     perdido seguem nas lentes próprias. */
+  if (lente === 'dia') {
+    return (meu && p.familia === 'lead' && p.temp !== 'X') || (p.familia === 'rec' && (meu || verTodos))
+      || p.familia === 'cli' || p.familia === 'av' || p.familia === 'alvo';
+  }
+  if (p.familia === 'alvo') return false;
   switch (lente) {
-    case 'dia': return meu && ((p.familia === 'lead' && p.temp !== 'X') || p.familia === 'rec');
     case 'novos': return p.familia === 'rec' && (meu || verTodos);
     case 'carteira': return meu && p.familia === 'lead';
     case 'alvo': return p.familia === 'av';
@@ -200,8 +208,13 @@ export function contarChips(itens: { c: Client; p: Pino }[], f: FiltrosNovos) {
  *  branco, conforme o tema); o lead, ponto de 10 px na cor da temperatura; o resto, ponto de 9 px
  *  na cor da família. `claro`: tema claro (o losango inverte). */
 export function pontoDe(p: Pino, claro = false): { cor: string; borda: string; forma: 'bola' | 'losango'; tamanho: number; opacidade: number } {
-  if (p.familia === 'rec') return claro
-    ? { cor: '#111418', borda: '#FFFFFF', forma: 'losango', tamanho: 9, opacidade: 1 }
-    : { cor: '#FFFFFF', borda: '#111418', forma: 'losango', tamanho: 9, opacidade: 1 };
+  void claro; // o limão neon lê nos dois temas (era preto e branco, invertido no claro)
+  if (p.familia === 'rec') return { cor: COR.rec, borda: COR.recTinta, forma: 'losango', tamanho: 10, opacidade: 1 };
   return { cor: p.cor, borda: '#FFFFFF', forma: 'bola', tamanho: p.familia === 'lead' ? 10 : 9, opacidade: p.dono === 'colega' ? 0.55 : 1 };
+}
+
+/** Conta-alvo que vai como bolinha transparente (no Meu dia e em qualquer lente que não a dela,
+ *  "Mais avaliados"): está no mapa, mas não compete com o lead, o recém-aberto e o cliente. */
+export function contaAlvoDiscreta(lente: Lente, p: Pino): boolean {
+  return p.familia === 'alvo' || (p.familia === 'av' && lente !== 'alvo');
 }

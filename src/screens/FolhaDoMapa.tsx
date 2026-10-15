@@ -87,7 +87,7 @@ function aPe(m: number | null): string | null {
 }
 
 function PinoMini({ p, plano }: { p: Pino; plano: number | null }) {
-  // recém-aberto: o losango preto e branco com os dias (o mesmo do mapa)
+  // recém-aberto: o losango limão com os dias (o mesmo do mapa)
   if (p.familia === 'rec') {
     return (
       <View style={s.miniCaixa}>
@@ -578,8 +578,9 @@ const s = StyleSheet.create({
   voltarMeuDia: { minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center' },
   voltarMeuDiaTexto: { fontSize: 15, fontWeight: '700', color: 'var(--text)' },
   miniCaixa: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
-  miniLosango: { width: 21, height: 21, borderRadius: 3, transform: [{ rotate: '45deg' }], backgroundColor: 'var(--text)', borderWidth: 1.5, borderColor: 'var(--surface)', alignItems: 'center', justifyContent: 'center' },
-  miniLosangoTexto: { fontSize: 10, fontWeight: '700', color: 'var(--surface)', transform: [{ rotate: '-45deg' }] },
+  // o mesmo limão neon do pino do mapa (15/10/26), com a tinta escura nos dois temas
+  miniLosango: { width: 21, height: 21, borderRadius: 3, transform: [{ rotate: '45deg' }], backgroundColor: '#C8F31D', borderWidth: 1.5, borderColor: '#111418', alignItems: 'center', justifyContent: 'center' },
+  miniLosangoTexto: { fontSize: 10, fontWeight: '700', color: '#111418', transform: [{ rotate: '-45deg' }] },
   pilulaRecolher: { width: 28, height: 40, alignItems: 'center', justifyContent: 'center', marginLeft: -8, flexShrink: 0 },
   pilulaMini: {
     position: 'absolute', left: 10, zIndex: 20, height: 44, borderRadius: 22, paddingHorizontal: 14,
