@@ -4874,6 +4874,25 @@ function MainApp() {
     const saiDaRua = codigo === ETAPA_FS.perdido || codigo === ETAPA_FS.reciclagem;
     if (saiDaRua) {
       setSelectedClient((atual) => (atual && atual.id === clientId ? null : atual));
+      /* E SAI DA AGENDA (auditoria 15/10/26): a parada planejada de hoje em diante e a reunião do
+         app ainda marcada continuavam lá depois do Perdido. Saem as minhas; o histórico fica. */
+      const hojeIso = diaBRT(new Date());
+      void (async () => {
+        try {
+          const { data: st } = await supabase.from('field_route_stops').select('id, route:field_routes!inner(route_date, seller_id)')
+            .eq('client_id', clientId).eq('status', 'planned').gte('route.route_date', hojeIso);
+          const ids = ((st ?? []) as unknown as { id: string; route: { seller_id: string } | null }[])
+            .filter((x) => !profile?.id || x.route?.seller_id === profile.id).map((x) => x.id);
+          if (ids.length) await supabase.from('field_route_stops').update({ status: 'removed' }).in('id', ids);
+          if (profile?.id) {
+            await supabase.from('client_meetings').update({ status: 'cancelada' }).eq('client_id', clientId).eq('created_by', profile.id)
+              .gte('scheduled_at', new Date().toISOString()).not('status', 'in', '(realizada,cancelada,nao_aconteceu)');
+          }
+        } catch (e) { console.warn('[perdido sai da agenda]', e); }
+        void queryClient.invalidateQueries({ queryKey: ['field_routes'] });
+        void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
+        void queryClient.invalidateQueries({ queryKey: ['client_meetings'] });
+      })();
       Toast.mostrar(`${rotulo}: saiu do Meu dia · continua na Carteira`, 'ok');
     } else {
       setSelectedClient((atual) => (atual && atual.id === clientId ? { ...atual, etapa: rotulo } : atual));
@@ -7667,7 +7686,7 @@ function MainApp() {
   // Paradas de hoje que faltam, na ordem do plano (selo da Agenda e a
   // "proxima parada" do Playbook).
   const paradasQueFaltam = routeStops.filter(
-    (st) => st.status !== 'done' && st.status !== 'removed' && !(st.client && visitadoHoje(st.client.visited_at)),
+    (st) => st.status !== 'done' && st.status !== 'removed' && st.status !== 'skipped' && !(st.client && visitadoHoje(st.client.visited_at)),
   );
   const proximaParadaDoPlano = (() => {
     const st = paradasQueFaltam[0];
@@ -7693,9 +7712,17 @@ function MainApp() {
   // ainda não feitos, sem contar duas vezes quem já está na rota.
   const hojeNoRodape = diaBRT(new Date());
   const naRotaDeHoje = new Set(paradasQueFaltam.map((st) => st.client_id));
-  const agendadosDeHoje = meetings.filter((m) => m.status !== 'realizada' && m.status !== 'cancelada' && m.status !== 'nao_aconteceu'
-    && diaBRT(new Date(m.scheduled_at)) === hojeNoRodape && !naRotaDeHoje.has(m.client_id)).length;
-  const seloAgenda = paradasQueFaltam.length + agendadosDeHoje;
+  const agendadosHoje = meetings.filter((m) => m.status !== 'realizada' && m.status !== 'cancelada' && m.status !== 'nao_aconteceu'
+    && m.status !== 'cancelled' && m.status !== 'canceled'
+    && diaBRT(new Date(m.scheduled_at)) === hojeNoRodape && !naRotaDeHoje.has(m.client_id));
+  const agendadosDeHoje = agendadosHoje.length;
+  /* O SELO CONTA O QUE A LISTA MOSTRA (auditoria 15/10/26): as tarefas do HubSpot que vencem hoje
+     (próximo passo, tarefa do Cockpit) apareciam na Agenda e não mexiam no número. Entram agora,
+     sem contar duas vezes o lead que já está na rota ou numa reunião de hoje. */
+  const jaContados = new Set([...naRotaDeHoje, ...agendadosHoje.map((m) => m.client_id)]);
+  const tarefasDeHojeNaAgenda = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'hoje'
+    && !(t.clientId && jaContados.has(t.clientId))).length;
+  const seloAgenda = paradasQueFaltam.length + agendadosDeHoje + tarefasDeHojeNaAgenda;
   const abasDoRodape: Array<{ aba: AppTab; rotulo: string; Icone: typeof IconLocation; ativa: boolean; selo: number | null; seloClaro?: boolean }> = [
     { aba: 'map', rotulo: 'Mapa', Icone: tab === 'map' ? IconLocationFilled : IconLocation, ativa: tab === 'map' || tab === 'list', selo: null },
     ...(isViewer ? [] : [
