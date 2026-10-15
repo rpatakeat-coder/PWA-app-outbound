@@ -301,10 +301,26 @@ export default function AgendaNovoScreen({
       return;
     }
     const idReuniao = k.id.replace(/^app-/, '');
+    // O Ligar marca o retorno como feito sozinho, 600 ms depois de abrir o discador, sem
+    // pergunta: a ligação pode nem ter acontecido. O toast diz o que gravou e o Desfazer
+    // (10 s) devolve o status que ele tinha.
+    const statusAntes = reunioes.find((r) => r.id === idReuniao)?.status ?? 'agendada';
     void (async () => {
       const { error } = await supabase.from('client_meetings').update({ status: 'realizada' }).eq('id', idReuniao);
       if (error) { voltar(); Alert.alert('Não consegui confirmar', error.message); return; }
       void queryClient.invalidateQueries({ queryKey: ['client_meetings'] });
+      Toast.mostrar(`${k.nome ?? 'Retorno'} marcado como feito`, 'ok', {
+        rotulo: 'Desfazer',
+        onPress: () => {
+          void (async () => {
+            const { error: e2 } = await supabase.from('client_meetings').update({ status: statusAntes }).eq('id', idReuniao);
+            if (e2) { Toast.mostrar(`Não consegui desfazer: ${e2.message}`, 'erro'); return; }
+            voltar();
+            void queryClient.invalidateQueries({ queryKey: ['client_meetings'] });
+            Toast.mostrar('Desfeito.', 'ok');
+          })();
+        },
+      }, 10000);
     })();
   };
   const ligar = (clientId: string | null, k?: (typeof compromissos)[number]) => {
