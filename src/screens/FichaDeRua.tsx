@@ -353,7 +353,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     if (p.foto) {
       try {
         await enviarFoto({
-          blob: p.foto, ownerId, dealId, clientId: client.id,
+          blob: p.foto, ownerId, dealId, clientId: client.id, tiradaEm: checkinEm,
           lat: client.latitude != null ? Number(client.latitude) : null, lng: client.longitude != null ? Number(client.longitude) : null,
         });
         lista.push({ rotulo: 'Foto da visita · vai para o gestor', estado: 'ok' });
