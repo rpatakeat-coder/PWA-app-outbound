@@ -6654,9 +6654,11 @@ function MainApp() {
             { c: COR_DO_PINO.Q, l: 'Quente' },
             { c: COR_DO_PINO.M, l: 'Morno' },
             { c: COR_DO_PINO.F, l: 'Frio' },
+            // prancha 15/10/26: o recém-aberto é o losango preto e branco; "Contas-alvo" virou "Mais avaliado"
+            { c: modoSol ? '#111418' : '#FFFFFF', l: 'Recém-aberto', losango: true },
+            { c: COR_DO_PINO.alvo, l: 'Mais avaliado' },
             { c: COR_DO_PINO.cliente, l: 'Cliente' },
             { c: COR_DO_PINO.ex, l: 'Ex-cliente' },
-            { c: COR_DO_PINO.alvo, l: 'Conta-alvo' },
             { c: COR_DO_PINO.X, l: 'Perdido' },
             { c: COR_DO_PINO.semDono, l: 'Sem dono (anel)' },
           ] : [
@@ -6668,7 +6670,7 @@ function MainApp() {
             { c: CONTA_ALVO_COLOR, l: 'Conta Alvo' },
           ]).map(item => (
             <View key={item.l} style={[styles.tempLegendRow, layout.ehLargo && styles.tempLegendaLinhaWeb]}>
-              <View style={[styles.tempLegendDot, { backgroundColor: item.c }]} />
+              <View style={[styles.tempLegendDot, { backgroundColor: item.c }, 'losango' in item && item.losango ? { borderRadius: 2, transform: [{ rotate: '45deg' }], width: 9, height: 9 } : null]} />
               {/* numberOfLines={1}: sem isto "🎯 Conta Alvo" quebrava em
                   duas linhas dentro da coluna e desalinhava a legenda. */}
               <Text style={styles.tempLegendLabel} numberOfLines={1}>{item.l}</Text>
