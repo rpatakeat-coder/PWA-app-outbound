@@ -7,7 +7,7 @@
 // exige: …", 400 "…não permite pular fases…").
 
 import { supabase } from '../integrations/supabase/client';
-import { ehErroDeRede } from './filaOffline';
+import { ehErroDeRede, ehSessaoVencida } from './filaOffline';
 
 export type RespostaNegocio = { ok: true; [k: string]: unknown };
 
@@ -41,7 +41,8 @@ export async function negocioAcao(corpo: Record<string, unknown>): Promise<Respo
   return data as RespostaNegocio;
 }
 
-/** Recusa de regra (não adianta tentar de novo) × falta de sinal (fila). */
+/** Recusa de regra (não adianta tentar de novo) × falta de sinal ou sessão vencida (o 401
+ *  "Sessão inválida ou expirada" passa quando o token renova; não é regra). */
 export function ehRecusa(err: unknown): err is RecusaDoServidor {
-  return err instanceof RecusaDoServidor && !ehErroDeRede(err);
+  return err instanceof RecusaDoServidor && !ehErroDeRede(err) && !ehSessaoVencida(err);
 }

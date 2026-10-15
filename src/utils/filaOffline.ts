@@ -62,6 +62,20 @@ export function ehErroDeRede(err: unknown): boolean {
   return /failed to fetch|network ?error|networkerror|load failed|fetch failed|network request failed|timeout|aborted/.test(msg);
 }
 
+/** Sessão vencida (o token não renovou a tempo): passa quando a sessão volta, então é "tentar
+ *  depois", nunca falha definitiva. Cobre o PostgREST (JWT/PGRST301), o Postgres (28000) e as
+ *  Edge Functions: o cockpit-api responde 401 { erro: 'Sessão inválida ou expirada…' }, que chega
+ *  como RecusaDoServidor com `status` 401 (e 403 só quando a mensagem fala de sessão). */
+export function ehSessaoVencida(err: unknown): boolean {
+  const e = err as { message?: string; code?: string; status?: number; context?: { status?: number } } | null;
+  const msg = String(e?.message ?? err ?? '') + ' ' + String(e?.code ?? '');
+  if (/jwt expired|JWT|PGRST301|28000|não autenticado|nao autenticado|401|sess[aã]o (inv[aá]lida|expirada|vencida)|sem sess[aã]o/i.test(msg)) return true;
+  const status = e?.status ?? e?.context?.status;
+  if (status === 401) return true;
+  if (status === 403 && /sess[aã]o|login|token|autentica/i.test(msg)) return true;
+  return false;
+}
+
 function abrir(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === 'undefined') return Promise.resolve(null);
   return new Promise((resolve) => {
@@ -177,9 +191,7 @@ export function subirFila(incluirFalhas = false): Promise<number> {
       } catch (err) {
         // sessão vencida durante o sem-sinal (o evento online chega antes do token renovar): tenta de
         // novo depois, não marca como falha (auditoria do GPS, 04/10)
-        const msg = String((err as { message?: string; code?: string })?.message ?? err) + ' ' + String((err as { code?: string })?.code ?? '');
-        const sessaoVencida = /jwt expired|JWT|PGRST301|28000|não autenticado|nao autenticado|401/i.test(msg);
-        if (ehErroDeRede(err) || sessaoVencida) {
+        if (ehErroDeRede(err) || ehSessaoVencida(err)) {
           await gravar({ ...item, tentativas: item.tentativas + 1, estado: 'na_fila' });
           break; // sem sinal: o resto também não sobe agora, e a ordem se mantém
         }
