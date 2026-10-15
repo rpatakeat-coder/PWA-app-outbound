@@ -56,6 +56,11 @@ export function diaCurto(iso: string): string {
 
 function textoDoProximo(f: FichaDoDia): string | null {
   if (f.proximo === 'sem_interesse' || f.como_foi === 'sem_interesse') return f.motivo_perdido ? `Encerrado: ${f.motivo_perdido}` : 'Encerrado (sem interesse)';
+  /* "Apresentei agora" grava proximo 'reuniao' (é demo com decisor no placar) com o retorno por
+     ligação como proximo_tipo 'follow-up': aqui é a demo feita + o retorno, não "Reunião" */
+  if (f.proximo === 'reuniao' && f.proximo_tipo === 'follow-up') return ['Demo feita · retorno', f.proximo_em ? diaCurto(f.proximo_em) : null].filter(Boolean).join(' ');
+  /* visita de retorno (fechou/negociando/vai pensar): proximo null, o tipo e a data dizem */
+  if (!f.proximo && f.proximo_tipo === 'follow-up' && f.proximo_em) return `Retorno ${diaCurto(f.proximo_em)}`;
   const o = f.proximo ? PROXIMO[f.proximo] ?? f.proximo : null;
   if (!o && !f.proximo_em) return null;
   return [o, f.proximo_em ? diaCurto(f.proximo_em) : null].filter(Boolean).join(' ');

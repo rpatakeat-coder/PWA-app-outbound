@@ -213,7 +213,7 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
                 <View key={rot} style={s.caixa}><Text style={s.miuda}>{rot}</Text><Text style={s.forte}>{v}</Text></View>
               ))}
             </View>
-            {bonus && (eu.nao_pontuaram ?? 0) > 0 && <Text style={[s.miuda, { color: 'var(--text-faint)' }]}>{`${eu.nao_pontuaram} ${eu.nao_pontuaram === 1 ? 'visita não pontuou' : 'visitas não pontuaram'}: acima de 6 no dia`}</Text>}
+            {bonus && (eu.nao_pontuaram ?? 0) > 0 && <Text style={[s.miuda, { color: 'var(--text-faint)' }]}>{`${eu.nao_pontuaram} ${eu.nao_pontuaram === 1 ? 'visita não pontuou' : 'visitas não pontuaram'} na semana`}</Text>}
             {!bonus && eu.declaradas > 0 && <Text style={[s.miuda, { color: 'var(--text-faint)' }]}>{`${eu.declaradas} ${eu.declaradas === 1 ? 'visita declarada' : 'visitas declaradas'}, sem GPS nem foto: não pontuam`}</Text>}
           </View>
         )}

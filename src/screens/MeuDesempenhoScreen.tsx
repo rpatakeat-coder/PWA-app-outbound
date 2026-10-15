@@ -167,7 +167,7 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
           <View key={String(r)} style={st.kpi}><Text style={st.kpiValor}>{String(v)}</Text><Text style={st.kpiRotulo}>{String(r)}</Text></View>
         ))}
       </View>
-      {(tmp?.nao_pontuaram ?? 0) > 0 && <Text style={st.fraco}>{`${tmp?.nao_pontuaram} ${tmp?.nao_pontuaram === 1 ? 'visita não pontuou' : 'visitas não pontuaram'}: acima de 6 no dia`}</Text>}
+      {(tmp?.nao_pontuaram ?? 0) > 0 && <Text style={st.fraco}>{`${tmp?.nao_pontuaram} ${tmp?.nao_pontuaram === 1 ? 'visita não pontuou' : 'visitas não pontuaram'} na semana`}</Text>}
       <Text style={st.nota}>{`Placar da semana: venda 100 · demo (negócio entrou em Demo/Proposta no HubSpot) 25 · visita com prova 3 (sem teto por dia; cada restaurante uma vez na semana). Demo do negócio que fechou na semana conta só como venda. O 1º leva R$ ${tmp?.premio ?? 250}. Visita declarada sem GPS perto do pino ou foto não conta.`}</Text>
     </View>
   ) : (
