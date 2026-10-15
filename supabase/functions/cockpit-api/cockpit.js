@@ -1,7 +1,7 @@
-// GERADO por scripts/portar-cockpit-api.cjs a partir de cockpit-unificado@4cb1017.
+// GERADO por scripts/portar-cockpit-api.cjs a partir de cockpit-unificado@3d6a4ae.
 // NAO EDITAR: cada funcao abaixo e um arquivo do Cockpit, byte a byte. Para mudar
 // uma regra, mude no Cockpit e gere de novo.
-export const ORIGEM = "4cb1017";
+export const ORIGEM = "3d6a4ae";
 export const ROTAS = ["negocio-acao","criar-negocio","desfazer-negocio","criar-nota-negocio","criar-empresa-prospeccao","restaurantes-proximos","novidades-mercado","importar-leads","buscar-leads"];
 export const JSONS = ["data/cadencias.json","data/comissionamento.json","data/desligados.json","data/leads-referencia.json","data/maptiler-config.json","data/redes-excluidas.json","data/supabase-config.json","data/temperatura.json","data/territorios.json","data/usuarios.json"];
 
@@ -1220,7 +1220,13 @@ async function tratarProximoPasso(req, res, usuario, token) {
   try {
     const sUrl = process.env.SUPABASE_URL, sKey = process.env.SUPABASE_SERVICE_KEY;
     const presencial = /visita|reuni|demo/i.test(String(tipo || ''));
-    if (sUrl && sKey && presencial && guard && guard.ownerId) {
+    /* REUNIÃO PARA HOJE NÃO ENTRA NA GRADE DE HOJE (14/10/26). Ela nasce da ficha da visita
+       ("Reunião hoje, mais tarde"): o executivo já está no restaurante, e o check-in da manhã
+       marcava a parada como feita na hora — aderência ao plano subindo sem a reunião ter
+       acontecido. A tarefa no HubSpot continua; só a grade de visitas de hoje fica de fora. */
+    const hojeBRT = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+    const reuniaoDeHoje = /reuni|demo/i.test(String(tipo || '')) && String(data).trim() === hojeBRT;
+    if (sUrl && sKey && presencial && !reuniaoDeHoje && guard && guard.ownerId) {
       await fetch(sUrl + '/rest/v1/rpc/plano_poe_slot', {
         method: 'POST',
         headers: { apikey: sKey, Authorization: 'Bearer ' + sKey, 'Content-Type': 'application/json' },
