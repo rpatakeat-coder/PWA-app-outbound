@@ -155,7 +155,9 @@ async function enviar(texto) {
   const r = await fetch(url + '/send/text', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', token: process.env.UAZAPI_TOKEN },
-    body: JSON.stringify({ number: process.env.UAZAPI_GRUPO_FIELD_SALES, text: texto }),
+    /* mentions "all": marca todo mundo do grupo sem encher o texto de @ (Julyan, 15/10/26:
+       "tem que mencionar todos do grupo, pra eles verem") */
+    body: JSON.stringify({ number: process.env.UAZAPI_GRUPO_FIELD_SALES, text: texto, mentions: 'all' }),
   });
   if (!r.ok) throw new Error('Uazapi ' + r.status + ' ' + (await r.text()).slice(0, 200));
 }
