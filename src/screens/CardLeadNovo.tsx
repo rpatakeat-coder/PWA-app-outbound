@@ -110,7 +110,8 @@ function kicker(d: DadosCardNovo): string {
     partes.push(ROTULO_TEMP[pino.temp ?? '?']);
     if (pino.dono === 'meu') partes.push('SEU');
     const etapa = d.etapaCodigo ? ROTULO_ETAPA[d.etapaCodigo] : null;
-    if (etapa) partes.push(etapa.toUpperCase());
+    // "PERDIDO · SEU · PERDIDO" (visto em 15/10/26): a etapa só entra quando diz algo a mais
+    if (etapa && pino.temp !== 'X') partes.push(etapa.toUpperCase());
   }
   if (d.planoNumero) partes.push(`PLANO ${d.planoNumero}`);
   if (!partes.length) partes.push((client.status ?? '').toUpperCase());

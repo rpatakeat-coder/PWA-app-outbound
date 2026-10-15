@@ -6328,7 +6328,10 @@ function MainApp() {
           setMapLayout({ x, y, width, height });
           // Fundo do mapa na régua da TELA (para a folha do mapa novo não tapar o logo do Google).
           const alvo = (e.nativeEvent as unknown as { target?: { getBoundingClientRect?: () => DOMRect } }).target;
-          if (alvo?.getBoundingClientRect && margemMapaRef.current === 0) setFundoMapaTela(Math.round(alvo.getBoundingClientRect().bottom));
+          /* o fundo NATURAL do mapa (sem a margem que a folha pede), medido a cada mudança. Antes era
+             medido uma vez só, ao abrir, quando o mapa ainda ia até o fim da tela: depois a barra de
+             abas ocupava os últimos ~60 px e sobrava uma faixa escura entre o mapa e a pílula (15/10/26). */
+          if (alvo?.getBoundingClientRect) setFundoMapaTela(Math.round(alvo.getBoundingClientRect().bottom + margemMapaRef.current));
         }}
         initialRegion={mapCenter}
         showsUserLocation={true}
