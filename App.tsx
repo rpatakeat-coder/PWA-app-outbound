@@ -5018,6 +5018,23 @@ function MainApp() {
           });
           Toast.mostrar(`Sem sinal · check-in em ${nomeDoLead}${fotoProva ? ' com a foto' : ''} na fila, sobe sozinho`, 'fila');
           marcarUltimoCheckin(client.id, userLat, userLon);
+          /* A FICHA ABRE MESMO SEM SINAL (auditoria 14/10/26): antes o executivo tinha de lembrar de
+             voltar depois. Tudo o que ela manda já sabe ir para a fila, atrás do check-in. */
+          if (modoNovo && contextoPino && client.status === 'lead') {
+            const chave = textoNormalizado(client.etapa);
+            const pelaTabela = chave ? contextoPino.etapaDePara.get(chave) ?? null : null;
+            const peloSnapshot = client.id_hubspot ? contextoPino.tempoPorNegocio.get(String(client.id_hubspot))?.etapaCodigo ?? null : null;
+            setFichaPendente({
+              client,
+              checkinEm: feitoEm,
+              etapaAtual: pelaTabela ?? peloSnapshot,
+              primeiraVisita: (client.visit_count ?? 0) === 0,
+              declarada,
+              // a foto de prova já foi para a fila junto com o check-in
+              fotoProva: null,
+              fotoNoCheckin: !!fotoProva,
+            });
+          }
           onDone?.();
           return;
         }
