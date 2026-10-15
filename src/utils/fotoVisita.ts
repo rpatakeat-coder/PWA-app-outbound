@@ -65,10 +65,27 @@ export async function comprimir(file: File): Promise<Blob> {
 
 const doisDigitos = (n: number) => String(n).padStart(2, '0');
 
-/** Sobe a foto e registra a linha. Devolve o caminho no bucket. */
+/** Quando a foto foi TIRADA (ISO), se for plausível: no passado (5 min de folga de relógio) e
+ *  há no máximo 7 dias. Fora disso, null e vale o default do banco (now()). */
+function horaDaFoto(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  const agora = Date.now();
+  if (t > agora + 5 * 60000 || t < agora - 7 * 86400000) return null;
+  return new Date(t).toISOString();
+}
+
+/** Sobe a foto e registra a linha. Devolve o caminho no bucket.
+ *  `tiradaEm`: a hora do toque no Cheguei. A foto que sobe pela fila offline chega horas depois,
+ *  e a regra da prova (0151: foto até visited_at + 2 h) a recusava pela hora do upload: o
+ *  criado_em passa a ser a hora em que ela foi tirada. O caminho no bucket continua com a hora
+ *  do upload (único; uma nova tentativa não colide com um upload que já foi). */
 export async function enviarFoto(p: {
   blob: Blob; ownerId: string | null; dealId: string | null; clientId: string; lat: number | null; lng: number | null;
+  tiradaEm?: string | null;
 }): Promise<string> {
+  const criadoEm = horaDaFoto(p.tiradaEm);
   const agora = new Date(Date.now() - 3 * 3600000); // Brasília
   const dia = agora.toISOString().slice(0, 10);
   const hora = `${doisDigitos(agora.getUTCHours())}${doisDigitos(agora.getUTCMinutes())}${doisDigitos(agora.getUTCSeconds())}`;
@@ -77,6 +94,7 @@ export async function enviarFoto(p: {
   if (up.error) throw up.error;
   const { error } = await supabase.from('fotos_visita').insert({
     caminho, client_id: p.clientId, deal_id: p.dealId, owner_id: p.ownerId, lat: p.lat, lng: p.lng,
+    ...(criadoEm ? { criado_em: criadoEm } : {}),
   });
   if (error) throw error;
   return caminho;

@@ -5143,7 +5143,9 @@ function MainApp() {
     // fila; o check-in repetido não duplica — o acaoId já está gravado)
     if (typeof Blob !== 'undefined' && p.foto instanceof Blob) {
       await enviarFotoVisita({ blob: p.foto, ownerId: myHubspotId, dealId: (p.dealId as string | null) ?? null, clientId,
-        lat: p.latitude == null ? null : Number(p.latitude), lng: p.longitude == null ? null : Number(p.longitude) });
+        lat: p.latitude == null ? null : Number(p.latitude), lng: p.longitude == null ? null : Number(p.longitude),
+        // a hora do toque: subindo horas depois, a foto ainda casa com a visita (0151: até visited_at + 2 h)
+        tiradaEm: (p.feitoEm as string | undefined) ?? null });
     }
     if (!isMonitoringRoute) {
       const stop = fieldOps.stops.find((s) => s.client_id === clientId && s.status !== 'done');
