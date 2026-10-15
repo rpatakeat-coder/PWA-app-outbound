@@ -16,7 +16,9 @@
 // 'ficha': a linha da ficha de rua em fichas_de_rua (0120), idempotente pelo acaoId.
 // 'plano': o HubSpot do "Marcar o próximo passo" (planoDoPino.ts). Entra ANTES do envio, em voo
 // (naoAntesDe): se o app fechar no meio, sobe ao reabrir; se o envio terminar, sai da fila.
-export type TipoAcao = 'checkin' | 'negocio' | 'tarefa' | 'ficha' | 'plano';
+// 'aba-tarefas': Sem interesse e Adiar da aba Tarefas (FilaTarefasScreen registra o executor):
+// sobem o Perdido/o adiamento e marcam a linha de fila_feitas como gravada.
+export type TipoAcao = 'checkin' | 'negocio' | 'tarefa' | 'ficha' | 'plano' | 'aba-tarefas';
 
 export type ItemFila = {
   acaoId: string;

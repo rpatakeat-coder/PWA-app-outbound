@@ -22,8 +22,8 @@ import { useLayout } from '../hooks/useLayout';
 import { useMeuPdi } from '../hooks/useMeuPdi';
 import FolhaRanking, { SeloPosicao } from './FolhaRanking';
 import { concluirComDesfazer } from '../utils/concluirTarefa';
-import { gravarContato } from '../utils/contatoDeCampo';
-import { ehErroDeRede, enfileirar, novoAcaoId } from '../utils/filaOffline';
+import { gravarContato, type Contato } from '../utils/contatoDeCampo';
+import { ehErroDeRede, ehSessaoVencida, enfileirar, novoAcaoId, registrarExecutor } from '../utils/filaOffline';
 import { ehRecusa, negocioAcao } from '../utils/negocioAcao';
 import { apagarPendente, desfazerFeita, lerFeitas, marcarGravada, registrarFeita, type FeitaServidor } from '../utils/filaFeitas';
 import { ehDiaUtil, proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
@@ -70,6 +70,49 @@ const mil = (v: number) => (v >= 1000 ? `R$ ${(v / 1000).toFixed(1).replace('.',
 const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
 const agoraHHMM = () => { const b = new Date(Date.now() - 3 * 3600000); return `${String(b.getUTCHours()).padStart(2, '0')}:${String(b.getUTCMinutes()).padStart(2, '0')}`; };
 const reduzirMovimento = () => { try { return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
+
+/* SEM INTERESSE E ADIAR PELA FILA (auditoria 14/10/26). Os dois esperam 5 s de Desfazer antes
+   de escrever. Antes: (a) fechar o app dentro da janela perdia a escrita (o Perdido nunca ia e a
+   linha de fila_feitas ficava 'pendente' para sempre); (b) sem sinal, o Perdido entrava na fila
+   como 'negocio' e, ao subir, ninguém marcava a linha como gravada — o Desfazer tardio dizia
+   "ainda está subindo" para sempre. Agora o envio é um só (enviarDaAba), é o executor do tipo
+   'aba-tarefas' da fila offline e marca a linha gravada depois que o Perdido sobe; e quem está
+   na janela vai para a fila no pagehide, como o concluirComDesfazer. Registrado no carregamento
+   do módulo (o App.tsx importa esta tela de forma estática): sobe mesmo se a aba não abrir. */
+type PedidoDaAba =
+  | { op: 'perdido'; corpo: Record<string, unknown>; feitaAcaoId: string; contato: Contato }
+  | { op: 'adiar'; tarefaId: string | null; amanha: string; corpo: Record<string, unknown> | null };
+
+async function enviarDaAba(p: PedidoDaAba): Promise<void> {
+  if (p.op === 'perdido') {
+    await negocioAcao(p.corpo);
+    void gravarContato(p.contato);
+    await marcarGravada(p.feitaAcaoId, {});
+    return;
+  }
+  if (p.tarefaId) {
+    const { data, error } = await supabase.functions.invoke('hubspot-sync', { body: { type: 'update_task', engagement_id: p.tarefaId, due_at: `${p.amanha}T12:00:00-03:00` } });
+    if (error) throw error;
+    // a hubspot-sync também recusa com 200 e { error } (o mesmo cuidado do concluirTarefa)
+    const d = data as { error?: string; detail?: string } | null;
+    if (d?.error) throw new Error(String(d.detail ?? d.error));
+  } else if (p.corpo) {
+    await negocioAcao(p.corpo);
+  }
+}
+
+registrarExecutor('aba-tarefas', (item) => enviarDaAba(item.payload as unknown as PedidoDaAba));
+
+const naJanela = new Map<string, { timer: ReturnType<typeof setTimeout>; rotulo: string; pedido: PedidoDaAba }>();
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => {
+    for (const [acaoId, j] of naJanela) {
+      clearTimeout(j.timer);
+      naJanela.delete(acaoId);
+      void enfileirar({ acaoId, tipo: 'aba-tarefas', rotulo: j.rotulo, payload: j.pedido as unknown as Record<string, unknown> });
+    }
+  });
+}
 
 // A ÚLTIMA FILA FICA NO APARELHO (auditoria de velocidade, 05/10/26): a Edge leva ~2 s, e ao
 // abrir o app o selo e a aba esperavam esse tempo em branco — sem sinal, para sempre. Agora a
@@ -539,21 +582,28 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
       const corpo = { op: 'mudar-etapa', dealId: i.dealId, novaEtapa: PERDIDO,
         // "O que pesou" vai sempre que escrito (14/10/26), não só no Outros
         propriedades: { motivo_do_perdido: d.motivo, ...(d.detalhe.trim() ? { observacao__desqualificado: d.detalhe.trim().slice(0, 200) } : {}) } };
+      const pedido: PedidoDaAba = { op: 'perdido', corpo, feitaAcaoId: acaoId,
+        contato: { canal, acaoId, clientId: i.clientId, dealId: i.dealId, ownerId, resultado: 'sem_interesse', em } };
+      const rotulo = `Perdido · ${i.negocio}`;
       let desfeito = false;
       const timer = setTimeout(async () => {
+        naJanela.delete(acaoId);
         if (desfeito) return;
         try {
-          await negocioAcao(corpo);
-          void gravarContato({ canal, acaoId, clientId: i.clientId, dealId: i.dealId, ownerId, resultado: 'sem_interesse', em });
-          void marcarGravada(acaoId, {}).then(recarregarFeitas);
+          await enviarDaAba(pedido);
+          void recarregarFeitas();
           void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] });
         } catch (e) {
-          if (ehErroDeRede(e)) { await enfileirar({ acaoId, tipo: 'negocio', rotulo: `Perdido · ${i.negocio}`, payload: { corpo } }); return; }
+          if (ehErroDeRede(e) || ehSessaoVencida(e)) {
+            await enfileirar({ acaoId, tipo: 'aba-tarefas', rotulo, payload: pedido as unknown as Record<string, unknown> });
+            return;
+          }
           mostrar(i.dealId); tirar(i.dealId);
           Toast.mostrar(ehRecusa(e) ? `Não foi para Perdido: ${(e as Error).message}` : 'Não consegui mover para Perdido. Tente de novo.', 'erro');
         }
       }, 5000);
-      Toast.mostrar(`Feito · ${i.negocio} · foi para Perdido`, 'ok', { rotulo: 'Desfazer', onPress: () => { desfeito = true; clearTimeout(timer); mostrar(i.dealId); tirar(i.dealId); } });
+      naJanela.set(acaoId, { timer, rotulo, pedido });
+      Toast.mostrar(`Feito · ${i.negocio} · foi para Perdido`, 'ok', { rotulo: 'Desfazer', onPress: () => { desfeito = true; clearTimeout(timer); naJanela.delete(acaoId); mostrar(i.dealId); tirar(i.dealId); } });
       return;
     }
     const volta = d.volta!;
@@ -634,23 +684,29 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   function adiar(i: CardDaFila) {
     const amanha = proximoDiaUtil(hoje, 1, feriados);
     esconder(i.dealId);
+    const pedido: PedidoDaAba = { op: 'adiar', tarefaId: i.tarefaId ?? null, amanha,
+      corpo: i.tarefaId ? null : pedidoDaVolta({ dealId: i.dealId, volta: amanha, pessoa: i.pessoa, canal: i.verbo === 'WhatsApp' ? 'whatsapp' : 'ligacao' }) };
+    const acaoId = novoAcaoId();
+    const rotulo = `Adiar · ${i.negocio}`;
     let desfeito = false;
     const timer = setTimeout(async () => {
+      naJanela.delete(acaoId);
       if (desfeito) return;
       try {
-        if (i.tarefaId) {
-          const { error } = await supabase.functions.invoke('hubspot-sync', { body: { type: 'update_task', engagement_id: i.tarefaId, due_at: `${amanha}T12:00:00-03:00` } });
-          if (error) throw error;
-        } else {
-          await negocioAcao(pedidoDaVolta({ dealId: i.dealId, volta: amanha, pessoa: i.pessoa, canal: i.verbo === 'WhatsApp' ? 'whatsapp' : 'ligacao' }));
-        }
+        await enviarDaAba(pedido);
         void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] });
-      } catch {
+      } catch (e) {
+        if (ehErroDeRede(e) || ehSessaoVencida(e)) {
+          await enfileirar({ acaoId, tipo: 'aba-tarefas', rotulo, payload: pedido as unknown as Record<string, unknown> });
+          Toast.mostrar('Sem sinal · o adiamento ficou no celular, na fila', 'fila');
+          return;
+        }
         mostrar(i.dealId);
-        Toast.mostrar('Não consegui adiar no HubSpot. O negócio voltou para a fila.', 'erro');
+        Toast.mostrar(`Não consegui adiar no HubSpot: ${String((e as Error)?.message ?? e)}. O negócio voltou para a fila.`, 'erro');
       }
     }, 5000);
-    Toast.mostrar(`Adiado · ${i.negocio} · volta ${diaCurto(amanha)}`, 'ok', { rotulo: 'Desfazer', onPress: () => { desfeito = true; clearTimeout(timer); mostrar(i.dealId); } });
+    naJanela.set(acaoId, { timer, rotulo, pedido });
+    Toast.mostrar(`Adiado · ${i.negocio} · volta ${diaCurto(amanha)}`, 'ok', { rotulo: 'Desfazer', onPress: () => { desfeito = true; clearTimeout(timer); naJanela.delete(acaoId); mostrar(i.dealId); } });
   }
 
   // ---- topo (120 px) ----
