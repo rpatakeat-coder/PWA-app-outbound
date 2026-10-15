@@ -131,7 +131,7 @@ import FichaDeRua, { type CamposCadastro } from './src/screens/FichaDeRua';
 import MudarEtapaNovo from './src/screens/MudarEtapaNovo';
 import PorNoPlano from './src/screens/PorNoPlano';
 import type { AcaoId } from './src/utils/acoesDoPlano';
-import { ROTULO_ETAPA } from './src/utils/fichaDeRua';
+import { ROTULO_ETAPA, ETAPA as ETAPA_FS } from './src/utils/fichaDeRua';
 import { negocioAcao } from './src/utils/negocioAcao';
 import { subirPlanoDaFila } from './src/utils/planoDoPino';
 import { textoNormalizado } from './src/utils/pinoP2';
@@ -4598,6 +4598,8 @@ function MainApp() {
   // Pôr no plano (um plano só, 06/10/26): o pino que abriu a folha
   const [porNoPlanoPara, setPorNoPlanoPara] = useState<{ client: Client; etapaAtual: string | null; tipoPino: string | null; cor: string; acao?: AcaoId } | null>(null);
   /* taskId: veio da lista de tarefas antiga ("Avançar etapa"/"Mover p/ Perdido") — conclui a tarefa quando a etapa grava */
+  /* a última etapa que a ficha subiu, por cliente: o 2º degrau parte do 1º no histórico */
+  const ultimaEtapaDaFicha = useRef<{ client: string; rotulo: string | null } | null>(null);
   const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null; soArmas?: boolean; taskId?: string } | null>(null);
   const codigoDaEtapa = (c: Client): string | null => {
     if (!contextoPino) return null;
@@ -9721,6 +9723,12 @@ function MainApp() {
           fotoProva={fichaPendente.fotoProva ?? null}
           fotoNoCheckin={fichaPendente.fotoNoCheckin === true}
           // Depois da visita: a Agenda no dia do passo combinado.
+          onEmitirCobranca={() => {
+            // "Fechou" na visita: a ficha fecha e a cobrança abre (o negócio já está em Negociação)
+            const c = fichaPendente.client;
+            setFichaPendente(null);
+            setTimeout(() => setEtapaNovaPara({ client: c, etapaAtual: ETAPA_FS.negociacao, destinoInicial: ETAPA_FS.pagamento }), 350);
+          }}
           onAgenda={(dia) => { void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] }); void queryClient.invalidateQueries({ queryKey: ['client_meetings'] }); setSelectedClient(null); setAgendaDiaInicial(dia); setTab('agenda'); }}
           onSalvarCadastro={async (campos: CamposCadastro) => {
             const c = fichaPendente.client;
@@ -9738,7 +9746,13 @@ function MainApp() {
               if (error) throw error;
             }
           }}
-          onEtapaMudou={(codigo) => aplicarEtapaNoLead(fichaPendente.client.id, codigo, undefined, fichaPendente.client.etapa ?? null)}
+          onEtapaMudou={(codigo) => {
+            /* a ficha pode subir dois degraus (Visita → Decisor → Demo): cada um parte do anterior,
+               ou o histórico mostraria um salto que não houve */
+            const de = ultimaEtapaDaFicha.current?.client === fichaPendente.client.id ? ultimaEtapaDaFicha.current.rotulo : (fichaPendente.client.etapa ?? null);
+            aplicarEtapaNoLead(fichaPendente.client.id, codigo, undefined, de);
+            ultimaEtapaDaFicha.current = { client: fichaPendente.client.id, rotulo: ROTULO_ETAPA[codigo] ?? de };
+          }}
         />
       )}
       {lugarGoogle && (

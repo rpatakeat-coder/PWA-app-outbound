@@ -24,8 +24,15 @@ export const COMO_FOI: { id: Desfecho; rotulo: string }[] = [
 ];
 
 /* 'apresentei' (14/10/26, handoff "app menos tela"): a demo foi feita na hora. Não existe em
-   fichas_de_rua.proximo (check da 0120): no banco a linha vai com proximo null e etapa_depois. */
-export type Proximo = 'reuniao' | 'voltar7' | 'ligar_amanha' | 'sem_interesse' | 'voltar_horario' | 'voltar_amanha' | 'apresentei';
+   fichas_de_rua.proximo (check da 0120): no banco vai como 'reuniao' (é assim que o placar conta
+   demo com decisor), com proximo_tipo 'follow-up' e etapa_depois. */
+/* A VISITA DE RETORNO (14/10/26, Julyan: "se eu já falei com quem decide na 1ª vez, ele abre as
+   mesmas opções de novo"). Com o negócio já em Demo/Proposta ou Negociação, o "E agora?" fala
+   da proposta: 'fechou' (vai a Negociação e abre a cobrança), 'negociando' (vai a Negociação,
+   retorno num dia escolhido) e 'retorno' (vai pensar, retorno num dia escolhido). Nenhum dos
+   três existe no check de fichas_de_rua.proximo: no banco vão null (ver fichaNoBanco). */
+export type Proximo = 'reuniao' | 'voltar7' | 'ligar_amanha' | 'sem_interesse' | 'voltar_horario' | 'voltar_amanha' | 'apresentei'
+  | 'fechou' | 'negociando' | 'retorno';
 export const PROXIMOS: { id: Proximo; rotulo: string }[] = [
   { id: 'reuniao', rotulo: 'Reunião' },
   { id: 'voltar7', rotulo: 'Voltar outro dia' },
@@ -34,7 +41,9 @@ export const PROXIMOS: { id: Proximo; rotulo: string }[] = [
 ];
 /* Toda volta à porta pede o DIA, escolhido por quem esteve lá: o dono que "volta à tarde"
    e o que "só segunda" não cabem num prazo fixo. Dias úteis, como a reunião. */
-export const PROXIMOS_DE_VOLTA: Proximo[] = ['voltar7', 'voltar_horario', 'voltar_amanha'];
+export const PROXIMOS_DE_VOLTA: Proximo[] = ['voltar7', 'voltar_horario', 'voltar_amanha', 'retorno', 'negociando'];
+/** As opções da visita de retorno que levam a Negociação (pedem plano e MRR, como o "Apresentei agora"). */
+export const PROXIMOS_PARA_NEGOCIACAO: Proximo[] = ['fechou', 'negociando'];
 export const ehVolta = (p: Proximo | null | undefined): boolean => !!p && PROXIMOS_DE_VOLTA.includes(p);
 export const DIAS_VOLTA = [
   { dias: 1, rotulo: 'Amanhã' },
@@ -83,9 +92,17 @@ const REUNIOES: OpcaoAgora[] = [
 const VOLTAR7: OpcaoAgora = { id: 'voltar7', rotulo: 'Voltar outro dia', proximo: 'voltar7' };
 const LIGAR: OpcaoAgora = { id: 'ligar_amanha', rotulo: 'Ligar amanhã', proximo: 'ligar_amanha' };
 const SEM: OpcaoAgora = { id: 'sem_interesse', rotulo: 'Sem interesse', proximo: 'sem_interesse' };
-export function opcoesAgora(comoFoi: Desfecho | null): OpcaoAgora[] {
+const FECHOU: OpcaoAgora = { id: 'fechou', rotulo: 'Fechou', proximo: 'fechou', sub: 'emitir a cobrança' };
+const NEGOCIANDO: OpcaoAgora = { id: 'negociando', rotulo: 'Negociando o preço', proximo: 'negociando', sub: 'vai a Negociação' };
+const RETORNO: OpcaoAgora = { id: 'retorno', rotulo: 'Vai pensar', proximo: 'retorno', sub: 'retorno no dia que escolher' };
+/** "E agora?" depende do "Como foi?" e, na visita de retorno, da etapa em que o negócio já está. */
+export function opcoesAgora(comoFoi: Desfecho | null, etapa: string | null = null): OpcaoAgora[] {
   switch (comoFoi) {
-    case 'falou_com_decisor': return [APRESENTEI, REUNIAO_HOJE, ...REUNIOES, VOLTAR7, LIGAR, SEM];
+    case 'falou_com_decisor':
+      if (etapa === ETAPA.demo) return [FECHOU, NEGOCIANDO, RETORNO, VOLTAR7, SEM];
+      if (etapa === ETAPA.negociacao) return [FECHOU, RETORNO, VOLTAR7, SEM];
+      if (etapa === ETAPA.pagamento) return [VOLTAR7, LIGAR, SEM];
+      return [APRESENTEI, REUNIAO_HOJE, ...REUNIOES, VOLTAR7, LIGAR, SEM];
     case 'decisor_ausente': return [{ id: 'voltar_horario', rotulo: 'Voltar no horário do dono', proximo: 'voltar_horario' }, VOLTAR7, LIGAR, SEM];
     case 'sem_interesse': return [VOLTAR7, LIGAR, SEM];
     case 'estabelecimento_fechado': return [{ id: 'voltar_amanha', rotulo: 'Voltar amanhã', proximo: 'voltar_amanha' }, VOLTAR7, LIGAR];
@@ -212,6 +229,15 @@ export function escadaAte(atual: string | null, alvo: string): string[] {
   return ESCADA.slice(iAtual + 1, iAlvo + 1);
 }
 
+/** Número como o brasileiro escreve: "449", "449,90", "1.200", "1.200,50" → 449 / 449.9 / 1200 / 1200.5. NaN se não é número. */
+export function numeroBR(v: unknown): number {
+  let s = String(v ?? '').trim().replace(/^R\$\s*/i, '').replace(/\s/g, '');
+  if (!s) return NaN;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+  return Number(s);
+}
+
 /** O valor do CRM conta como resposta? "." , "-", "verificar" e 1 letra são o lixo de quem só queria passar. */
 export function valorValido(v: unknown): boolean {
   const s = v == null ? '' : String(v).trim();
@@ -230,6 +256,7 @@ export function etapaSugerida(p: {
   let alvo: string | null = null;
   if (p.proximo === 'sem_interesse') alvo = ETAPA.perdido;
   else if (p.proximo === 'apresentei') alvo = ETAPA.demo;
+  else if (p.proximo === 'fechou' || p.proximo === 'negociando') alvo = ETAPA.negociacao;
   else if (p.comoFoi === 'falou_com_decisor' && p.proximo === 'reuniao') alvo = ETAPA.decisor;
   else if (p.primeiraVisita) alvo = ETAPA.visita;
   if (!alvo) return null;
@@ -279,7 +306,7 @@ export function degrausDaFicha(p: {
         falta.push(k); continue;
       }
       if (k === 'valor_de_mrr') {
-        const n = Number(v.replace(',', '.'));
+        const n = numeroBR(v);
         if (!(isFinite(n) && n > 0)) { if (!valorValido(p.negocio[k])) falta.push(k); continue; }
         if (manda) propriedades[k] = String(n);
         continue;
@@ -400,6 +427,9 @@ export function proximoPassoDaFicha(f: Ficha, hoje: string): { data: string; tip
   /* demo feita agora: o próximo passo é cobrar a resposta da proposta (sem ele, o negócio
      aparece como "sem próximo passo" no Cockpit) */
   if (f.proximo === 'apresentei') return { data: proximoDiaUtil(hoje, 2), tipo: 'follow-up', texto: 'Retorno da proposta', canal: 'ligacao' };
+  /* fechou: o passo é a cobrança, hoje (a tarefa fecha sozinha no Ganho) */
+  if (f.proximo === 'fechou') return { data: hoje, tipo: 'follow-up', texto: 'Emitir a cobrança', canal: 'visita' };
+  if ((f.proximo === 'retorno' || f.proximo === 'negociando') && f.dataVolta) return { data: f.dataVolta, tipo: 'follow-up', texto: f.proximo === 'negociando' ? 'Retorno da negociação' : 'Retorno da proposta', canal: 'ligacao' };
   /* volta sem o dia escolhido não vira tarefa: o Salvar já pede "o dia da volta" */
   if (ehVolta(f.proximo) && !f.dataVolta) return null;
   if (f.proximo === 'voltar7') return { data: f.dataVolta as string, tipo: 'visita', texto: 'Voltar para nova visita', canal: 'visita' };
@@ -427,7 +457,7 @@ export function notaDaVisita(f: Ficha, p: { cliente: string; ocorridoEm: string;
     // "sim" só quando falou com quem decide; nunca "nao" (vai vazio)
     decisorAlcancado: f.comoFoi === 'falou_com_decisor' ? 'sim' : 'desconhecido',
     dor: dorDaFicha(f) || null,
-    observacao: [f.proximo === 'apresentei' && (f.plano || f.mrr.trim()) ? `apresentou: ${[f.plano, f.mrr.trim() ? `MRR R$ ${f.mrr.trim()}` : ''].filter(Boolean).join(' · ')}` : null,
+    observacao: [(f.proximo === 'apresentei' || f.proximo === 'fechou' || f.proximo === 'negociando') && (f.plano || f.mrr.trim()) ? `apresentou: ${[f.plano, f.mrr.trim() ? `MRR R$ ${f.mrr.trim()}` : ''].filter(Boolean).join(' · ')}` : null,
       f.sistema ? `sistema: ${f.sistema}` : null, tipoDaFicha(f) ? `tipo: ${tipoDaFicha(f)}` : null,
       rotuloDoHorario(horarioDaFicha(f)) ? `dono costuma estar: ${rotuloDoHorario(horarioDaFicha(f))}` : null,
       f.proximo === 'sem_interesse' && f.motivoPerdido
@@ -489,7 +519,7 @@ export function montarPropriedades(destino: string, digitado: Record<string, str
     const tipo = TIPO_CAMPO[k] ?? 'texto';
     if (tipo === 'selecao' && !(PICKLIST[k] ?? []).includes(v)) { erros[k] = 'Escolha uma das opções.'; continue; }
     if (tipo === 'numero') {
-      const n = Number(v.replace(',', '.'));
+      const n = numeroBR(v);
       if (!isFinite(n) || n <= 0) { erros[k] = 'Valor inválido.'; continue; }
       propriedades[k] = String(n); continue;
     }

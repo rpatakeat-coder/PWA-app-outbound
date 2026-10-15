@@ -179,6 +179,18 @@ ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
   ok(horaLivre('18h30') === '18:30' && horaLivre('940') === '09:40' && horaLivre('25') === null, 'a hora digitada vira HH:MM');
 }
 
+// ── 14/10/26: a visita de retorno fala da proposta ──
+{
+  ok(opcoesAgora('falou_com_decisor', ETAPA.demo).map((o) => o.proximo).join() === 'fechou,negociando,retorno,voltar7,sem_interesse', 'em Demo: Fechou, Negociando, Vai pensar, Voltar, Sem interesse');
+  ok(opcoesAgora('falou_com_decisor', ETAPA.negociacao)[0].proximo === 'fechou' && !opcoesAgora('falou_com_decisor', ETAPA.negociacao).some((o) => o.proximo === 'apresentei'), 'em Negociação: Fechou primeiro, sem "Apresentei"');
+  ok(opcoesAgora('falou_com_decisor', ETAPA.visita)[0].proximo === 'apresentei', 'em Visita: continua o "Apresentei agora"');
+  ok(etapaSugerida({ atual: ETAPA.demo, comoFoi: 'falou_com_decisor', proximo: 'fechou', primeiraVisita: false }) === ETAPA.negociacao, 'Fechou em Demo sugere Negociação');
+  ok(etapaSugerida({ atual: ETAPA.demo, comoFoi: 'falou_com_decisor', proximo: 'retorno', primeiraVisita: false }) === null, 'Vai pensar não mexe na etapa');
+  ok(proximoPassoDaFicha(F({ comoFoi: 'falou_com_decisor', proximo: 'fechou' }), hoje)?.texto === 'Emitir a cobrança', 'Fechou: o passo é emitir a cobrança hoje');
+  ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'retorno' })).texto === 'Falta o dia da volta', 'Vai pensar pede o dia do retorno');
+  ok(proximoPassoDaFicha(F({ comoFoi: 'falou_com_decisor', proximo: 'negociando', dataVolta: '2026-09-29' }), hoje)?.texto === 'Retorno da negociação', 'Negociando: retorno no dia escolhido');
+}
+
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);
   process.exit(1);

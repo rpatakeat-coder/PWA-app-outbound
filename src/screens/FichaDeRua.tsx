@@ -23,7 +23,7 @@ import { enfileirar, ehErroDeRede, novoAcaoId } from '../utils/filaOffline';
 import {
   AJUDA_MOTIVO, COMO_FOI, DIAS_VOLTA, ETAPA, FICHA_VAZIA, GARGALOS, GARGALO_OUTRA, HORARIOS, HORAS_REUNIAO_HOJE, MAX_O_QUE_PESOU, MOTIVOS_PERDIDO,
   MOTIVOS_QUE_EXIGEM_TEXTO, PICKLIST, ROTULO_ETAPA, ROTULO_PROP, SISTEMAS,
-  degrausDaFicha, dorDaFicha, ehVolta, escadaAte, etapaSugerida, horaLivre, notaDaVisita, opcoesAgora, papelDaFicha, papelParaHubspot,
+  PROXIMOS_PARA_NEGOCIACAO, degrausDaFicha, dorDaFicha, ehVolta, escadaAte, etapaSugerida, horaLivre, notaDaVisita, opcoesAgora, papelDaFicha, papelParaHubspot,
   proximoDiaUtil, proximoPassoDaFicha, rotuloSalvar, valorValido,
   type Ficha,
 } from '../utils/fichaDeRua';
@@ -52,6 +52,8 @@ type Props = {
   onEtapaMudou: (codigo: string) => void;
   /** "Ver na Agenda": abre a Agenda no dia do próximo passo (ou hoje). */
   onAgenda?: (dia: string | null) => void;
+  /** "Fechou" na visita de retorno: depois de salvar, abre Emitir cobrança (o negócio já em Negociação). */
+  onEmitirCobranca?: () => void;
   /** Visita declarada (0109): o chip diz isso, não "GPS confere". */
   declarada?: boolean;
   /** Foto de prova (GPS falhou) que não subiu no check-in: sobe junto com a visita. */
@@ -79,6 +81,8 @@ type Sabido = {
   horario: string;
   /** o negócio foi lido (snapshot ou ao vivo)? sem isso, nada do que se sabia vai ao HubSpot */
   lido: boolean;
+  /** a leitura terminou (lida ou estourou o prazo)? antes disso a ficha ainda está lendo */
+  carregado: boolean;
 };
 type Campo = 'decisor' | 'celular' | 'dor' | 'sistema';
 
@@ -86,11 +90,13 @@ const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 
 const diaMes = (iso: string) => iso.split('-').reverse().slice(0, 2).join('/');
 const ddmm = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }) : '');
 const JANELA_DESFAZER_MS = 5000;
+/** a hora de agora em Brasília, "HH:MM" (reunião de hoje só para frente) */
+const agoraHHMM = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(11, 16);
 /* rede ruim na rua: o que não chegou em 4 s não segura a ficha — ela abre com o que tem */
 const comPrazo = <T,>(p: PromiseLike<T>, ms: number, padrao: T): Promise<T> =>
   Promise.race([Promise.resolve(p).catch(() => padrao), new Promise<T>((r) => setTimeout(() => r(padrao), ms))]);
 
-function montarSabido(client: Client, negocio: Record<string, unknown>, fichas: FichaArmas[], lido = false): Sabido {
+function montarSabido(client: Client, negocio: Record<string, unknown>, fichas: FichaArmas[], lido = false, carregado = false): Sabido {
   const a = armasConhecidas(negocio, fichas);
   const ord = [...fichas].sort((x, y) => (y.ocorrido_em ?? '').localeCompare(x.ocorrido_em ?? ''));
   const deFicha = (k: keyof FichaArmas, v: string) => {
@@ -100,7 +106,8 @@ function montarSabido(client: Client, negocio: Record<string, unknown>, fichas: 
   const empresa = client.empresa?.trim() ?? '';
   const contato = client.nome?.trim() ?? '';
   /* o "Nome do contato" do cadastro é quem a pessoa encontrou: vale como quem decide até alguém dizer outro */
-  const decisorCadastro = empresa && contato && contato.toLowerCase() !== empresa.toLowerCase() ? contato : '';
+  const pareceGente = valorValido(contato) && !/ainda|n[aã]o |tenho|sei|verific|teste|\?|^-+$/i.test(contato);
+  const decisorCadastro = empresa && contato && pareceGente && contato.toLowerCase() !== empresa.toLowerCase() ? contato : '';
   const decisor = valorValido(a.decisor) ? a.decisor : decisorCadastro;
   const celNeg = valorValido(negocio.celular) ? String(negocio.celular) : '';
   const sistema = valorValido(a.sistema) ? a.sistema : '';
@@ -118,10 +125,11 @@ function montarSabido(client: Client, negocio: Record<string, unknown>, fichas: 
     mrr: valorValido(negocio.valor_de_mrr) ? String(negocio.valor_de_mrr) : '',
     horario: a.horario,
     lido,
+    carregado,
   };
 }
 
-export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, declarada = false, ownerId = null, fotoProva = null, fotoNoCheckin = false, donoColega = null }: Props) {
+export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, onEmitirCobranca, declarada = false, ownerId = null, fotoProva = null, fotoNoCheckin = false, donoColega = null }: Props) {
   const [f, setF] = useState<Ficha>(FICHA_VAZIA);
   const [opcao, setOpcao] = useState<string | null>(null);
   const [completar, setCompletar] = useState(false);
@@ -135,6 +143,9 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   const [fase, setFase] = useState<'form' | 'desfazer' | 'enviando' | 'salvo'>('form');
   const [resultados, setResultados] = useState<Resultado[]>([]);
   const [passoSalvo, setPassoSalvo] = useState<{ data: string; texto: string; virouTarefa: boolean } | null>(null);
+  /* a visita de retorno já abre com "falei com quem decide" marcado; tocou no "Como foi", o app não marca mais */
+  const tocouComoFoi = useRef(false);
+  const [comoFoiAuto, setComoFoiAuto] = useState(false);
   const pendente = useRef<{ campos: CamposCadastro; envios: Envio[]; foto: Blob | null; linha: LinhaFicha | null; timer: ReturnType<typeof setTimeout> } | null>(null);
 
   const nome = client.empresa?.trim() || client.nome || 'Lead';
@@ -145,6 +156,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     if (!visivel) return;
     setF(FICHA_VAZIA); setOpcao(null); setCompletar(false); setCorrigindo({}); setOutroSistema(false); setOutraDataVolta(false);
     setOutraHora(false); setHoraTexto(''); setConfirmarSaida(false); setFase('form'); setResultados([]); setPassoSalvo(null);
+    tocouComoFoi.current = false; setComoFoiAuto(false);
     /* O QUE JÁ SE SABE, nas três fontes, cada uma com prazo: o negócio (snapshot do Cockpit e
        leitura ao vivo, que traz a etapa real), as fichas de visita e o cadastro */
     let vivo = true;
@@ -162,7 +174,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
         .then(({ data }) => (data ?? []) as FichaArmas[]), 4000, [] as FichaArmas[])
       : Promise.resolve([] as FichaArmas[]);
     void Promise.all([snap, aoVivo, fichas]).then(([sn, av, fs]) => {
-      if (vivo) setSabido(montarSabido(client, { ...sn, ...av }, fs, Object.keys(sn).length > 0 || Object.keys(av).length > 0));
+      if (vivo) setSabido(montarSabido(client, { ...sn, ...av }, fs, Object.keys(sn).length > 0 || Object.keys(av).length > 0, true));
     });
     return () => { vivo = false; };
   }, [visivel, client.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -192,12 +204,18 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
 
   /* OS DEGRAUS: "Apresentei agora" sobe até Demo, um por vez; o resto, a etapa sugerida de sempre */
   const apresentei = f.proximo === 'apresentei';
+  /* "Fechou" e "Negociando" (visita de retorno, negócio em Demo) também pedem plano e MRR: vão a Negociação */
+  const paraNegociacao = !!f.proximo && PROXIMOS_PARA_NEGOCIACAO.includes(f.proximo);
+  const pedePlano = apresentei || paraNegociacao;
+  const alvoFinal = apresentei ? ETAPA.demo : paraNegociacao ? ETAPA.negociacao : null;
   const degraus = useMemo(() => {
     if (!dealId || !f.comoFoi || !f.proximo) return [] as string[];
-    if (apresentei) return escadaAte(etapaReal, ETAPA.demo);
+    /* sem o negócio lido não se sabe a etapa real nem o que ele tem: a visita grava, a etapa espera */
+    if (!sabido?.lido) return [] as string[];
+    if (alvoFinal) return escadaAte(etapaReal, alvoFinal);
     const sug = etapaSugerida({ atual: etapaReal, comoFoi: f.comoFoi, proximo: f.proximo, primeiraVisita });
     return sug ? [sug] : [];
-  }, [dealId, f.comoFoi, f.proximo, apresentei, etapaReal, primeiraVisita]);
+  }, [dealId, f.comoFoi, f.proximo, alvoFinal, etapaReal, primeiraVisita, sabido?.lido]);
   const digitado = new Set<string>([
     ...(f.telefone.trim() ? ['celular'] : []), ...(dorDigitada ? ['gargalo_operacional'] : []), ...(f.sistema.trim() ? ['nome_do_sistema'] : []),
     /* plano/MRR contam como "dito agora" só se mudaram em relação ao negócio */
@@ -211,7 +229,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     },
   });
   const ultimo = plano.vai.length ? plano.vai[plano.vai.length - 1].etapa : null;
-  const vaiADemo = apresentei && ultimo === ETAPA.demo;
+  const vaiAoAlvo = !!alvoFinal && ultimo === alvoFinal;
   const faltaTexto = plano.falta.map((k) => ROTULO_PROP[k] ?? k);
   const juntar = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} e ${xs[xs.length - 1]}` : xs[0] ?? '');
 
@@ -221,10 +239,17 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   /* Completar agora: quem decide, celular, dor e sistema — "N de 4 já sabidos" */
   const sabidos = [decisorEf, celularEf, dorEf, sistemaEf].filter(Boolean).length;
   const aviso = !!plano.paraEm && !!f.comoFoi && !!f.proximo;
+  /* a etapa não vai mudar e a pessoa precisa saber por quê */
+  const querSubir = !!dealId && !!f.comoFoi && !!f.proximo && (!!alvoFinal || !!etapaSugerida({ atual: etapaReal, comoFoi: f.comoFoi, proximo: f.proximo, primeiraVisita }));
+  const avisoLeitura = querSubir && !sabido?.lido
+    ? (sabido?.carregado ? 'Não consegui ler o negócio no HubSpot: a visita grava, a etapa fica onde está' : 'Lendo o negócio no HubSpot…')
+    : (!!alvoFinal && !ultimo && !plano.paraEm && !!f.proximo ? `A etapa fica em ${ROTULO_ETAPA[etapaReal ?? ''] ?? 'onde está'}` : null);
   const legenda = !f.comoFoi || !f.proximo
     ? 'Escolha como foi e o que vem agora'
+    : avisoLeitura
+      ? avisoLeitura
     : aviso
-      ? `Falta ${juntar(faltaTexto)} para ir a ${ROTULO_ETAPA[apresentei ? ETAPA.demo : plano.paraEm as string]} · salvo a visita mesmo assim`
+      ? `Falta ${juntar(faltaTexto)} para ir a ${ROTULO_ETAPA[alvoFinal ?? plano.paraEm as string]} · salvo a visita mesmo assim`
       : f.proximo === 'reuniao' && f.diasReuniao === 0 && !f.horaReuniao
         ? 'Escolha a hora da reunião'
         : ehVolta(f.proximo) && !f.dataVolta
@@ -233,18 +258,39 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
             ? (!f.motivoPerdido ? 'Escolha o motivo'
               : MOTIVOS_QUE_EXIGEM_TEXTO.includes(f.motivoPerdido) && !f.motivoTexto.trim() ? 'Escreva o que pesou' : 'O negócio vai para Perdido, com o motivo')
             : apresentei
-              ? (vaiADemo ? 'Grava visita e etapa juntos · Desfazer por 5 s' : 'Grava a visita e o retorno da proposta')
+              ? (vaiAoAlvo ? 'Grava visita e etapa juntos · Desfazer por 5 s' : 'Grava a visita e o retorno da proposta')
+              : f.proximo === 'fechou'
+                ? (vaiAoAlvo || etapaReal === ETAPA.negociacao ? 'Depois de salvar, a cobrança abre aqui' : 'Grava a visita; a cobrança pede o negócio em Negociação')
               : passoPrevisto
                 // negócio de colega: a tarefa é do dono no HubSpot — dizer isso, não "vai para a Agenda"
                 ? `${passoPrevisto.texto} ${passoPrevisto.data === hoje ? `hoje${passoPrevisto.hora ? ` às ${passoPrevisto.hora}` : ''}` : `em ${diaMes(passoPrevisto.data)}`} vai para a Agenda ${donoColega ? `de ${donoColega} (dono do negócio)` : ''}`.trim()
                 : 'Salva a visita no HubSpot e no Cockpit';
 
   function escolherComoFoi(id: Ficha['comoFoi']) {
+    tocouComoFoi.current = true; setComoFoiAuto(false);
     set({ comoFoi: id, proximo: null, diasReuniao: null, horaReuniao: null, motivoPerdido: null, motivoTexto: '', dataVolta: null });
     setOpcao(null); setOutraDataVolta(false); setOutraHora(false);
     // Maior ralo do funil: visita que não chega em quem decide. Sai com o nome.
     if (id === 'decisor_ausente') setCompletar(true);
   }
+
+  /* A VISITA DE RETORNO (Julyan, 14/10/26): quem decide já é conhecido (do negócio ou de uma
+     ficha, nunca só do cadastro) e não é a 1ª visita → o "Como foi" já vem em "Falei com <nome>".
+     O executivo troca com um toque se não foi isso. */
+  const decisorConhecido = !!sabido?.lido && !!sabido.decisor && sabido.decisorDe !== 'do cadastro';
+  useEffect(() => {
+    if (!visivel || primeiraVisita || !decisorConhecido || tocouComoFoi.current || f.comoFoi) return;
+    set({ comoFoi: 'falou_com_decisor' });
+    setComoFoiAuto(true);
+  }, [visivel, primeiraVisita, decisorConhecido]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* tocou "Apresentei/Fechou/Negociando" antes do negócio carregar: plano e MRR chegam quando ele chega
+     (só se a pessoa ainda não escreveu nada) */
+  useEffect(() => {
+    if (!pedePlano || !sabido?.lido) return;
+    if (!f.plano && sabido.plano) set({ plano: sabido.plano });
+    if (!f.mrr && sabido.mrr) set({ mrr: sabido.mrr });
+  }, [sabido?.lido, pedePlano]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function enviar(e: Envio, lista: Resultado[]): Promise<boolean> {
     if (e.rota === 'hubspot-sync') {
@@ -288,18 +334,22 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     /* os degraus vão em ordem: se um é recusado, os de cima não têm como subir */
     let degrauFalhou = false;
     let degrauNaFila = false;
+    let subiuAte: string | null = null;
     for (const e of p.envios) {
       /* sem sinal, a fila sobe em ordem: o degrau de cima entra atrás do de baixo */
       if (e.etapa && degrauNaFila) {
         await enfileirar({ acaoId: novoAcaoId(), tipo: 'negocio', rotulo: `${e.rotulo} · ${nome}`, payload: { corpo: e.corpo } });
         lista.push({ rotulo: e.rotulo, estado: 'fila', detalhe: 'na fila, sobe depois do degrau de baixo' });
+        subiuAte = e.etapa;
         continue;
       }
       if (e.etapa && degrauFalhou) { lista.push({ rotulo: e.rotulo, estado: 'pulado', detalhe: 'o degrau de baixo não subiu' }); continue; }
       const foi = await enviar(e, lista);
-      if (foi && e.etapa) onEtapaMudou(e.etapa);
-      if (!foi && e.etapa) { if (lista[lista.length - 1]?.estado === 'fila') degrauNaFila = true; else degrauFalhou = true; }
+      if (foi && e.etapa) { onEtapaMudou(e.etapa); subiuAte = e.etapa; }
+      if (!foi && e.etapa) { if (lista[lista.length - 1]?.estado === 'fila') { degrauNaFila = true; subiuAte = e.etapa; } else degrauFalhou = true; }
     }
+    /* o banco diz a etapa que DE FATO subiu (ou entrou na fila), não a que se pretendia */
+    if (p.linha) p.linha = { ...p.linha, etapa_depois: subiuAte };
     if (p.foto) {
       try {
         await enviarFoto({
@@ -345,9 +395,10 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
       envios.push({ corpo: { op: 'nota', dealId, texto: notaDaVisita(fEf, { cliente: nome, ocorridoEm: checkinEm, hoje }) }, rotulo: 'Nota da visita' });
       /* A ETAPA VAI ANTES DA TAREFA: a nota do próximo passo grava sistema e dor de novo
          (qualificacao) e não pode chegar antes do degrau que os exige */
-      for (const d of plano.vai) {
-        envios.push({ corpo: { op: 'mudar-etapa', dealId, novaEtapa: d.etapa, propriedades: d.propriedades, ...(d.gargaloOutro ? { gargaloOutro: d.gargaloOutro } : {}) }, rotulo: `Etapa → ${ROTULO_ETAPA[d.etapa]}`, etapa: d.etapa });
-      }
+      plano.vai.forEach((d, i) => {
+        const esperada = i === 0 ? etapaReal : plano.vai[i - 1].etapa;
+        envios.push({ corpo: { op: 'mudar-etapa', dealId, novaEtapa: d.etapa, propriedades: d.propriedades, ...(d.gargaloOutro ? { gargaloOutro: d.gargaloOutro } : {}), ...(esperada ? { etapaEsperada: esperada } : {}) }, rotulo: `Etapa → ${ROTULO_ETAPA[d.etapa]}`, etapa: d.etapa });
+      });
       if (passo) {
         const qualificacao: Record<string, string> = {};
         if (f.sistema.trim()) qualificacao.nomeDoSistema = sistemaParaGravar(f.sistema);
@@ -373,8 +424,10 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
         });
       }
     }
-    /* a linha do banco leva só o que foi DITO nesta visita (o que já se sabia não vira "da ficha de hoje") */
-    const linha = linhaDaFicha(f, {
+    /* a linha do banco leva o que foi DITO nesta visita (sistema e dor que já se sabiam não viram
+       "da ficha de hoje"). Quem decide é exceção: "Falei com quem decide" CONFIRMA a pessoa, e o
+       Cockpit mede "ficha com decisor" por essa coluna */
+    const linha = linhaDaFicha(f.comoFoi === 'falou_com_decisor' && decisorEf ? { ...f, decisor: decisorEf, papel: fEf.papel, papelOutro: fEf.papelOutro } : f, {
       ownerId, clientId: client.id ?? null, dealId, ocorridoEm: checkinEm, declarada,
       etapaAntes: etapaReal ?? null, etapaDepois: ultimo,
       comFoto: !!fotoProva || fotoNoCheckin, bairro: client.bairro, cidade: client.cidade, hoje,
@@ -492,14 +545,18 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
       : campo === 'dor' ? (dorDigitada ? 'dito agora' : sabido?.dorDe ?? '')
         : (f.sistema.trim() ? 'dito agora' : sabido?.sistemaDe ?? ''));
   /* "Apresentei agora": o que falta para passar por Decisor aparece no topo, só o que falta */
-  const faltaDecisor = apresentei && plano.paraEm === ETAPA.decisor ? plano.falta : [];
+  const faltaDecisor = pedePlano && plano.paraEm === ETAPA.decisor ? plano.falta : [];
   const mostrarNoTopo = [
     ...((faltaDecisor.includes('nome_do_sistema') || ((!!f.sistema || outroSistema) && !sabido?.sistema)) ? ['nome_do_sistema'] : []),
     ...((faltaDecisor.includes('gargalo_operacional') || ((!!f.dor || f.dorOutra != null) && !sabido?.dor)) ? ['gargalo_operacional'] : []),
     ...((faltaDecisor.includes('celular') || (!!f.telefone && !sabido?.celular)) ? ['celular'] : []),
   ];
-  const rotuloComoFoi = COMO_FOI.find((c) => c.id === f.comoFoi)?.rotulo ?? '';
-  const textoSalvar = !salvar.pode ? salvar.texto : vaiADemo ? 'Salvar · vai a Demo/Proposta' : 'Salvar visita';
+  /* "Falei com a Marta (dono)": o nome de quem decide quando já se sabe */
+  const primeiroNome = (sabido?.decisor ?? '').trim().split(/\s+/)[0] ?? '';
+  const rotuloFalei = decisorConhecido && primeiroNome ? `Falei com ${primeiroNome}${sabido?.papel ? ` (${sabido.papel.toLowerCase()})` : ''}` : null;
+  const rotuloDe = (id: string, padrao: string) => (id === 'falou_com_decisor' && rotuloFalei ? rotuloFalei : padrao);
+  const rotuloComoFoi = rotuloDe(f.comoFoi ?? '', COMO_FOI.find((c) => c.id === f.comoFoi)?.rotulo ?? '');
+  const textoSalvar = !salvar.pode ? salvar.texto : vaiAoAlvo && alvoFinal ? `Salvar · vai a ${ROTULO_ETAPA[alvoFinal]}` : 'Salvar visita';
 
   return (
     <Modal visible={visivel} transparent animationType="slide" onRequestClose={fechar}>
@@ -531,7 +588,10 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                 {f.comoFoi ? (
                   <View style={s.respondido}>
                     <Text style={s.respondidoRotulo}>1 · COMO FOI</Text>
-                    <Text style={s.respondidoValor} numberOfLines={1}>{rotuloComoFoi}</Text>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={s.respondidoValor} numberOfLines={1}>{rotuloComoFoi}</Text>
+                      {comoFoiAuto && <Text style={s.fatoOrigem}>marcado pela última visita · troque se não foi</Text>}
+                    </View>
                     <Pressable accessibilityRole="button" onPress={() => escolherComoFoi(null)} style={s.corrigir}>
                       <Text style={s.corrigirTexto}>trocar</Text>
                     </Pressable>
@@ -539,7 +599,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                 ) : (
                   <>
                     <Text style={s.secao}>1 · COMO FOI?</Text>
-                    <View style={s.grade}>{COMO_FOI.map((c) => opcaoGrade(c.id, c.rotulo, false, () => escolherComoFoi(c.id)))}</View>
+                    <View style={s.grade}>{COMO_FOI.map((c) => opcaoGrade(c.id, rotuloDe(c.id, c.rotulo), false, () => escolherComoFoi(c.id)))}</View>
                   </>
                 )}
 
@@ -557,10 +617,10 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                   <>
                     <Text style={s.secao}>2 · E AGORA?</Text>
                     <View style={s.grade}>
-                      {opcoesAgora(f.comoFoi).map((o) => opcaoGrade(o.id, o.rotulo, opcao === o.id, () => {
+                      {opcoesAgora(f.comoFoi, etapaReal).map((o) => opcaoGrade(o.id, o.rotulo, opcao === o.id, () => {
                         setOpcao(o.id);
                         setOutraHora(false);
-                        if (o.proximo === 'apresentei') set({ plano: f.plano || sabido?.plano || '', mrr: f.mrr || sabido?.mrr || '' });
+                        if (o.proximo === 'apresentei' || PROXIMOS_PARA_NEGOCIACAO.includes(o.proximo)) set({ plano: f.plano || sabido?.plano || '', mrr: f.mrr || sabido?.mrr || '' });
                         set({
                           proximo: o.proximo, diasReuniao: o.dias ?? null, horaReuniao: null, motivoPerdido: o.proximo === 'sem_interesse' ? f.motivoPerdido : null,
                           /* "Voltar amanhã" já diz o dia; as outras voltas esperam o executivo escolher */
@@ -582,13 +642,13 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                     </View>
                     {outraHora && (
                       <TextInput style={s.campo} value={horaTexto} inputMode="numeric" placeholder="ex.: 18h30" placeholderTextColor="#8B919C" maxLength={6}
-                        onChangeText={(v) => { setHoraTexto(v); set({ horaReuniao: horaLivre(v) }); }} />
+                        onChangeText={(v) => { setHoraTexto(v); const h = horaLivre(v); set({ horaReuniao: h && h > agoraHHMM() ? h : null }); }} />
                     )}
                   </>
                 )}
 
-                {/* APRESENTEI AGORA: o que falta de Decisor (só o que falta), plano, MRR e a reunião = hoje */}
-                {apresentei && (
+                {/* APRESENTEI AGORA / FECHOU / NEGOCIANDO: o que falta de Decisor (só o que falta), plano, MRR */}
+                {pedePlano && (
                   <>
                     {/* o campo escolhido agora continua na tela (para ver e trocar); some só o que já se sabia */}
                     {!!dealId && degraus.includes(ETAPA.decisor) && (mostrarNoTopo.length ? (
@@ -613,17 +673,19 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                     <Text style={s.rotulo}>{`MRR mensal (R$)${sabido?.mrr && !f.mrr ? ' · do negócio' : ''}`}</Text>
                     <TextInput style={[s.campo, !mrrEf && s.campoFoco]} value={f.mrr} onChangeText={(v) => set({ mrr: v })}
                       placeholder="R$ por mês" placeholderTextColor="#8B919C" keyboardType="decimal-pad" />
-                    <View style={s.fatoLinha}>
-                      <Text style={s.fatoRotulo}>Reunião</Text>
-                      <Text style={[s.fatoValor, { flex: 1 }]}>{`Hoje, ${diaMes(hoje)} · agora`}</Text>
-                    </View>
+                    {apresentei && (
+                      <View style={s.fatoLinha}>
+                        <Text style={s.fatoRotulo}>Reunião</Text>
+                        <Text style={[s.fatoValor, { flex: 1 }]}>{`Hoje, ${diaMes(hoje)} · agora`}</Text>
+                      </View>
+                    )}
                     {!dealId && <Text style={s.ajuda}>Sem negócio no HubSpot: a visita grava, a etapa fica para quando ele existir.</Text>}
                   </>
                 )}
 
                 {ehVolta(f.proximo) && (
                   <>
-                    <Text style={s.secao}>QUANDO VOLTAR?</Text>
+                    <Text style={s.secao}>{f.proximo === 'retorno' || f.proximo === 'negociando' ? 'QUANDO É O RETORNO?' : 'QUANDO VOLTAR?'}</Text>
                     <View style={s.chips}>
                       {DIAS_VOLTA.map((d) => {
                         const dia = proximoDiaUtil(hoje, d.dias);
@@ -734,6 +796,11 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                     : problemas.map((p) => `${p.estado === 'fila' ? 'Na fila' : p.estado === 'falhou' ? 'Falhou' : 'Pendente'} · ${p.rotulo}${p.detalhe ? `: ${p.detalhe}` : ''}`).join('\n')}
                 </Text>
               )}
+              {fase === 'salvo' && f.proximo === 'fechou' && onEmitirCobranca && (ultimo === ETAPA.negociacao || etapaReal === ETAPA.negociacao) && (
+                <Pressable accessibilityRole="button" onPress={() => { onEmitirCobranca(); }} style={s.salvar}>
+                  <Text style={s.salvarTexto}>Emitir a cobrança agora</Text>
+                </Pressable>
+              )}
               {proxima && (
                 <View style={s.proxima}>
                   <View style={{ flex: 1, minWidth: 0 }}>
@@ -800,7 +867,7 @@ const s = StyleSheet.create({
   opcaoAtiva: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--vermelho-acao)', borderWidth: 1.5 },
   opcaoAtivaTexto: { color: 'var(--tint-red-text)' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { minHeight: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)', justifyContent: 'center' },
+  chip: { minHeight: 44, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)', justifyContent: 'center' },
   chipTexto: { fontSize: 13, fontWeight: '600', color: 'var(--text)' },
   etapa: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)' },
   caixa: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: 'var(--stroke-strong)', alignItems: 'center', justifyContent: 'center' },
@@ -827,7 +894,7 @@ const s = StyleSheet.create({
   salvo: { paddingHorizontal: 16, paddingBottom: 'max(16px, env(safe-area-inset-bottom))' as unknown as number, gap: 8 },
   salvoTopo: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
   salvoTitulo: { flex: 1, fontSize: 16, fontWeight: '700', color: 'var(--verde-texto)' },
-  desfazer: { minHeight: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center' },
+  desfazer: { minHeight: 44, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center' },
   desfazerTexto: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   proxima: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 14, backgroundColor: 'var(--surface-2)', marginTop: 4 },
   proximaRotulo: { fontSize: 11, fontWeight: '600', letterSpacing: 0.88, color: 'var(--vermelho-texto)' },
