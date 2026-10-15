@@ -107,10 +107,12 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
   const [armasAbertas, setArmasAbertas] = useState(false);
   const [outraData, setOutraData] = useState(false);
   const dealId = client.id_hubspot ? String(client.id_hubspot) : null;
-  /* A ETAPA QUE VALE: a do pino, senão a lida ao vivo do HubSpot. O mapa antigo e a lista de
-     tarefas não sabem a etapa do pino; sem isto a lista travava tudo menos Prospecção. */
+  /* A ETAPA QUE VALE: a lida ao vivo do HubSpot, senão a do pino. O pino pode estar velho (o
+     gestor moveu no kanban): com a do pino na frente, o avanço de um toque fazia o negócio VOLTAR.
+     O mapa antigo e a lista de tarefas nem sabem a etapa do pino. */
   const lidaAoVivo = String(jaTem.dealstage ?? '').trim();
-  const etapaAtual = etapaDoPino ?? (/^[0-9]+$/.test(lidaAoVivo) ? lidaAoVivo : null);
+  const etapaAtual = (/^[0-9]+$/.test(lidaAoVivo) ? lidaAoVivo : null) ?? etapaDoPino;
+  const [tentativa, setTentativa] = useState(0);
   const execId = client.vendedor_id_hubspot ? String(client.vendedor_id_hubspot) : null;
   const nome = client.empresa?.trim() || client.nome;
 
@@ -148,7 +150,7 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
     /* rede lenta: em 2,5 s a folha abre de qualquer jeito, com as armas carregando */
     const t = setTimeout(() => { if (vivo) setDecidido(true); }, 2500);
     return () => { vivo = false; clearTimeout(t); };
-  }, [visivel, dealId, destinoInicial, soArmas]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [visivel, dealId, destinoInicial, soArmas, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ehDemo = destino === ETAPA.demo && !!dealId;
   const ehNeg = destino === ETAPA.negociacao && !!dealId;
@@ -190,7 +192,9 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
   useEffect(() => {
     if (!visivel || decidido || soArmas || !UM_TOQUE.includes(destinoInicial ?? '') || !jaTemPronto) return;
     if (destinoInicial === ETAPA.demo && !armas) return;
-    if (exigidos.length === 0) void confirmar('auto');
+    const ordem: string[] = [ETAPA.prospeccao, ETAPA.visita, ETAPA.decisor, ETAPA.demo, ETAPA.negociacao];
+    const vizinho = !!etapaAtual && ordem.indexOf(destinoInicial ?? '') - ordem.indexOf(etapaAtual) === 1;
+    if (exigidos.length === 0 && vizinho) void confirmar('auto');
     else setDecidido(true);
   }, [visivel, decidido, armas, jaTemPronto]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (soArmas && armas && !decidido) setDecidido(true); }, [soArmas, armas, decidido]);
@@ -203,7 +207,11 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
   }
   function mandarArmas() {
     if (!dealId || !armas || !conhecidas) return 0;
-    const envios = enviosDasArmas({ dealId, ownerId: execId, negocio: jaTem, armas, decisorNoNegocio: !armas.decisor || armas.decisor === conhecidas.decisor });
+    /* SÓ O QUE FOI TOCADO vai ao HubSpot: o sistema/dor de uma ficha antiga não sobrescreve o que
+       o negócio tem (no avanço de um toque a folha nem abre) */
+    const tocado: Armas = { sistema: tocadas.sistema ? armas.sistema : '', dor: tocadas.dor ? armas.dor : '', horario: tocadas.horario ? armas.horario : '',
+      decisor: tocadas.decisor ? armas.decisor : '', papel: armas.papel };
+    const envios = enviosDasArmas({ dealId, ownerId: execId, negocio: jaTem, armas: tocado, decisorNoNegocio: !tocado.decisor || tocado.decisor === conhecidas.decisor });
     for (const e of envios) {
       void supabase.functions.invoke('hubspot-sync', { body: e.corpo }).then(({ error }) => {
         if (error) Toast.mostrar(`${e.rotulo} não foi ao HubSpot: ${error.message}`, 'erro');
@@ -222,15 +230,17 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
     onFechar();
   }
 
-  /* DESFAZER (10 s): volta à etapa de antes pelo mesmo caminho. Voltar é sempre permitido no
-     servidor; fecharTarefas:false para não encerrar nada no caminho de volta. */
-  function oferecerDesfazer(texto: string, para: string) {
+  /* DESFAZER (10 s): volta à etapa de antes pelo mesmo caminho, com fecharTarefas:false. O
+     servidor cobra da etapa de volta o que ela exige: se o negócio não tem, não oferece. */
+  function oferecerDesfazer(texto: string, para: string, enviado: Record<string, unknown> = {}) {
     /* a etapa real é a lida ao vivo (o rótulo do pino pode estar velho); Desfazer só existe
        nos avanços do funil — Perdido fecha tarefas, Onboarding não tem volta, Reciclagem é lateral */
     const lida = String(jaTem.dealstage ?? '').trim();
     const antes = /^[0-9]+$/.test(lida) ? lida : etapaAtual;
     const avanco = [ETAPA.visita, ETAPA.decisor, ETAPA.demo, ETAPA.negociacao].includes(para as never);
-    if (!antes || !dealId || antes === para || !avanco) { Toast.mostrar(texto, 'ok'); return; }
+    const finais = { ...jaTem, ...enviado };
+    const voltaPassa = !!antes && (PROPS_OBRIGATORIAS_POR_ETAPA[antes] ?? []).every((k) => valorValido(finais[k]));
+    if (!antes || !dealId || antes === para || !avanco || !voltaPassa) { Toast.mostrar(texto, 'ok'); return; }
     Toast.mostrar(texto, 'ok', {
       rotulo: 'Desfazer',
       onPress: () => {
@@ -250,7 +260,8 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
     if (Object.keys(e).length) { setDecidido(true); return; }
     setEnviando(true); setRecusa(null);
     /* dor "Outra": fora de `propriedades` (enum do HubSpot); o servidor aceita no lugar do gargalo */
-    const corpo = { op: 'mudar-etapa', dealId, novaEtapa: destino, propriedades, ...(gargaloOutro ? { gargaloOutro } : {}) };
+    /* etapaEsperada: se a etapa real mudou desde a leitura, o servidor devolve 409 em vez de gravar por cima */
+    const corpo = { op: 'mudar-etapa', dealId, novaEtapa: destino, propriedades, ...(gargaloOutro ? { gargaloOutro } : {}), ...(etapaAtual ? { etapaEsperada: etapaAtual } : {}) };
     try {
       await negocioAcao(corpo);
       onMudou(destino, propriedades as Record<string, unknown>);
@@ -262,7 +273,7 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
       }
       oferecerDesfazer(modo === 'auto'
         ? `Em ${ROTULO_ETAPA[destino]} · ${destino === ETAPA.demo ? 'plano, MRR e data' : 'plano e MRR'} já no negócio`
-        : `${nome} foi para ${ROTULO_ETAPA[destino]} · HubSpot + Cockpit`, destino);
+        : `${nome} foi para ${ROTULO_ETAPA[destino]} · HubSpot + Cockpit`, destino, propriedades as Record<string, unknown>);
       onFechar();
     } catch (err) {
       if (ehErroDeRede(err)) {
@@ -357,6 +368,8 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
   const sub = soArmas ? `${nome} · ${de}` : (ehDemo || ehNeg) && destino ? `${nome} · ${de ? `${de} → ` : ''}${ROTULO_ETAPA[destino]}` : null;
   const nDe4 = 4 - faltamArmas;
   const faltamTudo = faltamExig;
+  const ORDEM_FUNIL: string[] = [ETAPA.prospeccao, ETAPA.visita, ETAPA.decisor, ETAPA.demo, ETAPA.negociacao, ETAPA.pagamento];
+  const jaPassou = (ehDemo || ehNeg) && !!etapaAtual && !!destino && ORDEM_FUNIL.indexOf(etapaAtual) >= ORDEM_FUNIL.indexOf(destino);
   const rotuloFalta = (k: string) => (k === 'plano_apresentado' ? 'o plano' : k === 'valor_de_mrr' ? 'o MRR' : k === 'data_da_reuniao' ? 'a data' : ROTULO_PROP[k] ?? k);
 
   const rodapeArmas = (
@@ -365,6 +378,14 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
         <Pressable accessibilityRole="button" style={[s.botao52, s.fundoPrin]} onPress={salvarSoArmas} disabled={enviando || !armas}>
           {enviando ? <ActivityIndicator color="#fff" /> : <Text style={s.botaoPrinTexto}>Salvar as armas</Text>}
         </Pressable>
+      ) : jaPassou ? (
+        /* o pino estava velho: o negócio já está nesta etapa ou além — mover seria VOLTAR */
+        <>
+          <Text style={s.legendaRodape}>{`${nome} já está em ${ROTULO_ETAPA[etapaAtual ?? ''] ?? 'uma etapa à frente'} no HubSpot`}</Text>
+          <Pressable accessibilityRole="button" style={[s.botao52, s.bordaSec]} onPress={onFechar}>
+            <Text style={s.botaoSecTexto}>Fechar</Text>
+          </Pressable>
+        </>
       ) : (
         <>
           <Pressable accessibilityRole="button" accessibilityState={{ disabled: faltamTudo > 0 }} style={[s.botao52, faltamTudo > 0 ? s.botaoInerte : s.fundoPrin]}
@@ -410,6 +431,13 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
           </View>
         ) : !destino && !etapaAtual && !jaTemPronto ? (
           <View style={{ paddingVertical: 24 }}><ActivityIndicator /></View>
+        ) : !destino && !etapaAtual ? (
+          <View style={{ gap: 12, paddingVertical: 12 }}>
+            <Text style={s.aviso}>Não consegui ler a etapa deste negócio no HubSpot. Sem ela, a etapa não muda daqui.</Text>
+            <Pressable accessibilityRole="button" onPress={() => setTentativa((n) => n + 1)} style={[s.botao52, s.bordaSec]}>
+              <Text style={s.botaoSecTexto}>Tentar de novo</Text>
+            </Pressable>
+          </View>
         ) : !destino ? (
           [...ETAPAS_DA_FOLHA.slice(0, 7), ETAPA.ganho, ...ETAPAS_DA_FOLHA.slice(7)].map((id, i) => {
             const atual = id === etapaAtual;
@@ -601,7 +629,7 @@ const s = StyleSheet.create({
   campoBloco: { gap: 6 },
   campoRotulo: { fontSize: 14, fontWeight: '800', color: 'var(--text)' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { minHeight: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)', justifyContent: 'center' },
+  chip: { minHeight: 44, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)', justifyContent: 'center' },
   chipAtivo: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--tint-red-border)' },
   chipTexto: { fontSize: 13, fontWeight: '700', color: 'var(--text)' },
   chipTextoAtivo: { color: 'var(--tint-red-text)' },

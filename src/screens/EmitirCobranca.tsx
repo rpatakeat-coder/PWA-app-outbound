@@ -54,6 +54,14 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
   const [todosAdicionais, setTodosAdicionais] = useState(false);
   /* o contrato já conferido fica numa linha; "ver" abre os seletores */
   const [verContrato, setVerContrato] = useState(false);
+  /* RECOLHER SE DECIDE UMA VEZ, ao entrar no passo 2: com o contrato já completo (veio do negócio),
+     ele vira uma linha. Decidir a cada render recolhia o bloco no meio da digitação do MRR. */
+  const [recolher, setRecolher] = useState(false);
+  useEffect(() => {
+    if (passo !== 2) return;
+    setRecolher(!!c.pacote_contratado && c.adicional.length > 0 && !!c.periodo_contratado && !!c.tipo_de_pagamento
+      && Number(String(c.mrr).replace(',', '.')) > 0 && Number(String(c.amount).replace(',', '.')) > 0);
+  }, [passo]); // eslint-disable-line react-hooks/exhaustive-deps
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -220,12 +228,12 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
                   </View>
                 </>
               );
-              if (contratoPronto && !verContrato) {
+              if (recolher && contratoPronto && !verContrato) {
                 return (
                   <>
                     <Text style={s.secaoPreencher}>PREENCHER</Text>
                     {desafio}
-                    <Text style={s.secaoConferir}>CONFERIR · VEIO DO NEGÓCIO</Text>
+                    <Text style={s.secaoConferir}>CONFERIR</Text>
                     <Pressable accessibilityRole="button" onPress={() => setVerContrato(true)} style={s.conferir}>
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={s.conferirLinha} numberOfLines={1}>{`${c.pacote_contratado} · ${c.adicional.join(', ')} · ${c.periodo_contratado}`}</Text>
