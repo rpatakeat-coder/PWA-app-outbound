@@ -6834,6 +6834,8 @@ function MainApp() {
         visitasFeitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
         visitasProvadas={meuDia.data?.provadasHoje ?? null}
         metaVisitas={metaDeHoje}
+        novosSemana={contextoPino?.novosVisitadosSemana ?? null}
+        aoNovos={() => setLente('novos')}
         aoProgresso={() => setMeuDiaAberto(true)}
         totalNaArea={visiveisMapaNovo.length}
         rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
