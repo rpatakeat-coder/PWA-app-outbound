@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@0dae70b.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@a5f9e592.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* /gestao E O COCKPIT desde 25/09/2026. As tres telas que so a gestao antiga
@@ -40,7 +40,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "0dae70b";
+  var VERSAO = "a5f9e592";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -9854,7 +9854,7 @@ button.gv2-v9-fc-c:hover{background:var(--gv2-hov);border-color:var(--gv2-line-b
   
 
   <div id="appRoot" style="display:none;">
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        <div id="gv2Raiz" hidden></div><!-- /gv2Raiz -->
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              <div id="gv2Raiz" hidden></div><!-- /gv2Raiz -->
   <div style="min-height:100vh;background:var(--bg);display:flex;flex-direction:column;">
 
   <header class="app-header">
@@ -56445,7 +56445,8 @@ GV2.montar = async function (so) {
     const comRua = function (d, iso) {
       if (!d || !iso || !GV2.ruaPlanejada(id, iso)) return d || {};
       const pl = Number(d.planejadas) || 0, fp = Number(d.feitasDoPlano) || 0, pv = Number(d.provadas) || 0;
-      const rua = GV2.ruaVagas(pl, meta);
+
+      const rua = Math.max(GV2.ruaVagas(pl, meta), Math.max(0, pv - fp));
       return Object.assign({}, d, { planejadas: pl + rua, feitasDoPlano: fp + Math.min(Math.max(0, pv - fp), rua), rua: rua });
     };
     dHoje = comRua(dHoje, agora.iso);
@@ -60902,7 +60903,7 @@ GV2.v5DiaConta = function (p, iso, c) {
     jornada = { n: n, ini: ini, fim: fim, min: min, porta: porta, colados: n >= 4 && porta != null && porta < 10 };
   }
 
-  const rua = GV2.ruaPlanejada && GV2.ruaPlanejada(p.id, iso) ? GV2.ruaVagas(itens.length, p.meta_visitas_dia) : 0;
+  const rua = GV2.ruaPlanejada && GV2.ruaPlanejada(p.id, iso) ? Math.max(GV2.ruaVagas(itens.length, p.meta_visitas_dia), foraVis.length) : 0;
   const ruaFeitas = Math.min(foraVis.length, rua);
   const x = itens.filter(function (i) { return i.feita; }).length + ruaFeitas;
 
@@ -63275,8 +63276,18 @@ GV2.v8Ritmo = function (p) {
   };
   return { M: M, f: f, metaCli: metaCli,
     vis: linha('Visitas com prova', f.portas || 0, visDia * M.uteis),
-    dem: linha('Demos', f.demo || 0, metaCli / 0.4),
+    dem: Object.assign(linha('Demos', f.demo || 0, metaCli / 0.4), { extra: GV2.v8DemoAntes(pessoas) }),
     cli: linha('Clientes', f.fechado || 0, metaCli) };
+};
+
+GV2.v8DemoAntes = function (pessoas) {
+  const ids = {}; pessoas.forEach(function (x) { ids[x.id] = 1; });
+  const ini = GV2.base.agora.iso.slice(0, 8) + '01';
+  const n = (GV2.base.negocios || []).filter(function (x) {
+    const em = x.lead && x.lead.entrouNaEtapaEm;
+    return ids[x.dono] && x.etapa_idx === 3 && em && GV2.diaDe(em) < ini;
+  }).length;
+  return n ? '+ ' + n + ' de meses anteriores ainda em Demo/Proposta' : '';
 };
 GV2.v8Ranking = function (pessoas) {
   const l = pessoas.filter(function (p) { return Number(p.meta_clientes_mes) > 0 && p.fase !== 'Preparação'; })
@@ -63305,6 +63316,7 @@ GV2.v8BarraHTML = function (L, acao) {
   const tag = acao ? 'button type="button" data-gv2="' + acao + '"' : 'div';
   return '<' + tag + ' class="gv2-v8-bar is-' + L.selo.k + '"><div class="gv2-v8-bar-c"><small>' + GV2.e(L.rot) + '</small><i>' + GV2.e(L.selo.t) + '</i></div>'
     + '<div class="gv2-v8-bar-n"><b class="num">' + L.feito + '</b><span>' + GV2.e('esperado ' + GV2.v8Num(L.esp) + ' · meta ' + GV2.v8Num(L.meta)) + '</span></div>'
+    + (L.extra ? '<small class="gv2-v8-bar-x" style="display:block;font-size:12px;opacity:.75;margin:2px 0 4px">' + GV2.e(L.extra) + '</small>' : '')
     + '<div class="gv2-v8-trilha"><em style="width:' + L.pct.toFixed(1) + '%"></em><u style="left:' + L.tick.toFixed(1) + '%"></u></div></' + (acao ? 'button' : 'div') + '>';
 };
 
