@@ -31,6 +31,9 @@
       "source": "/gestao/:path*",
       "destination": "/gestao/index.html"
     },
-    { "source": "/((?!_expo/).*)", "destination": "/index.html" }
+    { "source": "/((?!_expo/|api/).*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    { "path": "/api/avisos-sem-passo", "schedule": "0 21 * * 1-5" }
   ]
 }
