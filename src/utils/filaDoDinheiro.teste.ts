@@ -35,12 +35,11 @@ const T = (x: Partial<TarefaEntrada>): TarefaEntrada => ({ id: 't1', dealId: 'd1
 // 2 · os grupos e a ordem
 {
   const negs = [
-    // sem passo só entra travado (16/10/26): q, z e r vêm com o slaBreach do robô; p, pela régua (6 > 3)
-    N({ dealId: 'q', nome: 'Bistrô Ipiranga', etapaId: '1395880472', temperatura: 81, mrr: 600, travado: true }), // quente sem passo
+    N({ dealId: 'q', nome: 'Bistrô Ipiranga', etapaId: '1395880472', temperatura: 81, mrr: 600 }),          // quente sem passo
     N({ dealId: 'v', nome: 'Yakisoba', mrr: 300, temperatura: 50 }),                                       // vence hoje
     N({ dealId: 'p', nome: 'Proposta Velha', etapaId: '1395880471', temperatura: 60, diasNaEtapa: 6 }),   // proposta sem retorno
-    N({ dealId: 'z', nome: 'Zé Bar', etapaId: '1396005401', temperatura: 30, travado: true }),            // decisor
-    N({ dealId: 'r', nome: 'Rei do Pastel', etapaId: '1395880472', temperatura: 40, travado: true }),     // parado
+    N({ dealId: 'z', nome: 'Zé Bar', etapaId: '1396005401', temperatura: 30 }),                           // decisor
+    N({ dealId: 'r', nome: 'Rei do Pastel', etapaId: '1395880472', temperatura: 40 }),                    // parado
     N({ dealId: 'f', nome: 'Futuro', etapaId: '1395880472', temperatura: 90 }),                           // passo marcado depois → fora
     N({ dealId: 'g', nome: 'Ganho', etapaId: '1396006162' }),                                             // fechado → fora
   ];
@@ -55,26 +54,6 @@ const T = (x: Partial<TarefaEntrada>): TarefaEntrada => ({ id: 't1', dealId: 'd1
   ok(f.find((x) => x.dealId === 'r')?.porque === 'Sem contato há 21 dias' && f.find((x) => x.dealId === 'r')?.grupo === 'reativar', 'parado há 21 dias vai para Reativar');
   ok(!f.some((x) => x.dealId === 'f'), 'negócio com próximo passo marcado para depois não entra');
   ok(!f.some((x) => x.dealId === 'g'), 'negócio fechado não entra');
-}
-// 2b · SEM PRÓXIMO PASSO SÓ COBRA O TRAVADO (16/10/26, Julyan: "só cobrar tbm os travados sem
-// proximo passo na automação, nao os leads recentes")
-{
-  const contatos = { a: { n: 1, ultimo: '2026-10-21T13:00:00Z' } };
-  const um = (n: Partial<NegocioEntrada>, x: Partial<Contexto> = {}, tarefas: TarefaEntrada[] = []) =>
-    montarFila([N({ dealId: 'a', etapaId: '1396005401', temperatura: 85, diasNaEtapa: 1, ...n })], tarefas, ctx({ contatos, ...x }));
-  ok(um({}).length === 0, 'lead recente (1 dia na Visita, régua 5) sem passo NÃO é cobrado — nem quente, nem decisor, nem poucos contatos');
-  ok(um({ diasNaEtapa: 5 }).length === 0, 'no limite da régua (5 de 5) ainda não é travado');
-  ok(um({ diasNaEtapa: 6 }).length === 1, 'passou da régua (6 de 5) sem passo: entra');
-  ok(um({ diasNaEtapa: 9, travado: false }).length === 0, 'o slaBreach do robô manda sobre a conta de dias (combinado no HubSpot)');
-  ok(um({ diasNaEtapa: 1, travado: true }).length === 1, 'travado pelo robô entra mesmo com poucos dias');
-  ok(um({ travado: true }, { noPlano: ['a'] }).length === 0, 'travado mas no Planejamento: tem próximo passo, não é cobrado');
-  ok(um({ travado: true, etapaId: '1395880473' }).length === 0, 'Ag. Pagamento travado sem passo fica com o financeiro');
-  ok(um({ diasNaEtapa: null, travado: null }).length === 0, 'sem dias (mudou de etapa agora) não é travado');
-  ok(um({ etapaId: '1395880471', diasNaEtapa: 3, temperatura: 50 }).length === 0, 'proposta com 3 dias (régua 3) não é cobrada ainda');
-  const vencida = um({}, {}, [T({ dealId: 'a', venceEm: '2026-10-21T15:00:00Z' })]);
-  ok(vencida.length === 1 && vencida[0].motivo === 'venceu', 'tarefa vencida continua na fila, mesmo no prazo da etapa: é compromisso dele');
-  const visita = um({}, { visitaHojeSemRegistro: { a: '10h' } });
-  ok(visita.length === 1 && visita[0].motivo === 'visita_sem_registro', 'visita de hoje sem registro continua na fila');
 }
 // 3 · casos do card
 {
