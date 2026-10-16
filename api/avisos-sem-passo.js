@@ -50,10 +50,11 @@ function segundaDe(iso) {
 const reais = (n) => 'R$ ' + Math.round(n).toLocaleString('pt-BR');
 const ddmm = (iso) => iso.slice(8, 10) + '/' + iso.slice(5, 7);
 const selo = (x) => (x.venceu ? ` ⏰${ddmm(x.venceu)}` : '');
-/* QUENTE = nota de temperatura 70+ (cockpit-unificado/data/temperatura.json, faixas.quente): o mesmo
-   corte do pino vermelho do mapa e do KPI "leads quentes (70°+)". Julyan, 16/10/26: a mensagem
-   das 18h tem de puxar primeiro os quentes sem próximo passo, que são o dinheiro mais perto. */
-const QUENTE_A_PARTIR = 70;
+/* QUENTE = Conversa com Decisor em diante (ordem 2+: Decisor, Demo/Proposta, Negociação). Julyan,
+   16/10/26, escolheu UMA regra para a Hoje, o Planejamento e esta mensagem (no Cockpit é
+   GV2.quenteCadencia); antes era a nota de temperatura 70+, e as três telas discordavam.
+   Ag. Pagamento também é quente, mas fica fora desta mensagem (o fluxo dela é a cobrança). */
+const QUENTE_A_PARTIR_DA_ORDEM = 2;
 
 /** A conta inteira, sem rede: entra o que foi lido, sai UMA mensagem para o grupo (lista com 0 ou 1 item).
  *  Exportada para o teste (e para conferir contra o Cockpit). */
@@ -108,9 +109,8 @@ function montarMensagens({ funilLeads, time, planos, paradas, hoje }) {
     const { l, nome, ordem, dias } = g.slice().sort((x, y) => (y.ordem - x.ordem) || (y.dias - x.dias))[0];
     if (!ROTULO[ordem] || temPasso(l)) return;
     const mrr = Number(l.mrr || l.valor_de_mrr || l.valor || 0) || 0;
-    const temp = Number(l.temp);
     (porDono[String(l.ownerId)] = porDono[String(l.ownerId)] || []).push({ nome, rotulo: ROTULO[ordem], ordem, mrr, dias,
-      quente: Number.isFinite(temp) && temp >= QUENTE_A_PARTIR, venceu: venceuEm(l) });
+      quente: ordem >= QUENTE_A_PARTIR_DA_ORDEM, venceu: venceuEm(l) });
   });
 
   /* UMA MENSAGEM SÓ PARA O GRUPO (Julyan, 15/10/26: "tem que ser uma mensagem só dos 7

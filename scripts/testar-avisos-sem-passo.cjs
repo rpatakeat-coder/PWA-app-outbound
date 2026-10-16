@@ -19,7 +19,7 @@ const funilLeads = {
     neg('12', '2', 'Pizza Norte', 64),                                                        // Negociação morna
   ],
   '1395880471': [neg('20', '2', 'Café Azul', 71, { mrr: 300 })],                              // quente em Demo
-  '1395880470': [neg('30', '1', 'Lanche Bom', 50)],
+  '1395880470': [neg('30', '1', 'Lanche Bom', 50), neg('31', '2', 'Grill Leste', 30)],             // Decisor: quente pela etapa
   '1396005401': [neg('40', '1', 'Padaria Sul', 40, { tarefas: [{ timestamp: '2026-10-14T21:00:00Z' }] }), neg('41', '1', 'ZZ TESTE grupo', 90), neg('42', '2', 'Bar Novo', 30)],
 };
 const planos = [{ data_segunda: '2026-10-12', grade: [null, null, null, null, [{ id: 'c-30' }], null, null] }];
@@ -30,14 +30,15 @@ console.log('\n' + t + '\n');
 
 const iQ = t.indexOf('Quentes sem próximo passo');
 ok(iQ > -1 && iQ < t.indexOf('*Ana Lima'), 'o bloco dos quentes vem no topo, antes dos executivos');
-ok(/Quentes sem próximo passo \(2\)/.test(t), 'conta 2 quentes sem passo (Cantina Sol e Café Azul)');
+ok(/Quentes sem próximo passo \(4\)/.test(t), 'quente = Decisor em diante: conta 4 (Cantina Sol, Pizza Norte, Café Azul, Grill Leste)');
 ok(t.indexOf('Cantina Sol') < t.indexOf('Café Azul'), 'Negociação antes de Demo');
 ok((t.match(/Cantina Sol/g) || []).length === 1, 'o quente não se repete no bloco do executivo');
 ok(/Cantina Sol\* ⏰13\/10 · Ana · Negociação, R\$ 400 \(9 dias parado\)/.test(t), 'a linha do quente diz dono, etapa, MRR e dias parado');
 ok(!/Bar do Porto/.test(t), 'quente com tarefa futura não é cobrado');
 ok(!/Lanche Bom/.test(t), 'negócio no Planejamento de hoje em diante não é cobrado');
 ok(!/ZZ TESTE/.test(t), 'teste não vai ao grupo');
-ok(/Pizza Norte/.test(t) && !/🔥[^\n]*Pizza Norte/.test(t), 'Negociação abaixo de 70 fica no bloco do executivo, sem 🔥');
+ok(/• \*Pizza Norte\* · Bia · Negociação/.test(t) && /• \*Grill Leste\* · Bia · Decisor/.test(t), 'a nota de temperatura não decide mais: Negociação com nota 64 e Decisor com 30 são quentes');
+ok(!/• \*(Padaria Sul|Bar Novo)\*/.test(t), 'Visita não é quente');
 ok(/\*Ana Lima \(2, 1 quente acima\)\*/.test(t), 'o cabeçalho do executivo conta o total e avisa o quente que está acima');
 // os vencidos (16/10/26): "venceu" ≠ "nunca teve"
 ok(/Cantina Sol\* ⏰13\/10 · Ana/.test(t), 'o quente vencido leva ⏰ e a data mais recente que venceu (13/10, não 08/10)');
