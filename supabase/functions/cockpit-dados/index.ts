@@ -485,7 +485,23 @@ Deno.serve(async (req) => {
     const semObjeto = (obj: any) => { const o: any = {}; Object.keys(obj || {}).forEach((k) => { if (fica(k)) o[k] = obj[k]; }); return o; };
     const recorte: any = { ...completo };
     if (Array.isArray(completo.reps)) recorte.reps = completo.reps.filter((r: any) => fica(r && r.ownerId));
-    if (completo.vendasMes && Array.isArray(completo.vendasMes.porRep)) recorte.vendasMes = { ...completo.vendasMes, porRep: completo.vendasMes.porRep.filter((r: any) => fica(r && r.ownerId)) };
+    if (completo.vendasMes && Array.isArray(completo.vendasMes.porRep)) {
+      /* A VENDA DO GESTOR NÃO SOME (auditoria 15/10/26): a linha do gestor sai do pódio (porRep),
+         mas a venda dele é venda da casa e conta no placar — antes ela era só descartada aqui, e o
+         Cockpit somava porRep: o "Clientes X de 52" ficava sem ela. Vai para `gestor`, onde o robô já
+         põe a venda de quem é só gestor. */
+      const vm = completo.vendasMes;
+      const saem = vm.porRep.filter((r: any) => !fica(r && r.ownerId));
+      let gestor = vm.gestor ? { ...vm.gestor, clientes: [...(vm.gestor.clientes || [])] } : null;
+      for (const r of saem) {
+        gestor = gestor || { count: 0, mrrTotal: 0, receitaTotal: 0, clientes: [], name: r.name, ownerId: r.ownerId };
+        gestor.count += r.count || 0;
+        gestor.mrrTotal += r.mrrTotal || 0;
+        gestor.receitaTotal += r.receitaTotal || 0;
+        gestor.clientes.push(...(r.clientes || []));
+      }
+      recorte.vendasMes = { ...vm, porRep: vm.porRep.filter((r: any) => fica(r && r.ownerId)), ...(gestor ? { gestor } : {}) };
+    }
     const rs = completo.resumoSemanal;
     if (rs) {
       recorte.resumoSemanal = { ...rs,

@@ -104,7 +104,7 @@ export function useContextoDoPino(ligado: boolean): Omit<ContextoPino, 'agora'> 
   /* A META DE 5 POR SEMANA: restaurantes recém-abertos que EU visitei com prova desde segunda.
      Mesma régua de visita do Cockpit (visitas_com_prova); o pino diz se o lead é recém-aberto. */
   const meuId = (profile as { id?: string } | null)?.id ?? null;
-  const visitasSemana = useQuery<{ client_id: string; dia: string }[]>({
+  const visitasSemana = useQuery<{ client_id: string; dia: string; abertura: string | null }[]>({
     // a segunda na chave: o PWA aberto de domingo para segunda não mostra a semana passada
     queryKey: ['novos-visitados-semana', meuId, segundaBRT()],
     enabled: ligado && isAuthenticated && !!meuId,
@@ -120,7 +120,19 @@ export function useContextoDoPino(ligado: boolean): Omit<ContextoPino, 'agora'> 
       const { data: cl, error: e2 } = await supabase.from('clients').select('id, lead_prospeccao_id').in('id', ids);
       if (e2) throw e2;
       const lead = new Map((cl ?? []).map((c: { id: string; lead_prospeccao_id: string | null }) => [c.id, c.lead_prospeccao_id]));
-      return minhas.filter((v) => lead.get(v.client_id)).map((v) => ({ client_id: String(lead.get(v.client_id)), dia: v.dia }));
+      /* A ABERTURA VEM DO SERVIDOR (0203, auditoria 15/10/26): a RLS de leads_prospeccao só mostra os
+         leads de que eu sou o responsável, e a visita a um recém-aberto de outro dono não contava. */
+      const leadIds = [...new Set(minhas.map((v) => lead.get(v.client_id)).filter(Boolean) as string[])];
+      const abertura = new Map<string, string>();
+      if (leadIds.length) {
+        const { data: ab, error: e3 } = await supabase.rpc('abertura_dos_leads', { p_ids: leadIds });
+        if (e3) throw e3;
+        for (const x of (ab ?? []) as { id: string; data_abertura: string }[]) abertura.set(String(x.id), String(x.data_abertura));
+      }
+      return minhas.filter((v) => lead.get(v.client_id)).map((v) => {
+        const id = String(lead.get(v.client_id));
+        return { client_id: id, dia: v.dia, abertura: abertura.get(id) ?? null };
+      });
     },
   });
 
@@ -148,10 +160,10 @@ export function useContextoDoPino(ligado: boolean): Omit<ContextoPino, 'agora'> 
     const aberturaPorLead = new Map<string, string>(aberturas.data ?? []);
     // recém-aberto na data da visita (até 90 dias), cada restaurante uma vez na semana
     let novosVisitadosSemana: number | null = null;
-    if (visitasSemana.data && aberturas.data) {
+    if (visitasSemana.data) {
       const vistos = new Set<string>();
       for (const v of visitasSemana.data) {
-        const ab = aberturaPorLead.get(v.client_id);
+        const ab = v.abertura ?? aberturaPorLead.get(v.client_id);
         if (!ab) continue;
         const dias = (Date.parse(v.dia + 'T12:00:00Z') - Date.parse(String(ab).slice(0, 10) + 'T12:00:00Z')) / 86400000;
         if (dias <= DIAS_RECEM_ABERTO) vistos.add(v.client_id);
