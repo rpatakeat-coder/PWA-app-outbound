@@ -205,27 +205,32 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
     void supabase.from('gv2_falta_etapa').insert(registroDoAvanco({ dealId, execId, etapa, armas }))
       .then(({ error }) => { if (error) console.warn('[gv2_falta_etapa]', error.message); });
   }
-  function mandarArmas() {
-    if (!dealId || !armas || !conhecidas) return 0;
+  function mandarArmas(): { n: number; feitos: Promise<number> } {
+    if (!dealId || !armas || !conhecidas) return { n: 0, feitos: Promise.resolve(0) };
     /* SÓ O QUE FOI TOCADO vai ao HubSpot: o sistema/dor de uma ficha antiga não sobrescreve o que
        o negócio tem (no avanço de um toque a folha nem abre) */
     const tocado: Armas = { sistema: tocadas.sistema ? armas.sistema : '', dor: tocadas.dor ? armas.dor : '', horario: tocadas.horario ? armas.horario : '',
       decisor: tocadas.decisor ? armas.decisor : '', papel: armas.papel };
     const envios = enviosDasArmas({ dealId, ownerId: execId, negocio: jaTem, armas: tocado, decisorNoNegocio: !tocado.decisor || tocado.decisor === conhecidas.decisor });
-    for (const e of envios) {
-      void supabase.functions.invoke('hubspot-sync', { body: e.corpo }).then(({ error }) => {
-        if (error) Toast.mostrar(`${e.rotulo} não foi ao HubSpot: ${error.message}`, 'erro');
-      });
-    }
-    return envios.length;
+    const feitos = Promise.all(envios.map((e) => supabase.functions.invoke('hubspot-sync', { body: e.corpo }).then(({ error }) => {
+      if (error) { Toast.mostrar(`${e.rotulo} não foi ao HubSpot: ${error.message}`, 'erro'); return 0; }
+      return 1;
+    }, () => 0))).then((r) => r.reduce((a: number, x: number) => a + x, 0));
+    return { n: envios.length, feitos };
   }
 
   async function salvarSoArmas() {
     if (!armas || enviando) return;
     setEnviando(true);
-    const n = mandarArmas();
+    // ESPERA O HUBSPOT (auditoria 16/10/26): o aviso de "salvas" saía antes dos envios terminarem e
+    // dizia HubSpot mesmo quando todos falhavam; e "no Cockpit" mesmo sem registro (sem execId)
+    const { n, feitos } = mandarArmas();
     registrar('armas');
-    Toast.mostrar(n ? `Armas de ${nome} salvas · HubSpot + Cockpit` : `Armas de ${nome} salvas no Cockpit`, 'ok');
+    const ok = await feitos;
+    const noCockpit = !!(dealId && execId && armas);
+    if (n && ok === n) Toast.mostrar(`Armas de ${nome} salvas · HubSpot${noCockpit ? ' + Cockpit' : ''}`, 'ok');
+    else if (n && ok > 0) Toast.mostrar(`Armas de ${nome}: ${ok} de ${n} foram ao HubSpot`, 'aviso');
+    else if (!n && noCockpit) Toast.mostrar(`Armas de ${nome} salvas no Cockpit`, 'ok');
     setEnviando(false);
     onFechar();
   }

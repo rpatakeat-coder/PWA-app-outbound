@@ -1366,6 +1366,11 @@ function MainApp() {
   // Gestor monitorando a rota de OUTRO vendedor -> tela read-only.
   const isMonitoringRoute = !!profile?.id && !!routeViewSellerId && routeViewSellerId !== profile.id;
   const fieldOps = useFieldOps(routeDate, isAuthenticated, routeViewSellerId);
+  // PARADA FEITA = check-in DO DONO DO PLANO hoje (auditoria 16/10/26). Só visited_at dava a
+  // parada como feita quando um colega ou o gestor passava no lead: saía do "faltam", pulava a
+  // próxima e o botão virava "Registrar de novo". O ✓ do pino (qualquer pessoa) não muda.
+  const donoDoPlano = routeViewSellerId ?? profile?.id ?? null;
+  const visitadoNoPlanoHoje = (c: Client | null | undefined) => !!c && visitadoHoje(c.visited_at) && (!donoDoPlano || c.visited_by === donoDoPlano);
   // PLANEJAR PELO MAPA (28/09/2026): o dia escolhido no modo Planejar. Hoje usa a
   // própria rota do mapa; outro dia, a rota daquela data (a mesma field_routes). O que
   // entra ou sai vai ao Planejamento do Cockpit pelo gatilho rota_para_plano (0136).
@@ -2582,11 +2587,11 @@ function MainApp() {
       const comp = parada?.compromisso ?? null;
       const horaComp = comp && /^\d{1,2}:\d{2}$/.test(comp) ? comp.padStart(5, '0') : null;
       const fixo = horaComp ?? (fixosPlano.has(c.id) ? fixosPlano.get(c.id) ?? null : doBanco);
-      const feita = parada?.status === 'done' || (ehHojeDia && visitadoHoje(c.visited_at));
+      const feita = parada?.status === 'done' || (ehHojeDia && visitadoNoPlanoHoje(c));
       const acao = opsDoDia.stops.find((st) => st.client_id === c.id)?.acao ?? null;
       return { client: c, estado: feita ? 'feita' : !parada ? 'entra' : 'planejada', compromisso: comp, fixo, acao } as ItemPC;
     });
-  }, [ehAgendaPC, planejarDia, routeDate, clientesDoPlanoNoMapa, paradasDoDiaPlanejado, opsDoDia.stops, fixosPlano]);
+  }, [ehAgendaPC, planejarDia, routeDate, clientesDoPlanoNoMapa, paradasDoDiaPlanejado, opsDoDia.stops, fixosPlano, donoDoPlano]);
   useEffect(() => {
     if (!agendaPlaneja && planejarPelaAgenda.current && planejarDiaRef.current) { fecharPlanejar(); return; }
     // ABRIR A AGENDA JÁ PLANEJA: o aviso da coluna da esquerda pode chegar antes do modo existir
@@ -5390,7 +5395,10 @@ function MainApp() {
       // ciclo fechado em vez de entrar torta.
       Toast.mostrar(declarada
         ? (fotoProva
-          ? `Visita com foto em ${nomeDoLead}${semLeitura ? ' · sem GPS agora' : ''}`
+          // a foto que não subiu não é "com foto" (auditoria 16/10/26): a ficha tenta de novo ao salvar
+          ? (fotoProvaPendente
+            ? `Visita em ${nomeDoLead} · a foto ainda não subiu, vai de novo ao salvar a ficha`
+            : `Visita com foto em ${nomeDoLead}${semLeitura ? ' · sem GPS agora' : ''}`)
           : `Visita declarada em ${nomeDoLead} (você estava a ${Math.round(distance)} m)`)
         : corrigirPino
         ? `Check-in em ${nomeDoLead} · pino corrigido (estava a ${Math.round(distance)} m)`
@@ -5407,6 +5415,13 @@ function MainApp() {
       }
       // O "x/6" da pílula e o Meu dia contam check-ins reais: atualiza na hora.
       void queryClient.invalidateQueries({ queryKey: ['meu_dia'] });
+      // auditoria 16/10/26: o Desempenho ("0 de 6" logo depois do check-in) e a fila (o cartão
+      // "visita sem registro" e o selo) ficavam velhos até 60 s; a fila só por check-in MEU (relê o HubSpot)
+      void queryClient.invalidateQueries({ queryKey: ['meu_desempenho'] });
+      void queryClient.invalidateQueries({ queryKey: ['vizinhos_no_ranking'] });
+      void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] });
+      void queryClient.invalidateQueries({ queryKey: ['feito_no_dia'] });
+      void queryClient.invalidateQueries({ queryKey: ['preparo'] });
       if (modoNovo && contextoPino && visitado.status === 'lead') {
         // Etapa atual no código do Cockpit: texto do app pela etapa_de_para,
         // senão a do snapshot (0105).
@@ -6062,7 +6077,12 @@ function MainApp() {
         // prancha "Mapa do Executivo" (15/10/26): o combinado, os clientes Takeat perto e o tempo do negócio
         combinado: combinadoDe(selectedClient),
         referencias: (clientePertoDe(selectedClient) ?? []).map((x) => ({ id: x.id, nome: x.nome, d: x.d })),
-        tempo: selectedClient.id_hubspot ? contextoPino.tempoPorNegocio.get(String(selectedClient.id_hubspot)) ?? null : null,
+        // tempo do snapshot só vale se a etapa ainda é a dele (a pessoa pode ter acabado de mudar; 16/10/26)
+        tempo: (() => {
+          const tp = selectedClient.id_hubspot ? contextoPino.tempoPorNegocio.get(String(selectedClient.id_hubspot)) ?? null : null;
+          const cod = codigoDaEtapa(selectedClient);
+          return tp && cod && tp.etapaCodigo && tp.etapaCodigo !== cod ? { ...tp, diasNaEtapa: null, slaEstourado: false } : tp;
+        })(),
         pertoDoCliente: (() => {
           if (selectedClient.latitude == null) return null;
           const pt = { lat: Number(selectedClient.latitude), lng: Number(selectedClient.longitude) };
@@ -6961,7 +6981,9 @@ function MainApp() {
           // Prompt §5: nas lentes Sem dono e Reconquista a linha tem "É meu" sem abrir o card.
           eMeu={!isViewer && (lente === 'semdono' || lente === 'rec') ? { naRota: routeStopClientIds, aoAssumir: (c) => { void assumirDoMapa(c); } } : null}
           planoTotal={routeDisplayClients.length}
-          planoFeito={routeStops.filter((s) => s.status === 'done').length}
+          // feito sobre a mesma base do total (parada com cliente lido): parada cujo cliente a RLS
+          // esconde contava no x e não no y, e dava "5 de 4" (auditoria 16/10/26)
+          planoFeito={routeClients.length > 0 ? routeStops.filter((s) => s.status === 'done' && !!s.client).length : 0}
           visitasFeitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
           visitasProvadas={meuDia.data?.provadasHoje ?? null}
           metaVisitas={metaDeHoje}
@@ -7376,7 +7398,7 @@ function MainApp() {
                   : null,
             }))
             .sort((a, b) =>
-              a.d !== null && b.d !== null ? a.d - b.d : (a.c.nome || '').localeCompare(b.c.nome || ''),
+              a.d !== null && b.d !== null ? a.d - b.d : (getClientPrimaryName(a.c) || '').localeCompare(getClientPrimaryName(b.c) || ''),
             )
             .slice(0, 80);
           return linhas.map(({ c, d }) => {
@@ -7386,14 +7408,15 @@ function MainApp() {
               <Pressable
                 key={c.id}
                 accessibilityRole="button"
-                accessibilityLabel={c.nome ?? 'Lead'}
+                accessibilityLabel={getClientPrimaryName(c) || 'Lead'}
                 style={styles.pmwLinha}
                 {...ds({ hover: 'surface2', trans: '1' })}
                 onPress={() => setSelectedClient(c)}
               >
                 <View style={[styles.pmwLinhaBarra, { backgroundColor: cor }]} />
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.pmwLinhaNome} numberOfLines={1}>{c.nome}</Text>
+                  {/* o restaurante, não o contato (auditoria 16/10/26) */}
+                  <Text style={styles.pmwLinhaNome} numberOfLines={1}>{getClientPrimaryName(c)}</Text>
                   <Text style={styles.pmwLinhaSub} numberOfLines={1}>
                     {[c.etapa, c.cidade].filter(Boolean).join(' · ') || '—'}
                   </Text>
@@ -7769,7 +7792,7 @@ function MainApp() {
   // Paradas de hoje que faltam, na ordem do plano (selo da Agenda e a
   // "proxima parada" do Playbook).
   const paradasQueFaltam = routeStops.filter(
-    (st) => st.status !== 'done' && st.status !== 'removed' && st.status !== 'skipped' && !(st.client && visitadoHoje(st.client.visited_at)),
+    (st) => st.status !== 'done' && st.status !== 'removed' && st.status !== 'skipped' && !visitadoNoPlanoHoje(st.client),
   );
   const proximaParadaDoPlano = (() => {
     const st = paradasQueFaltam[0];
@@ -7788,7 +7811,9 @@ function MainApp() {
   // UM NÚMERO SÓ (Fase 0 das abas, 04/10/26): selo, lateral, cabeçalho e Meu desempenho contam a
   // fila. Enquanto ela não chega, sem número (antes piscava o 5 do CRM e virava 3); a contagem
   // do CRM só entra se a fila falhar.
-  const totalDaFila = naFila ?? (filaNaTela.isError ? seloTarefas : null);
+  // Auditoria 16/10/26: com a fila em erro o selo NÃO cai mais na contagem do CRM. Era outra regra
+  // (12 no selo, 5 na aba quando a fila voltava); sem a fila, sem número.
+  const totalDaFila = naFila ?? null;
   // O NÚMERO DA AGENDA (28/09/2026, Julyan: "coloco na agenda e na rota do dia e o
   // rodapé fica travado sem atualizar o número"). Contava só as paradas da rota: o que
   // se agendava (demo, retorno) não mexia no número. Agora soma os agendamentos de hoje
@@ -8878,9 +8903,14 @@ function MainApp() {
           // Etapa e dias na etapa do snapshot (o mesmo do cartão do lead) e a régua da etapa.
           contextoDe={(c) => {
             const regua = slaForStage(c.etapa, routeSlaDays);
+            // os dias são do snapshot: se a etapa do lead já não é a do snapshot (a pessoa acabou de mudar),
+            // o tempo é o da etapa ANTIGA e tropeçava a régua ("há 14 dias" numa Demo de hoje) — sem número
+            // até o robô ler de novo (auditoria 16/10/26)
+            const tempo = c.id_hubspot ? contextoPino?.tempoPorNegocio.get(String(c.id_hubspot)) ?? null : null;
+            const codigo = codigoDaEtapa(c);
             return {
-              codigo: codigoDaEtapa(c),
-              diasNaEtapa: c.id_hubspot ? contextoPino?.tempoPorNegocio.get(String(c.id_hubspot))?.diasNaEtapa ?? null : null,
+              codigo,
+              diasNaEtapa: tempo && (!codigo || !tempo.etapaCodigo || tempo.etapaCodigo === codigo) ? tempo.diasNaEtapa ?? null : null,
               regua: regua >= 999 ? null : regua,
             };
           }}
@@ -8891,6 +8921,7 @@ function MainApp() {
           diaControlado={layout.ehLargo && planejarPelaAgenda.current ? planejarDia : null}
           diaInicial={agendaDiaInicial}
           paradas={routeStops}
+          paradasErro={fieldOps.erro}
           reunioes={meetings}
           metaVisitasDia={metaDeHoje}
           nomeDoLead={getClientPrimaryName}
@@ -8903,7 +8934,7 @@ function MainApp() {
             if (!c || !userLocation || c.latitude == null || c.longitude == null) return null;
             return distanciaTexto(haversineMeters(userLocation.latitude, userLocation.longitude, Number(c.latitude), Number(c.longitude)));
           }}
-          visitadoHoje={(c) => visitadoHoje(c.visited_at)}
+          visitadoHoje={(c) => visitadoNoPlanoHoje(c)}
           aoRoteirizar={isViewer ? undefined : () => { void roteirizarPlano(); }}
           roteirizando={roteirizando}
           aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
@@ -9049,7 +9080,7 @@ function MainApp() {
                 let achouProxima = false;
                 const km = routeGeometry.data && routeGeometry.data.coordinates.length > 1 ? `${(routeGeometry.data.distanceMeters / 1000).toFixed(1).replace('.', ',')} km` : null;
                 const min = routeGeometry.data && routeGeometry.data.coordinates.length > 1 ? `~${Math.round(routeGeometry.data.durationSeconds / 60)} min` : null;
-                const faltam = vivas.filter((st) => st.status !== 'done' && !(st.client && visitadoHoje(st.client.visited_at))).length;
+                const faltam = vivas.filter((st) => st.status !== 'done' && !visitadoNoPlanoHoje(st.client)).length;
                 return (
                   <View style={{ maxHeight: 260, borderTopWidth: 1, borderTopColor: 'var(--border)', backgroundColor: 'var(--surface)' }}>
                     <Text style={{ fontSize: 11, fontWeight: '800', letterSpacing: 1, color: 'var(--text-faint)', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6 }}>
@@ -9057,7 +9088,7 @@ function MainApp() {
                     </Text>
                     <ScrollView contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 12, gap: 4 }}>
                       {vivas.map((st, i) => {
-                        const feita = st.status === 'done' || (!!st.client && visitadoHoje(st.client.visited_at));
+                        const feita = st.status === 'done' || visitadoNoPlanoHoje(st.client);
                         const proxima = !feita && !achouProxima;
                         if (proxima) achouProxima = true;
                         return (

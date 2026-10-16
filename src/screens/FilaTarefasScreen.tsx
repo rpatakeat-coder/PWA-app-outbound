@@ -553,7 +553,14 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   const visiveis = fila.filter((i) => passa(i, filtro));
   const contagem = (f: Filtro) => fila.filter((i) => passa(i, f)).length;
   const zerada = !!q.data && !q.data.semMedicao && fila.length === 0;
-  const totalDia = feitas.length + fila.length;
+  // UM NEGÓCIO, UMA FEITA (auditoria 16/10/26): duas ações no mesmo negócio (ou a mesma registrada
+  // duas vezes) contavam duas; e o negócio que já está nas feitas e voltou para a fila (gravação na
+  // fila offline + recarga) entrava duas vezes no total do anel.
+  const dealsFeitos = new Set(feitas.map((x) => x.dealId));
+  const nFeitas = dealsFeitos.size;
+  const totalDia = nFeitas + fila.filter((i) => !dealsFeitos.has(i.dealId)).length;
+  // sem a fila lida (erro do HubSpot ou ainda carregando) o topo não diz "0 faltam"
+  const filaMedida = !!q.data;
   const doSelecionado = layout.ehDesktop ? (fila.find((i) => i.dealId === selecionado) ?? fila[0] ?? null) : null;
 
   // fila zerada: grava o dia (conquista "Fila zerada 5 dias"), uma vez por dia
@@ -748,10 +755,10 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   const topo = (
     <View style={s.topo}>
       <View style={s.topoA}>
-        <Anel feitas={feitas.length} total={totalDia} zerada={zerada} />
+        <Anel feitas={nFeitas} total={filaMedida ? totalDia : nFeitas} zerada={zerada} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[s.topoPlacar, pulso && s.topoSubPulso]} numberOfLines={1}>
-            {zerada ? `Tudo em dia · ${feitas.length} feitas` : `${feitas.length} feitas · ${fila.length} faltam`}
+            {zerada ? `Tudo em dia · ${nFeitas} feitas` : filaMedida ? `${nFeitas} feitas · ${fila.length} faltam` : `${nFeitas} feitas · — faltam`}
           </Text>
           <Text style={s.topoSub} numberOfLines={1}>sua fila de hoje</Text>
         </View>
@@ -765,7 +772,7 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
         {([['tudo', 'Tudo'], ['ligar', 'Ligar'], ['visitar', 'Visitar'], ['whatsapp', 'WhatsApp']] as Array<[Filtro, string]>).map(([f, r]) => (
           <Pressable key={f} accessibilityRole="button" accessibilityState={{ selected: filtro === f }} accessibilityLabel={`${r}: ${contagem(f)}`} onPress={() => setFiltro(f)} style={[s.filtroCelula, filtro === f && s.chipFiltroAtivo]}>
             <Text style={[s.filtroRotulo, filtro === f && s.chipFiltroTextoAtivo]} numberOfLines={1}>{r}</Text>
-            <Text style={s.filtroN}>{contagem(f)}</Text>
+            <Text style={s.filtroN}>{filaMedida ? contagem(f) : "—"}</Text>
           </Pressable>
         ))}
       </View>
@@ -895,9 +902,9 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   } else if (zerada) {
     corpo = (
       <View style={[s.estadoCaixa, { paddingTop: 32 }]}>
-        <Anel feitas={feitas.length} total={feitas.length} tamanho={112} zerada />
+        <Anel feitas={nFeitas} total={nFeitas} tamanho={112} zerada />
         <Text style={s.zeradaTitulo}>Tudo em dia</Text>
-        <Text style={[s.ajuda, { textAlign: 'center', maxWidth: 300 }]}>{`${feitas.length} feitas hoje. Todo negócio da sua carteira tem o próximo passo marcado.`}</Text>
+        <Text style={[s.ajuda, { textAlign: 'center', maxWidth: 300 }]}>{`${nFeitas} feitas hoje. Todo negócio da sua carteira tem o próximo passo marcado.`}</Text>
       </View>
     );
   } else if (visiveis.length === 0) {

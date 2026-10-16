@@ -7,6 +7,7 @@ import type { Client, ClientFormData } from '../types/client';
 import { bboxAround, boundsKey, roundCoordsForKey, type Bounds } from '../utils/area';
 import { concluirTarefaHubspot, createVisitTask, sendHubspotEvent } from '../utils/hubspotSync';
 import { FUNNEL_STAGE_IDS, STAGES, VISITA_STAGE_ID, VISITA_STAGE_LABEL } from '../constants/stages';
+import { Toast } from '../components/Toast';
 
 const mapRow = (row: any): Client => row as Client;
 
@@ -908,6 +909,8 @@ export function useClients(
       const podeMover = isLead && idxAtual < idxVisita;
 
       if (podeMover && client.id_hubspot) {
+        const etapaAntes = client.etapa ?? null;
+        const idDoLead = client.id;
         // Registra no historico local (mesma tabela do modal de etapa) e
         // dispara o change_stage. Fire-and-forget: o check-in ja sucedeu.
         (async () => {
@@ -944,6 +947,12 @@ export function useClients(
             // do gestor (10 páginas) a cada check-in (auditoria de velocidade, 28/09).
           } catch (err) {
             console.warn('[VISITA] change_stage automatico falhou:', err);
+            // O HUBSPOT RECUSOU (auditoria 16/10/26): o lead já tinha virado Visita no banco e na tela, e
+            // ficava assim com o negócio parado na etapa antiga. Desfaz a troca local (só se ninguém mudou
+            // depois) e avisa, em vez de mostrar uma etapa que o HubSpot não tem.
+            void supabase.from('clients').update({ etapa: etapaAntes }).eq('id', idDoLead).eq('etapa', VISITA_STAGE_LABEL)
+              .then(({ error }) => { if (error) console.warn('[VISITA] desfazer etapa:', error.message); });
+            Toast.mostrar('O check-in valeu, mas o HubSpot não aceitou mudar a etapa para Visita. Ela continua ' + (etapaAntes || 'como estava') + '.', 'aviso');
           }
         })();
         // O lead volta JÁ em Visita: a ficha de rua abre sabendo a etapa (e oferece

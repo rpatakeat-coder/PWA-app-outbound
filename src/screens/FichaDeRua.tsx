@@ -359,6 +359,9 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
         lista.push({ rotulo: 'Foto da visita · vai para o gestor', estado: 'ok' });
       } catch (err) {
         lista.push({ rotulo: 'Foto da visita', estado: 'falhou', detalhe: String((err as Error)?.message ?? err) });
+        // a foto não subiu: a ficha só é "com foto" se a do check-in já tinha subido (auditoria 16/10/26;
+        // antes o Cockpit recebia ficha com foto sem foto nenhuma)
+        if (p.linha) p.linha = { ...p.linha, com_foto: !!fotoNoCheckin };
       }
     }
     // A ficha no banco (0120): é o que o Cockpit lê para o funil de porta.

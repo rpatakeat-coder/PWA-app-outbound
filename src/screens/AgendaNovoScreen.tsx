@@ -44,6 +44,8 @@ type Props = {
   /** Dia que abre selecionado (o "Ver na Agenda" da ficha de rua). */
   diaInicial?: string | null;
   paradas: FieldRouteStopWithClient[];
+  /** A leitura das paradas de hoje falhou (não é "sem rota"). */
+  paradasErro?: boolean;
   reunioes: ClientMeeting[];
   metaVisitasDia: number;
   nomeDoLead: (c: Client) => string;
@@ -135,7 +137,7 @@ type Linha =
   | { k: string; tipo: 'compromisso'; ordem: number; hora: string | null; comp: ReturnType<typeof compromissosDoDia>[number] };
 
 export default function AgendaNovoScreen({
-  diaInicial, paradas, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead,
+  diaInicial, paradas, paradasErro, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead,
   aoRoteirizar, roteirizando, aoMontarDia, montandoDia, telefoneDe, base, ownerHubspot, contextoDe, aoMapaDoDia, aoPlaybook, largo, aoMudarDia, diaControlado,
 }: Props) {
   const [roteirizandoDia, setRoteirizandoDia] = useState(false);
@@ -253,8 +255,9 @@ export default function AgendaNovoScreen({
     enabled: !!ownerHubspot && horaAgora >= 18,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { count } = await supabase.from('pontos_eventos').select('id', { count: 'exact', head: true })
+      const { count, error } = await supabase.from('pontos_eventos').select('id', { count: 'exact', head: true })
         .eq('owner_id', ownerHubspot!).eq('tipo', 'demo_realizada').gte('ref_em', `${hoje}T03:00:00.000Z`);
+      if (error) throw error; // erro não vira "0 demos" (auditoria 16/10/26)
       return count ?? 0;
     },
   });
@@ -409,7 +412,10 @@ export default function AgendaNovoScreen({
   const md = meuDia.data;
   const prometido = md?.prometido?.visitas ?? null;
   const alvo = prometido ?? (metaVisitasDia > 0 ? metaVisitasDia : 6);
-  const provadas = md?.provadasHoje ?? md?.visitasHoje ?? feitasLista.length;
+  // SÓ PROVADAS (auditoria 16/10/26): o rótulo é "visitas provadas"; antes, sem a prova lida, caía no
+  // total de check-ins ou na lista local e mostrava visita sem prova como provada. Sem a medição: "—".
+  const provadasMedidas = md?.provadasHoje ?? null;
+  const provadas = provadasMedidas ?? 0;
   const momento: 'manha' | 'rua' | 'noite' = horaAgora >= 18 ? 'noite' : horaAgora < 11 && provadas === 0 ? 'manha' : 'rua';
   const pedePromessa = prometido == null && horaAgora < 12 && !!md;
   const prometer_ = (n: number) => {
@@ -457,6 +463,9 @@ export default function AgendaNovoScreen({
   });
   linhasDepois.sort((a, b) => a.ordem - b.ordem);
   const semRota = estado.length === 0;
+  // SEM LEITURA NÃO É SEM ROTA (auditoria 16/10/26): a falha virava "Sem rota hoje" e convidava a
+  // "Montar meu dia" por cima do plano que existe
+  const leituraFalhou = semRota && (dia === hoje ? !!paradasErro : planoDaFaixa.isError);
 
   // Dia fechado (noite): o que ficou para trás, com "Pôr amanhã".
   const amanha = proximoDiaUtil(hoje, 1);
@@ -466,7 +475,7 @@ export default function AgendaNovoScreen({
     void porNoDia(user.id, amanha, p.client_id)
       .then((r) => {
         void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
-        Toast.mostrar(r === 'ja' ? 'Já estava no plano de amanhã' : `No plano de ${SEMANA_LONGA[dowDe(amanha)]} ${ddmm(amanha)} · aparece no Planejamento do Cockpit`, 'ok');
+        Toast.mostrar(r === 'ja' ? `Já estava no plano de ${SEMANA_LONGA[dowDe(amanha)]} ${ddmm(amanha)}` : `No plano de ${SEMANA_LONGA[dowDe(amanha)]} ${ddmm(amanha)} · aparece no Planejamento do Cockpit`, 'ok');
       })
       .catch((e) => Alert.alert('Não consegui pôr amanhã', String((e as Error)?.message ?? e)));
   };
@@ -542,7 +551,7 @@ export default function AgendaNovoScreen({
     <View style={s.ritmo}>
       <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
         <Text style={s.ritmoLinha} numberOfLines={1}>
-          <Text style={s.ritmoNumero}>{`${provadas} de ${alvo}`}</Text>
+          <Text style={s.ritmoNumero}>{`${provadasMedidas == null ? "—" : provadas} de ${alvo}`}</Text>
           <Text style={s.ritmoRotulo}>  visitas provadas</Text>
         </Text>
         <View style={s.tracos}>
@@ -770,7 +779,7 @@ export default function AgendaNovoScreen({
     <View style={s.noite}>
       <Text style={s.heroiOlho}>DIA FECHADO</Text>
       <Text style={s.noiteTitulo}>
-        {`${provadas} ${provadas === 1 ? 'visita provada' : 'visitas provadas'}${demosHoje.data ? ` e ${demosHoje.data} ${demosHoje.data === 1 ? 'demo realizada' : 'demos realizadas'}` : ''}`}
+        {`${provadasMedidas == null ? 'visitas provadas: não medido agora' : `${provadas} ${provadas === 1 ? 'visita provada' : 'visitas provadas'}`}${demosHoje.data ? ` e ${demosHoje.data} ${demosHoje.data === 1 ? 'demo realizada' : 'demos realizadas'}` : ''}`}
       </Text>
       <Text style={s.subLinha}>Os mesmos números do placar da semana no Cockpit.</Text>
       {ficaram.map((p) => (
@@ -881,7 +890,13 @@ export default function AgendaNovoScreen({
             <>
               {noite}
               {heroi}
-              {semRota && (
+              {leituraFalhou && (
+                <View style={s.vazioCaixa}>
+                  <Text style={s.vazioTitulo}>Não consegui ler o seu plano agora</Text>
+                  <Text style={s.vazio}>Pode ser o sinal. Feche e abra a Agenda de novo antes de montar o dia, para não montar por cima do que já está planejado.</Text>
+                </View>
+              )}
+              {semRota && !leituraFalhou && (
                 <View style={s.vazioCaixa}>
                   <Text style={s.vazioTitulo}>{soltos.length ? 'Sem rota hoje' : 'Nada marcado hoje'}</Text>
                   <Text style={s.vazio}>O plano se monta no mapa: toque no pino e "Marcar o próximo passo". Sem plano para hoje: monte a microrrota a partir de onde você está.</Text>
@@ -892,7 +907,7 @@ export default function AgendaNovoScreen({
               {momento !== 'noite' && blocosSoltos}
               {feitas}
               {/* dia sem rota: "Montar meu dia" é a ação principal em qualquer hora (docs/12 §8) */}
-              {(momento !== 'noite' || semRota) && portaUnica}
+              {(momento !== 'noite' || semRota) && !leituraFalhou && portaUnica}
             </>
           )}
         </>

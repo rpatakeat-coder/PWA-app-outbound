@@ -56,6 +56,18 @@ async function hs(token: string, method: string, path: string, body?: unknown) {
   }
 }
 
+// PAGINADO (auditoria 16/10/26): o PostgREST corta em 1000 linhas sem erro. client_visits já tem
+// 1.419 linhas em 120 dias; cortadas, o negócio perdia toques e o decisor alcançado.
+async function tudo<T>(pagina: (de: number, ate: number) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
+  const out: T[] = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await pagina(de, de + 999);
+    if (error) throw error;
+    out.push(...(data ?? []));
+    if (!data || data.length < 1000) return out;
+  }
+}
+
 // ---- desfazer um registro da fila depois dos 5 s (0155, 04/10/2026) ----------------------
 // O app grava em fila_feitas os ids que o registro criou no HubSpot. Aqui cada id é
 // conferido contra o NEGÓCIO (associação) e o DONO antes de mexer: a linha é do cliente,
@@ -201,9 +213,9 @@ Deno.serve(async (req: Request) => {
   const reunioesP = (async () => {
     const de60 = new Date(Date.now() - 60 * 86400000).toISOString();
     const ate60 = new Date(Date.now() + 60 * 86400000).toISOString();
-    const { data: mm } = await svc.from('client_meetings')
+    const mm = await tudo<Record<string, unknown>>((a, b) => svc.from('client_meetings')
       .select('id, client_id, scheduled_at, duration_minutes, observacoes, status, type, created_by, hs_engagement_id')
-      .gte('scheduled_at', de60).lte('scheduled_at', ate60).limit(1000);
+      .gte('scheduled_at', de60).lte('scheduled_at', ate60).order('id').range(a, b)).catch(() => [] as Record<string, unknown>[]);
     const idsC = Array.from(new Set((mm ?? []).map((m: { client_id: string }) => m.client_id).filter(Boolean)));
     const idsP = Array.from(new Set((mm ?? []).map((m: { created_by: string }) => m.created_by).filter(Boolean)));
     const clientePorId = new Map<string, { nome: string | null; id_hubspot: string | null }>();
@@ -237,7 +249,9 @@ Deno.serve(async (req: Request) => {
   // 1) tarefas abertas do dono
   const tarefas: TarefaEntrada[] = [];
   let after: string | undefined;
-  for (let p = 0; p < 6; p++) {
+  let paginasDeTarefa = 0;
+  for (let p = 0; p < 20; p++) {
+    paginasDeTarefa++;
     const r = await hs(token, 'POST', '/crm/v3/objects/tasks/search', {
       filterGroups: [{ filters: [
         { propertyName: 'hubspot_owner_id', operator: 'EQ', value: owner },
@@ -246,18 +260,24 @@ Deno.serve(async (req: Request) => {
       properties: ['hs_task_subject', 'hs_task_body', 'hs_timestamp'],
       limit: 100, ...(after ? { after } : {}),
     });
-    if (!r.ok) { if (tarefas.length) break; return json(502, { erro: 'O HubSpot recusou a busca de tarefas.', detalhe: r.dados?.message }); }
+    // falha no meio da busca: a fila sairia sem as tarefas das páginas seguintes e poderia dizer
+    // "Tudo em dia" (auditoria 16/10/26). Melhor a tela de erro que uma fila menor que a verdade.
+    if (!r.ok) return json(502, { erro: 'O HubSpot recusou a busca de tarefas.', detalhe: r.dados?.message });
     for (const t of r.dados?.results ?? []) {
       tarefas.push({ id: String(t.id), dealId: null, assunto: t.properties?.hs_task_subject ?? '', corpo: t.properties?.hs_task_body ?? '', venceEm: t.properties?.hs_timestamp ?? null });
     }
     after = r.dados?.paging?.next?.after;
     if (!after) break;
   }
+  if (after) return json(502, { erro: 'Você tem mais de 2.000 tarefas abertas no HubSpot: a fila não cabe numa leitura. Fale com o gestor.' });
+  let lotesFalharam = false;
   const lotesTarefa: TarefaEntrada[][] = [];
   for (let i = 0; i < tarefas.length; i += 100) lotesTarefa.push(tarefas.slice(i, i + 100));
   await Promise.all(lotesTarefa.map(async (lote) => {
-    const a = await hs(token, 'POST', '/crm/v4/associations/tasks/deals/batch/read', { inputs: lote.map((t) => ({ id: t.id })) });
-    if (!a.ok) return;
+    let a = await hs(token, 'POST', '/crm/v4/associations/tasks/deals/batch/read', { inputs: lote.map((t) => ({ id: t.id })) });
+    if (!a.ok) a = await hs(token, 'POST', '/crm/v4/associations/tasks/deals/batch/read', { inputs: lote.map((t) => ({ id: t.id })) });
+    // sem a associação a tarefa some e o negócio aparece "sem próximo passo" (auditoria 16/10/26)
+    if (!a.ok) { lotesFalharam = true; return; }
     const mapa = new Map<string, string>();
     for (const r of a.dados?.results ?? []) {
       const de = r?.from?.id ?? r?._from?.id; const para = (r?.to ?? [])[0]?.toObjectId;
@@ -283,12 +303,15 @@ Deno.serve(async (req: Request) => {
       inputs: lote.map((id) => ({ id })),
       properties: ['dealname', 'dealstage', 'valor_de_mrr', 'hubspot_owner_id', 'pipeline'],
     });
-    if (!r.ok) return;
+    if (!r.ok) { lotesFalharam = true; return; }
     for (const d of r.dados?.results ?? []) {
       const p = d.properties ?? {};
       vivos.set(String(d.id), { nome: p.dealname ?? '', etapa: String(p.dealstage ?? ''), mrr: Number(p.valor_de_mrr) || null, owner: p.hubspot_owner_id ? String(p.hubspot_owner_id) : null, pipeline: p.pipeline ? String(p.pipeline) : null, entrada: null });
     }
   }));
+  // um lote de negócios ou de associações que o HubSpot não devolveu (5xx depois do retry do 429):
+  // a fila sairia sem esses negócios, calada (auditoria 16/10/26)
+  if (lotesFalharam) return json(502, { erro: 'O HubSpot não devolveu parte dos seus negócios agora. Puxe para tentar de novo.' });
   // fora do funil do Field Sales ou de outro dono não entra na fila desta pessoa
   const meus = ids.filter((id) => { const v = vivos.get(id); return v && v.pipeline === PIPELINE && v.owner === owner; });
 
@@ -300,7 +323,7 @@ Deno.serve(async (req: Request) => {
     ? await Promise.all([
       svc.from('clients').select('id, id_hubspot, nome, telefone, latitude, longitude, bairro').in('id_hubspot', meus),
       svc.from('contatos_de_campo').select('deal_id, client_id, ocorrido_em, canal').in('deal_id', meus).gte('ocorrido_em', desde),
-      svc.from('fichas_de_rua').select('deal_id, como_foi, ocorrido_em, criado_em').in('deal_id', meus),
+      tudo<Record<string, unknown>>((a, b) => svc.from('fichas_de_rua').select('deal_id, como_foi, ocorrido_em, criado_em').in('deal_id', meus).order('id').range(a, b)).then((data) => ({ data })),
       svc.from('contatos_de_campo').select('deal_id').in('deal_id', meus).eq('resultado', 'decisor'),
     ])
     : [vazio, vazio, vazio, vazio];
@@ -320,9 +343,10 @@ Deno.serve(async (req: Request) => {
   for (const x of cc ?? []) soma(String(x.deal_id), x.ocorrido_em as string, String(x.canal ?? 'contato'));
   let visitasHoje: Array<{ client_id: string; visited_at: string }> = [];
   if (clienteIds.length) {
-    const { data: vv } = await svc.from('client_visits').select('client_id, visited_at').in('client_id', clienteIds).gte('visited_at', desde);
-    for (const v of vv ?? []) soma(dealPorCliente.get(String(v.client_id)), v.visited_at as string);
-    visitasHoje = (vv ?? []).filter((v) => new Date(new Date(v.visited_at as string).getTime() - 3 * 3600000).toISOString().slice(0, 10) === hoje) as never;
+    const vv = await tudo<Record<string, unknown>>((a, b) => svc.from('client_visits').select('id, client_id, visited_at, visited_by').in('client_id', clienteIds).gte('visited_at', desde).order('id').range(a, b));
+    for (const v of vv) soma(dealPorCliente.get(String(v.client_id)), v.visited_at as string);
+    // "visita sem registro" é a MINHA visita de hoje sem ficha; a de um colega no meu lead não me cobra
+    visitasHoje = vv.filter((v) => String(v.visited_by ?? '') === uid && new Date(new Date(v.visited_at as string).getTime() - 3 * 3600000).toISOString().slice(0, 10) === hoje) as never;
   }
   // OS TOQUES DO COCKPIT (auditoria do Cockpit do gestor, 04/10/26): o "x de 4" do cartão e as
   // regras "poucos contatos" e "parado" passam a contar como o Cockpit conta (Pessoas, Raio X,

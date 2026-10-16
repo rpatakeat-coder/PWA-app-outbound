@@ -123,7 +123,7 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
         <Text style={st.faixaRotulo}>{`VARIÁVEL DE ${mesNome.toUpperCase()}`}</Text>
         <Text style={st.faixaValor}>{mes.variavel == null ? 'não medido' : reais(mes.variavel)}</Text>
         <Text style={st.faixaSub}>
-          {`${plural(mes.fechados, 'contrato', 'contratos')} de ${mes.meta} no mês${mes.por_cliente ? ` · faixa de ${reais(mes.por_cliente)} por cliente` : ''}`}
+          {`${plural(mes.fechados, 'contrato', 'contratos')}${mes.meta != null ? ` de ${mes.meta}` : ''} no mês${mes.por_cliente ? ` · faixa de ${reais(mes.por_cliente)} por cliente` : ''}`}
         </Text>
       </View>
       {mes.proxima_venda != null && (

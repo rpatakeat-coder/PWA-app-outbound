@@ -14,8 +14,8 @@ export type MeuDia = {
   /** false quando nem a função nem a leitura direta responderam: o número não é zero, é não medido. */
   medido: boolean;
   prometido: { visitas: number | null; avancos: number | null; propostas: number | null; validadaEm: string | null } | null;
-  reunioesMarcadasHoje: number;
-  reunioesParaHoje: number;
+  reunioesMarcadasHoje: number | null;
+  reunioesParaHoje: number | null;
   sequenciaDias: number;
   /** A semana (meu_placar, 0142): null quando a leitura falhou — nunca zero inventado. */
   semana: {
@@ -88,8 +88,9 @@ export function useMeuDia(ativo: boolean, profileId: string | null) {
         prometido: d && (d.prometido_visitas != null || d.prometido_avancos != null || d.prometido_propostas != null)
           ? { visitas: d.prometido_visitas, avancos: d.prometido_avancos, propostas: d.prometido_propostas, validadaEm: d.updated_at ?? d.created_at }
           : null,
-        reunioesMarcadasHoje: marcadas.count ?? 0,
-        reunioesParaHoje: paraHoje.count ?? 0,
+        // erro de leitura não é zero (auditoria 16/10/26): null vira "não medido" na folha
+        reunioesMarcadasHoje: marcadas.error ? null : (marcadas.count ?? 0),
+        reunioesParaHoje: paraHoje.error ? null : (paraHoje.count ?? 0),
         sequenciaDias: sequenciaDeDias(dias),
         semana: pl ? {
           visitas: num(pl.visitas_semana) ?? 0,

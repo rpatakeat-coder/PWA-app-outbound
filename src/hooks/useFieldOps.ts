@@ -309,6 +309,8 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
     route,
     stops: stopsQuery.data ?? [],
     isLoading: routesQuery.isLoading || stopsQuery.isLoading,
+    // a leitura do plano falhou: a tela não pode tratar como "sem rota" (auditoria 16/10/26)
+    erro: routesQuery.isError || stopsQuery.isError,
     saveRoute,
     updateStops,
     removeStop,

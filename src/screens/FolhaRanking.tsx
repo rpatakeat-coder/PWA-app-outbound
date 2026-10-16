@@ -147,6 +147,8 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
 
   let corpo: React.ReactNode;
   if (q.isLoading && !r) corpo = <Text style={s.ajuda}>lendo…</Text>;
+  // erro de rede ou da função não é "sem acesso" (auditoria 16/10/26)
+  else if (!r && q.isError) corpo = <Text style={s.ajuda}>Não consegui ler o ranking agora. Feche e abra de novo em instantes.</Text>;
   else if (!r) corpo = <Text style={s.ajuda}>O ranking não está disponível para o seu usuário.</Text>;
   else {
     const eu = r.eu;
@@ -169,7 +171,7 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
 
         {!!r.meta_coletiva && r.meta_coletiva.meta > 0 && (
           <View style={s.bloco}>
-            <Text style={s.rotulo}>{`TIME · ${mesNome(new Date().toISOString()).toUpperCase()}`}</Text>
+            <Text style={s.rotulo}>{`TIME · ${mesNome(new Date(Date.now() - 3 * 3600000).toISOString()).toUpperCase()}`}</Text>
             <Text style={s.forte}>{`${r.meta_coletiva.feitos} de ${r.meta_coletiva.meta} contratos`}</Text>
             <View style={s.barra}><View style={[s.barraCheia, { width: `${Math.min(100, (r.meta_coletiva.feitos / r.meta_coletiva.meta) * 100)}%` }]} /></View>
           </View>

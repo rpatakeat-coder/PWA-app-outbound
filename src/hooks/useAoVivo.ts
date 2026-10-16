@@ -31,7 +31,8 @@ export const INVALIDA_POR_TIPO: Record<string, string[][]> = {
   // HubSpot por rajada, para o time inteiro, a cada volta do robô (auditoria 28/09)
   negocio: [['mapa-contexto']],
   'negocio-meu': [['tarefas_crm']],
-  visita: [['meu_dia'], ['minha_daily'], ['client_visits'], ['novos-visitados-semana']],
+  // + Desempenho e ranking (auditoria 16/10/26): a visita provada muda o placar e eles ficavam velhos
+  visita: [['meu_dia'], ['minha_daily'], ['client_visits'], ['novos-visitados-semana'], ['meu_desempenho'], ['vizinhos_no_ranking'], ['ranking_executivo']],
   foto: [['client_visits']],
   ficha: [['meu_dia']],
   parada: [['field_routes'], ['field_route_stops'], ['meu_dia']],
