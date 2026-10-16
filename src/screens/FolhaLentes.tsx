@@ -23,7 +23,7 @@ const RAPIDOS: Rapido[] = [
 import { IconClose as SiClose } from '../components/icons';
 
 export const COR_LENTE: Record<Lente, string> = {
-  dia: '#E51A31', novos: '#C8F31D', carteira: '#F5A524', clientes: '#16A34A', alvo: '#8B5CF6', rec: '#EC4899', queda: '#84CC16', semdono: '#FACC15', calor: '#F97316',
+  dia: '#E51A31', novos: '#C8F31D', carteira: '#F5A524', clientes: '#16A34A', alvo: '#8B5CF6', rec: '#EC4899', queda: '#14B8A6', semdono: '#FACC15', calor: '#F97316',
 };
 
 const DESCRICAO: Record<Lente, string> = {
@@ -120,7 +120,8 @@ export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolh
           </View>
         )}
 
-        <Pressable accessibilityRole="button" onPress={() => { aoFechar(); aoFiltros(); }} style={s.filtros}>
+        {/* a folha dos filtros abre depois que esta fecha (as duas são Painel: no mesmo render o voltar de uma fechava a outra) */}
+        <Pressable accessibilityRole="button" onPress={() => { aoFechar(); setTimeout(aoFiltros, 350); }} style={s.filtros}>
           <Text style={s.filtrosTexto}>{filtrosAtivos ? `Todos os filtros · ${filtrosAtivos} ${filtrosAtivos === 1 ? 'ativo' : 'ativos'}` : 'Todos os filtros'}</Text>
           <Text style={s.filtrosSub}>etapa, temperatura, tempo sem toque, origem, dono, visitado</Text>
         </Pressable>

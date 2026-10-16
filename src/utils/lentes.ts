@@ -53,7 +53,7 @@ export function visivelNaLente(lente: Lente, p: Pino, noPlano: boolean, aberto: 
      contas-alvo DISCRETAS (bolinha transparente, ver contaAlvoDiscreta). Colega, ex-cliente e
      perdido seguem nas lentes próprias. */
   if (lente === 'dia') {
-    return (meu && p.familia === 'lead' && p.temp !== 'X') || (p.familia === 'rec' && (meu || verTodos))
+    return (meu && p.familia === 'lead' && p.temp !== 'X' && !p.reciclagem) || (p.familia === 'rec' && (meu || verTodos))
       || p.familia === 'cli' || p.familia === 'av' || p.familia === 'alvo';
   }
   if (p.familia === 'alvo') return false;

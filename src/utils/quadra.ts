@@ -15,7 +15,10 @@ type Item = {
 /** A partir de quantos pinos amontoados a pilha vira resumo de quadra. */
 export const MINIMO_QUADRA = 6;
 
-const ROTULO: Record<Pino['tipo'], [string, string]> = {
+/* o recém-aberto é tipo 'alvo' no banco, mas na quadra conta como recém-aberto (15/10/26) */
+type Grupo = Pino['tipo'] | 'rec';
+const ROTULO: Record<Grupo, [string, string]> = {
+  rec: ['recém-aberto', 'recém-abertos'],
   alvo: ['conta-alvo', 'contas-alvo'],
   ex: ['ex', 'ex'],
   lead: ['lead', 'leads'],
@@ -32,6 +35,8 @@ function pesoMelhor(it: Item): number {
   if (it.plano != null) return 0;
   if (it.p.etiqueta?.texto === 'cobrar') return 1;
   if (it.p.dono === 'meu' && it.p.temp === 'Q') return 2;
+  // recém-aberto ainda escolhendo sistema: a melhor porta depois do quente
+  if (it.p.familia === 'rec') return 3;
   if (it.p.tipo === 'alvo' && (it.c.conta_alvo_rating ?? 0) >= 4.5 && (it.c.conta_alvo_reviews ?? 0) >= 100) return 3;
   return 4;
 }
@@ -56,8 +61,8 @@ export function resumoDaQuadra(itens: Item[]): ResumoQuadra {
   const cidade = itens.map((it) => (it.c.cidade ?? '').trim()).find(Boolean);
   const area = topo?.grafia ?? cidade ?? 'Esta quadra';
 
-  const porTipo = new Map<Pino['tipo'], number>();
-  for (const it of itens) porTipo.set(it.p.tipo, (porTipo.get(it.p.tipo) ?? 0) + 1);
+  const porTipo = new Map<Grupo, number>();
+  for (const it of itens) { const g: Grupo = it.p.familia === 'rec' ? 'rec' : it.p.tipo; porTipo.set(g, (porTipo.get(g) ?? 0) + 1); }
   const composicao = [...porTipo.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
@@ -69,7 +74,7 @@ export function resumoDaQuadra(itens: Item[]): ResumoQuadra {
   let melhor: ResumoQuadra['melhor'] = null;
   if (melhorItem) {
     const nome = melhorItem.c.empresa?.trim() || melhorItem.c.nome;
-    const nota = melhorItem.p.tipo === 'alvo' && melhorItem.c.conta_alvo_rating != null
+    const nota = melhorItem.p.tipo === 'alvo' && melhorItem.p.familia !== 'rec' && melhorItem.c.conta_alvo_rating != null
       ? `nota ${Number(melhorItem.c.conta_alvo_rating).toFixed(1).replace('.', ',')}` : null;
     const plano = melhorItem.plano != null ? `parada ${melhorItem.plano}` : null;
     const partes = [plano ?? nota ?? nome, distTexto(melhorItem.distanciaM)].filter(Boolean);

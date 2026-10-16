@@ -579,7 +579,7 @@ const MarkerP2 = React.memo(
         coordinate={{ latitude: client.latitude as number, longitude: client.longitude as number }}
         onPress={handlePress}
         anchor={ANCORA_PINO_P2}
-        zIndex={selecionado ? 2000 : leque ? 1500 : papel === 'proxima' ? 1200 : planoNumero ? 1000 : rotulo ? 800 : discreto ? 200 : 500}
+        zIndex={selecionado ? 2000 : leque ? 1500 : papel === 'proxima' ? 1200 : planoNumero ? 1000 : rotulo ? 800 : discreto ? 200 : pino.familia === 'cli' ? 400 : 500}
         cluster={agrupar && !planoNumero}
       >
         <PinoP2
@@ -2663,7 +2663,7 @@ function MainApp() {
     const eu = { lat: userLocation.latitude, lng: userLocation.longitude };
     return itensMapaNovo
       .filter(({ c, p, plano }) => plano == null && !visitadoHoje(c.visited_at) && !feitosDaRota.has(c.id)
-        && ((p.familia === 'lead' && p.dono === 'meu' && p.temp !== 'X') || (p.familia === 'rec' && (p.dono === 'meu' || verTodosNoMapa))))
+        && ((p.familia === 'lead' && p.dono === 'meu' && p.temp !== 'X' && !p.reciclagem) || (p.familia === 'rec' && (p.dono === 'meu' || verTodosNoMapa))))
       .map(({ c, p }) => ({ c, p, d: metrosLL(eu, { lat: Number(c.latitude), lng: Number(c.longitude) }) }))
       .filter((x) => x.d <= RAIO_SUGESTAO_M)
       .sort((a, b) => a.d - b.d)
@@ -2779,14 +2779,12 @@ function MainApp() {
     setFalaAberta(a);
   }, []);
   // a lente Recém-abertos: quantos a pessoa tem na região (0 = estado vazio)
+  // conta os PINOS de recém-aberto (antes contava toda a base, inclusive os que já viraram negócio
+  // ou foram arquivados, e o número não batia com o mapa — auditoria 15/10/26)
   const recemNaRegiao = useMemo(() => {
-    const m = contextoPino?.aberturaPorLead;
-    if (!m) return null;
-    const hoje = Date.now();
-    let n = 0;
-    for (const ab of m.values()) if ((hoje - Date.parse(String(ab).slice(0, 10) + 'T12:00:00Z')) / 86400000 <= 90) n++;
-    return n;
-  }, [contextoPino?.aberturaPorLead]);
+    if (!contextoPino?.aberturaPorLead) return null;
+    return itensMapaNovo.filter(({ p }) => p.familia === 'rec' && (p.dono === 'meu' || verTodosNoMapa)).length;
+  }, [contextoPino?.aberturaPorLead, itensMapaNovo, verTodosNoMapa]);
   /* AS FALAS DO PLAYBOOK SEM ABRIR O PLAYBOOK: o "Para entrar" lê as 9 falas do cache do Playbook
      (texto editável no Cockpit). Quem nunca abriu a aba não tem cache: 30 s depois de abrir o app,
      uma carga por baixo — uma só, e só se faltar (o app tem a cópia v1 enquanto isso). */
@@ -2851,7 +2849,9 @@ function MainApp() {
     // pilha — senão um lead aparecia como "pilha de 5" por causa de 4 contas-alvo em volta
     const quietos = new Set<string>();
     for (const it of visiveisMapaNovo) {
-      const sempre = it.plano != null || it.c.id === selectedClient?.id || it.c.id === idPortaDoHalo || !!referenciasNaTela?.has(it.c.id);
+      const sempre = it.plano != null || it.c.id === selectedClient?.id || it.c.id === idPortaDoHalo || !!referenciasNaTela?.has(it.c.id)
+        // Agenda do computador: a conta-alvo sugerida na lateral, em foco ou com o mouse em cima é pino inteiro
+        || (ehAgendaPC && planejarDia && naCamada(it));
       if (!sempre && contaAlvoDiscreta(lente, it.p)) {
         if (afastado || lente === 'calor' || (ehAgendaPC && planejarDia)) continue;
         quietos.add(it.c.id);
@@ -2912,7 +2912,7 @@ function MainApp() {
   const placasDoMapa = useMemo(() => {
     // entre o bairro e a cidade: no zoom de estado ou de país, bairro não diz nada (medido em 15/10/26)
     if (!modoNovo || !mapRegion || mapRegion.latitudeDelta <= DELTA_AFASTADO || mapRegion.latitudeDelta > 0.6 || lente === 'calor' || (ehAgendaPC && planejarDia)) return [];
-    const itens = visiveisMapaNovo.filter((it) => it.plano == null)
+    const itens = visiveisMapaNovo.filter((it) => it.plano == null && !contaAlvoDiscreta(lente, it.p))
       .map(({ c, p }) => ({ id: c.id, bairro: c.bairro, cidade: c.cidade, lat: Number(c.latitude), lng: Number(c.longitude),
         familia: (p.familia === 'rec' || p.familia === 'lead' || p.familia === 'cli' ? p.familia : 'outro') as 'rec' | 'lead' | 'cli' | 'outro' }));
     const clientes = itensMapaNovo.filter(({ p }) => p.familia === 'cli').map(({ c }) => ({ bairro: c.bairro, cidade: c.cidade }));
@@ -2967,7 +2967,9 @@ function MainApp() {
     setPilhaAberta(null);
   }, [pilhaDe, pilhaAberta, planejarDia]);
   // Cor de cada pino da área: o anel da quadra pinta a proporção delas.
-  const corPorId = useMemo(() => new Map(visiveisMapaNovo.map((it) => [it.c.id, it.p.cor])), [visiveisMapaNovo]);
+  const corPorId = useMemo(() => new Map(visiveisMapaNovo.map((it) => [it.c.id, it.p.familia === 'rec' ? COR_DO_PINO.rec : it.p.cor] as [string, string])), [visiveisMapaNovo]);
+  // "N na área" sem as contas-alvo discretas (elas são contexto, não porta da lista)
+  const totalNaAreaSemDiscretas = useMemo(() => visiveisMapaNovo.filter((it) => it.plano != null || !contaAlvoDiscreta(lente, it.p)).length, [visiveisMapaNovo, lente]);
 
   // Folha de baixo do mapa novo: os pinos da lente, com distância e se a
   // parada do plano já foi feita.
@@ -2982,28 +2984,39 @@ function MainApp() {
         + Math.cos((userLocation.latitude * Math.PI) / 180) * Math.cos((Number(c.latitude) * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
       return 2 * r * Math.asin(Math.sqrt(a));
     };
-    return focoMapaNovo.map(({ c, p, plano }) => ({ c, p, plano, distanciaM: distancia(c), feito: feitos.has(c.id) }));
-  }, [focoMapaNovo, routeStops, userLocation]);
+    // a conta-alvo discreta está no mapa como contexto, não na lista (auditoria 15/10/26)
+    return focoMapaNovo.filter(({ c }) => !quietosMapa.has(c.id)).map(({ c, p, plano }) => ({ c, p, plano, distanciaM: distancia(c), feito: feitos.has(c.id) }));
+  }, [focoMapaNovo, quietosMapa, routeStops, userLocation]);
   // Resumo de quadra (prompt final §5): pilha grande vira área + composição +
   // melhor candidato, no lugar do pino com um número.
   const { resumoDaPilha, quadraAbsorvida } = useMemo(() => {
     const porId = new Map(itensFolha.map((it) => [it.c.id, it]));
     const unicas = new Map<string, Pilha>();
-    for (const pl of pilhaDe.values()) if (pl.membros.length >= MINIMO_QUADRA) unicas.set(pl.lider, pl);
+    for (const pl of pilhaDe.values()) {
+      if (pl.membros.length < MINIMO_QUADRA) continue;
+      // o plano, a próxima porta e o pino aberto continuam pino inteiro (auditoria 15/10/26)
+      const lider = porId.get(pl.lider);
+      if (!lider || lider.plano != null || pl.lider === idPortaDoHalo || pl.lider === selectedClient?.id) continue;
+      unicas.set(pl.lider, pl);
+    }
     const comPosicao = [...unicas.values()].flatMap((pl) => {
       const it = porId.get(pl.lider);
       if (!it || !janelaMapa) return [];
-      return [{ ...pl, ...projetar(Number(it.c.latitude), Number(it.c.longitude), janelaMapa) }];
+      return [{ ...pl, cli: it.p.familia === 'cli', ...projetar(Number(it.c.latitude), Number(it.c.longitude), janelaMapa) }];
     });
     // Cartões que se tocariam na tela viram uma quadra só (quadrasNaTela).
     // Anel de 46 px (v4.1), nao mais o cartao de 180 x 88: a caixa de colisao encolhe junto.
-    const { quadras, absorvida } = quadrasNaTela(comPosicao, 56, 56);
+    // Quadra de clientes e quadra do resto não se juntam: a de clientes engolia o recém-aberto.
+    const qa = quadrasNaTela(comPosicao.filter((x) => !x.cli), 56, 56);
+    const qb = quadrasNaTela(comPosicao.filter((x) => x.cli), 56, 56);
+    const quadras = new Map([...qa.quadras, ...qb.quadras]);
+    const absorvida = new Map([...qa.absorvida, ...qb.absorvida]);
     const r = new Map<string, { resumo: ResumoQuadra; membros: string[] }>();
     for (const [lider, membros] of quadras) {
       r.set(lider, { resumo: resumoDaQuadra(membros.map((id) => porId.get(id)).filter(Boolean) as ItemFolha[]), membros });
     }
     return { resumoDaPilha: r, quadraAbsorvida: absorvida };
-  }, [pilhaDe, itensFolha, janelaMapa]);
+  }, [pilhaDe, itensFolha, janelaMapa, idPortaDoHalo, selectedClient?.id]);
 
   // Dia que a Agenda mostra. Unico estado novo do M4: a tira da semana vive no
   // header (que e' desta casca) e o corpo vive na AgendaScreen, entao o dia
@@ -4914,22 +4927,36 @@ function MainApp() {
          app ainda marcada continuavam lá depois do Perdido. Saem as minhas; o histórico fica. */
       const hojeIso = diaBRT(new Date());
       void (async () => {
+        /* Conferido (auditoria 15/10/26): antes os updates não olhavam erro nem quantas linhas
+           mudaram, e a reunião só virava "cancelada" — o evento do Google e a observação do
+           HubSpot ficavam. Agora a reunião sai pelo mesmo cancelamento da Agenda (deleteMeeting),
+           e qualquer falha avisa em vez de sumir. */
+        let falhou = false;
         try {
-          const { data: st } = await supabase.from('field_route_stops').select('id, route:field_routes!inner(route_date, seller_id)')
+          const { data: st, error: e1 } = await supabase.from('field_route_stops').select('id, route:field_routes!inner(route_date, seller_id)')
             .eq('client_id', clientId).eq('status', 'planned').gte('route.route_date', hojeIso);
+          if (e1) throw e1;
           const ids = ((st ?? []) as unknown as { id: string; route: { seller_id: string } | null }[])
             .filter((x) => !profile?.id || x.route?.seller_id === profile.id).map((x) => x.id);
-          if (ids.length) await supabase.from('field_route_stops').update({ status: 'removed' }).in('id', ids);
-          if (profile?.id) {
-            await supabase.from('client_meetings').update({ status: 'cancelada' }).eq('client_id', clientId).eq('created_by', profile.id)
-              .gte('scheduled_at', new Date().toISOString()).not('status', 'in', '(realizada,cancelada,nao_aconteceu)');
+          if (ids.length) {
+            const { data: mudou, error: e2 } = await supabase.from('field_route_stops').update({ status: 'removed' }).in('id', ids).select('id');
+            if (e2 || (mudou ?? []).length < ids.length) falhou = true;
           }
-        } catch (e) { console.warn('[perdido sai da agenda]', e); }
+          if (profile?.id) {
+            const { data: futuras, error: e3 } = await supabase.from('client_meetings').select('*').eq('client_id', clientId).eq('created_by', profile.id)
+              .gte('scheduled_at', new Date().toISOString()).not('status', 'in', '(realizada,cancelada,nao_aconteceu)');
+            if (e3) throw e3;
+            for (const m of (futuras ?? []) as ClientMeeting[]) {
+              try { await deleteMeeting.mutateAsync(m); } catch { falhou = true; }
+            }
+          }
+        } catch (e) { falhou = true; console.warn('[perdido sai da agenda]', e); }
+        if (falhou) Toast.mostrar(`${rotulo} gravado, mas a parada ou a reunião não saiu da Agenda: tire por lá`, 'erro');
         void queryClient.invalidateQueries({ queryKey: ['field_routes'] });
         void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
         void queryClient.invalidateQueries({ queryKey: ['client_meetings'] });
       })();
-      Toast.mostrar(`${rotulo}: saiu do Meu dia · continua na Carteira`, 'ok');
+      Toast.mostrar(codigo === '1398311191' ? 'Reciclagem: saiu do Meu dia · volta pela Carteira' : `${rotulo}: saiu do Meu dia · continua na Carteira`, 'ok');
     } else {
       setSelectedClient((atual) => (atual && atual.id === clientId ? { ...atual, etapa: rotulo } : atual));
       // Mudar etapa fecha o cartão para abrir a folha: reabre já na etapa nova.
@@ -5769,10 +5796,16 @@ function MainApp() {
     );
   }
 
-  if (error) {
+  /* Uma releitura que falha (4G ruim ao arrastar o mapa, invalidação depois de uma ação) não
+     derruba mais o mapa que já estava na tela: a tela cheia só quando nunca veio pino nenhum, e com
+     saída (auditoria 15/10/26: antes só recarregando o app). */
+  if (error && !clientsNaArea?.length) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>Erro ao carregar</Text>
+        <Text style={styles.errorText}>Não deu para carregar o mapa</Text>
+        <TouchableOpacity style={[styles.permissionPrimaryButton, { marginTop: 16 }]} onPress={() => { void queryClient.invalidateQueries({ queryKey: ['clients'] }); }}>
+          <Text style={styles.permissionPrimaryButtonText}>Tentar de novo</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -6015,7 +6048,7 @@ function MainApp() {
         pino: classificarPino(selectedClient, contextoPino),
         planoNumero: (() => { const i = routeDisplayClients.findIndex((c) => c.id === selectedClient.id); return i >= 0 ? i + 1 : null; })(),
         naRota: routeStopClientIds.has(selectedClient.id),
-        visitadoHoje: visitadoHoje(selectedClient.visited_at),
+        visitadoHoje: selectedClient.status === 'lead' && visitadoHoje(selectedClient.visited_at) && !!profile?.id && (selectedClient as Client & { visited_by?: string | null }).visited_by === profile.id,
         distanciaM: userLocation && selectedClient.latitude != null && selectedClient.longitude != null
           ? haversineMeters(userLocation.latitude, userLocation.longitude, Number(selectedClient.latitude), Number(selectedClient.longitude))
           : null,
@@ -6331,7 +6364,11 @@ function MainApp() {
       <MapView
         mapRef={(ref) => { mapRef.current = ref as unknown as RNMapView; }}
         // restaurante do Google tocado: a folha dele, com "Virar lead" (05/10/26)
-        onPoiClick={modoNovo && !isViewer ? (e) => { setSelectedClient(null); setLugarGoogle({ placeId: e.nativeEvent.placeId, ...e.nativeEvent.coordinate }); } : undefined}
+        onPoiClick={modoNovo && !isViewer ? (e) => {
+          const lugar = { placeId: e.nativeEvent.placeId, ...e.nativeEvent.coordinate };
+          // com o cartão aberto, a folha do Google abre depois que ele fecha (senão fechava sozinha)
+          if (selectedClient) { setSelectedClient(null); setTimeout(() => setLugarGoogle(lugar), 350); } else setLugarGoogle(lugar);
+        } : undefined}
         // Modo sol: mapa claro com o app escuro (recria o mapa: colorScheme só vale na construção).
         claro={modoNovo && modoSol}
         style={[styles.map, folhaDeBaixo && margemMapa > 0 && { marginBottom: margemMapa }]}
@@ -6480,7 +6517,8 @@ function MainApp() {
                 anchor={ANCORA_QUADRA}
                 // o resumo já é o agrupamento: nunca vira bolha do clusterer
                 cluster={false}
-                zIndex={quadraAberta?.lider === pl.lider ? 1800 : 800}
+                // quadra de clientes fica por baixo dos leads e recém-abertos (é contexto)
+                zIndex={quadraAberta?.lider === pl.lider ? 1800 : p.familia === 'cli' ? 350 : 800}
                 onPress={() => {
                   if (planejarDia) {
                     // Planejar: a lista da quadra não aparece (a folha é a do dia). Abre como a
@@ -6867,7 +6905,7 @@ function MainApp() {
             // Portas boas a pé: leads e contas-alvo não visitados hoje, a até 250 m da próxima porta.
             const prox = routeDisplayClients.find((c) => c.id === idClienteParadaAtual);
             if (!prox || prox.latitude == null || prox.longitude == null) return 0;
-            return visiveisMapaNovo.filter(({ c, p, plano }) => plano == null && (p.tipo === 'lead' || p.tipo === 'alvo') && p.temp !== 'X'
+            return visiveisMapaNovo.filter(({ c, p, plano }) => plano == null && (p.familia === 'lead' || p.familia === 'rec') && p.temp !== 'X'
               && !visitadoHoje(c.visited_at) && c.latitude != null && c.longitude != null
               && haversineMeters(Number(prox.latitude), Number(prox.longitude), Number(c.latitude), Number(c.longitude)) <= 250).length;
           })()}
@@ -6931,7 +6969,7 @@ function MainApp() {
           recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
           aoProgresso={() => setMeuDiaAberto(true)}
           chao={alturaRodape ?? baseInferior}
-          totalNaArea={visiveisMapaNovo.length}
+          totalNaArea={totalNaAreaSemDiscretas}
           rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
           onAbrir={handleMarkerPress}
           onCheguei={(c) => handleMarkAsVisited(c)}
@@ -7175,7 +7213,7 @@ function MainApp() {
         aoFala={abrirFala}
         recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
         aoProgresso={() => setMeuDiaAberto(true)}
-        totalNaArea={visiveisMapaNovo.length}
+        totalNaArea={totalNaAreaSemDiscretas}
         rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
         onAbrir={handleMarkerPress}
         onCheguei={(c) => handleMarkAsVisited(c)}
@@ -10156,7 +10194,9 @@ function MainApp() {
           eu={userLocation}
           meuOwnerId={(profile as { id_hubspot?: string | null } | null)?.id_hubspot ?? null}
           aoFechar={() => setLugarGoogle(null)}
-          aoAbrirLead={(c) => { setLugarGoogle(null); openClientDetails(c); }}
+          // o cartão abre DEPOIS que a folha do Google fecha: no mesmo render, o history.back() dela
+          // fechava o cartão que acabou de abrir (auditoria 15/10/26; mesmo cuidado do "Virar lead")
+          aoAbrirLead={(c) => { setLugarGoogle(null); setTimeout(() => openClientDetails(c), 350); }}
           aoVirarLead={async (d) => {
             /* VIRAR LEAD JÁ ENTRA NO FUNIL (Julyan, 05/10/26: "tem que botar pra Prospecção, criar o
                lead e ir pro funil"). Antes abria o formulário vazio de contato; agora cria direto pelo
@@ -10828,8 +10868,13 @@ function ClientBottomSheet({
   const [reenviando, setReenviando] = useState(false);
   const [reenvioErro, setReenvioErro] = useState<string | null>(null);
   const CARENCIA_MS = 2 * 60_000;
+  // Conta-alvo (recém-aberto da Casa dos Dados, mais avaliado do Google) ainda NÃO é negócio por
+  // definição: vira negócio quando o executivo assume ("É meu"). A auditoria de 15/10/26 achou o
+  // alarme vermelho e o "tentar de novo" (que criaria o negócio) em todo recém-aberto. Cliente e
+  // ex-cliente também não são lead de funil.
   const semHubspot =
     !client.id_hubspot &&
+    client.status === 'lead' && !client.lead_prospeccao_id && !client.conta_alvo_place_id &&
     !!client.created_at &&
     Date.now() - new Date(client.created_at).getTime() > CARENCIA_MS;
 

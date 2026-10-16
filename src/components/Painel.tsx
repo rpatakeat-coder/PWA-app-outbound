@@ -36,6 +36,9 @@ import { useLayout } from '../hooks/useLayout';
 /** Celular: a folha tem dois tamanhos. Desktop ignora e abre sempre completo. */
 export type EstagioPainel = 'peek' | 'cheia';
 
+/** Quando um painel fechou tirando o próprio estado do histórico (o popstate que vem é dele). */
+let ultimoVoltarDePainel = 0;
+
 export interface PainelProps {
   visivel: boolean;
   aoFechar: () => void;
@@ -166,6 +169,10 @@ export function Painel({
     let nossoEstadoNaPilha = true;
     window.history.pushState({ painelTakeat: true }, '');
     const aoVoltar = () => {
+      // PAINEL EMPILHADO (auditoria 15/10/26): a "Fala pronta" abre por cima do cartão. Ao fechar,
+      // o history.back() dela chega aqui como "voltar" e o cartão descia ou fechava junto. Esse
+      // voltar é de outro painel, que acabou de tirar o próprio estado: o nosso continua na pilha.
+      if (Date.now() - ultimoVoltarDePainel < 600) return;
       nossoEstadoNaPilha = false;
       if (temPeekRef.current && estagioRef.current === 'cheia') {
         // Desce um estagio e reempilha: o proximo voltar fecha.
@@ -179,7 +186,7 @@ export function Painel({
     window.addEventListener('popstate', aoVoltar);
     return () => {
       window.removeEventListener('popstate', aoVoltar);
-      if (nossoEstadoNaPilha) window.history.back();
+      if (nossoEstadoNaPilha) { ultimoVoltarDePainel = Date.now(); window.history.back(); }
     };
   }, [visivel]);
 

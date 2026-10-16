@@ -10,6 +10,8 @@ import { supabase } from '../integrations/supabase/client';
 // os nomes nao existissem. Este hook resolve os nomes por id, em lotes,
 // exatamente como o cockpit de gestao ja' faz (nomesPorId).
 const LOTE = 200; // ids por consulta: limite de tamanho de URL do PostgREST
+// o mesmo Map vazio sempre: um novo a cada render quebrava os memos de quem usa (auditoria 15/10/26)
+const VAZIO = new Map<string, string>();
 
 export function useNomesDeClientes(ids: string[], enabled: boolean) {
   const query = useQuery<Map<string, string>>({
@@ -18,10 +20,12 @@ export function useNomesDeClientes(ids: string[], enabled: boolean) {
     queryFn: async () => {
       const mapa = new Map<string, string>();
       for (let i = 0; i < ids.length; i += LOTE) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('clients')
           .select('id, nome, empresa')
           .in('id', ids.slice(i, i + LOTE));
+        // erro não vira 'sem nome' guardado por 5 min: a consulta tenta de novo
+        if (error) throw error;
         for (const c of (data ?? []) as any[]) {
           mapa.set(c.id, (c.empresa || '').trim() || c.nome || 'Sem nome');
         }
@@ -31,5 +35,5 @@ export function useNomesDeClientes(ids: string[], enabled: boolean) {
     enabled: enabled && ids.length > 0,
     staleTime: 5 * 60 * 1000,
   });
-  return query.data ?? new Map<string, string>();
+  return query.data ?? VAZIO;
 }

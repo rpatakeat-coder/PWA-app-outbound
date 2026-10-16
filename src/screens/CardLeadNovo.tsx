@@ -256,6 +256,12 @@ export function ir(c: Client, perguntar = true) {
 
 function naoVale(d: DadosCardNovo, a: AcoesCardNovo) {
   const alvo = d.pino.tipo === 'alvo' && !!a.onDismissContaAlvo;
+  /* lead sem negócio no HubSpot (cadastro da rua antes do sync): a mudança de etapa abria só "este
+     lead ainda não tem negócio" e o motivo se perdia (auditoria 15/10/26). Diz o que fazer. */
+  if (!alvo && !d.client.id_hubspot) {
+    Alert.alert('Ainda não é negócio', 'Este lead ainda não chegou ao HubSpot, então não dá para marcar Perdido. Use "tentar de novo" no aviso do cartão e depois marque.');
+    return;
+  }
   // Conta-alvo sai do mapa na hora (o descarte que já existe); lead com
   // negócio vai para a etapa Perdido pelo modal de etapa, que pede o motivo.
   const acao = alvo ? a.onDismissContaAlvo : a.onChangeStage;
@@ -552,8 +558,11 @@ function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
     return (
       <View style={s.negocio}>
         <Text style={s.negocioRotulo}>NEGÓCIO · FUNIL FIELD SALES</Text>
-        <Text style={s.negocioEtapa}>Conta-alvo</Text>
-        <Text style={s.negocioNota}>{`Importada ${d.client.origem_lead === 'casa_dos_dados' ? 'da Casa dos Dados' : 'do Google'} · ainda não é negócio de ninguém`}</Text>
+        {/* o recém-aberto se apresenta como recém-aberto (o kicker já dizia; aqui dizia "Conta-alvo") */}
+        <Text style={s.negocioEtapa}>{d.pino.familia === 'rec' ? 'Recém-aberto' : 'Conta-alvo'}</Text>
+        <Text style={s.negocioNota}>{d.pino.familia === 'rec'
+          ? 'CNPJ novo da Casa dos Dados · ainda não é negócio de ninguém'
+          : `Importada ${d.client.origem_lead === 'casa_dos_dados' ? 'da Casa dos Dados' : 'do Google'} · ainda não é negócio de ninguém`}</Text>
         {a.onEMeu && <Botao rotulo="É meu · entrar em Prospecção" onPress={() => assumir(d, a)} estilo={[s.botao48, s.eMeuBotao]} texto={s.eMeuTexto} />}
       </View>
     );
@@ -583,7 +592,7 @@ function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
     <View style={s.negocio}>
       <View style={s.negocioTopo}>
         <Text style={s.negocioRotulo}>NEGÓCIO · FUNIL FIELD SALES</Text>
-        <Text style={s.negocioRotulo}>{i >= 0 ? `${i + 1} de 8` : 'lateral do funil'}</Text>
+        <Text style={s.negocioRotulo}>{i >= 0 ? `${i + 1} de 8` : ''}</Text>
       </View>
       <View style={s.barra8}>{FUNIL8.map((e, k) => <View key={e} style={[s.seg, k <= i && s.segFeito]} />)}</View>
       <Text style={s.negocioEtapa}>{codigo ? ROTULO_ETAPA[codigo] ?? d.etapaRotulo : d.etapaRotulo ?? 'Etapa não reconhecida'}</Text>

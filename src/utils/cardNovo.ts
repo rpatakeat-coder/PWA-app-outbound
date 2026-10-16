@@ -131,6 +131,8 @@ function peso(it: ItemFolha): number {
   if (it.p.queda) return 2; // cliente perdendo volume: o maior primeiro (desempate abaixo)
   if (it.p.temp === 'Q') return 2;
   if (it.p.temp === 'M') return 3;
+  // recém-aberto (escolhendo sistema) vem antes do lead frio e do cliente (auditoria 15/10/26)
+  if (it.p.familia === 'rec') return 3;
   return 4;
 }
 

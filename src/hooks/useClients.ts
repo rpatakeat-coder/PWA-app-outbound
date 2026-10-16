@@ -189,10 +189,12 @@ export function useClients(
     queryKey: ['visibility', profile?.sector],
     queryFn: async () => {
       const sector = profile?.sector || 'Geral';
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('sector_visibility')
         .select('status_slug')
         .eq('sector', sector);
+      // falha não pode virar "[]" guardado: lista vazia desliga o recorte por setor
+      if (error) throw error;
       const lista = (data || []).map((r: any) => r.status_slug);
       try { window.localStorage.setItem(`takeat-visibilidade:${sector}`, JSON.stringify(lista)); } catch { /* sem armazenamento */ }
       return lista;
@@ -340,12 +342,13 @@ export function useClients(
       const agora = new Date(Date.now() - 5000).toISOString();
       try {
         const bbox = bounds ?? (areaFilter ? bboxAround(areaFilter.lat, areaFilter.lon, areaFilter.radiusKm) : null);
-        let q = supabase.from('clients').select(`${CLIENT_MAP_COLUMNS},is_archived`).gt('updated_at', marca.em).limit(500);
+        let q = supabase.from('clients').select(`${CLIENT_MAP_COLUMNS},is_archived,updated_at`).gt('updated_at', marca.em).order('updated_at').limit(500);
         if (!isViewer && allowedStatuses && allowedStatuses.length > 0) q = q.in('status', allowedStatuses);
         if (bbox) q = q.gte('latitude', bbox.latMin).lte('latitude', bbox.latMax).gte('longitude', bbox.lonMin).lte('longitude', bbox.lonMax);
         const { data, error } = await q;
         if (error || !data) return;
-        if (ultimaLeituraRef.current?.chave === marca.chave) ultimaLeituraRef.current = { chave: marca.chave, em: agora };
+        // veio o teto (500): a marca vai só até a última linha lida, a próxima volta busca o resto (antes o resto ficava velho)
+        if (ultimaLeituraRef.current?.chave === marca.chave ) ultimaLeituraRef.current = { chave: marca.chave, em: data.length < 500 ? agora : String((data[data.length - 1] as { updated_at?: string }).updated_at ?? agora) };
         if (!data.length) return;
         const linhas = data as unknown as Record<string, unknown>[];
         const vivos = linhas.filter((r) => !r.is_archived).map((r) => mapRow(r));
@@ -960,6 +963,8 @@ export function useClients(
     onSuccess: (client) => {
       if (client) trocarNoCache(client);
       void queryClient.invalidateQueries({ queryKey: ['client_visits'] });
+      // a meta "x/5 recém-abertos" muda com o check-in (antes só recarregando o app)
+      void queryClient.invalidateQueries({ queryKey: ['novos-visitados-semana'] });
     },
   });
 

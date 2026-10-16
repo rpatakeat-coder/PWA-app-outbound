@@ -135,7 +135,7 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima = null, sugestao = null, aoFala, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
   const cores = useIconColors();
   const onCheguei = (c: Client) => { primeiroToque('cheguei'); chegueiBruto(c); };
   const irAte = (c: Client) => { primeiroToque('ir'); ir(c, false); };
@@ -201,6 +201,9 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
   const proxima = useMemo(() => (idProxima ? itens.find((it) => it.c.id === idProxima) ?? null : null)
     ?? ordenarItens(itens, 'prioridade').find((it) => it.plano && !it.feito) ?? null, [itens, idProxima]);
   const ehSugerida = !!proxima && !proxima.plano && !!sugestao;
+  // o "Para entrar" é da porta do halo: numa quadra aberta, a "próxima" pode ser outra parada, e a
+  // fala era de outro restaurante (auditoria 15/10/26)
+  const armaDaProxima = proxima && proxima.c.id === idProxima ? armaDoHalo : null;
   // Arrastar a pílula para cima abre a lista da área (handoff v4.1, xama1).
   const arrasto = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 12 && Math.abs(g.dy) > Math.abs(g.dx),
@@ -304,7 +307,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
           const feitoTarde = planoTotal > 0 && planoFeito >= planoTotal && hora >= 15;
           if (!semPlano && !feitoTarde) return null;
           const texto = semPlano
-            ? (hora >= 17 ? 'Sem plano hoje · deixe amanhã pronto' : `Sem plano hoje · monte as ${Math.max(1, metaVisitas)} portas em 1 minuto`)
+            ? (hora >= 17 ? 'Sem plano hoje · deixe amanhã pronto' : `Sem plano · monte ${Math.max(1, metaVisitas)} portas em 1 min`)
             : 'Plano de hoje feito · deixe amanhã pronto';
           return (
             <Pressable accessibilityRole="button" accessibilityLabel={`${texto}. Planejar`} onPress={aoPlanejar} style={s.pilulaArma}>
@@ -581,7 +584,7 @@ const s = StyleSheet.create({
   // o mesmo limão neon do pino do mapa (15/10/26), com a tinta escura nos dois temas
   miniLosango: { width: 21, height: 21, borderRadius: 3, transform: [{ rotate: '45deg' }], backgroundColor: '#C8F31D', borderWidth: 1.5, borderColor: '#111418', alignItems: 'center', justifyContent: 'center' },
   miniLosangoTexto: { fontSize: 10, fontWeight: '700', color: '#111418', transform: [{ rotate: '-45deg' }] },
-  pilulaRecolher: { width: 28, height: 40, alignItems: 'center', justifyContent: 'center', marginLeft: -8, flexShrink: 0 },
+  pilulaRecolher: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -12, flexShrink: 0 },
   pilulaMini: {
     position: 'absolute', left: 10, zIndex: 20, height: 44, borderRadius: 22, paddingHorizontal: 14,
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -660,7 +663,7 @@ const s = StyleSheet.create({
   lista: { maxHeight: 320 },
   roteirizar: { minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   roteirizarTexto: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
-  planejar: { minHeight: 40, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  planejar: { minHeight: 44, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   planejarTexto: { fontSize: 13, fontWeight: '700', color: 'var(--text)' },
   painel: { flex: 1, minHeight: 0, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, gap: 6, backgroundColor: 'var(--surface)' },
   listaEmbutida: { paddingBottom: 8 },

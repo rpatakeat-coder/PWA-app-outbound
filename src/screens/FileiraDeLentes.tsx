@@ -102,7 +102,7 @@ const s = StyleSheet.create({
   rolaConteudo: { gap: 8, paddingLeft: 12, paddingRight: 8, alignItems: 'center' },
   largo: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, width: '100%' },
   lente: {
-    height: 40, paddingHorizontal: 14, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0,
+    height: 44, paddingHorizontal: 14, borderRadius: 22, flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0,
     backgroundColor: 'var(--pilula-mapa)', borderWidth: 1, borderColor: 'var(--border)',
     shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 2 },
   },
@@ -124,7 +124,7 @@ const s = StyleSheet.create({
   cFalta: { backgroundColor: 'var(--tint-amber)' },
   cFaltaTexto: { color: 'var(--tint-amber-text)' },
   filtros: {
-    width: 44, height: 40, borderRadius: 20, marginRight: 12, marginLeft: 4, alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    width: 44, height: 44, borderRadius: 22, marginRight: 12, marginLeft: 4, alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     backgroundColor: 'var(--pilula-mapa)', borderWidth: 1, borderColor: 'var(--border)',
   },
   filtrosAceso: { borderColor: 'var(--text)', borderWidth: 1.5 },
@@ -134,8 +134,8 @@ const s = StyleSheet.create({
   l3: { width: 4, height: 2.2, borderRadius: 2, backgroundColor: 'var(--text)' },
   lAceso: { backgroundColor: 'var(--text)' },
   limparLinha: { position: 'absolute', top: ALTURA_FILEIRA_LENTES + 6, left: 12 },
-  limpar: { height: 34, paddingHorizontal: 12, borderRadius: 17, justifyContent: 'center', backgroundColor: 'var(--text)', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
-  limparLargo: { height: 40, borderRadius: 20 },
+  limpar: { height: 44, paddingHorizontal: 14, borderRadius: 22, justifyContent: 'center', backgroundColor: 'var(--text)', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+  limparLargo: { height: 44, borderRadius: 22 },
   limparTexto: { fontSize: 13, fontWeight: '700', color: 'var(--bg)' },
   pontoFiltro: { position: 'absolute', top: 6, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: 'var(--vermelho-acao)' },
 });

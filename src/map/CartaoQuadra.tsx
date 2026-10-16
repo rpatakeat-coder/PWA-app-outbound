@@ -10,7 +10,7 @@ import type { ResumoQuadra } from '../utils/quadra';
 export const ANCORA_QUADRA = { x: 0.5, y: 0.5 };
 
 // Ordem fixa das fatias: a mesma da legenda, para o anel ler igual em todo lugar.
-const ORDEM = ['#E23B3B', '#F5A524', '#0EA5E9', '#16A34A', '#EC4899', '#8B5CF6', '#4B5563', '#6B7280'];
+const ORDEM = ['#E23B3B', '#F5A524', '#C8F31D', '#0EA5E9', '#16A34A', '#EC4899', '#8B5CF6', '#4B5563', '#6B7280'];
 
 export function gradienteDoAnel(cores: string[]): string {
   const total = cores.length || 1;

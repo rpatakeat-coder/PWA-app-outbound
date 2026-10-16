@@ -90,6 +90,8 @@ export type Pino = {
   nota?: number | null;
   /** Cliente ativo em queda (lente "Clientes em queda"). */
   queda?: QuedaDoCliente | null;
+  /** Lead em Reciclagem: frio que volta depois; fora do Meu dia e da sugestão de porta. */
+  reciclagem?: boolean;
 };
 
 // Cores do Disco Takeat (prompt final §6 — a legenda de hoje). Dado, não
@@ -188,6 +190,8 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
   }
 
   const cor = tipo === 'cliente' ? COR.cliente : tipo === 'ex' ? COR.ex : tipo === 'alvo' ? COR.alvo : COR[temp ?? '?'];
+  // Reciclagem é frio, mas "volta depois": sai do Meu dia e da sugestão de porta (auditoria 15/10/26)
+  const reciclagem = tipo === 'lead' && codigo === '1398311191';
   const glifo = tipo === 'ex' ? '↺' : tipo === 'lead' ? `${temp}${parcial ? '·' : ''}` : '';
 
   const owner = c.vendedor_id_hubspot ? String(c.vendedor_id_hubspot) : null;
@@ -242,7 +246,7 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
     : abertoHa != null ? 'rec' : !alvoAntigo && nota != null && nota >= NOTA_MAIS_AVALIADO ? 'av' : 'alvo';
 
   return {
-    origem, familia,
+    origem, familia, reciclagem,
     avaliacoes: tipo === 'alvo' && c.conta_alvo_reviews != null ? Number(c.conta_alvo_reviews) : null,
     tipo, temp, cor, glifo, logo: tipo === 'cliente', dono,
     nota,

@@ -91,7 +91,8 @@ export function useContextoDoPino(ligado: boolean): Omit<ContextoPino, 'agora'> 
       const out: [string, string][] = [];
       for (let de = 0; de < 20000; de += 1000) {
         const { data, error } = await supabase.from('leads_prospeccao').select('id, data_abertura')
-          .ilike('fonte', '%Casa dos Dados%').not('data_abertura', 'is', null).range(de, de + 999);
+          // ordem fixa: sem ela, acima de 1000 linhas o PostgREST pula ou repete linha na virada da página
+          .ilike('fonte', '%Casa dos Dados%').not('data_abertura', 'is', null).order('id').range(de, de + 999);
         if (error) throw error;
         (data ?? []).forEach((l: { id: string; data_abertura: string }) => out.push([String(l.id), String(l.data_abertura)]));
         if (!data || data.length < 1000) break;
@@ -104,7 +105,8 @@ export function useContextoDoPino(ligado: boolean): Omit<ContextoPino, 'agora'> 
      Mesma régua de visita do Cockpit (visitas_com_prova); o pino diz se o lead é recém-aberto. */
   const meuId = (profile as { id?: string } | null)?.id ?? null;
   const visitasSemana = useQuery<{ client_id: string; dia: string }[]>({
-    queryKey: ['novos-visitados-semana', meuId],
+    // a segunda na chave: o PWA aberto de domingo para segunda não mostra a semana passada
+    queryKey: ['novos-visitados-semana', meuId, segundaBRT()],
     enabled: ligado && isAuthenticated && !!meuId,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
