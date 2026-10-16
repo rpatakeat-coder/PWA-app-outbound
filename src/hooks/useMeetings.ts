@@ -44,13 +44,21 @@ export function useMeetings() {
       //
       // Sem `user.id` nao filtra por nada: melhor nao trazer do que trazer o
       // que nao e' seu, entao a query cai num id impossivel.
-      const q = supabase
-        .from('client_meetings')
-        .select('*')
-        .eq('created_by', user?.id ?? '00000000-0000-0000-0000-000000000000');
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data ?? []) as ClientMeeting[];
+      // PAGINADO (auditoria 16/10/26): o PostgREST corta em 1000 linhas sem erro e quem passasse
+      // disso perderia as reuniões mais novas da Agenda (o maior hoje tem 109).
+      const todas: ClientMeeting[] = [];
+      for (let de = 0; ; de += 1000) {
+        const { data, error } = await supabase
+          .from('client_meetings')
+          .select('*')
+          .eq('created_by', user?.id ?? '00000000-0000-0000-0000-000000000000')
+          .order('id', { ascending: true })
+          .range(de, de + 999);
+        if (error) throw error;
+        todas.push(...((data ?? []) as ClientMeeting[]));
+        if (!data || data.length < 1000) break;
+      }
+      return todas;
     },
     enabled: isAuthenticated && !!user?.id,
   });

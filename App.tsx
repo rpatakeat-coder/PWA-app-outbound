@@ -2767,7 +2767,12 @@ function MainApp() {
     return clientesTakeatNaArea.map((x) => ({ ...x, d: metrosLL(pt, x) })).filter((x) => x.d <= RAIO_REFERENCIA_M && x.id !== c.id)
       .sort((a, b) => a.d - b.d);
   }, [clientesTakeatNaArea]);
+  /* a etapa do halo pela MESMA regra da folha (codigoDaEtapa: tabela de etapas, depois o snapshot).
+     Sem a tabela, negócio fora do snapshot ficava sem etapa e o halo dizia "achar o decisor" onde a
+     folha dizia "fechar" (auditoria 16/10/26). Não chamar codigoDaEtapa daqui: é declarada depois (TDZ). */
+  const etapaDoHalo = itemDoHalo && contextoPino ? (textoNormalizado(itemDoHalo.c.etapa) ? contextoPino.etapaDePara.get(textoNormalizado(itemDoHalo.c.etapa)) ?? null : null) : null;
   const { arma: armaDoHalo } = useArmaDoPino(itemDoHalo?.c ?? null, itemDoHalo?.p ?? null, {
+    etapaCodigo: etapaDoHalo,
     tempo: itemDoHalo?.c.id_hubspot ? contextoPino?.tempoPorNegocio.get(String(itemDoHalo.c.id_hubspot)) ?? null : null,
     proximo: combinadoDe(itemDoHalo?.c ?? null)?.texto?.toLowerCase() ?? null,
     clientePerto: clientePertoDe(itemDoHalo?.c ?? null)?.[0]?.nome ?? null,
