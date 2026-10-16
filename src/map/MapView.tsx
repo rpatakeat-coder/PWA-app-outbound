@@ -62,6 +62,9 @@ export interface MapViewProps {
   children?: React.ReactNode;
 
   showsUserLocation?: boolean;
+  /** Onde o app sabe que a pessoa está (GPS do app ou a última posição guardada). O ponto azul nasce
+   *  aqui, apagado, enquanto o GPS do mapa não confirma: sem isso ele ficava invisível até o 1º sinal. */
+  posicaoConhecida?: LatLng | null;
   followsUserLocation?: boolean;
 
   onPanDrag?: () => void;
@@ -147,6 +150,7 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
     initialRegion,
     children,
     showsUserLocation = false,
+    posicaoConhecida = null,
     followsUserLocation = false,
     onPanDrag,
     onRegionChange,
@@ -387,6 +391,17 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
   /* voltou a seguir (tocou em centralizar): o próximo ponto recentraliza na hora */
   if (!followsUserLocation) ultimoPan.current = null;
 
+  /* O PONTO AZUL NÃO SOME (16/10/26, Julyan: "no mapa dos executivos tem que ter o pin de falar onde
+     ele tá, ele às vezes some"). Sumia de três jeitos: (1) o marcador nascia SEM posição e só aparecia
+     no 1º sinal do GPS — com GPS lento ou em timeout, nunca; (2) o mapa recriado (tema, troca de aba)
+     recomeçava vazio; (3) no PWA do iPhone, voltar do segundo plano pode parar o watchPosition sem
+     erro. Agora: nasce na última posição sabida (a do mapa, a do app ou a guardada), apagado até o
+     GPS confirmar; o GPS se religa ao voltar para o app e depois de erro. */
+  const ultimaPosicao = useRef<{ lat: number; lng: number; em: number } | null>(null);
+  const conhecidaRef = useRef(posicaoConhecida);
+  conhecidaRef.current = posicaoConhecida;
+  const pontoRef = useRef<{ marker: google.maps.marker.AdvancedMarkerElement; dot: HTMLDivElement } | null>(null);
+
   useEffect(() => {
     if (!ctx || !showsUserLocation) return;
 
@@ -407,6 +422,11 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
       content: dot,
       zIndex: 9999, // sempre por cima dos pinos (prompt final C11)
     });
+    pontoRef.current = { marker, dot };
+    /* apagado = posição sabida, ainda não confirmada pelo GPS do mapa */
+    const apagado = (sim: boolean) => { dot.style.opacity = sim ? '0.55' : '1'; dot.style.background = sim ? '#64748B' : '#2563EB'; };
+    const inicio = ultimaPosicao.current ?? (conhecidaRef.current ? { lat: conhecidaRef.current.latitude, lng: conhecidaRef.current.longitude, em: 0 } : null);
+    if (inicio) { marker.position = { lat: inicio.lat, lng: inicio.lng }; apagado(Date.now() - inicio.em > 120000); }
 
     // Halo de precisão: raio = margem de erro do GPS. Mostra ao vendedor por
     // que o check-in pode dizer "longe" com GPS fraco.
@@ -421,10 +441,16 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
       zIndex: 0,
     });
 
-    const watchId = navigator.geolocation?.watchPosition(
+    let watchId: number | undefined;
+    let religar: ReturnType<typeof setTimeout> | null = null;
+    const ligar = () => {
+    if (watchId != null) navigator.geolocation?.clearWatch(watchId);
+    watchId = navigator.geolocation?.watchPosition(
       (pos) => {
         const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         marker.position = p;
+        ultimaPosicao.current = { lat: p.lat, lng: p.lng, em: Date.now() };
+        apagado(false);
         halo.setCenter(p);
         halo.setRadius(Math.min(pos.coords.accuracy || 0, 500));
         /* SEGUIR SEM SACUDIR (14/10/26): cada panTo é uma parada do mapa, e cada parada redesenha
@@ -439,16 +465,40 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
           }
         }
       },
-      (err) => console.warn('[MAP] geolocation:', err.message),
+      (err) => {
+        console.warn('[MAP] geolocation:', err.message);
+        /* o ponto fica na última posição, apagado; e o GPS tenta de novo em 20 s (sem permissão, não) */
+        apagado(true);
+        if (err.code !== 1 && !religar) religar = setTimeout(() => { religar = null; ligar(); }, 20000);
+      },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
     );
+    };
+    ligar();
+    const aoVoltar = () => { if (document.visibilityState === 'visible') ligar(); };
+    document.addEventListener('visibilitychange', aoVoltar);
 
     return () => {
       if (watchId != null) navigator.geolocation.clearWatch(watchId);
+      if (religar) clearTimeout(religar);
+      document.removeEventListener('visibilitychange', aoVoltar);
       marker.map = null;
       halo.setMap(null);
+      pontoRef.current = null;
     };
   }, [ctx, showsUserLocation]);
+
+  /* a posição do app chegou (ou mudou) e o GPS do mapa ainda não confirmou nada recente: o ponto vai
+     para ela, apagado. Com sinal do mapa nos últimos 2 min, quem manda é o mapa. */
+  useEffect(() => {
+    const pt = pontoRef.current;
+    if (!pt || !posicaoConhecida) return;
+    const ult = ultimaPosicao.current;
+    if (ult && Date.now() - ult.em < 120000) return;
+    pt.marker.position = { lat: posicaoConhecida.latitude, lng: posicaoConhecida.longitude };
+    pt.dot.style.opacity = '0.55';
+    pt.dot.style.background = '#64748B';
+  }, [posicaoConhecida?.latitude, posicaoConhecida?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- Metodos imperativos ----
   const handle = useMemo<MapViewHandle>(

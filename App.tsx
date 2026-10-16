@@ -6411,6 +6411,7 @@ function MainApp() {
         }}
         initialRegion={mapCenter}
         showsUserLocation={true}
+        posicaoConhecida={userLocation ?? posicaoGuardada}
         followsUserLocation={isFollowingUser && !creationMode}
         onPanDrag={handleMapInteraction}
         // Atualiza o preview de coords continuamente enquanto arrasta...
