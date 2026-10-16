@@ -72,16 +72,16 @@ export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolh
     aoFiltrosRapidos({ ...filtros, [r.grupo]: conj } as FiltrosNovos);
   };
   return (
-    <Painel visivel={visivel} aoFechar={aoFechar} rotulo="Filtros e outras lentes" topo={
+    <Painel visivel={visivel} aoFechar={aoFechar} rotulo={lentes.length ? 'Filtros e outras lentes' : 'Filtros'} topo={
       <View style={s.topo}>
-        <Text style={s.titulo}>Filtros e outras lentes</Text>
+        <Text style={s.titulo}>{lentes.length ? 'Filtros e outras lentes' : 'Filtros'}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={aoFechar} style={s.fechar}>
           <SiClose width={20} height={20} fill="var(--text-muted)" />
         </Pressable>
       </View>
     }>
       <View style={s.corpo}>
-        <View style={s.grade}>
+        {lentes.length > 0 && <View style={s.grade}>
           {lentes.map((l) => {
             const ativa = l.id === atual;
             return (
@@ -101,7 +101,7 @@ export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolh
               </Pressable>
             );
           })}
-        </View>
+        </View>}
 
         {filtros && aoFiltrosRapidos && (
           <View style={{ gap: 8 }}>

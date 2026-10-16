@@ -6873,7 +6873,7 @@ function MainApp() {
       {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && (
         <FileiraDeLentes
           top={insets.top + 7 + ALTURA_TOPO_CAMPO + 8}
-          lentes={LENTES.filter((l) => LENTES_DA_FILEIRA.includes(l.id))}
+          lentes={LENTES.filter((l) => LENTES_DA_FILEIRA.includes(l.id) && (l.id !== 'calor' || canViewGestor))}
           atual={lente}
           aoEscolher={escolherLente}
           contador={contadorDaSemana}
