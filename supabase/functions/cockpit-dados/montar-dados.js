@@ -792,7 +792,14 @@ function filtrarParaPapel(dados, usuario) {
       velocidade: dados.historicoEtapas.velocidade || [],
       ciclo: dados.historicoEtapas.ciclo || null,
       agregado: dados.historicoEtapas.agregado || null,
-      porOwner: { [meuId]: (dados.historicoEtapas.porOwner || {})[meuId] || null }
+      porOwner: { [meuId]: (dados.historicoEtapas.porOwner || {})[meuId] || null },
+      /* passos do mês (cockpit-unificado #842, auditoria 15/10/26): sem eles o executivo caía na
+         regra antiga, que contava a mesma visita 2-3 vezes como "decisor". A lista inteira só a
+         dele; dos colegas, só quantos (o ranking de totais é autorizado, a carteira não desce). */
+      passosDoMes: dados.historicoEtapas.passosDoMes ? Object.assign({}, dados.historicoEtapas.passosDoMes, {
+        porOwner: Object.fromEntries(Object.entries(dados.historicoEtapas.passosDoMes.porOwner || {}).map(([o, v]) => [o, o === String(meuId) ? v
+          : Object.fromEntries(Object.entries(v).map(([k, l]) => [k, l.map(x => ({ id: x.id, em: x.em }))]))]))
+      }) : null
     } : null,
     motivosPerda: dados.motivosPerda ? {
       dias: dados.motivosPerda.dias,
