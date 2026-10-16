@@ -15,10 +15,12 @@ import { Painel } from '../components/Painel';
 import { Toast } from '../components/Toast';
 import { IconCall, useIconColors } from '../components/icons';
 import { concluirComDesfazer } from '../utils/concluirTarefa';
-import { novoAcaoId } from '../utils/filaOffline';
+import { enfileirar, ehErroDeRede, novoAcaoId } from '../utils/filaOffline';
+import { ETAPA, MOTIVOS_PERDIDO, MOTIVOS_QUE_EXIGEM_TEXTO } from '../utils/fichaDeRua';
+import { ehRecusa, negocioAcao } from '../utils/negocioAcao';
 import { diaBRT } from '../utils/abaTarefas';
 import {
-  COMO_FOI, PROXIMOS, diaUtilDepois, notaDoRegistro, pedidoDoProximo, proximoSugerido, type ComoFoi,
+  COMO_FOI, PROXIMOS, diaUtilDepois, notaDoRegistro, pedidoDoProximo, podeRegistrar, proximoSugerido, type ComoFoi,
 } from '../utils/registroDeTarefa';
 
 export type TarefaParaRegistrar = {
@@ -47,8 +49,12 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
   const [comoFoi, setComoFoi] = useState<ComoFoi | null>(null);
   const [proximoId, setProximoId] = useState<string>('nada');
   const [nota, setNota] = useState('');
+  /* SEM INTERESSE VAI A PERDIDO (16/10/26): antes fechava a tarefa e deixava o negócio aberto e sem
+     passo. Agora pede o motivo, como a ficha e a aba Tarefas, e move o negócio pela porta única. */
+  const [motivo, setMotivo] = useState<string | null>(null);
+  const [motivoTexto, setMotivoTexto] = useState('');
 
-  useEffect(() => { setComoFoi(null); setProximoId('nada'); setNota(''); }, [tarefa?.id]);
+  useEffect(() => { setComoFoi(null); setProximoId('nada'); setNota(''); setMotivo(null); setMotivoTexto(''); }, [tarefa?.id]);
 
   // O TELEFONE SEMPRE (28/09/2026, Julyan: "é sempre ter botão de ligar"). Ele vinha do lead
   // carregado no mapa; lead fora da área da tela abria a folha sem o Ligar. Sem telefone na
@@ -69,10 +75,18 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
   const data = proximo.tipo === 'nada' ? null : diaUtilDepois(hoje, proximo.dias);
   const telefone = tarefa.telefone || foneBuscado || null;
   const fone = telefone ? soDigitos(telefone) : '';
+  const temNegocio = !!tarefa.dealId;
+  const perde = temNegocio && comoFoi === 'sem_interesse';
+  const regra = podeRegistrar({ comoFoi, proximoId, temNegocio, motivo, motivoTexto, exigemTexto: MOTIVOS_QUE_EXIGEM_TEXTO });
+  const bloqueado = !regra.pode || (!!tarefa.presencial && !tarefa.dealId);
 
   const registrar = () => {
-    if (!comoFoi) return;
+    if (!comoFoi || bloqueado) return;
     const t = tarefa;
+    const perdido = perde && t.dealId && motivo ? {
+      op: 'mudar-etapa', dealId: t.dealId, novaEtapa: ETAPA.perdido,
+      propriedades: { motivo_do_perdido: motivo, ...(motivoTexto.trim() ? { observacao__desqualificado: motivoTexto.trim().slice(0, 200) } : {}) },
+    } : null;
     const texto = notaDoRegistro({ comoFoi, assunto: t.assunto, nota, proximo, data });
     const passo = data ? pedidoDoProximo({ dealId: t.dealId, proximo, data, nome: t.nome, nota }) : null;
     // visita não sai da lista: continua aberta até o Cheguei
@@ -84,11 +98,20 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
       rotulo: `Registro · ${t.nome ?? t.assunto}`,
       textoToast: t.presencial ? 'Ligação registrada · a visita continua aberta até o Cheguei'
         : !t.dealId ? 'Tarefa concluída · sem negócio ligado, o como foi não fica registrado'
+        : perdido ? 'Registrado · o negócio vai para Perdido'
         : passo ? `Registrado · próximo em ${data!.split('-').reverse().slice(0, 2).join('/')}` : 'Registrado · HubSpot + Cockpit',
       aoVoltar: () => aoVoltar?.(t.id),
       // A conclusão, a nota e o próximo passo saem juntos (concluirTarefa), inclusive pela
       // fila quando não há sinal.
-      aoGravar: () => { void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] }); },
+      aoGravar: () => {
+        void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] });
+        if (!perdido) return;
+        void negocioAcao(perdido).then(() => { void queryClient.invalidateQueries({ queryKey: ['clients'] }); }).catch((e) => {
+          if (ehErroDeRede(e)) return enfileirar({ acaoId: novoAcaoId(), tipo: 'negocio', rotulo: `Perdido · ${t.nome ?? t.assunto}`, payload: { corpo: perdido } });
+          Toast.mostrar(`A tarefa foi registrada, mas o negócio não foi para Perdido: ${ehRecusa(e) ? (e as Error).message : String((e as Error)?.message ?? e)}`, 'erro');
+          return undefined;
+        });
+      },
     });
   };
 
@@ -124,10 +147,25 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
           {COMO_FOI.map((c) => chip(c.id, c.rotulo, comoFoi === c.id, () => { setComoFoi(c.id); setProximoId(proximoSugerido(c.id)); }))}
         </View>
 
-        <Text style={s.secao}>E AGORA</Text>
-        <View style={s.chips}>
-          {PROXIMOS.map((p) => chip(p.id, p.rotulo, proximoId === p.id, () => setProximoId(p.id)))}
-        </View>
+        {perde ? (
+          <>
+            <Text style={s.secao}>VAI PARA PERDIDO · O MOTIVO</Text>
+            <View style={s.chips}>
+              {MOTIVOS_PERDIDO.map((m) => chip(`m-${m.valor}`, m.rotulo, motivo === m.valor, () => setMotivo(m.valor)))}
+            </View>
+            {!!motivo && MOTIVOS_QUE_EXIGEM_TEXTO.includes(motivo) && (
+              <TextInput value={motivoTexto} onChangeText={setMotivoTexto} placeholder="O que pesou" placeholderTextColor={cores.muted} style={s.nota} maxLength={200} />
+            )}
+          </>
+        ) : (
+          <>
+            <Text style={s.secao}>E AGORA</Text>
+            <View style={s.chips}>
+              {/* com negócio, "Nada agora" sai: todo negócio fica com o próximo passo datado (16/10/26) */}
+              {PROXIMOS.filter((p) => !temNegocio || p.id !== 'nada').map((p) => chip(p.id, p.rotulo, proximoId === p.id, () => setProximoId(p.id)))}
+            </View>
+          </>
+        )}
         {!!tarefa.presencial && (
           <Text style={s.aviso}>{tarefa.dealId
             ? 'Tarefa de visita: a ligação e o próximo passo ficam no negócio, mas ela só conclui no Cheguei, com GPS ou foto.'
@@ -146,8 +184,8 @@ export default function RegistrarTarefa({ tarefa, aoFechar, aoSumir, aoVoltar }:
           maxLength={200}
         />
 
-        <Pressable accessibilityRole="button" disabled={!comoFoi || (!!tarefa.presencial && !tarefa.dealId)} onPress={registrar} style={[s.salvar, (!comoFoi || (!!tarefa.presencial && !tarefa.dealId)) && { opacity: 0.45 }]}>
-          <Text style={s.salvarTexto}>{comoFoi ? 'Registrar' : 'Escolha como foi'}</Text>
+        <Pressable accessibilityRole="button" disabled={bloqueado} onPress={registrar} style={[s.salvar, bloqueado && { opacity: 0.45 }]}>
+          <Text style={s.salvarTexto}>{regra.pode ? (perde ? 'Registrar e mandar para Perdido' : 'Registrar') : regra.falta}</Text>
         </Pressable>
       </View>
     </Painel>

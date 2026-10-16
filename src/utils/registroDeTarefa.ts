@@ -78,3 +78,21 @@ export function pedidoDoProximo(o: { dealId: string | null; proximo: Proximo; da
     texto: (o.proximo.tipo === 'visita' ? `Visita${quem}` : `Ligar${quem}`) + (livre ? ` — ${livre}` : ''),
   };
 }
+
+/** O QUE O REGISTRAR EXIGE (16/10/26, Julyan: "precisamos sempre que tenha próximo passo, pq o jogo
+ *  de field sales é constância e follow up"). Tarefa ligada a um negócio só se registra com um
+ *  desfecho: próximo passo com data, ou "Sem interesse" com o motivo (o negócio vai a Perdido).
+ *  "Nada agora" deixava o negócio aberto e sem passo; é a mesma regra da ficha e da aba Tarefas.
+ *  Sem negócio ligado não há onde guardar o passo: segue como antes. */
+export function podeRegistrar(o: { comoFoi: ComoFoi | null; proximoId: string; temNegocio: boolean; motivo: string | null; motivoTexto: string; exigemTexto: string[] }):
+  { pode: boolean; falta: string | null } {
+  if (!o.comoFoi) return { pode: false, falta: 'Escolha como foi' };
+  if (!o.temNegocio) return { pode: true, falta: null };
+  if (o.comoFoi === 'sem_interesse') {
+    if (!o.motivo) return { pode: false, falta: 'Escolha o motivo do Perdido' };
+    if (o.exigemTexto.includes(o.motivo) && !o.motivoTexto.trim()) return { pode: false, falta: 'Escreva o que pesou' };
+    return { pode: true, falta: null };
+  }
+  if (o.proximoId === 'nada') return { pode: false, falta: 'Escolha o próximo passo' };
+  return { pode: true, falta: null };
+}
