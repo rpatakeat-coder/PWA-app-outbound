@@ -1,3 +1,5 @@
+-- Renumerada em 16/10/2026: nasceu 0209, número que colidiu com 0209_pinos_dos_duplicados_do_hubspot.
+-- O SQL não muda: os marcadores "0209" abaixo são os que ela gravou na função, e a 0211 os procura.
 -- 0209 · "AGENDAR DEMO" SÓ PARA O DECISOR TRAVADO (Julyan, 16/10/2026)
 --
 -- "e só cobrar tbm os travados sem proximo passo na automação, nao os leads recentes".

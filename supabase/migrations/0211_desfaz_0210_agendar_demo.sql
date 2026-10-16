@@ -1,3 +1,5 @@
+-- Renumerada em 16/10/2026: nasceu 0210, ao lado da antiga 0209 (hoje 0210_agendar_demo_so_travado).
+-- O SQL não muda: desfaz o que a 0210 gravou, e os marcadores dela na função dizem "0209".
 -- 0210 · DESFAZ A 0209 (Julyan, 16/10/2026)
 --
 -- A 0209 (agendar_demo_so_travado) tirou o degrau D2 do generate_client_tasks por um pedido que
