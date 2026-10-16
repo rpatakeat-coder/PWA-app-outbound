@@ -573,7 +573,7 @@ function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       <View style={s.negocio}>
         <Text style={s.negocioRotulo}>NEGÓCIO · FUNIL FIELD SALES</Text>
         <Text style={s.negocioEtapa}>Ainda sem negócio no HubSpot</Text>
-        <Text style={s.negocioNota}>O negócio nasce em Prospecção quando o lead é assumido (É meu) ou cadastrado.</Text>
+        <Text style={s.negocioNota}>O negócio nasce em Prospecção, no seu nome, quando você marca o próximo passo, registra a visita ou toca em É meu.</Text>
       </View>
     );
   }

@@ -349,6 +349,8 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
            passo vão para ele, e a etapa dele (já em Visita) não volta para Prospecção na tela */
         lista.push({ rotulo: g.jaTinha ? 'Negócio no HubSpot' : 'Negócio em Prospecção', estado: 'ok' });
         if (g.criado) onEtapaMudou(ETAPA.prospeccao);
+        /* a linha da ficha nasceu sem negócio; o Cockpit liga ficha a negócio por deal_id */
+        if (p.linha && !p.linha.deal_id) p.linha = { ...p.linha, deal_id: String(g.client.id_hubspot) };
         void queryClient.invalidateQueries({ queryKey: ['clients'] });
         if (p.notaSemNegocio) {
           try { await negocioAcao({ op: 'nota', dealId: g.client.id_hubspot, texto: p.notaSemNegocio }); lista.push({ rotulo: 'Nota da visita', estado: 'ok' }); }
