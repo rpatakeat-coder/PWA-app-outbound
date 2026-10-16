@@ -13,7 +13,7 @@ import { sendHubspotEvent } from './hubspotSync';
 import type { Client } from '../types/client';
 import { decidirProspeccao, type Eu } from './entrarEmProspeccao';
 
-export type ResultadoAssumir = { ok: true; etapa: string | null; aviso: string | null; idHubspot?: string | null } | { ok: false; erro: string };
+export type ResultadoAssumir = { ok: true; etapa: string | null; aviso: string | null; idHubspot?: string | null; jaExistia?: boolean } | { ok: false; erro: string };
 
 async function erroDaFuncao(error: unknown): Promise<string> {
   const ctx = (error as { context?: Response }).context;
@@ -62,25 +62,37 @@ export async function assumirLead(
     });
     const o = (typeof body === 'object' && body ? body : null) as Record<string, unknown> | null;
     const id = typeof body === 'string' ? body : (o?.id_hubspot ?? o?.deal_id ?? o?.id ?? null);
+    const jaExistia = o?.deduped === true;
     await supabase.from('clients').update({
-      vendedor_id_hubspot: eu.idHubspot,
+      ...(jaExistia ? {} : { vendedor_id_hubspot: eu.idHubspot }),
       ...(id ? { id_hubspot: String(id) } : {}),
       ...(o?.url_hubspot ? { url_hubspot: String(o.url_hubspot) } : {}),
     }).eq('id', client.id);
-    return { ok: true, etapa: 'Prospecção', aviso: null, idHubspot: id ? String(id) : null };
+    return { ok: true, etapa: jaExistia ? null : 'Prospecção', aviso: null, idHubspot: id ? String(id) : null, jaExistia };
   } catch (e) {
     return { ok: false, erro: (e as Error)?.message ?? 'O HubSpot recusou criar o negócio.' };
   }
 }
 
 /** O lead planejado (ou registrado na ficha) entra no funil se ainda não tem negócio. Devolve o
- *  client com o negócio novo, para quem chamou mandar o próximo passo ao HubSpot no mesmo gesto, e
- *  o aviso quando não criou (ninguém fica achando que o lead está no funil sem estar). */
-export async function entrarEmProspeccao(client: Client, eu: Eu, nomeDoDono?: string | null): Promise<{ client: Client; criado: boolean; aviso: string | null }> {
-  const d = decidirProspeccao(client, eu, nomeDoDono);
-  if (!d.criar) return { client, criado: false, aviso: d.motivo };
-  const r = await assumirLead(client, eu);
-  if (!r.ok) return { client, criado: false, aviso: `o lead não entrou no funil (${r.erro})` };
-  if (!r.idHubspot) return { client, criado: false, aviso: 'o HubSpot não devolveu o negócio: confira em alguns minutos se ele entrou em Prospecção' };
-  return { client: { ...client, id_hubspot: r.idHubspot, vendedor_id_hubspot: eu.idHubspot, etapa: 'Prospecção' }, criado: true, aviso: null };
+ *  client com o negócio, para quem chamou mandar o próximo passo ao HubSpot no mesmo gesto, e o
+ *  aviso quando não criou (ninguém fica achando que o lead está no funil sem estar).
+ *
+ *  O PINO SE RELÊ ANTES (16/10/26): a ficha abre com o pino de ANTES do check-in, e o check-in da
+ *  conta-alvo cria o negócio sozinho. Com o pino velho, a ficha pediria outro; o servidor deduplica,
+ *  mas a tela diria "em Prospecção" de um negócio que já foi a Visita. `jaTinha` = usar o que existe. */
+export async function entrarEmProspeccao(client: Client, eu: Eu, nomeDoDono?: string | null): Promise<{ client: Client; criado: boolean; jaTinha: boolean; aviso: string | null }> {
+  let atual = client;
+  if (!client.id_hubspot && client.id) {
+    const { data } = await supabase.from('clients').select('id_hubspot, vendedor_id_hubspot, status').eq('id', client.id).maybeSingle();
+    if (data) atual = { ...client, ...(data as Partial<Client>) };
+  }
+  if (atual.id_hubspot) return { client: atual, criado: false, jaTinha: true, aviso: null };
+  const d = decidirProspeccao(atual, eu, nomeDoDono);
+  if (!d.criar) return { client: atual, criado: false, jaTinha: false, aviso: d.motivo };
+  const r = await assumirLead(atual, eu);
+  if (!r.ok) return { client: atual, criado: false, jaTinha: false, aviso: `o lead não entrou no funil (${r.erro})` };
+  if (!r.idHubspot) return { client: atual, criado: false, jaTinha: false, aviso: 'o HubSpot não devolveu o negócio: confira em alguns minutos se ele entrou em Prospecção' };
+  if (r.jaExistia) return { client: { ...atual, id_hubspot: r.idHubspot }, criado: false, jaTinha: true, aviso: null };
+  return { client: { ...atual, id_hubspot: r.idHubspot, vendedor_id_hubspot: eu.idHubspot, etapa: 'Prospecção' }, criado: true, jaTinha: false, aviso: null };
 }

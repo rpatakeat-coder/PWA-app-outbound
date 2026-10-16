@@ -344,9 +344,11 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     }
     if (!dealId && (p.notaSemNegocio || p.passoSemNegocio)) {
       const g = await entrarEmProspeccao(client, eu, donoColega);
-      if (g.criado && g.client.id_hubspot) {
-        lista.push({ rotulo: 'Negócio em Prospecção', estado: 'ok' });
-        onEtapaMudou(ETAPA.prospeccao);
+      if ((g.criado || g.jaTinha) && g.client.id_hubspot) {
+        /* jaTinha: o check-in da conta-alvo criou o negócio enquanto a ficha estava aberta; nota e
+           passo vão para ele, e a etapa dele (já em Visita) não volta para Prospecção na tela */
+        lista.push({ rotulo: g.jaTinha ? 'Negócio no HubSpot' : 'Negócio em Prospecção', estado: 'ok' });
+        if (g.criado) onEtapaMudou(ETAPA.prospeccao);
         void queryClient.invalidateQueries({ queryKey: ['clients'] });
         if (p.notaSemNegocio) {
           try { await negocioAcao({ op: 'nota', dealId: g.client.id_hubspot, texto: p.notaSemNegocio }); lista.push({ rotulo: 'Nota da visita', estado: 'ok' }); }
