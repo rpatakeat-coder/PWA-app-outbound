@@ -16,6 +16,10 @@
 // Salvar manda tudo pela porta única do Cockpit (negocio-acao), 5 s depois, para o Desfazer
 // valer; se a página fechar nesse meio-tempo, vai para a fila offline.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../context/AuthContext';
+import { entrarEmProspeccao } from '../utils/assumirLead';
+import { decidirProspeccao } from '../utils/entrarEmProspeccao';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { Client } from '../types/client';
@@ -146,7 +150,15 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   /* a visita de retorno já abre com "falei com quem decide" marcado; tocou no "Como foi", o app não marca mais */
   const tocouComoFoi = useRef(false);
   const [comoFoiAuto, setComoFoiAuto] = useState(false);
-  const pendente = useRef<{ campos: CamposCadastro; envios: Envio[]; foto: Blob | null; linha: LinhaFicha | null; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const pendente = useRef<{ campos: CamposCadastro; envios: Envio[]; foto: Blob | null; linha: LinhaFicha | null; notaSemNegocio: string | null; timer: ReturnType<typeof setTimeout> } | null>(null);
+  /* LEAD SEM NEGÓCIO ENTRA EM PROSPECÇÃO (16/10/26, Julyan: "coloque colocar em prospecção nas fichas, ele
+     só pode selecionar essa etapa"): a ficha oferece UMA etapa, Prospecção, já marcada. O negócio nasce
+     depois do Desfazer, com quem registra como dono, e a nota da visita vai nele. */
+  const { profile } = useAuth();
+  const queryClient = useQueryClient();
+  const eu = { idHubspot: profile?.id_hubspot ?? ownerId ?? null, nome: profile?.full_name ?? null };
+  const funil = decidirProspeccao(client, eu, donoColega);
+  const [vaiProFunil, setVaiProFunil] = useState(true);
 
   const nome = client.empresa?.trim() || client.nome || 'Lead';
   const temTelefone = !!client.telefone?.trim();
@@ -155,7 +167,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   useEffect(() => {
     if (!visivel) return;
     setF(FICHA_VAZIA); setOpcao(null); setCompletar(false); setCorrigindo({}); setOutroSistema(false); setOutraDataVolta(false);
-    setOutraHora(false); setHoraTexto(''); setConfirmarSaida(false); setFase('form'); setResultados([]); setPassoSalvo(null);
+    setOutraHora(false); setHoraTexto(''); setConfirmarSaida(false); setFase('form'); setResultados([]); setPassoSalvo(null); setVaiProFunil(true);
     tocouComoFoi.current = false; setComoFoiAuto(false);
     /* O QUE JÁ SE SABE, nas três fontes, cada uma com prazo: o negócio (snapshot do Cockpit e
        leitura ao vivo, que traz a etapa real), as fichas de visita e o cadastro */
@@ -330,7 +342,18 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
       try { await onSalvarCadastro(p.campos); lista.push({ rotulo: 'Cadastro do lead', estado: 'ok' }); }
       catch (err) { lista.push({ rotulo: 'Cadastro do lead', estado: ehErroDeRede(err) ? 'fila' : 'falhou', detalhe: String((err as Error)?.message ?? err) }); }
     }
-    if (!dealId) lista.push({ rotulo: 'HubSpot', estado: 'pulado', detalhe: 'este lead ainda não tem negócio no HubSpot' });
+    if (!dealId && funil.criar && vaiProFunil) {
+      const g = await entrarEmProspeccao(client, eu, donoColega);
+      if (g.criado && g.client.id_hubspot) {
+        lista.push({ rotulo: 'Negócio em Prospecção', estado: 'ok' });
+        onEtapaMudou(ETAPA.prospeccao);
+        void queryClient.invalidateQueries({ queryKey: ['clients'] });
+        if (p.notaSemNegocio) {
+          try { await negocioAcao({ op: 'nota', dealId: g.client.id_hubspot, texto: p.notaSemNegocio }); lista.push({ rotulo: 'Nota da visita', estado: 'ok' }); }
+          catch (err) { lista.push({ rotulo: 'Nota da visita', estado: 'falhou', detalhe: String((err as Error)?.message ?? err) }); }
+        }
+      } else lista.push({ rotulo: 'Negócio em Prospecção', estado: 'falhou', detalhe: g.aviso ?? 'o HubSpot não criou o negócio' });
+    } else if (!dealId) lista.push({ rotulo: 'HubSpot', estado: 'pulado', detalhe: funil.motivo ?? 'este lead ainda não tem negócio no HubSpot' });
     /* os degraus vão em ordem: se um é recusado, os de cima não têm como subir */
     let degrauFalhou = false;
     let degrauNaFila = false;
@@ -435,7 +458,8 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
       etapaAntes: etapaReal ?? null, etapaDepois: ultimo,
       comFoto: !!fotoProva || fotoNoCheckin, bairro: client.bairro, cidade: client.cidade, hoje,
     });
-    pendente.current = { campos, envios, foto: fotoProva, linha, timer: setTimeout(() => { void executar(); }, JANELA_DESFAZER_MS) };
+    const notaSemNegocio = !dealId && funil.criar && vaiProFunil ? notaDaVisita(fEf, { cliente: nome, ocorridoEm: checkinEm, hoje }) : null;
+    pendente.current = { campos, envios, foto: fotoProva, linha, notaSemNegocio, timer: setTimeout(() => { void executar(); }, JANELA_DESFAZER_MS) };
     setFase('desfazer');
   }
 
@@ -682,7 +706,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                         <Text style={[s.fatoValor, { flex: 1 }]}>{`Hoje, ${diaMes(hoje)} · agora`}</Text>
                       </View>
                     )}
-                    {!dealId && <Text style={s.ajuda}>Sem negócio no HubSpot: a visita grava, a etapa fica para quando ele existir.</Text>}
+                    {!dealId && <Text style={s.ajuda}>{funil.criar && vaiProFunil ? 'Sem negócio no HubSpot: ele nasce em Prospecção ao salvar; a etapa sobe depois, no negócio.' : 'Sem negócio no HubSpot: a visita grava, a etapa fica para quando ele existir.'}</Text>}
                   </>
                 )}
 
@@ -753,7 +777,14 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                     {campoDe('sistema', 'Sistema que usa hoje', sistemaEf, sabidoDe('sistema'), editorSistema)}
                   </View>
                 )}
-                {!dealId && <Text style={s.aviso}>Este lead ainda não tem negócio no HubSpot: a visita salva o cadastro, e a nota e a etapa ficam para quando o negócio existir.</Text>}
+                {!dealId && funil.criar && (
+                  <View style={{ gap: 6 }}>
+                    <Text style={s.rotulo}>Etapa no funil</Text>
+                    <View style={s.chips}>{chip('prospeccao', 'Colocar em Prospecção', vaiProFunil, () => setVaiProFunil((v) => !v))}</View>
+                    <Text style={s.ajuda}>{vaiProFunil ? 'O negócio nasce em Prospecção, no seu nome, e a nota da visita vai nele.' : 'Fora do funil: a visita salva o cadastro, e a nota fica para quando o negócio existir.'}</Text>
+                  </View>
+                )}
+                {!dealId && !funil.criar && <Text style={s.aviso}>{`Este lead ainda não tem negócio no HubSpot: a visita salva o cadastro, e a nota e a etapa ficam para quando o negócio existir.${funil.motivo ? ' (' + funil.motivo + ')' : ''}`}</Text>}
               </ScrollView>
               <View style={s.rodape}>
                 {confirmarSaida && (

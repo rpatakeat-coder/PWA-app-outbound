@@ -11,8 +11,9 @@ import { supabase } from '../integrations/supabase/client';
 import { origemDoLeadHs } from './origemDoLead';
 import { sendHubspotEvent } from './hubspotSync';
 import type { Client } from '../types/client';
+import { decidirProspeccao, type Eu } from './entrarEmProspeccao';
 
-export type ResultadoAssumir = { ok: true; etapa: string | null; aviso: string | null } | { ok: false; erro: string };
+export type ResultadoAssumir = { ok: true; etapa: string | null; aviso: string | null; idHubspot?: string | null } | { ok: false; erro: string };
 
 async function erroDaFuncao(error: unknown): Promise<string> {
   const ctx = (error as { context?: Response }).context;
@@ -66,8 +67,20 @@ export async function assumirLead(
       ...(id ? { id_hubspot: String(id) } : {}),
       ...(o?.url_hubspot ? { url_hubspot: String(o.url_hubspot) } : {}),
     }).eq('id', client.id);
-    return { ok: true, etapa: 'Prospecção', aviso: null };
+    return { ok: true, etapa: 'Prospecção', aviso: null, idHubspot: id ? String(id) : null };
   } catch (e) {
     return { ok: false, erro: (e as Error)?.message ?? 'O HubSpot recusou criar o negócio.' };
   }
+}
+
+/** O lead planejado (ou registrado na ficha) entra no funil se ainda não tem negócio. Devolve o
+ *  client com o negócio novo, para quem chamou mandar o próximo passo ao HubSpot no mesmo gesto, e
+ *  o aviso quando não criou (ninguém fica achando que o lead está no funil sem estar). */
+export async function entrarEmProspeccao(client: Client, eu: Eu, nomeDoDono?: string | null): Promise<{ client: Client; criado: boolean; aviso: string | null }> {
+  const d = decidirProspeccao(client, eu, nomeDoDono);
+  if (!d.criar) return { client, criado: false, aviso: d.motivo };
+  const r = await assumirLead(client, eu);
+  if (!r.ok) return { client, criado: false, aviso: `o lead não entrou no funil (${r.erro})` };
+  if (!r.idHubspot) return { client, criado: false, aviso: 'o HubSpot não devolveu o negócio: confira em alguns minutos se ele entrou em Prospecção' };
+  return { client: { ...client, id_hubspot: r.idHubspot, vendedor_id_hubspot: eu.idHubspot, etapa: 'Prospecção' }, criado: true, aviso: null };
 }

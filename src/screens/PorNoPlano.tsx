@@ -18,6 +18,8 @@ import type { Client, ClientMeeting } from '../types/client';
 import { ACOES, LIMITE_DO_DIA, acaoPorId, acaoSugerida, diaComEspaco, diaSugerido, propositoDaAcao, type AcaoId } from '../utils/acoesDoPlano';
 import { ehErroDeRede } from '../utils/filaOffline';
 import { diasPlanejaveis, rotuloDoDia, vaiAoCockpit } from '../utils/planoNoMapa';
+import { entrarEmProspeccao } from '../utils/assumirLead';
+import { decidirProspeccao } from '../utils/entrarEmProspeccao';
 import { avisarQueOPlanoMudou, lerPlanoDosDias, ondeEsta, porNoPlano, tirarDoPlano, type OndeEsta, type PlanoLido } from '../utils/planoDoPino';
 
 type Props = {
@@ -40,7 +42,7 @@ const agoraBRT = () => new Date(Date.now() - 3 * 3600000);
 const ordinal = (n: number) => `${n}ª`;
 
 export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor, onFechar, onFeito, acaoInicial }: Props) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { addMeeting, rescheduleMeeting, deleteMeeting } = useMeetings();
   const queryClient = useQueryClient();
   const uid = user?.id ?? null;
@@ -86,6 +88,11 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
   const nomeDoDia = (d: string) => (d === hoje ? 'hoje' : d === amanha ? 'amanhã' : SEMANA_LONGA[new Date(`${d}T12:00:00Z`).getUTCDay()]);
   const a = acaoPorId(acao)!;
   const contaAlvo = !client.id_hubspot && !!client.lead_prospeccao_id;
+  /* TODO LEAD PLANEJADO ENTRA NO FUNIL (16/10/26): pino sem negócio ganha o negócio em Prospecção
+     antes de o plano gravar, para o próximo passo ir ao HubSpot no mesmo gesto */
+  const eu = { idHubspot: profile?.id_hubspot ?? null, nome: profile?.full_name ?? null };
+  const funil = decidirProspeccao(client, eu);
+  const terNegocio = !!client.id_hubspot || funil.criar;
   const jaNoDia = !!antes && antes.dia === escolhido;
   const cheio = !jaNoDia && (contagem[escolhido] ?? 0) >= LIMITE_DO_DIA && a.ehParada;
   const alternativo = cheio ? diaComEspaco(isos, contagem, escolhido) : null;
@@ -113,8 +120,11 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
     if (!uid || !diaFinal || enviando) return;
     setEnviando(true);
     try {
+      const g = await entrarEmProspeccao(client, eu);
+      if (g.criado) void queryClient.invalidateQueries({ queryKey: ['clients'] });
+      const alvo = g.client;
       const r = await porNoPlano({
-        uid, client, dia: diaFinal, acao, hora, antes, tarefaAbertaEm: tarefaAbertaDoNegocio(),
+        uid, client: alvo, dia: diaFinal, acao, hora, antes, tarefaAbertaEm: tarefaAbertaDoNegocio(),
         criarCompromisso: async ({ tipo, acao: ac, quando }) => {
           await addMeeting.mutateAsync({ form: { client_id: client.id, scheduled_at: quando, duration_minutes: 30, observacoes: null, type: tipo, acao: ac }, client });
         },
@@ -132,8 +142,9 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
       const onde = a.ehParada ? `${r.ordem ? ordinal(r.ordem) + ' de ' : ''}${nomeDoDia(diaFinal)}` : `Ligar · ${nomeDoDia(diaFinal)}`;
       /* O PLANO JÁ ESTÁ GRAVADO: a folha fecha agora. Agenda do app, Google e HubSpot terminam em
          segundo plano; se algum falhar, um segundo aviso diz o quê (nada falha calado). */
-      const vaiAoCrm = !!client.id_hubspot && (!!hora || (!!antes && antes.dia !== diaFinal));
-      Toast.mostrar(`${nome} · ${onde} · ${vaiAoCockpit(client) ? 'já no Planejamento do Cockpit' : 'na rota do app'}${vaiAoCrm ? ' · HubSpot a caminho' : ''}`, 'ok');
+      const vaiAoCrm = !!alvo.id_hubspot && (!!hora || (!!antes && antes.dia !== diaFinal));
+      Toast.mostrar(`${nome} · ${onde} · ${vaiAoCockpit(alvo) ? 'já no Planejamento do Cockpit' : 'na rota do app'}${g.criado ? ' · entrou no seu funil em Prospecção' : ''}${vaiAoCrm ? ' · HubSpot a caminho' : ''}`, 'ok');
+      if (g.aviso) Toast.mostrar(`${nome}: o plano está gravado, mas ${g.aviso}`, 'aviso');
       avisarQueOPlanoMudou();
       void r.depois.then((d) => {
         avisarQueOPlanoMudou();
@@ -281,9 +292,11 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
                   <Text style={s.aconteceRot}>O QUE ACONTECE</Text>
                   <Text style={s.linha}>{a.ehParada ? `Entra como ${ordemPrevista ? ordinal(ordemPrevista) : 'nova'} de ${diaFinal ? nomeDoDia(diaFinal) : '—'}${hora ? `, às ${hora} com cadeado` : ''}` : `Ligar não é parada de rua: fica nas Ligações do dia de ${diaFinal ? nomeDoDia(diaFinal) : '—'}`}</Text>
                   <Text style={s.linhaSub}>{a.ehParada ? (hora ? 'A rota se ajusta em volta do horário combinado' : 'A hora sai do caminho') : 'sem posição na rota'}</Text>
-                  <Text style={s.linha}>{vaiAoCockpit(client) && a.ehParada ? `Planejamento do Cockpit · ${diaFinal ? rotuloDoDia(diaFinal) : '—'} · ${a.rotulo}` : a.ehParada ? 'Sem negócio nem conta-alvo: fica na rota do app' : `Agenda do app · Ligar · ${diaFinal ? rotuloDoDia(diaFinal) : '—'}`}</Text>
+                  <Text style={s.linha}>{(vaiAoCockpit(client) || funil.criar) && a.ehParada ? `Planejamento do Cockpit · ${diaFinal ? rotuloDoDia(diaFinal) : '—'} · ${a.rotulo}` : a.ehParada ? 'Sem negócio nem conta-alvo: fica na rota do app' : `Agenda do app · Ligar · ${diaFinal ? rotuloDoDia(diaFinal) : '—'}`}</Text>
                   {vaiAoCockpit(client) && a.ehParada && <Text style={s.linhaSub}>{`Propósito na grade: ${propositoDaAcao(acao, contaAlvo)}${antes && antes.dia !== escolhido ? ` · sai de ${nomeDoDia(antes.dia)}` : ''}`}</Text>}
-                  <Text style={s.linha}>{!hora ? 'Sem hora: nada novo no HubSpot' : client.id_hubspot ? `HubSpot · ${a.hubspot} ${diaFinal ? rotuloDoDia(diaFinal).slice(4) : ''} ${hora}` : 'Sem negócio no HubSpot: a hora fica só no plano'}</Text>
+                  {funil.criar && <Text style={s.linha}>Negócio novo em Prospecção no HubSpot, no seu nome</Text>}
+                  {!client.id_hubspot && !funil.criar && !!funil.motivo && <Text style={s.linhaSub}>{`Não entra no funil: ${funil.motivo}`}</Text>}
+                  <Text style={s.linha}>{!hora ? (funil.criar ? 'Sem hora: só o negócio vai ao HubSpot' : 'Sem hora: nada novo no HubSpot') : terNegocio ? `HubSpot · ${a.hubspot} ${diaFinal ? rotuloDoDia(diaFinal).slice(4) : ''} ${hora}` : 'Sem negócio no HubSpot: a hora fica só no plano'}</Text>
                   <Text style={s.linhaSub}>{antes && antes.dia !== escolhido && client.id_hubspot
                     ? `a tarefa aberta de ${nomeDoDia(antes.dia)}, se houver, vai junto para ${nomeDoDia(escolhido)}`
                     : !hora ? `com hora, vira ${a.hubspot}` : 'vira o próximo passo do negócio'}</Text>
