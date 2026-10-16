@@ -48,6 +48,10 @@ function segundaDe(iso) {
   return somaDias(iso, 1 - dow);
 }
 const reais = (n) => 'R$ ' + Math.round(n).toLocaleString('pt-BR');
+/* QUENTE = nota de temperatura 70+ (cockpit-unificado/data/temperatura.json, faixas.quente): o mesmo
+   corte do pino vermelho do mapa e do KPI "leads quentes (70°+)". Julyan, 16/10/26: a mensagem
+   das 18h tem de puxar primeiro os quentes sem próximo passo, que são o dinheiro mais perto. */
+const QUENTE_A_PARTIR = 70;
 
 /** A conta inteira, sem rede: entra o que foi lido, sai UMA mensagem para o grupo (lista com 0 ou 1 item).
  *  Exportada para o teste (e para conferir contra o Cockpit). */
@@ -93,7 +97,9 @@ function montarMensagens({ funilLeads, time, planos, paradas, hoje }) {
     const { l, nome, ordem, dias } = g.slice().sort((x, y) => (y.ordem - x.ordem) || (y.dias - x.dias))[0];
     if (!ROTULO[ordem] || temPasso(l)) return;
     const mrr = Number(l.mrr || l.valor_de_mrr || l.valor || 0) || 0;
-    (porDono[String(l.ownerId)] = porDono[String(l.ownerId)] || []).push({ nome, rotulo: ROTULO[ordem], ordem, mrr, dias });
+    const temp = Number(l.temp);
+    (porDono[String(l.ownerId)] = porDono[String(l.ownerId)] || []).push({ nome, rotulo: ROTULO[ordem], ordem, mrr, dias,
+      quente: Number.isFinite(temp) && temp >= QUENTE_A_PARTIR });
   });
 
   /* UMA MENSAGEM SÓ PARA O GRUPO (Julyan, 15/10/26: "tem que ser uma mensagem só dos 7
@@ -108,13 +114,24 @@ function montarMensagens({ funilLeads, time, planos, paradas, hoje }) {
     `📋 *Negócios sem próximo passo · ${dd}/${mm}*`,
     `${total} ${total === 1 ? 'negócio' : 'negócios'} sem nada agendado no HubSpot, no Planejamento ou na rota do app.`,
   ];
+  /* OS QUENTES PRIMEIRO, de todo o time, num bloco só no topo: o mais avançado e de maior MRR
+     antes. Nos blocos de cada executivo eles não se repetem (a mensagem já é longa). */
+  const quentes = [];
+  donos.forEach((o) => porDono[o].forEach((x) => { if (x.quente) quentes.push(Object.assign({ dono: time[o].primeiro }, x)); }));
+  quentes.sort((a, b) => b.ordem - a.ordem || b.mrr - a.mrr || b.dias - a.dias);
+  if (quentes.length) {
+    linhas.push('', '━━━━━━━━━━', `🔥 *Quentes sem próximo passo (${quentes.length})*: marcar hoje`);
+    quentes.forEach((x) => linhas.push(`• *${x.nome}* · ${x.dono} · ${x.rotulo}${x.mrr ? ', ' + reais(x.mrr) : ''}${x.dias >= 7 ? ` (${x.dias} dias parado)` : ''}`));
+  }
   const por = [];
   donos.forEach((o) => {
     const lista = porDono[o].sort((a, b) => b.ordem - a.ordem || b.mrr - a.mrr || b.dias - a.dias);
-    const prioridade = lista.filter((x) => x.ordem >= 3);
-    const deEtapa = (ordem) => lista.filter((x) => x.ordem === ordem).map((x) => x.nome);
-    linhas.push('', '━━━━━━━━━━', `*${time[o].nome} (${lista.length})*`);
-    prioridade.forEach((x) => linhas.push(`🔥 *${x.nome}*: ${x.rotulo}${x.ordem === 4 ? ', quente' : ''}${x.mrr ? ', ' + reais(x.mrr) : ''}${x.dias >= 7 ? ` (${x.dias} dias parado)` : ''}`));
+    const nQ = lista.filter((x) => x.quente).length;
+    const resto = lista.filter((x) => !x.quente);
+    const prioridade = resto.filter((x) => x.ordem >= 3);
+    const deEtapa = (ordem) => resto.filter((x) => x.ordem === ordem).map((x) => x.nome);
+    linhas.push('', '━━━━━━━━━━', `*${time[o].nome} (${lista.length}${nQ ? `, ${nQ} ${nQ === 1 ? 'quente' : 'quentes'} acima` : ''})*`);
+    prioridade.forEach((x) => linhas.push(`⚠️ *${x.nome}*: ${x.rotulo}${x.mrr ? ', ' + reais(x.mrr) : ''}${x.dias >= 7 ? ` (${x.dias} dias parado)` : ''}`));
     const dec = deEtapa(2), vis = deEtapa(1);
     if (dec.length) linhas.push(`*Decisor:* ${dec.join(', ')}`);
     if (vis.length) linhas.push(`*Visita:* ${vis.join(', ')}`);
