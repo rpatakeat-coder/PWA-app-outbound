@@ -48,6 +48,8 @@ function segundaDe(iso) {
   return somaDias(iso, 1 - dow);
 }
 const reais = (n) => 'R$ ' + Math.round(n).toLocaleString('pt-BR');
+const ddmm = (iso) => iso.slice(8, 10) + '/' + iso.slice(5, 7);
+const selo = (x) => (x.venceu ? ` ⏰${ddmm(x.venceu)}` : '');
 /* QUENTE = nota de temperatura 70+ (cockpit-unificado/data/temperatura.json, faixas.quente): o mesmo
    corte do pino vermelho do mapa e do KPI "leads quentes (70°+)". Julyan, 16/10/26: a mensagem
    das 18h tem de puxar primeiro os quentes sem próximo passo, que são o dinheiro mais perto. */
@@ -69,6 +71,15 @@ function montarMensagens({ funilLeads, time, planos, paradas, hoje }) {
     if (deal && dia && String(dia) >= hoje) noPlano.add(String(deal));
   });
 
+  /* O PASSO QUE VENCEU (16/10/26). Medido hoje: 64 de 247 negócios abertos tinham só tarefa vencida,
+     e 141 follow-ups venceram em 14 dias sem ser feitos. "Venceu" é diferente de "nunca teve": o
+     executivo combinou e deixou o dia passar. A data é a da tarefa aberta mais recente antes de hoje
+     (quem entra aqui já não tem nada de hoje em diante). */
+  const venceuEm = (l) => {
+    let d = null;
+    (Array.isArray(l.tarefas) ? l.tarefas : []).forEach((t) => { const x = t && diaBR(t.timestamp); if (x && x < hoje && (!d || x > d)) d = x; });
+    return d;
+  };
   const temPasso = (l) => {
     const datas = [l.proximaAtividade, l.proximaReuniao]
       .concat((Array.isArray(l.tarefas) ? l.tarefas : []).map((t) => t && t.timestamp));
@@ -99,7 +110,7 @@ function montarMensagens({ funilLeads, time, planos, paradas, hoje }) {
     const mrr = Number(l.mrr || l.valor_de_mrr || l.valor || 0) || 0;
     const temp = Number(l.temp);
     (porDono[String(l.ownerId)] = porDono[String(l.ownerId)] || []).push({ nome, rotulo: ROTULO[ordem], ordem, mrr, dias,
-      quente: Number.isFinite(temp) && temp >= QUENTE_A_PARTIR });
+      quente: Number.isFinite(temp) && temp >= QUENTE_A_PARTIR, venceu: venceuEm(l) });
   });
 
   /* UMA MENSAGEM SÓ PARA O GRUPO (Julyan, 15/10/26: "tem que ser uma mensagem só dos 7
@@ -121,7 +132,7 @@ function montarMensagens({ funilLeads, time, planos, paradas, hoje }) {
   quentes.sort((a, b) => b.ordem - a.ordem || b.mrr - a.mrr || b.dias - a.dias);
   if (quentes.length) {
     linhas.push('', '━━━━━━━━━━', `🔥 *Quentes sem próximo passo (${quentes.length})*: marcar hoje`);
-    quentes.forEach((x) => linhas.push(`• *${x.nome}* · ${x.dono} · ${x.rotulo}${x.mrr ? ', ' + reais(x.mrr) : ''}${x.dias >= 7 ? ` (${x.dias} dias parado)` : ''}`));
+    quentes.forEach((x) => linhas.push(`• *${x.nome}*${selo(x)} · ${x.dono} · ${x.rotulo}${x.mrr ? ', ' + reais(x.mrr) : ''}${x.dias >= 7 ? ` (${x.dias} dias parado)` : ''}`));
   }
   const por = [];
   donos.forEach((o) => {
@@ -129,15 +140,19 @@ function montarMensagens({ funilLeads, time, planos, paradas, hoje }) {
     const nQ = lista.filter((x) => x.quente).length;
     const resto = lista.filter((x) => !x.quente);
     const prioridade = resto.filter((x) => x.ordem >= 3);
-    const deEtapa = (ordem) => resto.filter((x) => x.ordem === ordem).map((x) => x.nome);
+    const deEtapa = (ordem) => resto.filter((x) => x.ordem === ordem).map((x) => x.nome + selo(x));
+    const nV = lista.filter((x) => x.venceu).length;
     linhas.push('', '━━━━━━━━━━', `*${time[o].nome} (${lista.length}${nQ ? `, ${nQ} ${nQ === 1 ? 'quente' : 'quentes'} acima` : ''})*`);
-    prioridade.forEach((x) => linhas.push(`⚠️ *${x.nome}*: ${x.rotulo}${x.mrr ? ', ' + reais(x.mrr) : ''}${x.dias >= 7 ? ` (${x.dias} dias parado)` : ''}`));
+    if (nV) linhas.push(`⏰ ${nV === 1 ? '1 venceu' : nV + ' venceram'} sem ser ${nV === 1 ? 'feito' : 'feitos'}: tinham passo marcado e o dia passou`);
+    prioridade.forEach((x) => linhas.push(`⚠️ *${x.nome}*${selo(x)}: ${x.rotulo}${x.mrr ? ', ' + reais(x.mrr) : ''}${x.dias >= 7 ? ` (${x.dias} dias parado)` : ''}`));
     const dec = deEtapa(2), vis = deEtapa(1);
     if (dec.length) linhas.push(`*Decisor:* ${dec.join(', ')}`);
     if (vis.length) linhas.push(`*Visita:* ${vis.join(', ')}`);
     por.push(time[o].nome + ' ' + lista.length);
   });
-  linhas.push('', '━━━━━━━━━━', 'Para contar como próximo passo: tarefa ou reunião com data no HubSpot, ou o negócio num dia do Planejamento. Valeu, time! 💪');
+  linhas.push('', '━━━━━━━━━━',
+    '⏰ = tinha passo marcado e o dia passou sem ser feito: faça ou remarque.',
+    'Para contar como próximo passo: tarefa ou reunião com data no HubSpot, ou o negócio num dia do Planejamento. Retorno longe também vale: na ficha, "Outro dia" aceita qualquer data. Valeu, time! 💪');
   return [{ total, por, texto: linhas.join('\n') }];
 }
 
