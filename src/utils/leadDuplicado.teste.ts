@@ -15,6 +15,7 @@ import {
   caixaDeBusca,
   nomeDaCasa,
   avaliar,
+  avaliarMeuNegocio,
   parecidos,
   fraseDoAviso,
   type LeadExistente,
@@ -108,6 +109,33 @@ ok('a frase diz o nome, o lugar e a etapa',
 ok('a frase do telefone',
    fraseDoAviso({ lead: lead({ empresa: 'Salseiro', etapa: 'Negociação' }), motivo: 'mesmo-telefone', distanciaM: null }),
    '“Salseiro” já está cadastrado com o mesmo telefone em Negociação.');
+
+console.log('\n--- os duplicados que passaram em out/2026 (auditoria 16/10) ---');
+// Top Gourmet: mesmo nome, mesmo executivo, ~180 m (o pino do 1º caiu na esquina)
+const tg = avaliar({ empresa: 'Top Gourmet ', nome: 'Petterson', telefone: null, latitude: -22.94389, longitude: -43.36092 },
+  lead({ empresa: 'Top Gourmet ', etapa: 'Negociação', latitude: -22.94305, longitude: -43.36246 }));
+ok('Top Gourmet a ~180 m: avisa', tg?.motivo, 'mesmo-lugar');
+// Maria Cereja: um nome dentro do outro, no mesmo ponto
+const mc = avaliar({ empresa: 'Padaria Maria Cereja', nome: 'Marcelo', telefone: null, latitude: -23.46118, longitude: -46.52799 },
+  lead({ empresa: 'Maria Cereja', etapa: 'Prospecção', latitude: -23.46095, longitude: -46.52811 }));
+ok('"Padaria Maria Cereja" × "Maria Cereja" a 30 m: avisa', mc?.motivo, 'mesmo-lugar');
+ok('nome contido longe (300 m) não avisa',
+   avaliar({ empresa: 'Maria Cereja Doces e Salgados', nome: null, telefone: null, latitude: a.latitude + 0.0027, longitude: a.longitude },
+     lead({ empresa: 'Maria Cereja', latitude: a.latitude, longitude: a.longitude })), null);
+ok('"Bar do Zé" × "Bar do Luan" no mesmo ponto não avisa (só a palavra genérica em comum)',
+   avaliar({ empresa: 'Bar do Zé', nome: null, telefone: null, latitude: a.latitude, longitude: a.longitude },
+     lead({ empresa: 'Bar do Luan', latitude: a.latitude, longitude: a.longitude })), null);
+ok('lojas da rede com sufixo diferente continuam fora (Bonfá Redenção × Harmonia)',
+   avaliar({ empresa: 'Cachorro do Bonfá - Redenção', nome: null, telefone: '51995611173', latitude: a.latitude, longitude: a.longitude },
+     lead({ empresa: 'Cachorro do Bonfá - Harmonia', telefone: '51995611173', latitude: a.latitude + 0.02, longitude: a.longitude })), null);
+
+// Rústico: o negócio nasceu no HubSpot sem endereço, horas antes do cadastro na rua
+const ru = avaliarMeuNegocio({ empresa: 'Rústico arte ferro e fogo', nome: 'Marlon', telefone: null, latitude: -22.81856, longitude: -43.19987 },
+  lead({ id: 'hs-66044938046', empresa: 'Rustico Arte Ferro e Fogo', etapa: 'Negociação', id_hubspot: '66044938046' }));
+ok('meu negócio no HubSpot sem lugar e mesmo nome: avisa', ru?.motivo, 'meu-negocio');
+ok('a frase do meu negócio', ru ? fraseDoAviso(ru) : null, '“Rustico Arte Ferro e Fogo” já é um negócio seu no HubSpot, em Negociação.');
+ok('meu negócio com nome só parecido e sem lugar: não avisa',
+   avaliarMeuNegocio({ empresa: 'Rústico Grill', nome: null, telefone: null, latitude: 0, longitude: 0 }, lead({ empresa: 'Rústico arte ferro e fogo' })), null);
 
 console.log(falhas === 0 ? '\nTODOS PASSARAM' : `\n${falhas} FALHA(S)`);
 process.exit(falhas === 0 ? 0 : 1);

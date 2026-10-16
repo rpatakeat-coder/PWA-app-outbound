@@ -10595,6 +10595,15 @@ function MainApp() {
                         onPress={() => {
                           setIsFormOpen(false);
                           resetForm();
+                          // negócio que só existe no HubSpot (0206): abre o pino pelo id do negócio, se já chegou
+                          if (p.lead.id.startsWith('hs-')) {
+                            void supabase.from('clients').select('id').eq('id_hubspot', p.lead.id_hubspot ?? '').limit(1).maybeSingle()
+                              .then(({ data }) => {
+                                if (data?.id) void openClientById(String(data.id));
+                                else Toast.mostrar(`${p.lead.empresa || 'O negócio'} ainda não chegou ao mapa (só está no HubSpot). Não cadastre de novo: ele aparece aqui em instantes.`, 'aviso');
+                              });
+                            return;
+                          }
                           void openClientById(p.lead.id);
                         }}
                       >
