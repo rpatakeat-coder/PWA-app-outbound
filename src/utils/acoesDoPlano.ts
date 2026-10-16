@@ -72,9 +72,12 @@ export function acaoSugerida(p: { etapa: string | null; tipoPino: string | null;
   }
 }
 
-export const LIMITE_DO_DIA = 15;
+/* SEM LIMITE DE VISITAS (16/10/26, Julyan: "não podemos limitar as visitas dele, pode ser ilimitadas,
+   tanto no slot do planejamento também"). Era 15: a 16ª parada ia para outro dia e, pelo espelho do
+   banco, nem chegava ao Planejamento. O Cockpit e o banco (0213) também deixaram de cortar o dia. */
+export const LIMITE_DO_DIA = Number.POSITIVE_INFINITY;
 
-/** O dia mais perto com espaço, a partir do escolhido (o cheio nunca grava a 16ª). */
+/** O dia mais perto com espaço, a partir do escolhido. Sem limite, todo dia tem espaço. */
 export function diaComEspaco(dias: string[], contagem: Record<string, number>, escolhido: string): string | null {
   const i = Math.max(0, dias.indexOf(escolhido));
   const ordem = [...dias.slice(i + 1), ...dias.slice(0, i).reverse()];

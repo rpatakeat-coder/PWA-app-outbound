@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@a6cf30dd.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@102687f3.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* /gestao E O COCKPIT desde 25/09/2026. As tres telas que so a gestao antiga
@@ -40,7 +40,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "a6cf30dd";
+  var VERSAO = "102687f3";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -26153,8 +26153,9 @@ async function espelharPassoNoPlanoSemanal(lead, dataISO, hora, ownerId) {
   }
 
   if (si < 0) {
-    const cap = (typeof PL6_SLOTS !== 'undefined') ? PL6_SLOTS : PL6_HORAS.length;
+    const cap = Math.max((typeof PL6_SLOTS !== 'undefined') ? PL6_SLOTS : PL6_HORAS.length, grade[di].length);
     for (let k = 0; k < cap; k++) { if (livre(k)) { si = k; break; } }
+    if (si < 0) si = grade[di].length;
   }
   if (si < 0) {
 
@@ -27945,7 +27946,7 @@ function pl6PrimeiraVaga(grade, di) {
     const v = col[si];
     if (!pl6SlotId(v) && v !== PL6_BLOQUEADO && !pl6SlotRua(v) && !pl6SlotRel(v)) return si;
   }
-  return -1;
+  return col.length;
 }
 
 function pl6BlocoDoSlot(id) {
@@ -28074,7 +28075,7 @@ function pl6GradeDoPlano() {
   const g = pl6Plano && Array.isArray(pl6Plano.grade) ? pl6Plano.grade : null;
   if (!g || g.length !== PL6_DIAS_UTEIS) return pl6GradeVazia();
   return g.map(col => {
-    const arr = Array.isArray(col) ? col.slice(0, PL6_SLOTS) : [];
+    const arr = Array.isArray(col) ? col.slice() : [];
     while (arr.length < PL6_SLOTS) arr.push(null);
     return arr;
   });
@@ -28267,14 +28268,17 @@ function pl6MesclarGrade(base, nova, fresca) {
     const n = Array.isArray(nova[d]) ? nova[d] : [];
     const f = fresca && Array.isArray(fresca[d]) ? fresca[d] : [];
     const col = [];
-    for (let i = 0; i < PL6_SLOTS; i++) col.push(J(n[i]) !== J(b[i]) ? (n[i] == null ? null : n[i]) : (f[i] == null ? null : f[i]));
+    const tam = Math.max(PL6_SLOTS, b.length, n.length, f.length);
+    for (let i = 0; i < tam; i++) col.push(J(n[i]) !== J(b[i]) ? (n[i] == null ? null : n[i]) : (f[i] == null ? null : f[i]));
     const naBase = new Set(b.map(pl6SlotId).filter(Boolean));
     const naCol = new Set(col.map(pl6SlotId).filter(Boolean));
     f.forEach(function (v) {
       const id = pl6SlotId(v);
       if (!id || naBase.has(id) || naCol.has(id)) return;
       const livre = col.findIndex(function (x) { return x == null; });
-      if (livre >= 0) { col[livre] = v; naCol.add(id); }
+
+      if (livre >= 0) col[livre] = v; else col.push(v);
+      naCol.add(id);
     });
     out.push(col);
   }
@@ -29029,7 +29033,7 @@ function pl6DadosFinal(rep) {
       const n = itens.filter(x => x.tipo === 'visita' || x.tipo === 'rua').length;
       const regTxt = pl6TextoDaRegiao(rotas[di], regioes);
       const passouDoDia = (typeof pl6DiaPassou === 'function') ? pl6DiaPassou(d.iso) : false;
-      const cheio = col.filter(v => pl6SlotId(v) || v === PL6_BLOQUEADO).length >= PL6_SLOTS;
+      const cheio = false;
       return {
 
         rot: esc(d.rot), data: esc(d.data), hoje: d.iso === hojeISOPl6,

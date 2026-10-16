@@ -247,7 +247,7 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
                     const n = contagem[d.iso] ?? 0;
                     const aqui = antes?.dia === d.iso;
                     const ativo = d.iso === escolhido;
-                    const rot = aqui ? 'está aqui' : n >= LIMITE_DO_DIA ? `cheio · ${LIMITE_DO_DIA}` : n ? `${n} ${n === 1 ? 'parada' : 'paradas'}` : 'vazio';
+                    const rot = aqui ? 'está aqui' : n ? `${n} ${n === 1 ? 'parada' : 'paradas'}` : 'vazio';
                     return (
                       <Pressable key={d.iso} accessibilityRole="button" accessibilityState={{ selected: ativo }} onPress={() => setDia(d.iso)} style={[s.dia, ativo && s.diaAtivo]}>
                         {sugestaoDia?.dia === d.iso && !antes && <View style={s.pontoSugerido} />}

@@ -1,5 +1,5 @@
 // Teste do plano único. Roda: npx tsx src/utils/acoesDoPlano.teste.ts
-import { ACOES, acaoDoProposito, acaoSugerida, casarCompromisso, diaComEspaco, diaSugerido, nomeNormalizado, propositoDaAcao } from './acoesDoPlano';
+import { ACOES, LIMITE_DO_DIA, acaoDoProposito, acaoSugerida, casarCompromisso, diaComEspaco, diaSugerido, nomeNormalizado, propositoDaAcao } from './acoesDoPlano';
 import { ETAPA } from './fichaDeRua';
 
 let falhas = 0;
@@ -17,8 +17,9 @@ ok(acaoSugerida({ etapa: ETAPA.pagamento, tipoPino: null, cliente: false }).id =
 ok(acaoSugerida({ etapa: ETAPA.negociacao, tipoPino: 'cliente', cliente: true }).id === 'rel', 'cliente → relacionamento');
 
 const dias = ['2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-12'];
-ok(diaComEspaco(dias, { '2026-10-09': 15, '2026-10-12': 0 }, '2026-10-09') === '2026-10-12', 'sexta cheia → o próximo dia com espaço');
-ok(diaComEspaco(dias, { '2026-10-09': 15, '2026-10-12': 15, '2026-10-08': 5 }, '2026-10-09') === '2026-10-08', 'sem espaço depois, volta para o mais perto antes');
+// sem limite de visitas (16/10/26): 15, 26 ou 40 paradas, o dia nunca está cheio
+ok(!Number.isFinite(LIMITE_DO_DIA), 'o dia não tem limite de paradas');
+ok(diaComEspaco(dias, { '2026-10-09': 40, '2026-10-12': 0 }, '2026-10-09') === '2026-10-12', 'diaComEspaco só é chamado com o dia cheio, que não existe mais: devolve o vizinho');
 
 ok(nomeNormalizado('Mada Restaurante e Lanches') === 'mada lanches' && nomeNormalizado('MADA lanches LTDA') === 'mada lanches', 'nome normalizado tira acento, caixa e "restaurante/ltda"');
 const paradas = [
@@ -38,7 +39,7 @@ const s1 = diaSugerido({ dias, hoje: '2026-10-06', horaBRT: 10, ponto: { lat: -3
 ok(s1?.dia === '2026-10-08' && /a rota passa a 3[5-9]0 m/.test(s1.motivo), 'sugere quinta: a rota passa a ~380 m (' + (s1 && s1.motivo) + ')');
 const s2 = diaSugerido({ dias, hoje: '2026-10-06', horaBRT: 15, ponto: null, contagem: { '2026-10-06': 2, '2026-10-08': 5 }, pontosDoDia: {} });
 ok(s2?.dia === '2026-10-07' && s2.motivo === 'está vazio', 'sem ponto, depois do meio-dia: o primeiro dia vazio a partir de amanhã');
-ok(diaSugerido({ dias: ['2026-10-09'], hoje: '2026-10-06', horaBRT: 9, ponto: null, contagem: { '2026-10-09': 15 }, pontosDoDia: {} }) === null, 'tudo cheio: sem sugestão');
+ok(diaSugerido({ dias: ['2026-10-09'], hoje: '2026-10-06', horaBRT: 9, ponto: null, contagem: { '2026-10-09': 26 }, pontosDoDia: {} })?.dia === '2026-10-09', 'dia com 26 paradas ainda é sugerível (sem limite)');
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nplano único: tudo certo');
