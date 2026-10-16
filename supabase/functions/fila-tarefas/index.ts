@@ -243,8 +243,23 @@ Deno.serve(async (req: Request) => {
     const { data: paradas } = await svc.from('field_route_stops').select('client_id, horario_fixo, status').in('route_id', idsRota).eq('status', 'planned');
     return (paradas ?? []) as Array<{ client_id: string; horario_fixo: string | null; status: string }>;
   })();
+  // O PLANEJAMENTO É PRÓXIMO PASSO (16/10/26): negócio com item no plano de hoje em diante não é
+  // cobrado como "sem próximo passo" — a mesma leitura do Cockpit (itens_do_plano, esta semana e a
+  // próxima). Falhou a leitura: a fila sai sem esse corte, como era antes, e não sem a fila.
+  const planoP = (async () => {
+    const w = new Date(hoje + 'T12:00:00Z').getUTCDay();
+    const seg = new Date(Date.parse(hoje + 'T12:00:00Z') - ((w + 6) % 7) * 86400000).toISOString().slice(0, 10);
+    const prox = new Date(Date.parse(seg + 'T12:00:00Z') + 7 * 86400000).toISOString().slice(0, 10);
+    const lidos = await Promise.all([seg, prox].map((s) => svc.rpc('itens_do_plano', { p_segunda: s, p_donos: [owner] })));
+    const itens: Array<{ dia: string; item_id: string | null; client_id: string | null }> = [];
+    for (const r of lidos) {
+      if (r.error) { console.error('itens_do_plano', r.error.message); continue; }
+      for (const x of (r.data ?? []) as Array<{ dia: string; item_id: string | null; client_id: string | null }>) if (String(x.dia) >= hoje) itens.push(x);
+    }
+    return itens;
+  })();
   // promessa que rejeita antes de alguém aguardar vira "unhandled rejection": já nascem com catch
-  reunioesP.catch(() => {}); paradasP.catch(() => {});
+  reunioesP.catch(() => {}); paradasP.catch(() => {}); planoP.catch(() => {});
 
   // 1) tarefas abertas do dono
   const tarefas: TarefaEntrada[] = [];
@@ -291,7 +306,7 @@ Deno.serve(async (req: Request) => {
   const snap = snapLido
     ? { atualizado_em: snapLido.atualizado_em, conteudo: { reps: snapLido.reps, funilLeads: snapLido.funilLeads, funilForaDoTime: snapLido.funilForaDoTime, agenda: snapLido.agenda } }
     : null;
-  const doSnap = new Map<string, { name?: string; stageId?: string; dias?: number; mrr?: number | string; temperatura?: number | string }>();
+  const doSnap = new Map<string, { name?: string; stageId?: string; dias?: number; slaBreach?: boolean; mrr?: number | string; temperatura?: number | string }>();
   const abertos = (snap?.conteudo as { reps?: Record<string, { abertos?: unknown[] }> } | null)?.reps?.[owner]?.abertos ?? [];
   for (const d of abertos as Array<{ id?: string | number }>) if (d?.id != null) doSnap.set(String(d.id), d as never);
   const ids = Array.from(new Set([...doSnap.keys(), ...tarefas.map((t) => t.dealId).filter(Boolean) as string[]]));
@@ -399,6 +414,12 @@ Deno.serve(async (req: Request) => {
     // hora da visita (auditoria 06/10). Sem cadeado: 'hoje' (a tela não repete a palavra).
     if (d) agendaHoje[d] = p.horario_fixo ? String(p.horario_fixo).slice(0, 5) : 'hoje';
   }
+  const noPlano: string[] = [];
+  for (const x of await planoP.catch(() => [])) {
+    const k = String(x.item_id ?? '');
+    const d = /^[cr]-\d+$/.test(k) ? k.slice(2) : x.client_id ? dealPorCliente.get(String(x.client_id)) : undefined;
+    if (d) noPlano.push(d);
+  }
 
   // 4) a fila
   const negocios: NegocioEntrada[] = meus.map((id) => {
@@ -409,12 +430,14 @@ Deno.serve(async (req: Request) => {
     return {
       dealId: id, nome: v.nome || s?.name || 'Negócio', etapaId: v.etapa, mrr: v.mrr ?? (Number(s?.mrr) || null),
       temperatura: Number.isFinite(temp as number) ? temp : null, diasNaEtapa: s?.stageId === v.etapa && s?.dias != null ? Number(s.dias) : null,
+      // o travado do Cockpit só vale se o snapshot está na mesma etapa que o HubSpot agora
+      travado: s?.stageId === v.etapa && typeof s?.slaBreach === 'boolean' ? s.slaBreach : null,
       pessoa, papel: null, tituloPorque, temTelefone: !!(c?.telefone && String(c.telefone).replace(/\D/g, '').length >= 10),
       clientId: c?.id ?? null, lat: c?.lat ?? null, lng: c?.lng ?? null,
     };
   });
   const itens = montarFila(negocios, tarefas.filter((t) => t.dealId && meus.includes(t.dealId)), {
-    hoje, feriados, contatos, decisorAlcancado, visitaHojeSemRegistro, agendaHoje,
+    hoje, feriados, contatos, decisorAlcancado, visitaHojeSemRegistro, agendaHoje, noPlano,
   }).map((i) => ({ ...i, titulo: tituloDoCard(i), ultimoContatoTexto: textoUltimoContato(i.ultimoContato, hoje),
     telefone: i.temTelefone ? clientePorDeal.get(i.dealId)?.telefone ?? null : null }));
 

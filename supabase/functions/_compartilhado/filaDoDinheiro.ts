@@ -32,8 +32,11 @@ export type NegocioEntrada = {
   mrr: number | null;
   /** 0–100 (temperatura do robô) ou null. */
   temperatura: number | null;
-  /** Dias corridos na etapa atual. */
+  /** Dias na etapa atual como o robô conta (úteis, desde a entrada ou o último toque). */
   diasNaEtapa: number | null;
+  /** Travado do Cockpit (slaBreach do robô: estourou a régua da etapa e não tem atividade
+   *  futura no HubSpot). Ausente: vale a régua sobre diasNaEtapa. */
+  travado?: boolean | null;
   pessoa: string | null;
   papel: string | null;
   /** Por que o título usa o negócio e não o contato (A2, handoff das abas 04/10/26). */
@@ -58,6 +61,8 @@ export type Contexto = {
   visitaHojeSemRegistro: Record<string, string>;
   /** dealId → hora na Agenda de hoje ("16h"): vira o selo "na agenda de hoje". */
   agendaHoje: Record<string, string>;
+  /** Negócios com item no Planejamento de hoje em diante: já têm próximo passo. */
+  noPlano?: string[];
 };
 
 export type ItemFila = {
@@ -104,6 +109,15 @@ const QUENTE = 70;
 const MINIMO_CONTATOS = 4;
 const DIAS_PARADO = 14;
 const DIAS_PROPOSTA = 3;
+/** A régua do Cockpit (SLA_DAYS de lib/lead-do-funil.js), em dias úteis por etapa. */
+export const REGUA_DA_ETAPA: Record<string, number> = {
+  [ETAPA.prospeccao]: 5, [ETAPA.visita]: 5, [ETAPA.decisor]: 4, [ETAPA.demo]: 3, [ETAPA.negociacao]: 7, [ETAPA.pagamento]: 2,
+};
+/** O travado do Cockpit: o slaBreach do robô quando veio; sem ele, estourou a régua da etapa. */
+export function estaTravado(n: Pick<NegocioEntrada, 'travado' | 'diasNaEtapa' | 'etapaId'>): boolean {
+  if (typeof n.travado === 'boolean') return n.travado;
+  return n.diasNaEtapa != null && n.diasNaEtapa > (REGUA_DA_ETAPA[n.etapaId] ?? Infinity);
+}
 
 // ---- datas ------------------------------------------------------------------
 const ehFimDeSemana = (d: string) => { const w = new Date(d + 'T12:00:00Z').getUTCDay(); return w === 0 || w === 6; };
@@ -202,6 +216,13 @@ export const PORQUE: Record<Motivo, (f: Fatos) => string> = {
  * Um registro por negócio aberto que precisa de ação. Negócio com próximo passo
  * marcado para depois de hoje (e nada vencido) NÃO entra: ele já tem plano.
  * Se o negócio tem várias tarefas abertas, comanda a mais urgente (a de prazo mais cedo).
+ *
+ * SEM PRÓXIMO PASSO SÓ COBRA O TRAVADO (16/10/26, Julyan: "só cobrar tbm os travados sem
+ * proximo passo na automação, nao os leads recentes"). Os cinco motivos sem tarefa — quente,
+ * proposta, decisor, poucos contatos e parado — exigem o negócio travado (a régua do Cockpit)
+ * e fora do Planejamento; Ag. Pagamento é do financeiro. Lead dentro do prazo da etapa não
+ * entra. O que tem tarefa (vencida, de hoje, cobrança) e a visita sem registro continuam:
+ * são compromissos que o próprio executivo marcou.
  */
 export function montarFila(negocios: NegocioEntrada[], tarefas: TarefaEntrada[], ctx: Contexto): ItemFila[] {
   const porNegocio = new Map<string, TarefaEntrada[]>();
@@ -211,6 +232,7 @@ export function montarFila(negocios: NegocioEntrada[], tarefas: TarefaEntrada[],
     l.push(t); porNegocio.set(t.dealId, l);
   }
   const decisor = new Set(ctx.decisorAlcancado);
+  const planejados = new Set(ctx.noPlano ?? []);
   const amanhaUtil = proximoDiaUtil(ctx.hoje, 1, ctx.feriados);
   const vistos = new Set<string>();
   const itens: ItemFila[] = [];
@@ -228,6 +250,7 @@ export function montarFila(negocios: NegocioEntrada[], tarefas: TarefaEntrada[],
     const diaUltimo = diaDe(c.ultimo);
     const diasSemContato = diaUltimo ? diasEntre(diaUltimo, ctx.hoje) : null;
     const temPassoFuturo = !!diaT && diaT > ctx.hoje;
+    const cobraSemPasso = !temPassoFuturo && !planejados.has(n.dealId) && n.etapaId !== ETAPA.pagamento && estaTravado(n);
 
     let grupo: Grupo | null = null; let motivo: Motivo | null = null; const f: Fatos = {};
     if (diaT && diaT < ctx.hoje) {
@@ -240,15 +263,15 @@ export function montarFila(negocios: NegocioEntrada[], tarefas: TarefaEntrada[],
       grupo = 'agora'; motivo = 'visita_sem_registro'; f.hora = ctx.visitaHojeSemRegistro[n.dealId];
     } else if (n.etapaId === ETAPA.pagamento && diaT && diaT <= amanhaUtil) {
       grupo = 'agora'; motivo = 'cobranca'; f.quando = 'amanhã';
-    } else if (!temPassoFuturo && (n.temperatura ?? 0) >= QUENTE && !t) {
+    } else if (cobraSemPasso && (n.temperatura ?? 0) >= QUENTE && !t) {
       grupo = 'proteger'; motivo = 'quente_sem_passo';
-    } else if (!temPassoFuturo && n.etapaId === ETAPA.demo && (n.diasNaEtapa ?? 0) >= DIAS_PROPOSTA) {
+    } else if (cobraSemPasso && n.etapaId === ETAPA.demo && (n.diasNaEtapa ?? 0) >= DIAS_PROPOSTA) {
       grupo = 'proteger'; motivo = 'proposta_sem_retorno'; f.dias = n.diasNaEtapa ?? DIAS_PROPOSTA;
-    } else if (!temPassoFuturo && !decisor.has(n.dealId) && (n.etapaId === ETAPA.prospeccao || n.etapaId === ETAPA.visita)) {
+    } else if (cobraSemPasso && !decisor.has(n.dealId) && (n.etapaId === ETAPA.prospeccao || n.etapaId === ETAPA.visita)) {
       grupo = 'destravar'; motivo = 'decisor';
-    } else if (!temPassoFuturo && c.n < MINIMO_CONTATOS) {
+    } else if (cobraSemPasso && c.n < MINIMO_CONTATOS) {
       grupo = 'destravar'; motivo = 'poucos_contatos'; f.n = c.n;
-    } else if (!temPassoFuturo && diasSemContato != null && diasSemContato >= DIAS_PARADO) {
+    } else if (cobraSemPasso && diasSemContato != null && diasSemContato >= DIAS_PARADO) {
       grupo = 'reativar'; motivo = 'parado'; f.dias = diasSemContato;
     }
     if (!grupo || !motivo) continue;
