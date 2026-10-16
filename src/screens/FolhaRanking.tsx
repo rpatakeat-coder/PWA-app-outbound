@@ -248,7 +248,7 @@ export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; 
         </View>
 
         <Text style={s.regras}>{bonus
-          ? 'Placar da semana (o mesmo do cockpit): venda 100 (negócio em Fechado no HubSpot; Ag. Pagamento não conta) · demo 25 (negócio que entrou em Demo/Proposta no HubSpot; um por negócio na semana) · visita com prova 3 (GPS até 200 m; foto só quando o GPS não confirma; sem teto por dia; cada restaurante conta uma vez na semana). A demo do negócio que fechou na mesma semana não soma: conta só a venda. Desempate: vendas, demos, visitas. Visita e demo contam até sexta às 23:59; venda, até domingo às 23:59 (a do fim de semana entra na semana que terminou). O ganhador aparece na segunda às 08:00; o pagamento é com o financeiro.'
+          ? 'Placar da semana (o mesmo do cockpit): venda 100 (negócio em Fechado no HubSpot; Ag. Pagamento não conta) · demo 25 (negócio que entrou em Demo/Proposta no HubSpot; um por negócio na semana) · visita com prova 3 (GPS até 200 m; foto só quando o GPS não confirma; sem teto por dia; cada restaurante conta uma vez na semana). Negócio que teve demo e fechou na semana conta as duas (25 + 100). Desempate: vendas, demos, visitas. Visita e demo contam até sexta às 23:59; venda, até domingo às 23:59 (a do fim de semana entra na semana que terminou). O ganhador aparece na segunda às 08:00; o pagamento é com o financeiro.'
           : 'Pontos: visita provada 20 (GPS ou foto) · demo realizada 50 (o negócio entrou em Demo/Proposta) · contrato 200. Visita declarada não pontua. O ranking é pela % da sua meta; desempate por contratos e MRR. A semana fecha segunda às 9h.'}</Text>
       </View>
     );
