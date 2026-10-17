@@ -88,6 +88,10 @@ export type ItemFila = {
   lat: number | null;
   lng: number | null;
   score: number;
+  /** P5 (17/10/26): o texto da tarefa que comanda o card ("o que foi combinado"), os dias na etapa e a hora do prazo. */
+  assunto?: string | null;
+  diasNaEtapa?: number | null;
+  horaPrazo?: string | null;
 };
 
 export const ORDEM_GRUPOS: Grupo[] = ['agora', 'proteger', 'destravar', 'reativar'];
@@ -268,6 +272,8 @@ export function montarFila(negocios: NegocioEntrada[], tarefas: TarefaEntrada[],
       agendaHoje: ctx.agendaHoje[n.dealId] ?? null, temTelefone: n.temTelefone,
       tarefaId: t?.id ?? null, presencial, lat: n.lat, lng: n.lng,
       score: (n.mrr && n.mrr > 0 ? n.mrr : 100) * p.peso,
+      assunto: t?.assunto ? curto(t.assunto, 90) : null, diasNaEtapa: n.diasNaEtapa ?? null,
+      horaPrazo: motivo === 'visita_sem_registro' ? null : horaT,
     });
   }
   return itens.sort((a, b) =>

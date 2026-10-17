@@ -19,21 +19,24 @@
 // continuam as do servidor (um card por negócio, valor × urgência).
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated, Linking, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View,
+  Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { supabase } from '../integrations/supabase/client';
 import { Toast } from '../components/Toast';
-import { IconCalendar, IconCall, IconCheck, IconClose, IconWhatsapp, IconClipboardCheck, IconLocation, useIconColors } from '../components/icons';
+import { IconCheck } from '../components/icons';
 import { useLayout } from '../hooks/useLayout';
 import { useMeuPdi } from '../hooks/useMeuPdi';
 import { concluirComDesfazer } from '../utils/concluirTarefa';
 import { gravarContato, type Contato } from '../utils/contatoDeCampo';
 import { ehErroDeRede, ehSessaoVencida, enfileirar, novoAcaoId, registrarExecutor } from '../utils/filaOffline';
 import { ehRecusa, negocioAcao } from '../utils/negocioAcao';
-import { apagarPendente, desfazerFeita, lerFeitas, marcarGravada, registrarFeita, type FeitaServidor } from '../utils/filaFeitas';
-import { ehDiaUtil, proximoDiaUtil, secaoDoItem, type SecaoDaFila } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
+import { apagarPendente, desfazerFeita, lerFeitas, marcarGravada, registrarFeita, type FeitaServidor, type OrigemDoFeito, type SecaoDoFeito } from '../utils/filaFeitas';
+import { ehDiaUtil, proximoDiaUtil, quenteEsfriando, secaoDoItem, type SecaoDaFila } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
+import { BlocoHoraDasLigacoes, CabecalhoDaSecao, CartaoCheio, CartaoFaltaComoFoi, CartaoMini, FilaZerada, LinhaFeitoHoje, PlacarDoDia, SecaoVazia, type DadosDoCartao } from './CartaoDaFila';
+import { estadoDoPush, ligarPush, type EstadoDoPush, type PedidoDaFila } from '../utils/pushDaFila';
+import { janelaAtual, janelasDoDia } from '../utils/horaDasLigacoes';
 import { porNoDia } from '../utils/paradaDoDia';
 import { aoMudarOPlano } from '../utils/planoDoPino';
 import { lerSemanaDoPlano, type DiaDoPlano } from '../utils/semanaDoPlano';
@@ -51,6 +54,7 @@ export type CardDaFila = {
   mrr: number | null; ultimoContato: string | null; ultimoContatoTexto: string; contatos: number;
   prazo: string | null; prazoTexto: string; venceu: boolean; agendaHoje: string | null; temTelefone: boolean;
   telefone: string | null; tarefaId: string | null; presencial: boolean; lat: number | null; lng: number | null;
+  assunto?: string | null; diasNaEtapa?: number | null; horaPrazo?: string | null;
   titulo: string;
   /** Por que o título usa o negócio (A2): "contato no CRM: 'Julyan' · igual ao dono da conta". */
   tituloPorque?: string | null;
@@ -71,14 +75,10 @@ const ETAPA: Record<string, { rotulo: string; cor: string }> = {
   '1395880473': { rotulo: 'Ag. Pagamento', cor: '#1E9E7B' },
 };
 const PERDIDO = '1396006164';
-/* temperatura em palavra (o número solto "72" não dizia nada na rua); a cor continua sendo dado */
-const palavraDaTemp = (t: number | null) => (t == null ? null : t >= 70 ? 'quente' : t >= 55 ? 'morno' : 'frio');
-const corDaTemp = (t: number | null) => (t == null ? 'var(--text-faint)' : t >= 70 ? 'var(--vermelho-acao)' : t >= 55 ? 'var(--tint-amber-text)' : 'var(--tint-blue-text)');
 const soDigitos = (t: string) => t.replace(/\D+/g, '');
-const mil = (v: number) => (v >= 1000 ? `R$ ${(v / 1000).toFixed(1).replace('.', ',')} mil` : `R$ ${Math.round(v)}`);
 const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
 const agoraHHMM = () => { const b = new Date(Date.now() - 3 * 3600000); return `${String(b.getUTCHours()).padStart(2, '0')}:${String(b.getUTCMinutes()).padStart(2, '0')}`; };
-const reduzirMovimento = () => { try { return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
+const duracao = (seg: number) => (seg < 60 ? `${seg} s` : `${Math.floor(seg / 60)} min ${seg % 60} s`);
 
 /* SEM INTERESSE E ADIAR PELA FILA (auditoria 14/10/26). Os dois esperam 5 s de Desfazer antes
    de escrever. Antes: (a) fechar o app dentro da janela perdia a escrita (o Perdido nunca ia e a
@@ -177,9 +177,9 @@ function useFeitas(hoje: string) {
   return {
     feitas,
     recarregar,
-    somar: (f: Feita, extra: { etapaAnterior?: string | null; tarefaId?: string | null }) => {
+    somar: (f: Feita, extra: { etapaAnterior?: string | null; tarefaId?: string | null; origem?: OrigemDoFeito; secao?: SecaoDoFeito | null }) => {
       setLocais((l) => [f, ...l.filter((x) => x.dealId !== f.dealId)]);
-      void registrarFeita({ ...f, dia: hoje, ...extra }).then(recarregar);
+      void registrarFeita({ ...f, dia: hoje, ...extra, origem: extra.origem }).then(recarregar);
     },
     tirar: (dealId: string) => {
       const f = feitas.find((x) => x.dealId === dealId && x.estado === 'pendente');
@@ -187,25 +187,6 @@ function useFeitas(hoje: string) {
       if (f) void apagarPendente(f.acaoId).then(recarregar);
     },
   };
-}
-
-// ---- anel do dia (44 px no topo, 112 px na fila zerada) ------------------------------
-function Anel({ feitas, total, tamanho = 44, zerada = false }: { feitas: number; total: number; tamanho?: number; zerada?: boolean }) {
-  const p = total > 0 ? feitas / total : 0;
-  const r = tamanho / 2 - (tamanho > 60 ? 5 : 3);
-  const c = 2 * Math.PI * r;
-  const cor = zerada ? 'var(--verde-acao)' : 'var(--vermelho-acao)';
-  if (Platform.OS !== 'web') return <View style={{ width: tamanho, height: tamanho }} />;
-  return (
-    <View style={{ width: tamanho, height: tamanho, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel={`${feitas} feitas de ${total}`}>
-      {React.createElement('svg', { width: tamanho, height: tamanho, style: { position: 'absolute', transform: 'rotate(-90deg)' } },
-        React.createElement('circle', { cx: tamanho / 2, cy: tamanho / 2, r, fill: 'none', stroke: 'var(--border)', strokeWidth: tamanho > 60 ? 6 : 3 }),
-        React.createElement('circle', { cx: tamanho / 2, cy: tamanho / 2, r, fill: 'none', stroke: cor, strokeWidth: tamanho > 60 ? 6 : 3, strokeDasharray: `${c * (zerada ? 1 : p)} ${c}`, strokeLinecap: 'round' }))}
-      {zerada && tamanho > 60
-        ? <IconCheck width={44} height={44} fill="var(--verde-acao)" />
-        : <Text style={{ fontSize: tamanho > 60 ? 28 : 14, fontWeight: '700', color: 'var(--text)' }}>{feitas}</Text>}
-    </View>
-  );
 }
 
 // ---- registro dentro do card (toques 2 e 3) ---------------------------------------------
@@ -348,118 +329,8 @@ function RegistroInline({ item, hoje, feriados, grande = false, discouEm, aoSalv
 let pedidoDeSaidaAtual: (() => boolean) | null = null;
 const podeSair = () => (pedidoDeSaidaAtual ? pedidoDeSaidaAtual() : true);
 
-// ---- o card ----------------------------------------------------------------------------
-function CardFila({ item, aberto, selecionado, aoVerbo, aoFechar, aoAdiar, aoSelecionar, semTelefone, children }: {
-  item: CardDaFila; aberto: boolean; selecionado?: boolean; aoVerbo: () => void; aoFechar: () => void; aoAdiar: () => void;
-  aoSelecionar?: () => void; children?: React.ReactNode;
-  /** A4: cartão de visita sem telefone e fora do plano — Pôr no plano + Telefone no lugar de "Visitar". */
-  semTelefone?: { aoPorNoPlano: () => void; aoTelefone: () => void; noPlano: string | null } | null;
-}) {
-  const cores = useIconColors();
-  const etapa = ETAPA[item.etapaId] ?? { rotulo: 'Etapa', cor: 'var(--text-faint)' };
-  const x = useRef(new Animated.Value(0)).current;
-  const [lado, setLado] = useState<0 | 1 | -1>(0);
-  const pan = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_e, g) => !aberto && Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
-    onPanResponderMove: (_e, g) => { if (g.dx > 0) return; x.setValue(g.dx); setLado(g.dx < 0 ? -1 : 0); },
-    onPanResponderRelease: (_e, g) => {
-      const volta = () => { Animated.timing(x, { toValue: 0, duration: 180, useNativeDriver: false }).start(); setLado(0); };
-      /* arrastar para a direita não disca mais (o rótulo dizia "Registrar" e ligava): só o
-         gesto de adiar ficou, e ele também tem botão visível */
-      if (g.dx < -90) {
-        if (reduzirMovimento()) { aoAdiar(); return; }
-        Animated.timing(x, { toValue: -480, duration: 220, useNativeDriver: false }).start(() => aoAdiar());
-        return;
-      }
-      volta();
-    },
-    onPanResponderTerminate: () => { Animated.timing(x, { toValue: 0, duration: 180, useNativeDriver: false }).start(); setLado(0); },
-  }), [aberto]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const corVerbo = item.verbo === 'WhatsApp' ? 'var(--whatsapp)' : 'var(--vermelho-acao)';
-  const Icone = item.verbo === 'WhatsApp' ? IconWhatsapp : item.verbo === 'Registrar' ? IconClipboardCheck : item.verbo === 'Visitar' ? IconLocation : IconCall;
-  return (
-    <View style={s.cardCaixa}>
-      {lado !== 0 && !aberto && (
-        <View style={[s.fundoGesto, { backgroundColor: lado > 0 ? 'var(--tint-green)' : 'var(--tint-amber)', alignItems: lado > 0 ? 'flex-start' : 'flex-end' }]}>
-          <Text style={[s.fundoGestoTexto, { color: lado > 0 ? 'var(--tint-green-text)' : 'var(--tint-amber-text)' }]}>{lado > 0 ? 'Registrar' : 'Adiar para amanhã'}</Text>
-        </View>
-      )}
-      <Animated.View {...pan.panHandlers} style={[s.card, aberto && s.cardAberto, selecionado && s.cardSelecionado, { transform: [{ translateX: x }] }]}>
-        <Pressable onPress={aoSelecionar} disabled={!aoSelecionar} style={{ gap: 3 }} accessibilityRole={aoSelecionar ? 'button' : undefined}>
-          <View style={s.cardTopo}>
-            <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-              <Text style={s.cardTitulo} numberOfLines={2}>{item.titulo}</Text>
-              <View style={s.cardLinha2}>
-                {/* o título já diz o nome ("Visitar FERRO XIS BRASA"): repetido, ele só espremia a etapa a 390 px */}
-                {!item.titulo.toLowerCase().includes(item.negocio.toLowerCase()) && <Text style={s.cardNegocio} numberOfLines={1}>{item.negocio}</Text>}
-                <View style={s.pilulaEtapa}><View style={[s.ponto, { backgroundColor: etapa.cor }]} /><Text style={s.pilulaTexto} numberOfLines={1}>{etapa.rotulo}</Text></View>
-                {item.temperatura != null && <View style={s.temp}><View style={[s.ponto, { backgroundColor: corDaTemp(item.temperatura) }]} /><Text style={s.tempTexto}>{palavraDaTemp(item.temperatura)}</Text></View>}
-              </View>
-              {/* o porquê é a razão de estar na fila: em duas linhas, não cortado em 15 letras ao lado do botão */}
-              <Text style={s.cardPorque} numberOfLines={2}>{item.porque}</Text>
-              {!!item.tituloPorque && <Text style={s.cardTituloPorque} numberOfLines={1}>{item.tituloPorque}</Text>}
-            </View>
-            {aberto ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={aoFechar} style={s.botaoX}>
-                <IconClose width={20} height={20} fill={cores.onSurface} />
-              </Pressable>
-            ) : semTelefone && !semTelefone.noPlano ? (
-              <View style={{ gap: 6, alignItems: 'stretch' }}>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Marcar o próximo passo: ${item.negocio}`} onPress={semTelefone.aoPorNoPlano} style={[s.botaoVerbo, { backgroundColor: 'var(--vermelho-acao)' }]}>
-                  <IconCalendar width={18} height={18} fill="#FFFFFF" />
-                  <Text style={s.botaoVerboTexto}>Próximo passo</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Adicionar telefone: ${item.negocio}`} onPress={semTelefone.aoTelefone} style={s.botaoTelefone}>
-                  <IconCall width={16} height={16} fill={cores.onSurface} />
-                  <Text style={s.botaoTelefoneTexto}>Telefone</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <Pressable accessibilityRole="button" accessibilityLabel={`${rotuloDoVerbo(item)}: ${item.negocio}`} onPress={aoVerbo} style={[s.botaoVerbo, { backgroundColor: corVerbo }]}>
-                <Icone width={18} height={18} fill="#FFFFFF" />
-                <Text style={s.botaoVerboTexto}>{rotuloDoVerbo(item)}</Text>
-              </Pressable>
-            )}
-          </View>
-          <View style={s.rodape}>
-            <Text style={s.rodapeTexto} numberOfLines={1}>{item.ultimoContatoTexto}</Text>
-            {semTelefone?.noPlano && !item.agendaHoje ? (
-                <View style={s.seloAgenda}><IconCalendar width={12} height={12} fill="var(--tint-green-text)" /><Text style={s.seloAgendaTexto}>{`próximo passo · ${semTelefone.noPlano}`}</Text></View>
-              ) : !item.temTelefone && (item.verbo === 'Visitar') && !item.agendaHoje ? <Text style={[s.rodapeFixo, { color: 'var(--ambar-texto)' }]} numberOfLines={1}>sem telefone no CRM</Text>
-              : item.agendaHoje ? (
-                <View style={s.seloAgenda}><IconCalendar width={12} height={12} fill="var(--tint-green-text)" /><Text style={s.seloAgendaTexto}>{item.agendaHoje === 'hoje' ? 'no plano de hoje' : `hoje ${item.agendaHoje}`}</Text></View>
-              ) : <Text style={[s.rodapeFixo, s.prazo, item.venceu && { color: 'var(--vermelho-texto)' }]}>{item.prazoTexto}</Text>}
-            {/* ADIAR VISÍVEL (o gesto de arrastar escrevia no HubSpot sem botão que dissesse isso) */}
-            {!aberto && (
-              <Pressable accessibilityRole="button" accessibilityLabel={`Adiar para amanhã: ${item.negocio}`} onPress={aoAdiar} style={s.botaoAdiar}>
-                <Text style={s.botaoAdiarTexto}>Adiar</Text>
-              </Pressable>
-            )}
-          </View>
-        </Pressable>
-        {aberto && children}
-      </Animated.View>
-    </View>
-  );
-}
-
-/* o verbo em rótulo fixo: Ligar e WhatsApp ficam na tela; o resto leva ao mapa e diz isso */
-function rotuloDoVerbo(i: CardDaFila): string {
-  if (i.verbo === 'Ligar' || i.verbo === 'WhatsApp') return i.verbo;
-  if (i.verbo === 'Registrar') return 'Registrar visita';
-  return i.agendaHoje && i.clientId ? 'Cheguei' : 'Ir ao mapa';
-}
-/* as cinco seções, na ordem de leitura */
 // a regra das seções mora no módulo da fila, junto do robô do push (17/10/26)
-type Secao = SecaoDaFila;
-const secaoDe = (i: CardDaFila): Secao => secaoDoItem(i);
-const SECOES: Array<{ id: Secao; rotulo: string; ajuda: string }> = [
-  { id: 'atrasados', rotulo: 'ATRASADOS', ajuda: 'o que você combinou e ainda não fez' },
-  { id: 'hoje', rotulo: 'PARA HOJE', ajuda: 'ligações, cobranças e visitas de hoje' },
-  { id: 'sem_passo', rotulo: 'SEM PRÓXIMO PASSO', ajuda: 'negócios parados: marque o próximo contato' },
-];
-const ROTULO_DO_GRUPO: Record<CardDaFila['grupo'], string> = { agora: 'PARA HOJE', proteger: 'SEM PRÓXIMO PASSO', destravar: 'SEM PRÓXIMO PASSO', reativar: 'SEM PRÓXIMO PASSO' };
+const secaoDe = (i: CardDaFila): SecaoDaFila => secaoDoItem(i);
 
 // ---- a tela -----------------------------------------------------------------------------
 type Props = {
@@ -475,6 +346,8 @@ type Props = {
   sellerId?: string | null;
   /** GPS atual; "Perto de mim" = até 1 km (D13, Julyan 04/10/26). */
   posicao: { latitude: number; longitude: number } | null;
+  /** O que o aviso da fila pediu (P6): abrir a fila, ou o cartão de um negócio pronto para ligar. */
+  pedido?: PedidoDaFila | null;
 };
 const PERTO_M = 1000;
 function metros(a: { latitude: number; longitude: number }, lat: number, lng: number) {
@@ -485,7 +358,7 @@ function metros(a: { latitude: number; longitude: number }, lat: number, lng: nu
 }
 type Filtro = 'tudo' | 'ligar' | 'visitar' | 'whatsapp' | 'perto';
 
-export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, aoRegistrarVisita, aoEditarTelefone, aoMarcarProximoPasso, sellerId, posicao }: Props) {
+export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVisita, aoEditarTelefone, aoMarcarProximoPasso, sellerId, posicao, pedido }: Props) {
   const layout = useLayout();
   const queryClient = useQueryClient();
   const q = useFila();
@@ -497,14 +370,26 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   const [aberto, setAberto] = useState<string | null>(null);
   const [discou, setDiscou] = useState<Record<string, string>>({});
   const [filtro, setFiltro] = useState<Filtro>('tudo');
-  const [feitasAbertas, setFeitasAbertas] = useState(false);
-  const [acordosAbertos, setAcordosAbertos] = useState(false);
-  const [foco, setFoco] = useState(false);
   const [selecionado, setSelecionado] = useState<string | null>(null);
-  const [pulso, setPulso] = useState(false);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine !== false);
   const { pdi, marcar: marcarAcordo } = useMeuPdi(true);
   const acordos = (pdi?.compromissos ?? []).filter((c) => c.estado !== 'validado');
+  // o relógio da hora das ligações (P1): a faixa aparece e some sozinha
+  const [relogio, setRelogio] = useState(() => Date.now());
+  useEffect(() => { const t = setInterval(() => setRelogio(Date.now()), 30_000); return () => clearInterval(t); }, []);
+  // os avisos no aparelho (P6)
+  const [estadoPush, setEstadoPush] = useState<EstadoDoPush | null>(null);
+  const [ligandoPush, setLigandoPush] = useState(false);
+  useEffect(() => { void estadoDoPush().then(setEstadoPush).catch(() => setEstadoPush('sem_suporte')); }, []);
+  // de onde veio o cartão em foco (o aviso) e o tempo fora do app depois de Ligar ou WhatsApp (0.2b)
+  const [veioDe, setVeioDe] = useState<{ deal: string; de: 'push' | 'agenda' } | null>(null);
+  const saida = useRef<{ deal: string; canal: 'ligacao' | 'whatsapp'; em: number; viaPush: boolean } | null>(null);
+  const [fora, setFora] = useState<Record<string, { segundos: number; canal: 'ligacao' | 'whatsapp' }>>({});
+  // os combinados do 1:1 entram no denominador do % que o gestor vê (fila_do_dia, 0217)
+  useEffect(() => {
+    if (!sellerId || !pdi) return;
+    void supabase.from('fila_do_dia').upsert({ user_id: sellerId, dia: hojeBRT(), combinados: acordos.length }, { onConflict: 'user_id,dia' }).then(() => {}, () => {});
+  }, [sellerId, pdi, acordos.length]);
   // A4: o plano desta semana e da próxima (o mesmo planos_semanais do Planejamento do Cockpit),
   // para saber se o negócio já está no plano e qual é o próximo dia de Rua.
   const plano = useQuery<DiaDoPlano[]>({
@@ -518,11 +403,6 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
     },
   });
   const [postosNoPlano, setPostosNoPlano] = useState<Record<string, string>>({});
-  const diaNoPlano = (dealId: string): string | null => {
-    if (postosNoPlano[dealId]) return postosNoPlano[dealId];
-    const d = (plano.data ?? []).find((x) => x.iso >= hoje && x.faixas.some((f) => f.id === `c-${dealId}` || f.id === `r-${dealId}`));
-    return d ? d.iso : null;
-  };
   // a folha "Marcar o próximo passo" grava fora daqui: o selo "próximo passo · dia" relê quando o plano muda
   useEffect(() => aoMudarOPlano(() => { void queryClient.invalidateQueries({ queryKey: ['plano_semana_fila'] }); }), [queryClient]);
   // Decisão 4 do handoff: o próximo dia de Rua do plano; sem Rua marcada, o próximo dia útil.
@@ -545,6 +425,45 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   }, [q.data]);
 
   const fila = useMemo(() => (q.data?.itens ?? []).filter((i) => !escondidos.has(i.dealId)), [q.data, escondidos]);
+  /* O % QUE O GESTOR VÊ (P3): uma conta só, no banco (percentual_followups, 0217) — a mesma do
+     cockpit e do push das 17:30. Relê quando a fila ou o Feito hoje mudam. */
+  const pctQ = useQuery<Array<{ user_id: string; pct: number | null }>>({
+    queryKey: ['pct_followups', hoje, feitas.length, q.dataUpdatedAt],
+    enabled: !!q.data && !!sellerId,
+    staleTime: 30_000,
+    queryFn: async () => { const { data, error } = await supabase.rpc('percentual_followups', { p_dia: hoje }); if (error) throw error; return (data ?? []) as Array<{ user_id: string; pct: number | null }>; },
+  });
+  const meuPct = sellerId ? (pctQ.data?.find((x) => x.user_id === sellerId)?.pct ?? null) : null;
+  const mediaPct = (() => { const v = (pctQ.data ?? []).map((x) => x.pct).filter((x): x is number => x != null); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null; })();
+  const seqQ = useQuery<{ atual: number; recorde: number } | null>({
+    queryKey: ['seq_fila_zerada', hoje],
+    staleTime: 5 * 60_000,
+    queryFn: async () => { const { data } = await supabase.rpc('sequencia_da_fila_zerada'); return ((data ?? []) as Array<{ atual: number; recorde: number }>)[0] ?? null; },
+  });
+  // o aviso abriu o app (P6): o cartão daquele negócio em destaque, pronto para ligar num toque
+  useEffect(() => {
+    if (!pedido || !q.data) return;
+    setFiltro('tudo');
+    if (pedido.acao === 'fila' || !pedido.deal) return;
+    const i = q.data.itens.find((x) => x.dealId === pedido.deal);
+    if (!i) { Toast.mostrar('Este negócio já saiu da fila.', 'ok'); return; }
+    setSelecionado(i.dealId); setVeioDe({ deal: i.dealId, de: 'push' });
+    setTimeout(() => { try { document.getElementById(`fila-${i.dealId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch { /* sem DOM */ } }, 300);
+  }, [pedido?.n, !!q.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  // voltou da ligação ou do WhatsApp: o tempo fora do app e o Como foi daquele negócio aberto
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const aoVoltar = () => {
+      if (document.visibilityState !== 'visible' || !saida.current) return;
+      const s0 = saida.current; saida.current = null;
+      const segundos = Math.round((Date.now() - s0.em) / 1000);
+      setFora((m) => ({ ...m, [s0.deal]: { segundos, canal: s0.canal } }));
+      setDiscou((d) => ({ ...d, [s0.deal]: `${s0.canal === 'whatsapp' ? 'WhatsApp' : 'Ligou'} · fora do app ${duracao(segundos)}${s0.viaPush ? ' · pela notificação' : ''}` }));
+      setSelecionado(s0.deal); setAberto(s0.deal);
+    };
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => document.removeEventListener('visibilitychange', aoVoltar);
+  }, []);
   const passa = (i: CardDaFila, f: Filtro) => f === 'tudo' || (f === 'ligar' && i.verbo === 'Ligar') || (f === 'visitar' && (i.verbo === 'Visitar' || i.verbo === 'Registrar'))
     || (f === 'whatsapp' && i.verbo === 'WhatsApp') || (f === 'perto' && !!posicao && i.lat != null && i.lng != null && metros(posicao, i.lat, i.lng) <= PERTO_M);
   const visiveis = fila.filter((i) => passa(i, filtro));
@@ -558,7 +477,6 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   const totalDia = nFeitas + fila.filter((i) => !dealsFeitos.has(i.dealId)).length;
   // sem a fila lida (erro do HubSpot ou ainda carregando) o topo não diz "0 faltam"
   const filaMedida = !!q.data;
-  const doSelecionado = layout.ehDesktop ? (fila.find((i) => i.dealId === selecionado) ?? fila[0] ?? null) : null;
 
   // fila zerada: grava o dia (conquista "Fila zerada 5 dias"), uma vez por dia
   useEffect(() => {
@@ -568,43 +486,46 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
     void supabase.rpc('registrar_fila_zerada');
   }, [zerada, hoje]);
 
-  const pulsar = () => { setPulso(true); setTimeout(() => setPulso(false), 450); };
   const esconder = (d: string) => setEscondidos((e) => new Set(e).add(d));
   const mostrar = (d: string) => setEscondidos((e) => { const n = new Set(e); n.delete(d); return n; });
 
-  function tocarVerbo(i: CardDaFila) {
+  function discar(i: CardDaFila, canal: 'ligacao' | 'whatsapp') {
     if (aberto && aberto !== i.dealId && !podeSair()) return;
     setSelecionado(i.dealId);
-    if (i.verbo === 'Registrar') { if (i.clientId) aoRegistrarVisita(i.clientId); return; }
-    if (i.verbo === 'Visitar') {
-      if (i.clientId) aoAbrirLead(i.clientId); else aoPosicionar?.(i.dealId, i.negocio);
-      return;
-    }
     const fone = i.telefone ? soDigitos(i.telefone) : '';
+    if (!fone) { if (i.clientId) aoEditarTelefone?.(i.clientId); else Toast.mostrar('Este negócio não tem telefone no CRM.', 'erro'); return; }
     const com55 = fone.length <= 11 ? `55${fone}` : fone;
-    if (fone) {
-      if (i.verbo === 'WhatsApp') void Linking.openURL(`https://wa.me/${com55}`);
-      else void Linking.openURL(`tel:+${com55}`);
-      setDiscou((d) => ({ ...d, [i.dealId]: `${i.verbo === 'WhatsApp' ? 'WhatsApp aberto' : 'Discou'} às ${agoraHHMM()} · ${i.telefone}` }));
-    }
+    saida.current = { deal: i.dealId, canal, em: Date.now(), viaPush: veioDe?.deal === i.dealId && veioDe.de === 'push' };
+    void Linking.openURL(canal === 'whatsapp' ? `https://wa.me/${com55}` : `tel:+${com55}`);
+    setDiscou((d) => ({ ...d, [i.dealId]: `${canal === 'whatsapp' ? 'WhatsApp aberto' : 'Discou'} às ${agoraHHMM()} · ${i.telefone}` }));
     pedidoDeSaidaAtual = null;
     setAberto(i.dealId);
   }
+  /* DE ONDE VEIO O FEITO (P7): ligação pelo app com 30 s ou mais fora dele, ou WhatsApp aberto pelo
+     app, vira "sozinha"; o resto é "pela fila". A duração é o tempo FORA DO APP: o navegador não
+     sabe quanto durou a ligação (item 0.2b do handoff). */
+  function origemDe(i: CardDaFila, canal: 'ligacao' | 'whatsapp'): OrigemDoFeito {
+    const fo = fora[i.dealId];
+    if (fo && fo.canal === canal && canal === 'ligacao' && fo.segundos >= 30) return 'ligacao_app';
+    if (fo && fo.canal === canal && canal === 'whatsapp') return 'whatsapp_app';
+    return 'fila';
+  }
+  const secaoDoFeito = (i: CardDaFila): SecaoDoFeito => secaoDe(i);
   function fecharCard() {
     if (!podeSair()) return;
     pedidoDeSaidaAtual = null; setAberto(null);
   }
 
   function salvar(i: CardDaFila, d: DadosRegistro) {
-    const canal = i.verbo === 'WhatsApp' ? 'whatsapp' as const : 'ligacao' as const;
+    const canal = fora[i.dealId]?.canal ?? (i.verbo === 'WhatsApp' ? 'whatsapp' as const : 'ligacao' as const);
     const em = new Date().toISOString();
     const hora = agoraHHMM();
     const acaoId = novoAcaoId();
     pedidoDeSaidaAtual = null;
-    setAberto(null); esconder(i.dealId); pulsar();
+    setAberto(null); esconder(i.dealId);
     if (d.comoFoi === 'sem_interesse') {
       somar({ id: null, acaoId, estado: 'pendente', dealId: i.dealId, hora, negocio: i.negocio, resultado: `Sem interesse · ${d.motivo}`, volta: null, perdido: d.motivo },
-        { etapaAnterior: i.etapaId, tarefaId: i.tarefaId ?? null });
+        { etapaAnterior: i.etapaId, tarefaId: i.tarefaId ?? null, origem: origemDe(i, canal), secao: secaoDoFeito(i) });
       const corpo = { op: 'mudar-etapa', dealId: i.dealId, novaEtapa: PERDIDO,
         // "O que pesou" vai sempre que escrito (14/10/26), não só no Outros
         propriedades: { motivo_do_perdido: d.motivo, ...(d.detalhe.trim() ? { observacao__desqualificado: d.detalhe.trim().slice(0, 200) } : {}) } };
@@ -639,7 +560,7 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
        passo, sem nascer um segundo. */
     const remarcarPresencial = !!i.tarefaId && i.presencial;
     somar({ id: null, acaoId, estado: 'pendente', dealId: i.dealId, hora, negocio: i.negocio, resultado: rotuloComoFoi(d.comoFoi), volta },
-      { etapaAnterior: i.etapaId, tarefaId: i.tarefaId ?? null });
+      { etapaAnterior: i.etapaId, tarefaId: i.tarefaId ?? null, origem: origemDe(i, canal), secao: secaoDoFeito(i) });
     concluirComDesfazer({
       pedido: {
         taskId: i.tarefaId ?? `negocio-${i.dealId}`,
@@ -696,7 +617,8 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   // A4: Pôr no plano. Grava na rota do dia (field_route_stops), que o espelho 0150 leva ao
   // planos_semanais do Planejamento do Cockpit. 5 s de Desfazer antes de gravar, como o Adiar.
   function porNoPlano(i: CardDaFila) {
-    if (!i.clientId) { Toast.mostrar('Este negócio ainda não tem pino no mapa.', 'erro'); return; }
+    // sem pino: o mapa posiciona o negócio primeiro (o mesmo caminho do antigo "Ir ao mapa")
+    if (!i.clientId) { if (aoPosicionar) aoPosicionar(i.dealId, i.negocio); else Toast.mostrar('Este negócio ainda não tem pino no mapa.', 'erro'); return; }
     /* A MESMA FOLHA DO PINO (06/10/26): aqui o botão punha no próximo dia de rua sem tipo, sem
        hora e sem HubSpot. Agora abre o "Marcar o próximo passo"; o atalho antigo só sobra sem ela. */
     if (aoMarcarProximoPasso) { aoMarcarProximoPasso(i.clientId); return; }
@@ -720,121 +642,68 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
     } });
   }
 
-  function adiar(i: CardDaFila) {
-    const amanha = proximoDiaUtil(hoje, 1, feriados);
-    esconder(i.dealId);
-    const pedido: PedidoDaAba = { op: 'adiar', tarefaId: i.tarefaId ?? null, amanha,
-      corpo: i.tarefaId ? null : pedidoDaVolta({ dealId: i.dealId, volta: amanha, pessoa: i.pessoa, canal: i.verbo === 'WhatsApp' ? 'whatsapp' : 'ligacao' }) };
-    const acaoId = novoAcaoId();
-    const rotulo = `Adiar · ${i.negocio}`;
-    let desfeito = false;
-    const timer = setTimeout(async () => {
-      naJanela.delete(acaoId);
-      if (desfeito) return;
-      try {
-        await enviarDaAba(pedido);
-        void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] });
-      } catch (e) {
-        if (ehErroDeRede(e) || ehSessaoVencida(e)) {
-          await enfileirar({ acaoId, tipo: 'aba-tarefas', rotulo, payload: pedido as unknown as Record<string, unknown> });
-          Toast.mostrar('Sem sinal · o adiamento ficou no celular, na fila', 'fila');
-          return;
-        }
-        mostrar(i.dealId);
-        Toast.mostrar(`Não consegui adiar no HubSpot: ${String((e as Error)?.message ?? e)}. O negócio voltou para a fila.`, 'erro');
-      }
-    }, 5000);
-    naJanela.set(acaoId, { timer, rotulo, pedido });
-    Toast.mostrar(`Adiado · ${i.negocio} · volta ${diaCurto(amanha)}`, 'ok', { rotulo: 'Desfazer', onPress: () => { desfeito = true; clearTimeout(timer); naJanela.delete(acaoId); mostrar(i.dealId); } });
-  }
+  // ---- o desenho do handoff "Tarefas do App" (17/10/26): placar, 5 seções, cartão por tipo ----
+  const janela = fila.length > 0 ? janelaAtual(relogio, feriados) : null;
+  const atrasadosLista = visiveis.filter((i) => secaoDe(i) === 'atrasados' && i.motivo !== 'visita_sem_registro');
+  // P7: o Cheguei sem Como foi vai para o TOPO de Para hoje (no servidor ele conta como atrasado)
+  const hojeLista = [...visiveis.filter((i) => i.motivo === 'visita_sem_registro'), ...visiveis.filter((i) => secaoDe(i) === 'hoje')];
+  const semPassoLista = visiveis.filter((i) => secaoDe(i) === 'sem_passo' && i.motivo !== 'visita_sem_registro');
+  const acordosAbertosN = acordos.filter((c) => !c.feito).length;
+  const nFollowups = fila.filter((i) => secaoDe(i) !== 'sem_passo').length + acordosAbertosN;
+  const nQuentes = fila.filter((i) => quenteEsfriando(i, hoje)).length;
+  const nSemPasso = fila.filter((i) => secaoDe(i) === 'sem_passo' && i.motivo !== 'visita_sem_registro').length;
+  const noAparelho = feitas.filter((f) => f.estado === 'pendente').length;
+  const horaBRT = new Date(relogio - 3 * 3600000).getUTCHours();
 
-  // ---- topo: uma linha (o placar e o ranking moram em Meu desempenho) ----
-  const topo = (
-    <View style={s.topo}>
-      <View style={s.topoA}>
-        <Anel feitas={nFeitas} total={filaMedida ? totalDia : nFeitas} zerada={zerada} />
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={[s.topoPlacar, pulso && s.topoSubPulso]} numberOfLines={1}>
-            {zerada ? `Tudo em dia · ${nFeitas} feitas` : filaMedida ? `${nFeitas} feitas · ${fila.length} faltam` : `${nFeitas} feitas · — faltam`}
-          </Text>
-          <Text style={s.topoSub} numberOfLines={1}>sua fila de hoje</Text>
-        </View>
-        <Pressable accessibilityRole="button" disabled={fila.length === 0} onPress={() => setFoco(true)} style={[s.botaoFoco, fila.length === 0 && { opacity: 0.5 }]}>
-          <Text style={s.botaoFocoTexto}>Um por um</Text>
-        </Pressable>
-      </View>
-      {/* A3 (handoff das abas): 4 colunas fixas, rótulo em cima e contagem embaixo, 52 px —
-          nada corta em 390. "Perto de mim" fica só no computador. */}
-      <View style={s.filtrosGrade}>
-        {([['tudo', 'Tudo'], ['ligar', 'Ligar'], ['visitar', 'Visitar'], ['whatsapp', 'WhatsApp']] as Array<[Filtro, string]>).map(([f, r]) => (
-          <Pressable key={f} accessibilityRole="button" accessibilityState={{ selected: filtro === f }} accessibilityLabel={`${r}: ${contagem(f)}`} onPress={() => setFiltro(f)} style={[s.filtroCelula, filtro === f && s.chipFiltroAtivo]}>
-            <Text style={[s.filtroRotulo, filtro === f && s.chipFiltroTextoAtivo]} numberOfLines={1}>{r}</Text>
-            <Text style={s.filtroN}>{filaMedida ? contagem(f) : "—"}</Text>
-          </Pressable>
-        ))}
-      </View>
-      {/* No computador, "Perto de mim" fica numa pílula embaixo: cinco colunas cortavam o
-          WhatsApp a 1280 (auditoria 04/10/26). */}
-      {layout.ehDesktop && (
-        <Pressable accessibilityRole="button" accessibilityState={{ selected: filtro === 'perto' }} onPress={() => setFiltro(filtro === 'perto' ? 'tudo' : 'perto')}
-          style={[s.chipFiltro, { alignSelf: 'flex-start', minHeight: 36 }, filtro === 'perto' && s.chipFiltroAtivo]}>
-          <Text style={s.chipFiltroTexto}>Perto de mim <Text style={s.chipFiltroN}>{contagem('perto')}</Text></Text>
-        </Pressable>
-      )}
-    </View>
-  );
-
+  const dadosDe = (i: CardDaFila): DadosDoCartao => ({
+    dealId: i.dealId, negocio: i.negocio, etapaRotulo: ETAPA[i.etapaId]?.rotulo ?? 'Etapa', diasNaEtapa: i.diasNaEtapa ?? null,
+    quente: quenteEsfriando(i, hoje), tipoPrazo: i.venceu ? 'vencido' : i.prazo === hoje ? 'hoje' : 'outro',
+    prazo: i.prazo, horaPrazo: i.horaPrazo ?? null, hoje, combinadoTexto: i.assunto ?? null,
+    sugerido: i.verbo === 'WhatsApp' ? 'WhatsApp' : i.verbo === 'Ligar' ? 'Ligar' : 'Pôr no plano',
+    visita: i.verbo === 'Visitar' || i.verbo === 'Registrar' || i.presencial, temTelefone: !!i.telefone,
+  });
   const registroDe = (i: CardDaFila, grande = false) => (
     <RegistroInline key={i.dealId} item={i} hoje={hoje} feriados={feriados} grande={grande} discouEm={discou[i.dealId] ?? null}
       aoSalvar={(d) => salvar(i, d)} aoSair={() => { pedidoDeSaidaAtual = null; setAberto(null); }} />
   );
-
-  const cabecalho = (rotulo: string, n: number, ajuda: string, extra?: string | null, cor?: string) => (
-    <View style={{ gap: 2 }}>
-      <View style={s.grupoCab}>
-        <Text style={[s.grupoRotulo, cor ? { color: cor } : null]}>{rotulo}</Text>
-        <View style={s.grupoN}><Text style={s.grupoNTexto}>{n}</Text></View>
-        <View style={s.grupoLinha} />
-        {!!extra && <Text style={s.grupoExtra}>{extra}</Text>}
-      </View>
-      <Text style={s.grupoAjuda}>{ajuda}</Text>
+  const cartao = (i: CardDaFila) => (
+    <View key={i.dealId} nativeID={`fila-${i.dealId}`}>
+      {i.motivo === 'visita_sem_registro' ? (
+        <CartaoFaltaComoFoi negocio={i.negocio} linha={i.porque} aoRegistrar={() => { if (i.clientId) aoRegistrarVisita(i.clientId); }} />
+      ) : (
+        <CartaoCheio d={dadosDe(i)} destaque={veioDe?.deal === i.dealId || (layout.ehDesktop && selecionado === i.dealId)} veioDaAgenda={veioDe?.deal === i.dealId && veioDe.de === 'agenda'}
+          aoLigar={() => discar(i, 'ligacao')} aoWhatsApp={() => discar(i, 'whatsapp')} aoPorNoPlano={() => porNoPlano(i)}>
+          {aberto === i.dealId && (
+            <View style={{ gap: 6 }}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Fechar o registro" onPress={fecharCard} style={[s.botaoSec, { alignSelf: 'flex-end' }]}><Text style={s.botaoSecTexto}>Fechar</Text></Pressable>
+              {registroDe(i)}
+            </View>
+          )}
+        </CartaoCheio>
+      )}
     </View>
   );
-  const cartoes = (doGrupo: CardDaFila[]) => doGrupo.map((i) => (
-          <CardFila key={i.dealId} item={i} aberto={aberto === i.dealId} selecionado={layout.ehDesktop && doSelecionado?.dealId === i.dealId}
-            aoVerbo={() => tocarVerbo(i)} aoFechar={fecharCard} aoAdiar={() => adiar(i)}
-            aoSelecionar={layout.ehDesktop ? () => setSelecionado(i.dealId) : undefined}
-            semTelefone={i.verbo === 'Visitar' && !i.temTelefone && !i.agendaHoje && i.clientId ? {
-              noPlano: (() => { const d = diaNoPlano(i.dealId); return d ? diaCurto(d) : null; })(),
-              aoPorNoPlano: () => porNoPlano(i),
-              aoTelefone: () => aoEditarTelefone?.(i.clientId!),
-            } : null}>
-            {!layout.ehDesktop && registroDe(i)}
-          </CardFila>
-  ));
-  /* AS SEÇÕES: a ordem do servidor (valor × urgência) vale dentro de cada uma */
-  const secao = (lista: CardDaFila[], id: Secao) => {
-    const doGrupo = lista.filter((i) => secaoDe(i) === id);
-    if (!doGrupo.length) return null;
-    const def = SECOES.find((x) => x.id === id)!;
-    const mrrDaSecao = doGrupo.reduce((a, i) => a + (i.mrr ?? 0), 0);
-    return (
-      <View key={id} style={{ gap: 10 }}>
-        {cabecalho(def.rotulo, doGrupo.length, def.ajuda, id === 'sem_passo' && mrrDaSecao > 0 ? `${mil(mrrDaSecao)}/mês` : null, id === 'atrasados' ? 'var(--vermelho-texto)' : undefined)}
-        {cartoes(doGrupo)}
-      </View>
-    );
-  };
-
-  const acordosBloco = acordos.length > 0 ? (
+  const secao = (rotulo: string, lista: CardDaFila[], vazio: string, ponto: string, sub?: string | null, cor?: string) => (
+    <View style={{ gap: 10 }}>
+      <CabecalhoDaSecao rotulo={rotulo} n={lista.length} sub={sub} ponto={ponto} cor={cor} />
+      {lista.length ? lista.map(cartao) : <SecaoVazia texto={vazio} />}
+    </View>
+  );
+  const semPassoBloco = (
     <View style={{ gap: 8 }}>
-      <Pressable accessibilityRole="button" accessibilityState={{ expanded: acordosAbertos }} onPress={() => setAcordosAbertos((v) => !v)} style={s.secaoRecolhida}>
-        <Text style={s.grupoRotulo}>COMBINADOS COM O GESTOR</Text>
-        <View style={s.grupoN}><Text style={s.grupoNTexto}>{acordos.length}</Text></View>
-        <View style={s.grupoLinha} />
-        <Text style={s.grupoExtra}>{acordosAbertos ? 'fechar' : 'ver'}</Text>
-      </Pressable>
-      {acordosAbertos && acordos.map((c) => (
+      <CabecalhoDaSecao rotulo="SEM PRÓXIMO PASSO" n={semPassoLista.length} sub={semPassoLista.length ? 'a regra é zero' : null}
+        ponto={semPassoLista.length ? 'var(--vermelho-acao)' : 'var(--verde-acao)'} cor={semPassoLista.length ? 'var(--vermelho-texto)' : 'var(--ok-texto)'} />
+      {semPassoLista.length ? semPassoLista.map((i) => (
+        <View key={i.dealId} nativeID={`fila-${i.dealId}`}>
+          <CartaoMini negocio={i.negocio} et={`${ETAPA[i.etapaId]?.rotulo ?? 'Etapa'} · ${i.ultimoContatoTexto}`} aoMarcar={() => porNoPlano(i)} />
+        </View>
+      )) : <SecaoVazia texto="zero · funil limpo" />}
+    </View>
+  );
+  const acordosBloco = (
+    <View style={{ gap: 8 }}>
+      <CabecalhoDaSecao rotulo="COMBINADOS COM O GESTOR" n={acordosAbertosN} ponto="var(--info-text)" />
+      {acordos.length === 0 ? <SecaoVazia texto="nenhum combinado aberto" /> : acordos.map((c) => (
         <Pressable key={c.id} accessibilityRole="checkbox" accessibilityState={{ checked: c.feito, disabled: marcarAcordo.isPending }} disabled={marcarAcordo.isPending}
           onPress={() => marcarAcordo.mutate({ id: c.id, feito: !c.feito })} style={s.acordo}>
           <View style={[s.circulo, c.feito && s.circuloFeito]}>{c.feito && <IconCheck width={14} height={14} fill="#FFFFFF" />}</View>
@@ -845,38 +714,67 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
         </Pressable>
       ))}
     </View>
-  ) : null;
-
-  /* FEITO HOJE: a última seção, recolhida (era uma aba interna escondida ao lado do MRR) */
+  );
+  /* FEITO HOJE: a 5ª seção, aberta (P3), com a origem de cada um (P7) */
   const feitasBloco = (
-    <View style={{ gap: 8, marginTop: 4 }}>
-      <Pressable accessibilityRole="button" accessibilityState={{ expanded: feitasAbertas }} onPress={() => setFeitasAbertas((v) => !v)} style={s.secaoRecolhida}>
-        <Text style={s.grupoRotulo}>FEITO HOJE</Text>
-        <View style={s.grupoN}><Text style={s.grupoNTexto}>{feitas.length}</Text></View>
-        <View style={s.grupoLinha} />
-        <Text style={s.grupoExtra}>{feitasAbertas ? 'fechar' : 'ver e desfazer'}</Text>
-      </Pressable>
-      {feitasAbertas && (feitas.length === 0 ? <Text style={s.vazio}>Nada registrado hoje ainda.</Text> : null)}
-      {feitasAbertas && feitas.map((f) => (
-          <View key={f.acaoId} style={s.feita}>
-            <Text style={s.feitaHora}>{f.hora}</Text>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={s.feitaNegocio} numberOfLines={1}>{f.negocio}</Text>
-              <Text style={s.feitaResultado} numberOfLines={1}>{f.resultado}</Text>
-              <Text style={s.feitaVolta} numberOfLines={1}>{f.perdido ? 'foi para Perdido' : f.volta ? `volta ${diaCurto(f.volta)}` : ''}{f.estado === 'pendente' ? (online ? ' · subindo' : ' · aguardando sinal para subir') : ''}</Text>
-            </View>
-            {f.estado === 'gravada' && f.id && (
-              <Pressable accessibilityRole="button" accessibilityLabel={`Desfazer o registro de ${f.negocio}`} onPress={() => void desfazerDepois(f)}
-                disabled={desfazendo?.id === f.id && desfazendo.fase === 'indo'} style={[s.botaoSec, desfazendo?.id === f.id && { borderColor: 'var(--vermelho-acao)' }]}>
-                <Text style={[s.botaoSecTexto, desfazendo?.id === f.id && { color: 'var(--vermelho-acao)' }]}>
-                  {desfazendo?.id === f.id ? (desfazendo.fase === 'indo' ? 'Desfazendo…' : 'Confirmar') : 'Desfazer'}
-                </Text>
-              </Pressable>
-            )}
-          </View>
-        ))}
+    <View style={{ gap: 0 }}>
+      <View style={{ paddingBottom: 8 }}><CabecalhoDaSecao rotulo="FEITO HOJE" n={nFeitas} sub={feitas.length ? 'Desfazer até o fim do dia' : null} ponto="var(--verde-acao)" /></View>
+      {feitas.length === 0 ? <SecaoVazia texto="nada ainda" /> : feitas.map((f) => (
+        <LinhaFeitoHoje key={f.acaoId} hora={f.hora} negocio={f.negocio}
+          resultado={`${f.resultado}${f.perdido ? ' → Perdido' : f.volta ? ` → volta ${diaCurto(f.volta)}` : ''}`}
+          origem={f.origem ?? (f.estado === 'pendente' ? null : 'fila')} noAparelho={f.estado === 'pendente' && !online}
+          acao={f.estado === 'gravada' && f.id ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={`Desfazer o registro de ${f.negocio}`} onPress={() => void desfazerDepois(f)}
+              disabled={desfazendo?.id === f.id && desfazendo.fase === 'indo'} style={[s.botaoSec, desfazendo?.id === f.id && { borderColor: 'var(--vermelho-acao)' }]}>
+              <Text style={[s.botaoSecTexto, desfazendo?.id === f.id && { color: 'var(--vermelho-acao)' }]}>
+                {desfazendo?.id === f.id ? (desfazendo.fase === 'indo' ? 'Desfazendo…' : 'Confirmar') : 'Desfazer'}
+              </Text>
+            </Pressable>
+          ) : f.estado === 'pendente' ? <Text style={s.feitaVolta}>subindo</Text> : undefined} />
+      ))}
     </View>
   );
+
+  // o cartão de ligar os avisos (P6): só enquanto não estão ligados, e some se a pessoa fechar
+  const [cartaoPushFechado, setCartaoPushFechado] = useState(() => { try { return window.localStorage.getItem('fila-push-cartao-fechado') === '1'; } catch { return false; } });
+  const cartaoPush = !cartaoPushFechado && (estadoPush === 'desligado' || estadoPush === 'precisa_instalar') ? (
+    <View style={s.cartaoPush}>
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text style={s.cartaoPushT}>Avisos da fila no celular</Text>
+        <Text style={s.ajudaMiuda}>{estadoPush === 'precisa_instalar'
+          ? 'No iPhone os avisos só chegam com o app na tela de início: Compartilhar › Adicionar à Tela de Início.'
+          : 'Até 4 por dia: quente esfriando, hora das ligações e o fim do dia. Nada depois das 19h.'}</Text>
+      </View>
+      <View style={{ gap: 6 }}>
+        {estadoPush === 'desligado' && (
+          <Pressable accessibilityRole="button" disabled={ligandoPush} onPress={async () => {
+            setLigandoPush(true);
+            try { const e = await ligarPush(); setEstadoPush(e); Toast.mostrar(e === 'ligado' ? 'Avisos ligados · mandei um de teste' : e === 'negado' ? 'O celular recusou os avisos. Libere nas configurações do navegador.' : 'Os avisos não ligaram.', e === 'ligado' ? 'ok' : 'erro'); }
+            catch (err) { Toast.mostrar((err as Error).message, 'erro'); }
+            finally { setLigandoPush(false); }
+          }} style={s.cartaoPushBotao}><Text style={s.cartaoPushBotaoT}>{ligandoPush ? 'Ligando…' : 'Ligar'}</Text></Pressable>
+        )}
+        <Pressable accessibilityRole="button" onPress={() => { setCartaoPushFechado(true); try { window.localStorage.setItem('fila-push-cartao-fechado', '1'); } catch { /* sem armazenamento */ } }} style={s.botaoSec}><Text style={s.botaoSecTexto}>Agora não</Text></Pressable>
+      </View>
+    </View>
+  ) : null;
+
+  const filtros = (
+    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+      {([['tudo', 'Todas'], ['ligar', 'Ligar'], ['visitar', 'Visitar'], ['whatsapp', 'WhatsApp'], ...(layout.ehDesktop ? [['perto', 'Perto de mim']] : [])] as Array<[Filtro, string]>).map(([f, r]) => (
+        <Pressable key={f} accessibilityRole="button" accessibilityState={{ selected: filtro === f }} accessibilityLabel={`${r}: ${filaMedida ? contagem(f) : '—'}`} onPress={() => setFiltro(f)}
+          style={[s.chipFiltro, filtro === f && s.chipFiltroAtivo]}>
+          <Text style={[s.chipFiltroTexto, filtro === f && s.chipFiltroTextoAtivo]}>{r}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
+  const barraDaAgenda = veioDe?.de === 'agenda' ? (
+    <Pressable accessibilityRole="button" onPress={() => setVeioDe(null)} style={s.barraAgenda}>
+      <Text style={s.barraAgendaT} numberOfLines={1}>{`‹ Agenda · ${fila.find((x) => x.dealId === veioDe.deal)?.negocio ?? ''}`}</Text>
+    </Pressable>
+  ) : null;
 
   let corpo: React.ReactNode;
   if (q.isLoading && !q.data) {
@@ -897,34 +795,87 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
   } else if (q.data?.semMedicao) {
     corpo = <View style={s.estadoCaixa}><Text style={s.ajuda}>{q.data.semMedicao}</Text></View>;
   } else if (zerada) {
+    const amanha = proximoDiaUtil(hoje, 1, feriados);
+    const nomeDia = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][new Date(amanha + 'T12:00:00Z').getUTCDay()];
     corpo = (
-      <View style={[s.estadoCaixa, { paddingTop: 32 }]}>
-        <Anel feitas={nFeitas} total={nFeitas} tamanho={112} zerada />
-        <Text style={s.zeradaTitulo}>Tudo em dia</Text>
-        <Text style={[s.ajuda, { textAlign: 'center', maxWidth: 300 }]}>{`${nFeitas} feitas hoje. Todo negócio da sua carteira tem o próximo passo marcado.`}</Text>
-      </View>
-    );
-  } else if (visiveis.length === 0) {
-    const nome = { tudo: 'Tudo', ligar: 'Ligar', visitar: 'Visitar', whatsapp: 'WhatsApp', perto: 'Perto de mim' }[filtro];
-    corpo = (
-      <View style={s.estadoCaixa}>
-        <Text style={s.ajuda}>{`Nada em '${nome}' agora.`}</Text>
-        <Pressable accessibilityRole="button" style={s.botaoSec} onPress={() => setFiltro('tudo')}><Text style={s.botaoSecTexto}>Volte para Tudo</Text></Pressable>
-      </View>
+      <FilaZerada total={nFeitas} zerouAs={feitas[0]?.hora ?? null} pct={meuPct} sequencia={seqQ.data?.atual ?? null} recorde={seqQ.data?.recorde ?? null}
+        amanha={`${nomeDia} ${amanha.slice(8, 10)}/${amanha.slice(5, 7)}`} />
     );
   } else {
-    /* Atrasados e Para hoje primeiro; os combinados do 1:1 logo depois (antes ficavam no fim,
-       depois de dezenas de cards); por último o que está sem próximo passo */
-    corpo = <View style={{ gap: 18 }}>{secao(visiveis, 'atrasados')}{secao(visiveis, 'hoje')}{acordosBloco}{secao(visiveis, 'sem_passo')}</View>;
+    corpo = (
+      <View style={{ gap: 18 }}>
+        {filtros}
+        {visiveis.length === 0 && filtro !== 'tudo' ? (
+          <View style={s.estadoCaixa}>
+            <Text style={s.ajuda}>{`Nada em '${{ tudo: 'Todas', ligar: 'Ligar', visitar: 'Visitar', whatsapp: 'WhatsApp', perto: 'Perto de mim' }[filtro]}' agora.`}</Text>
+            <Pressable accessibilityRole="button" style={s.botaoSec} onPress={() => setFiltro('tudo')}><Text style={s.botaoSecTexto}>Volte para Todas</Text></Pressable>
+          </View>
+        ) : (
+          <>
+            {secao('ATRASADOS', atrasadosLista, 'nenhum atrasado', 'var(--vermelho-acao)', atrasadosLista.length ? 'o mais antigo primeiro' : null, 'var(--vermelho-texto)')}
+            {secao('PARA HOJE', hojeLista, 'nada vence hoje', 'var(--tint-amber-text)')}
+            {acordosBloco}
+            {semPassoBloco}
+          </>
+        )}
+      </View>
+    );
   }
 
+  const topo = !zerada && filaMedida && !q.data?.semMedicao ? (
+    <View style={{ gap: 12 }}>
+      {janela && <BlocoHoraDasLigacoes faltamMin={janela.faltamMin} decorrido={janela.decorrido} de={janela.de} ate={janela.ate} followups={nFollowups} quentes={nQuentes} />}
+      <PlacarDoDia feitos={nFeitas} total={totalDia} pct={meuPct} media={mediaPct} semPasso={nSemPasso}
+        sub={fila.length === 0 ? 'tudo em dia' : horaBRT >= 18 ? `faltam ${fila.length} · passou das 18h` : `faltam ${fila.length} · zere até 18h`}
+        subCor={horaBRT >= 18 && fila.length > 0 ? 'var(--vermelho-texto)' : undefined} />
+    </View>
+  ) : null;
 
   const lista = (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={s.lista}
+    <ScrollView style={[{ flex: 1 }, layout.ehDesktop && { width: '100%', maxWidth: 720 }]} contentContainerStyle={s.lista}
       refreshControl={<RefreshControl refreshing={q.isFetching && !!q.data} onRefresh={() => q.refetch()} />}>
-      {!online && <View style={s.semSinal}><Text style={s.semSinalTexto}>Sem sinal. As ações vão para a fila e sobem sozinhas.</Text></View>}
+      {barraDaAgenda}
+      {!online && (
+        <View style={s.semSinal}><Text style={s.semSinalTexto}>{`Sem sinal · a fila segue funcionando${noAparelho ? ` · ${noAparelho} ${noAparelho === 1 ? 'registro guardado' : 'registros guardados'} no aparelho` : ''}. Sobe para o HubSpot sozinho quando o sinal voltar.`}</Text></View>
+      )}
+      {cartaoPush}
+      {topo}
       {corpo}
       {feitasBloco}
+    </ScrollView>
+  );
+
+  // PC: a coluna de 320 px com as janelas do dia e as ligações da agenda de hoje
+  const ligacoesDeHoje = fila.filter((i) => i.prazo === hoje && !!i.horaPrazo && (i.verbo === 'Ligar' || i.verbo === 'WhatsApp'))
+    .sort((a, b) => (a.horaPrazo ?? '').localeCompare(b.horaPrazo ?? ''));
+  const colunaDireita = (
+    <ScrollView style={s.colunaDireita} contentContainerStyle={{ padding: 16, gap: 16 }}>
+      <View style={s.blocoPainel}>
+        <Text style={s.rotuloSecao}>HORAS DAS LIGAÇÕES</Text>
+        {janelasDoDia(relogio).map((j) => {
+          const feitasNa = feitas.filter((f) => f.hora >= j.de && f.hora < j.ate).length;
+          return (
+            <View key={j.de} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 32 }}>
+              <Text style={[s.feitaNegocio, { width: 104 }]}>{`${j.de} – ${j.ate}`}</Text>
+              <Text style={[s.ajudaMiuda, j.estado === 'agora' && { color: 'var(--vermelho-texto)', fontWeight: '700' }, j.estado === 'feita' && { color: 'var(--ok-texto)' }]}>
+                {j.estado === 'agora' ? `agora · faltam ${j.faltamMin} min` : j.estado === 'feita' ? `feita · ${feitasNa} ${feitasNa === 1 ? 'ligação' : 'ligações'}` : 'próxima'}
+              </Text>
+            </View>
+          );
+        })}
+        <Text style={s.ajudaMiuda}>Na janela, a faixa aparece no Mapa e na Agenda. Fora dela, some.</Text>
+      </View>
+      <View style={s.blocoPainel}>
+        <Text style={s.rotuloSecao}>AGENDA DE HOJE · LIGAÇÕES</Text>
+        {ligacoesDeHoje.length === 0 ? <Text style={s.ajudaMiuda}>Nenhuma ligação com hora marcada hoje.</Text> : ligacoesDeHoje.map((i) => (
+          <View key={i.dealId} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 }}>
+            <Text style={[s.feitaNegocio, { width: 44 }]}>{i.horaPrazo}</Text>
+            <Text style={[s.ajudaMiuda, { flex: 1 }]} numberOfLines={2}>{`${i.verbo} · ${i.negocio}`}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${i.negocio}`} onPress={() => setSelecionado(i.dealId)} style={s.botaoSec}><Text style={s.botaoSecTexto}>abrir</Text></Pressable>
+          </View>
+        ))}
+        <Text style={s.ajudaMiuda}>Ligação e WhatsApp da Agenda abrem aqui na fila.</Text>
+      </View>
     </ScrollView>
   );
 
@@ -932,112 +883,22 @@ export default function FilaTarefasScreen({ ownerId, aoAbrirLead, aoPosicionar, 
     <View style={s.tela}>
       {layout.ehDesktop ? (
         <View style={{ flex: 1, flexDirection: 'row' }}>
-          <View style={s.colunaFila}>{topo}{lista}</View>
-          <View style={s.painel}>
-            {doSelecionado ? <PainelDoNegocio item={doSelecionado} aoVerbo={() => tocarVerbo(doSelecionado)} aberto={aberto === doSelecionado.dealId} aoFechar={fecharCard}>
-              {registroDe(doSelecionado)}
-            </PainelDoNegocio> : <View style={s.estadoCaixa}><Text style={s.ajuda}>Escolha um negócio da fila.</Text></View>}
-          </View>
+          <View style={{ flex: 1, alignItems: 'center' }}>{lista}</View>
+          {colunaDireita}
         </View>
-      ) : (<>{topo}{lista}</>)}
-      {foco && <ModoFoco fila={fila} hoje={hoje} feriados={feriados} discou={discou} aoVerbo={tocarVerbo}
-        aoSalvar={salvar} aoSair={() => { pedidoDeSaidaAtual = null; setAberto(null); setFoco(false); }} aberto={aberto} setAberto={setAberto} />}
+      ) : lista}
     </View>
   );
 }
 
-// ---- computador: painel do negócio ------------------------------------------------------
-function PainelDoNegocio({ item, aberto, aoVerbo, aoFechar, children }: { item: CardDaFila; aberto: boolean; aoVerbo: () => void; aoFechar: () => void; children: React.ReactNode }) {
-  const etapa = ETAPA[item.etapaId];
-  // a ordem do funil, explícita: chaves numéricas fazem o objeto se reordenar (Visita ia para o fim)
-  const trilha = ['1395880469', '1396005401', '1395880470', '1395880471', '1395880472', '1395880473'];
-  const idx = trilha.indexOf(item.etapaId);
-  return (
-    <ScrollView contentContainerStyle={{ padding: 28, gap: 16, maxWidth: 720 }}>
-      <Text style={s.grupoRotulo}>{item.venceu ? 'ATRASADO' : ROTULO_DO_GRUPO[item.grupo]}</Text>
-      <Text style={{ fontSize: 28, fontWeight: '700', color: 'var(--text)' }}>{item.titulo}</Text>
-      <Text style={s.cardNegocio}>{`${item.negocio} · ${etapa?.rotulo ?? ''}${item.temperatura != null ? ` · ${palavraDaTemp(item.temperatura)}` : ''}${item.mrr ? ` · R$ ${Math.round(item.mrr)}/mês` : ''}`}</Text>
-      <View style={{ flexDirection: 'row', gap: 4 }}>{trilha.map((t, i) => <View key={t} style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: i <= idx ? (ETAPA[t].cor) : 'var(--border)' }} />)}</View>
-      <View style={s.blocoPainel}>
-        <Text style={s.rotuloSecao}>AGORA</Text>
-        <Text style={[s.cardPorque, { fontSize: 16 }]}>{item.porque}</Text>
-        <Text style={s.ajuda}>{`${item.ultimoContatoTexto} · ${item.agendaHoje ? (item.agendaHoje === 'hoje' ? 'no plano de hoje' : `na agenda hoje ${item.agendaHoje}`) : item.prazoTexto}`}</Text>
-        {aberto ? (
-          <View style={{ gap: 8 }}>
-            <Pressable accessibilityRole="button" onPress={aoFechar} style={[s.botaoSec, { alignSelf: 'flex-end' }]}><Text style={s.botaoSecTexto}>Fechar</Text></Pressable>
-            {children}
-          </View>
-        ) : (
-          <Pressable accessibilityRole="button" onPress={aoVerbo} style={[s.salvar, { backgroundColor: item.verbo === 'WhatsApp' ? 'var(--whatsapp)' : 'var(--vermelho-acao)' }]}>
-            <Text style={s.salvarTexto}>{item.titulo}</Text>
-          </Pressable>
-        )}
-      </View>
-      <View style={s.blocoPainel}>
-        <Text style={s.rotuloSecao}>PRÓXIMO PASSO MARCADO</Text>
-        <Text style={s.ajuda}>{item.tarefaId ? `${item.prazoTexto} · tarefa aberta no HubSpot` : 'Nenhum: este negócio está sem próximo passo.'}</Text>
-      </View>
-    </ScrollView>
-  );
-}
-
-// ---- modo foco --------------------------------------------------------------------------
-function ModoFoco({ fila, hoje, feriados, discou, aberto, setAberto, aoVerbo, aoSalvar, aoSair }: {
-  fila: CardDaFila[]; hoje: string; feriados: string[]; discou: Record<string, string>; aberto: string | null; setAberto: (d: string | null) => void;
-  aoVerbo: (i: CardDaFila) => void; aoSalvar: (i: CardDaFila, d: DadosRegistro) => void; aoSair: () => void;
-}) {
-  const [ordem, setOrdem] = useState<string[]>(() => fila.map((i) => i.dealId));
-  const [feitosNaSessao, setFeitos] = useState(0);
-  const restantes = ordem.filter((d) => fila.some((i) => i.dealId === d));
-  const atual = fila.find((i) => i.dealId === restantes[0]) ?? null;
-  const total = feitosNaSessao + restantes.length;
-  const etapa = atual ? ETAPA[atual.etapaId] : null;
-  return (
-    <Modal visible transparent={false} animationType="slide" onRequestClose={aoSair}>
-      <View style={[s.tela, { padding: 16, gap: 12 }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Pressable accessibilityRole="button" onPress={aoSair} style={s.botaoSec}><Text style={s.botaoSecTexto}>Sair</Text></Pressable>
-          <View style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={s.ajudaMiuda}>UM POR UM</Text>
-            <Text style={s.topoTitulo}>{atual ? `${feitosNaSessao + 1} de ${total}` : `${total} de ${total}`}</Text>
-          </View>
-          <Pressable accessibilityRole="button" disabled={!atual} onPress={() => { if (atual) { setAberto(null); setOrdem([...restantes.slice(1), atual.dealId]); } }} style={s.botaoSec}><Text style={s.botaoSecTexto}>Pular</Text></Pressable>
-        </View>
-        <View style={{ height: 4, borderRadius: 2, backgroundColor: 'var(--border)' }}><View style={{ height: 4, borderRadius: 2, width: `${total ? (feitosNaSessao / total) * 100 : 100}%`, backgroundColor: 'var(--vermelho-acao)' }} /></View>
-        {atual ? (
-          <ScrollView contentContainerStyle={[s.card, { gap: 12, padding: 20 }]}>
-            <Text style={s.grupoRotulo}>{atual.venceu ? 'ATRASADO' : ROTULO_DO_GRUPO[atual.grupo]}</Text>
-            <Text style={{ fontSize: 26, fontWeight: '700', color: 'var(--text)' }}>{atual.titulo}</Text>
-            <Text style={s.cardNegocio}>{`${atual.negocio} · ${etapa?.rotulo ?? ''}${atual.temperatura != null ? ` · ${palavraDaTemp(atual.temperatura)}` : ''}`}</Text>
-            <Text style={{ fontSize: 17, fontWeight: '600', color: 'var(--text)' }}>{atual.porque}</Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              {[['Último contato', atual.ultimoContatoTexto.replace(/^contato /, '')], ['Prazo', atual.agendaHoje ? (atual.agendaHoje === 'hoje' ? 'no plano de hoje' : `hoje ${atual.agendaHoje}`) : atual.prazoTexto]].map(([r, v]) => (
-                <View key={r} style={s.caixaFato}><Text style={s.ajudaMiuda}>{r}</Text><Text style={[s.feitaNegocio, r === 'Prazo' && atual.venceu && { color: 'var(--vermelho-texto)' }]}>{v}</Text></View>
-              ))}
-            </View>
-            {!!atual.mrr && <Text style={s.ajuda}>{`R$ ${Math.round(atual.mrr)}/mês em jogo`}</Text>}
-            {aberto === atual.dealId ? (
-              <RegistroInline item={atual} hoje={hoje} feriados={feriados} grande discouEm={discou[atual.dealId] ?? null}
-                aoSalvar={(d) => { setFeitos((n) => n + 1); aoSalvar(atual, d); }} aoSair={() => { pedidoDeSaidaAtual = null; setAberto(null); }} />
-            ) : (
-              <Pressable accessibilityRole="button" onPress={() => aoVerbo(atual)} style={[s.salvar, { minHeight: 56, backgroundColor: atual.verbo === 'WhatsApp' ? 'var(--whatsapp)' : 'var(--vermelho-acao)' }]}>
-                <Text style={s.salvarTexto}>{atual.titulo}</Text>
-              </Pressable>
-            )}
-          </ScrollView>
-        ) : (
-          <View style={s.estadoCaixa}>
-            <Anel feitas={1} total={1} tamanho={112} zerada />
-            <Text style={s.zeradaTitulo}>Sessão concluída</Text>
-            <Pressable accessibilityRole="button" style={s.botaoSec} onPress={aoSair}><Text style={s.botaoSecTexto}>Voltar para a fila</Text></Pressable>
-          </View>
-        )}
-      </View>
-    </Modal>
-  );
-}
-
 const s = StyleSheet.create({
+  cartaoPush: { borderRadius: 16, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)', padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cartaoPushT: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
+  cartaoPushBotao: { minHeight: 40, paddingHorizontal: 16, borderRadius: 12, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center' },
+  cartaoPushBotaoT: { fontSize: 13.5, fontWeight: '700', color: '#FFFFFF' },
+  barraAgenda: { minHeight: 44, borderRadius: 12, backgroundColor: 'var(--surface-3)', paddingHorizontal: 14, justifyContent: 'center' },
+  barraAgendaT: { fontSize: 13.5, fontWeight: '700', color: 'var(--text)' },
+  colunaDireita: { width: 320, flexGrow: 0, borderLeftWidth: 1, borderLeftColor: 'var(--border-soft)' },
   tela: { flex: 1, backgroundColor: 'var(--bg)' },
   colunaFila: { width: 440, borderRightWidth: 1, borderRightColor: 'var(--border-soft)' },
   painel: { flex: 1 },
@@ -1063,10 +924,10 @@ const s = StyleSheet.create({
   cardTituloPorque: { fontSize: 12, color: 'var(--text-faint)' },
   botaoTelefone: { minHeight: 44, borderRadius: 10, borderWidth: 1, borderColor: 'var(--border)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 10 },
   botaoTelefoneTexto: { fontSize: 13, fontWeight: '600', color: 'var(--text)' },
-  chipFiltro: { minHeight: 44, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center', backgroundColor: 'var(--surface-2)' },
-  chipFiltroAtivo: { borderColor: 'var(--vermelho-acao)', backgroundColor: 'var(--tint-red)' },
-  chipFiltroTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
-  chipFiltroTextoAtivo: { color: 'var(--text)' },
+  chipFiltro: { minHeight: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center', backgroundColor: 'var(--surface-2)' },
+  chipFiltroAtivo: { borderColor: 'var(--text)', backgroundColor: 'var(--text)' },
+  chipFiltroTexto: { fontSize: 13.5, fontWeight: '700', color: 'var(--text)' },
+  chipFiltroTextoAtivo: { color: 'var(--bg)' },
   chipFiltroN: { color: 'var(--text-muted)', fontWeight: '500' },
   lista: { padding: 16, gap: 18, paddingBottom: 120 },
   semSinal: { borderRadius: 12, padding: 12, backgroundColor: 'var(--tint-amber)', borderWidth: 1, borderColor: 'var(--tint-amber-border)' },

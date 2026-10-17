@@ -67,6 +67,44 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
+// 3. A FILA VAI ATÉ O EXECUTIVO (handoff Tarefas do App, P6, 17/10/2026). O aviso chega cifrado
+//    pela Edge push-fila; o navegador já entrega o JSON: { titulo, texto, tag, url, acoes: [{acao, titulo, url}] }.
+//    Android mostra até 2 botões; no iPhone (só com o app instalado) não há botão: o toque abre a url.
+self.addEventListener('push', (event) => {
+  let d = {};
+  try { d = event.data ? event.data.json() : {}; } catch (e) { d = { titulo: 'Takeat', texto: event.data ? event.data.text() : '' }; }
+  const acoes = Array.isArray(d.acoes) ? d.acoes.filter((a) => a && a.acao && a.titulo).slice(0, 2) : [];
+  event.waitUntil(self.registration.showNotification(d.titulo || 'Sua fila', {
+    body: d.texto || '',
+    tag: d.tag || 'fila',
+    renotify: true,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    data: { url: d.url || '/?fila=fila&origem=push', acoes },
+    actions: acoes.map((a) => ({ action: a.acao, title: a.titulo })),
+  }));
+});
+
+// O toque leva ao app: com uma janela aberta, ela vem para a frente e recebe a ação (o app trata
+// a url como faria na abertura); sem janela, abre o app já na url. "fechar" só fecha.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const dados = event.notification.data || {};
+  if (event.action === 'fechar') return;
+  const escolhida = (dados.acoes || []).find((a) => a.acao === event.action);
+  const alvo = new URL((escolhida && escolhida.url) || dados.url || '/', self.location.origin).href;
+  event.waitUntil((async () => {
+    const janelas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const doApp = janelas.find((c) => new URL(c.url).origin === self.location.origin && !new URL(c.url).pathname.startsWith('/gestao'));
+    if (doApp) {
+      await doApp.focus();
+      doApp.postMessage({ type: 'FILA_ACAO', url: alvo });
+      return;
+    }
+    await self.clients.openWindow(alvo);
+  })());
+});
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;

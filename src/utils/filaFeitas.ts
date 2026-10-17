@@ -13,17 +13,24 @@ import { supabase } from '../integrations/supabase/client';
 export type FeitaServidor = {
   id: string | null; acaoId: string; dealId: string; hora: string; negocio: string; resultado: string;
   volta: string | null; perdido?: string | null; estado: 'pendente' | 'gravada';
+  /** de onde veio (0217): a linha local nasce sem e a do servidor traz. */
+  origem?: string | null;
 };
 
 const emVoo = new Map<string, Promise<unknown>>();
 
-export function registrarFeita(f: FeitaServidor & { dia: string; etapaAnterior?: string | null; tarefaId?: string | null }) {
+/** origem e secao (0217): de onde veio o feito e de que seção da fila — o % que o gestor vê conta só follow-up. */
+export type OrigemDoFeito = 'fila' | 'cheguei' | 'ligacao_app' | 'whatsapp_app' | 'desfecho';
+export type SecaoDoFeito = 'atrasados' | 'hoje' | 'combinado' | 'sem_passo';
+
+export function registrarFeita(f: Omit<FeitaServidor, 'origem'> & { dia: string; etapaAnterior?: string | null; tarefaId?: string | null; origem?: OrigemDoFeito; secao?: SecaoDoFeito | null }) {
   const p = (async () => {
     try {
       await supabase.from('fila_feitas').insert({
         dia: f.dia, deal_id: f.dealId, negocio: f.negocio, hora: f.hora, resultado: f.resultado,
         volta: f.volta, perdido: f.perdido ?? null, acao_id: f.acaoId,
         etapa_anterior: f.etapaAnterior ?? null, tarefa_id: f.tarefaId ?? null,
+        origem: f.origem ?? 'fila', secao: f.secao ?? null,
       });
     } catch { /* complemento */ }
   })();
@@ -51,12 +58,12 @@ export async function marcarGravada(acaoId: string | null | undefined, ids: {
 
 export async function lerFeitas(dia: string): Promise<FeitaServidor[]> {
   const { data, error } = await supabase.from('fila_feitas')
-    .select('id, acao_id, deal_id, hora, negocio, resultado, volta, perdido, estado')
+    .select('id, acao_id, deal_id, hora, negocio, resultado, volta, perdido, estado, origem')
     .eq('dia', dia).neq('estado', 'desfeita').order('criada_em', { ascending: false });
   if (error) throw error;
   return (data ?? []).map((r) => ({
     id: r.id, acaoId: r.acao_id, dealId: r.deal_id, hora: r.hora ?? '', negocio: r.negocio ?? '',
-    resultado: r.resultado ?? '', volta: r.volta, perdido: r.perdido, estado: r.estado,
+    resultado: r.resultado ?? '', volta: r.volta, perdido: r.perdido, estado: r.estado, origem: r.origem ?? null,
   }));
 }
 

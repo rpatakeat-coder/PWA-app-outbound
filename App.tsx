@@ -215,6 +215,7 @@ import { buildHeatCells, celulasNinguemFoi, heatColor, heatIntensity, HEAT_CELL_
 import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type MandatoryReason } from './src/utils/dailyRoute';
 import { fetchSlaCandidate } from './src/utils/slaCandidate';
 import { slaForStage, slaStatus, type SlaDays } from './src/utils/sla';
+import { lerPedidoDaUrl, limparPedidoDaUrl, type PedidoDaFila } from './src/utils/pushDaFila';
 import { useRouteConfig } from './src/hooks/useRouteConfig';
 import { useSellerGoals } from './src/hooks/useSellerGoals';
 import { IconCheck as SiCheck, IconChevronDown as SiDown, IconChevronLeft as SiLeft } from './src/components/icons';
@@ -795,6 +796,23 @@ function MainApp() {
   // 4px de respiro entre os rotulos das abas e a assinatura.
   const { isAuthenticated, loading, logout, profile, updatePassword } = useAuth();
   const [tab, setTab] = useState<AppTab>('map');
+  // O AVISO DA FILA (handoff Tarefas do App, P6, 17/10/26): o push abre o app com ?fila=<acao>&deal=<id>,
+  // ou, com o app já aberto, o service worker manda a mesma url por mensagem. Vai para Tarefas e
+  // entrega o pedido à fila, que abre o cartão daquele negócio.
+  const [pedidoDaFila, setPedidoDaFila] = useState<PedidoDaFila | null>(null);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let n = 0;
+    const tratar = (href: string) => {
+      const p = lerPedidoDaUrl(href, ++n);
+      if (!p) return;
+      setTab('tasks'); setPedidoDaFila(p); limparPedidoDaUrl();
+    };
+    tratar(window.location.href);
+    const aoMsg = (e: MessageEvent) => { if (e.data?.type === 'FILA_ACAO' && typeof e.data.url === 'string') tratar(e.data.url); };
+    navigator.serviceWorker?.addEventListener('message', aoMsg);
+    return () => navigator.serviceWorker?.removeEventListener('message', aoMsg);
+  }, []);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [showCepStep, setShowCepStep] = useState(false);
   // Snapshot do passo 1 (M9/B): o `arrow_back` do passo 2 reabre a CEPStep com
@@ -8841,6 +8859,7 @@ function MainApp() {
         <BarreiraDaAba nome="Tarefas">
         <FilaTarefasScreen
           ownerId={myHubspotId}
+          pedido={pedidoDaFila}
           posicao={userLocation}
           aoAbrirLead={(id) => { setTab('map'); void openClientById(id); }}
           aoRegistrarVisita={(id) => { setTab('map'); void openClientById(id); }}
