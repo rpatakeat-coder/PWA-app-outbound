@@ -139,7 +139,7 @@ function montarAviso(momento: string, f: { itens: Item[]; hoje: string }, combin
   }
   if (momento === '1730') {
     const gestor = pct.meu != null ? `Seu gestor vê ${pct.meu}% dos follow-ups de hoje.` : '';
-    const media = pct.media != null ? ` A média do time é ${pct.media}%.` : '';
+    const media = pct.media ? ` A média do time é ${pct.media}%.` : '';
     return {
       tipo: 'faltam', ref: '1730',
       aviso: { titulo: `Faltam ${nTotal} para zerar a fila`, texto: (`${quentes.length ? `${pl(quentes.length, 'quente esfriando', 'quentes esfriando')}. ` : ''}${gestor}${media}`.trim() + doSemPasso).trim() || 'Feche o dia com a fila zerada.',
