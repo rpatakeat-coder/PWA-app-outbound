@@ -152,7 +152,7 @@ function montarAviso(momento: string, f: { itens: Item[]; hoje: string }, combin
   return null;
 }
 
-async function rodar(svc: ReturnType<typeof createClient>, momento: string, dryRun: boolean, segredo: string) {
+async function rodar(svc: ReturnType<typeof createClient>, momento: string, dryRun: boolean, segredo: string, ignorarHorario = false) {
   const { data: cfgLinha } = await svc.from('cockpit_config').select('conteudo').eq('chave', 'push_fila').maybeSingle();
   const cfg = (cfgLinha?.conteudo ?? {}) as { ligado?: boolean; so_para?: string[] };
   const ensaio = dryRun || cfg.ligado !== true;
@@ -160,8 +160,10 @@ async function rodar(svc: ReturnType<typeof createClient>, momento: string, dryR
   const ano = Number(hoje.slice(0, 4));
   const feriados = [...feriadosNacionais(ano), ...feriadosNacionais(ano + 1)];
   const hora = agoraBRT().getUTCHours();
-  if (!ehDiaUtil(hoje, feriados)) return { ok: true, momento, pulou: 'não é dia útil' };
-  if (hora >= 19) return { ok: true, momento, pulou: 'depois das 19h' };
+  // ignorarHorario só vale no ensaio: deixa testar no fim de semana e à noite sem mandar nada
+  const pularRelogio = ignorarHorario && dryRun;
+  if (!pularRelogio && !ehDiaUtil(hoje, feriados)) return { ok: true, momento, pulou: 'não é dia útil' };
+  if (!pularRelogio && hora >= 19) return { ok: true, momento, pulou: 'depois das 19h' };
 
   // so_acesso nulo conta como falso (neq('so_acesso', true) deixaria o nulo de fora)
   const { data: equipe } = await svc.from('equipe_cockpit').select('profile_id, papel').eq('ativo', true).or('so_acesso.is.null,so_acesso.eq.false');
@@ -232,7 +234,7 @@ Deno.serve(async (req: Request) => {
     if (corpo.op !== 'rodar') return json(400, { erro: 'O robô só roda.' });
     const momento = String(corpo.momento ?? '');
     if (!['0830', '1230', '1730', '1805'].includes(momento)) return json(400, { erro: 'momento inválido' });
-    try { return json(200, await rodar(svc, momento, corpo.dry_run === true, segredo)); }
+    try { return json(200, await rodar(svc, momento, corpo.dry_run === true, segredo, corpo.ignorar_horario === true)); }
     catch (e) { return json(500, { erro: (e as Error).message }); }
   }
 
