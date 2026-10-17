@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@3b6d12b0.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@c6e1de9b.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* /gestao E O COCKPIT desde 25/09/2026. As tres telas que so a gestao antiga
@@ -40,7 +40,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "3b6d12b0";
+  var VERSAO = "c6e1de9b";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -10987,7 +10987,10 @@ async function hidratarSessao(email) {
       const token = data && data.session ? data.session.access_token : null;
       if (!token) { mostrarLogin('Sessão não encontrada. Tente entrar de novo.'); return; }
 
-      try { if (typeof GV2 !== 'undefined' && GV2.preler && data.session.user) GV2.preler(data.session.user.email); } catch (e) {}
+      try {
+        if (data.session.user) window.__gv2PreEmail = data.session.user.email;
+        if (typeof GV2 !== 'undefined' && GV2.preler && data.session.user && !GV2.preLeitura) GV2.preler(data.session.user.email);
+      } catch (e) {}
       const resp = await prazoDoLogin(
         fetch(v5EnderecoDosDados(), { headers: { Authorization: 'Bearer ' + token } }),
         PRAZO_DA_CARGA, 'a carga dos seus dados');
@@ -65745,6 +65748,8 @@ PL7.toquesHTML = function (arr, grande) {
   return '<span class="pl7-toques' + (grande ? ' is-grande' : '') + '" title="' + n + ' de 6 semanas com toque registrado"><small>toques · 6 sem</small>'
     + arr.map(function (v) { return '<i' + (v ? ' class="is-ok"' : '') + '></i>'; }).join('') + '</span>';
 };
+
+if (typeof window !== 'undefined' && window.__gv2PreEmail && GV2.preler && !GV2.preLeitura) { try { GV2.preler(window.__gv2PreEmail); } catch (e) {} }
 
 GV2.instalar();
 </script><!-- /gv2-js -->
