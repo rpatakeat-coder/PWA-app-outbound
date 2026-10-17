@@ -106,12 +106,18 @@ function montarAviso(momento: string, f: { itens: Item[]; hoje: string }, combin
   const { itens, hoje } = f;
   const abertos = itens.filter((i) => secaoDoItem(i as never) !== 'sem_passo');
   const nAbertos = abertos.length + combinados;
+  /* A REGRA É ZERO (Julyan, 17/10/26: "nada sem passo, focar nos quentes"): o Sem próximo passo não
+     entra no % do gestor, mas a fila só zera sem ele; os avisos dizem quantos são e o das 18:05 sai
+     mesmo quando só sobrou ele. */
+  const semPasso = itens.length - abertos.length;
+  const nTotal = nAbertos + semPasso;
+  const doSemPasso = semPasso ? ` ${pl(semPasso, 'negócio sem próximo passo', 'negócios sem próximo passo')}.` : '';
   const quentes = itens.filter((i) => quenteEsfriando(i as never, hoje)).sort((a, b) => b.score - a.score);
   const topo = quentes[0] ?? abertos[0] ?? null;
   const nomeDe = (i: Item) => i.negocio || i.titulo || 'o primeiro da fila';
   const ligar = (i: Item | null) => i ? [{ acao: 'ligar', titulo: `Ligar ${nomeDe(i)}`.slice(0, 40), url: urlApp('ligar', i.dealId) }] : [];
   const abrir = { acao: 'fila', titulo: 'Abrir a fila', url: urlApp('fila') };
-  if (nAbertos === 0) return null; // fila zerada: nada
+  if (nTotal === 0) return null; // fila zerada: nada
 
   if (momento === '0830') {
     const q = quentes.find((i) => !jaMandados.has(`quente:${i.dealId}`));
@@ -124,9 +130,10 @@ function montarAviso(momento: string, f: { itens: Item[]; hoje: string }, combin
     };
   }
   if (momento === '1230') {
+    if (nAbertos === 0 && !semPasso) return null;
     return {
       tipo: 'janela', ref: '1230',
-      aviso: { titulo: 'Hora das ligações · 15 min', texto: `${pl(nAbertos, 'follow-up', 'follow-ups')}, ${pl(quentes.length, 'quente', 'quentes')}.${topo ? ` Comece pelo ${nomeDe(topo)}.` : ''}`,
+      aviso: { titulo: 'Hora das ligações · 15 min', texto: `${pl(nAbertos, 'follow-up', 'follow-ups')}, ${pl(quentes.length, 'quente', 'quentes')}.${topo ? ` Comece pelo ${nomeDe(topo)}.` : ''}${doSemPasso}`,
         tag: 'janela', url: urlApp('fila'), acoes: [...ligar(topo), abrir] },
     };
   }
@@ -135,7 +142,7 @@ function montarAviso(momento: string, f: { itens: Item[]; hoje: string }, combin
     const media = pct.media != null ? ` A média do time é ${pct.media}%.` : '';
     return {
       tipo: 'faltam', ref: '1730',
-      aviso: { titulo: `Faltam ${nAbertos} para zerar a fila`, texto: `${gestor}${media}`.trim() || 'Feche o dia com a fila zerada.',
+      aviso: { titulo: `Faltam ${nTotal} para zerar a fila`, texto: (`${quentes.length ? `${pl(quentes.length, 'quente esfriando', 'quentes esfriando')}. ` : ''}${gestor}${media}`.trim() + doSemPasso).trim() || 'Feche o dia com a fila zerada.',
         tag: 'janela', url: urlApp('fila'), acoes: [abrir, ...ligar(topo)] },
     };
   }
@@ -145,7 +152,7 @@ function montarAviso(momento: string, f: { itens: Item[]; hoje: string }, combin
     const extra = velho?.prazo ? ` ${nomeDe(velho)} faz ${pl(diasEntre(velho.prazo, hoje), 'dia', 'dias')} sem resposta.` : '';
     return {
       tipo: 'naozerou', ref: '1805',
-      aviso: { titulo: 'A fila não zerou hoje', texto: `Amanhã começa com ${pl(atrasados, 'atrasado', 'atrasados')}.${extra}`,
+      aviso: { titulo: 'A fila não zerou hoje', texto: `Amanhã começa com ${pl(atrasados, 'atrasado', 'atrasados')}${semPasso ? ` e ${pl(semPasso, 'sem próximo passo', 'sem próximo passo')}` : ''}.${extra}`,
         tag: 'fim-do-dia', url: urlApp('fila'), acoes: [{ acao: 'fila', titulo: 'Resolver agora · 5 min', url: urlApp('fila') }, { acao: 'fechar', titulo: 'Amanhã às 08:00', url: '' }] },
     };
   }
@@ -168,11 +175,16 @@ async function rodar(svc: ReturnType<typeof createClient>, momento: string, dryR
   // so_acesso nulo conta como falso (neq('so_acesso', true) deixaria o nulo de fora)
   const { data: equipe } = await svc.from('equipe_cockpit').select('profile_id, papel').eq('ativo', true).or('so_acesso.is.null,so_acesso.eq.false');
   const soPara = new Set((cfg.so_para ?? []).map(String));
+  // os executivos sempre (a leitura grava fila_do_dia) e, desde 17/10/26 ("automático pra geral"),
+  // qualquer pessoa ativa da equipe com aparelho inscrito — o gestor que vende também recebe
+  const daEquipe = new Set((equipe ?? []).map((e: { profile_id: string }) => String(e.profile_id)));
+  const { data: todasInscritas } = await svc.from('push_inscricoes').select('id, user_id, endpoint, p256dh, auth, falhas');
   const alvo = Array.from(new Set([
     ...(equipe ?? []).filter((e: { papel: string }) => e.papel === 'rep').map((e: { profile_id: string }) => String(e.profile_id)),
+    ...((todasInscritas ?? []) as Inscricao[]).map((i) => String(i.user_id)).filter((u) => daEquipe.has(u)),
     ...soPara,
   ]));
-  const { data: inscritas } = await svc.from('push_inscricoes').select('id, user_id, endpoint, p256dh, auth, falhas').in('user_id', alvo);
+  const inscritas = ((todasInscritas ?? []) as Inscricao[]).filter((i) => alvo.includes(String(i.user_id)));
   const porUser = new Map<string, Inscricao[]>();
   for (const i of (inscritas ?? []) as Inscricao[]) (porUser.get(i.user_id) ?? porUser.set(i.user_id, []).get(i.user_id)!).push(i);
 
