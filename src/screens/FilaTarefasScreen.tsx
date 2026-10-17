@@ -672,8 +672,13 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
     dealId: i.dealId, negocio: i.negocio, etapaRotulo: ETAPA[i.etapaId]?.rotulo ?? 'Etapa', diasNaEtapa: i.diasNaEtapa ?? null,
     quente: quenteEsfriando(i, hoje), tipoPrazo: i.venceu ? 'vencido' : i.prazo === hoje ? 'hoje' : 'outro',
     prazo: i.prazo, horaPrazo: i.horaPrazo ?? null, hoje, combinadoTexto: i.assunto ?? null,
-    sugerido: i.verbo === 'WhatsApp' ? 'WhatsApp' : i.verbo === 'Ligar' ? 'Ligar' : 'Pôr no plano',
-    visita: i.verbo === 'Visitar' || i.verbo === 'Registrar' || i.presencial, temTelefone: !!i.telefone,
+    /* O VERBO SEGUE A TAREFA, NÃO A ETAPA (produção, 17/10/26): negócio em Visita com tarefa "Follow-up
+       - Ligar…" vinha com a nota "Visita só conclui com o Cheguei" e o Pôr no plano sugerido. Só tarefa
+       presencial (visita/reunião) é visita; o resto sugere ligar (ou WhatsApp, se a tarefa diz). */
+    sugerido: i.presencial || i.verbo === 'Registrar' ? 'Pôr no plano'
+      : i.verbo === 'WhatsApp' || /whats/i.test(i.assunto ?? '') ? 'WhatsApp'
+      : i.telefone ? 'Ligar' : 'Pôr no plano',
+    visita: i.presencial || i.verbo === 'Registrar', temTelefone: !!i.telefone,
   });
   const registroDe = (i: CardDaFila, grande = false) => (
     <RegistroInline key={i.dealId} item={i} hoje={hoje} feriados={feriados} grande={grande} discouEm={discou[i.dealId] ?? null}
@@ -885,7 +890,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
     <ScrollView style={s.colunaDireita} contentContainerStyle={{ padding: 16, gap: 16 }}>
       <View style={s.blocoPainel}>
         <Text style={s.rotuloSecao}>HORAS DAS LIGAÇÕES</Text>
-        {janelasDoDia(relogio).map((j) => {
+        {!ehDiaUtil(hoje, feriados) ? <Text style={s.ajudaMiuda}>Hoje não tem hora das ligações: fim de semana ou feriado.</Text> : janelasDoDia(relogio).map((j) => {
           const feitasNa = feitas.filter((f) => f.hora >= j.de && f.hora < j.ate).length;
           return (
             <View key={j.de} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 32 }}>
