@@ -45,7 +45,8 @@ export async function ligarPush(): Promise<EstadoDoPush> {
   if (!temSuporte()) return ehIphone() && !instalado() ? 'precisa_instalar' : 'sem_suporte';
   const permissao = await Notification.requestPermission();
   if (permissao !== 'granted') return permissao === 'denied' ? 'negado' : 'desligado';
-  const reg = await navigator.serviceWorker.ready;
+  // sem o service worker ativo o ready nunca resolve, e o botão ficava em "Ligando…" para sempre
+  const reg = await Promise.race([navigator.serviceWorker.ready, new Promise<never>((_, nao) => setTimeout(() => nao(new Error('O app ainda está se atualizando no celular. Feche e abra o app e tente de novo.')), 8000))]);
   const { publica } = await chamar('chave') as { publica: string };
   let sub = await reg.pushManager.getSubscription();
   if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: deB64u(publica) as BufferSource });

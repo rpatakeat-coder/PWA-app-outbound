@@ -773,6 +773,24 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
     </View>
   ) : null;
 
+  /* O ESTADO DOS AVISOS FICA SEMPRE NO FIM DA ABA (iPhone, 17/10/26): fechado o cartão, não havia
+     mais como ligar, e nada dizia por que o aviso não chegava. */
+  const linhaDosAvisos = estadoPush && estadoPush !== 'ligado' ? (
+    <View style={s.linhaAvisos}>
+      <Text style={[s.ajudaMiuda, { flex: 1 }]}>{estadoPush === 'desligado' ? 'Avisos da fila neste celular: desligados.'
+        : estadoPush === 'precisa_instalar' ? 'Avisos no iPhone: abra pelo ícone do app na tela de início (Compartilhar › Adicionar à Tela de Início).'
+        : estadoPush === 'negado' ? 'O celular bloqueou os avisos do app. No iPhone: Ajustes › Notificações › Takeat; no Android: configurações do site no Chrome.'
+        : 'Este navegador não recebe avisos. No iPhone, precisa do iOS 16.4 ou mais novo e do app aberto pela tela de início.'}</Text>
+      {estadoPush === 'desligado' && (
+        <Pressable accessibilityRole="button" disabled={ligandoPush} onPress={async () => {
+          setLigandoPush(true);
+          try { const e = await ligarPush(); setEstadoPush(e); Toast.mostrar(e === 'ligado' ? 'Avisos ligados · mandei um de teste' : e === 'negado' ? 'O celular recusou os avisos.' : 'Os avisos não ligaram.', e === 'ligado' ? 'ok' : 'erro'); }
+          catch (err) { Toast.mostrar((err as Error).message, 'erro'); }
+          finally { setLigandoPush(false); }
+        }} style={s.cartaoPushBotao}><Text style={s.cartaoPushBotaoT}>{ligandoPush ? 'Ligando…' : 'Ligar'}</Text></Pressable>
+      )}
+    </View>
+  ) : null;
   const filtros = (
     <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
       {([['tudo', 'Todas'], ['ligar', 'Ligar'], ['visitar', 'Visitar'], ['whatsapp', 'WhatsApp'], ...(layout.ehDesktop ? [['perto', 'Perto de mim']] : [])] as Array<[Filtro, string]>).map(([f, r]) => (
@@ -856,6 +874,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
       {topo}
       {corpo}
       {feitasBloco}
+      {linhaDosAvisos}
     </ScrollView>
   );
 
@@ -906,6 +925,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
 }
 
 const s = StyleSheet.create({
+  linhaAvisos: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', padding: 12 },
   cartaoPush: { borderRadius: 16, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)', padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
   cartaoPushT: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   cartaoPushBotao: { minHeight: 40, paddingHorizontal: 16, borderRadius: 12, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center' },

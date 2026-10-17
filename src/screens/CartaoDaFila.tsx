@@ -34,7 +34,8 @@ function Anel({ fracao, tamanho, traco, cor, fundo }: { fracao: number; tamanho:
 export function PlacarDoDia({ feitos, total, sub, subCor, pct, media, semPasso }: {
   feitos: number; total: number; sub: string; subCor?: string; pct: number | null; media: number | null; semPasso: number;
 }) {
-  const cor = pct == null ? T.dim : media != null && pct >= media ? T.verde : pct >= 30 ? T.avFg : T.acao;
+  // 0% nunca é verde, nem quando a média do time também é 0
+  const cor = pct == null ? T.dim : pct > 0 && (media == null || pct >= media) && (media != null || pct >= 30) ? T.verde : pct >= 30 ? T.avFg : T.acao;
   return (
     <View style={st.placar}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
@@ -52,9 +53,9 @@ export function PlacarDoDia({ feitos, total, sub, subCor, pct, media, semPasso }
         </View>
         <View style={st.barra}>
           <View style={[st.barraCheia, { width: `${pct ?? 0}%` as unknown as number, backgroundColor: cor }]} />
-          {media != null && <View style={[st.barraMedia, { left: `${media}%` as unknown as number }]} />}
+          {!!media && <View style={[st.barraMedia, { left: `${media}%` as unknown as number }]} />}
         </View>
-        <Text style={st.gestorSub}>{media != null ? `dos follow-ups de hoje feitos · o traço é a média do time (${media}%)` : 'dos follow-ups de hoje feitos'}</Text>
+        <Text style={st.gestorSub}>{media ? `dos follow-ups de hoje feitos · o traço é a média do time (${media}%)` : media === 0 ? 'dos follow-ups de hoje feitos · ninguém do time fez follow-up hoje ainda' : 'dos follow-ups de hoje feitos'}</Text>
       </View>
       <View style={[st.placarDiv, { flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
         <Text style={st.semPassoRot}>Sem próximo passo <Text style={{ fontWeight: '500', color: T.dim }}>· a regra é zero</Text></Text>

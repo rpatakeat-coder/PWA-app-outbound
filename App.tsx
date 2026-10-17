@@ -7003,7 +7003,7 @@ function MainApp() {
       )}
       {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && janelaDasLigacoes && (
         <View style={{ position: 'absolute', left: 12, right: 12, top: insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + ALTURA_FILEIRA_LENTES + 8, zIndex: 24 }}>
-          <FaixaHoraDasLigacoes ate={janelaDasLigacoes.ate} followups={janelaDasLigacoes.followups} quentes={janelaDasLigacoes.quentes} aoAbrir={() => irParaAba('tasks')} />
+          <FaixaHoraDasLigacoes ate={janelaDasLigacoes.ate} followups={janelaDasLigacoes.followups} quentes={janelaDasLigacoes.quentes} aoAbrir={() => { setPedidoDaFila({ acao: 'fila', deal: null, origem: 'janela', n: Date.now() }); irParaAba('tasks'); }} />
         </View>
       )}
       {modoNovo && (
@@ -9006,7 +9006,7 @@ function MainApp() {
         <View style={{ flex: 1 }}>
         {janelaDasLigacoes && (
           <View style={{ paddingHorizontal: layout.ehLargo ? 0 : 12, paddingTop: 10 }}>
-            <FaixaHoraDasLigacoes ate={janelaDasLigacoes.ate} followups={janelaDasLigacoes.followups} quentes={janelaDasLigacoes.quentes} aoAbrir={() => irParaAba('tasks')} />
+            <FaixaHoraDasLigacoes ate={janelaDasLigacoes.ate} followups={janelaDasLigacoes.followups} quentes={janelaDasLigacoes.quentes} aoAbrir={() => { setPedidoDaFila({ acao: 'fila', deal: null, origem: 'janela', n: Date.now() }); irParaAba('tasks'); }} />
           </View>
         )}
         <AgendaNovoScreen
@@ -9282,7 +9282,7 @@ function MainApp() {
           gestor={avisos.gestor}
           carregando={avisos.carregando}
           aoTentarDeNovo={() => { void subirFila(true).then((n) => Toast.mostrar(n > 0 ? `${n} ${n === 1 ? 'envio subiu' : 'envios subiram'}` : 'Ainda não subiu — confira o sinal', n > 0 ? 'ok' : 'erro')); }}
-          aoAbrirTarefas={() => { setAvisosAbertos(false); setTab('tasks'); }}
+          aoAbrirTarefas={() => { setAvisosAbertos(false); setPedidoDaFila({ acao: 'fila', deal: null, origem: 'sino', n: Date.now() }); setTab('tasks'); }}
         />
       )}
 
@@ -13789,7 +13789,7 @@ const styles = StyleSheet.create({
     boxSizing: 'content-box',
   },
   navBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  navSeloTexto: { position: 'absolute', top: -8, left: -4, height: 18, paddingHorizontal: 6, borderRadius: 9, backgroundColor: 'var(--vermelho-acao)', borderWidth: 1.5, borderColor: 'var(--surface)', justifyContent: 'center', boxSizing: 'content-box' } as never,
+  navSeloTexto: { position: 'absolute', top: -12, left: 14, height: 18, paddingHorizontal: 6, borderRadius: 9, backgroundColor: 'var(--vermelho-acao)', borderWidth: 1.5, borderColor: 'var(--surface)', justifyContent: 'center', boxSizing: 'content-box' } as never,
   navSeloTextoT: { color: '#fff', fontSize: 10, lineHeight: 14, fontWeight: '800', whiteSpace: 'nowrap' } as never,
   navItemText: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-faint)' },
   // ===== Calendario da Agenda (so' desktop) =====
