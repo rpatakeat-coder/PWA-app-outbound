@@ -82,17 +82,35 @@ export type Pilha = { lider: string; membros: string[] };
 export function pilhasNaTela(cands: Candidato[], j: Janela, raioPx = 24): Pilha[] {
   const pos = cands.map((c) => ({ c, ...projetar(c.lat, c.lng, j) }))
     .sort((a, b) => a.c.prioridade - b.c.prioridade || a.c.id.localeCompare(b.c.id));
-  const usados = new Set<string>();
+  // GRADE DE raioPx (16/10/26): antes cada pino comparava com todos (O(n²), ~900 pinos numa
+  // área cheia a cada parada do mapa). Só as 9 células em volta podem estar a menos de raioPx;
+  // os vizinhos voltam na ordem de prioridade, então o resultado é o mesmo do laço antigo.
+  const grade = new Map<string, number[]>();
+  const celula = (x: number, y: number) => Math.floor(x / raioPx) + ':' + Math.floor(y / raioPx);
+  pos.forEach((p, i) => {
+    const k = celula(p.x, p.y);
+    const l = grade.get(k);
+    if (l) l.push(i); else grade.set(k, [i]);
+  });
+  const usados = new Uint8Array(pos.length);
   const pilhas: Pilha[] = [];
-  for (const p of pos) {
-    if (usados.has(p.c.id)) continue;
-    usados.add(p.c.id);
+  for (let i = 0; i < pos.length; i++) {
+    if (usados[i]) continue;
+    usados[i] = 1;
+    const p = pos[i];
+    const cx = Math.floor(p.x / raioPx), cy = Math.floor(p.y / raioPx);
+    const viz: number[] = [];
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+      const l = grade.get((cx + dx) + ':' + (cy + dy));
+      if (l) for (const j of l) if (!usados[j]) viz.push(j);
+    }
+    viz.sort((a, b) => a - b);
     const membros = [p.c.id];
-    for (const q of pos) {
-      if (usados.has(q.c.id)) continue;
+    for (const j of viz) {
+      const q = pos[j];
       // coordenada idêntica dá 0 px: empilha em qualquer zoom sem regra à parte
       if (Math.hypot(q.x - p.x, q.y - p.y) < raioPx) {
-        usados.add(q.c.id);
+        usados[j] = 1;
         membros.push(q.c.id);
       }
     }
