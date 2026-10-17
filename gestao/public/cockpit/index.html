@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@c6e1de9b.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@621b3a3e.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* /gestao E O COCKPIT desde 25/09/2026. As tres telas que so a gestao antiga
@@ -40,7 +40,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "c6e1de9b";
+  var VERSAO = "621b3a3e";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -30543,9 +30543,9 @@ function pl6Ligar(box, rep) {
             .eq('owner_id', String(rep.ownerId)).eq('data_segunda', segunda).select('owner_id');
           if (u.error) erro = u.error.message;
           else if (!u.data || !u.data.length) {
-            const ins = await supa.from('planos_semanais').upsert({ owner_id: String(rep.ownerId), data_segunda: segunda, grade: pl6GradeDoPlano(), fechado_em: agoraIso, fechado_por: quem },
-              { onConflict: 'owner_id,data_segunda' }).select('owner_id');
-            if (ins.error) erro = ins.error.message;
+
+            const ins = await pl6Gravar(rep, { fechado_em: agoraIso, fechado_por: quem }, segunda);
+            if (ins.error) erro = ins.error.message || 'erro';
           }
         } catch (e) { erro = (e && e.message) || 'erro'; }
         s.pl7Enviar = false;
