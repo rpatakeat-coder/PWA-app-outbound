@@ -89,13 +89,20 @@ export function useContextoDoPino(ligado: boolean): Omit<ContextoPino, 'agora'> 
     staleTime: 30 * 60 * 1000,
     queryFn: async () => {
       const out: [string, string][] = [];
-      for (let de = 0; de < 20000; de += 1000) {
-        const { data, error } = await supabase.from('leads_prospeccao').select('id, data_abertura')
-          // ordem fixa: sem ela, acima de 1000 linhas o PostgREST pula ou repete linha na virada da página
-          .ilike('fonte', '%Casa dos Dados%').not('data_abertura', 'is', null).order('id').range(de, de + 999);
-        if (error) throw error;
-        (data ?? []).forEach((l: { id: string; data_abertura: string }) => out.push([String(l.id), String(l.data_abertura)]));
-        if (!data || data.length < 1000) break;
+      // ordem fixa: sem ela, acima de 1000 linhas o PostgREST pula ou repete linha na virada da página
+      const pagina = (de: number) => supabase.from('leads_prospeccao').select('id, data_abertura')
+        .ilike('fonte', '%Casa dos Dados%').not('data_abertura', 'is', null).order('id').range(de, de + 999);
+      // EM LOTES DE 4 PÁGINAS EM PARALELO (16/10/26): eram 3 pedidos em fila, ~200 ms cada do
+      // Brasil. Um lote cobre a base de hoje (2,9 mil); se a última página vier cheia, outro lote.
+      for (let de = 0; de < 20000; de += 4000) {
+        const lote = await Promise.all([0, 1000, 2000, 3000].map((k) => pagina(de + k)));
+        let acabou = false;
+        for (const { data, error } of lote) {
+          if (error) throw error;
+          (data ?? []).forEach((l: { id: string; data_abertura: string }) => out.push([String(l.id), String(l.data_abertura)]));
+          if (!data || data.length < 1000) { acabou = true; break; }
+        }
+        if (acabou) break;
       }
       return out;
     },

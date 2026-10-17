@@ -285,6 +285,26 @@ export function useClients(
       // laco antigo pedia uma pagina so' depois da anterior chegar e o app
       // ficava 12 s em "Carregando..." com a rede ociosa. Agora a primeira
       // pagina traz o total e as demais saem todas juntas: ~3 s.
+      // SEM CONTAGEM NA CAIXA DO MAPA (auditoria 16/10/26): o count=exact custava 215 ms contra
+      // 30 ms sem ele, na mesma consulta. A caixa mais cheia tem ~950 pinos, então quase sempre
+      // vem numa página só; se vier cheia, as próximas seguem por id (keyset), sem OFFSET.
+      // A base inteira (sem caixa) continua contando para buscar as páginas em paralelo.
+      const temCaixa = !!(bounds || areaFilter);
+      if (temCaixa) {
+        const all: any[] = [];
+        let ultimo: string | null = null;
+        for (let k = 0; k < 50; k++) {
+          let q = pagina(0, false);
+          if (ultimo) q = q.gt('id', ultimo);
+          const r = await q;
+          if (r.error) throw r.error;
+          const linhas = r.data ?? [];
+          all.push(...linhas);
+          if (linhas.length < PAGE_SIZE) break;
+          ultimo = String((linhas[linhas.length - 1] as any).id);
+        }
+        return all.map(mapRow);
+      }
       const primeira = await pagina(0, true);
       if (primeira.error) throw primeira.error;
       const all: any[] = [...(primeira.data ?? [])];

@@ -2075,10 +2075,15 @@ function MainApp() {
   // cada pixel. Sem isto, todo cliente carregado virava um nó de DOM vivo —
   // acima do maxZoom do clustering a biblioteca anexa TODOS ao mapa, mesmo
   // os fora da tela, e é isso que travava ao aproximar.
-  const renderBounds = useMemo(
-    () => (mapRegion ? boundsForRender(mapRegion) : null),
-    [mapRegion],
-  );
+  // A CAIXA SÓ MUDA QUANDO MUDA DE QUADRADO (auditoria 16/10/26): o objeto era novo a cada
+  // parada do mapa, mesmo dentro do mesmo quadrado de 0,01°, e derrubava em cascata a lista de
+  // pinos, a classificação de todos e as pilhas. Agora a identidade segue a chave da grade.
+  const renderBoundsBruto = mapRegion ? boundsForRender(mapRegion) : null;
+  const renderBoundsChave = renderBoundsBruto
+    ? [renderBoundsBruto.latMin, renderBoundsBruto.latMax, renderBoundsBruto.lonMin, renderBoundsBruto.lonMax].map((n) => n.toFixed(3)).join('|')
+    : '';
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const renderBounds = useMemo(() => renderBoundsBruto, [renderBoundsChave]);
 
   const filteredMapMarkers = useMemo(
     () => {
@@ -2189,8 +2194,19 @@ function MainApp() {
   }, [planejarDia, paradasDoDiaPlanejado, pendentesDoPlano, routeDisplayClients, ordemPlano]);
   const clientesDoPlanoRef = useRef<Client[]>([]);
   clientesDoPlanoRef.current = clientesDoPlanoNoMapa;
+  // CLASSIFICAÇÃO GUARDADA POR LINHA (auditoria 16/10/26): o mesmo objeto de cliente com o
+  // mesmo contexto dá o mesmo pino. Antes cada recálculo criava pinos novos para todos, e o memo
+  // de cada MarkerP2 caía no JSON.stringify duplo. Contexto novo zera o guardado.
+  const pinoGuardadoRef = useRef<{ ctx: unknown; porLinha: WeakMap<Client, Pino> }>({ ctx: null, porLinha: new WeakMap() });
   const itensMapaNovo = useMemo(() => {
     if (!modoNovo || !contextoPino) return [];
+    if (pinoGuardadoRef.current.ctx !== contextoPino) pinoGuardadoRef.current = { ctx: contextoPino, porLinha: new WeakMap() };
+    const guardado = pinoGuardadoRef.current.porLinha;
+    const classificar = (c: Client) => {
+      let p = guardado.get(c);
+      if (!p) { p = classificarPino(c, contextoPino); guardado.set(c, p); }
+      return p;
+    };
     const plano = new Map<string, number>();
     clientesDoPlanoNoMapa.forEach((c, i) => plano.set(c.id, i + 1));
     const vistos = new Set<string>();
@@ -2211,7 +2227,7 @@ function MainApp() {
       vistos.add(c.id);
       base.push(c);
     }
-    return base.map((c) => ({ c, p: classificarPino(c, contextoPino), plano: plano.get(c.id) ?? null }));
+    return base.map((c) => ({ c, p: classificar(c), plano: plano.get(c.id) ?? null }));
   }, [modoNovo, contextoPino, clientesDoPlanoNoMapa, clientsForCount, renderBounds]);
 
   // Toque no pino com o modo Planejar ligado: põe no dia, ou tira se já está.

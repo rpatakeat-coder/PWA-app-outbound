@@ -54,7 +54,6 @@ export function sinalMeInteressa(s: Sinal, meuOwnerId: string | null, ehGestor: 
   return !!meuOwnerId && String(s.owner_id) === String(meuOwnerId);
 }
 
-const RELER_BASE_NO_MAXIMO_A_CADA_MS = 60_000;
 // O contexto do mapa (mapa_contexto, que varre o snapshot do funil) no máximo 1 vez por
 // minuto: uma sincronização do robô de 30 s dava ~25 releituras seguidas por aparelho.
 // 05/10/26 (Julyan: "o mapa tá carregando e piscando toda hora"): com o time na rua chega
@@ -78,7 +77,6 @@ export function useAoVivo(ativo: boolean, meuOwnerId: string | null, ehGestor: b
   const tipos = useRef<Set<string>>(new Set());
   const pinos = useRef<Set<string>>(new Set());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const baseRelidaEm = useRef(0);
   const contextoRelidoEm = useRef(0);
   const contextoAdiado = useRef<ReturnType<typeof setTimeout> | null>(null);
   const donoRef = useRef({ meuOwnerId, ehGestor });
@@ -90,7 +88,6 @@ export function useAoVivo(ativo: boolean, meuOwnerId: string | null, ehGestor: b
       timer.current = null;
       const chaves = new Map<string, string[]>();
       tipos.current.forEach((tipo) => (INVALIDA_POR_TIPO[tipo] || []).forEach((k) => chaves.set(k.join('|'), k)));
-      const nasceu = tipos.current.has('pino-novo');
       const ids = [...pinos.current].slice(0, 200);
       tipos.current.clear();
       pinos.current.clear();
@@ -111,11 +108,10 @@ export function useAoVivo(ativo: boolean, meuOwnerId: string | null, ehGestor: b
         }
         void qc.invalidateQueries({ queryKey: k });
       });
-      if (nasceu && Date.now() - baseRelidaEm.current > RELER_BASE_NO_MAXIMO_A_CADA_MS) {
-        baseRelidaEm.current = Date.now();
-        void qc.invalidateQueries({ queryKey: ['clients'] });
-        return;
-      }
+      // PINO NOVO NÃO RELÊ A ÁREA (auditoria 16/10/26): rebaixava a caixa inteira e
+      // reclassificava todos os pinos até 1 vez por minuto, e o gestor recebe o sinal do time
+      // todo. O pino novo entra pela releitura de 60 s do useClients (updated_at, dentro da
+      // caixa), que já acrescenta linha que não estava no cache.
       if (!ids.length) return;
       const { data, error } = await supabase.from('clients').select(CLIENT_LIST_COLUMNS).in('id', ids);
       if (error || !Array.isArray(data)) return;

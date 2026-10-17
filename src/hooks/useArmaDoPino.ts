@@ -52,8 +52,9 @@ export function useFatosDoNegocio(c: Client | null, ativo = true) {
   return useQuery<FatosDoNegocio>({
     queryKey: ['fatos-do-negocio', c?.id ?? null, dealId],
     enabled: ativo && !!c?.id,
-    staleTime: 55 * 1000,
-    refetchInterval: 60 * 1000,
+    // a cada 3 min (era 1): 3 pedidos por cartao, e o sinal ao vivo do negocio ja rele o contexto
+    staleTime: 175 * 1000,
+    refetchInterval: 180 * 1000,
     queryFn: async () => {
       const [neg, fichas, folha] = await Promise.all([
         dealId
