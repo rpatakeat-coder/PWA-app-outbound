@@ -2586,7 +2586,7 @@ function MainApp() {
     }
     const porGrupo = new Map<string, number>();
     return out.sort((a, b) => a.d - b.d).filter((x) => { const n = porGrupo.get(x.grupo) ?? 0; porGrupo.set(x.grupo, n + 1); return n < 8; })
-      .map(({ d: _d, ...x }) => x); // eslint-disable-line @typescript-eslint/no-unused-vars
+      .map(({ d: _d, ...x }) => x);
   }, [ehAgendaPC, planejarDia, clientesDoPlanoNoMapa, centroDoPlano, itensMapaNovo, routeSlaDays, googleAgenda, mapRegion]);
   const idsSugestao = useMemo(() => {
     const m = new Map<string, SugestaoPC['grupo']>();
@@ -7817,7 +7817,7 @@ function MainApp() {
       return;
     }
     const r = await assumirLead(c, { idHubspot: myHubspotId, nome: profile?.full_name ?? null });
-    if (!r.ok) { Alert.alert('Não deu para assumir', r.erro); return; }
+    if (r.ok === false) { Alert.alert('Não deu para assumir', r.erro); return; }
     if (selectedClient?.id === c.id) setSelectedClient({ ...c, vendedor_id_hubspot: myHubspotId, ...(r.etapa ? { etapa: r.etapa } : {}) });
     void queryClient.invalidateQueries({ queryKey: ['clients'] });
     Toast.mostrar(r.aviso ? `É seu · ${r.aviso}` : `É seu · no seu funil${r.etapa ? ` (${r.etapa})` : ''} · HubSpot + Cockpit`, 'ok');

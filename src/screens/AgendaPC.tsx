@@ -761,8 +761,9 @@ export default function AgendaPC(props: Props) {
     );
   })();
 
+  // dataSet é do react-native-web (vira data-agenda-pc); o tipo do React Native não o declara
   return (
-    <View style={[s.painel, { width: props.largura }]} dataSet={{ agendaPc: '1' }}>
+    <View style={[s.painel, { width: props.largura }]} {...({ dataSet: { agendaPc: '1' } } as object)}>
       <View style={s.cabeca}>
         <View style={s.buscaCaixa}>
           <IconSearch width={16} height={16} fill={cores.muted} />

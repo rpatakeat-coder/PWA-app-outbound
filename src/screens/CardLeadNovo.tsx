@@ -578,7 +578,7 @@ function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
     );
   }
   const codigo = d.etapaCodigo ?? null;
-  const i = codigo ? FUNIL8.indexOf(codigo) : -1;
+  const i = codigo ? (FUNIL8 as readonly string[]).indexOf(codigo) : -1;
   const av = avancoDaEtapa(codigo);
   const pedeAlgo = !!av.destino && (PROPS_OBRIGATORIAS_POR_ETAPA[av.destino] ?? []).length > 0 && av.destino !== ETAPA.pagamento;
   const nota = !pedeAlgo || !falta ? av.nota

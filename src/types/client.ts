@@ -71,6 +71,9 @@ export interface Client {
   // Tipo de lugar (Restaurante, Bar…) — a ficha de rua pergunta só se faltar.
   categoria?: string | null;
   visited_at: string | null;
+  // Quem fez o último check-in (profiles.id). Vem em CLIENT_MAP_COLUMNS; a parada só conta
+  // como feita quando quem passou foi o dono do plano.
+  visited_by?: string | null;
   // Quantas vezes o lead ja foi visitado (contador mantido pela RPC
   // mark_client_as_visited; o historico completo vive em client_visits).
   visit_count: number;

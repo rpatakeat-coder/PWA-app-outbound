@@ -91,7 +91,7 @@ export async function entrarEmProspeccao(client: Client, eu: Eu, nomeDoDono?: st
   const d = decidirProspeccao(atual, eu, nomeDoDono);
   if (!d.criar) return { client: atual, criado: false, jaTinha: false, aviso: d.motivo };
   const r = await assumirLead(atual, eu);
-  if (!r.ok) return { client: atual, criado: false, jaTinha: false, aviso: `o lead não entrou no funil (${r.erro})` };
+  if (r.ok === false) return { client: atual, criado: false, jaTinha: false, aviso: `o lead não entrou no funil (${r.erro})` };
   if (!r.idHubspot) return { client: atual, criado: false, jaTinha: false, aviso: 'o HubSpot não devolveu o negócio: confira em alguns minutos se ele entrou em Prospecção' };
   if (r.jaExistia) return { client: { ...atual, id_hubspot: r.idHubspot }, criado: false, jaTinha: true, aviso: null };
   return { client: { ...atual, id_hubspot: r.idHubspot, vendedor_id_hubspot: eu.idHubspot, etapa: 'Prospecção' }, criado: true, jaTinha: false, aviso: null };

@@ -17,9 +17,9 @@ const ok = (c: boolean, m: string) => {
 
 const pino = (x: Partial<Pino>): Pino => ({
   tipo: 'lead', temp: 'F', cor: '#60A5FA', glifo: 'F', logo: false, dono: 'meu', aproximado: false, nome: 'x', etiqueta: null, opacidade: 1, ...x,
-});
+} as Pino);
 const cli = (x: Partial<Client>): Client => ({ id: 'x', nome: 'x', telefone: null, geo_approximate: false, conta_alvo_rating: null, conta_alvo_reviews: null, ...x } as unknown as Client);
-const it = (id: string, x: Partial<ItemFolha> & { p?: Partial<Pino> }): ItemFolha => ({
+const it = (id: string, x: Omit<Partial<ItemFolha>, 'p'> & { p?: Partial<Pino> }): ItemFolha => ({
   c: cli({ id }), plano: null, distanciaM: 500, feito: false, ...x, p: pino(x.p ?? {}),
 });
 

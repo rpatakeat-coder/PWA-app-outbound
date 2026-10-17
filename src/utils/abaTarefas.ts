@@ -89,7 +89,7 @@ export function chipsDaTarefa(t: TarefaMinima, agora: Date): { tipo: string; ori
 }
 
 /** Ação rápida à direita: `Liguei` para cobrança, follow-up e ligação. */
-export function acaoRapida(t: TarefaMinima): 'liguei' | null {
+export function acaoRapida(t: Pick<TarefaMinima, 'assunto' | 'tipo'>): 'liguei' | null {
   if (t.tipo === 'visita' || /reuni|demo/i.test(t.assunto)) return null;
   return 'liguei';
 }
