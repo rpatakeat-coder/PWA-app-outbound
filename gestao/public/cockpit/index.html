@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@efbb2ed6.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@4ac3e10d.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* /gestao E O COCKPIT desde 25/09/2026. As tres telas que so a gestao antiga
@@ -40,7 +40,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "efbb2ed6";
+  var VERSAO = "4ac3e10d";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -11204,7 +11204,8 @@ function aplicarVisaoPorPapel() {
   if (typeof GV2 !== 'undefined' && GV2.ligar) GV2.ligar();
 
   const prefetchOcioso = () => {
-    if (typeof renderProspeccaoNova === 'function') renderProspeccaoNova();
+
+    if (typeof renderProspeccaoNova === 'function' && !(typeof gv2CobreGestor === 'function' && gv2CobreGestor())) renderProspeccaoNova();
     if (!souRep && !gv2Cobre) {
       if (typeof renderDecisoes === 'function') renderDecisoes();
     }
@@ -46569,6 +46570,8 @@ async function importarNovidade(dados, botao) {
 async function montarNovidadesPracas() {
   const slot = document.getElementById('novidadesPracasSlot');
   if (!slot) return;
+
+  if (typeof gv2CobreGestor === 'function' && gv2CobreGestor()) return;
   const pracas = pracasDoTime();
   slot.innerHTML = '<div class="chart-card" style="margin-top:14px;border-left:3px solid #0E9F9F;"><div style="font-size:12px;color:var(--muted);">Consultando a Casa dos Dados nas ' + pracas.length + ' praças…</div></div>';
 
