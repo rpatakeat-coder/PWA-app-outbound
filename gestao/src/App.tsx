@@ -10,14 +10,6 @@
 // evento de auth consegue mexer nisso. Aba desconhecida cai na home do papel.
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
-import { Cockpit } from './telas/Cockpit';
-import { Daily } from './telas/Daily';
-import { Agenda } from './telas/Agenda';
-import { Prospeccao } from './telas/Prospeccao';
-import { Pessoas } from './telas/Pessoas';
-import { Comunicados } from './telas/Comunicados';
-import { Semana } from './telas/Semana';
-import { Rotas } from './telas/Rotas';
 import { Acessos } from './telas/Acessos';
 import { DesativarAcesso } from './telas/DesativarAcesso';
 import { Documentacao } from './telas/Documentacao';
@@ -26,13 +18,6 @@ import { Documentacao } from './telas/Documentacao';
 // erram os dois, e o import default volta undefined.
 // Cuidado com o nome torto: IconArrowFoward, com um 'r' so'.
 import { IconBookOpen } from 'takeat-design-system-ui-kit/icons/IconBookOpen';
-import { IconUserGroup } from 'takeat-design-system-ui-kit/icons/IconUserGroup';
-import { IconCalendarCheck } from 'takeat-design-system-ui-kit/icons/IconCalendarCheck';
-import { IconCalendar } from 'takeat-design-system-ui-kit/icons/IconCalendar';
-import { IconSchedule } from 'takeat-design-system-ui-kit/icons/IconSchedule';
-import { IconCar } from 'takeat-design-system-ui-kit/icons/IconCar';
-import { IconSearch } from 'takeat-design-system-ui-kit/icons/IconSearch';
-import { IconIdCard } from 'takeat-design-system-ui-kit/icons/IconIdCard';
 import { IconUserAdd } from 'takeat-design-system-ui-kit/icons/IconUserAdd';
 // O desenho pede `person_off`. O UI Kit nao tem esse glifo — a familia de
 // pessoa tem User, UserAdd, UserGroup, UserRefresh, UserError e UserCircle.
@@ -43,7 +28,6 @@ import { IconArrowFoward } from 'takeat-design-system-ui-kit/icons/IconArrowFowa
 import { IconLightBulb } from 'takeat-design-system-ui-kit/icons/IconLightBulb';
 // Megafone, nao lampada: a lampada ja' e' o alternador de tema no rodape da
 // barra, e dois iconos iguais na mesma coluna viram duvida a cada olhada.
-import { IconBullhorn } from 'takeat-design-system-ui-kit/icons/IconBullhorn';
 // A marca vem do kit como COMPONENTE, e nao de /marca/takeat-icon.svg: aquele
 // arquivo mora no public/ do app de campo, e o caminho absoluto so' resolve em
 // producao, onde os dois produtos dividem o dominio. No dev do cockpit dava 404.
@@ -76,20 +60,11 @@ function temaEscuroAgora(): boolean {
 // aparecia no hover; agora e' a sublinha do cabecalho. Nao reescrever.
 // `teto`: tabela pede 1600, leitura pede 1200 — texto com medida de 1500px vira
 // linha de 250 caracteres, que ninguem le' sem perder a linha.
+// PAINEL ANTIGO SÓ COM O QUE O COCKPIT ABRE (16/10/26). Desde o Cockpit unificado o /gestao é o
+// Cockpit; este build vive em painel-antigo.html e o Cockpit só manda para três abas: Acessos,
+// Desativar acesso e Documentação. As outras oito (Time, Daily, Semana, Agenda, Rotas,
+// Prospecção, Pessoas, Comunicados) não tinham link de entrada e saíram.
 const ABAS = [
-  { id: 'time', rotulo: 'Time', descricao: 'Onde eu ajo hoje?', Icone: IconUserGroup, teto: 1600 },
-  { id: 'daily', rotulo: 'Daily', descricao: 'Quem cumpriu, quem está vazio?', Icone: IconCalendarCheck, teto: 1600 },
-  { id: 'semana', rotulo: 'Semana', descricao: 'O que mudou e o que eu faço?', Icone: IconCalendar, teto: 1200 },
-  { id: 'agenda', rotulo: 'Agenda', descricao: 'A semana está planejada?', Icone: IconSchedule, teto: 1200 },
-  { id: 'rotas', rotulo: 'Rotas', descricao: 'Ver, editar e montar a rota de cada vendedor', Icone: IconCar, teto: 1600 },
-  { id: 'prospeccao', rotulo: 'Prospecção', descricao: 'O que entra no topo do funil?', Icone: IconSearch, teto: 1200 },
-  { id: 'pessoas', rotulo: 'Pessoas', descricao: 'Quem precisa de mim no 1:1?', Icone: IconIdCard, teto: 1200 },
-  // Depois de Pessoas porque e' o mesmo assunto visto de outro angulo: no 1:1
-  // o gestor fala com UMA pessoa, aqui com o time. `teto` 1200 porque e'
-  // leitura corrida — recado com medida de 1600px vira linha que ninguem le'.
-  { id: 'comunicados', rotulo: 'Comunicados', descricao: 'O que eu avisei, e quem soube?', Icone: IconBullhorn, teto: 1200 },
-  // Ultima de proposito: e' a aba que menos se usa e a que mais custa errar.
-  // `teto` 1600 porque a lista de contas e' tabela, nao leitura corrida.
   { id: 'acessos', rotulo: 'Acessos', descricao: 'Quem entra no app, e consegue trabalhar?', Icone: IconUserAdd, teto: 1600 },
   // Nona e ultima. Vizinha da Acessos de proposito: criar e encerrar sao a
   // mesma pergunta vista dos dois lados. `teto` 1600 porque sao duas colunas
@@ -106,7 +81,7 @@ type AbaId = (typeof ABAS)[number]['id'];
 
 function abaDoHash(): AbaId {
   const id = window.location.hash.replace(/^#\/?/, '');
-  return (ABAS.find((a) => a.id === id)?.id ?? 'time') as AbaId;
+  return (ABAS.find((a) => a.id === id)?.id ?? 'acessos') as AbaId;
 }
 
 // As telas de guarda aparecem ANTES de haver navegacao — nao recebem casca.
@@ -310,14 +285,6 @@ export default function App() {
         </header>
 
         <div className="envoltorio" style={{ ['--teto' as string]: `${abaAtual.teto}px` }}>
-          {aba === 'daily' && <Daily />}
-          {aba === 'agenda' && <Agenda />}
-          {aba === 'rotas' && <Rotas />}
-          {aba === 'prospeccao' && <Prospeccao />}
-          {aba === 'pessoas' && <Pessoas />}
-          {aba === 'comunicados' && <Comunicados />}
-          {aba === 'semana' && <Semana />}
-          {aba === 'time' && <Cockpit />}
           {aba === 'acessos' && <Acessos />}
           {aba === 'desativar-acesso' && <DesativarAcesso />}
           {aba === 'documentacao' && <Documentacao />}
