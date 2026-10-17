@@ -2874,16 +2874,35 @@ function MainApp() {
     // conta-alvo discreta (bolinha transparente): não vira ponto no zoom afastado e não entra em
     // pilha — senão um lead aparecia como "pilha de 5" por causa de 4 contas-alvo em volta
     const quietos = new Set<string>();
+    const sempreIds = new Set<string>();
     for (const it of visiveisMapaNovo) {
       const sempre = it.plano != null || it.c.id === selectedClient?.id || it.c.id === idPortaDoHalo || !!referenciasNaTela?.has(it.c.id)
         // Agenda do computador: a conta-alvo sugerida na lateral, em foco ou com o mouse em cima é pino inteiro
         || (ehAgendaPC && planejarDia && naCamada(it));
+      if (sempre) sempreIds.add(it.c.id);
       if (!sempre && contaAlvoDiscreta(lente, it.p)) {
         if (afastado || lente === 'calor' || (ehAgendaPC && planejarDia)) continue;
         quietos.add(it.c.id);
       }
       if (ehAgendaPC && planejarDia ? naCamada(it) : (sempre || (!afastado && lente !== 'calor'))) foco.push(it);
       else if (lente !== 'calor') pontos.push(it);
+    }
+    /* ÁREA CHEIA NO ZOOM DE BAIRRO (Julyan, 17/10/26: "pode fazer, deixa o mapa fluido"). Cada pino
+       inteiro é um elemento que o Google reposiciona a cada parada do mapa: medido no PC, ~97 ms
+       por parada com ~150 pinos contra ~51 ms com 19 (no celular, 3 a 4 vezes isso). Acima de 40
+       pinos inteiros no zoom de bairro, ficam inteiros só o plano, o aberto, a próxima porta, o
+       que é para cobrar, os meus quentes e, na lente Recém-abertos, os recém-abertos; o resto vira
+       ponto, como no zoom afastado, e volta a ser pino no zoom de rua. Área com até 40, nada muda. */
+    const LIMITE_PINOS_INTEIROS = 40;
+    if (!zoomRua && !afastado && !(ehAgendaPC && planejarDia) && lente !== 'calor' && foco.length > LIMITE_PINOS_INTEIROS) {
+      const fica = (it: (typeof visiveisMapaNovo)[number]) => sempreIds.has(it.c.id) || it.p.etiqueta?.texto === 'cobrar'
+        || (it.p.dono === 'meu' && it.p.temp === 'Q') || (lente === 'novos' && it.p.familia === 'rec');
+      const sai = foco.filter((it) => !fica(it));
+      const ficam = foco.filter(fica);
+      foco.length = 0;
+      foco.push(...ficam);
+      // a conta-alvo discreta some, como no zoom afastado (não vira ponto nem pilha)
+      for (const it of sai) { if (quietos.has(it.c.id)) { quietos.delete(it.c.id); continue; } pontos.push(it); }
     }
     // Nomes (prancha §1, "Rótulos"): de rua, até 8, na ordem plano › cobrar › recém ≤ 30 d ›
     // meu Q › M › F › recém 31–90 d (empate: o mais perto); de bairro, só a próxima porta e o
