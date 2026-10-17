@@ -33,7 +33,7 @@ import { gravarContato, type Contato } from '../utils/contatoDeCampo';
 import { ehErroDeRede, ehSessaoVencida, enfileirar, novoAcaoId, registrarExecutor } from '../utils/filaOffline';
 import { ehRecusa, negocioAcao } from '../utils/negocioAcao';
 import { apagarPendente, desfazerFeita, lerFeitas, marcarGravada, registrarFeita, type FeitaServidor } from '../utils/filaFeitas';
-import { ehDiaUtil, proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
+import { ehDiaUtil, proximoDiaUtil, secaoDoItem, type SecaoDaFila } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
 import { porNoDia } from '../utils/paradaDoDia';
 import { aoMudarOPlano } from '../utils/planoDoPino';
 import { lerSemanaDoPlano, type DiaDoPlano } from '../utils/semanaDoPlano';
@@ -451,12 +451,9 @@ function rotuloDoVerbo(i: CardDaFila): string {
   return i.agendaHoje && i.clientId ? 'Cheguei' : 'Ir ao mapa';
 }
 /* as cinco seções, na ordem de leitura */
-type Secao = 'atrasados' | 'hoje' | 'sem_passo';
-function secaoDe(i: CardDaFila): Secao {
-  if (i.venceu || i.motivo === 'visita_sem_registro') return 'atrasados';
-  if (i.grupo === 'agora') return 'hoje';
-  return 'sem_passo';
-}
+// a regra das seções mora no módulo da fila, junto do robô do push (17/10/26)
+type Secao = SecaoDaFila;
+const secaoDe = (i: CardDaFila): Secao => secaoDoItem(i);
 const SECOES: Array<{ id: Secao; rotulo: string; ajuda: string }> = [
   { id: 'atrasados', rotulo: 'ATRASADOS', ajuda: 'o que você combinou e ainda não fez' },
   { id: 'hoje', rotulo: 'PARA HOJE', ajuda: 'ligações, cobranças e visitas de hoje' },

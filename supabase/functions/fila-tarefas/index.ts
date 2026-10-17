@@ -17,6 +17,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
   feriadosNacionais, montarFila, ORDEM_GRUPOS, ROTULO_GRUPO, pessoaDoCard, textoUltimoContato, tituloDoCard,
+  secaoDoItem, quenteEsfriando,
   type NegocioEntrada, type TarefaEntrada,
 } from '../_compartilhado/filaDoDinheiro.ts';
 import { criarToques, itensDoApp } from '../_compartilhado/toquesDoCockpit.js';
@@ -188,15 +189,28 @@ Deno.serve(async (req: Request) => {
   if (!token) return json(503, { erro: 'HUBSPOT_TOKEN não configurado' });
   const svc = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
 
-  const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
-  const { data: quem } = await svc.auth.getUser(jwt);
-  const uid = quem?.user?.id;
+  let corpo: Record<string, unknown> = {};
+  try { corpo = await req.json(); } catch { /* sem corpo: é a leitura da fila */ }
+  /* O ROBÔ DO PUSH LÊ A FILA DE CADA UM (17/10/26): com o segredo do cron (vault 'push_fila'), a
+     fila sai para o executivo indicado em corpo.uid, pela MESMA regra da tela. Só leitura: as
+     escritas (desfazer, remarcar) continuam exigindo a sessão da própria pessoa. */
+  let uid: string | undefined;
+  const segredoCron = req.headers.get('x-cron-secret');
+  if (segredoCron) {
+    const { data: ok } = await svc.rpc('segredo_confere', { p_nome: 'push_fila', p_valor: segredoCron });
+    if (ok !== true) return json(403, { erro: 'segredo' });
+    if (corpo?.op) return json(400, { erro: 'O robô só lê a fila.' });
+    uid = typeof corpo?.uid === 'string' ? corpo.uid : undefined;
+    if (!uid) return json(400, { erro: 'Falta o uid.' });
+  } else {
+    const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+    const { data: quem } = await svc.auth.getUser(jwt);
+    uid = quem?.user?.id;
+  }
   if (!uid) return json(401, { erro: 'Sessão inválida. Entre de novo.' });
   const { data: perfil } = await svc.from('profiles').select('id, id_hubspot, full_name').eq('id', uid).maybeSingle();
   const owner = perfil?.id_hubspot ? String(perfil.id_hubspot) : null;
   if (!owner) return json(200, { itens: [], semMedicao: 'Seu usuário não está ligado a um dono no HubSpot: não há carteira para montar a fila.' });
-  let corpo: Record<string, unknown> = {};
-  try { corpo = await req.json(); } catch { /* sem corpo: é a leitura da fila */ }
   if (corpo?.op === 'desfazer') return await desfazer(svc, token, uid, owner, String(corpo.id ?? ''));
   if (corpo?.op === 'remarcar') return await remarcar(token, owner, corpo);
 
@@ -436,6 +450,15 @@ Deno.serve(async (req: Request) => {
       contatos: Math.min(4, contatos[n.dealId]?.n ?? 0), proximoPasso: proximoPorDeal.get(n.dealId) ?? null,
     };
   });
+
+  /* A FILA DO DIA (0217): quanto está aberto em cada seção, para o % que o gestor vê e o push.
+     Os combinados do 1:1 não passam por aqui (vêm do PDI): quem grava essa coluna é o app. */
+  {
+    const c = { atrasados: 0, hoje: 0, sem_passo: 0, quentes: 0 };
+    for (const i of itens) { c[secaoDoItem(i)]++; if (quenteEsfriando(i, hoje)) c.quentes++; }
+    await svc.from('fila_do_dia').upsert({ user_id: uid, dia: hoje, ...c, atualizado_em: new Date().toISOString() }, { onConflict: 'user_id,dia' })
+      .then(() => {}, () => {});
+  }
 
   return json(200, {
     itens,

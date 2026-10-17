@@ -314,3 +314,19 @@ export function feriadosNacionais(ano: number): string[] {
   const fixos = ['01-01', '04-21', '05-01', '09-07', '10-12', '11-02', '11-15', '11-20', '12-25'].map((x) => `${ano}-${x}`);
   return [...fixos, mais(pascoa, -48), mais(pascoa, -47), mais(pascoa, -2), mais(pascoa, 60)].sort();
 }
+
+/* AS SEÇÕES DA ABA TAREFAS (17/10/26, handoff "Tarefas do App"): uma regra só para a tela e para
+   o robô do push, para os dois contarem igual. Os combinados do 1:1 vêm de outra fonte (PDI). */
+export type SecaoDaFila = 'atrasados' | 'hoje' | 'sem_passo';
+export function secaoDoItem(i: { venceu: boolean; motivo: string; grupo: string }): SecaoDaFila {
+  if (i.venceu || i.motivo === 'visita_sem_registro') return 'atrasados';
+  if (i.grupo === 'agora') return 'hoje';
+  return 'sem_passo';
+}
+
+/* QUENTE ESFRIANDO (P2): Conversa com Decisor, Demo/Proposta ou Negociação, com a tarefa que
+   comanda o card vencida ou vencendo hoje. Ag. Pagamento fica fora: ali quem age é o ASAAS. */
+export const ETAPAS_QUENTES = [ETAPA.decisor, ETAPA.demo, ETAPA.negociacao];
+export function quenteEsfriando(i: { etapaId: string; venceu: boolean; prazo: string | null }, hoje: string): boolean {
+  return ETAPAS_QUENTES.includes(i.etapaId) && (i.venceu || i.prazo === hoje);
+}
