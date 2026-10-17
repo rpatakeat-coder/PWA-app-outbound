@@ -17,6 +17,7 @@ import { Alert } from '../components/Alert';
 import { Painel } from '../components/Painel';
 import { supabase } from '../integrations/supabase/client';
 import RegistrarTarefa, { type TarefaParaRegistrar } from './RegistrarTarefa';
+import { JANELAS_LIGACAO, MINUTOS_DA_JANELA } from '../utils/horaDasLigacoes';
 import SemDesfecho from './SemDesfecho';
 import SemLugarNoMapa from './SemLugarNoMapa';
 import { fetchOptimizedTrip } from '../utils/routing';
@@ -80,6 +81,8 @@ type Props = {
   aoMudarDia?: (iso: string) => void;
   /** O dia trocado pela barra do Planejar volta para cá. */
   diaControlado?: string | null;
+  /** P4 (handoff Tarefas do App): ligação e WhatsApp do HubSpot se registram na fila, no cartão do negócio. */
+  aoAbrirNaFila?: (dealId: string, rotulo: string) => void;
 };
 
 const ruaDo = (c: Client | null) => {
@@ -138,7 +141,7 @@ type Linha =
 
 export default function AgendaNovoScreen({
   diaInicial, paradas, paradasErro, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead,
-  aoRoteirizar, roteirizando, aoMontarDia, montandoDia, telefoneDe, base, ownerHubspot, contextoDe, aoMapaDoDia, aoPlaybook, largo, aoMudarDia, diaControlado,
+  aoRoteirizar, roteirizando, aoMontarDia, montandoDia, telefoneDe, base, ownerHubspot, contextoDe, aoMapaDoDia, aoPlaybook, largo, aoMudarDia, diaControlado, aoAbrirNaFila,
 }: Props) {
   const [roteirizandoDia, setRoteirizandoDia] = useState(false);
   const [registrando, setRegistrando] = useState<TarefaParaRegistrar | null>(null);
@@ -292,6 +295,16 @@ export default function AgendaNovoScreen({
       return !!t && acaoRapida(t) === 'liguei';
     }
     return k.tipo === 'retorno';
+  };
+  /* UMA PORTA SÓ (P4, 17/10/26): a tarefa de ligação ou WhatsApp do HubSpot com negócio abre o
+     cartão dele na fila; o "Registrar a tarefa" daqui saiu. Sem negócio ela não está na fila e
+     segue com o registro antigo. */
+  const naFilaDe = (k: (typeof compromissos)[number]): { dealId: string; rotulo: string } | null => {
+    if (!aoAbrirNaFila || k.fonte !== 'hubspot' || !podeLigar(k)) return null;
+    const t = tarefas.find((x) => `hs-${x.id}` === k.id);
+    if (!t?.dealId) return null;
+    const verbo = /whats/i.test(`${t.assunto ?? ''} ${k.titulo ?? ''}`) ? 'WhatsApp' : 'Ligar';
+    return { dealId: String(t.dealId), rotulo: `veio de ${k.hora ?? '—'} · ${verbo} · ${k.nome ?? t.nomeDoCliente ?? 'negócio'}` };
   };
   const registrar = (k: (typeof compromissos)[number]) => {
     setConcluidas((st) => new Set(st).add(k.id));
@@ -708,6 +721,10 @@ export default function AgendaNovoScreen({
             <Pressable accessibilityRole="button" accessibilityLabel={`Confirmar no WhatsApp: ${nome}`} style={[s.botaoLinha, s.botaoWhats]} onPress={() => confirmarNoWhatsApp(k)}>
               <IconWhatsapp width={16} height={16} fill="#FFFFFF" /><Text style={[s.botaoLinhaTexto, { color: '#FFFFFF' }]}>Confirmar</Text>
             </Pressable>
+          ) : dia <= hoje && naFilaDe(k) ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={`Abrir na fila: ${nome}`} style={s.botaoNaFila} onPress={() => { const nf = naFilaDe(k); if (nf) aoAbrirNaFila!(nf.dealId, nf.rotulo); }}>
+              <Text style={s.botaoNaFilaTexto}>na fila ›</Text>
+            </Pressable>
           ) : dia <= hoje && podeLigar(k) ? (
             <Pressable accessibilityRole="button" accessibilityLabel={`Ligar: ${nome}`} style={s.botaoLinha} onPress={() => ligar(k.clientId, k)}>
               <IconCall width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoLinhaTexto}>Ligar</Text>
@@ -725,7 +742,7 @@ export default function AgendaNovoScreen({
                     <IconLocation width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoSecTexto}>Abrir o cartão</Text>
                   </Pressable>
                 )}
-                {dia <= hoje && podeLigar(k) && (
+                {dia <= hoje && podeLigar(k) && !naFilaDe(k) && (
                   <Pressable accessibilityRole="button" style={s.botaoSec} onPress={() => registrar(k)}>
                     <IconCheck width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoSecTexto}>Registrar</Text>
                   </Pressable>
@@ -745,7 +762,13 @@ export default function AgendaNovoScreen({
   const blocosSoltos = (
     <>
       {casadosTotal > 0 && <Text style={s.casadosAviso}>{`${casadosTotal} ${casadosTotal === 1 ? 'compromisso do HubSpot e do app já está' : 'compromissos do HubSpot e do app já estão'} nas paradas, sem repetir`}</Text>}
-      {sep.ligacoes.length > 0 && <Text style={s.secao}>LIGAÇÕES DO DIA · NÃO É PARADA DE RUA</Text>}
+      {(sep.ligacoes.length > 0 || (dia === hoje && !!aoAbrirNaFila)) && <Text style={s.secao}>LIGAÇÕES DO DIA · NÃO É PARADA DE RUA</Text>}
+      {dia === hoje && !!aoAbrirNaFila && JANELAS_LIGACAO.map((j) => (
+        <View key={`janela-${j}`} style={s.linhaJanela}>
+          <Text style={s.horaJanela}>{j}</Text>
+          <Text style={s.subLinha} numberOfLines={1}>{`Hora das ligações · ${MINUTOS_DA_JANELA} min · os follow-ups da fila`}</Text>
+        </View>
+      ))}
       {sep.ligacoes.map((k) => linhaDepois({ k: `c-${k.id}`, tipo: 'compromisso', ordem: 0, hora: k.hora, comp: k }))}
       {sep.fora.length > 0 && <Text style={s.secao}>FORA DO PLANO</Text>}
       {sep.fora.length > 0 && (
@@ -1007,6 +1030,10 @@ const s = StyleSheet.create({
   subLinha: { fontSize: 13, lineHeight: 18, color: 'var(--text-muted)' },
   botaoLinha: { minHeight: 44, minWidth: 56, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   botaoWhats: { backgroundColor: '#128C4A', borderColor: '#128C4A' },
+  botaoNaFila: { minHeight: 36, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: 'var(--stroke-strong)', alignItems: 'center', justifyContent: 'center' },
+  botaoNaFilaTexto: { fontSize: 13, fontWeight: '700', color: 'var(--text)' },
+  linhaJanela: { minHeight: 44, borderRadius: 12, backgroundColor: 'var(--surface-3)', paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  horaJanela: { width: 44, fontSize: 13, fontWeight: '800', color: 'var(--vermelho-texto)' },
   botaoLinhaTexto: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   refazer: { minHeight: 48, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: 'var(--border)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4 },
   refazerTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text-muted)' },

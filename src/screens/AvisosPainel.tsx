@@ -11,6 +11,7 @@ import { Painel } from '../components/Painel';
 import { IconChevronRight, IconClose, useIconColors } from '../components/icons';
 import type { AvisoGestor } from '../hooks/useAvisos';
 import type { ItemFila } from '../utils/filaOffline';
+import type { SeloDaFila } from '../utils/seloDaFila';
 
 type Props = {
   aoFechar: () => void;
@@ -19,6 +20,8 @@ type Props = {
   naFila: number | null;
   /** Da fila, quantos estão no grupo "Agora". */
   paraAgora: number | null;
+  /** P2 (handoff Tarefas do App): "2 quentes esfriando" com os nomes e o vencimento. */
+  selo?: SeloDaFila | null;
   gestor: AvisoGestor[];
   carregando: boolean;
   aoTentarDeNovo: () => void;
@@ -26,7 +29,7 @@ type Props = {
 };
 
 export default function AvisosPainel({
-  aoFechar, falhas, naFila, paraAgora, gestor, carregando, aoTentarDeNovo, aoAbrirTarefas,
+  aoFechar, falhas, naFila, paraAgora, selo, gestor, carregando, aoTentarDeNovo, aoAbrirTarefas,
 }: Props) {
   const cores = useIconColors();
   const nada = !falhas.length && !naFila && !gestor.length;
@@ -52,7 +55,17 @@ export default function AvisosPainel({
           </View>
         )}
 
-        {!!naFila && (
+        {!!selo && (
+          <View style={[s.bloco, s.blocoErro]}>
+            <Text style={[s.blocoTitulo, { color: 'var(--vermelho-texto)' }]}>{selo.longo}</Text>
+            <Text style={s.linhaPequena}>{selo.texto}</Text>
+            <Pressable accessibilityRole="button" onPress={aoAbrirTarefas} style={s.botao}>
+              <Text style={s.botaoTexto}>Abrir a fila</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {!!naFila && !selo && (
           <Pressable accessibilityRole="button" onPress={aoAbrirTarefas} style={[s.bloco, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
             <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
               <Text style={s.blocoTitulo}>{`${naFila} ${naFila === 1 ? 'negócio precisa' : 'negócios precisam'} de você em Tarefas${paraAgora ? ` · ${paraAgora} para hoje` : ''}`}</Text>

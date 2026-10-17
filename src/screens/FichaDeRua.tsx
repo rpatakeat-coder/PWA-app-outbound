@@ -36,6 +36,8 @@ import { ehRecusa, negocioAcao } from '../utils/negocioAcao';
 import { supabase } from '../integrations/supabase/client';
 import { enviarFoto } from '../utils/fotoVisita';
 import { gravarFichaNoBanco, linhaDaFicha, type LinhaFicha } from '../utils/fichaNoBanco';
+import { enviarConclusao, idDe } from '../utils/concluirTarefa';
+import { apagarPendente, marcarGravada, registrarFeita, type SecaoDoFeito } from '../utils/filaFeitas';
 import { CampoData } from '../components/CampoData';
 import { IconClose as SiClose, IconCheck as SiCheck, IconChevronDown as SiDown } from '../components/icons';
 
@@ -68,6 +70,10 @@ type Props = {
   ownerId?: string | null;
   /** Negócio de COLEGA: o próximo passo vira tarefa do dono, na Agenda dele (28/09/2026). */
   donoColega?: string | null;
+  /** P7 (handoff Tarefas do App): a tarefa aberta deste negócio na fila. Cheguei (GPS) + Como foi
+   *  fecha ela sozinha, com origem "cheguei" no Feito hoje; o Desfazer de lá reabre a tarefa e
+   *  apaga o próximo passo criado aqui. Visita declarada (sem GPS) não fecha. */
+  tarefaDaFila?: { tarefaId: string; negocio: string; secao: SecaoDoFeito; etapaId: string; assunto: string | null } | null;
 };
 
 type Resultado = { rotulo: string; estado: 'ok' | 'fila' | 'falhou' | 'pulado'; detalhe?: string };
@@ -133,7 +139,7 @@ function montarSabido(client: Client, negocio: Record<string, unknown>, fichas: 
   };
 }
 
-export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, onEmitirCobranca, declarada = false, ownerId = null, fotoProva = null, fotoNoCheckin = false, donoColega = null }: Props) {
+export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, onEmitirCobranca, declarada = false, ownerId = null, fotoProva = null, fotoNoCheckin = false, donoColega = null, tarefaDaFila = null }: Props) {
   const [f, setF] = useState<Ficha>(FICHA_VAZIA);
   const [opcao, setOpcao] = useState<string | null>(null);
   const [completar, setCompletar] = useState(false);
@@ -150,6 +156,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   /* a visita de retorno já abre com "falei com quem decide" marcado; tocou no "Como foi", o app não marca mais */
   const tocouComoFoi = useRef(false);
   const [comoFoiAuto, setComoFoiAuto] = useState(false);
+  const passoCriado = useRef<{ id: string | null; jaExistia: boolean } | null>(null);
   const pendente = useRef<{ campos: CamposCadastro; envios: Envio[]; foto: Blob | null; linha: LinhaFicha | null; notaSemNegocio: string | null; passoSemNegocio: Record<string, unknown> | null; timer: ReturnType<typeof setTimeout> } | null>(null);
   /* LEAD SEM NEGÓCIO ENTRA EM PROSPECÇÃO (16/10/26, Julyan: "coloque colocar em prospecção nas fichas, ele
      só pode selecionar essa etapa"): a ficha oferece UMA etapa, Prospecção, já marcada. O negócio nasce
@@ -317,7 +324,8 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
       }
     }
     try {
-      await negocioAcao(e.corpo);
+      const rp = await negocioAcao(e.corpo);
+      if (e.corpo.tipoAcao === 'proximo-passo') passoCriado.current = { id: idDe(rp), jaExistia: !!(rp as { jaExistia?: boolean } | null)?.jaExistia };
       lista.push({ rotulo: e.rotulo, estado: 'ok' });
       return true;
     } catch (err) {
@@ -379,6 +387,28 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
       const foi = await enviar(e, lista);
       if (foi && e.etapa) { onEtapaMudou(e.etapa); subiuAte = e.etapa; }
       if (!foi && e.etapa) { if (lista[lista.length - 1]?.estado === 'fila') { degrauNaFila = true; subiuAte = e.etapa; } else degrauFalhou = true; }
+    }
+    /* A TAREFA FECHA SOZINHA (P7): Cheguei + Como foi do mesmo negócio no mesmo dia. Um negócio,
+       uma tarefa (a da fila), nunca em lote. Conta como toque no HubSpot, como qualquer conclusão. */
+    if (dealId && tarefaDaFila && !declarada && !degrauFalhou) {
+      const acaoId = novoAcaoId();
+      const b = new Date(Date.now() - 3 * 3600000);
+      const hora = `${String(b.getUTCHours()).padStart(2, '0')}:${String(b.getUTCMinutes()).padStart(2, '0')}`;
+      const volta = proximoPassoDaFicha(fEf, hoje)?.data ?? null;
+      await registrarFeita({ id: null, acaoId, estado: 'pendente', dealId: String(dealId), hora, negocio: tarefaDaFila.negocio, resultado: 'Visita registrada', volta, perdido: null,
+        dia: hoje, etapaAnterior: tarefaDaFila.etapaId, tarefaId: tarefaDaFila.tarefaId, origem: 'cheguei', secao: tarefaDaFila.secao });
+      try {
+        await enviarConclusao({ taskId: tarefaDaFila.tarefaId, nota: null, proximo: null });
+        await marcarGravada(acaoId, { proximoId: passoCriado.current?.id ?? null, proximoJaExistia: !!passoCriado.current?.jaExistia, concluiu: true });
+        lista.push({ rotulo: `Tarefa da fila concluída sozinha${tarefaDaFila.assunto ? ` · ${tarefaDaFila.assunto}` : ''}`, estado: 'ok' });
+        void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] });
+        void queryClient.invalidateQueries({ queryKey: ['fila_feitas'] });
+      } catch (err) {
+        // a linha do Feito hoje sai (não fica "subindo" para sempre); sem sinal, a conclusão vai para a fila do aparelho
+        await apagarPendente(acaoId);
+        if (ehErroDeRede(err)) await enfileirar({ acaoId: `tarefa-${tarefaDaFila.tarefaId}-${acaoId}`, tipo: 'tarefa', rotulo: `Tarefa da fila · ${nome}`, payload: { taskId: tarefaDaFila.tarefaId, nota: null, proximo: null } });
+        lista.push({ rotulo: 'Tarefa da fila', estado: ehErroDeRede(err) ? 'fila' : 'falhou', detalhe: ehErroDeRede(err) ? 'sobe quando voltar o sinal' : String((err as Error)?.message ?? err) });
+      }
     }
     /* o banco diz a etapa que DE FATO subiu (ou entrou na fila), não a que se pretendia */
     if (p.linha) p.linha = { ...p.linha, etapa_depois: subiuAte };

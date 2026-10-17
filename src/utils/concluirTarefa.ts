@@ -15,7 +15,7 @@ import { negocioAcao, RecusaDoServidor } from './negocioAcao';
 import { gravarContato, type Contato } from './contatoDeCampo';
 import { marcarGravada } from './filaFeitas';
 
-const idDe = (r: unknown) => (r && typeof r === 'object' && (r as { id?: unknown }).id != null ? String((r as { id: unknown }).id) : null);
+export const idDe = (r: unknown) => (r && typeof r === 'object' && (r as { id?: unknown }).id != null ? String((r as { id: unknown }).id) : null);
 
 export type PedidoConclusao = {
   taskId: string;

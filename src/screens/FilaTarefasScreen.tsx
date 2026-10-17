@@ -348,6 +348,8 @@ type Props = {
   posicao: { latitude: number; longitude: number } | null;
   /** O que o aviso da fila pediu (P6): abrir a fila, ou o cartão de um negócio pronto para ligar. */
   pedido?: PedidoDaFila | null;
+  /** P4: "‹ Agenda" e a volta sozinha depois do Salvar, quando o cartão veio da Agenda. */
+  aoVoltarAgenda?: () => void;
 };
 const PERTO_M = 1000;
 function metros(a: { latitude: number; longitude: number }, lat: number, lng: number) {
@@ -358,7 +360,7 @@ function metros(a: { latitude: number; longitude: number }, lat: number, lng: nu
 }
 type Filtro = 'tudo' | 'ligar' | 'visitar' | 'whatsapp' | 'perto';
 
-export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVisita, aoEditarTelefone, aoMarcarProximoPasso, sellerId, posicao, pedido }: Props) {
+export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVisita, aoEditarTelefone, aoMarcarProximoPasso, sellerId, posicao, pedido, aoVoltarAgenda }: Props) {
   const layout = useLayout();
   const queryClient = useQueryClient();
   const q = useFila();
@@ -382,7 +384,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
   const [ligandoPush, setLigandoPush] = useState(false);
   useEffect(() => { void estadoDoPush().then(setEstadoPush).catch(() => setEstadoPush('sem_suporte')); }, []);
   // de onde veio o cartão em foco (o aviso) e o tempo fora do app depois de Ligar ou WhatsApp (0.2b)
-  const [veioDe, setVeioDe] = useState<{ deal: string; de: 'push' | 'agenda' } | null>(null);
+  const [veioDe, setVeioDe] = useState<{ deal: string; de: 'push' | 'agenda'; rotulo?: string | null } | null>(null);
   const saida = useRef<{ deal: string; canal: 'ligacao' | 'whatsapp'; em: number; viaPush: boolean } | null>(null);
   const [fora, setFora] = useState<Record<string, { segundos: number; canal: 'ligacao' | 'whatsapp' }>>({});
   // os combinados do 1:1 entram no denominador do % que o gestor vê (fila_do_dia, 0217)
@@ -446,8 +448,14 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
     setFiltro('tudo');
     if (pedido.acao === 'fila' || !pedido.deal) return;
     const i = q.data.itens.find((x) => x.dealId === pedido.deal);
-    if (!i) { Toast.mostrar('Este negócio já saiu da fila.', 'ok'); return; }
-    setSelecionado(i.dealId); setVeioDe({ deal: i.dealId, de: 'push' });
+    if (!i) { Toast.mostrar('Este negócio já saiu da fila: foi registrado ou mudou de etapa.', 'ok'); return; }
+    const daAgenda = pedido.origem === 'agenda';
+    // a ligação já saiu de outra tela (Antes da rua): a volta conta o tempo fora do app daqui
+    if (pedido.discouEm && !saida.current) {
+      saida.current = { deal: i.dealId, canal: 'ligacao', em: pedido.discouEm, viaPush: false };
+      setDiscou((d) => ({ ...d, [i.dealId]: `Discou às ${agoraHHMM()} · ${i.telefone ?? ''}` }));
+    }
+    setSelecionado(i.dealId); setVeioDe({ deal: i.dealId, de: daAgenda ? 'agenda' : 'push', rotulo: pedido.rotulo ?? null });
     setTimeout(() => { try { document.getElementById(`fila-${i.dealId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch { /* sem DOM */ } }, 300);
   }, [pedido?.n, !!q.data]); // eslint-disable-line react-hooks/exhaustive-deps
   // voltou da ligação ou do WhatsApp: o tempo fora do app e o Como foi daquele negócio aberto
@@ -523,6 +531,11 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
     const acaoId = novoAcaoId();
     pedidoDeSaidaAtual = null;
     setAberto(null); esconder(i.dealId);
+    if (veioDe?.deal === i.dealId) {
+      const voltarAgenda = veioDe.de === 'agenda';
+      setVeioDe(null);
+      if (voltarAgenda) setTimeout(() => aoVoltarAgenda?.(), 900);
+    }
     if (d.comoFoi === 'sem_interesse') {
       somar({ id: null, acaoId, estado: 'pendente', dealId: i.dealId, hora, negocio: i.negocio, resultado: `Sem interesse · ${d.motivo}`, volta: null, perdido: d.motivo },
         { etapaAnterior: i.etapaId, tarefaId: i.tarefaId ?? null, origem: origemDe(i, canal), secao: secaoDoFeito(i) });
@@ -723,7 +736,8 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
         <LinhaFeitoHoje key={f.acaoId} hora={f.hora} negocio={f.negocio}
           resultado={`${f.resultado}${f.perdido ? ' → Perdido' : f.volta ? ` → volta ${diaCurto(f.volta)}` : ''}`}
           origem={f.origem ?? (f.estado === 'pendente' ? null : 'fila')} noAparelho={f.estado === 'pendente' && !online}
-          acao={f.estado === 'gravada' && f.id ? (
+          // o desfecho no mapa se desfaz lá (a etapa), não aqui
+          acao={f.estado === 'gravada' && f.id && f.origem !== 'desfecho' ? (
             <Pressable accessibilityRole="button" accessibilityLabel={`Desfazer o registro de ${f.negocio}`} onPress={() => void desfazerDepois(f)}
               disabled={desfazendo?.id === f.id && desfazendo.fase === 'indo'} style={[s.botaoSec, desfazendo?.id === f.id && { borderColor: 'var(--vermelho-acao)' }]}>
               <Text style={[s.botaoSecTexto, desfazendo?.id === f.id && { color: 'var(--vermelho-acao)' }]}>
@@ -771,8 +785,8 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
   );
 
   const barraDaAgenda = veioDe?.de === 'agenda' ? (
-    <Pressable accessibilityRole="button" onPress={() => setVeioDe(null)} style={s.barraAgenda}>
-      <Text style={s.barraAgendaT} numberOfLines={1}>{`‹ Agenda · ${fila.find((x) => x.dealId === veioDe.deal)?.negocio ?? ''}`}</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel="Voltar para a Agenda" onPress={() => { setVeioDe(null); aoVoltarAgenda?.(); }} style={s.barraAgenda}>
+      <Text style={s.barraAgendaT} numberOfLines={1}>{`‹ Agenda · ${veioDe.rotulo ?? fila.find((x) => x.dealId === veioDe.deal)?.negocio ?? ''}`}</Text>
     </Pressable>
   ) : null;
 

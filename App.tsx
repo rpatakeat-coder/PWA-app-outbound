@@ -216,6 +216,13 @@ import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type 
 import { fetchSlaCandidate } from './src/utils/slaCandidate';
 import { slaForStage, slaStatus, type SlaDays } from './src/utils/sla';
 import { lerPedidoDaUrl, limparPedidoDaUrl, type PedidoDaFila } from './src/utils/pushDaFila';
+import { seloDaFila } from './src/utils/seloDaFila';
+import { janelaAtual } from './src/utils/horaDasLigacoes';
+import { quenteEsfriando, secaoDoItem } from './supabase/functions/_compartilhado/filaDoDinheiro';
+import { FaixaHoraDasLigacoes } from './src/screens/CartaoDaFila';
+import FolhaAntesDaRua from './src/screens/FolhaAntesDaRua';
+import { marcarGravada as marcarFeitaGravada, registrarFeita } from './src/utils/filaFeitas';
+import { JANELAS_LIGACAO } from './src/utils/horaDasLigacoes';
 import { useRouteConfig } from './src/hooks/useRouteConfig';
 import { useSellerGoals } from './src/hooks/useSellerGoals';
 import { IconCheck as SiCheck, IconChevronDown as SiDown, IconChevronLeft as SiLeft } from './src/components/icons';
@@ -1146,6 +1153,27 @@ function MainApp() {
   // até a pessoa abrir a aba, e o da fila (3) depois. Mesmo cache e mesma chave da tela.
   const filaNaTela = useQuery({ ...opcoesDaFila(), enabled: !!profile && profile.role !== 'view' });
   const naFila = Array.isArray(filaNaTela.data?.itens) ? filaNaTela.data!.itens!.length : null;
+  // P2 (handoff Tarefas do App, 17/10/26): "2 quentes esfriando" ou "6 vencidos" — o mesmo no menu, na lateral e no sino
+  const seloFila = useMemo(() => seloDaFila(filaNaTela.data?.itens, filaNaTela.data?.hoje ?? diaBRT(new Date())), [filaNaTela.data]);
+  // P1: a hora das ligações (12:30 e 17:30, 15 min). Fora da janela ou com a fila vazia, a faixa some.
+  const [relogioDaJanela, setRelogioDaJanela] = useState(() => Date.now());
+  useEffect(() => { const t = setInterval(() => setRelogioDaJanela(Date.now()), 30_000); return () => clearInterval(t); }, []);
+  /** O item da fila de um negócio (P7): a tarefa que o Cheguei + Como foi ou o desfecho fecham. */
+  type ItemDaFilaApp = { dealId: string; negocio: string; etapaId: string; tarefaId: string | null; assunto?: string | null; venceu: boolean; motivo: string; grupo: string };
+  const itemDaFila = (dealId: string | number | null | undefined): ItemDaFilaApp | null => {
+    if (dealId == null) return null;
+    return ((filaNaTela.data?.itens ?? []) as ItemDaFilaApp[]).find((i) => String(i.dealId) === String(dealId)) ?? null;
+  };
+  // o desfecho no mapa espera a janela de Desfazer da própria folha (10 s) antes de entrar no Feito hoje
+  const desfechoEmEspera = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const janelaDasLigacoes = useMemo(() => {
+    const itens = filaNaTela.data?.itens;
+    if (!itens?.length) return null;
+    const j = janelaAtual(relogioDaJanela, filaNaTela.data?.feriados ?? []);
+    if (!j) return null;
+    const hojeF = filaNaTela.data?.hoje ?? diaBRT(new Date());
+    return { ate: j.ate, followups: itens.filter((i) => secaoDoItem(i) !== 'sem_passo').length, quentes: itens.filter((i) => quenteEsfriando(i, hojeF)).length };
+  }, [filaNaTela.data, relogioDaJanela]);
   // Config editável pelo gestor (meta/dia, SLAs, params da Conta Alvo).
   const { config: routeConfig } = useRouteConfig();
   // memorizado (auditoria 05/10/26): um objeto novo a cada render recalculava as sugestões da
@@ -1214,6 +1242,17 @@ function MainApp() {
   // de contextoPino já se protege de null), e se a RPC falhar o contexto vem
   // vazio (useContextoDoPino), para o pino nunca sumir.
   const modoNovo = mapaNovo;
+  /* ANTES DA RUA (P6, handoff Tarefas do App): na 1ª abertura do Mapa no dia, com quente esfriando,
+     sobe a folha com os quentes e o Ligar. Uma vez por dia por aparelho; não bloqueia o mapa. */
+  const [antesDaRua, setAntesDaRua] = useState(false);
+  useEffect(() => {
+    if (!modoNovo || tab !== 'map' || !seloFila?.quente || !filaNaTela.data) return;
+    const agoraBRT = new Date(Date.now() - 3 * 3600000);
+    if (agoraBRT.getUTCHours() >= 19) return;
+    const chave = `antes-da-rua-${filaNaTela.data.hoje ?? diaBRT(new Date())}`;
+    try { if (window.localStorage.getItem(chave)) return; window.localStorage.setItem(chave, '1'); } catch { return; }
+    setAntesDaRua(true);
+  }, [modoNovo, tab, seloFila?.quente, filaNaTela.data]);
   // A14 (handoff v6): com o mapa na tela, a fila aparece só na pílula (ver Toast.mapaNaTela)
   useEffect(() => {
     Toast.mapaNaTela(modoNovo && tab === 'map' && !layout.ehLargo);
@@ -6771,7 +6810,7 @@ function MainApp() {
         // `top` contado do Y REAL do mapa, igual aos botoes: este overlay e'
         // absoluto contra a RAIZ DA TELA, e o `top: 8` cru punha a pill em
         // cima da busca do header (valia ja' pra de carregamento).
-        style={[styles.areaStatusWrap, { top: modoNovo && !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + (tab === 'map' && !creationMode ? ALTURA_FILEIRA_LENTES + 8 : 0) : (mapLayout?.y ?? 0) + 8 }]}
+        style={[styles.areaStatusWrap, { top: modoNovo && !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + (tab === 'map' && !creationMode ? ALTURA_FILEIRA_LENTES + 8 + (janelaDasLigacoes ? 72 : 0) : 0) : (mapLayout?.y ?? 0) + 8 }]}
         pointerEvents="none"
       >
         {modoNovo && !layout.ehLargo && <AvisoSemSinal />}
@@ -6940,7 +6979,7 @@ function MainApp() {
           aoBuscar={setSearchQuery}
           aoAbrirBusca={() => setBuscaAberta(true)}
           buscando={buscando}
-          selo={avisos.selo}
+          selo={avisos.selo + (seloFila?.n ?? 0)}
           aoSino={() => { setAvisosAbertos(true); avisos.marcarRecadosVistos(); }}
           avatar={{ url: profile?.avatar_url, nome: profile?.full_name, email: profile?.email }}
           aoAvatar={() => setPerfilAberto(true)}
@@ -6961,6 +7000,11 @@ function MainApp() {
           lenteNosFiltros={!LENTES_DA_FILEIRA.includes(lente)}
           aoLimparFiltros={() => setFiltrosNovos(FILTROS_VAZIOS)}
         />
+      )}
+      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && janelaDasLigacoes && (
+        <View style={{ position: 'absolute', left: 12, right: 12, top: insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + ALTURA_FILEIRA_LENTES + 8, zIndex: 24 }}>
+          <FaixaHoraDasLigacoes ate={janelaDasLigacoes.ate} followups={janelaDasLigacoes.followups} quentes={janelaDasLigacoes.quentes} aoAbrir={() => irParaAba('tasks')} />
+        </View>
       )}
       {modoNovo && (
         <FolhaBusca
@@ -7885,11 +7929,11 @@ function MainApp() {
   const tarefasDeHojeNaAgenda = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'hoje'
     && !(t.clientId && jaContados.has(t.clientId))).length;
   const seloAgenda = paradasQueFaltam.length + agendadosDeHoje + tarefasDeHojeNaAgenda;
-  const abasDoRodape: Array<{ aba: AppTab; rotulo: string; Icone: typeof IconLocation; ativa: boolean; selo: number | null; seloClaro?: boolean }> = [
+  const abasDoRodape: Array<{ aba: AppTab; rotulo: string; Icone: typeof IconLocation; ativa: boolean; selo: number | null; seloClaro?: boolean; seloTexto?: string | null }> = [
     { aba: 'map', rotulo: 'Mapa', Icone: tab === 'map' ? IconLocationFilled : IconLocation, ativa: tab === 'map' || tab === 'list', selo: null },
     ...(isViewer ? [] : [
       { aba: 'agenda' as AppTab, rotulo: 'Agenda', Icone: IconCalendar, ativa: tab === 'agenda' || tab === 'route', selo: seloAgenda || null, seloClaro: true },
-      { aba: 'tasks' as AppTab, rotulo: 'Tarefas', Icone: IconClipboardCheck, ativa: tab === 'tasks', selo: totalDaFila || null },
+      { aba: 'tasks' as AppTab, rotulo: 'Tarefas', Icone: IconClipboardCheck, ativa: tab === 'tasks', selo: seloFila ? null : totalDaFila || null, seloTexto: seloFila?.curto ?? null },
       { aba: 'playbook' as AppTab, rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, ativa: tab === 'playbook', selo: null },
     ]),
   ];
@@ -7924,14 +7968,14 @@ function MainApp() {
 
   // 'cockpit' nao e' aba: e' destino. Fica na mesma lista porque ocupa o mesmo
   // lugar na sidebar, mas nunca chega ao `tab` — o onPress navega pra fora.
-  const itensNavWeb: Array<{ aba: AppTab | 'cockpit'; rotulo: string; Icone: typeof IconLocation; badge?: number; visivel: boolean }> = [
+  const itensNavWeb: Array<{ aba: AppTab | 'cockpit'; rotulo: string; Icone: typeof IconLocation; badge?: number; selo?: string; visivel: boolean }> = [
     { aba: 'map', rotulo: 'Mapa', Icone: IconLocation, visivel: true },
     { aba: 'list', rotulo: 'Lista', Icone: IconSquareMenu, visivel: true },
     // R1 opção A: no mapa novo a Rota é o mapa da Agenda (coluna da direita), não uma aba.
     { aba: 'route', rotulo: 'Rota', Icone: IconCar, visivel: !isViewer && !modoNovo },
     { aba: 'agenda', rotulo: 'Agenda', Icone: IconCalendar, visivel: !isViewer },
     // N5 (handoff v6): um número de tarefas só, "atrasadas + hoje", igual ao selo do rodapé
-    { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: modoNovo ? (totalDaFila ?? undefined) : visibleTasksCount, visivel: !isViewer },
+    { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: modoNovo ? (seloFila ? undefined : totalDaFila ?? undefined) : visibleTasksCount, selo: modoNovo ? seloFila?.longo : undefined, visivel: !isViewer },
     // No computador o Playbook não aparecia (auditoria das abas, 04/10/26); a tela já existia.
     { aba: 'playbook', rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, visivel: !isViewer },
     { aba: 'cockpit', rotulo: 'Gestão', Icone: IconBarGraph, visivel: verGestao },
@@ -7989,9 +8033,16 @@ function MainApp() {
               <View style={styles.sbItemIcone}>
                 <item.Icone width={24} height={24} fill={ativo ? iconColors.tintRedText : iconColors.muted} />
               </View>
+              {item.selo ? (
+                <View style={{ flex: 1, minWidth: 0, gap: 2 }} {...ds({ rotulo: '1' })}>
+                  <Text style={[styles.sbItemTexto, ativo && styles.sbItemTextoAtivo]} numberOfLines={1}>{item.rotulo}</Text>
+                  <View style={styles.sbSeloTexto}><Text style={styles.sbSeloTextoT} numberOfLines={1}>{item.selo}</Text></View>
+                </View>
+              ) : (
               <Text style={[styles.sbItemTexto, ativo && styles.sbItemTextoAtivo]} numberOfLines={1} {...ds({ rotulo: '1' })}>
                 {item.rotulo}
               </Text>
+              )}
               {item.badge ? (
                 <View style={styles.sbBadge} {...ds({ navbadge: '1' })}>
                   <Text style={styles.sbBadgeTexto}>{item.badge > 99 ? '99+' : item.badge}</Text>
@@ -8125,7 +8176,7 @@ function MainApp() {
             onPress={() => { if (modoNovo) { setAvisosAbertos(true); avisos.marcarRecadosVistos(); } else setTab('tasks'); }}
           >
             <IconBell width={20} height={20} fill={iconColors.muted} />
-            {(modoNovo ? avisos.selo > 0 : visibleTasksCount > 0) && <View style={styles.hwSinoDot} />}
+            {(modoNovo ? avisos.selo + (seloFila?.n ?? 0) > 0 : visibleTasksCount > 0) && <View style={styles.hwSinoDot} />}
           </Pressable>
         )}
         {!isViewer && (
@@ -8299,9 +8350,9 @@ function MainApp() {
               onPress={() => { setAvisosAbertos(true); avisos.marcarRecadosVistos(); }}
             >
               <IconBell width={24} height={24} fill="#FFFFFF" />
-              {avisos.selo > 0 && (
+              {avisos.selo + (seloFila?.n ?? 0) > 0 && (
                 <View style={styles.sinoSelo}>
-                  <Text style={styles.sinoSeloTexto}>{avisos.selo > 9 ? '9+' : avisos.selo}</Text>
+                  <Text style={styles.sinoSeloTexto}>{avisos.selo + (seloFila?.n ?? 0) > 9 ? '9+' : avisos.selo + (seloFila?.n ?? 0)}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -8860,6 +8911,7 @@ function MainApp() {
         <FilaTarefasScreen
           ownerId={myHubspotId}
           pedido={pedidoDaFila}
+          aoVoltarAgenda={() => { setPedidoDaFila(null); setTab('agenda'); }}
           posicao={userLocation}
           aoAbrirLead={(id) => { setTab('map'); void openClientById(id); }}
           aoRegistrarVisita={(id) => { setTab('map'); void openClientById(id); }}
@@ -8951,8 +9003,15 @@ function MainApp() {
         />
       ) : modoNovo ? (
         (() => { const agendaNova = (
+        <View style={{ flex: 1 }}>
+        {janelaDasLigacoes && (
+          <View style={{ paddingHorizontal: layout.ehLargo ? 0 : 12, paddingTop: 10 }}>
+            <FaixaHoraDasLigacoes ate={janelaDasLigacoes.ate} followups={janelaDasLigacoes.followups} quentes={janelaDasLigacoes.quentes} aoAbrir={() => irParaAba('tasks')} />
+          </View>
+        )}
         <AgendaNovoScreen
           key={agendaDiaInicial ?? 'hoje'}
+          aoAbrirNaFila={(deal, rotulo) => { setPedidoDaFila({ acao: 'cartao', deal, origem: 'agenda', rotulo, n: Date.now() }); setTab('tasks'); }}
           ownerHubspot={myHubspotId}
           largo={layout.ehLargo}
           // Etapa e dias na etapa do snapshot (o mesmo do cartão do lead) e a régua da etapa.
@@ -9012,6 +9071,7 @@ function MainApp() {
             else void openClientById(id);
           }}
         />
+        </View>
         );
         // G2 (handoff das abas): no computador, duas colunas — a linha do tempo à esquerda e o
         // mapa do caminho à direita (é a Rota do computador; o mesmo conteudoMapa do Mapa).
@@ -9189,12 +9249,35 @@ function MainApp() {
 
       {selectedClientSheet}
 
+      {antesDaRua && (() => {
+        const itensF = (filaNaTela.data?.itens ?? []) as Array<{ dealId: string; negocio: string; etapaId: string; venceu: boolean; prazo: string | null; horaPrazo?: string | null; telefone: string | null }>;
+        const hojeF = filaNaTela.data?.hoje ?? diaBRT(new Date());
+        const quentes = itensF.filter((i) => quenteEsfriando(i, hojeF)).slice(0, 4);
+        const b = new Date(Date.now() - 3 * 3600000);
+        const hhmm = `${String(b.getUTCHours()).padStart(2, '0')}:${String(b.getUTCMinutes()).padStart(2, '0')}`;
+        return (
+          <FolhaAntesDaRua hora={hhmm} proximaJanela={JANELAS_LIGACAO.find((j) => j > hhmm) ?? null}
+            quentes={quentes.map((i) => ({ dealId: i.dealId, negocio: i.negocio, temTelefone: !!i.telefone,
+              linha: i.prazo === hojeF ? `vence hoje${i.horaPrazo ? ` às ${i.horaPrazo}` : ''}` : `venceu ${i.prazo ? `${i.prazo.slice(8, 10)}/${i.prazo.slice(5, 7)}` : ''}` }))}
+            aoDeixar={() => setAntesDaRua(false)}
+            aoLigar={(deal) => {
+              const i = quentes.find((x) => x.dealId === deal);
+              const d = (i?.telefone ?? '').replace(/\D+/g, '');
+              if (!d) return;
+              void Linking.openURL(`tel:+${d.length <= 11 ? `55${d}` : d}`);
+              setAntesDaRua(false);
+              setPedidoDaFila({ acao: 'ligar', deal, origem: 'antes_da_rua', n: Date.now(), discouEm: Date.now() });
+              setTab('tasks');
+            }} />
+        );
+      })()}
       {avisosAbertos && (
         <AvisosPainel
           aoFechar={() => setAvisosAbertos(false)}
           falhas={avisos.falhas}
           // S1: o mesmo número do selo da aba Tarefas (a fila), e quantos estão em "Agora"
           naFila={totalDaFila}
+          selo={seloFila}
           paraAgora={Array.isArray(filaNaTela.data?.itens) ? (filaNaTela.data!.itens as Array<{ grupo?: string }>).filter((i) => i.grupo === 'agora').length : null}
           gestor={avisos.gestor}
           carregando={avisos.carregando}
@@ -9390,13 +9473,16 @@ function MainApp() {
               key={a.aba}
               accessibilityRole="tab"
               accessibilityState={{ selected: ativo }}
-              accessibilityLabel={a.selo ? `${a.rotulo}, ${a.selo}` : a.rotulo}
+              accessibilityLabel={a.seloTexto ? `${a.rotulo}, ${a.seloTexto}` : a.selo ? `${a.rotulo}, ${a.selo}` : a.rotulo}
               style={[styles.navItem, styles.navItemNovo]}
               onPress={() => irParaAba(a.aba)}
             >
               {ativo && <View style={styles.navTracoAtivo} />}
               <View style={styles.navIconeAncora}>
                 <NavIcon Icone={a.Icone} ativo={ativo} size={24} />
+                {!!a.seloTexto && (
+                  <View style={styles.navSeloTexto}><Text style={styles.navSeloTextoT} numberOfLines={1}>{a.seloTexto}</Text></View>
+                )}
                 {a.selo != null && (
                   <View style={[styles.navBadge, a.seloClaro && styles.navBadgeClaro]}>
                     <Text style={[styles.navBadgeText, a.seloClaro && styles.navBadgeTextClaro]}>
@@ -10245,6 +10331,10 @@ function MainApp() {
           onProxima={(c) => handleMarkerPress(c)}
           declarada={fichaPendente.declarada}
           fotoProva={fichaPendente.fotoProva ?? null}
+          tarefaDaFila={(() => {
+            const it = itemDaFila(fichaPendente.client.id_hubspot);
+            return it?.tarefaId ? { tarefaId: it.tarefaId, negocio: it.negocio, etapaId: it.etapaId, assunto: it.assunto ?? null, secao: secaoDoItem(it) } : null;
+          })()}
           fotoNoCheckin={fichaPendente.fotoNoCheckin === true}
           // Depois da visita: a Agenda no dia do passo combinado.
           onEmitirCobranca={() => {
@@ -10371,6 +10461,29 @@ function MainApp() {
               void supabase.from('clients').update({ telefone: cel }).eq('id', alvo.id).then(({ error }) => { if (error) console.warn('[telefone no lead]', error.message); });
             }
             aplicarEtapaNoLead(alvo.id, codigo, alvo);
+            /* DESFECHO NO MAPA (P7): o negócio da fila que mudou de etapa (ou foi a Perdido) entra no
+               Feito hoje como "sozinha · desfecho no mapa". O servidor já fecha as tarefas na mudança
+               de etapa; aqui só se registra, depois dos 10 s do Desfazer da folha. Voltar à etapa de
+               antes (o Desfazer) cancela. */
+            {
+              const deal = alvo.id_hubspot ? String(alvo.id_hubspot) : null;
+              const it = itemDaFila(deal);
+              const espera = deal ? desfechoEmEspera.current.get(deal) : undefined;
+              if (espera) { clearTimeout(espera); desfechoEmEspera.current.delete(deal!); }
+              if (deal && it && codigo !== etapaNovaPara.etapaAtual) {
+                desfechoEmEspera.current.set(deal, setTimeout(() => {
+                  desfechoEmEspera.current.delete(deal);
+                  const acaoId = novoAcaoId();
+                  const b = new Date(Date.now() - 3 * 3600000);
+                  const hora = `${String(b.getUTCHours()).padStart(2, '0')}:${String(b.getUTCMinutes()).padStart(2, '0')}`;
+                  const perdido = codigo === '1396006164';
+                  void registrarFeita({ id: null, acaoId, estado: 'pendente', dealId: deal, hora, negocio: it.negocio, resultado: perdido ? 'Foi para Perdido' : `Etapa → ${ROTULO_ETAPA[codigo] ?? codigo}`,
+                    volta: null, perdido: null, dia: diaBRT(new Date()), etapaAnterior: it.etapaId, tarefaId: null, origem: 'desfecho', secao: secaoDoItem(it) })
+                    .then(() => marcarFeitaGravada(acaoId, {}))
+                    .then(() => { void queryClient.invalidateQueries({ queryKey: ['fila_feitas'] }); void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] }); });
+                }, 11_000));
+              }
+            }
             // veio da tarefa: a etapa gravou, a tarefa conclui (o que o modal antigo fazia no onDone)
             if (etapaNovaPara.taskId) resolveTask.mutate({ id: etapaNovaPara.taskId, status: 'concluida' });
           }}
@@ -13237,6 +13350,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sbBadgeTexto: { fontSize: 11, lineHeight: 18, fontWeight: '700', color: '#FFFFFF' },
+  sbSeloTexto: { alignSelf: 'flex-start', minHeight: 18, paddingHorizontal: 7, borderRadius: 9, backgroundColor: 'var(--vermelho-acao)', justifyContent: 'center' },
+  sbSeloTextoT: { fontSize: 10.5, lineHeight: 16, fontWeight: '700', color: '#FFFFFF' },
   sbRodape: {
     borderTopWidth: 1,
     borderTopColor: 'var(--border)',
@@ -13674,6 +13789,8 @@ const styles = StyleSheet.create({
     boxSizing: 'content-box',
   },
   navBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  navSeloTexto: { position: 'absolute', top: -8, left: -4, height: 18, paddingHorizontal: 6, borderRadius: 9, backgroundColor: 'var(--vermelho-acao)', borderWidth: 1.5, borderColor: 'var(--surface)', justifyContent: 'center', boxSizing: 'content-box' } as never,
+  navSeloTextoT: { color: '#fff', fontSize: 10, lineHeight: 14, fontWeight: '800', whiteSpace: 'nowrap' } as never,
   navItemText: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-faint)' },
   // ===== Calendario da Agenda (so' desktop) =====
   navItemTextActive: { fontWeight: '700', color: 'var(--vermelho-texto)' },
