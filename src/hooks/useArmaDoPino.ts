@@ -96,6 +96,8 @@ export function useArmaDoPino(c: Client | null, p: Pino | null, extras: ExtrasDa
     etapaCodigo: extras.etapaCodigo ?? extras.tempo?.etapaCodigo ?? null,
     decisor: f?.decisor, horario: f?.horario, mrr: f?.mrr ?? null, proximo: extras.proximo ?? null, sistema: f?.sistema, dor: f?.dor,
     abertoHa: p.abertoHa ?? null, nota: p.nota ?? null, avaliacoes: p.avaliacoes ?? null, queda: p.queda?.motivo ?? null,
+    // 0221: o motivo principal que o Sucesso/Onboarding registrou (N1) — a arma 8 do ex-cliente
+    motivoSaida: c.hs_churn_motivo_macro ?? null,
     clientePerto: extras.clientePerto ?? null, agora: new Date(),
   }, paginasDeGatilho());
   return { arma, fatos: f, lendo: false };

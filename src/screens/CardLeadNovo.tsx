@@ -101,7 +101,7 @@ function kicker(d: DadosCardNovo): string {
   const partes: string[] = [];
   const f = pino.familia;
   if (f === 'cli') partes.push(pino.queda ? 'CLIENTE TAKEAT · EM QUEDA' : 'CLIENTE TAKEAT');
-  else if (f === 'ex') partes.push('EX-CLIENTE · RECONQUISTA');
+  else if (f === 'ex') partes.push('EX-CLIENTE');
   else if (f === 'rec') partes.push(pino.abertoHa === 0 ? 'RECÉM-ABERTO · ABRIU HOJE' : `RECÉM-ABERTO · HÁ ${pino.abertoHa} ${pino.abertoHa === 1 ? 'DIA' : 'DIAS'}`);
   else if (f === 'av') partes.push('MAIS AVALIADO · GOOGLE');
   else if (f === 'alvo') partes.push('CONTA-ALVO');
@@ -440,37 +440,6 @@ function LinhaCliente({ d }: { d: DadosCardNovo }) {
   );
 }
 
-// POR QUE SAIU (0221, Julyan 19/10/26): o motivo que o Sucesso/Onboarding registrou no
-// negócio, para o executivo chegar à reconquista sabendo o que deu errado. Na espiada, só
-// o macro e o micro; no cartão cheio, também o relato, recolhido em 3 linhas.
-function PorQueSaiu({ d, compacto }: { d: DadosCardNovo; compacto: boolean }) {
-  const c = d.client;
-  const [aberto, setAberto] = useState(false);
-  const ex = c.hs_situacao === 'churn' || d.pino.familia === 'ex';
-  const macro = c.hs_churn_motivo_macro?.trim();
-  if (!ex || !macro) return null;
-  const micro = c.hs_churn_motivo_micro?.trim();
-  const texto = c.hs_churn_motivo_texto?.trim();
-  const setor = c.hs_churn_setor?.trim();
-  return (
-    <View style={s.saiu}>
-      <Text style={s.saiuRotulo}>{`POR QUE SAIU${setor ? ` · NO ${setor.toUpperCase()}` : ''}`}</Text>
-      <Text style={s.saiuMotivo}>{micro ? `${macro} · ${micro}` : macro}</Text>
-      {!compacto && !!texto && (
-        <>
-          <Text style={s.saiuTexto} numberOfLines={aberto ? undefined : 3}>{texto}</Text>
-          {texto.length > 160 && (
-            <Pressable accessibilityRole="button" accessibilityLabel={aberto ? 'Recolher o relato' : 'Ler o relato inteiro do cancelamento'}
-              onPress={() => setAberto((v) => !v)} hitSlop={8} style={({ pressed }) => [s.saiuLer, pressed && { opacity: 0.7 }]}>
-              <Text style={s.saiuLerTexto}>{aberto ? 'Recolher' : 'Ler tudo'}</Text>
-            </Pressable>
-          )}
-        </>
-      )}
-    </View>
-  );
-}
-
 function assumir(d: DadosCardNovo, a: AcoesCardNovo) {
   // fora da rota, quem pergunta e põe na rota é o App (assumirDoMapa)
   if (a.onEMeu) a.onEMeu();
@@ -654,7 +623,6 @@ export function PeekCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       <Cabecalho d={d} a={a} compacto />
       <ArmaDoCartao d={d} a={a} compacto />
       <LinhaCliente d={d} />
-      <PorQueSaiu d={d} compacto />
       <AcaoPrincipal d={d} a={a} />
       <GradeEspiada d={d} a={a} />
     </View>
@@ -679,7 +647,6 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       <ArmaDoCartao d={d} a={a} compacto={false} />
       <LinhasDaFamilia d={d} a={a} />
       <LinhaCliente d={d} />
-      <PorQueSaiu d={d} compacto={false} />
       {/* Motor (prompt §7.4): a conta-alvo sumiu do Google ou está fechada. Descartar
           tira da rota antes de alguém perder a viagem até uma porta fechada. */}
       {(d.client.motor_status === 'sumiu_google' || d.client.motor_status === 'fechado_temporario' || d.client.motor_status === 'cnpj_baixado') && (
@@ -768,12 +735,6 @@ const s = StyleSheet.create({
   fechar: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', marginRight: -10 },
   fecharTexto: { fontSize: 18, color: 'var(--text-muted)' },
   fatos: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  saiu: { gap: 4, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)' },
-  saiuRotulo: { fontSize: 11, fontWeight: '800', letterSpacing: 0.4, color: 'var(--text-muted)' },
-  saiuMotivo: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
-  saiuTexto: { fontSize: 13, lineHeight: 19, color: 'var(--text-muted)' },
-  saiuLer: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
-  saiuLerTexto: { fontSize: 13, fontWeight: '700', color: 'var(--text)', textDecorationLine: 'underline' },
   fato: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: 'var(--surface-2)' },
   fatoTexto: { fontSize: 12, fontWeight: '700', color: 'var(--text)' },
   fatoAviso: { backgroundColor: 'var(--tint-amber)' },

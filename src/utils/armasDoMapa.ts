@@ -44,7 +44,7 @@ export const PAGINAS_GATILHO: Record<GatilhoId, PaginaGatilho> = {
   7: { id: 7, titulo: 'Casa cheia', fala: 'Vi que vocês são muito bem avaliados. Com esse movimento, como fica o pedido no horário de pico?',
     insistir: { quando: 'dá conta', texto: 'Que bom! Então o que mais toma o seu tempo hoje: o caixa, o cardápio ou o delivery?' },
     marcar: 'Como foi → conforme a conversa. Ao registrar a visita, a conta vira lead seu.' },
-  8: { id: 8, titulo: 'Reconquista', fala: 'Muita coisa mudou desde que vocês saíram. Posso te mostrar em 5 minutos o que resolvemos sobre {motivo}?',
+  8: { id: 8, titulo: 'Ex-cliente', fala: 'Muita coisa mudou desde que vocês saíram. Posso te mostrar em 5 minutos o que resolvemos sobre {motivo}?',
     insistir: { quando: 'não quero voltar', texto: 'Entendo. Posso só perguntar o que faria você voltar? Fica registrado e eu não insisto.' },
     marcar: 'Como foi → conforme a conversa · E agora → Voltar outro dia ou Sem interesse (pede o motivo)' },
   9: { id: 9, titulo: 'Cliente em queda', fala: 'Vim ver como está o movimento. Tem algo no sistema que eu possa ajustar para vocês agora?',

@@ -23,7 +23,8 @@ export const LENTES: { id: Lente; rotulo: string }[] = [
   { id: 'carteira', rotulo: 'Carteira' },
   // MAIS AVALIADOS (15/10/26): as contas-alvo do Google com nota 4,5+. Era "Contas-alvo".
   { id: 'alvo', rotulo: 'Mais avaliados' },
-  { id: 'rec', rotulo: 'Reconquista' },
+  // EX-CLIENTES (19/10/26, Julyan: "troque reconquista por ex clientes"). O id segue 'rec'.
+  { id: 'rec', rotulo: 'Ex-clientes' },
   { id: 'queda', rotulo: 'Em queda' },
   { id: 'semdono', rotulo: 'Sem dono' },
   { id: 'calor', rotulo: 'Calor' },
