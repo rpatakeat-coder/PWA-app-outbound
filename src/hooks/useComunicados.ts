@@ -35,6 +35,12 @@ export function useComunicadosNaoLidos(enabled: boolean) {
       const { data: sessao } = await usuarioDaSessao();
       const meuId = sessao?.user?.id;
       if (!meuId) return [];
+      // SÓ O QUE É PARA ESTA PESSOA (Julyan, 19/10/26: "os avisos só pra quem tem que ver").
+      // Conta nova herdava até 20 comunicados antigos, um atrás do outro e sem fechar, no
+      // primeiro acesso. Vale o que saiu depois de a conta existir, e nunca mais velho que 14 dias.
+      const quatorzeDias = Date.now() - 14 * 86400000;
+      const criadaEm = Date.parse(sessao?.user?.created_at ?? '') || 0;
+      const desde = new Date(Math.max(quatorzeDias, criadaEm)).toISOString();
 
       // P#7 (02/10/26): as duas leituras não dependem uma da outra — em paralelo,
       // um ida-e-volta ao banco (~200 ms de Oregon) a menos na abertura.
@@ -43,6 +49,7 @@ export function useComunicadosNaoLidos(enabled: boolean) {
           .from('comunicados')
           .select('id, titulo, mensagem, publicado_em, created_by_name')
           .not('publicado_em', 'is', null)
+          .gte('publicado_em', desde)
           .order('publicado_em', { ascending: false })
           .limit(20),
         supabase

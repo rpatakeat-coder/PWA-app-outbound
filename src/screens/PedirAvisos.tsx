@@ -10,6 +10,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { IconBell } from '../components/icons';
 import { Toast } from '../components/Toast';
 import { estadoDoPush, ligarPush, type EstadoDoPush } from '../utils/pushDaFila';
+import { useComunicadosNaoLidos } from '../hooks/useComunicados';
 
 const PAUSA_MS = 2 * 60_000;
 let adiadoEm = 0;
@@ -20,6 +21,8 @@ export default function PedirAvisos({ ativo }: { ativo: boolean }) {
   const [estado, setEstado] = useState<EstadoDoPush | null>(null);
   const [aberto, setAberto] = useState(false);
   const [ligando, setLigando] = useState(false);
+  // Um aviso por vez (19/10/26): com comunicado na frente, este espera a pessoa terminar de ler.
+  const { naoLidos } = useComunicadosNaoLidos(ativo);
 
   useEffect(() => {
     if (!ativo) return;
@@ -42,7 +45,7 @@ export default function PedirAvisos({ ativo }: { ativo: boolean }) {
     return () => { vivo = false; document.removeEventListener('visibilitychange', aoVoltar); };
   }, [ativo]);
 
-  if (!aberto || !estado) return null;
+  if (!aberto || !estado || naoLidos.length > 0) return null;
   const adiar = () => { adiadoEm = Date.now(); setAberto(false); };
   const ativar = async () => {
     setLigando(true);
