@@ -187,6 +187,21 @@ Deno.serve(async (req) => {
 
   const corpo = await req.json().catch(() => null);
 
+  // --- op 'senha': o master define a senha de outra pessoa --------------------
+  // O banco só guarda o hash e o projeto não tem SMTP, então "esqueci a senha" não existe:
+  // quem resolve é o master, na aba Acessos (Julyan, 19/10/26: "eu quero criar a senha deles").
+  // Sem senha no corpo, gera uma e devolve UMA vez.
+  if (corpo?.op === 'senha') {
+    const alvo = String(corpo?.id ?? '');
+    const informada = corpo?.senha ? String(corpo.senha) : '';
+    if (!alvo) return json(400, { error: 'Falta a conta.' });
+    if (informada && informada.length < 8) return json(400, { error: 'A senha precisa de pelo menos 8 caracteres.' });
+    const nova = informada || senhaTemporaria();
+    const { error: eSenha } = await svc.auth.admin.updateUserById(alvo, { password: nova });
+    if (eSenha) return json(500, { error: `Não consegui trocar a senha (${eSenha.message}).` });
+    return json(200, { id: alvo, senha: informada ? undefined : nova });
+  }
+
   // --- op 'setor': trocar o setor de quem já existe ----------------------------
   // O setor decide o que a pessoa enxerga (sector_visibility corta clients por
   // status). Só setor que existe: setor inexistente abriria o app sem nada.
