@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@bec5b819.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@b73f0e77.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* /gestao E O COCKPIT desde 25/09/2026. As tres telas que so a gestao antiga
@@ -40,7 +40,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "bec5b819";
+  var VERSAO = "b73f0e77";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -55800,7 +55800,7 @@ GV2.ler = async function (donos, agora, emailsProntos) {
     faltaEtapa: supa.from('gv2_falta_etapa').select('negocio_id,exec_id,etapa,faltou,armas,criado_em').gte('criado_em', GV2.somaDias(agora.iso, -70) + 'T03:00:00Z').order('criado_em', { ascending: false }).limit(3000),
     playbook: listaEmails.length ? supa.from('playbook_progresso').select('user_email,guia_slug,concluido_em').in('user_email', listaEmails) : Promise.resolve({ data: [] }),
 
-    reunioes: supa.from('client_meetings').select('id,client_id,created_by,scheduled_at,type,acao').eq('status', 'agendada')
+    reunioes: supa.from('client_meetings').select('id,client_id,created_by,scheduled_at,type,acao,clients(status)').eq('status', 'agendada')
       .lt('scheduled_at', new Date(Date.now() - 2 * 3600000).toISOString()).order('scheduled_at', { ascending: false }).limit(3000),
     perfis: supa.from('profiles').select('id,id_hubspot').in('id_hubspot', donos),
     filaFeitas: supa.from('fila_feitas').select('user_id,dia,estado,origem').gte('dia', GV2.somaDias(agora.iso, -6)),
@@ -59184,7 +59184,9 @@ GV2.disciplinaMontar = function (L, pessoas, agora, clientePorId, faltas) {
 
   GV2.v4Corte = new Date(Date.now() - GV2.V4_JANELA * 86400000).toISOString();
   const reunPor = {};
+
   ((L.reunioes && L.reunioes.data) || []).forEach(function (r) {
+    const stc = r.clients && r.clients.status; if (stc === 'cliente' || stc === 'ganho_fs') return;
     const d = donoDoUid[r.created_by]; if (!d) return;
     (reunPor[d] = reunPor[d] || []).push({ id: r.id, cliente: nomeCli(r.client_id), quando: r.scheduled_at, tipo: r.type === 'follow_up' ? 'retorno' : 'reunião' });
   });
