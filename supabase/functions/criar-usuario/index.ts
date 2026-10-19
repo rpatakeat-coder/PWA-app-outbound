@@ -187,6 +187,21 @@ Deno.serve(async (req) => {
 
   const corpo = await req.json().catch(() => null);
 
+  // --- op 'setor': trocar o setor de quem já existe ----------------------------
+  // O setor decide o que a pessoa enxerga (sector_visibility corta clients por
+  // status). Só setor que existe: setor inexistente abriria o app sem nada.
+  if (corpo?.op === 'setor') {
+    const alvo = String(corpo?.id ?? '');
+    const novo = String(corpo?.setor ?? '').trim();
+    if (!alvo || !novo) return json(400, { error: 'Falta a conta ou o setor.' });
+    const { data: regras } = await svc.from('sector_visibility').select('status_slug').eq('sector', novo);
+    if (!regras || regras.length === 0) return json(400, { error: `O setor "${novo}" não existe.` });
+    const { data: mudou, error: eSetor } = await svc.from('profiles').update({ sector: novo }).eq('id', alvo).select('id');
+    if (eSetor) return json(500, { error: `Não consegui mudar o setor (${eSetor.message}).` });
+    if (!mudou || mudou.length === 0) return json(404, { error: 'Conta não encontrada.' });
+    return json(200, { id: alvo, setor: novo, setor_ve_lead: regras.some((r: any) => r.status_slug === 'lead') });
+  }
+
   // --- op 'papel': promover a gestor master ou voltar a executivo -------------
   // Fica aqui, e não no navegador, porque profiles só deixa cada um alterar o
   // PRÓPRIO perfil: o update do gestor sobre outra pessoa voltaria "sucesso" com
