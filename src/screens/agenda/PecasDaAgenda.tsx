@@ -14,6 +14,9 @@ export const T = {
   info: 'var(--info-text)', inv: 'var(--text)', invFg: 'var(--bg)',
 };
 
+/** "1,2 km" não quebra entre o número e a unidade (no WebKit o "km" descia sozinho para a linha de baixo). */
+const semQuebra = (t: string) => t.replace(/(\d) (km|m)\b/g, '$1\u00A0$2');
+
 // ---- o aviso (3 níveis, um desenho) ----------------------------------------------------------
 export type AcaoDoAviso = { rotulo: string; principal?: boolean; onPress: () => void; desligado?: boolean };
 export type ItemDoAviso = { chave: string; nome: string; sub?: string; acoes?: AcaoDoAviso[] };
@@ -110,7 +113,7 @@ export function ProximaParada({ d, aoIr, aoCheguei, aoLigar, aoCartao, aoPlayboo
         </View>
         {(!!d.endereco || !!d.distancia) && (
           <Text style={[st.loc, perto && { color: T.okTx }]}>
-            {[d.endereco, perto ? `você está a ${Math.round(d.pertoM!)} m` : d.distancia].filter(Boolean).join(' · ')}
+            {semQuebra([d.endereco, perto ? `você está a ${Math.round(d.pertoM!)} m` : d.distancia].filter(Boolean).join(' · '))}
           </Text>
         )}
       </View>
@@ -191,7 +194,7 @@ export function LinhaParada({ d, aberta, aoTocar, aoIr, aoFazerAgora, aoCartao, 
               {d.doHubspot && <View style={[st.seloP, { backgroundColor: T.s3 }]}><Text style={[st.seloPT, { color: T.muted }]}>tarefa do HubSpot</Text></View>}
             </View>
           )}
-          <Text style={st.sub12}>{d.linha2}</Text>
+          <Text style={st.sub12}>{semQuebra(d.linha2)}</Text>
           {!!d.cadencia && <Text style={[st.cad, { color: d.cadenciaVermelha ? T.vtx : T.muted }]}>{d.cadencia}</Text>}
           {!!d.objetivo && <Text style={st.objetivo}>{d.objetivo}</Text>}
         </Pressable>
