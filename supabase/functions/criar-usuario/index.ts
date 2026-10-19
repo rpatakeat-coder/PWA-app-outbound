@@ -78,17 +78,20 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-// Esta API cria SOMENTE vendedor.
+// Esta API cria vendedor e, desde 19/10/26, GESTOR MASTER.
 //
-// Nao e' limitacao: e' o que fecha a porta. Uma rota capaz de escolher o papel
-// e' uma via de escalonamento de privilegio — bastaria um gestor com a sessao
-// aberta num aparelho alheio, ou a service role key vazando, pra nascer um
-// 'gestor' novo com acesso a base inteira de clientes.
+// O gestor master saiu da aba Acessos do Cockpit (Julyan: "vamos colocar o CEO
+// com o login master de gestão"). Antes so' nascia vendedor e o gestor era
+// promovido a mao na tabela — o que deixava a pessoa fora de equipe_cockpit e
+// sem entrar no Cockpit. O escalonamento continua fechado pelo mesmo lugar: so'
+// quem ja' e' gestor (ou a service role) chega aqui, e um gestor ja' pode mudar
+// o papel de qualquer um direto na tabela (profiles_prevent_role_self_escalation).
 //
-// Promover alguem continua possivel, mas pelo caminho que ja' existe e que e'
-// auditavel: o gatilho profiles_prevent_role_self_escalation deixa um gestor
-// mudar o papel de outra pessoa direto na tabela.
+// Gestor master = role 'gestor' + linha em equipe_cockpit (papel 'manager',
+// so_acesso, ignorar_owner): entra no Cockpit sem entrar em meta, ranking nem
+// cobrança — o mesmo desenho de Arthur, Guilherme e Victor (0095/0096).
 const PAPEL_FIXO = 'user' as const;
+const SETOR_DO_GESTOR = 'Outbound';
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -160,6 +163,7 @@ Deno.serve(async (req) => {
   // Dois caminhos, igual as outras funcoes deste projeto: a service role key
   // (script, integracao) ou um JWT de usuario com role='gestor' (a tela).
   const ehServiceRole = await temPoderDeServico(credencial);
+  let chamadorId: string | null = null;
 
   if (!ehServiceRole) {
     const { data: userData, error: erroUser } = await svc.auth.getUser(credencial);
@@ -178,13 +182,48 @@ Deno.serve(async (req) => {
       .maybeSingle();
     // Criar usuario e' CONCEDER ACESSO a base inteira de clientes. So gestor.
     if (perfil?.role !== 'gestor') return json(403, { error: 'Só gestor cria usuário' });
+    chamadorId = userData.user.id;
   }
 
   const corpo = await req.json().catch(() => null);
+
+  // --- op 'papel': promover a gestor master ou voltar a executivo -------------
+  // Fica aqui, e não no navegador, porque profiles só deixa cada um alterar o
+  // PRÓPRIO perfil: o update do gestor sobre outra pessoa voltaria "sucesso" com
+  // zero linhas. Ninguém tira o próprio master (a tela ficaria sem dono).
+  if (corpo?.op === 'papel') {
+    const alvo = String(corpo?.id ?? '');
+    const paraGestor = corpo?.tipo === 'gestor';
+    if (!alvo) return json(400, { error: 'Falta o id da conta.' });
+    if (!paraGestor && alvo === chamadorId) return json(400, { error: 'Você não pode tirar o seu próprio acesso de master.' });
+    const { data: conta } = await svc.from('profiles').select('id, full_name, email, role').eq('id', alvo).maybeSingle();
+    if (!conta) return json(404, { error: 'Conta não encontrada.' });
+    const { error: eRole } = await svc.from('profiles').update({ role: paraGestor ? 'gestor' : PAPEL_FIXO }).eq('id', alvo);
+    if (eRole) return json(500, { error: `Não consegui mudar o papel (${eRole.message}).` });
+    const { data: linha } = await svc.from('equipe_cockpit').select('profile_id, so_acesso').eq('profile_id', alvo).maybeSingle();
+    let eEq: { message: string } | null = null;
+    if (paraGestor) {
+      ({ error: eEq } = linha
+        ? await svc.from('equipe_cockpit').update({ papel: 'manager', ativo: true }).eq('profile_id', alvo)
+        : await svc.from('equipe_cockpit').insert({
+            profile_id: alvo, nome: (conta as any).full_name ?? (conta as any).email, papel: 'manager', ativo: true,
+            so_acesso: true, ignorar_owner: true, nota: 'gestor master pela aba Acessos do Cockpit',
+          }));
+    } else if (linha) {
+      // master "só acesso" não é do time: sai do Cockpit. Quem era do time volta a executivo.
+      ({ error: eEq } = (linha as any).so_acesso
+        ? await svc.from('equipe_cockpit').update({ ativo: false }).eq('profile_id', alvo)
+        : await svc.from('equipe_cockpit').update({ papel: 'rep' }).eq('profile_id', alvo));
+    }
+    if (eEq) return json(500, { error: `Mudei o papel, mas não a entrada no Cockpit (${eEq.message}).` });
+    return json(200, { id: alvo, role: paraGestor ? 'gestor' : PAPEL_FIXO });
+  }
   const email = String(corpo?.email ?? '').trim().toLowerCase();
   const nome = String(corpo?.nome ?? '').trim();
   const idHubspot = corpo?.id_hubspot ? String(corpo.id_hubspot).trim() : null;
-  const setor = corpo?.setor ? String(corpo.setor).trim() : null;
+  const ehGestor = corpo?.tipo === 'gestor';
+  const papel = ehGestor ? 'gestor' : PAPEL_FIXO;
+  const setor = corpo?.setor ? String(corpo.setor).trim() : ehGestor ? SETOR_DO_GESTOR : null;
   const senhaInformada = corpo?.senha ? String(corpo.senha) : null;
   const dryRun = corpo?.dry_run === true;
 
@@ -192,18 +231,18 @@ Deno.serve(async (req) => {
   if (!ehEmail(email)) return json(400, { error: 'E-mail inválido.' });
   if (nome.length < 2) return json(400, { error: 'Informe o nome completo da pessoa.' });
   // Recusa em vez de ignorar: quem mandou `role` esperava que funcionasse, e
-  // criar um vendedor calado seria o pior dos dois mundos.
-  if (corpo?.role && corpo.role !== PAPEL_FIXO) {
+  // criar um vendedor calado seria o pior dos dois mundos. O papel se escolhe
+  // por `tipo` ('vendedor' | 'gestor').
+  if (corpo?.role && corpo.role !== papel) {
     return json(400, {
-      error:
-        'Esta API cria apenas vendedor. Para mudar o papel de alguém, altere ' +
-        'profiles.role direto — a permissão para isso já é só de gestor.',
+      error: 'O papel se escolhe por "tipo": "vendedor" ou "gestor".',
     });
   }
   if (senhaInformada && senhaInformada.length < 8) {
     return json(400, { error: 'A senha precisa de pelo menos 8 caracteres.' });
   }
-  if (!idHubspot) {
+  // Gestor master não trabalha carteira: o id do HubSpot é opcional para ele.
+  if (!idHubspot && !ehGestor) {
     return json(400, {
       error:
         'Vendedor precisa do id_hubspot (owner do CRM). Sem ele a pessoa loga, ' +
@@ -261,6 +300,7 @@ Deno.serve(async (req) => {
   // a disponibilidade de terceiro), mas vira aviso na resposta. Owner que o
   // HubSpot NEGA, sim: aquilo e' erro de dado, e o certo e' recusar.
   async function conferirOwner(): Promise<{ ok: boolean; motivo?: string; nome?: string }> {
+    if (!idHubspot) return { ok: true };
     const token = Deno.env.get('HUBSPOT_TOKEN');
     if (!token) return { ok: true, motivo: 'HUBSPOT_TOKEN não configurado — id não conferido.' };
     try {
@@ -309,7 +349,7 @@ Deno.serve(async (req) => {
       id: (perfilExistente as any)?.id,
       email,
       nome,
-      role: PAPEL_FIXO,
+      role: papel,
       id_hubspot: idHubspot,
       owner_no_hubspot: owner.nome,
     });
@@ -356,7 +396,7 @@ Deno.serve(async (req) => {
         .from('profiles').select('id, email, full_name, role, id_hubspot, sector').eq('email', email).maybeSingle();
       return json(200, {
         id: (agora as any)?.id, email, nome: (agora as any)?.full_name ?? nome,
-        role: (agora as any)?.role ?? PAPEL_FIXO, id_hubspot: (agora as any)?.id_hubspot ?? idHubspot,
+        role: (agora as any)?.role ?? papel, id_hubspot: (agora as any)?.id_hubspot ?? idHubspot,
         ja_existia: true,
       });
     }
@@ -372,7 +412,7 @@ Deno.serve(async (req) => {
   const { error: erroPerfil } = await svc
     .from('profiles')
     .upsert(
-      { id, email, full_name: nome, role: PAPEL_FIXO, id_hubspot: idHubspot, sector: setor },
+      { id, email, full_name: nome, role: papel, id_hubspot: idHubspot, sector: setor },
       { onConflict: 'id' },
     );
 
@@ -385,11 +425,30 @@ Deno.serve(async (req) => {
     });
   }
 
+  // --- 3. gestor master: a entrada no Cockpit --------------------------------
+  // Sem esta linha o login de gestor abre o app, mas o Cockpit não o reconhece.
+  if (ehGestor) {
+    const { error: erroEquipe } = await svc.from('equipe_cockpit').upsert(
+      {
+        profile_id: id, nome, papel: 'manager', ativo: true, so_acesso: true, ignorar_owner: true,
+        nota: 'gestor master criado pela aba Acessos do Cockpit',
+      },
+      { onConflict: 'profile_id' },
+    );
+    if (erroEquipe) {
+      await svc.from('profiles').delete().eq('id', id).then(() => {}, () => {});
+      await svc.auth.admin.deleteUser(id).catch(() => {});
+      return json(500, {
+        error: `Criei o login mas não consegui dar a entrada no Cockpit (${erroEquipe.message}). Desfiz a conta; tente de novo.`,
+      });
+    }
+  }
+
   return json(201, {
     id,
     email,
     nome,
-    role: PAPEL_FIXO,
+    role: papel,
     id_hubspot: idHubspot,
     setor,
     setor_ve_lead: setorVeLead,
