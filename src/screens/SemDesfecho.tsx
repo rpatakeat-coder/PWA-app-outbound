@@ -86,8 +86,8 @@ export default function SemDesfecho({ userId }: { userId: string | null }) {
     const ocupado = gravando === r.id;
     return (
       <View key={r.id} style={s.linha}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={s.nome} numberOfLines={1}>{nome}</Text>
+        <View>
+          <Text style={s.nome} numberOfLines={2}>{nome}</Text>
           <Text style={s.sub}>{`${quandoTxt(r.scheduled_at)}${r.type === 'follow_up' ? ' · retorno' : ' · reunião'}`}</Text>
         </View>
         {ocupado ? <ActivityIndicator /> : remarcando === r.id ? (
@@ -133,11 +133,13 @@ const s = StyleSheet.create({
   caixa: { borderRadius: 14, borderWidth: 1, borderColor: 'var(--tint-amber-border)', backgroundColor: 'var(--surface)', padding: 12, gap: 8 },
   titulo: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: 'var(--tint-amber-text)' },
   ajuda: { fontSize: 13, lineHeight: 18, color: 'var(--text-muted)' },
-  linha: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingVertical: 8, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
+  /* texto em cima, botões embaixo (iPhone, 19/10/26): na mesma fileira com flexWrap, o texto encolhia até uma
+     letra de largura em vez de os botões quebrarem para baixo — o nome e a data viravam uma coluna vertical */
+  linha: { flexDirection: 'column', alignItems: 'stretch', gap: 8, paddingVertical: 8, borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
   nome: { fontSize: 15, fontWeight: '600', color: 'var(--text)' },
   sub: { fontSize: 13, color: 'var(--text-muted)' },
   botoes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  botao: { minHeight: 40, borderRadius: 10, borderWidth: 1, borderColor: 'var(--border)', paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
+  botao: { flexGrow: 1, minHeight: 40, borderRadius: 10, borderWidth: 1, borderColor: 'var(--border)', paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
   botaoTexto: { fontSize: 13, fontWeight: '600', color: 'var(--text)' },
   link: { fontSize: 13, fontWeight: '700', color: 'var(--tint-blue-text)', paddingVertical: 6 },
 });
