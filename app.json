@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Takeat RPA",
+    "name": "APP Field Sales",
     "slug": "takeat-rpa",
     "version": "2.0.0",
     "orientation": "portrait",
@@ -11,8 +11,8 @@
       "bundler": "metro",
       "output": "single",
       "favicon": "./assets/favicon.png",
-      "name": "Takeat RPA",
-      "shortName": "Takeat RPA",
+      "name": "APP Field Sales",
+      "shortName": "APP Field Sales",
       "lang": "pt-BR",
       "themeColor": "#0f172a",
       "backgroundColor": "#ffffff",

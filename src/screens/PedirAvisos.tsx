@@ -50,7 +50,7 @@ export default function PedirAvisos({ ativo }: { ativo: boolean }) {
   const texto = estado === 'precisa_instalar'
     ? 'No iPhone os avisos só chegam com o app na tela de início. No Safari: toque em Compartilhar › Adicionar à Tela de Início, e abra o app pelo ícone.'
     : estado === 'negado'
-      ? 'Os avisos estão bloqueados neste celular. No iPhone: Ajustes › Notificações › Takeat RPA › Permitir. No Android: toque no cadeado ao lado do endereço › Notificações › Permitir.'
+      ? 'Os avisos estão bloqueados neste celular. No iPhone: Ajustes › Notificações › APP Field Sales (ou Takeat RPA, se o ícone é antigo) › Permitir. No Android: toque no cadeado ao lado do endereço › Notificações › Permitir.'
       : 'Os quentes esfriando, a hora das ligações e os recados do gestor chegam no celular. Toque em Ativar e depois em Permitir.';
 
   return (

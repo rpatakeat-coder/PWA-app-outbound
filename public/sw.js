@@ -1,5 +1,5 @@
 /* eslint-env serviceworker */
-// Service worker do Takeat RPA.
+// Service worker do APP Field Sales.
 //
 // Faz dois papeis:
 //  1. Canal de atualizacao — substitui o OTA do expo-updates. Cada build

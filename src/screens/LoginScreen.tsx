@@ -172,7 +172,7 @@ export function LoginScreen() {
             source={require('../../assets/icon.png')}
             style={styles.logo}
           />
-          <Text style={styles.title}>Takeat RPA</Text>
+          <Text style={styles.title}>APP Field Sales</Text>
           <Text style={styles.subtitle}>Gestão de Leads & Clientes</Text>
         </View>
 
