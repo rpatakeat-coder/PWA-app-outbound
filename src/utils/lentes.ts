@@ -15,14 +15,15 @@ export type Lente = 'dia' | 'novos' | 'carteira' | 'clientes' | 'alvo' | 'rec' |
 /** Na ordem da prancha (§2). No celular, as 4 primeiras ficam na fileira; o resto, em Filtros. */
 export const LENTES: { id: Lente; rotulo: string }[] = [
   { id: 'dia', rotulo: 'Meu dia' },
+  // CLIENTES ATIVOS (28/09/2026, Julyan: "quero clientes ativos, não só reduzindo custo"). Em segundo desde
+  // 19/10/26 (Julyan: "a lente de clientes tá lá por último, tem que ser um dos primeiros").
+  { id: 'clientes', rotulo: 'Clientes' },
   // RECÉM-ABERTOS (15/10/26, Julyan): CNPJ aberto há até 90 dias, que ainda não tem sistema.
   { id: 'novos', rotulo: 'Recém-abertos' },
   { id: 'carteira', rotulo: 'Carteira' },
   // MAIS AVALIADOS (15/10/26): as contas-alvo do Google com nota 4,5+. Era "Contas-alvo".
   { id: 'alvo', rotulo: 'Mais avaliados' },
   { id: 'rec', rotulo: 'Reconquista' },
-  // CLIENTES ATIVOS (28/09/2026, Julyan: "quero clientes ativos, não só reduzindo custo").
-  { id: 'clientes', rotulo: 'Clientes' },
   { id: 'queda', rotulo: 'Em queda' },
   { id: 'semdono', rotulo: 'Sem dono' },
   { id: 'calor', rotulo: 'Calor' },

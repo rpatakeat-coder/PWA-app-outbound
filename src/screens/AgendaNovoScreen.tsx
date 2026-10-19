@@ -83,6 +83,8 @@ type Props = {
   diaControlado?: string | null;
   /** P4 (handoff Tarefas do App): ligação e WhatsApp do HubSpot se registram na fila, no cartão do negócio. */
   aoAbrirNaFila?: (dealId: string, rotulo: string) => void;
+  /** A folha "Marcar o próximo passo" (a mesma do pino e da aba Tarefas). */
+  aoMarcarProximoPasso?: (clientId: string) => void;
 };
 
 const ruaDo = (c: Client | null) => {
@@ -141,7 +143,7 @@ type Linha =
 
 export default function AgendaNovoScreen({
   diaInicial, paradas, paradasErro, reunioes, metaVisitasDia, nomeDoLead, nomePorId, distanciaAte, visitadoHoje, aoCheguei, aoAbrirLead,
-  aoRoteirizar, roteirizando, aoMontarDia, montandoDia, telefoneDe, base, ownerHubspot, contextoDe, aoMapaDoDia, aoPlaybook, largo, aoMudarDia, diaControlado, aoAbrirNaFila,
+  aoRoteirizar, roteirizando, aoMontarDia, montandoDia, telefoneDe, base, ownerHubspot, contextoDe, aoMapaDoDia, aoPlaybook, largo, aoMudarDia, diaControlado, aoAbrirNaFila, aoMarcarProximoPasso,
 }: Props) {
   const [roteirizandoDia, setRoteirizandoDia] = useState(false);
   const [registrando, setRegistrando] = useState<TarefaParaRegistrar | null>(null);
@@ -465,7 +467,8 @@ export default function AgendaNovoScreen({
     anterior = pontoDe(proxima.client) ?? anterior;
   }
   estado.forEach((p, i) => {
-    if (p.estado !== 'pendente') return;
+    // à noite o card da próxima parada some: ela entra na lista junto com as outras
+    if (p.estado !== 'pendente' && !(momento === 'noite' && p.estado === 'proxima')) return;
     const h = horaDe(p, hoje);
     let hora: string;
     if (h) { relogio = Math.max(relogio, h); hora = horaBRT(p.planned_at!); }
@@ -777,8 +780,8 @@ export default function AgendaNovoScreen({
             <View key={k.id} style={{ gap: 6 }}>
               {linhaDepois({ k: `c-${k.id}`, tipo: 'compromisso', ordem: 0, hora: k.hora, comp: k })}
               {k.clientId && (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Marcar o próximo passo: ${k.nome ?? 'lead'}`} style={s.botaoSec} onPress={() => aoAbrirLead(k.clientId!)}>
-                  <IconLocation width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoSecTexto}>Marcar o próximo passo</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Marcar o próximo passo: ${k.nome ?? 'lead'}`} style={s.botaoSec} onPress={() => (aoMarcarProximoPasso ? aoMarcarProximoPasso(k.clientId!) : aoAbrirLead(k.clientId!))}>
+                  <IconCalendar width={16} height={16} fill={cores.onSurface} /><Text style={s.botaoSecTexto}>Marcar o próximo passo</Text>
                 </Pressable>
               )}
             </View>
@@ -925,9 +928,11 @@ export default function AgendaNovoScreen({
                   <Text style={s.vazio}>O plano se monta no mapa: toque no pino e "Marcar o próximo passo". Sem plano para hoje: monte a microrrota a partir de onde você está.</Text>
                 </View>
               )}
-              {linhasDepois.length > 0 && momento !== 'noite' && <Text style={s.secao}>DEPOIS</Text>}
-              {momento !== 'noite' && linhasDepois.map(linhaDepois)}
-              {momento !== 'noite' && blocosSoltos}
+              {/* DEPOIS DAS 18H A LISTA FICA (19/10/26): o resumo do dia vem em cima, mas quem ainda está
+                  na rua via as paradas sumirem. As que ficaram para trás aparecem nos dois, com Pôr amanhã no resumo. */}
+              {linhasDepois.length > 0 && <Text style={s.secao}>{momento === 'noite' ? 'AINDA NO PLANO DE HOJE' : 'DEPOIS'}</Text>}
+              {linhasDepois.map(linhaDepois)}
+              {blocosSoltos}
               {feitas}
               {/* dia sem rota: "Montar meu dia" é a ação principal em qualquer hora (docs/12 §8) */}
               {(momento !== 'noite' || semRota) && !leituraFalhou && portaUnica}

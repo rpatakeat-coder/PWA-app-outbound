@@ -27,8 +27,9 @@ const T = (x: Partial<TarefaEntrada>): TarefaEntrada => ({ id: 't1', dealId: 'd1
     T({ id: 'c', venceEm: '2026-10-28T15:00:00Z' }),
   ], ctx({ contatos: { d1: { n: 3, ultimo: '2026-10-16T13:00:00Z' } } }));
   ok(f.length === 1, 'o mesmo negócio com 3 tarefas abertas aparece 1 vez');
-  ok(f[0].tarefaId === 'a' && f[0].motivo === 'venceu' && f[0].prazoTexto === 'venceu ontem', 'comanda a tarefa mais urgente (a vencida)');
-  ok(f[0].porque === 'Combinou retorno ontem e ainda não falou', 'o porquê vem do mapa do servidor');
+  // 19/10/26: com passo de hoje, a vencida de ontem não faz o negócio "atrasado" (era a tarefa 'a')
+  ok(f[0].tarefaId === 'b' && f[0].motivo === 'vence_hoje' && !f[0].venceu, 'comanda o passo de hoje, não a vencida antiga');
+  ok(f[0].porque.startsWith('Follow-up de hoje'), 'o porquê vem do mapa do servidor');
   ok(tituloDoCard(f[0]) === 'Ligar para Ana (sócia)', 'título: verbo + pessoa (papel)');
   ok(f[0].contatos === 3 && textoUltimoContato(f[0].ultimoContato, hoje) === 'contato há 6 dias', 'contatos e último contato');
 }
@@ -105,6 +106,23 @@ ok(pessoaDoCard('Ana Paula', 'Cantina', 'Bruno', null).pessoa === 'Ana' && pesso
 ok(pessoaDoCard('Ana', 'Cantina', 'Bruno', 'Sócia').porque === null, 'A2: com papel é confiável');
 ok(pessoaDoCard(null, 'Cantina', 'Bruno', null).porque === null, 'A2: sem contato não explica nada');
 ok(tituloDoCard({ verbo: 'Visitar', pessoa: 'Ana', papel: null, negocio: 'Cantina' }) === 'Visitar Cantina', 'A2: sem papel o título usa o negócio');
+
+// O PRÓXIMO PASSO É O QUE CONTA (19/10/26, o caso do print: visita velha de 26/09 aberta + follow-up de 27/10)
+{
+  const velha = T({ id: 'tv', assunto: 'Visita - Visita', venceEm: '2026-09-26T12:00:00Z' });
+  const futura = T({ id: 'tf', assunto: 'Follow-up - ligar', venceEm: '2026-10-27T14:00:00Z' });
+  ok(montarFila([N({})], [velha, futura], ctx()).length === 0, 'vencida velha + passo futuro: não é atrasado nem sem passo (sai da fila)');
+  const deHoje = T({ id: 'th', assunto: 'Ligar - hoje', venceEm: '2026-10-22T15:00:00Z' });
+  const f2 = montarFila([N({})], [velha, deHoje], ctx())[0];
+  ok(f2?.motivo === 'vence_hoje' && f2.tarefaId === 'th', 'vencida velha + tarefa de hoje: é de hoje, pela tarefa de hoje');
+  const outraVencida = T({ id: 'tr', assunto: 'Ligar - recente', venceEm: '2026-10-20T15:00:00Z' });
+  const f3 = montarFila([N({})], [velha, outraVencida], ctx())[0];
+  ok(f3?.motivo === 'venceu' && f3.tarefaId === 'tr' && f3.prazo === '2026-10-20', 'só vencidas: vale a mais recente (o último passo combinado)');
+  ok(montarFila([N({})], [velha], ctx({ passoFuturo: ['d1'] })).length === 0, 'vencida + negócio no plano futuro (rota/Planejamento/reunião): sai da fila');
+  const f5 = montarFila([N({})], [velha], ctx({ agendaHoje: { d1: 'hoje' } }))[0];
+  ok(f5?.motivo === 'vence_hoje' && f5.prazo === hoje && !f5.venceu, 'vencida + no plano de hoje: é trabalho de hoje, não atraso');
+  ok(montarFila([N({ temperatura: 80 })], [], ctx({ passoFuturo: ['d1'] })).length === 0, 'quente sem tarefa mas no plano futuro: não é "sem próximo passo"');
+}
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nfila do dinheiro: tudo certo');

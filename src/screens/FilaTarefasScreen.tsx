@@ -341,6 +341,23 @@ const podeSair = () => (pedidoDeSaidaAtual ? pedidoDeSaidaAtual() : true);
 
 // a regra das seções mora no módulo da fila, junto do robô do push (17/10/26)
 const secaoDe = (i: CardDaFila): SecaoDaFila => secaoDoItem(i);
+/* O QUE FOI COMBINADO SEM REPETIÇÃO (print de 19/10: "Visita - Visita"): o assunto do HubSpot é "Tipo - texto";
+   quando o texto só repete o tipo ou o nome do restaurante, fica o tipo. */
+const semAcento = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+function assuntoLimpo(assunto: string | null, negocio: string): string | null {
+  if (!assunto) return null;
+  // o separador tem espaço dos dois lados: o hífen de "Follow-up" não separa
+  const m = assunto.match(/^\s*(.+?)\s+[-–·]\s+(.+)$/);
+  if (!m) return assunto.trim();
+  const tipo = m[1].trim();
+  // "Demo - Demo · Cantina": o tipo repetido no começo do texto sai
+  let resto = m[2].trim();
+  const rep = new RegExp(`^${tipo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[·\\-–]\\s*`, 'i');
+  if (rep.test(resto)) resto = resto.replace(rep, '').trim();
+  const r = semAcento(resto), n = semAcento(negocio);
+  if (r === semAcento(tipo) || r === n || (r.length >= 4 && n.startsWith(r))) return tipo;
+  return `${tipo} · ${resto}`;
+}
 
 // ---- a tela -----------------------------------------------------------------------------
 type Props = {
@@ -681,7 +698,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
   const dadosDe = (i: CardDaFila): DadosDoCartao => ({
     dealId: i.dealId, negocio: i.negocio, etapaRotulo: ETAPA[i.etapaId]?.rotulo ?? 'Etapa', diasNaEtapa: i.diasNaEtapa ?? null,
     quente: quenteEsfriando(i, hoje), tipoPrazo: i.venceu ? 'vencido' : i.prazo === hoje ? 'hoje' : 'outro',
-    prazo: i.prazo, horaPrazo: i.horaPrazo ?? null, hoje, combinadoTexto: i.assunto ?? null,
+    prazo: i.prazo, horaPrazo: i.horaPrazo ?? null, hoje, combinadoTexto: assuntoLimpo(i.assunto ?? null, i.negocio),
     /* O VERBO SEGUE A TAREFA, NÃO A ETAPA (produção, 17/10/26): negócio em Visita com tarefa "Follow-up
        - Ligar…" vinha com a nota "Visita só conclui com o Cheguei" e o Pôr no plano sugerido. Só tarefa
        presencial (visita/reunião) é visita; o resto sugere ligar (ou WhatsApp, se a tarefa diz). */

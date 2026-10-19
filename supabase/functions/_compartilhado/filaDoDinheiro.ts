@@ -58,6 +58,9 @@ export type Contexto = {
   visitaHojeSemRegistro: Record<string, string>;
   /** dealId → hora na Agenda de hoje ("16h"): vira o selo "na agenda de hoje". */
   agendaHoje: Record<string, string>;
+  /** Negócios com passo marcado DEPOIS de hoje fora das tarefas do HubSpot: reunião do app,
+   *  parada da rota ou dia do Planejamento (19/10/26). Tarefa vencida não os põe em Atrasados. */
+  passoFuturo?: string[];
 };
 
 export type ItemFila = {
@@ -218,23 +221,35 @@ export function montarFila(negocios: NegocioEntrada[], tarefas: TarefaEntrada[],
   const amanhaUtil = proximoDiaUtil(ctx.hoje, 1, ctx.feriados);
   const vistos = new Set<string>();
   const itens: ItemFila[] = [];
+  const passoFuturoFora = new Set(ctx.passoFuturo ?? []);
 
   for (const n of negocios) {
     if (!ABERTAS.has(n.etapaId) || vistos.has(n.dealId)) continue;
     vistos.add(n.dealId);
     const abertas = (porNegocio.get(n.dealId) ?? []).slice().sort((a, b) =>
       (a.venceEm ? Date.parse(a.venceEm) : Infinity) - (b.venceEm ? Date.parse(b.venceEm) : Infinity));
-    const t = abertas[0] ?? null;
+    /* A TAREFA QUE CONTA É O PRÓXIMO PASSO (19/10/26): a fila pegava a tarefa aberta MAIS ANTIGA. Negócio
+       com uma visita velha de 26/09 nunca concluída e o follow-up de 27/10 marcado aparecia "atrasado há
+       23 dias" e "sem próximo passo". Agora: a de hoje; senão a próxima futura; só sem nenhuma de hoje em
+       diante, a vencida mais recente (o último passo combinado que passou). */
+    const deHoje = abertas.find((x) => diaDe(x.venceEm) === ctx.hoje);
+    const futura = abertas.find((x) => { const d = diaDe(x.venceEm); return !!d && d > ctx.hoje; });
+    const vencidas = abertas.filter((x) => { const d = diaDe(x.venceEm); return !!d && d < ctx.hoje; });
+    const t = deHoje ?? futura ?? vencidas[vencidas.length - 1] ?? abertas[0] ?? null;
     const diaT = t ? diaDe(t.venceEm) : null;
     const horaT = t ? horaDe(t.venceEm) : null;
     const tipoT = t ? tipoDaTarefa(t) : null;
     const c = ctx.contatos[n.dealId] ?? { n: 0, ultimo: null };
     const diaUltimo = diaDe(c.ultimo);
     const diasSemContato = diaUltimo ? diasEntre(diaUltimo, ctx.hoje) : null;
-    const temPassoFuturo = !!diaT && diaT > ctx.hoje;
+    const temPassoFuturo = (!!diaT && diaT > ctx.hoje) || passoFuturoFora.has(n.dealId);
+    const noPlanoHoje = !!ctx.agendaHoje[n.dealId];
 
     let grupo: Grupo | null = null; let motivo: Motivo | null = null; const f: Fatos = {};
-    if (diaT && diaT < ctx.hoje) {
+    if (diaT && diaT < ctx.hoje && noPlanoHoje) {
+      // passou, mas está no plano de hoje: é trabalho de hoje, não atraso
+      grupo = 'agora'; motivo = 'vence_hoje'; f.assunto = t?.assunto; f.quando = 'hoje';
+    } else if (diaT && diaT < ctx.hoje && !temPassoFuturo) {
       grupo = 'agora'; motivo = 'venceu';
       const atraso = diasEntre(diaT, ctx.hoje);
       f.quando = atraso === 1 ? 'ontem' : `há ${atraso} dias`;
@@ -262,7 +277,7 @@ export function montarFila(negocios: NegocioEntrada[], tarefas: TarefaEntrada[],
       : tipoT === 'visita' ? 'Visitar' : tipoT === 'whatsapp' ? 'WhatsApp' : 'Ligar';
     if (!n.temTelefone && (verbo === 'Ligar' || verbo === 'WhatsApp')) verbo = 'Visitar';
 
-    const prazoDia = motivo === 'visita_sem_registro' ? ctx.hoje : diaT;
+    const prazoDia = motivo === 'visita_sem_registro' || (motivo === 'vence_hoje' && noPlanoHoje && diaT && diaT < ctx.hoje) ? ctx.hoje : diaT;
     const p = prazoTexto(prazoDia, motivo === 'visita_sem_registro' ? null : horaT, ctx);
     itens.push({
       dealId: n.dealId, clientId: n.clientId, grupo, motivo, porque: PORQUE[motivo](f), verbo,

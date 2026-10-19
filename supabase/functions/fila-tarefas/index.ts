@@ -257,8 +257,34 @@ Deno.serve(async (req: Request) => {
     const { data: paradas } = await svc.from('field_route_stops').select('client_id, horario_fixo, status').in('route_id', idsRota).eq('status', 'planned');
     return (paradas ?? []) as Array<{ client_id: string; horario_fixo: string | null; status: string }>;
   })();
+  /* O PASSO MARCADO FORA DO HUBSPOT (19/10/26): a parada da rota depois de hoje e o negócio num dia do
+     Planejamento (esta semana e a próxima, de hoje em diante) — o mesmo que a Agenda e a mensagem
+     das 18h contam como próximo passo. */
+  const planoFuturoP = (async () => {
+    const clientes = new Set<string>(); const deals = new Set<string>();
+    const { data: rotas } = await svc.from('field_routes').select('id').eq('seller_id', uid).gt('route_date', hoje);
+    const idsRota = (rotas ?? []).map((x: { id: string }) => x.id);
+    for (let i = 0; i < idsRota.length; i += 150) {
+      const { data: ps } = await svc.from('field_route_stops').select('client_id').in('route_id', idsRota.slice(i, i + 150)).eq('status', 'planned');
+      for (const p of ps ?? []) if (p.client_id) clientes.add(String(p.client_id));
+    }
+    if (owner) {
+      const d0 = new Date(hoje + 'T12:00:00Z'); const dow = d0.getUTCDay() || 7;
+      const seg = new Date(d0.getTime() - (dow - 1) * 86400000).toISOString().slice(0, 10);
+      const prox = new Date(Date.parse(seg + 'T12:00:00Z') + 7 * 86400000).toISOString().slice(0, 10);
+      const { data: pl } = await svc.from('planos_semanais').select('data_segunda, grade').eq('owner_id', owner).in('data_segunda', [seg, prox]);
+      for (const p of (pl ?? []) as Array<{ data_segunda: string; grade: unknown }>) {
+        (Array.isArray(p.grade) ? p.grade : []).forEach((dia: unknown, i: number) => {
+          const iso = new Date(Date.parse(p.data_segunda + 'T12:00:00Z') + i * 86400000).toISOString().slice(0, 10);
+          if (iso < hoje || !Array.isArray(dia)) return;
+          for (const s of dia as Array<{ id?: string } | null>) { const id = s?.id ? String(s.id) : ''; if (id.startsWith('c-')) deals.add(id.slice(2)); }
+        });
+      }
+    }
+    return { clientes, deals };
+  })();
   // promessa que rejeita antes de alguém aguardar vira "unhandled rejection": já nascem com catch
-  reunioesP.catch(() => {}); paradasP.catch(() => {});
+  reunioesP.catch(() => {}); paradasP.catch(() => {}); planoFuturoP.catch(() => {});
 
   // 1) tarefas abertas do dono
   const tarefas: TarefaEntrada[] = [];
@@ -427,8 +453,20 @@ Deno.serve(async (req: Request) => {
       clientId: c?.id ?? null, lat: c?.lat ?? null, lng: c?.lng ?? null,
     };
   });
+  // reunião do app agendada de hoje em diante (a lista de reuniões já lida, 60 dias para a frente)
+  const passoFuturo = new Set<string>();
+  try {
+    const pf = await planoFuturoP;
+    for (const cId of pf.clientes) { const d = dealPorCliente.get(cId); if (d) passoFuturo.add(d); }
+    for (const d of pf.deals) passoFuturo.add(d);
+    const { mm } = await reunioesP;
+    for (const m of (mm ?? []) as Array<{ client_id?: string; scheduled_at?: string; status?: string; created_by?: string }>) {
+      if (m.status !== 'agendada' || m.created_by !== uid || !m.scheduled_at || (diaBRTde(m.scheduled_at) ?? '') < hoje) continue;
+      const d = m.client_id ? dealPorCliente.get(String(m.client_id)) : undefined; if (d) passoFuturo.add(d);
+    }
+  } catch (e) { console.error('passo futuro fora do HubSpot', e); }
   const itens = montarFila(negocios, tarefas.filter((t) => t.dealId && meus.includes(t.dealId)), {
-    hoje, feriados, contatos, decisorAlcancado, visitaHojeSemRegistro, agendaHoje,
+    hoje, feriados, contatos, decisorAlcancado, visitaHojeSemRegistro, agendaHoje, passoFuturo: [...passoFuturo],
   }).map((i) => ({ ...i, titulo: tituloDoCard(i), ultimoContatoTexto: textoUltimoContato(i.ultimoContato, hoje),
     telefone: i.temTelefone ? clientePorDeal.get(i.dealId)?.telefone ?? null : null }));
 

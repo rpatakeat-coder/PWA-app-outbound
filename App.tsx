@@ -9012,6 +9012,11 @@ function MainApp() {
         )}
         <AgendaNovoScreen
           key={agendaDiaInicial ?? 'hoje'}
+          aoMarcarProximoPasso={async (id) => {
+            const local = clients.find((c) => c.id === id);
+            const c = local ?? ((await supabase.from('clients').select('*').eq('id', id).maybeSingle()).data as Client | null);
+            if (c) abrirPorNoPlano(c); else Toast.mostrar('Não encontrei este lead.', 'erro');
+          }}
           aoAbrirNaFila={(deal, rotulo) => { setPedidoDaFila({ acao: 'cartao', deal, origem: 'agenda', rotulo, n: Date.now() }); setTab('tasks'); }}
           ownerHubspot={myHubspotId}
           largo={layout.ehLargo}
