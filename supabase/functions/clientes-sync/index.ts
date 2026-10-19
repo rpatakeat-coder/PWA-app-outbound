@@ -50,6 +50,8 @@ const PROPS = [
   'faturamento_0_mes', 'faturamento_a', 'faturamento_b', 'faturamento_c', 'variacao_faturamento',
   'data_solicitacao_cancelamento', 'data_ultimo_caixa_fechado', 'data_ultima_cobranca_recebida',
   'cnpj_cpf', 'celular', 'logradouro', 'numero', 'bairro', 'cidade', 'estado', 'cep', 'latitude', 'longitude',
+  // 0221: por que o cliente saiu (N1 macro, N2 micro, N3 observação e o setor de origem do cancelamento)
+  'n1___motivo_macro', 'n2___motivo_micro', 'observacoes___cancelamento', 'etapa_de_cancelamento',
 ];
 
 const json = (status: number, body: unknown) =>
@@ -185,6 +187,8 @@ Deno.serve(async (req) => {
             bairro: txt(q.bairro), cidade: txt(q.cidade), estado: txt(q.estado), cep: txt(q.cep),
             latitude: coord(q.latitude, 90), longitude: coord(q.longitude, 180),
             hs_modificado_em: txt(q.hs_lastmodifieddate),
+            churn_motivo_macro: txt(q.n1___motivo_macro), churn_motivo_micro: txt(q.n2___motivo_micro),
+            churn_motivo_texto: txt(q.observacoes___cancelamento), churn_setor: txt(q.etapa_de_cancelamento),
           });
         }
         after = res.paging?.next?.after;
