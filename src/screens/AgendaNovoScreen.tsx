@@ -597,7 +597,7 @@ export default function AgendaNovoScreen({
       </Pressable>
       {feitasAbertas && itensFeitos.map((i) => (
         <Pressable key={i.chave} accessibilityRole="button" disabled={!i.clientId} style={[s.feitoItem, i.faltaRegistro && s.feitoFalta]} onPress={() => i.clientId && aoAbrirLead(i.clientId)}>
-          <Text style={s.hora}>{i.hora}</Text>
+          <Text style={s.hora} numberOfLines={1}>{i.hora}</Text>
           <View style={[s.disco, { backgroundColor: i.faltaRegistro ? 'var(--tint-amber)' : 'var(--tint-green)' }]}>
             {i.tipo === 'tarefa' ? <IconCall width={14} height={14} fill="var(--tint-green-text)" /> : <IconCheck width={14} height={14} fill={i.faltaRegistro ? 'var(--tint-amber-text)' : 'var(--tint-green-text)'} />}
           </View>
@@ -667,10 +667,10 @@ export default function AgendaNovoScreen({
       return (
         <View key={l.k} style={[s.linha, open && s.linhaAberta]}>
           <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} style={s.linhaTopo} onPress={() => setAberto(open ? null : l.k)}>
-            <Text style={s.hora}>{l.hora ?? '~'}</Text>
+            <Text style={s.hora} numberOfLines={1}>{l.hora ?? '~'}</Text>
             <View style={[s.disco, { backgroundColor: temp?.color ?? 'var(--surface-3)' }]}><Text style={s.discoTexto}>{l.numero}</Text></View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={s.nomeLinha} numberOfLines={1}>{nome}</Text>
+              <Text style={s.nomeLinha} numberOfLines={2}>{nome}</Text>
               <Text style={s.subLinha} numberOfLines={1}>{[chipDaParada(l.p), distanciaAte(l.p.client_id), cobrar.has(l.p.client_id) ? 'cobrar' : null].filter(Boolean).join(' · ') || 'visita do plano'}</Text>
               {selosDa(l.p.client_id).map((x) => <Text key={x} style={s.selo} numberOfLines={1}>{x}</Text>)}
             </View>
@@ -709,7 +709,7 @@ export default function AgendaNovoScreen({
     return (
       <View key={l.k} style={[s.linha, open && s.linhaAberta]}>
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} style={s.linhaTopo} onPress={() => setAberto(open ? null : l.k)}>
-          <Text style={s.hora}>{k.hora ?? '—'}</Text>
+          <Text style={s.hora} numberOfLines={1}>{k.hora ?? '—'}</Text>
           <View style={[s.disco, { backgroundColor: 'var(--surface-3)' }]}>
             {reuniao ? <IconCalendar width={14} height={14} fill={cores.onSurface} /> : <IconCall width={14} height={14} fill={cores.onSurface} />}
           </View>
@@ -841,9 +841,9 @@ export default function AgendaNovoScreen({
           const hora = p.planned_at && dia === diaBRT(new Date(p.planned_at)) ? horaBRT(p.planned_at) : (reuniao?.hora ?? null);
           return (
             <Pressable key={p.id} accessibilityRole="button" style={s.bloco} onPress={() => aoAbrirLead(p.client_id)}>
-              <Text style={s.hora}>{hora ?? String(i + 1)}</Text>
+              <Text style={s.hora} numberOfLines={1}>{hora ?? String(i + 1)}</Text>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={s.nomeLinha} numberOfLines={1}>{nome}</Text>
+                <Text style={s.nomeLinha} numberOfLines={2}>{nome}</Text>
                 <Text style={s.subLinha} numberOfLines={1}>{[chipDaParada(p) ?? 'Visita do plano', ruaDo(c), distanciaAte(p.client_id)].filter(Boolean).join(' · ')}</Text>
                 {casados.map((k) => <Text key={k.id} style={s.selo} numberOfLines={1}>{seloDoCompromisso(k, p.client_id)}</Text>)}
               </View>
@@ -1024,7 +1024,8 @@ const s = StyleSheet.create({
   linhaAberta: { borderColor: 'var(--border)' },
   linhaTopo: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 64, paddingHorizontal: 12, paddingVertical: 8 },
   linhaPreparo: { paddingHorizontal: 12, paddingBottom: 12, gap: 10 },
-  hora: { width: 44, fontSize: 14, fontWeight: '800', color: 'var(--text)', fontVariant: ['tabular-nums'] },
+  // 58 e uma linha só: a hora estimada tem o "~" na frente e quebrava em "~12:0 / 0" (iPhone, 19/10/26)
+  hora: { width: 58, flexShrink: 0, fontSize: 14, fontWeight: '800', color: 'var(--text)', fontVariant: ['tabular-nums'], whiteSpace: 'nowrap' } as never,
   disco: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   discoTexto: { fontSize: 13, fontWeight: '800', color: '#111418' },
   nomeLinha: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: 'var(--text)' },
