@@ -2,14 +2,17 @@
 // automaticamente, não quero que eles escolham"). Nenhum celular deixa um site ligar notificação sem
 // a pessoa tocar em "Permitir" na janela do sistema, e essa janela só abre depois de um toque na
 // tela. O mais perto disso: o app abre com esta tela e um botão só; quem não ativar vê de novo a cada
-// abertura (o "Agora não" vale só até fechar o app). Bloqueado nos Ajustes: diz onde liberar.
+// abertura E a cada volta ao app (19/10/26: "toda hora que alguém abrir o app"). O "Agora não" só
+// segura 2 minutos, para a janela do sistema não reabrir o pedido na mesma hora. Bloqueado nos Ajustes:
+// diz onde liberar, uma vez por dia.
 import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { IconBell } from '../components/icons';
 import { Toast } from '../components/Toast';
 import { estadoDoPush, ligarPush, type EstadoDoPush } from '../utils/pushDaFila';
 
-const CHAVE_SESSAO = 'avisos-pedido-adiado';
+const PAUSA_MS = 2 * 60_000;
+let adiadoEm = 0;
 const CHAVE_NEGADO = 'avisos-negado-avisado';
 const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
 
@@ -21,21 +24,26 @@ export default function PedirAvisos({ ativo }: { ativo: boolean }) {
   useEffect(() => {
     if (!ativo) return;
     let vivo = true;
-    void estadoDoPush().then((e) => {
+    const verificar = () => { void estadoDoPush().then((e) => {
       if (!vivo) return;
       setEstado(e);
+      if (e === 'ligado' || e === 'sem_suporte') { setAberto(false); return; }
+      if (Date.now() - adiadoEm < PAUSA_MS) return;
       try {
-        if (sessionStorage.getItem(CHAVE_SESSAO)) return;
         // bloqueado: avisa uma vez por dia (não adianta pedir de novo; só a pessoa libera nos Ajustes)
         if (e === 'negado') { if (localStorage.getItem(CHAVE_NEGADO) === hojeBRT()) return; localStorage.setItem(CHAVE_NEGADO, hojeBRT()); }
       } catch { /* sem armazenamento: pede mesmo assim */ }
       if (e === 'desligado' || e === 'precisa_instalar' || e === 'negado') setAberto(true);
-    }).catch(() => undefined);
-    return () => { vivo = false; };
+    }).catch(() => undefined); };
+    verificar();
+    // voltou ao app (trocou de app e voltou, desbloqueou a tela): pede de novo
+    const aoVoltar = () => { if (document.visibilityState === 'visible') verificar(); };
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => { vivo = false; document.removeEventListener('visibilitychange', aoVoltar); };
   }, [ativo]);
 
   if (!aberto || !estado) return null;
-  const adiar = () => { try { sessionStorage.setItem(CHAVE_SESSAO, '1'); } catch { /* sem armazenamento */ } setAberto(false); };
+  const adiar = () => { adiadoEm = Date.now(); setAberto(false); };
   const ativar = async () => {
     setLigando(true);
     try {
