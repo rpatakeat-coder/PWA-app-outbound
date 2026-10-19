@@ -277,7 +277,8 @@ Deno.serve(async (req: Request) => {
         (Array.isArray(p.grade) ? p.grade : []).forEach((dia: unknown, i: number) => {
           const iso = new Date(Date.parse(p.data_segunda + 'T12:00:00Z') + i * 86400000).toISOString().slice(0, 10);
           if (iso < hoje || !Array.isArray(dia)) return;
-          for (const s of dia as Array<{ id?: string } | null>) { const id = s?.id ? String(s.id) : ''; if (id.startsWith('c-')) deals.add(id.slice(2)); }
+          // visita já feita (feito: true) fica registrada na grade, mas não é passo futuro
+          for (const s of dia as Array<{ id?: string; feito?: boolean } | null>) { const id = s?.id ? String(s.id) : ''; if (id.startsWith('c-') && !s?.feito) deals.add(id.slice(2)); }
         });
       }
     }

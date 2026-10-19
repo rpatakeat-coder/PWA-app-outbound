@@ -63,7 +63,8 @@ function montarMensagens({ funilLeads, time, planos, paradas, hoje }) {
   (planos || []).forEach((p) => {
     (Array.isArray(p.grade) ? p.grade : []).forEach((dia, i) => {
       if (somaDias(String(p.data_segunda), i) < hoje || !Array.isArray(dia)) return;
-      dia.forEach((s) => { const id = s ? String(s.id || '') : ''; if (id.startsWith('c-')) noPlano.add(id.slice(2)); }); // vaga vazia é null
+      // vaga vazia é null; visita já feita (feito: true) fica na grade mas não é próximo passo (19/10/26)
+      dia.forEach((s) => { const id = s ? String(s.id || '') : ''; if (id.startsWith('c-') && !s.feito) noPlano.add(id.slice(2)); });
     });
   });
   (paradas || []).forEach((s) => {

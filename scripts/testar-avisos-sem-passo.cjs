@@ -47,5 +47,12 @@ ok(/\*Ana Lima[^\n]*\n⏰ 2 venceram sem ser feitos/.test(t), 'o executivo tem a
 ok(/Bar Novo/.test(t) && !/Bar Novo ⏰/.test(t) && !/\*Bia Rocha[^\n]*\n⏰/.test(t), 'quem nunca teve passo não leva ⏰, e quem não tem vencido não ganha a linha');
 ok(/Outro dia" aceita qualquer data/.test(t), 'o rodapé diz que retorno longe também é passo');
 
+// 19/10/26: visita já FEITA hoje fica na grade (feito: true), mas não é próximo passo
+{
+  const p2 = [{ data_segunda: '2026-10-12', grade: [null, null, null, null, [{ id: 'c-31', feito: true, fora: true }], null, null] }];
+  const [m2] = montarMensagens({ funilLeads, time, planos: p2, paradas: [], hoje });
+  ok(/Grill Leste/.test(m2 ? m2.texto : ''), 'visita feita hoje na grade não tira o negócio da lista de sem próximo passo');
+}
+
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\navisos das 18h: tudo certo');
