@@ -159,6 +159,33 @@ function montarAviso(momento: string, f: { itens: Item[]; hoje: string }, combin
   return null;
 }
 
+/* O RECADO DO GESTOR VIRA PUSH (Julyan, 19/10/26: "isso tinha que ir pra notificação via push
+   tbm"). Tudo o que o cockpit manda ao executivo (o Cobrar, os avisos) é uma linha em
+   sugestoes_planos, que o app mostra na tela inicial; o gatilho 0219 chama esta op a cada linha
+   nova. Não conta no limite de 4 avisos da fila (é o gestor falando) e sai a qualquer hora. */
+async function recado(svc: ReturnType<typeof createClient>, id: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return { ok: false, pulou: 'id inválido' };
+  const { data: linha } = await svc.from('sugestoes_planos').select('id, owner_id, texto, autor').eq('id', id).maybeSingle();
+  if (!linha) return { ok: false, pulou: 'recado não encontrado' };
+  const { data: perfis } = await svc.from('profiles').select('id').eq('id_hubspot', String(linha.owner_id));
+  const uids = (perfis ?? []).map((p: { id: string }) => p.id);
+  if (!uids.length) return { ok: true, pulou: 'dono sem perfil no app' };
+  const { data: ins } = await svc.from('push_inscricoes').select('id, user_id, endpoint, p256dh, auth, falhas').in('user_id', uids);
+  if (!ins || !ins.length) return { ok: true, pulou: 'sem aparelho inscrito' };
+  const quem = String(linha.autor ?? '').trim().split(/\s+/)[0] || 'gestor';
+  const texto = String(linha.texto ?? '').replace(/\s+/g, ' ').trim();
+  const daFila = /pr[oó]ximo passo|tarefa/i.test(texto);
+  const aviso: Aviso = {
+    titulo: `Recado do ${quem}`, texto: texto.length > 220 ? texto.slice(0, 217) + '…' : texto, tag: `recado-${linha.id}`,
+    url: daFila ? urlApp('fila') : '/',
+    acoes: daFila ? [{ acao: 'fila', titulo: 'Abrir a fila', url: urlApp('fila') }] : [],
+  };
+  const k = await chaves(svc);
+  let entregues = 0;
+  for (const a of ins as Inscricao[]) if (await enviar(svc, a, aviso, k)) entregues++;
+  return { ok: true, aparelhos: ins.length, entregues };
+}
+
 async function rodar(svc: ReturnType<typeof createClient>, momento: string, dryRun: boolean, segredo: string, ignorarHorario = false) {
   const { data: cfgLinha } = await svc.from('cockpit_config').select('conteudo').eq('chave', 'push_fila').maybeSingle();
   const cfg = (cfgLinha?.conteudo ?? {}) as { ligado?: boolean; so_para?: string[] };
@@ -243,6 +270,10 @@ Deno.serve(async (req: Request) => {
   if (segredo) {
     const { data: ok } = await svc.rpc('segredo_confere', { p_nome: 'push_fila', p_valor: segredo });
     if (ok !== true) return json(403, { erro: 'segredo' });
+    if (corpo.op === 'recado') {
+      try { return json(200, await recado(svc, String(corpo.id ?? ''))); }
+      catch (e) { return json(500, { erro: (e as Error).message }); }
+    }
     if (corpo.op !== 'rodar') return json(400, { erro: 'O robô só roda.' });
     const momento = String(corpo.momento ?? '');
     if (!['0830', '1230', '1730', '1805'].includes(momento)) return json(400, { erro: 'momento inválido' });
