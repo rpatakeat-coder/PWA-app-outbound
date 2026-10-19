@@ -221,6 +221,7 @@ import { janelaAtual } from './src/utils/horaDasLigacoes';
 import { quenteEsfriando, secaoDoItem } from './supabase/functions/_compartilhado/filaDoDinheiro';
 import { FaixaHoraDasLigacoes } from './src/screens/CartaoDaFila';
 import FolhaAntesDaRua from './src/screens/FolhaAntesDaRua';
+import PedirAvisos from './src/screens/PedirAvisos';
 import { marcarGravada as marcarFeitaGravada, registrarFeita } from './src/utils/filaFeitas';
 import { JANELAS_LIGACAO } from './src/utils/horaDasLigacoes';
 import { useRouteConfig } from './src/hooks/useRouteConfig';
@@ -9249,6 +9250,8 @@ function MainApp() {
 
       {selectedClientSheet}
 
+      {/* os avisos do celular pedidos na abertura (19/10/26): só falta o Permitir do sistema */}
+      <PedirAvisos ativo={!!profile && profile.role !== 'view'} />
       {antesDaRua && (() => {
         const itensF = (filaNaTela.data?.itens ?? []) as Array<{ dealId: string; negocio: string; etapaId: string; venceu: boolean; prazo: string | null; horaPrazo?: string | null; telefone: string | null }>;
         const hojeF = filaNaTela.data?.hoje ?? diaBRT(new Date());
