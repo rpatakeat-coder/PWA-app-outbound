@@ -93,6 +93,12 @@ export interface Client {
   // Nada a ver com clients.status ('churn' de lá é marcação manual do app).
   hs_etapa_uso: string | null;
   hs_situacao: 'ativo' | 'churn' | null;
+  // 0221: por que o cliente saiu, como o Sucesso/Onboarding registrou no negócio
+  // (N1 macro, N2 micro, N3 observação, setor de origem). Só preenchido em ex-cliente.
+  hs_churn_motivo_macro?: string | null;
+  hs_churn_motivo_micro?: string | null;
+  hs_churn_motivo_texto?: string | null;
+  hs_churn_setor?: string | null;
   // Quando o sync passou por este cliente. NULL = fora do recorte do sync (ou
   // ele ainda nao rodou); distingue "sem comanda" de "sem dado".
   hs_uso_sincronizado_em: string | null;

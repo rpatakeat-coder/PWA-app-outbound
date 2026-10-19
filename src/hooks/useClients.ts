@@ -38,6 +38,8 @@ export const CLIENT_LIST_COLUMNS = [
   'hs_etapa_uso', 'hs_situacao', 'hs_qtd_comandas', 'hs_ultima_comanda_em',
   'hs_uso_sincronizado_em', 'hs_cancelamento_solicitado_em',
   'hs_stage_entered_at', 'hs_last_activity_at',
+  // 0221: o motivo do cancelamento (só o cartão lê; fora da carga do mapa)
+  'hs_churn_motivo_macro', 'hs_churn_motivo_micro', 'hs_churn_motivo_texto', 'hs_churn_setor',
   'conta_alvo_place_id', 'conta_alvo_rating', 'conta_alvo_reviews',
   'conta_alvo_dismissed', 'conta_alvo_dismissed_at',
   'conta_alvo_dismissed_by', 'conta_alvo_dismissed_by_name',
@@ -71,6 +73,7 @@ const SO_DO_CARTAO_OU_SEM_USO = new Set([
   'created_at', 'updated_at', 'hs_etapa_uso', 'hs_ultima_comanda_em', 'hs_uso_sincronizado_em',
   'hs_cancelamento_solicitado_em', 'hs_stage_entered_at', 'hs_last_activity_at',
   'origem_detalhe', 'entrou_em', 'motor_conferido_em',
+  'hs_churn_motivo_macro', 'hs_churn_motivo_micro', 'hs_churn_motivo_texto', 'hs_churn_setor',
 ]);
 export const CLIENT_MAP_COLUMNS = CLIENT_LIST_COLUMNS.split(',').filter((c) => !SO_DO_CARTAO_OU_SEM_USO.has(c)).join(',');
 
