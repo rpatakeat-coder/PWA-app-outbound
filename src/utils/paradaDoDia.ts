@@ -51,11 +51,12 @@ export async function porNoDia(sellerId: string, dia: string, clientId: string):
 }
 
 /** Tira o lead do dia. Parada já feita não se tira (a visita aconteceu). */
-export async function tirarDoDia(sellerId: string, dia: string, clientId: string): Promise<number> {
+export async function tirarDoDia(sellerId: string, dia: string, clientId: string, motivo?: 'fechado' | 'sem_tempo' | 'outro_dia'): Promise<number> {
   const rota = await rotaDoDia(sellerId, dia, false);
   if (!rota) return 0;
+  // o motivo (0220) só vai quando foi perguntado: quem tira pelo mapa ou pela folha segue como antes
   const { data, error } = await supabase.from('field_route_stops')
-    .update({ status: 'removed' }).eq('route_id', rota).eq('client_id', clientId)
+    .update(motivo ? { status: 'removed', motivo_remocao: motivo } : { status: 'removed' }).eq('route_id', rota).eq('client_id', clientId)
     .in('status', ['planned', 'skipped']).select('id');
   if (error) throw error;
   return (data ?? []).length;

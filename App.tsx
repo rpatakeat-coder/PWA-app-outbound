@@ -9005,11 +9005,7 @@ function MainApp() {
       ) : modoNovo ? (
         (() => { const agendaNova = (
         <View style={{ flex: 1 }}>
-        {janelaDasLigacoes && (
-          <View style={{ paddingHorizontal: layout.ehLargo ? 0 : 12, paddingTop: 10 }}>
-            <FaixaHoraDasLigacoes ate={janelaDasLigacoes.ate} followups={janelaDasLigacoes.followups} quentes={janelaDasLigacoes.quentes} aoAbrir={() => { setPedidoDaFila({ acao: 'fila', deal: null, origem: 'janela', n: Date.now() }); irParaAba('tasks'); }} />
-          </View>
-        )}
+        {/* a hora das ligações vira aviso de Informação dentro da lista (handoff Agenda do App, 19/10/26) */}
         <AgendaNovoScreen
           key={agendaDiaInicial ?? 'hoje'}
           aoMarcarProximoPasso={async (id) => {

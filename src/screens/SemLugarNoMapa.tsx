@@ -26,7 +26,7 @@ export default function SemLugarNoMapa({ dia }: { dia: string }) {
   if (!itens.length) return null;
   return (
     <View style={s.caixa}>
-      <Text style={s.titulo}>{`NO PLANO, SEM LUGAR NO MAPA · ${itens.length}`}</Text>
+      <Text style={s.titulo}>{`SEM ENDEREÇO NO MAPA · ${itens.length}`}</Text>
       <Text style={s.ajuda}>Estão no seu Planejamento e o gestor conta, mas o negócio não tem endereço no HubSpot: o app não consegue pôr na rota. Ponha a rua no negócio e o pino aparece.</Text>
       {itens.map((x) => {
         const deal = /^[cr]-\d+$/.test(x.item_id) ? x.item_id.slice(2) : null;
