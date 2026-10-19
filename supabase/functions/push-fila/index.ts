@@ -21,7 +21,7 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { feriadosNacionais, ehDiaUtil, secaoDoItem, quenteEsfriando } from '../_compartilhado/filaDoDinheiro.ts';
+import { feriadosNacionais, ehDiaUtil, secaoDoItem, quenteEsfriando, tituloDoCard } from '../_compartilhado/filaDoDinheiro.ts';
 import { b64u, cifrarWebPush, jwtVapid } from '../_compartilhado/webPush.ts';
 
 const cors = {
@@ -89,7 +89,7 @@ const pl = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : var
 // a URL que o aviso abre: o app decide (abre a fila, disca ou abre o WhatsApp e, na volta, o Como foi)
 const urlApp = (acao: string, deal?: string) => `/?fila=${acao}${deal ? `&deal=${encodeURIComponent(deal)}` : ''}&origem=push`;
 
-type Item = { dealId: string; negocio: string; titulo?: string; etapaId: string; venceu: boolean; prazo: string | null; motivo: string; grupo: string; porque: string; score: number; telefone?: string | null };
+type Item = { dealId: string; negocio: string; titulo?: string; etapaId: string; venceu: boolean; prazo: string | null; motivo: string; grupo: string; porque: string; score: number; telefone?: string | null; verbo?: string; pessoa?: string | null; papel?: string | null };
 
 async function filaDe(uid: string, segredo: string): Promise<{ itens: Item[]; hoje: string } | null> {
   const r = await fetch(`${URL_SUPA}/functions/v1/fila-tarefas?forceFunctionRegion=us-west-2`, {
@@ -102,58 +102,63 @@ async function filaDe(uid: string, segredo: string): Promise<{ itens: Item[]; ho
   return d && Array.isArray(d.itens) ? { itens: d.itens as Item[], hoje: String(d.hoje ?? hojeBRT()) } : null;
 }
 
-function montarAviso(momento: string, f: { itens: Item[]; hoje: string }, combinados: number, pct: { meu: number | null; media: number | null }, jaMandados: Set<string>): { aviso: Aviso; tipo: string; ref: string } | null {
+/* O AVISO QUE FAZ FAZER (Julyan, 19/10/26: "tem que ser algo melhor, que faça eles fazerem as
+   tarefas"). Antes o aviso contava ("Faltam 6 para zerar a fila", "Seu gestor vê 0%, a média do
+   time é 5%") e o executivo não sabia o que fazer ao ler. Agora cada aviso é UM negócio: o título
+   diz qual restaurante e o que fazer ("Misses Cakes · Ligar para Patricia"), o texto diz por quê
+   em uma linha, e o toque abre o cartão dele na fila, pronto para os 3 toques. A contagem vira
+   rodapé, e a comparação com o gestor e com o time saiu (ela constrange, não move). */
+function montarAviso(momento: string, f: { itens: Item[]; hoje: string }, combinados: number, _pct: { meu: number | null; media: number | null }, jaMandados: Set<string>): { aviso: Aviso; tipo: string; ref: string } | null {
   const { itens, hoje } = f;
   const abertos = itens.filter((i) => secaoDoItem(i as never) !== 'sem_passo');
-  const nAbertos = abertos.length + combinados;
-  /* A REGRA É ZERO (Julyan, 17/10/26: "nada sem passo, focar nos quentes"): o Sem próximo passo não
-     entra no % do gestor, mas a fila só zera sem ele; os avisos dizem quantos são e o das 18:05 sai
-     mesmo quando só sobrou ele. */
   const semPasso = itens.length - abertos.length;
-  const nTotal = nAbertos + semPasso;
-  const doSemPasso = semPasso ? ` ${pl(semPasso, 'negócio sem próximo passo', 'negócios sem próximo passo')}.` : '';
-  const quentes = itens.filter((i) => quenteEsfriando(i as never, hoje)).sort((a, b) => b.score - a.score);
-  const topo = quentes[0] ?? abertos[0] ?? null;
-  const nomeDe = (i: Item) => i.negocio || i.titulo || 'o primeiro da fila';
-  const ligar = (i: Item | null) => i ? [{ acao: 'ligar', titulo: `Ligar ${nomeDe(i)}`.slice(0, 40), url: urlApp('ligar', i.dealId) }] : [];
-  const abrir = { acao: 'fila', titulo: 'Abrir a fila', url: urlApp('fila') };
+  const nTotal = abertos.length + combinados + semPasso;
   if (nTotal === 0) return null; // fila zerada: nada
+  const quentes = itens.filter((i) => quenteEsfriando(i as never, hoje)).sort((a, b) => b.score - a.score);
+  const atrasados = itens.filter((i) => secaoDoItem(i as never) === 'atrasados').sort((a, b) => String(a.prazo).localeCompare(String(b.prazo)));
+  // quem vem primeiro: o quente esfriando, depois o atrasado mais antigo, depois a ordem do servidor
+  const topo = quentes[0] ?? atrasados[0] ?? abertos[0] ?? itens[0] ?? null;
+  if (!topo) return null;
+  const nome = (i: Item) => (i.negocio || i.titulo || 'o primeiro da fila').trim();
+  const fazer = (i: Item) => tituloDoCard({ verbo: (i.verbo ?? 'Ligar') as never, pessoa: i.pessoa ?? null, papel: i.papel ?? null, negocio: nome(i) });
+  const curto = (t: string, n: number) => (t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t);
+  const tituloDe = (i: Item) => curto(`${nome(i)} · ${fazer(i)}`, 64);
+  const porque = (i: Item) => (i.porque || '').replace(/\.$/, '');
+  const resto = (n: number) => (n > 0 ? ` Depois dele, mais ${pl(n, 'negócio', 'negócios')} na fila.` : ' É o último da fila.');
+  const botoes = (i: Item) => [
+    { acao: 'ligar', titulo: 'Ligar agora', url: urlApp('ligar', i.dealId) },
+    { acao: 'whatsapp', titulo: 'WhatsApp', url: urlApp('whatsapp', i.dealId) },
+  ];
 
   if (momento === '0830') {
-    const q = quentes.find((i) => !jaMandados.has(`quente:${i.dealId}`));
+    // o quente que esfria, um por dia por negócio; sem quente, o atrasado mais antigo
+    const q = quentes.find((i) => !jaMandados.has(`quente:${i.dealId}`)) ?? atrasados.find((i) => !jaMandados.has(`quente:${i.dealId}`));
     if (!q) return null;
-    const venc = q.prazo ? (q.venceu ? `Venceu ${diaSemana(q.prazo)} ${ddmm(q.prazo)}, há ${pl(diasEntre(q.prazo, hoje), 'dia', 'dias')}.` : 'Vence hoje.') : '';
     return {
       tipo: 'quente', ref: q.dealId,
-      aviso: { titulo: `${nomeDe(q)} está esfriando`, texto: `${venc} ${q.porque || ''}`.trim(), tag: `quente-${q.dealId}`, url: urlApp('cartao', q.dealId),
-        acoes: [{ acao: 'ligar', titulo: 'Ligar agora', url: urlApp('ligar', q.dealId) }, { acao: 'whatsapp', titulo: 'WhatsApp', url: urlApp('whatsapp', q.dealId) }] },
+      aviso: { titulo: tituloDe(q), texto: curto(`Comece o dia por ele: ${porque(q).charAt(0).toLowerCase()}${porque(q).slice(1)}.`, 140), tag: `quente-${q.dealId}`, url: urlApp('cartao', q.dealId), acoes: botoes(q) },
     };
   }
   if (momento === '1230') {
-    if (nAbertos === 0 && !semPasso) return null;
     return {
       tipo: 'janela', ref: '1230',
-      aviso: { titulo: 'Hora das ligações · 15 min', texto: `${pl(nAbertos, 'follow-up', 'follow-ups')}, ${pl(quentes.length, 'quente', 'quentes')}.${topo ? ` Comece pelo ${nomeDe(topo)}.` : ''}${doSemPasso}`,
-        tag: 'janela', url: urlApp('fila'), acoes: [...ligar(topo), abrir] },
+      aviso: { titulo: tituloDe(topo), texto: curto(`Hora das ligações. ${porque(topo)}.${resto(nTotal - 1)}`, 140), tag: 'janela', url: urlApp('cartao', topo.dealId), acoes: botoes(topo) },
     };
   }
   if (momento === '1730') {
-    const gestor = pct.meu != null ? `Seu gestor vê ${pct.meu}% dos follow-ups de hoje.` : '';
-    const media = pct.media ? ` A média do time é ${pct.media}%.` : '';
     return {
       tipo: 'faltam', ref: '1730',
-      aviso: { titulo: `Faltam ${nTotal} para zerar a fila`, texto: (`${quentes.length ? `${pl(quentes.length, 'quente esfriando', 'quentes esfriando')}. ` : ''}${gestor}${media}`.trim() + doSemPasso).trim() || 'Feche o dia com a fila zerada.',
-        tag: 'janela', url: urlApp('fila'), acoes: [abrir, ...ligar(topo)] },
+      aviso: { titulo: tituloDe(topo), texto: curto(`Antes de sair. ${porque(topo)}.${resto(nTotal - 1)}`, 140), tag: 'janela', url: urlApp('cartao', topo.dealId), acoes: botoes(topo) },
     };
   }
   if (momento === '1805') {
-    const atrasados = itens.filter((i) => secaoDoItem(i as never) === 'atrasados').length;
-    const velho = itens.filter((i) => i.venceu && i.prazo).sort((a, b) => String(a.prazo).localeCompare(String(b.prazo)))[0];
-    const extra = velho?.prazo ? ` ${nomeDe(velho)} faz ${pl(diasEntre(velho.prazo, hoje), 'dia', 'dias')} sem resposta.` : '';
+    const velho = atrasados[0] ?? topo;
+    const dias = velho.prazo ? diasEntre(velho.prazo, hoje) : 0;
+    const quanto = dias > 0 ? `${pl(dias, 'dia', 'dias')} sem resposta` : porque(velho);
     return {
       tipo: 'naozerou', ref: '1805',
-      aviso: { titulo: 'A fila não zerou hoje', texto: `Amanhã começa com ${pl(atrasados, 'atrasado', 'atrasados')}${semPasso ? ` e ${pl(semPasso, 'sem próximo passo', 'sem próximo passo')}` : ''}.${extra}`,
-        tag: 'fim-do-dia', url: urlApp('fila'), acoes: [{ acao: 'fila', titulo: 'Resolver agora · 5 min', url: urlApp('fila') }, { acao: 'fechar', titulo: 'Amanhã às 08:00', url: '' }] },
+      aviso: { titulo: tituloDe(velho), texto: curto(`Ainda dá tempo: ${quanto}. Se ficar para amanhã, a fila começa com ${pl(Math.max(atrasados.length, 1), 'atrasado', 'atrasados')}.`, 140),
+        tag: 'fim-do-dia', url: urlApp('cartao', velho.dealId), acoes: botoes(velho) },
     };
   }
   return null;
