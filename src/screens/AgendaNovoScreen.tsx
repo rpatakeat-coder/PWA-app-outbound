@@ -766,7 +766,7 @@ export default function AgendaNovoScreen({
       {dia === hoje && !!aoAbrirNaFila && JANELAS_LIGACAO.map((j) => (
         <View key={`janela-${j}`} style={s.linhaJanela}>
           <Text style={s.horaJanela}>{j}</Text>
-          <Text style={s.subLinha} numberOfLines={1}>{`Hora das ligações · ${MINUTOS_DA_JANELA} min · os follow-ups da fila`}</Text>
+          <Text style={[s.subLinha, { flex: 1 }]} numberOfLines={2}>{`Hora das ligações · ${MINUTOS_DA_JANELA} min`}</Text>
         </View>
       ))}
       {sep.ligacoes.map((k) => linhaDepois({ k: `c-${k.id}`, tipo: 'compromisso', ordem: 0, hora: k.hora, comp: k }))}
@@ -1017,7 +1017,8 @@ const s = StyleSheet.create({
   botaoSecTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
   selo: { fontSize: 12, fontWeight: '700', color: 'var(--tint-blue-text)', marginTop: 2 },
   casadosAviso: { fontSize: 12.5, fontWeight: '600', color: 'var(--tint-green-text)' },
-  fora: { gap: 10, padding: 10, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: 'var(--border)' },
+  // sem padding lateral: a caixa tracejada dentro da coluna cortava o nome ("Kadô Sushi Ba…") a 390 px
+  fora: { gap: 10, paddingVertical: 6, paddingHorizontal: 4, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: 'var(--border)' },
   secao: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: 'var(--text-faint)', marginTop: 4 },
   linha: { borderRadius: 12, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border-soft)' },
   linhaAberta: { borderColor: 'var(--border)' },

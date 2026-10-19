@@ -9,6 +9,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { CampoData } from '../components/CampoData';
 import { Painel } from '../components/Painel';
 import { Toast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
@@ -50,6 +51,14 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
   const horaAgora = agoraBRT().getUTCHours();
   const dias = useMemo(() => diasPlanejaveis(hoje, 5), [hoje]);
   const isos = dias.map((d) => d.iso);
+  /* OUTRO DIA (Julyan, 19/10/26: "se o lead quiser o próximo passo para 15 dias, os executivos não
+     conseguem escolher a data"): a folha mostrava só 5 dias úteis. Agora lê o plano dos próximos ~3
+     meses (para achar o pino já marcado longe e mover, não duplicar) e o "Outro dia" abre o
+     calendário do aparelho. */
+  const isosLeitura = useMemo(() => diasPlanejaveis(hoje, 65).map((d) => d.iso), [hoje]);
+  const ultimoDia = isosLeitura[isosLeitura.length - 1];
+  const [outroAberto, setOutroAberto] = useState(false);
+  const [avisoOutro, setAvisoOutro] = useState<string | null>(null);
   const nome = client.empresa?.trim() || client.nome;
   const sugerida = acaoSugerida({ etapa: etapaCodigo, tipoPino, cliente: client.status === 'cliente' || client.status === 'ganho_fs' });
 
@@ -65,11 +74,11 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
   useEffect(() => {
     if (!visivel || !uid) return;
     let vivo = true;
-    setPlano(null); setErroLeitura(null); setAntes(null); setAcao(acaoInicial ?? sugerida.id); setHora(null); setOutraHora(''); setDia(null);
-    lerPlanoDosDias(uid, isos).then((p) => {
+    setPlano(null); setErroLeitura(null); setAntes(null); setAcao(acaoInicial ?? sugerida.id); setHora(null); setOutraHora(''); setDia(null); setOutroAberto(false); setAvisoOutro(null);
+    lerPlanoDosDias(uid, isosLeitura).then((p) => {
       if (!vivo) return;
       setPlano(p);
-      const onde = ondeEsta(client.id, p, isos);
+      const onde = ondeEsta(client.id, p, isosLeitura);
       setAntes(onde);
       if (onde) {
         setDia(onde.dia);
@@ -85,7 +94,9 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
   const sugestaoDia = useMemo(() => (plano ? diaSugerido({ dias: isos, hoje, horaBRT: horaAgora, ponto, contagem, pontosDoDia: plano.paradas }) : null), [plano]); // eslint-disable-line react-hooks/exhaustive-deps
   const escolhido = dia ?? sugestaoDia?.dia ?? isos[0];
   const amanha = new Date(Date.parse(`${hoje}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
-  const nomeDoDia = (d: string) => (d === hoje ? 'hoje' : d === amanha ? 'amanhã' : SEMANA_LONGA[new Date(`${d}T12:00:00Z`).getUTCDay()]);
+  // fora da semana à vista, o nome do dia sozinho é ambíguo: vai com a data ("seg 03/11")
+  const nomeDoDia = (d: string) => (d === hoje ? 'hoje' : d === amanha ? 'amanhã' : isos.includes(d) ? SEMANA_LONGA[new Date(`${d}T12:00:00Z`).getUTCDay()] : rotuloDoDia(d));
+  const foraDaSemana = !isos.includes(escolhido);
   const a = acaoPorId(acao)!;
   const contaAlvo = !client.id_hubspot && !!client.lead_prospeccao_id;
   /* TODO LEAD PLANEJADO ENTRA NO FUNIL (16/10/26): pino sem negócio ganha o negócio em Prospecção
@@ -95,7 +106,7 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
   const terNegocio = !!client.id_hubspot || funil.criar;
   const jaNoDia = !!antes && antes.dia === escolhido;
   const cheio = !jaNoDia && (contagem[escolhido] ?? 0) >= LIMITE_DO_DIA && a.ehParada;
-  const alternativo = cheio ? diaComEspaco(isos, contagem, escolhido) : null;
+  const alternativo = cheio ? diaComEspaco(foraDaSemana ? isosLeitura.filter((d) => d >= escolhido) : isos, contagem, escolhido) : null;
   const diaFinal = cheio ? alternativo : escolhido;
   // parada sem chip gravado (anterior a 0175): o chip que a folha mostra é o sugerido, e isso não é mudança
   const acaoAntes = antes && acaoPorId(antes.acao) ? antes.acao : sugerida.id;
@@ -258,7 +269,27 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
                     );
                   })}
                 </View>
-                {sugestaoDia && !antes && !cheio && <Text style={s.sugerido}>{`Sugerido: ${nomeDoDia(sugestaoDia.dia)} ${sugestaoDia.motivo}`}</Text>}
+                <Pressable accessibilityRole="button" accessibilityState={{ selected: foraDaSemana, expanded: outroAberto }} onPress={() => setOutroAberto((v) => !v)}
+                  style={[s.outroDia, foraDaSemana && s.diaAtivo]}>
+                  <Text style={[s.outroDiaTexto, foraDaSemana && s.diaTextoAtivo]}>{foraDaSemana ? `Outro dia · ${rotuloDoDia(escolhido)}${contagem[escolhido] ? ` · ${contagem[escolhido]} ${contagem[escolhido] === 1 ? 'parada' : 'paradas'}` : ''}` : 'Outro dia · escolher no calendário'}</Text>
+                </Pressable>
+                {outroAberto && (
+                  <View style={{ gap: 4 }}>
+                    <CampoData valor={foraDaSemana ? escolhido : ''} minimo={hoje} rotulo="Escolher o dia do próximo passo" aoMudar={(v) => {
+                      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
+                      /* a grade do Cockpit é de segunda a sexta: sábado e domingo vão para a segunda */
+                      const dow = new Date(`${v}T12:00:00Z`).getUTCDay();
+                      const d = dow === 6 ? new Date(Date.parse(`${v}T12:00:00Z`) + 2 * 86400000).toISOString().slice(0, 10)
+                        : dow === 0 ? new Date(Date.parse(`${v}T12:00:00Z`) + 86400000).toISOString().slice(0, 10) : v;
+                      if (d < hoje) return;
+                      if (d > ultimoDia) { setAvisoOutro(`Até ${rotuloDoDia(ultimoDia)} (uns 3 meses). Mais longe que isso, marque uma data mais perto e remarque depois.`); return; }
+                      setAvisoOutro(d !== v ? `Fim de semana não entra no plano: ficou para ${rotuloDoDia(d)}.` : null);
+                      setDia(d);
+                    }} />
+                    {!!avisoOutro && <Text style={s.ajuda}>{avisoOutro}</Text>}
+                  </View>
+                )}
+                {sugestaoDia && !antes && !cheio && !foraDaSemana && <Text style={s.sugerido}>{`Sugerido: ${nomeDoDia(sugestaoDia.dia)} ${sugestaoDia.motivo}`}</Text>}
                 {cheio && (
                   <View style={s.faixaAmbar}>
                     <Text style={s.faixaAmbarTitulo}>{`${nomeDoDia(escolhido).replace(/^./, (c) => c.toUpperCase())} já tem ${LIMITE_DO_DIA} paradas`}</Text>
@@ -330,6 +361,8 @@ const s = StyleSheet.create({
   diaNome: { fontSize: 12.5, fontWeight: '800', color: 'var(--text)' },
   diaTextoAtivo: { color: 'var(--tint-red-text)' },
   diaConta: { fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' },
+  outroDia: { minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  outroDiaTexto: { fontSize: 13.5, fontWeight: '700', color: 'var(--text)', textAlign: 'center' },
   pontoSugerido: { position: 'absolute', top: 6, right: 6, width: 7, height: 7, borderRadius: 4, backgroundColor: 'var(--vermelho-acao)' },
   sugerido: { fontSize: 12.5, fontWeight: '700', color: 'var(--tint-red-text)' },
   tomAviso: { color: 'var(--tint-amber-text)' },

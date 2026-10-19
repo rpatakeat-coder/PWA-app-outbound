@@ -24,6 +24,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { supabase } from '../integrations/supabase/client';
+import { CampoData } from '../components/CampoData';
 import { Toast } from '../components/Toast';
 import { IconCheck } from '../components/icons';
 import { useLayout } from '../hooks/useLayout';
@@ -294,6 +295,15 @@ function RegistroInline({ item, hoje, feriados, grande = false, discouEm, aoSalv
                   })}
                 </View>
               ))}
+              {/* MAIS LONGE QUE 3 SEMANAS (19/10/26): o cliente pede "me liga daqui a um mês" e o
+                  calendário parava em 15 dias úteis. O calendário do aparelho aceita qualquer dia útil. */}
+              <Text style={s.ajudaMiuda}>Mais longe: escolha no calendário</Text>
+              <CampoData valor={volta && !semanas.some((l) => l.includes(volta)) ? volta : ''} minimo={proximoDiaUtil(hoje, 1, feriados)} rotulo="Escolher outro dia para o próximo passo"
+                aoMudar={(v) => {
+                  if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || v <= hoje) return;
+                  // fim de semana ou feriado vai para o próximo dia útil
+                  setVolta(ehDiaUtil(v, feriados) ? v : proximoDiaUtil(v, 1, feriados));
+                }} />
             </View>
           )}
           {!!volta && (() => {
