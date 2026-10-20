@@ -22,6 +22,7 @@ import { useParaFechar } from './SemDesfecho';
 import { Aviso, LinhaFeito, LinhaParada, LinhaTarefa, MarcoDaJanela, PlacarDoDia, ProximaParada, TituloDeLista, type DadosDaLinha, type DadosDaProxima, type DadosDaTarefa, type ItemDoAviso } from './agenda/PecasDaAgenda';
 import { opcoesDaFila } from './FilaTarefasScreen';
 import { lerFeitas } from '../utils/filaFeitas';
+import { oQueFazer } from '../utils/textoDaTarefa';
 import * as Location from 'expo-location';
 import SemLugarNoMapa from './SemLugarNoMapa';
 import { fetchOptimizedTrip } from '../utils/routing';
@@ -750,7 +751,8 @@ export default function AgendaNovoScreen({
         quente: !!etapa && ETAPAS_QUENTES_AGENDA.has(etapa),
         linha2: [contato, rotuloDaEtapa(etapa)].filter(Boolean).join(' · ') || null,
         linha3: [marcada ? null : 'sem hora', ondeCombinou(f) ?? (marcada ? (k.fonte === 'hubspot' ? 'tarefa do HubSpot' : 'retorno da Agenda do app') : 'entra na hora das ligações')].filter(Boolean).join(' · '),
-        linha4: oQue ? `${verbo}: ${oQue}` : reuniao ? 'Confirmar a reunião no WhatsApp' : null,
+        // o mesmo texto do cartão na aba Tarefas (textoDaTarefa); sem o negócio na fila, o verbo + o assunto
+        linha4: f?.assunto ? oQueFazer(f.assunto, k.nome ?? '', '') || null : oQue ? `${verbo}: ${oQue}` : reuniao ? 'Confirmar a reunião no WhatsApp' : null,
       };
       return { k: k.id, min, ord: 1, nTarefa: 1, el: (
         <LinhaTarefa key={k.id} d={d}
@@ -880,7 +882,7 @@ export default function AgendaNovoScreen({
             {placar}
             {avisoDaNoite}
             {(temTarefaNaLista || (momento === 'noite' ? ficaramNoite.length > 0 : linhasParadas.length > 0)) && listaDoDia(
-              momento === 'noite' ? `Ficaram para trás · ${ficaramNoite.length}` : 'Depois',
+              momento === 'noite' ? `Ficaram para trás · ${ficaramNoite.length}` : linhasParadas.length ? 'Depois' : 'Hoje',
               momento === 'noite' ? ficaramNoite.map((p) => ({ p, hora: null, numero: estado.indexOf(p) + 1 })) : linhasParadas,
               hoje, momento === 'noite')}
             {blocoHubspot}

@@ -50,6 +50,7 @@ import {
   pedidoDaVolta, rotuloComoFoi, textoDoSalvar, type ComoFoiFila,
 } from '../utils/registroDaFila';
 import { AJUDA_MOTIVO, MOTIVOS_QUE_EXIGEM_TEXTO, rotuloDoMotivo } from '../utils/fichaDeRua';
+import { oQueFazer } from '../utils/textoDaTarefa';
 
 // ---- o que o servidor devolve ---------------------------------------------------------
 export type CardDaFila = {
@@ -357,23 +358,7 @@ const podeSair = () => (pedidoDeSaidaAtual ? pedidoDeSaidaAtual() : true);
 
 // a regra das seções mora no módulo da fila, junto do robô do push (17/10/26)
 const secaoDe = (i: CardDaFila): SecaoDaFila => secaoDoItem(i);
-/* O QUE FOI COMBINADO SEM REPETIÇÃO (print de 19/10: "Visita - Visita"): o assunto do HubSpot é "Tipo - texto";
-   quando o texto só repete o tipo ou o nome do restaurante, fica o tipo. */
-const semAcento = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-function assuntoLimpo(assunto: string | null, negocio: string): string | null {
-  if (!assunto) return null;
-  // o separador tem espaço dos dois lados: o hífen de "Follow-up" não separa
-  const m = assunto.match(/^\s*(.+?)\s+[-–·]\s+(.+)$/);
-  if (!m) return assunto.trim();
-  const tipo = m[1].trim();
-  // "Demo - Demo · Cantina": o tipo repetido no começo do texto sai
-  let resto = m[2].trim();
-  const rep = new RegExp(`^${tipo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[·\\-–]\\s*`, 'i');
-  if (rep.test(resto)) resto = resto.replace(rep, '').trim();
-  const r = semAcento(resto), n = semAcento(negocio);
-  if (r === semAcento(tipo) || r === n || (r.length >= 4 && n.startsWith(r))) return tipo;
-  return `${tipo} · ${resto}`;
-}
+// o texto da tarefa (assuntoLimpo, oQueFazer) é o mesmo da Agenda: src/utils/textoDaTarefa.ts
 
 // ---- a tela -----------------------------------------------------------------------------
 type Props = {
@@ -731,10 +716,6 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
 
   // ---- o cartão único (2.3) ----
   const contatoDe = (pessoa: string | null, papel: string | null) => (pessoa ? (papel ? `${pessoa}, ${papel.toLowerCase()}` : pessoa) : null);
-  const oQueFazer = (assunto: string | null | undefined, negocio: string, titulo: string) => {
-    const a = assuntoLimpo(assunto ?? null, negocio);
-    return a ? a.replace(' · ', ': ') : titulo;
-  };
   const etapaDe = (id: string) => ETAPA[id] ?? { rotulo: 'Etapa', cor: 'var(--text-subtle)' };
   const ehVerboDeConversa = (v: string) => v === 'Ligar' || v === 'WhatsApp';
   /** Os três botões: o verbo combinado primeiro (cheio), o outro verbo, a terceira ação. */

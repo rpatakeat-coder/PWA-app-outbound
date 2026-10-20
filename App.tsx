@@ -7831,7 +7831,7 @@ function MainApp() {
           const atr = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, agora) === 'atrasadas').length;
           const hj = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, agora) === 'hoje').length;
           void atr; void hj;
-          return { titulo: 'Tarefas', sub: naFila != null ? `${naFila} negócios precisam de você` : 'negócios que precisam de você' };
+          return { titulo: 'Tarefas', sub: naFila != null ? `${naFila} ${naFila === 1 ? 'tarefa' : 'tarefas'} hoje` : 'negócios que precisam de você' };
         }
         return { titulo: 'Tarefas', sub: `${visibleTasksCount} ${visibleTasksCount === 1 ? 'cobrança aberta' : 'cobranças abertas'} · escalonamento D2 → D5` };
       }
@@ -8317,7 +8317,7 @@ function MainApp() {
                       if (tarefasSemMedicao) return 'sem medição · ' + tarefasSemMedicao;
                       if (tarefasErro) return 'não consegui ler o HubSpot agora';
                       if (!tarefasMedidas) return 'lendo as tarefas do HubSpot…';
-                      if (naFila != null) return `${naFila} negócios precisam de você`;
+                      if (naFila != null) return `${naFila} ${naFila === 1 ? 'tarefa' : 'tarefas'} hoje`;
                       const atr = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'atrasadas').length;
                       return `${atr} atrasadas · ${seloTarefas - atr} para hoje`;
                     })()
