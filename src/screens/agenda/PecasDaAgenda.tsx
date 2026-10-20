@@ -5,7 +5,7 @@
 // colunas iguais (no iPhone, texto ao lado de botão virava coluna de uma letra).
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { IconBook, IconCall, IconCar, IconCheck, IconChevronRight, IconClose, IconIdCard, IconLocation, IconWarning, IconWhatsapp } from '../../components/icons';
+import { IconBook, IconCall, IconCar, IconCheck, IconClose, IconIdCard, IconLocation, IconWarning, IconWhatsapp } from '../../components/icons';
 
 export const T = {
   surface: 'var(--surface)', s2: 'var(--surface-2)', s3: 'var(--surface-3)', border: 'var(--border)', forte: 'var(--stroke-strong)',
@@ -267,39 +267,60 @@ export function PlacarDoDia({ rotulo, feitas, meta, linhas, promessa }: {
   );
 }
 
-// ---- a linha de ligação / WhatsApp ----------------------------------------------------------------
-export function LinhaLigacao({ hora, nome, sub, whatsapp, acoes }: {
-  hora: string | null; nome: string; sub: string; whatsapp: boolean; acoes: AcaoDoAviso[];
-}) {
+// ---- a tarefa de ligar ou WhatsApp na lista do dia (Tarefas por dia, 2.5) ------------------------
+// O mesmo grid da parada (48 / 28 / texto / 44): disco vazado na cor da etapa com o ícone do verbo,
+// sem número de ordem, sem endereço e sem Cheguei. O texto abre o cartão na aba Tarefas; o botão
+// liga (ou abre o WhatsApp) e entra nos 3 toques.
+export type DadosDaTarefa = {
+  chave: string; nome: string; hora: string | null; marcada: boolean; whatsapp: boolean; corEtapa: string | null;
+  quente: boolean; linha2: string | null; linha3: string | null; linha4: string | null;
+};
+export function LinhaTarefa({ d, aoTocar, aoVerbo }: { d: DadosDaTarefa; aoTocar?: () => void; aoVerbo?: () => void }) {
+  const Icone = d.whatsapp ? IconWhatsapp : IconCall;
   return (
-    <View style={{ paddingTop: 4, paddingBottom: 8, gap: 8 }}>
+    <View style={st.linha}>
       <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
-        <Text style={[st.horaLinha, { fontWeight: '700', color: T.text }]}>{hora ?? ''}</Text>
-        <View style={[st.disco, { backgroundColor: T.s3 }]}>
-          {whatsapp ? <IconWhatsapp width={14} height={14} fill="var(--text)" /> : <IconCall width={14} height={14} fill="var(--text)" />}
+        <Text style={[st.horaLinha, d.marcada ? { fontWeight: '700', color: T.text } : { fontWeight: '500', color: T.subtle }]}>{d.hora ?? ''}</Text>
+        <View style={[st.disco, { borderWidth: 2, borderColor: d.corEtapa ?? T.forte, backgroundColor: 'transparent' }]}>
+          <Icone width={13} height={13} fill="var(--text)" />
         </View>
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Text style={st.nome14} numberOfLines={2}>{nome}</Text>
-          <Text style={st.sub12}>{sub}</Text>
-        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Abrir a tarefa de ${d.nome} na aba Tarefas`} disabled={!aoTocar} onPress={aoTocar} style={{ flex: 1, minWidth: 0, gap: 3 }}>
+          {/* o nome inteiro, sem reticências (teste do handoff: Restaurante e Pizzaria Sabor da Montanha Capixaba a 375 px) */}
+          <Text style={st.nome145}>{d.nome}</Text>
+          <View style={st.selos}>
+            {d.quente && <View style={[st.seloP, { backgroundColor: T.acao }]}><Text style={[st.seloPT, { color: '#FFFFFF' }]}>QUENTE</Text></View>}
+            <View style={[st.seloP, { backgroundColor: T.s3 }]}><Text style={[st.seloPT, { color: T.text }]}>{d.whatsapp ? 'WHATSAPP' : 'LIGAR'}</Text></View>
+          </View>
+          {!!d.linha2 && <Text style={st.sub12}>{d.linha2}</Text>}
+          {!!d.linha3 && <Text style={st.sub12}>{d.linha3}</Text>}
+          {!!d.linha4 && <Text style={st.objetivo}>{d.linha4}</Text>}
+        </Pressable>
+        {aoVerbo ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`${d.whatsapp ? 'WhatsApp' : 'Ligar'}: ${d.nome}`} onPress={aoVerbo} style={st.ir}>
+            <Icone width={18} height={18} fill="var(--text)" />
+          </Pressable>
+        ) : <View style={{ width: 44 }} />}
       </View>
-      {!!acoes.length && (
-        <View style={[st.recuo, { flexDirection: 'row', gap: 6 }]}>
-          {acoes.map((a) => (
-            <Pressable key={a.rotulo} accessibilityRole="button" onPress={a.onPress} style={[st.naFila, a.principal && { backgroundColor: T.acao, borderColor: T.acao }]}>
-              <Text style={[st.naFilaT, a.principal && { color: '#FFFFFF' }]}>{a.rotulo}</Text>
-              {a.rotulo === 'na fila' && <IconChevronRight width={15} height={15} fill="var(--text)" />}
-            </Pressable>
-          ))}
-        </View>
-      )}
+    </View>
+  );
+}
+
+/** O marco da hora das ligações dentro da lista: a hora na coluna 1 e a faixa nas colunas 2 a 4. */
+export function MarcoDaJanela({ de, ate, nNaFila }: { de: string; ate: string; nNaFila: number }) {
+  return (
+    <View style={[st.linha, { flexDirection: 'row', gap: 10, alignItems: 'center' }]}>
+      <Text style={[st.horaLinha, { paddingTop: 0, fontWeight: '700', color: T.info }]}>{de}</Text>
+      <View style={{ flex: 1, minWidth: 0, borderRadius: 10, backgroundColor: T.s3, paddingVertical: 8, paddingHorizontal: 12, gap: 1 }}>
+        <Text style={[st.nome14, { fontSize: 13 }]}>Hora das ligações</Text>
+        <Text style={st.sub12}>{`até ${ate} · ${nNaFila} na fila`}</Text>
+      </View>
     </View>
   );
 }
 
 // ---- Feito hoje -----------------------------------------------------------------------------------
-export function LinhaFeito({ hora, nome, sub, proximo, guardado, aoMarcar, aoTocar }: {
-  hora: string; nome: string; sub: string; proximo: string | null; guardado?: boolean; aoMarcar?: () => void; aoTocar?: () => void;
+export function LinhaFeito({ hora, nome, sub, proximo, guardado, selo, aoMarcar, aoTocar }: {
+  hora: string; nome: string; sub: string; proximo: string | null; guardado?: boolean; selo?: string | null; aoMarcar?: () => void; aoTocar?: () => void;
 }) {
   return (
     <View style={st.linha}>
@@ -314,6 +335,7 @@ export function LinhaFeito({ hora, nome, sub, proximo, guardado, aoMarcar, aoToc
             <Text style={[st.feitoP, { color: proximo ? T.okTx : T.vtx }]}>{proximo ? `Próximo passo: ${proximo}` : 'Sem próximo passo'}</Text>
           </View>
           {guardado && <View style={[st.seloP, { backgroundColor: T.s3, alignSelf: 'flex-start' }]}><Text style={[st.seloPT, { color: T.muted }]}>guardado no aparelho</Text></View>}
+          {!!selo && <View style={[st.seloP, { backgroundColor: T.s3, alignSelf: 'flex-start' }]}><Text style={[st.seloPT, { color: T.muted }]}>{selo}</Text></View>}
         </Pressable>
       </View>
       {!proximo && !!aoMarcar && (

@@ -15,7 +15,7 @@ export type FichaDoDia = {
   client_id: string | null; ocorrido_em: string; como_foi: string; proximo: string | null; proximo_em: string | null;
   proximo_tipo: string | null; etapa_antes: string | null; etapa_depois: string | null; decisor_nome: string | null; motivo_perdido: string | null;
 };
-export type RegistroDoDia = { id: string; deal_id: string | null; negocio: string | null; hora: string | null; resultado: string | null; volta: string | null; perdido: string | null; criada_em: string };
+export type RegistroDoDia = { id: string; deal_id: string | null; negocio: string | null; hora: string | null; resultado: string | null; volta: string | null; perdido: string | null; criada_em: string; origem?: string | null; concluiu_tarefa?: boolean | null };
 
 export type ItemFeito = {
   chave: string;
@@ -31,6 +31,8 @@ export type ItemFeito = {
   /** "Próximo passo: Reunião qui 08/10" */
   proximo: string | null;
   faltaRegistro: boolean;
+  /** O selo do mesmo item nas duas telas (Tarefas por dia, 2.6). */
+  selo?: string | null;
 };
 
 const COMO_FOI: Record<string, string> = {
@@ -103,7 +105,8 @@ export function montarFeitoNoDia(p: {
     const volta = r.perdido ? `Encerrado: ${r.perdido}` : r.volta ? `Voltar ${diaCurto(r.volta)}` : null;
     itens.push({
       chave: `t-${r.id}`, quando: r.criada_em, hora: r.hora || horaBRT(r.criada_em), tipo: 'tarefa', clientId: null,
-      nome: r.negocio || 'Negócio', linha1: 'Registrado na Tarefas', linha2: r.resultado, proximo: volta, faltaRegistro: false,
+      nome: r.negocio || 'Negócio', linha1: r.origem === 'agenda' ? 'Registrado pela Agenda' : 'Registrado na Tarefas', linha2: r.resultado, proximo: volta, faltaRegistro: false,
+      selo: r.concluiu_tarefa ? 'tarefa concluída no HubSpot · saiu da aba Tarefas' : null,
     });
   }
   return itens.sort((a, b) => Date.parse(a.quando) - Date.parse(b.quando));

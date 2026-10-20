@@ -9,7 +9,7 @@
 //
 // `Cheguei` na próxima parada é o MESMO check-in do mapa (GPS novo, "Está na porta?", ficha de
 // rua): a tela só leva ao mapa e dispara o fluxo de lá.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
@@ -19,7 +19,9 @@ import { supabase } from '../integrations/supabase/client';
 import RegistrarTarefa, { type TarefaParaRegistrar } from './RegistrarTarefa';
 import { JANELAS_LIGACAO, MINUTOS_DA_JANELA } from '../utils/horaDasLigacoes';
 import { useParaFechar } from './SemDesfecho';
-import { Aviso, LinhaFeito, LinhaLigacao, LinhaParada, PlacarDoDia, ProximaParada, TituloDeLista, type DadosDaLinha, type DadosDaProxima, type ItemDoAviso } from './agenda/PecasDaAgenda';
+import { Aviso, LinhaFeito, LinhaParada, LinhaTarefa, MarcoDaJanela, PlacarDoDia, ProximaParada, TituloDeLista, type DadosDaLinha, type DadosDaProxima, type DadosDaTarefa, type ItemDoAviso } from './agenda/PecasDaAgenda';
+import { opcoesDaFila } from './FilaTarefasScreen';
+import { lerFeitas } from '../utils/filaFeitas';
 import * as Location from 'expo-location';
 import SemLugarNoMapa from './SemLugarNoMapa';
 import { fetchOptimizedTrip } from '../utils/routing';
@@ -86,7 +88,7 @@ type Props = {
   /** O dia trocado pela barra do Planejar volta para cá. */
   diaControlado?: string | null;
   /** P4 (handoff Tarefas do App): ligação e WhatsApp do HubSpot se registram na fila, no cartão do negócio. */
-  aoAbrirNaFila?: (dealId: string, rotulo: string) => void;
+  aoAbrirNaFila?: (dealId: string, rotulo: string, discou?: { em: number; canal: 'ligacao' | 'whatsapp' }) => void;
   /** A folha "Marcar o próximo passo" (a mesma do pino e da aba Tarefas). */
   aoMarcarProximoPasso?: (clientId: string) => void;
 };
@@ -117,6 +119,10 @@ const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const horaBRT = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 const soDigitos = (t: string) => t.replace(/\D+/g, '');
 const com55 = (t: string) => { const d = soDigitos(t); return d.length <= 11 ? `55${d}` : d; };
+
+/* A VOLTA PARA O MESMO PONTO (Tarefas por dia, 2.6): a Agenda desmonta ao trocar de aba; a rolagem
+   fica guardada aqui e volta quando a pessoa sai para a Tarefas e retorna pela barra (até 10 min). */
+const rolagem = { dia: '', y: 0, voltarAte: 0 };
 
 type Linha =
   | { k: string; tipo: 'parada'; ordem: number; hora: string | null; numero: number; p: FieldRouteStopWithClient }
@@ -156,6 +162,7 @@ export default function AgendaNovoScreen({
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
   const queryClient = useQueryClient();
+  const rolador = useRef<ScrollView>(null);
   // Concluídas nesta sessão: somem da lista na hora (o Desfazer as devolve).
   const [concluidas, setConcluidas] = useState<Set<string>>(new Set());
   const cores = useIconColors();
@@ -174,9 +181,11 @@ export default function AgendaNovoScreen({
   };
   const somaDias = (iso: string, n: number) => { const t = new Date(`${iso}T12:00:00Z`); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
   const semanaDoDia = (iso: string) => (iso >= segundaDe(hoje, 1) ? 1 : 0);
-  const [semanaVista, setSemanaVista] = useState(diaInicial ? semanaDoDia(diaInicial) : 0);
+  // voltando da Tarefas pela barra: o mesmo dia que estava aberto
+  const diaDaVolta = !diaInicial && rolagem.voltarAte > Date.now() && rolagem.dia >= hoje ? rolagem.dia : null;
+  const [semanaVista, setSemanaVista] = useState(diaInicial ? semanaDoDia(diaInicial) : diaDaVolta ? semanaDoDia(diaDaVolta) : 0);
   const dias = useMemo(() => { const seg = segundaDe(hoje, semanaVista); return [0, 1, 2, 3, 4].map((i) => somaDias(seg, i)); }, [hoje, semanaVista]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [dia, setDia] = useState(diaInicial && dias.includes(diaInicial) ? diaInicial : hoje);
+  const [dia, setDia] = useState(diaInicial && dias.includes(diaInicial) ? diaInicial : diaDaVolta && dias.includes(diaDaVolta) ? diaDaVolta : hoje);
   const irParaSemana = (n: number) => {
     setSemanaVista(n);
     const seg = segundaDe(hoje, n);
@@ -191,6 +200,9 @@ export default function AgendaNovoScreen({
     setDia(diaControlado);
   }, [diaControlado]); // eslint-disable-line react-hooks/exhaustive-deps
   const { tarefas } = useTarefasDoCrm(true);
+  // a mesma fila e o mesmo Feito hoje da aba Tarefas (o mesmo cache): uma conta só nas duas telas
+  const filaQ = useQuery(opcoesDaFila());
+  const feitasFilaQ = useQuery({ queryKey: ['fila_feitas', hoje], queryFn: () => lerFeitas(hoje), staleTime: 30_000 });
   const { user } = useAuth();
   const { prometer } = useMinhaDaily(true);
   const meuDia = useMeuDia(true, user?.id ?? null);
@@ -211,7 +223,7 @@ export default function AgendaNovoScreen({
           .eq('visited_by', user!.id).gte('visited_at', ini).lte('visited_at', fim),
         supabase.from('fichas_de_rua').select('client_id, ocorrido_em, como_foi, proximo, proximo_em, proximo_tipo, etapa_antes, etapa_depois, decisor_nome, motivo_perdido, client:clients(empresa, nome)')
           .eq('criado_por', user!.id).gte('ocorrido_em', ini).lte('ocorrido_em', fim),
-        supabase.from('fila_feitas').select('id, deal_id, negocio, hora, resultado, volta, perdido, criada_em')
+        supabase.from('fila_feitas').select('id, deal_id, negocio, hora, resultado, volta, perdido, criada_em, origem, concluiu_tarefa')
           .eq('user_id', user!.id).eq('dia', dia).neq('estado', 'desfeita'),
       ]);
       if (v.error) throw v.error;
@@ -298,11 +310,13 @@ export default function AgendaNovoScreen({
      cartão dele na fila; o "Registrar a tarefa" daqui saiu. Sem negócio ela não está na fila e
      segue com o registro antigo. */
   const naFilaDe = (k: (typeof compromissos)[number]): { dealId: string; rotulo: string } | null => {
-    if (!aoAbrirNaFila || k.fonte !== 'hubspot' || !podeLigar(k)) return null;
+    if (!aoAbrirNaFila || k.fonte !== 'hubspot') return null;
     const t = tarefas.find((x) => `hs-${x.id}` === k.id);
     if (!t?.dealId) return null;
+    // o negócio está na fila (hoje ou num dos próximos dias): o cartão dele existe na aba Tarefas
+    if (!podeLigar(k) && !daFila(String(t.dealId))) return null;
     const verbo = /whats/i.test(`${t.assunto ?? ''} ${k.titulo ?? ''}`) ? 'WhatsApp' : 'Ligar';
-    return { dealId: String(t.dealId), rotulo: `veio de ${k.hora ?? '—'} · ${verbo} · ${k.nome ?? t.nomeDoCliente ?? 'negócio'}` };
+    return { dealId: String(t.dealId), rotulo: `${k.hora && !['00:00', '09:00', '12:00'].includes(k.hora) ? `${k.hora} · ` : ''}${verbo} · ${k.nome ?? t.nomeDoCliente ?? 'negócio'}` };
   };
   const registrar = (k: (typeof compromissos)[number]) => {
     setConcluidas((st) => new Set(st).add(k.id));
@@ -650,6 +664,12 @@ export default function AgendaNovoScreen({
   if (semPasso) linhasDoPlacar.push({ texto: `${semPasso} sem próximo passo`, tom: 'ruim' });
   if (semComoFoi.length) linhasDoPlacar.push({ texto: `${semComoFoi.length} falta o Como foi`, tom: 'ruim' });
   if (momento === 'noite' && demosHoje.data) linhasDoPlacar.push({ texto: `${demosHoje.data} ${demosHoje.data === 1 ? 'demo hoje' : 'demos hoje'}`, tom: 'info' });
+  // A CONTA É UMA SÓ (2.6): o mesmo N de M do placar da aba Tarefas, do mesmo cache
+  if (filaQ.data && !filaQ.data.semMedicao && feitasFilaQ.data) {
+    const feitosF = new Set(feitasFilaQ.data.map((x) => x.dealId));
+    const totalF = feitosF.size + (filaQ.data.itens ?? []).filter((x) => !feitosF.has(x.dealId)).length;
+    if (totalF > 0) linhasDoPlacar.push({ texto: `Tarefas: ${feitosF.size} de ${totalF} feitas · a mesma conta da aba Tarefas`, tom: 'info' });
+  }
   const placar = (
     <PlacarDoDia rotulo={momento === 'noite' ? `Seu dia · ${horaBRT(new Date().toISOString())}` : 'Como está o seu dia'}
       feitas={provadasMedidas} meta={metaVisitasDia > 0 ? metaVisitasDia : 6} linhas={linhasDoPlacar}
@@ -663,53 +683,118 @@ export default function AgendaNovoScreen({
       acoes={[{ rotulo: `Pôr ${ficaramNoite.length === 1 ? 'a parada' : `as ${ficaramNoite.length}`} amanhã`, principal: true, onPress: () => ficaramNoite.forEach(porAmanha) }]} />
   ) : null;
 
+  /* A TAREFA NA LISTA DO DIA (Tarefas por dia, 2.5): a seção "Ligar e WhatsApp de hoje" saiu. Cada
+     ligação ou WhatsApp entra na lista pela hora; sem hora, na primeira janela de ligação que ainda
+     não passou (12:30 ou 17:30). Os marcos das janelas entram na lista e somem quando a janela passa. */
+  const agoraHM = horaBRT(new Date().toISOString());
+  const janelasDoDia = JANELAS_LIGACAO.map((j) => { const [h, m] = j.split(':').map(Number); const fim = h * 60 + m + MINUTOS_DA_JANELA; return { de: j, ate: `${String(Math.floor(fim / 60)).padStart(2, '0')}:${String(fim % 60).padStart(2, '0')}` }; });
+  const janelasAbertas = dia === hoje ? janelasDoDia.filter((x) => agoraHM < x.ate) : [];
+  const minutos = (h: string | null) => { if (!h) return null; const m = h.replace(/^~/, '').match(/^(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  // 00:00, 09:00 e 12:00 são o "sem hora" do HubSpot (a mesma regra do servidor, horaDe)
+  const semHora = (h: string | null) => !h || h === '00:00' || h === '09:00' || h === '12:00';
+  const filaItens = (filaQ.data?.itens ?? []) as Array<{ dealId: string; pessoa: string | null; papel: string | null; etapaId: string; verbo: string; assunto?: string | null; telefone: string | null; presencial?: boolean }>;
+  const filaProximos = (filaQ.data?.proximos ?? []) as Array<{ dealId: string; pessoa: string | null; papel: string | null; etapaId: string; verbo: string; assunto: string | null; telefone: string | null; presencial?: boolean }>;
+  const daFila = (dealId: string | null) => (dealId ? filaItens.find((x) => x.dealId === dealId) ?? filaProximos.find((x) => x.dealId === dealId) ?? null : null);
+  // feito na Tarefas (ou aqui, pela Tarefas): sai da lista nas duas telas
+  const dealsFeitos = new Set((feitasFilaQ.data ?? []).map((f) => f.dealId));
+  type Extra = { k: string; min: number; ord: 0 | 1; el: React.ReactNode; nTarefa?: number };
+  const tarefasDoDia: Array<{ k: (typeof compromissos)[number]; hora: string; marcada: boolean; min: number }> = [];
+  /* QUEM É LIGAÇÃO: o chip 'ligar' do plano, ou a tarefa do HubSpot cujo negócio está na fila com o verbo
+     Ligar ou WhatsApp (o assunto 'Ligar - marcar a data da demo' lia como demo e ia para os sem dia no plano) */
+  const ehConversa = (k: (typeof compromissos)[number]) => {
+    if (k.acao === 'ligar') return true;
+    const f = k.fonte === 'hubspot' ? daFila(k.dealId ? String(k.dealId) : null) : null;
+    return !!f && (f.verbo === 'Ligar' || f.verbo === 'WhatsApp') && !f.presencial;
+  };
+  const ligacoesDoDia = [...sep.ligacoes, ...sep.fora.filter(ehConversa)];
+  const foraDoDia = sep.fora.filter((k) => !ehConversa(k));
+  for (const k of ligacoesDoDia) {
+    if (dia === hoje && k.dealId && dealsFeitos.has(String(k.dealId))) continue;
+    const marcada = !semHora(k.hora);
+    const hora = marcada ? k.hora! : (janelasAbertas[0] ?? janelasDoDia[dia > hoje ? 0 : janelasDoDia.length - 1]).de;
+    tarefasDoDia.push({ k, hora, marcada, min: minutos(hora) ?? 0 });
+  }
+  const discarDaAgenda = (k: (typeof compromissos)[number], whats: boolean) => {
+    const f = daFila(k.dealId);
+    const tel = telefoneDe?.(k.clientId) ?? f?.telefone ?? null;
+    if (!tel) { Toast.mostrar('Sem telefone no CRM para este lead.', 'fila'); return; }
+    void Linking.openURL(whats ? `https://wa.me/${com55(tel)}` : `tel:+${com55(tel)}`);
+    const nf = naFilaDe(k);
+    // com negócio: entra nos 3 toques da aba Tarefas, no cartão dele, com o tempo fora do app contando
+    if (nf) { rolagem.dia = dia; rolagem.voltarAte = Date.now() + 10 * 60_000; aoAbrirNaFila!(nf.dealId, nf.rotulo, { em: Date.now(), canal: whats ? 'whatsapp' : 'ligacao' }); return; }
+    if (!whats && podeLigar(k)) setTimeout(() => registrar(k), 600);
+  };
+  const extrasDoDia: Extra[] = [
+    ...tarefasDoDia.map(({ k, hora, marcada, min }): Extra => {
+      const f = daFila(k.dealId);
+      // o verbo da fila vence o assunto: "Ligar - marcar a data da demo" não é reunião
+      const reuniao = k.tipo === 'reunião' && !(f && (f.verbo === 'Ligar' || f.verbo === 'WhatsApp'));
+      const whats = reuniao || (f ? f.verbo === 'WhatsApp' : /whats/i.test(`${k.titulo ?? ''} ${acaoPorId(k.acao)?.rotulo ?? ''}`));
+      const nf = dia <= hoje || f ? naFilaDe(k) : null;
+      const etapa = f?.etapaId ?? null;
+      const contato = f?.pessoa ? (f.papel ? `${f.pessoa}, ${f.papel.toLowerCase()}` : f.pessoa) : null;
+      const verbo = reuniao ? 'Confirmar' : whats ? 'WhatsApp' : 'Ligar';
+      // o assunto do HubSpot é "Tipo - texto": o tipo já está no verbo da frase
+      const semTipo = (x: string | null | undefined) => (x ? x.replace(/^\s*[^-–·:]{1,24}\s+[-–·:]\s+/, '').trim() || null : null);
+      const oQue = semTipo(k.titulo) ?? semTipo(f?.assunto);
+      const d: DadosDaTarefa = {
+        chave: k.id, nome: k.nome ?? 'cliente não identificado', hora, marcada, whatsapp: whats, corEtapa: corDaEtapa(etapa),
+        quente: !!etapa && ETAPAS_QUENTES_AGENDA.has(etapa),
+        linha2: [contato, rotuloDaEtapa(etapa)].filter(Boolean).join(' · ') || null,
+        linha3: marcada ? `${k.fonte === 'hubspot' ? 'tarefa do HubSpot' : 'retorno da Agenda do app'}` : 'sem hora · entra na hora das ligações',
+        linha4: oQue ? `${verbo}: ${oQue}` : reuniao ? 'Confirmar a reunião no WhatsApp' : null,
+      };
+      return { k: k.id, min, ord: 1, nTarefa: 1, el: (
+        <LinhaTarefa key={k.id} d={d}
+          aoTocar={nf ? () => { rolagem.dia = dia; rolagem.voltarAte = Date.now() + 10 * 60_000; aoAbrirNaFila!(nf.dealId, nf.rotulo); } : k.clientId ? () => aoAbrirLead(k.clientId!) : undefined}
+          aoVerbo={dia < hoje ? undefined : reuniao ? () => confirmarNoWhatsApp(k) : () => discarDaAgenda(k, whats)} />
+      ) };
+    }),
+    ...janelasAbertas.map((x): Extra => {
+      const fim = minutos(x.ate) ?? 0, ini = minutos(x.de) ?? 0;
+      const n = tarefasDoDia.filter((t) => t.min >= ini && t.min < fim).length;
+      return { k: `janela-${x.de}`, min: ini, ord: 0, el: <MarcoDaJanela key={`janela-${x.de}`} de={x.de} ate={x.ate} nNaFila={n} /> };
+    }),
+  ].sort((a, b) => a.min - b.min || a.ord - b.ord);
+
+  /** As paradas na ordem delas, com as tarefas e os marcos encaixados pela hora (marco, parada, tarefa). */
+  const intercalar = (paradasEl: Array<{ min: number | null; el: React.ReactNode }>, extras: Extra[]) => {
+    const fora: React.ReactNode[] = [];
+    let i = 0;
+    let ultimo = -1;
+    for (const p of paradasEl) {
+      const m = p.min ?? ultimo;
+      while (i < extras.length && (extras[i].min < m || (extras[i].min === m && extras[i].ord === 0))) fora.push(extras[i++].el);
+      fora.push(p.el);
+      ultimo = m;
+    }
+    while (i < extras.length) fora.push(extras[i++].el);
+    return fora;
+  };
+  const LEGENDA = 'Hora em negrito: marcada. Em cinza: prevista. Disco vazado: ligar ou WhatsApp, na hora dele; sem hora, entra na hora das ligações.';
   const listaDoDia = (rotulo: string, linhas: Array<{ p: FieldRouteStopWithClient; hora: string | null; numero: number }>, d: string, comAmanha: boolean) => (
     <View>
-      <TituloDeLista titulo={rotulo} apoio="Hora em negrito: marcada. Em cinza: prevista pela rota." />
-      {linhas.map((l) => (
-        <LinhaComPreparo key={l.p.id} p={l.p} contextoDe={contextoDe} d={dadosDaLinha(l.p, l.numero, l.hora)} aberta={aberto === l.p.id}
-          aoTocar={() => setAberto(aberto === l.p.id ? null : l.p.id)}
-          aoIr={l.p.client ? () => ir(l.p.client!) : undefined}
-          aoFazerAgora={d === hoje && l.p.status !== 'done' ? () => { setFocoId(l.p.id); setAberto(null); } : undefined}
-          aoCartao={() => aoAbrirLead(l.p.client_id)} aoPorAmanha={comAmanha ? () => porAmanha(l.p) : undefined} />
-      ))}
-      {botoesDoDia(paradasDoDia(d), d)}
+      <TituloDeLista titulo={rotulo} apoio={LEGENDA} />
+      {intercalar(linhas.map((l) => ({
+        min: minutos(l.hora),
+        el: (
+          <LinhaComPreparo key={l.p.id} p={l.p} contextoDe={contextoDe} d={dadosDaLinha(l.p, l.numero, l.hora)} aberta={aberto === l.p.id}
+            aoTocar={() => setAberto(aberto === l.p.id ? null : l.p.id)}
+            aoIr={l.p.client ? () => ir(l.p.client!) : undefined}
+            aoFazerAgora={d === hoje && l.p.status !== 'done' ? () => { setFocoId(l.p.id); setAberto(null); } : undefined}
+            aoCartao={() => aoAbrirLead(l.p.client_id)} aoPorAmanha={comAmanha ? () => porAmanha(l.p) : undefined} />
+        ),
+      })), extrasDoDia)}
+      {linhas.length > 0 && botoesDoDia(paradasDoDia(d), d)}
     </View>
   );
-
-  /* LIGAR E WHATSAPP DO DIA (§2.7): as janelas que ainda não passaram como aviso de Informação, e cada
-     ligação com o "na fila ›" embaixo do texto */
-  const agoraHM = horaBRT(new Date().toISOString());
-  const janelasAbertas = dia === hoje && !!aoAbrirNaFila
-    ? JANELAS_LIGACAO.map((j) => { const [h, m] = j.split(':').map(Number); const fim = h * 60 + m + MINUTOS_DA_JANELA; return { j, ate: `${String(Math.floor(fim / 60)).padStart(2, '0')}:${String(fim % 60).padStart(2, '0')}` }; })
-      .filter((x) => agoraHM < x.ate) : [];
-  const blocoLigacoes = (sep.ligacoes.length || janelasAbertas.length) ? (
-    <View style={{ gap: 8 }}>
-      <TituloDeLista titulo={`Ligar e WhatsApp ${dia === hoje ? 'de hoje' : `de ${SEMANA_LONGA[dowDe(dia)]}`}`} />
-      {janelasAbertas.map((x) => (
-        <Aviso key={x.j} nivel="info" titulo={`${x.j} · Hora das ligações`}
-          texto={sep.ligacoes.length ? `Até ${x.ate} · ${sep.ligacoes.length} na fila.${sep.ligacoes[0]?.nome ? ` Comece pelo ${sep.ligacoes[0].nome}.` : ''}` : `Até ${x.ate}. Os follow-ups da aba Tarefas.`} />
-      ))}
-      {sep.ligacoes.map((k) => {
-        const reuniao = k.tipo === 'reunião';
-        const nf = dia <= hoje ? naFilaDe(k) : null;
-        const whats = /whats/i.test(`${k.titulo ?? ''} ${acaoPorId(k.acao)?.rotulo ?? ''}`);
-        const acoes = reuniao ? [{ rotulo: 'Confirmar no WhatsApp', onPress: () => confirmarNoWhatsApp(k) }]
-          : nf ? [{ rotulo: 'na fila', onPress: () => aoAbrirNaFila!(nf.dealId, nf.rotulo) }]
-            : dia <= hoje && podeLigar(k) ? [{ rotulo: 'Ligar', onPress: () => ligar(k.clientId, k) }] : [];
-        return (
-          <LinhaLigacao key={k.id} hora={k.hora} nome={k.nome ?? 'cliente não identificado'} whatsapp={whats || reuniao}
-            sub={[acaoPorId(k.acao)?.rotulo ?? (reuniao ? 'Reunião' : k.tipo === 'retorno' ? 'Retorno' : 'Ligar'), k.titulo].filter(Boolean).join(' · ')} acoes={acoes} />
-        );
-      })}
-    </View>
-  ) : null;
+  const temTarefaNaLista = tarefasDoDia.length > 0;
 
   // MARCADOS NO HUBSPOT, SEM DIA NO PLANO (§2.8)
-  const blocoHubspot = sep.fora.length ? (
+  const blocoHubspot = foraDoDia.length ? (
     <View style={{ gap: 8 }}>
-      <TituloDeLista titulo={`Marcados no HubSpot, sem dia no plano · ${sep.fora.length}`} apoio="Têm tarefa no HubSpot, mas nenhuma parada combina. Marque o passo para entrar no plano." />
-      {sep.fora.map((k) => (
+      <TituloDeLista titulo={`Marcados no HubSpot, sem dia no plano · ${foraDoDia.length}`} apoio="Têm tarefa no HubSpot, mas nenhuma parada combina. Marque o passo para entrar no plano." />
+      {foraDoDia.map((k) => (
         <View key={k.id} style={s.cartaoHub}>
           <View style={{ gap: 2 }}>
             <Text style={s.cartaoHubNome} numberOfLines={2}>{k.nome ?? 'cliente não identificado'}</Text>
@@ -732,7 +817,7 @@ export default function AgendaNovoScreen({
     <View>
       <TituloDeLista titulo={`${dia === hoje ? 'Feito hoje' : 'Feito no dia'} · ${feitosDoDia.length}`} />
       {feitosDoDia.map((i) => (
-        <LinhaFeito key={i.chave} hora={i.hora} nome={i.nome} sub={[i.linha1, i.linha2].filter(Boolean).join(' · ')} proximo={i.proximo}
+        <LinhaFeito key={i.chave} hora={i.hora} nome={i.nome} sub={[i.linha1, i.linha2].filter(Boolean).join(' · ')} proximo={i.proximo} selo={i.selo}
           aoTocar={i.clientId ? () => aoAbrirLead(i.clientId!) : undefined}
           aoMarcar={i.clientId && aoMarcarProximoPasso ? () => aoMarcarProximoPasso(i.clientId!) : undefined} />
       ))}
@@ -745,7 +830,12 @@ export default function AgendaNovoScreen({
   const plOutro = outro ? semana.data?.get(dia) : undefined;
 
   return (
-    <ScrollView style={s.tela} contentContainerStyle={[s.conteudo, largo && { paddingHorizontal: 0 }]}>
+    <ScrollView ref={rolador} style={s.tela} contentContainerStyle={[s.conteudo, largo && { paddingHorizontal: 0 }]}
+      scrollEventThrottle={200} onScroll={(e) => { rolagem.dia = dia; rolagem.y = e.nativeEvent.contentOffset.y; }}
+      onContentSizeChange={(_w, h) => {
+        // voltou da aba Tarefas pela barra: a mesma rolagem, uma vez
+        if (rolagem.voltarAte > Date.now() && rolagem.dia === dia && rolagem.y > 0 && h >= rolagem.y + 200) { rolador.current?.scrollTo({ y: rolagem.y, animated: false }); rolagem.voltarAte = 0; }
+      }}>
       <RegistrarTarefa
         tarefa={registrando}
         aoFechar={() => setRegistrando(null)}
@@ -781,11 +871,10 @@ export default function AgendaNovoScreen({
             {blocoParaFechar}
             {placar}
             {avisoDaNoite}
-            {(momento === 'noite' ? ficaramNoite.length > 0 : linhasParadas.length > 0) && listaDoDia(
+            {(temTarefaNaLista || (momento === 'noite' ? ficaramNoite.length > 0 : linhasParadas.length > 0)) && listaDoDia(
               momento === 'noite' ? `Ficaram para trás · ${ficaramNoite.length}` : 'Depois',
               momento === 'noite' ? ficaramNoite.map((p) => ({ p, hora: null, numero: estado.indexOf(p) + 1 })) : linhasParadas,
               hoje, momento === 'noite')}
-            {blocoLigacoes}
             {blocoHubspot}
             {blocoFeito}
           </>
@@ -797,10 +886,10 @@ export default function AgendaNovoScreen({
             <Text style={s.subLinha}>{[plOutro?.proposito ? PROPOSITOS[plOutro.proposito] ?? plOutro.proposito : null, listaOutro.length ? `${listaOutro.length} ${listaOutro.length === 1 ? 'parada' : 'paradas'}` : null, listaOutro.length ? 'plano fechado com o gestor' : null].filter(Boolean).join(' · ') || 'Nada no plano deste dia'}</Text>
           </View>
           {blocoParaFechar}
-          {listaOutro.length > 0 ? listaDoDia(`Paradas · ${listaOutro.length}`, listaOutro.map((p, i) => ({ p, hora: horaDe(p, dia) ? horaBRT(p.planned_at!) : null, numero: i + 1 })), dia, false) : (
+          {listaOutro.length === 0 && (
             <Aviso nivel="atencao" titulo="Este dia ainda não tem paradas" texto={'O plano se monta no mapa (toque no pino e "Marcar o próximo passo") ou no Planejamento do Cockpit.'} />
           )}
-          {blocoLigacoes}
+          {(listaOutro.length > 0 || temTarefaNaLista) && listaDoDia(listaOutro.length ? `Paradas · ${listaOutro.length}` : 'Tarefas do dia', listaOutro.map((p, i) => ({ p, hora: horaDe(p, dia) ? horaBRT(p.planned_at!) : null, numero: i + 1 })), dia, false)}
           {blocoHubspot}
           {blocoFeito}
           <Text style={s.nota}>É o mesmo plano que o seu gestor vê no Planejamento do Cockpit.</Text>

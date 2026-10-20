@@ -20,7 +20,7 @@ export type FeitaServidor = {
 const emVoo = new Map<string, Promise<unknown>>();
 
 /** origem e secao (0217): de onde veio o feito e de que seção da fila — o % que o gestor vê conta só follow-up. */
-export type OrigemDoFeito = 'fila' | 'cheguei' | 'ligacao_app' | 'whatsapp_app' | 'desfecho';
+export type OrigemDoFeito = 'fila' | 'cheguei' | 'ligacao_app' | 'whatsapp_app' | 'desfecho' | 'agenda';
 export type SecaoDoFeito = 'atrasados' | 'hoje' | 'combinado' | 'sem_passo';
 
 export function registrarFeita(f: Omit<FeitaServidor, 'origem'> & { dia: string; etapaAnterior?: string | null; tarefaId?: string | null; origem?: OrigemDoFeito; secao?: SecaoDoFeito | null }) {

@@ -69,7 +69,7 @@ export async function desligarPush(): Promise<void> {
 /* O QUE O AVISO PEDE AO APP: o service worker abre (ou foca) o app com ?fila=<acao>&deal=<id>.
    acao: 'fila' (abre Tarefas no topo), 'cartao' (abre o cartão), 'ligar' e 'whatsapp' (abrem o
    cartão pronto: o navegador só deixa discar depois de um toque na tela). */
-export type PedidoDaFila = { acao: 'fila' | 'cartao' | 'ligar' | 'whatsapp'; deal: string | null; origem: string | null; n: number; rotulo?: string | null; discouEm?: number | null };
+export type PedidoDaFila = { acao: 'fila' | 'cartao' | 'ligar' | 'whatsapp'; deal: string | null; origem: string | null; n: number; rotulo?: string | null; discouEm?: number | null; canal?: 'ligacao' | 'whatsapp' | null };
 
 export function lerPedidoDaUrl(href: string, n: number): PedidoDaFila | null {
   try {

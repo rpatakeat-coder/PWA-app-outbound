@@ -7913,6 +7913,11 @@ function MainApp() {
   // Auditoria 16/10/26: com a fila em erro o selo NÃO cai mais na contagem do CRM. Era outra regra
   // (12 no selo, 5 na aba quando a fila voltava); sem a fila, sem número.
   const totalDaFila = naFila ?? null;
+  /* O SELO DA ABA (Tarefas por dia, 2.7): a pílula "N atrasados" só quando há atrasado; sem atrasado, sem pílula.
+     O Cheguei sem Como foi conta atrasado no servidor, mas na aba ele fica em Para hoje: não entra. */
+  const nAtrasadosFila = ((filaNaTela.data?.itens ?? []) as Array<{ venceu: boolean; motivo: string; grupo: string }>)
+    .filter((i) => secaoDoItem(i) === 'atrasados' && i.motivo !== 'visita_sem_registro').length;
+  const seloAtrasados = nAtrasadosFila ? `${nAtrasadosFila} ${nAtrasadosFila === 1 ? 'atrasado' : 'atrasados'}` : null;
   // O NÚMERO DA AGENDA (28/09/2026, Julyan: "coloco na agenda e na rota do dia e o
   // rodapé fica travado sem atualizar o número"). Contava só as paradas da rota: o que
   // se agendava (demo, retorno) não mexia no número. Agora soma os agendamentos de hoje
@@ -7934,7 +7939,7 @@ function MainApp() {
     { aba: 'map', rotulo: 'Mapa', Icone: tab === 'map' ? IconLocationFilled : IconLocation, ativa: tab === 'map' || tab === 'list', selo: null },
     ...(isViewer ? [] : [
       { aba: 'agenda' as AppTab, rotulo: 'Agenda', Icone: IconCalendar, ativa: tab === 'agenda' || tab === 'route', selo: seloAgenda || null, seloClaro: true },
-      { aba: 'tasks' as AppTab, rotulo: 'Tarefas', Icone: IconClipboardCheck, ativa: tab === 'tasks', selo: seloFila ? null : totalDaFila || null, seloTexto: seloFila?.curto ?? null },
+      { aba: 'tasks' as AppTab, rotulo: 'Tarefas', Icone: IconClipboardCheck, ativa: tab === 'tasks', selo: null, seloTexto: seloAtrasados },
       { aba: 'playbook' as AppTab, rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, ativa: tab === 'playbook', selo: null },
     ]),
   ];
@@ -7976,7 +7981,7 @@ function MainApp() {
     { aba: 'route', rotulo: 'Rota', Icone: IconCar, visivel: !isViewer && !modoNovo },
     { aba: 'agenda', rotulo: 'Agenda', Icone: IconCalendar, visivel: !isViewer },
     // N5 (handoff v6): um número de tarefas só, "atrasadas + hoje", igual ao selo do rodapé
-    { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: modoNovo ? (seloFila ? undefined : totalDaFila ?? undefined) : visibleTasksCount, selo: modoNovo ? seloFila?.longo : undefined, visivel: !isViewer },
+    { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: modoNovo ? undefined : visibleTasksCount, selo: modoNovo ? seloAtrasados ?? undefined : undefined, visivel: !isViewer },
     // No computador o Playbook não aparecia (auditoria das abas, 04/10/26); a tela já existia.
     { aba: 'playbook', rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, visivel: !isViewer },
     { aba: 'cockpit', rotulo: 'Gestão', Icone: IconBarGraph, visivel: verGestao },
@@ -8913,6 +8918,7 @@ function MainApp() {
           ownerId={myHubspotId}
           pedido={pedidoDaFila}
           aoVoltarAgenda={() => { setPedidoDaFila(null); setTab('agenda'); }}
+          aoAbrirAgendaNoDia={(dia) => { setAgendaDiaInicial(dia); setTab('agenda'); }}
           posicao={userLocation}
           aoAbrirLead={(id) => { setTab('map'); void openClientById(id); }}
           aoRegistrarVisita={(id) => { setTab('map'); void openClientById(id); }}
@@ -9013,7 +9019,7 @@ function MainApp() {
             const c = local ?? ((await supabase.from('clients').select('*').eq('id', id).maybeSingle()).data as Client | null);
             if (c) abrirPorNoPlano(c); else Toast.mostrar('Não encontrei este lead.', 'erro');
           }}
-          aoAbrirNaFila={(deal, rotulo) => { setPedidoDaFila({ acao: 'cartao', deal, origem: 'agenda', rotulo, n: Date.now() }); setTab('tasks'); }}
+          aoAbrirNaFila={(deal, rotulo, discou) => { setPedidoDaFila({ acao: 'cartao', deal, origem: 'agenda', rotulo, n: Date.now(), discouEm: discou?.em ?? null, canal: discou?.canal ?? null }); setTab('tasks'); }}
           ownerHubspot={myHubspotId}
           largo={layout.ehLargo}
           // Etapa e dias na etapa do snapshot (o mesmo do cartão do lead) e a régua da etapa.
