@@ -126,21 +126,80 @@ export async function avisarSeVisitaProvada(clientId: string, mostrar: (texto: s
   } catch { /* o toast é um extra: nunca derruba o check-in */ }
 }
 
+/* O RESULTADO DO MÊS, SEM PONTOS (20/10/26, Julyan: "resultado geral do mês, com ranking MRR e valor…
+   quero os pontos só pra competição semanal"). A mesma função do Cockpit do gestor: vendas_do_mes (0224). */
+type VendasDoMes = {
+  mes: string; lidoEm: string | null; total: { vendas: number; mrr: number; valor: number };
+  ranking: Array<{ pos: number; ownerId: string; nome: string; vendas: number; mrr: number; valor: number }>;
+  erro?: string;
+};
+const reais = (v: number) => `R$ ${Math.round(Number(v) || 0).toLocaleString('pt-BR')}`;
+function ResultadoDoMes({ ativo }: { ativo: boolean }) {
+  const q = useQuery<VendasDoMes | null>({
+    queryKey: ['vendas_do_mes'],
+    enabled: ativo,
+    staleTime: 2 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('vendas_do_mes');
+      if (error) throw error;
+      const r = data as VendasDoMes;
+      return r?.erro ? null : r;
+    },
+  });
+  const d = q.data;
+  if (q.isLoading && !d) return <Text style={s.ajuda}>lendo…</Text>;
+  if (!d) return <Text style={s.ajuda}>{q.isError ? 'Não consegui ler as vendas do mês agora. Feche e abra de novo em instantes.' : 'O resultado do mês não está disponível para o seu usuário.'}</Text>;
+  return (
+    <View style={{ gap: 16 }}>
+      <Text style={s.ajuda}>{`Mês · ${mesNome(`${d.mes}-15T12:00:00Z`)} · vendas pela competência, sem pontos`}</Text>
+      <View style={s.bloco}>
+        <Text style={s.rotulo}>TIME NO MÊS</Text>
+        <Text style={s.forte}>{`${d.total.vendas} ${d.total.vendas === 1 ? 'venda' : 'vendas'} · ${reais(d.total.mrr)} de MRR`}</Text>
+        <Text style={s.ajuda}>{`${reais(d.total.valor)} de valor`}</Text>
+      </View>
+      {d.ranking.length === 0 ? <Text style={s.ajuda}>Nenhuma venda no mês ainda.</Text> : (
+        <View style={{ gap: 8 }}>
+          <Text style={s.rotulo}>RANKING POR MRR</Text>
+          {d.ranking.map((l) => (
+            <View key={l.ownerId} style={[s.bloco, { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 }]}>
+              <Text style={[s.forte, { width: 28 }]}>{`${l.pos}º`}</Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={s.forte}>{l.nome}</Text>
+                <Text style={s.miuda}>{`${l.vendas} ${l.vendas === 1 ? 'venda' : 'vendas'} · ${reais(l.valor)} de valor`}</Text>
+              </View>
+              <Text style={s.forte}>{`${reais(l.mrr)}/mês`}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      <Text style={s.regras}>Venda = negócio em Negócio Fechado ou Enviado Onboarding no HubSpot, no mês da competência. MRR = valor mensal do plano; valor = o total do plano negociado. Desempate: valor, depois número de vendas. Os pontos ficam só no placar da semana.</Text>
+    </View>
+  );
+}
+
 export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; aoFechar: () => void }) {
-  // 20/10/26 (Julyan: "temporada não precisa ter ponto, vamos fazer semanal"): só o placar da semana
-  const periodo = 'semana' as 'semana' | 'mes';
-  const q = useRanking(periodo, visivel);
+  // 20/10/26 (Julyan): os pontos só na semana; o mês é o resultado de vendas (MRR e valor), sem pontos
+  const [periodo, setPeriodo] = useState<'semana' | 'mes'>('semana');
+  const q = useRanking('semana', visivel && periodo === 'semana');
   const c = useConquistas(visivel);
   const r = q.data;
 
   const topo = (
     <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8, gap: 8 }}>
-      <Text style={s.titulo}>Placar da semana</Text>
+      <Text style={s.titulo}>Ranking</Text>
+      <View style={{ flexDirection: 'row', gap: 16 }}>
+        {(['semana', 'mes'] as const).map((p) => (
+          <Pressable key={p} accessibilityRole="tab" accessibilityState={{ selected: periodo === p }} onPress={() => setPeriodo(p)} style={{ minHeight: 44, justifyContent: 'center' }}>
+            <Text style={[s.aba, periodo === p && s.abaAtiva]}>{p === 'semana' ? 'Semana · pontos' : 'Mês · vendas'}</Text>
+          </Pressable>
+        ))}
+      </View>
     </View>
   );
 
   let corpo: React.ReactNode;
-  if (q.isLoading && !r) corpo = <Text style={s.ajuda}>lendo…</Text>;
+  if (periodo === 'mes') corpo = <ResultadoDoMes ativo={visivel} />;
+  else if (q.isLoading && !r) corpo = <Text style={s.ajuda}>lendo…</Text>;
   // erro de rede ou da função não é "sem acesso" (auditoria 16/10/26)
   else if (!r && q.isError) corpo = <Text style={s.ajuda}>Não consegui ler o ranking agora. Feche e abra de novo em instantes.</Text>;
   else if (!r) corpo = <Text style={s.ajuda}>O ranking não está disponível para o seu usuário.</Text>;

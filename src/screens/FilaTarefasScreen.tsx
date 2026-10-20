@@ -397,7 +397,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
   const [discou, setDiscou] = useState<Record<string, string>>({});
   // o dia da fileira ('hoje', um iso ou 'depois'), os recolhidos e o Remarcar (Tarefas por dia)
   const [diaSel, setDiaSel] = useState<string>('hoje');
-  const [abertos, setAbertos] = useState<{ combinados: boolean; feito: boolean }>({ combinados: false, feito: false });
+  const [abertos, setAbertos] = useState<{ combinados: boolean; feito: boolean; antigos: boolean }>({ combinados: false, feito: false, antigos: false });
   const [recemFeita, setRecemFeita] = useState<string | null>(null);
   const [mostrarMais, setMostrarMais] = useState<Record<string, number>>({});
   const [semanasAbertas, setSemanasAbertas] = useState<Record<string, boolean>>({});
@@ -692,6 +692,13 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
   // numerados com linha de fim, o cartão único, os próximos dias e o "Depois" por semana ----
   const janela = fila.length > 0 ? janelaAtual(relogio, feriados) : null;
   const atrasadosLista = fila.filter((i) => secaoDe(i) === 'atrasados' && i.motivo !== 'visita_sem_registro');
+  /* ATRASADO ANTIGO NÃO EMPURRA O DIA (Julyan, 20/10/26: "ele corrompe mais e confunde e tira as tarefas que
+     precisam fazer"): até 3 dias de atraso fica no bloco 2, logo depois de Para hoje; o resto vai para o
+     recolhido do fim, só com Remarcar ou Sem interesse. Ninguém sai da conta. */
+  const ATRASO_ANTIGO = 3;
+  const ehAntigo = (i: CardDaFila) => !!i.prazo && diasEntreIso(i.prazo, hoje) > ATRASO_ANTIGO;
+  const atrasadosRecentes = atrasadosLista.filter((i) => !ehAntigo(i));
+  const atrasadosAntigos = atrasadosLista.filter(ehAntigo);
   // P7: o Cheguei sem Como foi vai para o TOPO de Para hoje (no servidor ele conta como atrasado)
   const hojeLista = [...fila.filter((i) => i.motivo === 'visita_sem_registro'), ...fila.filter((i) => secaoDe(i) === 'hoje')];
   const semPassoLista = fila.filter((i) => secaoDe(i) === 'sem_passo' && i.motivo !== 'visita_sem_registro');
@@ -753,6 +760,20 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
         textoCaixa: 'Um próximo passo datado, ou o Sem interesse com o motivo',
         botoes: [{ rotulo: 'Marcar o passo', icone: 'passo', cheio: true, onPress: () => porNoPlano(i) },
           { rotulo: 'Ligar', icone: 'ligar', onPress: () => discar(i, 'ligacao') }, { rotulo: 'WhatsApp', icone: 'whatsapp', onPress: () => discar(i, 'whatsapp') }] };
+    } else if (secaoDe(i) === 'atrasados' && i.prazo && ehAntigo(i)) {
+      const n = diasEntreIso(i.prazo, hoje);
+      d = { ...base, atrasado: true, quando: { texto: `venceu ${diaCurto(i.prazo)} · há ${n} dias`, tom: 'erro', icone: 'alerta' },
+        rotuloCaixa: 'o que foi combinado', textoCaixa: oQueFazer(i.assunto, i.negocio, i.titulo),
+        nota: 'Combinado antigo: remarque com o cliente ou encerre com o motivo.',
+        botoes: [{ rotulo: 'Remarcar', icone: 'remarcar', cheio: true, onPress: () => setRemarcando((r) => (r === i.dealId ? null : i.dealId)) },
+          { rotulo: 'Sem interesse', icone: 'registrar', onPress: () => { pedidoDeSaidaAtual = null; setAberto(i.dealId); } },
+          { rotulo: 'Ligar', icone: 'ligar', onPress: () => discar(i, 'ligacao') }] };
+      return (
+        <CartaoTarefa key={i.dealId} d={d}>
+          {remarcando === i.dealId && painelRemarcar({ dealId: i.dealId, tarefaId: i.tarefaId, negocio: i.negocio }, i.prazo, true)}
+          {registroAberto(i)}
+        </CartaoTarefa>
+      );
     } else if (secaoDe(i) === 'atrasados' && i.prazo) {
       const n = diasEntreIso(i.prazo, hoje);
       d = { ...base, atrasado: true, quando: { texto: `venceu ${diaCurto(i.prazo)} · ${n === 1 ? 'ontem' : `há ${n} dias`}`, tom: 'erro', icone: 'alerta' },
@@ -783,26 +804,34 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
     };
     return (
       <CartaoTarefa key={p.dealId} d={d}>
-        {remarcando === p.dealId && (
-          <View style={{ gap: 8 }}>
-            <Text style={s.rotuloSecao}>REMARCAR PARA</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {[proximoDiaUtil(hoje, 1, feriados), ...diasUteis.slice(1)].filter((x, k, a) => a.indexOf(x) === k && x !== p.dia).map((x) => (
-                <Pressable key={x} accessibilityRole="button" onPress={() => remarcarPara(p, x)} style={s.chipFiltro}><Text style={s.chipFiltroTexto}>{diasEntreIso(hoje, x) === 1 ? 'Amanhã' : diaCurto(x)}</Text></Pressable>
-              ))}
-            </View>
-            <CampoData valor="" rotulo="Outra data" minimo={proximoDiaUtil(hoje, 1, feriados)} aoMudar={(v) => { if (v) remarcarPara(p, v); }} />
-            <Text style={s.ajudaMiuda}>Remarcar muda só a data no HubSpot: não registra contato e não conta como feito.</Text>
-          </View>
-        )}
+        {remarcando === p.dealId && painelRemarcar({ dealId: p.dealId, tarefaId: p.tarefaId, negocio: p.negocio }, p.dia, false)}
         {registroAberto(i)}
       </CartaoTarefa>
     );
   }
-  /** Remarcar (2.4): 5 s de Desfazer; depois a data da tarefa muda no HubSpot (op adiar). */
-  function remarcarPara(p: ItemProximo, dia: string) {
+  type AlvoRemarcar = { dealId: string; tarefaId: string | null; negocio: string };
+  /** As opções do Remarcar: Amanhã, os dias da fileira e Outra data. daFila = tarefa de hoje (atrasada). */
+  function painelRemarcar(p: AlvoRemarcar, diaAtual: string | null, daFila: boolean) {
+    return (
+      <View style={{ gap: 8 }}>
+        <Text style={s.rotuloSecao}>REMARCAR PARA</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+          {[proximoDiaUtil(hoje, 1, feriados), ...diasUteis.slice(1)].filter((x, k, a) => a.indexOf(x) === k && x !== diaAtual).map((x) => (
+            <Pressable key={x} accessibilityRole="button" onPress={() => remarcarPara(p, x, daFila)} style={s.chipFiltro}><Text style={s.chipFiltroTexto}>{diasEntreIso(hoje, x) === 1 ? 'Amanhã' : diaCurto(x)}</Text></Pressable>
+          ))}
+        </View>
+        <CampoData valor="" rotulo="Outra data" minimo={proximoDiaUtil(hoje, 1, feriados)} aoMudar={(v) => { if (v) remarcarPara(p, v, daFila); }} />
+        <Text style={s.ajudaMiuda}>Remarcar muda só a data no HubSpot: não registra contato e não conta como feito.</Text>
+      </View>
+    );
+  }
+  /** Remarcar (2.4): 5 s de Desfazer; depois a data da tarefa muda no HubSpot (op adiar). A tarefa de
+      hoje (atrasada) sai da fila na hora e volta se desfizer; a de outro dia muda de dia na fileira. */
+  function remarcarPara(p: AlvoRemarcar, dia: string, daFila = false) {
     setRemarcando(null);
-    setRemarcados((r) => ({ ...r, [p.dealId]: dia }));
+    if (!p.tarefaId) { Toast.mostrar('Este negócio não tem tarefa aberta no HubSpot para remarcar. Use Marcar o passo.', 'erro'); return; }
+    const tirarRemarcado = () => { if (daFila) mostrar(p.dealId); else setRemarcados((r) => { const n = { ...r }; delete n[p.dealId]; return n; }); };
+    if (daFila) esconder(p.dealId); else setRemarcados((r) => ({ ...r, [p.dealId]: dia }));
     const pedidoR: PedidoDaAba = { op: 'adiar', tarefaId: p.tarefaId, amanha: dia, corpo: null };
     let desfeito = false;
     const timer = setTimeout(async () => {
@@ -812,13 +841,13 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
         void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] });
       } catch (e) {
         if (ehErroDeRede(e) || ehSessaoVencida(e)) { await enfileirar({ acaoId: novoAcaoId(), tipo: 'aba-tarefas', rotulo: `Remarcar · ${p.negocio}`, payload: pedidoR as unknown as Record<string, unknown> }); return; }
-        setRemarcados((r) => { const n = { ...r }; delete n[p.dealId]; return n; });
+        tirarRemarcado();
         Toast.mostrar(`Não consegui remarcar no HubSpot: ${String((e as Error)?.message ?? e)}`, 'erro');
       }
     }, 5000);
     Toast.mostrar(`Remarcou · ${diaCurto(dia)}`, 'ok', { rotulo: 'Desfazer', onPress: () => {
       desfeito = true; clearTimeout(timer);
-      setRemarcados((r) => { const n = { ...r }; delete n[p.dealId]; return n; });
+      tirarRemarcado();
     } });
   }
   const listaComMais = (chave: string, lista: ItemProximo[]) => {
@@ -956,19 +985,25 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
         <PlacarTarefas feitas={nFeitas} total={totalDia} faltam={fila.length}
           soAtrasados={hojeLista.length === 0 && semPassoLista.length === 0 && atrasadosLista.length > 0 ? atrasadosLista.length : null} />
         <View style={{ gap: 10 }}>
-          <CabecalhoDeBloco numero={1} titulo="Atrasados" n={atrasadosLista.length} legenda="o mais antigo primeiro · o que foi combinado em cada um" />
-          {atrasadosLista.length ? atrasadosLista.map(cartaoDeHoje) : <BlocoVazio texto="nenhum atrasado" />}
-        </View>
-        <View style={{ gap: 10 }}>
-          <CabecalhoDeBloco numero={2} titulo="Para hoje" n={hojeLista.length} legenda="ligações sem hora entram na hora das ligações · 12:30 e 17:30" />
+          <CabecalhoDeBloco numero={1} titulo="Para hoje" n={hojeLista.length} legenda="ligações sem hora entram na hora das ligações · 12:30 e 17:30" />
           {janela && <FaixaJanela ate={janela.ate} faltamMin={janela.faltamMin} decorrido={janela.decorrido} />}
           {hojeLista.length ? hojeLista.map(cartaoDeHoje) : <BlocoVazio texto="nada mais vence hoje" />}
+        </View>
+        <View style={{ gap: 10 }}>
+          <CabecalhoDeBloco numero={2} titulo="Atrasados" n={atrasadosRecentes.length} legenda={`até ${ATRASO_ANTIGO} dias · o mais antigo primeiro · o que foi combinado em cada um`} />
+          {atrasadosRecentes.length ? atrasadosRecentes.map(cartaoDeHoje) : <BlocoVazio texto="nenhum atrasado recente" />}
         </View>
         <View style={{ gap: 10 }}>
           <CabecalhoDeBloco numero={3} titulo="Sem próximo passo" n={semPassoLista.length} legenda="a meta é zero" alerta />
           {semPassoLista.length ? semPassoLista.map(cartaoDeHoje) : <BlocoVazio texto="zero · meta batida" />}
         </View>
         <LinhaDeFim zerada={false} />
+        {atrasadosAntigos.length > 0 && (
+          <Recolhido titulo="Atrasados antigos" n={atrasadosAntigos.length} aberto={abertos.antigos} aoAlternar={() => setAbertos((a) => ({ ...a, antigos: !a.antigos }))}
+            legenda={`mais de ${ATRASO_ANTIGO} dias · remarque com o cliente ou encerre com o motivo`}>
+            <View style={{ gap: 10 }}>{atrasadosAntigos.map(cartaoDeHoje)}</View>
+          </Recolhido>
+        )}
         {acordosRecolhido}
         {feitasRecolhido}
       </View>
