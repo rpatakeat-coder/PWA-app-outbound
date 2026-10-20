@@ -289,6 +289,8 @@ Deno.serve(async (req: Request) => {
 
   // 1) tarefas abertas do dono
   const tarefas: TarefaEntrada[] = [];
+  // quando a tarefa nasceu: a Agenda diz "combinado na visita de sex 16/10" (Tarefas por dia, 2.5)
+  const criadaPorTarefa = new Map<string, string>();
   let after: string | undefined;
   let paginasDeTarefa = 0;
   for (let p = 0; p < 20; p++) {
@@ -298,13 +300,14 @@ Deno.serve(async (req: Request) => {
         { propertyName: 'hubspot_owner_id', operator: 'EQ', value: owner },
         { propertyName: 'hs_task_status', operator: 'EQ', value: 'NOT_STARTED' },
       ] }],
-      properties: ['hs_task_subject', 'hs_task_body', 'hs_timestamp'],
+      properties: ['hs_task_subject', 'hs_task_body', 'hs_timestamp', 'hs_createdate'],
       limit: 100, ...(after ? { after } : {}),
     });
     // falha no meio da busca: a fila sairia sem as tarefas das páginas seguintes e poderia dizer
     // "Tudo em dia" (auditoria 16/10/26). Melhor a tela de erro que uma fila menor que a verdade.
     if (!r.ok) return json(502, { erro: 'O HubSpot recusou a busca de tarefas.', detalhe: r.dados?.message });
     for (const t of r.dados?.results ?? []) {
+      if (t.properties?.hs_createdate) criadaPorTarefa.set(String(t.id), String(t.properties.hs_createdate));
       tarefas.push({ id: String(t.id), dealId: null, assunto: t.properties?.hs_task_subject ?? '', corpo: t.properties?.hs_task_body ?? '', venceEm: t.properties?.hs_timestamp ?? null });
     }
     after = r.dados?.paging?.next?.after;
@@ -466,14 +469,33 @@ Deno.serve(async (req: Request) => {
       const d = m.client_id ? dealPorCliente.get(String(m.client_id)) : undefined; if (d) passoFuturo.add(d);
     }
   } catch (e) { console.error('passo futuro fora do HubSpot', e); }
+  /* ONDE FOI COMBINADO: o contato do mesmo negócio no dia em que a tarefa nasceu — a ficha da visita,
+     ou a ligação/WhatsApp registrados pelo app. Sem contato naquele dia, só o dia. */
+  const fichasPorDeal = new Map<string, Set<string>>();
+  for (const x of (ff ?? []) as Array<Record<string, unknown>>) {
+    const d = String(x.deal_id ?? ''); const dia = diaBRTde(String(x.ocorrido_em ?? x.criado_em ?? ''));
+    if (d && dia) { const s = fichasPorDeal.get(d) ?? new Set<string>(); s.add(dia); fichasPorDeal.set(d, s); }
+  }
+  const canalPorDealDia = new Map<string, string>();
+  for (const x of (cc ?? []) as Array<Record<string, unknown>>) {
+    const dia = diaBRTde(String(x.ocorrido_em ?? '')); if (dia) canalPorDealDia.set(`${x.deal_id}|${dia}`, String(x.canal ?? ''));
+  }
+  const combinado = (dealId: string, tarefaId: string | null | undefined) => {
+    const criada = tarefaId ? criadaPorTarefa.get(tarefaId) : null;
+    const dia = criada ? diaBRTde(criada) : null;
+    if (!dia) return { combinadoEm: null, combinadoNa: null };
+    const canal = canalPorDealDia.get(`${dealId}|${dia}`);
+    const na = fichasPorDeal.get(dealId)?.has(dia) ? 'visita' : canal === 'ligacao' || canal === 'whatsapp' ? canal : null;
+    return { combinadoEm: dia, combinadoNa: na };
+  };
   const itens = montarFila(negocios, tarefas.filter((t) => t.dealId && meus.includes(t.dealId)), {
     hoje, feriados, contatos, decisorAlcancado, visitaHojeSemRegistro, agendaHoje, passoFuturo: [...passoFuturo],
   }).map((i) => ({ ...i, titulo: tituloDoCard(i), ultimoContatoTexto: textoUltimoContato(i.ultimoContato, hoje),
-    telefone: i.temTelefone ? clientePorDeal.get(i.dealId)?.telefone ?? null : null }));
+    telefone: i.temTelefone ? clientePorDeal.get(i.dealId)?.telefone ?? null : null, ...combinado(i.dealId, i.tarefaId) }));
 
   // OS PRÓXIMOS DIAS (handoff Tarefas por dia, 20/10/26): a próxima tarefa futura de quem não está na fila de hoje
   const proximos = montarProximos(negocios, tarefas.filter((t) => t.dealId && meus.includes(t.dealId)), { hoje }, new Set(itens.map((i) => i.dealId)))
-    .map((p) => ({ ...p, titulo: tituloDoCard(p), telefone: p.temTelefone ? clientePorDeal.get(p.dealId)?.telefone ?? null : null }));
+    .map((p) => ({ ...p, titulo: tituloDoCard(p), telefone: p.temTelefone ? clientePorDeal.get(p.dealId)?.telefone ?? null : null, ...combinado(p.dealId, p.tarefaId) }));
 
   // A CARTEIRA (Fase 4 das abas, 04/10/26): todos os negócios abertos do dono, com os mesmos
   // números da fila (etapa ao vivo, dias e temperatura do snapshot, contatos), para a Lista do

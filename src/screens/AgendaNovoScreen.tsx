@@ -692,8 +692,16 @@ export default function AgendaNovoScreen({
   const minutos = (h: string | null) => { if (!h) return null; const m = h.replace(/^~/, '').match(/^(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
   // 00:00, 09:00 e 12:00 são o "sem hora" do HubSpot (a mesma regra do servidor, horaDe)
   const semHora = (h: string | null) => !h || h === '00:00' || h === '09:00' || h === '12:00';
-  const filaItens = (filaQ.data?.itens ?? []) as Array<{ dealId: string; pessoa: string | null; papel: string | null; etapaId: string; verbo: string; assunto?: string | null; telefone: string | null; presencial?: boolean }>;
-  const filaProximos = (filaQ.data?.proximos ?? []) as Array<{ dealId: string; pessoa: string | null; papel: string | null; etapaId: string; verbo: string; assunto: string | null; telefone: string | null; presencial?: boolean }>;
+  const filaItens = (filaQ.data?.itens ?? []) as Array<{ dealId: string; pessoa: string | null; papel: string | null; etapaId: string; verbo: string; assunto?: string | null; telefone: string | null; presencial?: boolean; combinadoEm?: string | null; combinadoNa?: string | null }>;
+  const filaProximos = (filaQ.data?.proximos ?? []) as Array<{ dealId: string; pessoa: string | null; papel: string | null; etapaId: string; verbo: string; assunto: string | null; telefone: string | null; presencial?: boolean; combinadoEm?: string | null; combinadoNa?: string | null }>;
+  /** 'combinado na visita de sex 16/10' (o servidor diz o dia em que a tarefa nasceu e o contato daquele dia) */
+  const ondeCombinou = (f: { combinadoEm?: string | null; combinadoNa?: string | null } | null) => {
+    if (!f?.combinadoEm) return null;
+    // espaço que não quebra: "sex" e "16/10" ficam na mesma linha
+    const quando = [SEMANA[dowDe(f.combinadoEm)].toLowerCase(), ddmm(f.combinadoEm)].join('\u00A0');
+    return f.combinadoNa === 'visita' ? 'combinado na visita de ' + quando : f.combinadoNa === 'ligacao' ? 'combinado na ligação de ' + quando
+      : f.combinadoNa === 'whatsapp' ? 'combinado no WhatsApp de ' + quando : 'combinado em ' + quando;
+  };
   const daFila = (dealId: string | null) => (dealId ? filaItens.find((x) => x.dealId === dealId) ?? filaProximos.find((x) => x.dealId === dealId) ?? null : null);
   // feito na Tarefas (ou aqui, pela Tarefas): sai da lista nas duas telas
   const dealsFeitos = new Set((feitasFilaQ.data ?? []).map((f) => f.dealId));
@@ -741,7 +749,7 @@ export default function AgendaNovoScreen({
         chave: k.id, nome: k.nome ?? 'cliente não identificado', hora, marcada, whatsapp: whats, corEtapa: corDaEtapa(etapa),
         quente: !!etapa && ETAPAS_QUENTES_AGENDA.has(etapa),
         linha2: [contato, rotuloDaEtapa(etapa)].filter(Boolean).join(' · ') || null,
-        linha3: marcada ? `${k.fonte === 'hubspot' ? 'tarefa do HubSpot' : 'retorno da Agenda do app'}` : 'sem hora · entra na hora das ligações',
+        linha3: [marcada ? null : 'sem hora', ondeCombinou(f) ?? (marcada ? (k.fonte === 'hubspot' ? 'tarefa do HubSpot' : 'retorno da Agenda do app') : 'entra na hora das ligações')].filter(Boolean).join(' · '),
         linha4: oQue ? `${verbo}: ${oQue}` : reuniao ? 'Confirmar a reunião no WhatsApp' : null,
       };
       return { k: k.id, min, ord: 1, nTarefa: 1, el: (
