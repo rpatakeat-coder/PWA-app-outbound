@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@2d1ff7b4.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@a8b7e086.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "2d1ff7b4";
+  var VERSAO = "a8b7e086";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -20433,7 +20433,8 @@ async function playbookGravarProgressoSupabase(slug, tipo) {
 
   if (tipo !== 'prova' && playbookProgressoCache && playbookProgressoCache.prova && playbookProgressoCache.prova.has(slug)) return true;
   const { error } = await supa.from('playbook_progresso')
-    .upsert({ user_email: sessaoAtual.email, guia_slug: slug, tipo, concluido_em: new Date().toISOString() }, { onConflict: 'user_email,guia_slug' });
+
+    .upsert({ user_email: sessaoAtual.email, guia_slug: slug, tipo, concluido_em: new Date().toISOString() }, tipo === 'prova' ? { onConflict: 'user_email,guia_slug' } : { onConflict: 'user_email,guia_slug', ignoreDuplicates: true });
   return !error;
 }
 

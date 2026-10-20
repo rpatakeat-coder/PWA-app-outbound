@@ -106,7 +106,9 @@ export default function PlaybookScreen({ email, proximaParada }: Props) {
   const enviarLidas = useCallback(async () => {
     const pend = ler<Array<{ user_email: string; guia_slug: string; tipo: string; concluido_em: string }>>(CHAVE_LIDAS_PENDENTES) ?? [];
     if (!pend.length) return;
-    const { error } = await supabase.from('playbook_progresso').upsert(pend, { onConflict: 'user_email,guia_slug' });
+    // LIDA NUNCA SOBRESCREVE (20/10/26): uma linha por página, e a 'prova' do quiz vale mais que a leitura.
+    // Sobrescrever apagava o quiz aprovado e travava a trilha do Cockpit (Fabio, Kelly, Allef).
+    const { error } = await supabase.from('playbook_progresso').upsert(pend, { onConflict: 'user_email,guia_slug', ignoreDuplicates: true });
     if (!error) gravar(CHAVE_LIDAS_PENDENTES, []);
   }, []);
   useEffect(() => {
@@ -121,7 +123,7 @@ export default function PlaybookScreen({ email, proximaParada }: Props) {
     setProg((p) => (p[id]?.lida ? p : { ...p, [id]: { pct: 100, lida: true, em: Date.now() } }));
     if (!email) return;
     const linha = { user_email: email.toLowerCase(), guia_slug: id, tipo: 'leitura', concluido_em: new Date().toISOString() };
-    void supabase.from('playbook_progresso').upsert(linha, { onConflict: 'user_email,guia_slug' }).then(({ error }) => {
+    void supabase.from('playbook_progresso').upsert(linha, { onConflict: 'user_email,guia_slug', ignoreDuplicates: true }).then(({ error }) => {
       if (!error) return;
       const pend = ler<Array<typeof linha>>(CHAVE_LIDAS_PENDENTES) ?? [];
       gravar(CHAVE_LIDAS_PENDENTES, [...pend.filter((x) => x.guia_slug !== id), linha]);
