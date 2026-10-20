@@ -182,6 +182,15 @@ async function gravar(rows: ActivityRow[]): Promise<{ atualizados: number; erros
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST' && req.method !== 'GET') return json(405, { error: 'Method Not Allowed' });
 
+  // QUEM CHAMA É O CRON, COM O SEGREDO DO VAULT (0222, 20/10/26). O agendamento antigo mandava
+  // "Bearer SUA_SERVICE_ROLE_KEY" (o texto do exemplo, nunca trocado): a função respondia 401 toda
+  // madrugada desde que nasceu, e hs_last_activity_at estava nulo nos 10,8 mil pinos. Agora
+  // public.invocar_hubspot_activity manda x-cron-secret, conferido por public.segredo_confere.
+  // verify_jwt DESLIGADO: o segredo é a trava.
+  const svc = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
+  const { data: segredoOk } = await svc.rpc('segredo_confere', { p_nome: 'hubspot_activity', p_valor: req.headers.get('x-cron-secret') ?? '' });
+  if (segredoOk !== true) return json(401, { error: 'segredo do cron não confere' });
+
   const token = Deno.env.get('HUBSPOT_TOKEN_USAGE') ?? Deno.env.get('HUBSPOT_TOKEN');
   if (!token) return json(503, { error: 'HUBSPOT_TOKEN_USAGE/HUBSPOT_TOKEN not configured' });
 
