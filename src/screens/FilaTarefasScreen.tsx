@@ -76,6 +76,8 @@ const SELO_ORIGEM: Record<string, string> = { cheguei: 'Cheguei GPS', ligacao_ap
 // os dias da fileira (Tarefas por dia, 20/10/26)
 const SEMANA_CURTA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 const SEMANA_LONGA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+/** "14h15" / "13h" / "9h30" (o formato do servidor) → "14:15" / "13:00" / "09:30", o mesmo da Agenda. */
+const horaHHMM = (h: string) => { const m = h.match(/^(\d{1,2})(?:h|:)(\d{2})?$/); return m ? `${m[1].padStart(2, '0')}:${m[2] ?? '00'}` : h; };
 const dowIso = (iso: string) => new Date(`${iso}T12:00:00Z`).getUTCDay();
 const ddmmIso = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const somaDias = (iso: string, n: number) => { const t = new Date(`${iso}T12:00:00Z`); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
@@ -756,7 +758,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
       d = { ...base, atrasado: true, quando: { texto: `venceu ${diaCurto(i.prazo)} · ${n === 1 ? 'ontem' : `há ${n} dias`}`, tom: 'erro', icone: 'alerta' },
         rotuloCaixa: 'o que foi combinado', textoCaixa: oQueFazer(i.assunto, i.negocio, i.titulo), nota: notaPresencial(i), botoes: botoesDe(i, plano) };
     } else {
-      const quando = i.horaPrazo ? `vence hoje · ${i.horaPrazo}` : ehVerboDeConversa(i.verbo) && proximaJanela ? `vence hoje · sem hora, entra às ${proximaJanela}` : 'vence hoje';
+      const quando = i.horaPrazo ? `vence hoje · ${horaHHMM(i.horaPrazo)}` : ehVerboDeConversa(i.verbo) && proximaJanela ? `vence hoje · sem hora, entra às ${proximaJanela}` : 'vence hoje';
       d = { ...base, quando: { texto: quando, tom: 'aviso', icone: 'relogio' }, rotuloCaixa: 'o que fazer',
         textoCaixa: oQueFazer(i.assunto, i.negocio, i.titulo), nota: notaPresencial(i), botoes: botoesDe(i, plano) };
     }
@@ -776,7 +778,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
     const d: DadosCartaoTarefa = {
       id: p.dealId, nome: p.negocio, quente: (ETAPAS_QUENTES as string[]).includes(p.etapaId), etapaRotulo: et.rotulo, etapaCor: et.cor,
       contato: contatoDe(p.pessoa, p.papel), destaque: destaqueDe(p.dealId),
-      quando: { texto: `${diaCurto(p.dia)}${p.hora ? ` · ${p.hora}` : ' · sem hora'}`, tom: 'mute', icone: 'relogio' },
+      quando: { texto: `${diaCurto(p.dia)}${p.hora ? ` · ${horaHHMM(p.hora)}` : ' · sem hora'}`, tom: 'mute', icone: 'relogio' },
       rotuloCaixa: 'o que fazer', textoCaixa: oQueFazer(p.assunto, p.negocio, p.titulo), nota: notaPresencial(i), botoes: botoesDe(i, remarcar),
     };
     return (
@@ -1009,14 +1011,18 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
     const amanha = diaSel === diasUteis[0] && diasEntreIso(hoje, diaSel) === 1;
     const nomeLongo = SEMANA_LONGA[dowIso(diaSel)];
     const doEvento = doDia.filter((p) => /evento/i.test(p.assunto ?? '')).length;
+    // visita e reunião não se adiantam por telefone: o aviso só fala das de ligar e WhatsApp
+    const nConversa = doDia.filter((p) => !p.presencial && (p.verbo === 'Ligar' || p.verbo === 'WhatsApp')).length;
     corpo = doDia.length ? (
       <View style={{ gap: 14 }}>
         <View style={{ gap: 2 }}>
           <Text style={s.diaTitulo}>{`${nomeLongo.charAt(0).toUpperCase()}${nomeLongo.slice(1)}, ${ddmmIso(diaSel)}`}</Text>
           <Text style={s.ajuda}>{`${doDia.length} ${doDia.length === 1 ? 'tarefa vence' : 'tarefas vencem'} ${amanha ? 'amanhã' : `na ${nomeLongo}`}, na ordem da fila.`}</Text>
         </View>
-        <Aviso nivel="info" titulo="Dá para adiantar"
-          texto={`${doEvento >= 3 ? `${doEvento} são leads de evento. ` : ''}Ligar hoje resolve pelos mesmos 3 toques e a tarefa sai de ${nomeLongo}.`} />
+        {nConversa > 0 && (
+          <Aviso nivel="info" titulo="Dá para adiantar"
+            texto={`${doEvento >= 3 ? `${doEvento} são leads de evento. ` : ''}${nConversa === doDia.length ? 'Ligar' : `As ${nConversa} de ligar ou WhatsApp: ligar`} hoje resolve pelos mesmos 3 toques e a tarefa sai de ${nomeLongo}.${nConversa < doDia.length ? ' Visita e reunião só concluem com o Cheguei.' : ''}`} />
+        )}
         {listaComMais(diaSel, doDia)}
       </View>
     ) : (
