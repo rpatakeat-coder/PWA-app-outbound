@@ -127,21 +127,15 @@ export async function avisarSeVisitaProvada(clientId: string, mostrar: (texto: s
 }
 
 export default function FolhaRanking({ visivel, aoFechar }: { visivel: boolean; aoFechar: () => void }) {
-  const [periodo, setPeriodo] = useState<'semana' | 'mes'>('semana');
+  // 20/10/26 (Julyan: "temporada não precisa ter ponto, vamos fazer semanal"): só o placar da semana
+  const periodo = 'semana' as 'semana' | 'mes';
   const q = useRanking(periodo, visivel);
   const c = useConquistas(visivel);
   const r = q.data;
 
   const topo = (
     <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8, gap: 8 }}>
-      <Text style={s.titulo}>Ranking</Text>
-      <View style={{ flexDirection: 'row', gap: 16 }}>
-        {(['semana', 'mes'] as const).map((p) => (
-          <Pressable key={p} accessibilityRole="tab" accessibilityState={{ selected: periodo === p }} onPress={() => setPeriodo(p)} style={{ minHeight: 44, justifyContent: 'center' }}>
-            <Text style={[s.aba, periodo === p && s.abaAtiva]}>{p === 'semana' ? 'Semana' : 'Mês'}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <Text style={s.titulo}>Placar da semana</Text>
     </View>
   );
 
