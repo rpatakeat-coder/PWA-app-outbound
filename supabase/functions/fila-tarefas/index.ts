@@ -16,7 +16,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
-  feriadosNacionais, montarFila, ORDEM_GRUPOS, ROTULO_GRUPO, pessoaDoCard, textoUltimoContato, tituloDoCard,
+  feriadosNacionais, montarFila, montarProximos, ORDEM_GRUPOS, ROTULO_GRUPO, pessoaDoCard, textoUltimoContato, tituloDoCard,
   secaoDoItem, quenteEsfriando,
   type NegocioEntrada, type TarefaEntrada,
 } from '../_compartilhado/filaDoDinheiro.ts';
@@ -471,6 +471,10 @@ Deno.serve(async (req: Request) => {
   }).map((i) => ({ ...i, titulo: tituloDoCard(i), ultimoContatoTexto: textoUltimoContato(i.ultimoContato, hoje),
     telefone: i.temTelefone ? clientePorDeal.get(i.dealId)?.telefone ?? null : null }));
 
+  // OS PRÓXIMOS DIAS (handoff Tarefas por dia, 20/10/26): a próxima tarefa futura de quem não está na fila de hoje
+  const proximos = montarProximos(negocios, tarefas.filter((t) => t.dealId && meus.includes(t.dealId)), { hoje }, new Set(itens.map((i) => i.dealId)))
+    .map((p) => ({ ...p, titulo: tituloDoCard(p), telefone: p.temTelefone ? clientePorDeal.get(p.dealId)?.telefone ?? null : null }));
+
   // A CARTEIRA (Fase 4 das abas, 04/10/26): todos os negócios abertos do dono, com os mesmos
   // números da fila (etapa ao vivo, dias e temperatura do snapshot, contatos), para a Lista do
   // computador abrir em "Minha carteira" sem depender da área do mapa.
@@ -501,6 +505,7 @@ Deno.serve(async (req: Request) => {
 
   return json(200, {
     itens,
+    proximos,
     carteira,
     grupos: ORDEM_GRUPOS.map((g) => ({ id: g, rotulo: ROTULO_GRUPO[g] })),
     mrrEmJogo: itens.reduce((s, i) => s + (i.mrr ?? 0), 0),

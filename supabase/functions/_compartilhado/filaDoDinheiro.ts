@@ -295,6 +295,47 @@ export function montarFila(negocios: NegocioEntrada[], tarefas: TarefaEntrada[],
     ORDEM_GRUPOS.indexOf(a.grupo) - ORDEM_GRUPOS.indexOf(b.grupo) || b.score - a.score || a.negocio.localeCompare(b.negocio));
 }
 
+/* OS PRÓXIMOS DIAS (handoff "Tarefas por dia", 20/10/26): a aba mostra o que vence depois de hoje.
+   Mesma regra de "a tarefa que conta" da fila: para cada negócio aberto SEM card hoje, a próxima
+   tarefa futura. Um cartão por negócio, com o mesmo verbo e o mesmo "presencial" da fila. Ordem:
+   o dia, depois o horário da tarefa e então o valor (mrr). O app só agrupa. */
+export type ItemProximo = {
+  dealId: string; clientId: string | null; negocio: string; etapaId: string; pessoa: string | null; papel: string | null;
+  verbo: Verbo; presencial: boolean; tarefaId: string; assunto: string | null; dia: string; hora: string | null; venceEm: string;
+  temTelefone: boolean; mrr: number | null; temperatura: number | null; diasNaEtapa: number | null;
+};
+export function montarProximos(negocios: NegocioEntrada[], tarefas: TarefaEntrada[], ctx: Pick<Contexto, 'hoje'>, jaNaFila: Set<string>): ItemProximo[] {
+  const porNegocio = new Map<string, TarefaEntrada[]>();
+  for (const t of tarefas) {
+    if (!t.dealId) continue;
+    const l = porNegocio.get(t.dealId) ?? [];
+    l.push(t); porNegocio.set(t.dealId, l);
+  }
+  const vistos = new Set<string>();
+  const out: ItemProximo[] = [];
+  for (const n of negocios) {
+    if (!ABERTAS.has(n.etapaId) || vistos.has(n.dealId) || jaNaFila.has(n.dealId)) continue;
+    vistos.add(n.dealId);
+    const abertas = (porNegocio.get(n.dealId) ?? []).slice().sort((a, b) =>
+      (a.venceEm ? Date.parse(a.venceEm) : Infinity) - (b.venceEm ? Date.parse(b.venceEm) : Infinity));
+    // de hoje o negócio estaria na fila; aqui só a próxima de um dia depois de hoje
+    if (abertas.some((x) => diaDe(x.venceEm) === ctx.hoje)) continue;
+    const t = abertas.find((x) => { const d = diaDe(x.venceEm); return !!d && d > ctx.hoje; });
+    if (!t) continue;
+    const tipoT = tipoDaTarefa(t);
+    let verbo: Verbo = tipoT === 'visita' ? 'Visitar' : tipoT === 'whatsapp' ? 'WhatsApp' : 'Ligar';
+    if (!n.temTelefone && (verbo === 'Ligar' || verbo === 'WhatsApp')) verbo = 'Visitar';
+    out.push({
+      dealId: n.dealId, clientId: n.clientId, negocio: n.nome, etapaId: n.etapaId, pessoa: n.pessoa, papel: n.papel,
+      verbo, presencial: tipoT === 'visita' || tipoT === 'reuniao', tarefaId: t.id, assunto: t.assunto ? curto(t.assunto, 90) : null,
+      dia: diaDe(t.venceEm)!, hora: horaDe(t.venceEm), venceEm: String(t.venceEm), temTelefone: n.temTelefone, mrr: n.mrr, temperatura: n.temperatura,
+      diasNaEtapa: n.diasNaEtapa ?? null,
+    });
+  }
+  return out.sort((a, b) => a.dia.localeCompare(b.dia) || Date.parse(a.venceEm) - Date.parse(b.venceEm)
+    || (b.mrr ?? 0) - (a.mrr ?? 0) || a.negocio.localeCompare(b.negocio));
+}
+
 /** O contato do CRM só vira título quando é confiável (A2, handoff das abas 04/10/26): tem
  *  letra, não repete o negócio, não é o dono da conta e tem papel (Dono, Sócio, Gerente).
  *  Fora disso o título usa o negócio, e `porque` diz o motivo quando há algo a explicar. */

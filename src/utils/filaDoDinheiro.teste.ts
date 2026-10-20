@@ -1,6 +1,6 @@
 // Teste da fila do dinheiro (docs/10 §1). Roda: npx tsx src/utils/filaDoDinheiro.teste.ts
 import {
-  diasUteisEntre, feriadosNacionais, montarFila, pessoaDoCard, oQuePulou, proximoDiaUtil, textoUltimoContato, tipoDaTarefa, tituloDoCard,
+  diasUteisEntre, feriadosNacionais, montarFila, montarProximos, pessoaDoCard, oQuePulou, proximoDiaUtil, textoUltimoContato, tipoDaTarefa, tituloDoCard,
   type Contexto, type NegocioEntrada, type TarefaEntrada,
 } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
 import { dataDoChip, diaCurto, diasSugeridos, fraseDaVolta, notaDaFila, pedidoDaVolta, textoDoSalvar } from './registroDaFila';
@@ -122,6 +122,24 @@ ok(tituloDoCard({ verbo: 'Visitar', pessoa: 'Ana', papel: null, negocio: 'Cantin
   const f5 = montarFila([N({})], [velha], ctx({ agendaHoje: { d1: 'hoje' } }))[0];
   ok(f5?.motivo === 'vence_hoje' && f5.prazo === hoje && !f5.venceu, 'vencida + no plano de hoje: é trabalho de hoje, não atraso');
   ok(montarFila([N({ temperatura: 80 })], [], ctx({ passoFuturo: ['d1'] })).length === 0, 'quente sem tarefa mas no plano futuro: não é "sem próximo passo"');
+}
+
+// 20/10/26 · os próximos dias (Tarefas por dia): a próxima tarefa futura de quem não está na fila de hoje
+{
+  const negs = [N({ dealId: 'a', nome: 'Amanhã' }), N({ dealId: 'b', nome: 'Hoje' }), N({ dealId: 'c', nome: 'Sexta', mrr: 900 }), N({ dealId: 'd', nome: 'Ganho', etapaId: '1396006162' }), N({ dealId: 'e', nome: 'Sexta cedo', mrr: 100 })];
+  const ts = [
+    T({ id: 'ta', dealId: 'a', venceEm: '2026-10-23T12:00:00Z' }), T({ id: 'ta2', dealId: 'a', venceEm: '2026-10-30T12:00:00Z' }),
+    T({ id: 'tb', dealId: 'b', venceEm: '2026-10-22T15:00:00Z' }), T({ id: 'tb2', dealId: 'b', venceEm: '2026-10-26T15:00:00Z' }),
+    T({ id: 'tc', dealId: 'c', venceEm: '2026-10-23T18:00:00Z', assunto: 'WhatsApp - confirmar' }),
+    T({ id: 'td', dealId: 'd', venceEm: '2026-10-23T12:00:00Z' }), T({ id: 'te', dealId: 'e', venceEm: '2026-10-23T11:00:00Z' }),
+  ];
+  const p = montarProximos(negs, ts, { hoje }, new Set(['x']));
+  ok(!p.some((x) => x.dealId === 'b'), 'negócio com tarefa hoje não entra nos próximos dias (está na fila de hoje)');
+  ok(!p.some((x) => x.dealId === 'd'), 'negócio fechado não entra');
+  ok(p.filter((x) => x.dealId === 'a').length === 1 && p.find((x) => x.dealId === 'a')!.tarefaId === 'ta', 'um cartão por negócio: a próxima tarefa futura');
+  ok(p.map((x) => x.dealId).join(',') === 'e,a,c', 'ordem: dia, depois o horário da tarefa');
+  ok(p.find((x) => x.dealId === 'c')!.verbo === 'WhatsApp', 'o verbo segue a tarefa (WhatsApp)');
+  ok(montarProximos(negs, ts, { hoje }, new Set(['a'])).every((x) => x.dealId !== 'a'), 'quem já está na fila de hoje fica fora');
 }
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
