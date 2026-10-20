@@ -307,7 +307,9 @@ Deno.serve(async (req: Request) => {
     // "Tudo em dia" (auditoria 16/10/26). Melhor a tela de erro que uma fila menor que a verdade.
     if (!r.ok) return json(502, { erro: 'O HubSpot recusou a busca de tarefas.', detalhe: r.dados?.message });
     for (const t of r.dados?.results ?? []) {
-      if (t.properties?.hs_createdate) criadaPorTarefa.set(String(t.id), String(t.properties.hs_createdate));
+      // a busca nem sempre devolve hs_createdate nas propriedades; o createdAt do objeto vem sempre (medido 20/10)
+      const criada = t.properties?.hs_createdate ?? t.createdAt;
+      if (criada) criadaPorTarefa.set(String(t.id), String(criada));
       tarefas.push({ id: String(t.id), dealId: null, assunto: t.properties?.hs_task_subject ?? '', corpo: t.properties?.hs_task_body ?? '', venceEm: t.properties?.hs_timestamp ?? null });
     }
     after = r.dados?.paging?.next?.after;
