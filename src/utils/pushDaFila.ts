@@ -40,10 +40,28 @@ export async function estadoDoPush(): Promise<EstadoDoPush> {
   return sub && Notification.permission === 'granted' ? 'ligado' : 'desligado';
 }
 
+/* ATIVOU UMA VEZ, FICA (Julyan, 20/10/26: "ativou uma vez tinha que já ficar"). O pedido voltava em
+   dois casos: (1) o aparelho com a permissão dada perdia a inscrição (o iPhone troca o endpoint) — aí
+   o app se reinscreve sozinho, sem toque e sem aviso de teste; (2) a pessoa abria em outro aparelho
+   ou no navegador fora do ícone — quem já tem avisos ativos na conta não é mais cobrado. */
+export async function estadoDosAvisos(): Promise<EstadoDoPush> {
+  const e = await estadoDoPush();
+  if (e === 'ligado' || e === 'sem_suporte') return e;
+  if (e === 'desligado' && Notification.permission === 'granted') {
+    try { if (await ligarPush({ teste: false }) === 'ligado') return 'ligado'; } catch { /* segue para a conta */ }
+  }
+  try {
+    const { data } = await supabase.from('push_inscricoes').select('id').lt('falhas', 3).limit(1);
+    if (data?.length) return 'ligado';
+  } catch { /* sem leitura: fica o estado do aparelho */ }
+  return e;
+}
+
 /** Pede a permissão (tem de ser num toque), inscreve o aparelho e manda um aviso de teste. */
-export async function ligarPush(): Promise<EstadoDoPush> {
+export async function ligarPush({ teste = true }: { teste?: boolean } = {}): Promise<EstadoDoPush> {
   if (!temSuporte()) return ehIphone() && !instalado() ? 'precisa_instalar' : 'sem_suporte';
-  const permissao = await Notification.requestPermission();
+  // já permitido: não pede de novo (a reinscrição sozinha acontece fora de um toque)
+  const permissao = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
   if (permissao !== 'granted') return permissao === 'denied' ? 'negado' : 'desligado';
   // sem o service worker ativo o ready nunca resolve, e o botão ficava em "Ligando…" para sempre
   const reg = await Promise.race([navigator.serviceWorker.ready, new Promise<never>((_, nao) => setTimeout(() => nao(new Error('O app ainda está se atualizando no celular. Feche e abra o app e tente de novo.')), 8000))]);
@@ -54,7 +72,7 @@ export async function ligarPush(): Promise<EstadoDoPush> {
     endpoint: sub.endpoint, p256dh: paraB64u(sub.getKey('p256dh')), auth: paraB64u(sub.getKey('auth')),
     plataforma: ehIphone() ? 'iphone' : /android/i.test(navigator.userAgent) ? 'android' : 'computador',
   });
-  await chamar('testar').catch(() => null); // o teste é conferência: falhar não desfaz a inscrição
+  if (teste) await chamar('testar').catch(() => null); // o teste é conferência: falhar não desfaz a inscrição
   return 'ligado';
 }
 

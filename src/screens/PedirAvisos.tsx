@@ -9,7 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { IconBell } from '../components/icons';
 import { Toast } from '../components/Toast';
-import { estadoDoPush, ligarPush, type EstadoDoPush } from '../utils/pushDaFila';
+import { estadoDosAvisos, ligarPush, type EstadoDoPush } from '../utils/pushDaFila';
 import { useComunicadosNaoLidos } from '../hooks/useComunicados';
 
 const PAUSA_MS = 2 * 60_000;
@@ -27,7 +27,7 @@ export default function PedirAvisos({ ativo }: { ativo: boolean }) {
   useEffect(() => {
     if (!ativo) return;
     let vivo = true;
-    const verificar = () => { void estadoDoPush().then((e) => {
+    const verificar = () => { void estadoDosAvisos().then((e) => {
       if (!vivo) return;
       setEstado(e);
       if (e === 'ligado' || e === 'sem_suporte') { setAberto(false); return; }

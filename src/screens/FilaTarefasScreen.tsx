@@ -40,7 +40,7 @@ import {
   type BotaoDoCartao, type DadosCartaoTarefa, type DiaDaFileira,
 } from './tarefas/PecasDaTarefa';
 import { Aviso } from './agenda/PecasDaAgenda';
-import { estadoDoPush, ligarPush, type EstadoDoPush, type PedidoDaFila } from '../utils/pushDaFila';
+import { estadoDosAvisos, ligarPush, type EstadoDoPush, type PedidoDaFila } from '../utils/pushDaFila';
 import { janelaAtual, janelasDoDia } from '../utils/horaDasLigacoes';
 import { porNoDia } from '../utils/paradaDoDia';
 import { aoMudarOPlano } from '../utils/planoDoPino';
@@ -426,7 +426,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
   // os avisos no aparelho (P6)
   const [estadoPush, setEstadoPush] = useState<EstadoDoPush | null>(null);
   const [ligandoPush, setLigandoPush] = useState(false);
-  useEffect(() => { void estadoDoPush().then(setEstadoPush).catch(() => setEstadoPush('sem_suporte')); }, []);
+  useEffect(() => { void estadoDosAvisos().then(setEstadoPush).catch(() => setEstadoPush('sem_suporte')); }, []);
   // de onde veio o cartão em foco (o aviso) e o tempo fora do app depois de Ligar ou WhatsApp (0.2b)
   const [veioDe, setVeioDe] = useState<{ deal: string; de: 'push' | 'agenda'; rotulo?: string | null } | null>(null);
   const saida = useRef<{ deal: string; canal: 'ligacao' | 'whatsapp'; em: number; viaPush: boolean } | null>(null);
