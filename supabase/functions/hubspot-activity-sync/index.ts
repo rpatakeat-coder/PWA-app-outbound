@@ -33,7 +33,10 @@ const SLA_STAGES = [
   { id: '1395880473', label: 'Ag. Pagamento' },
 ];
 
-const PROP_LAST_ACTIVITY = 'hs_lastactivitydate';
+// 20/10/26: 'hs_lastactivitydate' não existe nesta conta (a 1ª rodada de verdade avisou "nenhum
+// deal trouxe"). O "Last Activity Date" do negócio é notes_last_updated: nota, ligação, e-mail,
+// reunião ou tarefa registrada.
+const PROP_LAST_ACTIVITY = 'notes_last_updated';
 
 const SEARCH_PAGE_SIZE = 100;
 const MAX_PAGES_PER_STAGE = 100;
@@ -134,7 +137,9 @@ async function buscarEtapa(
   stage: { id: string; label: string },
 ): Promise<{ rows: ActivityRow[]; paginas: number; truncado: boolean; erro?: string }> {
   const rows: ActivityRow[] = [];
-  const enteredProp = `hs_date_entered_${stage.id}`;
+  // hs_date_entered_<etapa> também não existe (é a geração antiga); a v2 da etapa ATUAL vale para
+  // todas as etapas, inclusive as que não têm a propriedade por etapa (ver a Reciclagem)
+  const enteredProp = 'hs_v2_date_entered_current_stage';
   let after: string | undefined;
   let paginas = 0;
 
