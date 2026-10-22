@@ -7,6 +7,20 @@ Dois produtos num repositório, mesmo domínio, mesma sessão Supabase:
 - **Cockpit de gestão** (`gestao/`): Vite + React DOM puro. Só gestor. Servido
   em `/gestao`.
 
+## Domínios (22/10/2026)
+
+- **`fieldtakeat.vercel.app`** — o endereço principal. App em `/`, cockpit em `/gestao`.
+- **`pwa-app-outbound.vercel.app`** — o mesmo projeto da Vercel, mantido em paralelo
+  durante a migração do time; depois vira redirecionamento para o principal.
+- **`fieldsalestakeat.vercel.app`** — é OUTRO projeto da Vercel. As páginas dele
+  redirecionam para cá, mas as rotas **`/api/`** ainda rodam lá (o cockpit chama
+  `/api/hubspot-webhook` e a Edge `cockpit-api` chama `COCKPIT_URL`). Não trocar essas
+  referências pelo domínio principal: aqui não existe `/api/`.
+- **Trocar ou acrescentar domínio** exige, além da Vercel: o endereço na restrição de
+  sites da chave do navegador no Google Cloud (senão o mapa cai com
+  `RefererNotAllowedMapError`) e o Site URL / Redirect URLs no Supabase Auth. Login,
+  app instalado e notificações ficam presos ao endereço: o time reinstala e entra de novo.
+
 ## Regras que não se negociam
 
 1. **O celular não muda.** Todo layout novo é condicionado por
