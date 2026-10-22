@@ -1,9 +1,10 @@
-// Teste da mensagem das 18h (negócios sem próximo passo no grupo do Field Sales).
+// Teste da mensagem das 18h (quentes sem próximo passo no grupo do Field Sales).
 //
 // Rode com:  node scripts/testar-avisos-sem-passo.cjs
 //
-// Protege: o quente (nota 70+) sem passo sumindo no meio da lista; o quente aparecendo duas vezes;
-// negócio com tarefa futura ou no Planejamento sendo cobrado; e o "ZZ TESTE" indo para o grupo.
+// Protege: só quente vai para o grupo (Decisor em diante); negócio com tarefa futura ou no
+// Planejamento não é cobrado; "ZZ TESTE" não vai ao grupo; o placar de ontem → hoje conta quem
+// resolveu e não zera quando a rota roda de novo no mesmo dia.
 const { montarMensagens } = require('../api/avisos-sem-passo.js');
 
 let falhas = 0;
@@ -16,7 +17,7 @@ const funilLeads = {
   '1395880472': [
     neg('10', '1', 'Cantina Sol', 82, { mrr: 400, dias: 9, tarefas: [{ timestamp: '2026-10-13T12:00:00Z' }, { timestamp: '2026-10-08T12:00:00Z' }] }), // quente, passo venceu 13/10
     neg('11', '2', 'Bar do Porto', 75, { tarefas: [{ timestamp: '2026-10-20T12:00:00Z' }] }), // quente, COM passo
-    neg('12', '2', 'Pizza Norte', 64),                                                        // Negociação morna
+    neg('12', '2', 'Pizza Norte', 64),                                                        // Negociação, nunca teve passo
   ],
   '1395880471': [neg('20', '2', 'Café Azul', 71, { mrr: 300 })],                              // quente em Demo
   '1395880470': [neg('30', '1', 'Lanche Bom', 50), neg('31', '2', 'Grill Leste', 30)],             // Decisor: quente pela etapa
@@ -28,30 +29,45 @@ const [m] = montarMensagens({ funilLeads, time, planos, paradas: [], hoje });
 const t = m ? m.texto : '';
 console.log('\n' + t + '\n');
 
-const iQ = t.indexOf('Quentes sem próximo passo');
-ok(iQ > -1 && iQ < t.indexOf('*Ana Lima'), 'o bloco dos quentes vem no topo, antes dos executivos');
-ok(/Quentes sem próximo passo \(4\)/.test(t), 'quente = Decisor em diante: conta 4 (Cantina Sol, Pizza Norte, Café Azul, Grill Leste)');
-ok(t.indexOf('Cantina Sol') < t.indexOf('Café Azul'), 'Negociação antes de Demo');
-ok((t.match(/Cantina Sol/g) || []).length === 1, 'o quente não se repete no bloco do executivo');
-ok(/Cantina Sol\* ⏰13\/10 · Ana · Negociação, R\$ 400 \(9 dias parado\)/.test(t), 'a linha do quente diz dono, etapa, MRR e dias parado');
+ok(/^🔥 \*Quentes sem próximo passo · 16\/10\*/.test(t), 'o título é dos quentes, com a data');
+ok(/^4 negócios · R\$ 700\/mês parados\. Marque o próximo passo hoje\.$/m.test(t), 'conta 4 quentes (Cantina Sol, Pizza Norte, Café Azul, Grill Leste) e soma o MRR parado');
+ok(!/Padaria Sul|Bar Novo/.test(t), 'Visita não vai mais para a mensagem');
 ok(!/Bar do Porto/.test(t), 'quente com tarefa futura não é cobrado');
 ok(!/Lanche Bom/.test(t), 'negócio no Planejamento de hoje em diante não é cobrado');
 ok(!/ZZ TESTE/.test(t), 'teste não vai ao grupo');
-ok(/• \*Pizza Norte\* · Bia · Negociação/.test(t) && /• \*Grill Leste\* · Bia · Decisor/.test(t), 'a nota de temperatura não decide mais: Negociação com nota 64 e Decisor com 30 são quentes');
-ok(!/• \*(Padaria Sul|Bar Novo)\*/.test(t), 'Visita não é quente');
-ok(/\*Ana Lima \(2, 1 quente acima\)\*/.test(t), 'o cabeçalho do executivo conta o total e avisa o quente que está acima');
-// os vencidos (16/10/26): "venceu" ≠ "nunca teve"
-ok(/Cantina Sol\* ⏰13\/10 · Ana/.test(t), 'o quente vencido leva ⏰ e a data mais recente que venceu (13/10, não 08/10)');
-ok(/\*Visita:\* Padaria Sul ⏰14\/10/.test(t), 'o negócio da lista leva ⏰ e a data');
-ok(/\*Ana Lima[^\n]*\n⏰ 2 venceram sem ser feitos/.test(t), 'o executivo tem a contagem dos que venceram logo abaixo do nome');
-ok(/Bar Novo/.test(t) && !/Bar Novo ⏰/.test(t) && !/\*Bia Rocha[^\n]*\n⏰/.test(t), 'quem nunca teve passo não leva ⏰, e quem não tem vencido não ganha a linha');
-ok(/Outro dia" aceita qualquer data/.test(t), 'o rodapé diz que retorno longe também é passo');
+ok(t.indexOf('*Bia (3)*') > -1 && t.indexOf('*Bia (3)*') < t.indexOf('*Ana (1)*'), 'um bloco por pessoa, de quem tem mais para quem tem menos');
+ok(/\*Ana \(1\)\*\n• Cantina Sol · Negociação R\$ 400 · venceu 13\/10/.test(t), 'a linha diz etapa, MRR e a data mais recente que venceu (13/10, não 08/10)');
+ok(t.indexOf('Pizza Norte') < t.indexOf('Café Azul') && t.indexOf('Café Azul') < t.indexOf('Grill Leste'), 'dentro do bloco: Negociação, Demo, Decisor');
+ok(/• Pizza Norte · Negociação$/m.test(t), 'quem nunca teve passo não leva "venceu"');
+ok(/fieldtakeat\.vercel\.app/.test(t), 'o rodapé leva o endereço do app');
+ok(!/eram/.test(t), 'sem lista de ontem não há placar');
+ok(m.estado && m.estado.dia === hoje && m.estado.porDono['2'].length === 3, 'devolve a lista de hoje para gravar');
+
+// o placar: ontem a Ana tinha 2 (um saiu) e a Bia 3 (os mesmos)
+{
+  const ontem = { dia: '2026-10-15', porDono: { '1': ['10', '99'], '2': ['12', '20', '31'] } };
+  const [m2] = montarMensagens({ funilLeads, time, planos, paradas: [], hoje, ontem });
+  ok(/^Ontem eram 5 → hoje 4\. Resolveram: Ana 1 ✅$/m.test(m2.texto), 'o placar conta quem saiu da lista desde ontem');
+  // rodou de novo no mesmo dia: a base continua a de ontem
+  const [m3] = montarMensagens({ funilLeads, time, planos, paradas: [], hoje, ontem: m2.estado });
+  ok(/^Ontem eram 5 → hoje 4\. Resolveram: Ana 1 ✅$/m.test(m3.texto), 'rodar de novo no mesmo dia não zera o placar');
+  const [m4] = montarMensagens({ funilLeads, time, planos, paradas: [], hoje, ontem: { dia: '2026-10-15', porDono: { '2': ['12', '20', '31'] } } });
+  ok(/Ninguém resolveu nenhum\./.test(m4.texto), 'ninguém resolveu: o placar diz isso');
+}
+
+// zerou: manda o parabéns com o placar; sem nada para cobrar e sem ontem, não manda
+{
+  const vazio = { '1395880472': [neg('11', '2', 'Bar do Porto', 75, { tarefas: [{ timestamp: '2026-10-20T12:00:00Z' }] })] };
+  const [z] = montarMensagens({ funilLeads: vazio, time, planos, paradas: [], hoje, ontem: { dia: '2026-10-15', porDono: { '2': ['11'] } } });
+  ok(z && /Nenhum quente sem próximo passo/.test(z.texto) && /Resolveram: Bia 1 ✅/.test(z.texto), 'zerou: manda o parabéns e o placar');
+  ok(montarMensagens({ funilLeads: vazio, time, planos, paradas: [], hoje }).length === 0, 'nada a cobrar e sem ontem: não manda nada');
+}
 
 // 19/10/26: visita já FEITA hoje fica na grade (feito: true), mas não é próximo passo
 {
-  const p2 = [{ data_segunda: '2026-10-12', grade: [null, null, null, null, [{ id: 'c-31', feito: true, fora: true }], null, null] }];
+  const p2 = [{ data_segunda: '2026-10-12', grade: [null, null, null, null, [{ id: 'c-30', feito: true, fora: true }], null, null] }];
   const [m2] = montarMensagens({ funilLeads, time, planos: p2, paradas: [], hoje });
-  ok(/Grill Leste/.test(m2 ? m2.texto : ''), 'visita feita hoje na grade não tira o negócio da lista de sem próximo passo');
+  ok(/Lanche Bom/.test(m2 ? m2.texto : ''), 'visita feita hoje na grade não tira o negócio da lista');
 }
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
