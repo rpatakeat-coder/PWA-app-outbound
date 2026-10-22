@@ -696,7 +696,8 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
      precisam fazer"): até 3 dias de atraso fica no bloco 2, logo depois de Para hoje; o resto vai para o
      recolhido do fim, só com Remarcar ou Sem interesse. Ninguém sai da conta. */
   const ATRASO_ANTIGO = 3;
-  const ehAntigo = (i: CardDaFila) => !!i.prazo && diasEntreIso(i.prazo, hoje) > ATRASO_ANTIGO;
+  // negócio quente (Decisor, Demo, Negociação) nunca vai para o recolhido: é o dinheiro do mês (Julyan, 22/10/26)
+  const ehAntigo = (i: CardDaFila) => !!i.prazo && diasEntreIso(i.prazo, hoje) > ATRASO_ANTIGO && !(ETAPAS_QUENTES as string[]).includes(i.etapaId);
   const atrasadosRecentes = atrasadosLista.filter((i) => !ehAntigo(i));
   const atrasadosAntigos = atrasadosLista.filter(ehAntigo);
   // P7: o Cheguei sem Como foi vai para o TOPO de Para hoje (no servidor ele conta como atrasado)
