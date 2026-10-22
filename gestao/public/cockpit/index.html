@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@3f8468b9.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@7a921aa9.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "3f8468b9";
+  var VERSAO = "7a921aa9";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -56395,6 +56395,8 @@ GV2.montar = async function (so, leituraPronta) {
       negocios.push({
         id: String(l.id), dono: String(l.ownerId), nome: l.name || l.dealname || 'sem nome', etapa_idx: idx, stageId: sid,
         dias: dias, regua: regua, mrr: mrr, proximo_passo: ppTxt, plano: l.plano_apresentado || null,
+
+        vencidaDesde: ppTxt ? null : ((Array.isArray(l.tarefas) ? l.tarefas : []).map(function (x) { return x && x.timestamp ? GV2.diaDe(x.timestamp) : null; }).filter(function (d) { return d && d < agora.iso; }).sort()[0] || null),
         quente: idx >= 4, negociacao: idx === 4, morno: idx === 2 || idx === 3, agPag: agPag,
         travado: travado, semPasso: !agPag && idx >= 1 && !ppTxt,
         puxar: !agPag && (travado || (idx === 4 && !ppTxt)),
@@ -59775,7 +59777,7 @@ GV2.p3Funil = function (p) {
       + '<span class="num ' + (n.travado ? 't-av' : 't-mute') + '">' + n.dias + 'd · régua ' + n.regua + '</span>'
       + '<b class="num">' + (n.mrr ? GV2.rs(n.mrr) : '<span class="t-dim">sem valor</span>') + '</b>'
       + '<span class="' + (n.etapa_idx >= 3 ? (nA === 4 ? 't-ok' : 't-av') : 't-dim') + '">' + (n.etapa_idx >= 3 ? nA + ' de 4' : '—') + '</span>'
-      + '<span class="gv2-ellip ' + (n.proximo_passo || n.agPag ? 't-mute' : 't-av') + '">' + GV2.e(n.agPag ? 'cobrança do financeiro' : (n.proximo_passo || 'sem próximo passo')) + '</span>'
+      + '<span class="gv2-ellip ' + (n.proximo_passo || n.agPag ? 't-mute' : 't-av') + '">' + GV2.e(n.agPag ? 'cobrança do financeiro' : (n.proximo_passo || GV2.textoSemPasso(n))) + '</span>'
       + '<span>' + acao + '</span></div>';
   }).join('');
   const titulo = sel != null ? GV2.ETAPAS[sel] + ' · ' + lista.length : 'Para puxar · travados e quentes sem passo · ' + p.puxar.length;
@@ -59958,7 +59960,7 @@ GV2.render.negocios = function () {
       GV2.celSistema(n),
       '<span class="num ' + (n.travado ? 't-av' : 't-mute') + '">' + GV2.pl(n.dias, 'dia', 'dias') + (n.travado ? ' · travado' : '') + '</span>',
       '<span class="num ' + (n.mrr ? 'cel-forte' : 't-faint') + '">' + (n.mrr ? GV2.rs(n.mrr) : 'sem valor') + '</span>',
-      '<span class="gv2-ellip ' + (n.proximo_passo || n.agPag ? '' : 't-av') + '">' + GV2.e(n.agPag ? '—' : (n.proximo_passo || 'sem próximo passo')) + '</span>',
+      '<span class="gv2-ellip ' + (n.proximo_passo || n.agPag ? '' : 't-av') + '">' + GV2.e(n.agPag ? '—' : (n.proximo_passo || GV2.textoSemPasso(n))) + '</span>',
       '<span style="justify-self:end">' + acao + '</span>'
     ] };
   });
@@ -60070,6 +60072,7 @@ GV2.rxGavFechar = function () {
   GV2.pintar();
 };
 
+GV2.textoSemPasso = function (n) { return n && n.vencidaDesde ? 'vencida desde ' + GV2.ddmm(n.vencidaDesde) : 'sem próximo passo'; };
 GV2.rxLinhaNeg = function (n) {
   const c = GV2.estado.cobrados['neg:' + n.id];
   const acao = n.agPag ? '<span class="t-dim gv2-v4-fin">com o financeiro</span>'
@@ -60080,7 +60083,7 @@ GV2.rxLinhaNeg = function (n) {
     '<span class="gv2-ellip t-mute">' + GV2.e(GV2.ETAPAS[n.etapa_idx]) + '</span>',
     '<span class="num ' + (n.travado ? 't-av' : 't-mute') + '" title="' + GV2.e(GV2.pl(n.dias, 'dia', 'dias') + ' na etapa' + (n.travado ? ' · travado (régua ' + n.regua + ' d)' : '')) + '">' + n.dias + ' d</span>',
     '<span class="num ' + (n.mrr ? 'cel-forte' : 't-dim') + '">' + (n.mrr ? GV2.rs(n.mrr) : 'sem valor') + '</span>',
-    (n.proximo_passo || n.agPag ? '<span class="gv2-ellip">' + GV2.e(n.agPag ? '—' : n.proximo_passo) + '</span>' : '<span><em class="gv2-v9-selo is-av">sem próximo passo</em></span>'),
+    (n.proximo_passo || n.agPag ? '<span class="gv2-ellip">' + GV2.e(n.agPag ? '—' : n.proximo_passo) + '</span>' : '<span><em class="gv2-v9-selo is-av">' + GV2.e(GV2.textoSemPasso(n)) + '</em></span>'),
     '<span style="justify-self:end">' + acao + '</span>'
   ] };
 };
