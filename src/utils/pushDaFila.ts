@@ -8,6 +8,7 @@ export type EstadoDoPush = 'sem_suporte' | 'precisa_instalar' | 'negado' | 'desl
 
 const temSuporte = () => typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 const ehIphone = () => typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent);
+const ehCelular = () => typeof navigator !== 'undefined' && (ehIphone() || /android/i.test(navigator.userAgent));
 const instalado = () => typeof window !== 'undefined'
   && (window.matchMedia?.('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone === true);
 
@@ -51,10 +52,33 @@ export async function estadoDosAvisos(): Promise<EstadoDoPush> {
     try { if (await ligarPush({ teste: false }) === 'ligado') return 'ligado'; } catch { /* segue para a conta */ }
   }
   try {
-    const { data } = await supabase.from('push_inscricoes').select('id').lt('falhas', 3).limit(1);
+    // 22/10/26: no CELULAR só vale aviso ativo em celular. Quem ativou no computador nunca mais era
+    // cobrado no telefone (Sérgio, Fabio e Júlio só tinham o computador inscrito), e na rua o aviso
+    // não chegava. No computador, qualquer aparelho inscrito basta.
+    let q = supabase.from('push_inscricoes').select('id').lt('falhas', 3);
+    if (ehCelular()) q = q.in('plataforma', ['iphone', 'android']);
+    const { data } = await q.limit(1);
     if (data?.length) return 'ligado';
   } catch { /* sem leitura: fica o estado do aparelho */ }
   return e;
+}
+
+/* POR QUE OS AVISOS NÃO LIGAM (22/10/26): Bruno, Marco, Sandro e Renata nunca inscreveram aparelho
+   nenhum, e não havia como saber se recusaram, adiaram, abriram fora do ícone ou num celular sem
+   suporte. O app guarda o último estado em profiles.preferences.avisos (a própria pessoa grava; o
+   gestor lê). Só escreve quando muda, para não gravar a cada abertura. */
+export async function registrarEstadoDosAvisos(estado: EstadoDoPush): Promise<void> {
+  try {
+    const { data: sessao } = await supabase.auth.getUser();
+    const id = sessao?.user?.id;
+    if (!id) return;
+    const plataforma = ehIphone() ? (instalado() ? 'iphone_icone' : 'iphone_navegador') : /android/i.test(navigator.userAgent) ? 'android' : 'computador';
+    const { data } = await supabase.from('profiles').select('preferences').eq('id', id).maybeSingle();
+    const prefs = (data?.preferences ?? {}) as Record<string, unknown>;
+    const antes = (prefs.avisos ?? {}) as { estado?: string; plataforma?: string };
+    if (antes.estado === estado && antes.plataforma === plataforma) return;
+    await supabase.from('profiles').update({ preferences: { ...prefs, avisos: { estado, plataforma, em: new Date().toISOString() } } }).eq('id', id);
+  } catch { /* registro é diagnóstico: falhar não muda nada para quem usa */ }
 }
 
 /** Pede a permissão (tem de ser num toque), inscreve o aparelho e manda um aviso de teste. */

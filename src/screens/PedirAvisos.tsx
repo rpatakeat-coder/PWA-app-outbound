@@ -9,7 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { IconBell } from '../components/icons';
 import { Toast } from '../components/Toast';
-import { estadoDosAvisos, ligarPush, type EstadoDoPush } from '../utils/pushDaFila';
+import { estadoDosAvisos, ligarPush, registrarEstadoDosAvisos, type EstadoDoPush } from '../utils/pushDaFila';
 import { useComunicadosNaoLidos } from '../hooks/useComunicados';
 
 const PAUSA_MS = 2 * 60_000;
@@ -30,6 +30,7 @@ export default function PedirAvisos({ ativo }: { ativo: boolean }) {
     const verificar = () => { void estadoDosAvisos().then((e) => {
       if (!vivo) return;
       setEstado(e);
+      void registrarEstadoDosAvisos(e);
       if (e === 'ligado' || e === 'sem_suporte') { setAberto(false); return; }
       if (Date.now() - adiadoEm < PAUSA_MS) return;
       try {
@@ -52,6 +53,7 @@ export default function PedirAvisos({ ativo }: { ativo: boolean }) {
     try {
       const e = await ligarPush();
       setEstado(e);
+      void registrarEstadoDosAvisos(e);
       if (e === 'ligado') { Toast.mostrar('Avisos ligados · mandei um de teste', 'ok'); setAberto(false); }
       else if (e === 'negado') Toast.mostrar('O celular recusou. Libere nos Ajustes para receber os avisos.', 'erro');
     } catch (err) { Toast.mostrar((err as Error).message, 'erro'); }
