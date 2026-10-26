@@ -917,7 +917,15 @@ export function useClients(
       // Check-in move o lead pra etapa "Visita" automaticamente — mas SO se
       // ele ainda nao passou desse ponto do funil. Um lead em Negociacao que
       // recebe uma revisita nao pode regredir pra Visita.
-      const etapaAtual = (client.etapa ?? '').trim().toUpperCase();
+      // 26/10/26: o espelho grava o rótulo do HubSpot ("Ag. Pagamento", "Enviado Onboarding"), que não
+      // casava com o rótulo do app ("Pagamento", "Onboarding"): a etapa virava "desconhecida" e o
+      // check-in do Marco no Bar da Leia (23/10) tirou o negócio de Ag. Pagamento e pôs em Visita.
+      const APELIDO: Record<string, string> = {
+        'AG. PAGAMENTO': 'PAGAMENTO', 'AGUARDANDO PAGAMENTO': 'PAGAMENTO', 'ENVIADO ONBOARDING': 'ONBOARDING',
+        'DIAGNÓSTICO': 'CONVERSA COM DECISOR', 'CONVERSA COM O DECISOR': 'CONVERSA COM DECISOR',
+      };
+      const etapaCrua = (client.etapa ?? '').trim().toUpperCase();
+      const etapaAtual = APELIDO[etapaCrua] ?? etapaCrua;
       const idxAtual = FUNNEL_STAGE_IDS.indexOf(
         STAGES.find(s => s.label.toUpperCase() === etapaAtual)?.id ?? '',
       );
