@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@64ce0609.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@4d9eb13e.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "64ce0609";
+  var VERSAO = "4d9eb13e";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -3964,6 +3964,9 @@
   .pb9-rail-bloco.is-ouro{background:var(--pb9-ouro-bg,var(--amber-soft));border-color:var(--pb9-ouro-li,var(--amber-line));}
   .pb9-rail-rot{font:900 9px var(--font-display);letter-spacing:.12em;text-transform:uppercase;color:var(--ter);}
   .pb9-rail-bloco.is-ouro .pb9-rail-rot{color:#8A6314;}
+
+  .pb9-rail-bloco.is-ouro .pb9-rail-txt{color:#4A3A16;}
+  .pb9-rail-bloco.is-ouro .pb9-rail-txt b{color:#2B2008;}
   .pb9-rail-txt{margin-top:6px;font-size:11.5px;line-height:1.55;color:var(--muted);}
   .pb9-rail-barra{margin-top:9px;height:6px;border-radius:var(--r-pill);background:var(--sunk);overflow:hidden;}
   .pb9-rail-barra i{display:block;height:100%;background:linear-gradient(90deg,var(--red),#B07C1F);}
