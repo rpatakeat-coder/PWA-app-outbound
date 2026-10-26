@@ -29,14 +29,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadingProfileFor = useRef<string | null>(null);
 
   useEffect(() => {
-    // Check current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    /* A SESSÃO NÃO CAI POR INTERNET RUIM (26/10/26, Julyan: "toda hora que eles tão abrindo tá pedindo
+       pra logar novamente"). Ao abrir depois de um tempo, o token vencido é renovado no servidor
+       (Oregon). Se a rede da rua falha nessa hora, o getSession devolve sessão nula com erro de REDE,
+       mas a sessão continua guardada e válida — e o app mostrava o login. Medido: o Bruno entrou com
+       senha 5 vezes na sexta (23/10) sem nenhuma recusa do servidor no meio. Agora, com sessão guardada
+       e erro de rede, o app espera e tenta de novo (até ~1 min); o login só aparece sem sessão guardada
+       ou quando o servidor recusa de verdade (aí o próprio supabase-js apaga a sessão). */
+    let vivo = true;
+    const temSessaoGuardada = () => {
+      try { return typeof window !== 'undefined' && Object.keys(window.localStorage).some((k) => /^sb-.*-auth-token$/.test(k)); } catch { return false; }
+    };
+    const restaurar = async (tentativa: number) => {
+      const { data: { session }, error: erroSessao } = await supabase.auth.getSession();
+      if (!vivo) return;
       if (session?.user) {
         setUser(session.user);
         loadProfile(session.user.id);
+        setLoading(false);
+        return;
+      }
+      const deRede = !!erroSessao && (erroSessao.name === 'AuthRetryableFetchError' || !(erroSessao as { status?: number }).status);
+      if (deRede && tentativa < 8 && temSessaoGuardada()) {
+        setTimeout(() => { void restaurar(tentativa + 1); }, Math.min(2000 * (tentativa + 1), 10000));
+        return;
       }
       setLoading(false);
-    });
+    };
+    void restaurar(0);
 
     // Listen for auth changes. Skip INITIAL_SESSION — getSession above already handled it.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -45,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session?.user) {
           setUser(session.user);
           loadProfile(session.user.id);
+          setLoading(false); // a renovação em segundo plano conseguiu antes da nova tentativa
         } else {
           setUser(null);
           setProfile(null);
@@ -52,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    return () => subscription?.unsubscribe();
+    return () => { vivo = false; subscription?.unsubscribe(); };
   }, []);
 
   /* O PERFIL DA ÚLTIMA VEZ ABRE NA HORA (auditoria de velocidade, 05/10/26). Medido como Sandro:
