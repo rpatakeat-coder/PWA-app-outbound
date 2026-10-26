@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@5044b21b.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@64ce0609.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "5044b21b";
+  var VERSAO = "64ce0609";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -4171,6 +4171,9 @@
   .pb7-leve li{color:rgba(255,253,248,.72);}
   .pb7-leve li::before{color:var(--red);}
   .pb7-leve li strong{color:var(--dark-ink);}
+
+  .pb9-rail-bloco .pb7-leve li{color:var(--ink);}
+  .pb9-rail-bloco .pb7-leve li strong{color:var(--ink);}
 
   @media (max-width:760px){
     .pb7{padding:12px;}
