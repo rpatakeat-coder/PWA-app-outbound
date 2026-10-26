@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@0d6b8718.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@f4a6a04f.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "0d6b8718";
+  var VERSAO = "f4a6a04f";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -22322,6 +22322,30 @@ function preencherCabecalhoRodape() {
   const updatedEl = document.getElementById('updatedLine');
   updatedEl.textContent =
     `HubSpot atualizado automaticamente em ${DATA.hubspotUpdatedAtFmt} · Time ativo: ${ativos} executivos${emPreparacao ? ` · ${emPreparacao} em preparação` : ''}`;
+
+  (function () {
+    const velho = document.getElementById('confNumerosLista');
+    if (velho) velho.remove();
+    const conf = DATA.syncStatus && DATA.syncStatus.conferencia;
+    if (!conf || !conf.em) return;
+    const hh = new Date(Date.parse(conf.em) - 3 * 3600000).toISOString().slice(11, 16);
+    const itens = Array.isArray(conf.itens) ? conf.itens : [];
+    const botao = document.createElement('button');
+    botao.type = 'button';
+    botao.style.cssText = 'background:none;border:0;padding:0;font:inherit;cursor:' + (itens.length ? 'pointer' : 'default') + ';color:' + (itens.length ? 'var(--red)' : 'inherit') + ';';
+    botao.textContent = itens.length
+      ? ' · ' + itens.length + (itens.length === 1 ? ' divergência' : ' divergências') + ' na conferência das ' + hh + ' — ver'
+      : ' · números conferidos com o HubSpot e o banco às ' + hh;
+    updatedEl.appendChild(botao);
+    if (!itens.length) return;
+    const lista = document.createElement('div');
+    lista.id = 'confNumerosLista';
+    lista.hidden = true;
+    lista.style.cssText = 'margin:6px 0 2px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-size:12px;line-height:1.55;color:var(--ink);';
+    itens.forEach(function (i) { const li = document.createElement('div'); li.textContent = '• ' + i.texto; lista.appendChild(li); });
+    updatedEl.insertAdjacentElement('afterend', lista);
+    botao.addEventListener('click', function () { lista.hidden = !lista.hidden; });
+  }());
 
   const el = document.getElementById('sidenavFooterInfo');
   if (el) {
