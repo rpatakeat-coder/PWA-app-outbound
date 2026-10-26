@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@65f0206b.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@5044b21b.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "65f0206b";
+  var VERSAO = "5044b21b";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -28747,6 +28747,9 @@ function pl6DadosFinal(rep) {
     if (lugarAtivo && pl6LugarDo(l).chave !== lugarAtivo) return false;
     return true;
   }).sort(function (a, b) {
+
+    const pa = naGrade.indexOf(a.id) >= 0, pb = naGrade.indexOf(b.id) >= 0;
+    if (pa !== pb) return pa ? 1 : -1;
     if (propAtivo === 'cad' && pl7) return pl7.comparar(pl7Na, hojeISOPl6)(a, b);
 
     if (propAtivo === 'follow') return (b.atrasoDias || 0) - (a.atrasoDias || 0);
@@ -29205,19 +29208,22 @@ function pl6DadosFinal(rep) {
       const tg = propAtivo === 'cad' && pl7 ? pl7.selo(l, pl7Na, hojeISOPl6) : pfTag(l);
       const met = pl6MetricaDoCard(l, propAtivo);
       const l3Cad = propAtivo === 'cad' && pl7 ? pl7.linha3(l, pl7Na, hojeISOPl6) : '';
+
+      const diPlano = grade.findIndex(function (d) { return (d || []).some(function (v) { return pl6SlotId(v) === l.id; }); });
+      const noPlano = diPlano >= 0 && dias[diPlano] ? dias[diPlano].rot + ' ' + dias[diPlano].data : '';
       return {
         nome: esc(l.nome), sub: esc(met && met.l2 ? met.l2 : pl6SubDoCard(l)),
         metrica: met ? esc(met.v) : '', metricaCor: met ? met.cor : 'var(--ink)',
         metricaRot: met ? esc(met.rot) : '',
         linha3: l3Cad ? esc(l3Cad) : (met && met.l3 ? esc(met.l3) : ''),
         linha3Cor: (met && met.l3 && met.l3.indexOf('sem ') === 0) ? 'var(--ter)' : '#7A8494',
-        tag: esc(tg.tag), tagCor: tg.cor, tagBg: tg.bg,
+        tag: noPlano ? esc('NO PLANO · ' + String(noPlano).toUpperCase()) : esc(tg.tag), tagCor: noPlano ? '#1E7B4F' : tg.cor, tagBg: noPlano ? '#E3F4EA' : tg.bg,
         bg: sel ? 'var(--red-soft)' : 'var(--panel)', borda: sel ? '#E51A31' : 'var(--line)',
 
-        acao: 'Pôr em ▾',
-        acaoCor: 'var(--plum-ink)',
+        acao: noPlano ? 'Mudar dia ▾' : 'Pôr em ▾',
+        acaoCor: noPlano ? '#1E7B4F' : 'var(--plum-ink)',
         acaoBg: 'var(--panel)',
-        acaoBorda: 'var(--plum-linha)',
+        acaoBorda: noPlano ? '#A9D9BD' : 'var(--plum-linha)',
         on: 'poremmenu:' + l.id,
         poremAberto: s.poremDe === l.id,
         poremDias: s.poremDe === l.id ? dias.map(function (dd, di) {
