@@ -222,6 +222,7 @@ import { quenteEsfriando, secaoDoItem } from './supabase/functions/_compartilhad
 import { FaixaHoraDasLigacoes } from './src/screens/CartaoDaFila';
 import FolhaAntesDaRua from './src/screens/FolhaAntesDaRua';
 import PedirAvisos from './src/screens/PedirAvisos';
+import MinhasFotos, { FOTOS_LIBERADAS } from './src/screens/MinhasFotos';
 import { marcarGravada as marcarFeitaGravada, registrarFeita } from './src/utils/filaFeitas';
 import { JANELAS_LIGACAO } from './src/utils/horaDasLigacoes';
 import { useRouteConfig } from './src/hooks/useRouteConfig';
@@ -3129,6 +3130,8 @@ function MainApp() {
   // logout, o tema e — finalmente — a entrada pro Gestor e pro Meu desempenho,
   // que desde o M1 nao tinham como ser alcancados no celular.
   const [perfilAberto, setPerfilAberto] = useState(false);
+  // "Minhas fotos" (26/10/26): as fotos dos próprios check-ins, liberado por pessoa (FOTOS_LIBERADAS)
+  const [fotosAbertas, setFotosAbertas] = useState(false);
   // A foto do perfil: trocar e remover. Vive aqui porque o avatar da folha do
   // perfil e' o botao, e a folha e' montada neste componente.
   const {
@@ -9259,6 +9262,9 @@ function MainApp() {
 
       {/* os avisos do celular pedidos na abertura (19/10/26): só falta o Permitir do sistema */}
       <PedirAvisos ativo={!!profile && profile.role !== 'view'} />
+      {profile?.id && FOTOS_LIBERADAS.has(profile.id) && (
+        <MinhasFotos aberto={fotosAbertas} userId={profile.id} onFechar={() => setFotosAbertas(false)} />
+      )}
       {antesDaRua && (() => {
         const itensF = (filaNaTela.data?.itens ?? []) as Array<{ dealId: string; negocio: string; etapaId: string; venceu: boolean; prazo: string | null; horaPrazo?: string | null; telefone: string | null }>;
         const hojeF = filaNaTela.data?.hoje ?? diaBRT(new Date());
@@ -9404,6 +9410,9 @@ function MainApp() {
             // Modo sol (prompt §6): mapa claro para ler na rua ao meio-dia. Só no mapa novo.
             modoNovo
               ? { chave: 'sol', Icone: IconSparkle, rotulo: 'Modo sol · mapa claro', chaveLigada: modoSol, aoTocar: () => { alternarModoSol(); } }
+              : null,
+            profile?.id && FOTOS_LIBERADAS.has(profile.id)
+              ? { chave: 'fotos', Icone: IconEye, rotulo: 'Minhas fotos', aoTocar: () => { setPerfilAberto(false); setFotosAbertas(true); } }
               : null,
             { chave: 'config', Icone: IconSettings, rotulo: 'Configurações', aoTocar: () => irParaTelaDePerfil('config') },
             // O logout disparava a UM toque, sem rede — e sem conexao pra
