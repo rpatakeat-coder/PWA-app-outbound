@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@b20ece92.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@0d6b8718.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "b20ece92";
+  var VERSAO = "0d6b8718";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -54146,8 +54146,7 @@ function sm5TelaHTML(d) {
     +       conv.reunioes + ' reuniões</b> <span style="color:var(--muted2);">('
     +       pctConv(conv.reunioes, conv.criados) + ')</span></span>'
     +     '<span><b>' + conv.reunioes + ' reuniões</b> → <b style="color:var(--green);">'
-    +       conv.ganhos + ' ganhos</b> <span style="color:var(--muted2);">('
-    +       pctConv(conv.ganhos, conv.reunioes) + ')</span></span>'
+    +       conv.ganhos + ' ganhos</b></span>'
     +     '<span style="color:var(--muted);">perdidos <b style="color:#E51A31;">' + conv.perdidos
     +       '</b> · reciclagem <b>' + conv.reciclagem + '</b></span>'
     +     '<span style="margin-left:auto;color:var(--muted2);">conversões da semana</span>'
@@ -60815,7 +60814,7 @@ GV2.V5_PROP = { funil: 'funil', follow: 'follow-up', nova: 'nova', rua: 'prospec
 GV2.V5_IC = {
   lig: 'M5 4h4l2 5-3 2a11 11 0 005 5l2-3 5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2',
   reu: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
-  tar: 'M5 12l5 5L20 7',
+  tar: 'M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01',
   cal: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
   pess: 'M9 11a4 4 0 100-8 4 4 0 000 8zM2 21a7 7 0 0114 0M17 11a3 3 0 100-6M22 21a6 6 0 00-5-6',
   wa: 'M21 12a9 9 0 01-13.5 7.8L3 21l1.2-4.5A9 9 0 1121 12z',
