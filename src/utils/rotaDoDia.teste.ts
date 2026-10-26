@@ -1,7 +1,7 @@
 // Teste da conta da rota do dia (Agenda no computador).
 //
 // Rode com:  npx tsx src/utils/rotaDoDia.teste.ts
-import { conflito, encaixar, horarios, hhmm, melhorPosicao, perna, resumo, temOutraCidade, type ParadaRota } from './rotaDoDia';
+import { conflito, encaixar, horarios, hhmm, melhorPosicao, ordemParaDirigir, perna, resumo, temOutraCidade, type ParadaRota } from './rotaDoDia';
 
 let falhas = 0;
 const ok = (c: boolean, m: string) => {
@@ -57,6 +57,38 @@ ok(horarios(semPonto, 540).length === 3 && encaixar(semPonto, 540).length === 3,
 const vv = { latitude: -20.33, longitude: -40.29 }, rio = { latitude: -22.93, longitude: -43.17 };
 ok(temOutraCidade([{ id: 'a', ponto: vv, fixo: null }, { id: 'b', ponto: rio, fixo: null }]), 'Vila Velha → Rio é outra cidade: sem horas de rua inventadas');
 ok(!temOutraCidade([{ id: 'a', ponto: vv, fixo: null }, { id: 'b', ponto: { latitude: -20.35, longitude: -40.31 }, fixo: null }]), 'paradas no mesmo bairro seguem com a estimativa');
+
+// A ORDEM PARA DIRIGIR (26/10/26): o dia real do Sérgio em 23/10, na ordem em que entrou no plano
+// (Morumbi, Vila Paulicéia, Vila Guilherme, Vila Gertrudes no sul, Carandiru...), saindo de Santana.
+{
+  const sp = (id: string, lat: number, lng: number, fixo: number | null = null): ParadaRota => ({ id, ponto: { latitude: lat, longitude: lng }, fixo });
+  const dia = [
+    sp('morumbi', -23.62722, -46.69944), sp('barecito', -23.4888, -46.60992), sp('north', -23.48967, -46.61033),
+    sp('quintal', -23.50855, -46.60621), sp('terraco', -23.4926, -46.61069), sp('quatro', -23.62532, -46.70093),
+    sp('lelui', -23.50475, -46.61237), sp('villares', -23.49736, -46.61217),
+  ];
+  const santana = { latitude: -23.5018, longitude: -46.6168 };
+  const km = (ids: string[], de: { latitude: number; longitude: number } | null) => {
+    const pts = ids.map((id) => dia.find((p) => p.id === id)!.ponto!);
+    let m = de ? perna(de, pts[0])!.m : 0;
+    for (let i = 1; i < pts.length; i++) m += perna(pts[i - 1], pts[i])!.m;
+    return m / 1000;
+  };
+  const ordem = ordemParaDirigir(dia, santana, 10 * 60);
+  const antes = km(dia.map((p) => p.id), santana), depois = km(ordem, santana);
+  ok(ordem.length === dia.length && new Set(ordem).size === dia.length, 'nenhuma parada some nem repete');
+  ok(depois < antes * 0.6, `pelo caminho: ${depois.toFixed(1)} km contra ${antes.toFixed(1)} km na ordem do plano`);
+  const sul = ['morumbi', 'quatro'].map((id) => ordem.indexOf(id)).sort((a, b) => a - b);
+  ok(sul[1] - sul[0] === 1, 'as duas paradas da zona sul ficam juntas (sem voltar ao sul duas vezes)');
+  ok(['lelui', 'villares', 'terraco', 'quintal'].includes(ordem[0]), 'começa pela parada mais perto de onde ele está');
+  // com cadeado: o Quatro às 10:00 vem na hora, mesmo sendo longe
+  const comCadeado = dia.map((p) => (p.id === 'quatro' ? { ...p, fixo: 11 * 60 } : p));
+  const o2 = ordemParaDirigir(comCadeado, santana, 10 * 60);
+  const hs = horarios([{ id: 'o', ponto: santana, fixo: null }, ...o2.map((id) => comCadeado.find((p) => p.id === id)!)], 10 * 60 - 20);
+  const iQ = o2.indexOf('quatro') + 1;
+  ok(hs[iQ].atraso <= 10, `a parada com cadeado às 11:00 chega no horário (atraso ${hs[iQ].atraso} min)`);
+  ok(ordemParaDirigir(dia, null, 9 * 60).length === dia.length, 'sem GPS, cai no Encaixar com todas as paradas');
+}
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\ntudo certo');

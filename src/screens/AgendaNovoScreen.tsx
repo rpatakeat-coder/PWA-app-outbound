@@ -40,6 +40,7 @@ import { compromissosDoDia, estadoDasParadas, paradaParaCasar, separarCompromiss
 import { acaoPorId } from '../utils/acoesDoPlano';
 import { montarFeitoNoDia, type FichaDoDia, type RegistroDoDia, type VisitaDoDia } from '../utils/feitoNoDia';
 import { proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
+import { ordemParaDirigir } from '../utils/rotaDoDia';
 import { porNoDia, tirarDoDia } from '../utils/paradaDoDia';
 import { avisarQueOPlanoMudou } from '../utils/planoDoPino';
 import { ROTULO_ETAPA } from '../utils/fichaDeRua';
@@ -366,10 +367,23 @@ export default function AgendaNovoScreen({
     void Linking.openURL(`https://wa.me/${com55(tel)}?text=${encodeURIComponent(msg)}`);
   };
 
-  /* O PERCURSO COMPLETO, A PÉ OU DE CARRO (28/09/2026): 10 pontos por vez no Google Maps. */
-  const abrirPercursoDe = (lista: FieldRouteStopWithClient[]) => {
-    const pts = lista.filter((p) => p.client?.latitude != null && p.client?.longitude != null)
-      .map((p) => `${p.client!.latitude},${p.client!.longitude}`);
+  /* O PERCURSO COMPLETO, A PÉ OU DE CARRO (28/09/2026): 10 pontos por vez no Google Maps.
+     PELO CAMINHO (26/10/26, Sérgio: "a roteirização está imprecisa"): a ordem do plano é a ordem em
+     que as contas entraram ("Pôr em" põe no fim), e o Maps fazia atravessar a cidade — em 23/10,
+     94 km contra 28 km pelo caminho. Agora sai de onde a pessoa está, a mais perto primeiro, e a
+     parada com horário travado (cadeado) entra na hora dela. */
+  const abrirPercursoDe = (listaDoPlano: FieldRouteStopWithClient[]) => {
+    const comPonto = listaDoPlano.filter((p) => p.client?.latitude != null && p.client?.longitude != null);
+    const minDoCadeado = (h: string | null | undefined) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(h ?? '')); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+    const agoraBR = new Date(Date.now() - 3 * 3600000);
+    const ordemIds = ordemParaDirigir(
+      comPonto.map((p) => ({ id: p.id, ponto: { latitude: Number(p.client!.latitude), longitude: Number(p.client!.longitude) }, fixo: minDoCadeado(p.horario_fixo) })),
+      posicao ?? base ?? null,
+      Math.max(agoraBR.getUTCHours() * 60 + agoraBR.getUTCMinutes(), 8 * 60),
+    );
+    const porId = new Map(comPonto.map((p) => [p.id, p] as const));
+    const lista = ordemIds.map((id) => porId.get(id)).filter((p): p is FieldRouteStopWithClient => !!p);
+    const pts = lista.map((p) => `${p.client!.latitude},${p.client!.longitude}`);
     if (!pts.length) { Toast.mostrar('Nenhuma parada deste dia tem posição no mapa.', 'fila'); return; }
     const abrirParte = (modo: 'walking' | 'driving', ini: number) => {
       const parte = pts.slice(ini, ini + 10);
@@ -389,7 +403,7 @@ export default function AgendaNovoScreen({
         { text: 'Cancelar', style: 'cancel' as const },
       ]);
     };
-    Alert.alert(`Percurso · ${pts.length} ${pts.length === 1 ? 'parada' : 'paradas'}`, 'Na ordem do plano, no Google Maps.', [
+    Alert.alert(`Percurso · ${pts.length} ${pts.length === 1 ? 'parada' : 'paradas'}`, (posicao ?? base) ? 'Pelo caminho, a partir de onde você está, no Google Maps. Horário travado entra na hora dele.' : 'Pelo caminho, no Google Maps. Horário travado entra na hora dele.', [
       { text: 'A pé', onPress: () => escolherParte('walking') },
       { text: 'Carro', onPress: () => escolherParte('driving') },
       { text: 'Cancelar', style: 'cancel' },

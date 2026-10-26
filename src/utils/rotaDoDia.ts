@@ -145,6 +145,45 @@ export function encaixar(paradas: ParadaRota[], inicio: number): string[] {
   return ordem.map((p) => p.id);
 }
 
+/**
+ * A ORDEM PARA DIRIGIR (26/10/26, Sérgio: "a roteirização está imprecisa"). O percurso que abre no
+ * Google Maps seguia a ordem em que as contas entraram no Planejamento ("Pôr em" põe no fim do dia):
+ * em 23/10 a rota dele foi do Morumbi à Vila Paulicéia, voltou ao sul e subiu de novo. Aqui a ordem
+ * sai do caminho A PARTIR DE ONDE A PESSOA ESTÁ (vizinho mais próximo entre as paradas sem cadeado)
+ * e cada parada com cadeado entra onde cumpre o horário com menos espera e atraso — a regra do
+ * Encaixar, com a origem presa no começo. Sem origem, é o próprio Encaixar.
+ */
+export function ordemParaDirigir(paradas: ParadaRota[], origem: Ponto | null, agora: number): string[] {
+  if (!origem) return encaixar(paradas, agora);
+  const o: ParadaRota = { id: '__origem', ponto: origem, fixo: null };
+  const resto = paradas.filter((p) => p.fixo == null);
+  const fixas = paradas.filter((p) => p.fixo != null).sort((a, b) => a.fixo! - b.fixo!);
+  const ordem: ParadaRota[] = [o];
+  while (resto.length) {
+    const de = ordem[ordem.length - 1];
+    let iMelhor = 0, mMelhor = Infinity;
+    resto.forEach((p, i) => {
+      const m = de.ponto && p.ponto ? metros(de.ponto, p.ponto) : Infinity;
+      if (m < mMelhor) { mMelhor = m; iMelhor = i; }
+    });
+    ordem.push(resto.splice(iMelhor, 1)[0]);
+  }
+  // a origem "termina" agora: o horário da 1ª parada é agora + o caminho até ela
+  const inicio = agora - MIN_POR_VISITA;
+  for (const f of fixas) {
+    let melhor = { i: ordem.length, nota: Infinity };
+    for (let i = 1; i <= ordem.length; i++) {
+      const tentativa = [...ordem.slice(0, i), f, ...ordem.slice(i)];
+      const hs = horarios(tentativa, inicio);
+      const nota = hs.reduce((s, x, k) => s + (tentativa[k].fixo != null ? x.espera + x.atraso * 3 : 0), 0)
+        + (perna(tentativa[i - 1].ponto, f.ponto)?.min ?? 0);
+      if (nota < melhor.nota) melhor = { i, nota };
+    }
+    ordem.splice(melhor.i, 0, f);
+  }
+  return ordem.slice(1).map((p) => p.id);
+}
+
 export const hhmm = (min: number) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${String(Math.round(min % 60)).padStart(2, '0')}`;
 export const duracao = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}` : `${min} min`);
 export const kmTexto = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} km` : `${Math.round(m / 10) * 10} m`);
