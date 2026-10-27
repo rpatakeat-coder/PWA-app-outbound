@@ -136,7 +136,7 @@ import { negocioAcao } from './src/utils/negocioAcao';
 import { subirPlanoDaFila } from './src/utils/planoDoPino';
 import { textoNormalizado } from './src/utils/pinoP2';
 import { contaAlvoDiscreta, DELTA_AFASTADO, FILTROS_VAZIOS, LENTES, LENTES_DA_FILEIRA, passaNosFiltros, pontoDe, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
-import { montarLista } from './src/utils/listaDoMapa';
+import { montarLista, type OrdemDaLista } from './src/utils/listaDoMapa';
 import FileiraDeLentes, { ALTURA_FILEIRA_LENTES } from './src/screens/FileiraDeLentes';
 import { contadorDaMeta, decisorEstaAgora, escolhidaPor, linhaDaMetaNaFolha, metros as metrosLL, portaSugerida, RAIO_REFERENCIA_M, RAIO_SUGESTAO_M, segundaOpcao, type Candidata } from './src/utils/armasDoMapa';
 import { mapaAbriu, primeiroToque, registrarEvento } from './src/utils/eventosDoMapa';
@@ -1268,6 +1268,8 @@ function MainApp() {
   const [filtrosNovosAbertos, setFiltrosNovosAbertos] = useState(false);
   /** A LISTA DO MAPA (Julyan, 27/10/26): o mesmo recorte do mapa, em lista, mais perto primeiro. */
   const [listaAberta, setListaAberta] = useState(false);
+  /** A ordem da lista (Julyan, 27/10/26: "ordena por nunca visitado primeiro também"). */
+  const [ordemDaLista, setOrdemDaLista] = useState<OrdemDaLista>('perto');
   // Lentes, filtros e legenda saíram do topo (handoff v4.1 §6.9).
   const [lentesAbertas, setLentesAbertas] = useState(false);
   // Pilha aberta em leque (C11): id do líder. Fecha ao mexer o mapa.
@@ -2930,7 +2932,8 @@ function MainApp() {
     })),
     userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : null,
     new Date(),
-  ), [visiveisMapaNovo, userLocation, contextoPino]);
+    ordemDaLista,
+  ), [visiveisMapaNovo, userLocation, contextoPino, ordemDaLista]);
 
   /** Tocar de novo na lente ativa volta ao Meu dia (liga e desliga). */
   const escolherLente = useCallback((l: Lente) => {
@@ -7056,6 +7059,8 @@ function MainApp() {
           linhas={linhasDaLista}
           semGps={!userLocation}
           filtrosAtivos={quantosFiltros(filtrosNovos)}
+          ordem={ordemDaLista}
+          aoTrocarOrdem={setOrdemDaLista}
           aoTocar={(id) => {
             const alvo = visiveisMapaNovo.find(({ c }) => c.id === id);
             setListaAberta(false);

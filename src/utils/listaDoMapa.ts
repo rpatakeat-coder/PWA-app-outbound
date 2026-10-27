@@ -44,6 +44,8 @@ export type LinhaDaLista = {
   aproximado: boolean;
   /** Metros, para ordenar; null vai para o fim. */
   metros: number | null;
+  /** Nunca visitado — o que separa os dois blocos na ordem "Nunca visitado". */
+  nunca: boolean;
 };
 
 /** "SANTA ROSA" → "Santa Rosa" (a Casa dos Dados cadastra em caixa alta). */
@@ -63,19 +65,40 @@ function metrosEntre(a: { lat: number; lng: number }, b: { lat: number; lng: num
 const diaBRT = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d);
 
 /**
+ * NUNCA VISITADO — uma definição só, usada pelo texto da linha E pela ordenação. Se cada um
+ * tivesse a sua, a lista diria "nunca visitado" numa linha que a ordem tratou como visitada.
+ * Data podre no cadastro conta como nunca visitado: visita que não dá para datar não prova nada.
+ */
+export function nuncaVisitado(it: ItemDaLista): boolean {
+  return dataDaVisita(it) == null;
+}
+
+/**
+ * A ÚNICA leitura da data da visita. `null` = não há visita datável.
+ *
+ * Uma função só porque o `diaBRT` abaixo é `Intl.DateTimeFormat.format`, que **lança
+ * RangeError** com data inválida — e um throw aqui dentro sobe até a BarreiraDeErro e derruba
+ * a tela do executivo na rua. Enquanto quem pergunta "nunca visitado?" e quem formata a data
+ * lerem o campo pelo mesmo lugar, isso não tem como acontecer.
+ */
+function dataDaVisita(it: ItemDaLista): Date | null {
+  if (!it.visitadoEm) return null;
+  const v = new Date(it.visitadoEm);
+  return Number.isNaN(v.getTime()) ? null : v;
+}
+
+/**
  * O QUE FALTA ALI — a coluna que transforma a lista em ferramenta. Precedência: o plano de hoje
  * manda (já está decidido), depois a visita de hoje, depois há quanto tempo foi a última, e só
  * então o tempo parado na etapa. "Nunca visitado" é o estado mais acionável, não um vazio.
  */
 export function situacao(it: ItemDaLista, agora: Date): string {
   if (it.plano != null) return `${it.plano}ª parada do plano`;
-  if (it.visitadoEm) {
-    const v = new Date(it.visitadoEm);
-    if (!Number.isNaN(v.getTime())) {
-      if (diaBRT(v) === diaBRT(agora)) return 'visitado hoje';
-      const dias = Math.max(1, Math.floor((agora.getTime() - v.getTime()) / 86400000));
-      return dias === 1 ? 'visitado ontem' : `última visita há ${dias} dias`;
-    }
+  const v = dataDaVisita(it);
+  if (v) {
+    if (diaBRT(v) === diaBRT(agora)) return 'visitado hoje';
+    const dias = Math.max(1, Math.floor((agora.getTime() - v.getTime()) / 86400000));
+    return dias === 1 ? 'visitado ontem' : `última visita há ${dias} dias`;
   }
   if (it.diasNaEtapa != null && it.diasNaEtapa > 0) {
     return `nunca visitado · ${it.diasNaEtapa} ${it.diasNaEtapa === 1 ? 'dia' : 'dias'} parado`;
@@ -84,10 +107,21 @@ export function situacao(it: ItemDaLista, agora: Date): string {
 }
 
 /**
+ * AS DUAS ORDENS (Julyan, 27/10/26: "ordena por nunca visitado primeiro também").
+ *
+ * - `perto`: só distância. Responde "o que está do meu lado agora".
+ * - `novo`: quem nunca foi visitado primeiro e, DENTRO de cada bloco, o mais perto. Responde
+ *   "o que ainda não trabalhei aqui perto" — que é outra pergunta, não a mesma com outro
+ *   enfeite. Sem a distância como segundo critério, o bloco de nunca visitados sairia numa
+ *   ordem qualquer e a pessoa teria de ler a lista inteira para achar o que dá para ir a pé.
+ */
+export type OrdemDaLista = 'perto' | 'novo';
+
+/**
  * @param eu onde a pessoa está agora; null = sem GPS, e aí a lista é alfabética e não inventa
  *   distância nenhuma.
  */
-export function montarLista(itens: ItemDaLista[], eu: { lat: number; lng: number } | null, agora: Date): LinhaDaLista[] {
+export function montarLista(itens: ItemDaLista[], eu: { lat: number; lng: number } | null, agora: Date, ordem: OrdemDaLista = 'perto'): LinhaDaLista[] {
   const linhas = itens.map((it) => {
     const temCoord = it.lat != null && it.lng != null && Number.isFinite(it.lat) && Number.isFinite(it.lng);
     const m = eu && temCoord ? metrosEntre(eu, { lat: Number(it.lat), lng: Number(it.lng) }) : null;
@@ -103,14 +137,19 @@ export function montarLista(itens: ItemDaLista[], eu: { lat: number; lng: number
       distancia: texto == null ? null : it.aproximado ? `~${texto}` : texto,
       aproximado: it.aproximado,
       metros: m,
+      nunca: nuncaVisitado(it),
     };
   });
-  // Mais perto primeiro. Sem distância (sem coordenada, ou sem GPS) vai para o fim, em ordem
-  // de nome — o que também é a ordem da lista inteira quando não há GPS.
-  return linhas.sort((a, b) => {
+  // Sem distância (sem coordenada, ou sem GPS) vai para o fim do SEU bloco, em ordem de nome —
+  // o que também é a ordem da lista inteira quando não há GPS.
+  const porPerto = (a: LinhaDaLista, b: LinhaDaLista) => {
     if (a.metros == null && b.metros == null) return a.nome.localeCompare(b.nome, 'pt-BR');
     if (a.metros == null) return 1;
     if (b.metros == null) return -1;
     return a.metros - b.metros;
+  };
+  return linhas.sort((a, b) => {
+    if (ordem === 'novo' && a.nunca !== b.nunca) return a.nunca ? -1 : 1;
+    return porPerto(a, b);
   });
 }

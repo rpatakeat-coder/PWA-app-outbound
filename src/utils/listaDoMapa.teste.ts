@@ -57,8 +57,45 @@ ok(situacao(it({ id: 'x', plano: 2, visitadoEm: '2026-10-01T09:00:00-03:00' }), 
 
 // A visita das 23h de ontem é ONTEM, não "há 0 dias": o dia é o de Brasília, não o fuso do aparelho.
 ok(!situacao(it({ id: 'x', visitadoEm: '2026-10-26T23:30:00-03:00' }), AGORA).includes('0 dias'), 'nunca "há 0 dias"');
-// Data podre no cadastro não pode virar "há NaN dias" na tela do executivo.
-ok(situacao(it({ id: 'x', visitadoEm: 'ontem' }), AGORA) === 'nunca visitado', 'data inválida não vira NaN');
+// Data podre no cadastro não pode virar "há NaN dias" na tela do executivo — nem LANÇAR, que é
+// o que o Intl faz com data inválida. Chamada protegida: sem isso, o defeito mata a suíte em vez
+// de ser reportado, e quem lê a saída não sabe qual regra quebrou.
+const semLancar = <T>(f: () => T): T | '(lançou)' => { try { return f(); } catch { return '(lançou)'; } };
+ok(semLancar(() => situacao(it({ id: 'x', visitadoEm: 'ontem' }), AGORA)) === 'nunca visitado', 'data inválida não vira NaN nem lança');
+
+// ── a ORDEM "nunca visitado primeiro" (Julyan, 27/10/26) ─────────────────────────────────
+// Dois blocos, e dentro de cada um a distância manda. Os casos são montados com a ordem de
+// distância CRUZADA com a de visita: se o segundo critério sumir, a ordem muda.
+const pertoVisitado = it({ id: 'pv', nome: 'Perto visitado', lat: -20.3005, lng: -40.29, visitadoEm: '2026-10-01T10:00:00-03:00' });
+const medioNovo = it({ id: 'mn', nome: 'Médio novo', lat: -20.3100, lng: -40.29 });
+const longeNovo = it({ id: 'ln', nome: 'Longe novo', lat: -20.4000, lng: -40.29 });
+const medioVisitado = it({ id: 'mv', nome: 'Médio visitado', lat: -20.3050, lng: -40.29, visitadoEm: '2026-09-01T10:00:00-03:00' });
+const baralho = [pertoVisitado, longeNovo, medioVisitado, medioNovo];
+
+ok(montarLista([...baralho], EU, AGORA, 'perto').map((l) => l.id).join(',') === 'pv,mv,mn,ln',
+  'ordem "perto" ignora a visita: puro metro');
+ok(montarLista([...baralho], EU, AGORA, 'novo').map((l) => l.id).join(',') === 'mn,ln,pv,mv',
+  'ordem "novo": nunca visitados primeiro e, dentro de cada bloco, o mais perto');
+ok(montarLista([...baralho], EU, AGORA).map((l) => l.id).join(',') === 'pv,mv,mn,ln',
+  'sem dizer a ordem, continua "perto" — a troca é escolha de quem usa, não padrão novo');
+
+// Sem GPS a ordem "novo" ainda vale: blocos por visita, alfabética dentro de cada um.
+ok(montarLista([...baralho], null, AGORA, 'novo').map((l) => l.nome).join(',') === 'Longe novo,Médio novo,Médio visitado,Perto visitado',
+  'sem GPS a ordem "novo" separa os blocos e ordena por nome dentro de cada um');
+
+// A linha carrega o mesmo veredito que a ordem usou — texto e ordem não podem discordar. E
+// montar a lista NÃO PODE LANÇAR: `Intl.DateTimeFormat.format` joga RangeError em data inválida,
+// e um throw aqui sobe até a BarreiraDeErro e apaga a tela de quem está na rua.
+for (const podre of ['ontem', '', '0000-00-00', '31/10/2026']) {
+  for (const o of ['perto', 'novo'] as const) {
+    let linha: ReturnType<typeof montarLista>[number] | null = null;
+    let lancou = false;
+    try { linha = montarLista([it({ id: 'podre', visitadoEm: podre })], EU, AGORA, o)[0]; } catch { lancou = true; }
+    ok(!lancou, `data podre ${JSON.stringify(podre)} na ordem "${o}" não derruba a lista`);
+    ok(!lancou && linha!.nunca === true && linha!.sub.includes('nunca visitado'),
+      `data podre ${JSON.stringify(podre)} na ordem "${o}": ordem e texto concordam`);
+  }
+}
 
 // ── o bairro na linha ────────────────────────────────────────────────────────────────────
 ok(montarLista([it({ id: 'x', bairro: 'SANTA ROSA DE LIMA' })], EU, AGORA)[0].sub.startsWith('Santa Rosa de Lima · '), 'caixa alta vira grafia de tela');
