@@ -28,6 +28,10 @@ type Props = {
   lenteNosFiltros?: boolean;
   /** Com filtro ligado, a pílula "N filtros · Limpar" logo abaixo da fileira (um toque desliga). */
   aoLimparFiltros?: () => void;
+  /** A LISTA DO MAPA (Julyan, 27/10/26): com filtro ligado, a pílula abre o mesmo recorte em
+   *  lista. `naLista` é quantos lugares ela mostra — o mesmo número que o mapa desenha. */
+  aoVerLista?: () => void;
+  naLista?: number;
   /** Computador: quebra em linhas em vez de rolar, e o Filtros vira um botão com texto. */
   largo?: boolean;
   top?: number;
@@ -45,11 +49,17 @@ function Contador({ c, ativa }: { c: NonNullable<Props['contador']>; ativa: bool
   );
 }
 
-export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, aoFiltros, filtrosAtivos = 0, lenteNosFiltros = false, aoLimparFiltros, largo = false, top }: Props) {
+export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, aoFiltros, filtrosAtivos = 0, lenteNosFiltros = false, aoLimparFiltros, aoVerLista, naLista = 0, largo = false, top }: Props) {
   const limpar = filtrosAtivos > 0 && aoLimparFiltros ? (
     <Pressable accessibilityRole="button" accessibilityLabel={`${filtrosAtivos} ${filtrosAtivos === 1 ? 'filtro ligado' : 'filtros ligados'}. Limpar`}
       onPress={aoLimparFiltros} style={[s.limpar, largo && s.limparLargo]}>
       <Text style={s.limparTexto}>{`${filtrosAtivos} ${filtrosAtivos === 1 ? 'filtro' : 'filtros'} · Limpar ✕`}</Text>
+    </Pressable>
+  ) : null;
+  const lista = filtrosAtivos > 0 && aoVerLista ? (
+    <Pressable accessibilityRole="button" accessibilityLabel={`Ver os ${naLista} em lista, mais perto primeiro`}
+      onPress={aoVerLista} style={[s.lista, largo && s.limparLargo]}>
+      <Text style={s.listaTexto}>{`Lista · ${naLista}`}</Text>
     </Pressable>
   ) : null;
   /* TODAS AS LENTES NA FILEIRA (Julyan, 15/10/26: "as lentes têm que estar mais visíveis, em
@@ -85,6 +95,7 @@ export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, a
           </Pressable>
         )}
         {limpar}
+        {lista}
       </View>
     );
   }
@@ -104,7 +115,7 @@ export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, a
           {filtrosAtivos > 0 && <View style={s.pontoFiltro} />}
         </Pressable>
       )}
-      {limpar && <View style={s.limparLinha} pointerEvents="box-none">{limpar}</View>}
+      {(limpar || lista) && <View style={s.limparLinha} pointerEvents="box-none"><View style={s.duasPilulas}>{limpar}{lista}</View></View>}
     </View>
   );
 }
@@ -153,5 +164,8 @@ const s = StyleSheet.create({
   limpar: { height: 44, paddingHorizontal: 14, borderRadius: 22, justifyContent: 'center', backgroundColor: 'var(--text)', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
   limparLargo: { height: 44, borderRadius: 22 },
   limparTexto: { fontSize: 13, fontWeight: '700', color: 'var(--bg)' },
+  duasPilulas: { flexDirection: 'row', gap: 8 },
+  lista: { height: 44, paddingHorizontal: 14, borderRadius: 22, justifyContent: 'center', backgroundColor: 'var(--pilula-mapa)', borderWidth: 1, borderColor: 'var(--border)', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+  listaTexto: { fontSize: 13, fontWeight: '700', color: 'var(--text)' },
   pontoFiltro: { position: 'absolute', top: 6, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: 'var(--vermelho-acao)' },
 });

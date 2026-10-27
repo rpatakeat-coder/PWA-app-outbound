@@ -24,6 +24,8 @@ type Props = {
   soMinhaArea: boolean;
   aoTrocarSoMinhaArea: (v: boolean) => void;
   aoAbrirMaisFiltros: () => void;
+  /** O mesmo recorte em lista, mais perto primeiro (Julyan, 27/10/26). */
+  aoVerLista: () => void;
   motorConferidoEm?: string | null;
   /** Só para gestor/admin: leads de teste (0106) ficam escondidos por padrão. */
   mostrarTestes?: boolean;
@@ -41,7 +43,7 @@ function alternar<T>(s: Set<T>, v: T): Set<T> {
 }
 
 export default function FiltrosMapaNovo({
-  visivel, aoFechar, itens, filtros, aoAplicar, soMinhaArea, aoTrocarSoMinhaArea, aoAbrirMaisFiltros, motorConferidoEm,
+  visivel, aoFechar, itens, filtros, aoAplicar, soMinhaArea, aoTrocarSoMinhaArea, aoAbrirMaisFiltros, aoVerLista, motorConferidoEm,
   mostrarTestes, aoTrocarMostrarTestes,
 }: Props) {
   const [rascunho, setRascunho] = useState<FiltrosNovos>(filtros);
@@ -80,8 +82,11 @@ export default function FiltrosMapaNovo({
           <Pressable accessibilityRole="button" style={[s.botao, s.botaoLimpar]} onPress={() => setRascunho(FILTROS_VAZIOS)}>
             <Text style={s.botaoLimparTexto}>Limpar</Text>
           </Pressable>
+          <Pressable accessibilityRole="button" style={[s.botao, s.botaoLista]} onPress={() => { aoAplicar(rascunho); aoVerLista(); }}>
+            <Text style={s.botaoListaTexto}>Lista</Text>
+          </Pressable>
           <Pressable accessibilityRole="button" style={[s.botao, s.botaoVer]} onPress={() => { aoAplicar(rascunho); aoFechar(); }}>
-            <Text style={s.botaoVerTexto}>{`Ver ${total}`}</Text>
+            <Text style={s.botaoVerTexto}>{`Mapa · ${total}`}</Text>
           </Pressable>
         </View>
       }
@@ -182,6 +187,8 @@ const s = StyleSheet.create({
   botao: { minHeight: 52, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   botaoLimpar: { flex: 1, borderWidth: 1, borderColor: 'var(--border)' },
   botaoLimparTexto: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
-  botaoVer: { flex: 2, backgroundColor: 'var(--vermelho-acao)' },
+  botaoLista: { flex: 1, borderWidth: 1, borderColor: 'var(--border)' },
+  botaoListaTexto: { fontSize: 15, fontWeight: '800', color: 'var(--text)' },
+  botaoVer: { flex: 1.4, backgroundColor: 'var(--vermelho-acao)' },
   botaoVerTexto: { fontSize: 15, fontWeight: '800', color: '#fff' },
 });

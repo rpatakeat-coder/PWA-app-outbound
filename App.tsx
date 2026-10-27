@@ -117,6 +117,7 @@ import FolhaLentes from './src/screens/FolhaLentes';
 import AvisoSemSinal from './src/screens/AvisoSemSinal';
 import FolhaMeuDia from './src/screens/FolhaMeuDia';
 import FolhaBusca, { type LinhaBusca } from './src/screens/FolhaBusca';
+import FolhaLista from './src/screens/FolhaLista';
 import { useBuscaNegocios } from './src/hooks/useBuscaNegocios';
 // Nomes próprios: escolherFoto/enviarFoto já são a foto de PERFIL dentro do
 // MainApp (useFotoDePerfil) e o nome local sombreava o import — a câmera do
@@ -135,6 +136,7 @@ import { negocioAcao } from './src/utils/negocioAcao';
 import { subirPlanoDaFila } from './src/utils/planoDoPino';
 import { textoNormalizado } from './src/utils/pinoP2';
 import { contaAlvoDiscreta, DELTA_AFASTADO, FILTROS_VAZIOS, LENTES, LENTES_DA_FILEIRA, passaNosFiltros, pontoDe, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
+import { montarLista } from './src/utils/listaDoMapa';
 import FileiraDeLentes, { ALTURA_FILEIRA_LENTES } from './src/screens/FileiraDeLentes';
 import { contadorDaMeta, decisorEstaAgora, escolhidaPor, linhaDaMetaNaFolha, metros as metrosLL, portaSugerida, RAIO_REFERENCIA_M, RAIO_SUGESTAO_M, segundaOpcao, type Candidata } from './src/utils/armasDoMapa';
 import { mapaAbriu, primeiroToque, registrarEvento } from './src/utils/eventosDoMapa';
@@ -1264,6 +1266,8 @@ function MainApp() {
   const [lente, setLente] = useState<Lente>('dia');
   const [filtrosNovos, setFiltrosNovos] = useState<FiltrosNovos>(FILTROS_VAZIOS);
   const [filtrosNovosAbertos, setFiltrosNovosAbertos] = useState(false);
+  /** A LISTA DO MAPA (Julyan, 27/10/26): o mesmo recorte do mapa, em lista, mais perto primeiro. */
+  const [listaAberta, setListaAberta] = useState(false);
   // Lentes, filtros e legenda saíram do topo (handoff v4.1 §6.9).
   const [lentesAbertas, setLentesAbertas] = useState(false);
   // Pilha aberta em leque (C11): id do líder. Fecha ao mexer o mapa.
@@ -2906,6 +2910,28 @@ function MainApp() {
     }),
     [itensMapaNovo, filtrosNovos, comFiltro, lente, selectedClient?.id, verTodosNoMapa, referenciasNaTela],
   );
+  /* A LISTA DO MAPA (Julyan, 27/10/26: "não aparecer só no mapa e virar lista também, com a
+     distância e etc, ou bairro"). Sai do MESMO recorte que o mapa desenha: se divergir, a lista
+     vira uma segunda verdade e perde o motivo de existir. Ordem e texto são regra pura, testada
+     em src/utils/listaDoMapa.teste.ts. */
+  const linhasDaLista = useMemo(() => montarLista(
+    visiveisMapaNovo.map(({ c, p, plano }) => ({
+      id: c.id,
+      nome: getClientPrimaryName(c),
+      bairro: c.bairro,
+      lat: c.latitude == null ? null : Number(c.latitude),
+      lng: c.longitude == null ? null : Number(c.longitude),
+      aproximado: p.aproximado,
+      cor: p.cor,
+      plano,
+      visitadoEm: c.visited_at,
+      diasNaEtapa: (c.id_hubspot ? contextoPino?.tempoPorNegocio.get(String(c.id_hubspot))?.diasNaEtapa : null) ?? null,
+      etiqueta: p.etiqueta?.texto ?? null,
+    })),
+    userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : null,
+    new Date(),
+  ), [visiveisMapaNovo, userLocation, contextoPino]);
+
   /** Tocar de novo na lente ativa volta ao Meu dia (liga e desliga). */
   const escolherLente = useCallback((l: Lente) => {
     setLente((atual) => (atual === l && l !== 'dia' ? 'dia' : l));
@@ -7003,6 +7029,8 @@ function MainApp() {
           filtrosAtivos={quantosFiltros(filtrosNovos)}
           lenteNosFiltros={!LENTES_DA_FILEIRA.includes(lente)}
           aoLimparFiltros={() => setFiltrosNovos(FILTROS_VAZIOS)}
+          aoVerLista={() => setListaAberta(true)}
+          naLista={linhasDaLista.length}
         />
       )}
       {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && janelaDasLigacoes && (
@@ -7019,6 +7047,21 @@ function MainApp() {
           linhas={linhasBusca}
           carregando={buscando || buscaNegocios.isFetching}
           foraFalhou={buscaNegocios.isError}
+        />
+      )}
+      {modoNovo && (
+        <FolhaLista
+          visivel={listaAberta}
+          aoFechar={() => setListaAberta(false)}
+          linhas={linhasDaLista}
+          semGps={!userLocation}
+          filtrosAtivos={quantosFiltros(filtrosNovos)}
+          aoTocar={(id) => {
+            const alvo = visiveisMapaNovo.find(({ c }) => c.id === id);
+            setListaAberta(false);
+            // Depois do painel fechar: o history.back() dele cancelaria a abertura do pino.
+            if (alvo) setTimeout(() => handleMarkerPress(alvo.c), 300);
+          }}
         />
       )}
       {modoNovo && (
@@ -7279,6 +7322,8 @@ function MainApp() {
           aoFiltros={() => setFiltrosNovosAbertos(true)}
           filtrosAtivos={quantosFiltros(filtrosNovos)}
           aoLimparFiltros={() => setFiltrosNovos(FILTROS_VAZIOS)}
+          aoVerLista={() => setListaAberta(true)}
+          naLista={linhasDaLista.length}
         />
         {/* esconder também daqui, onde a mão já está (05/10/26: "tenho que esconder painel ali também") */}
         <Pressable accessibilityRole="button" accessibilityLabel="Esconder o painel e ampliar o mapa" onPress={alternarPainel} style={[styles.pmnLente, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
@@ -9869,6 +9914,7 @@ function MainApp() {
             // Depois do painel fechar: o history.back() dele cancelaria a abertura.
             setTimeout(() => setIsFiltersOpen(true), 300);
           }}
+          aoVerLista={() => { setFiltrosNovosAbertos(false); setTimeout(() => setListaAberta(true), 300); }}
           motorConferidoEm={contextoPino?.atualizadoEm ?? null}
           mostrarTestes={canViewGestor ? mostrarTestes : undefined}
           aoTrocarMostrarTestes={canViewGestor ? setMostrarTestes : undefined}
