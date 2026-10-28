@@ -14,6 +14,11 @@ import type { EstiloMeta } from '../utils/armasDoMapa';
 import type { Lente } from '../utils/lentes';
 
 export const ALTURA_FILEIRA_LENTES = 44;
+/* Quanto a linha de pílulas ("Limpar", "Ver em lista") ocupa abaixo da fileira, respiro incluído.
+   Exportado porque quem empilha o que vem DEPOIS dela é o App: até 28/10 cada peça abaixo das
+   lentes escolhia o próprio `top`, e as pílulas e a faixa das janelas de ligação acabaram
+   nascendo as duas quase no mesmo pixel (44+6 e 44+8) — uma em cima da outra, duas vezes por dia. */
+export const ALTURA_PILULAS_DAS_LENTES = 6 + 44;
 
 type Props = {
   lentes: { id: Lente; rotulo: string }[];
@@ -40,6 +45,8 @@ type Props = {
   /** Computador: quebra em linhas em vez de rolar, e o Filtros vira um botão com texto. */
   largo?: boolean;
   top?: number;
+  /** Quanto descer as pílulas, para caber a linha do dia entre elas e a fileira. */
+  desloc?: number;
 };
 
 /** O desenho de "lista": três linhas com marcador. Feito aqui com Views, como o ≡ do Filtros. */
@@ -68,7 +75,7 @@ function Contador({ c, ativa }: { c: NonNullable<Props['contador']>; ativa: bool
   );
 }
 
-export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, aoFiltros, filtrosAtivos = 0, lenteNosFiltros = false, aoLimparFiltros, aoVerLista, naLista = 0, contagens, largo = false, top }: Props) {
+export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, aoFiltros, filtrosAtivos = 0, lenteNosFiltros = false, aoLimparFiltros, aoVerLista, naLista = 0, contagens, largo = false, top, desloc = 0 }: Props) {
   const limpar = filtrosAtivos > 0 && aoLimparFiltros ? (
     <Pressable accessibilityRole="button" accessibilityLabel={`${filtrosAtivos} ${filtrosAtivos === 1 ? 'filtro ligado' : 'filtros ligados'}. Limpar`}
       onPress={aoLimparFiltros} style={[s.limpar, largo && s.limparLargo]}>
@@ -152,7 +159,7 @@ export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, a
           {filtrosAtivos > 0 && <View style={s.pontoFiltro} />}
         </Pressable>
       )}
-      {(limpar || lista) && <View style={s.limparLinha} pointerEvents="box-none"><View style={s.duasPilulas}>{limpar}{lista}</View></View>}
+      {(limpar || lista) && <View style={[s.limparLinha, desloc ? { top: ALTURA_FILEIRA_LENTES + 6 + desloc } : null]} pointerEvents="box-none"><View style={s.duasPilulas}>{limpar}{lista}</View></View>}
     </View>
   );
 }

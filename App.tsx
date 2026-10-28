@@ -138,7 +138,9 @@ import { textoNormalizado } from './src/utils/pinoP2';
 import { contaAlvoDiscreta, DELTA_AFASTADO, FILTROS_VAZIOS, LENTES, LENTES_DA_FILEIRA, passaNosFiltros, pontoDe, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
 import { montarLista, type OrdemDaLista } from './src/utils/listaDoMapa';
 import type { EstagioPainel } from './src/components/Painel';
-import FileiraDeLentes, { ALTURA_FILEIRA_LENTES } from './src/screens/FileiraDeLentes';
+import FileiraDeLentes, { ALTURA_FILEIRA_LENTES, ALTURA_PILULAS_DAS_LENTES } from './src/screens/FileiraDeLentes';
+import LinhaDoDia from './src/screens/LinhaDoDia';
+import { ALTURA_LINHA_DO_DIA, PERTO_M, linhaDoDia } from './src/utils/linhaDoDia';
 import { contadorDaMeta, decisorEstaAgora, escolhidaPor, linhaDaMetaNaFolha, metros as metrosLL, portaSugerida, RAIO_REFERENCIA_M, RAIO_SUGESTAO_M, segundaOpcao, type Candidata } from './src/utils/armasDoMapa';
 import { mapaAbriu, primeiroToque, registrarEvento } from './src/utils/eventosDoMapa';
 import { useArmaDoPino } from './src/hooks/useArmaDoPino';
@@ -2827,6 +2829,58 @@ function MainApp() {
     return linhaDaMetaNaFolha(novosNaSemana, perto, new Date());
   }, [novosNaSemana, userLocation, itensMapaNovo, verTodosNoMapa]);
 
+  /* ══ A LINHA DO DIA (pacote "a espinha do dia", §2.2, 28/10/26) ══════════════════════════
+     O placar do dia indo ATÉ o executivo, no mapa, porque ele não sai do mapa. Medido em 28/10:
+     "0 de 6 visitas provadas" e "+R$ 250 na próxima venda" moram em Meu desempenho, e às 17h,
+     quando ainda daria para fazer mais duas portas, ninguém lhe conta que ele está em 3.
+
+     O QUE ELA DIZ é função pura (utils/linhaDoDia.ts), testada minuto a minuto pelo dia inteiro.
+     AQUI só se junta o que já está na tela: nenhuma consulta nova — o mapa é o caminho quente.
+
+     O RELÓGIO precisa bater sozinho: o tom muda com a hora, e um memo sem tique ficaria parado
+     no minuto em que o mapa abriu. Um por minuto, só com o Mapa à frente no celular; nada
+     acorda em segundo plano, e voltar para o app recalcula na hora. */
+  const [minutoDaLinha, setMinutoDaLinha] = useState(0);
+  useEffect(() => {
+    if (!modoNovo || tab !== 'map' || layout.ehLargo) return;
+    const bater = () => setMinutoDaLinha((n) => n + 1);
+    const id = setInterval(bater, 60000);
+    const aoVoltar = () => { if (document.visibilityState === 'visible') bater(); };
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', aoVoltar); };
+  }, [modoNovo, tab, layout.ehLargo]);
+  const linhaDoDiaAgora = useMemo(() => {
+    /* Só o dia de hoje e só a própria rua: o gestor olhando a rota de outra pessoa não leva
+       cobrança do dia dela, e no modo Planejar de outro dia o placar seria de outro dia. */
+    if (!modoNovo || isMonitoringRoute || routeDate !== todayKey()) return null;
+    const doPlano = routeStops.filter((st) => st.status !== 'removed' && st.status !== 'skipped');
+    const faltam = doPlano.filter((st) => st.status !== 'done' && !visitadoNoPlanoHoje(st.client));
+    const eu = userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : null;
+    const perto = eu ? faltam.filter((st) => st.client?.latitude != null && st.client?.longitude != null
+      && metrosLL(eu, { lat: Number(st.client.latitude), lng: Number(st.client.longitude) }) <= PERTO_M).length : 0;
+    /* A VISITA SEM DESFECHO SAI DA MESMA FILA QUE O COCKPIT COBRA (motivo `visita_sem_registro`),
+       nunca de uma conta nova aqui: dois números para o mesmo fato fazem o gestor desconfiar dos
+       dois. A hora vem do texto que o próprio servidor monta ("Visita das HH:MM ainda sem
+       registro"); quando ela não vier, a linha segue — só não diz a hora. */
+    const itens = (filaNaTela.data?.itens ?? []) as Array<{ motivo: string; porque: string; dealId: string; clientId: string | null; negocio: string }>;
+    const semDesfecho = itens
+      .filter((i) => i.motivo === 'visita_sem_registro')
+      .map((i) => ({ dealId: i.dealId, clientId: i.clientId, nome: i.negocio, hora: (/(\d{2}:\d{2})/.exec(i.porque ?? '') ?? [])[1] ?? null }))
+      .sort((a, b) => String(b.hora ?? '').localeCompare(String(a.hora ?? '')))[0] ?? null;
+    return linhaDoDia({
+      agora: new Date(),
+      meta: metaDeHoje,
+      feitas: meuDia.data?.provadasHoje ?? null,
+      noPlano: doPlano.length,
+      faltamNoPlano: faltam.length,
+      pertoDasQueFaltam: perto,
+      semDesfecho,
+    });
+    // `minutoDaLinha` entra de propósito: é ele que faz o relógio andar aqui dentro.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minutoDaLinha, modoNovo, isMonitoringRoute, routeDate, routeStops, userLocation,
+    filaNaTela.data, metaDeHoje, meuDia.data?.provadasHoje, donoDoPlano]);
+
   /* O COMBINADO (prancha §6): o próximo passo do negócio é a tarefa aberta do HubSpot que não é
      cobrança — a mesma da aba Tarefas. Vai na linha "Combinado" e na fala do gatilho 2. */
   const combinadoDe = useCallback((c: Client | null): { texto: string; quando: string | null } | null => {
@@ -2955,6 +3009,15 @@ function MainApp() {
     }
     return n;
   }, [itensMapaNovo, verTodosNoMapa]);
+
+  /* ══ O QUE SE EMPILHA ABAIXO DAS LENTES ══════════════════════════════════════════════════
+     Lentes › linha do dia › pílulas ("Limpar", "Ver em lista") › janela das ligações › área.
+     Calculado num lugar só, de propósito: enquanto cada peça escolhia o próprio `top`, as
+     pílulas (44+6) e a faixa das janelas de ligação (44+8) nasceram as duas quase no mesmo
+     pixel e se cobriam nas duas janelas do dia, 12:30–12:45 e 17:30–17:45. */
+  const temPilulasDasLentes = comFiltro || linhasDaLista.length > 0;
+  const deslocDasPilulas = linhaDoDiaAgora ? ALTURA_LINHA_DO_DIA + 8 : 0;
+  const abaixoDasLentes = deslocDasPilulas + (temPilulasDasLentes ? ALTURA_PILULAS_DAS_LENTES : 0);
 
   /** Tocar de novo na lente ativa volta ao Meu dia (liga e desliga). */
   const escolherLente = useCallback((l: Lente) => {
@@ -6864,7 +6927,7 @@ function MainApp() {
         // `top` contado do Y REAL do mapa, igual aos botoes: este overlay e'
         // absoluto contra a RAIZ DA TELA, e o `top: 8` cru punha a pill em
         // cima da busca do header (valia ja' pra de carregamento).
-        style={[styles.areaStatusWrap, { top: modoNovo && !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + (tab === 'map' && !creationMode ? ALTURA_FILEIRA_LENTES + 8 + (janelaDasLigacoes ? 72 : 0) : 0) : (mapLayout?.y ?? 0) + 8 }]}
+        style={[styles.areaStatusWrap, { top: modoNovo && !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + (tab === 'map' && !creationMode ? ALTURA_FILEIRA_LENTES + 8 + abaixoDasLentes + (janelaDasLigacoes ? 72 : 0) : 0) : (mapLayout?.y ?? 0) + 8 }]}
         pointerEvents="none"
       >
         {modoNovo && !layout.ehLargo && <AvisoSemSinal />}
@@ -7056,10 +7119,35 @@ function MainApp() {
           aoVerLista={() => { setEstagioLista('peek'); setListaAberta(true); }}
           naLista={linhasDaLista.length}
           contagens={comFiltro ? undefined : contagensDasLentes}
+          desloc={deslocDasPilulas}
+        />
+      )}
+      {/* A LINHA DO DIA (§2.2): o placar do dia, sempre à vista, logo abaixo das lentes. Sem ✕ —
+          o dia não se fecha. Tocar abre o que ela está falando, sempre sem sair do mapa. */}
+      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && linhaDoDiaAgora && (
+        <LinhaDoDia
+          linha={linhaDoDiaAgora}
+          top={insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + ALTURA_FILEIRA_LENTES + 8}
+          aoTocar={() => {
+            const l = linhaDoDiaAgora;
+            if (l.acao === 'desfecho' && l.alvo) {
+              /* A nota é datada NA VISITA, não no envio (DesfechoVisitaSheet). A hora vem da
+                 fila; sem ela, agora é o mais perto da verdade que dá para afirmar. */
+              const hoje = diaBRT(new Date());
+              setDesfechoPendente({
+                idHubspot: l.alvo.dealId,
+                cliente: l.alvo.nome,
+                visitadoEm: l.alvo.hora && hoje ? new Date(`${hoje}T${l.alvo.hora}:00-03:00`).toISOString() : new Date().toISOString(),
+              });
+              return;
+            }
+            if (l.acao === 'montar') { void montarDiaComMicrorrotas(); return; }
+            setMeuDiaAberto(true);
+          }}
         />
       )}
       {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && janelaDasLigacoes && (
-        <View style={{ position: 'absolute', left: 12, right: 12, top: insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + ALTURA_FILEIRA_LENTES + 8, zIndex: 24 }}>
+        <View style={{ position: 'absolute', left: 12, right: 12, top: insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + ALTURA_FILEIRA_LENTES + 8 + abaixoDasLentes, zIndex: 24 }}>
           <FaixaHoraDasLigacoes ate={janelaDasLigacoes.ate} followups={janelaDasLigacoes.followups} quentes={janelaDasLigacoes.quentes} aoAbrir={() => { setPedidoDaFila({ acao: 'fila', deal: null, origem: 'janela', n: Date.now() }); irParaAba('tasks'); }} />
         </View>
       )}
