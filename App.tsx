@@ -137,6 +137,7 @@ import { subirPlanoDaFila } from './src/utils/planoDoPino';
 import { textoNormalizado } from './src/utils/pinoP2';
 import { contaAlvoDiscreta, DELTA_AFASTADO, FILTROS_VAZIOS, LENTES, LENTES_DA_FILEIRA, passaNosFiltros, pontoDe, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
 import { montarLista, type OrdemDaLista } from './src/utils/listaDoMapa';
+import type { EstagioPainel } from './src/components/Painel';
 import FileiraDeLentes, { ALTURA_FILEIRA_LENTES } from './src/screens/FileiraDeLentes';
 import { contadorDaMeta, decisorEstaAgora, escolhidaPor, linhaDaMetaNaFolha, metros as metrosLL, portaSugerida, RAIO_REFERENCIA_M, RAIO_SUGESTAO_M, segundaOpcao, type Candidata } from './src/utils/armasDoMapa';
 import { mapaAbriu, primeiroToque, registrarEvento } from './src/utils/eventosDoMapa';
@@ -1270,6 +1271,10 @@ function MainApp() {
   const [listaAberta, setListaAberta] = useState(false);
   /** A ordem da lista (Julyan, 27/10/26: "ordena por nunca visitado primeiro também"). */
   const [ordemDaLista, setOrdemDaLista] = useState<OrdemDaLista>('perto');
+  /* MAPA E LISTA (Julyan, 28/10/26: "a lista não pode tampar tudo"): ela abre no peek, com
+     três linhas sobre o mapa, e sobe para a lista cheia no arrasto. Volta ao peek a cada
+     abertura — quem fechou na lista cheia não quer reabrir com o mapa tampado. */
+  const [estagioLista, setEstagioLista] = useState<EstagioPainel>('peek');
   // Lentes, filtros e legenda saíram do topo (handoff v4.1 §6.9).
   const [lentesAbertas, setLentesAbertas] = useState(false);
   // Pilha aberta em leque (C11): id do líder. Fecha ao mexer o mapa.
@@ -7032,7 +7037,7 @@ function MainApp() {
           filtrosAtivos={quantosFiltros(filtrosNovos)}
           lenteNosFiltros={!LENTES_DA_FILEIRA.includes(lente)}
           aoLimparFiltros={() => setFiltrosNovos(FILTROS_VAZIOS)}
-          aoVerLista={() => setListaAberta(true)}
+          aoVerLista={() => { setEstagioLista('peek'); setListaAberta(true); }}
           naLista={linhasDaLista.length}
         />
       )}
@@ -7061,6 +7066,8 @@ function MainApp() {
           filtrosAtivos={quantosFiltros(filtrosNovos)}
           ordem={ordemDaLista}
           aoTrocarOrdem={setOrdemDaLista}
+          estagio={estagioLista}
+          aoTrocarEstagio={setEstagioLista}
           aoTocar={(id) => {
             const alvo = visiveisMapaNovo.find(({ c }) => c.id === id);
             setListaAberta(false);
@@ -7327,7 +7334,7 @@ function MainApp() {
           aoFiltros={() => setFiltrosNovosAbertos(true)}
           filtrosAtivos={quantosFiltros(filtrosNovos)}
           aoLimparFiltros={() => setFiltrosNovos(FILTROS_VAZIOS)}
-          aoVerLista={() => setListaAberta(true)}
+          aoVerLista={() => { setEstagioLista('peek'); setListaAberta(true); }}
           naLista={linhasDaLista.length}
         />
         {/* esconder também daqui, onde a mão já está (05/10/26: "tenho que esconder painel ali também") */}
@@ -9919,7 +9926,7 @@ function MainApp() {
             // Depois do painel fechar: o history.back() dele cancelaria a abertura.
             setTimeout(() => setIsFiltersOpen(true), 300);
           }}
-          aoVerLista={() => { setFiltrosNovosAbertos(false); setTimeout(() => setListaAberta(true), 300); }}
+          aoVerLista={() => { setFiltrosNovosAbertos(false); setEstagioLista('peek'); setTimeout(() => setListaAberta(true), 300); }}
           motorConferidoEm={contextoPino?.atualizadoEm ?? null}
           mostrarTestes={canViewGestor ? mostrarTestes : undefined}
           aoTrocarMostrarTestes={canViewGestor ? setMostrarTestes : undefined}

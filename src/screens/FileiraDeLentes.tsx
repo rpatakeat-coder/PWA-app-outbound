@@ -56,7 +56,12 @@ export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, a
       <Text style={s.limparTexto}>{`${filtrosAtivos} ${filtrosAtivos === 1 ? 'filtro' : 'filtros'} · Limpar ✕`}</Text>
     </Pressable>
   ) : null;
-  const lista = filtrosAtivos > 0 && aoVerLista ? (
+  /* SEMPRE, não só com filtro marcado (Julyan, 28/10/26: "clico em clientes e não aparece a
+     lista ainda, só o mapa, eu quero os dois"). Eu tinha prendido a pílula a `filtrosAtivos > 0`
+     — mas "Clientes" é LENTE, não filtro, e lente também é um recorte. A lista vale para
+     qualquer coisa que o mapa esteja mostrando; com zero lugares a pílula some, porque aí não
+     há lista nenhuma para abrir. */
+  const lista = naLista > 0 && aoVerLista ? (
     <Pressable accessibilityRole="button" accessibilityLabel={`Ver os ${naLista} em lista, mais perto primeiro`}
       onPress={aoVerLista} style={[s.lista, largo && s.limparLargo]}>
       <Text style={s.listaTexto}>{`Lista · ${naLista}`}</Text>
