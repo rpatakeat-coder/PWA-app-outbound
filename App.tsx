@@ -2940,6 +2940,22 @@ function MainApp() {
     ordemDaLista,
   ), [visiveisMapaNovo, userLocation, contextoPino, ordemDaLista]);
 
+  /* QUANTOS CABEM EM CADA LENTE (Julyan, 28/10/26: "pode melhorar as lentes também"). O número
+     ao lado do rótulo responde "vale o toque?" antes do toque. Conta pela MESMA regra que o mapa
+     usa (visivelNaLente), sem o plano e sem o pino aberto: esses entram em QUALQUER lente e
+     inflariam as nove igual, o que não distingue nada. Não depende de `lente`, então só recalcula
+     quando o dado muda - nove varreduras num switch puro, uma vez por carga. */
+  const contagensDasLentes = useMemo(() => {
+    const n: Partial<Record<Lente, number>> = {};
+    for (const l of LENTES) {
+      if (l.id === 'calor' || l.id === 'novos') continue;
+      let quantos = 0;
+      for (const { p } of itensMapaNovo) if (visivelNaLente(l.id, p, false, false, verTodosNoMapa)) quantos += 1;
+      n[l.id] = quantos;
+    }
+    return n;
+  }, [itensMapaNovo, verTodosNoMapa]);
+
   /** Tocar de novo na lente ativa volta ao Meu dia (liga e desliga). */
   const escolherLente = useCallback((l: Lente) => {
     setLente((atual) => (atual === l && l !== 'dia' ? 'dia' : l));
@@ -7039,6 +7055,7 @@ function MainApp() {
           aoLimparFiltros={() => setFiltrosNovos(FILTROS_VAZIOS)}
           aoVerLista={() => { setEstagioLista('peek'); setListaAberta(true); }}
           naLista={linhasDaLista.length}
+          contagens={comFiltro ? undefined : contagensDasLentes}
         />
       )}
       {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && janelaDasLigacoes && (
@@ -7336,6 +7353,7 @@ function MainApp() {
           aoLimparFiltros={() => setFiltrosNovos(FILTROS_VAZIOS)}
           aoVerLista={() => { setEstagioLista('peek'); setListaAberta(true); }}
           naLista={linhasDaLista.length}
+          contagens={comFiltro ? undefined : contagensDasLentes}
         />
         {/* esconder também daqui, onde a mão já está (05/10/26: "tenho que esconder painel ali também") */}
         <Pressable accessibilityRole="button" accessibilityLabel="Esconder o painel e ampliar o mapa" onPress={alternarPainel} style={[styles.pmnLente, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>

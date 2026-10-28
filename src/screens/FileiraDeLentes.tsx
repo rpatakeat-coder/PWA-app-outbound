@@ -32,10 +32,29 @@ type Props = {
    *  lista. `naLista` é quantos lugares ela mostra — o mesmo número que o mapa desenha. */
   aoVerLista?: () => void;
   naLista?: number;
+  /** QUANTOS CABEM EM CADA LENTE (Julyan, 28/10/26: "pode melhorar as lentes também"). O número
+   *  ao lado do rótulo responde "vale o toque?" ANTES do toque — e zero é resposta, não falta de
+   *  dado. Vem de fora porque quem sabe contar é quem monta o mapa. Com FILTRO ligado quem manda
+   *  no recorte não é a lente: aí este mapa chega vazio e nenhum número aparece, para não mentir. */
+  contagens?: Partial<Record<Lente, number>>;
   /** Computador: quebra em linhas em vez de rolar, e o Filtros vira um botão com texto. */
   largo?: boolean;
   top?: number;
 };
+
+/** O desenho de "lista": três linhas com marcador. Feito aqui com Views, como o ≡ do Filtros. */
+function IconeLista() {
+  return (
+    <View style={s.liIcone}>
+      {[0, 1, 2].map((i) => (
+        <View key={i} style={s.liLinha}>
+          <View style={s.liPonto} />
+          <View style={s.liBarra} />
+        </View>
+      ))}
+    </View>
+  );
+}
 
 function Contador({ c, ativa }: { c: NonNullable<Props['contador']>; ativa: boolean }) {
   // na lente ativa (botão invertido) a pílula neutra ganha o fundo da página, como na prancha
@@ -49,7 +68,7 @@ function Contador({ c, ativa }: { c: NonNullable<Props['contador']>; ativa: bool
   );
 }
 
-export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, aoFiltros, filtrosAtivos = 0, lenteNosFiltros = false, aoLimparFiltros, aoVerLista, naLista = 0, largo = false, top }: Props) {
+export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, aoFiltros, filtrosAtivos = 0, lenteNosFiltros = false, aoLimparFiltros, aoVerLista, naLista = 0, contagens, largo = false, top }: Props) {
   const limpar = filtrosAtivos > 0 && aoLimparFiltros ? (
     <Pressable accessibilityRole="button" accessibilityLabel={`${filtrosAtivos} ${filtrosAtivos === 1 ? 'filtro ligado' : 'filtros ligados'}. Limpar`}
       onPress={aoLimparFiltros} style={[s.limpar, largo && s.limparLargo]}>
@@ -61,10 +80,16 @@ export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, a
      — mas "Clientes" é LENTE, não filtro, e lente também é um recorte. A lista vale para
      qualquer coisa que o mapa esteja mostrando; com zero lugares a pílula some, porque aí não
      há lista nenhuma para abrir. */
+  /* E PRECISA SER ACHADA (Julyan, 28/10/26: "ainda não achei o modo lista... deixa a lista mais
+     visível"). Ela estava do tamanho, da cor e do formato de mais um chip no meio de um mapa
+     cheio de chip — existia e não era vista. Agora é o botão cheio da tela: ícone de lista,
+     o verbo na frente e a tinta invertida. Quem fica discreto é o "Limpar", que é saída, não
+     destino. */
   const lista = naLista > 0 && aoVerLista ? (
     <Pressable accessibilityRole="button" accessibilityLabel={`Ver os ${naLista} em lista, mais perto primeiro`}
       onPress={aoVerLista} style={[s.lista, largo && s.limparLargo]}>
-      <Text style={s.listaTexto}>{`Lista · ${naLista}`}</Text>
+      <IconeLista />
+      <Text style={s.listaTexto}>{`Ver em lista · ${naLista}`}</Text>
     </Pressable>
   ) : null;
   /* TODAS AS LENTES NA FILEIRA (Julyan, 15/10/26: "as lentes têm que estar mais visíveis, em
@@ -79,14 +104,21 @@ export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, a
   const botoes = lentes.map((l) => {
     const ativa = l.id === atual;
     const comContador = l.id === 'novos' && contador;
+    /* Em "Recém-abertos" o lugar do número já é da META DA SEMANA (visitados/mínimo), que é outra
+       coisa que quantidade; duas contas no mesmo canto seria pedir para ler errado. Lá fica a meta. */
+    const quantos = comContador ? null : contagens?.[l.id];
     return (
       <Pressable key={l.id} accessibilityRole="button" accessibilityState={{ selected: ativa }}
-        accessibilityLabel={comContador ? `Lente ${l.rotulo}. ${contador!.texto} recém-abertos visitados na semana` : `Lente ${l.rotulo}`}
+        accessibilityLabel={comContador ? `Lente ${l.rotulo}. ${contador!.texto} recém-abertos visitados na semana`
+          : quantos == null ? `Lente ${l.rotulo}` : `Lente ${l.rotulo}, ${quantos} ${quantos === 1 ? 'lugar' : 'lugares'}`}
         onLayout={(e) => { xDe.current.set(l.id, e.nativeEvent.layout.x); }}
         onPress={() => aoEscolher(l.id)} style={[s.lente, largo && s.lenteLarga, ativa && s.lenteAtiva]}>
         <View style={[s.bolinha, { backgroundColor: COR_LENTE[l.id] }, ativa && s.bolinhaAtiva]} />
         <Text style={[s.lenteTexto, largo && s.lenteTextoLargo, ativa && s.lenteTextoAtivo]} numberOfLines={1}>{l.rotulo}</Text>
         {comContador ? <Contador c={contador!} ativa={ativa} /> : null}
+        {quantos == null ? null : (
+          <Text style={[s.qtd, ativa && s.qtdAtiva, quantos === 0 && !ativa && s.qtdVazia]}>{quantos}</Text>
+        )}
       </Pressable>
     );
   });
@@ -165,12 +197,21 @@ const s = StyleSheet.create({
   l2: { width: 10, height: 2.2, borderRadius: 2, backgroundColor: 'var(--text)' },
   l3: { width: 4, height: 2.2, borderRadius: 2, backgroundColor: 'var(--text)' },
   lAceso: { backgroundColor: 'var(--text)' },
-  limparLinha: { position: 'absolute', top: ALTURA_FILEIRA_LENTES + 6, left: 12 },
-  limpar: { height: 44, paddingHorizontal: 14, borderRadius: 22, justifyContent: 'center', backgroundColor: 'var(--text)', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+  // `right` e o `flexWrap` das pílulas: com o botão da lista maior, duas pílulas numa tela de
+  // 320 px passariam da borda e a segunda sairia da mão — aqui ela desce de linha.
+  limparLinha: { position: 'absolute', top: ALTURA_FILEIRA_LENTES + 6, left: 12, right: 12 },
+  limpar: { height: 44, paddingHorizontal: 14, borderRadius: 22, justifyContent: 'center', backgroundColor: 'var(--pilula-mapa)', borderWidth: 1, borderColor: 'var(--border)', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
   limparLargo: { height: 44, borderRadius: 22 },
-  limparTexto: { fontSize: 13, fontWeight: '700', color: 'var(--bg)' },
-  duasPilulas: { flexDirection: 'row', gap: 8 },
-  lista: { height: 44, paddingHorizontal: 14, borderRadius: 22, justifyContent: 'center', backgroundColor: 'var(--pilula-mapa)', borderWidth: 1, borderColor: 'var(--border)', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
-  listaTexto: { fontSize: 13, fontWeight: '700', color: 'var(--text)' },
+  limparTexto: { fontSize: 13, fontWeight: '700', color: 'var(--text)' },
+  duasPilulas: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  lista: { height: 44, paddingHorizontal: 16, borderRadius: 22, flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: 'var(--text)', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 3 } },
+  listaTexto: { fontSize: 13.5, fontWeight: '700', color: 'var(--bg)' },
+  liIcone: { gap: 3 },
+  liLinha: { flexDirection: 'row', alignItems: 'center', gap: 3.5 },
+  liPonto: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'var(--bg)' },
+  liBarra: { width: 9, height: 2, borderRadius: 1, backgroundColor: 'var(--bg)' },
+  qtd: { fontSize: 13, fontWeight: '700', color: 'var(--text-muted)', marginLeft: -2 },
+  qtdAtiva: { color: 'var(--bg)' },
+  qtdVazia: { color: 'var(--text-disabled)' },
   pontoFiltro: { position: 'absolute', top: 6, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: 'var(--vermelho-acao)' },
 });
