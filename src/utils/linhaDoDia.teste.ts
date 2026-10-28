@@ -131,6 +131,16 @@ ok(!/9h|09:00|avisad/.test(linha({ agora: as('08:30'), noPlano: 0, faltamNoPlano
 // ── 9. antes das 8h, com plano, mostra o plano ─────────────────────────────────────────────
 ok(estado({ agora: as('07:10'), noPlano: 5, faltamNoPlano: 5 }) === 'plano', 'às 7h10 a linha mostra o plano, não um ritmo sobre nada');
 ok(/5 portas/.test(linha({ agora: as('07:10'), noPlano: 5, faltamNoPlano: 5 })?.titulo ?? ''), 'e diz quantas portas são');
+/* "0 DE 6 · NO RITMO" É VERDADE E NÃO INFORMA NADA: ninguém está no ritmo de coisa nenhuma
+   antes da primeira porta. Enquanto o placar é zero e o relógio ainda perdoa, vale o plano. */
+ok(estado({ agora: as('08:40'), noPlano: 6, faltamNoPlano: 6, feitas: 0 }) === 'plano',
+  'às 8h40 com o plano feito e nenhuma visita ainda, a linha mostra o plano');
+ok(estado({ agora: as('09:30'), noPlano: 6, faltamNoPlano: 5, feitas: 1 }) === 'no_ritmo',
+  'a primeira visita já troca para o placar');
+ok(estado({ agora: as('14:00'), noPlano: 6, faltamNoPlano: 6, feitas: 0 }) === 'escapando',
+  'e zero às 14h não vira "plano": o relógio já não perdoa');
+ok(estado({ agora: as('11:00'), noPlano: 6, faltamNoPlano: 6, feitas: 0 }) === 'atras',
+  'nem zero às 11h: aí é atraso, não plano');
 
 // ── 10. acima do mínimo ────────────────────────────────────────────────────────────────────
 ok(estado({ agora: as('16:00'), feitas: 7, faltamNoPlano: 0 }) === 'acima', '7 de 6 é "acima"');

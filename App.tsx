@@ -2843,7 +2843,9 @@ function MainApp() {
   const [minutoDaLinha, setMinutoDaLinha] = useState(0);
   useEffect(() => {
     if (!modoNovo || tab !== 'map' || layout.ehLargo) return;
-    const bater = () => setMinutoDaLinha((n) => n + 1);
+    /* COM O APP ATRÁS, NÃO BATE. Cada tique re-renderiza o App inteiro; com a aba escondida
+       isso é trabalho jogado fora (e o `visibilitychange` abaixo recalcula na volta). */
+    const bater = () => { if (document.visibilityState === 'visible') setMinutoDaLinha((n) => n + 1); };
     const id = setInterval(bater, 60000);
     const aoVoltar = () => { if (document.visibilityState === 'visible') bater(); };
     document.addEventListener('visibilitychange', aoVoltar);

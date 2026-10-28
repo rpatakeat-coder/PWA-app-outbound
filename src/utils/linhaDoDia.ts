@@ -284,9 +284,12 @@ export function linhaDoDia(e: EntradaDaLinha): LinhaDoDia | null {
     });
   }
 
-  /* 7. ANTES DAS 8h, COM PLANO: o dia ainda não começou, e "0 de 6 · no ritmo" seria uma
-        informação sobre nada. A linha mostra o que ele combinou consigo mesmo. */
-  if (minutos < INICIO_DA_RUA * 60 && e.noPlano > 0) {
+  /* 7. O DIA AINDA NÃO COMEÇOU, E HÁ PLANO. "0 de 6 portas · no ritmo" é verdade e não
+        informa nada: ninguém está no ritmo de coisa nenhuma antes da primeira porta. Enquanto
+        o placar é zero e o relógio ainda perdoa, a linha mostra o que ele combinou consigo
+        mesmo. Vale antes das 8h e vale às 8h30 — assim que a primeira visita entra, ou assim
+        que o dia começa a atrasar, os estados de cima tomam o lugar. */
+  if (e.noPlano > 0 && (feitas === 0 || minutos < INICIO_DA_RUA * 60)) {
     return montar({
       estado: 'plano', tom: 'neutro', acao: 'progresso',
       titulo: `Plano de hoje · ${contagem(e.noPlano, 'porta', 'portas')}`,
