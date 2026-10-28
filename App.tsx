@@ -10441,10 +10441,14 @@ function MainApp() {
           onAgenda={(dia) => { void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] }); void queryClient.invalidateQueries({ queryKey: ['client_meetings'] }); setSelectedClient(null); setAgendaDiaInicial(dia); setTab('agenda'); }}
           onSalvarCadastro={async (campos: CamposCadastro) => {
             const c = fichaPendente.client;
-            if (campos.empresa || campos.telefone) {
+            /* `campos.nome` chega quando o executivo corrige "quem e quem" na ficha (28/10/26):
+               loja e contato trocados e um so botao que inverte os dois. Vai pela MESMA porta do
+               formulario de edicao, que dispara o webhook do HubSpot quando nome ou empresa mudam —
+               entao o conserto vale no CRM tambem, nao so na tela do app. */
+            if (campos.empresa || campos.nome || campos.telefone) {
               // Mesmo caminho do formulário de edição (sincroniza com o HubSpot).
               await updateClient.mutateAsync({
-                id: c.id, nome: c.nome, empresa: campos.empresa ?? c.empresa ?? undefined, endereco: c.endereco ?? undefined,
+                id: c.id, nome: campos.nome ?? c.nome, empresa: campos.empresa ?? c.empresa ?? undefined, endereco: c.endereco ?? undefined,
                 numero: c.numero, cep: c.cep ?? undefined, cidade: c.cidade ?? undefined, estado: c.estado ?? undefined,
                 telefone: campos.telefone ?? c.telefone ?? undefined, email: c.email ?? undefined, status: c.status,
                 latitude: c.latitude, longitude: c.longitude, observacoes: c.observacoes ?? undefined,

@@ -39,9 +39,9 @@ import { gravarFichaNoBanco, linhaDaFicha, type LinhaFicha } from '../utils/fich
 import { enviarConclusao, idDe } from '../utils/concluirTarefa';
 import { apagarPendente, marcarGravada, registrarFeita, type SecaoDoFeito } from '../utils/filaFeitas';
 import { CampoData } from '../components/CampoData';
-import { IconClose as SiClose, IconCheck as SiCheck, IconChevronDown as SiDown } from '../components/icons';
+import { IconClose as SiClose, IconCheck as SiCheck, IconChevronDown as SiDown, IconPencil as SiLapis } from '../components/icons';
 
-export type CamposCadastro = { empresa?: string; telefone?: string; categoria?: string };
+export type CamposCadastro = { empresa?: string; nome?: string; telefone?: string; categoria?: string };
 
 type Props = {
   visivel: boolean;
@@ -167,7 +167,25 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   const funil = decidirProspeccao(client, eu, donoColega);
   const [vaiProFunil, setVaiProFunil] = useState(true);
 
-  const nome = client.empresa?.trim() || client.nome || 'Lead';
+  /*  TROCAR LOJA ↔ CONTATO (Julyan, 28/10/26: "erram o nome da loja e colocam o nome do
+      cliente e vice-versa"). O erro quase nunca é de digitação: é de ORDEM, os dois campos
+      trocados. Por isso o conserto principal é um botão que inverte os dois de uma vez —
+      quem trocou digitando torna a trocar digitando. Os campos livres ficam logo abaixo,
+      para o erro que é mesmo de escrita.
+      Grava na hora, pela mesma porta do cadastro (updateClient), que já avisa o HubSpot
+      quando nome ou empresa mudam: o conserto vale nos dois lados, não só na tela daqui.
+      `nomesLocais` existe porque o `client` desta folha é uma cópia: sem ele, o cabeçalho
+      continuaria mostrando o nome errado até a folha fechar e reabrir. */
+  const [nomesLocais, setNomesLocais] = useState<{ empresa: string; contato: string } | null>(null);
+  const [editandoNomes, setEditandoNomes] = useState(false);
+  const [rascunhoLoja, setRascunhoLoja] = useState('');
+  const [rascunhoContato, setRascunhoContato] = useState('');
+  const [salvandoNomes, setSalvandoNomes] = useState(false);
+  const [erroNomes, setErroNomes] = useState('');
+  const lojaAtual = nomesLocais ? nomesLocais.empresa : (client.empresa?.trim() ?? '');
+  const contatoAtual = nomesLocais ? nomesLocais.contato : (client.nome?.trim() ?? '');
+
+  const nome = lojaAtual || contatoAtual || 'Lead';
   const temTelefone = !!client.telefone?.trim();
   const dealId = client.id_hubspot ? String(client.id_hubspot) : null;
 
@@ -643,11 +661,59 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                     {apresentei && etapaReal ? `${nome} · ${ROTULO_ETAPA[etapaReal] ?? ''} → Demo/Proposta` : `${nome} · toque ${toque} de 3`}
                   </Text>
                 </View>
+                <Pressable accessibilityRole="button" accessibilityLabel="Corrigir o nome da loja e do contato"
+                  onPress={() => { setRascunhoLoja(lojaAtual); setRascunhoContato(contatoAtual); setErroNomes(''); setEditandoNomes((x) => !x); }}
+                  style={[s.lapis, editandoNomes && s.lapisAceso]}>
+                  <SiLapis width={18} height={18} fill={editandoNomes ? 'var(--text)' : 'var(--text-muted)'} />
+                </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={fechar} style={s.fechar}>
                   <SiClose width={20} height={20} fill="var(--text-muted)" />
                 </Pressable>
               </View>
               <ScrollView contentContainerStyle={s.corpo} keyboardShouldPersistTaps="handled">
+                {editandoNomes && (
+                  <View style={s.nomes}>
+                    <Text style={s.nomesRotulo}>QUEM É QUEM AQUI</Text>
+                    {/* O conserto de um toque vem PRIMEIRO, porque é o erro que acontece. */}
+                    <Pressable accessibilityRole="button"
+                      accessibilityLabel={`Trocar: a loja passa a ser ${rascunhoContato || 'o contato'} e o contato, ${rascunhoLoja || 'a loja'}`}
+                      onPress={() => { setRascunhoLoja(rascunhoContato); setRascunhoContato(rascunhoLoja); }}
+                      style={s.trocar}>
+                      <Text style={s.trocarTexto}>Estão trocados · inverter os dois</Text>
+                    </Pressable>
+                    <Text style={s.nomesCampo}>Loja</Text>
+                    <TextInput style={s.nomesInput} value={rascunhoLoja} onChangeText={setRascunhoLoja}
+                      placeholder="Nome do restaurante" placeholderTextColor="var(--text-faint)" />
+                    <Text style={s.nomesCampo}>Contato</Text>
+                    <TextInput style={s.nomesInput} value={rascunhoContato} onChangeText={setRascunhoContato}
+                      placeholder="Nome da pessoa" placeholderTextColor="var(--text-faint)" />
+                    {!!erroNomes && <Text style={s.nomesErro}>{erroNomes}</Text>}
+                    <View style={s.nomesBotoes}>
+                      <Pressable accessibilityRole="button" onPress={() => setEditandoNomes(false)} style={s.nomesCancelar}>
+                        <Text style={s.nomesCancelarTexto}>Deixa como está</Text>
+                      </Pressable>
+                      <Pressable accessibilityRole="button" disabled={salvandoNomes}
+                        onPress={async () => {
+                          const loja = rascunhoLoja.trim();
+                          const contato = rascunhoContato.trim();
+                          /* Sem loja o pino perde o nome no mapa: aviso em vez de gravar vazio. */
+                          if (!loja && !contato) { setErroNomes('Escreva ao menos o nome da loja.'); return; }
+                          setSalvandoNomes(true); setErroNomes('');
+                          try {
+                            await onSalvarCadastro({ empresa: loja, nome: contato || loja });
+                            setNomesLocais({ empresa: loja, contato: contato || loja });
+                            setEditandoNomes(false);
+                          } catch (e) {
+                            setErroNomes('Não consegui gravar agora. Tente de novo em instantes.');
+                          } finally { setSalvandoNomes(false); }
+                        }}
+                        style={[s.nomesSalvar, salvandoNomes && s.nomesSalvando]}>
+                        <Text style={s.nomesSalvarTexto}>{salvandoNomes ? 'Gravando…' : 'Gravar'}</Text>
+                      </Pressable>
+                    </View>
+                    <Text style={s.nomesNota}>Corrige também no HubSpot.</Text>
+                  </View>
+                )}
                 {!f.comoFoi && (
                   <View style={[s.gps, declarada && s.gpsDeclarada]}>
                     <Text style={[s.gpsTexto, declarada && s.gpsDeclaradaTexto]}>{declarada ? 'Visita declarada · o gestor vê que foi sem GPS' : 'GPS confere · check-in feito'}</Text>
@@ -929,6 +995,24 @@ const s = StyleSheet.create({
   subtitulo: { fontSize: 13, fontWeight: '500', color: 'var(--text-muted)', marginTop: 2 },
   fechar: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -8, marginTop: -6 },
   fecharTexto: { fontSize: 18, color: 'var(--text-muted)' },
+  lapis: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, marginTop: -6 },
+  lapisAceso: { backgroundColor: 'var(--surface-3)' },
+  nomes: { gap: 8, padding: 14, borderRadius: 14, backgroundColor: 'var(--surface-2)', borderWidth: 1, borderColor: 'var(--border)' },
+  nomesRotulo: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, color: 'var(--text-muted)' },
+  trocar: { minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--vermelho-acao)', paddingHorizontal: 14 },
+  trocarTexto: { fontSize: 14, fontWeight: '700', color: 'var(--vermelho-acao-tinta)' },
+  nomesCampo: { fontSize: 12, fontWeight: '700', color: 'var(--text-muted)', marginTop: 2 },
+  nomesInput: { minHeight: 48, borderRadius: 12, paddingHorizontal: 12, fontSize: 15, color: 'var(--text)', backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--stroke-default)' },
+  nomesErro: { fontSize: 13, fontWeight: '600', color: 'var(--vermelho-texto)' },
+  nomesBotoes: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  nomesCancelar: { flex: 1, minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'var(--stroke-default)' },
+  nomesCancelarTexto: { fontSize: 14, fontWeight: '700', color: 'var(--text-muted)' },
+  nomesSalvar: { flex: 1, minHeight: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--text)' },
+  nomesSalvando: { opacity: 0.6 },
+  nomesSalvarTexto: { fontSize: 14, fontWeight: '700', color: 'var(--bg)' },
+  nomesNota: { fontSize: 12, color: 'var(--text-faint)' },
+  lapisTraco: { position: 'absolute', backgroundColor: 'var(--text-muted)' },
+  lapisTracoAceso: { backgroundColor: 'var(--text)' },
   corpo: { paddingHorizontal: 16, paddingBottom: 16, gap: 10 },
   gps: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: 'var(--tint-green)' },
   gpsTexto: { fontSize: 12, fontWeight: '600', color: 'var(--tint-green-text)' },
