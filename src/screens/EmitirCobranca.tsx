@@ -14,7 +14,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Switch, Te
 import type { Client } from '../types/client';
 import {
   ADICIONAIS, ADICIONAIS_MAIS_USADOS, COBRANCA_VAZIA, DESAFIOS, ETAPA_AG_PAGAMENTO, MINIMO_DESAFIO, PACOTES, PACOTES_MAIS_USADOS,
-  PAGAMENTOS, PERIODOS, alternarAdicional, conferirDocumento, faltaNoPasso, propriedadesDaCobranca, valorDoPeriodo,
+  PAGAMENTOS, PERIODOS, alternarAdicional, conferirDocumento, faltaNoPasso, propriedadesDaCobranca, rascunhoDoDesafio, valorDoPeriodo,
   type Cobranca,
 } from '../utils/cobranca';
 import { negocioAcao } from '../utils/negocioAcao';
@@ -25,6 +25,8 @@ type Props = {
   client: Client;
   /** O que o negócio já tem (mapa_negocio): celular, MRR, plano. */
   jaTem: Record<string, unknown>;
+  /** O que as fichas de rua sabem (dor e sistema), que vence o negócio por ser mais recente. */
+  armas?: { dor?: string; sistema?: string } | null;
   onFechar: () => void;
   onEmitida: (codigoEtapa: string) => void;
 };
@@ -41,7 +43,7 @@ const DOR_PARA_DESAFIO: Record<string, string> = {
   'Sem fidelização': 'Problemas em Fidelizar o Cliente', 'Demora na divisão de contas': 'Operação', Estoque: 'Problemas de Gestão',
 };
 
-export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmitida }: Props) {
+export default function EmitirCobranca({ visivel, client, jaTem, armas = null, onFechar, onEmitida }: Props) {
   const [c, setC] = useState<Cobranca>(COBRANCA_VAZIA);
   const [passo, setPasso] = useState<1 | 2 | 3 | 4>(1);
   /* A7 (handoff v6): o passo 4 dizia "Link gerado no Asaas ✓" sem nada confirmar — o app
@@ -62,6 +64,15 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
     setRecolher(!!c.pacote_contratado && c.adicional.length > 0 && !!c.periodo_contratado && !!c.tipo_de_pagamento
       && Number(String(c.mrr).replace(',', '.')) > 0 && Number(String(c.amount).replace(',', '.')) > 0);
   }, [passo]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* O DESAFIO ESCRITO PELO APP (28/10/26, Julyan: "eu queria que meu executivo nem colocasse
+     essa informação ali"). O mínimo de 50 caracteres é exigência da ETAPA no HubSpot, não nossa:
+     sem ele o CRM recusa a passagem inteira. Enquanto estiver lá, o app escreve a frase com o que
+     já foi registrado (dor, sistema, pacote) e o executivo só confere — não digita.
+     Sem dor E sem sistema o rascunho vem vazio e a tela volta a pedir, como antes: a frase
+     que sobraria seria o nome do pacote, igual para todo mundo (ver cobranca.ts). */
+  const [desafioConferido, setDesafioConferido] = useState(false);
+  const [rascunhoNoCampo, setRascunhoNoCampo] = useState('');
+  const [editandoDesafio, setEditandoDesafio] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -83,6 +94,7 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
       qual_maior_desafio_: DOR_PARA_DESAFIO[String(jaTem.gargalo_operacional ?? '')] ?? '',
     });
     setPasso(1); setErro(null); setTodosPacotes(false); setTodosAdicionais(false); setVerContrato(false);
+    setDesafioConferido(false); setRascunhoNoCampo(''); setEditandoDesafio(false);
   }, [visivel, client.id]);
 
   // O que o negócio já tem chega um instante depois de abrir (leitura ao vivo do
@@ -115,7 +127,41 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
     if (!n.amountEditado && ('mrr' in x || 'periodo_contratado' in x)) n.amount = valorDoPeriodo(n.mrr, n.periodo_contratado);
     return n;
   });
-  const falta = passo <= 3 ? faltaNoPasso(c, passo as 1 | 2 | 3) : [];
+  /* a ficha de rua vence o negócio (é mais recente), como nas armas da demo */
+  const rascunho = useMemo(() => rascunhoDoDesafio({
+    nome: client.empresa?.trim() || client.nome || '',
+    dor: String(armas?.dor || jaTem.gargalo_operacional || ''),
+    sistema: String(armas?.sistema || jaTem.nome_do_sistema || ''),
+    pacote: c.pacote_contratado,
+    adicionais: c.adicional,
+  }), [client.empresa, client.nome, armas, jaTem, c.pacote_contratado, c.adicional]);
+
+  // Escreve o rascunho no campo enquanto ele estiver intocado — e REESCREVE quando o pacote
+  // muda, senão a frase ficaria falando de um contrato que não é mais o que vai ser emitido.
+  // Texto digitado pelo executivo nunca é sobrescrito.
+  useEffect(() => {
+    if (!visivel || !rascunho) return;
+    setC((x) => {
+      const atual = x.informacoes_sobre_o_maior_desafio.trim();
+      if (atual && atual !== rascunhoNoCampo) return x;
+      return { ...x, informacoes_sobre_o_maior_desafio: rascunho };
+    });
+    setRascunhoNoCampo(rascunho);
+  }, [visivel, rascunho]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* Um toque de "confere" antes de seguir: o texto é nosso até alguém ler. Editar também vale
+     como conferir — aí o texto deixa de ser o rascunho. */
+  const precisaConferir = !!rascunho && !desafioConferido
+    && c.informacoes_sobre_o_maior_desafio.trim() === rascunhoNoCampo.trim();
+  /* Enquanto o texto ainda é o rascunho — conferido ou não — ele fica em leitura; a caixa só
+     aparece quando a pessoa toca em "Editar". Depois de conferido continua em leitura: deixar
+     voltar para a caixa cortava a última linha de novo, agora sem ninguém para avisar. */
+  const soLerDesafio = !!rascunho && !editandoDesafio
+    && c.informacoes_sobre_o_maior_desafio.trim() === rascunhoNoCampo.trim();
+  const falta = [
+    ...(passo <= 3 ? faltaNoPasso(c, passo as 1 | 2 | 3) : []),
+    ...(passo === 2 && precisaConferir ? ['conferir o desafio'] : []),
+  ];
   const doc = conferirDocumento(c.cnpj_cpf);
   const props = useMemo(() => propriedadesDaCobranca(c), [c]);
 
@@ -219,12 +265,39 @@ export default function EmitirCobranca({ visivel, client, jaTem, onFechar, onEmi
                   <Text style={s.rotulo}>{`Maior desafio do cliente${c.qual_maior_desafio_ && DOR_PARA_DESAFIO[String(jaTem.gargalo_operacional ?? '')] === c.qual_maior_desafio_ ? ' · sugerido da dor' : ''}`}</Text>
                   <View style={s.chips}>{DESAFIOS.map((d) => chip(d, d, c.qual_maior_desafio_ === d, () => set({ qual_maior_desafio_: d })))}</View>
                   <View style={s.campoBloco}>
-                    <Text style={s.rotulo}>Conte o desafio com as palavras do dono</Text>
-                    <TextInput style={[s.input, s.area, c.informacoes_sobre_o_maior_desafio.trim().length < MINIMO_DESAFIO && contratoPronto && s.inputFoco]} value={c.informacoes_sobre_o_maior_desafio}
-                      onChangeText={(v) => set({ informacoes_sobre_o_maior_desafio: v })} multiline placeholder="O que o dono contou, com as palavras dele" placeholderTextColor="#8B919C" />
+                    <Text style={s.rotulo}>{soLerDesafio ? 'Escrito pelo app · leia e confirme' : 'Conte o desafio com as palavras do dono'}</Text>
+                    {/* Enquanto é só para LER, o rascunho sai como texto e não como caixa: a caixa
+                        tem altura fixa e cortava a última linha (visto na bancada em 28/10/26) —
+                        e esconder o fim de um texto que a pessoa tem que conferir é o pior lugar
+                        possível para cortar. "Editar" abre a caixa. */}
+                    {soLerDesafio ? (
+                      <View style={s.rascunho}><Text style={s.rascunhoTexto}>{c.informacoes_sobre_o_maior_desafio}</Text></View>
+                    ) : (
+                      <TextInput style={[s.input, s.area, c.informacoes_sobre_o_maior_desafio.trim().length < MINIMO_DESAFIO && contratoPronto && s.inputFoco]} value={c.informacoes_sobre_o_maior_desafio}
+                        onChangeText={(v) => set({ informacoes_sobre_o_maior_desafio: v })} multiline placeholder="O que o dono contou, com as palavras dele" placeholderTextColor="#8B919C" />
+                    )}
+                    {/* O número não é enfeite: é a exigência da ETAPA no HubSpot, que recusa a
+                        passagem inteira abaixo de 50. Dizia "o Asaas lê esse texto" — quem lê é
+                        o RPA, e isso eu não tenho como provar (28/10/26). */}
                     <Text style={[s.valida, c.informacoes_sobre_o_maior_desafio.trim().length >= MINIMO_DESAFIO ? s.validaOk : s.ajudaCor]}>
-                      {`${c.informacoes_sobre_o_maior_desafio.trim().length} de ${MINIMO_DESAFIO} caracteres${c.informacoes_sobre_o_maior_desafio.trim().length >= MINIMO_DESAFIO ? ' ✓' : ' · o Asaas lê esse texto'}`}
+                      {`${c.informacoes_sobre_o_maior_desafio.trim().length} de ${MINIMO_DESAFIO} caracteres${c.informacoes_sobre_o_maior_desafio.trim().length >= MINIMO_DESAFIO ? ' ✓' : ' · o HubSpot não libera a etapa abaixo disso'}`}
                     </Text>
+                    {soLerDesafio && (
+                      <View style={s.linha2}>
+                        {precisaConferir && (
+                          <Pressable accessibilityRole="button" accessibilityLabel="Confere o desafio escrito pelo app"
+                            onPress={() => setDesafioConferido(true)} style={[s.confere, { flex: 2 }]}>
+                            <Text style={s.confereTexto}>Confere ✓</Text>
+                          </Pressable>
+                        )}
+                        <Pressable accessibilityRole="button" onPress={() => setEditandoDesafio(true)} style={[s.secundario, { flex: 1, height: 48 }]}>
+                          <Text style={s.secundarioTexto}>Editar</Text>
+                        </Pressable>
+                      </View>
+                    )}
+                    {!!rascunho && !precisaConferir && (
+                      <Text style={s.ajuda}>{desafioConferido ? 'Você conferiu.' : 'Você reescreveu — vale o seu texto.'}</Text>
+                    )}
                   </View>
                 </>
               );
@@ -405,4 +478,13 @@ const s = StyleSheet.create({
   conferirLinha: { fontSize: 14, fontWeight: '600', color: 'var(--text)' },
   conferirVer: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)', textDecorationLine: 'underline', paddingHorizontal: 4 },
   inputFoco: { borderWidth: 2, borderColor: 'var(--vermelho-acao)' },
+  confere: {
+    minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 12,
+    borderWidth: 1.5, borderColor: 'var(--vermelho-acao)', backgroundColor: 'var(--tint-red)',
+  },
+rascunho: {
+    borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--bg)', padding: 12,
+  },
+  rascunhoTexto: { fontSize: 15, lineHeight: 22, color: 'var(--text)' },
+    confereTexto: { fontSize: 15, fontWeight: '700', color: 'var(--tint-red-text)' },
 });

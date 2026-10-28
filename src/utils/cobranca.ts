@@ -131,3 +131,54 @@ export function propriedadesDaCobranca(c: Cobranca): Record<string, string> {
     informacoes_sobre_o_maior_desafio: c.informacoes_sobre_o_maior_desafio.trim(),
   };
 }
+
+// == O RASCUNHO DO DESAFIO (28/10/26) =============================================
+// Julyan: "eu queria que meu executivo nem colocasse essa informação ali". O mínimo de
+// 50 caracteres não é nosso — é exigência da etapa no HubSpot, que recusa a passagem
+// inteira sem ele. Enquanto estiver lá, o melhor que dá para fazer é o app escrever e o
+// executivo só conferir.
+//
+// MEDIDO em 28/10/26, antes de escrever: das 511 fichas de rua, 140 têm a dor escrita e
+// só DUAS passam de 50 caracteres; o "como foi" é lista fechada. Ou seja, não existe
+// texto comprido para reaproveitar — o que existe são etiquetas curtas. Nos 923 negócios
+// do espelho, 423 têm `gargalo_operacional` e 418 `nome_do_sistema`.
+//
+// Por isso a regra é conservadora: sem dor E sem sistema o rascunho sai VAZIO e a tela
+// volta a pedir. Com só o pacote, a frase seria idêntica para todo mundo, e quem lê
+// depois (implantação, CS) perderia o campo sem ganhar nada.
+
+/** A dor da lista em frase. Fora da lista é texto livre do vendedor: vai como ele escreveu. */
+const DOR_EM_FRASE: Record<string, string> = {
+  Fila: 'a fila no atendimento',
+  'Falta de Garçom': 'a falta de garçom',
+  'Falta de Gestão': 'a falta de gestão',
+  'Sem fidelização': 'o cliente que não volta',
+  'Demora na divisão de contas': 'a demora para dividir a conta',
+  Estoque: 'o controle de estoque',
+};
+
+export type MaterialDoDesafio = {
+  /** Nome do restaurante. */
+  nome: string;
+  /** `gargalo_operacional` do negócio ou a dor escrita na ficha de rua. */
+  dor: string;
+  /** `nome_do_sistema` — o que ele usa hoje. */
+  sistema: string;
+  pacote: string;
+  adicionais: string[];
+};
+
+/** O texto que o app escreve a partir do que já foi registrado. '' = não há o que contar. */
+export function rascunhoDoDesafio(m: MaterialDoDesafio): string {
+  const dor = String(m.dor ?? '').trim();
+  const sistema = String(m.sistema ?? '').trim();
+  if (!dor && !sistema) return '';
+  const nome = String(m.nome ?? '').trim();
+  const pacote = String(m.pacote ?? '').trim();
+  const extras = (m.adicionais ?? []).filter((a) => a && a !== 'Sem adicionais');
+  const frases: string[] = [];
+  if (dor) frases.push(`${nome ? `${nome}: a` : 'A'} maior dor é ${DOR_EM_FRASE[dor] ?? dor.toLowerCase()}`);
+  if (sistema) frases.push(`${!dor && nome ? `${nome} usa` : 'Hoje usa'} ${sistema}`);
+  if (pacote) frases.push(`Fechou ${pacote}${extras.length ? ` com ${extras.join(', ')}` : ''}${dor ? ' para resolver isso' : ''}`);
+  return `${frases.join('. ')}.`;
+}

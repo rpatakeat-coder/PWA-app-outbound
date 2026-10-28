@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
   ADICIONAIS, COBRANCA_VAZIA, DESAFIOS, PACOTES, alternarAdicional, conferirDocumento, faltaNoPasso,
-  propriedadesDaCobranca, valorDoPeriodo,
+  MINIMO_DESAFIO, propriedadesDaCobranca, rascunhoDoDesafio, valorDoPeriodo,
 } from './cobranca';
 
 let falhas = 0;
@@ -33,6 +33,23 @@ ok(faltaNoPasso({ ...cheia, informacoes_sobre_o_maior_desafio: 'curto' }, 2).som
 const props = propriedadesDaCobranca(cheia);
 ok(props.cep === '29055270' && props.cnpj_cpf === '11222333000181', 'CEP e CNPJ vão só com dígitos');
 ok(props.deseja_criar_perfil_no_asaas_ === 'true' && props.adicional === 'Sem adicionais', 'perfil Asaas e adicional no formato do servidor');
+
+// ---- rascunho do desafio (28/10/26) ----
+// O app escreve com o que já foi registrado; o executivo só confere. Asserção por texto
+// exato de propósito: qualquer troca na composição aparece aqui, não só o tamanho.
+const base = { nome: 'Cantina do Zé', dor: 'Fila', sistema: 'Saipos', pacote: 'Profissional', adicionais: ['Fiscal SN'] };
+ok(rascunhoDoDesafio(base) === 'Cantina do Zé: a maior dor é a fila no atendimento. Hoje usa Saipos. Fechou Profissional com Fiscal SN para resolver isso.',
+  'com dor da lista, sistema e pacote: a frase sai inteira');
+ok(rascunhoDoDesafio(base).length >= MINIMO_DESAFIO, 'o rascunho completo já passa do mínimo do HubSpot');
+ok(rascunhoDoDesafio({ ...base, dor: 'Cozinha lenta no almoço' }).startsWith('Cantina do Zé: a maior dor é cozinha lenta no almoço.'),
+  'dor escrita pelo vendedor vai com as palavras dele');
+ok(rascunhoDoDesafio({ ...base, adicionais: ['Sem adicionais'] }) === 'Cantina do Zé: a maior dor é a fila no atendimento. Hoje usa Saipos. Fechou Profissional para resolver isso.',
+  '"Sem adicionais" não vira texto');
+ok(rascunhoDoDesafio({ ...base, dor: '', sistema: '' }) === '', 'sem dor e sem sistema: nada é inventado, a tela volta a pedir');
+ok(rascunhoDoDesafio({ ...base, dor: '' }) === 'Cantina do Zé usa Saipos. Fechou Profissional com Fiscal SN.',
+  'só com o sistema: não fala de dor nem promete resolver');
+ok(rascunhoDoDesafio({ ...base, nome: '' }).startsWith('A maior dor é a fila'), 'sem nome, a frase começa pela dor');
+ok(!rascunhoDoDesafio({ ...base, pacote: '' }).includes('Fechou'), 'sem pacote, não inventa contrato');
 
 // ---- espelho do servidor ----
 const servidor = path.resolve(__dirname, '../../../cockpit-unificado/lib/acoes-negocio/mudar-etapa-negocio.js');

@@ -16,7 +16,7 @@
 // armas (sistema, dor, quem decide, horário) viram um bloco recolhido que nunca trava; o que
 // faltou é gravado em gv2_falta_etapa e o gestor vê no Raio X. "Avançar sem preencher" saiu:
 // o botão principal já faz isso.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CampoData } from '../components/CampoData';
@@ -164,6 +164,14 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
     setOutroSistema(chipDoSistema(k.sistema) === 'Outro');
     setAbertos(abertosDe(k));
   }, [comArmas, armas, jaTemPronto, todasFichas, jaTem]);
+
+  /* Emitir cobranca escreve sozinha o texto do desafio (28/10/26): precisa da dor e do sistema
+     que as fichas de rua sabem. As armas da demo nascem so no caminho da Demo, entao aqui elas
+     sao calculadas de novo, pela MESMA regra - ficha recente vence o negocio. */
+  const armasParaCobranca = useMemo(
+    () => (destino === ETAPA.pagamento && todasFichas != null ? armasConhecidas(jaTem, todasFichas) : null),
+    [destino, todasFichas, jaTem],
+  );
 
   /* "O que pesou" aparece para QUALQUER motivo escolhido (14/10/26); só é exigido nos que não
      se explicam sozinhos — montarPropriedades decide, e manda o opcional quando vem escrito */
@@ -473,6 +481,7 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
             visivel
             client={client}
             jaTem={jaTem}
+            armas={armasParaCobranca}
             onFechar={() => { setDestino(null); onFechar(); }}
             onEmitida={(codigo) => onMudou(codigo)}
           />
