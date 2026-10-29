@@ -54,8 +54,16 @@ export function visivelNaLente(lente: Lente, p: Pino, noPlano: boolean, aberto: 
      leads com negócio, os recém-abertos, os clientes ativos (prova social na porta ao lado) e as
      contas-alvo DISCRETAS (bolinha transparente, ver contaAlvoDiscreta). Colega, ex-cliente e
      perdido seguem nas lentes próprias. */
+  /* SEM DONO TAMBÉM É MAPA (Julyan, 29/10/26: "o filtro da casa dos dados, tbm dos leads recém
+     abertos, preciso deles no mapa sempre"). Medido no banco no mesmo dia: 2.297 leads da Casa dos
+     Dados, dos quais **1.206 sem dono**, e 1.338 do motor do Google, 634 sem dono — todos com pino
+     e todos invisíveis na lente de abertura, porque ela pedia `meu`. Lead sem dono não é lead de
+     colega: é o que está na mesa para quem chegar ("pode assumir: É meu"), e escondê-lo da lente
+     que o executivo abre de manhã é esconder a prospecção dele. Colega segue fora, nas lentes
+     próprias — território é território. */
+  const meuOuLivre = meu || p.dono === 'sem';
   if (lente === 'dia') {
-    return (meu && p.familia === 'lead' && p.temp !== 'X' && !p.reciclagem) || (p.familia === 'rec' && (meu || verTodos))
+    return (meuOuLivre && p.familia === 'lead' && p.temp !== 'X' && !p.reciclagem) || (p.familia === 'rec' && (meuOuLivre || verTodos))
       || p.familia === 'cli' || p.familia === 'av' || p.familia === 'alvo';
   }
   if (p.familia === 'alvo') return false;

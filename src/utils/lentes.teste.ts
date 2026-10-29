@@ -52,6 +52,15 @@ ok(!V('dia', colegaQuente), 'Meu dia: pino de colega não aparece');
 // 15/10/26 (Julyan: "tirar tudo ficou meio ruim"): o cliente ativo volta ao Meu dia; o ex-cliente segue na Reconquista
 ok(V('dia', cliente) && !V('dia', ex), 'Meu dia: cliente ativo aparece, ex-cliente não');
 ok(V('dia', novo) && !V('dia', novoColega), 'Meu dia: meus recém-abertos, não os do colega');
+/* SEM DONO TAMBÉM É MAPA (Julyan, 29/10/26). Eram 1.206 leads da Casa dos Dados e 634 do motor do
+   Google invisíveis na lente de abertura, por não terem dono. Lead sem dono está na mesa; lead de
+   colega não — e é essa diferença que estas quatro checagens seguram. */
+const semDono = P({ etapa: 'Prospecção', vendedor_id_hubspot: null, origem_lead: 'casa_dos_dados' } as Partial<Client>);
+const novoSemDono = P({ lead_prospeccao_id: 'lp-novo', conta_alvo_place_id: 'm', vendedor_id_hubspot: null } as Partial<Client>);
+ok(semDono.dono === 'sem' && novoSemDono.dono === 'sem', 'sem vendedor, o pino é "sem dono"');
+ok(V('dia', semDono), 'Meu dia: lead sem dono (Casa dos Dados) aparece — está na mesa para quem chegar');
+ok(V('dia', novoSemDono), 'Meu dia: recém-aberto sem dono aparece');
+ok(!V('dia', colegaQuente) && !V('dia', novoColega), 'Meu dia: o que é do colega continua fora — território é território');
 ok(V('dia', avaliado) && V('dia', velho) && contaAlvoDiscreta('dia', avaliado) && contaAlvoDiscreta('dia', velho), 'Meu dia: as contas-alvo entram, discretas');
 ok(!contaAlvoDiscreta('alvo', avaliado) && contaAlvoDiscreta('alvo', velho) && !contaAlvoDiscreta('dia', novo) && !contaAlvoDiscreta('dia', cliente), 'discreta: na lente Mais avaliados o avaliado é pino inteiro; recém-aberto e cliente nunca');
 ok(!V('novos', velho) && !V('clientes', velho), 'conta-alvo antiga fora das outras lentes');
