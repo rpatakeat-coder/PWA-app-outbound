@@ -44,10 +44,12 @@ Dois produtos num repositório, mesmo domínio, mesma sessão Supabase:
 
 - **`clients` do app = só a área visível do mapa** (bounds). Qualquer feature
   que precise de nome/coordenada fora do viewport usa busca por id
-  (`src/hooks/useNomesDeClientes.ts`; no cockpit `nomesPorId`/`coordenadasPorId`
-  em `gestao/src/dados/`). Sintoma clássico: "Lead não encontrado".
-- **PostgREST corta em 1000 linhas sem erro.** Paginação em
-  `gestao/src/dados/paginar.ts` (`buscarTudo`). Não consultar tabela grande sem.
+  (`src/hooks/useNomesDeClientes.ts`, em lotes de 200 por causa do limite de
+  tamanho de URL do PostgREST). Sintoma clássico: "Lead não encontrado".
+- **PostgREST corta em 1000 linhas sem erro.** Pagine com `.range()` explícito
+  até a página voltar curta — `src/hooks/useClients.ts` e
+  `src/hooks/useVisitsHeatmap.ts` são os exemplos vivos. Não consultar tabela
+  grande sem.
 - **`sector_visibility` corta `clients` por status, por setor.** Quem não é
   `view` só enxerga os status liberados pro setor dele — e **só `Outbound` e
   `RPA` têm `lead`**. Uma feature que filtre por status aparece vazia pra quase
@@ -60,7 +62,9 @@ Dois produtos num repositório, mesmo domínio, mesma sessão Supabase:
 - **Hook dentro de callback derruba o app** (tela preta). ESLint só tem
   `react-hooks/rules-of-hooks` — rode `npm run lint`; não adicionar preset.
 - **Datas: sempre Brasília** (`diaBRT`). `toISOString().slice(0,10)` vira o
-  dia às 21h. Helpers testados em `gestao/src/dados/datas.ts`.
+  dia às 21h. Há DUAS cópias vivas do helper, `src/utils/abaTarefas.ts` e
+  `src/hooks/useMinhaDaily.ts`; conferidas em 29/10/26, concordam (as duas são
+  `en-CA` + `America/Sao_Paulo`). Mexer numa é mexer nas duas.
 - **FlatList não muda `numColumns` em voo** — troque a `key`.
 - **`Painel` aberto cancela navegação pra fora.** Ele empilha um estado no
   history ao abrir e chama `history.back()` no cleanup ao fechar

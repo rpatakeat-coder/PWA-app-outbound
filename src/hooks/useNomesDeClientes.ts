@@ -7,8 +7,7 @@ import { supabase } from '../integrations/supabase/client';
 // A lista `clients` do app carrega so' a AREA VISIVEL do mapa (bounds). As
 // reunioes da agenda vem da base inteira — entao `clients.find(id)` falha pra
 // qualquer lead fora do viewport e a agenda mostrava "Lead" em tudo, como se
-// os nomes nao existissem. Este hook resolve os nomes por id, em lotes,
-// exatamente como o cockpit de gestao ja' faz (nomesPorId).
+// os nomes nao existissem. Este hook resolve os nomes por id, em lotes.
 const LOTE = 200; // ids por consulta: limite de tamanho de URL do PostgREST
 // o mesmo Map vazio sempre: um novo a cada render quebrava os memos de quem usa (auditoria 15/10/26)
 const VAZIO = new Map<string, string>();
