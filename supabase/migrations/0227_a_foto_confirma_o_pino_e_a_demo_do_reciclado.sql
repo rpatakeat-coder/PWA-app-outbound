@@ -264,7 +264,15 @@ begin
 end $function$;
 
 -- As permissoes de volta, iguais as de antes do drop.
-revoke all on function public._visitas_com_prova(date, date, uuid) from public;
-revoke all on function public.visitas_com_prova(date, date, uuid) from public;
+--
+-- CUIDADO, custou um vazamento aqui em 29/10/26: `revoke from public` NAO basta.
+-- O Supabase tem default privileges no schema public que dao execute para anon,
+-- authenticated e service_role em TODA funcao nova. Depois do drop+create as
+-- duas nasceram com `anon` — e _visitas_com_prova aceita p_pessoa sem o filtro
+-- de gestor, enquanto visitas_com_prova, chamada por anon, teria auth.uid()
+-- nulo e portanto p_pessoa nulo, que na funcao de baixo quer dizer "todo mundo".
+-- Por isso o revoke nomeia anon e authenticated, nao so' public.
+revoke all on function public._visitas_com_prova(date, date, uuid) from anon, authenticated, public;
+revoke all on function public.visitas_com_prova(date, date, uuid) from anon, public;
 grant execute on function public._visitas_com_prova(date, date, uuid) to service_role;
 grant execute on function public.visitas_com_prova(date, date, uuid) to authenticated, service_role;
