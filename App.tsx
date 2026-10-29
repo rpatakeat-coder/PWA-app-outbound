@@ -5275,6 +5275,13 @@ function MainApp() {
   const [fechoResolvido, setFechoResolvido] = useState(false);
   useEffect(() => {
     if (!modoNovo || tab !== "map" || isViewer || fechoResolvido || planoDoDia) return;
+    /* QUEM NÃO FOI À RUA NÃO TEM DIA PARA FECHAR (visto no app em 29/10, logo depois de subir:
+       a folha abriu com "0 portas, todas com próximo passo. Fecha?"). Fechar o nada é pedir um
+       toque sem motivo, e na terceira vez a pessoa fecha no reflexo — e aí a folha não serve mais
+       nem quando importa. Espera o número chegar (null = ainda carregando) e só pergunta a quem
+       trabalhou. É a mesma regra do "não fechou ontem" lá no gestor: não se cobra silêncio. */
+    const portasHoje = meuDia.data?.provadasHoje ?? null;
+    if (portasHoje == null || portasHoje === 0) return;
     const bISO = new Date(Date.now() - 3 * 3600000);
     if (bISO.getUTCHours() < 18) return;
     const chave = `fecho-do-dia-${diaBRT(new Date())}`;
@@ -5284,7 +5291,7 @@ function MainApp() {
     } catch { setFechoResolvido(true); return; }
     setFechoResolvido(true);
     setFechoDoDia(true);
-  }, [modoNovo, tab, isViewer, fechoResolvido, planoDoDia]);
+  }, [modoNovo, tab, isViewer, fechoResolvido, planoDoDia, meuDia.data?.provadasHoje]);
 
   const handleMarkAsVisited = useCallback(async (client: Client, onDone?: () => void) => {
     if (visitingRef.current) return;

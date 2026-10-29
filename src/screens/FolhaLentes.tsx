@@ -77,9 +77,9 @@ export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolh
     aoFiltrosRapidos({ ...filtros, [r.grupo]: conj } as FiltrosNovos);
   };
   return (
-    <Painel visivel={visivel} aoFechar={aoFechar} rotulo={lentes.length ? 'Filtros e outras lentes' : 'Filtros'} topo={
+    <Painel visivel={visivel} aoFechar={aoFechar} rotulo={lentes.length ? 'O que o mapa mostra' : 'Filtros'} topo={
       <View style={s.topo}>
-        <Text style={s.titulo}>{lentes.length ? 'Filtros e outras lentes' : 'Filtros'}</Text>
+        <Text style={s.titulo}>{lentes.length ? 'O que o mapa mostra' : 'Filtros'}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Fechar" onPress={aoFechar} style={s.fechar}>
           <SiClose width={20} height={20} fill="var(--text-muted)" />
         </Pressable>
