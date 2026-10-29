@@ -8106,9 +8106,14 @@ function MainApp() {
   const abasDoRodape: Array<{ aba: AppTab; rotulo: string; Icone: typeof IconLocation; ativa: boolean; selo: number | null; seloClaro?: boolean; seloTexto?: string | null }> = [
     { aba: 'map', rotulo: 'Mapa', Icone: tab === 'map' ? IconLocationFilled : IconLocation, ativa: tab === 'map' || tab === 'list', selo: null },
     ...(isViewer ? [] : [
-      { aba: 'agenda' as AppTab, rotulo: 'Agenda', Icone: IconCalendar, ativa: tab === 'agenda' || tab === 'route', selo: seloAgenda || null, seloClaro: true },
-      { aba: 'tasks' as AppTab, rotulo: 'Tarefas', Icone: IconClipboardCheck, ativa: tab === 'tasks', selo: null, seloTexto: seloAtrasados },
-      { aba: 'playbook' as AppTab, rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, ativa: tab === 'playbook', selo: null },
+      // 6 ABAS -> 3 (handoff "espinha do dia" 2.1, 28/10/26): o executivo so usa
+      // o Mapa, entao o app para de pedir que ele saia de la. Mapa · Hoje · Eu.
+      // Nada fica inalcancavel: Agenda (dia) e Tarefas viram Hoje; Agenda
+      // (semana), Playbook e Meu desempenho ficam em Eu — hoje pelo menu do
+      // avatar, ate a tela da aba Eu chegar (2.9). O selo de Hoje soma o que
+      // vence hoje, e o selo de texto segue mostrando os atrasados.
+      { aba: 'tasks' as AppTab, rotulo: 'Hoje', Icone: IconClipboardCheck, ativa: tab === 'tasks' || tab === 'agenda' || tab === 'route', selo: seloAgenda || null, seloClaro: true, seloTexto: seloAtrasados },
+      { aba: 'meu' as AppTab, rotulo: 'Eu', Icone: IconTrendingUp as typeof IconLocation, ativa: tab === 'meu' || tab === 'playbook' || tab === 'config', selo: null },
     ]),
   ];
   // Trocar de aba fecha o card aberto; o mapa (lente, zoom, filtros) fica como
@@ -9553,6 +9558,16 @@ function MainApp() {
             !isViewer
               ? { chave: 'meu', Icone: IconTrendingUp, rotulo: 'Meu desempenho', aoTocar: () => irParaTelaDePerfil('meu') }
               : null,
+            // AS DUAS QUE SAIRAM DA BARRA (espinha do dia 2.1, 29/10/26). A barra
+            // passou a ter 3 abas e estas duas telas continuam inteiras — so
+            // mudaram de porta. Quando a aba Eu ganhar tela propria (2.9), elas
+            // viram linhas de la e saem daqui.
+            !isViewer
+              ? { chave: 'agenda', Icone: IconCalendar, rotulo: 'Planejar a semana', aoTocar: () => irParaTelaDePerfil('agenda') }
+              : null,
+            !isViewer
+              ? { chave: 'playbook', Icone: IconBook, rotulo: 'Playbook', aoTocar: () => irParaTelaDePerfil('playbook') }
+              : null,
             // "Gestão" leva pro cockpit (para a equipe inteira, ver verGestao);
             // "Meu desempenho" e a entrada que faltava no celular, onde nada
             // chamava setTab('meu').
@@ -9642,12 +9657,15 @@ function MainApp() {
         </Painel>
       )}
 
-      {/* Meu desempenho e Configuracoes nao tem barra: nao sao abas, chegam
-          pelo menu do perfil, e o arrow_back do header e' a volta. Com a barra
-          elas teriam dois caminhos de saida dizendo coisas diferentes. */}
-      {!layout.ehLargo && tab !== 'meu' && tab !== 'config' && !rotaMapaExpandido && modoNovo && !telaCheia && !(tab === 'map' && selectedClient) && (
-      /* RODAPE DO MAPA NOVO (prompt final §B2): Mapa · Agenda · Tarefas ·
-         Playbook, iguais para todos. A Rota mora na Agenda, o "+" e' botao do
+      {/* Configuracoes nao tem barra: nao e' aba, chega pelo menu do perfil, e o
+          arrow_back do header e' a volta. Com a barra teria dois caminhos de
+          saida dizendo coisas diferentes. "Meu desempenho" DEIXOU de ser assim
+          em 29/10/26: virou a aba Eu (2.1), entao a barra fica. O Playbook,
+          que ainda chega pelo menu, mantem a barra para o executivo nao ficar
+          sem caminho de volta agora que nao e' mais aba. */}
+      {!layout.ehLargo && tab !== 'config' && !rotaMapaExpandido && modoNovo && !telaCheia && !(tab === 'map' && selectedClient) && (
+      /* RODAPE DO MAPA NOVO (espinha do dia 2.1, 29/10/26): Mapa · Hoje · Eu.
+         A Rota mora na Agenda, o "+" e' botao do
          mapa e a Gestao fica no menu do avatar, para o time inteiro. */
       <View testID="rodape-app" style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]} onLayout={(e) => setAlturaRodape(Math.round(e.nativeEvent.layout.height))}>
         {abasDoRodape.map((a) => {

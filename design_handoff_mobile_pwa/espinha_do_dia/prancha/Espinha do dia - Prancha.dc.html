@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap">
+<style>
+body{margin:0;background:#E7E3DA;font-family:'Poppins',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+a{color:#E51A31;} a:hover{color:#C8131B;}
+</style>
+</helmet>
+<div style="padding:56px 64px 96px;display:flex;flex-direction:column;gap:72px;color:#111418;font-family:Poppins,sans-serif;">
+
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px;">
+<span style="font:600 12px Poppins;letter-spacing:.1em;color:#E51A31;">APP DE RUA · A ESPINHA DO DIA · PEDIDO DE 28/10</span>
+<h1 style="margin:0;font:800 40px/1.1 Poppins;letter-spacing:-.01em;">Uma linha no mapa que abre, acompanha e fecha o dia</h1>
+<p style="margin:0;font:500 16px/1.55 Poppins;color:#414852;text-wrap:pretty;">Nenhuma aba nova. O mapa de 15/10 continua igual e ganha uma peça só: a <b>linha do dia</b>, 48 px logo abaixo das lentes, sempre visível. Ela mostra o que o dia precisa agora e muda de tom quando ele escapa. Tocar nela abre a folha do momento: de manhã o plano para confirmar, na rua as portas, às 18h o fecho. A folha usa o que a Agenda, as Tarefas, o Playbook e o Desempenho já calculam.</p>
+</header>
+
+<section id="decisoes" data-screen-label="Decisões" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;max-width:1600px;">
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:12px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#1E3A8A;">DECIDIDO POR JULYAN · 28/10</span>
+<sc-for list="{{ decs }}" as="d" hint-placeholder-count="6"><div style="display:flex;gap:10px;font:500 13.5px/1.5 Poppins;color:#2A2F36;"><span style="flex:none;width:6px;height:6px;border-radius:3px;background:#1E3A8A;margin-top:8px;"></span><span style="text-wrap:pretty;"><b>{{ d.t }}</b> {{ d.d }}</span></div></sc-for>
+</div>
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:12px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;">A LINHA DO DIA · 9 ESTADOS</span>
+<sc-for list="{{ lineStates }}" as="ls" hint-placeholder-count="7">
+<div style="display:flex;flex-direction:column;gap:4px;">
+<div style="min-height:48px;border-radius:14px;background:{{ ls.l.bg }};border:1px solid {{ ls.l.bd }};display:flex;align-items:center;gap:10px;padding:6px 14px;box-sizing:border-box;"><span style="flex:none;width:8px;height:8px;border-radius:4px;background:{{ ls.l.dot }};"></span><div style="flex:1;min-width:0;display:flex;flex-direction:column;"><span style="font:700 13.5px/1.3 Poppins;color:{{ ls.l.fg }};">{{ ls.l.t }}</span><span style="font:500 12px/1.3 Poppins;color:{{ ls.l.sub }};">{{ ls.l.s }}</span></div><span style="flex:none;font:700 12.5px Poppins;color:{{ ls.l.fg }};white-space:nowrap;">{{ ls.l.r }}</span></div>
+<span style="font:500 12px/1.4 Poppins;color:#5B6370;">{{ ls.w }}</span>
+</div>
+</sc-for>
+</div>
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:12px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#14532D;">POR QUE NÃO UMA ABA NOVA</span>
+<span style="font:500 13.5px/1.55 Poppins;color:#2A2F36;text-wrap:pretty;">O problema não é falta de tela: as seis abas já sabem o que fazer. O problema é que ele não sai do mapa. Uma aba nova seria a sétima que ele não abre. A linha leva até ele o que essas abas sabem, no único lugar que ele olha.</span>
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;padding-top:6px;">O QUE O GESTOR VÊ E FAZ · NO MÁXIMO 2 AVISOS POR DIA</span>
+<sc-for list="{{ gestor }}" as="g" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:52px minmax(0,1fr);gap:10px;padding:8px 0;border-top:1px solid #EDEAE3;"><span style="font:800 13.5px Poppins;">{{ g.h }}</span><div style="display:flex;flex-direction:column;gap:2px;"><span style="font:700 13.5px/1.4 Poppins;">{{ g.t }}</span><span style="font:500 12.5px/1.45 Poppins;color:#5B6370;text-wrap:pretty;">{{ g.d }}</span></div></div></sc-for>
+</div>
+</section>
+
+<sc-for list="{{ secs }}" as="sec" hint-placeholder-count="3">
+<section id="{{ sec.id }}" data-screen-label="{{ sec.title }}" style="display:flex;flex-direction:column;gap:24px;">
+<div style="display:flex;flex-direction:column;gap:6px;max-width:1100px;"><span style="font:800 28px Poppins;">{{ sec.title }}</span><span style="font:500 15px/1.5 Poppins;color:#414852;text-wrap:pretty;">{{ sec.desc }}</span></div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;max-width:1300px;">
+<sc-for list="{{ sec.vti }}" as="v" hint-placeholder-count="3"><div style="background:{{ v.bg }};border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:6px;"><span style="font:700 12px Poppins;letter-spacing:.08em;color:{{ v.kc }};">{{ v.k }}</span><span style="font:500 13.5px/1.5 Poppins;color:#2A2F36;text-wrap:pretty;">{{ v.t }}</span></div></sc-for>
+</div>
+<div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;">
+<sc-for list="{{ sec.phones }}" as="ph" hint-placeholder-count="3">
+<div id="{{ ph.id }}" style="display:flex;flex-direction:column;gap:12px;width:390px;">
+<div style="display:flex;flex-direction:column;gap:4px;min-height:96px;"><div style="display:flex;gap:8px;align-items:center;"><span style="font:700 12px Poppins;background:#111418;color:#fff;border-radius:6px;padding:3px 8px;">{{ ph.id }}</span><span style="font:700 11px Poppins;letter-spacing:.06em;color:{{ ph.tagFg }};background:{{ ph.tagBg }};border-radius:6px;padding:3px 8px;white-space:nowrap;">{{ ph.tag }}</span></div><span style="font:700 15px Poppins;">{{ ph.cap }}</span><span style="font:500 13px/1.45 Poppins;color:#5B6370;text-wrap:pretty;">{{ ph.desc }}</span></div>
+<div style="position:relative;flex:none;width:390px;height:844px;border-radius:34px;overflow:hidden;background:#121417;box-shadow:0 18px 44px rgba(0,0,0,.22);">
+<div style="position:absolute;inset:-200px;background:#1B2130 url(mapa-base.svg) center/cover;"></div>
+<svg width="390" height="844" style="position:absolute;left:0;top:0;"><path d="{{ ph.route }}" fill="none" stroke="rgba(255,255,255,.9)" stroke-width="3.5" stroke-dasharray="0.5 8" stroke-linecap="round"></path></svg>
+<sc-for list="{{ ph.dots }}" as="d" hint-placeholder-count="0"><div style="position:absolute;left:{{ d.x }}px;top:{{ d.y }}px;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;background:{{ d.c }};border:1.5px solid #fff;box-sizing:border-box;opacity:.5;"></div></sc-for>
+<div style="position:absolute;left:{{ ph.ux }}px;top:{{ ph.uy }}px;width:0;height:0;z-index:30;"><div style="position:absolute;left:-20px;top:-20px;width:40px;height:40px;border-radius:50%;background:rgba(59,130,246,.2);"></div><div style="position:absolute;left:-8px;top:-8px;width:16px;height:16px;border-radius:50%;background:#3B82F6;border:3px solid #fff;box-sizing:border-box;"></div></div>
+<sc-for list="{{ ph.pins }}" as="p" hint-placeholder-count="0">
+<div style="position:absolute;left:{{ p.x }}px;top:{{ p.y }}px;width:0;height:0;opacity:{{ p.op }};z-index:{{ p.z }};">
+<sc-if value="{{ p.ring }}"><div style="position:absolute;left:-33px;top:{{ p.rt }}px;width:66px;height:66px;border-radius:50%;border:3px solid #E51A31;background:rgba(229,26,49,.16);box-sizing:border-box;"></div></sc-if>
+<div style="position:absolute;left:-5px;top:-8px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:8px solid #fff;"></div>
+<div style="position:absolute;left:{{ p.bl }}px;top:{{ p.bt }}px;width:{{ p.s }}px;height:{{ p.s }}px;box-sizing:border-box;border-radius:50%;background:{{ p.bg }};border:2.5px {{ p.bst }} #fff;color:#fff;display:flex;align-items:center;justify-content:center;font:700 {{ p.fs }}px/1 Poppins;box-shadow:0 2px 5px rgba(0,0,0,.4);">{{ p.t }}</div>
+<sc-if value="{{ p.label }}"><div style="position:absolute;left:{{ p.lx }}px;top:{{ p.ly }}px;background:rgba(23,25,29,.94);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:3px 9px;display:flex;flex-direction:column;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.25);"><span style="font:700 13px/1.25 Poppins;color:#F4F5F7;">{{ p.ln }}</span><span style="font:600 11.5px/1.25 Poppins;color:rgba(255,255,255,.74);">{{ p.ls }}</span></div></sc-if>
+</div>
+</sc-for>
+<div style="position:absolute;top:0;left:0;right:0;height:46px;display:flex;justify-content:space-between;align-items:center;padding:0 30px;font:600 14px Poppins;color:#F4F5F7;z-index:80;"><span>{{ ph.time }}</span><span>4G</span></div>
+<div style="position:absolute;top:50px;left:12px;right:12px;height:48px;border-radius:24px;background:rgba(23,25,29,.94);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;gap:10px;padding:0 6px 0 16px;z-index:80;box-sizing:border-box;"><span style="width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.74);box-sizing:border-box;flex:none;"></span><span style="flex:1;font:500 14px Poppins;color:rgba(255,255,255,.74);">Buscar lead, rua ou bairro</span><span style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.12);color:#F4F5F7;display:flex;align-items:center;justify-content:center;font:700 13px Poppins;">SA</span></div>
+<div style="position:absolute;top:106px;left:0;right:60px;height:44px;display:flex;align-items:center;gap:8px;padding-left:12px;overflow:hidden;z-index:80;">
+<sc-for list="{{ lenses }}" as="l" hint-placeholder-count="4"><span style="flex:none;height:40px;padding:0 14px;border-radius:20px;background:{{ l.bg }};color:{{ l.fg }};border:1px solid {{ l.bd }};display:flex;align-items:center;gap:8px;font:600 14px Poppins;white-space:nowrap;box-sizing:border-box;">{{ l.t }}<sc-if value="{{ l.cnt }}"><span style="height:24px;padding:0 8px;border-radius:12px;background:rgba(255,255,255,.12);color:#F4F5F7;display:flex;align-items:center;font:700 12.5px Poppins;">{{ l.cnt }}</span></sc-if></span></sc-for>
+</div>
+<div style="position:absolute;top:106px;right:12px;width:44px;height:40px;border-radius:20px;background:rgba(23,25,29,.94);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;z-index:81;box-sizing:border-box;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F4F5F7" stroke-width="2.2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"></path></svg></div>
+<div style="position:absolute;top:158px;left:12px;right:12px;min-height:48px;border-radius:14px;background:{{ ph.line.bg }};border:1px solid {{ ph.line.bd }};display:flex;align-items:center;gap:10px;padding:6px 14px;box-sizing:border-box;z-index:82;box-shadow:0 4px 14px rgba(0,0,0,.3);"><span style="flex:none;width:8px;height:8px;border-radius:4px;background:{{ ph.line.dot }};"></span><div style="flex:1;min-width:0;display:flex;flex-direction:column;"><span style="font:700 13.5px/1.3 Poppins;color:{{ ph.line.fg }};">{{ ph.line.t }}</span><span style="font:500 12px/1.3 Poppins;color:{{ ph.line.sub }};">{{ ph.line.s }}</span></div><span style="flex:none;font:700 12.5px Poppins;color:{{ ph.line.fg }};white-space:nowrap;">{{ ph.line.r }}</span></div>
+<sc-if value="{{ ph.toast }}"><div style="position:absolute;top:216px;left:12px;right:12px;border-radius:14px;background:#F4F5F7;color:#111418;padding:10px 14px;display:flex;align-items:center;gap:10px;z-index:83;box-shadow:0 6px 18px rgba(0,0,0,.35);"><span style="flex:1;font:600 13px/1.4 Poppins;text-wrap:pretty;">{{ ph.toast.t }}</span><sc-if value="{{ ph.toast.a }}"><span style="flex:none;font:700 13.5px Poppins;text-decoration:underline;">{{ ph.toast.a }}</span></sc-if></div></sc-if>
+<div style="position:absolute;left:0;right:0;top:{{ ph.sh.top }}px;bottom:{{ ph.sh.bottom }}px;background:#17191D;border-radius:22px 22px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden;z-index:70;">
+<div style="height:18px;flex:none;display:flex;align-items:center;justify-content:center;"><div style="width:40px;height:5px;border-radius:3px;background:rgba(255,255,255,.28);"></div></div>
+<div style="padding:0 16px 14px;display:flex;flex-direction:column;gap:10px;">
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:2px 10px;"><span style="white-space:nowrap;font:700 11.5px/1.3 Poppins;letter-spacing:.06em;color:{{ ph.sh.kc }};">{{ ph.sh.kicker }}</span><span style="white-space:nowrap;font:600 12.5px Poppins;color:rgba(255,255,255,.74);">{{ ph.sh.kr }}</span></div>
+<div style="display:flex;flex-direction:column;gap:2px;margin-top:-4px;"><span style="font:700 19px/1.25 Poppins;color:#F4F5F7;text-wrap:pretty;">{{ ph.sh.title }}</span><sc-if value="{{ ph.sh.sub }}"><span style="font:500 13.5px/1.4 Poppins;color:rgba(255,255,255,.74);text-wrap:pretty;">{{ ph.sh.sub }}</span></sc-if></div>
+<sc-if value="{{ ph.sh.arma }}"><div style="border-radius:14px;background:rgba(255,255,255,.06);border:1.5px solid rgba(229,26,49,.55);padding:9px 12px;display:flex;flex-direction:column;gap:3px;"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;"><span style="font:700 11px Poppins;letter-spacing:.08em;color:#FF6B78;">{{ ph.sh.arma.k }}</span><span style="font:600 12px Poppins;color:rgba(255,255,255,.74);text-decoration:underline;">Fala pronta ›</span></div><span style="font:700 14px/1.4 Poppins;color:#F4F5F7;text-wrap:pretty;">{{ ph.sh.arma.why }}</span></div></sc-if>
+<sc-if value="{{ ph.sh.ifs }}"><div style="display:flex;flex-direction:column;"><span style="font:700 11px Poppins;letter-spacing:.08em;color:rgba(255,255,255,.6);padding-bottom:4px;">SE ELE DISSER · DO PLAYBOOK, PARA ESTA CASA</span><sc-for list="{{ ph.sh.ifs }}" as="f" hint-placeholder-count="2"><div style="display:flex;align-items:center;gap:10px;min-height:44px;border-top:1px solid rgba(255,255,255,.14);"><span style="flex:1;font:600 14px/1.35 Poppins;color:#F4F5F7;">“{{ f.q }}”</span><span style="font:500 12px Poppins;color:rgba(255,255,255,.6);">{{ f.w }}</span><span style="font:600 16px Poppins;color:rgba(255,255,255,.74);">›</span></div></sc-for></div></sc-if>
+<sc-if value="{{ ph.sh.note }}"><div style="border-radius:12px;background:{{ ph.sh.note.bg }};color:{{ ph.sh.note.fg }};padding:10px 12px;font:600 13px/1.45 Poppins;text-wrap:pretty;">{{ ph.sh.note.t }}</div></sc-if>
+<sc-if value="{{ ph.sh.rows }}"><div style="display:flex;flex-direction:column;"><sc-if value="{{ ph.sh.rowsT }}"><span style="font:700 11.5px Poppins;letter-spacing:.06em;color:rgba(255,255,255,.6);padding:2px 0 6px;">{{ ph.sh.rowsT }}</span></sc-if><sc-for list="{{ ph.sh.rows }}" as="r" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.14);">
+<div style="display:flex;align-items:center;gap:12px;min-height:36px;"><span style="flex:none;width:24px;height:24px;box-sizing:border-box;border-radius:50%;background:{{ r.mc }};border:2px {{ r.mst }} #fff;color:#fff;display:flex;align-items:center;justify-content:center;font:700 11px Poppins;">{{ r.m }}</span><div style="flex:1;min-width:0;display:flex;flex-direction:column;"><div style="display:flex;align-items:center;gap:6px;"><span style="font:600 14.5px/1.3 Poppins;color:#F4F5F7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.n }}</span><sc-if value="{{ r.tag }}"><span style="flex:none;height:20px;padding:0 7px;border-radius:6px;background:#3A2A06;color:#FDE68A;font:700 10.5px/20px Poppins;letter-spacing:.04em;">{{ r.tag }}</span></sc-if></div><span style="font:500 12.5px/1.35 Poppins;color:rgba(255,255,255,.74);">{{ r.s }}</span></div><sc-if value="{{ r.a }}"><span style="flex:none;height:44px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.14);color:#F4F5F7;display:flex;align-items:center;font:600 13.5px Poppins;box-sizing:border-box;">{{ r.a }}</span></sc-if></div>
+<sc-if value="{{ r.acts }}"><div style="display:flex;gap:6px;padding-left:36px;"><sc-for list="{{ r.acts }}" as="b" hint-placeholder-count="3"><span style="flex:1;height:44px;border-radius:12px;border:1px solid rgba(255,255,255,.2);color:#F4F5F7;display:flex;align-items:center;justify-content:center;font:600 13.5px Poppins;">{{ b }}</span></sc-for></div></sc-if>
+</div></sc-for></div></sc-if>
+<sc-if value="{{ ph.sh.foot }}"><span style="font:500 12.5px/1.45 Poppins;color:rgba(255,255,255,.6);text-wrap:pretty;">{{ ph.sh.foot }}</span></sc-if>
+<sc-if value="{{ ph.sh.prim }}"><div style="display:flex;gap:8px;"><sc-for list="{{ ph.sh.sec }}" as="b" hint-placeholder-count="1"><span style="flex:1;height:52px;border-radius:14px;border:1px solid rgba(255,255,255,.14);color:#F4F5F7;display:flex;align-items:center;justify-content:center;font:600 14.5px Poppins;">{{ b }}</span></sc-for><span style="flex:2;height:52px;border-radius:14px;background:{{ ph.sh.pbg }};color:#fff;border:1px solid {{ ph.sh.pbd }};display:flex;align-items:center;justify-content:center;font:700 16px Poppins;box-sizing:border-box;">{{ ph.sh.prim }}</span></div></sc-if>
+<sc-if value="{{ ph.sh.link }}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-height:44px;justify-content:center;"><span style="font:600 14px Poppins;color:#F4F5F7;text-decoration:underline;">{{ ph.sh.link }}</span><span style="font:500 12px Poppins;color:rgba(255,255,255,.6);">{{ ph.sh.linkSub }}</span></div></sc-if>
+</div>
+</div>
+<sc-if value="{{ ph.tab }}"><div style="position:absolute;left:0;right:0;bottom:0;height:84px;background:#17191D;border-top:1px solid rgba(255,255,255,.14);display:flex;padding:0 6px 22px;box-sizing:border-box;z-index:90;"><sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="5"><span style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font:600 11.5px Poppins;color:{{ tb.c }};"><span style="width:20px;height:20px;border-radius:6px;border:2px solid {{ tb.c }};background:{{ tb.f }};box-sizing:border-box;"></span>{{ tb.t }}</span></sc-for></div></sc-if>
+<div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#F4F5F7;opacity:.45;z-index:95;"></div>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+
+<section id="pelomapa" data-screen-label="4 · Tudo pelo mapa" style="display:flex;flex-direction:column;gap:24px;max-width:1100px;">
+<div style="display:flex;flex-direction:column;gap:6px;"><span style="font:800 28px Poppins;">4 · O dia inteiro sem sair do mapa</span><span style="font:500 15px/1.5 Poppins;color:#414852;text-wrap:pretty;">Ele não abre as outras abas, então o dia não depende delas. Tudo o que o dia pede acontece na linha ou na folha. As abas continuam para quem quiser planejar a semana ou estudar.</span></div>
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:2px;">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,.6fr);gap:0 16px;font:600 12px Poppins;color:#5B6370;padding:6px 0;border-bottom:1px solid #D9D4CA;"><span>O que o dia pede</span><span>Onde ele faz, no mapa</span><span>Antes, só em</span></div>
+<sc-for list="{{ pelomapa }}" as="r" hint-placeholder-count="8"><div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,.6fr);gap:0 16px;padding:10px 0;border-bottom:1px solid #EDEAE3;font:500 13.5px/1.45 Poppins;color:#2A2F36;"><span style="font-weight:700;color:#111418;">{{ r.a }}</span><span>{{ r.b }}</span><span style="color:#5B6370;">{{ r.c }}</span></div></sc-for>
+</div>
+</section>
+
+<section id="regras" data-screen-label="Regras" style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:24px;max-width:1600px;">
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:2px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;padding-bottom:8px;">REGRAS EXATAS · PARA O CÓDIGO</span>
+<sc-for list="{{ regras }}" as="r" hint-placeholder-count="8"><div style="display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.6fr);gap:12px;padding:9px 0;border-bottom:1px solid #EDEAE3;"><span style="font:700 13.5px/1.4 Poppins;">{{ r.t }}</span><span style="font:500 13px/1.5 Poppins;color:#2A2F36;text-wrap:pretty;">{{ r.d }}</span></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:24px;">
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:2px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;padding-bottom:8px;">COSTURA · NADA NASCE DE NOVO</span>
+<sc-for list="{{ reuse }}" as="r" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:12px;padding:8px 0;border-bottom:1px solid #EDEAE3;font:500 13px/1.45 Poppins;color:#2A2F36;"><span style="font-weight:700;color:#111418;">{{ r.a }}</span><span style="text-wrap:pretty;">{{ r.b }}</span></div></sc-for>
+</div>
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:10px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#7F1D1D;">FORA DESTA ENTREGA (ITEM 5)</span>
+<sc-for list="{{ fora }}" as="f" hint-placeholder-count="5"><div style="display:flex;gap:10px;font:500 13.5px/1.5 Poppins;color:#2A2F36;"><span style="flex:none;width:6px;height:6px;border-radius:3px;background:#7F1D1D;margin-top:8px;"></span><span style="text-wrap:pretty;">{{ f }}</span></div></sc-for>
+</div>
+</div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const Q='#E23B3B', M='#F5A524', F='#0EA5E9', R='#E51A31';
+const LT = {
+  neutral:{ bg:'rgba(23,25,29,.94)', bd:'rgba(255,255,255,.14)', dot:'#86EFAC', fg:'#F4F5F7', sub:'rgba(255,255,255,.74)' },
+  warn:{ bg:'#3A2A06', bd:'#7A5A12', dot:'#FCD34D', fg:'#FDE68A', sub:'#F5DFA0' },
+  red:{ bg:'#4A0F16', bd:'#8E1D2A', dot:'#FF6B78', fg:'#FFD0D5', sub:'#FFB4BC' },
+  ok:{ bg:'#0F2E1B', bd:'#1F5A35', dot:'#86EFAC', fg:'#BBF7D0', sub:'#86EFAC' },
+};
+const L = (tone, t, s, r) => ({ ...LT[tone], t, s, r });
+const LINES = {
+  semPlano: L('warn', 'Dia sem plano', 'às 9h00 o gestor vê', 'Montar ›'),
+  proposta: L('warn', 'Hoje ainda sem plano', '6 portas prontas para confirmar', ''),
+  cockpit: L('neutral', 'Plano de hoje · feito no Cockpit', 'ontem, 19:12 · 0 de 6 portas', '6 ›'),
+  prov: L('warn', 'Plano provisório · gestor avisado', 'você não confirmou · 0 de 6', 'Confirmar ›'),
+  gestor: L('neutral', 'Plano do gestor · 0 de 6 portas', 'montado às 09:20', '6 ›'),
+  ritmo: L('neutral', '2 de 6 portas · no ritmo', 'faltam R$ 250 para a próxima venda', '+R$ 250'),
+  atras: L('warn', '3 de 6 · faltam 3, restam 2h30', '2 delas a menos de 400 m', 'Ver ›'),
+  escapa: L('red', '4 de 6 · faltam 2 e resta 50 min', 'as 2 mais perto cabem até as 18h', 'Ir ›'),
+  fecho: L('warn', 'Fecha o dia · 2 sem desfecho', '6 de 6 portas', 'Fechar ›'),
+  fechado: L('ok', 'Dia fechado · 6 de 6 portas', 'amanhã já começa com 2', '✓'),
+  aberto: L('warn', 'Dia aberto · 2 sem desfecho', 'fica até você fechar', 'Fechar ›'),
+  ontem: L('warn', 'Ontem ficou aberto', '2 portas sem desfecho', 'Fechar ›'),
+};
+const PLAN = [
+  { n:'VASCO RESTAURANTE', c:Q, s:'Pediu para voltar · venceu há 22 dias', tag:'PROMESSA', x:150, ny:1 },
+  { n:'Padaria Ki-Pão', c:M, s:'Retorno combinado · venceu há 2 dias', tag:'PROMESSA', x:96, ny:.72 },
+  { n:'Cantina Bento', c:M, s:'Lead morno · Demo/Proposta · 450 m', x:178, ny:.46 },
+  { n:'Bar do Alemão', c:F, s:'1ª visita · decisor desconhecido · 300 m', x:268, ny:.12 },
+  { n:'Empório Lírio', c:F, s:'Recém-aberto há 9 dias · 220 m', x:326, ny:.48 },
+  { n:'Pizzaria Forno Vivo', c:F, s:'★ 4,7 · 1.020 avaliações · 380 m', x:292, ny:.88 },
+];
+const DOTS = [[46,.2,Q],[120,.08,F],[226,.3,M],[352,.18,F],[60,.55,M],[236,.7,F],[352,.8,Q],[30,.92,F],[200,.98,M],[130,.35,F],[300,.36,M],[214,.06,F]];
+function ys(top){ const a = 228, b = Math.max(a + 50, top - 40); return ny => Math.round(a + ny * (b - a)); }
+function planPins(top, o){ o = o || {}; const Y = ys(top);
+  return PLAN.map((p, i) => { const n = i + 1, done = n <= (o.done || 0), next = n === o.next, s = done ? 24 : next ? 40 : 32;
+    const cy = -7 - s / 2, lab = next && !o.lup ? { n:p.n, s:o.nextS || p.s.split(' · ')[0] } : null;
+    return { x:p.x, y:Y(p.ny), s, bl:-s/2, bt:cy - s/2, bg:p.c, t:done ? '✓' : String(n), fs:next ? 16 : done ? 12 : 14, bst:o.prop ? 'dashed' : 'solid', op:done ? .5 : o.prop ? .85 : 1, z:next ? 40 : 20,
+      ring:next, rt:cy - 33, label:!!lab, ln:lab ? lab.n : '', ls:lab ? lab.s : '', lx:(p.x > 240 || o.ll) ? -170 : 26, ly:cy - 19 - (next && o.lup ? 40 : 0) }; }); }
+function dots(top){ const Y = ys(top); return DOTS.map(([x, ny, c]) => ({ x, y:Y(ny), c })); }
+function route(top, from){ const Y = ys(top); const pts = PLAN.slice(from).map(p => ({ x:p.x, y:Y(p.ny) })); return pts.length > 1 ? 'M' + pts.map(p => p.x + ' ' + (p.y - 4)).join(' L') : ''; }
+const row = (i, extra) => { const p = PLAN[i]; return { m:String(i + 1), mc:p.c, mst:'solid', n:p.n, s:p.s, tag:p.tag || false, a:false, acts:false, ...(extra || {}) }; };
+const btn = (prim, sec, neutral) => ({ prim, sec:sec || [], pbg:neutral ? 'transparent' : R, pbd:neutral ? 'rgba(255,255,255,.2)' : R });
+const SH0 = { kc:'rgba(255,255,255,.74)', kr:'', sub:false, arma:false, ifs:false, note:false, rows:false, rowsT:false, foot:false, prim:false, sec:[], pbg:R, pbd:R, link:false, linkSub:'' };
+const TAG = { abrir:['#DBEAFE','#1E3A8A'], rua:['#D9D4CA','#414852'], fechar:['#DCFCE7','#14532D'], ign:['#FEF3C7','#78350F'] };
+
+function P(id, kind, tag, cap, desc, o){
+  const sh = { ...SH0, ...o.sh }; const top = sh.top;
+  return { id, tag, tagBg:TAG[kind][0], tagFg:TAG[kind][1], cap, desc, time:o.time, line:o.line, toast:o.toast || false, tab:sh.bottom > 0,
+    sh, pins:planPins(top, o.pins), dots:dots(top), route:o.route === false ? '' : route(top, (o.pins && o.pins.done) || 0), ux:o.u ? o.u[0] : 186, uy:o.u ? o.u[1] : ys(top)(1.02) + 18 };
+}
+
+function build(){
+  const p1 = [
+    P('1a', 'abrir', '08:05 · JÁ PLANEJOU', 'O plano que ele fez no Cockpit ou no app abre o dia', 'Um plano só: o que ele montou no Cockpit (computador) ou no app aparece aqui igual, sem abrir a Agenda. Promessa vencida fora do plano vira uma linha para pôr na frente.', { time:'08:05', line:LINES.cockpit, pins:{},
+      sh:{ top:262, bottom:0, kicker:'BOM DIA · QUARTA, 28/10', kc:'#86EFAC', kr:'feito no Cockpit ontem', title:'Seu plano de hoje: 6 portas. Vamos?', rows:PLAN.map((_, i) => row(i)), note:{ t:'Bar Fino pediu retorno e venceu há 4 dias. Está fora do plano.  Pôr na frente ›', bg:'#3A2A06', fg:'#FDE68A' }, ...btn('Começar o dia', ['Trocar uma']) } }),
+    P('1b', 'abrir', '08:05 · NÃO PLANEJOU', 'Sem plano: a folha sobe com o dia montado', 'Nada no Cockpit nem no app: a pergunta fechada vem antes dos pinos. Promessas vencidas na frente, depois as sugestões. Pinos tracejados: proposta, ainda não plano.', { time:'08:05', line:LINES.proposta, pins:{ prop:1 },
+      sh:{ top:262, bottom:0, kicker:'BOM DIA · QUARTA, 28/10', kc:'#FF6B78', kr:'meta 6 portas', title:'Hoje são estas 6, nesta ordem. Confirma?', sub:'Rota de 3,8 km · começa a 600 m de você', rows:PLAN.map((_, i) => row(i, { mst:'dashed' })), ...btn('Confirmar as 6', ['Trocar uma']), link:'Agora não', linkSub:'a linha fica âmbar e às 9h00 o gestor vê' } }),
+    P('1c', 'abrir', '08:06 · TROCAR UMA', 'Tocou na 5: três trocas perto da rota', 'Troca sem sair do mapa. Um toque escolhe, a ordem se refaz. Promessa vencida não sai pelo Trocar: só com motivo.', { time:'08:06', line:LINES.proposta, pins:{ prop:1 },
+      sh:{ top:380, bottom:0, kicker:'TROCAR A 5 · EMPÓRIO LÍRIO', kr:'mesma distância ou menos', title:'Pôr no lugar dela', rows:[
+        { m:'5', mc:'#111418', mst:'solid', n:'Sushi Kaze', s:'Recém-aberto há 21 dias · 180 m da 4', tag:false, a:'Pôr', acts:false },
+        { m:'5', mc:Q, mst:'solid', n:'Bar Fino', s:'Lead quente · cobrar · 260 m da 4', tag:false, a:'Pôr', acts:false },
+        { m:'5', mc:F, mst:'solid', n:'Lanchonete Arco', s:'1ª visita · 310 m da 4', tag:false, a:'Pôr', acts:false },
+      ], note:{ t:'As 2 promessas não aparecem para troca. Para tirar uma, "Tirar do plano" na folha dela, com o motivo.', bg:'rgba(255,255,255,.06)', fg:'rgba(255,255,255,.74)' }, link:'Manter o Empório Lírio', linkSub:'' } }),
+    P('1d', 'ign', 'SE IGNORAR · 08:12', '"Agora não": a folha desce, a linha não', 'O mapa abre normal, com a proposta tracejada. A linha âmbar fica no topo, sem X, e diz o que acontece às 9h00.', { time:'08:12', line:LINES.semPlano, pins:{ prop:1 },
+      sh:{ top:550, bottom:84, kicker:'SEM PLANO · 6 PORTAS PRONTAS', kc:'#FDE68A', kr:'', title:'Às 9h00 seu gestor vê que não tem plano', sub:'Confirmar agora é um toque. Depois, ele pode montar o seu dia.', ...btn('Ver as 6', []) } }),
+    P('1e', 'ign', 'SE IGNORAR · 09:00', 'O gestor é avisado; a proposta vale até ele mexer', 'O gestor recebe "não planejou" com as 6 já postas. Enquanto ele não salva nada, elas valem como plano provisório: o executivo não fica parado esperando.', { time:'09:00', line:LINES.prov, pins:{ next:1, ll:1, nextS:'pediu para voltar · 22 dias' }, toast:{ t:'09:00 · Seu gestor foi avisado. Até ele mexer, seguem estas 6.', a:false },
+      sh:{ top:500, bottom:84, kicker:'PRÓXIMA PORTA · 1 DO PLANO', kc:'#FF6B78', kr:'0 de 6 portas', title:'VASCO RESTAURANTE', sub:'600 m · 8 min a pé · Praia do Canto', arma:{ k:'PARA ENTRAR', why:'Você prometeu voltar há 22 dias. Comece por aí: "vim cumprir o que combinei".' }, ...btn('Cheguei', ['Ir']) } }),
+    P('1f', 'abrir', '09:20 · O GESTOR MONTOU', 'Os leads que o gestor pôs entram na hora', 'O gestor troca ou põe leads no Cockpit e salva; o mapa atualiza sozinho. A linha diz de quem é o plano, e a folha mostra só o que mudou.', { time:'09:20', line:LINES.gestor, pins:{ next:1, ll:1, nextS:'pediu para voltar · 22 dias' }, toast:{ t:'09:20 · Seu gestor montou seu dia: trocou 2 portas.', a:false },
+      sh:{ top:404, bottom:84, kicker:'PRÓXIMA PORTA · 1 DO PLANO', kc:'#FF6B78', kr:'0 de 6 portas', title:'VASCO RESTAURANTE', sub:'600 m · 8 min a pé · Praia do Canto', rowsT:'O QUE O GESTOR MUDOU', rows:[
+        { m:'3', mc:Q, mst:'solid', n:'Bar Fino', s:'no lugar da Cantina Bento', tag:'GESTOR', a:false, acts:false },
+        { m:'6', mc:M, mst:'solid', n:'Lanchonete Arco', s:'no lugar da Pizzaria Forno Vivo', tag:'GESTOR', a:false, acts:false } ], ...btn('Cheguei', ['Ir']) } }),
+  ];
+  const p2 = [
+    P('2a', 'rua', '10:40 · NO RITMO', 'Linha neutra: o placar e o que falta na mesa', 'O número do Meu desempenho vem para a rua. Na folha, além do "Para entrar" de hoje, as 2 objeções que essa casa deve trazer, pelo sistema e pela dor da ficha.', { time:'10:40', line:LINES.ritmo, pins:{ done:2, next:3, ll:1, nextS:'Marcos · Demo/Proposta' },
+      sh:{ top:380, bottom:84, kicker:'PRÓXIMA PORTA · 3 DO PLANO', kc:'#FF6B78', kr:'450 m · 6 min', title:'Cantina Bento', sub:'R. Joaquim Lírio, 210 · Praia do Canto', arma:{ k:'PARA ENTRAR', why:'Proposta de R$ 449 pronta · usa Saipos e reclama da taxa do delivery' },
+        ifs:[{ q:'Já tenho sistema', w:'Saipos' }, { q:'Está caro', w:'taxa delivery' }], ...btn('Cheguei', ['Ir']) } }),
+    P('2b', 'rua', '15:30 · ATRÁS DO RITMO', 'Linha âmbar: diz quanto falta e quanto tempo resta', 'Muda de tom quando as portas feitas ficam 2 atrás do esperado para a hora. Tocar mostra as do plano mais perto.', { time:'15:30', line:LINES.atras, pins:{ done:3, next:4, nextS:'1ª visita · 300 m' },
+      sh:{ top:430, bottom:84, kicker:'PRÓXIMA PORTA · 4 DO PLANO', kc:'#FF6B78', kr:'300 m · 4 min', title:'Bar do Alemão', sub:'1ª visita · decisor desconhecido', rowsT:'DEPOIS, NO PLANO', rows:[row(4, { tag:false, a:'Ir' }), row(5, { tag:false, a:'Ir' })], ...btn('Cheguei', ['Ir']) } }),
+    P('2c', 'ign', 'SE IGNORAR · 17:10', 'Linha vermelha: o que falta já não cabe sozinho', 'Vermelho quando as que faltam × 45 min passam do tempo até 18h00. A folha só oferece o que cabe. O que não couber abre amanhã, no fecho.', { time:'17:10', line:LINES.escapa, pins:{ done:4, next:5, lup:1, nextS:'220 m · 3 min a pé' },
+      sh:{ top:432, bottom:84, kicker:'O DIA ESTÁ ESCAPANDO', kc:'#FF6B78', kr:'resta 50 min', title:'Dá para fazer as 2 até as 18h', rows:[row(4, { tag:false, a:'Ir', s:'220 m · 3 min a pé' }), row(5, { tag:false, a:'Ir', s:'380 m da 5 · 5 min a pé' })], foot:'Se não der, elas viram as primeiras de amanhã. Ninguém perde a ordem.', ...btn('Ir para o Empório Lírio', []) } }),
+  ];
+  const p3 = [
+    P('3a', 'fechar', '18:00 · O FECHO', '"6 portas, 4 fichas, 2 sem desfecho. Fecha?"', 'Só aparece o que falta: as portas sem desfecho, um toque cada. "Voltar" já entra no plano de amanhã, na frente das sugestões. É aqui que a rua vira pipeline.', { time:'18:00', line:LINES.fecho, pins:{ done:6 }, route:false,
+      sh:{ top:270, bottom:0, kicker:'FIM DO DIA · QUARTA, 28/10', kc:'#86EFAC', kr:'6 de 6 portas ✓', title:'6 portas, 4 fichas, 2 sem desfecho. Fecha?', sub:'R$ 0 no dia · faltam R$ 250 para a próxima venda', rowsT:'SEM DESFECHO · O QUE FICOU COMBINADO?', rows:[
+        row(3, { m:'4', tag:false, s:'Cheguei às 15:42 · sem ficha', acts:['Voltar','Demo','Perdeu'] }),
+        row(5, { m:'6', tag:false, s:'Cheguei às 17:48 · ficha sem próximo passo', acts:['Voltar','Demo','Perdeu'] }) ],
+        foot:'Voltar pede só o dia. Demo pede dia e hora. Perdeu pede o motivo, como já pede hoje.', ...btn('Fechar o dia', []), link:'Depois', linkSub:'a linha fica âmbar até você fechar' } }),
+    P('3b', 'fechar', '18:04 · FECHADO', 'O fecho de hoje é o começo de amanhã', 'Linha verde. Os 2 "Voltar" já estão no plano de quinta; às 8h o app completa com 4 sugestões e pergunta o Confirma (1a).', { time:'18:04', line:LINES.fechado, pins:{ done:6 }, route:false, toast:{ t:'Salvou. Dia fechado.', a:'Desfazer' },
+      sh:{ top:604, bottom:84, kicker:'AMANHÃ · QUINTA, 29/10', kc:'#86EFAC', kr:'2 de 6 já no plano', title:'Bar do Alemão e Pizzaria Forno Vivo', sub:'às 8h o app completa com 4 sugestões perto', ...btn('Ver amanhã', [], true) } }),
+    P('3c', 'ign', 'SE IGNORAR · 21:30', 'Fechou o app sem fechar o dia', 'Nada se perde nem se trava. A linha fica "Dia aberto" e o fecho espera.', { time:'21:30', line:LINES.aberto, pins:{ done:6 }, route:false,
+      sh:{ top:604, bottom:84, kicker:'DIA AINDA ABERTO', kc:'#FDE68A', kr:'leva 30 s', title:'Amanhã o app abre por aqui', sub:'Antes do plano de quinta, o fecho de hoje.', ...btn('Fechar agora', []) } }),
+    P('3d', 'ign', 'SE IGNORAR · DIA SEGUINTE 08:02', 'O fecho pendente abre o dia, antes do plano', 'Primeira abertura de quinta: o fecho de quarta vem antes do Confirma. Pular é permitido; a linha diz "Ontem ficou aberto" e o gestor vê a quarta como não fechada.', { time:'Qui 08:02', line:LINES.ontem, pins:{ prop:1 }, route:false,
+      sh:{ top:262, bottom:0, kicker:'ANTES DO PLANO · ONTEM FICOU ABERTO', kc:'#FDE68A', kr:'quarta, 28/10', title:'2 portas de ontem sem desfecho', rows:[
+        row(3, { m:'4', tag:false, s:'Cheguei às 15:42 · sem ficha', acts:['Voltar','Demo','Perdeu'] }),
+        row(5, { m:'6', tag:false, s:'Cheguei às 17:48 · ficha sem próximo passo', acts:['Voltar','Demo','Perdeu'] }) ],
+        ...btn('Fechar ontem e ver o plano', []), link:'Pular para o plano', linkSub:'quarta fica como não fechada para o gestor' } }),
+  ];
+  const V = (k, t, kc, bg) => ({ k, t, kc, bg });
+  const secs = [
+    { id:'abrir', title:'1 · Abrir · da primeira abertura até 9h00', desc:'O dia começa com uma pergunta fechada, não com 298 pinos.', phones:p1, vti:[
+      V('O QUE ELE VÊ', 'Na primeira abertura do dia, a folha sobe sozinha com as 6 portas em ordem: promessas vencidas primeiro, depois as sugestões da Agenda. Os pinos ficam tracejados atrás.', '#1E3A8A', '#fff'),
+      V('O QUE ELE TOCA', 'Confirmar as 6 (1 toque). Trocar uma (2 toques). Agora não.', '#1E3A8A', '#fff'),
+      V('SE IGNORAR', 'A linha fica âmbar ("Dia sem plano") e não tem X. Às 9h00 o app confirma as 6, a linha passa a "Plano do app" e o gestor recebe "não planejou", uma vez só.', '#78350F', '#FEF3C7') ] },
+    { id:'rua', title:'2 · Rua · 9h00 às 18h00', desc:'O mapa de hoje. A linha leva o placar, e a folha traz a resposta para a porta.', phones:p2, vti:[
+      V('O QUE ELE VÊ', 'A linha sempre: N de 6 portas e quanto falta para a próxima venda. Na folha da próxima porta, até 2 "Se ele disser" escolhidos pelo sistema e pela dor da ficha.', '#414852', '#fff'),
+      V('O QUE ELE TOCA', 'Ir e Cheguei, como hoje. A linha abre as portas mais perto. "Se ele disser" abre a página do Playbook que já existe.', '#414852', '#fff'),
+      V('SE IGNORAR', 'Nada trava. A linha fica âmbar quando ele fica 2 portas atrás e vermelha quando o que falta não cabe até as 18h. O que não for feito abre o dia seguinte, no fecho.', '#78350F', '#FEF3C7') ] },
+    { id:'fechar', title:'3 · Fechar · 18h00', desc:'O momento que não existe hoje. Curto: só o que ficou sem desfecho.', phones:p3, vti:[
+      V('O QUE ELE VÊ', 'Às 18h00 a folha sobe com o placar do dia e só as portas sem desfecho.', '#14532D', '#fff'),
+      V('O QUE ELE TOCA', 'Um toque por porta (Voltar · Demo · Perdeu) e Fechar o dia. "Voltar" entra no plano de amanhã, na frente das sugestões.', '#14532D', '#fff'),
+      V('SE IGNORAR', 'A linha fica "Dia aberto". Na primeira abertura do dia seguinte, o fecho vem antes do plano. Pular é permitido, mas o gestor vê o dia como não fechado.', '#78350F', '#FEF3C7') ] },
+  ];
+  return {
+    secs,
+    pelomapa:[
+      { a:'Ver e confirmar o plano do dia', b:'Folha que sobe ao abrir (1a, 1b)', c:'Agenda' },
+      { a:'Trocar uma porta', b:'Trocar uma, na mesma folha (1c)', c:'Agenda' },
+      { a:'Tirar do plano, com motivo', b:'Link na folha da porta', c:'Agenda' },
+      { a:'Promessa vencida', b:'Entra no plano com o selo PROMESSA', c:'Tarefas' },
+      { a:'Dar desfecho (voltar, demo, perdeu)', b:'Fecho das 18h (3a)', c:'Tarefas' },
+      { a:'Placar e próxima venda', b:'Linha do dia, sempre', c:'Meu desempenho' },
+      { a:'Resposta à objeção', b:'"Se ele disser", na folha da porta (2a)', c:'Playbook' },
+      { a:'Plano de amanhã', b:'Sai pronto do fecho (3b)', c:'Agenda' },
+    ],
+    lenses:[{ t:'Meu dia', bg:'#F4F5F7', fg:'#121417', bd:'#F4F5F7', cnt:false }, { t:'Recém-abertos', bg:'rgba(23,25,29,.94)', fg:'#F4F5F7', bd:'rgba(255,255,255,.14)', cnt:'2/5' }, { t:'Carteira', bg:'rgba(23,25,29,.94)', fg:'#F4F5F7', bd:'rgba(255,255,255,.14)', cnt:false }],
+    tabs:['Mapa','Agenda','Tarefas','Playbook','Desempenho'].map((t, i) => ({ t, c:i ? 'rgba(255,255,255,.6)' : R, f:i ? 'transparent' : R })),
+    lineStates:[
+      { l:LINES.semPlano, w:'Abrir · ainda sem plano, antes das 9h00' },
+      { l:LINES.cockpit, w:'Abrir · já tem plano (Cockpit ou app)' },
+      { l:LINES.prov, w:'Abrir · 9h00 sem plano: gestor avisado, proposta vale' },
+      { l:LINES.gestor, w:'Abrir · o gestor montou ou mudou o plano' },
+      { l:LINES.ritmo, w:'Rua · no ritmo ou à frente' },
+      { l:LINES.atras, w:'Rua · 2 ou mais portas atrás do esperado' },
+      { l:LINES.escapa, w:'Rua · o que falta não cabe até 18h00' },
+      { l:LINES.fecho, w:'Fechar · das 18h00 até fechar (ou "Ontem ficou aberto" no dia seguinte)' },
+      { l:LINES.fechado, w:'Fechado · até a meia-noite' },
+    ],
+    decs:[
+      { t:'Força pela atenção, nunca pela trava.', d:'Nenhum estado impede abrir o mapa. A regra "obrigatório é avisar, não travar" continua valendo.' },
+      { t:'A espinha mora no mapa.', d:'Os três momentos são estados da linha e da folha. O desenho do mapa não muda.' },
+      { t:'Um plano só.', d:'Cockpit, app e gestor escrevem no mesmo plano. O mapa mostra o que foi planejado e de onde veio.' },
+      { t:'Se não planejar:', d:'a linha fica fixa; às 9h00 o gestor recebe "não planejou" e põe os leads. Até ele salvar, a proposta do app vale como provisória.' },
+      { t:'Promessa vencida', d:'entra no plano proposto na frente das sugestões novas.' },
+      { t:'Fecho às 18h00.', d:'Se não fechar, o fecho pendente abre o dia seguinte, antes do plano.' },
+      { t:'Placar sempre visível.', d:'É a linha do dia. Quente = Ag. Pagamento + as 3 etapas de venda (confirmado).' },
+    ],
+    gestor:[
+      { h:'09:00', t:'"[Executivo] não planejou · Montar o dia dele ›"', d:'Abre o Planejamento do Cockpit com as 6 sugeridas já postas. Trocar, pôr lead e salvar manda para o app na hora. Se o executivo confirmar antes, o aviso vira "confirmou às 9h40".' },
+      { h:'Rua', t:'Nada novo', d:'O gestor já vê as visitas provadas ao vivo. A linha do dia não gera aviso.' },
+      { h:'08:00', t:'"[Executivo] não fechou quarta, 28/10 · 2 sem desfecho"', d:'No dia seguinte, só se ele pulou o fecho. Some quando ele fechar.' },
+    ],
+    regras:[
+      { t:'Primeira abertura do dia', d:'Primeira vez que o app vai para a frente depois das 05h00, no fuso da praça. Só nela a folha sobe sozinha. Nas outras, a linha basta.' },
+      { t:'Proposta do dia', d:'As promessas vencidas de visita (tarefas de rua atrasadas, na ordem valor × urgência das Tarefas), completadas até 6 com o "Montar com 6 sugestões" da Agenda. Ligação e WhatsApp atrasados ficam nas Tarefas e não entram.' },
+      { t:'Mais de 6 promessas', d:'Entram as 6 primeiras da fila. A linha diz "+2 promessas fora do plano", e tocar abre as Tarefas.' },
+      { t:'Confirmar', d:'Grava o mesmo plano que a Agenda grava. Editar depois na Agenda continua igual.' },
+      { t:'Plano já feito', d:'Feito no Cockpit ou na Agenda do app, ontem ou hoje: a folha mostra esse plano, não a proposta. Promessa vencida fora dele vira a linha "Pôr na frente".' },
+      { t:'9h00 sem plano', d:'1 aviso ao gestor com a proposta já posta. A proposta vira plano provisório no app. O que o gestor salvar no Cockpit substitui na hora (mesma fonte; o app relê ao voltar para a tela e a cada 60 s).' },
+      { t:'Origem do plano', d:'Seu · provisório · do gestor. Se o gestor mexer num plano feito pelo executivo, a linha avisa "Gestor mudou 2 portas" e a folha lista só as trocas.' },
+      { t:'Ritmo esperado', d:'6 × (agora − 8h) ÷ 10h. Neutro: feitas ≥ esperado − 1. Âmbar: abaixo disso. Vermelho: faltam × 45 min > tempo até 18h00. Passou de 6: verde, "7 de 6".' },
+      { t:'Próxima venda', d:'O mesmo "+R$ 250" do Meu desempenho, mesma fonte.' },
+      { t:'"Se ele disser"', d:'Até 2 páginas do Playbook, escolhidas pelo sistema atual e pela dor registrados na ficha. Sem ficha, o bloco some. Funciona sem sinal, como a Fala pronta.' },
+      { t:'Sem desfecho', d:'Cheguei sem ficha, ou ficha sem próximo passo. Se for zero, o fecho mostra só o placar e "Fechar o dia".' },
+      { t:'Fecho às 18h00', d:'A folha sobe na primeira vez que o app vem para a frente depois das 18h00. Se ele não fechar até 23h59, o dia conta como não fechado e o fecho abre a manhã seguinte.' },
+      { t:'Desfazer', d:'Fechar o dia e cada desfecho têm os 5 s de Desfazer, igual às Tarefas.' },
+    ],
+    reuse:[
+      { a:'Sugestões do dia (Agenda)', b:'Viram a proposta do 1a. Mesmo algoritmo, mesmo "Montar com 6".' },
+      { a:'Fila valor × urgência (Tarefas)', b:'Dá a ordem das promessas vencidas na frente do plano.' },
+      { a:'Próxima porta + Cheguei (Mapa)', b:'Igual. O 1d e o 2a são a folha de hoje.' },
+      { a:'Fala pronta (Mapa)', b:'Continua no "Para entrar". "Se ele disser" usa a mesma tabela de gatilhos do Playbook.' },
+      { a:'Placar (Meu desempenho)', b:'Portas provadas e próxima venda vão para a linha. A aba continua com o resto.' },
+      { a:'Tirar do plano (Agenda)', b:'Vem para a folha da porta, no mapa. É o único jeito de tirar uma promessa (1c).' },
+      { a:'Planejamento (Cockpit)', b:'Mesma fonte do plano. Executivo e gestor editam o mesmo; o mapa mostra.' },
+    ],
+    fora:[
+      'Redesenho do mapa: entram a linha (48 px abaixo das lentes) e três conteúdos de folha. Pinos, lentes e cores ficam como estão.',
+      'Mudanças dentro de Tarefas e Agenda: elas só passam a alimentar a linha e a folha.',
+      'Aba nova, e nenhuma ação do dia que exija abrir Agenda, Tarefas, Playbook ou Desempenho.',
+      'HubSpot e Asaas: nenhuma propriedade nem automação. "Plano do app" e "dia fechado" são registros do próprio app.',
+      'Trava: nenhum estado impede usar o mapa.',
+    ],
+  };
+}
+
+class Component extends DCLogic {
+  renderVals(){ if (!this._v) this._v = build(); return this._v; }
+}
+</script>
+</body>
+</html>

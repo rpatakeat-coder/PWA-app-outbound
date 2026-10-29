@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap">
+<style>
+body{margin:0;background:#E7E3DA;font-family:'Poppins',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+a{color:#E51A31;} a:hover{color:#C8131B;}
+</style>
+</helmet>
+<div style="padding:56px 64px 96px;display:flex;flex-direction:column;gap:72px;color:#111418;font-family:Poppins,sans-serif;">
+
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px;">
+<span style="font:600 12px Poppins;letter-spacing:.1em;color:#E51A31;">APP DE RUA · OTIMIZAÇÃO COMPLETA · 28/10</span>
+<h1 style="margin:0;font:800 40px/1.1 Poppins;letter-spacing:-.01em;">Seis abas viram três. O dia inteiro acontece no mapa.</h1>
+<p style="margin:0;font:500 16px/1.55 Poppins;color:#414852;text-wrap:pretty;">Eles já vivem no mapa: marcam visita, dão Cheguei. Então o app para de pedir que eles saiam dali. Agenda, Tarefas, Playbook e Desempenho continuam existindo, mas cada um chega na hora em que serve: o plano ao abrir, a fala na porta, o próximo passo ao sair, a ligação entre portas, o placar na linha do dia, o fecho às 18h. A barra de baixo fica com <b>Mapa · Hoje · Eu</b>.</p>
+</header>
+
+<section id="arquitetura" data-screen-label="0 · Arquitetura" style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:24px;max-width:1600px;">
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:2px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;padding-bottom:8px;">PARA ONDE VAI CADA ABA DE HOJE</span>
+<div style="display:grid;grid-template-columns:minmax(0,.7fr) minmax(0,1.6fr) minmax(0,.6fr);gap:0 16px;font:600 12px Poppins;color:#5B6370;padding:6px 0;border-bottom:1px solid #D9D4CA;"><span>Aba de hoje</span><span>Onde passa a aparecer</span><span>Quadro</span></div>
+<sc-for list="{{ mapaAbas }}" as="r" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:minmax(0,.7fr) minmax(0,1.6fr) minmax(0,.6fr);gap:0 16px;padding:10px 0;border-bottom:1px solid #EDEAE3;font:500 13.5px/1.45 Poppins;color:#2A2F36;"><span style="font-weight:700;color:#111418;">{{ r.a }}</span><span style="text-wrap:pretty;">{{ r.b }}</span><span style="color:#5B6370;">{{ r.c }}</span></div></sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:24px;">
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:12px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;">A BARRA NOVA</span>
+<sc-for list="{{ barra }}" as="b" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;padding:8px 0;border-top:1px solid #EDEAE3;"><span style="font:800 15px Poppins;color:{{ b.c }};">{{ b.t }}</span><span style="font:500 13.5px/1.5 Poppins;color:#2A2F36;text-wrap:pretty;">{{ b.d }}</span></div></sc-for>
+</div>
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:12px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#14532D;">O CICLO DE CADA PORTA</span>
+<sc-for list="{{ ciclo }}" as="c" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;font:500 13.5px/1.5 Poppins;color:#2A2F36;"><span style="font:800 15px Poppins;color:#111418;">{{ c.n }}</span><span style="text-wrap:pretty;"><b>{{ c.t }}</b> {{ c.d }}</span></div></sc-for>
+</div>
+</div>
+</section>
+
+<sc-for list="{{ secs }}" as="sec" hint-placeholder-count="6">
+<section id="{{ sec.id }}" data-screen-label="{{ sec.title }}" style="display:flex;flex-direction:column;gap:24px;">
+<div style="display:flex;flex-direction:column;gap:6px;max-width:1100px;"><span style="font:800 28px Poppins;">{{ sec.title }}</span><span style="font:500 15px/1.5 Poppins;color:#414852;text-wrap:pretty;">{{ sec.desc }}</span></div>
+<div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;">
+<sc-for list="{{ sec.phones }}" as="ph" hint-placeholder-count="2">
+<div id="{{ ph.id }}" style="display:flex;flex-direction:column;gap:12px;width:390px;">
+<div style="display:flex;flex-direction:column;gap:4px;min-height:116px;"><div style="display:flex;gap:8px;align-items:center;"><span style="font:700 12px Poppins;background:#111418;color:#fff;border-radius:6px;padding:3px 8px;">{{ ph.id }}</span><span style="font:700 11px Poppins;letter-spacing:.06em;color:{{ ph.tagFg }};background:{{ ph.tagBg }};border-radius:6px;padding:3px 8px;white-space:nowrap;">{{ ph.tag }}</span></div><span style="font:700 15px Poppins;">{{ ph.cap }}</span><span style="font:500 13px/1.45 Poppins;color:#5B6370;text-wrap:pretty;">{{ ph.desc }}</span></div>
+<div style="position:relative;flex:none;width:390px;height:844px;border-radius:34px;overflow:hidden;background:#121417;box-shadow:0 18px 44px rgba(0,0,0,.22);">
+<sc-if value="{{ ph.map }}">
+<div style="position:absolute;inset:-200px;background:#1B2130 url(mapa-base.svg) center/cover;"></div>
+<svg width="390" height="844" style="position:absolute;left:0;top:0;"><path d="{{ ph.route }}" fill="none" stroke="rgba(255,255,255,.9)" stroke-width="3.5" stroke-dasharray="0.5 8" stroke-linecap="round"></path></svg>
+<sc-for list="{{ ph.dots }}" as="d" hint-placeholder-count="0"><div style="position:absolute;left:{{ d.x }}px;top:{{ d.y }}px;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;background:{{ d.c }};border:1.5px solid #fff;box-sizing:border-box;opacity:.5;"></div></sc-for>
+<div style="position:absolute;left:{{ ph.ux }}px;top:{{ ph.uy }}px;width:0;height:0;z-index:30;"><div style="position:absolute;left:-20px;top:-20px;width:40px;height:40px;border-radius:50%;background:rgba(59,130,246,.2);"></div><div style="position:absolute;left:-8px;top:-8px;width:16px;height:16px;border-radius:50%;background:#3B82F6;border:3px solid #fff;box-sizing:border-box;"></div></div>
+<sc-for list="{{ ph.pins }}" as="p" hint-placeholder-count="0">
+<div style="position:absolute;left:{{ p.x }}px;top:{{ p.y }}px;width:0;height:0;opacity:{{ p.op }};z-index:{{ p.z }};">
+<sc-if value="{{ p.ring }}"><div style="position:absolute;left:-33px;top:{{ p.rt }}px;width:66px;height:66px;border-radius:50%;border:3px solid #E51A31;background:rgba(229,26,49,.16);box-sizing:border-box;"></div></sc-if>
+<div style="position:absolute;left:-5px;top:-8px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:8px solid #fff;"></div>
+<div style="position:absolute;left:{{ p.bl }}px;top:{{ p.bt }}px;width:{{ p.s }}px;height:{{ p.s }}px;box-sizing:border-box;border-radius:50%;background:{{ p.bg }};border:2.5px {{ p.bst }} #fff;color:#fff;display:flex;align-items:center;justify-content:center;font:700 {{ p.fs }}px/1 Poppins;box-shadow:0 2px 5px rgba(0,0,0,.4);">{{ p.t }}</div>
+</div>
+</sc-for>
+<div style="position:absolute;top:50px;left:12px;right:12px;height:48px;border-radius:24px;background:rgba(23,25,29,.94);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;gap:10px;padding:0 6px 0 16px;z-index:80;box-sizing:border-box;"><span style="width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.74);box-sizing:border-box;flex:none;"></span><span style="flex:1;font:500 14px Poppins;color:rgba(255,255,255,.74);">Buscar lead, rua ou bairro</span><span style="height:36px;padding:0 12px;border-radius:18px;background:rgba(255,255,255,.12);color:#F4F5F7;display:flex;align-items:center;font:600 13px Poppins;">Lista</span></div>
+<div style="position:absolute;top:106px;left:0;right:60px;height:44px;display:flex;align-items:center;gap:8px;padding-left:12px;overflow:hidden;z-index:80;">
+<sc-for list="{{ lenses }}" as="l" hint-placeholder-count="3"><span style="flex:none;height:40px;padding:0 14px;border-radius:20px;background:{{ l.bg }};color:{{ l.fg }};border:1px solid {{ l.bd }};display:flex;align-items:center;gap:8px;font:600 14px Poppins;white-space:nowrap;box-sizing:border-box;">{{ l.t }}<sc-if value="{{ l.cnt }}"><span style="height:24px;padding:0 8px;border-radius:12px;background:rgba(255,255,255,.12);color:#F4F5F7;display:flex;align-items:center;font:700 12.5px Poppins;">{{ l.cnt }}</span></sc-if></span></sc-for>
+</div>
+<div style="position:absolute;top:106px;right:12px;width:44px;height:40px;border-radius:20px;background:rgba(23,25,29,.94);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;z-index:81;box-sizing:border-box;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F4F5F7" stroke-width="2.2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"></path></svg></div>
+<div style="position:absolute;top:158px;left:12px;right:12px;min-height:48px;border-radius:14px;background:{{ ph.line.bg }};border:1px solid {{ ph.line.bd }};display:flex;align-items:center;gap:10px;padding:6px 14px;box-sizing:border-box;z-index:82;box-shadow:0 4px 14px rgba(0,0,0,.3);"><span style="flex:none;width:8px;height:8px;border-radius:4px;background:{{ ph.line.dot }};"></span><div style="flex:1;min-width:0;display:flex;flex-direction:column;"><span style="font:700 13.5px/1.3 Poppins;color:{{ ph.line.fg }};">{{ ph.line.t }}</span><span style="font:500 12px/1.3 Poppins;color:{{ ph.line.sub }};">{{ ph.line.s }}</span></div><span style="flex:none;font:700 12.5px Poppins;color:{{ ph.line.fg }};white-space:nowrap;">{{ ph.line.r }}</span></div>
+</sc-if>
+<div style="position:absolute;top:0;left:0;right:0;height:46px;display:flex;justify-content:space-between;align-items:center;padding:0 30px;font:600 14px Poppins;color:#F4F5F7;z-index:85;"><span>{{ ph.time }}</span><span>4G</span></div>
+<sc-if value="{{ ph.toast }}"><div style="position:absolute;top:216px;left:12px;right:12px;border-radius:14px;background:#F4F5F7;color:#111418;padding:10px 14px;display:flex;align-items:center;gap:10px;z-index:83;box-shadow:0 6px 18px rgba(0,0,0,.35);"><span style="flex:1;font:600 13px/1.4 Poppins;text-wrap:pretty;">{{ ph.toast.t }}</span><sc-if value="{{ ph.toast.a }}"><span style="flex:none;font:700 13.5px Poppins;text-decoration:underline;">{{ ph.toast.a }}</span></sc-if></div></sc-if>
+<div style="position:absolute;left:0;right:0;top:{{ ph.sh.top }}px;bottom:{{ ph.sh.bottom }}px;background:#17191D;border-radius:{{ ph.sh.rad }};box-shadow:0 -8px 24px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden;z-index:70;">
+<sc-if value="{{ ph.map }}"><div style="height:18px;flex:none;display:flex;align-items:center;justify-content:center;"><div style="width:40px;height:5px;border-radius:3px;background:rgba(255,255,255,.28);"></div></div></sc-if>
+<div style="padding:{{ ph.sh.pad }};display:flex;flex-direction:column;gap:10px;">
+<sc-if value="{{ ph.sh.chips }}"><div style="display:flex;gap:6px;overflow:hidden;"><sc-for list="{{ ph.sh.chips }}" as="c" hint-placeholder-count="4"><span style="flex:none;height:40px;padding:0 13px;border-radius:20px;background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ c.bd }};display:flex;align-items:center;gap:6px;font:600 13.5px Poppins;white-space:nowrap;box-sizing:border-box;">{{ c.t }}<sc-if value="{{ c.n }}"><span style="font:700 12px Poppins;opacity:.8;">{{ c.n }}</span></sc-if></span></sc-for></div></sc-if>
+<sc-for list="{{ ph.sh.boxes }}" as="bx" hint-placeholder-count="0"><div style="border-radius:14px;background:{{ bx.bg }};border:1.5px solid {{ bx.bd }};padding:10px 12px;display:flex;flex-direction:column;gap:6px;"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;"><span style="font:700 11px Poppins;letter-spacing:.08em;color:{{ bx.kc }};">{{ bx.k }}</span><span style="font:600 12px Poppins;color:{{ bx.kc }};white-space:nowrap;">{{ bx.kr }}</span></div><span style="font:700 14.5px/1.35 Poppins;color:#F4F5F7;text-wrap:pretty;">{{ bx.t }}</span><sc-if value="{{ bx.s }}"><span style="font:500 13px/1.45 Poppins;color:rgba(255,255,255,.74);text-wrap:pretty;">{{ bx.s }}</span></sc-if><sc-if value="{{ bx.acts }}"><div style="display:flex;gap:6px;"><sc-for list="{{ bx.acts }}" as="b" hint-placeholder-count="3"><span style="flex:1;height:44px;border-radius:12px;background:{{ b.bg }};border:1px solid {{ b.bd }};color:#F4F5F7;display:flex;align-items:center;justify-content:center;font:600 13.5px Poppins;white-space:nowrap;">{{ b.t }}</span></sc-for></div></sc-if></div></sc-for>
+<sc-if value="{{ ph.sh.kicker }}"><div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:2px 10px;"><span style="white-space:nowrap;font:700 11.5px/1.3 Poppins;letter-spacing:.06em;color:{{ ph.sh.kc }};">{{ ph.sh.kicker }}</span><span style="white-space:nowrap;font:600 12.5px Poppins;color:rgba(255,255,255,.74);">{{ ph.sh.kr }}</span></div></sc-if>
+<sc-if value="{{ ph.sh.title }}"><div style="display:flex;flex-direction:column;gap:2px;margin-top:-4px;"><span style="font:700 {{ ph.sh.tfs }}px/1.25 Poppins;color:#F4F5F7;text-wrap:pretty;">{{ ph.sh.title }}</span><sc-if value="{{ ph.sh.sub }}"><span style="font:500 13.5px/1.4 Poppins;color:rgba(255,255,255,.74);text-wrap:pretty;">{{ ph.sh.sub }}</span></sc-if></div></sc-if>
+<sc-if value="{{ ph.sh.stats }}"><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;"><sc-for list="{{ ph.sh.stats }}" as="st" hint-placeholder-count="4"><div style="border-radius:14px;background:{{ st.bg }};padding:12px 14px;display:flex;flex-direction:column;gap:2px;"><span style="font:700 11px Poppins;letter-spacing:.08em;color:rgba(255,255,255,.6);">{{ st.l }}</span><span style="font:800 22px/1.2 Poppins;color:{{ st.c }};">{{ st.v }}</span><span style="font:500 12px/1.35 Poppins;color:rgba(255,255,255,.74);">{{ st.s }}</span></div></sc-for></div></sc-if>
+<sc-if value="{{ ph.sh.arma }}"><div style="border-radius:14px;background:rgba(255,255,255,.06);border:1.5px solid rgba(229,26,49,.55);padding:9px 12px;display:flex;flex-direction:column;gap:4px;"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;"><span style="font:700 11px Poppins;letter-spacing:.08em;color:#FF6B78;">{{ ph.sh.arma.k }}</span><sc-if value="{{ ph.sh.arma.src }}"><span style="font:600 12px Poppins;color:rgba(255,255,255,.74);text-decoration:underline;">{{ ph.sh.arma.src }}</span></sc-if></div><span style="font:700 14px/1.4 Poppins;color:#F4F5F7;text-wrap:pretty;">{{ ph.sh.arma.why }}</span><sc-if value="{{ ph.sh.arma.fala }}"><span style="font:500 14px/1.5 Poppins;color:rgba(255,255,255,.86);text-wrap:pretty;">“{{ ph.sh.arma.fala }}”</span></sc-if></div></sc-if>
+<sc-if value="{{ ph.sh.ifs }}"><div style="display:flex;flex-direction:column;"><span style="font:700 11px Poppins;letter-spacing:.08em;color:rgba(255,255,255,.6);padding-bottom:4px;">SE ELE DISSER · PARA ESTA CASA</span><sc-for list="{{ ph.sh.ifs }}" as="f" hint-placeholder-count="2"><div style="display:flex;flex-direction:column;border-top:1px solid rgba(255,255,255,.14);"><div style="display:flex;align-items:center;gap:10px;min-height:44px;"><span style="flex:1;font:600 14px/1.35 Poppins;color:#F4F5F7;">“{{ f.q }}”</span><span style="font:500 12px Poppins;color:rgba(255,255,255,.6);">{{ f.w }}</span><span style="font:600 16px Poppins;color:rgba(255,255,255,.74);">{{ f.ic }}</span></div><sc-if value="{{ f.ans }}"><span style="font:500 13.5px/1.5 Poppins;color:rgba(255,255,255,.86);padding:0 0 10px;text-wrap:pretty;">{{ f.ans }}</span></sc-if></div></sc-for></div></sc-if>
+<sc-if value="{{ ph.sh.choice }}"><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;"><sc-for list="{{ ph.sh.choice }}" as="c" hint-placeholder-count="4"><div style="min-height:60px;border-radius:14px;background:{{ c.bg }};border:1.5px solid {{ c.bd }};display:flex;flex-direction:column;justify-content:center;padding:8px 12px;box-sizing:border-box;"><span style="font:700 15px/1.3 Poppins;color:#F4F5F7;">{{ c.t }}</span><span style="font:500 12px/1.3 Poppins;color:rgba(255,255,255,.74);">{{ c.s }}</span></div></sc-for></div></sc-if>
+<sc-if value="{{ ph.sh.when }}"><div style="display:flex;flex-direction:column;gap:6px;"><span style="font:700 11px Poppins;letter-spacing:.08em;color:rgba(255,255,255,.6);">{{ ph.sh.when.l }}</span><div style="display:flex;gap:6px;"><sc-for list="{{ ph.sh.when.o }}" as="c" hint-placeholder-count="4"><span style="flex:1;height:44px;border-radius:12px;background:{{ c.bg }};border:1px solid {{ c.bd }};color:{{ c.fg }};display:flex;align-items:center;justify-content:center;font:600 13.5px Poppins;white-space:nowrap;">{{ c.t }}</span></sc-for></div></div></sc-if>
+<sc-if value="{{ ph.sh.field }}"><div style="display:flex;flex-direction:column;gap:6px;"><span style="font:700 11px Poppins;letter-spacing:.08em;color:rgba(255,255,255,.6);">{{ ph.sh.field.l }}</span><div style="min-height:48px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.2);padding:10px 12px;box-sizing:border-box;font:500 14px/1.45 Poppins;color:#F4F5F7;">{{ ph.sh.field.v }}</div><span style="font:500 12px/1.4 Poppins;color:{{ ph.sh.field.hc }};">{{ ph.sh.field.h }}</span></div></sc-if>
+<sc-if value="{{ ph.sh.note }}"><div style="border-radius:12px;background:{{ ph.sh.note.bg }};color:{{ ph.sh.note.fg }};padding:10px 12px;font:600 13px/1.45 Poppins;text-wrap:pretty;">{{ ph.sh.note.t }}</div></sc-if>
+<sc-for list="{{ ph.sh.groups }}" as="g" hint-placeholder-count="0"><div style="display:flex;flex-direction:column;"><div style="display:flex;justify-content:space-between;align-items:baseline;padding:2px 0 6px;"><span style="font:700 11.5px Poppins;letter-spacing:.06em;color:{{ g.tc }};">{{ g.t }}</span><span style="font:600 12px Poppins;color:rgba(255,255,255,.6);">{{ g.r }}</span></div><sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2"><div style="display:flex;align-items:center;gap:12px;min-height:52px;border-top:1px solid rgba(255,255,255,.14);"><span style="flex:none;width:24px;height:24px;box-sizing:border-box;border-radius:{{ r.mr }};background:{{ r.mc }};border:2px solid #fff;color:#fff;display:flex;align-items:center;justify-content:center;font:700 10.5px Poppins;">{{ r.m }}</span><div style="flex:1;min-width:0;display:flex;flex-direction:column;"><div style="display:flex;align-items:center;gap:6px;"><span style="font:600 14.5px/1.3 Poppins;color:#F4F5F7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.n }}</span><sc-if value="{{ r.tag }}"><span style="flex:none;height:20px;padding:0 7px;border-radius:6px;background:{{ r.tbg }};color:{{ r.tfg }};font:700 10.5px/20px Poppins;letter-spacing:.04em;">{{ r.tag }}</span></sc-if></div><span style="font:500 12.5px/1.35 Poppins;color:rgba(255,255,255,.74);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.s }}</span></div><sc-if value="{{ r.a }}"><span style="flex:none;height:44px;min-width:58px;padding:0 12px;border-radius:12px;background:{{ r.abg }};border:1px solid {{ r.abd }};color:#F4F5F7;display:flex;align-items:center;justify-content:center;font:600 13.5px Poppins;box-sizing:border-box;">{{ r.a }}</span></sc-if></div></sc-for><sc-if value="{{ g.foot }}"><span style="font:600 12.5px Poppins;color:rgba(255,255,255,.6);padding-top:6px;">{{ g.foot }}</span></sc-if></div></sc-for>
+<sc-if value="{{ ph.sh.foot }}"><span style="font:500 12.5px/1.45 Poppins;color:rgba(255,255,255,.6);text-wrap:pretty;">{{ ph.sh.foot }}</span></sc-if>
+<sc-if value="{{ ph.sh.prim }}"><div style="display:flex;gap:8px;"><sc-for list="{{ ph.sh.sec }}" as="b" hint-placeholder-count="1"><span style="flex:1;height:52px;border-radius:14px;border:1px solid rgba(255,255,255,.14);color:#F4F5F7;display:flex;align-items:center;justify-content:center;font:600 14.5px Poppins;">{{ b }}</span></sc-for><span style="flex:2;height:52px;border-radius:14px;background:{{ ph.sh.pbg }};color:#fff;border:1px solid {{ ph.sh.pbd }};display:flex;align-items:center;justify-content:center;font:700 16px Poppins;box-sizing:border-box;">{{ ph.sh.prim }}</span></div></sc-if>
+<sc-if value="{{ ph.sh.link }}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-height:44px;justify-content:center;"><span style="font:600 14px Poppins;color:#F4F5F7;text-decoration:underline;">{{ ph.sh.link }}</span><span style="font:500 12px Poppins;color:rgba(255,255,255,.6);">{{ ph.sh.linkSub }}</span></div></sc-if>
+</div>
+</div>
+<sc-if value="{{ ph.tab }}"><div style="position:absolute;left:0;right:0;bottom:0;height:84px;background:#17191D;border-top:1px solid rgba(255,255,255,.14);display:flex;padding:0 24px 22px;box-sizing:border-box;z-index:90;"><sc-for list="{{ ph.tabs }}" as="tb" hint-placeholder-count="3"><span style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font:600 12.5px Poppins;color:{{ tb.c }};position:relative;"><span style="width:22px;height:22px;border-radius:7px;border:2px solid {{ tb.c }};background:{{ tb.f }};box-sizing:border-box;"></span>{{ tb.t }}<sc-if value="{{ tb.n }}"><span style="position:absolute;top:8px;left:50%;margin-left:8px;height:18px;min-width:18px;padding:0 5px;border-radius:9px;background:#E51A31;color:#fff;font:700 11px/18px Poppins;text-align:center;box-sizing:border-box;">{{ tb.n }}</span></sc-if></span></sc-for></div></sc-if>
+<div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:#F4F5F7;opacity:.45;z-index:95;"></div>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+
+<section id="cobranca" data-screen-label="7 · Cobrança e regras" style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:24px;max-width:1600px;">
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:2px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#7F1D1D;padding-bottom:8px;">TODA VISITA TEM PRÓXIMO PASSO · A ESCADA DA COBRANÇA</span>
+<sc-for list="{{ escada }}" as="e" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:120px minmax(0,1fr);gap:12px;padding:10px 0;border-bottom:1px solid #EDEAE3;"><span style="font:800 13.5px/1.4 Poppins;color:{{ e.c }};">{{ e.q }}</span><div style="display:flex;flex-direction:column;gap:2px;"><span style="font:700 13.5px/1.4 Poppins;">{{ e.t }}</span><span style="font:500 13px/1.5 Poppins;color:#414852;text-wrap:pretty;">{{ e.d }}</span></div></div></sc-for>
+<span style="font:500 12.5px/1.5 Poppins;color:#5B6370;padding-top:10px;text-wrap:pretty;">Nada trava: Cheguei na porta seguinte sempre funciona. A cobrança está em não deixar de ver o pendente, e em o gestor ver o número.</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:24px;">
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:2px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;padding-bottom:8px;">REGRAS PARA O CÓDIGO</span>
+<sc-for list="{{ regras }}" as="r" hint-placeholder-count="7"><div style="display:grid;grid-template-columns:minmax(0,.7fr) minmax(0,1.6fr);gap:12px;padding:9px 0;border-bottom:1px solid #EDEAE3;"><span style="font:700 13px/1.4 Poppins;">{{ r.t }}</span><span style="font:500 13px/1.5 Poppins;color:#2A2F36;text-wrap:pretty;">{{ r.d }}</span></div></sc-for>
+</div>
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:10px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;">COMO SABER SE FUNCIONOU · 4 SEMANAS</span>
+<sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;gap:2px;"><span style="font:700 14px Poppins;">{{ k.t }}</span><span style="font:500 13px/1.45 Poppins;color:#414852;text-wrap:pretty;">{{ k.d }}</span></div></sc-for>
+</div>
+</div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const Q='#E23B3B', M='#F5A524', F='#0EA5E9', R='#E51A31', G='#16A34A';
+const LT = {
+  neutral:{ bg:'rgba(23,25,29,.94)', bd:'rgba(255,255,255,.14)', dot:'#86EFAC', fg:'#F4F5F7', sub:'rgba(255,255,255,.74)' },
+  warn:{ bg:'#3A2A06', bd:'#7A5A12', dot:'#FCD34D', fg:'#FDE68A', sub:'#F5DFA0' },
+  red:{ bg:'#4A0F16', bd:'#8E1D2A', dot:'#FF6B78', fg:'#FFD0D5', sub:'#FFB4BC' },
+  ok:{ bg:'#0F2E1B', bd:'#1F5A35', dot:'#86EFAC', fg:'#BBF7D0', sub:'#86EFAC' },
+};
+const L = (tone, t, s, r) => ({ ...LT[tone], t, s, r });
+const PLAN = [
+  { n:'VASCO RESTAURANTE', c:Q, x:150, ny:1 }, { n:'Padaria Ki-Pão', c:M, x:96, ny:.72 }, { n:'Cantina Bento', c:M, x:178, ny:.46 },
+  { n:'Bar do Alemão', c:F, x:268, ny:.12 }, { n:'Empório Lírio', c:F, x:326, ny:.48 }, { n:'Pizzaria Forno Vivo', c:F, x:292, ny:.88 },
+];
+const DOTS = [[46,.2,Q],[120,.08,F],[226,.3,M],[352,.18,F],[60,.55,M],[236,.7,F],[352,.8,Q],[30,.92,F],[200,.98,M],[130,.35,F],[300,.36,M],[214,.06,F]];
+function ys(top){ const a = 228, b = Math.max(a + 50, top - 40); return ny => Math.round(a + ny * (b - a)); }
+function planPins(top, o){ o = o || {}; const Y = ys(top);
+  return PLAN.map((p, i) => { const n = i + 1, done = n <= (o.done || 0), next = n === o.next, s = done ? 24 : next ? 40 : 32, cy = -7 - s / 2;
+    return { x:p.x, y:Y(p.ny), s, bl:-s/2, bt:cy - s/2, bg:p.c, t:done ? '✓' : String(n), fs:next ? 16 : done ? 12 : 14, bst:o.prop ? 'dashed' : 'solid', op:done ? .5 : 1, z:next ? 40 : 20, ring:next, rt:cy - 33 }; }); }
+const dots = top => { const Y = ys(top); return DOTS.map(([x, ny, c]) => ({ x, y:Y(ny), c })); };
+const route = (top, from) => { const Y = ys(top); const pts = PLAN.slice(from).map(p => ({ x:p.x, y:Y(p.ny) })); return pts.length > 1 ? 'M' + pts.map(p => p.x + ' ' + (p.y - 4)).join(' L') : ''; };
+const TAGC = { abrir:['#DBEAFE','#1E3A8A'], porta:['#FEE2E2','#7F1D1D'], rua:['#D9D4CA','#414852'], fechar:['#DCFCE7','#14532D'], aba:['#111418','#FFFFFF'], cob:['#FEF3C7','#78350F'] };
+const SH0 = { kc:'rgba(255,255,255,.74)', kicker:false, kr:'', title:false, tfs:19, sub:false, arma:false, ifs:false, note:false, chips:false, boxes:[], stats:false, choice:false, when:false, field:false, groups:[], foot:false, prim:false, sec:[], pbg:R, pbd:R, link:false, linkSub:'' };
+const btn = (prim, sec, neutral) => ({ prim, sec:sec || [], pbg:neutral ? 'transparent' : R, pbd:neutral ? 'rgba(255,255,255,.2)' : R });
+const A = (t, on) => ({ t, bg:on ? R : 'rgba(255,255,255,.08)', bd:on ? R : 'rgba(255,255,255,.2)' });
+const TABS = (on, n) => ['Mapa','Hoje','Eu'].map((t, i) => ({ t, c:i === on ? R : 'rgba(255,255,255,.6)', f:i === on ? R : 'transparent', n:i === 1 && n ? String(n) : false }));
+const rw = (m, mc, n, s, a, o) => ({ m, mc, mr:'50%', n, s, a:a || false, abg:'transparent', abd:'rgba(255,255,255,.2)', tag:false, tbg:'#3A2A06', tfg:'#FDE68A', ...(o || {}) });
+const pRow = (i, s, a, o) => rw(String(i + 1), PLAN[i].c, PLAN[i].n, s, a, o);
+
+function P(id, kind, tag, cap, desc, o){
+  const map = o.map !== false;
+  const sh = { ...SH0, rad:map ? '22px 22px 0 0' : '0', pad:map ? '0 16px 14px' : '10px 16px 14px', ...o.sh };
+  const top = sh.top;
+  return { id, tag, tagBg:TAGC[kind][0], tagFg:TAGC[kind][1], cap, desc, time:o.time, map, line:o.line || LT.neutral, toast:o.toast || false,
+    tab:sh.bottom > 0, tabs:TABS(o.tabOn || 0, o.badge === undefined ? 3 : o.badge), sh,
+    pins:map ? planPins(top, o.pins) : [], dots:map ? dots(top) : [], route:map && o.route !== false ? route(top, (o.pins && o.pins.done) || 0) : '',
+    ux:o.u ? o.u[0] : 186, uy:o.u ? o.u[1] : ys(top)(1.02) + 18 };
+}
+
+function build(){
+  const ritmo = L('neutral', '2 de 6 portas · no ritmo', 'faltam R$ 250 para a próxima venda', '+R$ 250');
+  const secs = [];
+  secs.push({ id:'abrir', title:'1 · Abrir · o plano vem até ele', desc:'Igual à prancha da espinha (1a–1f): o plano feito no Cockpit ou no app abre o dia; sem plano, a proposta; às 9h00 o gestor vê e põe os leads. Aqui, só o quadro de referência.', phones:[
+    P('1a', 'abrir', '08:05 · PRIMEIRA ABERTURA', 'O dia abre confirmando, não procurando', 'Promessa vencida na frente. "Começar o dia" e a folha desce para a próxima porta.', { time:'08:05', line:L('neutral', 'Plano de hoje · feito no Cockpit', 'ontem, 19:12 · 0 de 6 portas', '6 ›'),
+      sh:{ top:262, bottom:0, kicker:'BOM DIA · QUARTA, 28/10', kc:'#86EFAC', kr:'meta 6 portas', title:'Seu plano de hoje: 6 portas. Vamos?', groups:[{ t:'NESTA ORDEM', tc:'rgba(255,255,255,.6)', r:'3,8 km', rows:[
+        pRow(0, 'Pediu para voltar · venceu há 22 dias', false, { tag:'PROMESSA' }), pRow(1, 'Retorno combinado · venceu há 2 dias', false, { tag:'PROMESSA' }), pRow(2, 'Lead morno · Demo/Proposta'), pRow(3, '1ª visita · decisor desconhecido'), pRow(4, 'Recém-aberto há 9 dias'), pRow(5, '★ 4,7 · 1.020 avaliações') ] }], ...btn('Começar o dia', ['Trocar uma']) } }),
+  ] });
+  secs.push({ id:'porta', title:'2 · Na porta · o ciclo de cada visita', desc:'Quatro estados da mesma folha. O Playbook chega antes da campainha; o próximo passo é pedido ao sair, em 3 toques. Se ele sair sem dar, o pendente vai junto para a próxima porta.', phones:[
+    P('2a', 'porta', '10:40 · INDO', 'A folha já diz com o que entrar', 'Para entrar e as 2 objeções que essa casa deve trazer, escolhidas pelo sistema e pela dor da ficha.', { time:'10:40', line:ritmo, pins:{ done:2, next:3 },
+      sh:{ top:380, bottom:84, kicker:'PRÓXIMA PORTA · 3 DO PLANO', kc:'#FF6B78', kr:'450 m · 6 min', title:'Cantina Bento', sub:'R. Joaquim Lírio, 210 · Praia do Canto', arma:{ k:'PARA ENTRAR', why:'Proposta de R$ 449 pronta · usa Saipos e reclama da taxa do delivery', src:'Fala pronta ›', fala:false },
+        ifs:[{ q:'Já tenho sistema', w:'Saipos', ic:'›', ans:false }, { q:'Está caro', w:'taxa delivery', ic:'›', ans:false }], ...btn('Cheguei', ['Ir']) } }),
+    P('2b', 'porta', '10:52 · CHEGUEI', 'Na porta: a fala e as respostas, sem navegar', 'O Cheguei prova a visita (GPS, como hoje) e a folha vira "Na porta": a fala inteira, a última combinação, e a objeção abre a resposta ali mesmo.', { time:'10:52', line:L('neutral', 'Na porta · Cantina Bento', 'visita provada às 10:52', '2 de 6'), pins:{ done:2, next:3 },
+      sh:{ top:250, bottom:84, kicker:'NA PORTA · VISITA PROVADA ✓', kc:'#86EFAC', kr:'10:52', title:'Cantina Bento · Marcos, sócio', sub:'Da última vez: ficou de ver a proposta com a sócia', arma:{ k:'FALA PRONTA', why:'Volte na taxa do delivery: foi o que pesou na demo.', src:false, fala:'Marcos, trouxe a proposta. Quer ver de novo a parte do delivery, que era o que mais pesava na taxa?' },
+        ifs:[{ q:'Já tenho sistema', w:'Saipos', ic:'–', ans:'"O Saipos cobra por pedido no delivery. Na Takeat a taxa é fixa: no seu volume, R$ 380 a menos por mês." Mostre a conta na tela 4 da proposta.' }, { q:'Está caro', w:'taxa delivery', ic:'›', ans:false }],
+        ...btn('Saí · como ficou?', []) } }),
+    P('2c', 'porta', '11:08 · SAÍ', 'O próximo passo em 3 toques', 'Um desfecho, um dia, uma frase. O que já se sabe (decisor, etapa, proposta) não é perguntado de novo. "Salvar" leva direto para a próxima porta.', { time:'11:08', line:L('neutral', 'Saindo · Cantina Bento', 'falta o próximo passo', '3 de 6'), pins:{ done:3, next:4 }, badge:3,
+      sh:{ top:200, bottom:0, kicker:'COMO FICOU · CANTINA BENTO', kc:'#FF6B78', kr:'leva 20 s', title:'Qual é o próximo passo?', choice:[
+        { t:'Fechou', s:'vai para Ag. Pagamento', bg:'rgba(255,255,255,.06)', bd:'rgba(255,255,255,.2)' }, { t:'Demo marcada', s:'dia e hora', bg:'rgba(255,255,255,.06)', bd:'rgba(255,255,255,.2)' },
+        { t:'Voltar', s:'dia, e o que levar', bg:'rgba(229,26,49,.18)', bd:R }, { t:'Perdeu', s:'motivo, como hoje', bg:'rgba(255,255,255,.06)', bd:'rgba(255,255,255,.2)' } ],
+        when:{ l:'VOLTAR QUANDO', o:[{ t:'Amanhã', bg:'transparent', bd:'rgba(255,255,255,.2)', fg:'#F4F5F7' }, { t:'Sex 30', bg:R, bd:R, fg:'#fff' }, { t:'Seg 2', bg:'transparent', bd:'rgba(255,255,255,.2)', fg:'#F4F5F7' }, { t:'Outro', bg:'transparent', bd:'rgba(255,255,255,.2)', fg:'#F4F5F7' }] },
+        field:{ l:'O QUE FICOU COMBINADO', v:'Volto sexta com a sócia; levar a conta do delivery impressa', h:'59 caracteres · mínimo 50 ✓', hc:'#86EFAC' },
+        foot:'Vira tarefa de visita na sexta e entra no plano de sexta, na frente das sugestões.', ...btn('Salvar e ir para a 4', []), link:'Depois', linkSub:'fica pendente no topo da próxima folha' } }),
+    P('2d', 'cob', 'SE SAIR SEM DAR · 11:15', 'O pendente vai junto para a próxima porta', 'Andou 150 m ou passaram 10 min sem desfecho: a linha fica vermelha e o pendente fica no topo de toda folha. Cheguei na próxima continua funcionando.', { time:'11:15', line:L('red', 'Cantina Bento sem próximo passo', 'visita das 10:52', 'Dar ›'), pins:{ done:3, next:4 },
+      sh:{ top:330, bottom:84, boxes:[{ k:'ANTES DA PRÓXIMA', kr:'1 toque', kc:'#FF6B78', bg:'#4A0F16', bd:'#8E1D2A', t:'Como ficou a Cantina Bento?', s:false, acts:[A('Fechou'), A('Demo'), A('Voltar'), A('Perdeu')] }],
+        kicker:'PRÓXIMA PORTA · 4 DO PLANO', kc:'#FF6B78', kr:'300 m · 4 min', title:'Bar do Alemão', sub:'1ª visita · decisor desconhecido', ...btn('Cheguei', ['Ir']) } }),
+  ] });
+  secs.push({ id:'entre', title:'3 · Entre portas · as Tarefas vêm para o mapa', desc:'Ligações e WhatsApp combinados (o que hoje mora em Tarefas) aparecem nos momentos mortos: depois de um desfecho, parado mais de 5 min, ou na hora de ligar do dia. Um por vez, com o que foi combinado.', phones:[
+    P('3a', 'rua', '13:20 · PARADO 6 MIN', 'Uma ligação de 2 min, com o combinado na tela', 'O app não lista as 6 atrasadas; põe a mais valiosa que dá para fazer agora. Ligar abre o telefone; ao voltar, o mesmo desfecho em 3 toques.', { time:'13:20', line:L('neutral', '3 de 6 portas · no ritmo', '2 ligações para hoje', '+R$ 250'), pins:{ done:3, next:4 },
+      sh:{ top:340, bottom:84, boxes:[{ k:'ANTES DE ANDAR · 2 MIN', kr:'1 de 2 hoje', kc:'#FDE68A', bg:'#3A2A06', bd:'#7A5A12', t:'Ligar para Rita, Padaria Ki-Pão', s:'Combinado: "liga quarta depois do almoço para fechar o plano". Venceu há 2 dias.', acts:[A('Ligar', true), A('WhatsApp'), A('Depois')] }],
+        kicker:'DEPOIS · 4 DO PLANO', kc:'rgba(255,255,255,.6)', kr:'300 m · 4 min', title:'Bar do Alemão', sub:'1ª visita · decisor desconhecido', ...btn('Ir', [], true) } }),
+  ] });
+  const chip = (t, n, on) => ({ t, n, bg:on ? '#F4F5F7' : 'transparent', fg:on ? '#121417' : '#F4F5F7', bd:on ? '#F4F5F7' : 'rgba(255,255,255,.2)' });
+  secs.push({ id:'hoje', title:'4 · Aba Hoje · Agenda e Tarefas numa lista só', desc:'O mesmo dia do mapa, em lista: para o carro, o almoço, o fim de tarde. Portas e ligações juntas, por hora. Os dias no topo são os da prancha Tarefas por Dia. O selo da aba é o que está atrasado.', phones:[
+    P('4a', 'aba', 'ABA HOJE', 'Tudo o que o dia pede, numa rolagem', 'Atrasados primeiro, depois o plano com hora, depois ligar, depois o que ficou sem próximo passo. Cada linha com um verbo só.', { time:'13:20', map:false, tabOn:1,
+      sh:{ top:46, bottom:84, chips:[chip('Hoje', '11', true), chip('Amanhã', '4'), chip('Sex', '3'), chip('Depois', '6')], title:'Quarta, 28/10 · 3 de 6 portas', tfs:20, groups:[
+        { t:'ATRASADOS', tc:'#FDE68A', r:'2', rows:[ pRow(0, 'Pediu para voltar · 22 dias · no plano', 'Ir', { tag:'PROMESSA' }), rw('☎', M, 'Padaria Ki-Pão · Rita', 'Ligar · venceu há 2 dias', 'Ligar') ] },
+        { t:'PLANO', tc:'rgba(255,255,255,.6)', r:'3 de 6 feitas', rows:[ pRow(3, '13:40 · 300 m · 1ª visita', 'Ir'), pRow(4, '14:30 · recém-aberto há 9 dias', 'Ir'), pRow(5, '15:20 · ★ 4,7', 'Ir') ] },
+        { t:'LIGAR HOJE', tc:'rgba(255,255,255,.6)', r:'janela 17:30–17:45', rows:[ rw('☎', Q, 'Bar Fino', 'Cobrar data da assinatura', 'Ligar') ] },
+        { t:'SEM PRÓXIMO PASSO', tc:'#FF6B78', r:'1', rows:[ rw('!', M, 'Cantina Bento', 'Visita às 10:52', 'Dar', { abg:R, abd:R }) ] } ] } }),
+  ] });
+  secs.push({ id:'eu', title:'5 · Aba Eu · placar, semana e Playbook', desc:'O que é do executivo e não é do dia: quanto ganha, a semana, a biblioteca do Playbook, recém-abertos da semana. Entra quem quer; o dia não depende dela.', phones:[
+    P('5a', 'aba', 'ABA EU', 'O placar que hoje mora em Meu desempenho', 'Os quatro números que mudam o mês. Embaixo, o que era aba virou linha: planejar a semana, Playbook com busca.', { time:'19:40', map:false, tabOn:2, badge:0,
+      sh:{ top:46, bottom:84, title:'Outubro · faixa 1 da variável', tfs:20, sub:'Mais 1 venda leva para a faixa 2', stats:[
+        { l:'HOJE', v:'6 de 6', s:'portas provadas ✓', c:'#86EFAC', bg:'rgba(255,255,255,.06)' }, { l:'SEMANA', v:'14 de 30', s:'faltam 16 em 2 dias', c:'#FDE68A', bg:'rgba(255,255,255,.06)' },
+        { l:'MÊS', v:'R$ 0', s:'0 contratos', c:'#F4F5F7', bg:'rgba(255,255,255,.06)' }, { l:'PRÓXIMA VENDA', v:'+R$ 250', s:'na sua variável', c:'#F4F5F7', bg:'rgba(255,255,255,.06)' } ],
+        groups:[{ t:'MAIS', tc:'rgba(255,255,255,.6)', r:'', rows:[
+          rw('▦', '#3B4252', 'Planejar a semana', 'Qui 4 portas · Sex 3 · Seg vazia', '›', { mr:'7px', abd:'transparent' }),
+          rw('?', '#3B4252', 'Playbook', '33 páginas · busque pela objeção', '›', { mr:'7px', abd:'transparent' }),
+          rw('◆', '#3B4252', 'Recém-abertos da semana', '2 de 5', '›', { mr:'7px', abd:'transparent' }),
+          rw('⚙', '#3B4252', 'Ajustes e sair', '', '›', { mr:'7px', abd:'transparent' }) ] }] } }),
+  ] });
+  secs.push({ id:'fechar', title:'6 · Fechar · 18h00', desc:'Igual à espinha (3a–3d). Com o ciclo da porta, o fecho fica curto: só o que ficou sem próximo passo. Fechar agora gera o plano de amanhã.', phones:[
+    P('6a', 'fechar', '18:00 · O FECHO', '"6 portas, 5 com próximo passo, 1 sem. Fecha?"', 'O pendente da Cantina Bento que ele pulou às 11:15 está aqui, ainda em 1 toque. Se ignorar o fecho, ele abre a manhã seguinte e o gestor vê.', { time:'18:00', line:L('warn', 'Fecha o dia · 1 sem próximo passo', '6 de 6 portas', 'Fechar ›'), pins:{ done:6 }, route:false,
+      sh:{ top:330, bottom:0, kicker:'FIM DO DIA · QUARTA, 28/10', kc:'#86EFAC', kr:'6 de 6 portas ✓', title:'6 portas, 5 com próximo passo, 1 sem. Fecha?', sub:'Ligações: 1 de 2 feitas · a outra passa para amanhã', boxes:[],
+        groups:[{ t:'SEM PRÓXIMO PASSO', tc:'#FF6B78', r:'1', rows:[ rw('3', M, 'Cantina Bento', 'Visita às 10:52', 'Dar', { abg:R, abd:R }) ] }, { t:'AMANHÃ JÁ COMEÇA COM', tc:'rgba(255,255,255,.6)', r:'', rows:[ rw('1', F, 'Bar do Alemão', 'Voltar · trazer o dono', false), rw('☎', M, 'Bar Fino', 'Ligar · data da assinatura', false) ] }],
+        ...btn('Fechar o dia', []) } }),
+  ] });
+  return {
+    secs,
+    lenses:[{ t:'Meu dia', bg:'#F4F5F7', fg:'#121417', bd:'#F4F5F7', cnt:false }, { t:'Recém-abertos', bg:'rgba(23,25,29,.94)', fg:'#F4F5F7', bd:'rgba(255,255,255,.14)', cnt:'2/5' }, { t:'Carteira', bg:'rgba(23,25,29,.94)', fg:'#F4F5F7', bd:'rgba(255,255,255,.14)', cnt:false }],
+    mapaAbas:[
+      { a:'Mapa', b:'Continua o centro. Ganha a linha do dia, a folha que muda com o momento (abrir, indo, na porta, saí, entre portas, fechar) e o botão Lista na busca.', c:'1a–6a' },
+      { a:'Lista', b:'Sai da barra. Vira o botão "Lista" na busca do mapa: o mesmo recorte, mais perto primeiro, como já é.', c:'todos' },
+      { a:'Agenda', b:'O dia: folha ao abrir (1a). A lista do dia: aba Hoje (4a). A semana: Eu › Planejar a semana (5a).', c:'1a · 4a · 5a' },
+      { a:'Tarefas', b:'Visitas combinadas: entram no plano como PROMESSA. Ligações: entre portas (3a) e em Hoje. O próximo passo de cada visita é pedido ao sair (2c).', c:'1a · 2c · 3a · 4a' },
+      { a:'Playbook', b:'Na folha: Para entrar e Se ele disser (2a), a fala inteira e a resposta na porta (2b). A biblioteca com busca: Eu › Playbook.', c:'2a · 2b · 5a' },
+      { a:'Meu desempenho', b:'O placar do dia: linha do dia, sempre. O mês e a variável: aba Eu.', c:'todos · 5a' },
+    ],
+    barra:[
+      { t:'Mapa', c:R, d:'O dia. Abre aqui, sempre.' },
+      { t:'Hoje', c:'#111418', d:'O mesmo dia em lista: portas e ligações por hora. Selo com os atrasados.' },
+      { t:'Eu', c:'#111418', d:'Placar do mês, semana, Playbook completo, ajustes.' },
+    ],
+    ciclo:[
+      { n:'1', t:'Indo:', d:'próxima porta, Para entrar, 2 objeções prováveis.' },
+      { n:'2', t:'Cheguei:', d:'prova a visita e a folha vira "Na porta", com a fala e as respostas.' },
+      { n:'3', t:'Saí:', d:'Fechou · Demo · Voltar · Perdeu, um dia, uma frase. 20 s.' },
+      { n:'4', t:'Entre portas:', d:'a ligação mais valiosa que cabe agora.' },
+      { n:'5', t:'Próxima porta,', d:'com o pendente no topo se o 3 ficou para trás.' },
+    ],
+    escada:[
+      { q:'Ao tocar Saí', c:'#14532D', t:'A folha pede o desfecho', d:'4 opções, um dia, uma frase com o mínimo de 50 caracteres (aviso, não trava). Dado que já existe não é perguntado.' },
+      { q:'150 m ou 10 min', c:'#78350F', t:'Saiu sem dar: linha vermelha e pendente no topo de toda folha', d:'Vale também para quem deu Cheguei e nunca tocou Saí. O selo da aba Hoje soma o pendente.' },
+      { q:'18h00', c:'#78350F', t:'O fecho só mostra os pendentes', d:'Um toque cada. Fechar gera o plano de amanhã.' },
+      { q:'Dia seguinte', c:'#7F1D1D', t:'O fecho pendente abre o app, antes do plano', d:'Pular é permitido; a linha diz "Ontem ficou aberto".' },
+      { q:'Gestor', c:'#7F1D1D', t:'"Visitas sem próximo passo" por executivo, no Cockpit', d:'Número do dia e da semana. Às 9h00, "não planejou" com "Montar o dia dele". No máximo 2 avisos por dia.' },
+    ],
+    regras:[
+      { t:'Desfecho grava em', d:'Mesmo lugar de hoje: Fechou → etapa Ag. Pagamento (conta como quente); Demo → tarefa com data e hora; Voltar → tarefa de visita, que entra no plano daquele dia como PROMESSA; Perdeu → motivo de perda.' },
+      { t:'"Saí"', d:'Botão da folha Na porta. Se ele não tocar, vale o GPS: 150 m da porta ou 10 min parado em outro lugar.' },
+      { t:'Entre portas', d:'Aparece depois de um desfecho salvo, parado mais de 5 min, ou nas janelas de ligação 12:30–12:45 e 17:30–17:45 (Tarefas por Dia). Só ligações e WhatsApp, a de maior valor × urgência, uma por vez. "Depois" esconde por 30 min.' },
+      { t:'Se ele disser', d:'Até 2 páginas do Playbook, pelo sistema atual e pela dor da ficha. Na porta, a resposta abre na própria folha. Sem ficha, o bloco some. Funciona sem sinal.' },
+      { t:'Selo da aba Hoje', d:'Atrasados + sem próximo passo. Some quando zera.' },
+      { t:'Lista', d:'O botão abre a lista do recorte que já existe. Nada muda nela.' },
+      { t:'Telas que saem', d:'Agenda, Tarefas, Playbook e Meu desempenho deixam de ser abas. O conteúdo delas continua (Hoje, Eu e a folha). Link direto antigo redireciona: Agenda/Tarefas → Hoje; Playbook/Desempenho → Eu.' },
+    ],
+    kpis:[
+      { t:'Visitas com próximo passo no mesmo dia', d:'Meta: 95%. É o número da cobrança. Medir também quantas vieram do Saí × do pendente × do fecho.' },
+      { t:'Plano confirmado até 9h00', d:'Por executivo. Medir quantos foram montados pelo gestor.' },
+      { t:'Promessas vencidas há mais de 7 dias', d:'Hoje há uma de 22 dias. Meta: zero, porque elas entram no plano.' },
+      { t:'Toques em "Se ele disser"', d:'Por página do Playbook. Página que ninguém abre na porta deve ser reescrita.' },
+    ],
+  };
+}
+
+class Component extends DCLogic {
+  renderVals(){ if (!this._v) this._v = build(); return this._v; }
+}
+</script>
+</body>
+</html>
