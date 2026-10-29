@@ -39,6 +39,8 @@ type Props = {
   tarefasPendentes?: number;
   aoAbrirTarefas?: () => void;
   ehGestor?: boolean;
+  /** As linhas da aba Eu (espinha do dia 2.9): Planejar a semana, Playbook, Ajustes e sair... */
+  linhas?: Array<{ chave: string; rotulo: string; sub?: string | null; selo?: string | null; perigo?: boolean; aoTocar: () => void }>;
 };
 
 const reais = (v: number) => `R$ ${Math.round(v).toLocaleString('pt-BR')}`;
@@ -47,7 +49,7 @@ const MES_CURTO = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set'
 const SEM = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
 
-export function MeuDesempenhoScreen({ enabled }: Props) {
+export function MeuDesempenhoScreen({ enabled, linhas = [] }: Props) {
   const layout = useLayout();
   const cores = useIconColors();
   const duas = layout.ehDesktop;
@@ -271,6 +273,25 @@ export function MeuDesempenhoScreen({ enabled }: Props) {
         <>{blocoHoje}{blocoSemana}{blocoTemporada}{blocoHistorico}</>
       )}
       <Text style={st.nota}>Os mesmos números do Cockpit. Contratos e demos atualizam a cada 10 min; visitas, na hora.</Text>
+
+      {/* A ABA EU DE VERDADE (espinha do dia 2.9, 29/10/26). Até aqui "Eu" era só o placar, e
+          Planejar a semana, Playbook e Ajustes moravam no menu do avatar — um menu que o
+          executivo precisava descobrir. Agora são linhas da própria aba. Quem monta a lista é o
+          App, para ela nunca divergir do que o menu oferece. */}
+      {linhas.length > 0 && (
+        <View style={st.lista}>
+          {linhas.map((l) => (
+            <Pressable key={l.chave} accessibilityRole="button" accessibilityLabel={l.rotulo} onPress={l.aoTocar} style={st.linhaEu}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[st.linhaTexto, l.perigo && st.linhaPerigo]} numberOfLines={1}>{l.rotulo}</Text>
+                {!!l.sub && <Text style={st.linhaSub} numberOfLines={1}>{l.sub}</Text>}
+              </View>
+              {!!l.selo && <View style={st.linhaSelo}><Text style={st.linhaSeloTexto}>{l.selo}</Text></View>}
+              <Text style={st.linhaSeta}>›</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
       <FolhaRanking visivel={rankingAberto} aoFechar={() => setRankingAberto(false)} />
     </ScrollView>
   );
@@ -301,6 +322,14 @@ const st = StyleSheet.create({
   seloOk: { backgroundColor: 'var(--tint-green)' },
   seloAviso: { backgroundColor: 'var(--tint-amber)' },
   seloTexto: { fontSize: 12, fontWeight: '700' },
+  lista: { marginTop: 4, borderTopWidth: 1, borderTopColor: 'var(--border)' },
+  linhaEu: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: 'var(--border)' },
+  linhaTexto: { fontSize: 15, fontWeight: '600', color: 'var(--text)' },
+  linhaPerigo: { color: 'var(--vermelho-texto)' },
+  linhaSub: { fontSize: 12.5, color: 'var(--text-muted)', marginTop: 1 },
+  linhaSelo: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: 'var(--text)', alignItems: 'center', justifyContent: 'center' },
+  linhaSeloTexto: { fontSize: 11.5, fontWeight: '800', color: 'var(--surface)' },
+  linhaSeta: { fontSize: 16, color: 'var(--text-muted)' },
   tres: { flexDirection: 'row', gap: 8 },
   kpi: { flex: 1, minWidth: 0, padding: 12, borderRadius: 12, backgroundColor: 'var(--surface-2)', gap: 2 },
   kpiValor: { fontSize: 24, fontWeight: '800', color: 'var(--text)', fontVariant: ['tabular-nums'] },

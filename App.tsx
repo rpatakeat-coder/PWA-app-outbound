@@ -9325,6 +9325,18 @@ function MainApp() {
       ) : tab === 'meu' ? (
         <MeuDesempenhoScreen
           enabled={tab === 'meu'}
+          /* AS LINHAS DA ABA EU (2.9). Montadas aqui para não divergirem do menu do avatar, que
+             segue existindo para a foto do perfil. "Recém-abertos da semana" volta ao MAPA na
+             lente certa, em vez de abrir mais uma tela — o executivo quer ver onde eles estão. */
+          linhas={isViewer ? [] : [
+            { chave: 'agenda', rotulo: 'Planejar a semana', sub: 'a agenda da semana inteira', aoTocar: () => setTab('agenda') },
+            { chave: 'playbook', rotulo: 'Playbook', sub: 'a biblioteca, com busca', aoTocar: () => setTab('playbook') },
+            { chave: 'novos', rotulo: 'Recém-abertos da semana', sub: contadorDaSemana?.texto ?? null, aoTocar: () => { setLente('novos'); setTab('map'); } },
+            ...(verGestao ? [{ chave: 'gestao', rotulo: 'Gestão', sub: 'o Cockpit, no computador', aoTocar: () => { irParaOCockpit(); } }] : []),
+            ...(canViewGestor ? [{ chave: 'time', rotulo: 'O time na rua · hoje', sub: 'prova, pendências e quem não planejou', aoTocar: () => setTimeNaRua(true) }] : []),
+            { chave: 'avisos', rotulo: 'Avisos', sub: 'o que não subiu e os recados do gestor', selo: avisos.selo + (seloFila?.n ?? 0) > 0 ? String(avisos.selo + (seloFila?.n ?? 0)) : null, aoTocar: () => { setAvisosAbertos(true); avisos.marcarRecadosVistos(); } },
+            { chave: 'perfil', rotulo: 'Ajustes e sair', sub: 'foto, configurações e sair da conta', aoTocar: () => setPerfilAberto(true) },
+          ]}
           tarefasPendentes={modoNovo ? (totalDaFila ?? undefined) : visibleTasksCount}
           aoAbrirTarefas={() => setTab('tasks')}
           ehGestor={canViewGestor}
