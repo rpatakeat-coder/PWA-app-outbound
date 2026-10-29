@@ -60,8 +60,6 @@ type Props = {
   onAgenda?: (dia: string | null) => void;
   /** "Fechou" na visita de retorno: depois de salvar, abre Emitir cobrança (o negócio já em Negociação). */
   onEmitirCobranca?: () => void;
-  /** Começa já na opção escolhida no "Saí · como ficou?" (espinha do dia 2.6). */
-  inicio?: Partial<Ficha> | null;
   /** Visita declarada (0109): o chip diz isso, não "GPS confere". */
   declarada?: boolean;
   /** Foto de prova (GPS falhou) que não subiu no check-in: sobe junto com a visita. */
@@ -141,7 +139,7 @@ function montarSabido(client: Client, negocio: Record<string, unknown>, fichas: 
   };
 }
 
-export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, onEmitirCobranca, declarada = false, ownerId = null, fotoProva = null, fotoNoCheckin = false, donoColega = null, tarefaDaFila = null, inicio = null }: Props) {
+export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, onEmitirCobranca, declarada = false, ownerId = null, fotoProva = null, fotoNoCheckin = false, donoColega = null, tarefaDaFila = null }: Props) {
   const [f, setF] = useState<Ficha>(FICHA_VAZIA);
   const [opcao, setOpcao] = useState<string | null>(null);
   const [completar, setCompletar] = useState(false);
@@ -193,10 +191,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
 
   useEffect(() => {
     if (!visivel) return;
-    /* JÁ NA OPÇÃO ESCOLHIDA (espinha do dia 2.6, 29/10/26): quando a ficha vem do "Saí · como
-       ficou?", o executivo já apertou o botão lá — repetir a pergunta aqui seria perguntar duas
-       vezes a mesma coisa. Sem `inicio`, abre vazia como sempre. */
-    setF(inicio ? { ...FICHA_VAZIA, ...inicio } : FICHA_VAZIA); setOpcao(null); setCompletar(false); setCorrigindo({}); setOutroSistema(false); setOutraDataVolta(false);
+    setF(FICHA_VAZIA); setOpcao(null); setCompletar(false); setCorrigindo({}); setOutroSistema(false); setOutraDataVolta(false);
     setOutraHora(false); setHoraTexto(''); setConfirmarSaida(false); setFase('form'); setResultados([]); setPassoSalvo(null); setVaiProFunil(true);
     tocouComoFoi.current = false; setComoFoiAuto(false);
     /* O QUE JÁ SE SABE, nas três fontes, cada uma com prazo: o negócio (snapshot do Cockpit e

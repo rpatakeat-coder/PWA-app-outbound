@@ -74,10 +74,6 @@ type Props = {
   aoMontarDia?: () => void;
   /** Há faixa vermelha na tela: o Cheguei vira contorno. Nunca dois vermelhos cheios (§3). */
   faixaVermelha?: boolean;
-  /* NA PORTA (espinha do dia 2.5/2.6): há uma visita aberta — o Cheguei já foi dado e o desfecho
-     ainda não. A folha para de oferecer a próxima porta e passa a oferecer a pergunta da saída,
-     que é a única coisa que importa enquanto ele está lá dentro. */
-  naPorta?: { nome: string; aoSair: () => void } | null;
   /** Lente Recém-abertos: quantos a pessoa tem na região (0 = estado vazio) e a volta ao Meu dia. */
   recem?: { naRegiao: number | null; aoVoltar: () => void } | null;
   /** Desktop (28/09/2026): a mesma folha vira o painel lateral, sempre aberta, sem alça. */
@@ -152,7 +148,7 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, objecoesDaProxima = [], linha = null, aoMontarDia, faixaVermelha = false, naPorta = null, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, objecoesDaProxima = [], linha = null, aoMontarDia, faixaVermelha = false, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
   const cores = useIconColors();
   /** Qual objeção do "Se ele disser" está aberta (uma por vez, e a folha não muda de tamanho à toa). */
   const [disserAberta, setDisserAberta] = useState<string | null>(null);
@@ -268,22 +264,6 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
      o mapa com um "Montar ›" de 60 px; virou a folha inteira, porque começar o dia com compromisso
      é a coisa mais importante que a tela tem a dizer às 8h. Continua sem travar nada: o mapa está
      atrás, o Cheguei de qualquer pino funciona, e "Agora não" é só fechar. */
-  /* NA PORTA (2.5/2.6): enquanto a visita está aberta, a folha não oferece a próxima porta nem o
-     Cheguei — ele já está dentro. Oferece a única coisa que importa na saída, e uma só. */
-  if (!aberta && naPorta) {
-    return (
-      <View ref={acima.ref} style={[s.pilula, s.semPlano, { bottom: chao + 8 + acima.ajuste }]} onLayout={medir} {...arrasto.panHandlers}>
-        <View style={s.kickerLinha}>
-          <Text style={[s.kickerFolha, s.kickerVerde]} numberOfLines={1}>NA PORTA · VISITA PROVADA</Text>
-        </View>
-        <Text style={s.semPlanoTitulo} numberOfLines={1}>{naPorta.nome}</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Saí de ${naPorta.nome}. Como ficou?`}
-          onPress={naPorta.aoSair} style={[s.btnMontar, { marginTop: 10 }]}>
-          <Text style={s.btnChegueiTexto}>Saí · como ficou?</Text>
-        </Pressable>
-      </View>
-    );
-  }
   if (!aberta && linha?.estado === 'sem_plano' && aoMontarDia) {
     return (
       <View ref={acima.ref} style={[s.pilula, s.semPlano, { bottom: chao + 8 + acima.ajuste }]} onLayout={medir} {...arrasto.panHandlers}>
