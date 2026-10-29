@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap">
+<style>
+body{margin:0;background:#E7E3DA;font-family:'Poppins',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+a{color:#C8131B;} a:hover{color:#A50F16;}
+</style>
+</helmet>
+<div style="padding:56px 64px 96px;display:flex;flex-direction:column;gap:64px;color:#111418;font-family:Poppins,sans-serif;">
+
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px;">
+<span style="font:600 12px Poppins;letter-spacing:.1em;color:#C8131B;">APP DE RUA · ABA MAPA · O MAPA LIMPO · 29/10</span>
+<h1 style="margin:0;font:800 40px/1.1 Poppins;letter-spacing:-.01em;">O mapa volta a ser um mapa. Nove camadas viram quatro.</h1>
+<p style="margin:0;font:500 16px/1.55 Poppins;color:#414852;text-wrap:pretty;">Nada some: tudo muda de lugar para um lugar fixo. Em cima, <b>uma fileira de controles</b> que nunca cresce. Abaixo dela, <b>uma faixa só</b>, que existe apenas quando algo pede ação com prazo. Embaixo, <b>a folha</b>, que já recolhida mostra a próxima porta e o Cheguei. O resto é rua.</p>
+</header>
+
+<section id="decisoes" data-screen-label="0 · Decisões" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;max-width:1600px;">
+<sc-for list="{{ decisoes }}" as="d" hint-placeholder-count="3">
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:10px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;">{{ d.k }}</span>
+<span style="font:800 20px/1.3 Poppins;text-wrap:pretty;">{{ d.t }}</span>
+<sc-for list="{{ d.p }}" as="p" hint-placeholder-count="3"><span style="font:500 13.5px/1.55 Poppins;color:#2A2F36;text-wrap:pretty;padding-top:8px;border-top:1px solid #EDEAE3;">{{ p }}</span></sc-for>
+</div>
+</sc-for>
+</section>
+
+<sc-for list="{{ secs }}" as="sec" hint-placeholder-count="3">
+<section id="{{ sec.id }}" data-screen-label="{{ sec.title }}" style="display:flex;flex-direction:column;gap:24px;">
+<div style="display:flex;flex-direction:column;gap:6px;max-width:1100px;"><span style="font:800 28px Poppins;">{{ sec.title }}</span><span style="font:500 15px/1.5 Poppins;color:#414852;text-wrap:pretty;">{{ sec.desc }}</span></div>
+<div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;">
+<sc-for list="{{ sec.phones }}" as="ph" hint-placeholder-count="3">
+<div id="{{ ph.id }}" style="display:flex;flex-direction:column;gap:12px;width:390px;">
+<div style="display:flex;flex-direction:column;gap:6px;min-height:236px;">
+<div style="display:flex;gap:8px;align-items:center;"><span style="font:700 12px Poppins;background:#111418;color:#fff;border-radius:6px;padding:3px 8px;">{{ ph.id }}</span><span style="font:700 11px Poppins;letter-spacing:.06em;color:{{ ph.tagFg }};background:{{ ph.tagBg }};border-radius:6px;padding:3px 8px;white-space:nowrap;">{{ ph.tag }}</span></div>
+<span style="font:700 15px/1.35 Poppins;text-wrap:pretty;">{{ ph.cap }}</span>
+<sc-for list="{{ ph.q }}" as="q" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:78px minmax(0,1fr);gap:8px;font:500 13px/1.45 Poppins;color:#414852;"><span style="font-weight:700;color:#111418;">{{ q.k }}</span><span style="text-wrap:pretty;">{{ q.v }}</span></div></sc-for>
+</div>
+<div style="position:relative;flex:none;width:390px;height:844px;border-radius:34px;overflow:hidden;background:{{ ph.T.bg }};box-shadow:0 18px 44px rgba(0,0,0,.22);">
+<div style="position:absolute;inset:-200px;background:#1B2130 url(mapa-base.svg) center/cover;filter:{{ ph.T.mf }};"></div>
+<svg width="390" height="844" style="position:absolute;left:0;top:0;"><path d="{{ ph.route }}" fill="none" stroke="{{ ph.T.route }}" stroke-width="3.5" stroke-dasharray="0.5 8" stroke-linecap="round"></path></svg>
+<sc-for list="{{ ph.placas }}" as="pl" hint-placeholder-count="0"><span style="position:absolute;left:{{ pl.x }}px;top:{{ pl.y }}px;height:28px;padding:0 10px;border-radius:14px;background:{{ ph.T.painel }};border:1px solid {{ ph.T.line }};color:{{ ph.T.fg }};display:flex;align-items:center;font:600 12px Poppins;white-space:nowrap;z-index:25;">{{ pl.t }}</span></sc-for>
+<div style="position:absolute;left:{{ ph.ux }}px;top:{{ ph.uy }}px;width:0;height:0;z-index:30;"><div style="position:absolute;left:-20px;top:-20px;width:40px;height:40px;border-radius:50%;background:rgba(37,99,235,.2);"></div><div style="position:absolute;left:-8px;top:-8px;width:16px;height:16px;border-radius:50%;background:#2563EB;border:3px solid #fff;box-sizing:border-box;"></div></div>
+<sc-for list="{{ ph.pins }}" as="p" hint-placeholder-count="0">
+<div style="position:absolute;left:{{ p.x }}px;top:{{ p.y }}px;width:0;height:0;opacity:{{ p.op }};z-index:{{ p.z }};">
+<sc-if value="{{ p.ring }}"><div style="position:absolute;left:-33px;top:{{ p.rt }}px;width:66px;height:66px;border-radius:50%;border:3px solid {{ ph.T.acao }};background:rgba(229,26,49,.16);box-sizing:border-box;"></div></sc-if>
+<div style="position:absolute;left:-5px;top:-8px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:8px solid #fff;"></div>
+<sc-if value="{{ p.lab }}"><div style="position:absolute;right:36px;top:{{ p.lab.t }}px;padding:4px 10px;border-radius:10px;background:{{ ph.T.rot }};border:1px solid {{ ph.T.line }};display:flex;flex-direction:column;white-space:nowrap;box-shadow:0 2px 5px rgba(0,0,0,.25);"><span style="font:700 13px/1.3 Poppins;color:{{ ph.T.fg }};">{{ p.lab.n }}</span><span style="font:600 11.5px/1.3 Poppins;color:{{ ph.T.mute }};">{{ p.lab.s }}</span></div></sc-if>
+<div style="position:absolute;left:{{ p.bl }}px;top:{{ p.bt }}px;width:{{ p.s }}px;height:{{ p.s }}px;box-sizing:border-box;border-radius:50%;background:{{ p.bg }};border:2.5px solid #fff;color:#fff;display:flex;align-items:center;justify-content:center;font:700 {{ p.fs }}px/1 Poppins;box-shadow:0 2px 5px rgba(0,0,0,.4);">{{ p.t }}</div>
+</div>
+</sc-for>
+
+<sc-if value="{{ ph.old }}">
+<div style="position:absolute;top:50px;left:12px;right:12px;height:48px;border-radius:24px;background:{{ ph.T.painel }};border:1px solid {{ ph.T.line }};display:flex;align-items:center;gap:10px;padding:0 6px 0 16px;z-index:80;box-sizing:border-box;"><span style="width:14px;height:14px;border-radius:50%;border:2px solid {{ ph.T.mute }};box-sizing:border-box;flex:none;"></span><span style="flex:1;font:500 14px Poppins;color:{{ ph.T.mute }};">Buscar lead, rua ou bairro</span><span style="position:relative;width:36px;height:36px;display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{ ph.T.fg }}" stroke-width="2"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"></path></svg><span style="position:absolute;top:2px;right:2px;height:16px;min-width:16px;border-radius:8px;background:#E23B3B;color:#fff;font:700 10px/16px Poppins;text-align:center;">3</span></span><span style="width:36px;height:36px;border-radius:18px;background:{{ ph.T.chip }};color:{{ ph.T.fg }};display:flex;align-items:center;justify-content:center;font:700 13px Poppins;">J</span></div>
+<div style="position:absolute;top:106px;left:12px;right:12px;height:40px;display:flex;gap:8px;overflow:hidden;z-index:80;"><span style="flex:none;height:40px;padding:0 14px;border-radius:20px;background:{{ ph.T.inv }};color:{{ ph.T.invfg }};display:flex;align-items:center;gap:6px;font:600 14px Poppins;">Meu dia <b>234</b></span><span style="flex:none;height:40px;padding:0 14px;border-radius:20px;background:{{ ph.T.painel }};color:{{ ph.T.fg }};border:1px solid {{ ph.T.line }};display:flex;align-items:center;gap:6px;font:600 14px Poppins;box-sizing:border-box;">Clientes <b>20</b></span><span style="flex:none;height:40px;padding:0 14px;border-radius:20px;background:{{ ph.T.painel }};color:{{ ph.T.fg }};border:1px solid {{ ph.T.line }};display:flex;align-items:center;font:600 14px Poppins;box-sizing:border-box;">R…</span></div>
+<div style="position:absolute;top:106px;right:12px;width:44px;height:40px;border-radius:20px;background:{{ ph.T.painel }};border:1px solid {{ ph.T.line }};z-index:81;box-sizing:border-box;display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{ ph.T.fg }}" stroke-width="2.2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"></path></svg></div>
+<div style="position:absolute;top:154px;left:12px;right:12px;height:48px;border-radius:14px;background:{{ ph.T.avBg }};color:{{ ph.T.avFg }};display:flex;align-items:center;gap:10px;padding:0 14px;z-index:82;box-sizing:border-box;"><div style="flex:1;display:flex;flex-direction:column;"><span style="font:700 13.5px/1.3 Poppins;">Dia sem plano</span><span style="font:500 12px/1.3 Poppins;">o gestor vê quem planejou</span></div><span style="font:700 13px Poppins;">Montar ›</span></div>
+<span style="position:absolute;top:210px;left:12px;height:40px;padding:0 14px;border-radius:20px;background:#fff;color:#111418;display:flex;align-items:center;font:600 13.5px Poppins;z-index:82;box-shadow:0 2px 8px rgba(0,0,0,.25);">Ver em lista · 234</span>
+</sc-if>
+
+<sc-if value="{{ ph.top }}">
+<div style="position:absolute;top:50px;left:12px;right:12px;display:flex;gap:8px;z-index:80;">
+<div style="flex:1;min-width:0;height:48px;border-radius:24px;background:{{ ph.T.painel }};border:1px solid {{ ph.T.line }};display:flex;align-items:center;box-sizing:border-box;box-shadow:0 2px 10px rgba(0,0,0,.18);overflow:hidden;">
+<span style="flex:none;height:100%;display:flex;align-items:center;gap:7px;padding:0 10px 0 14px;border-right:1px solid {{ ph.T.line }};"><span style="width:10px;height:10px;border-radius:5px;background:{{ ph.lens.c }};"></span><span style="font:600 14px Poppins;color:{{ ph.T.fg }};white-space:nowrap;">{{ ph.lens.t }}</span><sc-if value="{{ ph.lens.f }}"><span style="height:22px;padding:0 7px;border-radius:11px;background:{{ ph.T.inv }};color:{{ ph.T.invfg }};font:700 11.5px/22px Poppins;white-space:nowrap;">{{ ph.lens.f }}</span></sc-if><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="{{ ph.T.mute }}" stroke-width="3" stroke-linecap="round"><path d="M6 9l6 6 6-6"></path></svg></span>
+<span style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:0 12px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{ ph.T.mute }}" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg><span style="font:500 14px Poppins;color:{{ ph.T.mute }};">Buscar</span></span>
+</div>
+<sc-if value="{{ ph.tog }}"><div style="flex:none;width:128px;height:48px;border-radius:24px;background:{{ ph.T.painel }};border:1px solid {{ ph.T.line }};display:flex;padding:3px;box-sizing:border-box;box-shadow:0 2px 10px rgba(0,0,0,.18);"><sc-for list="{{ ph.tog }}" as="tg" hint-placeholder-count="2"><span style="flex:1;border-radius:20px;background:{{ tg.bg }};color:{{ tg.fg }};display:flex;align-items:center;justify-content:center;font:600 13.5px Poppins;">{{ tg.t }}</span></sc-for></div></sc-if>
+</div>
+<sc-if value="{{ ph.load }}"><div style="position:absolute;top:100px;left:36px;right:160px;height:3px;border-radius:2px;background:{{ ph.T.line }};z-index:81;overflow:hidden;"><div style="width:45%;height:100%;background:{{ ph.T.gps }};"></div></div></sc-if>
+</sc-if>
+
+<sc-if value="{{ ph.fx }}"><div style="position:absolute;top:106px;left:12px;right:12px;height:48px;border-radius:14px;background:{{ ph.fx.bg }};border:1px solid {{ ph.fx.bd }};display:flex;align-items:center;gap:10px;padding:0 6px 0 14px;box-sizing:border-box;z-index:82;box-shadow:0 4px 14px rgba(0,0,0,.2);"><div style="flex:1;min-width:0;display:flex;flex-direction:column;"><span style="font:700 13.5px/1.3 Poppins;color:{{ ph.fx.fg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ ph.fx.t }}</span><span style="font:500 12px/1.3 Poppins;color:{{ ph.fx.sub }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ ph.fx.s }}</span></div><span style="flex:none;height:36px;padding:0 14px;border-radius:10px;background:{{ ph.fx.abg }};color:{{ ph.fx.afg }};display:flex;align-items:center;font:700 13px Poppins;white-space:nowrap;">{{ ph.fx.a }}</span></div></sc-if>
+
+<sc-if value="{{ ph.list }}">
+<div style="position:absolute;top:{{ ph.list.top }}px;left:0;right:0;bottom:84px;background:{{ ph.T.bg }};padding:10px 16px;display:flex;flex-direction:column;gap:12px;overflow:hidden;z-index:60;box-sizing:border-box;">
+<sc-if value="{{ ph.list.title }}"><span style="font:800 22px Poppins;color:{{ ph.T.fg }};">{{ ph.list.title }}</span></sc-if>
+<sc-if value="{{ ph.list.note }}"><div style="border-radius:12px;background:{{ ph.T.avBg }};color:{{ ph.T.avFg }};padding:10px 12px;font:600 13px/1.45 Poppins;text-wrap:pretty;">{{ ph.list.note }}</div></sc-if>
+<span style="font:500 12.5px Poppins;color:{{ ph.T.dim }};">{{ ph.list.head }}</span>
+<sc-for list="{{ ph.list.groups }}" as="g" hint-placeholder-count="2"><div style="display:flex;flex-direction:column;"><div style="display:flex;justify-content:space-between;padding-bottom:6px;"><span style="font:700 11.5px Poppins;letter-spacing:.06em;color:{{ ph.T.dim }};white-space:nowrap;">{{ g.t }}</span><span style="font:600 12px Poppins;color:{{ ph.T.dim }};white-space:nowrap;">{{ g.r }}</span></div>
+<sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:12px;min-height:56px;border-top:1px solid {{ ph.T.line }};opacity:{{ r.op }};"><span style="flex:none;width:26px;height:26px;box-sizing:border-box;border-radius:50%;background:{{ r.mc }};border:2px solid #fff;color:#fff;display:flex;align-items:center;justify-content:center;font:700 11px Poppins;box-shadow:0 1px 3px rgba(0,0,0,.25);">{{ r.m }}</span><div style="flex:1;min-width:0;display:flex;flex-direction:column;"><span style="font:600 14.5px/1.3 Poppins;color:{{ ph.T.fg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.n }}</span><span style="font:500 12.5px/1.35 Poppins;color:{{ ph.T.mute }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ r.s }}</span></div><span style="flex:none;font:600 12.5px Poppins;color:{{ ph.T.dim }};white-space:nowrap;">{{ r.d }}</span><sc-if value="{{ r.a }}"><span style="flex:none;height:44px;min-width:56px;padding:0 12px;border-radius:12px;background:{{ r.abg }};border:1px solid {{ r.abd }};color:{{ r.afg }};display:flex;align-items:center;justify-content:center;font:600 13.5px Poppins;box-sizing:border-box;">{{ r.a }}</span></sc-if></div></sc-for></div></sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ ph.veil }}"><div style="position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:65;"></div></sc-if>
+
+<sc-if value="{{ ph.btns }}">
+<span style="position:absolute;left:12px;top:{{ ph.btnTop }}px;width:44px;height:44px;border-radius:22px;background:{{ ph.T.painel }};border:1px solid {{ ph.T.line }};display:flex;align-items:center;justify-content:center;z-index:66;box-sizing:border-box;box-shadow:0 2px 8px rgba(0,0,0,.2);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{ ph.T.fg }}" stroke-width="2.2"><circle cx="12" cy="12" r="6"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></svg></span>
+<span style="position:absolute;right:12px;top:{{ ph.btnTop }}px;width:44px;height:44px;border-radius:22px;background:{{ ph.plusBg }};border:1px solid {{ ph.plusBd }};display:flex;align-items:center;justify-content:center;z-index:66;box-sizing:border-box;box-shadow:0 2px 8px rgba(0,0,0,.2);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ ph.plusFg }}" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+</sc-if>
+
+<sc-if value="{{ ph.sh }}">
+<div style="position:absolute;left:0;right:0;top:{{ ph.sh.top }}px;bottom:84px;background:{{ ph.T.painel }};border-radius:22px 22px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.22);display:flex;flex-direction:column;overflow:hidden;z-index:70;">
+<div style="height:18px;flex:none;display:flex;align-items:center;justify-content:center;"><div style="width:40px;height:5px;border-radius:3px;background:{{ ph.T.line2 }};"></div></div>
+<div style="padding:0 16px 14px;display:flex;flex-direction:column;gap:10px;">
+<sc-if value="{{ ph.sh.k }}"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;"><span style="white-space:nowrap;font:700 11.5px Poppins;letter-spacing:.06em;color:{{ ph.sh.kc }};">{{ ph.sh.k }}</span><span style="white-space:nowrap;font:600 12.5px Poppins;color:{{ ph.T.mute }};">{{ ph.sh.kr }}</span></div></sc-if>
+<sc-if value="{{ ph.sh.title }}"><div style="display:flex;flex-direction:column;gap:2px;"><span style="font:700 18px/1.3 Poppins;color:{{ ph.T.fg }};text-wrap:pretty;">{{ ph.sh.title }}</span><sc-if value="{{ ph.sh.sub }}"><span style="font:500 13.5px/1.4 Poppins;color:{{ ph.T.mute }};text-wrap:pretty;">{{ ph.sh.sub }}</span></sc-if></div></sc-if>
+<sc-if value="{{ ph.sh.next }}"><div style="display:flex;align-items:center;gap:12px;"><span style="flex:none;width:36px;height:36px;border-radius:50%;background:{{ ph.sh.next.c }};border:2.5px solid #fff;box-sizing:border-box;color:#fff;display:flex;align-items:center;justify-content:center;font:700 15px Poppins;box-shadow:0 1px 4px rgba(0,0,0,.3);">{{ ph.sh.next.m }}</span><div style="flex:1;min-width:0;display:flex;flex-direction:column;"><span style="font:700 16.5px/1.3 Poppins;color:{{ ph.T.fg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ ph.sh.next.n }}</span><span style="font:500 13px/1.35 Poppins;color:{{ ph.T.mute }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ ph.sh.next.s }}</span></div><span style="flex:none;height:48px;padding:0 18px;border-radius:14px;background:{{ ph.sh.next.bg }};border:1.5px solid {{ ph.sh.next.bd }};color:{{ ph.sh.next.fg }};display:flex;align-items:center;font:700 15px Poppins;box-sizing:border-box;">Cheguei</span></div></sc-if>
+<sc-if value="{{ ph.sh.rows }}"><div style="display:flex;flex-direction:column;"><sc-for list="{{ ph.sh.rows }}" as="r" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:12px;min-height:52px;border-top:1px solid {{ ph.T.line }};"><span style="flex:none;width:14px;height:14px;border-radius:7px;background:{{ r.c }};"></span><div style="flex:1;min-width:0;display:flex;flex-direction:column;"><span style="font:600 14.5px/1.3 Poppins;color:{{ ph.T.fg }};">{{ r.n }}</span><span style="font:500 12.5px/1.35 Poppins;color:{{ ph.T.mute }};">{{ r.s }}</span></div><span style="flex:none;width:22px;height:22px;border-radius:11px;box-sizing:border-box;border:2px solid {{ r.rb }};background:{{ r.rf }};"></span></div></sc-for></div></sc-if>
+<sc-if value="{{ ph.sh.chips }}"><div style="display:flex;flex-direction:column;gap:8px;"><span style="font:700 11px Poppins;letter-spacing:.08em;color:{{ ph.T.dim }};">{{ ph.sh.chipsL }}</span><div style="display:flex;flex-wrap:wrap;gap:6px;"><sc-for list="{{ ph.sh.chips }}" as="c" hint-placeholder-count="4"><span style="height:40px;padding:0 14px;border-radius:20px;background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ c.bd }};display:flex;align-items:center;gap:7px;font:600 13.5px Poppins;box-sizing:border-box;"><span style="width:10px;height:10px;border-radius:5px;background:{{ c.c }};"></span>{{ c.t }}</span></sc-for></div></div></sc-if>
+<sc-if value="{{ ph.sh.prim }}"><div style="display:flex;gap:8px;"><sc-if value="{{ ph.sh.sec }}"><span style="flex:1;height:52px;border-radius:14px;border:1px solid {{ ph.T.line2 }};color:{{ ph.T.fg }};display:flex;align-items:center;justify-content:center;font:600 14.5px Poppins;box-sizing:border-box;">{{ ph.sh.sec }}</span></sc-if><span style="flex:2;height:52px;border-radius:14px;background:{{ ph.sh.pbg }};color:{{ ph.sh.pfg }};display:flex;align-items:center;justify-content:center;font:700 16px Poppins;">{{ ph.sh.prim }}</span></div></sc-if>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ ph.oldSheet }}"><div style="position:absolute;left:0;right:0;top:700px;bottom:84px;background:{{ ph.T.painel }};border-radius:22px 22px 0 0;z-index:70;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:8px;"><div style="width:40px;height:5px;border-radius:3px;background:{{ ph.T.line2 }};"></div><span style="font:700 14px Poppins;color:{{ ph.T.fg }};">0/6 ⌃</span></div></sc-if>
+
+<div style="position:absolute;left:0;right:0;bottom:0;height:84px;background:{{ ph.T.nav }};border-top:1px solid {{ ph.T.line }};display:flex;padding:0 20px 22px;box-sizing:border-box;z-index:90;"><sc-for list="{{ ph.tabs }}" as="tb" hint-placeholder-count="3"><span style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font:600 12.5px Poppins;color:{{ tb.c }};position:relative;"><span style="width:22px;height:22px;border-radius:7px;border:2px solid {{ tb.c }};background:{{ tb.f }};box-sizing:border-box;"></span>{{ tb.t }}<sc-if value="{{ tb.n }}"><span style="position:absolute;top:8px;left:50%;margin-left:6px;height:18px;min-width:18px;padding:0 6px;border-radius:9px;background:{{ tb.nbg }};color:{{ tb.nfg }};font:700 11px/18px Poppins;text-align:center;box-sizing:border-box;white-space:nowrap;">{{ tb.n }}</span></sc-if></span></sc-for></div>
+<div style="position:absolute;top:0;left:0;right:0;height:46px;display:flex;justify-content:space-between;align-items:center;padding:0 30px;font:600 14px Poppins;color:{{ ph.T.fg }};z-index:85;"><span>{{ ph.time }}</span><span>4G</span></div>
+<div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:{{ ph.T.fg }};opacity:.4;z-index:95;"></div>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+
+<section id="regua" data-screen-label="4 · Régua e regras" style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:24px;max-width:1600px;">
+<div style="display:flex;flex-direction:column;gap:24px;">
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:2px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#7F1D1D;padding-bottom:8px;">A RÉGUA · DE CIMA PARA BAIXO NA ATENÇÃO, NÃO NA TELA</span>
+<sc-for list="{{ regua }}" as="r" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:36px minmax(0,1fr);gap:12px;padding:10px 0;border-bottom:1px solid #EDEAE3;"><span style="font:800 20px/1.2 Poppins;color:#111418;">{{ r.n }}</span><div style="display:flex;flex-direction:column;gap:2px;"><span style="font:700 14px/1.4 Poppins;">{{ r.t }}</span><span style="font:500 13px/1.5 Poppins;color:#414852;text-wrap:pretty;">{{ r.d }}</span></div></div></sc-for>
+</div>
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:2px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;padding-bottom:8px;">A FILA DA FAIXA · UMA POR VEZ, NESTA ORDEM</span>
+<sc-for list="{{ fila }}" as="f" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:28px minmax(0,.9fr) minmax(0,1.3fr);gap:12px;padding:9px 0;border-bottom:1px solid #EDEAE3;font:500 13px/1.45 Poppins;color:#2A2F36;"><span style="font:800 14px Poppins;color:#111418;">{{ f.n }}</span><span style="font-weight:700;color:#111418;">{{ f.t }}</span><span style="text-wrap:pretty;">{{ f.d }}</span></div></sc-for>
+<span style="font:500 12.5px/1.5 Poppins;color:#5B6370;padding-top:10px;text-wrap:pretty;">Os estados neutros da linha do dia (placar, no ritmo, na porta, plano feito no Cockpit) não usam a faixa: viram o topo da folha. A faixa só nasce quando há um verbo com prazo.</span>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:24px;">
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:2px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;padding-bottom:8px;">AS 9 CAMADAS DE 13:23 · PARA ONDE FOI CADA UMA</span>
+<sc-for list="{{ camadas }}" as="c" hint-placeholder-count="9"><div style="display:grid;grid-template-columns:minmax(0,.75fr) minmax(0,1.5fr);gap:12px;padding:8px 0;border-bottom:1px solid #EDEAE3;"><span style="font:700 13px/1.4 Poppins;">{{ c.a }}</span><span style="font:500 13px/1.5 Poppins;color:#2A2F36;text-wrap:pretty;">{{ c.b }}</span></div></sc-for>
+</div>
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:2px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;padding-bottom:8px;">QUANDO DUAS DISPUTAM</span>
+<sc-for list="{{ disputa }}" as="c" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:minmax(0,.75fr) minmax(0,1.5fr);gap:12px;padding:8px 0;border-bottom:1px solid #EDEAE3;"><span style="font:700 13px/1.4 Poppins;">{{ c.a }}</span><span style="font:500 13px/1.5 Poppins;color:#2A2F36;text-wrap:pretty;">{{ c.b }}</span></div></sc-for>
+</div>
+</div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const Q='#E23B3B', M='#F5A524', F='#0EA5E9', G='#16A34A';
+const DARK = { bg:'#121417', painel:'#17191D', card:'#1F2228', chip:'#262A31', line:'#2E333B', line2:'#4A515C', fg:'#F4F5F7', mute:'#AEB4BE', dim:'#8B919C', nav:'#0F1114', inv:'#F4F5F7', invfg:'#111418', aviso:['#3A2A06','#FDE68A'], avBg:'#3A2A06', avFg:'#FDE68A', ok:['#0F2E1B','#86EFAC'], erro:['#3B1216','#FCA5A5'], acao:'#E51A31', vtx:'#FF8A92', mf:'none', rot:'rgba(23,25,29,.94)', route:'rgba(255,255,255,.9)', amb:'#FDE68A', verde:'#86EFAC', gps:'#60A5FA', alerta:'#E23B3B' };
+const SOL = { bg:'#F3F1EC', painel:'#FFFFFF', card:'#FFFFFF', chip:'#EDEAE3', line:'#D9D4CA', line2:'#9AA1AB', fg:'#111418', mute:'#414852', dim:'#5B6370', nav:'#FFFFFF', inv:'#111418', invfg:'#FFFFFF', aviso:['#FEF3C7','#78350F'], avBg:'#FEF3C7', avFg:'#78350F', ok:['#DCFCE7','#14532D'], erro:['#FEE2E2','#7F1D1D'], acao:'#C8131B', vtx:'#A50F16', rot:'rgba(255,255,255,.96)', mf:'invert(.92) hue-rotate(180deg) saturate(.5) brightness(1.04)', route:'#111418', amb:'#78350F', verde:'#14532D', gps:'#2563EB', alerta:'#E23B3B' };
+const PLAN = [
+  { n:'VASCO RESTAURANTE', c:Q, x:150, ny:1, d:'—', s:'Promessa · venceu há 22 dias' }, { n:'Padaria Ki-Pão', c:M, x:96, ny:.72, d:'—', s:'Retorno combinado' },
+  { n:'Cantina Bento', c:M, x:178, ny:.46, d:'450 m', s:'Proposta pronta · usa Saipos' }, { n:'Bar do Alemão', c:F, x:268, ny:.12, d:'750 m', s:'1ª visita · decisor desconhecido' },
+  { n:'Empório Lírio', c:F, x:326, ny:.48, d:'1,1 km', s:'Recém-aberto há 9 dias' }, { n:'Pizzaria Forno Vivo', c:F, x:292, ny:.88, d:'1,4 km', s:'★ 4,7 · 1.020 avaliações' },
+];
+const LOOSE = [[46,.2,Q],[120,.08,F],[226,.3,M],[352,.18,F],[60,.55,M],[236,.7,F],[352,.8,Q],[30,.92,F],[200,.98,M],[130,.35,F],[300,.36,M],[214,.06,F],[150,1,Q],[96,.72,M],[178,.46,M],[268,.12,F],[326,.48,F],[292,.88,F],[82,.4,G],[250,.55,G],[340,.62,M]];
+const ys = (a, top) => ny => Math.round(a + ny * (Math.max(a + 50, top - 50) - a));
+function planPins(a, top, done, next){ const Y = ys(a, top);
+  return PLAN.map((p, i) => { const n = i + 1, dn = n <= done, nx = n === next, s = dn ? 24 : nx ? 40 : 32, cy = -7 - s / 2;
+    return { x:p.x, y:Y(p.ny), s, bl:-s/2, bt:cy - s/2, bg:p.c, t:dn ? '✓' : String(n), fs:nx ? 16 : dn ? 12 : 14, op:dn ? .5 : 1, z:nx ? 40 : 20, ring:nx, rt:cy - 33, lab:nx ? { n:p.n, s:p.d + ' · ' + p.s.split(' · ')[0].toLowerCase(), t:cy - 20 } : false }; }); }
+function loosePins(a, top, colors){ const Y = ys(a, top);
+  const SZ = { [Q]:26, [M]:24, [F]:22 }, LT = { [Q]:'Q', [M]:'M', [F]:'F' };
+  return LOOSE.filter(l => l[2] !== G && (!colors || colors.includes(l[2]))).map(([x, ny, c]) => { const s = SZ[c], cy = -7 - s / 2; return { x, y:Y(ny), s, bl:-s/2, bt:cy - s/2, bg:c, t:LT[c], fs:11, op:1, z:20, ring:false, rt:0, lab:false }; }); }
+const routeD = (a, top, from) => { const Y = ys(a, top); return 'M' + PLAN.slice(from).map(p => p.x + ' ' + (Y(p.ny) - 4)).join(' L'); };
+const TAGC = { antes:['#FEE2E2','#7F1D1D'], quieto:['#DCFCE7','#14532D'], pior:['#FEF3C7','#78350F'], lista:['#DBEAFE','#1E3A8A'], contra:['#D9D4CA','#414852'] };
+const tabs = (T, on, n, four) => (four ? ['Mapa','Lista','Hoje','Eu'] : ['Mapa','Hoje','Eu']).map((t, i) => ({ t, c:i === on ? T.acao : T.dim, f:i === on ? T.acao : 'transparent', n:t === 'Hoje' && n ? n : false, nbg:T.inv, nfg:T.invfg }));
+const tog = (T, on) => ['Mapa','Lista'].map((t, i) => ({ t, bg:i === on ? T.inv : 'transparent', fg:i === on ? T.invfg : T.fg }));
+const q = (v, t, i) => [{ k:'Vê', v }, { k:'Toca', v:t }, { k:'Se ignorar', v:i }];
+
+function phone(id, kind, tag, cap, qs, T, o){
+  const tabsOut = o.tabs || tabs(T, o.tabOn || 0, o.badge === undefined ? '6' : o.badge, false);
+  const shTop = o.sh ? o.sh.top : 700;
+  return { id, tag, tagBg:TAGC[kind][0], tagFg:TAGC[kind][1], cap, q:qs, T, time:o.time,
+    old:!!o.old, oldSheet:!!o.old, top:!o.old, lens:o.lens || { t:'Meu dia', c:T.acao, f:false }, tog:o.tog === false ? false : tog(T, o.list ? 1 : 0), load:!!o.load,
+    fx:o.fx || false, list:o.list || false, veil:!!o.veil, sh:o.sh || false, tabs:tabsOut,
+    btns:!o.list && !o.veil, btnTop:shTop - 58, plusBg:o.old ? T.acao : T.painel, plusBd:o.old ? T.acao : T.line, plusFg:o.old ? '#fff' : T.fg,
+    pins:o.pins || [], route:o.route || '', placas:o.placas || [], ux:186, uy:o.uy || shTop - 90 };
+}
+const nextSheet = (T, top, redFaixa) => ({ top, k:'2 DE 6 PORTAS · NO RITMO', kc:T.verde, kr:'+R$ 250 na próxima venda', title:false, sub:false,
+  next:{ m:'3', c:M, n:'Cantina Bento', s:'450 m · 6 min · proposta pronta', bg:redFaixa ? 'transparent' : T.acao, bd:redFaixa ? T.line2 : T.acao, fg:redFaixa ? T.fg : '#fff' }, rows:false, chips:false, prim:false, sec:false });
+const semPlano = (T, top) => ({ top, k:'DIA SEM PLANO', kc:T.amb, kr:'o gestor vê desde 9h00', title:'6 portas perto de você, já em ordem', sub:'As 2 promessas vencidas vêm na frente · 3,1 km a pé', next:false, rows:false, chips:false, sec:'Ver as 6', prim:'Montar o dia', pbg:T.acao, pfg:'#fff' });
+const faixaLig = T => ({ t:'Hora das ligações · até 12:45', s:'2 na fila · Rita, Padaria Ki-Pão primeiro', a:'Ligar', bg:T.card, bd:T.line2, fg:T.fg, sub:T.mute, abg:T.inv, afg:T.invfg });
+const lr = (T, i, st) => { const p = PLAN[i], dn = st === 'done', nx = st === 'next';
+  return { m:dn ? '✓' : String(i + 1), mc:p.c, n:p.n, s:dn ? 'Cheguei às ' + (i ? '09:48' : '09:05') + ' · próximo passo dado' : p.s, d:dn ? '' : p.d, a:dn ? false : nx ? 'Cheguei' : 'Ir', abg:nx ? T.acao : 'transparent', abd:nx ? T.acao : T.line2, afg:nx ? '#fff' : T.fg, op:dn ? .55 : 1 }; };
+const lo = (T, n, c, s, d) => ({ m:'', mc:c, n, s, d, a:'Ir', abg:'transparent', abd:T.line2, afg:T.fg, op:1 });
+const listaQuieta = (T, top, extra) => ({ top, title:false, note:false, head:'Meu dia · 38 neste recorte · contado às 10:00 · mais perto primeiro', ...(extra || {}), groups:[
+  { t:'NO PLANO', r:'2 de 6', rows:[lr(T, 2, 'next'), lr(T, 3), lr(T, 4), lr(T, 5), lr(T, 0, 'done'), lr(T, 1, 'done')] },
+  { t:'FORA DO PLANO, PERTO', r:'32', rows:[lo(T, 'Bar Fino', Q, 'Demo/Proposta · ligar hoje', '300 m'), lo(T, 'Lanchonete Ponto Certo', F, '1ª visita', '380 m')] } ] });
+
+function build(){
+  const secs = [];
+  const A = 112, AQ = 180;
+  // 1 · quieto
+  const qs1 = q('A rua inteira de 112 px até a folha. Um pino com anel: o 3. Na folha recolhida, o placar e a próxima porta.', 'Cheguei (o único vermelho), o pino, ou puxa a folha para ver Para entrar e Se ele disser.', 'Nada acontece. Não há o que ignorar: sem faixa, nada pedindo.');
+  secs.push({ id:'quieto', title:'1 · O estado quieto · 10:00, dia com plano, sem filtro', desc:'Quatro camadas: controles, folha, botões do mapa, abas. Nenhuma faixa: o placar "2 de 6 · no ritmo" saiu do topo e virou o título da folha, que agora mostra a próxima porta já recolhida. À esquerda, o que está no ar hoje.', phones:[
+    phone('0a', 'antes', 'HOJE · 13:23 · O PRINT', 'Nove camadas, quatro pesos de cor, a rua na metade de baixo', q('Busca, sino, avatar, lentes com 234 e 20, faixa âmbar, pílula da lista, três placas, dois botões, 0/6, selo "6 atrasados".', 'Qualquer coisa; nada diz qual é a principal.', 'Os números mudam sozinhos ao arrastar. A próxima porta não aparece em lugar nenhum.'), DARK,
+      { time:'13:23', old:true, pins:loosePins(250, 700), uy:560, placas:[{ x:196, y:300, t:'Jacarezinho · 3 clientes' }, { x:24, y:420, t:'São Cristóvão ·' }, { x:170, y:520, t:'6 novos clientes Takeat' }], tabs:tabs(DARK, 0, false).map(t => t.t === 'Hoje' ? { ...t, n:'6 atrasados', nbg:'#E23B3B', nfg:'#fff' } : t), sh:{ top:700 } }),
+    phone('1a', 'quieto', '10:00 · ESCURO', 'Uma coisa óbvia: o anel no 3 e o Cheguei', qs1, DARK, { time:'10:00', pins:planPins(AQ, 646, 2, 3), route:routeD(AQ, 646, 2), sh:nextSheet(DARK, 646), uy:560 }),
+    phone('1b', 'quieto', '10:00 · CLARO', 'O mesmo, no sol', qs1, SOL, { time:'10:00', pins:planPins(AQ, 646, 2, 3), route:routeD(AQ, 646, 2), sh:nextSheet(SOL, 646), uy:560 }),
+  ].map(p => (p.sh && !p.sh.k && (p.sh = false), p)) });
+  // 2 · pior minuto
+  const lensF = T => ({ t:'Meu dia', c:T.acao, f:'2' });
+  const qs2 = q('Controles com o selo "2" (há filtro). Uma faixa: a hora das ligações, que fecha às 12:45. Na folha, o dia sem plano com a proposta pronta.', 'Ligar na faixa; Montar o dia na folha; o selo 2 abre a lente para limpar.', 'A faixa some às 12:45 e a ligação volta para Hoje. A folha continua propondo; o gestor já vê "não planejou" desde 9h00. Cheguei em qualquer pino segue funcionando.');
+  const worst = T => ({ time:'12:30', lens:lensF(T), load:true, fx:faixaLig(T), pins:loosePins(A + 60, 564, [M, F]), sh:semPlano(T, 564), uy:470 });
+  secs.push({ id:'pior', title:'2 · O pior minuto · 12:30, filtro ligado, dia sem plano, janela de ligação', desc:'Antes eram cinco faixas entre a busca e o primeiro pino. Agora: uma fileira de controles, uma faixa, e a folha. O filtro vira selo no chip da lente; o carregamento vira uma linha de 3 px sob a busca; o "Dia sem plano" sai do topo e mora na folha, que é a mesma folha que vai subir sozinha na primeira abertura (item 2.3).', phones:[
+    phone('2a', 'pior', '12:30 · ESCURO', 'Duas coisas, cada uma no seu lugar, nenhuma cobrindo a rua', qs2, DARK, worst(DARK)),
+    phone('2b', 'pior', '12:30 · CLARO', 'O mesmo, no sol', qs2, SOL, worst(SOL)),
+    phone('2c', 'pior', 'TOCOU NA LENTE', 'Lente, filtro e Limpar num lugar só', q('A folha da lente: qual recorte, quais etapas. Recém-abertos com a meta da semana, não com contagem.', 'Um toque troca a lente; os chips ligam e desligam etapa; Limpar zera.', 'Fechar a folha mantém o que está. O selo no chip continua dizendo que há filtro.'), DARK,
+      { time:'12:31', lens:lensF(DARK), veil:true, pins:loosePins(A + 60, 300, [M, F]), sh:{ top:300, k:'O QUE O MAPA MOSTRA', kc:DARK.dim, kr:'o mesmo na Lista', title:false, sub:false, next:false,
+        rows:[{ c:DARK.acao, n:'Meu dia', s:'o plano e o que está perto', rb:DARK.acao, rf:DARK.acao }, { c:G, n:'Clientes', s:'a carteira ativa', rb:DARK.line2, rf:'transparent' }, { c:'#8B5CF6', n:'Recém-abertos', s:'meta da semana: 2 de 5', rb:DARK.line2, rf:'transparent' }],
+        chipsL:'ETAPAS · 2 LIGADAS', chips:[{ t:'Quente', c:Q, bg:'transparent', fg:DARK.fg, bd:DARK.line2 }, { t:'Morno', c:M, bg:DARK.inv, fg:DARK.invfg, bd:DARK.inv }, { t:'Frio', c:F, bg:DARK.inv, fg:DARK.invfg, bd:DARK.inv }, { t:'Cliente', c:G, bg:'transparent', fg:DARK.fg, bd:DARK.line2 }],
+        sec:'Limpar', prim:'Ver no mapa', pbg:DARK.inv, pfg:DARK.invfg } }),
+  ] });
+  // 3 · lista
+  const qs3 = q('O mesmo recorte do mapa, mais perto primeiro. A contagem aparece aqui, parada: "38 neste recorte · contado às 10:00".', 'Mapa, no mesmo lugar onde tocou Lista. Ir ou Cheguei em cada linha.', 'A lista fica como está até ele voltar ao mapa ou puxar para atualizar. Lente e filtro são os mesmos nas duas vistas.');
+  secs.push({ id:'lista', title:'3 · Mapa ↔ Lista · o alternador fixo, e a contra-prova da 4ª aba', desc:'O alternador é um controle próprio, do lado da busca, sempre no mesmo pixel, nas duas vistas. Ele não divide espaço com nada e não some. A faixa da vez e a lente atravessam as duas vistas sem mudar. Em 3c, a 4ª aba desenhada a sério, para comparar.', phones:[
+    phone('3a', 'lista', 'LISTA · ESCURO', 'Mesmo topo, outra vista', qs3, DARK, { time:'10:02', list:listaQuieta(DARK, 106) }),
+    phone('3b', 'lista', 'LISTA · CLARO', 'O mesmo, no sol', qs3, SOL, { time:'10:02', list:listaQuieta(SOL, 106) }),
+    phone('3c', 'contra', 'CONTRA-PROVA · 4ª ABA', 'Lista como aba: acha-se fácil, mas mente', q('Uma aba Lista com o recorte que o mapa tinha da última vez, e um aviso dizendo isso.', 'Para mudar o recorte, volta ao Mapa; ou ganha uma segunda lente aqui, que precisa concordar com a do mapa.', 'Lista e Hoje viram duas listas na barra, lado a lado. Ele precisa saber qual é qual. A barra volta a ter 4 depois de ter ido para 3 hoje.'), DARK,
+      { time:'10:02', tog:false, tabs:tabs(DARK, 1, '6', true), list:listaQuieta(DARK, 106, { note:'Recorte do mapa de 4 min atrás. Para mudar, volte ao Mapa.' }) }),
+  ] });
+  return {
+    secs,
+    decisoes:[
+      { k:'DIREÇÃO · A + C', t:'Uma faixa fixa que só existe quando pede ação. O contexto calmo vai para a folha.', p:[
+        'Da A: abaixo dos controles há um único lugar de 48 px para aviso. Mostra um por vez, pela fila da linha do dia. Nunca empilha.',
+        'Da C: o que é contexto e não pede verbo (placar, ritmo, plano feito, dia sem plano) mora no topo da folha, que ele já puxa.',
+        'Da B, nada: esconder o topo ao arrastar faria ele esquecer o filtro. Aqui o filtro é um selo no chip, sempre visível.' ] },
+      { k:'ITEM 4 · LISTA', t:'Lista fica como vista do mapa, com alternador Mapa | Lista fixo. Barra em 3.', p:[
+        'O alternador tem 128 × 48 px, do lado da busca, no mesmo pixel nas duas vistas. É o segundo controle mais visível da tela, depois do Cheguei.',
+        'Como aba (3c), a lista precisaria de uma segunda lente ou mostraria um recorte velho. E ficaria ao lado de Hoje, que também é lista.',
+        'Se em 2 semanas o toque em Lista não subir, aí sim vale testar a 4ª aba. Medir: toques no alternador por dia, por executivo.' ] },
+      { k:'NÚMEROS DAS LENTES', t:'Saem. Número no mapa só muda por algo que ele fez.', p:[
+        'O chip da lente não mostra contagem. Arrastar o mapa não muda nenhum número na tela.',
+        'A contagem do recorte vai para a Lista, parada: "38 neste recorte · contado às 10:00". Reconta ao abrir ou ao puxar para atualizar.',
+        'O número que decide o dia fica no título da folha: "2 de 6 portas". Só muda quando ele dá Cheguei. Meta com dono (Recém-abertos 2 de 5) aparece na folha da lente.' ] },
+    ],
+    regua:[
+      { n:'1', t:'A próxima porta', d:'Pino com anel no mapa + a mesma porta na folha recolhida, com Cheguei. Sempre. É o único vermelho cheio da tela.' },
+      { n:'2', t:'A faixa da vez', d:'Só quando há um verbo com prazo (ver a fila). Uma por vez; a que espera aparece como "+1" na ponta da faixa e abre a fila ao tocar.' },
+      { n:'3', t:'Os controles', d:'Lente com selo de filtro, Buscar, Mapa | Lista. Fixos, mesma altura sempre, nunca mostram contagem.' },
+      { n:'4', t:'Os botões do mapa', d:'Localização e +. Neutros, encostados na folha. O + deixou de ser vermelho: cadastrar é importante, mas não é a coisa do momento.' },
+      { n:'5', t:'O próprio mapa', d:'Não muda. Pinos, tamanhos, letras, halo, rótulos e placas de bairro exatamente como estão no pacote do Mapa do Executivo. O que sai é o que estava escrito por cima dele.' },
+    ],
+    fila:[
+      { n:'1', t:'Visita sem próximo passo', d:'Vermelha. Enquanto estiver, o Cheguei da folha passa para contorno (continua funcionando). Um vermelho por tela.' },
+      { n:'2', t:'Não salvou / sem sinal', d:'Âmbar. "3 desfechos no aparelho · enviam quando voltar o sinal".' },
+      { n:'3', t:'Hora das ligações', d:'Neutra. Só 12:30–12:45 e 17:30–17:45. Fecha sozinha.' },
+      { n:'4', t:'Ontem ficou aberto', d:'Âmbar. Só até o primeiro Cheguei do dia.' },
+      { n:'5', t:'Fecha o dia', d:'Âmbar. A partir das 18h00.' },
+      { n:'—', t:'Dia sem plano', d:'Não é faixa: é a folha (2a). É a porta de entrada do plano e a mesma folha que sobe sozinha na primeira abertura.' },
+    ],
+    camadas:[
+      { a:'1 · Busca, sino, avatar', b:'Busca fica, menor. Sino vai para o selo de Hoje. Avatar vai para a aba Eu.' },
+      { a:'2 · Fileira de lentes', b:'Vira o chip da lente, dentro da busca, sem número. Filtro é o selo no chip.' },
+      { a:'3 · Linha do dia', b:'Estados neutros: título da folha. Estados com verbo: a faixa da vez.' },
+      { a:'4 · Ver em lista · 234', b:'Alternador Mapa | Lista fixo. A contagem vai para dentro da Lista.' },
+      { a:'5 · Placas sobre o mapa', b:'Ficam como estão (são do mapa, não do topo). Com o topo limpo, param de disputar com as pílulas.' },
+      { a:'6 · Localização', b:'Fica, neutra, encostada na folha.' },
+      { a:'7 · Botão +', b:'Fica, neutro. Mesmo lugar.' },
+      { a:'8 · Folha 0/6 ⌃', b:'Recolhida já mostra a próxima porta e o Cheguei. 0/6 vira "2 de 6 portas" no título.' },
+      { a:'9 · Barra · 6 atrasados', b:'3 abas. Selo de Hoje com o número, em cor neutra.' },
+      { a:'Limpar · Calor', b:'Na folha da lente (2c). Calor só aparece para gestor.' },
+      { a:'Janela de ligação', b:'Faixa da vez, posição 3 da fila.' },
+      { a:'Carregando área', b:'Linha de 3 px sob a busca. Some ao terminar.' },
+      { a:'Cartão da quadra', b:'Toma o lugar da folha enquanto aberto. Fechar devolve a próxima porta.' },
+    ],
+    disputa:[
+      { a:'Faixa × folha', b:'A faixa nunca repete a folha. Se o assunto é o plano ou a próxima porta, é da folha.' },
+      { a:'Duas na faixa', b:'Ganha a de cima na fila. A outra vira "+1" na ponta; tocar abre as duas.' },
+      { a:'Faixa vermelha × Cheguei', b:'O Cheguei passa para contorno. Nunca dois vermelhos cheios.' },
+      { a:'Busca aberta', b:'Esconde a faixa até fechar a busca. A faixa volta igual.' },
+      { a:'Quadra × próxima porta', b:'A quadra ganha enquanto ele estiver olhando. Fechou, volta a porta.' },
+      { a:'Gestor (Calor)', b:'Mesma fileira; Calor é mais uma linha na folha da lente. Nada a mais no topo.' },
+    ],
+  };
+}
+
+class Component extends DCLogic {
+  renderVals(){ if (!this._v) this._v = build(); return this._v; }
+}
+</script>
+</body>
+</html>
