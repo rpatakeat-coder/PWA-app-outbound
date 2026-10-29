@@ -229,6 +229,7 @@ import { FaixaHoraDasLigacoes } from './src/screens/CartaoDaFila';
 import FolhaAntesDaRua from './src/screens/FolhaAntesDaRua';
 import FolhaPlanoDoDia from './src/screens/FolhaPlanoDoDia';
 import FolhaSai from './src/screens/FolhaSai';
+import FolhaTimeNaRua from './src/screens/FolhaTimeNaRua';
 import PedirAvisos from './src/screens/PedirAvisos';
 import MinhasFotos, { FOTOS_LIBERADAS } from './src/screens/MinhasFotos';
 import { marcarGravada as marcarFeitaGravada, registrarFeita } from './src/utils/filaFeitas';
@@ -5255,6 +5256,8 @@ function MainApp() {
   const [visitaAberta, setVisitaAberta] = useState<VisitaAberta | null>(null);
   const [escolhendoSaida, setEscolhendoSaida] = useState(false);
   const pedirDesfechoNaSaida = useCallback((v: VisitaAberta) => { setVisitaAberta(v); setEscolhendoSaida(false); }, []);
+  /** "O time na rua · hoje": a folha do gestor, aberta por uma linha do menu do perfil. */
+  const [timeNaRua, setTimeNaRua] = useState(false);
 
   const handleMarkAsVisited = useCallback(async (client: Client, onDone?: () => void) => {
     if (visitingRef.current) return;
@@ -9583,6 +9586,7 @@ function MainApp() {
           }}
         />
       )}
+      {canViewGestor && <FolhaTimeNaRua visivel={timeNaRua} aoFechar={() => setTimeNaRua(false)} />}
       {antesDaRua && (() => {
         const itensF = (filaNaTela.data?.itens ?? []) as Array<{ dealId: string; negocio: string; etapaId: string; venceu: boolean; prazo: string | null; horaPrazo?: string | null; telefone: string | null }>;
         const hojeF = filaNaTela.data?.hoje ?? diaBRT(new Date());
@@ -9734,6 +9738,13 @@ function MainApp() {
               : null,
             modoNovo && canViewGestor
               ? { chave: 'calor', Icone: IconBarGraph, rotulo: 'Lente Calor', aoTocar: () => { setPerfilAberto(false); setLente('calor'); } }
+              : null,
+            /* O TIME NA RUA (29/10/26): UMA linha, só para gestor, e nada no mapa nem aba nova —
+               o Julyan pediu duas vezes hoje para não poluir. É a versão de celular do que o
+               Cockpit não tem: o dia de hoje com a prova aberta, para quem está na rua com o
+               time. A análise profunda continua no Cockpit, que é onde ela deve estar. */
+            canViewGestor
+              ? { chave: 'time', Icone: IconTrendingUp, rotulo: 'O time na rua · hoje', aoTocar: () => { setPerfilAberto(false); setTimeNaRua(true); } }
               : null,
             // Modo sol (prompt §6): mapa claro para ler na rua ao meio-dia. Só no mapa novo.
             // No CELULAR ele mudou de casa em 29/10 e mora na folha da lente, que é a folha que
