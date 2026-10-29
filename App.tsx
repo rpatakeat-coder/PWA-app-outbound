@@ -227,6 +227,7 @@ import { janelaAtual } from './src/utils/horaDasLigacoes';
 import { quenteEsfriando, secaoDoItem } from './supabase/functions/_compartilhado/filaDoDinheiro';
 import { FaixaHoraDasLigacoes } from './src/screens/CartaoDaFila';
 import FolhaAntesDaRua from './src/screens/FolhaAntesDaRua';
+import FolhaPlanoDoDia from './src/screens/FolhaPlanoDoDia';
 import PedirAvisos from './src/screens/PedirAvisos';
 import MinhasFotos, { FOTOS_LIBERADAS } from './src/screens/MinhasFotos';
 import { marcarGravada as marcarFeitaGravada, registrarFeita } from './src/utils/filaFeitas';
@@ -1253,14 +1254,33 @@ function MainApp() {
   /* ANTES DA RUA (P6, handoff Tarefas do App): na 1ª abertura do Mapa no dia, com quente esfriando,
      sobe a folha com os quentes e o Ligar. Uma vez por dia por aparelho; não bloqueia o mapa. */
   const [antesDaRua, setAntesDaRua] = useState(false);
+  /* O PLANO VEM ATÉ ELE (espinha do dia 2.3, 29/10/26). Mesma mecânica provada da "Antes da rua":
+     uma chave por dia no aparelho, nada depois das 19h. A ORDEM importa — primeiro se decide o
+     dia, depois se fazem as ligações de antes de sair; por isso a "Antes da rua" espera esta
+     fechar. E nunca trava: "Agora não" fecha, o mapa está atrás o tempo todo e o Cheguei de
+     qualquer pino funciona. Forçar pela ATENÇÃO, não pela trava — decisão do próprio Julyan. */
+  const [planoDoDia, setPlanoDoDia] = useState(false);
+  const [planoDoDiaResolvido, setPlanoDoDiaResolvido] = useState(false);
   useEffect(() => {
-    if (!modoNovo || tab !== 'map' || !seloFila?.quente || !filaNaTela.data) return;
+    if (!modoNovo || tab !== 'map' || isViewer || planoDoDiaResolvido) return;
+    const agoraBRT = new Date(Date.now() - 3 * 3600000);
+    if (agoraBRT.getUTCHours() >= 19) { setPlanoDoDiaResolvido(true); return; }
+    const chave = `plano-do-dia-${diaBRT(new Date())}`;
+    try {
+      if (window.localStorage.getItem(chave)) { setPlanoDoDiaResolvido(true); return; }
+      window.localStorage.setItem(chave, '1');
+    } catch { setPlanoDoDiaResolvido(true); return; }
+    setPlanoDoDiaResolvido(true);
+    setPlanoDoDia(true);
+  }, [modoNovo, tab, isViewer, planoDoDiaResolvido]);
+  useEffect(() => {
+    if (!modoNovo || tab !== 'map' || !seloFila?.quente || !filaNaTela.data || planoDoDia) return;
     const agoraBRT = new Date(Date.now() - 3 * 3600000);
     if (agoraBRT.getUTCHours() >= 19) return;
     const chave = `antes-da-rua-${filaNaTela.data.hoje ?? diaBRT(new Date())}`;
     try { if (window.localStorage.getItem(chave)) return; window.localStorage.setItem(chave, '1'); } catch { return; }
     setAntesDaRua(true);
-  }, [modoNovo, tab, seloFila?.quente, filaNaTela.data]);
+  }, [modoNovo, tab, seloFila?.quente, filaNaTela.data, planoDoDia]);
   // A14 (handoff v6): com o mapa na tela, a fila aparece só na pílula (ver Toast.mapaNaTela)
   useEffect(() => {
     Toast.mapaNaTela(modoNovo && tab === 'map' && !layout.ehLargo);
@@ -9493,6 +9513,34 @@ function MainApp() {
       <PedirAvisos ativo={!!profile && profile.role !== 'view'} />
       {profile?.id && FOTOS_LIBERADAS.has(profile.id) && (
         <MinhasFotos aberto={fotosAbertas} userId={profile.id} onFechar={() => setFotosAbertas(false)} />
+      )}
+      {/* A FOLHA DE ABERTURA DO DIA (espinha do dia 2.3). Vem antes da "Antes da rua": primeiro
+          se decide o dia, depois as ligações de antes de sair. */}
+      {planoDoDia && (
+        <FolhaPlanoDoDia
+          dia={new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }).toLocaleUpperCase('pt-BR')}
+          paradas={paradasQueFaltam.map((st, i) => ({
+            id: st.client_id ?? String(i),
+            numero: routeStops.indexOf(st) + 1,
+            nome: st.client ? getClientPrimaryName(st.client) : 'lead sem nome',
+            sub: st.client?.bairro?.trim() || null,
+          }))}
+          /* A prancha pede "feito no Cockpit ontem" aqui. NÃO DÁ PARA DIZER ISSO HOJE sem mentir:
+             `field_routes` guarda `source`, mas em outubro ele só tem dois valores — 'manual'
+             (219) e 'suggested' (2) — e nenhum distingue Cockpit, app e gestor. Preencher exige um
+             campo de origem no plano, que é mexida de banco e decisão do Julyan. Até lá, sem
+             linha: melhor silêncio do que carimbo errado. */
+          origem={null}
+          quantasPropostas={Math.min(6, linhasDaLista.length)}
+          aoComecar={() => setPlanoDoDia(false)}
+          aoMontar={() => { setPlanoDoDia(false); void montarDiaComMicrorrotas(); }}
+          aoAgoraNao={() => setPlanoDoDia(false)}
+          aoTocarParada={(id) => {
+            setPlanoDoDia(false);
+            const c = routeDisplayClients.find((x) => x.id === id);
+            if (c) handleMarkerPress(c);
+          }}
+        />
       )}
       {antesDaRua && (() => {
         const itensF = (filaNaTela.data?.itens ?? []) as Array<{ dealId: string; negocio: string; etapaId: string; venceu: boolean; prazo: string | null; horaPrazo?: string | null; telefone: string | null }>;
