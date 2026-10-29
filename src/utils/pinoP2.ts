@@ -90,6 +90,10 @@ export type Pino = {
   nota?: number | null;
   /** Cliente ativo em queda (lente "Clientes em queda"). */
   queda?: QuedaDoCliente | null;
+  /* EX-CLIENTE COM MOTIVO DE SAÍDA REGISTRADO (Julyan, 29/10: "ex clientes só com motivo de
+     saída"). É o que separa a reconquista possível da lista morta: sem o motivo não há conversa
+     — a fala de reconquista é literalmente "o que resolvemos sobre {motivo}". */
+  temMotivoSaida?: boolean;
   /** Lead em Reciclagem: frio que volta depois; fora do Meu dia e da sugestão de porta. */
   reciclagem?: boolean;
 };
@@ -258,6 +262,7 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
 
   return {
     origem, familia, reciclagem,
+    temMotivoSaida: !!String(c.hs_churn_motivo_macro ?? c.hs_churn_motivo_micro ?? '').trim(),
     avaliacoes: tipo === 'alvo' && c.conta_alvo_reviews != null ? Number(c.conta_alvo_reviews) : null,
     tipo, temp, cor, glifo, logo: tipo === 'cliente', dono,
     nota,

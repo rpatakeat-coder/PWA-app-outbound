@@ -68,8 +68,14 @@ export function visivelNaLente(lente: Lente, p: Pino, noPlano: boolean, aberto: 
        lente de abertura, e são **189 no total** com pino — não enche mapa nenhum, e é o caso do
        Paladare, que o André achou na rua em Reciclagem e refez a demo. Perdido continua fora:
        negócio morto não decide a próxima porta, e há checagem só para isso. */
+    /* EX-CLIENTE SÓ COM MOTIVO DE SAÍDA (Julyan, 29/10: "ter ex clientes... MAS NEM TANTO", e
+       depois, decidindo: "ex clientes só com motivo de saída"). São 2.861 com pino, dos quais
+       2.029 têm motivo — e o motivo não é detalhe burocrático: a fala de reconquista é
+       literalmente "o que resolvemos sobre {motivo}". Sem ele não há conversa para ter na porta,
+       e o pino seria só mais um ponto no mapa. */
     return (meuOuLivre && p.familia === 'lead' && p.temp !== 'X') || (p.familia === 'rec' && (meuOuLivre || verTodos))
-      || p.familia === 'cli' || p.familia === 'av' || p.familia === 'alvo';
+      || p.familia === 'cli' || p.familia === 'av' || p.familia === 'alvo'
+      || (p.familia === 'ex' && !!p.temMotivoSaida);
   }
   if (p.familia === 'alvo') return false;
   switch (lente) {

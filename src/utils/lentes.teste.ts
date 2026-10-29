@@ -58,7 +58,14 @@ ok(V('dia', meuQuente) && V('dia', meuFrio), 'Meu dia: meus leads com negócio, 
 ok(!V('dia', meuPerdido), 'Meu dia: negócio perdido não decide a próxima porta');
 ok(!V('dia', colegaQuente), 'Meu dia: pino de colega não aparece');
 // 15/10/26 (Julyan: "tirar tudo ficou meio ruim"): o cliente ativo volta ao Meu dia; o ex-cliente segue na Reconquista
-ok(V('dia', cliente) && !V('dia', ex), 'Meu dia: cliente ativo aparece, ex-cliente não');
+/* EX-CLIENTE SÓ COM MOTIVO DE SAÍDA (Julyan, 29/10). São 2.861 com pino e 2.029 com motivo; o
+   motivo é o que separa reconquista de lista morta, porque a fala é "o que resolvemos sobre
+   {motivo}". Sem ele o pino seria só mais um ponto — e o pedido veio junto com "MAS NEM TANTO". */
+const exComMotivo = P({ status: 'churn', hs_churn_motivo_macro: 'Preço' } as Partial<Client>);
+ok(V('dia', cliente), 'Meu dia: cliente ativo aparece');
+ok(V('dia', exComMotivo), 'Meu dia: ex-cliente COM motivo de saída aparece — dá para reconquistar');
+ok(!V('dia', ex), 'Meu dia: ex-cliente sem motivo fica fora — não há conversa para ter na porta');
+ok(V('rec', ex) && V('rec', exComMotivo), 'Reconquista mostra os dois: lá a lista é a lista');
 ok(V('dia', novo) && !V('dia', novoColega), 'Meu dia: meus recém-abertos, não os do colega');
 /* SEM DONO TAMBÉM É MAPA (Julyan, 29/10/26). Eram 1.206 leads da Casa dos Dados e 634 do motor do
    Google invisíveis na lente de abertura, por não terem dono. Lead sem dono está na mesa; lead de

@@ -70,6 +70,8 @@ type Props = {
      o resto é contexto e vira o KICKER desta folha, que é onde o executivo já olha para ver a
      próxima porta. `sem_plano` não é nem faixa nem kicker: vira a folha inteira (§4, 2a/2b). */
   linha?: LinhaDoDiaTipo | null;
+  /** Entre portas (2.7): o bloco ambar da ligacao que cabe no caminho, no topo da folha. */
+  entrePortas?: React.ReactNode;
   /** "Montar o dia" da folha sem plano: a mesma proposta de sempre. */
   aoMontarDia?: () => void;
   /** Lente Recém-abertos: quantos a pessoa tem na região (0 = estado vazio) e a volta ao Meu dia. */
@@ -146,7 +148,7 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, objecoesDaProxima = [], linha = null, aoMontarDia, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, objecoesDaProxima = [], linha = null, aoMontarDia, entrePortas = null, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
   const cores = useIconColors();
   /** Qual objeção do "Se ele disser" está aberta (uma por vez, e a folha não muda de tamanho à toa). */
   const [disserAberta, setDisserAberta] = useState<string | null>(null);
@@ -295,6 +297,10 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
       : linha?.tom === 'vermelho' ? s.kickerVermelho : null;
     return (
       <View ref={acima.ref} style={[s.pilula, { bottom: chao + 8 + acima.ajuste }]} accessibilityLabel="Próxima porta" onLayout={medir} {...arrasto.panHandlers}>
+        {/* ENTRE PORTAS (2.7) vai ACIMA do kicker e da proxima porta, mas dentro da folha: e uma
+            sugestao de dois minutos, nao um estado do dia — e, como tudo aqui, nunca toma o lugar
+            do Cheguei, que continua embaixo, no mesmo pixel. */}
+        {entrePortas}
         {linha && (
           <Pressable accessibilityRole="button" accessibilityLabel={linha.rotulo} onPress={aoProgresso} style={s.kickerLinha}>
             <Text style={[s.kickerFolha, tomDoKicker]} numberOfLines={1}>{linha.titulo.toLocaleUpperCase('pt-BR')}</Text>

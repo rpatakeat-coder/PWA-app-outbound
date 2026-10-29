@@ -230,6 +230,7 @@ import FolhaAntesDaRua from './src/screens/FolhaAntesDaRua';
 import FolhaPlanoDoDia from './src/screens/FolhaPlanoDoDia';
 import FolhaTimeNaRua from './src/screens/FolhaTimeNaRua';
 import TiraDeLentes from './src/screens/TiraDeLentes';
+import BlocoEntrePortas from './src/screens/BlocoEntrePortas';
 import PedirAvisos from './src/screens/PedirAvisos';
 import MinhasFotos, { FOTOS_LIBERADAS } from './src/screens/MinhasFotos';
 import { marcarGravada as marcarFeitaGravada, registrarFeita } from './src/utils/filaFeitas';
@@ -2875,6 +2876,22 @@ function MainApp() {
     document.addEventListener('visibilitychange', aoVoltar);
     return () => { clearInterval(id); document.removeEventListener('visibilitychange', aoVoltar); };
   }, [modoNovo, tab, layout.ehLargo]);
+  /* A LIGAÇÃO DO "ENTRE PORTAS" (2.7). Não é escolha nova: é a PRIMEIRA de telefone na fila, que
+     o servidor já ordena por valor × urgência. `presencial` fica de fora porque visita não se
+     resolve por telefone — e é justamente de uma visita que ele acabou de sair. */
+  const ligacaoEntrePortas = useMemo(() => {
+    const itens = (filaNaTela.data?.itens ?? []) as Array<{
+      dealId: string; negocio: string; pessoa: string | null; assunto?: string | null;
+      prazoTexto: string; presencial: boolean; temTelefone: boolean; telefone: string | null;
+    }>;
+    const i = itens.find((x) => !x.presencial && x.temTelefone);
+    if (!i) return null;
+    return {
+      ligacao: { dealId: i.dealId, pessoa: i.pessoa, negocio: i.negocio, combinado: i.assunto ?? null, prazoTexto: i.prazoTexto, temTelefone: i.temTelefone },
+      telefone: i.telefone,
+    };
+  }, [filaNaTela.data]);
+
   const linhaDoDiaAgora = useMemo(() => {
     /* Só o dia de hoje e só a própria rua: o gestor olhando a rota de outra pessoa não leva
        cobrança do dia dela, e no modo Planejar de outro dia o placar seria de outro dia. */
@@ -5243,6 +5260,11 @@ function MainApp() {
 
   /** "O time na rua · hoje": a folha do gestor, aberta por uma linha do menu do perfil. */
   const [timeNaRua, setTimeNaRua] = useState(false);
+  /* ENTRE PORTAS (espinha do dia 2.7). Nasce quando ele acaba de dar o desfecho: esta de pe na
+     rua e ainda nao andou, que e o melhor momento do dia para dois minutos de telefone. O
+     "Depois" esconde por 30 min — adia, nao cancela. */
+  const [entrePortasDesde, setEntrePortasDesde] = useState<number | null>(null);
+  const [entrePortasAte, setEntrePortasAte] = useState(0);
 
   const handleMarkAsVisited = useCallback(async (client: Client, onDone?: () => void) => {
     if (visitingRef.current) return;
@@ -7311,6 +7333,14 @@ function MainApp() {
           armaDaProxima={armaDoHalo}
           objecoesDaProxima={objecoesDaProxima}
           linha={linhaDoDiaAgora && linhaDoDiaAgora.estado !== "pendente" ? linhaDoDiaAgora : null}
+          entrePortas={entrePortasDesde && ligacaoEntrePortas ? (
+            <BlocoEntrePortas
+              ligacao={ligacaoEntrePortas.ligacao}
+              aoLigar={() => { const d = (ligacaoEntrePortas.telefone ?? '').replace(/D+/g, ''); if (d) void Linking.openURL(`tel:+${d.length <= 11 ? `55${d}` : d}`); }}
+              aoWhats={() => { const d = (ligacaoEntrePortas.telefone ?? '').replace(/D+/g, ''); if (d) void Linking.openURL(`https://wa.me/${d.length <= 11 ? `55${d}` : d}`); }}
+              aoDepois={() => { setEntrePortasDesde(null); setEntrePortasAte(Date.now() + 30 * 60 * 1000); }}
+            />
+          ) : null}
           aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
           sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
           aoFala={abrirFala}
@@ -10669,6 +10699,7 @@ function MainApp() {
           // O PASSO CAI NA AGENDA NA HORA (28/09/2026): a ficha acabou de criar a tarefa no
           // HubSpot, e a Agenda guardava a lista por 3 min. Fechar a ficha ou ir para a
           // Agenda relê as tarefas e os agendamentos.
+          onSalvouDesfecho={() => { if (Date.now() >= entrePortasAte) setEntrePortasDesde(Date.now()); }}
           onFechar={() => { setFichaPendente(null); void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] }); void queryClient.invalidateQueries({ queryKey: ['client_meetings'] }); }}
           onProxima={(c) => handleMarkerPress(c)}
           declarada={fichaPendente.declarada}

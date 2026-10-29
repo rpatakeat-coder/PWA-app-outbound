@@ -60,6 +60,8 @@ type Props = {
   onAgenda?: (dia: string | null) => void;
   /** "Fechou" na visita de retorno: depois de salvar, abre Emitir cobrança (o negócio já em Negociação). */
   onEmitirCobranca?: () => void;
+  /** Entre portas (2.7): o desfecho foi dado — hora de sugerir a ligação do caminho. */
+  onSalvouDesfecho?: () => void;
   /** Visita declarada (0109): o chip diz isso, não "GPS confere". */
   declarada?: boolean;
   /** Foto de prova (GPS falhou) que não subiu no check-in: sobe junto com a visita. */
@@ -139,7 +141,7 @@ function montarSabido(client: Client, negocio: Record<string, unknown>, fichas: 
   };
 }
 
-export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, onEmitirCobranca, declarada = false, ownerId = null, fotoProva = null, fotoNoCheckin = false, donoColega = null, tarefaDaFila = null }: Props) {
+export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, primeiraVisita, proxima, onFechar, onProxima, onSalvarCadastro, onEtapaMudou, onAgenda, onEmitirCobranca, declarada = false, ownerId = null, fotoProva = null, fotoNoCheckin = false, donoColega = null, tarefaDaFila = null, onSalvouDesfecho }: Props) {
   const [f, setF] = useState<Ficha>(FICHA_VAZIA);
   const [opcao, setOpcao] = useState<string | null>(null);
   const [completar, setCompletar] = useState(false);
@@ -522,6 +524,12 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     const passoSemNegocio = criaNegocio && passo ? { op: 'nota', tipoAcao: 'proximo-passo', texto: passo.texto, data: passo.data, tipo: passo.tipo, ...(passo.hora ? { hora: passo.hora } : {}) } : null;
     pendente.current = { campos, envios, foto: fotoProva, linha, notaSemNegocio, passoSemNegocio, timer: setTimeout(() => { void executar(); }, JANELA_DESFAZER_MS) };
     setFase('desfazer');
+    /* ENTRE PORTAS (2.7): avisa que o desfecho foi dado. É o gatilho da ligação que cabe no
+       caminho — ele acabou de registrar a visita, está de pé na rua e ainda não andou. Avisa
+       aqui, na intenção de salvar, e não no `executar`: durante os 5 s do Desfazer ele já está
+       guardando o celular, e a sugestão chega atrasada se esperar. Desfazer fecha a ficha de
+       qualquer jeito, e aí o bloco some junto. */
+    onSalvouDesfecho?.();
   }
 
   function desfazer() {
