@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap">
+<style>
+body{margin:0;background:#E7E3DA;font-family:'Poppins',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+a{color:#C8131B;} a:hover{color:#A50F16;}
+</style>
+</helmet>
+<div style="padding:56px 64px 96px;display:flex;flex-direction:column;gap:64px;color:#111418;font-family:Poppins,sans-serif;">
+
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px;">
+<span style="font:600 12px Poppins;letter-spacing:.1em;color:#C8131B;">APP DE RUA · ABA MAPA · A ORDEM DA PORTA, E AS LENTES DE VOLTA · 29/10</span>
+<h1 style="margin:0;font:800 40px/1.1 Poppins;letter-spacing:-.01em;">Primeiro a porta, depois o desfecho. As lentes voltam, embaixo.</h1>
+<p style="margin:0;font:500 16px/1.55 Poppins;color:#414852;text-wrap:pretty;">O Cheguei é o que não pode <b>falhar</b>: ele fica cheio, no mesmo pixel, em todo estado. O desfecho é o que não pode ser <b>esquecido</b>: a ficha abre na chegada como antes, e o que ficou em branco volta <b>na saída</b>, numa linha, pela faixa pendente que já existe. As lentes voltam como uma fileira pequena entre os botões do mapa, sem tocar o topo.</p>
+</header>
+
+<section id="decisoes" data-screen-label="0 · Decisões" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;max-width:1600px;">
+<sc-for list="{{ decisoes }}" as="d" hint-placeholder-count="3">
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:10px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;">{{ d.k }}</span>
+<span style="font:800 20px/1.3 Poppins;text-wrap:pretty;">{{ d.t }}</span>
+<sc-for list="{{ d.p }}" as="p" hint-placeholder-count="3"><span style="font:500 13.5px/1.55 Poppins;color:#2A2F36;text-wrap:pretty;padding-top:8px;border-top:1px solid #EDEAE3;">{{ p }}</span></sc-for>
+</div>
+</sc-for>
+</section>
+
+<sc-for list="{{ secs }}" as="sec" hint-placeholder-count="4">
+<section id="{{ sec.id }}" data-screen-label="{{ sec.title }}" style="display:flex;flex-direction:column;gap:24px;">
+<div style="display:flex;flex-direction:column;gap:6px;max-width:1100px;"><span style="font:800 28px Poppins;">{{ sec.title }}</span><span style="font:500 15px/1.5 Poppins;color:#414852;text-wrap:pretty;">{{ sec.desc }}</span></div>
+<div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;">
+<sc-for list="{{ sec.phones }}" as="ph" hint-placeholder-count="3">
+<div id="{{ ph.id }}" style="display:flex;flex-direction:column;gap:12px;width:390px;">
+<div style="display:flex;flex-direction:column;gap:6px;min-height:236px;">
+<div style="display:flex;gap:8px;align-items:center;"><span style="font:700 12px Poppins;background:#111418;color:#fff;border-radius:6px;padding:3px 8px;">{{ ph.id }}</span><span style="font:700 11px Poppins;letter-spacing:.06em;color:{{ ph.tagFg }};background:{{ ph.tagBg }};border-radius:6px;padding:3px 8px;white-space:nowrap;">{{ ph.tag }}</span></div>
+<span style="font:700 15px/1.35 Poppins;text-wrap:pretty;">{{ ph.cap }}</span>
+<sc-for list="{{ ph.q }}" as="q" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:78px minmax(0,1fr);gap:8px;font:500 13px/1.45 Poppins;color:#414852;"><span style="font-weight:700;color:#111418;">{{ q.k }}</span><span style="text-wrap:pretty;">{{ q.v }}</span></div></sc-for>
+</div>
+<div style="position:relative;flex:none;width:390px;height:844px;border-radius:34px;overflow:hidden;background:{{ ph.T.bg }};box-shadow:0 18px 44px rgba(0,0,0,.22);">
+<div style="position:absolute;inset:-200px;background:#1B2130 url(mapa-base.svg) center/cover;filter:{{ ph.T.mf }};"></div>
+<svg width="390" height="844" style="position:absolute;left:0;top:0;"><path d="{{ ph.route }}" fill="none" stroke="{{ ph.T.route }}" stroke-width="3.5" stroke-dasharray="0.5 8" stroke-linecap="round"></path></svg>
+<div style="position:absolute;left:{{ ph.ux }}px;top:{{ ph.uy }}px;width:0;height:0;z-index:30;"><div style="position:absolute;left:-20px;top:-20px;width:40px;height:40px;border-radius:50%;background:rgba(37,99,235,.2);"></div><div style="position:absolute;left:-8px;top:-8px;width:16px;height:16px;border-radius:50%;background:#2563EB;border:3px solid #fff;box-sizing:border-box;"></div></div>
+<sc-for list="{{ ph.pins }}" as="p" hint-placeholder-count="0">
+<div style="position:absolute;left:{{ p.x }}px;top:{{ p.y }}px;width:0;height:0;opacity:{{ p.op }};z-index:{{ p.z }};">
+<sc-if value="{{ p.ring }}"><div style="position:absolute;left:-33px;top:{{ p.rt }}px;width:66px;height:66px;border-radius:50%;border:3px solid {{ ph.T.acao }};background:rgba(229,26,49,.16);box-sizing:border-box;"></div></sc-if>
+<div style="position:absolute;left:-5px;top:-8px;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:8px solid #fff;"></div>
+<sc-if value="{{ p.lab }}"><div style="position:absolute;right:36px;top:{{ p.lab.t }}px;padding:4px 10px;border-radius:10px;background:{{ ph.T.rot }};border:1px solid {{ ph.T.line }};display:flex;flex-direction:column;white-space:nowrap;box-shadow:0 2px 5px rgba(0,0,0,.25);"><span style="font:700 13px/1.3 Poppins;color:{{ ph.T.fg }};">{{ p.lab.n }}</span><span style="font:600 11.5px/1.3 Poppins;color:{{ ph.T.mute }};">{{ p.lab.s }}</span></div></sc-if>
+<div style="position:absolute;left:{{ p.bl }}px;top:{{ p.bt }}px;width:{{ p.s }}px;height:{{ p.s }}px;box-sizing:border-box;border-radius:50%;background:{{ p.bg }};border:2.5px solid #fff;color:#fff;display:flex;align-items:center;justify-content:center;font:700 {{ p.fs }}px/1 Poppins;box-shadow:0 2px 5px rgba(0,0,0,.4);">{{ p.t }}</div>
+</div>
+</sc-for>
+
+<div style="position:absolute;top:50px;left:12px;right:12px;display:flex;gap:8px;z-index:80;">
+<div style="flex:1;min-width:0;height:48px;border-radius:24px;background:{{ ph.T.painel }};border:1px solid {{ ph.T.line }};display:flex;align-items:center;box-sizing:border-box;box-shadow:0 2px 10px rgba(0,0,0,.18);overflow:hidden;">
+<span style="flex:none;height:100%;min-width:52px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:6px;padding:0 10px 0 14px;border-right:1px solid {{ ph.T.line }};"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{ ph.T.fg }}" stroke-width="2.2" stroke-linejoin="round"><path d="M4 5h16l-6 7.5V18l-4 2v-7.5z"></path></svg><sc-if value="{{ ph.filt }}"><span style="height:22px;min-width:22px;padding:0 7px;box-sizing:border-box;border-radius:11px;background:{{ ph.T.inv }};color:{{ ph.T.invfg }};font:700 11.5px/22px Poppins;text-align:center;">{{ ph.filt }}</span></sc-if></span>
+<span style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:0 12px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{ ph.T.mute }}" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg><span style="font:500 14px Poppins;color:{{ ph.T.mute }};">Buscar</span></span>
+</div>
+<div style="flex:none;width:128px;height:48px;border-radius:24px;background:{{ ph.T.painel }};border:1px solid {{ ph.T.line }};display:flex;padding:3px;box-sizing:border-box;box-shadow:0 2px 10px rgba(0,0,0,.18);"><sc-for list="{{ ph.tog }}" as="tg" hint-placeholder-count="2"><span style="flex:1;border-radius:20px;background:{{ tg.bg }};color:{{ tg.fg }};display:flex;align-items:center;justify-content:center;font:600 13.5px Poppins;">{{ tg.t }}</span></sc-for></div>
+</div>
+<sc-if value="{{ ph.load }}"><div style="position:absolute;top:100px;left:36px;right:160px;height:3px;border-radius:2px;background:{{ ph.T.line }};z-index:81;overflow:hidden;"><div style="width:45%;height:100%;background:{{ ph.T.gps }};"></div></div></sc-if>
+
+<sc-if value="{{ ph.fx }}"><div style="position:absolute;top:106px;left:12px;right:12px;height:48px;border-radius:14px;background:{{ ph.fx.bg }};border:1px solid {{ ph.fx.bd }};display:flex;align-items:center;gap:8px;padding:0 6px 0 14px;box-sizing:border-box;z-index:82;box-shadow:0 4px 14px rgba(0,0,0,.2);"><div style="flex:1;min-width:0;display:flex;flex-direction:column;"><span style="font:700 13.5px/1.3 Poppins;color:{{ ph.fx.fg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ ph.fx.t }}</span><span style="font:500 12px/1.3 Poppins;color:{{ ph.fx.sub }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ ph.fx.s }}</span></div><sc-if value="{{ ph.fx.plus }}"><span style="flex:none;height:28px;padding:0 9px;border-radius:14px;border:1px solid {{ ph.fx.abd }};color:{{ ph.fx.fg }};display:flex;align-items:center;font:700 12px Poppins;box-sizing:border-box;">+1</span></sc-if><span style="flex:none;height:36px;padding:0 14px;border-radius:10px;background:{{ ph.fx.abg }};border:1.5px solid {{ ph.fx.abd }};color:{{ ph.fx.afg }};display:flex;align-items:center;font:700 13px Poppins;white-space:nowrap;box-sizing:border-box;">{{ ph.fx.a }}</span></div></sc-if>
+
+<sc-if value="{{ ph.btns }}">
+<span style="position:absolute;left:12px;top:{{ ph.btnTop }}px;width:44px;height:44px;border-radius:22px;background:{{ ph.T.painel }};border:1px solid {{ ph.T.line }};display:flex;align-items:center;justify-content:center;z-index:66;box-sizing:border-box;box-shadow:0 2px 8px rgba(0,0,0,.2);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{ ph.T.fg }}" stroke-width="2.2"><circle cx="12" cy="12" r="6"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></svg></span>
+<div style="position:absolute;left:64px;right:64px;top:{{ ph.btnTop }}px;height:44px;z-index:66;overflow:hidden;display:flex;align-items:center;gap:6px;-webkit-mask-image:linear-gradient(90deg,#000 82%,transparent);mask-image:linear-gradient(90deg,#000 82%,transparent);">
+<sc-for list="{{ ph.lens }}" as="l" hint-placeholder-count="3"><span style="flex:none;height:32px;padding:0 12px;border-radius:16px;background:{{ l.bg }};border:1px solid {{ l.bd }};color:{{ l.fg }};display:flex;align-items:center;gap:6px;font:600 13px Poppins;box-sizing:border-box;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.18);"><span style="width:8px;height:8px;border-radius:4px;background:{{ l.c }};"></span>{{ l.t }}</span></sc-for>
+</div>
+<span style="position:absolute;right:12px;top:{{ ph.btnTop }}px;width:44px;height:44px;border-radius:22px;background:{{ ph.T.painel }};border:1px solid {{ ph.T.line }};display:flex;align-items:center;justify-content:center;z-index:66;box-sizing:border-box;box-shadow:0 2px 8px rgba(0,0,0,.2);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ ph.T.fg }}" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+</sc-if>
+
+<sc-if value="{{ ph.sh }}">
+<div style="position:absolute;left:0;right:0;top:{{ ph.sh.top }}px;bottom:84px;background:{{ ph.T.painel }};border-radius:22px 22px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.22);display:flex;flex-direction:column;overflow:hidden;z-index:70;">
+<div style="height:18px;flex:none;display:flex;align-items:center;justify-content:center;"><div style="width:40px;height:5px;border-radius:3px;background:{{ ph.T.line2 }};"></div></div>
+<div style="padding:0 16px 14px;display:flex;flex-direction:column;gap:10px;">
+<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;"><span style="white-space:nowrap;font:700 11.5px Poppins;letter-spacing:.06em;color:{{ ph.sh.kc }};">{{ ph.sh.k }}</span><span style="white-space:nowrap;font:600 12.5px Poppins;color:{{ ph.T.mute }};">{{ ph.sh.kr }}</span></div>
+<sc-if value="{{ ph.sh.title }}"><div style="display:flex;flex-direction:column;gap:2px;"><span style="font:700 18px/1.3 Poppins;color:{{ ph.T.fg }};text-wrap:pretty;">{{ ph.sh.title }}</span><span style="font:500 13.5px/1.4 Poppins;color:{{ ph.T.mute }};text-wrap:pretty;">{{ ph.sh.sub }}</span></div></sc-if>
+<sc-if value="{{ ph.sh.next }}"><div style="display:flex;align-items:center;gap:12px;"><span style="flex:none;width:36px;height:36px;border-radius:50%;background:{{ ph.sh.next.c }};border:2.5px solid #fff;box-sizing:border-box;color:#fff;display:flex;align-items:center;justify-content:center;font:700 15px Poppins;box-shadow:0 1px 4px rgba(0,0,0,.3);">{{ ph.sh.next.m }}</span><div style="flex:1;min-width:0;display:flex;flex-direction:column;"><span style="font:700 16.5px/1.3 Poppins;color:{{ ph.T.fg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ ph.sh.next.n }}</span><span style="font:500 13px/1.35 Poppins;color:{{ ph.T.mute }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ ph.sh.next.s }}</span></div><span style="flex:none;height:48px;padding:0 18px;border-radius:14px;background:{{ ph.T.acao }};color:#fff;display:flex;align-items:center;font:700 15px Poppins;">Cheguei</span></div></sc-if>
+<sc-if value="{{ ph.sh.prim }}"><div style="display:flex;gap:8px;"><span style="flex:1;height:52px;border-radius:14px;border:1px solid {{ ph.T.line2 }};color:{{ ph.T.fg }};display:flex;align-items:center;justify-content:center;font:600 14.5px Poppins;box-sizing:border-box;">{{ ph.sh.sec }}</span><span style="flex:2;height:52px;border-radius:14px;background:{{ ph.T.acao }};color:#fff;display:flex;align-items:center;justify-content:center;font:700 16px Poppins;">{{ ph.sh.prim }}</span></div></sc-if>
+</div>
+</div>
+</sc-if>
+
+<div style="position:absolute;left:0;right:0;bottom:0;height:84px;background:{{ ph.T.nav }};border-top:1px solid {{ ph.T.line }};display:flex;padding:0 20px 22px;box-sizing:border-box;z-index:90;"><sc-for list="{{ ph.tabs }}" as="tb" hint-placeholder-count="3"><span style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font:600 12.5px Poppins;color:{{ tb.c }};position:relative;"><span style="width:22px;height:22px;border-radius:7px;border:2px solid {{ tb.c }};background:{{ tb.f }};box-sizing:border-box;"></span>{{ tb.t }}<sc-if value="{{ tb.n }}"><span style="position:absolute;top:8px;left:50%;margin-left:6px;height:18px;min-width:18px;padding:0 6px;border-radius:9px;background:{{ ph.T.inv }};color:{{ ph.T.invfg }};font:700 11px/18px Poppins;text-align:center;box-sizing:border-box;white-space:nowrap;">{{ tb.n }}</span></sc-if></span></sc-for></div>
+
+<sc-if value="{{ ph.fi }}">
+<div style="position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:91;"></div>
+<div style="position:absolute;left:0;right:0;top:{{ ph.fi.top }}px;bottom:0;background:{{ ph.T.painel }};border-radius:22px 22px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.25);z-index:92;display:flex;flex-direction:column;overflow:hidden;">
+<div style="height:18px;flex:none;display:flex;align-items:center;justify-content:center;"><div style="width:40px;height:5px;border-radius:3px;background:{{ ph.T.line2 }};"></div></div>
+<div style="flex:1;min-height:0;padding:0 16px 12px;display:flex;flex-direction:column;gap:12px;overflow:hidden;">
+<div style="display:flex;gap:10px;align-items:flex-start;"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;"><span style="font:700 18px/1.3 Poppins;color:{{ ph.T.fg }};">Registrar visita</span><span style="font:500 13px/1.4 Poppins;color:{{ ph.T.mute }};">{{ ph.fi.sub }}</span></div><span style="flex:none;width:44px;height:44px;margin:-6px -10px 0 0;display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{ ph.T.mute }}" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></span></div>
+<span style="align-self:flex-start;height:30px;padding:0 12px;border-radius:15px;background:{{ ph.T.okBg }};color:{{ ph.T.okFg }};display:flex;align-items:center;font:600 12.5px Poppins;white-space:nowrap;">{{ ph.fi.gps }}</span>
+<sc-if value="{{ ph.fi.como }}"><div style="display:flex;flex-direction:column;gap:8px;"><span style="font:600 11px Poppins;letter-spacing:.08em;color:{{ ph.T.dim }};">1 · COMO FOI?</span><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><sc-for list="{{ ph.fi.como }}" as="o" hint-placeholder-count="4"><span style="min-height:46px;padding:6px 12px;border-radius:12px;background:{{ ph.T.card }};border:1px solid {{ ph.T.line2 }};color:{{ ph.T.fg }};display:flex;align-items:center;font:600 13.5px/1.3 Poppins;box-sizing:border-box;text-wrap:pretty;">{{ o }}</span></sc-for></div></div></sc-if>
+<sc-if value="{{ ph.fi.comoLine }}"><div style="height:44px;border-radius:12px;background:{{ ph.T.card }};border:1px solid {{ ph.T.line }};display:flex;align-items:center;gap:10px;padding:0 12px;box-sizing:border-box;"><span style="font:600 11px Poppins;letter-spacing:.08em;color:{{ ph.T.dim }};white-space:nowrap;">1 · COMO FOI</span><span style="flex:1;min-width:0;font:600 14px Poppins;color:{{ ph.T.fg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ ph.fi.comoLine }}</span><span style="font:500 13px Poppins;color:{{ ph.T.mute }};text-decoration:underline;">trocar</span></div></sc-if>
+<sc-if value="{{ ph.fi.eLine }}"><div style="min-height:44px;border-radius:12px;border:1px dashed {{ ph.T.line2 }};display:flex;align-items:center;gap:10px;padding:6px 12px;box-sizing:border-box;"><span style="font:600 11px Poppins;letter-spacing:.08em;color:{{ ph.T.dim }};white-space:nowrap;">2 · E AGORA?</span><span style="flex:1;min-width:0;font:500 13px/1.35 Poppins;color:{{ ph.T.mute }};text-wrap:pretty;">{{ ph.fi.eLine }}</span></div></sc-if>
+<sc-if value="{{ ph.fi.big }}"><div style="display:flex;flex-direction:column;gap:8px;"><span style="font:600 11px Poppins;letter-spacing:.08em;color:{{ ph.T.dim }};">2 · E AGORA?</span><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><sc-for list="{{ ph.fi.big }}" as="o" hint-placeholder-count="2"><div style="min-height:58px;padding:8px 12px;border-radius:12px;background:{{ ph.T.card }};border:1.5px solid {{ ph.T.line2 }};display:flex;flex-direction:column;justify-content:center;box-sizing:border-box;"><span style="font:700 14px/1.3 Poppins;color:{{ ph.T.fg }};">{{ o.t }}</span><span style="font:500 11.5px/1.3 Poppins;color:{{ ph.T.dim }};">{{ o.s }}</span></div></sc-for><sc-for list="{{ ph.fi.small }}" as="o" hint-placeholder-count="6"><span style="height:46px;padding:0 12px;border-radius:12px;background:{{ ph.T.card }};border:1px solid {{ ph.T.line }};color:{{ ph.T.fg }};display:flex;align-items:center;font:600 13px Poppins;box-sizing:border-box;white-space:nowrap;">{{ o }}</span></sc-for></div></div></sc-if>
+<div style="height:44px;border-top:1px solid {{ ph.T.line }};display:flex;align-items:center;justify-content:space-between;gap:10px;"><span style="font:600 14px Poppins;color:{{ ph.T.fg }};">Completar agora</span><span style="font:500 12.5px Poppins;color:{{ ph.T.dim }};white-space:nowrap;">{{ ph.fi.comp }}</span></div>
+</div>
+<div style="flex:none;padding:12px 16px 30px;border-top:1px solid {{ ph.T.line }};display:flex;flex-direction:column;gap:8px;"><span style="height:56px;border-radius:16px;background:{{ ph.T.acao }};color:#fff;display:flex;align-items:center;justify-content:center;font:700 16px Poppins;">{{ ph.fi.btn }}</span><span style="font:500 12.5px/1.4 Poppins;color:{{ ph.T.mute }};text-align:center;text-wrap:pretty;">{{ ph.fi.leg }}</span></div>
+</div>
+</sc-if>
+
+<div style="position:absolute;top:0;left:0;right:0;height:46px;display:flex;justify-content:space-between;align-items:center;padding:0 30px;font:600 14px Poppins;color:{{ ph.T.fg }};z-index:85;"><span>{{ ph.time }}</span><span>4G</span></div>
+<div style="position:absolute;bottom:8px;left:50%;margin-left:-67px;width:134px;height:5px;border-radius:3px;background:{{ ph.T.fg }};opacity:.4;z-index:95;"></div>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+
+<section id="regras" data-screen-label="5 · Regras" style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:24px;max-width:1600px;">
+<div style="display:flex;flex-direction:column;gap:24px;">
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:2px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#7F1D1D;padding-bottom:8px;">SE ELE IGNORAR · EM CADA MOMENTO</span>
+<sc-for list="{{ ignora }}" as="r" hint-placeholder-count="7"><div style="display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.5fr);gap:12px;padding:9px 0;border-bottom:1px solid #EDEAE3;"><span style="font:700 13px/1.45 Poppins;">{{ r.a }}</span><span style="font:500 13px/1.5 Poppins;color:#2A2F36;text-wrap:pretty;">{{ r.b }}</span></div></sc-for>
+</div>
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:2px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;padding-bottom:8px;">O QUE MUDA NO CÓDIGO · E SÓ ISSO</span>
+<sc-for list="{{ muda }}" as="r" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;padding:9px 0;border-bottom:1px solid #EDEAE3;"><span style="font:800 14px Poppins;">{{ r.n }}</span><span style="font:500 13px/1.5 Poppins;color:#2A2F36;text-wrap:pretty;"><b style="color:#111418;">{{ r.t }}</b> {{ r.d }}</span></div></sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:24px;">
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:14px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;">A FILEIRA DE LENTES · MEDIDAS · 2×</span>
+<div style="background:#17191D;border-radius:14px;padding:22px 18px;display:flex;align-items:center;gap:0;overflow:hidden;">
+<div style="flex:none;width:88px;height:88px;border:1.5px dashed #60A5FA;box-sizing:border-box;border-radius:8px;display:flex;align-items:center;justify-content:center;"><span style="width:88px;height:88px;border-radius:44px;transform:scale(.5);background:#17191D;border:2px solid #4A515C;box-sizing:border-box;"></span></div>
+<div style="flex:none;width:16px;"></div>
+<div style="flex:none;height:88px;border:1.5px dashed #60A5FA;box-sizing:border-box;border-radius:8px;display:flex;align-items:center;padding:0 6px;"><span style="height:64px;padding:0 24px;border-radius:32px;background:#F4F5F7;color:#111418;display:flex;align-items:center;gap:12px;font:600 26px Poppins;white-space:nowrap;"><span style="width:16px;height:16px;border-radius:8px;background:#E51A31;"></span>Meu dia</span></div>
+<div style="flex:none;height:88px;border:1.5px dashed #60A5FA;border-left:none;box-sizing:border-box;border-radius:0 8px 8px 0;display:flex;align-items:center;padding:0 6px;"><span style="height:64px;padding:0 24px;border-radius:32px;background:#17191D;border:2px solid #2E333B;box-sizing:border-box;color:#F4F5F7;display:flex;align-items:center;gap:12px;font:600 26px Poppins;white-space:nowrap;"><span style="width:16px;height:16px;border-radius:8px;background:#16A34A;"></span>Clientes</span></div>
+</div>
+<span style="font:500 12.5px/1.5 Poppins;color:#5B6370;text-wrap:pretty;">Tracejado azul = alvo de toque. A pílula tem 32 px de altura visível; o alvo tem os 44 px da fileira inteira, de cima a baixo, e encosta no da vizinha (6 px de vão divididos ao meio). Não há ponto morto entre duas lentes.</span>
+<sc-for list="{{ medidas }}" as="r" hint-placeholder-count="8"><div style="display:grid;grid-template-columns:minmax(0,.6fr) minmax(0,1.5fr);gap:12px;padding:8px 0;border-top:1px solid #EDEAE3;"><span style="font:700 13px/1.4 Poppins;">{{ r.a }}</span><span style="font:500 13px/1.5 Poppins;color:#2A2F36;text-wrap:pretty;">{{ r.b }}</span></div></sc-for>
+</div>
+<div style="background:#fff;border-radius:20px;padding:24px 26px;display:flex;flex-direction:column;gap:2px;">
+<span style="font:700 13px Poppins;letter-spacing:.08em;color:#5B6370;padding-bottom:8px;">COMO SABER SE FUNCIONOU · 2 SEMANAS</span>
+<sc-for list="{{ mede }}" as="r" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.4fr);gap:12px;padding:8px 0;border-bottom:1px solid #EDEAE3;"><span style="font:700 13px/1.4 Poppins;">{{ r.a }}</span><span style="font:500 13px/1.5 Poppins;color:#2A2F36;text-wrap:pretty;">{{ r.b }}</span></div></sc-for>
+</div>
+</div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const Q='#E23B3B', M='#F5A524', F='#0EA5E9', G='#16A34A', ROXO='#8B5CF6';
+const DARK = { bg:'#121417', painel:'#17191D', card:'#1F2228', line:'#2E333B', line2:'#4A515C', fg:'#F4F5F7', mute:'#AEB4BE', dim:'#8B919C', nav:'#0F1114', inv:'#F4F5F7', invfg:'#111418', okBg:'#0F2E1B', okFg:'#86EFAC', erBg:'#3B1216', erFg:'#FCA5A5', acao:'#E51A31', mf:'none', rot:'rgba(23,25,29,.94)', route:'rgba(255,255,255,.9)', amb:'#FDE68A', verde:'#86EFAC', gps:'#60A5FA' };
+const SOL = { bg:'#F3F1EC', painel:'#FFFFFF', card:'#FFFFFF', line:'#D9D4CA', line2:'#9AA1AB', fg:'#111418', mute:'#414852', dim:'#5B6370', nav:'#FFFFFF', inv:'#111418', invfg:'#FFFFFF', okBg:'#DCFCE7', okFg:'#14532D', erBg:'#FEE2E2', erFg:'#7F1D1D', acao:'#C8131B', mf:'invert(.92) hue-rotate(180deg) saturate(.5) brightness(1.04)', rot:'rgba(255,255,255,.96)', route:'#111418', amb:'#78350F', verde:'#14532D', gps:'#2563EB' };
+const PLAN = [
+  { n:'VASCO RESTAURANTE', c:Q, x:150, ny:1 }, { n:'Padaria Ki-Pão', c:M, x:96, ny:.72 },
+  { n:'Cantina Bento', c:M, x:178, ny:.46, d:'450 m', s:'proposta pronta' }, { n:'Bar do Alemão', c:F, x:268, ny:.12, d:'300 m', s:'1ª visita' },
+  { n:'Empório Lírio', c:F, x:326, ny:.48, d:'1,1 km', s:'recém-aberto' }, { n:'Pizzaria Forno Vivo', c:F, x:292, ny:.88, d:'400 m', s:'★ 4,7' },
+];
+const LOOSE = [[46,.2,Q],[120,.08,F],[226,.3,M],[352,.18,F],[60,.55,M],[236,.7,F],[352,.8,Q],[30,.92,F],[200,.98,M],[130,.35,F],[300,.36,M],[214,.06,F],[150,1,Q],[96,.72,M],[178,.46,M],[268,.12,F],[326,.48,F],[292,.88,F],[340,.62,M]];
+const ys = (a, top) => ny => Math.round(a + ny * (Math.max(a + 50, top - 50) - a));
+function planPins(a, top, done, next){ const Y = ys(a, top);
+  return PLAN.map((p, i) => { const n = i + 1, dn = n <= done, nx = n === next, s = dn ? 24 : nx ? 40 : 32, cy = -7 - s / 2;
+    return { x:p.x, y:Y(p.ny), s, bl:-s/2, bt:cy - s/2, bg:p.c, t:dn ? '✓' : String(n), fs:nx ? 16 : dn ? 12 : 14, op:dn ? .5 : 1, z:nx ? 40 : 20, ring:nx, rt:cy - 33, lab:nx ? { n:p.n, s:p.d + ' · ' + p.s, t:cy - 20 } : false }; }); }
+function loosePins(a, top, colors){ const Y = ys(a, top), SZ = { [Q]:26, [M]:24, [F]:22 }, LT = { [Q]:'Q', [M]:'M', [F]:'F' };
+  return LOOSE.filter(l => colors.includes(l[2])).map(([x, ny, c]) => { const s = SZ[c], cy = -7 - s / 2; return { x, y:Y(ny), s, bl:-s/2, bt:cy - s/2, bg:c, t:LT[c], fs:11, op:1, z:20, ring:false, rt:0, lab:false }; }); }
+const routeD = (a, top, from) => { const Y = ys(a, top); return 'M' + PLAN.slice(from).map(p => p.x + ' ' + (Y(p.ny) - 4)).join(' L'); };
+const TAGC = { chega:['#DBEAFE','#1E3A8A'], sai:['#DCFCE7','#14532D'], esq:['#FEE2E2','#7F1D1D'], quieto:['#DCFCE7','#14532D'], pior:['#FEF3C7','#78350F'] };
+const tabs = (T, n) => ['Mapa','Hoje','Eu'].map((t, i) => ({ t, c:i === 0 ? T.acao : T.dim, f:i === 0 ? T.acao : 'transparent', n:t === 'Hoje' && n ? n : false }));
+const tog = T => ['Mapa','Lista'].map((t, i) => ({ t, bg:i === 0 ? T.inv : 'transparent', fg:i === 0 ? T.invfg : T.fg }));
+const lensRow = T => [['Meu dia', T.acao], ['Clientes', G], ['Recém-abertos', ROXO]].map(([t, c], i) => ({ t, c, bg:i === 0 ? T.inv : T.painel, fg:i === 0 ? T.invfg : T.fg, bd:i === 0 ? T.inv : T.line }));
+const q = (v, t, i) => [{ k:'Vê', v }, { k:'Toca', v:t }, { k:'Se ignorar', v:i }];
+const A = 112, AQ = 180;
+
+function phone(id, kind, tag, cap, qs, T, o){
+  const shTop = o.sh ? o.sh.top : 646;
+  return { id, tag, tagBg:TAGC[kind][0], tagFg:TAGC[kind][1], cap, q:qs, T, time:o.time, tog:tog(T),
+    filt:o.filt || false, load:!!o.load, fx:o.fx || false, sh:o.fi ? false : (o.sh || false), fi:o.fi || false,
+    btns:!o.fi, btnTop:shTop - 58, lens:lensRow(T), tabs:tabs(T, o.badge || false),
+    pins:o.pins || [], route:o.route || '', ux:o.ux || 186, uy:o.uy || 470 };
+}
+const porta = (T, top, k, kc, kr, i, sub) => { const p = PLAN[i]; return { top, k, kc, kr, title:false, prim:false, next:{ m:String(i + 1), c:p.c, n:p.n, s:sub } }; };
+const semPlano = (T, top) => ({ top, k:'DIA SEM PLANO', kc:T.amb, kr:'o gestor vê desde 9h00', title:'6 portas perto de você, já em ordem', sub:'As 2 promessas vencidas vêm na frente · 3,1 km a pé', next:false, sec:'Ver as 6', prim:'Montar o dia' });
+const faixaLig = T => ({ t:'Hora das ligações · até 12:45', s:'2 na fila · Rita, Padaria Ki-Pão primeiro', a:'Ligar', bg:T.card, bd:T.line2, fg:T.fg, sub:T.mute, abg:T.inv, abd:T.inv, afg:T.invfg, plus:false });
+const faixaPend = (T, s, plus) => ({ t:'Cantina Bento · e agora?', s, a:'Dar', bg:T.erBg, bd:T.acao, fg:T.erFg, sub:T.erFg, abg:'transparent', abd:T.acao, afg:T.erFg, plus });
+const COMO = ['Falei com quem decide', 'Quem decide não estava', 'Não quis conversar', 'Estava fechado'];
+const fichaChega = { top:300, sub:'Cantina Bento · toque 1 de 3', gps:'GPS confere · check-in feito às 10:52', como:COMO, comoLine:false,
+  eLine:'depende do como foi · se ainda não sabe, fica para a saída', big:false, comp:'2 de 4 já sabidos', btn:'Salvar o que sei',
+  leg:'A visita já contou às 10:52. O que ficar em branco volta quando você sair.' };
+const fichaSai = { top:118, sub:'Cantina Bento · na porta de 10:52 a 11:16', gps:'GPS confere · check-in feito às 10:52', como:false, comoLine:'Falei com quem decide', eLine:false,
+  big:[{ t:'Apresentei agora', s:'vai a Demo/Proposta' }, { t:'Reunião hoje, mais tarde', s:'só a hora' }],
+  small:['Reunião amanhã','Reunião em 3 dias','Reunião em 1 semana','Voltar outro dia','Ligar amanhã','Sem interesse'], comp:'2 de 4 já sabidos', btn:'Salvar visita',
+  leg:'Escolha o próximo passo · nada trava' };
+
+function build(){
+  const secs = [];
+  const S = 646, PY = S - 44;
+  // 1 · chegada
+  const q1 = q('A prova no topo (GPS confere · 10:52). Como foi, as 4 de sempre. O "E agora?" recolhido numa linha tracejada: depende do como foi, e pode esperar.', 'Uma opção do Como foi e Salvar o que sei. Ou o ×: a visita já contou.', 'Fechar no × não desfaz nada: o ponto está gravado antes de a ficha abrir. O que ficou em branco volta na saída (2a).');
+  const chega = T => ({ time:'10:52', fi:fichaChega, pins:planPins(AQ, PY, 3, 4), route:routeD(AQ, PY, 3) });
+  const naPorta = T => ({ time:'10:58', pins:planPins(AQ, PY, 3, 4), route:routeD(AQ, PY, 3), uy:330, ux:190, sh:porta(T, S, 'NA PORTA · CANTINA BENTO', T.verde, 'desde 10:52 · 3 de 6', 3, '300 m · 4 min · 1ª visita') });
+  secs.push({ id:'chegada', title:'1 · A chegada · 10:52, Cheguei na Cantina Bento', desc:'O Cheguei grava o ponto primeiro, como hoje, e a ficha de rua abre logo depois, igual. Muda uma coisa: salvar não exige o "E agora?". Se ele ainda não falou com ninguém, salva o que sabe e o resto volta na saída. Em 1c, a visita aberta: a folha volta com o Cheguei da próxima porta no lugar de sempre.', phones:[
+    phone('1a', 'chega', 'CHEGUEI · ESCURO', 'A ficha de sempre, sem cobrar o que ele ainda não sabe', q1, DARK, chega(DARK)),
+    phone('1b', 'chega', 'CHEGUEI · CLARO', 'O mesmo, no sol', q1, SOL, chega(SOL)),
+    phone('1c', 'chega', 'VISITA ABERTA · 10:58', 'Na porta, e a próxima a um toque', q('O kicker NA PORTA · desde 10:52 e, embaixo, a próxima porta com o Cheguei vermelho. Nenhuma faixa: ainda não é hora de cobrar.', 'Cheguei na 4 a qualquer momento. Puxar a folha abre a Fala pronta e o Se ele disser, como no pacote anterior.', 'Nada. A visita está aberta e provada; a cobrança só nasce na saída.'), DARK, naPorta(DARK)),
+  ] });
+  // 2 · saída
+  const q2 = q('Faixa em tom de alerta claro, uma linha: "Cantina Bento · e agora?", com o tempo que ele ficou na porta. Embaixo, a folha intacta, com o Cheguei da 4 cheio.', 'Dar abre a mesma ficha, já no E agora (2c). Ou Cheguei na 4, sem passar pela faixa.', 'A faixa fica. Não cresce, não pisca, não abre a ficha sozinha. Vai para 3a.');
+  const sai = T => ({ time:'11:16', fx:faixaPend(T, 'ficou 24 min na porta · apresentou? marcou?', false), badge:'1', pins:planPins(AQ, PY, 3, 4), route:routeD(AQ, PY, 3), uy:380, ux:236, sh:porta(T, S, '3 DE 6 PORTAS · NO RITMO', T.verde, '+R$ 250 na próxima venda', 3, '300 m · 4 min · 1ª visita') });
+  secs.push({ id:'saida', title:'2 · A saída · 11:16, andou 150 m', desc:'A saída é detectada como no item 2.6: 150 m da porta, 10 min parado em outro lugar, ou o Cheguei na próxima. Só se o "E agora?" ficou em branco, a faixa da vez vira a pergunta, numa linha. O Cheguei da próxima continua cheio, no mesmo pixel. A faixa perde a disputa: é tinta clara, o verbo é contorno.', phones:[
+    phone('2a', 'sai', 'SAIU · ESCURO', 'A pergunta chega quando ele já sabe a resposta', q2, DARK, sai(DARK)),
+    phone('2b', 'sai', 'SAIU · CLARO', 'O mesmo, no sol', q2, SOL, sai(SOL)),
+    phone('2c', 'sai', 'TOCOU EM DAR', 'A mesma ficha, aberta no ponto que faltou', q('O Como foi recolhido numa linha (já respondido na porta). O E agora aberto, com Apresentei agora na primeira posição, como já está.', 'Uma opção e Salvar visita. Dois toques. Apresentei agora segue para plano e MRR, como hoje.', 'O × devolve 2a, com a faixa igual.'), DARK, { time:'11:17', fi:fichaSai, badge:'1', pins:planPins(AQ, PY, 3, 4) }),
+  ] });
+  // 3 · esqueci
+  const q3 = q('"Cantina Bento · e agora?" com +1 na ponta (o Bar do Alemão também ficou). Selo 2 em Hoje. Folha com 5 de 6 e o Cheguei da 6 cheio.', '+1 abre as duas numa folha curta; Dar responde a mais antiga. Ou segue a rua.', '18h00: Fecha o dia lista as duas em SEM PRÓXIMO PASSO. 23h59: viram o número do gestor. Amanhã: Ontem ficou aberto. Nunca trava.');
+  const esq = T => ({ time:'13:40', fx:faixaPend(T, 'desde 11:16 · mais 1 sem próximo passo', true), badge:'2', pins:planPins(AQ, PY, 5, 6), route:routeD(AQ, PY, 5), uy:300, ux:300, sh:porta(T, S, '5 DE 6 PORTAS · NO RITMO', T.verde, '+R$ 250 na próxima venda', 5, '400 m · 5 min · ★ 4,7') });
+  secs.push({ id:'esqueci', title:'3 · O esqueci · 13:40, duas visitas sem desfecho', desc:'Ele seguiu a rua. A cobrança é a que já existe: a faixa pendente, primeira da fila, e o selo de Hoje. Ela não sobe de tom com o tempo, não entra na ficha da próxima porta e nunca tira o Cheguei do lugar.', phones:[
+    phone('3a', 'esq', '13:40 · ESCURO', 'Cobra no topo, a rua segue embaixo', q3, DARK, esq(DARK)),
+    phone('3b', 'esq', '13:40 · CLARO', 'O mesmo, no sol', q3, SOL, esq(SOL)),
+  ] });
+  // 4 · lentes
+  const q4 = q('Topo: filtro, Buscar, Mapa | Lista, como no mapa limpo. Embaixo, sobre a folha: Meu dia invertido, Clientes, Recém-abertos cortado na borda (dá para arrastar).', 'Uma lente troca o recorte num toque. Arrastar a fileira para o lado mostra as outras; o mapa não se move.', 'Nada muda. A fileira não tem número, então não há o que mudar sozinho.');
+  const quieto = T => ({ time:'10:00', pins:planPins(AQ, PY, 2, 3), route:routeD(AQ, PY, 2), uy:470, sh:porta(T, S, '2 DE 6 PORTAS · NO RITMO', T.verde, '+R$ 250 na próxima venda', 2, '450 m · 6 min · proposta pronta') });
+  const q5 = q('Topo: filtro com selo 2, a linha de carregamento, uma faixa (ligações). Embaixo, a fileira colada na folha sem plano. Entre a busca e o primeiro pino, só a faixa.', 'Ligar; Montar o dia; uma lente; o botão com o 2 abre a folha da lente para Limpar.', 'A faixa some às 12:45; a fileira não se mexe; o selo fica enquanto houver filtro.');
+  const pior = T => ({ time:'12:30', filt:'2', load:true, fx:faixaLig(T), badge:'6', pins:loosePins(A + 60, 520, [M, F]), sh:semPlano(T, 564), uy:400 });
+  secs.push({ id:'lentes', title:'4 · As lentes de volta · embaixo, entre os botões do mapa', desc:'A fileira mora na faixa que localização e + já ocupam, encostada na folha, e sobe e desce com ela. O topo continua com as duas posições fixas (50 e 106) e nunca empilha. O chip da lente sai do campo de busca; no lugar dele fica o botão de filtro, com o selo, no mesmo pixel.', phones:[
+    phone('4a', 'quieto', 'QUIETO · 10:00 · ESCURO', 'As lentes à mão, o topo limpo', q4, DARK, quieto(DARK)),
+    phone('4b', 'quieto', 'QUIETO · 10:00 · CLARO', 'O mesmo, no sol', q4, SOL, quieto(SOL)),
+    phone('4c', 'pior', 'PIOR MINUTO · 12:30 · ESCURO', 'Filtro, sem plano, janela de ligação: nada voltou a empilhar', q5, DARK, pior(DARK)),
+    phone('4d', 'pior', 'PIOR MINUTO · 12:30 · CLARO', 'O mesmo, no sol', q5, SOL, pior(SOL)),
+  ] });
+  return {
+    secs,
+    decisoes:[
+      { k:'DIREÇÃO · A, COBRADA PELA FAIXA QUE JÁ EXISTE', t:'A ficha abre na chegada, como antes. O que ficou em branco volta na saída, numa linha.', p:[
+        'Zero mudança de hábito: Cheguei, ponto gravado, ficha aberta. Ele responde o que já sabe ao encostar (estava fechado? quem atendeu?).',
+        'Salvar deixa de exigir o "E agora?". Se ficar em branco, a faixa pendente (fila 1 do mapa limpo) nasce na saída, não antes. Nenhum formulário novo; Dar abre a mesma ficha.',
+        'Não pergunta duas vezes: só volta o que ficou em branco. Quem já deu o E agora na porta não vê faixa nenhuma.' ] },
+      { k:'UMA REGRA DO MAPA LIMPO SE INVERTE', t:'O Cheguei fica cheio sempre. Quem desce de tom é a faixa.', p:[
+        'No mapa limpo, a faixa vermelha punha o Cheguei em contorno. Isso dava ao desfecho mais destaque que à prova, o contrário do que este pedido quer.',
+        'Agora a faixa pendente usa o tom de alerta claro (fundo e texto da pergunta 0.9), com borda e verbo em contorno vermelho. O Cheguei é o único vermelho cheio, em todo estado.',
+        'A regra "um vermelho cheio por tela" continua. Só muda de dono: é sempre do Cheguei.' ] },
+      { k:'LENTES · EMBAIXO, SEM NÚMERO', t:'Uma fileira de 44 px entre localização e +, encostada na folha.', p:[
+        'Não ocupa faixa nova: usa o vão de 262 px entre os dois botões, que já existe e já sobe e desce com a folha. Faixa da vez e fileira nunca se encontram.',
+        'O chip da lente sai do campo (a fileira diz qual está ativa). No lugar fica um botão de filtro de 52 px, com o selo "2" no mesmo pixel de antes. Ele abre a FolhaLentes, sem mudança.',
+        'Ativa = invertida, com o ponto na cor da lente. Sem contagem: a regra do §8 continua.' ] },
+    ],
+    ignora:[
+      { a:'Fecha a ficha no × ao chegar', b:'Nada se perde: o ponto foi gravado antes de a ficha abrir. Como foi e E agora em branco voltam juntos na saída, pela mesma faixa.' },
+      { a:'Sai sem dar o E agora', b:'Nasce a faixa pendente (2a). Ela é fila 1: se for hora das ligações, a ligação vira o "+1" na ponta.' },
+      { a:'Dá Cheguei na próxima com pendente', b:'O Cheguei grava e a ficha da nova porta abre normal. A pendente fica na faixa; não entra na ficha nova, não pede antes.' },
+      { a:'Duas ou mais pendentes', b:'Uma faixa só, a mais antiga, com "+1". Tocar no +1 abre a fila numa folha curta (já previsto no mapa limpo).' },
+      { a:'O dia passa', b:'A faixa não muda de tom, não pisca, não abre nada sozinha. O selo de Hoje conta.' },
+      { a:'18h00', b:'A folha Fecha o dia lista as pendentes em SEM PRÓXIMO PASSO, cada uma com Dar. Já existe (item 2.10).' },
+      { a:'Não fechou', b:'23h59: entram no número "sem próximo passo" do gestor. Dia seguinte: Ontem ficou aberto, até o primeiro Cheguei.' },
+      { a:'Nunca', b:'Trava o Cheguei, troca a folha, abre a ficha sozinha ou some com a próxima porta.' },
+    ],
+    muda:[
+      { n:'1', t:'FichaDeRua.tsx:', d:'salvar com o E agora em branco. O botão "Falta como foi e o próximo passo" vira "Salvar o que sei", ativo. Legenda: "A visita já contou às HH:MM. O que ficar em branco volta quando você sair." E agora recolhido diz "se ainda não sabe, fica para a saída". Mais nada muda na ficha.' },
+      { n:'2', t:'Abrir no ponto que falta:', d:'Dar (faixa, Fecha o dia, Hoje) abre a mesma ficha com o que já foi respondido recolhido em linha, como o A1 do App Menos Tela já faz.' },
+      { n:'3', t:'Faixa pendente:', d:'nasce na saída (150 m / 10 min / Cheguei na próxima), só se o E agora está em branco. Linha 2: "ficou N min na porta" (Cheguei até a saída).' },
+      { n:'4', t:'Tom:', d:'faixa pendente em tinta de alerta clara + borda e verbo em contorno vermelho. Remover a regra que põe o Cheguei em contorno.' },
+      { n:'5', t:'Lentes:', d:'FileiraDeLentes.tsx vai para o vão entre localização e +, em pílulas de 32 px num alvo de 44, sem contagem. O chip da lente no campo vira botão de filtro com o selo. FolhaLentes não muda.' },
+    ],
+    medidas:[
+      { a:'Onde', b:'left 64, right 64 (entre os botões de 44 com 8 de vão), top = topo da folha − 58, mesma linha dos botões.' },
+      { a:'Altura', b:'Fileira 44 · pílula 32, raio 16, 13/600, ponto de 8 px. Padding 0 12, vão 6.' },
+      { a:'Arraste', b:'Só lateral, com inércia. Arrasto horizontal na fileira não move o mapa; vertical passa para a folha. Borda direita esmaece nos últimos 18% para dizer que há mais.' },
+      { a:'Ordem', b:'Fixa, a de hoje. Ao abrir o app, a ativa encosta à esquerda. Calor, só para gestor, no fim.' },
+      { a:'Ativa', b:'Invertida (fundo do texto, texto da superfície), com o ponto na cor da lente. Inativas: superfície, borda, ponto. Nenhum número.' },
+      { a:'Filtro', b:'Botão de 52 × 48 à esquerda do campo, funil + selo invertido de 22 px com o número de etapas ligadas. Abre a FolhaLentes (lentes, etapas, Limpar, Modo sol).' },
+      { a:'Some quando', b:'A folha sobe além da metade (some junto com os botões, como hoje), a busca abre, ou a ficha está aberta. Volta igual.' },
+      { a:'Desktop', b:'Fica como está: lá a fileira antiga segue no topo.' },
+    ],
+    mede:[
+      { a:'Apresentei agora', b:'Fichas que levaram a Demo/Proposta contra pontos de demo. Hoje 7 de 314 fichas, com 154 demos no mês. Deve subir.' },
+      { a:'Onde o E agora é dado', b:'Na chegada, pela faixa, no Fecha o dia, ou nunca. Se "nunca" subir, a faixa não está sendo vista.' },
+      { a:'Cheguei por dia', b:'Não pode cair. É a prova de que o desfecho não tomou o lugar da porta.' },
+      { a:'Toques nas lentes', b:'Por executivo por dia, na fileira contra o botão de filtro. Se a fileira não for usada, ela sai e o chip volta.' },
+    ],
+  };
+}
+
+class Component extends DCLogic {
+  renderVals(){ if (!this._v) this._v = build(); return this._v; }
+}
+</script>
+</body>
+</html>
