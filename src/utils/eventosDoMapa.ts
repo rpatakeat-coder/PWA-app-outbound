@@ -10,8 +10,13 @@ import { supabase } from '../integrations/supabase/client';
 
 // 'se_ele_disser_aberto' (espinha do dia §5, 29/10/26): quantos toques a resposta
 // na porta recebe por página — é o KPI que diz se o bloco serve ou é enfeite.
+// A FOLHA DE ABERTURA DO DIA (espinha do dia §5, 29/10/26). Sem estes três não há
+// como responder a pergunta que importa daqui a duas semanas: a folha fez alguém
+// planejar, ou virou mais um aviso bonito que se fecha no reflexo? `confirmado`
+// contra `ignorado` é a resposta, e `proposto` é o denominador.
 export type TipoEvento = 'primeiro_toque' | 'fala_aberta' | 'halo_sugerido' | 'halo_aceito' | 'referencia_tocada'
-  | 'se_ele_disser_aberto';
+  | 'se_ele_disser_aberto'
+  | 'plano_proposto' | 'plano_confirmado' | 'plano_ignorado';
 
 let desligado = false;
 

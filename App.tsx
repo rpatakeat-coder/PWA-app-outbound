@@ -1272,6 +1272,7 @@ function MainApp() {
     } catch { setPlanoDoDiaResolvido(true); return; }
     setPlanoDoDiaResolvido(true);
     setPlanoDoDia(true);
+    registrarEvento('plano_proposto', {});
   }, [modoNovo, tab, isViewer, planoDoDiaResolvido]);
   useEffect(() => {
     if (!modoNovo || tab !== 'map' || !seloFila?.quente || !filaNaTela.data || planoDoDia) return;
@@ -9532,9 +9533,11 @@ function MainApp() {
              linha: melhor silêncio do que carimbo errado. */
           origem={null}
           quantasPropostas={Math.min(6, linhasDaLista.length)}
-          aoComecar={() => setPlanoDoDia(false)}
-          aoMontar={() => { setPlanoDoDia(false); void montarDiaComMicrorrotas(); }}
-          aoAgoraNao={() => setPlanoDoDia(false)}
+          /* MEDIDO (§5): `confirmado` contra `ignorado` é o que diz, daqui a duas semanas, se esta
+             folha fez alguém planejar ou virou mais um aviso que se fecha no reflexo. */
+          aoComecar={() => { registrarEvento('plano_confirmado', { origem: 'ja_existia', portas: paradasQueFaltam.length }); setPlanoDoDia(false); }}
+          aoMontar={() => { registrarEvento('plano_confirmado', { origem: 'proposta', portas: Math.min(6, linhasDaLista.length) }); setPlanoDoDia(false); void montarDiaComMicrorrotas(); }}
+          aoAgoraNao={() => { registrarEvento('plano_ignorado', { tinha_plano: paradasQueFaltam.length > 0 }); setPlanoDoDia(false); }}
           aoTocarParada={(id) => {
             setPlanoDoDia(false);
             const c = routeDisplayClients.find((x) => x.id === id);
