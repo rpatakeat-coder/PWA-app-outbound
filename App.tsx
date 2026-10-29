@@ -229,6 +229,7 @@ import { FaixaHoraDasLigacoes } from './src/screens/CartaoDaFila';
 import FolhaAntesDaRua from './src/screens/FolhaAntesDaRua';
 import FolhaPlanoDoDia from './src/screens/FolhaPlanoDoDia';
 import FolhaTimeNaRua from './src/screens/FolhaTimeNaRua';
+import FolhaFechoDoDia from './src/screens/FolhaFechoDoDia';
 import TiraDeLentes from './src/screens/TiraDeLentes';
 import BlocoEntrePortas from './src/screens/BlocoEntrePortas';
 import PedirAvisos from './src/screens/PedirAvisos';
@@ -5266,6 +5267,25 @@ function MainApp() {
   const [entrePortasDesde, setEntrePortasDesde] = useState<number | null>(null);
   const [entrePortasAte, setEntrePortasAte] = useState(0);
 
+  /* FECHAR O DIA (espinha do dia 2.10). As 18h, na primeira vez que o app volta para a frente,
+     a folha sobe sozinha — uma vez por dia por aparelho, a mesma mecanica provada da "Antes da
+     rua" e da folha de abertura. Nao trava: "Depois" fecha e o dia fica aberto, e quem nao
+     fechou aparece para o gestor no dia seguinte (2.11). */
+  const [fechoDoDia, setFechoDoDia] = useState(false);
+  const [fechoResolvido, setFechoResolvido] = useState(false);
+  useEffect(() => {
+    if (!modoNovo || tab !== "map" || isViewer || fechoResolvido || planoDoDia) return;
+    const bISO = new Date(Date.now() - 3 * 3600000);
+    if (bISO.getUTCHours() < 18) return;
+    const chave = `fecho-do-dia-${diaBRT(new Date())}`;
+    try {
+      if (window.localStorage.getItem(chave)) { setFechoResolvido(true); return; }
+      window.localStorage.setItem(chave, "1");
+    } catch { setFechoResolvido(true); return; }
+    setFechoResolvido(true);
+    setFechoDoDia(true);
+  }, [modoNovo, tab, isViewer, fechoResolvido, planoDoDia]);
+
   const handleMarkAsVisited = useCallback(async (client: Client, onDone?: () => void) => {
     if (visitingRef.current) return;
     // a porta sugerida depois do plano virou Cheguei em até 30 min (prancha §4b, decisão 5)
@@ -9594,6 +9614,38 @@ function MainApp() {
         />
       )}
       {canViewGestor && <FolhaTimeNaRua visivel={timeNaRua} aoFechar={() => setTimeNaRua(false)} />}
+      {/* O FECHO DAS 18h (2.10). As pendentes vem da MESMA fila que o Cockpit cobra
+          (motivo visita_sem_registro), nunca de uma conta nova aqui. */}
+      {fechoDoDia && profile?.id && (() => {
+        const itensF = (filaNaTela.data?.itens ?? []) as Array<{ motivo: string; porque: string; dealId: string; clientId: string | null; negocio: string }>;
+        const pend = itensF.filter((i) => i.motivo === "visita_sem_registro")
+          .map((i) => ({ dealId: i.dealId, clientId: i.clientId, nome: i.negocio, hora: (/(d{2}:d{2})/.exec(i.porque ?? "") ?? [])[1] ?? null }));
+        const portas = meuDia.data?.provadasHoje ?? 0;
+        return (
+          <FolhaFechoDoDia
+            dia={new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" }).toLocaleUpperCase("pt-BR")}
+            portas={portas}
+            meta={metaDeHoje}
+            pendentes={pend}
+            amanha={0}
+            aoDar={(p) => {
+              setFechoDoDia(false);
+              const hoje = diaBRT(new Date());
+              setDesfechoPendente({ idHubspot: p.dealId, cliente: p.nome, visitadoEm: p.hora && hoje ? new Date(`${hoje}T${p.hora}:00-03:00`).toISOString() : new Date().toISOString() });
+            }}
+            aoDepois={() => setFechoDoDia(false)}
+            aoFechar={() => {
+              setFechoDoDia(false);
+              void supabase.from("fecho_do_dia").upsert({
+                pessoa: profile.id, dia: diaBRT(new Date()), fechado_em: new Date().toISOString(),
+                portas, com_passo: Math.max(0, portas - pend.length), sem_passo: pend.length,
+              }, { onConflict: "pessoa,dia" }).then(({ error }) => {
+                Toast.mostrar(error ? "Nao consegui fechar o dia agora. Tente de novo." : "Dia fechado.", error ? "erro" : "ok");
+              });
+            }}
+          />
+        );
+      })()}
       {antesDaRua && (() => {
         const itensF = (filaNaTela.data?.itens ?? []) as Array<{ dealId: string; negocio: string; etapaId: string; venceu: boolean; prazo: string | null; horaPrazo?: string | null; telefone: string | null }>;
         const hojeF = filaNaTela.data?.hoje ?? diaBRT(new Date());

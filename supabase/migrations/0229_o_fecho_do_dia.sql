@@ -52,12 +52,16 @@ create policy fecho_do_dia_delete on public.fecho_do_dia for delete
 
 revoke all on table public.fecho_do_dia from anon, public;
 grant select, insert, update, delete on table public.fecho_do_dia to authenticated;
+-- RLS nao protege TRUNCATE: os default privileges do Supabase dao TRUNCATE a authenticated.
+revoke truncate, references, trigger on table public.fecho_do_dia from authenticated;
 grant all on table public.fecho_do_dia to service_role;
 
 -- O TIME NA RUA GANHA AS DUAS COLUNAS DO ITEM 2.11: quem nao planejou hoje e quem
 -- nao fechou ontem. Os dois avisos da prancha moram no Cockpit; aqui eles viram
 -- coluna na tela que o gestor abre no celular, que e onde ele esta quando a
 -- informacao importa. Mesma funcao, mesma guarda de papel.
+drop function if exists public.time_na_rua(date);
+
 create or replace function public.time_na_rua(p_dia date default null)
  returns table(
    owner_id text, pessoa uuid, nome text, avatar_url text,
@@ -71,6 +75,10 @@ as $function$
 declare
   v_dia date := coalesce(p_dia, (now() at time zone 'America/Sao_Paulo')::date);
   v_ontem date := v_dia - 1;
+  /* O FECHO SÓ PASSA A SER COBRADO DEPOIS QUE ELE EXISTE. A tela nasceu em 30/10/26; sem este
+     piso, no primeiro dia a coluna acusaria o time inteiro de não ter fechado um dia que
+     ninguém podia fechar — e o gestor perderia a confiança na coluna logo na estreia. */
+  v_desde constant date := date '2026-10-30';
 begin
   if not ((select public.is_field_admin()) or (select public.eh_gestor_cockpit())) then
     raise exception 'time_na_rua e so do gestor' using errcode = '42501';
@@ -101,7 +109,8 @@ begin
     /* NAO FECHOU ONTEM: so conta se houve rua ontem. Cobrar fecho de quem nao
        visitou ninguem seria cobrar silencio — e o gestor perde a confianca na
        coluna no primeiro dia de folga de alguem. */
-    (not exists (select 1 from public.fecho_do_dia fd where fd.pessoa = pe.id and fd.dia = v_ontem)
+    (v_ontem >= v_desde
+      and not exists (select 1 from public.fecho_do_dia fd where fd.pessoa = pe.id and fd.dia = v_ontem)
       and exists (select 1 from public.client_visits cv where cv.visited_by = pe.id
                    and (cv.visited_at at time zone 'America/Sao_Paulo')::date = v_ontem))
   from pessoas pe
@@ -110,5 +119,5 @@ begin
   order by count(v.visit_id) filter (where v.provada) desc, pe.nome;
 end $function$;
 
-revoke all on function public.time_na_rua(date) from anon, public;
+revoke all on function public.time_na_rua(date) from anon, authenticated, public;
 grant execute on function public.time_na_rua(date) to authenticated, service_role;

@@ -36,6 +36,10 @@ export type LinhaDoTime = {
   declaradas: number;
   sem_desfecho: number;
   ultima: string | null;
+  /* OS DOIS AVISOS DO ITEM 2.11, que na prancha moram no Cockpit e aqui viram coluna: é no
+     celular que o gestor está quando a informação importa. */
+  sem_plano: boolean;
+  nao_fechou_ontem: boolean;
 };
 
 export default function FolhaTimeNaRua({ visivel, aoFechar }: { visivel: boolean; aoFechar: () => void }) {
@@ -54,6 +58,8 @@ export default function FolhaTimeNaRua({ visivel, aoFechar }: { visivel: boolean
   const total = linhas.reduce((n, l) => n + l.provadas, 0);
   const semPasso = linhas.reduce((n, l) => n + l.sem_desfecho, 0);
   const foraDoRaio = linhas.reduce((n, l) => n + l.foto_fora, 0);
+  const semPlano = linhas.filter((l) => l.sem_plano).length;
+  const naoFecharam = linhas.filter((l) => l.nao_fechou_ontem).length;
 
   return (
     <Painel visivel={visivel} aoFechar={aoFechar} rotulo="O time na rua" topo={
@@ -67,6 +73,8 @@ export default function FolhaTimeNaRua({ visivel, aoFechar }: { visivel: boolean
             {[
               semPasso > 0 ? `${semPasso} sem próximo passo` : null,
               foraDoRaio > 0 ? `${foraDoRaio} com a foto fora do raio` : null,
+              semPlano > 0 ? `${semPlano} sem plano` : null,
+              naoFecharam > 0 ? `${naoFecharam} não fechou ontem` : null,
             ].filter(Boolean).join(' · ') || 'nada pendente até agora'}
           </Text>
         )}
@@ -89,7 +97,7 @@ export default function FolhaTimeNaRua({ visivel, aoFechar }: { visivel: boolean
                   l.ultima ? `última ${l.ultima}` : null,
                 ].filter(Boolean).join(' · ')}
               </Text>
-              {(l.foto_fora > 0 || l.sem_desfecho > 0) && (
+              {(l.foto_fora > 0 || l.sem_desfecho > 0 || l.sem_plano || l.nao_fechou_ontem) && (
                 <View style={s.selos}>
                   {l.foto_fora > 0 && (
                     <Text style={[s.selo, s.seloVermelho]}>{`${l.foto_fora} foto fora do raio`}</Text>
@@ -97,6 +105,10 @@ export default function FolhaTimeNaRua({ visivel, aoFechar }: { visivel: boolean
                   {l.sem_desfecho > 0 && (
                     <Text style={[s.selo, s.seloAmbar]}>{`${l.sem_desfecho} sem próximo passo`}</Text>
                   )}
+                  {/* Os dois do 2.11. "Não fechou ontem" só aparece para quem teve rua ontem —
+                      cobrar fecho de quem não visitou ninguém seria cobrar silêncio. */}
+                  {l.sem_plano && <Text style={[s.selo, s.seloAmbar]}>sem plano hoje</Text>}
+                  {l.nao_fechou_ontem && <Text style={[s.selo, s.seloAmbar]}>não fechou ontem</Text>}
                 </View>
               )}
             </View>
