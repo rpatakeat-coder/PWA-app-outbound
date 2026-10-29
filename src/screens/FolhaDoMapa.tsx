@@ -20,6 +20,7 @@ import { IconChevronDown as SiDown, IconClose as SiClose } from '../components/i
 import { BlocoParaEntrar } from '../components/ParaEntrar';
 import { visitasDoDia, type Arma } from '../utils/armasDoMapa';
 import type { ObjecaoDaCasa } from '../utils/playbook';
+import type { LinhaDoDia as LinhaDoDiaTipo } from '../utils/linhaDoDia';
 import { primeiroToque, registrarEvento } from '../utils/eventosDoMapa';
 import { useComSinal } from './AvisoSemSinal';
 
@@ -64,6 +65,15 @@ type Props = {
   aoFala?: (a: Arma) => void;
   /** "SE ELE DISSER · PARA ESTA CASA" (espinha do dia 2.4): até 2, escolhidas pela ficha. */
   objecoesDaProxima?: ObjecaoDaCasa[];
+  /* A LINHA DO DIA MUDOU DE CASA (prancha "Mapa limpo" §4, 29/10/26). Ela era uma faixa sobre o
+     mapa; agora só o estado `pendente` fica lá em cima, porque é o único com verbo e prazo. Todo
+     o resto é contexto e vira o KICKER desta folha, que é onde o executivo já olha para ver a
+     próxima porta. `sem_plano` não é nem faixa nem kicker: vira a folha inteira (§4, 2a/2b). */
+  linha?: LinhaDoDiaTipo | null;
+  /** "Montar o dia" da folha sem plano: a mesma proposta de sempre. */
+  aoMontarDia?: () => void;
+  /** Há faixa vermelha na tela: o Cheguei vira contorno. Nunca dois vermelhos cheios (§3). */
+  faixaVermelha?: boolean;
   /** Lente Recém-abertos: quantos a pessoa tem na região (0 = estado vazio) e a volta ao Meu dia. */
   recem?: { naRegiao: number | null; aoVoltar: () => void } | null;
   /** Desktop (28/09/2026): a mesma folha vira o painel lateral, sempre aberta, sem alça. */
@@ -138,7 +148,7 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, objecoesDaProxima = [], recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, objecoesDaProxima = [], linha = null, aoMontarDia, faixaVermelha = false, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
   const cores = useIconColors();
   /** Qual objeção do "Se ele disser" está aberta (uma por vez, e a folha não muda de tamanho à toa). */
   const [disserAberta, setDisserAberta] = useState<string | null>(null);
@@ -250,13 +260,49 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
       </Pressable>
     );
   }
+  /* A FOLHA SEM PLANO (prancha "Mapa limpo" §4, 2a/2b). "Dia sem plano" era uma faixa âmbar sobre
+     o mapa com um "Montar ›" de 60 px; virou a folha inteira, porque começar o dia com compromisso
+     é a coisa mais importante que a tela tem a dizer às 8h. Continua sem travar nada: o mapa está
+     atrás, o Cheguei de qualquer pino funciona, e "Agora não" é só fechar. */
+  if (!aberta && linha?.estado === 'sem_plano' && aoMontarDia) {
+    return (
+      <View ref={acima.ref} style={[s.pilula, s.semPlano, { bottom: chao + 8 + acima.ajuste }]} onLayout={medir} {...arrasto.panHandlers}>
+        <View style={s.kickerLinha}>
+          <Text style={[s.kickerFolha, s.kickerAmbar]} numberOfLines={1}>DIA SEM PLANO</Text>
+          {!!linha.subtitulo && <Text style={s.kickerDireita} numberOfLines={1}>{linha.subtitulo}</Text>}
+        </View>
+        <Text style={s.semPlanoTitulo} numberOfLines={2}>{linha.titulo}</Text>
+        <View style={s.semPlanoBotoes}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Ver as portas propostas" onPress={() => setAberta(true)} style={s.btnContorno}>
+            <Text style={s.btnContornoTexto}>Ver as portas</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Montar o dia com as portas propostas" onPress={aoMontarDia} style={s.btnMontar}>
+            <Text style={s.btnChegueiTexto}>Montar o dia</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
   if (!aberta) {
     const meta = Math.max(1, metaVisitas);
     const subProxima = proxima
       ? (ehSugerida ? sugestao!.porque : [distanciaTexto(proxima.distanciaM), aPe(proxima.distanciaM)].filter(Boolean).join(' · ')) || 'toque para ver o lead'
       : '';
+    /* O KICKER: o texto que era a faixa do topo, agora aqui. `linha.titulo` já vem pronto e
+       testado ("2 de 6 portas · no ritmo"); aqui ele só sobe para caixa alta. O tom vem da
+       própria linha — inclusive o VERMELHO do `escapando`, que é a decisão de 29/10: ele fala do
+       dia inteiro, não é um verbo que se resolve num toque, então é kicker e não faixa. */
+    const tomDoKicker = linha?.tom === 'verde' ? s.kickerVerde
+      : linha?.tom === 'ambar' ? s.kickerAmbar
+      : linha?.tom === 'vermelho' ? s.kickerVermelho : null;
     return (
       <View ref={acima.ref} style={[s.pilula, { bottom: chao + 8 + acima.ajuste }]} accessibilityLabel="Próxima porta" onLayout={medir} {...arrasto.panHandlers}>
+        {linha && (
+          <Pressable accessibilityRole="button" accessibilityLabel={linha.rotulo} onPress={aoProgresso} style={s.kickerLinha}>
+            <Text style={[s.kickerFolha, tomDoKicker]} numberOfLines={1}>{linha.titulo.toLocaleUpperCase('pt-BR')}</Text>
+            {!!linha.direita && <Text style={s.kickerDireita} numberOfLines={1}>{linha.direita}</Text>}
+          </Pressable>
+        )}
         <View style={s.pilulaLinha}>
           <Pressable accessibilityRole="button" accessibilityLabel="Recolher a barra da próxima porta" onPress={() => setRecolhida(true)} hitSlop={8} style={s.pilulaRecolher}>
             <SiDown width={18} height={18} fill="var(--text-muted)" />
@@ -284,8 +330,9 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
             <Text style={[s.pilulaProva, semProva > 0 && s.pilulaProvaFalta]} numberOfLines={1}>{semProva ? `${semProva} sem prova` : `mín. ${meta}`}</Text>
           </Pressable>
           {proxima ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Cheguei na próxima porta" onPress={() => onCheguei(proxima.c)} style={s.pilulaCheguei}>
-              <Text style={s.btnChegueiTexto}>Cheguei</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Cheguei na próxima porta" onPress={() => onCheguei(proxima.c)}
+              style={[s.pilulaCheguei, faixaVermelha && s.chegueiContorno]}>
+              <Text style={[s.btnChegueiTexto, faixaVermelha && s.chegueiContornoTexto]}>Cheguei</Text>
             </Pressable>
           ) : lenteRecem && recem!.naRegiao === 0 ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Voltar ao Meu dia" onPress={recem!.aoVoltar} style={s.pilulaLista}>
@@ -669,6 +716,26 @@ const s = StyleSheet.create({
   pilulaProva: { fontSize: 11, fontWeight: '600', color: 'var(--text-muted)', marginTop: 2 },
   pilulaProvaFalta: { color: 'var(--tint-amber-text)' },
   proxima: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
+  /* O KICKER DA FOLHA (prancha "Mapa limpo" §4): a linha que era faixa no topo. */
+  kickerLinha: { minHeight: 24, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 2, marginBottom: 6 },
+  kickerFolha: { flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: '700', letterSpacing: 0.5, color: 'var(--text-muted)' },
+  kickerVerde: { color: 'var(--ok-texto)' },
+  kickerAmbar: { color: 'var(--tint-amber-text)' },
+  /* O `escapando` é o único de ritmo que é vermelho, e por decisão de 29/10 ele é kicker, não
+     faixa: fala do dia inteiro em vez de um verbo que se resolve num toque. */
+  kickerVermelho: { color: 'var(--vermelho-texto)' },
+  kickerDireita: { fontSize: 12, fontWeight: '500', color: 'var(--text-muted)', flexShrink: 0 },
+  /* NUNCA DOIS VERMELHOS CHEIOS (§3): com a faixa vermelha na tela o Cheguei vira contorno —
+     e continua funcionando, porque nada no mapa trava o Cheguei. */
+  chegueiContorno: { backgroundColor: 'transparent', borderWidth: 1, borderColor: 'var(--stroke-strong)' },
+  chegueiContornoTexto: { color: 'var(--text)' },
+  /* A FOLHA SEM PLANO (§4, 2a/2b). */
+  semPlano: { gap: 2 },
+  semPlanoTitulo: { fontSize: 18, lineHeight: 23, fontWeight: '700', color: 'var(--text)', paddingHorizontal: 2 },
+  semPlanoBotoes: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  btnContorno: { flex: 1, height: 48, borderRadius: 14, borderWidth: 1, borderColor: 'var(--stroke-strong)', alignItems: 'center', justifyContent: 'center' },
+  btnContornoTexto: { fontSize: 15, fontWeight: '700', color: 'var(--text)' },
+  btnMontar: { flex: 1, height: 48, borderRadius: 14, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center' },
   // SE ELE DISSER (2.4): mesmos tokens do resto da folha, nenhuma cor nova, e
   // cada linha com os 44 px de toque mínimo do pedido.
   disserBloco: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'var(--border)', gap: 2 },

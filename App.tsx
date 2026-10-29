@@ -7135,10 +7135,19 @@ function MainApp() {
           A fila completa é da fase 2; aqui já vale a regra que importa — a linha do dia em
           `pendente` (visita sem próximo passo) ganha de tudo, e a janela das ligações só aparece
           quando não há pendência. Antes as duas tinham `top` calculado e se cobriam às 12:30. */}
-      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && linhaDoDiaAgora
-        && (linhaDoDiaAgora.estado === 'pendente' || !janelaDasLigacoes) && (
+      {/* FASE 2 (29/10): só `pendente` continua aqui em cima. É o único estado com verbo e prazo —
+          uma visita provada hoje que ficou sem "Como foi". Todo o resto virou o kicker da folha, e
+          `sem_plano` virou a folha inteira. Era isto que enchia o topo: nove estados disputando
+          uma faixa que ninguém tinha pedido. */}
+      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !buscaAberta && linhaDoDiaAgora
+        && linhaDoDiaAgora.estado === 'pendente' && (
         <LinhaDoDia
           linha={linhaDoDiaAgora}
+          /* A hora das ligações perdeu a vez para a pendência, mas não some: vira o "+1". */
+          outra={janelaDasLigacoes ? {
+            rotulo: 'Hora das ligações: abrir a fila',
+            aoTocar: () => { setPedidoDaFila({ acao: 'fila', deal: null, origem: 'janela', n: Date.now() }); irParaAba('tasks'); },
+          } : null}
           top={insets.top + 7 + ALTURA_TOPO_CAMPO + RESPIRO_ABAIXO_DA_FILEIRA}
           aoTocar={() => {
             const l = linhaDoDiaAgora;
@@ -7158,7 +7167,9 @@ function MainApp() {
           }}
         />
       )}
-      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && janelaDasLigacoes
+      {/* A outra ocupante da faixa. Com pendência na tela ela vira o "+1" lá em cima, e a busca
+          aberta esconde a faixa inteira (§3) — digitar precisa da tela. */}
+      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !buscaAberta && janelaDasLigacoes
         && linhaDoDiaAgora?.estado !== 'pendente' && (
         <View style={{ position: 'absolute', left: 12, right: 12, top: insets.top + 7 + ALTURA_TOPO_CAMPO + RESPIRO_ABAIXO_DA_FILEIRA, zIndex: 24 }}>
           <FaixaHoraDasLigacoes ate={janelaDasLigacoes.ate} followups={janelaDasLigacoes.followups} quentes={janelaDasLigacoes.quentes} aoAbrir={() => { setPedidoDaFila({ acao: 'fila', deal: null, origem: 'janela', n: Date.now() }); irParaAba('tasks'); }} />
@@ -7272,6 +7283,9 @@ function MainApp() {
           idProxima={planejarOutroDia ? null : idPortaDoHalo}
           armaDaProxima={armaDoHalo}
           objecoesDaProxima={objecoesDaProxima}
+          linha={linhaDoDiaAgora && linhaDoDiaAgora.estado !== "pendente" ? linhaDoDiaAgora : null}
+          aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
+          faixaVermelha={linhaDoDiaAgora?.estado === "pendente"}
           sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
           aoFala={abrirFala}
           recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
@@ -7318,7 +7332,8 @@ function MainApp() {
           style={[styles.fabMapaNovo, { right: 12, bottom: (alturaRodape ?? baseInferior) + (folhaDeBaixo ? alturaFolha : 0) + 12 }]}
           onPress={() => setShowCepStep(true)}
         >
-          <IconPlus width={26} height={26} fill="#FFFFFF" />
+          {/* branco fixo não serve mais: o botão virou neutro e segue o tema (§5) */}
+          <IconPlus width={24} height={24} fill="var(--text)" />
         </TouchableOpacity>
       )}
 
@@ -7521,6 +7536,9 @@ function MainApp() {
         idProxima={planejarOutroDia ? null : idPortaDoHalo}
         armaDaProxima={armaDoHalo}
         objecoesDaProxima={objecoesDaProxima}
+        linha={linhaDoDiaAgora && linhaDoDiaAgora.estado !== "pendente" ? linhaDoDiaAgora : null}
+        aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
+        faixaVermelha={linhaDoDiaAgora?.estado === "pendente"}
         sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
         aoFala={abrirFala}
         recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
@@ -13256,10 +13274,15 @@ const styles = StyleSheet.create({
   // Map
   map: { flex: 1 },
   // "+" do mapa novo (C10): 52 px, vermelho, acima da folha.
+  /* O "+" DEIXOU DE SER VERMELHO (prancha "Mapa limpo" §5, 29/10/26). Cadastrar um lead na rua é
+     uma ação útil, não a ação do momento — e o vermelho disputava atenção com o Cheguei e com a
+     faixa de alerta, três vermelhos na mesma tela. Agora é um círculo neutro de 44, como o botão
+     de localização, e o vermelho ficou só para o que é agir agora. */
   fabMapaNovo: {
-    position: 'absolute', right: 16, width: 52, height: 52, borderRadius: 26, zIndex: 25,
-    backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 8,
+    position: 'absolute', right: 16, width: 44, height: 44, borderRadius: 22, zIndex: 25,
+    backgroundColor: 'var(--surface-2)', borderWidth: 1, borderColor: 'var(--border)',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 8,
   },
   // Aviso do carregamento por área. No TOPO do mapa: embaixo ficam a legenda
   // de temperatura, o botao de localizacao e a barra de navegacao.

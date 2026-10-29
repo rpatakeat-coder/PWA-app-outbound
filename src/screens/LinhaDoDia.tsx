@@ -14,9 +14,11 @@ import { ALTURA_LINHA_DO_DIA, type LinhaDoDia as Linha, type TomDaLinha } from '
 
 type Props = {
   linha: Linha;
-  /** Distância do topo da tela. O App empilha: lentes › esta faixa › pílulas › janela das ligações. */
+  /** Distância do topo. Desde 29/10 há só duas posições fixas: a fileira e ESTA faixa. */
   top: number;
   aoTocar: () => void;
+  /** A ocupante que perdeu a vez na fila: vira o "+1" na ponta direita (prancha "Mapa limpo" §3). */
+  outra?: { rotulo: string; aoTocar: () => void } | null;
 };
 
 /* Cada tom é um trio (fundo, traço, tinta) e o ponto repete a tinta — menos no vermelho, onde
@@ -28,7 +30,7 @@ const TOM: Record<TomDaLinha, { fundo: string; traco: string; tinta: string; pon
   verde: { fundo: 'var(--ok-fundo)', traco: 'var(--tint-green-border)', tinta: 'var(--ok-texto)', ponto: 'var(--ok-texto)' },
 };
 
-export default function LinhaDoDia({ linha, top, aoTocar }: Props) {
+export default function LinhaDoDia({ linha, top, aoTocar, outra }: Props) {
   const t = TOM[linha.tom];
   return (
     <Pressable
@@ -49,6 +51,14 @@ export default function LinhaDoDia({ linha, top, aoTocar }: Props) {
         )}
       </View>
       {!!linha.direita && <Text style={[s.direita, { color: t.tinta }]} numberOfLines={1}>{linha.direita}</Text>}
+      {/* O "+1" DA FILA (prancha "Mapa limpo" §3): só UMA faixa por vez, mas a que perdeu não
+          evapora. Sem isto, uma visita sem próximo passo às 12:30 esconderia a hora das ligações
+          o dia inteiro — o executivo nunca saberia que era hora de ligar. */}
+      {outra && (
+        <Pressable accessibilityRole="button" accessibilityLabel={outra.rotulo} onPress={outra.aoTocar} style={[s.mais, { borderColor: t.traco }]}>
+          <Text style={[s.maisTexto, { color: t.tinta }]}>+1</Text>
+        </Pressable>
+      )}
     </Pressable>
   );
 }
@@ -66,5 +76,7 @@ const s = StyleSheet.create({
   titulo: { fontSize: 13.5, fontWeight: '700' },
   sub: { fontSize: 12, fontWeight: '500' },
   subNeutro: { color: 'var(--text-muted)' },
+  mais: { minWidth: 28, height: 28, borderRadius: 14, borderWidth: 1, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  maisTexto: { fontSize: 12.5, fontWeight: '800' },
   direita: { fontSize: 12.5, fontWeight: '700', flexShrink: 0, whiteSpace: 'nowrap' } as never,
 });
