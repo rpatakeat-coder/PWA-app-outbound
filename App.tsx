@@ -131,7 +131,7 @@ import FichaDeRua, { type CamposCadastro } from './src/screens/FichaDeRua';
 import MudarEtapaNovo from './src/screens/MudarEtapaNovo';
 import PorNoPlano from './src/screens/PorNoPlano';
 import type { AcaoId } from './src/utils/acoesDoPlano';
-import { ROTULO_ETAPA, ETAPA as ETAPA_FS } from './src/utils/fichaDeRua';
+import { ROTULO_ETAPA, ETAPA as ETAPA_FS, type Ficha } from './src/utils/fichaDeRua';
 import { negocioAcao } from './src/utils/negocioAcao';
 import { subirPlanoDaFila } from './src/utils/planoDoPino';
 import { textoNormalizado } from './src/utils/pinoP2';
@@ -228,6 +228,7 @@ import { quenteEsfriando, secaoDoItem } from './supabase/functions/_compartilhad
 import { FaixaHoraDasLigacoes } from './src/screens/CartaoDaFila';
 import FolhaAntesDaRua from './src/screens/FolhaAntesDaRua';
 import FolhaPlanoDoDia from './src/screens/FolhaPlanoDoDia';
+import FolhaSai from './src/screens/FolhaSai';
 import PedirAvisos from './src/screens/PedirAvisos';
 import MinhasFotos, { FOTOS_LIBERADAS } from './src/screens/MinhasFotos';
 import { marcarGravada as marcarFeitaGravada, registrarFeita } from './src/utils/filaFeitas';
@@ -5232,12 +5233,28 @@ function MainApp() {
     fotoProva?: Blob | null;
     /** A foto de prova JÁ subiu (no check-in, ou no da mesma visita mais cedo). */
     fotoNoCheckin?: boolean;
+    /** A opção escolhida no "Saí · como ficou?" (2.6): a ficha abre já nela. */
+    inicio?: Partial<Ficha> | null;
   } | null>(null);
   const [desfechoPendente, setDesfechoPendente] = useState<{
     idHubspot: string;
     cliente: string;
     visitadoEm: string;
   } | null>(null);
+
+  /* "SAÍ · COMO FICOU?" (espinha do dia 2.6, 29/10/26). A ficha abria logo depois do Cheguei —
+     o executivo tinha acabado de encostar na porta e ainda não havia falado com ninguém. Era por
+     isso que, desde 14/10, só 7 de 314 fichas levaram alguém a Demo/Proposta: quando o formulário
+     subia, a demo ainda não tinha acontecido.
+
+     Agora o Cheguei abre uma VISITA, e a pergunta espera a saída. A folha do mapa mostra "Na
+     porta · {nome}" com um botão só; tocar nele escolhe entre quatro saídas e abre A MESMA ficha
+     de sempre, já naquela opção. Nada trava: se ele ignorar, a visita fica sem desfecho e a linha
+     do dia em `pendente` cobra sozinha, em vermelho, como já cobrava. */
+  type VisitaAberta = NonNullable<typeof fichaPendente>;
+  const [visitaAberta, setVisitaAberta] = useState<VisitaAberta | null>(null);
+  const [escolhendoSaida, setEscolhendoSaida] = useState(false);
+  const pedirDesfechoNaSaida = useCallback((v: VisitaAberta) => { setVisitaAberta(v); setEscolhendoSaida(false); }, []);
 
   const handleMarkAsVisited = useCallback(async (client: Client, onDone?: () => void) => {
     if (visitingRef.current) return;
@@ -5269,7 +5286,7 @@ function MainApp() {
           fotoNoCheckin = !!fotos?.length;
         }
       } catch { /* sem a leitura, a ficha abre como antes */ }
-      setFichaPendente({
+      pedirDesfechoNaSaida({
         client, checkinEm: client.visited_at ?? new Date().toISOString(), etapaAtual: pelaTabela ?? peloSnapshot,
         primeiraVisita: (client.visit_count ?? 0) <= 1,
         declarada: declaradaDaVisita,
@@ -5594,7 +5611,7 @@ function MainApp() {
             const chave = textoNormalizado(client.etapa);
             const pelaTabela = chave ? contextoPino.etapaDePara.get(chave) ?? null : null;
             const peloSnapshot = client.id_hubspot ? contextoPino.tempoPorNegocio.get(String(client.id_hubspot))?.etapaCodigo ?? null : null;
-            setFichaPendente({
+            pedirDesfechoNaSaida({
               client,
               checkinEm: feitoEm,
               etapaAtual: pelaTabela ?? peloSnapshot,
@@ -5698,7 +5715,7 @@ function MainApp() {
             }
           }
         } catch { /* fica a marca da tentativa */ }
-        setFichaPendente({
+        pedirDesfechoNaSaida({
           client: visitado,
           checkinEm: visitado.visited_at ?? new Date().toISOString(),
           etapaAtual: pelaTabela ?? peloSnapshot,
@@ -7309,6 +7326,7 @@ function MainApp() {
           linha={linhaDoDiaAgora && linhaDoDiaAgora.estado !== "pendente" ? linhaDoDiaAgora : null}
           aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
           faixaVermelha={linhaDoDiaAgora?.estado === "pendente"}
+          naPorta={visitaAberta ? { nome: getClientPrimaryName(visitaAberta.client), aoSair: () => setEscolhendoSaida(true) } : null}
           sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
           aoFala={abrirFala}
           recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
@@ -7562,6 +7580,7 @@ function MainApp() {
         linha={linhaDoDiaAgora && linhaDoDiaAgora.estado !== "pendente" ? linhaDoDiaAgora : null}
         aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
         faixaVermelha={linhaDoDiaAgora?.estado === "pendente"}
+        naPorta={visitaAberta ? { nome: getClientPrimaryName(visitaAberta.client), aoSair: () => setEscolhendoSaida(true) } : null}
         sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
         aoFala={abrirFala}
         recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
@@ -9545,6 +9564,25 @@ function MainApp() {
           }}
         />
       )}
+      {/* A ESCOLHA DA SAÍDA (2.6). Cada botão abre a MESMA ficha de rua, já na opção — nada de
+          formulário novo. O mapeamento usa o vocabulário que a ficha já tem desde 14/10:
+          "Fiz a demo" é o `apresentei`, que move o negócio para Demo/Proposta. */}
+      {escolhendoSaida && visitaAberta && (
+        <FolhaSai
+          nome={getClientPrimaryName(visitaAberta.client)}
+          aoDepois={() => { registrarEvento('sai_depois', { cliente: visitaAberta.client.id }); setEscolhendoSaida(false); }}
+          aoEscolher={(saida) => {
+            registrarEvento('sai_desfecho', { opcao: saida, cliente: visitaAberta.client.id });
+            const inicio = saida === 'fechou' ? { comoFoi: 'falou_com_decisor' as const, proximo: 'fechou' as const }
+              : saida === 'demo' ? { comoFoi: 'falou_com_decisor' as const, proximo: 'apresentei' as const }
+              : saida === 'voltar' ? { comoFoi: 'falou_com_decisor' as const, proximo: 'voltar7' as const }
+              : { comoFoi: 'sem_interesse' as const, proximo: 'sem_interesse' as const };
+            setEscolhendoSaida(false);
+            setVisitaAberta(null);
+            setFichaPendente({ ...visitaAberta, inicio });
+          }}
+        />
+      )}
       {antesDaRua && (() => {
         const itensF = (filaNaTela.data?.itens ?? []) as Array<{ dealId: string; negocio: string; etapaId: string; venceu: boolean; prazo: string | null; horaPrazo?: string | null; telefone: string | null }>;
         const hojeF = filaNaTela.data?.hoje ?? diaBRT(new Date());
@@ -10632,6 +10670,7 @@ function MainApp() {
           ownerId={myHubspotId}
           donoColega={fichaPendente.client.vendedor_id_hubspot && myHubspotId && String(fichaPendente.client.vendedor_id_hubspot) !== String(myHubspotId)
             ? (vendorById.get(fichaPendente.client.vendedor_id_hubspot)?.full_name ?? 'o dono') : null}
+          inicio={fichaPendente.inicio ?? null}
           checkinEm={fichaPendente.checkinEm}
           etapaAtual={fichaPendente.etapaAtual}
           primeiraVisita={fichaPendente.primeiraVisita}

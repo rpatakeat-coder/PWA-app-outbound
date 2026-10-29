@@ -16,7 +16,11 @@ import { supabase } from '../integrations/supabase/client';
 // contra `ignorado` é a resposta, e `proposto` é o denominador.
 export type TipoEvento = 'primeiro_toque' | 'fala_aberta' | 'halo_sugerido' | 'halo_aceito' | 'referencia_tocada'
   | 'se_ele_disser_aberto'
-  | 'plano_proposto' | 'plano_confirmado' | 'plano_ignorado';
+  | 'plano_proposto' | 'plano_confirmado' | 'plano_ignorado'
+  /* O CICLO DA PORTA (§5). `sai_desfecho` por opção é o que diz se "Fiz a demo" saiu dos 7 de 314
+     — a medida que justifica o item 2.6 inteiro. `sai_depois` é o contrapeso honesto: quantas
+     vezes a pergunta foi empurrada para frente. */
+  | 'sai_desfecho' | 'sai_depois';
 
 let desligado = false;
 
