@@ -19,7 +19,8 @@ import { ordenarItens, quedaCurta, type ItemFolha } from '../utils/cardNovo';
 import { IconChevronDown as SiDown, IconClose as SiClose } from '../components/icons';
 import { BlocoParaEntrar } from '../components/ParaEntrar';
 import { visitasDoDia, type Arma } from '../utils/armasDoMapa';
-import { primeiroToque } from '../utils/eventosDoMapa';
+import type { ObjecaoDaCasa } from '../utils/playbook';
+import { primeiroToque, registrarEvento } from '../utils/eventosDoMapa';
 import { useComSinal } from './AvisoSemSinal';
 
 export type { ItemFolha };
@@ -61,6 +62,8 @@ type Props = {
   sugestao?: { porque: string; segunda: { id: string; texto: string } | null } | null;
   /** "Fala pronta ›" / "Playbook ›": abre a página do gatilho. */
   aoFala?: (a: Arma) => void;
+  /** "SE ELE DISSER · PARA ESTA CASA" (espinha do dia 2.4): até 2, escolhidas pela ficha. */
+  objecoesDaProxima?: ObjecaoDaCasa[];
   /** Lente Recém-abertos: quantos a pessoa tem na região (0 = estado vazio) e a volta ao Meu dia. */
   recem?: { naRegiao: number | null; aoVoltar: () => void } | null;
   /** Desktop (28/09/2026): a mesma folha vira o painel lateral, sempre aberta, sem alça. */
@@ -135,8 +138,10 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, objecoesDaProxima = [], recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
   const cores = useIconColors();
+  /** Qual objeção do "Se ele disser" está aberta (uma por vez, e a folha não muda de tamanho à toa). */
+  const [disserAberta, setDisserAberta] = useState<string | null>(null);
   const onCheguei = (c: Client) => { primeiroToque('cheguei'); chegueiBruto(c); };
   const irAte = (c: Client) => { primeiroToque('ir'); ir(c, false); };
   const visitasFeitas = feitasMedidas ?? 0;
@@ -419,6 +424,43 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
           ) : armaDaProxima ? (
             <BlocoParaEntrar arma={armaDaProxima} compacto={!embutida && !aberta} aoAbrirFala={aoFala} />
           ) : null}
+          {/* SE ELE DISSER · PARA ESTA CASA (espinha do dia 2.4): a objeção que ele vai
+              dizer chega antes da campainha. A resposta abre AQUI, sem sair da folha —
+              na porta ninguém navega biblioteca. Sem ficha, nada disto aparece. */}
+          {(embutida || aberta) && objecoesDaProxima.length > 0 && (
+            <View style={s.disserBloco}>
+              <Text style={s.disserKicker}>SE ELE DISSER · PARA ESTA CASA</Text>
+              {objecoesDaProxima.map((od) => {
+                const abertaEsta = disserAberta === od.objecao.id;
+                return (
+                  <View key={od.objecao.id}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: abertaEsta }}
+                      accessibilityLabel={`Se ele disser: ${od.objecao.curta}. ${od.motivo}`}
+                      onPress={() => {
+                        if (!abertaEsta) registrarEvento('se_ele_disser_aberto', { objecao_id: od.objecao.id, pagina: od.objecao.paginaId });
+                        setDisserAberta(abertaEsta ? null : od.objecao.id);
+                      }}
+                      style={s.disserLinha}
+                    >
+                      <Text style={s.disserAspas} numberOfLines={1}>{`“${od.objecao.curta}”`}</Text>
+                      <Text style={s.disserMotivo} numberOfLines={1}>{od.motivo}</Text>
+                      <Text style={s.disserSeta}>{abertaEsta ? '–' : '›'}</Text>
+                    </Pressable>
+                    {abertaEsta && (
+                      <View style={s.disserResposta}>
+                        <Text style={s.disserFala}>{`“${od.objecao.fala}”`}</Text>
+                        {od.objecao.seInsistir.length > 0 && (
+                          <Text style={s.disserInsistir}>{`Se ele insistir: ${od.objecao.seInsistir.join(' ')}`}</Text>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
           {!comSinal && <Text style={s.semSinal}>Cheguei funciona sem sinal: grava no celular com a hora e o GPS.</Text>}
           {ehSugerida && sugestao!.segunda && (
             <Pressable accessibilityRole="button" onPress={() => { const it = itens.find((x) => x.c.id === sugestao!.segunda!.id); if (it) onAbrir(it.c); }} style={s.segunda}>
@@ -627,6 +669,17 @@ const s = StyleSheet.create({
   pilulaProva: { fontSize: 11, fontWeight: '600', color: 'var(--text-muted)', marginTop: 2 },
   pilulaProvaFalta: { color: 'var(--tint-amber-text)' },
   proxima: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
+  // SE ELE DISSER (2.4): mesmos tokens do resto da folha, nenhuma cor nova, e
+  // cada linha com os 44 px de toque mínimo do pedido.
+  disserBloco: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'var(--border)', gap: 2 },
+  disserKicker: { fontSize: 11, fontWeight: '700', letterSpacing: 0.66, color: 'var(--text-subtle)', marginBottom: 4 },
+  disserLinha: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  disserAspas: { flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: '600', color: 'var(--text)' },
+  disserMotivo: { fontSize: 12, fontWeight: '500', color: 'var(--text-subtle)', flexShrink: 1, maxWidth: '42%' },
+  disserSeta: { fontSize: 15, fontWeight: '700', color: 'var(--text-muted)', width: 14, textAlign: 'center' },
+  disserResposta: { paddingBottom: 10, gap: 4 },
+  disserFala: { fontSize: 14, lineHeight: 19, fontWeight: '600', color: 'var(--text)' },
+  disserInsistir: { fontSize: 12.5, lineHeight: 17, color: 'var(--text-muted)' },
   btnCheguei: { height: 48, paddingHorizontal: 20, borderRadius: 14, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   btnChegueiTexto: { fontSize: 15, fontWeight: '700', color: '#fff' },
   mini: { width: 30, height: 30, borderRadius: 15, borderWidth: 2.5, backgroundColor: '#14171C', alignItems: 'center', justifyContent: 'center' },

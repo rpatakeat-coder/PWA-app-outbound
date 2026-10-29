@@ -185,6 +185,54 @@ export function objecoesDoPlaybook(pb: Playbook, paginaId = 'objecoes'): Objecao
   return out;
 }
 
+// SE ELE DISSER · PARA ESTA CASA (espinha do dia 2.4, 29/10/26). O Playbook tem
+// 33 páginas e 4 lidas: na porta, com o dono na frente, ninguém navega
+// biblioteca. Então a objeção que ELE vai dizer chega antes da campainha.
+//
+// Quem escolhe são os dois dados que a ficha já tem — sistema atual e dor — e
+// nada mais: sem ficha, o bloco some (é o que o pedido manda). A dor vem antes
+// do sistema porque é o que o dono falou com a própria boca; o sistema é
+// contexto. "Nenhum" como sistema não é objeção: casa sem sistema não diz "já
+// tenho sistema".
+export type ObjecaoDaCasa = {
+  objecao: Objecao;
+  /** O motivo curto que vai à direita da linha: a dor ou o sistema que a trouxe. */
+  motivo: string;
+};
+
+const SEM_SISTEMA = ['nenhum', 'nao tem', 'caderno', 'papel', ''];
+
+/** Até `max` objeções para esta casa, pela dor e pelo sistema da ficha. Sem os dois, lista vazia. */
+export function objecoesDaCasa(
+  lista: Objecao[],
+  casa: { sistema?: string | null; dor?: string | null },
+  max = 2,
+): ObjecaoDaCasa[] {
+  const dor = (casa.dor ?? '').trim();
+  const sistemaBruto = (casa.sistema ?? '').trim();
+  const sistema = SEM_SISTEMA.includes(semAcento(sistemaBruto)) ? '' : sistemaBruto;
+  if (!dor && !sistema) return [];
+  const buscas: { termo: string; motivo: string }[] = [];
+  if (dor) buscas.push({ termo: dor, motivo: dor });
+  if (sistema) buscas.push({ termo: `${sistema} sistema trocar`, motivo: `usa ${sistema}` });
+
+  const out: ObjecaoDaCasa[] = [];
+  const posta = new Set<string>();
+  const por = (b: { termo: string; motivo: string }, uma: boolean) => {
+    for (const o of buscarObjecoes(lista, b.termo)) {
+      if (posta.has(o.id)) continue;
+      posta.add(o.id);
+      out.push({ objecao: o, motivo: b.motivo });
+      if (uma || out.length >= max) return;
+    }
+  };
+  // Primeira rodada: UMA de cada, para dor e sistema dividirem as duas vagas.
+  for (const b of buscas) { if (out.length < max) por(b, true); }
+  // Sobrou vaga (só um dos dois achou): completa com o resto de quem achou.
+  for (const b of buscas) { if (out.length < max) por(b, false); }
+  return out.slice(0, max);
+}
+
 /** Busca pela palavra do dono ("caro", "sistema", "internet"), sem acento. */
 export function buscarObjecoes(lista: Objecao[], termo: string): Objecao[] {
   const palavras = semAcento(termo).split(/\s+/).filter((p) => p.length >= 3);

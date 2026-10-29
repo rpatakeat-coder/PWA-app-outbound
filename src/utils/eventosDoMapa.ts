@@ -8,7 +8,10 @@
 // se perde em silêncio. Medição é bônus, a venda não espera por ela.
 import { supabase } from '../integrations/supabase/client';
 
-export type TipoEvento = 'primeiro_toque' | 'fala_aberta' | 'halo_sugerido' | 'halo_aceito' | 'referencia_tocada';
+// 'se_ele_disser_aberto' (espinha do dia §5, 29/10/26): quantos toques a resposta
+// na porta recebe por página — é o KPI que diz se o bloco serve ou é enfeite.
+export type TipoEvento = 'primeiro_toque' | 'fala_aberta' | 'halo_sugerido' | 'halo_aceito' | 'referencia_tocada'
+  | 'se_ele_disser_aberto';
 
 let desligado = false;
 

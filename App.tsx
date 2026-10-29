@@ -196,6 +196,7 @@ import { TarefasScreen, baldeDeVencimento, baldeDaTarefaDoCrm } from './src/scre
 import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
 import PlaybookScreen, { buscarPlaybook } from './src/screens/PlaybookScreen';
+import { objecoesDaCasa, objecoesDoPlaybook } from './src/utils/playbook';
 import FilaTarefasScreen, { opcoesDaFila } from './src/screens/FilaTarefasScreen';
 import ListaCarteiraWeb from './src/screens/ListaCarteiraWeb';
 import LimparFunil from './src/screens/LimparFunil';
@@ -2918,12 +2919,26 @@ function MainApp() {
      Sem a tabela, negócio fora do snapshot ficava sem etapa e o halo dizia "achar o decisor" onde a
      folha dizia "fechar" (auditoria 16/10/26). Não chamar codigoDaEtapa daqui: é declarada depois (TDZ). */
   const etapaDoHalo = itemDoHalo && contextoPino ? (textoNormalizado(itemDoHalo.c.etapa) ? contextoPino.etapaDePara.get(textoNormalizado(itemDoHalo.c.etapa)) ?? null : null) : null;
-  const { arma: armaDoHalo } = useArmaDoPino(itemDoHalo?.c ?? null, itemDoHalo?.p ?? null, {
+  const { arma: armaDoHalo, fatos: fatosDoHalo } = useArmaDoPino(itemDoHalo?.c ?? null, itemDoHalo?.p ?? null, {
     etapaCodigo: etapaDoHalo,
     tempo: itemDoHalo?.c.id_hubspot ? contextoPino?.tempoPorNegocio.get(String(itemDoHalo.c.id_hubspot)) ?? null : null,
     proximo: combinadoDe(itemDoHalo?.c ?? null)?.texto?.toLowerCase() ?? null,
     clientePerto: clientePertoDe(itemDoHalo?.c ?? null)?.[0]?.nome ?? null,
   }, modoNovo && !!itemDoHalo);
+  /* SE ELE DISSER · PARA ESTA CASA (espinha do dia 2.4, 29/10/26). As duas objeções saem do TEXTO
+     OFICIAL da página "objecoes" do Playbook e são escolhidas pela ficha desta casa — sistema atual
+     e dor, que o `fatos` do gatilho já leu. Sem ficha, a lista vem vazia e o bloco some.
+     O playbook só é buscado quando HÁ próxima porta (é a única hora em que o bloco pode aparecer);
+     fica no mesmo cache da aba Playbook, então na rua sai do celular, sem rede. */
+  const playbookDaPorta = useQuery({
+    queryKey: ['playbook'], queryFn: buscarPlaybook, staleTime: 10 * 60 * 1000,
+    enabled: modoNovo && !!itemDoHalo,
+  });
+  const objecoesDaProxima = useMemo(() => {
+    const pb = playbookDaPorta.data;
+    if (!pb) return [];
+    return objecoesDaCasa(objecoesDoPlaybook(pb), { sistema: fatosDoHalo?.sistema, dor: fatosDoHalo?.dor });
+  }, [playbookDaPorta.data, fatosDoHalo?.sistema, fatosDoHalo?.dor]);
   // "Fala pronta ›" / "Playbook ›": a página do gatilho por cima do mapa (e o evento fala_aberta)
   const [falaAberta, setFalaAberta] = useState<Arma | null>(null);
   const abrirFala = useCallback((a: Arma) => {
@@ -7255,6 +7270,7 @@ function MainApp() {
           aoNovos={() => setLente('novos')}
           idProxima={planejarOutroDia ? null : idPortaDoHalo}
           armaDaProxima={armaDoHalo}
+          objecoesDaProxima={objecoesDaProxima}
           sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
           aoFala={abrirFala}
           recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
@@ -7503,6 +7519,7 @@ function MainApp() {
         aoNovos={() => setLente('novos')}
         idProxima={planejarOutroDia ? null : idPortaDoHalo}
         armaDaProxima={armaDoHalo}
+        objecoesDaProxima={objecoesDaProxima}
         sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
         aoFala={abrirFala}
         recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
