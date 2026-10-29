@@ -14,6 +14,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { horaBRT } from '../utils/linhaDoDia';
+
 import { Painel, type EstagioPainel } from '../components/Painel';
 import { IconChevronRight as SiRight } from '../components/icons';
 
@@ -23,6 +25,8 @@ type Props = {
   visivel: boolean;
   aoFechar: () => void;
   linhas: LinhaDaLista[];
+  /** O nome da lente, para o cabeçalho dizer de que recorte está falando. */
+  rotuloLente?: string | null;
   /** Sem GPS a lista é alfabética e não mostra distância — e isso é dito, não escondido. */
   semGps: boolean;
   /** Quantos filtros estão ligados (0 = é a lente que está mandando). */
@@ -46,15 +50,30 @@ const PAGINA = 60;
 const NO_PEEK = 2;
 
 export default function FolhaLista({
-  visivel, aoFechar, linhas, semGps, filtrosAtivos, aoTocar, ordem, aoTrocarOrdem, estagio, aoTrocarEstagio,
+  visivel, aoFechar, linhas, semGps, filtrosAtivos, aoTocar, ordem, aoTrocarOrdem, estagio, aoTrocarEstagio, rotuloLente = null,
 }: Props) {
   const [quantas, setQuantas] = React.useState(PAGINA);
   // Trocar a ordem volta ao começo: continuar na página 3 de outra ordem mostra o meio da lista.
   React.useEffect(() => { setQuantas(PAGINA); }, [visivel, ordem]);
 
+  /* O NÚMERO CONGELA AO ABRIR. A dependência é só `visivel` DE PROPÓSITO: incluir `linhas` faria
+     o congelamento acompanhar o mapa, que é exatamente o que se quer evitar. */
+  const [congelado, setCongelado] = React.useState({ n: 0, hora: '' });
+  const recontar = React.useCallback(() => {
+    setCongelado({ n: linhas.length, hora: horaBRT(new Date()) });
+  }, [linhas.length]);
+  React.useEffect(() => {
+    if (visivel) setCongelado({ n: linhas.length, hora: horaBRT(new Date()) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visivel]);
+
   const aproximados = linhas.filter((l) => l.aproximado).length;
   const nunca = linhas.filter((l) => l.nunca).length;
   const mostradas = linhas.slice(0, quantas);
+  /* A página vale para os dois grupos juntos: o plano vem inteiro (são 6, no máximo) e o resto
+     ocupa o que sobrar, para "Ver mais" continuar significando a mesma coisa. */
+  const noPlano = mostradas.filter((l) => l.plano != null);
+  const foraDoPlano = mostradas.filter((l) => l.plano == null);
   const faltam = linhas.length - NO_PEEK;
 
   const botaoOrdem = (o: OrdemDaLista, rotulo: string) => (
@@ -83,7 +102,12 @@ export default function FolhaLista({
   const cabecalho = (
     <View style={s.topo}>
       <View style={s.linhaTitulo}>
-        <Text style={s.titulo}>{`${linhas.length} ${linhas.length === 1 ? 'lugar' : 'lugares'}`}</Text>
+        {/* A CONTAGEM É CONGELADA (prancha "Mapa limpo" §8, 29/10/26). Ela diz quantos havia no
+            recorte NA HORA EM QUE A LISTA ABRIU, e não se mexe enquanto o executivo lê. Antes era
+            `linhas.length` ao vivo: o número mudava sozinho a cada arraste do mapa atrás, e número
+            que muda sozinho não é informação — é ruído com cara de dado. Para recontar, o toque em
+            "atualizar", que é dele. */}
+        <Text style={s.titulo}>{`${congelado.n} ${congelado.n === 1 ? 'lugar' : 'lugares'}`}</Text>
         <Pressable accessibilityRole="button" onPress={aoFechar} style={s.fechar} hitSlop={8}>
           <Text style={s.fecharTexto}>Fechar</Text>
         </Pressable>
@@ -93,15 +117,22 @@ export default function FolhaLista({
         {botaoOrdem('novo', `Nunca visitado · ${nunca}`)}
       </View>
       <Text style={s.legenda}>
+        {`${rotuloLente ? `${rotuloLente} · ` : ''}contado às ${congelado.hora}`}
+        {' · '}
         {semGps
           ? ordem === 'novo'
-            ? 'Sem GPS: nunca visitados primeiro, depois em ordem de nome.'
-            : 'Sem GPS: em ordem de nome. Ligue a localização para ver a distância.'
+            ? 'sem GPS: nunca visitados primeiro, depois em ordem de nome'
+            : 'sem GPS: em ordem de nome'
           : ordem === 'novo'
-            ? 'Quem você nunca visitou primeiro e, dentro disso, o mais perto.'
-            : 'Mais perto primeiro, de onde você está agora.'}
+            ? 'nunca visitados primeiro e, dentro disso, o mais perto'
+            : 'mais perto primeiro'}
         {filtrosAtivos > 0 ? ` · ${filtrosAtivos} ${filtrosAtivos === 1 ? 'filtro' : 'filtros'}` : ''}
       </Text>
+      {congelado.n !== linhas.length && (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Recontar: agora são ${linhas.length} no recorte`} onPress={recontar} style={s.recontar}>
+          <Text style={s.recontarTexto}>{`O mapa mudou · recontar (${linhas.length})`}</Text>
+        </Pressable>
+      )}
     </View>
   );
 
@@ -133,7 +164,15 @@ export default function FolhaLista({
       <View style={s.corpo}>
         {linhas.length === 0 ? vazio : (
           <>
-            {mostradas.map(linha)}
+            {/* DOIS GRUPOS (prancha §6): a parada combinada não disputa atenção em pé de
+                igualdade com o CNPJ que ele nunca viu. Só aparecem quando há plano — sem plano,
+                um título "FORA DO PLANO" sozinho seria ruído. */}
+            {noPlano.length > 0 && <Text style={s.grupo}>{`NO PLANO · ${noPlano.length}`}</Text>}
+            {noPlano.map(linha)}
+            {noPlano.length > 0 && foraDoPlano.length > 0 && (
+              <Text style={s.grupo}>{`FORA DO PLANO, PERTO · ${foraDoPlano.length}`}</Text>
+            )}
+            {(noPlano.length > 0 ? foraDoPlano : mostradas).map(linha)}
             {linhas.length > quantas && (
               <Pressable accessibilityRole="button" onPress={() => setQuantas((q) => q + PAGINA)} style={s.mais}>
                 <Text style={s.maisTexto}>{`Ver mais ${Math.min(PAGINA, linhas.length - quantas)}`}</Text>
@@ -158,6 +197,9 @@ const s = StyleSheet.create({
   titulo: { flex: 1, fontSize: 18, fontWeight: '800', color: 'var(--text)' },
   fechar: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
   fecharTexto: { fontSize: 15, fontWeight: '600', color: 'var(--text-muted)' },
+  grupo: { fontSize: 11.5, fontWeight: '700', letterSpacing: 0.5, color: 'var(--text-subtle)', marginTop: 10, marginBottom: 2 },
+  recontar: { minHeight: 36, justifyContent: 'center' },
+  recontarTexto: { fontSize: 12.5, fontWeight: '600', color: 'var(--vermelho-texto)' },
   legenda: { fontSize: 12, color: 'var(--text-muted)' },
   ordens: { flexDirection: 'row', gap: 8, marginTop: 4, marginBottom: 2 },
   ordem: {

@@ -7191,6 +7191,7 @@ function MainApp() {
           visivel={listaAberta}
           aoFechar={() => setListaAberta(false)}
           linhas={linhasDaLista}
+          rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? null}
           semGps={!userLocation}
           filtrosAtivos={quantosFiltros(filtrosNovos)}
           ordem={ordemDaLista}
@@ -7238,6 +7239,7 @@ function MainApp() {
           aoFiltrosRapidos={setFiltrosNovos}
           filtrosAtivos={quantosFiltros(filtrosNovos)}
           aoFiltros={() => setFiltrosNovosAbertos(true)}
+          contadorNovos={contadorDaSemana?.texto ?? null}
           modoSol={modoSol}
           aoModoSol={alternarModoSol}
         />
@@ -14061,8 +14063,12 @@ const styles = StyleSheet.create({
     boxSizing: 'content-box',
   },
   navBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  navSeloTexto: { position: 'absolute', top: -12, left: 14, height: 18, paddingHorizontal: 6, borderRadius: 9, backgroundColor: 'var(--vermelho-acao)', borderWidth: 1.5, borderColor: 'var(--surface)', justifyContent: 'center', boxSizing: 'content-box' } as never,
-  navSeloTextoT: { color: '#fff', fontSize: 10, lineHeight: 14, fontWeight: '800', whiteSpace: 'nowrap' } as never,
+  /* O SELO DE HOJE EM NEUTRO INVERTIDO (prancha "Mapa limpo" §7, 29/10/26). Ele era vermelho e
+     ficava aceso o dia inteiro — atrasado é coisa para resolver hoje, não agora. O vermelho
+     passa a valer só para o que é agir neste minuto: o Cheguei e a faixa de alerta. Invertido
+     (fundo da tinta, texto do fundo) continua sendo o elemento mais forte da barra. */
+  navSeloTexto: { position: 'absolute', top: -12, left: 14, height: 18, paddingHorizontal: 6, borderRadius: 9, backgroundColor: 'var(--text)', borderWidth: 1.5, borderColor: 'var(--surface)', justifyContent: 'center', boxSizing: 'content-box' } as never,
+  navSeloTextoT: { color: 'var(--surface)', fontSize: 10, lineHeight: 14, fontWeight: '800', whiteSpace: 'nowrap' } as never,
   navItemText: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-faint)' },
   // ===== Calendario da Agenda (so' desktop) =====
   navItemTextActive: { fontWeight: '700', color: 'var(--vermelho-texto)' },

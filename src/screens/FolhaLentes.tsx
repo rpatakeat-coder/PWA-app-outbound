@@ -62,11 +62,13 @@ type Props = {
   filtros?: FiltrosNovos;
   aoFiltrosRapidos?: (f: FiltrosNovos) => void;
   /** "Modo sol · mapa claro": controle do mapa que veio do menu do avatar (29/10/26). */
+  /** Meta da semana de Recém-abertos ("2/5"): mora aqui, não na pílula — é meta com dono. */
+  contadorNovos?: string | null;
   modoSol?: boolean;
   aoModoSol?: () => void;
 };
 
-export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolher, filtrosAtivos, aoFiltros, filtros, aoFiltrosRapidos, modoSol, aoModoSol }: Props) {
+export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolher, filtrosAtivos, aoFiltros, filtros, aoFiltrosRapidos, contadorNovos = null, modoSol, aoModoSol }: Props) {
   const marcado = (r: Rapido) => !!filtros && (filtros[r.grupo] as Set<string>).has(r.valor);
   const alternar = (r: Rapido) => {
     if (!filtros || !aoFiltrosRapidos) return;
@@ -99,6 +101,7 @@ export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolh
                 <View style={s.lenteLinha}>
                   <View style={[s.bolinha, { backgroundColor: COR_LENTE[l.id] }]} />
                   <Text style={s.lenteNome} numberOfLines={1}>{l.rotulo}</Text>
+                  {l.id === 'novos' && !!contadorNovos && <Text style={s.lenteMeta}>{contadorNovos}</Text>}
                 </View>
                 <Text style={s.lenteDesc} numberOfLines={2}>{DESCRICAO[l.id]}</Text>
               </Pressable>
@@ -172,6 +175,7 @@ export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolh
 }
 
 const s = StyleSheet.create({
+  lenteMeta: { fontSize: 12, fontWeight: '800', color: 'var(--text-muted)' },
   limpar: { minHeight: 44, justifyContent: 'center' },
   limparTexto: { fontSize: 14, fontWeight: '600', color: 'var(--vermelho-texto)' },
   sol: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },

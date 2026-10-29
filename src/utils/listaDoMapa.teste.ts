@@ -63,6 +63,11 @@ ok(!situacao(it({ id: 'x', visitadoEm: '2026-10-26T23:30:00-03:00' }), AGORA).in
 const semLancar = <T>(f: () => T): T | '(lançou)' => { try { return f(); } catch { return '(lançou)'; } };
 ok(semLancar(() => situacao(it({ id: 'x', visitadoEm: 'ontem' }), AGORA)) === 'nunca visitado', 'data inválida não vira NaN nem lança');
 
+/* A POSIÇÃO NO PLANO SAI NA LINHA (prancha "Mapa limpo" §6, 29/10/26): o dado entrava e morria
+   aqui dentro. É ele que separa "NO PLANO" de "FORA DO PLANO, PERTO" na folha da Lista. */
+ok(montarLista([it({ id: 'a', plano: 2 })], EU, AGORA)[0].plano === 2, 'a linha diz em que posição do plano está');
+ok(montarLista([it({ id: 'b' })], EU, AGORA)[0].plano === null, 'fora do plano, a linha diz null — não zero, que seria uma posição');
+
 // ── a ORDEM "nunca visitado primeiro" (Julyan, 27/10/26) ─────────────────────────────────
 // Dois blocos, e dentro de cada um a distância manda. Os casos são montados com a ordem de
 // distância CRUZADA com a de visita: se o segundo critério sumir, a ordem muda.

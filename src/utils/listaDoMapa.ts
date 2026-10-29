@@ -46,6 +46,10 @@ export type LinhaDaLista = {
   metros: number | null;
   /** Nunca visitado — o que separa os dois blocos na ordem "Nunca visitado". */
   nunca: boolean;
+  /* POSIÇÃO NO PLANO (prancha "Mapa limpo" §6, 29/10/26). O dado já entrava em `ItemDaLista` e
+     morria aqui; agora sai, porque a Lista passa a separar "NO PLANO" de "FORA DO PLANO, PERTO".
+     A parada combinada e o CNPJ que eu nunca vi não podem disputar atenção em pé de igualdade. */
+  plano: number | null;
 };
 
 /** "SANTA ROSA" → "Santa Rosa" (a Casa dos Dados cadastra em caixa alta). */
@@ -138,6 +142,7 @@ export function montarLista(itens: ItemDaLista[], eu: { lat: number; lng: number
       aproximado: it.aproximado,
       metros: m,
       nunca: nuncaVisitado(it),
+      plano: it.plano,
     };
   });
   // Sem distância (sem coordenada, ou sem GPS) vai para o fim do SEU bloco, em ordem de nome —
