@@ -47,6 +47,46 @@ const q = quadrasNaTela([
 ok([...q.quadras.keys()].join() === 'A,C' && q.quadras.get('A')!.length === 46, 'B se toca com A: vira uma quadra com 46; C fica sozinha');
 ok(q.absorvida.get('B') === 'A' && !q.absorvida.has('D'), 'B absorvida por A; pilha pequena fica de fora');
 
+// ── O CENTRÓIDE NÃO É QUADRA (Julyan, 28/10/26: "revise esse bug no mapa") ───────────────
+/* O caso exato do print dele, reconstruído: 27 lugares amontoados num ponto só, no Estácio,
+   com bairros de Jacarepaguá no meio. A tela dizia "Quadra · JACAREPAGUA · 27 pinos" e
+   oferecia um melhor candidato "a 2,3 km" — que é a distância até o centro do Rio.
+   Medido na base no mesmo dia: 777 leads em 69 coordenadas assim. */
+{
+  const BAIRROS_RJ = ['Anil', 'Taquara', 'Freguesia', 'Vargem Pequena', 'Centro', 'Tijuca',
+    'Estácio', 'Botafogo', 'Méier', 'Madureira', 'Barra', 'Recreio', 'Bangu', 'Campo Grande',
+    'Ipanema', 'Leblon'];
+  const centroide = Array.from({ length: 27 }, (_, i) =>
+    it(`c${i}`, { tipo: 'cliente' }, { bairro: BAIRROS_RJ[i % BAIRROS_RJ.length], cidade: 'Rio de Janeiro' }, null, 2300));
+  const rc = resumoDaQuadra(centroide);
+  ok(rc.semLugar, 'ponto com 16 bairros não é quarteirão');
+  ok(!/jacarepagua|anil|taquara/i.test(rc.area), `a área não finge um bairro (veio "${rc.area}")`);
+  ok(/Sem endereço exato/.test(rc.area), 'a área diz o que é: sem endereço exato');
+  ok(/Rio de Janeiro/.test(rc.area), 'e diz a cidade, que é o que de fato se sabe');
+  ok(/16 bairros/.test(rc.composicao), `a composição mostra a prova (veio "${rc.composicao}")`);
+  ok(rc.melhor === null, 'sem melhor candidato: não se manda ninguém andar 2,3 km até um centróide');
+  ok(!/km/.test(JSON.stringify(rc)), 'e a distância até o centróide não aparece em lugar nenhum');
+}
+/* E O QUARTEIRÃO DE VERDADE CONTINUA QUARTEIRÃO — inclusive o shopping, onde cinco
+   restaurantes dividem a mesma coordenada de propósito. Sem esta checagem, o conserto teria
+   apagado o melhor candidato do mapa inteiro. */
+{
+  const shopping = Array.from({ length: 8 }, (_, i) =>
+    it(`s${i}`, { tipo: 'lead' }, { bairro: 'Praia do Canto', cidade: 'Vitória' }, null, 120));
+  const rs = resumoDaQuadra(shopping);
+  ok(!rs.semLugar, 'oito lugares no mesmo bairro seguem sendo uma quadra');
+  ok(rs.area === 'Praia do Canto', 'e a quadra continua com o nome do bairro');
+  ok(!!rs.melhor && /120 m/.test(rs.melhor.texto), 'e continua indicando o melhor candidato, com a distância');
+  const doisBairros = [...shopping, it('x1', { tipo: 'lead' }, { bairro: 'Jardim da Penha', cidade: 'Vitória' })];
+  ok(!resumoDaQuadra(doisBairros).semLugar, 'dois bairros ainda é quadra: rua de divisa existe');
+  const tres = [...doisBairros, it('x2', { tipo: 'lead' }, { bairro: 'Mata da Praia', cidade: 'Vitória' })];
+  ok(resumoDaQuadra(tres).semLugar, 'o terceiro bairro é a linha: aí não é mais quarteirão');
+}
+/* A base do topo deste arquivo tem dois bairros (Centro e Praia do Canto), então continua
+   sendo quadra — e é por isso que as checagens de área e composição lá em cima seguem
+   valendo. Se alguém mexer nos fixtures e cruzar a linha, esta checagem avisa antes. */
+ok(!r.semLugar, 'o resumo do topo deste arquivo continua sendo uma quadra de verdade');
+
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);
   process.exit(1);

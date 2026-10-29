@@ -1,4 +1,7 @@
 // Teste do variável e da semana do plano (Fase 0 das abas). Roda: npx tsx src/utils/comissao.teste.ts
+// O cliente do Supabase vem junto no fundo da cadeia e precisa de window: ver semNavegador.ts.
+// Este import e o PRIMEIRO de proposito — o ESM avalia na ordem.
+import './semNavegador';
 import { faixaDe, proximaVenda, variavelDoMes, type TabelaComissao } from './comissao';
 import { resumoDaSemana } from './semanaDoPlano';
 
@@ -45,3 +48,8 @@ ok(resumoDaSemana(null, '2026-10-05').every((d) => d.faixas.length === 0), 'sem 
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\ntudo certo');
+
+/* SAI EXPLICITAMENTE. Importar o modulo traz junto o cliente do Supabase, que fica vivo
+   com temporizador e ouvinte proprios: sem esta linha a suite imprime o veredito e o processo
+   NUNCA termina — o que o varredor le como vermelho, igualzinho a uma falha de verdade. */
+process.exit(falhas ? 1 : 0);

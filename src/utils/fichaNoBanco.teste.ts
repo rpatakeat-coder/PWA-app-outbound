@@ -3,6 +3,9 @@
 // Protege o que o Cockpit vai contar: "como foi" e o próximo passo com a data certa,
 // o motivo do perdido só quando é sem interesse, texto vazio virando null (e não ""),
 // e a ficha sem "como foi" não virando linha.
+// O cliente do Supabase vem junto no fundo da cadeia e precisa de window: ver semNavegador.ts.
+// Este import e o PRIMEIRO de proposito — o ESM avalia na ordem.
+import './semNavegador';
 import { linhaDaFicha } from './fichaNoBanco';
 import { FICHA_VAZIA, type Ficha } from './fichaDeRua';
 
@@ -42,3 +45,8 @@ ok(outroVazio.decisor_papel === null && outroVazio.horario_dono === null && outr
 
 console.log(falhas ? `\n${falhas} falha(s)` : '\nficha no banco: tudo certo');
 if (falhas) process.exit(1);
+
+/* SAI EXPLICITAMENTE. Importar o modulo traz junto o cliente do Supabase, que fica vivo
+   com temporizador e ouvinte proprios: sem esta linha a suite imprime o veredito e o processo
+   NUNCA termina — o que o varredor le como vermelho, igualzinho a uma falha de verdade. */
+process.exit(falhas ? 1 : 0);

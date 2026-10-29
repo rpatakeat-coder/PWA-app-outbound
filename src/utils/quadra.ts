@@ -45,7 +45,29 @@ export type ResumoQuadra = {
   area: string;
   composicao: string;
   melhor: { id: string; texto: string } | null;
+  /** true quando a pilha não é um quarteirão, e sim um centróide. Ver `ehCentroide`. */
+  semLugar: boolean;
 };
+
+/* QUARTEIRÃO DE VERDADE TEM UM BAIRRO (Julyan, 28/10/26: "revise esse bug no mapa").
+   Ele mandou um print com "Quadra · JACAREPAGUA · 27 pinos" desenhada em cima do Estácio, e
+   todos os leads da lista a "2,3 km" — a mesma distância, porque é o mesmo ponto. Medido na
+   base no mesmo dia: 777 leads empilhados em 69 coordenadas que são CENTRÓIDE DE CIDADE
+   (75 no centro de SP, 61 em Brasília, 50 no Rio, 25 no centro do Brasil). O geocodificador
+   responde "centro da cidade" quando não entende o endereço, em vez de dizer que não sabe.
+
+   O que denuncia não é a quantidade — cinco restaurantes dividem a coordenada de um shopping
+   de verdade —, é a DISPERSÃO: um ponto só servindo três bairros não é um quarteirão. É a
+   mesma regra que a migration 0226 usou para marcar essas linhas como aproximadas, de
+   propósito: duas regras diferentes para o mesmo fato divergem na primeira mudança.
+
+   Chamar isso de quadra custa caro de três jeitos: promete um "melhor candidato a 2,3 km" que
+   é a distância até o centro da cidade; esconde 27 lugares atrás de um número que parece
+   endereço; e manda o executivo andar até uma porta que não existe. */
+export const BAIRROS_PARA_NAO_SER_QUADRA = 3;
+export function ehCentroide(bairrosDistintos: number): boolean {
+  return bairrosDistintos >= BAIRROS_PARA_NAO_SER_QUADRA;
+}
 
 export function resumoDaQuadra(itens: Item[]): ResumoQuadra {
   // Área: o bairro que mais aparece (grafia do primeiro que o trouxe).
@@ -59,20 +81,32 @@ export function resumoDaQuadra(itens: Item[]): ResumoQuadra {
   }
   const topo = [...contagem.values()].sort((a, b) => b.n - a.n)[0];
   const cidade = itens.map((it) => (it.c.cidade ?? '').trim()).find(Boolean);
-  const area = topo?.grafia ?? cidade ?? 'Esta quadra';
+  const semLugar = ehCentroide(contagem.size);
+  /* O NOME DA ÁREA SÓ VALE SE A ÁREA FOR UMA. Com três bairros no mesmo ponto, escrever o
+     bairro mais frequente é dizer "Jacarepaguá" sobre um amontoado no Estácio. */
+  const area = semLugar
+    ? (cidade ? `Sem endereço exato · ${cidade}` : 'Sem endereço exato')
+    : (topo?.grafia ?? cidade ?? 'Esta quadra');
 
   const porTipo = new Map<Grupo, number>();
   for (const it of itens) { const g: Grupo = it.p.familia === 'rec' ? 'rec' : it.p.tipo; porTipo.set(g, (porTipo.get(g) ?? 0) + 1); }
-  const composicao = [...porTipo.entries()]
+  const porTipos = [...porTipo.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
     .map(([t, n]) => `${n} ${ROTULO[t][n === 1 ? 0 : 1]}`)
     .join(' · ');
+  /* O NÚMERO DE BAIRROS É A PROVA na tela: "16 bairros" explica, sozinho, por que não há
+     uma porta para onde andar — e é o que faz o executivo abrir a lista em vez de ir. */
+  const composicao = semLugar
+    ? `${porTipos} · ${contagem.size} bairros`
+    : porTipos;
 
   const d = (x: Item) => x.distanciaM ?? Number.POSITIVE_INFINITY;
   const melhorItem = [...itens].sort((a, b) => pesoMelhor(a) - pesoMelhor(b) || d(a) - d(b))[0];
   let melhor: ResumoQuadra['melhor'] = null;
-  if (melhorItem) {
+  /* SEM MELHOR CANDIDATO. "melhor: Gellato Churros · 2,3 km" é a distância até o centro da
+     cidade, e mandaria alguém andar 2,3 km até um ponto onde não há restaurante nenhum. */
+  if (melhorItem && !semLugar) {
     const nome = melhorItem.c.empresa?.trim() || melhorItem.c.nome;
     const nota = melhorItem.p.tipo === 'alvo' && melhorItem.p.familia !== 'rec' && melhorItem.c.conta_alvo_rating != null
       ? `nota ${Number(melhorItem.c.conta_alvo_rating).toFixed(1).replace('.', ',')}` : null;
@@ -80,7 +114,7 @@ export function resumoDaQuadra(itens: Item[]): ResumoQuadra {
     const partes = [plano ?? nota ?? nome, distTexto(melhorItem.distanciaM)].filter(Boolean);
     melhor = { id: melhorItem.c.id, texto: `melhor: ${partes.join(' · ')}` };
   }
-  return { area, composicao, melhor };
+  return { area, composicao, melhor, semLugar };
 }
 
 /**

@@ -1,4 +1,7 @@
 // Teste do preparo de 10 s da Agenda (handoff das abas). Roda: npx tsx src/utils/preparo.teste.ts
+// O cliente do Supabase vem junto no fundo da cadeia e precisa de window: ver semNavegador.ts.
+// Este import e o PRIMEIRO de proposito — o ESM avalia na ordem.
+import './semNavegador';
 import { montarPreparo } from './preparo';
 
 let falhas = 0;
@@ -29,3 +32,8 @@ ok(t.ultimo.startsWith('WhatsApp') && t.contatos === 2, 'último contato é o ma
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\npreparo: tudo certo');
+
+/* SAI EXPLICITAMENTE. Importar o modulo traz junto o cliente do Supabase, que fica vivo
+   com temporizador e ouvinte proprios: sem esta linha a suite imprime o veredito e o processo
+   NUNCA termina — o que o varredor le como vermelho, igualzinho a uma falha de verdade. */
+process.exit(falhas ? 1 : 0);
