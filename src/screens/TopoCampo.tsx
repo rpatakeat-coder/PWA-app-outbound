@@ -6,8 +6,8 @@
 //
 //   [ ● Meu dia ▾ | ⌕ Buscar ]  [ Mapa | Lista ]
 //
-// O chip da lente abre a folha da lente (onde moram as lentes, as etapas, o
-// Limpar e o Modo sol). O selo de filtro vive DENTRO do chip: é o único aviso de
+// O botao de filtro abre a folha da lente (lentes, etapas, Limpar, Modo sol). A
+// lente em si voltou a ter fileira propria, embaixo. O selo vive no botao: e o
 // que há filtro ligado, e não some enquanto houver. **Sem contagem nenhuma** — o
 // número que mudava a cada arraste saiu daqui (prancha §8).
 //
@@ -22,7 +22,7 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { IconClose, IconSearch, useIconColors } from '../components/icons';
+import { IconClose, IconFilterList, IconSearch, useIconColors } from '../components/icons';
 import { IconChevronDown as SiDown } from '../components/icons';
 
 export const ALTURA_TOPO_CAMPO = 48;
@@ -33,8 +33,6 @@ export type VistaDoMapa = 'mapa' | 'lista';
 
 type Props = {
   top: number;
-  /** O chip da lente: ponto na cor dela, nome e ▾. Abre a folha da lente. */
-  lente?: { rotulo: string; cor: string } | null;
   aoAbrirLentes?: () => void;
   /** Quantos filtros estão ligados. > 0 mostra o selo invertido dentro do chip. */
   filtrosAtivos?: number;
@@ -48,35 +46,34 @@ type Props = {
   aoVista?: (v: VistaDoMapa) => void;
 };
 
-export default function TopoCampo({ top, lente = null, aoAbrirLentes, filtrosAtivos = 0, busca, aoBuscar, aoAbrirBusca, buscando, vista, aoVista }: Props) {
+export default function TopoCampo({ top, aoAbrirLentes, filtrosAtivos = 0, busca, aoBuscar, aoAbrirBusca, buscando, vista, aoVista }: Props) {
   const cores = useIconColors();
   const comFiltro = filtrosAtivos > 0;
   return (
     <View style={[s.fileira, { top }]} accessibilityRole="toolbar">
       <View style={s.campo}>
-        {lente && (
+        {/* O BOTÃO DE FILTRO toma o lugar do chip da lente (prancha "Ordem da porta" §5): a lente
+            voltou a ter fileira própria, embaixo, então o chip aqui vira redundância. O que fica
+            é o filtro — que não tem outra casa e cujo selo é o único aviso de que há filtro. */}
+        {aoAbrirLentes && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={comFiltro
-              ? `Lente ${lente.rotulo}, ${filtrosAtivos} ${filtrosAtivos === 1 ? 'filtro ligado' : 'filtros ligados'}. Trocar o que o mapa mostra`
-              : `Lente ${lente.rotulo}. Trocar o que o mapa mostra`}
+              ? `Filtros, ${filtrosAtivos} ${filtrosAtivos === 1 ? 'ligado' : 'ligados'}`
+              : 'Filtros e o que o mapa mostra'}
             onPress={aoAbrirLentes}
-            style={s.lenteAlvo}
+            style={s.filtroAlvo}
           >
-            <View style={s.lente}>
-              <View style={[s.bolinha, { backgroundColor: lente.cor }]} />
-              <Text style={s.lenteTexto} numberOfLines={1}>{lente.rotulo}</Text>
-              {comFiltro && (
-                <View style={s.seloFiltro}>
-                  <Text style={s.seloFiltroTexto}>{filtrosAtivos > 9 ? '9+' : filtrosAtivos}</Text>
-                </View>
-              )}
-              <SiDown width={16} height={16} fill={cores.muted} />
-            </View>
+            <IconFilterList width={18} height={18} fill={comFiltro ? cores.onSurface : cores.muted} />
+            {comFiltro && (
+              <View style={s.seloFiltro}>
+                <Text style={s.seloFiltroTexto}>{filtrosAtivos > 9 ? '9+' : filtrosAtivos}</Text>
+              </View>
+            )}
           </Pressable>
         )}
-        {lente && <View style={s.divisor} />}
-        <View style={[s.busca, !lente && s.buscaSozinha]}>
+        {aoAbrirLentes && <View style={s.divisor} />}
+        <View style={[s.busca, !aoAbrirLentes && s.buscaSozinha]}>
           <IconSearch width={16} height={16} fill={cores.muted} />
           <Pressable
             style={s.buscaAbrir}
@@ -137,16 +134,12 @@ const s = StyleSheet.create({
   // ALVOS DE 48 (handoff v4.1 §13): a barra tem 48 contando a borda; o alvo
   // ocupa a altura toda (margem -1 sobre a borda) e o desenho segue com 40.
   // hitSlop não vale no navegador: o "limpar" tinha 16 px de toque.
-  lenteAlvo: { height: 48, marginVertical: -1, justifyContent: 'center', flexShrink: 0, maxWidth: 170 },
-  lente: {
-    height: 40, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10,
-    borderRadius: 20, backgroundColor: 'var(--chip-mapa)', flexShrink: 0, maxWidth: 170,
-  },
-  bolinha: { width: 10, height: 10, borderRadius: 5 },
-  lenteTexto: { fontSize: 14, fontWeight: '600', color: 'var(--text)', flexShrink: 1 },
+  /* 52 x 48 (prancha §5): alvo cheio, desenho no meio, selo sobreposto no canto. */
+  filtroAlvo: { width: 52, height: 48, marginVertical: -1, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   /* O ÚNICO AVISO DE FILTRO. Invertido (fundo do texto, texto do fundo), como o
      selecionado do alternador — e não some enquanto houver filtro ligado. */
   seloFiltro: {
+    position: 'absolute', top: 6, right: 4,
     minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 5,
     backgroundColor: 'var(--text)', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },

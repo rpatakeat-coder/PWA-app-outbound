@@ -113,7 +113,7 @@ import { gravarOrdemDoDia, lerColunaDoPlano, porNoDia, tirarDoDia } from './src/
 import { diasDaFaixa } from './src/utils/agendaNovo';
 import { abrirGestao } from './src/utils/abrirGestao';
 import TopoCampo, { ALTURA_TOPO_CAMPO, RESPIRO_ABAIXO_DA_FILEIRA } from './src/screens/TopoCampo';
-import FolhaLentes, { COR_LENTE } from './src/screens/FolhaLentes';
+import FolhaLentes from './src/screens/FolhaLentes';
 import AvisoSemSinal from './src/screens/AvisoSemSinal';
 import FolhaMeuDia from './src/screens/FolhaMeuDia';
 import FolhaBusca, { type LinhaBusca } from './src/screens/FolhaBusca';
@@ -229,6 +229,7 @@ import { FaixaHoraDasLigacoes } from './src/screens/CartaoDaFila';
 import FolhaAntesDaRua from './src/screens/FolhaAntesDaRua';
 import FolhaPlanoDoDia from './src/screens/FolhaPlanoDoDia';
 import FolhaTimeNaRua from './src/screens/FolhaTimeNaRua';
+import TiraDeLentes from './src/screens/TiraDeLentes';
 import PedirAvisos from './src/screens/PedirAvisos';
 import MinhasFotos, { FOTOS_LIBERADAS } from './src/screens/MinhasFotos';
 import { marcarGravada as marcarFeitaGravada, registrarFeita } from './src/utils/filaFeitas';
@@ -7139,7 +7140,6 @@ function MainApp() {
       {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && (
         <TopoCampo
           top={insets.top + 7}
-          lente={{ rotulo: LENTES.find((l) => l.id === lente)?.rotulo ?? 'Meu dia', cor: COR_LENTE[lente] }}
           aoAbrirLentes={() => { Keyboard.dismiss(); setLentesAbertas(true); }}
           filtrosAtivos={quantosFiltros(filtrosNovos)}
           busca={searchQuery}
@@ -7361,6 +7361,22 @@ function MainApp() {
           {/* branco fixo não serve mais: o botão virou neutro e segue o tema (§5) */}
           <IconPlus width={24} height={24} fill="var(--text)" />
         </TouchableOpacity>
+      )}
+
+      {/* A FILEIRA DE LENTES, EMBAIXO (prancha "Ordem da porta" §5). Mora na linha dos botões do
+          mapa, entre a localização e o "+", e some exatamente com eles — folha alta, busca
+          aberta, ficha aberta. Assim ela volta a existir sem recriar a faixa que o mapa limpo
+          tirou: o topo continua com duas posições e nada empilha. Calor só para gestor, no fim,
+          que é a ordem que a `LENTES` já tem. */}
+      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && !planejarVisivel
+        && !buscaAberta && !fichaPendente && !(folhaDeBaixo && alturaFolha > janelaTela.height * 0.36)
+        && !(folhaDeBaixo && topoFolha == null) && (
+        <TiraDeLentes
+          lentes={LENTES.filter((l) => l.id !== 'calor' || canViewGestor)}
+          atual={lente}
+          aoEscolher={escolherLente}
+          bottom={(alturaRodape ?? baseInferior) + (folhaDeBaixo ? alturaFolha : 0) + 12}
+        />
       )}
 
       {creationMode && creationCenter && (
