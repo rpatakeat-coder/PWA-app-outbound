@@ -242,7 +242,18 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
   const origem: OrigemPick | null = origemHs ?? (c.origem_lead ? DERIVADA_PARA_PICKLIST[c.origem_lead] ?? null : null);
 
   const nota = tipo === 'alvo' && c.conta_alvo_rating != null ? Number(c.conta_alvo_rating) : null;
-  const familia: Familia = tipo === 'cliente' ? 'cli' : tipo === 'ex' ? 'ex' : tipo === 'lead' ? 'lead'
+  /* O RECÉM-ABERTO QUE JÁ ERA LEAD NÃO APARECIA COMO RECÉM-ABERTO (Julyan, 29/10: "as contas
+     recém abertas que ainda não vejo aqui"). `tipo === 'lead'` era testado ANTES da abertura,
+     então todo CNPJ novo que já tinha virado lead caía em `familia: 'lead'` e desenhava como
+     lead comum. Medido no mesmo dia: **478 dos 483** recém-abertos com pino estão assim — eles
+     estavam no mapa o tempo todo, só não pareciam o que são.
+
+     A troca é estreita de propósito: só vira 'rec' o lead que AINDA NÃO TEM NEGÓCIO (467 dos
+     478). Lead novo que já está em Negociação é lead primeiro — trocar o pino dele por losango
+     de recém-aberto apagaria a temperatura, que é a informação mais cara do mapa. */
+  const semNegocio = !String(c.id_hubspot ?? '').trim();
+  const familia: Familia = tipo === 'cliente' ? 'cli' : tipo === 'ex' ? 'ex'
+    : tipo === 'lead' ? (abertoHa != null && semNegocio ? 'rec' : 'lead')
     : abertoHa != null ? 'rec' : !alvoAntigo && nota != null && nota >= NOTA_MAIS_AVALIADO ? 'av' : 'alvo';
 
   return {

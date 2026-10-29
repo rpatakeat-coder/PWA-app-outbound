@@ -46,6 +46,14 @@ const avaliado = P({ lead_prospeccao_id: 'lp-google', conta_alvo_place_id: 'g', 
 const avaliadoBaixo = P({ lead_prospeccao_id: 'lp-google', conta_alvo_place_id: 'g', conta_alvo_rating: 4.1 } as Partial<Client>);
 ok(meuQuente.familia === 'lead' && novo.familia === 'rec' && avaliado.familia === 'av' && cliente.familia === 'cli' && ex.familia === 'ex', 'famílias do pino');
 ok(velho.familia === 'alvo' && avaliadoBaixo.familia === 'alvo', 'conta-alvo antiga e nota abaixo de 4,5 ficam sem família de lente');
+/* O RECÉM-ABERTO QUE JÁ ERA LEAD (Julyan, 29/10: "as contas recém abertas que ainda não vejo
+   aqui"). Eram 478 de 483 caindo em `familia: 'lead'` porque o tipo era testado antes da
+   abertura. Agora vira 'rec' — MAS só sem negócio: lead novo já em Negociação é lead primeiro,
+   e trocar o pino dele apagaria a temperatura, que é o dado mais caro do mapa. */
+const novoComNegocio = P({ lead_prospeccao_id: 'lp-novo', conta_alvo_place_id: 'm', etapa: 'Negociação', id_hubspot: '123' } as Partial<Client>);
+const novoQuente = P({ etapa: 'Negociação', id_hubspot: '123' } as Partial<Client>);
+ok(novo.familia === 'rec', 'CNPJ novo sem negócio: aparece como recém-aberto');
+ok(novoComNegocio.familia === 'lead' && novoComNegocio.temp === novoQuente.temp, 'CNPJ novo JÁ EM NEGOCIAÇÃO segue lead, com a mesma temperatura de um lead igual sem abertura');
 ok(V('dia', meuQuente) && V('dia', meuFrio), 'Meu dia: meus leads com negócio, de toda temperatura');
 ok(!V('dia', meuPerdido), 'Meu dia: negócio perdido não decide a próxima porta');
 ok(!V('dia', colegaQuente), 'Meu dia: pino de colega não aparece');
