@@ -63,7 +63,12 @@ export function visivelNaLente(lente: Lente, p: Pino, noPlano: boolean, aberto: 
      próprias — território é território. */
   const meuOuLivre = meu || p.dono === 'sem';
   if (lente === 'dia') {
-    return (meuOuLivre && p.familia === 'lead' && p.temp !== 'X' && !p.reciclagem) || (p.familia === 'rec' && (meuOuLivre || verTodos))
+    /* RECICLAGEM VOLTA AO MAPA (Julyan, 29/10: "no mapa preciso dos leads tbm da casa dos dados
+       que pararam"). Reciclagem é exatamente "parou": foi trabalhado e esfriou. Eram invisíveis na
+       lente de abertura, e são **189 no total** com pino — não enche mapa nenhum, e é o caso do
+       Paladare, que o André achou na rua em Reciclagem e refez a demo. Perdido continua fora:
+       negócio morto não decide a próxima porta, e há checagem só para isso. */
+    return (meuOuLivre && p.familia === 'lead' && p.temp !== 'X') || (p.familia === 'rec' && (meuOuLivre || verTodos))
       || p.familia === 'cli' || p.familia === 'av' || p.familia === 'alvo';
   }
   if (p.familia === 'alvo') return false;

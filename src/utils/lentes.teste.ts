@@ -61,6 +61,14 @@ ok(semDono.dono === 'sem' && novoSemDono.dono === 'sem', 'sem vendedor, o pino �
 ok(V('dia', semDono), 'Meu dia: lead sem dono (Casa dos Dados) aparece — está na mesa para quem chegar');
 ok(V('dia', novoSemDono), 'Meu dia: recém-aberto sem dono aparece');
 ok(!V('dia', colegaQuente) && !V('dia', novoColega), 'Meu dia: o que é do colega continua fora — território é território');
+/* "PRECISO DOS LEADS DA CASA DOS DADOS QUE PARARAM" (Julyan, 29/10). Reciclagem é o que parou:
+   foi trabalhado e esfriou. São 189 com pino na base inteira — não enche mapa — e é o caso do
+   Paladare, achado na rua em Reciclagem. Perdido continua fora, e a checagem de baixo é só isso. */
+const recicladoCdd = P({ etapa: 'Reciclagem', origem_lead: 'casa_dos_dados' } as Partial<Client>);
+const recicladoSemDono = P({ etapa: 'Reciclagem', origem_lead: 'casa_dos_dados', vendedor_id_hubspot: null } as Partial<Client>);
+ok(V('dia', recicladoCdd), 'Meu dia: lead da Casa dos Dados em Reciclagem aparece — parou, mas está vivo');
+ok(V('dia', recicladoSemDono), 'Meu dia: reciclado sem dono também aparece');
+ok(!V('dia', meuPerdido), 'Meu dia: Perdido segue fora — morto não decide a próxima porta');
 ok(V('dia', avaliado) && V('dia', velho) && contaAlvoDiscreta('dia', avaliado) && contaAlvoDiscreta('dia', velho), 'Meu dia: as contas-alvo entram, discretas');
 ok(!contaAlvoDiscreta('alvo', avaliado) && contaAlvoDiscreta('alvo', velho) && !contaAlvoDiscreta('dia', novo) && !contaAlvoDiscreta('dia', cliente), 'discreta: na lente Mais avaliados o avaliado é pino inteiro; recém-aberto e cliente nunca');
 ok(!V('novos', velho) && !V('clientes', velho), 'conta-alvo antiga fora das outras lentes');
