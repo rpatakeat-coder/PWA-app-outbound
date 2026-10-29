@@ -112,8 +112,8 @@ import { diaInicial, diasPlanejaveis, ehCompromisso, faixaDoLead, rotuloDoDia, v
 import { gravarOrdemDoDia, lerColunaDoPlano, porNoDia, tirarDoDia } from './src/utils/paradaDoDia';
 import { diasDaFaixa } from './src/utils/agendaNovo';
 import { abrirGestao } from './src/utils/abrirGestao';
-import TopoCampo, { ALTURA_TOPO_CAMPO } from './src/screens/TopoCampo';
-import FolhaLentes from './src/screens/FolhaLentes';
+import TopoCampo, { ALTURA_TOPO_CAMPO, RESPIRO_ABAIXO_DA_FILEIRA } from './src/screens/TopoCampo';
+import FolhaLentes, { COR_LENTE } from './src/screens/FolhaLentes';
 import AvisoSemSinal from './src/screens/AvisoSemSinal';
 import FolhaMeuDia from './src/screens/FolhaMeuDia';
 import FolhaBusca, { type LinhaBusca } from './src/screens/FolhaBusca';
@@ -135,7 +135,7 @@ import { ROTULO_ETAPA, ETAPA as ETAPA_FS } from './src/utils/fichaDeRua';
 import { negocioAcao } from './src/utils/negocioAcao';
 import { subirPlanoDaFila } from './src/utils/planoDoPino';
 import { textoNormalizado } from './src/utils/pinoP2';
-import { contaAlvoDiscreta, DELTA_AFASTADO, FILTROS_VAZIOS, LENTES, LENTES_DA_FILEIRA, passaNosFiltros, pontoDe, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
+import { contaAlvoDiscreta, DELTA_AFASTADO, FILTROS_VAZIOS, LENTES, passaNosFiltros, pontoDe, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
 import { montarLista, type OrdemDaLista } from './src/utils/listaDoMapa';
 import type { EstagioPainel } from './src/components/Painel';
 import FileiraDeLentes, { ALTURA_FILEIRA_LENTES, ALTURA_PILULAS_DAS_LENTES } from './src/screens/FileiraDeLentes';
@@ -3027,14 +3027,14 @@ function MainApp() {
     return n;
   }, [itensMapaNovo, verTodosNoMapa]);
 
-  /* ══ O QUE SE EMPILHA ABAIXO DAS LENTES ══════════════════════════════════════════════════
-     Lentes › linha do dia › pílulas ("Limpar", "Ver em lista") › janela das ligações › área.
-     Calculado num lugar só, de propósito: enquanto cada peça escolhia o próprio `top`, as
-     pílulas (44+6) e a faixa das janelas de ligação (44+8) nasceram as duas quase no mesmo
-     pixel e se cobriam nas duas janelas do dia, 12:30–12:45 e 17:30–17:45. */
-  const temPilulasDasLentes = comFiltro || linhasDaLista.length > 0;
-  const deslocDasPilulas = linhaDoDiaAgora ? ALTURA_LINHA_DO_DIA + 8 : 0;
-  const abaixoDasLentes = deslocDasPilulas + (temPilulasDasLentes ? ALTURA_PILULAS_DAS_LENTES : 0);
+  /* ══ NÃO HÁ MAIS PILHA ═══════════════════════════════════════════════════════════════════
+     Até 29/10 havia aqui o cálculo de "o que se empilha abaixo das lentes": lentes › linha do
+     dia › pílulas ("Limpar", "Ver em lista") › janela das ligações › área, cinco faixas numa
+     soma de `top` — e duas delas já tinham se coberto às 12:30 e às 17:30.
+
+     A prancha "Mapa limpo" (§0.1) manda esse cálculo sair inteiro, e saiu. Agora existem DUAS
+     posições fixas e mais nenhuma: a fileira de controles em `insets.top + 7` e a faixa da vez
+     um respiro abaixo dela. Quem disputa a faixa decide por prioridade, não por pixel. */
 
   /** Tocar de novo na lente ativa volta ao Meu dia (liga e desliga). */
   const escolherLente = useCallback((l: Lente) => {
@@ -6944,7 +6944,9 @@ function MainApp() {
         // `top` contado do Y REAL do mapa, igual aos botoes: este overlay e'
         // absoluto contra a RAIZ DA TELA, e o `top: 8` cru punha a pill em
         // cima da busca do header (valia ja' pra de carregamento).
-        style={[styles.areaStatusWrap, { top: modoNovo && !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + (tab === 'map' && !creationMode ? ALTURA_FILEIRA_LENTES + 8 + abaixoDasLentes + (janelaDasLigacoes ? 72 : 0) : 0) : (mapLayout?.y ?? 0) + 8 }]}
+        /* Encostado na fileira, sempre no mesmo lugar: o carregamento é uma linha fina logo
+           abaixo do campo, não mais uma faixa que empurrava o resto para baixo (prancha §1). */
+        style={[styles.areaStatusWrap, { top: modoNovo && !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 2 : (mapLayout?.y ?? 0) + 8 }]}
         pointerEvents="none"
       >
         {modoNovo && !layout.ehLargo && <AvisoSemSinal />}
@@ -7105,46 +7107,39 @@ function MainApp() {
         </TouchableOpacity>
       )}
 
-      {/* Topo do app de campo v4.1: UMA linha flutuando sobre o mapa. */}
+      {/* A FILEIRA DE CONTROLES (prancha "Mapa limpo", §1, 29/10/26): campo com o chip da lente
+          e a busca, mais o alternador Mapa | Lista. O sino e o avatar saíram daqui para a aba Eu;
+          a fileira de lentes, o botão de filtro e as pílulas "Limpar"/"Ver em lista" deixaram de
+          existir — tudo mora na folha da lente, que o chip abre. */}
       {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && (
         <TopoCampo
           top={insets.top + 7}
+          lente={{ rotulo: LENTES.find((l) => l.id === lente)?.rotulo ?? 'Meu dia', cor: COR_LENTE[lente] }}
+          aoAbrirLentes={() => { Keyboard.dismiss(); setLentesAbertas(true); }}
+          filtrosAtivos={quantosFiltros(filtrosNovos)}
           busca={searchQuery}
           aoBuscar={setSearchQuery}
           aoAbrirBusca={() => setBuscaAberta(true)}
           buscando={buscando}
-          selo={avisos.selo + (seloFila?.n ?? 0)}
-          aoSino={() => { setAvisosAbertos(true); avisos.marcarRecadosVistos(); }}
-          avatar={{ url: profile?.avatar_url, nome: profile?.full_name, email: profile?.email }}
-          aoAvatar={() => setPerfilAberto(true)}
+          vista={listaAberta ? 'lista' : 'mapa'}
+          aoVista={(v) => {
+            /* O MAPA NÃO DESMONTA (decisão de 29/10): a Lista é uma folha POR CIMA dele, então
+               voltar devolve a mesma posição e o mesmo zoom. Se a Lista virasse uma vista que
+               troca o mapa, ele remontaria com `initialRegion` = o GPS com delta fixo — e a volta
+               jogaria o executivo de volta em cima de si mesmo, perdendo onde ele navegou. */
+            if (v === 'lista') { setEstagioLista('cheia'); setListaAberta(true); } else setListaAberta(false);
+          }}
         />
       )}
-      {/* A FILEIRA DE LENTES (prancha "Mapa do Executivo", §2, 15/10/26). Toma o lugar da faixa da
-          rua: o número do dia mora na folha ("N visitas hoje · mínimo 6") e a próxima porta, na
-          pílula. A 390 px cabem 4 lentes; o resto e os filtros ficam no ≡. */}
-      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && (
-        <FileiraDeLentes
-          top={insets.top + 7 + ALTURA_TOPO_CAMPO + 8}
-          lentes={LENTES.filter((l) => LENTES_DA_FILEIRA.includes(l.id) && (l.id !== 'calor' || canViewGestor))}
-          atual={lente}
-          aoEscolher={escolherLente}
-          contador={contadorDaSemana}
-          aoFiltros={() => { Keyboard.dismiss(); setLentesAbertas(true); }}
-          filtrosAtivos={quantosFiltros(filtrosNovos)}
-          lenteNosFiltros={!LENTES_DA_FILEIRA.includes(lente)}
-          aoLimparFiltros={() => setFiltrosNovos(FILTROS_VAZIOS)}
-          aoVerLista={() => { setEstagioLista('peek'); setListaAberta(true); }}
-          naLista={linhasDaLista.length}
-          contagens={comFiltro ? undefined : contagensDasLentes}
-          desloc={deslocDasPilulas}
-        />
-      )}
-      {/* A LINHA DO DIA (§2.2): o placar do dia, sempre à vista, logo abaixo das lentes. Sem ✕ —
-          o dia não se fecha. Tocar abre o que ela está falando, sempre sem sair do mapa. */}
-      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && linhaDoDiaAgora && (
+      {/* A FAIXA DA VEZ (prancha "Mapa limpo", §3): UMA posição fixa, UMA ocupante por vez.
+          A fila completa é da fase 2; aqui já vale a regra que importa — a linha do dia em
+          `pendente` (visita sem próximo passo) ganha de tudo, e a janela das ligações só aparece
+          quando não há pendência. Antes as duas tinham `top` calculado e se cobriam às 12:30. */}
+      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && linhaDoDiaAgora
+        && (linhaDoDiaAgora.estado === 'pendente' || !janelaDasLigacoes) && (
         <LinhaDoDia
           linha={linhaDoDiaAgora}
-          top={insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + ALTURA_FILEIRA_LENTES + 8}
+          top={insets.top + 7 + ALTURA_TOPO_CAMPO + RESPIRO_ABAIXO_DA_FILEIRA}
           aoTocar={() => {
             const l = linhaDoDiaAgora;
             if (l.acao === 'desfecho' && l.alvo) {
@@ -7163,8 +7158,9 @@ function MainApp() {
           }}
         />
       )}
-      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && janelaDasLigacoes && (
-        <View style={{ position: 'absolute', left: 12, right: 12, top: insets.top + 7 + ALTURA_TOPO_CAMPO + 8 + ALTURA_FILEIRA_LENTES + 8 + abaixoDasLentes, zIndex: 24 }}>
+      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && janelaDasLigacoes
+        && linhaDoDiaAgora?.estado !== 'pendente' && (
+        <View style={{ position: 'absolute', left: 12, right: 12, top: insets.top + 7 + ALTURA_TOPO_CAMPO + RESPIRO_ABAIXO_DA_FILEIRA, zIndex: 24 }}>
           <FaixaHoraDasLigacoes ate={janelaDasLigacoes.ate} followups={janelaDasLigacoes.followups} quentes={janelaDasLigacoes.quentes} aoAbrir={() => { setPedidoDaFila({ acao: 'fila', deal: null, origem: 'janela', n: Date.now() }); irParaAba('tasks'); }} />
         </View>
       )}
@@ -7221,13 +7217,18 @@ function MainApp() {
         <FolhaLentes
           visivel={lentesAbertas}
           aoFechar={() => setLentesAbertas(false)}
-          lentes={LENTES.filter((l) => !LENTES_DA_FILEIRA.includes(l.id) && (l.id !== 'calor' || canViewGestor))}
+          /* TODAS as lentes (29/10/26): a fileira do topo saiu, então esta folha é o ÚNICO lugar
+             onde se troca a lente no celular. Filtrar por LENTES_DA_FILEIRA aqui deixaria
+             "Meu dia" e "Recém-abertos" inalcançáveis. */
+          lentes={LENTES.filter((l) => l.id !== 'calor' || canViewGestor)}
           atual={lente}
           aoEscolher={escolherLente}
           filtros={filtrosNovos}
           aoFiltrosRapidos={setFiltrosNovos}
           filtrosAtivos={quantosFiltros(filtrosNovos)}
           aoFiltros={() => setFiltrosNovosAbertos(true)}
+          modoSol={modoSol}
+          aoModoSol={alternarModoSol}
         />
       )}
 
@@ -8469,31 +8470,52 @@ function MainApp() {
           ) : tab === 'playbook' ? (
             <Text style={styles.headerTitulo}>Playbook</Text>
           ) : tab === 'meu' || tab === 'config' ? (
-            /* Estas duas nao sao abas da barra: chegam pelo menu do perfil.
-               Sem o arrow_back a tela fica sem saida — e' a unica volta.
-               Configuracoes reabre o MENU (foi de la' que veio); Meu
-               desempenho volta pra aba de origem. */
+            /* Configuracoes nao e' aba: chega pelo menu do perfil, e sem o
+               arrow_back ficaria sem saida. "Meu desempenho" virou a aba Eu em
+               29/10 e tem a barra como volta — por isso ela nao leva o
+               arrow_back, e leva o SINO e o AVATAR, que sairam do mapa
+               (prancha "Mapa limpo", respostas 6 e 7). O sino conta falha de
+               sincronizacao e recado do gestor: nao e' tarefa da rua, nao cabia
+               no selo de Hoje e nao merecia faixa. */
             <View style={styles.headerLinha}>
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel="Voltar"
-                style={styles.headerVoltar}
-                onPress={() => {
-                  if (tab === 'config') {
-                    setTab(abaAnterior);
-                    setPerfilAberto(true);
-                    return;
-                  }
-                  setTab(abaAnterior);
-                }}
-              >
-                <IconArrowBack width={24} height={24} fill="#FFFFFF" />
-              </TouchableOpacity>
+              {tab === 'config' && (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Voltar"
+                  style={styles.headerVoltar}
+                  onPress={() => { setTab(abaAnterior); setPerfilAberto(true); }}
+                >
+                  <IconArrowBack width={24} height={24} fill="#FFFFFF" />
+                </TouchableOpacity>
+              )}
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.headerTitulo} numberOfLines={1}>
-                  {tab === 'meu' ? 'Meu desempenho' : 'Configurações'}
+                  {tab === 'meu' ? 'Eu' : 'Configurações'}
                 </Text>
               </View>
+              {tab === 'meu' && !layout.ehLargo && (
+                <>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={avisos.selo + (seloFila?.n ?? 0) > 0
+                      ? `Avisos, ${avisos.selo + (seloFila?.n ?? 0)} ${avisos.selo + (seloFila?.n ?? 0) === 1 ? 'novo' : 'novos'}`
+                      : 'Avisos'}
+                    style={styles.headerVoltar}
+                    onPress={() => { setAvisosAbertos(true); avisos.marcarRecadosVistos(); }}
+                  >
+                    <IconBell width={22} height={22} fill="#FFFFFF" />
+                    {avisos.selo + (seloFila?.n ?? 0) > 0 && <View style={styles.hwSinoDot} />}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Abrir menu do perfil"
+                    style={styles.headerVoltar}
+                    onPress={() => setPerfilAberto(true)}
+                  >
+                    <Avatar url={profile?.avatar_url} nome={profile?.full_name} email={profile?.email} tamanho={30} />
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           ) : tab === 'tasks' ? (
             <View style={{ flex: 1, minWidth: 0 }}>
@@ -9605,7 +9627,10 @@ function MainApp() {
               ? { chave: 'calor', Icone: IconBarGraph, rotulo: 'Lente Calor', aoTocar: () => { setPerfilAberto(false); setLente('calor'); } }
               : null,
             // Modo sol (prompt §6): mapa claro para ler na rua ao meio-dia. Só no mapa novo.
-            modoNovo
+            // No CELULAR ele mudou de casa em 29/10 e mora na folha da lente, que é a folha que
+            // fala do que o mapa mostra — aqui ficaria duplicado. No computador a folha da lente
+            // não existe, então esta segue sendo a única porta.
+            modoNovo && layout.ehLargo
               ? { chave: 'sol', Icone: IconSparkle, rotulo: 'Modo sol · mapa claro', chaveLigada: modoSol, aoTocar: () => { alternarModoSol(); } }
               : null,
             profile?.id && FOTOS_LIBERADAS.has(profile.id)

@@ -5,7 +5,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Painel } from '../components/Painel';
-import type { FiltrosNovos, Lente } from '../utils/lentes';
+import { FILTROS_VAZIOS, type FiltrosNovos, type Lente } from '../utils/lentes';
 
 /* FILTROS DE UM TOQUE (Julyan, 15/10/26: "cadê os outros filtros? o que eles precisam pra vender mais
    com menos cliques, sem poluir a tela"). Os que mais decidem a próxima porta ficam aqui, sem abrir
@@ -61,9 +61,12 @@ type Props = {
   /** Os filtros de agora e a troca direta (filtros de um toque). */
   filtros?: FiltrosNovos;
   aoFiltrosRapidos?: (f: FiltrosNovos) => void;
+  /** "Modo sol · mapa claro": controle do mapa que veio do menu do avatar (29/10/26). */
+  modoSol?: boolean;
+  aoModoSol?: () => void;
 };
 
-export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolher, filtrosAtivos, aoFiltros, filtros, aoFiltrosRapidos }: Props) {
+export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolher, filtrosAtivos, aoFiltros, filtros, aoFiltrosRapidos, modoSol, aoModoSol }: Props) {
   const marcado = (r: Rapido) => !!filtros && (filtros[r.grupo] as Set<string>).has(r.valor);
   const alternar = (r: Rapido) => {
     if (!filtros || !aoFiltrosRapidos) return;
@@ -120,11 +123,37 @@ export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolh
           </View>
         )}
 
+        {/* LIMPAR (29/10/26): a pílula "Limpar" que ficava sobre o mapa saiu com a pilha do topo.
+            Sem isto, desligar filtro viraria caçar chip por chip — e o selo do chip da lente
+            avisaria de um filtro que custa caro tirar. */}
+        {filtrosAtivos > 0 && aoFiltrosRapidos && (
+          <Pressable accessibilityRole="button" accessibilityLabel={`Limpar os ${filtrosAtivos} filtros`}
+            onPress={() => aoFiltrosRapidos(FILTROS_VAZIOS)} style={s.limpar}>
+            <Text style={s.limparTexto}>{`Limpar os ${filtrosAtivos} filtros`}</Text>
+          </Pressable>
+        )}
+
         {/* a folha dos filtros abre depois que esta fecha (as duas são Painel: no mesmo render o voltar de uma fechava a outra) */}
         <Pressable accessibilityRole="button" onPress={() => { aoFechar(); setTimeout(aoFiltros, 350); }} style={s.filtros}>
           <Text style={s.filtrosTexto}>{filtrosAtivos ? `Todos os filtros · ${filtrosAtivos} ${filtrosAtivos === 1 ? 'ativo' : 'ativos'}` : 'Todos os filtros'}</Text>
           <Text style={s.filtrosSub}>etapa, temperatura, tempo sem toque, origem, dono, visitado</Text>
         </Pressable>
+
+        {/* MODO SOL mora aqui desde 29/10 (prancha "Mapa limpo", resposta 7): é um controle DO
+            MAPA e vivia no menu do avatar. Com o avatar fora do mapa, ele viraria três toques
+            justamente na hora em que a pessoa está com sol na tela. Esta folha é a que fala
+            sobre o que o mapa mostra, então é a casa dele. */}
+        {aoModoSol && (
+          <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!modoSol }} onPress={aoModoSol} style={s.sol}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={s.solTexto}>Modo sol · mapa claro</Text>
+              <Text style={s.solSub}>para ler na calçada ao meio-dia</Text>
+            </View>
+            <View style={[s.chave, modoSol && s.chaveOn]}>
+              <View style={[s.chaveBola, modoSol && s.chaveBolaOn]} />
+            </View>
+          </Pressable>
+        )}
 
         <Text style={s.secao}>LEGENDA</Text>
         <View style={s.legenda}>
@@ -143,6 +172,15 @@ export default function FolhaLentes({ visivel, aoFechar, lentes, atual, aoEscolh
 }
 
 const s = StyleSheet.create({
+  limpar: { minHeight: 44, justifyContent: 'center' },
+  limparTexto: { fontSize: 14, fontWeight: '600', color: 'var(--vermelho-texto)' },
+  sol: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  solTexto: { fontSize: 14.5, fontWeight: '600', color: 'var(--text)' },
+  solSub: { fontSize: 12.5, color: 'var(--text-muted)', marginTop: 1 },
+  chave: { width: 44, height: 26, borderRadius: 13, padding: 3, backgroundColor: 'var(--surface-3)', borderWidth: 1, borderColor: 'var(--border)', flexShrink: 0 },
+  chaveOn: { backgroundColor: 'var(--text)', borderColor: 'var(--text)' },
+  chaveBola: { width: 18, height: 18, borderRadius: 9, backgroundColor: 'var(--text-muted)' },
+  chaveBolaOn: { backgroundColor: 'var(--surface)', marginLeft: 18 },
   topo: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 },
   titulo: { flex: 1, fontSize: 18, fontWeight: '700', color: 'var(--text)' },
   fechar: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -8 },
