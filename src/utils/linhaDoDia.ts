@@ -197,7 +197,9 @@ export function linhaDoDia(e: EntradaDaLinha): LinhaDoDia | null {
     const aindaLaDentro = desdeAPorta != null && desdeAPorta >= 0 && desdeAPorta < MIN_NA_PORTA;
     if (aindaLaDentro) {
       return montar({
-        estado: 'na_porta', tom: 'neutro', acao: 'desfecho', alvo: e.semDesfecho,
+        /* VERDE, nao neutro (prancha "Ordem da porta" 1c): enquanto ele esta la dentro a visita
+           JA CONTOU, e o kicker da folha deve dizer isso — e uma boa noticia, nao um aviso. */
+        estado: 'na_porta', tom: 'verde', acao: 'desfecho', alvo: e.semDesfecho,
         titulo: `Na porta · ${e.semDesfecho.nome}`,
         subtitulo: semDesfechoTexto(e.semDesfecho),
         direita: `${feitas} de ${meta}`,
@@ -208,13 +210,25 @@ export function linhaDoDia(e: EntradaDaLinha): LinhaDoDia | null {
        RESTAURANTE E PETISCARIA" come a frase inteira e sobra "…s", que não diz nada. Numa
        faixa de uma linha, o fim do texto é o primeiro a morrer: o que não pode morrer não
        mora lá. Os dois fatos continuam na tela, cada um na sua linha. */
+    /* A PERGUNTA, E NÃO A COBRANÇA (29/10/26, prancha "Ordem da porta" §2). O título passa a ser
+       "{nome} · e agora?" e o subtítulo pergunta o que ele faria de cabeça — apresentou? marcou?
+       — em vez de anunciar um débito. É a mesma faixa, no mesmo lugar, com outra voz.
+
+       E o subtítulo diz a HORA DA VISITA, não "ficou N min na porta" como a prancha propôs: o
+       app mede o tempo desde o CHECK-IN, não o tempo na porta (ver RESPOSTAS-ordem-da-porta,
+       pergunta 4 — a saída é detectada por relógio, não por GPS). Dizer "ficou 35 min na porta"
+       para quem saiu em 5 seria inventar um fato. Decisão do Julyan em 29/10: relógio, e troca
+       o texto. */
+    /* ONDE A PRANCHA PEDE "{nome} · e agora?" NO TÍTULO, AQUI ELA PERDE PARA A RÉGUA.
+       Numa faixa de uma linha o fim é o primeiro a morrer: a 375 px, "VASCO RESTAURANTE E
+       PETISCARIA · e agora?" vira "VASCO RESTAURANTE E PETISCARIA ·…" e some justamente a
+       pergunta. A checagem que guarda isso é de antes e continua valendo. Então a pergunta
+       muda de linha e vai para o COMEÇO do subtítulo, onde nada corta — a voz é a que a
+       prancha quis, o lugar é o que a medição permite. */
     return montar({
       estado: 'pendente', tom: 'vermelho', acao: 'desfecho', alvo: e.semDesfecho,
       titulo: e.semDesfecho.nome,
-      /* "visita das 14:20" e não "visita provada às 14:20": com a frase cheia o subtítulo
-         também cortava, e levava a hora junto. Que foi provada já está dito pelo fato de a
-         visita existir — o Cheguei é a única coisa que cria uma. */
-      subtitulo: `sem próximo passo · ${e.semDesfecho.hora ? `visita das ${e.semDesfecho.hora}` : 'visita de hoje'}`,
+      subtitulo: `e agora? · ${e.semDesfecho.hora ? `visita das ${e.semDesfecho.hora}` : 'visita de hoje'}`,
       direita: 'Dar ›',
     });
   }

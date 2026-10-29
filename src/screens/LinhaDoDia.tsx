@@ -26,7 +26,9 @@ type Props = {
 const TOM: Record<TomDaLinha, { fundo: string; traco: string; tinta: string; ponto: string }> = {
   neutro: { fundo: 'var(--pilula-mapa)', traco: 'var(--border)', tinta: 'var(--text)', ponto: 'var(--text-muted)' },
   ambar: { fundo: 'var(--tint-amber)', traco: 'var(--tint-amber-border)', tinta: 'var(--tint-amber-text)', ponto: 'var(--tint-amber-text)' },
-  vermelho: { fundo: 'var(--tint-red)', traco: 'var(--tint-red-border)', tinta: 'var(--tint-red-text)', ponto: 'var(--vermelho-acao)' },
+  /* A BORDA E A COR DE ACAO (prancha "Ordem da porta" §4): a faixa desce de tom, mas se marca
+     com o contorno vermelho. Quem tem vermelho CHEIO na tela e sempre o Cheguei, nunca ela. */
+  vermelho: { fundo: 'var(--tint-red)', traco: 'var(--vermelho-acao)', tinta: 'var(--tint-red-text)', ponto: 'var(--vermelho-acao)' },
   verde: { fundo: 'var(--ok-fundo)', traco: 'var(--tint-green-border)', tinta: 'var(--ok-texto)', ponto: 'var(--ok-texto)' },
 };
 

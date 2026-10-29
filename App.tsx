@@ -7312,7 +7312,6 @@ function MainApp() {
           objecoesDaProxima={objecoesDaProxima}
           linha={linhaDoDiaAgora && linhaDoDiaAgora.estado !== "pendente" ? linhaDoDiaAgora : null}
           aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
-          faixaVermelha={linhaDoDiaAgora?.estado === "pendente"}
           sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
           aoFala={abrirFala}
           recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
@@ -7565,7 +7564,6 @@ function MainApp() {
         objecoesDaProxima={objecoesDaProxima}
         linha={linhaDoDiaAgora && linhaDoDiaAgora.estado !== "pendente" ? linhaDoDiaAgora : null}
         aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
-        faixaVermelha={linhaDoDiaAgora?.estado === "pendente"}
         sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
         aoFala={abrirFala}
         recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}

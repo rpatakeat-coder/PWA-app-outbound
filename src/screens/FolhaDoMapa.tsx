@@ -72,8 +72,6 @@ type Props = {
   linha?: LinhaDoDiaTipo | null;
   /** "Montar o dia" da folha sem plano: a mesma proposta de sempre. */
   aoMontarDia?: () => void;
-  /** Há faixa vermelha na tela: o Cheguei vira contorno. Nunca dois vermelhos cheios (§3). */
-  faixaVermelha?: boolean;
   /** Lente Recém-abertos: quantos a pessoa tem na região (0 = estado vazio) e a volta ao Meu dia. */
   recem?: { naRegiao: number | null; aoVoltar: () => void } | null;
   /** Desktop (28/09/2026): a mesma folha vira o painel lateral, sempre aberta, sem alça. */
@@ -148,7 +146,7 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, objecoesDaProxima = [], linha = null, aoMontarDia, faixaVermelha = false, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, objecoesDaProxima = [], linha = null, aoMontarDia, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
   const cores = useIconColors();
   /** Qual objeção do "Se ele disser" está aberta (uma por vez, e a folha não muda de tamanho à toa). */
   const [disserAberta, setDisserAberta] = useState<string | null>(null);
@@ -331,8 +329,8 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
           </Pressable>
           {proxima ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Cheguei na próxima porta" onPress={() => onCheguei(proxima.c)}
-              style={[s.pilulaCheguei, faixaVermelha && s.chegueiContorno]}>
-              <Text style={[s.btnChegueiTexto, faixaVermelha && s.chegueiContornoTexto]}>Cheguei</Text>
+              style={s.pilulaCheguei}>
+              <Text style={s.btnChegueiTexto}>Cheguei</Text>
             </Pressable>
           ) : lenteRecem && recem!.naRegiao === 0 ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Voltar ao Meu dia" onPress={recem!.aoVoltar} style={s.pilulaLista}>
@@ -727,8 +725,6 @@ const s = StyleSheet.create({
   kickerDireita: { fontSize: 12, fontWeight: '500', color: 'var(--text-muted)', flexShrink: 0 },
   /* NUNCA DOIS VERMELHOS CHEIOS (§3): com a faixa vermelha na tela o Cheguei vira contorno —
      e continua funcionando, porque nada no mapa trava o Cheguei. */
-  chegueiContorno: { backgroundColor: 'transparent', borderWidth: 1, borderColor: 'var(--stroke-strong)' },
-  chegueiContornoTexto: { color: 'var(--text)' },
   /* A FOLHA SEM PLANO (§4, 2a/2b). */
   semPlano: { gap: 2 },
   semPlanoTitulo: { fontSize: 18, lineHeight: 23, fontWeight: '700', color: 'var(--text)', paddingHorizontal: 2 },

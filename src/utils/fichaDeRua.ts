@@ -406,21 +406,40 @@ export const horarioDaFicha = (f: Ficha): string => (f.horario === HORARIO_OUTRO
  * quando a ficha sugeria Decisor, e o time escrevia "." no sistema só para passar. O que a
  * etapa pede vira aviso (a visita grava e a etapa fica). Só o que a VISITA precisa trava.
  */
-export function rotuloSalvar(f: Ficha): { pode: boolean; texto: string } {
-  const falta: string[] = [];
-  if (!f.comoFoi) falta.push('como foi');
-  if (!f.proximo) falta.push('o próximo passo');
-  else if (f.proximo === 'reuniao' && f.diasReuniao === 0 && !f.horaReuniao) falta.push('a hora da reunião');
-  else if (f.proximo === 'reuniao' && f.diasReuniao == null) falta.push('o dia da reunião');
-  else if (ehVolta(f.proximo) && !f.dataVolta) falta.push('o dia da volta');
-  else if (f.proximo === 'sem_interesse' && !f.motivoPerdido) falta.push('o motivo');
-  else if (f.proximo === 'sem_interesse' && MOTIVOS_QUE_EXIGEM_TEXTO.includes(f.motivoPerdido ?? '') && !f.motivoTexto.trim()) falta.push('o que pesou');
-  if (!falta.length) return { pode: true, texto: 'Salvar' };
-  return { pode: false, texto: `Falta ${falta.length > 1 ? `${falta.slice(0, -1).join(', ')} e ${falta[falta.length - 1]}` : falta[0]}` };
+/* O QUE AINDA FALTA PARA O PRÓXIMO PASSO VALER. `null` = vale, ou nem foi escolhido.
+   Separado de propósito (29/10/26): estas checagens eram `else if` penduradas no "escolheu um
+   próximo passo?" e só rodavam por causa disso. Soltando a obrigatoriedade do próximo passo,
+   elas tinham de virar checagens próprias — senão o app passaria a aceitar "Reunião" sem dia,
+   que é pior do que travar. */
+export function faltaNoProximo(f: Ficha): string | null {
+  if (!f.proximo) return null;
+  if (f.proximo === 'reuniao' && f.diasReuniao === 0 && !f.horaReuniao) return 'a hora da reunião';
+  if (f.proximo === 'reuniao' && f.diasReuniao == null) return 'o dia da reunião';
+  if (ehVolta(f.proximo) && !f.dataVolta) return 'o dia da volta';
+  if (f.proximo === 'sem_interesse' && !f.motivoPerdido) return 'o motivo';
+  if (f.proximo === 'sem_interesse' && MOTIVOS_QUE_EXIGEM_TEXTO.includes(f.motivoPerdido ?? '') && !f.motivoTexto.trim()) return 'o que pesou';
+  return null;
+}
+
+/* SALVAR NUNCA TRAVA (29/10/26, "a ordem da porta"). Julyan: "o CHEGUEI e marcar o check-in é
+   mais importante, depois o próximo passo". A ficha abre quando ele ENCOSTA na porta, antes de
+   falar com alguém — exigir ali o "e agora?" é exigir uma resposta que ainda não existe, e foi
+   o que produziu 7 de 314 fichas levando a Demo/Proposta desde 14/10, contra 154 demos no mês.
+   Agora o botão sempre salva. O que ficou em branco volta na saída, pela faixa pendente.
+   `completa` diz se foi inteira: é ela que decide o texto do botão e, no App, se há próximo
+   passo para virar tarefa. */
+export function rotuloSalvar(f: Ficha): { pode: boolean; texto: string; completa: boolean } {
+  const completa = !!f.comoFoi && !!f.proximo && faltaNoProximo(f) == null;
+  return { pode: true, texto: completa ? 'Salvar' : 'Salvar o que sei', completa };
 }
 
 /** Tarefa do próximo passo (op 'nota' + 'proximo-passo'); null = sem tarefa. */
 export function proximoPassoDaFicha(f: Ficha, hoje: string): { data: string; tipo: 'reuniao' | 'visita' | 'follow-up'; texto: string; canal: 'visita' | 'ligacao'; hora?: string } | null {
+  /* MEIO PRÓXIMO PASSO NÃO VIRA TAREFA (29/10/26). Agora que salvar não trava, dá para chegar
+     aqui com "Reunião" escolhida e sem dia. Uma tarefa sem data é pior que tarefa nenhuma: ela
+     some da fila e ninguém cobra. Sem o que falta, a visita grava e o próximo passo fica em
+     branco — e a faixa pendente continua pedindo, que é o comportamento certo. */
+  if (faltaNoProximo(f) != null) return null;
   /* reunião HOJE: a data é hoje e a hora é a escolhida (proximoDiaUtil anda sempre 1 dia) */
   if (f.proximo === 'reuniao' && f.diasReuniao === 0) return f.horaReuniao ? { data: hoje, tipo: 'reuniao', texto: 'Reunião combinada na visita', canal: 'visita', hora: f.horaReuniao } : null;
   if (f.proximo === 'reuniao' && f.diasReuniao) return { data: proximoDiaUtil(hoje, f.diasReuniao), tipo: 'reuniao', texto: 'Reunião combinada na visita', canal: 'visita' };

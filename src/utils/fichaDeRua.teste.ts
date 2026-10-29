@@ -8,7 +8,7 @@
 import {
   opcoesAgora, HORARIOS,
   ETAPA, FICHA_VAZIA, etapaSugerida, faltandoParaEtapa, montarPropriedades, movimentoPermitido, notaDaVisita,
-  pareceNomeDePessoa, proximoPassoDaFicha, rotuloSalvar, proximoDiaUtil, type Ficha,
+  pareceNomeDePessoa, proximoPassoDaFicha, rotuloSalvar, faltaNoProximo, proximoDiaUtil, type Ficha,
   degrausDaFicha, escadaAte, horaLivre, valorValido,
   GARGALO_OUTRA, HORARIO_OUTRO, MOTIVOS_PERDIDO, dorDaFicha, horarioDaFicha, papelDaFicha, papelParaHubspot, rotuloDoHorario, rotuloDoMotivo, tipoDaFicha,
 } from './fichaDeRua';
@@ -46,12 +46,19 @@ ok(faltandoParaEtapa(ETAPA.decisor, { celular: '27999', gargalo_operacional: 'Fi
 ok(faltandoParaEtapa(ETAPA.visita, {}).length === 0, 'Visita não exige nada');
 ok(faltandoParaEtapa(ETAPA.prospeccao, {}).join() === 'origem_do_lead', 'Prospecção exige origem_do_lead');
 
-// salvar
-ok(!rotuloSalvar(F({})).pode && rotuloSalvar(F({})).texto === 'Falta como foi e o próximo passo', 'vazio: diz os dois obrigatórios');
-ok(rotuloSalvar(F({ comoFoi: 'decisor_ausente', proximo: 'reuniao' })).texto === 'Falta o dia da reunião', 'reunião pede o dia');
-ok(rotuloSalvar(F({ comoFoi: 'sem_interesse', proximo: 'sem_interesse' })).texto === 'Falta o motivo', 'sem interesse pede o motivo');
-// 14/10/26 (handoff "app menos tela"): o que a ETAPA pede nunca trava a visita — vira aviso
-ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'voltar7', dataVolta: '2026-09-29' })).pode, 'o campo que a etapa exige não trava o Salvar');
+/* SALVAR NUNCA TRAVA (29/10/26, "a ordem da porta"). A ficha abre quando o executivo ENCOSTA na
+   porta, antes de falar com alguém; exigir ali o "e agora?" é pedir uma resposta que ainda não
+   existe. O botão sempre salva, e o que ficou em branco volta na saída, pela faixa pendente.
+   14/10/26 segue valendo: o que a ETAPA pede nunca travou a visita — vira aviso. */
+ok(rotuloSalvar(F({})).pode && rotuloSalvar(F({})).texto === 'Salvar o que sei', 'ficha vazia salva, e o botão diz que vai pela metade');
+ok(rotuloSalvar(F({ comoFoi: 'decisor_ausente' })).pode, 'só o como foi: salva');
+ok(rotuloSalvar(F({ proximo: 'ligar_amanha' })).pode, 'só o próximo passo: salva');
+const inteira = rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'voltar7', dataVolta: '2026-09-29' }));
+ok(inteira.pode && inteira.completa && inteira.texto === 'Salvar', 'ficha inteira: o botão volta a dizer só "Salvar"');
+ok(!rotuloSalvar(F({ comoFoi: 'decisor_ausente', proximo: 'reuniao' })).completa, 'reunião sem dia não conta como completa');
+ok(faltaNoProximo(F({ comoFoi: 'sem_interesse', proximo: 'sem_interesse' })) === 'o motivo', 'sem interesse ainda pede o motivo — virou checagem própria, não sumiu');
+ok(faltaNoProximo(F({ proximo: 'reuniao', diasReuniao: 0 })) === 'a hora da reunião', 'reunião hoje ainda pede a hora');
+ok(faltaNoProximo(F({})) === null, 'sem próximo passo escolhido, não falta nada nele');
 
 // próximo passo e nota
 const hoje = '2026-09-25'; // sexta
@@ -113,7 +120,7 @@ ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
   ok(stages.includes(`'${MOTIVOS_PERDIDO.map((m) => m.valor).join("', '")}'`), 'o fallback do modal antigo (stages.ts) tem a mesma lista');
   ok(stages.includes("'GoogleMaps', 'Familia', 'Eventos'") && !stages.includes("'Família'"), 'origem: Familia sem acento, o valor do servidor');
 
-  ok(rotuloSalvar(F({ comoFoi: 'sem_interesse', proximo: 'sem_interesse', motivoPerdido: 'Funcionalidade', moverEtapa: false })).texto === 'Falta o que pesou', 'Funcionalidade sem texto: pede o que pesou');
+  ok(faltaNoProximo(F({ comoFoi: 'sem_interesse', proximo: 'sem_interesse', motivoPerdido: 'Funcionalidade', moverEtapa: false })) === 'o que pesou', 'Funcionalidade sem texto: pede o que pesou');
   ok(rotuloSalvar(F({ comoFoi: 'sem_interesse', proximo: 'sem_interesse', motivoPerdido: 'Preço', moverEtapa: false })).pode, 'Preço: o que pesou é opcional');
 
   const perdidoOpc = montarPropriedades(ETAPA.perdido, { motivo_do_perdido: 'Sem retorno', observacao__desqualificado: '  3 ligações, nada ' }, {});
@@ -143,7 +150,7 @@ ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
   ok(!opcoesAgora('decisor_ausente').some((o) => /7 dias/.test(o.rotulo)), 'nenhuma opção promete "7 dias" fixo');
   for (const proximo of ['voltar7', 'voltar_horario', 'voltar_amanha'] as const) {
     ok(proximoPassoDaFicha(F({ comoFoi: 'decisor_ausente', proximo }), hoje) === null, proximo + ' sem dia escolhido não vira tarefa');
-    ok(rotuloSalvar(F({ comoFoi: 'decisor_ausente', proximo, moverEtapa: false })).texto === 'Falta o dia da volta', proximo + ' sem dia: o Salvar pede o dia da volta');
+    ok(faltaNoProximo(F({ comoFoi: 'decisor_ausente', proximo, moverEtapa: false })) === 'o dia da volta', proximo + ' sem dia: ainda pede o dia da volta');
     ok(proximoPassoDaFicha(F({ comoFoi: 'decisor_ausente', proximo, dataVolta: '2026-09-30' }), hoje)?.data === '2026-09-30', proximo + ': a tarefa cai no dia escolhido');
   }
   ok(rotuloSalvar(F({ comoFoi: 'decisor_ausente', proximo: 'voltar7', dataVolta: '2026-09-29', moverEtapa: false })).pode, 'com o dia escolhido, salva');
@@ -155,7 +162,7 @@ ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
   const op = opcoesAgora('falou_com_decisor');
   ok(op[0].proximo === 'apresentei' && op[1].dias === 0, 'falou com quem decide: Apresentei agora e Reunião hoje vêm primeiro');
   ok(!opcoesAgora('decisor_ausente').some((o) => o.proximo === 'apresentei'), 'sem quem decide, não há "apresentei"');
-  ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'reuniao', diasReuniao: 0 })).texto === 'Falta a hora da reunião', 'reunião hoje pede a hora');
+  ok(faltaNoProximo(F({ comoFoi: 'falou_com_decisor', proximo: 'reuniao', diasReuniao: 0 })) === 'a hora da reunião', 'reunião hoje pede a hora');
   const rh = proximoPassoDaFicha(F({ comoFoi: 'falou_com_decisor', proximo: 'reuniao', diasReuniao: 0, horaReuniao: '15:00' }), hoje);
   ok(rh?.data === hoje && rh?.hora === '15:00' && rh?.tipo === 'reuniao', 'reunião hoje: tarefa de hoje, na hora escolhida');
   ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'apresentei' })).pode, 'apresentei agora salva sem plano/MRR (a etapa é que espera)');
@@ -187,7 +194,7 @@ ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
   ok(etapaSugerida({ atual: ETAPA.demo, comoFoi: 'falou_com_decisor', proximo: 'fechou', primeiraVisita: false }) === ETAPA.negociacao, 'Fechou em Demo sugere Negociação');
   ok(etapaSugerida({ atual: ETAPA.demo, comoFoi: 'falou_com_decisor', proximo: 'retorno', primeiraVisita: false }) === null, 'Vai pensar não mexe na etapa');
   ok(proximoPassoDaFicha(F({ comoFoi: 'falou_com_decisor', proximo: 'fechou' }), hoje)?.texto === 'Emitir a cobrança', 'Fechou: o passo é emitir a cobrança hoje');
-  ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'retorno' })).texto === 'Falta o dia da volta', 'Vai pensar pede o dia do retorno');
+  ok(faltaNoProximo(F({ comoFoi: 'falou_com_decisor', proximo: 'retorno' })) === 'o dia da volta', 'Vai pensar pede o dia do retorno');
   ok(proximoPassoDaFicha(F({ comoFoi: 'falou_com_decisor', proximo: 'negociando', dataVolta: '2026-09-29' }), hoje)?.texto === 'Retorno da negociação', 'Negociando: retorno no dia escolhido');
 }
 

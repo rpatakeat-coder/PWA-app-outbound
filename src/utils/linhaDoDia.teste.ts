@@ -63,7 +63,12 @@ ok(estado({ agora: as('14:50'), semDesfecho: VASCO, feitas: 1 }) === 'pendente',
    a visita que já aconteceu se perde hoje e a porta que não aconteceu se faz amanhã. */
 ok(estado({ agora: as('17:40'), semDesfecho: VASCO, feitas: 1 }) === 'pendente',
   'pendente vence escapando');
-ok(linha({ agora: as('14:30'), semDesfecho: VASCO })?.tom === 'neutro', 'na porta é neutro: não se atrapalha quem está vendendo');
+/* NA PORTA VIROU VERDE EM 29/10 (prancha "Ordem da porta" 1c). A razão original desta checagem
+   continua de pé — não se atrapalha quem está vendendo — e é por isso que ela segue aqui: o que
+   não pode acontecer é `na_porta` virar âmbar ou VERMELHO, que seria cobrar alguém que está no
+   meio da conversa. Verde não cobra: diz que a visita já contou, que é a notícia do momento. */
+ok(linha({ agora: as('14:30'), semDesfecho: VASCO })?.tom === 'verde', 'na porta é verde: a visita já contou');
+ok(!['ambar', 'vermelho'].includes(linha({ agora: as('14:30'), semDesfecho: VASCO })?.tom ?? ''), 'na porta NUNCA cobra quem está vendendo');
 ok(linha({ agora: as('14:50'), semDesfecho: VASCO })?.tom === 'vermelho', 'pendente é vermelho');
 ok(linha({ agora: as('14:50'), semDesfecho: VASCO })?.alvo?.dealId === '123', 'a linha leva junto DE QUAL visita está falando');
 ok(linha({ agora: as('14:50'), semDesfecho: VASCO })?.acao === 'desfecho', 'o toque abre o desfecho daquela visita');
@@ -76,8 +81,11 @@ ok(!/null|undefined|às \b/.test(
    some exatamente o que a linha tinha a dizer. O que não pode sumir não mora no fim. */
 ok(linha({ agora: as('14:50'), semDesfecho: VASCO })?.titulo === VASCO.nome,
   'pendente: o título é só o nome, que pode cortar sem perder o recado');
-ok(/^sem próximo passo · /.test(linha({ agora: as('14:50'), semDesfecho: VASCO })?.subtitulo ?? ''),
-  'e o que falta vem no começo do subtítulo, onde não corta');
+/* 29/10/26: "sem próximo passo" virou "e agora?" — a prancha "Ordem da porta" trocou a cobrança
+   pela pergunta. O LUGAR não mudou, e é o que esta checagem guarda: começo do subtítulo, onde
+   não corta. A prancha pedia a pergunta no fim do TÍTULO; a 375 px ela sumiria. */
+ok(/^e agora\? · /.test(linha({ agora: as('14:50'), semDesfecho: VASCO })?.subtitulo ?? ''),
+  'e a pergunta vem no começo do subtítulo, onde não corta');
 /* O SUBTÍTULO TAMBÉM TEM FIM. Medido na bancada a 375 px: com "visita provada às 14:20" o
    subtítulo cortava em "às 14:…" e levava a hora junto — e a hora é o que deixa ele reconhecer
    de qual visita se fala. 38 caracteres é o que coube. */

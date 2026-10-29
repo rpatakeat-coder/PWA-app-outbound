@@ -644,7 +644,16 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   const rotuloFalei = decisorConhecido && primeiroNome ? `Falei com ${primeiroNome}${sabido?.papel ? ` (${sabido.papel.toLowerCase()})` : ''}` : null;
   const rotuloDe = (id: string, padrao: string) => (id === 'falou_com_decisor' && rotuloFalei ? rotuloFalei : padrao);
   const rotuloComoFoi = rotuloDe(f.comoFoi ?? '', COMO_FOI.find((c) => c.id === f.comoFoi)?.rotulo ?? '');
-  const textoSalvar = !salvar.pode ? salvar.texto : vaiAoAlvo && alvoFinal ? `Salvar · vai a ${ROTULO_ETAPA[alvoFinal]}` : 'Salvar visita';
+  /* SALVAR NUNCA TRAVA (29/10/26, "a ordem da porta"). O botão não diz mais o que falta — ele
+     salva. Ficha inteira continua dizendo para onde a etapa vai; ficha pela metade diz que vai
+     pela metade, e a legenda abaixo conta o resto. */
+  const textoSalvar = !salvar.completa ? salvar.texto : vaiAoAlvo && alvoFinal ? `Salvar · vai a ${ROTULO_ETAPA[alvoFinal]}` : 'Salvar visita';
+  /* A LEGENDA SOB O BOTÃO: o executivo precisa saber que a visita já está contada ANTES de ele
+     responder qualquer coisa — é isso que tira a pressa e deixa o "e agora?" para a saída. */
+  const horaDoCheckin = (() => {
+    const d = new Date(checkinEm);
+    return Number.isNaN(d.getTime()) ? null : d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+  })();
 
   return (
     <Modal visible={visivel} transparent animationType="slide" onRequestClose={fechar}>
@@ -909,9 +918,16 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                     </View>
                   </View>
                 )}
-                <Pressable accessibilityRole="button" style={[s.salvar, !salvar.pode && s.salvarDesligado]} onPress={aoSalvar} disabled={!salvar.pode}>
-                  <Text style={[s.salvarTexto, !salvar.pode && s.salvarTextoDesligado]}>{textoSalvar}</Text>
+                <Pressable accessibilityRole="button" style={s.salvar} onPress={aoSalvar}>
+                  <Text style={s.salvarTexto}>{textoSalvar}</Text>
                 </Pressable>
+                {!salvar.completa && (
+                  <Text style={s.legenda} numberOfLines={2}>
+                    {horaDoCheckin
+                      ? `A visita já contou às ${horaDoCheckin}. O que ficar em branco volta quando você sair.`
+                      : 'A visita já contou. O que ficar em branco volta quando você sair.'}
+                  </Text>
+                )}
                 <Text style={[s.legenda, aviso && s.legendaAviso]} numberOfLines={2}>{legenda}</Text>
               </View>
             </>
