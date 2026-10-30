@@ -38,7 +38,7 @@ import {
 import { acaoRapida, diaBRT } from '../utils/abaTarefas';
 import { compromissosDoDia, estadoDasParadas, paradaParaCasar, separarCompromissos } from '../utils/agendaNovo';
 import { acaoPorId } from '../utils/acoesDoPlano';
-import { montarFeitoNoDia, type FichaDoDia, type RegistroDoDia, type VisitaDoDia } from '../utils/feitoNoDia';
+import { diaCurto, montarFeitoNoDia, type FichaDoDia, type RegistroDoDia, type VisitaDoDia } from '../utils/feitoNoDia';
 import { proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
 import { ordemParaDirigir } from '../utils/rotaDoDia';
 import { porNoDia, tirarDoDia } from '../utils/paradaDoDia';
@@ -836,7 +836,19 @@ export default function AgendaNovoScreen({
   ) : null;
 
   // FEITO HOJE (§2.9), aberto; quem falta o Como foi está no Para fechar
-  const feitosDoDia = itensFeitos.filter((i) => !i.faltaRegistro);
+  /* O PASSO DE AGORA, NÃO O DA HORA DA VISITA (auditoria 29/10/26): a visita combinou "voltar
+     seg 02/11", a tarefa foi remarcada para ter 03/11 na aba Tarefas, e esta linha seguia dizendo
+     02/11 — lia a ficha, que é o que foi dito na porta. Se o negócio tem tarefa aberta noutro
+     dia, a data mostrada é a dela. */
+  const diaAtualDoPasso = new Map<string, string>();
+  for (const x of (filaQ.data?.proximos ?? []) as Array<{ clientId?: string | null; dia?: string }>) {
+    if (x.clientId && x.dia && !diaAtualDoPasso.has(x.clientId)) diaAtualDoPasso.set(x.clientId, x.dia);
+  }
+  const comDiaAtual = (i: { clientId: string | null; proximo: string | null }) => {
+    const d = i.clientId ? diaAtualDoPasso.get(i.clientId) : undefined;
+    return d && i.proximo ? i.proximo.replace(/(dom|seg|ter|qua|qui|sex|sáb) \d{2}\/\d{2}$/, diaCurto(d)) : i.proximo;
+  };
+  const feitosDoDia = itensFeitos.filter((i) => !i.faltaRegistro).map((i) => ({ ...i, proximo: comDiaAtual(i) }));
   const blocoFeito = feitosDoDia.length ? (
     <View>
       <TituloDeLista titulo={`${dia === hoje ? 'Feito hoje' : 'Feito no dia'} · ${feitosDoDia.length}`} />

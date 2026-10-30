@@ -1372,8 +1372,13 @@ function MainApp() {
     capped: heatCapped,
     isLoading: heatLoading,
     nomes: heatNomes,
-    semGps30d: heatSemGps30d,
+    semGps30d: heatSemGpsTime,
+    semGpsPorVendedor: heatSemGpsPorVendedor,
   } = useVisitsHeatmap((canViewGestor || modoNovo) && heatOn, modoNovo ? 30 : null);
+  /* o rodapé "N check-ins sem GPS" do recorte que está na tela: só eu, o vendedor escolhido ou o time */
+  const heatSemGps30d = heatSemGpsTime == null ? null
+    : calorEscopo === 'eu' ? (profile?.id ? heatSemGpsPorVendedor[profile.id] ?? 0 : null)
+      : heatSeller ? heatSemGpsPorVendedor[heatSeller] ?? 0 : heatSemGpsTime;
   // Mapa novo (prompt §5): a mancha é dos ÚLTIMOS 30 DIAS, do time ou só minha.
   const pontosCalor = useMemo(() => {
     if (!modoNovo) return heatPoints;
@@ -6706,8 +6711,11 @@ function MainApp() {
     <>
       <MapView
         mapRef={(ref) => { mapRef.current = ref as unknown as RNMapView; }}
-        // restaurante do Google tocado: a folha dele, com "Virar lead" (05/10/26)
-        onPoiClick={modoNovo && !isViewer ? (e) => {
+        // restaurante do Google tocado: a folha dele, com "Virar lead" (05/10/26).
+        // PLANEJANDO, NÃO (auditoria 29/10/26): os pinos do plano são pequenos e moram ao lado dos
+        // ícones do Google; o toque que errava por milímetros abria a biblioteca vizinha e
+        // derrubava o Planejar no meio. Com o plano aberto, o toque no Google é ignorado.
+        onPoiClick={modoNovo && !isViewer && !planejarDia ? (e) => {
           const lugar = { placeId: e.nativeEvent.placeId, ...e.nativeEvent.coordinate };
           // com o cartão aberto, a folha do Google abre depois que ele fecha (senão fechava sozinha)
           if (selectedClient) { setSelectedClient(null); setTimeout(() => setLugarGoogle(lugar), 350); } else setLugarGoogle(lugar);
@@ -9832,7 +9840,8 @@ function MainApp() {
                 }
               : null,
             modoNovo && canViewGestor
-              ? { chave: 'calor', Icone: IconBarGraph, rotulo: 'Lente Calor', aoTocar: () => { setPerfilAberto(false); setLente('calor'); } }
+              // a lente mora no mapa: de outra aba, o toque só fechava o menu (auditoria 29/10/26)
+              ? { chave: 'calor', Icone: IconBarGraph, rotulo: 'Lente Calor', aoTocar: () => { setPerfilAberto(false); if (tab !== 'map') irParaAba('map'); setLente('calor'); } }
               : null,
             /* O TIME NA RUA (29/10/26): UMA linha, só para gestor, e nada no mapa nem aba nova —
                o Julyan pediu duas vezes hoje para não poluir. É a versão de celular do que o
@@ -10154,11 +10163,15 @@ function MainApp() {
                   Um cartão por negócio, com o motivo de ele estar aqui. Dentro de cada seção, quem vale mais
                   e tem o prazo mais apertado vem primeiro.
                 </Text>
+                {/* NA ORDEM DA TELA (auditoria 29/10/26): a ajuda listava Atrasados antes de Para hoje e
+                    falava de "Adiar" e de arrastar o cartão, que não existem mais desde o handoff
+                    "Tarefas por dia" (20/10). */}
                 {[
-                  ['Atrasados', 'O que você combinou e não fez: tarefa do HubSpot vencida e visita de hoje sem registro.'],
-                  ['Para hoje', 'Ligações, cobranças e visitas marcadas para hoje.'],
+                  ['1 · Para hoje', 'Ligações, cobranças e visitas marcadas para hoje, e a visita de hoje que ainda está sem registro.'],
+                  ['2 · Atrasados', 'O que você combinou e não fez, até 3 dias de atraso. Negócio quente (Decisor, Demo, Negociação) fica aqui de qualquer data.'],
+                  ['3 · Sem próximo passo', 'Negócios parados: quente sem passo, proposta sem retorno, sem falar com quem decide, poucos contatos ou muito tempo sem contato. A meta é zero.'],
+                  ['Atrasados antigos', 'Mais de 3 dias: remarque com o cliente ou encerre com o motivo.'],
                   ['Combinados com o gestor', 'Os acordos do seu 1:1. Marque quando fizer; o gestor valida.'],
-                  ['Sem próximo passo', 'Negócios parados: quente sem passo, proposta sem retorno, sem falar com quem decide, poucos contatos ou muito tempo sem contato.'],
                   ['Feito hoje', 'O que você registrou hoje. Dá para desfazer até o fim do dia.'],
                 ].map(([t, x]) => (
                   <View key={t} style={styles.ruleCard}>
@@ -10167,8 +10180,8 @@ function MainApp() {
                   </View>
                 ))}
                 <Text style={styles.taskRulesIntro}>
-                  Negócio com próximo passo para outro dia não aparece: ele volta no dia do passo.
-                  {'\n\n'}"Adiar" (ou arrastar o cartão para a esquerda) passa para o próximo dia útil.
+                  Negócio com próximo passo para outro dia não aparece hoje: ele está no dia dele, na fileira
+                  de dias lá em cima. "Remarcar" muda só a data no HubSpot.
                 </Text>
               </ScrollView>
             ) : (<>

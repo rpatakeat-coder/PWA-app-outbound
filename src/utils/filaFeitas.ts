@@ -57,9 +57,16 @@ export async function marcarGravada(acaoId: string | null | undefined, ids: {
 }
 
 export async function lerFeitas(dia: string): Promise<FeitaServidor[]> {
+  /* SÓ AS MINHAS (auditoria 29/10/26). A RLS deixa gestor ler as feitas do time inteiro
+     (fila_feitas_gestor_le) e esta leitura não filtrava: no app do Julyan, o "Feito hoje" listava
+     as visitas do André e da Kelly como dele, com Desfazer — que o servidor recusaria (desfazer só
+     acha user_id = uid) — e o "5 de 11 feitas" contava o time. A aba é de quem está com o celular. */
+  const { data: sessao } = await supabase.auth.getSession();
+  const uid = sessao.session?.user?.id;
+  if (!uid) return [];
   const { data, error } = await supabase.from('fila_feitas')
     .select('id, acao_id, deal_id, hora, negocio, resultado, volta, perdido, estado, origem')
-    .eq('dia', dia).neq('estado', 'desfeita').order('criada_em', { ascending: false });
+    .eq('dia', dia).eq('user_id', uid).neq('estado', 'desfeita').order('criada_em', { ascending: false });
   if (error) throw error;
   return (data ?? []).map((r) => ({
     id: r.id, acaoId: r.acao_id, dealId: r.deal_id, hora: r.hora ?? '', negocio: r.negocio ?? '',

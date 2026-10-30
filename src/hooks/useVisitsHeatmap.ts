@@ -107,6 +107,9 @@ export function useVisitsHeatmap(enabled: boolean, desdeDias: number | null = nu
       // calor: some só o complemento.
       const nomes: Record<string, { nome: string; apelidos: string[] }> = {};
       let semGps30d: number | null = null;
+      /* POR PESSOA (auditoria 29/10/26): o rodapé dizia "48 check-ins sem GPS" também no "Só eu"
+         e com um vendedor escolhido — era sempre o total do time. */
+      const semGpsPorVendedor: Record<string, number> = {};
       try {
         const ids = [...acc.keys()];
         const desde = new Date(Date.now() - 30 * 86400000).toISOString();
@@ -116,8 +119,8 @@ export function useVisitsHeatmap(enabled: boolean, desdeDias: number | null = nu
           // O nome do CADASTRO é o do Cockpit (equipe_cockpit.nome: "Wericles
           // Andrade"); o do perfil costuma ser o apelido de login ("Whell Andrade").
           ids.length ? supabase.from('equipe_cockpit').select('profile_id, nome').in('profile_id', ids) : Promise.resolve({ data: [] as { profile_id: string; nome: string | null }[] }),
-          supabase.from('client_visits').select('id', { count: 'exact', head: true })
-            .gte('visited_at', desde).or('declarada.eq.true,visited_at_lat.is.null'),
+          supabase.from('client_visits').select('visited_by')
+            .gte('visited_at', desde).or('declarada.eq.true,visited_at_lat.is.null').limit(5000),
         ]);
         const doCadastro = new Map(((equipe.data ?? []) as { profile_id: string; nome: string | null }[])
           .filter((e) => e.nome && e.nome.trim()).map((e) => [e.profile_id, e.nome!.trim()]));
@@ -132,10 +135,14 @@ export function useVisitsHeatmap(enabled: boolean, desdeDias: number | null = nu
           const ap = limpo(a.apelido);
           if (n && ap && ap.toLowerCase() !== n.nome.toLowerCase() && !n.apelidos.some((x) => x.toLowerCase() === ap.toLowerCase())) n.apelidos.push(ap);
         }
-        semGps30d = typeof semGps.count === 'number' ? semGps.count : null;
+        if (!semGps.error) {
+          const linhas = (semGps.data ?? []) as { visited_by: string | null }[];
+          semGps30d = linhas.length;
+          for (const l of linhas) if (l.visited_by) semGpsPorVendedor[l.visited_by] = (semGpsPorVendedor[l.visited_by] ?? 0) + 1;
+        }
       } catch { /* complemento opcional */ }
 
-      return { points, sellers, capped, nomes, semGps30d };
+      return { points, sellers, capped, nomes, semGps30d, semGpsPorVendedor };
     },
     enabled,
     staleTime: 5 * 60 * 1000,
@@ -147,6 +154,7 @@ export function useVisitsHeatmap(enabled: boolean, desdeDias: number | null = nu
     capped: query.data?.capped ?? false,
     nomes: query.data?.nomes ?? {},
     semGps30d: query.data?.semGps30d ?? null,
+    semGpsPorVendedor: query.data?.semGpsPorVendedor ?? {},
     isLoading: query.isLoading,
     refetch: query.refetch,
   };

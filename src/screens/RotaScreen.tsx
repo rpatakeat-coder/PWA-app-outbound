@@ -1120,6 +1120,14 @@ export function RotaScreen({
             >
               <IconArrowDown width={20} height={20} fill={iconColors.muted} />
             </TouchableOpacity>
+            {/* PARADA FEITA NÃO SAI (auditoria 29/10/26): o X tirava do plano uma visita já feita,
+                e o plano do dia — que o gestor lê — ficava sem ela. É a mesma regra do "Tirar da
+                rota" da ficha do lead: visitada hoje, fica no registro do dia. */}
+            {stop?.status === 'done' ? (
+              <View style={styles.configParadaBotao} accessibilityLabel={`${nomeDoLead(client)} já foi visitada hoje`}>
+                <IconCheck width={18} height={18} fill={iconColors.muted} />
+              </View>
+            ) : (
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel={`Remover ${nomeDoLead(client)}`}
@@ -1129,6 +1137,7 @@ export function RotaScreen({
             >
               <IconClose width={20} height={20} fill={iconColors.tintRedText} />
             </TouchableOpacity>
+            )}
           </View>
         );
       })}
