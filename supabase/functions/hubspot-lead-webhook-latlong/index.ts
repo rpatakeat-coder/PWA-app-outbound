@@ -439,7 +439,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: existingRows, error: selectError } = await supabase
     .from('clients')
-    .select('id_hubspot')
+    .select('id_hubspot, latitude, longitude, endereco, numero, cep, cidade')
     .in('id_hubspot', ids);
 
   if (selectError) {
@@ -448,6 +448,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const existingSet = new Set((existingRows ?? []).map((r) => r.id_hubspot as string));
+  const existingById = new Map((existingRows ?? []).map((r) => [r.id_hubspot as string, r]));
   const newLeads = normalized.filter((n) => !existingSet.has(n.idHubspot));
   const updates = normalized.filter((n) => existingSet.has(n.idHubspot));
 
@@ -520,6 +521,22 @@ Deno.serve(async (req: Request) => {
           updated_by: webhookUserId,
         };
         if (statusSlug) fields.status = statusSlug;
+        /* O PINO QUE JÁ EXISTE NÃO ANDA À TOA (30/10/26). Todo update de negócio
+           regeocodava o endereço e gravava a posição por cima: o pino do Google, do
+           recém-aberto ou corrigido antes "saía do lugar" quando o negócio mudava de
+           etapa — e, se o endereço não batia, ia para vazio. Agora a posição só muda
+           quando o pino não tem posição ou quando o ENDEREÇO mudou de fato (rua, número,
+           CEP ou cidade). Check-in e coordenada marcada à mão continuam protegidos pelo
+           gatilho clients_protege_posicao_confirmada. */
+        const antes = existingById.get(idHubspot);
+        const norm = (v: unknown) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+        const temPosicao = !!antes && antes.latitude != null && antes.longitude != null;
+        const enderecoMudou = !!antes && (
+          norm(antes.endereco) !== norm(fields.endereco) || norm(antes.numero) !== norm(fields.numero)
+          || digits(antes.cep) !== digits(fields.cep) || norm(antes.cidade) !== norm(fields.cidade));
+        if (temPosicao && (!enderecoMudou || fields.latitude == null || fields.longitude == null)) {
+          delete fields.latitude; delete fields.longitude; delete fields.geo_source; delete fields.geo_approximate;
+        }
         const { data, error } = await supabase
           .from('clients')
           .update(fields)

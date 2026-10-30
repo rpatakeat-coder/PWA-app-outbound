@@ -201,7 +201,7 @@ function LinhasDaFamilia({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
           ))}
         </View>
       )}
-      {rec && <Text style={s.caixaNeutra}>Sem telefone: vá na porta e anote o celular do dono no registro.</Text>}
+      {rec && lp && <TelefoneDoCnpj c={c} lp={lp} cnpj={doCnpj.data?.cnpj ? String(doCnpj.data.cnpj).replace(/\D/g, '') : null} />}
       {p.familia === 'av' && p.dono !== 'meu' && <Text style={s.caixaNeutra}>Ninguém do time está com ele. Ao registrar a visita, ele vira seu lead.</Text>}
       {aproximado && <Text style={s.caixaAviso}>{'Posição aproximada, pelo endereço. Confira o número na rua; no Cheguei, "Mover pino" corrige.'}</Text>}
       {linhaRef && (
@@ -285,6 +285,58 @@ function naoVale(d: DadosCardNovo, a: AcoesCardNovo) {
 function ligar(c: Client) {
   const n = (c.telefone ?? '').replace(/\D/g, '');
   if (n) Linking.openURL(`tel:${n}`);
+}
+
+/* O TELEFONE DO RECÉM-ABERTO, PELO CNPJ (Julyan, 30/10/26: "quero o telefone dos leads da
+   casa dos dados"). A busca em lote da Casa dos Dados não devolve número; a Consulta CNPJ
+   devolve (contato_telefonico) e cobra 1 crédito por empresa. Por isso é SOB DEMANDA: o
+   crédito só sai quando o executivo pede, e o número fica gravado no lead e no pino — a
+   segunda pessoa que abrir já vê, e a rota guarda 90 dias de cache. Nada de Google.
+   O aviso fica: o telefone do cadastro do CNPJ muitas vezes é o do contador. */
+function TelefoneDoCnpj({ c, lp, cnpj }: { c: Client; lp: string; cnpj: string | null }) {
+  const [tel, setTel] = useState<string | null>(c.telefone?.trim() || null);
+  const [estado, setEstado] = useState<'livre' | 'buscando' | 'sem' | 'erro'>('livre');
+  const [erro, setErro] = useState<string | null>(null);
+  async function buscar() {
+    if (!cnpj || estado === 'buscando') return;
+    setEstado('buscando'); setErro(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('cockpit-api/novidades-mercado', { body: { cnpj } });
+      if (error) throw error;
+      const t = String((data as { contato?: { telefone?: string | null } } | null)?.contato?.telefone ?? '').trim();
+      if (!t) { setEstado('sem'); return; }
+      const so = t.replace(/\D/g, '');
+      /* grava nos dois lugares: o lead (a fonte do recém-aberto) e o pino (o que o mapa lê) */
+      await supabase.from('leads_prospeccao').update({ telefone: t, telefone_normalizado: so }).eq('id', lp);
+      await supabase.from('clients').update({ telefone: t }).eq('id', c.id);
+      setTel(t); setEstado('livre');
+    } catch (e) {
+      setErro(String((e as Error)?.message ?? e)); setEstado('erro');
+    }
+  }
+  if (tel) {
+    const zap = toWhatsappNumber(tel);
+    return (
+      <View style={{ gap: 6 }}>
+        <Text style={s.caixaNeutra}>{`Telefone do CNPJ: ${tel}. Pode ser do contador: na porta, confirme o celular do dono.`}</Text>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Botao rotulo="Ligar" onPress={() => Linking.openURL(`tel:${tel.replace(/\D/g, '')}`)} estilo={[s.botao48, { flex: 1 }]} acessivel={`Ligar para ${tel}`} />
+          <Botao rotulo="WhatsApp" onPress={() => openWhatsapp(tel, { clientId: c.id, dealId: c.id_hubspot ?? null })} desabilitado={!zap} estilo={[s.botao48, s.zapBotao, { flex: 1 }]} texto={s.zapTexto} acessivel="Abrir conversa no WhatsApp" />
+        </View>
+      </View>
+    );
+  }
+  if (!cnpj) return <Text style={s.caixaNeutra}>Sem telefone: vá na porta e anote o celular do dono no registro.</Text>;
+  return (
+    <View style={{ gap: 6 }}>
+      <Botao rotulo={estado === 'buscando' ? 'Buscando o telefone…' : 'Ver telefone do CNPJ'} onPress={estado === 'buscando' ? undefined : buscar} estilo={s.botao48} tracejado acessivel="Buscar o telefone do CNPJ na Casa dos Dados" />
+      <Text style={s.caixaNeutra}>
+        {estado === 'sem' ? 'A Casa dos Dados não tem telefone para este CNPJ. Na porta, anote o celular do dono.'
+          : estado === 'erro' ? `Não consegui buscar agora (${erro}). Tente de novo ou anote na porta.`
+          : 'Busca o telefone do cadastro do CNPJ (1 crédito da Casa dos Dados). Pode ser do contador.'}
+      </Text>
+    </View>
+  );
 }
 
 function Botao({ rotulo, onPress, estilo, texto, desabilitado, tracejado, acessivel }: {
