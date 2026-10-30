@@ -8,6 +8,7 @@
 
 import { supabase } from '../integrations/supabase/client';
 import { ehErroDeRede, ehSessaoVencida } from './filaOffline';
+import { registrarGravado } from './gravadoAgora';
 
 export type RespostaNegocio = { ok: true; [k: string]: unknown };
 
@@ -38,6 +39,7 @@ export async function negocioAcao(corpo: Record<string, unknown>): Promise<Respo
   if (data && typeof data === 'object' && (data as { ok?: boolean }).ok === false) {
     throw new RecusaDoServidor(String((data as { erro?: string }).erro ?? 'O servidor recusou.'), 400);
   }
+  registrarGravado(corpo);
   return data as RespostaNegocio;
 }
 

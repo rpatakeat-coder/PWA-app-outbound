@@ -12,6 +12,7 @@ import { supabase } from '../integrations/supabase/client';
 import type { Client } from '../types/client';
 import { argumentoDoSistema, armasConhecidas, nomeDoSistema, fichasDaFolha, linhaDaPraca, type Armas, type DadosDaPraca, type FichaArmas } from '../utils/armasDaDemo';
 import { ETAPA, HORARIOS } from '../utils/fichaDeRua';
+import { aoGravar, gravadoAgora } from '../utils/gravadoAgora';
 
 export const ETAPAS_DO_BLOCO: string[] = [ETAPA.decisor, ETAPA.demo, ETAPA.negociacao, ETAPA.pagamento];
 
@@ -30,6 +31,9 @@ export default function ArmasDoNegocio({ client, etapa, onCompletar }: { client:
   const [armas, setArmas] = useState<Armas | null>(null);
   const [praca, setPraca] = useState<DadosDaPraca | null>(null);
   const dealId = client.id_hubspot ? String(client.id_hubspot) : null;
+  /* o que o app acabou de gravar vale por cima da cópia do HubSpot até ela alcançar (gravadoAgora) */
+  const [versao, setVersao] = useState(0);
+  useEffect(() => aoGravar(() => setVersao((v) => v + 1)), []);
 
   useEffect(() => {
     if (!dealId) return;
@@ -44,10 +48,10 @@ export default function ArmasDoNegocio({ client, etapa, onCompletar }: { client:
         : Promise.resolve([] as FichaArmas[]),
       supabase.from('gv2_falta_etapa').select('criado_em, armas').eq('negocio_id', dealId).order('criado_em', { ascending: false }).limit(5)
         .then(({ data }) => fichasDaFolha((data ?? []) as { criado_em: string; armas: Record<string, unknown> | null }[]), () => [] as FichaArmas[]),
-    ]).then(([neg, fichas, folha]) => { if (vivo) setArmas(armasConhecidas(neg, [...folha, ...fichas])); });
+    ]).then(([neg, fichas, folha]) => { if (vivo) setArmas(armasConhecidas({ ...neg, ...gravadoAgora(dealId) }, [...folha, ...fichas])); });
     void lerPraca().then((d) => { if (vivo) setPraca(d); });
     return () => { vivo = false; };
-  }, [dealId, client.id]);
+  }, [dealId, client.id, versao]);
 
   if (!dealId || !ETAPAS_DO_BLOCO.includes(etapa)) return null;
   const titulo = etapa === ETAPA.negociacao || etapa === ETAPA.pagamento ? 'SUAS ARMAS PRA NEGOCIAÇÃO' : 'SUAS ARMAS PRA DEMO';

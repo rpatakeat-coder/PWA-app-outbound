@@ -30,6 +30,7 @@ import type { OndeEsta } from '../utils/planoDoPino';
 
 export { distanciaTexto };
 import { openWhatsapp, toWhatsappNumber } from '../utils/whatsapp';
+import { gravadoAgora } from '../utils/gravadoAgora';
 
 export type AcoesCardNovo = {
   onMarkVisited?: () => void;
@@ -542,7 +543,7 @@ function useFaltaPara(dealId: string | null, destino: string | null): { falta: s
     void Promise.resolve(supabase.rpc('mapa_negocio', { p_deal: dealId }))
       .then(({ data }) => {
         if (!vivo) return;
-        const neg = (data as Record<string, unknown>) ?? {};
+        const neg = { ...((data as Record<string, unknown>) ?? {}), ...gravadoAgora(dealId) };
         setR({ falta: pede.filter((k) => !valorValido(neg[k])), tem: pede.filter((k) => valorValido(neg[k])) });
       }, () => undefined);
     return () => { vivo = false; };

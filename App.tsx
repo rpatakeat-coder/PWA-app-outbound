@@ -919,6 +919,8 @@ function MainApp() {
   // sobe pra ca' e desce por prop.
   const [configRotaAberta, setConfigRotaAberta] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  /* a folha Mudar etapa salvou algo desde que abriu? (decide se a ficha do lead volta ao fechar) */
+  const etapaMudouRef = useRef(false);
   const [isFollowingUser, setIsFollowingUser] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ClientStatus>('lead' as ClientStatus);
   // Multi-selecao de status exclusiva do viewer (role='view'). Diferente do
@@ -4901,11 +4903,13 @@ function MainApp() {
         avisoPino = 'O endereço foi salvo, mas o pino continuou no lugar antigo. Use "Mover o pino".';
         geo = {};
       }
-      if (avisoPino) Toast.mostrar(avisoPino, geo.geo_source ? 'ok' : 'fila');
       setEditingClient(null);
       resetForm();
       setIsFormOpen(false);
-      Alert.alert('Sucesso', 'Cliente atualizado!');
+      /* "Salvo" no toast, não num alerta que trava a tela com OK (auditoria 29/10/26): na rua o
+         "+ Telefone" é um toque no meio da visita, e o alerta exigia mais um. O aviso do pino,
+         quando há, já diz que salvou. */
+      Toast.mostrar(avisoPino ?? 'Salvo.', avisoPino && !geo.geo_source ? 'fila' : 'ok');
     } catch (err: any) {
       Alert.alert('Erro ao atualizar', err?.message || 'Tente novamente');
     } finally {
@@ -4932,16 +4936,18 @@ function MainApp() {
         email: client.email ?? undefined,
         observacoes: client.observacoes ?? undefined,
         status: client.status as ClientStatus,
-        // Campos de localizacao — os novos. Endereco/cidade/etc do reverse-geocode
-        // quando vierem; senao mantem o atual do cliente.
+        // As coordenadas são as novas. O ENDEREÇO NÃO (auditoria 29/10/26): o reverse-geocode
+        // sobrescrevia o endereço inteiro — arrastar o pino 31 m na porta trocou "Rua Lélio Gama,
+        // 105" por "Rua Senador Dantas, 76" e o CEP junto. Corrigir o pino é dizer onde fica a
+        // porta; o endereço cadastrado continua o do restaurante. O reverso só preenche o lead
+        // que ainda não tem endereço nenhum.
         latitude: payload.latitude,
         longitude: payload.longitude,
-        endereco: payload.endereco ?? client.endereco ?? undefined,
-        numero: payload.numero ?? client.numero ?? undefined,
-        bairro: payload.bairro ?? client.bairro ?? undefined,
-        cep: payload.cep ?? client.cep ?? undefined,
-        cidade: payload.cidade ?? client.cidade ?? undefined,
-        estado: payload.estado ?? client.estado ?? undefined,
+        ...(String(client.endereco ?? '').trim()
+          ? { endereco: client.endereco ?? undefined, numero: client.numero ?? undefined, bairro: client.bairro ?? undefined,
+              cep: client.cep ?? undefined, cidade: client.cidade ?? undefined, estado: client.estado ?? undefined }
+          : { endereco: payload.endereco ?? undefined, numero: payload.numero ?? client.numero ?? undefined, bairro: payload.bairro ?? client.bairro ?? undefined,
+              cep: payload.cep ?? client.cep ?? undefined, cidade: payload.cidade ?? client.cidade ?? undefined, estado: payload.estado ?? client.estado ?? undefined }),
         geo_source: 'coords',
         geo_approximate: false,
       });
@@ -4955,7 +4961,7 @@ function MainApp() {
   const confirmDeleteClient = useCallback((client: Client, onDone?: () => void) => {
     Alert.alert(
       'Remover cliente',
-      `Deseja realmente remover "${client.nome}"? Esta ação não pode ser desfeita.`,
+      `Deseja realmente remover "${getClientPrimaryName(client)}" do app? Esta ação não pode ser desfeita. O negócio no HubSpot não muda.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -10897,7 +10903,15 @@ function MainApp() {
           tipoPino={porNoPlanoPara.tipoPino}
           cor={porNoPlanoPara.cor}
           acaoInicial={porNoPlanoPara.acao}
-          onFechar={() => setPorNoPlanoPara(null)}
+          onFechar={() => {
+            /* A FICHA VOLTA (auditoria 29/10/26): abrirPorNoPlano fecha a ficha do lead antes de abrir
+               (o history.back do Painel mataria a folha nova), e o Cancelar deixava o executivo no
+               mapa vazio, sem o lead que ele estava olhando. No mapa, ela reabre depois do fechar. */
+            const c = porNoPlanoPara.client;
+            setPorNoPlanoPara(null);
+            // `prev ??`: se quem salvou já reabriu a ficha (com o dado novo), não troca pela antiga
+            if (tab === 'map') setTimeout(() => setSelectedClient((prev) => prev ?? c), 350);
+          }}
         />
       )}
       {etapaNovaPara && (
@@ -10908,8 +10922,18 @@ function MainApp() {
           destinoInicial={etapaNovaPara.destinoInicial ?? null}
           preenchido={etapaNovaPara.preenchido ?? null}
           soArmas={!!etapaNovaPara.soArmas}
-          onFechar={() => setEtapaNovaPara(null)}
+          onFechar={() => {
+            /* a mesma volta da ficha do Pôr no plano (auditoria 29/10/26) — só quando a folha fecha
+               SEM mudar nada: mudando, quem decide é aplicarEtapaNoLead (reabre na etapa nova, ou
+               fecha de vez no Perdido e na Reciclagem, que saem da rua) */
+            const c = etapaNovaPara.client;
+            const mudou = etapaMudouRef.current;
+            etapaMudouRef.current = false;
+            setEtapaNovaPara(null);
+            if (!mudou && tab === 'map') setTimeout(() => setSelectedClient((prev) => prev ?? c), 350);
+          }}
           onMudou={(codigo, props) => {
+            etapaMudouRef.current = true;
             // O TELEFONE DIGITADO NA ETAPA VAI PARA O LEAD (auditoria 28/09): ia só ao HubSpot e o
             // card seguia "sem telefone", sem o Ligar. Mesmo campo do cadastro (clients.telefone).
             const cel = props && typeof props.celular === 'string' ? props.celular.trim() : '';

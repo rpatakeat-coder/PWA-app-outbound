@@ -35,6 +35,7 @@ import {
 } from '../utils/armasDaDemo';
 import { negocioAcao } from '../utils/negocioAcao';
 import EmitirCobranca from './EmitirCobranca';
+import { gravadoAgora } from '../utils/gravadoAgora';
 
 type Props = {
   visivel: boolean;
@@ -141,7 +142,7 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
        para sempre (auditoria 14/10/26) */
     const vazio = {} as Record<string, unknown>;
     Promise.all([
-      comPrazo(supabase.rpc('mapa_negocio', { p_deal: dealId }).then(({ data }) => (data as Record<string, unknown>) ?? {}), 4000, vazio),
+      comPrazo(supabase.rpc('mapa_negocio', { p_deal: dealId }).then(({ data }) => ({ ...((data as Record<string, unknown>) ?? {}), ...gravadoAgora(dealId) })), 4000, vazio),
       client.vendedor_id_hubspot
         ? comPrazo(supabase.functions.invoke('hubspot-sync', { body: { type: 'ler_negocio', id_hubspot: dealId, owner_id: String(client.vendedor_id_hubspot) } })
             .then(({ data }) => ((data as { propriedades?: Record<string, unknown> } | null)?.propriedades ?? {})), 4000, vazio)

@@ -40,6 +40,7 @@ import { enviarConclusao, idDe } from '../utils/concluirTarefa';
 import { apagarPendente, marcarGravada, registrarFeita, type SecaoDoFeito } from '../utils/filaFeitas';
 import { CampoData } from '../components/CampoData';
 import { IconClose as SiClose, IconCheck as SiCheck, IconChevronDown as SiDown, IconPencil as SiLapis } from '../components/icons';
+import { gravadoAgora } from '../utils/gravadoAgora';
 
 export type CamposCadastro = { empresa?: string; nome?: string; telefone?: string; categoria?: string };
 
@@ -201,7 +202,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     let vivo = true;
     setSabido(montarSabido(client, {}, []));
     const snap = dealId
-      ? comPrazo(supabase.rpc('mapa_negocio', { p_deal: dealId }).then(({ data }) => (data as Record<string, unknown>) ?? {}), 4000, {} as Record<string, unknown>)
+      ? comPrazo(supabase.rpc('mapa_negocio', { p_deal: dealId }).then(({ data }) => ({ ...((data as Record<string, unknown>) ?? {}), ...gravadoAgora(dealId) })), 4000, {} as Record<string, unknown>)
       : Promise.resolve({} as Record<string, unknown>);
     const aoVivo = dealId && client.vendedor_id_hubspot
       ? comPrazo(supabase.functions.invoke('hubspot-sync', { body: { type: 'ler_negocio', id_hubspot: dealId, owner_id: String(client.vendedor_id_hubspot) } })

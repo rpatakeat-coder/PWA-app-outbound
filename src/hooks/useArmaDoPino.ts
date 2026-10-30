@@ -15,6 +15,7 @@ import type { Client } from '../types/client';
 import { armasConhecidas, fichasDaFolha, type FichaArmas } from '../utils/armasDaDemo';
 import { escolherArma, PAGINAS_GATILHO, type Arma, type GatilhoId, type PaginaGatilho } from '../utils/armasDoMapa';
 import type { Pino, TempoDoNegocio } from '../utils/pinoP2';
+import { gravadoAgora } from '../utils/gravadoAgora';
 
 export type FatosDoNegocio = { decisor: string; papel: string; horario: string; sistema: string; dor: string; mrr: number | null };
 
@@ -58,7 +59,7 @@ export function useFatosDoNegocio(c: Client | null, ativo = true) {
     queryFn: async () => {
       const [neg, fichas, folha] = await Promise.all([
         dealId
-          ? Promise.resolve(supabase.rpc('mapa_negocio', { p_deal: dealId })).then(({ data }) => (data as Record<string, unknown>) ?? {}, () => ({}))
+          ? Promise.resolve(supabase.rpc('mapa_negocio', { p_deal: dealId })).then(({ data }) => ({ ...((data as Record<string, unknown>) ?? {}), ...gravadoAgora(dealId) }), () => ({ ...gravadoAgora(dealId) }))
           : Promise.resolve({} as Record<string, unknown>),
         Promise.resolve(supabase.from('fichas_de_rua').select('ocorrido_em, decisor_nome, decisor_papel, horario_dono, sistema, dor')
           .eq('client_id', c!.id).order('ocorrido_em', { ascending: false }).limit(10))

@@ -21,6 +21,7 @@ import { Painel } from '../components/Painel';
 import { Toast } from '../components/Toast';
 import { AJUDA_MOTIVO, ETAPA, MAX_O_QUE_PESOU, MOTIVOS_PERDIDO, MOTIVOS_QUE_EXIGEM_TEXTO, ROTULO_ETAPA, montarPropriedades } from '../utils/fichaDeRua';
 import { enfileirar, ehErroDeRede, novoAcaoId } from '../utils/filaOffline';
+import { etapaGravadaAgora } from '../utils/gravadoAgora';
 import { negocioAcao } from '../utils/negocioAcao';
 import { opcoesDaFila } from './FilaTarefasScreen';
 
@@ -65,8 +66,10 @@ export default function LimparFunil({ visivel, dealInicial, reguaDe, onFechar, o
 
   const passou = (l: Linha) => { const r = reguaDe(l.etapaId); return r != null && l.diasNaEtapa != null && l.diasNaEtapa > r; };
   const todas = useMemo(() => {
+    // a etapa que o app acabou de gravar vence a da cópia do HubSpot (gravadoAgora, 29/10/26)
     const carteira = ((fila.data as { carteira?: Linha[] } | undefined)?.carteira ?? [])
-      .filter((l) => l.etapaId !== ETAPA.pagamento);
+      .map((l) => { const e = etapaGravadaAgora(l.dealId); return e && e !== l.etapaId ? { ...l, etapaId: e, diasNaEtapa: 0 } : l; })
+      .filter((l) => l.etapaId !== ETAPA.pagamento && l.etapaId !== ETAPA.perdido && l.etapaId !== ETAPA.reciclagem);
     return carteira.slice().sort((a, b) => (Number(passou(b)) - Number(passou(a))) || ((b.diasNaEtapa ?? -1) - (a.diasNaEtapa ?? -1)));
   }, [fila.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const estourados = todas.filter(passou).length;

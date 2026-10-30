@@ -21,10 +21,17 @@ interface NavigationParams {
  *
  * `_blank` em vez de trocar a location: no PWA instalado, navegar pra fora
  * descarregaria o app e o vendedor perderia a rota do dia carregada.
+ *
+ * SEM `noopener` NO window.open (auditoria 29/10/26): com ele, a especificacao
+ * manda devolver `null` SEMPRE — a aba abria e o app mostrava "Pop-up
+ * bloqueado" em todo "Ir" e todo "Navegar". O isolamento continua: a aba nova
+ * perde o `opener` logo em seguida.
  */
 function openInNewTab(url: string): boolean {
-  const win = window.open(url, '_blank', 'noopener,noreferrer');
-  return win !== null;
+  const win = window.open(url, '_blank');
+  if (!win) return false;
+  try { win.opener = null; } catch { /* aba de outra origem: ja' isolada */ }
+  return true;
 }
 
 /**

@@ -78,7 +78,11 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
     lerPlanoDosDias(uid, isosLeitura).then((p) => {
       if (!vivo) return;
       setPlano(p);
-      const onde = ondeEsta(client.id, p, isosLeitura);
+      /* A PARADA JÁ FEITA NÃO É O PRÓXIMO PASSO (auditoria 29/10/26): visitado hoje, o lead abria
+         esta folha com "Já está marcado para hoje" e o botão travado — e "Outro dia move" tiraria
+         a visita feita do plano de hoje. Só a parada ainda por fazer conta como "antes". */
+      const pendentes = { ...p, paradas: Object.fromEntries(Object.entries(p.paradas).map(([d, l]) => [d, l.filter((x) => x.status !== 'done')])) };
+      const onde = ondeEsta(client.id, pendentes, isosLeitura);
       setAntes(onde);
       if (onde) {
         setDia(onde.dia);
