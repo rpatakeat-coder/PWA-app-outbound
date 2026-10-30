@@ -11113,7 +11113,11 @@ function MainApp() {
                 <>
                   <Text style={sharedStyles.fieldLabel}>Status</Text>
                   <View style={styles.statusSelector}>
-                    {statusOptions.map(opt => {
+                    {/* SEM GANHO NA MÃO (Julyan, 29/10/26: "tirar o ganho manual"). "Ganho - Field Sales" só
+                        nasce pelo caminho automático (ASAAS confirma o pagamento → gatilho
+                        lead_onboarding_vira_ganho_fs), a mesma regra que a ficha e o Mudar etapa já
+                        seguiam. O chip só aparece no registro que JÁ é ganho, para mostrar o que ele é. */}
+                    {statusOptions.filter(opt => opt.value !== 'ganho_fs' || editingClient.status === 'ganho_fs').map(opt => {
                       const lockedFromClient = (editingClient.status === 'cliente' || editingClient.status === 'churn')
                         && opt.value === 'lead';
                       return (
