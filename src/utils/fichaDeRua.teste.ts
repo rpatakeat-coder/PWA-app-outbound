@@ -46,13 +46,16 @@ ok(faltandoParaEtapa(ETAPA.decisor, { celular: '27999', gargalo_operacional: 'Fi
 ok(faltandoParaEtapa(ETAPA.visita, {}).length === 0, 'Visita não exige nada');
 ok(faltandoParaEtapa(ETAPA.prospeccao, {}).join() === 'origem_do_lead', 'Prospecção exige origem_do_lead');
 
-/* SALVAR NUNCA TRAVA (29/10/26, "a ordem da porta"). A ficha abre quando o executivo ENCOSTA na
-   porta, antes de falar com alguém; exigir ali o "e agora?" é pedir uma resposta que ainda não
-   existe. O botão sempre salva, e o que ficou em branco volta na saída, pela faixa pendente.
+/* TODA VISITA SAI COM PRÓXIMO PASSO (29/10/26, Julyan depois de ver uma ficha salvar em branco:
+   "TODA VISITA TEM QUE TER UM PRÓXIMO PASSO"). O Salvar trava enquanto falta — e trava SEM
+   tocar no Cheguei: o check-in é outro botão, acontece antes, e a visita já está contada e
+   provada quando esta ficha abre. O que a trava protege é a saída do lead.
    14/10/26 segue valendo: o que a ETAPA pede nunca travou a visita — vira aviso. */
-ok(rotuloSalvar(F({})).pode && rotuloSalvar(F({})).texto === 'Salvar o que sei', 'ficha vazia salva, e o botão diz que vai pela metade');
-ok(rotuloSalvar(F({ comoFoi: 'decisor_ausente' })).pode, 'só o como foi: salva');
-ok(rotuloSalvar(F({ proximo: 'ligar_amanha' })).pode, 'só o próximo passo: salva');
+ok(!rotuloSalvar(F({})).pode && rotuloSalvar(F({})).texto === 'Escolha como foi', 'ficha vazia não salva, e o botão diz o que falta');
+ok(!rotuloSalvar(F({ comoFoi: 'decisor_ausente' })).pode, 'só o como foi: ainda falta o próximo passo');
+ok(rotuloSalvar(F({ comoFoi: 'decisor_ausente' })).texto === 'Escolha o próximo passo', 'e o botão pede exatamente ele');
+ok(!rotuloSalvar(F({ proximo: 'ligar_amanha' })).pode, 'só o próximo passo: ainda falta como foi');
+ok(rotuloSalvar(F({ comoFoi: 'decisor_ausente', proximo: 'voltar7' })).texto === 'Falta o dia da volta', 'meio próximo passo: o botão nomeia o que falta');
 const inteira = rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'voltar7', dataVolta: '2026-09-29' }));
 ok(inteira.pode && inteira.completa && inteira.texto === 'Salvar', 'ficha inteira: o botão volta a dizer só "Salvar"');
 ok(!rotuloSalvar(F({ comoFoi: 'decisor_ausente', proximo: 'reuniao' })).completa, 'reunião sem dia não conta como completa');

@@ -421,16 +421,20 @@ export function faltaNoProximo(f: Ficha): string | null {
   return null;
 }
 
-/* SALVAR NUNCA TRAVA (29/10/26, "a ordem da porta"). Julyan: "o CHEGUEI e marcar o check-in é
-   mais importante, depois o próximo passo". A ficha abre quando ele ENCOSTA na porta, antes de
-   falar com alguém — exigir ali o "e agora?" é exigir uma resposta que ainda não existe, e foi
-   o que produziu 7 de 314 fichas levando a Demo/Proposta desde 14/10, contra 154 demos no mês.
-   Agora o botão sempre salva. O que ficou em branco volta na saída, pela faixa pendente.
-   `completa` diz se foi inteira: é ela que decide o texto do botão e, no App, se há próximo
-   passo para virar tarefa. */
+/* TODA VISITA SAI COM PRÓXIMO PASSO (29/10/26, decisão do Julyan depois de ver uma ficha salvar
+   em branco: "não podemos ter NADA preenchido... TODA VISITA TEM QUE TER UM PRÓXIMO PASSO").
+   Mais cedo no mesmo dia eu tinha soltado a trava para proteger o registro da visita; a trava
+   volta, mas SEM TOCAR NO CHEGUEI — e é isso que torna a volta segura. O check-in acontece
+   antes, fora daqui: a visita já contou, a prova de GPS já está gravada, e nada do que o botão
+   exigir pode apagá-la. O que esta trava protege é a SAÍDA do lead: sem o "e agora?" ninguém
+   cobra a porta amanhã, e o negócio some da fila.
+   A ordem da mensagem segue a ordem da tela: como foi, depois o que falta no próximo passo. */
 export function rotuloSalvar(f: Ficha): { pode: boolean; texto: string; completa: boolean } {
-  const completa = !!f.comoFoi && !!f.proximo && faltaNoProximo(f) == null;
-  return { pode: true, texto: completa ? 'Salvar' : 'Salvar o que sei', completa };
+  if (!f.comoFoi) return { pode: false, texto: 'Escolha como foi', completa: false };
+  if (!f.proximo) return { pode: false, texto: 'Escolha o próximo passo', completa: false };
+  const falta = faltaNoProximo(f);
+  if (falta) return { pode: false, texto: `Falta ${falta}`, completa: false };
+  return { pode: true, texto: 'Salvar', completa: true };
 }
 
 /** Tarefa do próximo passo (op 'nota' + 'proximo-passo'); null = sem tarefa. */
