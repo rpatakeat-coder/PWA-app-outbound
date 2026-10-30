@@ -164,8 +164,15 @@ export function MeuDesempenhoScreen({ enabled, linhas = [] }: Props) {
           </View>
         </View>
       ) : null}
+      {/* FORA DO PLACAR (auditoria 29/10/26): quem não disputa o bônus (o gestor) recebia o placar
+          sem o "eu" e a tela mostrava 0 · 0 · 0 logo acima do histórico com 2 provadas e 1 contrato.
+          Sem posição, os três números são os da semana dele, os mesmos do histórico. */}
+      {!tmp?.pos && <Text style={st.fraco}>Você não disputa o placar do bônus: estes são os seus números da semana.</Text>}
       <View style={st.tres}>
-        {[[tmp?.vendas ?? 0, (tmp?.vendas ?? 0) === 1 ? 'venda' : 'vendas'], [tmp?.reunioes ?? 0, (tmp?.reunioes ?? 0) === 1 ? 'demo' : 'demos'], [tmp?.visitas ?? 0, (tmp?.visitas ?? 0) === 1 ? 'visita com prova' : 'visitas com prova']].map(([v, r]) => (
+        {(tmp?.pos
+          ? [[tmp.vendas ?? 0, 'venda', 'vendas'], [tmp.reunioes ?? 0, 'demo', 'demos'], [tmp.visitas ?? 0, 'visita com prova', 'visitas com prova']]
+          : [[sem.contratos ?? 0, 'venda', 'vendas'], [sem.demos ?? 0, 'demo', 'demos'], [sem.provadas ?? 0, 'visita com prova', 'visitas com prova']]
+        ).map(([n, um, varios]) => [n, n === 1 ? um : varios]).map(([v, r]) => (
           <View key={String(r)} style={st.kpi}><Text style={st.kpiValor}>{String(v)}</Text><Text style={st.kpiRotulo}>{String(r)}</Text></View>
         ))}
       </View>

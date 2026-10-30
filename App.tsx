@@ -133,7 +133,7 @@ import PorNoPlano from './src/screens/PorNoPlano';
 import type { AcaoId } from './src/utils/acoesDoPlano';
 import { ROTULO_ETAPA, ETAPA as ETAPA_FS } from './src/utils/fichaDeRua';
 import { negocioAcao } from './src/utils/negocioAcao';
-import { subirPlanoDaFila } from './src/utils/planoDoPino';
+import { lerPlanoDosDias, subirPlanoDaFila } from './src/utils/planoDoPino';
 import { textoNormalizado } from './src/utils/pinoP2';
 import { contaAlvoDiscreta, DELTA_AFASTADO, FILTROS_VAZIOS, LENTES, passaNosFiltros, pontoDe, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
 import { montarLista, type OrdemDaLista } from './src/utils/listaDoMapa';
@@ -5273,6 +5273,17 @@ function MainApp() {
      fechou aparece para o gestor no dia seguinte (2.11). */
   const [fechoDoDia, setFechoDoDia] = useState(false);
   const [fechoResolvido, setFechoResolvido] = useState(false);
+  /* "AMANHÃ JÁ COMEÇA COM N PORTAS" (auditoria 29/10/26): a folha tinha a frase, mas o App mandava
+     amanha={0} fixo e ela nunca aparecia. Lê o plano do próximo dia útil quando a folha abre;
+     falha de leitura fica 0, que esconde a frase em vez de inventar número. */
+  const [portasAmanha, setPortasAmanha] = useState(0);
+  useEffect(() => {
+    if (!fechoDoDia || !profile?.id) return;
+    let vivo = true;
+    const prox = diasPlanejaveis(diaBRT(new Date()), 2).find((d) => !d.hoje)?.iso;
+    if (prox) lerPlanoDosDias(profile.id, [prox]).then((p) => { if (vivo) setPortasAmanha(p.contagem[prox] ?? 0); }, () => {});
+    return () => { vivo = false; };
+  }, [fechoDoDia, profile?.id]);
   useEffect(() => {
     if (!modoNovo || tab !== "map" || isViewer || fechoResolvido || planoDoDia) return;
     /* QUEM NÃO FOI À RUA NÃO TEM DIA PARA FECHAR (visto no app em 29/10, logo depois de subir:
@@ -9638,7 +9649,7 @@ function MainApp() {
       {fechoDoDia && profile?.id && (() => {
         const itensF = (filaNaTela.data?.itens ?? []) as Array<{ motivo: string; porque: string; dealId: string; clientId: string | null; negocio: string }>;
         const pend = itensF.filter((i) => i.motivo === "visita_sem_registro")
-          .map((i) => ({ dealId: i.dealId, clientId: i.clientId, nome: i.negocio, hora: (/(d{2}:d{2})/.exec(i.porque ?? "") ?? [])[1] ?? null }));
+          .map((i) => ({ dealId: i.dealId, clientId: i.clientId, nome: i.negocio, hora: (/(\d{2}:\d{2})/.exec(i.porque ?? "") ?? [])[1] ?? null }));
         const portas = meuDia.data?.provadasHoje ?? 0;
         return (
           <FolhaFechoDoDia
@@ -9646,7 +9657,7 @@ function MainApp() {
             portas={portas}
             meta={metaDeHoje}
             pendentes={pend}
-            amanha={0}
+            amanha={portasAmanha}
             aoDar={(p) => {
               setFechoDoDia(false);
               const hoje = diaBRT(new Date());
@@ -10375,7 +10386,7 @@ function MainApp() {
                   showsVerticalScrollIndicator={true}
                   keyboardShouldPersistTaps="handled"
                 >
-                <Text style={styles.adminSectionTitle}>Responsavel</Text>
+                <Text style={styles.adminSectionTitle}>Responsável</Text>
                 <Text style={styles.passwordModalHint}>
                   {isAdmin
                     ? 'Filtra por qualquer vendedor do time (admin).'

@@ -57,7 +57,7 @@ export function PlacarTarefas({ feitas, total, faltam, soAtrasados }: { feitas: 
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Text style={st.placarN}>{`${feitas} de ${total}`}<Text style={st.placarFeitas}> feitas hoje</Text></Text>
         {soAtrasados != null
-          ? <Text style={[st.placarSub, { color: T.vtx }]}>{`${soAtrasados} ${soAtrasados === 1 ? 'atrasado esperando' : 'atrasados esperando'} · comece pelo bloco 1`}</Text>
+          ? <Text style={[st.placarSub, { color: T.vtx }]}>{`${soAtrasados} ${soAtrasados === 1 ? 'atrasado esperando' : 'atrasados esperando'} · comece pelo bloco 2`}</Text>
           : <Text style={st.placarSub}>{`faltam ${faltam} · de cima para baixo, termina no bloco 3`}</Text>}
       </View>
     </View>

@@ -246,18 +246,14 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
   const origem: OrigemPick | null = origemHs ?? (c.origem_lead ? DERIVADA_PARA_PICKLIST[c.origem_lead] ?? null : null);
 
   const nota = tipo === 'alvo' && c.conta_alvo_rating != null ? Number(c.conta_alvo_rating) : null;
-  /* O RECÉM-ABERTO QUE JÁ ERA LEAD NÃO APARECIA COMO RECÉM-ABERTO (Julyan, 29/10: "as contas
-     recém abertas que ainda não vejo aqui"). `tipo === 'lead'` era testado ANTES da abertura,
-     então todo CNPJ novo que já tinha virado lead caía em `familia: 'lead'` e desenhava como
-     lead comum. Medido no mesmo dia: **478 dos 483** recém-abertos com pino estão assim — eles
-     estavam no mapa o tempo todo, só não pareciam o que são.
-
-     A troca é estreita de propósito: só vira 'rec' o lead que AINDA NÃO TEM NEGÓCIO (467 dos
-     478). Lead novo que já está em Negociação é lead primeiro — trocar o pino dele por losango
-     de recém-aberto apagaria a temperatura, que é a informação mais cara do mapa. */
-  const semNegocio = !String(c.id_hubspot ?? '').trim();
-  const familia: Familia = tipo === 'cliente' ? 'cli' : tipo === 'ex' ? 'ex'
-    : tipo === 'lead' ? (abertoHa != null && semNegocio ? 'rec' : 'lead')
+  /* O RECÉM-ABERTO SÓ EXISTE COMO CONTA-ALVO, e isso está certo. Recém-aberto sem negócio é
+     `tipo === 'alvo'` (sem id_hubspot, com lead_prospeccao_id) e é só para ele que `abertoHa` é
+     calculado. Medido em 29/10/26, os recém-abertos da Casa dos Dados com pino: 467 alvo (todos
+     viram 'rec'), 12 lead COM negócio, 3 clientes, 1 ex. Lead com negócio é lead primeiro:
+     trocar o pino dele por losango apagaria a temperatura, o dado mais caro do mapa.
+     Em 29/10 entrou aqui um ramo "lead sem negócio → rec" que nunca rodava — lead sem negócio
+     com lead_prospeccao_id é alvo por definição. Saiu na auditoria da mesma noite. */
+  const familia: Familia = tipo === 'cliente' ? 'cli' : tipo === 'ex' ? 'ex' : tipo === 'lead' ? 'lead'
     : abertoHa != null ? 'rec' : !alvoAntigo && nota != null && nota >= NOTA_MAIS_AVALIADO ? 'av' : 'alvo';
 
   return {

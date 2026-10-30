@@ -24,6 +24,8 @@
 //  - VALOR NAO PODE TER QUEBRA DE LINHA. O parser le' linha a linha; uma
 //    observacao de dois paragrafos viraria uma chave fantasma no meio do bloco.
 
+import { feriadosNacionais } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
+
 /** Gargalos do HubSpot. Enumeracao — valor fora da lista volta erro cru da API. */
 export const GARGALOS = [
   'Fila',
@@ -166,18 +168,22 @@ export function vencimentoDoDia(dia: string): string {
 }
 
 /**
- * Segunda a sexta. Le' o dia como meio-dia UTC pelo mesmo motivo de
- * `vencimentoDoDia`: 'AAAA-MM-DD' puro seria meia-noite UTC, que no Brasil
- * ainda e' o dia anterior — e um sabado viraria sexta na conta.
+ * Segunda a sexta, fora feriado nacional. Le' o dia como meio-dia UTC pelo mesmo
+ * motivo de `vencimentoDoDia`: 'AAAA-MM-DD' puro seria meia-noite UTC, que no
+ * Brasil ainda e' o dia anterior — e um sabado viraria sexta na conta.
+ *
+ * FERIADO (auditoria 29/10/26): a ficha marcou "Em 2 dias" para 02/11, Finados,
+ * enquanto a fila de Tarefas — que ja pulava feriado — mostrava a mesma tarefa
+ * na terca. Duas contas de dia util no mesmo app. Agora e' a lista da fila.
  */
 export const ehDiaUtil = (dia: string): boolean => {
   const d = new Date(`${dia}T12:00:00Z`).getUTCDay();
-  return d >= 1 && d <= 5;
+  return d >= 1 && d <= 5 && !feriadosNacionais(Number(dia.slice(0, 4))).includes(dia);
 };
 
 /**
- * `dias` dias uteis a frente de `de`, pulando fim de semana — e nunca caindo
- * NUM fim de semana.
+ * `dias` dias uteis a frente de `de`, pulando fim de semana e feriado nacional
+ * — e nunca caindo NUM deles.
  *
  * A rua nao acontece no sabado: datar a proxima visita pra sabado e' prometer
  * um toque que nao vai existir, e a tarefa vence sozinha no HubSpot. E' defeito
@@ -186,9 +192,9 @@ export const ehDiaUtil = (dia: string): boolean => {
 export function proximoDiaUtil(de: string, dias: number): string {
   const cursor = new Date(`${de}T12:00:00Z`);
   let andados = 0;
-  // Teto de seguranca: um feriado longo nao existe aqui (so' fim de semana),
-  // entao `dias * 2 + 7` sempre cobre.
-  for (let i = 0; i < dias * 2 + 7; i++) {
+  // Teto de seguranca: o pior caso e' carnaval colado em fim de semana (4 dias
+  // seguidos fora), e `dias * 3 + 10` cobre com folga.
+  for (let i = 0; i < dias * 3 + 10; i++) {
     cursor.setUTCDate(cursor.getUTCDate() + 1);
     if (ehDiaUtil(cursor.toISOString().slice(0, 10))) andados++;
     if (andados >= dias) break;

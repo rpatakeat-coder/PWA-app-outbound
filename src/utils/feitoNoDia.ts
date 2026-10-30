@@ -43,7 +43,7 @@ const COMO_FOI: Record<string, string> = {
 };
 const PROXIMO: Record<string, string> = {
   reuniao: 'Reunião',
-  voltar7: 'Voltar em 7 dias',
+  voltar7: 'Voltar outro dia',
   ligar_amanha: 'Ligar amanhã',
   voltar_horario: 'Voltar no horário do dono',
   voltar_amanha: 'Voltar amanhã',

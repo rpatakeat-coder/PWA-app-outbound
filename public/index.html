@@ -567,9 +567,15 @@
       }
 
       /* Segura o "puxa pra atualizar" do Chrome Android: num app de mapa o
-         gesto de arrastar pra baixo e' pan, nao refresh. */
+         gesto de arrastar pra baixo e' pan, nao refresh.
+         No html tambem, e nos dois eixos (29/10/26, Julyan: "a tela parar de
+         balancar"): so' o body segurava, e o html seguia `auto` — arrastar
+         uma folha ate' o fim puxava a pagina inteira no elastico do Safari. */
+      html,
       body {
-        overscroll-behavior-y: contain;
+        overscroll-behavior: none;
+      }
+      body {
         -webkit-tap-highlight-color: transparent;
       }
 

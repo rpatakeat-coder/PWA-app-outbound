@@ -454,12 +454,18 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
         halo.setCenter(p);
         halo.setRadius(Math.min(pos.coords.accuracy || 0, 500));
         /* SEGUIR SEM SACUDIR (14/10/26): cada panTo é uma parada do mapa, e cada parada redesenha
-           o app inteiro. Só recentraliza se andou mais de ~15 m e no máximo a cada 3 s. */
-        if (followRef.current) {
+           o app inteiro. Só recentraliza se andou mais de ~15 m e no máximo a cada 3 s.
+           A TELA BALANÇANDO (Julyan, 29/10/26): 15 m é menos que o erro do GPS parado. Na porta,
+           dentro do salão, a precisão fica em 50–70 m e cada leitura "anda" 20–60 m sem ninguém
+           sair do lugar — o mapa pulava a cada 3 s. Agora o passo mínimo é a própria margem de
+           erro (nunca menos de 25 m), leitura com erro acima de 150 m não move o mapa, e o
+           intervalo é 5 s. O ponto azul e o halo continuam na leitura de agora. */
+        const erro = pos.coords.accuracy || 0;
+        if (followRef.current && erro <= 150) {
           const ult = ultimoPan.current;
           const agora = Date.now();
           const andou = !ult ? Infinity : Math.hypot((p.lat - ult.lat) * 111320, (p.lng - ult.lng) * 111320 * Math.cos((p.lat * Math.PI) / 180));
-          if (!ult || (andou > 15 && agora - ult.em > 3000)) {
+          if (!ult || (andou > Math.max(25, erro) && agora - ult.em > 5000)) {
             ultimoPan.current = { lat: p.lat, lng: p.lng, em: agora };
             ctx.map.panTo(p);
           }

@@ -115,11 +115,13 @@ export default function FolhaTimeNaRua({ visivel, aoFechar }: { visivel: boolean
             <Text style={s.conta}>{l.provadas}</Text>
           </View>
         ))}
-        {/* O QUE MUDA EM 01/11, dito na tela de quem vai cobrar — e não por conversa. */}
+        {/* A REGRA DA FOTO, dita na tela de quem vai cobrar — e não por conversa. Era "de 01/11 em
+            diante"; a 0230 adiantou o corte para 29/10 e a frase ficou prometendo uma folga que
+            não existia mais (auditoria 29/10/26: a Kelly já aparecia aqui com a foto fora do raio). */}
         {!q.isLoading && linhas.length > 0 && (
           <Text style={s.rodape}>
-            De 1º de novembro em diante, foto com coordenada precisa estar dentro do raio para provar a visita.
-            Até lá ela vale como sempre valeu.
+            Desde 29/10, foto com coordenada só prova a visita se estiver dentro do raio do pino
+            (200 m, ou 500 m quando o pino é aproximado).
           </Text>
         )}
       </ScrollView>

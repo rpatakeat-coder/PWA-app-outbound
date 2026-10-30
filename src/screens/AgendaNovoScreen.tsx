@@ -519,7 +519,7 @@ export default function AgendaNovoScreen({
     return {
       chave: p.id, numero, nome: c ? nomeDoLead(c) : 'Parada', hora: hora ? hora.replace(/^~/, '') : null, marcada,
       cliente: cli, corEtapa: corDaEtapa(codigo), quente: quenteDe(c), doHubspot: (sep.casados.get(p.client_id) ?? []).some((k) => k.fonte === 'hubspot'),
-      linha2: [oQue, cli ? null : rotuloDaEtapa(codigo), distanciaAte(p.client_id)].filter(Boolean).join(' · '),
+      linha2: [oQue, cli || rotuloDaEtapa(codigo) === oQue ? null : rotuloDaEtapa(codigo), distanciaAte(p.client_id)].filter(Boolean).join(' · '),
       cadencia: cli ? 'cliente · sem régua de venda'
         : ctx?.diasNaEtapa != null ? `${ctx.diasNaEtapa} ${ctx.diasNaEtapa === 1 ? 'dia' : 'dias'} na etapa${ctx.regua ? (passou ? ` · passou da régua de ${ctx.regua} dias` : ` · régua de ${ctx.regua} dias`) : ''}` : null,
       cadenciaVermelha: passou,
@@ -907,7 +907,7 @@ export default function AgendaNovoScreen({
         <>
           <View style={{ gap: 2 }}>
             <Text style={s.outroTitulo}>{`${SEMANA_LONGA[dowDe(dia)][0].toUpperCase()}${SEMANA_LONGA[dowDe(dia)].slice(1)}, ${ddmm(dia)}`}</Text>
-            <Text style={s.subLinha}>{[plOutro?.proposito ? PROPOSITOS[plOutro.proposito] ?? plOutro.proposito : null, listaOutro.length ? `${listaOutro.length} ${listaOutro.length === 1 ? 'parada' : 'paradas'}` : null, listaOutro.length ? 'plano fechado com o gestor' : null].filter(Boolean).join(' · ') || 'Nada no plano deste dia'}</Text>
+            <Text style={s.subLinha}>{[plOutro?.proposito ? PROPOSITOS[plOutro.proposito] ?? plOutro.proposito : null, listaOutro.length ? `${listaOutro.length} ${listaOutro.length === 1 ? 'parada' : 'paradas'}` : null].filter(Boolean).join(' · ') || 'Nada no plano deste dia'}</Text>
           </View>
           {blocoParaFechar}
           {listaOutro.length === 0 && (

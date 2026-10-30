@@ -426,7 +426,7 @@ export function RotaScreen({
         })}
       </View>
 
-      <Text style={[sharedStyles.fieldLabel, { marginTop: 12 }]}>Responsavel</Text>
+      <Text style={[sharedStyles.fieldLabel, { marginTop: 12 }]}>Responsável</Text>
       {isAdmin ? (
         <TouchableOpacity
           style={[

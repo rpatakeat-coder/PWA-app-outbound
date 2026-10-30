@@ -124,6 +124,10 @@ ok('D+5 de segunda fecha a semana seguinte', proximoDiaUtil('2026-09-14', 5), '2
 ok('nenhum prazo cai em fim de semana', [1, 2, 3, 4, 5, 7, 10].every((n) =>
   ['2026-09-10', '2026-09-11', '2026-09-12', '2026-09-13', '2026-09-14'].every((base) =>
     ehDiaUtil(proximoDiaUtil(base, n)))), true);
+// auditoria 29/10/26: "Em 2 dias" numa quinta marcou 02/11, Finados
+ok('Finados nao e dia util', ehDiaUtil('2026-11-02'), false);
+ok('D+2 de quinta 29/10 pula o fim de semana E o Finados', proximoDiaUtil('2026-10-29', 2), '2026-11-03');
+ok('D+1 de quinta antes da sexta-feira santa cai na segunda', proximoDiaUtil('2027-03-25', 1), '2027-03-29');
 
 console.log('\n--- titulo da tarefa ---');
 ok('ligacao', tituloDoProximoPasso('ligacao', 'Bar do Zé'), 'Ligar para Bar do Zé');

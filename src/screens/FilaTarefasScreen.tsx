@@ -991,7 +991,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
           {hojeLista.length ? hojeLista.map(cartaoDeHoje) : <BlocoVazio texto="nada mais vence hoje" />}
         </View>
         <View style={{ gap: 10 }}>
-          <CabecalhoDeBloco numero={2} titulo="Atrasados" n={atrasadosRecentes.length} legenda={`até ${ATRASO_ANTIGO} dias · o mais antigo primeiro · o que foi combinado em cada um`} />
+          <CabecalhoDeBloco numero={2} titulo="Atrasados" n={atrasadosRecentes.length} legenda={`até ${ATRASO_ANTIGO} dias, e negócio quente de qualquer data · o mais antigo primeiro`} />
           {atrasadosRecentes.length ? atrasadosRecentes.map(cartaoDeHoje) : <BlocoVazio texto="nenhum atrasado recente" />}
         </View>
         <View style={{ gap: 10 }}>

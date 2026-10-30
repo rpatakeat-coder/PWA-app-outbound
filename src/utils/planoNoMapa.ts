@@ -4,6 +4,8 @@
 // o gatilho rota_para_plano (0131/0136) leva ao Planejamento do Cockpit. Aqui ficam as
 // regras puras: quais dias dá para planejar e o que o Cockpit consegue mostrar.
 
+import { feriadosNacionais } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
+
 export type DiaPlanejavel = { iso: string; curto: string; rotulo: string; hoje: boolean };
 
 const SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
@@ -24,14 +26,17 @@ export function rotuloDoDia(iso: string) {
 }
 
 /** Os próximos `quantos` dias úteis a partir de hoje (hoje entra se for dia útil).
- *  A grade do Cockpit é de segunda a sexta: sábado e domingo não entram. */
+ *  A grade do Cockpit é de segunda a sexta: sábado e domingo não entram. Feriado nacional
+ *  também não (auditoria 29/10/26: o plano e o "Marcar o próximo passo" ofereciam 02/11,
+ *  Finados, enquanto a aba Tarefas já o pulava). Hoje entra mesmo sendo feriado: quem está
+ *  na rua num feriado precisa do dia na tela. */
 export function diasPlanejaveis(hojeIso: string, quantos = 10): DiaPlanejavel[] {
   const out: DiaPlanejavel[] = [];
   const dt = partes(hojeIso);
   while (out.length < quantos) {
     const dow = dt.getUTCDay();
-    if (dow >= 1 && dow <= 5) {
-      const iso = isoDe(dt);
+    const iso = isoDe(dt);
+    if (dow >= 1 && dow <= 5 && (iso === hojeIso || !feriadosNacionais(dt.getUTCFullYear()).includes(iso))) {
       out.push({ iso, curto: SEMANA[dow], rotulo: rotuloDoDia(iso), hoje: iso === hojeIso });
     }
     dt.setUTCDate(dt.getUTCDate() + 1);

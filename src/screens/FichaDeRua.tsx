@@ -937,7 +937,10 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                       : 'A visita já contou. Falta só dizer o que vem agora.'}
                   </Text>
                 )}
-                <Text style={[s.legenda, aviso && s.legendaAviso]} numberOfLines={2}>{legenda}</Text>
+                {/* com o botão travado, ele mesmo já diz o que falta: a legenda repetia ("Escolha
+                    como foi e o que vem agora" mesmo com o como foi escolhido). Volta quando o
+                    botão libera, para dizer o que o Salvar vai fazer. */}
+                {(salvar.pode || !!avisoLeitura) && <Text style={[s.legenda, aviso && s.legendaAviso]} numberOfLines={2}>{legenda}</Text>}
               </View>
             </>
           ) : (

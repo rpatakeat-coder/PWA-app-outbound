@@ -27,12 +27,12 @@ export const COR_LENTE: Record<Lente, string> = {
 };
 
 const DESCRICAO: Record<Lente, string> = {
-  dia: 'plano, meus leads, recém-abertos, clientes e contas-alvo (apagadas)',
+  dia: 'plano, meus leads, recém-abertos, clientes, ex-clientes com motivo e contas-alvo apagadas',
   novos: 'CNPJ aberto há até 90 dias',
   carteira: 'meus leads por etapa',
   clientes: 'clientes ativos · relacionamento',
   alvo: 'nota 4,5+ no Google',
-  rec: 'ex-clientes',
+  rec: 'todos os ex-clientes, com ou sem motivo',
   queda: 'faturamento caindo ou sem comanda',
   semdono: 'pode assumir: É meu',
   calor: 'só gestor · 30 dias',
