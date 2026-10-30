@@ -29,6 +29,8 @@ export type { ItemFolha };
 type Props = {
   itens: ItemFolha[];
   planoTotal: number;
+  /** o plano do dia ainda está sendo lido: não afirmar "Nada planejado" antes de saber (auditoria 29/10/26) */
+  planoCarregando?: boolean;
   planoFeito: number;
   /** Distância do chão da tela (acima da barra de baixo). */
   chao: number;
@@ -148,7 +150,7 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, objecoesDaProxima = [], linha = null, aoMontarDia, entrePortas = null, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, objecoesDaProxima = [], linha = null, aoMontarDia, entrePortas = null, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
   const cores = useIconColors();
   /** Qual objeção do "Se ele disser" está aberta (uma por vez, e a folha não muda de tamanho à toa). */
   const [disserAberta, setDisserAberta] = useState<string | null>(null);
@@ -325,7 +327,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
           ) : (
             <Pressable accessibilityRole="button" accessibilityLabel="Abrir a lista desta área" onPress={() => setAberta(true)} style={s.pilulaTexto}>
               {/* sem "concluído" (prancha §3): 6 é o mínimo, a rua continua */}
-              <Text style={s.pilulaNome} numberOfLines={1}>{planoTotal ? `Plano feito · ${planoFeito} de ${planoTotal}` : 'Nada planejado hoje'}</Text>
+              <Text style={s.pilulaNome} numberOfLines={1}>{planoCarregando ? 'Lendo o plano…' : planoTotal ? `Plano feito · ${planoFeito} de ${planoTotal}` : 'Nada planejado hoje'}</Text>
               <Text style={s.pilulaSub} numberOfLines={1}>{`${totalNaArea} na área · ver a lista`}</Text>
             </Pressable>
           )}
@@ -357,7 +359,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoFeito, chao, total
             uma linha leva ao Planejar (o dia de hoje ou o de amanhã). Durante o plano, nada: a
             próxima porta já é o guia. Nunca bloqueia o Cheguei. */}
         {(() => {
-          if (!aoPlanejar) return null;
+          if (!aoPlanejar || planoCarregando) return null;
           const hora = Number(new Date().toLocaleString('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/Sao_Paulo' }));
           const semPlano = planoTotal === 0;
           const feitoTarde = planoTotal > 0 && planoFeito >= planoTotal && hora >= 15;

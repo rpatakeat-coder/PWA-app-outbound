@@ -2948,7 +2948,9 @@ function MainApp() {
       const d = new Date(tf.venceEm);
       const hojeK = diaBRT(new Date()); const k = diaBRT(d);
       const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
-      const comHora = hora !== '00:00' && hora !== '21:00' ? `, ${hora.replace(':00', 'h').replace(':', 'h')}` : '';
+      // a MESMA regra da fila (horaDe, filaDoDinheiro): 00h, 09h e 12h redondos são o HubSpot cravando
+      // "sem hora". Aqui só caía o 00h — a ficha dizia "03/11, 12h" e a aba Tarefas, "sem hora" (29/10/26)
+      const comHora = !['00:00', '09:00', '12:00', '21:00'].includes(hora) ? `, ${hora.replace(':00', 'h').replace(':', 'h')}` : '';
       if (k === hojeK) return `hoje${comHora}`;
       return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })}${comHora}`;
     })() : null;
@@ -7373,6 +7375,7 @@ function MainApp() {
           // Prompt §5: nas lentes Sem dono e Reconquista a linha tem "É meu" sem abrir o card.
           eMeu={!isViewer && (lente === 'semdono' || lente === 'rec') ? { naRota: routeStopClientIds, aoAssumir: (c) => { void assumirDoMapa(c); } } : null}
           planoTotal={routeDisplayClients.length}
+          planoCarregando={fieldOps.isLoading}
           // feito sobre a mesma base do total (parada com cliente lido): parada cujo cliente a RLS
           // esconde contava no x e não no y, e dava "5 de 4" (auditoria 16/10/26)
           planoFeito={routeClients.length > 0 ? routeStops.filter((s) => s.status === 'done' && !!s.client).length : 0}
@@ -7651,6 +7654,7 @@ function MainApp() {
         quadra={quadraAberta ? { area: quadraAberta.area, aoFechar: () => setQuadraAberta(null) } : null}
         eMeu={!isViewer && (lente === 'semdono' || lente === 'rec') ? { naRota: routeStopClientIds, aoAssumir: (c) => { void assumirDoMapa(c); } } : null}
         planoTotal={routeDisplayClients.length}
+          planoCarregando={fieldOps.isLoading}
         planoFeito={routeStops.filter((s) => s.status === 'done').length}
         visitasFeitas={meuDia.data?.medido ? meuDia.data.visitasHoje : null}
         visitasProvadas={meuDia.data?.provadasHoje ?? null}
