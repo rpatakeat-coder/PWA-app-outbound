@@ -40,6 +40,7 @@ import {
   type BotaoDoCartao, type DadosCartaoTarefa, type DiaDaFileira,
 } from './tarefas/PecasDaTarefa';
 import { Aviso } from './agenda/PecasDaAgenda';
+import { MinhaRampaCard } from './MinhaRampaCard';
 import { estadoDosAvisos, ligarPush, type EstadoDoPush, type PedidoDaFila } from '../utils/pushDaFila';
 import { janelaAtual, janelasDoDia } from '../utils/horaDasLigacoes';
 import { porNoDia } from '../utils/paradaDoDia';
@@ -1104,6 +1105,8 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
         <Aviso nivel="atencao" titulo="Sem sinal"
           texto={`Pode seguir. O registro fica guardado no aparelho e sobe sozinho para o HubSpot quando o sinal voltar.${noAparelho ? ` ${noAparelho} ${noAparelho === 1 ? 'registro guardado' : 'registros guardados'}.` : ''}`} />
       )}
+      {/* handoff "Acelerar Field Sales v2" (1d): só para quem está na rampa; o resto do Hoje não muda */}
+      <MinhaRampaCard />
       {!q.data?.semMedicao && <FileiraDeDias dias={diasDaFileira} ativo={diaSel} aoEscolher={escolherDia} />}
       {cartaoPush}
       {corpo}
