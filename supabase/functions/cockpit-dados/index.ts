@@ -22,7 +22,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
-  montarDadosCompletos, filtrarParaPapel, usarEquipe, usarConfig, usarSnapshot, temSnapshot, faltandoNoSnapshot,
+  montarDadosCompletos, filtrarParaPapel, usarEquipe, usarExTime, usarConfig, usarSnapshot, temSnapshot, faltandoNoSnapshot,
 } from './montar-dados.js';
 import * as REALIZADO from './realizado.js';
 import { STAGES, PROP_ENTRADA_ONBOARDING } from '../_compartilhado/lead-do-funil.js';
@@ -205,6 +205,18 @@ Deno.serve(async (req) => {
   // acesso não pode mudar nenhum dos dois.
   const equipe = cadastro.filter((c) => !c.soAcesso).map((c) => c.pessoa);
   usarEquipe(equipe);
+  /* QUEM SAIU DO TIME (cockpit-unificado #915): os executivos INATIVOS com owner, só para a
+     venda deles no mês contar no total. Falhar aqui não derruba a carga: sem a lista, a
+     venda de quem saiu volta para foraDoTime, como antes. */
+  const { data: saiu } = await svc
+    .from('equipe_cockpit')
+    .select('nome, papel, profiles!inner(full_name, id_hubspot)')
+    .eq('ativo', false)
+    .eq('papel', 'rep');
+  usarExTime((saiu ?? []).map((l: any) => ({
+    ownerId: l.profiles?.id_hubspot ?? null,
+    nome: l.nome ?? String(l.profiles?.full_name ?? '').replace(/\s*\/\s*DESATIVADO\s*$/i, ''),
+  })));
   const usuario: any = (cadastro.find((c) => c.pessoa.email === emailLogado) || {}).pessoa;
   if (!usuario) return json(403, { erro: 'Seu login não está na equipe do Cockpit. Fale com seu gestor.' });
   const url = new URL(req.url);

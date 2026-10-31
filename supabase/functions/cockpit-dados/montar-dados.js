@@ -108,6 +108,18 @@ function usarEquipe(lista) {
   USUARIOS = Array.isArray(lista) ? lista : [];
   GESTORES_QUE_VENDEM = calcularGestoresQueVendem(USUARIOS);
 }
+/* QUEM SAIU DO TIME, MAS VENDEU NO MÊS (cockpit-unificado #915, 30/10/26). No Cockpit a
+   lista sai de usuarios.json (rep com `desligado`); aqui, das linhas INATIVAS de
+   equipe_cockpit com owner, lidas pelo index.ts. A venda delas entra nos totais do mês,
+   fora do pódio — Julyan: "a venda da renata msm q ela tenha saído conta pra meta do mês". */
+let EX_EXECUTIVOS = {};
+function usarExTime(lista) {
+  EX_EXECUTIVOS = {};
+  (lista || []).forEach(function (u) {
+    if (!u || !u.ownerId || String(u.ownerId).startsWith('pendente_')) return;
+    EX_EXECUTIVOS[String(u.ownerId)] = { name: u.nome || 'ex-executivo', ownerId: String(u.ownerId) };
+  });
+}
 // AS CONFIGURAÇÕES CHEGAM DE FORA (public.cockpit_config), por chamada. Mesmos
 // padrões de ausência do original: sem a chave, o mesmo valor que o require
 // opcional dava quando o arquivo não existia.
@@ -350,6 +362,8 @@ function montarDadosCompletos() {
        e a régua por pessoa, e é ela que alimenta a rodada, a Daily e a meta individual.
        O gestor não tem plano de dia nem lugar na fila — o que ele tem é venda. */
     const doGestor = { count: 0, mrrTotal: 0, receitaTotal: 0, clientes: [], name: null, ownerId: null };
+    // e as de quem saiu do time no meio do mês: contam no total, fora do pódio (cockpit-unificado #915)
+    const doExTime = { count: 0, mrrTotal: 0, receitaTotal: 0, clientes: [] };
     /* E O QUE NÃO É DE NINGUÉM DO TIME CONTINUA FORA, mas agora CONTADO: antes ele
        sumia sem deixar rastro, e foi assim que quatro vendas do gestor ficaram um mês
        inteiro fora do placar sem ninguém ver. */
@@ -363,7 +377,8 @@ function montarDadosCompletos() {
          quatro vendas fechadas no CRM. */
       const ehRep = !!(d.ownerId && narrativas.reps[d.ownerId]);
       const ehGestor = !ehRep && !!(d.ownerId && GESTORES_QUE_VENDEM[d.ownerId]);
-      if (!d.ownerId || (!ehRep && !ehGestor)) {
+      const ehExTime = !ehRep && !ehGestor && !!(d.ownerId && EX_EXECUTIVOS[d.ownerId]);
+      if (!d.ownerId || (!ehRep && !ehGestor && !ehExTime)) {
         foraDoTime.push({ id: d.id || null, nome: d.nome, ownerId: d.ownerId || null,
           mrr: d.mrr || 0, receita: d.receita || 0, closedate: d.closedate || null });
         return;
@@ -376,7 +391,7 @@ function montarDadosCompletos() {
            gestor de usuarios.json. Ler narrativas.reps[ownerId].name para o gestor
            estouraria aqui — ele não está lá, e é justamente por isso que este patch
            existe. */
-        const quem = narrativas.reps[d.ownerId] || GESTORES_QUE_VENDEM[d.ownerId];
+        const quem = narrativas.reps[d.ownerId] || GESTORES_QUE_VENDEM[d.ownerId] || EX_EXECUTIVOS[d.ownerId];
         ajustadas.push({ id: d.id || null, nome: d.nome, ownerId: d.ownerId,
           name: (quem && quem.name) || 'sem nome', mrr: d.mrr || 0, receita: d.receita || 0,
           closedate: d.closedate || null, contaEm: mes, motivo: d.ajustado || null });
@@ -390,6 +405,15 @@ function montarDadosCompletos() {
         doGestor.ownerId = d.ownerId;
         doGestor.clientes.push({ id: d.id || null, nome: d.nome, mrr: d.mrr || 0,
           receita: d.receita || 0, closedate: d.closedate || null });
+        return;
+      }
+      if (ehExTime) {
+        doExTime.count += 1;
+        doExTime.mrrTotal += d.mrr || 0;
+        doExTime.receitaTotal += d.receita || 0;
+        doExTime.clientes.push({ id: d.id || null, nome: d.nome, ownerId: d.ownerId,
+          name: EX_EXECUTIVOS[d.ownerId].name, mrr: d.mrr || 0, receita: d.receita || 0,
+          closedate: d.closedate || null });
         return;
       }
       if (!porOwnerMes[d.ownerId]) porOwnerMes[d.ownerId] = { count: 0, mrrTotal: 0, receitaTotal: 0, clientes: [] };
@@ -416,9 +440,9 @@ function montarDadosCompletos() {
          Venda do gestor é venda da casa e conta no placar. O `porRep` abaixo NÃO a
          inclui de propósito — ele é o pódio e a régua por pessoa. Quem quiser saber a
          diferença entre os dois lê `gestor`, que viaja ao lado com nome e clientes. */
-      totalClientes: porRepMes.reduce((s, r) => s + r.count, 0) + doGestor.count,
-      totalMrr: porRepMes.reduce((s, r) => s + r.mrrTotal, 0) + doGestor.mrrTotal,
-      totalReceita: porRepMes.reduce((s, r) => s + r.receitaTotal, 0) + doGestor.receitaTotal,
+      totalClientes: porRepMes.reduce((s, r) => s + r.count, 0) + doGestor.count + doExTime.count,
+      totalMrr: porRepMes.reduce((s, r) => s + r.mrrTotal, 0) + doGestor.mrrTotal + doExTime.mrrTotal,
+      totalReceita: porRepMes.reduce((s, r) => s + r.receitaTotal, 0) + doGestor.receitaTotal + doExTime.receitaTotal,
       porRep: porRepMes,
       /* A PARTE DO GESTOR, nomeada. `null` quando ele não vendeu no mês — e null é
          diferente de zero: zero seria uma linha na tela dizendo que ele não vendeu. */
@@ -426,6 +450,11 @@ function montarDadosCompletos() {
         ownerId: doGestor.ownerId, name: doGestor.name, count: doGestor.count,
         mrrTotal: doGestor.mrrTotal, receitaTotal: doGestor.receitaTotal,
         clientes: doGestor.clientes.sort((a, b) => (b.mrr || 0) - (a.mrr || 0))
+      } : null,
+      /* A PARTE DE QUEM SAIU DO TIME, nomeada venda por venda. `null` quando não houve. */
+      exTime: doExTime.count ? {
+        count: doExTime.count, mrrTotal: doExTime.mrrTotal, receitaTotal: doExTime.receitaTotal,
+        clientes: doExTime.clientes.sort((a, b) => (b.mrr || 0) - (a.mrr || 0))
       } : null,
       /* E O QUE FICOU FORA DO TIME, CONTADO em vez de sumido em silêncio. */
       foraDoTime: foraDoTime,
@@ -862,4 +891,4 @@ function configMaptiler() {
   return maptilerConfig ? maptilerConfig.key : null;
 }
 
-export { montarDadosCompletos, filtrarParaPapel, configSupabase, configMaptiler, usarEquipe, usarConfig, usarSnapshot, temSnapshot, faltandoNoSnapshot };
+export { montarDadosCompletos, filtrarParaPapel, configSupabase, configMaptiler, usarEquipe, usarExTime, usarConfig, usarSnapshot, temSnapshot, faltandoNoSnapshot };
