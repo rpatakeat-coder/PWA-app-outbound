@@ -17,6 +17,7 @@ import { supabase } from '../integrations/supabase/client';
 import { useLayout } from '../hooks/useLayout';
 import { IconCheck, IconChevronRight, IconTrophy, useIconColors } from '../components/icons';
 import FolhaRanking, { Avatar } from './FolhaRanking';
+import { MinhaHabilidadeCard } from './MinhaHabilidadeCard';
 
 type Dia = { dia: string; provadas: number; demos: number; contratos: number };
 type Desempenho = {
@@ -270,6 +271,8 @@ export function MeuDesempenhoScreen({ enabled, linhas = [] }: Props) {
   return (
     <ScrollView style={st.tela} contentContainerStyle={[st.conteudo, duas && st.conteudoLargo]}
       refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => void q.refetch()} />}>
+      {/* 3d (Acelerar v2, 31/10/26): a habilidade do mês e as taxas contra o time; o resto não muda */}
+      <MinhaHabilidadeCard enabled={enabled} />
       {variavel}
       {duas ? (
         <View style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start' }}>
