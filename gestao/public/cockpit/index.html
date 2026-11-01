@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@3b240e44.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@51ca4f74.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "3b240e44";
+  var VERSAO = "51ca4f74";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -29634,9 +29634,8 @@ function pl6DadosFinal(rep) {
           .sort(pl7.comparar(pl7Na, hojeISOPl6));
         const r = pl7.montar(fila, grade, dias, metaDoDia, pl6SlotId, typeof pl6DiaPassou === 'function' ? pl6DiaPassou : null, s.pl7Fora);
         s.pl7Proposta = r;
-        return pl7.rascunhoHTML(r, { aberto: !!s.pl7Aberto, enviando: s.pl7Enviando || null, feito: s.pl7Feito || null })
-          + pl7.enviarHTML(pl7.regras(pl7Cad, grade, dias, metaDoDia, pl6SlotId, typeof pl6DiaPassou === 'function' ? pl6DiaPassou : null).feitas,
-            pl6Plano && pl6Plano.fechado_em ? pl6Plano.fechado_em : null, !!s.pl7Enviar);
+
+        return pl7.rascunhoHTML(r, { aberto: !!s.pl7Aberto, enviando: s.pl7Enviando || null, feito: s.pl7Feito || null });
       }())) : '',
     cadAbasHTML: propAtivo === 'cad' && pl7Cad ? pl7.abasHTML(pl7Cad, faixaAtiva) : '',
 

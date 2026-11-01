@@ -185,9 +185,12 @@ export default function AgendaNovoScreen({
   const semanaDoDia = (iso: string) => (iso >= segundaDe(hoje, 1) ? 1 : 0);
   // voltando da Tarefas pela barra: o mesmo dia que estava aberto
   const diaDaVolta = !diaInicial && rolagem.voltarAte > Date.now() && rolagem.dia >= hoje ? rolagem.dia : null;
-  const [semanaVista, setSemanaVista] = useState(diaInicial ? semanaDoDia(diaInicial) : diaDaVolta ? semanaDoDia(diaDaVolta) : 0);
+  /* A SEMANA VIRA NA SEXTA ÀS 17H, como no Cockpit (Julyan, 01/11/26): a Agenda abre na semana que vem,
+     e "Esta semana" continua a um toque para fechar o dia de hoje. */
+  const sextaDepoisDas17 = new Date(`${hoje}T12:00:00Z`).getUTCDay() === 5 && horaAgora >= 17;
+  const [semanaVista, setSemanaVista] = useState(diaInicial ? semanaDoDia(diaInicial) : diaDaVolta ? semanaDoDia(diaDaVolta) : sextaDepoisDas17 ? 1 : 0);
   const dias = useMemo(() => { const seg = segundaDe(hoje, semanaVista); return [0, 1, 2, 3, 4].map((i) => somaDias(seg, i)); }, [hoje, semanaVista]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [dia, setDia] = useState(diaInicial && dias.includes(diaInicial) ? diaInicial : diaDaVolta && dias.includes(diaDaVolta) ? diaDaVolta : hoje);
+  const [dia, setDia] = useState(diaInicial && dias.includes(diaInicial) ? diaInicial : diaDaVolta && dias.includes(diaDaVolta) ? diaDaVolta : dias.includes(hoje) ? hoje : dias[0]);
   const irParaSemana = (n: number) => {
     setSemanaVista(n);
     const seg = segundaDe(hoje, n);
