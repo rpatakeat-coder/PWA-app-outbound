@@ -22,6 +22,7 @@ import {
   IconTarget, IconTrophy, IconUserGroup, IconZap, useIconColors,
 } from '../components/icons';
 import { buscarPlaybook } from './PlaybookScreen';
+import FolhaRanking from './FolhaRanking';
 import {
   montarDesenvolvimento, type Capitulo, type Quadro, type VM, type Tom,
 } from '../../supabase/functions/_compartilhado/desenvolvimentoV2';
@@ -122,6 +123,7 @@ export function MeuDesempenhoV2Screen({ enabled, linhas = [], origem = 'menu', r
   const reduzir = useReduzirMovimento();
   const vm: VM | null = useMemo(() => (q.data && !q.data.erro ? montarDesenvolvimento(q.data, capitulos) : null), [q.data, capitulos]);
   const [umAberto, setUmAberto] = useState(false);
+  const [rankingAberto, setRankingAberto] = useState(false);
   const rolagem = useRef<ScrollView>(null);
   const yColecao = useRef<number | null>(null);
 
@@ -232,6 +234,10 @@ export function MeuDesempenhoV2Screen({ enabled, linhas = [], origem = 'menu', r
       <View style={[st.caixa, { backgroundColor: 'var(--tint-blue)' }]}><Text style={[st.textoForte, { color: 'var(--tint-blue-text)' }]}>{S.proximo}</Text></View>
       <View style={st.linha}>{S.regra.map((r) => <View key={r.t} style={st.chip}><Text style={st.chipTexto}><Text style={{ fontWeight: '800' }}>{r.v}</Text>{` ${r.t}`}</Text></View>)}</View>
       <Text style={st.nota}>{S.nota}</Text>
+      {/* o ranking completo fica na Disputa (README, regra 3): aqui só o pódio e o próximo a passar */}
+      {!S.fora && q.data?.pessoa.fase !== 'novato' && (
+        <Pressable accessibilityRole="button" onPress={() => setRankingAberto(true)} style={[st.botao, { alignSelf: 'flex-start' }]}><Text style={st.botaoTexto}>a disputa completa</Text></Pressable>
+      )}
     </View>
   );
 
@@ -445,6 +451,7 @@ export function MeuDesempenhoV2Screen({ enabled, linhas = [], origem = 'menu', r
           ))}
         </View>
       )}
+      <FolhaRanking visivel={rankingAberto} aoFechar={() => setRankingAberto(false)} />
     </ScrollView>
   );
 }

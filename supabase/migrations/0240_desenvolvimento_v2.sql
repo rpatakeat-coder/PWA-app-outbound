@@ -751,24 +751,29 @@ $function$;
 revoke all on function public._desenvolvimento_de(uuid) from public, anon, authenticated;
 grant execute on function public._desenvolvimento_de(uuid) to service_role;
 
-/* o que o app e o Cockpit chamam: sem p_pessoa, a própria pessoa; com p_pessoa, só o gestor */
-create or replace function public.desenvolvimento_quadro(p_pessoa uuid default null)
+/* o que o app e o Cockpit chamam: sem pessoa, a própria; com p_pessoa (ou p_owner, o id do HubSpot que a
+   Pessoas do gestor conhece), só o gestor */
+create or replace function public.desenvolvimento_quadro(p_pessoa uuid default null, p_owner text default null)
  returns jsonb
  language plpgsql
  volatile security definer
  set search_path to 'public'
 as $function$
-declare v_eu uuid := (select auth.uid());
+declare v_eu uuid := (select auth.uid()); v_alvo uuid := p_pessoa;
 begin
   if v_eu is null then return jsonb_build_object('erro', 'sem sessão'); end if;
-  if p_pessoa is not null and p_pessoa <> v_eu and not coalesce((select public.eh_gestor_cockpit()), false) then
+  if v_alvo is null and p_owner is not null then
+    select p.id into v_alvo from public.profiles p where p.id_hubspot = p_owner order by p.id limit 1;
+    if v_alvo is null then return jsonb_build_object('erro', 'pessoa sem perfil no app'); end if;
+  end if;
+  if v_alvo is not null and v_alvo <> v_eu and not coalesce((select public.eh_gestor_cockpit()), false) then
     return jsonb_build_object('erro', 'só o gestor vê outra pessoa');
   end if;
-  return public._desenvolvimento_de(coalesce(p_pessoa, v_eu));
+  return public._desenvolvimento_de(coalesce(v_alvo, v_eu));
 end;
 $function$;
-revoke all on function public.desenvolvimento_quadro(uuid) from public, anon;
-grant execute on function public.desenvolvimento_quadro(uuid) to authenticated;
+revoke all on function public.desenvolvimento_quadro(uuid, text) from public, anon;
+grant execute on function public.desenvolvimento_quadro(uuid, text) to authenticated;
 
 /* a abertura da tela (a medição); a origem é uma das 6 do handoff */
 create or replace function public.registrar_abertura(p_tela text, p_origem text)
