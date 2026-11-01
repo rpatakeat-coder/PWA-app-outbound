@@ -20,6 +20,7 @@ import FolhaRanking, { Avatar } from './FolhaRanking';
 import { MinhaHabilidadeCard } from './MinhaHabilidadeCard';
 import { diaBRT } from '../utils/abaTarefas';
 import { ehDiaUtil } from '../utils/desfechoVisita';
+import { MeuDesempenhoV2Screen, type OrigemAbertura } from './MeuDesempenhoV2';
 
 type Dia = { dia: string; provadas: number; demos: number; contratos: number };
 type Desempenho = {
@@ -52,7 +53,19 @@ const MES_CURTO = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set'
 const SEM = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
 
-export function MeuDesempenhoScreen({ enabled, linhas = [] }: Props) {
+/* DESENVOLVIMENTO v2 (01/11/26): a aba Eu abre o "jogo da carreira" (MeuDesempenhoV2). Esta tela, a v1,
+   continua inteira atrás de localStorage['meu-desempenho-v1'] = '1' — o caminho de volta enquanto a v2
+   se prova na rua. */
+export const CHAVE_V1 = 'meu-desempenho-v1';
+export function querV1(): boolean {
+  try { return typeof localStorage !== 'undefined' && localStorage.getItem(CHAVE_V1) === '1'; } catch { return false; }
+}
+export function MeuDesempenhoScreen(props: Props & { origem?: OrigemAbertura; rolarColecao?: number; aoFazerQuiz?: () => void }) {
+  if (querV1()) return <MeuDesempenhoV1 enabled={props.enabled} linhas={props.linhas} />;
+  return <MeuDesempenhoV2Screen enabled={props.enabled} linhas={props.linhas} origem={props.origem} rolarColecao={props.rolarColecao} aoFazerQuiz={props.aoFazerQuiz} />;
+}
+
+function MeuDesempenhoV1({ enabled, linhas = [] }: Props) {
   const layout = useLayout();
   const cores = useIconColors();
   const duas = layout.ehDesktop;
