@@ -5,6 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { supabase } from '../integrations/supabase/client';
+import { ehDiaUtil } from '../utils/desfechoVisita';
 
 export type MeuDia = {
   /** Visitas FEITAS hoje — visitas_do_dia (0143), a mesma função do Cockpit. */
@@ -43,9 +44,10 @@ export function sequenciaDeDias(diasComVisita: Set<string>, agora = new Date()):
   if (!diasComVisita.has(diaBRT(d))) d = new Date(d.getTime() - DIA_MS);
   for (let i = 0; i < 60; i++) {
     const dia = diaBRT(d);
-    const semana = new Date(`${dia}T12:00:00Z`).getUTCDay();
     if (diasComVisita.has(dia)) n++;
-    else if (semana !== 0 && semana !== 6) break; // fim de semana sem rua não quebra
+    // fim de semana sem rua não quebra — e feriado também não (auditoria 01/11/26: o Finados
+    // zerava a sequência de quem não foi à rua num dia em que ninguém vai)
+    else if (ehDiaUtil(dia)) break;
     d = new Date(d.getTime() - DIA_MS);
   }
   return n;

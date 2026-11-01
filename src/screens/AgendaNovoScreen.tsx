@@ -39,7 +39,9 @@ import { acaoRapida, diaBRT } from '../utils/abaTarefas';
 import { compromissosDoDia, estadoDasParadas, paradaParaCasar, separarCompromissos } from '../utils/agendaNovo';
 import { acaoPorId } from '../utils/acoesDoPlano';
 import { diaCurto, montarFeitoNoDia, type FichaDoDia, type RegistroDoDia, type VisitaDoDia } from '../utils/feitoNoDia';
-import { proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
+// FERIADO (auditoria 01/11/26): o "Pôr amanhã" usava a conta do servidor sem a lista de
+// feriados e punha a parada no 02/11 (Finados). A de desfechoVisita já pula feriado nacional.
+import { proximoDiaUtil } from '../utils/desfechoVisita';
 import { ordemParaDirigir } from '../utils/rotaDoDia';
 import { porNoDia, tirarDoDia } from '../utils/paradaDoDia';
 import { avisarQueOPlanoMudou } from '../utils/planoDoPino';

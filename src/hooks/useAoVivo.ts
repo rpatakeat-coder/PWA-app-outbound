@@ -30,14 +30,18 @@ export const INVALIDA_POR_TIPO: Record<string, string[][]> = {
   // tarefas_crm só relê para o dono do negócio (ver 'negocio-meu'): era uma chamada ao
   // HubSpot por rajada, para o time inteiro, a cada volta do robô (auditoria 28/09)
   negocio: [['mapa-contexto']],
-  'negocio-meu': [['tarefas_crm']],
+  // + a fila de Tarefas (auditoria 01/11/26): o próximo passo mudado no Cockpit ou pela visita
+  // só aparecia na aba Tarefas pelo staleTime, enquanto a Agenda já tinha relido
+  'negocio-meu': [['tarefas_crm'], ['fila_tarefas']],
   // + Desempenho e ranking (auditoria 16/10/26): a visita provada muda o placar e eles ficavam velhos
-  visita: [['meu_dia'], ['minha_daily'], ['client_visits'], ['novos-visitados-semana'], ['meu_desempenho'], ['vizinhos_no_ranking'], ['ranking_executivo']],
+  visita: [['meu_dia'], ['minha_daily'], ['client_visits'], ['novos-visitados-semana'], ['meu_desempenho'], ['vizinhos_no_ranking'], ['ranking_executivo'], ['fila_tarefas']],
   foto: [['client_visits']],
   ficha: [['meu_dia']],
-  parada: [['field_routes'], ['field_route_stops'], ['meu_dia']],
+  // + o plano lido pela fila, pela ficha do lead e pelo "sem lugar no mapa" (auditoria 01/11/26):
+  // o Cockpit mexia no plano e essas três telas mostravam o dia velho até o staleTime
+  parada: [['field_routes'], ['field_route_stops'], ['meu_dia'], ['plano_semana_fila'], ['no_plano_do_lead'], ['meu_plano_sem_lugar']],
   // + a faixa da semana da Agenda (01/11/26): só relia pelo staleTime de 60 s depois que o Cockpit mudava o plano
-  plano: [['field_routes'], ['field_route_stops'], ['meu_dia'], ['plano_do_dia'], ['plano_semana_agenda'], ['plano_semana_agenda_pc']],
+  plano: [['field_routes'], ['field_route_stops'], ['meu_dia'], ['plano_do_dia'], ['plano_semana_agenda'], ['plano_semana_agenda_pc'], ['plano_semana_fila'], ['no_plano_do_lead'], ['meu_plano_sem_lugar']],
   comunicado: [['avisos_gestor'], ['comunicados_nao_lidos']],
   recado: [['avisos_gestor']],
   // 0129: o gestor validou ou devolveu um acordo do 1:1 (ou eu marquei em outro aparelho)
@@ -45,7 +49,7 @@ export const INVALIDA_POR_TIPO: Record<string, string[][]> = {
   // 0130: agendamento (Agendar do app) criado, reagendado ou cancelado
   agenda: [['client_meetings']],
   // cockpit-api: próximo passo criado no Cockpit (tarefa no HubSpot) — a Agenda e as Tarefas releem
-  tarefa: [['tarefas_crm']],
+  tarefa: [['tarefas_crm'], ['fila_tarefas']],
 };
 
 export function sinalMeInteressa(s: Sinal, meuOwnerId: string | null, ehGestor: boolean): boolean {

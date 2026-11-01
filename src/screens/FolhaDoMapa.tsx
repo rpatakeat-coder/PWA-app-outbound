@@ -158,15 +158,19 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
   const [disserAberta, setDisserAberta] = useState<string | null>(null);
   const onCheguei = (c: Client) => { primeiroToque('cheguei'); chegueiBruto(c); };
   const irAte = (c: Client) => { primeiroToque('ir'); ir(c, false); };
-  const visitasFeitas = feitasMedidas ?? 0;
-  const feitasTexto = feitasMedidas == null ? "—" : String(feitasMedidas);
+  const checkins = feitasMedidas ?? 0;
   // "N visitas hoje · mínimo 6" (prancha §3): passa de 6 normalmente, nunca "dia concluído"
-  const semProva = visitasProvadas != null && visitasFeitas > visitasProvadas ? visitasFeitas - visitasProvadas : 0;
+  const semProva = visitasProvadas != null && checkins > visitasProvadas ? checkins - visitasProvadas : 0;
+  /* O NÚMERO É A VISITA COM PROVA (auditoria 01/11/26): a pílula contava todo check-in e ficava verde
+     com "6 de 6" quando o Cockpit e a Agenda diziam 4 de 6. O que não tem prova aparece como "N sem prova". */
+  const provadasMedidas = feitasMedidas == null ? null : visitasProvadas != null ? Math.min(visitasProvadas, checkins) : feitasMedidas;
+  const visitasFeitas = provadasMedidas ?? 0;
+  const feitasTexto = provadasMedidas == null ? "—" : String(provadasMedidas);
   /* sem expediente (fim de semana, feriado) não tem mínimo (auditoria 01/11/26) */
   const diaUtilHoje = ehDiaUtil(diaBRT(new Date()));
   const visitasTexto = !diaUtilHoje
     ? `${feitasTexto} ${visitasFeitas === 1 ? 'visita' : 'visitas'} hoje · sem expediente`
-    : visitasDoDia(feitasMedidas, metaVisitas) ?? `mínimo ${metaVisitas} visitas`;
+    : visitasDoDia(provadasMedidas, metaVisitas) ?? `mínimo ${metaVisitas} visitas`;
   const lenteRecem = !!recem;
   const comSinal = useComSinal();
   const emAberto = Math.max(0, planoTotal - planoFeito);
@@ -432,7 +436,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
         </Text>
         <Pressable accessibilityRole="button" accessibilityLabel={visitasTexto} onPress={aoProgresso} hitSlop={10} style={{ paddingVertical: 13, marginVertical: -13 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-            <Text style={[s.progresso, feitasMedidas != null && feitasMedidas >= metaVisitas && s.progressoOk]}>{visitasTexto}</Text>
+            <Text style={[s.progresso, provadasMedidas != null && provadasMedidas >= metaVisitas && s.progressoOk]}>{visitasTexto}</Text>
           </View>
         </Pressable>
       </View>

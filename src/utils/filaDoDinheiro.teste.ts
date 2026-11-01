@@ -1,6 +1,6 @@
 // Teste da fila do dinheiro (docs/10 §1). Roda: npx tsx src/utils/filaDoDinheiro.teste.ts
 import {
-  diasUteisEntre, feriadosNacionais, montarFila, montarProximos, pessoaDoCard, oQuePulou, proximoDiaUtil, textoUltimoContato, tipoDaTarefa, tituloDoCard,
+  diasUteisEntre, feriadosNacionais, montarFila, montarProximos, pessoaDoCard, oQuePulou, proximoDiaUtil, secaoDoItem, textoUltimoContato, tipoDaTarefa, tituloDoCard,
   type Contexto, type NegocioEntrada, type TarefaEntrada,
 } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
 import { dataDoChip, diaCurto, diasSugeridos, fraseDaVolta, notaDaFila, pedidoDaVolta, textoDoSalvar } from './registroDaFila';
@@ -140,6 +140,18 @@ ok(tituloDoCard({ verbo: 'Visitar', pessoa: 'Ana', papel: null, negocio: 'Cantin
   ok(p.map((x) => x.dealId).join(',') === 'e,a,c', 'ordem: dia, depois o horário da tarefa');
   ok(p.find((x) => x.dealId === 'c')!.verbo === 'WhatsApp', 'o verbo segue a tarefa (WhatsApp)');
   ok(montarProximos(negs, ts, { hoje }, new Set(['a'])).every((x) => x.dealId !== 'a'), 'quem já está na fila de hoje fica fora');
+}
+
+// TODO NEGÓCIO ABERTO TEM PRÓXIMO PASSO (auditoria 01/11/26): o mesmo número do Cockpit
+{
+  const morno = N({ dealId: 'm', etapaId: '1395880470', temperatura: 40 });
+  const cx = ctx({ decisorAlcancado: ['m'], contatos: { m: { n: 5, ultimo: '2026-10-20T13:00:00Z' } } });
+  const f = montarFila([morno], [], cx);
+  ok(f.length === 1 && f[0].motivo === 'sem_passo' && secaoDoItem(f[0]) === 'sem_passo', 'sem tarefa, com decisor, contatos e toque recente: entra como sem próximo passo');
+  const semData = montarFila([morno], [T({ dealId: 'm', venceEm: null })], cx);
+  ok(semData.length === 1 && semData[0].motivo === 'sem_passo', 'tarefa sem data não é próximo passo (como no Cockpit)');
+  ok(montarFila([morno], [], { ...cx, passoFuturo: ['m'] }).length === 0, 'sem tarefa mas no plano futuro: tem passo, sai da fila');
+  ok(montarFila([morno], [], { ...cx, agendaHoje: { m: '10:00' } }).length === 0, 'sem tarefa mas no plano de hoje: tem passo, sai da fila');
 }
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }

@@ -229,7 +229,7 @@ function montarDadosCompletos() {
 
   const reps = ownerIds.map(ownerId => {
     const n = narrativas.reps[ownerId];
-    const h = hubspot.reps[ownerId] || { open: 0, stages: {}, criticos: [], travados: [], leadsTravados: 0, ganhosSemana: 0, ganhosSemanaNomes: [], fechadosNoMes: 0, metaMensal: 10, metaMrr: null, metaReceita: null, patamarMeta: null, visitasHubspotHoje: 0, avancosHubspotHoje: 0, propostasHubspotHoje: 0, fechamentosHubspotHoje: 0 };
+    const h = hubspot.reps[ownerId] || { open: 0, stages: {}, criticos: [], travados: [], leadsTravados: 0, ganhosSemana: 0, ganhosSemanaNomes: [], fechadosNoMes: 0, metaMensal: 0, metaMrr: null, metaReceita: null, patamarMeta: null, visitasHubspotHoje: 0, avancosHubspotHoje: 0, propostasHubspotHoje: 0, fechamentosHubspotHoje: 0 };
 
     return {
       ownerId,
@@ -269,7 +269,7 @@ function montarDadosCompletos() {
          2. `|| 10` TRANSFORMA ZERO EM DEZ. A Amanda saiu da planilha e tem meta 0; a
             tela mostrava 10 para ela, que e exatamente o numero que este trabalho veio
             tirar. Zero e falsy, e `|| ` nao distingue "nao tem meta" de "meta zero". */
-      metaMensal: h.metaMensal != null ? h.metaMensal : 10,
+      metaMensal: h.metaMensal != null ? h.metaMensal : 0, // fora do robô = sem meta, não 10 (cockpit-unificado#936, 01/11/26)
       metaMrr: h.metaMrr != null ? h.metaMrr : null,
       metaReceita: h.metaReceita != null ? h.metaReceita : null,
       patamarMeta: h.patamarMeta || null,

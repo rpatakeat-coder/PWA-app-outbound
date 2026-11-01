@@ -2,8 +2,9 @@
 //
 // A conta é a MESMA do cockpit do gestor (GV2.HB em template/cockpit.template.html): os dois leem
 // habilidade_quadro() (migração 0233), que devolve as contagens de cada dia do mês anterior e do
-// corrente e a soma do time sem quem está em rampa. Dias úteis = seg a sex nos dois lados. Se a
-// regra mudar lá, muda aqui.
+// corrente e a soma do time sem quem está em rampa. Dias úteis = seg a sex fora feriado nacional nos
+// dois lados. Se a regra mudar lá, muda aqui.
+import { ehDiaUtil } from './desfechoVisita';
 //   dono    Sair com o dono   fichas com quem decide ÷ fichas
 //   demo    Virar demo        demos ÷ visitas com prova
 //   fechar  Fechar            clientes ÷ demos
@@ -32,9 +33,11 @@ export const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho'
 const somaDias = (iso: string, n: number) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 export const mesNome = (iso: string) => MESES[Number(String(iso).slice(5, 7)) - 1];
 
+/* feriado não é dia útil (auditoria 01/11/26): novembro tinha 21 em vez de 19 e o volume por semana
+   saía ~10% abaixo. A mesma regra do GV2.hbUteis do Cockpit. */
 export function uteis(de: string, ate: string): number {
   let n = 0;
-  for (let d = de; d <= ate; d = somaDias(d, 1)) { const w = new Date(`${d}T12:00:00Z`).getUTCDay(); if (w > 0 && w < 6) n++; }
+  for (let d = de; d <= ate; d = somaDias(d, 1)) if (ehDiaUtil(d)) n++;
   return n;
 }
 export function janela(q: QuadroHab, qual: 'anterior' | 'atual') {

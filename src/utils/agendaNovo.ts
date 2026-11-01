@@ -5,20 +5,26 @@
 // Planejamento do Cockpit põe visita e retorno na semana) e as reuniões e
 // follow-ups agendados pelo app (client_meetings).
 import { diaBRT } from './abaTarefas';
+import { ehDiaUtil } from './desfechoVisita';
 import { acaoPorId, casarCompromisso, motivoDoCasamento, type AcaoId, type Casamento, type ParadaParaCasar } from './acoesDoPlano';
 
 export type EstadoParada = 'feito' | 'proxima' | 'pendente';
 
-/** Hoje + os próximos dias úteis (sábado e domingo ficam fora da faixa). */
+/**
+ * Hoje + os próximos dias úteis (sábado, domingo e feriado nacional ficam fora da faixa).
+ *
+ * FERIADO (auditoria 01/11/26): a faixa só pulava fim de semana e mostrava o 02/11 (Finados)
+ * como dia de agenda, enquanto o "Pôr amanhã" e a fila já pulavam. Hoje sempre entra —
+ * quem abre a agenda num feriado ainda vê o próprio dia.
+ */
 export function diasDaFaixa(agora: Date, n = 6): string[] {
   const hoje = diaBRT(agora)!;
   const [a, m, d] = hoje.split('-').map(Number);
   const dias = [hoje];
   for (let i = 1; dias.length < n && i < 30; i++) {
-    const t = new Date(Date.UTC(a, m - 1, d + i));
-    const dow = t.getUTCDay();
-    if (dow === 0 || dow === 6) continue;
-    dias.push(t.toISOString().slice(0, 10));
+    const t = new Date(Date.UTC(a, m - 1, d + i)).toISOString().slice(0, 10);
+    if (!ehDiaUtil(t)) continue;
+    dias.push(t);
   }
   return dias;
 }

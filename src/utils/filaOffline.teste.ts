@@ -7,7 +7,7 @@
 // sem sinal nada some e nada pula a ordem; a mesma ação nunca sobe duas vezes;
 // erro de regra (longe demais) não fica tentando para sempre. Conferido
 // vermelho em 25/09/2026 tirando o `break` e a trava de subida simultânea.
-import { descartar, ehErroDeRede, enfileirar, itensDaFila, liberar, novoAcaoId, registrarExecutor, subirFila } from './filaOffline';
+import { definirDonoDaFila, descartar, ehErroDeRede, enfileirar, itensDaFila, liberar, novoAcaoId, registrarExecutor, subirFila } from './filaOffline';
 
 let falhas = 0;
 const ok = (c: boolean, m: string) => {
@@ -72,6 +72,30 @@ registrarExecutor('checkin', async (i) => {
   chamadas = [];
   n = await subirFila();
   ok(n === 1 && chamadas.length === 1, 'app fechou no meio: passada a hora, sobe sozinho');
+
+  // A FILA TEM DONO (auditoria 01/11/26): logout e login de outra pessoa no mesmo aparelho não
+  // podem subir o check-in de quem saiu com a sessão de quem entrou.
+  definirDonoDaFila('ana');
+  const daAna = novoAcaoId();
+  online = false;
+  await enfileirar({ acaoId: daAna, tipo: 'checkin', rotulo: 'Ana', payload: {} });
+  ok(itensDaFila()[0]?.uid === 'ana', 'o item guarda o uid de quem estava logado');
+  definirDonoDaFila('bia');
+  online = true;
+  chamadas = [];
+  ok(itensDaFila().length === 0, 'a Bia não vê o que a Ana deixou na fila');
+  const daBia = novoAcaoId();
+  await enfileirar({ acaoId: daBia, tipo: 'checkin', rotulo: 'Bia', payload: {} });
+  n = await subirFila(true);
+  ok(n === 1 && chamadas.join() === daBia, 'com a sessão da Bia sobe só o da Bia');
+  definirDonoDaFila(null);
+  chamadas = [];
+  n = await subirFila(true);
+  ok(n === 0 && chamadas.length === 0, 'sem ninguém logado, o da Ana continua guardado');
+  definirDonoDaFila('ana');
+  ok(itensDaFila().length === 1, 'a Ana volta e vê o item dela');
+  n = await subirFila();
+  ok(n === 1 && chamadas.join() === daAna && itensDaFila().length === 0, 'com a sessão da Ana, o dela sobe');
 
   ok(ehErroDeRede(new TypeError('Load failed')) && !ehErroDeRede(new Error('Lead não encontrado')),
     'separa erro de rede de erro de regra');

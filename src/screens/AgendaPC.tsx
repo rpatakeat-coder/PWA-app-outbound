@@ -21,6 +21,7 @@ import { useTarefasDoCrm } from '../hooks/useTarefasDoCrm';
 import { useClientSearch } from '../hooks/useClients';
 import { compromissosDoDia, paradaParaCasar, seloDoCompromisso, separarCompromissos, type Compromisso } from '../utils/agendaNovo';
 import { acaoPorId } from '../utils/acoesDoPlano';
+import { ehDiaUtil } from '../utils/desfechoVisita';
 import { lerSemanaDoPlano, PROPOSITOS } from '../utils/semanaDoPlano';
 import { montarPreparo, usePreparo } from '../utils/preparo';
 import { conflito, duracao, ehOutraCidade, encaixar, hhmm, horarios, kmTexto, melhorPosicao, metros, perna, resumo, temOutraCidade, type ParadaRota, type Ponto } from '../utils/rotaDoDia';
@@ -238,6 +239,7 @@ function Campo({ rotulo, valor, tom }: { rotulo: string; valor: string; tom?: st
 
 export default function AgendaPC(props: Props) {
   const { hoje, dia, aoDia, itens, carregando, meta, ownerHubspot, foco, aoFocar, aba, aoAba } = props;
+  const diaUtil = ehDiaUtil(dia);
   const cores = useIconColors();
   const { user } = useAuth();
   const passado = dia < hoje;
@@ -277,6 +279,10 @@ export default function AgendaPC(props: Props) {
   const { tarefas } = useTarefasDoCrm(true);
   const compromissosDe = (d: string, jaNoPlano: Set<string> | ReturnType<typeof paradaParaCasar>[]) => compromissosDoDia(d, tarefas, props.reunioes, props.nomePorId, jaNoPlano);
   const rotuloChip = (d: string) => {
+    const r = rotuloChipBruto(d);
+    return ehDiaUtil(d) ? r : r === 'vazio' || r === '—' ? 'feriado' : `feriado · ${r}`;
+  };
+  const rotuloChipBruto = (d: string) => {
     if (d === dia) {
       const n = itens.length;
       if (passado) return n ? `${itens.filter((i) => i.estado === 'feita').length} de ${n}` : 'vazio';
@@ -610,15 +616,19 @@ export default function AgendaPC(props: Props) {
   const grupos: GrupoSugestao[] = BUSCA_GOOGLE_PAUSADA ? ['regua', 'alvo', 'queda'] : ['regua', 'alvo', 'queda', 'google'];
   const nSug = sugestoesComPosicao.filter((x) => !x.noDia).length;
   const titulo = tituloDoDia(dia, hoje);
+  /* feriado não tem meta (auditoria 01/11/26: 02/11, Finados, dizia "1 parada · meta 6") */
+  const metaTxt = diaUtil ? `meta ${meta}` : 'feriado, sem meta';
   const resumoTexto = passado
     ? `${itens.filter((i) => i.estado === 'feita' || provaDe(i.client)).length} de ${itens.length} visitadas · ${comProva} com prova de GPS · ${kmTexto((rodado?.km ?? 0) * 1000)} rodados`
     : itens.length
       ? (outraCidade
-        ? `${itens.length} ${itens.length === 1 ? 'parada' : 'paradas'} · meta ${meta} · paradas em cidades diferentes · confira o plano`
-        : `${itens.length} ${itens.length === 1 ? 'parada' : 'paradas'} · meta ${meta} · ≈ ${duracao(res.minutos)} de rua · ${kmTexto(res.km * 1000)} · ${hhmm(res.inicio!)} → ${hhmm(res.fim!)}`)
-      : compromissos.length
-        ? `Meta de ${meta} visitas · ${compromissos.length} ${compromissos.length === 1 ? 'compromisso marcado' : 'compromissos marcados'}, nenhuma parada`
-        : `Meta de ${meta} visitas · nada marcado ainda`;
+        ? `${itens.length} ${itens.length === 1 ? 'parada' : 'paradas'} · ${metaTxt} · paradas em cidades diferentes · confira o plano`
+        : `${itens.length} ${itens.length === 1 ? 'parada' : 'paradas'} · ${metaTxt} · ≈ ${duracao(res.minutos)} de rua · ${kmTexto(res.km * 1000)} · ${hhmm(res.inicio!)} → ${hhmm(res.fim!)}`)
+      : !diaUtil
+        ? 'Feriado · ninguém é cobrado de rua neste dia'
+        : compromissos.length
+          ? `Meta de ${meta} visitas · ${compromissos.length} ${compromissos.length === 1 ? 'compromisso marcado' : 'compromissos marcados'}, nenhuma parada`
+          : `Meta de ${meta} visitas · nada marcado ainda`;
 
   let corpo: React.ReactNode;
   if (termo.length >= 2) {

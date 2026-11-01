@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@51ca4f74.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@226a43a3.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "51ca4f74";
+  var VERSAO = "226a43a3";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -63166,7 +63166,7 @@ GV2.hbMesNome = function (iso) { return GV2.MESES[Number(String(iso).slice(5, 7)
 GV2.hbMesSeguinte = function (iso) { return GV2.somaDias(String(iso).slice(0, 8) + '28', 7).slice(0, 8) + '01'; };
 GV2.hbFimDoMes = function (iso) { return GV2.somaDias(GV2.hbMesSeguinte(iso), -1); };
 
-GV2.hbUteis = function (de, ate) { let n = 0, d = de; while (d <= ate) { const w = GV2.dow(d); if (w > 0 && w < 6) n++; d = GV2.somaDias(d, 1); } return n; };
+GV2.hbUteis = function (de, ate) { return GV2.uteisEntre(de, ate); };
 
 GV2.hbJanela = function (qual) {
   const d = GV2.hb.d || {};
@@ -68497,9 +68497,11 @@ EXH4.regrasHTML = function (p, b) {
 
 EXH4.cartoesHTML = function (p, b, m) {
   const html = EXH.cartoesHTML(p, b, m);
-  const sp = EXH4.semPasso(p, b).length;
+  const spL = EXH4.semPasso(p, b), sp = spL.length;
+
+  const venc = spL.filter(function (n) { return EXH4.vencida(n, b); }).length;
   const novo = '<button type="button" class="exh-num" data-exh="rolar:exh4Sem"><small>Sem próximo passo</small><b class="' + (sp ? 't-acao' : 't-ok') + '">' + sp + '</b><span>'
-    + (sp ? (sp === 1 ? 'lead ativo sem nada marcado' : 'leads ativos sem nada marcado') : 'todo lead com plano') + '</span><em>dos negócios abertos no HubSpot</em></button>';
+    + (sp ? venc + ' com passo vencido + ' + (sp - venc) + ' nunca ' + (sp - venc === 1 ? 'marcado' : 'marcados') : 'todo lead com plano') + '</span><em>dos negócios abertos no HubSpot</em></button>';
 
   const i = html.lastIndexOf('<button type="button" class="exh-num"');
   const f = html.indexOf('</button>', i);

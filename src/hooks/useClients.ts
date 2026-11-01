@@ -234,9 +234,14 @@ export function useClients(
     : areaFilter
       ? `area:${JSON.stringify({ ...roundCoordsForKey(areaFilter.lat, areaFilter.lon), r: areaFilter.radiusKm })}`
       : null;
+  // O CACHE TEM DONO (auditoria 01/11/26): a chave não tinha o usuário e o `placeholderData`
+  // segurava a lista anterior — depois de trocar de conta no mesmo aparelho, quem entrava via
+  // por um instante os leads de quem saiu. O uid vai no fim da chave (o prefixo ['clients']
+  // das invalidações continua casando) e a lista anterior só fica se for do mesmo usuário.
+  const donoDoCache: string | null = user?.id ?? null;
 
   const query = useQuery<Client[]>({
-    queryKey: ['clients', allowedStatuses, recorteCacheKey],
+    queryKey: ['clients', allowedStatuses, recorteCacheKey, donoDoCache],
     queryFn: async () => {
       // PostgREST capa em 1000 linhas por padrão. Pagina em blocos pra trazer
       // todos os clientes do setor sem precisar mexer no max-rows do servidor.
@@ -338,7 +343,7 @@ export function useClients(
     // rotacionou), mantem a lista ANTERIOR na tela enquanto a nova area
     // carrega — sem isso o app inteiro vira "Carregando..." no meio do uso
     // (isLoading fica true por nao haver cache pra key nova).
-    placeholderData: (prev: Client[] | undefined) => prev,
+    placeholderData: (prev: Client[] | undefined, anterior) => (anterior?.queryKey[3] === donoDoCache ? prev : undefined),
     // Viewer nao espera o sector_visibility (desabilitado pra ele); os demais
     // so disparam depois que as regras de visibilidade chegaram.
     enabled: callerEnabled && isAuthenticated && (isViewer || visibilityQuery.isFetched || visibilityQuery.data !== undefined),
@@ -351,11 +356,11 @@ export function useClients(
      arquivado no meio do caminho sai do cache. */
   const ultimaLeituraRef = useRef<{ chave: string; em: string } | null>(null);
   useEffect(() => {
-    const chaveAtual = JSON.stringify(['clients', allowedStatuses, recorteCacheKey]);
+    const chaveAtual = JSON.stringify(['clients', allowedStatuses, recorteCacheKey, donoDoCache]);
     if (query.dataUpdatedAt && ultimaLeituraRef.current?.chave !== chaveAtual) {
       ultimaLeituraRef.current = { chave: chaveAtual, em: new Date(query.dataUpdatedAt - 5000).toISOString() };
     }
-  }, [query.dataUpdatedAt, allowedStatuses, recorteCacheKey]);
+  }, [query.dataUpdatedAt, allowedStatuses, recorteCacheKey, donoDoCache]);
   useEffect(() => {
     if (!callerEnabled || !isAuthenticated) return;
     let rodando = false;
@@ -377,7 +382,7 @@ export function useClients(
         const linhas = data as unknown as Record<string, unknown>[];
         const vivos = linhas.filter((r) => !r.is_archived).map((r) => mapRow(r));
         const mortos = new Set(linhas.filter((r) => r.is_archived).map((r) => String(r.id)));
-        queryClient.setQueryData<Client[]>(['clients', allowedStatuses, recorteCacheKey], (lista) => {
+        queryClient.setQueryData<Client[]>(['clients', allowedStatuses, recorteCacheKey, donoDoCache], (lista) => {
           if (!lista) return lista;
           const porId = new Map(vivos.map((c) => [c.id, c]));
           const nova = lista.filter((c) => !mortos.has(c.id)).map((c) => (porId.has(c.id) ? { ...c, ...porId.get(c.id)! } : c));
@@ -392,7 +397,7 @@ export function useClients(
     document.addEventListener('visibilitychange', aoVoltar);
     window.addEventListener('online', aoVoltar);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', aoVoltar); window.removeEventListener('online', aoVoltar); };
-  }, [callerEnabled, isAuthenticated, isViewer, allowedStatuses, recorteCacheKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [callerEnabled, isAuthenticated, isViewer, allowedStatuses, recorteCacheKey, donoDoCache]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // SALVAR NAO ESPERA A BASE RECARREGAR (26/09/2026). O onSuccess devolvia a
   // promessa do invalidateQueries, e o mutateAsync so' resolvia depois do

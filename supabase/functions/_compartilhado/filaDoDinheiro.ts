@@ -14,7 +14,7 @@ export type Motivo =
   | 'venceu' | 'vence_hoje' | 'visita_sem_registro' | 'cobranca'
   | 'quente_sem_passo' | 'proposta_sem_retorno'
   | 'decisor' | 'poucos_contatos'
-  | 'parado';
+  | 'parado' | 'sem_passo';
 
 export type TarefaEntrada = {
   id: string;
@@ -202,6 +202,7 @@ export const PORQUE: Record<Motivo, (f: Fatos) => string> = {
   decisor: () => 'Ainda não falou com quem decide',
   poucos_contatos: (f) => `Só ${f.n} de 4 contatos antes de desistir`,
   parado: (f) => `Sem contato há ${f.dias} dias`,
+  sem_passo: () => 'Sem próximo passo marcado',
 };
 
 // ---- a fila --------------------------------------------------------------------
@@ -269,6 +270,12 @@ export function montarFila(negocios: NegocioEntrada[], tarefas: TarefaEntrada[],
       grupo = 'destravar'; motivo = 'poucos_contatos'; f.n = c.n;
     } else if (!temPassoFuturo && diasSemContato != null && diasSemContato >= DIAS_PARADO) {
       grupo = 'reativar'; motivo = 'parado'; f.dias = diasSemContato;
+    } else if (!temPassoFuturo && !diaT && !noPlanoHoje) {
+      /* TODO NEGÓCIO ABERTO TEM PRÓXIMO PASSO (auditoria 01/11/26): o negócio sem nenhuma tarefa que não
+         caía em quente, proposta, decisor, poucos contatos ou parado saía da fila, e a aba dizia "Sem
+         próximo passo · 0 · meta batida" enquanto o Cockpit contava 11 para a mesma pessoa. Tarefa sem
+         data também não é passo (no Cockpit, proximoPassoDoLead só conta o que tem dia). */
+      grupo = 'reativar'; motivo = 'sem_passo';
     }
     if (!grupo || !motivo) continue;
 

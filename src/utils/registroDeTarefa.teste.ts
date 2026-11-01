@@ -7,6 +7,9 @@ const ok = (c: boolean, m: string) => { if (c) console.log('ok  ', m); else { fa
 ok(diaUtilDepois('2026-09-28', 1) === '2026-09-29', 'segunda + 1 útil = terça');
 ok(diaUtilDepois('2026-10-02', 1) === '2026-10-05', 'sexta + 1 útil = segunda');
 ok(diaUtilDepois('2026-10-01', 3) === '2026-10-06', 'quinta + 3 úteis = terça');
+// feriado (auditoria 01/11/26): "Ligar amanhã" na sexta 30/10 não cai no Finados
+ok(diaUtilDepois('2026-10-30', 1) === '2026-11-03', 'sexta 30/10 + 1 útil = terça 03/11 (pula o Finados)');
+ok(diaUtilDepois('2026-11-19', 1) === '2026-11-23', 'quinta 19/11 + 1 útil = segunda 23/11 (pula a Consciência Negra)');
 
 ok(proximoSugerido('nao_atendeu') === 'ligar1', 'não atendeu sugere ligar amanhã');
 ok(proximoSugerido('sem_interesse') === 'nada', 'sem interesse não sugere nada');

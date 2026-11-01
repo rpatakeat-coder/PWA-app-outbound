@@ -96,6 +96,7 @@ const ETAPA: Record<string, { rotulo: string; cor: string }> = {
   '1395880473': { rotulo: 'Ag. Pagamento', cor: '#1E9E7B' },
 };
 const PERDIDO = '1396006164';
+const ETAPA_PAGAMENTO = '1395880473';
 const soDigitos = (t: string) => t.replace(/\D+/g, '');
 const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
 const agoraHHMM = () => { const b = new Date(Date.now() - 3 * 3600000); return `${String(b.getUTCHours()).padStart(2, '0')}:${String(b.getUTCMinutes()).padStart(2, '0')}`; };
@@ -704,6 +705,13 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
   // P7: o Cheguei sem Como foi vai para o TOPO de Para hoje (no servidor ele conta como atrasado)
   const hojeLista = [...fila.filter((i) => i.motivo === 'visita_sem_registro'), ...fila.filter((i) => secaoDe(i) === 'hoje')];
   const semPassoLista = fila.filter((i) => secaoDe(i) === 'sem_passo' && i.motivo !== 'visita_sem_registro');
+  /* "SEM PRÓXIMO PASSO" É UM NÚMERO SÓ NO APP E NO COCKPIT (auditoria 01/11/26): negócio aberto sem nada
+     marcado de hoje em diante = o passo que venceu (bloco 2) + o que nunca teve passo (bloco 3). Ag.
+     Pagamento fica fora, como no Cockpit (quem age ali é o financeiro). O Cockpit mostra a mesma quebra. */
+  const forDoPagamento = (i: CardDaFila) => i.etapaId !== ETAPA_PAGAMENTO;
+  const passoVencidoN = fila.filter((i) => i.motivo === 'venceu' && forDoPagamento(i)).length;
+  const nuncaMarcadoN = semPassoLista.filter(forDoPagamento).length;
+  const semPassoTotal = passoVencidoN + nuncaMarcadoN;
   const acordosAbertosN = acordos.filter((c) => !c.feito).length;
   const noAparelho = feitas.filter((f) => f.estado === 'pendente').length;
   const proximaJanela = janelasDoDia(relogio).find((j) => j.estado !== 'feita')?.de ?? null;
@@ -996,8 +1004,10 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
           {atrasadosRecentes.length ? atrasadosRecentes.map(cartaoDeHoje) : <BlocoVazio texto="nenhum atrasado recente" />}
         </View>
         <View style={{ gap: 10 }}>
-          <CabecalhoDeBloco numero={3} titulo="Sem próximo passo" n={semPassoLista.length} legenda="a meta é zero" alerta />
-          {semPassoLista.length ? semPassoLista.map(cartaoDeHoje) : <BlocoVazio texto="zero · meta batida" />}
+          <CabecalhoDeBloco numero={3} titulo="Sem próximo passo" n={semPassoTotal}
+            legenda={semPassoTotal ? `${passoVencidoN} com passo vencido (bloco 2) + ${nuncaMarcadoN} nunca ${nuncaMarcadoN === 1 ? 'marcado' : 'marcados'} · a meta é zero` : 'a meta é zero'} alerta />
+          {semPassoLista.length ? semPassoLista.map(cartaoDeHoje)
+            : <BlocoVazio texto={semPassoTotal ? `os ${passoVencidoN} estão no bloco 2: remarque com o cliente` : 'zero · meta batida'} />}
         </View>
         <LinhaDeFim zerada={false} />
         {atrasadosAntigos.length > 0 && (

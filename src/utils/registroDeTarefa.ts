@@ -12,7 +12,9 @@
 // "Não atendeu" já sugere ligar no próximo dia útil: ligação que não aconteceu não
 // pode sumir da lista sem deixar o próximo contato marcado.
 
-export type ComoFoi = 'decisor' | 'falou' | 'nao_atendeu' | 'sem_interesse';
+import { proximoDiaUtil } from './desfechoVisita';
+
+export type ComoFoi ='decisor' | 'falou' | 'nao_atendeu' | 'sem_interesse';
 export type Proximo = { tipo: 'visita' | 'ligar' | 'nada'; dias: number };
 
 export const COMO_FOI: Array<{ id: ComoFoi; rotulo: string }> = [
@@ -39,17 +41,15 @@ export function proximoSugerido(r: ComoFoi): string {
   return 'nada';
 }
 
-/** `dias` dias ÚTEIS depois de `hoje` (AAAA-MM-DD, Brasília). Sábado e domingo pulam. */
+/**
+ * `dias` dias ÚTEIS depois de `hoje` (AAAA-MM-DD, Brasília). Sábado, domingo e feriado
+ * nacional pulam.
+ *
+ * FERIADO (auditoria 01/11/26): só pulava fim de semana — "Ligar amanhã" registrado na
+ * sexta 30/10 marcava a ligação no 02/11, Finados. Agora é a mesma conta da ficha.
+ */
 export function diaUtilDepois(hoje: string, dias: number): string {
-  const [a, m, d] = hoje.split('-').map(Number);
-  const t = new Date(Date.UTC(a, m - 1, d));
-  let n = 0;
-  while (n < Math.max(1, dias)) {
-    t.setUTCDate(t.getUTCDate() + 1);
-    const dow = t.getUTCDay();
-    if (dow !== 0 && dow !== 6) n += 1;
-  }
-  return t.toISOString().slice(0, 10);
+  return proximoDiaUtil(hoje, Math.max(1, dias));
 }
 
 const ROTULO = Object.fromEntries(COMO_FOI.map((c) => [c.id, c.rotulo])) as Record<ComoFoi, string>;

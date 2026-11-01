@@ -23,10 +23,12 @@ const q: QuadroHab = {
   pessoas: [bia],
 };
 
-ok(uteis('2026-10-01', '2026-10-31') === 22, 'outubro de 2026 tem 22 dias úteis (seg a sex)');
+// 01/11/26: feriado não é dia útil (12/10), como no GV2.hbUteis do Cockpit
+ok(uteis('2026-10-01', '2026-10-31') === 21, 'outubro de 2026 tem 21 dias úteis (seg a sex, fora 12/10)');
+ok(uteis('2026-11-01', '2026-11-30') === 19, 'novembro de 2026 tem 19 dias úteis (fora 02/11 e 20/11)');
 ok(daPessoa(q, bia, 'dono', 'anterior').v === 25 && daPessoa(q, bia, 'demo', 'anterior').v === 20 && daPessoa(q, bia, 'fechar', 'anterior').v === 25, 'outubro da pessoa: 25%, 20% e 25%');
-ok(daPessoa(q, bia, 'volume', 'anterior').v === 18, 'volume: 80 visitas em 22 dias úteis = 18 por semana');
-ok(doTime(q, 'dono', 'anterior').v === 50 && doTime(q, 'demo', 'anterior').v === 21 && doTime(q, 'fechar', 'anterior').v === 41 && doTime(q, 'volume', 'anterior').v === 18,
+ok(daPessoa(q, bia, 'volume', 'anterior').v === 19, 'volume: 80 visitas em 21 dias úteis = 19 por semana');
+ok(doTime(q, 'dono', 'anterior').v === 50 && doTime(q, 'demo', 'anterior').v === 21 && doTime(q, 'fechar', 'anterior').v === 41 && doTime(q, 'volume', 'anterior').v === 19,
   'o time em outubro: 50%, 21%, 41% e 18 por pessoa por semana (os mesmos números do cockpit)');
 const agora = daPessoa(q, bia, 'dono', 'atual');
 ok(agora.v === 36 && agora.n === 8 && agora.den === 22, 'novembro até 16/11: 8 de 22 fichas com o dono = 36%');

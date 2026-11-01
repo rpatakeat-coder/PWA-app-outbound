@@ -13,7 +13,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { supabase } from '../integrations/supabase/client';
 import { Toast } from '../components/Toast';
-import { proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
+// FERIADO (auditoria 01/11/26): remarcar passava lista de feriados vazia e oferecia
+// reunião no 02/11 (Finados). A conta de desfechoVisita já pula feriado nacional.
+import { proximoDiaUtil } from '../utils/desfechoVisita';
 import { Aviso, type ItemDoAviso } from './agenda/PecasDaAgenda';
 
 type Reuniao = { id: string; scheduled_at: string; type: string | null; client_id: string; clients: { empresa: string | null; nome: string | null; status: string | null } | null };
@@ -73,7 +75,7 @@ export function useParaFechar(userId: string | null) {
     const h = horaBRT(r.scheduled_at);
     const hoje = diaBRT(new Date());
     return [1, 2, 5].map((n) => {
-      const d = proximoDiaUtil(hoje, n, []);
+      const d = proximoDiaUtil(hoje, n);
       return { rot: n === 1 ? `amanhã ${h}` : `${DIAS[new Date(`${d}T12:00:00Z`).getUTCDay()]} ${d.slice(8, 10)}/${d.slice(5, 7)}`, quando: new Date(`${d}T${h}:00-03:00`).toISOString() };
     });
   };

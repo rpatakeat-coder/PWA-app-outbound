@@ -39,7 +39,7 @@ function Celula({ d, ehHoje }: { d: { visitas: number; prometido: number | null;
 }
 
 export function MinhaDailyCard({ enabled }: { enabled: boolean }) {
-  const { daily, isLoading, prometer, anotar } = useMinhaDaily(enabled);
+  const { daily, isLoading, isError, refetch, prometer, anotar } = useMinhaDaily(enabled);
   const { profile } = useAuth();
   const ehGestor = profile?.role === 'gestor';
   // Desde 25/09/2026 o executivo tambem tem a Daily dele no Cockpit (/gestao).
@@ -52,6 +52,19 @@ export function MinhaDailyCard({ enabled }: { enabled: boolean }) {
     return (
       <View style={styles.card}>
         <ActivityIndicator color="var(--brand-text)" />
+      </View>
+    );
+  }
+  // LEITURA FALHOU (auditoria 01/11/26): antes virava zero e "não cumpriu"; agora o cartão
+  // diz que não mediu, sem número inventado, e deixa tentar de novo.
+  if (isError && !daily) {
+    return (
+      <View style={styles.card}>
+        <Text style={styles.titulo}>Minha Daily</Text>
+        <Text style={styles.estado}>Não medido agora: não consegui ler suas promessas e visitas.</Text>
+        <TouchableOpacity onPress={() => { void refetch(); }} style={styles.mudar}>
+          <Text style={styles.mudarTexto}>Tentar de novo</Text>
+        </TouchableOpacity>
       </View>
     );
   }

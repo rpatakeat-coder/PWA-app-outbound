@@ -31,9 +31,26 @@ export type ItemFila = {
   erro?: string;
   /** em voo: a tela ainda está enviando; a fila não sobe nem mostra antes desta hora (ISO). */
   naoAntesDe?: string;
+  /** Quem criou (auth user id). Sem ele (item antigo, de antes de 01/11/26) sobe com a sessão atual, como antes. */
+  uid?: string | null;
 };
 
 const emVoo = (i: ItemFila) => !!i.naoAntesDe && i.naoAntesDe > new Date().toISOString();
+
+// A FILA TEM DONO (auditoria 01/11/26): o item não guardava quem o criou. Num aparelho
+// emprestado, quem entrava depois de um logout subia com a PRÓPRIA sessão o check-in e a foto
+// do colega — a visita ia para a conta errada. Agora o item leva o uid de quem estava logado,
+// e a fila só sobe (e só mostra) o que é da sessão atual; o do outro fica guardado até ele voltar.
+let donoAtual: string | null = null;
+const ehDoDono = (i: ItemFila) => !i.uid || i.uid === donoAtual;
+const visivel = (i: ItemFila) => !emVoo(i) && ehDoDono(i);
+
+/** Quem está logado agora (AuthContext chama a cada troca de sessão; null = ninguém). */
+export function definirDonoDaFila(uid: string | null) {
+  if (donoAtual === uid) return;
+  donoAtual = uid;
+  avisar();
+}
 
 export type Executor = (item: ItemFila) => Promise<void>;
 
@@ -111,7 +128,7 @@ async function comLoja<T>(modo: IDBTransactionMode, fn: (loja: IDBObjectStore) =
 }
 
 function avisar() {
-  const copia = memoria.filter((i) => !emVoo(i));
+  const copia = memoria.filter(visivel);
   ouvintes.forEach((fn) => { try { fn(copia); } catch { /* ouvinte não derruba a fila */ } });
 }
 
@@ -141,13 +158,13 @@ async function remover(acaoId: string) {
 }
 
 export function itensDaFila(): ItemFila[] {
-  return memoria.filter((i) => !emVoo(i));
+  return memoria.filter(visivel);
 }
 
 export function ouvirFila(fn: (itens: ItemFila[]) => void): () => void {
   ouvintes.add(fn);
   void carregar();
-  fn(memoria.filter((i) => !emVoo(i)));
+  fn(memoria.filter(visivel));
   return () => { ouvintes.delete(fn); };
 }
 
@@ -159,7 +176,7 @@ export function registrarExecutor(tipo: TipoAcao, fn: Executor): () => void {
 export async function enfileirar(item: Omit<ItemFila, 'criadoEm' | 'tentativas' | 'estado'> & { criadoEm?: string }) {
   await carregar();
   if (memoria.some((x) => x.acaoId === item.acaoId)) return; // mesma ação não entra duas vezes
-  await gravar({ ...item, criadoEm: item.criadoEm ?? new Date().toISOString(), tentativas: 0, estado: 'na_fila' });
+  await gravar({ ...item, uid: item.uid ?? donoAtual, criadoEm: item.criadoEm ?? new Date().toISOString(), tentativas: 0, estado: 'na_fila' });
 }
 
 export async function descartar(acaoId: string) {
@@ -184,6 +201,7 @@ export function subirFila(incluirFalhas = false): Promise<number> {
     for (const item of [...memoria]) {
       if (item.estado === 'falhou' && !incluirFalhas) continue;
       if (emVoo(item)) continue; // a tela ainda está enviando este
+      if (!ehDoDono(item)) continue; // de outra conta neste aparelho: fica guardado, não sobe com a sessão errada
       const exec = executores.get(item.tipo);
       if (!exec) continue;
       try {

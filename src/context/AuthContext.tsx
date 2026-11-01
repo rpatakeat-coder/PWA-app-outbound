@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { supabase } from '../integrations/supabase/client';
 import type { Profile } from '../integrations/supabase/types';
+import { definirDonoDaFila } from '../utils/filaOffline';
 
 interface AuthContextType {
   user: any | null;
@@ -44,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: { session }, error: erroSessao } = await supabase.auth.getSession();
       if (!vivo) return;
       if (session?.user) {
+        definirDonoDaFila(session.user.id);
         setUser(session.user);
         loadProfile(session.user.id);
         setLoading(false);
@@ -62,6 +64,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === 'INITIAL_SESSION') return;
+        // a fila offline sabe de quem é a sessão (auditoria 01/11/26): o que outro usuário deixou
+        // na fila deste aparelho não sobe com a sessão de quem entrou depois
+        definirDonoDaFila(session?.user?.id ?? null);
         if (session?.user) {
           setUser(session.user);
           loadProfile(session.user.id);
@@ -143,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (err) throw err;
 
       if (data.session?.user) {
+        definirDonoDaFila(data.session.user.id);
         setUser(data.session.user);
         await loadProfile(data.session.user.id);
       }
@@ -175,6 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       await supabase.auth.signOut();
+      definirDonoDaFila(null);
       setUser(null);
       setProfile(null);
       if (typeof window !== 'undefined') guardarPerfil(null);

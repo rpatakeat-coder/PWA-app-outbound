@@ -17,7 +17,7 @@ import { IconCalendar, IconCheck, IconClose, IconDownload, useIconColors } from 
 import { useLayout } from '../hooks/useLayout';
 import { opcoesDaFila } from './FilaTarefasScreen';
 import { porNoDia } from '../utils/paradaDoDia';
-import { proximoDiaUtil } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
+import { proximoDiaUtil } from '../utils/desfechoVisita';
 import { ROTULO_ETAPA } from '../utils/fichaDeRua';
 import { FUNIL8 } from '../utils/preparo';
 import type { Client } from '../types/client';
@@ -99,6 +99,8 @@ export default function ListaCarteiraWeb({ ownerHubspot, sellerId, aoAbrirLead, 
   const bairros = [...new Set(base.map((l) => l.bairro).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
   // "Pôr no plano da semana": os próximos 5 dias úteis (amanhã em diante).
+  // FERIADO (auditoria 01/11/26): a conta não recebia feriados e oferecia o 02/11 (Finados)
+  // como dia de plano. A de desfechoVisita pula feriado nacional.
   const hoje = hojeBRT();
   const diasDoPlano = [1, 2, 3, 4, 5].map((n) => proximoDiaUtil(hoje, n));
   const porNoPlano = async (dia: string) => {

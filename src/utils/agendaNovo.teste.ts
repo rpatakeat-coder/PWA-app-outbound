@@ -13,6 +13,8 @@ const ok = (c: boolean, m: string) => {
 const agora = new Date('2026-09-26T01:00:00Z');
 const dias = diasDaFaixa(agora);
 ok(dias.join() === '2026-09-25,2026-09-28,2026-09-29,2026-09-30,2026-10-01,2026-10-02', 'hoje (sexta, pelo dia de Brasília) + 5 dias úteis, pulando o fim de semana');
+// feriado (auditoria 01/11/26): a faixa do domingo 01/11 não mostra o Finados
+ok(diasDaFaixa(new Date('2026-11-01T15:00:00Z'), 3).join() === '2026-11-01,2026-11-03,2026-11-04', 'a faixa pula o feriado de 02/11');
 ok(rotuloDoDia('2026-09-25', '2026-09-25').semana === 'hoje' && rotuloDoDia('2026-09-28', '2026-09-25').semana === 'seg', 'rótulos "hoje" e "seg"');
 
 const P = (id: string, status: string, visitadoHoje = false) => ({ id, status, visitadoHoje });

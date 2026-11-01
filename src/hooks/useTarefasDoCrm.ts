@@ -49,17 +49,20 @@ const VAZIO = (semMedicao: string | null = null): ResultadoTarefasDoCrm => ({
 export function useTarefasDoCrm(enabled: boolean) {
   const { profile } = useAuth();
   const ownerId = (profile as { id_hubspot?: string | null } | null)?.id_hubspot ?? null;
+  // O CACHE TEM DONO (auditoria 01/11/26): sem o usuário na chave, a lista anterior do
+  // `placeholderData` atravessava a troca de conta e quem entrava via as tarefas de quem saiu.
+  const donoDoCache: string | null = profile?.id ?? null;
 
   const query = useQuery<ResultadoTarefasDoCrm>({
-    queryKey: ['tarefas_crm', ownerId],
+    queryKey: ['tarefas_crm', ownerId, donoDoCache],
     enabled: enabled && !!profile,
     staleTime: 3 * 60_000,
     // A `queryKey` carrega o `ownerId`, que sai do `profile`. Toda vez que o
     // AuthContext recarrega o perfil a chave troca, e sem isto o react-query
     // entrega `undefined` para a chave nova — a tela pisca com ZERO tarefas e
     // volta segundos depois. Mantendo a lista anterior, falhar em atualizar
-    // nunca apaga o que ja' estava certo.
-    placeholderData: (anterior: ResultadoTarefasDoCrm | undefined) => anterior,
+    // nunca apaga o que ja' estava certo. Só do MESMO usuário (01/11/26): de outra conta não segura.
+    placeholderData: (anterior: ResultadoTarefasDoCrm | undefined, consulta) => (consulta?.queryKey[2] === donoDoCache ? anterior : undefined),
     queryFn: async () => {
       if (!ownerId) {
         // A mensagem muda com o papel: mandar o gestor "pedir para a gestão

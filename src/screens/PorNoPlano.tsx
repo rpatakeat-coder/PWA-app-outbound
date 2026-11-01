@@ -18,6 +18,7 @@ import { supabase } from '../integrations/supabase/client';
 import type { Client, ClientMeeting } from '../types/client';
 import { ACOES, LIMITE_DO_DIA, acaoPorId, acaoSugerida, diaComEspaco, diaSugerido, propositoDaAcao, type AcaoId } from '../utils/acoesDoPlano';
 import { ehErroDeRede } from '../utils/filaOffline';
+import { ehDiaUtil, proximoDiaUtil } from '../utils/desfechoVisita';
 import { diasPlanejaveis, rotuloDoDia, vaiAoCockpit } from '../utils/planoNoMapa';
 import { entrarEmProspeccao } from '../utils/assumirLead';
 import { decidirProspeccao } from '../utils/entrarEmProspeccao';
@@ -281,13 +282,14 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
                   <View style={{ gap: 4 }}>
                     <CampoData valor={foraDaSemana ? escolhido : ''} minimo={hoje} rotulo="Escolher o dia do próximo passo" aoMudar={(v) => {
                       if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
-                      /* a grade do Cockpit é de segunda a sexta: sábado e domingo vão para a segunda */
+                      /* a grade do Cockpit é de segunda a sexta: sábado e domingo vão para o próximo dia útil.
+                         FERIADO (auditoria 01/11/26): o sábado 31/10 ia para a segunda 02/11 (Finados) e o
+                         próprio feriado escolhido direto era aceito. Agora rola para o próximo dia útil de verdade. */
                       const dow = new Date(`${v}T12:00:00Z`).getUTCDay();
-                      const d = dow === 6 ? new Date(Date.parse(`${v}T12:00:00Z`) + 2 * 86400000).toISOString().slice(0, 10)
-                        : dow === 0 ? new Date(Date.parse(`${v}T12:00:00Z`) + 86400000).toISOString().slice(0, 10) : v;
+                      const d = ehDiaUtil(v) ? v : proximoDiaUtil(v, 1);
                       if (d < hoje) return;
                       if (d > ultimoDia) { setAvisoOutro(`Até ${rotuloDoDia(ultimoDia)} (uns 3 meses). Mais longe que isso, marque uma data mais perto e remarque depois.`); return; }
-                      setAvisoOutro(d !== v ? `Fim de semana não entra no plano: ficou para ${rotuloDoDia(d)}.` : null);
+                      setAvisoOutro(d !== v ? `${dow === 0 || dow === 6 ? 'Fim de semana' : 'Feriado'} não entra no plano: ficou para ${rotuloDoDia(d)}.` : null);
                       setDia(d);
                     }} />
                     {!!avisoOutro && <Text style={s.ajuda}>{avisoOutro}</Text>}

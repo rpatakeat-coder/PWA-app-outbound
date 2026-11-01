@@ -107,6 +107,11 @@ export function useMinhaDaily(enabled: boolean) {
           .eq('visited_by', meuId)
           .gte('visited_at', `${maisAntigo}T00:00:00Z`),
       ]);
+      // LEITURA QUE FALHOU NÃO É ZERO (auditoria 01/11/26): `data ?? []` engolia o erro e a
+      // tela mostrava 0 visitas e "não cumpriu" num dia cumprido. Erro sobe e o cartão diz
+      // "não medido agora".
+      if (promessas.error) throw promessas.error;
+      if (visitas.error) throw visitas.error;
 
       const prometidoPorDia = new Map<string, number | null>();
       const notaPorDia = new Map<string, string | null>();
@@ -194,5 +199,5 @@ export function useMinhaDaily(enabled: boolean) {
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['minha_daily', meuId] }); },
   });
 
-  return { daily: query.data ?? null, isLoading: query.isLoading, prometer, anotar };
+  return { daily: query.data ?? null, isLoading: query.isLoading, isError: query.isError, refetch: query.refetch, prometer, anotar };
 }
