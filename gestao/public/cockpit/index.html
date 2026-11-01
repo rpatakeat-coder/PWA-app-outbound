@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@0e0f72ca.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@c2455140.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "0e0f72ca";
+  var VERSAO = "c2455140";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -61934,7 +61934,7 @@ GV2.v5Grupos = function () {
   const top = din.slice(0, 3);
   if (top.length) {
     GV2.estado.v5Dinheiro = top.map(function (n) { return n.id; });
-    g.push({ k: 'dinheiro', l: 'Dinheiro parado', sev: 2, curta: 'quente sem passo', regra: 'quente sem próximo passo e o maior travado de cada um',
+    g.push({ k: 'dinheiro', l: 'Dinheiro parado', sev: 2, curta: din.length > top.length ? 'os ' + top.length + ' de mais MRR, de ' + din.length : 'quente sem passo', regra: 'quente sem próximo passo e o maior travado de cada um',
       chips: top.map(function (n) { const p = b.porId[n.dono]; return { ini: p ? p.iniciais : '—', n: n.nome, s: (n.mrr ? GV2.rsCheio(n.mrr) + ' · ' : '') + n.dias + ' d', tip: (p ? p.nome + ' · ' : '') + GV2.ETAPAS[n.etapa_idx] + ' há ' + n.dias + ' dias', a: 'ficha:' + n.id }; }),
       btn: top.length > 1 ? 'Cobrar os ' + top.length : 'Cobrar', acao: 'v5lote:dinheiro' });
   }

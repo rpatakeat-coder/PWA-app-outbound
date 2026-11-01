@@ -987,7 +987,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
         <PlacarTarefas feitas={nFeitas} total={totalDia} faltam={fila.length}
           soAtrasados={hojeLista.length === 0 && semPassoLista.length === 0 && atrasadosLista.length > 0 ? atrasadosLista.length : null} />
         <View style={{ gap: 10 }}>
-          <CabecalhoDeBloco numero={1} titulo="Para hoje" n={hojeLista.length} legenda="ligações sem hora entram na hora das ligações · 12:30 e 17:30" />
+          <CabecalhoDeBloco numero={1} titulo="Para hoje" n={hojeLista.length} legenda={ehDiaUtil(hoje, feriados) ? "ligações sem hora entram na hora das ligações · 12:30 e 17:30" : "hoje não tem hora das ligações: fim de semana ou feriado"} />
           {janela && <FaixaJanela ate={janela.ate} faltamMin={janela.faltamMin} decorrido={janela.decorrido} />}
           {hojeLista.length ? hojeLista.map(cartaoDeHoje) : <BlocoVazio texto="nada mais vence hoje" />}
         </View>
