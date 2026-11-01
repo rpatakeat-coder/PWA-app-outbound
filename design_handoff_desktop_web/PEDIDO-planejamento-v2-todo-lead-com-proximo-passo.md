@@ -82,8 +82,8 @@ Hoje o banco já avisa a tela em menos de 1 s (canal `sinais_ao_vivo`, trigger `
 - **A semana vira no mesmo momento nos dois.** Hoje o Cockpit abre a semana seguinte na sexta e o app só no fim de semana. Proponha uma regra só e mostre "planejando: próxima semana" quando for o caso.
 
 ### 5. O que sai ou encolhe
-- **"Enviar o plano ao gestor"** (0 uso em duas semanas). Proponha: some, e o gestor passa a ver o plano sempre ao vivo. Ou vira automático no domingo às 20h. **Para o Julyan decidir.**
-- **"A sua palavra desta semana"** (0 promessas). Encolhe para uma linha. **Para decidir:** se continua.
+- **"Enviar o plano ao gestor"** (0 uso em duas semanas): **sai**. O gestor vê o plano ao vivo.
+- **"A sua palavra desta semana"** (0 promessas): **sai como editor** e vira uma linha de leitura com a meta da semana (ver "Decidido").
 - **Os 7 propósitos do "Pra:"** e os 4 blocos de cadência na munição viram **um** filtro com 3 opções visíveis (Sem passo · Quentes · Contas-alvo) e "mais".
 
 ## Regras que não mudam
@@ -128,8 +128,17 @@ Hoje o banco já avisa a tela em menos de 1 s (canal `sinais_ao_vivo`, trigger `
   - "sem próximo passo" do time sai de 46% para menos de 10%;
   - "feitas ÷ plano" sai de 31% para mais de 70%, com o plano encolhendo para o real, não com a rua inflando.
 
-## Para aprovar (Julyan)
-- [ ] "Enviar o plano ao gestor" some ou vira automático?
-- [ ] A "palavra da semana" continua?
-- [ ] A capacidade do dia avisa acima de 1,5× a média da pessoa: esse é o número?
-- [ ] A semana vira na sexta às 17h nos dois (app e Cockpit)?
+## Decidido (Julyan, 01/11)
+1. **"Enviar o plano ao gestor" some.** O gestor já vê o plano ao vivo (Rua › Semana), e o botão teve 0 uso em duas semanas. Não desenhe botão nem estado de "enviado".
+2. **A "palavra da semana" sai como editor.**
+   - Fica uma linha só de leitura no topo: "semana: 24 visitas com prova · 2 fechamentos para a meta".
+   - A meta vem do sistema (visitas por dia × dias úteis; fechamentos = meta do mês ÷ semanas que faltam).
+   - Ninguém digita promessa (0 promessas dadas para a semana de 02/11).
+3. **O aviso de capacidade dispara em 1,5× a média da pessoa.**
+   - A média é a de visitas com prova por dia útil nas últimas 4 semanas.
+   - Novato sem histórico usa a meta da fase.
+   - Mostre a média ao lado da meta no cabeçalho do dia: "média 5,2".
+   - Avisa, não trava.
+4. **A semana vira na sexta às 17h, no Cockpit e no app.**
+   - O Cockpit já faz assim; o app passa a fazer igual.
+   - Desenhe o selo "planejando: próxima semana" que aparece da sexta 17h até domingo.
