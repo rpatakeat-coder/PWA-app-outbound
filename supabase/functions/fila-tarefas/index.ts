@@ -340,6 +340,21 @@ Deno.serve(async (req: Request) => {
   const doSnap = new Map<string, { name?: string; stageId?: string; dias?: number; mrr?: number | string; temperatura?: number | string }>();
   const abertos = (snap?.conteudo as { reps?: Record<string, { abertos?: unknown[] }> } | null)?.reps?.[owner]?.abertos ?? [];
   for (const d of abertos as Array<{ id?: string | number }>) if (d?.id != null) doSnap.set(String(d.id), d as never);
+  /* QUEM ESTÁ FORA DO TIME (o Julyan) NÃO TEM LINHA EM reps (auditoria 01/11/26): a carteira saía só dos
+     negócios com tarefa (7) e o Cockpit contava os 20 do funil dele. Sem linha no robô, a carteira é o
+     funil com ele de dono, a mesma gaveta que a tela dele no Cockpit usa (funilForaDoTime + funilLeads). */
+  if (!abertos.length) {
+    const c = (snap?.conteudo ?? {}) as { funilLeads?: Record<string, unknown[]>; funilForaDoTime?: Record<string, Record<string, unknown[]>> };
+    const gaveta = Object.values(c.funilForaDoTime?.[owner] ?? {});
+    for (const lista of [...gaveta, ...Object.values(c.funilLeads ?? {})]) {
+      const daGaveta = gaveta.includes(lista);
+      for (const l of (Array.isArray(lista) ? lista : []) as Array<Record<string, unknown>>) {
+        if (l?.id == null || doSnap.has(String(l.id)) || (!daGaveta && String(l.ownerId ?? '') !== owner)) continue;
+        doSnap.set(String(l.id), { name: (l.name ?? l.dealname) as string | undefined, stageId: l.stageId as string | undefined, dias: l.dias as number | undefined,
+          mrr: (l.valor_de_mrr ?? l.mrr) as number | string | undefined, temperatura: (l.temp ?? undefined) as number | undefined });
+      }
+    }
+  }
   const ids = Array.from(new Set([...doSnap.keys(), ...tarefas.map((t) => t.dealId).filter(Boolean) as string[]]));
   const vivos = new Map<string, { nome: string; etapa: string; mrr: number | null; owner: string | null; pipeline: string | null; entrada: string | null }>();
   const lotesDeal: string[][] = [];
@@ -359,7 +374,10 @@ Deno.serve(async (req: Request) => {
   // a fila sairia sem esses negócios, calada (auditoria 16/10/26)
   if (lotesFalharam) return json(502, { erro: 'O HubSpot não devolveu parte dos seus negócios agora. Puxe para tentar de novo.' });
   // fora do funil do Field Sales ou de outro dono não entra na fila desta pessoa
-  const meus = ids.filter((id) => { const v = vivos.get(id); return v && v.pipeline === PIPELINE && v.owner === owner; });
+  // + negócio de teste fora, a mesma regra do robô do Cockpit (ehNegocioDeTeste, lib/realizado.js: "teste"
+  // no nome não conta em métrica nenhuma). Sem isto os "ZZ TESTE" entravam na fila e no "sem próximo passo"
+  // do app e não no do Cockpit (auditoria 01/11/26).
+  const meus = ids.filter((id) => { const v = vivos.get(id); return v && v.pipeline === PIPELINE && v.owner === owner && !/teste/i.test(v.nome || ''); });
 
   // 3) o lead de cada negócio, contatos, decisor, visitas de hoje — as leituras que só dependem
   // da carteira saem juntas; as visitas esperam só os clientes
