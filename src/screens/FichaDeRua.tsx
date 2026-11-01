@@ -41,6 +41,7 @@ import { apagarPendente, marcarGravada, registrarFeita, type SecaoDoFeito } from
 import { CampoData } from '../components/CampoData';
 import { IconClose as SiClose, IconCheck as SiCheck, IconChevronDown as SiDown, IconPencil as SiLapis } from '../components/icons';
 import { gravadoAgora } from '../utils/gravadoAgora';
+import { PrevisaoDaDemo } from './PrevisaoDaDemo';
 
 export type CamposCadastro = { empresa?: string; nome?: string; telefone?: string; categoria?: string };
 
@@ -967,6 +968,10 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                     ? 'Salvo · HubSpot e Cockpit atualizados'
                     : problemas.map((p) => `${p.estado === 'fila' ? 'Na fila' : p.estado === 'falhou' ? 'Falhou' : 'Pendente'} · ${p.rotulo}${p.detalhe ? `: ${p.detalhe}` : ''}`).join('\n')}
                 </Text>
+              )}
+              {/* 4c (Acelerar v2, 01/11/26): depois da demo salva, a chance de fechar no mês; a ficha não muda e dá para pular */}
+              {fase === 'salvo' && apresentei && !!dealId && (ultimo === ETAPA.demo || etapaReal === ETAPA.demo) && (
+                <PrevisaoDaDemo dealId={dealId} ownerId={ownerId} />
               )}
               {fase === 'salvo' && f.proximo === 'fechou' && onEmitirCobranca && (ultimo === ETAPA.negociacao || etapaReal === ETAPA.negociacao) && (
                 <Pressable accessibilityRole="button" onPress={() => { onEmitirCobranca(); }} style={s.salvar}>
