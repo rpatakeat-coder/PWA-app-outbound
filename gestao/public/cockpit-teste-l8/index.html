@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@96c225e5.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@3b240e44.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "96c225e5";
+  var VERSAO = "3b240e44";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -29352,7 +29352,7 @@ function pl6DadosFinal(rep) {
         }),
         agendar: cheio ? 'cheio:' + di : 'agendar:' + di,
         vazio: n === 0 && !s.sel,
-        vazioRot: 'dia livre — escolha uma conta na munição e coloque na hora que quiser',
+        vazioRot: d.feriado ? 'feriado — ninguém é cobrado de rua neste dia' : 'dia livre — escolha uma conta na munição e coloque na hora que quiser',
         sug: (function () {
           if (!(n === 0 && !s.sel && !passouDoDia) || d.feriado || !pl6SugRegioes.length) return null;
 
