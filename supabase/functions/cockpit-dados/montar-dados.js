@@ -497,6 +497,8 @@ function montarDadosCompletos() {
        sozinhos — não há lista de campos aqui que precise ser atualizada. */
     motivosPerda: hubspot.motivosPerda || null,
     perdasPosDemo: hubspot.perdasPosDemo || null,
+    /* 6a (01/11/26): as vendas que já fizeram 60 dias; o cockpit cruza com os clientes da Takeat */
+    clienteQueFica: hubspot.clienteQueFica || null,
     /* Conversão por turma, velocidade de etapa e ciclo — o gestor recebe inteiro. */
     historicoEtapas: hubspot.historicoEtapas || null,
     funil: hubspot.funil,
