@@ -19,6 +19,8 @@ import { ordenarItens, quedaCurta, type ItemFolha } from '../utils/cardNovo';
 import { IconChevronDown as SiDown, IconClose as SiClose } from '../components/icons';
 import { BlocoParaEntrar } from '../components/ParaEntrar';
 import { visitasDoDia, type Arma } from '../utils/armasDoMapa';
+import { diaBRT } from '../utils/abaTarefas';
+import { ehDiaUtil } from '../utils/desfechoVisita';
 import type { ObjecaoDaCasa } from '../utils/playbook';
 import type { LinhaDoDia as LinhaDoDiaTipo } from '../utils/linhaDoDia';
 import { primeiroToque, registrarEvento } from '../utils/eventosDoMapa';
@@ -160,7 +162,11 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
   const feitasTexto = feitasMedidas == null ? "—" : String(feitasMedidas);
   // "N visitas hoje · mínimo 6" (prancha §3): passa de 6 normalmente, nunca "dia concluído"
   const semProva = visitasProvadas != null && visitasFeitas > visitasProvadas ? visitasFeitas - visitasProvadas : 0;
-  const visitasTexto = visitasDoDia(feitasMedidas, metaVisitas) ?? `mínimo ${metaVisitas} visitas`;
+  /* sem expediente (fim de semana, feriado) não tem mínimo (auditoria 01/11/26) */
+  const diaUtilHoje = ehDiaUtil(diaBRT(new Date()));
+  const visitasTexto = !diaUtilHoje
+    ? `${feitasTexto} ${visitasFeitas === 1 ? 'visita' : 'visitas'} hoje · sem expediente`
+    : visitasDoDia(feitasMedidas, metaVisitas) ?? `mínimo ${metaVisitas} visitas`;
   const lenteRecem = !!recem;
   const comSinal = useComSinal();
   const emAberto = Math.max(0, planoTotal - planoFeito);
@@ -331,9 +337,9 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
               <Text style={s.pilulaSub} numberOfLines={1}>{`${totalNaArea} na área · ver a lista`}</Text>
             </Pressable>
           )}
-          <Pressable accessibilityRole="button" accessibilityLabel={`${feitasTexto} ${visitasFeitas === 1 ? 'visita' : 'visitas'} hoje, mínimo ${meta}`} onPress={aoProgresso} style={s.pilulaProgresso} hitSlop={6}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${feitasTexto} ${visitasFeitas === 1 ? 'visita' : 'visitas'} hoje, ${diaUtilHoje ? `mínimo ${meta}` : 'sem expediente'}`} onPress={aoProgresso} style={s.pilulaProgresso} hitSlop={6}>
             <Text style={s.pilulaConta} numberOfLines={1}>{`${feitasTexto} hoje`}</Text>
-            <Text style={[s.pilulaProva, semProva > 0 && s.pilulaProvaFalta]} numberOfLines={1}>{semProva ? `${semProva} sem prova` : `mín. ${meta}`}</Text>
+            <Text style={[s.pilulaProva, semProva > 0 && s.pilulaProvaFalta]} numberOfLines={1}>{semProva ? `${semProva} sem prova` : diaUtilHoje ? `mín. ${meta}` : 'sem exped.'}</Text>
           </Pressable>
           {proxima ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Cheguei na próxima porta" onPress={() => onCheguei(proxima.c)}

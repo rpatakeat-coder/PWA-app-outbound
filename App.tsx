@@ -206,6 +206,7 @@ import { avisarSeVisitaProvada, type Ranking } from './src/screens/FolhaRanking'
 import AgendaNovoScreen from './src/screens/AgendaNovoScreen';
 import { concluirComDesfazer, enviarConclusao, type PedidoConclusao } from './src/utils/concluirTarefa';
 import { diaBRT, diasDeAtraso, ehCobranca, grupoDaTarefa } from './src/utils/abaTarefas';
+import { ehDiaUtil } from './src/utils/desfechoVisita';
 import { distanciaTexto } from './src/utils/cardNovo';
 import { definirOcupado } from './src/utils/updates';
 import { assumirLead } from './src/utils/assumirLead';
@@ -1271,6 +1272,9 @@ function MainApp() {
     if (!modoNovo || tab !== 'map' || isViewer || planoDoDiaResolvido) return;
     const agoraBRT = new Date(Date.now() - 3 * 3600000);
     if (agoraBRT.getUTCHours() >= 19) { setPlanoDoDiaResolvido(true); return; }
+    /* sem expediente (fim de semana, feriado) não pergunta o dia (auditoria 01/11/26: no domingo
+       subia "Hoje são estas 6, confirma?" e "às 9h00 o gestor vê") */
+    if (!ehDiaUtil(diaBRT(new Date()))) { setPlanoDoDiaResolvido(true); return; }
     const chave = `plano-do-dia-${diaBRT(new Date())}`;
     try {
       if (window.localStorage.getItem(chave)) { setPlanoDoDiaResolvido(true); return; }
