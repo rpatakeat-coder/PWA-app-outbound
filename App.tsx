@@ -1288,6 +1288,8 @@ function MainApp() {
     if (!modoNovo || tab !== 'map' || !seloFila?.quente || !filaNaTela.data || planoDoDia) return;
     const agoraBRT = new Date(Date.now() - 3 * 3600000);
     if (agoraBRT.getUTCHours() >= 19) return;
+    /* sem expediente (fim de semana, feriado) não cobra ligação antes da rua (auditoria 01/11/26) */
+    if (!ehDiaUtil(filaNaTela.data.hoje ?? diaBRT(new Date()) ?? '')) return;
     const chave = `antes-da-rua-${filaNaTela.data.hoje ?? diaBRT(new Date())}`;
     try { if (window.localStorage.getItem(chave)) return; window.localStorage.setItem(chave, '1'); } catch { return; }
     setAntesDaRua(true);

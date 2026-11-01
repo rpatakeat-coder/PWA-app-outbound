@@ -72,17 +72,21 @@ function faseAtual(x: Linha) {
 
 export function MinhaRampaCard() {
   const q = useQuery({
-    queryKey: ['minha_rampa'],
+    queryKey: ['minha_rampa', 'so-a-propria'],
     queryFn: async () => {
       const { data, error } = await supabase.rpc('rampa_quadro');
       if (error) throw error;
-      return data as unknown as Quadro;
+      /* SÓ A PRÓPRIA RAMPA (auditoria 01/11/26): para o gestor, rampa_quadro devolve o time inteiro, e o
+         cartão pegava a primeira linha — o gestor via "Minha rampa · dia 5" com os dados de outra pessoa. */
+      const { data: sessao } = await supabase.auth.getSession();
+      return { quadro: data as unknown as Quadro, eu: sessao.session?.user.id ?? null };
     },
     staleTime: 5 * 60_000,
     retry: 1,
   });
-  const d = q.data;
-  const x = d && Array.isArray(d.pessoas) ? d.pessoas[0] : null;
+  const d = q.data?.quadro;
+  const eu = q.data?.eu;
+  const x = d && eu && Array.isArray(d.pessoas) ? d.pessoas.find((p) => p.pessoa === eu) ?? null : null;
   if (!d || !x) return null;
   const atual = faseAtual(x);
   const estende = x.decisao?.decisao === 'estende' && x.decisao.novaData;

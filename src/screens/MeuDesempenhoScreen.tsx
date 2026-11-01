@@ -18,6 +18,8 @@ import { useLayout } from '../hooks/useLayout';
 import { IconCheck, IconChevronRight, IconTrophy, useIconColors } from '../components/icons';
 import FolhaRanking, { Avatar } from './FolhaRanking';
 import { MinhaHabilidadeCard } from './MinhaHabilidadeCard';
+import { diaBRT } from '../utils/abaTarefas';
+import { ehDiaUtil } from '../utils/desfechoVisita';
 
 type Dia = { dia: string; provadas: number; demos: number; contratos: number };
 type Desempenho = {
@@ -143,10 +145,14 @@ export function MeuDesempenhoScreen({ enabled, linhas = [] }: Props) {
   );
 
   // ---- 2 · hoje ----
+  /* fim de semana e feriado não têm meta do dia (auditoria 01/11/26: no domingo dizia "0 de 6") */
+  const diaUtilHoje = ehDiaUtil(diaBRT(new Date()) ?? '');
   const blocoHoje = (
     <View style={st.cartao}>
       <Text style={st.secao}>HOJE</Text>
-      <Text style={st.linhaGrande}><Text style={st.numero}>{`${hoje.provadas} de ${hoje.meta}`}</Text><Text style={st.fraco}>  visitas provadas</Text></Text>
+      {diaUtilHoje
+        ? <Text style={st.linhaGrande}><Text style={st.numero}>{`${hoje.provadas} de ${hoje.meta}`}</Text><Text style={st.fraco}>  visitas provadas</Text></Text>
+        : <Text style={st.linhaGrande}><Text style={st.numero}>{String(hoje.provadas)}</Text><Text style={st.fraco}>{`  ${hoje.provadas === 1 ? 'visita provada' : 'visitas provadas'} · sem expediente hoje`}</Text></Text>}
       <View style={st.tracos}>{Array.from({ length: Math.max(1, Math.min(hoje.meta, 12)) }, (_, i) => <View key={i} style={[st.traco, i < hoje.provadas && { backgroundColor: 'var(--verde-acao)' }]} />)}</View>
       {hoje.sem_prova > 0 && <Text style={st.fraco}>{`${plural(hoje.sem_prova, 'visita sem prova', 'visitas sem prova')} hoje: longe do pino e sem foto não conta`}</Text>}
     </View>
