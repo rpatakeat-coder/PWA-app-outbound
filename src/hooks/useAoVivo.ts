@@ -32,11 +32,16 @@ export const INVALIDA_POR_TIPO: Record<string, string[][]> = {
   negocio: [['mapa-contexto']],
   // + a fila de Tarefas (auditoria 01/11/26): o próximo passo mudado no Cockpit ou pela visita
   // só aparecia na aba Tarefas pelo staleTime, enquanto a Agenda já tinha relido
-  'negocio-meu': [['tarefas_crm'], ['fila_tarefas']],
+  // + o Desenvolvimento v2 (01/11/26): a venda e a demo mudam o placar, a escada e a coleção
+  'negocio-meu': [['tarefas_crm'], ['fila_tarefas'], ['desenvolvimento_quadro']],
   // + Desempenho e ranking (auditoria 16/10/26): a visita provada muda o placar e eles ficavam velhos
-  visita: [['meu_dia'], ['minha_daily'], ['client_visits'], ['novos-visitados-semana'], ['meu_desempenho'], ['vizinhos_no_ranking'], ['ranking_executivo'], ['fila_tarefas']],
-  foto: [['client_visits']],
-  ficha: [['meu_dia']],
+  // + o Desenvolvimento v2 (01/11/26): o check-in fecha a sequência, a missão e a medalha (o toast)
+  visita: [['meu_dia'], ['minha_daily'], ['client_visits'], ['novos-visitados-semana'], ['meu_desempenho'], ['vizinhos_no_ranking'], ['ranking_executivo'], ['fila_tarefas'], ['desenvolvimento_quadro']],
+  foto: [['client_visits'], ['desenvolvimento_quadro']],
+  // a ficha na hora fecha a missão "Registro na hora"
+  ficha: [['meu_dia'], ['desenvolvimento_quadro']],
+  // 0240: nasceu uma medalha (conquistas_ganhas) — relê o quadro e o toast aparece
+  conquista: [['desenvolvimento_quadro']],
   // + o plano lido pela fila, pela ficha do lead e pelo "sem lugar no mapa" (auditoria 01/11/26):
   // o Cockpit mexia no plano e essas três telas mostravam o dia velho até o staleTime
   parada: [['field_routes'], ['field_route_stops'], ['meu_dia'], ['plano_semana_fila'], ['no_plano_do_lead'], ['meu_plano_sem_lugar']],

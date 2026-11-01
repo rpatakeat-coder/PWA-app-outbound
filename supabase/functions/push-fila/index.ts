@@ -23,6 +23,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { feriadosNacionais, ehDiaUtil, secaoDoItem, quenteEsfriando, tituloDoCard } from '../_compartilhado/filaDoDinheiro.ts';
 import { b64u, cifrarWebPush, jwtVapid } from '../_compartilhado/webPush.ts';
+import { pushSegunda, pushSexta, type Quadro } from '../_compartilhado/desenvolvimentoV2.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -239,7 +240,8 @@ async function rodar(svc: ReturnType<typeof createClient>, momento: string, dryR
     const aparelhos = porUser.get(uid) ?? [];
     if (!aparelhos.length) { linha.pulou = 'sem aparelho inscrito'; continue; }
     if (soPara.size && !soPara.has(uid)) { linha.pulou = 'fora de so_para (teste)'; continue; }
-    const { data: enviados } = await svc.from('push_enviados').select('tipo, ref').eq('user_id', uid).eq('dia', hoje);
+    // os pushes da semana do Desenvolvimento v2 não gastam o limite de 4 da fila
+    const { data: enviados } = await svc.from('push_enviados').select('tipo, ref').eq('user_id', uid).eq('dia', hoje).neq('tipo', 'desenvolvimento');
     if ((enviados ?? []).length >= LIMITE_DIA) { linha.pulou = 'já recebeu 4 hoje'; continue; }
     // Cheguei aberto: check-in nos últimos 40 min sem Como foi depois dele
     const desde = new Date(Date.now() - 40 * 60000).toISOString();
@@ -264,6 +266,49 @@ async function rodar(svc: ReturnType<typeof createClient>, momento: string, dryR
   return { ok: true, momento, ensaio, media, relatorio };
 }
 
+/* OS PUSHES DA SEMANA DO DESENVOLVIMENTO v2 (handoff de 01/11/26, README §5). Um por semana cada:
+     seg 08:00  "Sua missão da semana · <a missão> · <N> dias · selo <selo>"  → abre a missão
+     sex 17:00  "Você fechou a semana com <pts> pts, <pos>º · seu recorde é <rec>" → abre a semana
+   O texto sai de _compartilhado/desenvolvimentoV2.ts (o mesmo do app e do Cockpit) sobre o quadro de
+   _desenvolvimento_de(pessoa) (0240) — que, na segunda, também é quem escolhe a missão da semana.
+   Abaixo do 3º, o push diz a posição e o recorde; nunca "último". Não conta no limite de 4 da fila, não
+   sai no feriado e segue o mesmo cockpit_config.push_fila (desligado = ensaio). */
+async function rodarSemana(svc: ReturnType<typeof createClient>, momento: 'seg0800' | 'sex1700', dryRun: boolean, ignorarHorario: boolean) {
+  const { data: cfgLinha } = await svc.from('cockpit_config').select('conteudo').eq('chave', 'push_fila').maybeSingle();
+  const cfg = (cfgLinha?.conteudo ?? {}) as { ligado?: boolean; so_para?: string[] };
+  const ensaio = dryRun || cfg.ligado !== true;
+  const hoje = hojeBRT();
+  const ano = Number(hoje.slice(0, 4));
+  const feriados = [...feriadosNacionais(ano), ...feriadosNacionais(ano + 1)];
+  if (!(ignorarHorario && dryRun) && !ehDiaUtil(hoje, feriados)) return { ok: true, momento, pulou: 'não é dia útil' };
+  const { data: equipe } = await svc.from('equipe_cockpit').select('profile_id, papel').eq('ativo', true).eq('papel', 'rep').or('so_acesso.is.null,so_acesso.eq.false');
+  const soPara = new Set((cfg.so_para ?? []).map(String));
+  const alvo = (equipe ?? []).map((e: { profile_id: string }) => String(e.profile_id));
+  const { data: inscritas } = await svc.from('push_inscricoes').select('id, user_id, endpoint, p256dh, auth, falhas').in('user_id', alvo.length ? alvo : ['-']);
+  const k = await chaves(svc);
+  const relatorio: Array<Record<string, unknown>> = [];
+  for (const uid of alvo) {
+    const linha: Record<string, unknown> = { uid };
+    relatorio.push(linha);
+    const aparelhos = ((inscritas ?? []) as Inscricao[]).filter((i) => String(i.user_id) === uid);
+    if (!aparelhos.length) { linha.pulou = 'sem aparelho inscrito'; continue; }
+    if (soPara.size && !soPara.has(uid)) { linha.pulou = 'fora de so_para (teste)'; continue; }
+    const { data: q, error } = await svc.rpc('_desenvolvimento_de', { p_pessoa: uid });
+    if (error || !q || (q as Quadro).erro) { linha.pulou = 'quadro não lido'; continue; }
+    const t = momento === 'seg0800' ? pushSegunda(q as Quadro) : pushSexta(q as Quadro);
+    if (!t) { linha.pulou = 'fonte fora (missão ou placar)'; continue; }
+    const aviso: Aviso = { titulo: t.titulo, texto: t.texto, tag: `desenvolvimento-${momento}`, url: `/?desenvolvimento=${momento === 'seg0800' ? 'seg' : 'sex'}`, acoes: [] };
+    linha.aviso = aviso.titulo; linha.texto = aviso.texto;
+    if (ensaio) { linha.ensaio = true; continue; }
+    const { error: reservou } = await svc.from('push_enviados').insert({ user_id: uid, dia: hoje, tipo: 'desenvolvimento', ref: momento });
+    if (reservou) { linha.pulou = 'já mandado'; continue; }
+    let algum = false;
+    for (const a of aparelhos) algum = (await enviar(svc, a, aviso, k)) || algum;
+    linha.enviado = algum;
+  }
+  return { ok: true, momento, ensaio, relatorio };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json(405, { erro: 'Método não permitido' });
@@ -281,6 +326,10 @@ Deno.serve(async (req: Request) => {
     }
     if (corpo.op !== 'rodar') return json(400, { erro: 'O robô só roda.' });
     const momento = String(corpo.momento ?? '');
+    if (momento === 'seg0800' || momento === 'sex1700') {
+      try { return json(200, await rodarSemana(svc, momento, corpo.dry_run === true, corpo.ignorar_horario === true)); }
+      catch (e) { return json(500, { erro: (e as Error).message }); }
+    }
     if (!['0830', '1230', '1730', '1805'].includes(momento)) return json(400, { erro: 'momento inválido' });
     try { return json(200, await rodar(svc, momento, corpo.dry_run === true, segredo, corpo.ignorar_horario === true)); }
     catch (e) { return json(500, { erro: (e as Error).message }); }

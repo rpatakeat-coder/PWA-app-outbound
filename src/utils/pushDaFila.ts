@@ -131,3 +131,21 @@ export function limparPedidoDaUrl() {
     window.history.replaceState(window.history.state, '', u.pathname + (u.search ? u.search : '') + u.hash);
   } catch { /* sem history */ }
 }
+
+/* OS PUSHES DA SEMANA (Desenvolvimento v2, 01/11/26): segunda 08:00 abre a missão e sexta 17:00 abre a
+   semana, pelo push-fila, com ?desenvolvimento=seg|sex. O app vai para o Meu desempenho e grava a
+   origem (push_seg / push_sex) em aberturas_de_tela. */
+export function lerAberturaDaUrl(href: string): 'push_seg' | 'push_sex' | null {
+  try {
+    const v = new URL(href).searchParams.get('desenvolvimento');
+    return v === 'seg' ? 'push_seg' : v === 'sex' ? 'push_sex' : null;
+  } catch { return null; }
+}
+export function limparAberturaDaUrl() {
+  try {
+    const u = new URL(window.location.href);
+    if (!u.searchParams.has('desenvolvimento')) return;
+    u.searchParams.delete('desenvolvimento');
+    window.history.replaceState(window.history.state, '', u.pathname + (u.search ? u.search : '') + u.hash);
+  } catch { /* sem history */ }
+}
