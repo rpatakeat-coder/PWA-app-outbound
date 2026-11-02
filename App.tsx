@@ -3214,7 +3214,19 @@ function MainApp() {
       } catch { /* cai no leque */ }
     }
     setPilhaAberta(pl.lider);
-  }, [pilhaDe, focoMapaNovo]);
+    /* O LEQUE NO MEIO (mapa na rua, 2c): perto da borda, os nomes dos membros sairiam da tela. Com a
+       pilha fora do miolo do mapa, ele centraliza nela (o mesmo zoom) — e essa parada não fecha o leque. */
+    const r = regiaoRef.current;
+    if (!layout.ehLargo && r && mapRef.current && c.latitude != null && c.longitude != null) {
+      const fx = (Number(c.longitude) - (r.longitude - r.longitudeDelta / 2)) / r.longitudeDelta;
+      const fy = (r.latitude + r.latitudeDelta / 2 - Number(c.latitude)) / r.latitudeDelta;
+      if (fx < 0.3 || fx > 0.7 || fy < 0.3 || fy > 0.75) {
+        lequeCentralizando.current = true;
+        mapRef.current.animateToRegion({ latitude: Number(c.latitude), longitude: Number(c.longitude), latitudeDelta: r.latitudeDelta, longitudeDelta: r.longitudeDelta }, 300);
+      }
+    }
+  }, [pilhaDe, focoMapaNovo, layout.ehLargo]);
+  const lequeCentralizando = useRef(false);
   // O LEQUE FICA ABERTO NO MODO PLANEJAR (Julyan, 28/09/2026). Fora dele, fecha ao mexer
   // o mapa. Planejando, ele toca um a um os leads do mesmo endereço: o leque só fecha
   // quando o zoom muda de verdade (arrastar não fecha), e sobrevive ao toque — pôr um
@@ -3227,6 +3239,9 @@ function MainApp() {
     const antes = zoomDoLequeRef.current;
     const agora = mapRegion?.latitudeDelta ?? null;
     if (planejarDia && antes != null && agora != null && Math.abs(agora - antes) / antes < 0.15) return;
+    // a parada que o próprio leque pediu (centralizar na pilha) não o fecha
+    if (lequeCentralizando.current && antes != null && agora != null && Math.abs(agora - antes) / antes < 0.02) { lequeCentralizando.current = false; return; }
+    lequeCentralizando.current = false;
     setPilhaAberta(null);
   }, [mapRegion]);
   useEffect(() => {
