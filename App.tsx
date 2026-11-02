@@ -222,7 +222,9 @@ import { buildHeatCells, celulasNinguemFoi, heatColor, heatIntensity, HEAT_CELL_
 import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type MandatoryReason } from './src/utils/dailyRoute';
 import { fetchSlaCandidate } from './src/utils/slaCandidate';
 import { slaForStage, slaStatus, type SlaDays } from './src/utils/sla';
-import { lerPedidoDaUrl, limparPedidoDaUrl, type PedidoDaFila } from './src/utils/pushDaFila';
+import { lerAberturaDaUrl, lerPedidoDaUrl, limparAberturaDaUrl, limparPedidoDaUrl, type PedidoDaFila } from './src/utils/pushDaFila';
+import { PilulaDoHoje, ToastDeConquista } from './src/screens/EntradasDesenvolvimento';
+import type { OrigemAbertura } from './src/screens/MeuDesempenhoV2';
 import { seloDaFila } from './src/utils/seloDaFila';
 import { janelaAtual } from './src/utils/horaDasLigacoes';
 import { quenteEsfriando, secaoDoItem } from './supabase/functions/_compartilhado/filaDoDinheiro';
@@ -821,10 +823,21 @@ function MainApp() {
   // ou, com o app já aberto, o service worker manda a mesma url por mensagem. Vai para Tarefas e
   // entrega o pedido à fila, que abre o cartão daquele negócio.
   const [pedidoDaFila, setPedidoDaFila] = useState<PedidoDaFila | null>(null);
+  // DESENVOLVIMENTO v2 (01/11/26): de onde a pessoa abriu o Meu desempenho (toast, pílula, push, menu),
+  // para a medição de aberturas_de_tela, e o pedido de rolar até a coleção (o toque do toast). Fora da
+  // aba Eu, a origem volta a ser o menu: a próxima abertura pela barra conta como menu.
+  const [aberturaEu, setAberturaEu] = useState<{ origem: OrigemAbertura; rolar: number }>({ origem: 'menu', rolar: 0 });
+  const irParaEu = useCallback((origem: OrigemAbertura, rolar = false) => {
+    setAberturaEu((a) => ({ origem, rolar: rolar ? a.rolar + 1 : a.rolar }));
+    setTab('meu');
+  }, []);
+  useEffect(() => { if (tab !== 'meu') setAberturaEu((a) => (a.origem === 'menu' ? a : { ...a, origem: 'menu' })); }, [tab]);
   useEffect(() => {
     if (typeof window === 'undefined') return;
     let n = 0;
     const tratar = (href: string) => {
+      const ab = lerAberturaDaUrl(href);
+      if (ab) { setAberturaEu((a) => ({ ...a, origem: ab })); setTab('meu'); limparAberturaDaUrl(); return; }
       const p = lerPedidoDaUrl(href, ++n);
       if (!p) return;
       setTab('tasks'); setPedidoDaFila(p); limparPedidoDaUrl();
@@ -9277,6 +9290,9 @@ function MainApp() {
         // A fila do dinheiro (docs/10 §1, 04/10/2026): um card por negócio, valor × urgência.
         // Visitar e Registrar levam ao lead no mapa (o Cheguei é a prova da visita).
         <BarreiraDaAba nome="Tarefas">
+        {/* Desenvolvimento v2 (01/11/26): a pílula fixa no topo do Hoje leva ao Meu desempenho */}
+        <View style={{ flex: 1 }}>
+        {!isViewer && <PilulaDoHoje ativo={tab === 'tasks'} aoTocar={() => irParaEu('pilula')} />}
         <FilaTarefasScreen
           ownerId={myHubspotId}
           pedido={pedidoDaFila}
@@ -9301,6 +9317,7 @@ function MainApp() {
             if (data) openEditClient(data as Client); else Toast.mostrar('Não encontrei este lead.', 'erro');
           }}
         />
+        </View>
         </BarreiraDaAba>
       ) : tab === 'tasks' ? (
         <TarefasScreen
@@ -9382,6 +9399,9 @@ function MainApp() {
           tarefasPendentes={modoNovo ? (totalDaFila ?? undefined) : visibleTasksCount}
           aoAbrirTarefas={() => setTab('tasks')}
           ehGestor={canViewGestor}
+          origem={aberturaEu.origem}
+          rolarColecao={aberturaEu.rolar}
+          aoFazerQuiz={() => setTab('playbook')}
         />
       ) : modoNovo ? (
         (() => { const agendaNova = (
@@ -9722,6 +9742,11 @@ function MainApp() {
             }} />
         );
       })()}
+      {/* Desenvolvimento v2 (01/11/26): a conquista que nasce (check-in, venda, missão fechada) vira um
+          cartão no topo; o toque abre o Meu desempenho rolado até a coleção */}
+      {isAuthenticated && !isViewer && !canViewGestor && (
+        <ToastDeConquista aoVer={() => irParaEu('toast', true)} naAbaEu={tab === 'meu'} />
+      )}
       {avisosAbertos && (
         <AvisosPainel
           aoFechar={() => setAvisosAbertos(false)}
