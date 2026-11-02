@@ -12,8 +12,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import {
-  chipsDeDia, diaDoExecutivo, semProximoPassoDaFila, sugestoes, toastCheguei, toastFicha,
-  type EntradaDoDia, type EntradaSug,
+  chipsDeDia, diaDoExecutivo, ordemPorDinheiro, semProximoPassoDaFila, sugestoes, toastCheguei, toastFicha,
+  type EntradaDoDia, type EntradaSug, type LeadOrdem,
 } from '../../supabase/functions/_compartilhado/hojeV3';
 import { feriadosNacionais, montarFila, type NegocioEntrada, type TarefaEntrada } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
 
@@ -30,6 +30,7 @@ type Fixture = {
   chips: Array<{ hoje: string; comHoje: boolean }>;
   toasts: { cheguei: Array<Parameters<typeof toastCheguei>[0]>; ficha: Array<Parameters<typeof toastFicha>[0]> };
   sugestoes: EntradaSug;
+  ordem: LeadOrdem[];
   semPasso: { hoje: string; negocios: NegFix[] };
 };
 const F = JSON.parse(fs.readFileSync(path.join(__dirname, 'hojeV3.fixture.json'), 'utf8')) as Fixture;
@@ -70,6 +71,7 @@ const saida = {
   chips: F.chips.map((c) => chipsDeDia(c.hoje, F.feriados, c.comHoje)),
   toasts: { cheguei: F.toasts.cheguei.map(toastCheguei), ficha: F.toasts.ficha.map(toastFicha) },
   sugestoes: sugestoes(F.sugestoes),
+  ordem: ordemPorDinheiro(F.ordem).map((l) => l.nome),
   semPasso: semPassoPelaFila(F.semPasso),
 };
 for (const nome of Object.keys(F.estados)) saida.estados[nome] = diaDoExecutivo(resolver(nome));
@@ -115,6 +117,7 @@ ok(saida.toasts.cheguei[2].titulo === 'Check-in sem prova · fora do raio', 'o t
 ok(saida.toasts.ficha[1].titulo === 'Sushi Madu ficou sem próximo passo' && saida.toasts.ficha[1].chips, 'o toast pós-ficha sem passo, com os chips');
 ok(saida.sugestoes.deLead['c-1'].dia === 4 && saida.sugestoes.deLead['c-1'].mesmo === true && saida.sugestoes.deLead['c-2'].dia === 3 && !saida.sugestoes.deLead['c-2'].mesmo, 'a sugestão: o quente vai ao dia do mesmo bairro com vaga (hoje está cheio); sem bairro igual, ao 1º dia com vaga');
 ok(!saida.sugestoes.deLead['c-6'] && !saida.sugestoes.deLead['c-9'], 'sem endereço e já usado não são sugeridos');
+ok(saida.ordem.slice(0, 3).join(' · ') === 'Pizzaria Fornalha · Cantina do Porto · Botequim da Praça Seca', 'a fila por dinheiro: etapa, depois o vencido, depois os dias na etapa');
 ok(saida.semPasso.join(',') === '1,2,9,11,12', 'sem próximo passo: vencido + nunca marcado, Ag. Pagamento fora (pela montarFila)');
 ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(JSON.stringify(saida)), 'zero emoji');
 ok(!/último|pior/i.test(JSON.stringify(saida)), 'ninguém é exposto como último ou pior');

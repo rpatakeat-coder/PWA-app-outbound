@@ -154,6 +154,18 @@ export function sugestoes(o: EntradaSug): SaidaSug {
   return { porDia, deLead, quentesSem, elegiveis: elig };
 }
 
+/**
+ * A fila "por dinheiro" do Planejamento v3 (PLV3.ordemPorDinheiro): Negociação → Demo → Decisor → Visita →
+ * Prospecção; dentro da etapa, primeiro o passo vencido e o que ficou para trás; depois, mais dias na etapa.
+ * Os "3 primeiros" da folha da manhã são os 3 primeiros desta ordem.
+ */
+export type LeadOrdem = { nome: string; etapaIdx: number; dias?: number | null; venc?: string | null; ficou?: string | null; tirado?: string | null };
+export function ordemPorDinheiro<T extends LeadOrdem>(fila: T[]): T[] {
+  const urg = (l: LeadOrdem) => (l.venc || l.ficou || l.tirado ? 1 : 0);
+  return (fila || []).slice().sort((a, b) => ((Number(b.etapaIdx) || 0) - (Number(a.etapaIdx) || 0)) || (urg(b) - urg(a)) || ((Number(b.dias) || 0) - (Number(a.dias) || 0))
+    || String(a.nome || '').localeCompare(String(b.nome || '')));
+}
+
 // ── 3 · os chips de dia: amanhã · sex 13 · seg 16 ─────────────────────────────────────────────────
 /**
  * Os próximos 3 dias úteis depois de hoje (feriado e fim de semana pulados). O 1º se chama "amanhã" quando
