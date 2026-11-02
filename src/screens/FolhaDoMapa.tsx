@@ -25,6 +25,7 @@ import type { ObjecaoDaCasa } from '../utils/playbook';
 import type { LinhaDoDia as LinhaDoDiaTipo } from '../utils/linhaDoDia';
 import { primeiroToque, registrarEvento } from '../utils/eventosDoMapa';
 import { useComSinal } from './AvisoSemSinal';
+import { RESPIRO_ACIMA_DO_GOOGLE } from './TiraDeLentes';
 
 export type { ItemFolha };
 
@@ -95,6 +96,10 @@ type Props = {
   aoTirar?: (c: Client) => void;
   /** Hoje v3 (01/11/26): "passo vence hoje · ligar 12:30" quando a próxima porta tem passo vencendo hoje. */
   venceHojeDe?: (c: Client) => string | null;
+  /** Hoje v3: a pílula-placar do topo já conta o dia; a recolhida não repete o número (02/11/26). */
+  placarNoTopo?: boolean;
+  /** Largura da pílula recolhida (null quando não está recolhida): a fileira de lentes começa depois dela. */
+  aoMini?: (largura: number | null) => void;
 };
 
 type Modo = 'prioridade' | 'distancia' | 'roteiro';
@@ -154,7 +159,7 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, objecoesDaProxima = [], linha = null, aoMontarDia, entrePortas = null, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null, venceHojeDe }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, objecoesDaProxima = [], linha = null, aoMontarDia, entrePortas = null, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null, venceHojeDe, placarNoTopo = false, aoMini }: Props) {
   const cores = useIconColors();
   /** Qual objeção do "Se ele disser" está aberta (uma por vez, e a folha não muda de tamanho à toa). */
   const [disserAberta, setDisserAberta] = useState<string | null>(null);
@@ -242,9 +247,23 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
      quando a pílula muda de TAMANHO. Quando ela muda de LUGAR (o rodapé mede depois, o ajuste do
      useAcimaDoRodape), o mapa ficava com o topo velho e sobrava uma faixa escura embaixo dele.
      Remede a cada mudança de lugar ou de conteúdo, no quadro seguinte. */
+  const mini = !aberta && recolhida;
+  // fora da recolhida a fileira de lentes volta a começar na borda
+  useEffect(() => { if (!mini) aoMini?.(null); }, [mini]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => aoMini?.(null), []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (aberta || !aoMedir) return;
     const id = requestAnimationFrame(() => {
+      /* RECOLHIDA, A PÍLULA NÃO TEM FAIXA PRÓPRIA (print do iPhone, 02/11/26): o "0/6 ^" media a
+         própria altura, o mapa terminava acima dela e sobrava uma faixa escura só para ela, solta
+         entre o mapa e as abas. Agora ela entra na fileira de baixo do mapa (ao lado das lentes) e
+         diz ao App "altura zero, topo no topo das abas": o mapa vai até o rodapé. */
+      if (mini) {
+        const rodape = typeof document !== 'undefined' ? document.querySelector('[data-testid="rodape-app"]') : null;
+        const topo = rodape ? rodape.getBoundingClientRect().top : (typeof window !== 'undefined' ? window.innerHeight - chao : 0);
+        aoMedir({ y: Math.round(topo), altura: 0 });
+        return;
+      }
       const el = acima.ref.current as unknown as HTMLElement | null;
       if (!el || typeof el.getBoundingClientRect !== 'function') return;
       const r = el.getBoundingClientRect();
@@ -264,13 +283,23 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
   // flutua a 8 px do rodapé, tem 60 px e nenhum rótulo: nome e distância, o
   // progresso em tracinhos e o Cheguei. "Dono às 15h" e "decisor ?" já estão na
   // etiqueta do pino, não se repetem aqui.
-  if (!aberta && recolhida) {
+  if (mini) {
     const metaR = Math.max(1, metaVisitas);
+    /* UM PLACAR SÓ (02/11/26). Com o Hoje v3 a pílula-placar do topo já conta o dia (com prova × meta,
+       e "Feriado · sem expediente" no feriado); o "0/6" aqui embaixo era um segundo placar, de outra
+       fonte, e no feriado ainda cobrava a meta que o topo dizia não existir. Com o placar no topo, a
+       recolhida é só o atalho da próxima porta; sem ele (hoje v2), segue com o número — e sem "/6"
+       fora do expediente. */
+    const texto = placarNoTopo ? 'Próxima porta' : diaUtilHoje ? `${feitasTexto}/${metaR}` : feitasTexto;
+    const rotulo = placarNoTopo ? 'Mostrar a próxima porta'
+      : `Mostrar a próxima porta. ${feitasTexto} ${diaUtilHoje ? `de ${metaR} ` : ''}visitas hoje`;
     return (
-      <Pressable ref={acima.ref} accessibilityRole="button" accessibilityLabel={`Mostrar a próxima porta. ${feitasTexto} de ${metaR} visitas hoje`}
-        onPress={() => setRecolhida(false)} onLayout={medir} style={[s.pilulaMini, { bottom: chao + 8 + acima.ajuste }]}>
-        <Text style={s.pilulaMiniTexto}>{`${feitasTexto}/${metaR}`}</Text>
-        <View style={{ transform: [{ rotate: true ? '180deg' : '0deg' }] }}><SiDown width={18} height={18} fill="var(--text-muted)" /></View>
+      <Pressable ref={acima.ref} accessibilityRole="button" accessibilityLabel={rotulo}
+        onPress={() => setRecolhida(false)}
+        onLayout={(e) => aoMini?.(Math.round(e.nativeEvent.layout.width))}
+        style={[s.pilulaMini, { bottom: chao + RESPIRO_ACIMA_DO_GOOGLE + acima.ajuste }]}>
+        <Text style={s.pilulaMiniTexto} numberOfLines={1}>{texto}</Text>
+        <View style={{ transform: [{ rotate: '180deg' }] }}><SiDown width={18} height={18} fill="var(--text-muted)" /></View>
       </Pressable>
     );
   }
@@ -694,11 +723,14 @@ const s = StyleSheet.create({
   miniLosangoTexto: { fontSize: 10, fontWeight: '700', color: '#111418', transform: [{ rotate: '-45deg' }] },
   pilulaRecolher: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -12, flexShrink: 0 },
   pilulaMini: {
-    position: 'absolute', left: 10, zIndex: 20, height: 44, borderRadius: 22, paddingHorizontal: 14,
+    // left 12 e teto de largura (02/11/26): a mesma borda da fileira de baixo; com fonte grande não empurra as lentes para fora
+    position: 'absolute', left: 12, zIndex: 20, minHeight: 44, maxWidth: 150, borderRadius: 22, paddingHorizontal: 14,
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)',
+    // agora flutua sobre o mapa, como as lentes e o "+": a mesma sombra deles
+    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 2 },
   },
-  pilulaMiniTexto: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
+  pilulaMiniTexto: { fontSize: 14, fontWeight: '700', color: 'var(--text)', flexShrink: 1 },
   pilulaMiniSeta: { fontSize: 14, color: 'var(--text-muted)' },
   // a pílula ganhou a linha do "Para entrar" (prancha §4): coluna, não mais 60 px fixos
   pilula: {

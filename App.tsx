@@ -236,7 +236,7 @@ import {
 } from './src/utils/diaV3';
 import { useBairrosDaFila, useDiaV3 } from './src/hooks/useDiaV3';
 import { useDesenvolvimentoQuadro } from './src/hooks/useDesenvolvimento';
-import TiraDeLentes from './src/screens/TiraDeLentes';
+import TiraDeLentes, { RESPIRO_ACIMA_DO_GOOGLE } from './src/screens/TiraDeLentes';
 import BlocoEntrePortas from './src/screens/BlocoEntrePortas';
 import PedirAvisos from './src/screens/PedirAvisos';
 import MinhasFotos, { FOTOS_LIBERADAS } from './src/screens/MinhasFotos';
@@ -1263,6 +1263,9 @@ function MainApp() {
   // ~29 px maior que o rodapé real (56–61 + área segura): a pílula da próxima
   // porta e os botões flutuavam num vão sobre o nada (medido em 26/09).
   const [alturaRodape, setAlturaRodape] = useState<number | null>(null);
+  // Largura da pílula recolhida da próxima porta (FolhaDoMapa): ela mora na fileira de baixo do mapa,
+  // e as lentes começam depois dela (02/11/26). null = não está recolhida.
+  const [larguraMini, setLarguraMini] = useState<number | null>(null);
   const [topoFolha, setTopoFolha] = useState<number | null>(null);
   const [margemMapa, setMargemMapa] = useState(0);
   // Fundo do mapa na tela SEM margem — medido só quando a margem é zero, para
@@ -4213,6 +4216,12 @@ function MainApp() {
   // Lente Calor no celular: folha própria (vendedores, Time/Só eu, Ninguém foi).
   const folhaCalorVisivel = tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && lente === 'calor' && heatOn && !planejarDia;
   const folhaDeBaixo = folhaVisivel || folhaCalorVisivel || planejarVisivel;
+  /* A FILEIRA DE BAIXO DO MAPA NO CELULAR (print do iPhone, 02/11/26): [pílula recolhida] [lentes ···] [+],
+     com a localização na coluna da direita, acima do "+". Uma conta só para todos: o chão (abas + folha)
+     mais o respiro que tira a fileira de cima do logo e dos "Termos" da Google. A área segura dos lados
+     entra também (iPhone deitado, Android com barra de gestos lateral). */
+  const baseFileiraMapa = (alturaRodape ?? baseInferior) + (folhaDeBaixo ? alturaFolha : 0) + RESPIRO_ACIMA_DO_GOOGLE;
+  const miniNaFileira = folhaVisivel && larguraMini ? larguraMini : 0;
   // Margem do mapa = onde o mapa terminaria sem margem menos o topo MEDIDO da
   // folha (a barra de baixo real não tem a altura do baseInferior; a conta
   // fixa deixava o logo do Google 34 px atrás da folha — medido em 25/09).
@@ -6881,7 +6890,10 @@ function MainApp() {
                     ? { bottom: baseInferior, left: 16 }
                     : (tab === 'map')
                       // Handoff v4.1 §3: coluna à direita, 12 px acima do "+", que fica 12 px acima da folha.
-                      ? { bottom: (alturaRodape ?? baseInferior) + (folhaDeBaixo ? alturaFolha : 0) + 12 + 52 + 12, right: 12, width: 44, height: 44, borderRadius: 22 }
+                      /* `left: 'auto'` (02/11/26): o `left: 16` do mapButton ganhava do `right` e o botão
+                         caía à ESQUERDA, 64 px acima da fileira, sozinho (print do iPhone). Agora fica
+                         onde o handoff manda: coluna da direita, 8 px acima do "+", mesmo tamanho dele. */
+                      ? { bottom: baseFileiraMapa + 44 + 8, left: 'auto' as never, right: 12 + insets.right, width: 44, height: 44, borderRadius: 22 }
                       : { top: (mapLayout?.y ?? 0) + 16, left: 16 },
                   layout.ehLargo && styles.mapaControleWeb,
                 ]
@@ -7114,6 +7126,9 @@ function MainApp() {
           ) : null}
           aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
           venceHojeDe={hojeV3 ? (c) => (c.id_hubspot ? venceHojeV3[String(c.id_hubspot)] ?? null : null) : undefined}
+          // um placar só (02/11/26): com a pílula-placar do v3 no topo, a recolhida não repete o "0/6"
+          placarNoTopo={hojeV3 && ehRepV3}
+          aoMini={setLarguraMini}
           sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
           aoFala={abrirFala}
           recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
@@ -7157,7 +7172,7 @@ function MainApp() {
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Novo lead"
-          style={[styles.fabMapaNovo, { right: 12, bottom: (alturaRodape ?? baseInferior) + (folhaDeBaixo ? alturaFolha : 0) + 12 }]}
+          style={[styles.fabMapaNovo, { right: 12 + insets.right, bottom: baseFileiraMapa }]}
           onPress={() => setShowCepStep(true)}
         >
           {/* branco fixo não serve mais: o botão virou neutro e segue o tema (§5) */}
@@ -7177,7 +7192,9 @@ function MainApp() {
           lentes={LENTES.filter((l) => l.id !== 'calor' || canViewGestor)}
           atual={lente}
           aoEscolher={escolherLente}
-          bottom={(alturaRodape ?? baseInferior) + (folhaDeBaixo ? alturaFolha : 0) + 12}
+          bottom={baseFileiraMapa}
+          left={12 + insets.left + (miniNaFileira ? miniNaFileira + 8 : 0)}
+          right={12 + 44 + 8 + insets.right}
         />
       )}
 
