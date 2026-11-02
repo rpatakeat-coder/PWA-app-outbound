@@ -375,7 +375,11 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
               <Text style={s.pilulaSub} numberOfLines={1}>{`${totalNaArea} na área · ver a lista`}</Text>
             </Pressable>
           )}
-          <Pressable accessibilityRole="button" accessibilityLabel={`${feitasTexto} ${visitasFeitas === 1 ? 'visita' : 'visitas'} hoje, ${diaUtilHoje ? `mínimo ${meta}` : 'sem expediente'}`} onPress={aoProgresso} style={s.pilulaProgresso} hitSlop={6}>
+          {/* O PLACAR É PARTE DA FAIXA (02/11/26: "clico no teste e vai pro desempenho"): colado no nome,
+              o toque nele abria o Meu desempenho. Agora faz o mesmo que o nome ao lado; só o "N sem
+              prova" leva ao desempenho, onde se vê qual visita ficou sem prova. */}
+          <Pressable accessibilityRole="button" accessibilityLabel={`${feitasTexto} ${visitasFeitas === 1 ? 'visita' : 'visitas'} hoje, ${diaUtilHoje ? `mínimo ${meta}` : 'sem expediente'}`}
+            onPress={semProva > 0 ? aoProgresso : proxima ? () => onAbrir(proxima.c) : () => setAberta(true)} style={s.pilulaProgresso}>
             <Text style={s.pilulaConta} numberOfLines={1}>{`${feitasTexto} hoje`}</Text>
             <Text style={[s.pilulaProva, semProva > 0 && s.pilulaProvaFalta]} numberOfLines={1}>{semProva ? `${semProva} sem prova` : diaUtilHoje ? `mín. ${meta}` : 'sem exped.'}</Text>
           </Pressable>

@@ -634,6 +634,9 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
   const passoVencidoN = contaSemPasso.vencido;
   const nuncaMarcadoN = contaSemPasso.nunca;
   const semPassoTotal = contaSemPasso.total;
+  // o cartão aberto, destacado ou que veio do push/Agenda nunca fica atrás do "Mostrar mais"
+  const alvoSemPasso = semPassoLista.findIndex((i) => i.dealId === veioDe?.deal || i.dealId === aberto || i.dealId === selecionado);
+  const limiteSemPasso = Math.max(mostrarMais.semPasso ?? 5, alvoSemPasso + 1);
   const acordosAbertosN = acordos.filter((c) => !c.feito).length;
   const noAparelho = feitas.filter((f) => f.estado === 'pendente').length;
   const proximaJanela = janelasDoDia(relogio).find((j) => j.estado !== 'feita')?.de ?? null;
@@ -688,8 +691,10 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
         botoes: [{ rotulo: 'Registrar', icone: 'registrar', cheio: true, onPress: () => { if (i.clientId) aoRegistrarVisita(i.clientId); } },
           { rotulo: 'Ligar', icone: 'ligar', onPress: () => discar(i, 'ligacao') }, { rotulo: 'WhatsApp', icone: 'whatsapp', onPress: () => discar(i, 'whatsapp') }] };
     } else if (secaoDe(i) === 'sem_passo') {
+      /* A ABA HOJE LOTADA (02/11/26): 16 cartões repetiam a mesma caixa "o que falta". O que falta
+         está uma vez na legenda do bloco 3; o cartão fica com nome, etapa, último contato e botões. */
       d = { ...base, quando: { texto: `Sem próximo passo · ${i.ultimoContatoTexto}`, tom: 'erro', icone: 'alerta' }, rotuloCaixa: 'o que falta',
-        textoCaixa: 'Um próximo passo datado, ou o Sem interesse com o motivo',
+        textoCaixa: '',
         botoes: [{ rotulo: 'Marcar o passo', icone: 'passo', cheio: true, onPress: () => porNoPlano(i) },
           { rotulo: 'Ligar', icone: 'ligar', onPress: () => discar(i, 'ligacao') }, { rotulo: 'WhatsApp', icone: 'whatsapp', onPress: () => discar(i, 'whatsapp') }] };
     } else if (secaoDe(i) === 'atrasados' && i.prazo && ehAntigo(i)) {
@@ -917,19 +922,29 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
         <PlacarTarefas feitas={nFeitas} total={totalDia} faltam={fila.length}
           soAtrasados={hojeLista.length === 0 && semPassoLista.length === 0 && atrasadosLista.length > 0 ? atrasadosLista.length : null} />
         <View style={{ gap: 10 }}>
-          <CabecalhoDeBloco numero={1} titulo="Para hoje" n={hojeLista.length} legenda={ehDiaUtil(hoje, feriados) ? "ligações sem hora entram na hora das ligações · 12:30 e 17:30" : "hoje não tem hora das ligações: fim de semana ou feriado"} />
+          {/* bloco vazio vira só a legenda (02/11/26): a caixa tracejada repetia o que o 0 já diz */}
+          <CabecalhoDeBloco numero={1} titulo="Para hoje" n={hojeLista.length} legenda={!hojeLista.length ? 'nada mais vence hoje' : ehDiaUtil(hoje, feriados) ? "ligações sem hora entram na hora das ligações · 12:30 e 17:30" : "hoje não tem hora das ligações: fim de semana ou feriado"} />
           {janela && <FaixaJanela ate={janela.ate} faltamMin={janela.faltamMin} decorrido={janela.decorrido} />}
-          {hojeLista.length ? hojeLista.map(cartaoDeHoje) : <BlocoVazio texto="nada mais vence hoje" />}
+          {hojeLista.map(cartaoDeHoje)}
         </View>
         <View style={{ gap: 10 }}>
-          <CabecalhoDeBloco numero={2} titulo="Atrasados" n={atrasadosRecentes.length} legenda={`até ${ATRASO_ANTIGO} dias, e negócio quente de qualquer data · o mais antigo primeiro`} />
-          {atrasadosRecentes.length ? atrasadosRecentes.map(cartaoDeHoje) : <BlocoVazio texto="nenhum atrasado recente" />}
+          <CabecalhoDeBloco numero={2} titulo="Atrasados" n={atrasadosRecentes.length} legenda={atrasadosRecentes.length ? `até ${ATRASO_ANTIGO} dias, e negócio quente de qualquer data · o mais antigo primeiro` : 'nenhum atrasado recente'} />
+          {atrasadosRecentes.map(cartaoDeHoje)}
         </View>
         <View style={{ gap: 10 }}>
           <CabecalhoDeBloco numero={3} titulo="Sem próximo passo" n={semPassoTotal}
-            legenda={semPassoTotal ? `${passoVencidoN} com passo vencido (bloco 2) + ${nuncaMarcadoN} nunca ${nuncaMarcadoN === 1 ? 'marcado' : 'marcados'} · a meta é zero` : 'a meta é zero'} alerta />
-          {semPassoLista.length ? semPassoLista.map(cartaoDeHoje)
-            : <BlocoVazio texto={semPassoTotal ? `os ${passoVencidoN} estão no bloco 2: remarque com o cliente` : 'zero · meta batida'} />}
+            legenda={semPassoTotal ? `${passoVencidoN} com passo vencido (bloco 2) + ${nuncaMarcadoN} nunca ${nuncaMarcadoN === 1 ? 'marcado' : 'marcados'} · cada um precisa de um passo datado, ou do Sem interesse com o motivo · a meta é zero` : 'a meta é zero'} alerta />
+          {semPassoLista.length ? (
+            <>
+              {/* 5 por vez: a lista inteira empurrava o resto da Hoje para longe */}
+              {semPassoLista.slice(0, limiteSemPasso).map(cartaoDeHoje)}
+              {semPassoLista.length > limiteSemPasso && (
+                <Pressable accessibilityRole="button" onPress={() => setMostrarMais((m) => ({ ...m, semPasso: limiteSemPasso + 10 }))} style={s.botaoSec}>
+                  <Text style={s.botaoSecTexto}>{`Mostrar mais ${Math.min(10, semPassoLista.length - limiteSemPasso)} de ${semPassoLista.length - limiteSemPasso}`}</Text>
+                </Pressable>
+              )}
+            </>
+          ) : <BlocoVazio texto={semPassoTotal ? `os ${passoVencidoN} estão no bloco 2: remarque com o cliente` : 'zero · meta batida'} />}
         </View>
         <LinhaDeFim zerada={false} />
         {atrasadosAntigos.length > 0 && (

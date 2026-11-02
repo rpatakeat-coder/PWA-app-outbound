@@ -162,10 +162,13 @@ export function CartaoTarefa({ d, children }: { d: DadosCartaoTarefa; children?:
         <IconeQ width={14} height={14} fill={cor} />
         <Text style={[st.quando, { color: cor }]}>{d.quando.texto}</Text>
       </View>
-      <View style={st.caixa}>
-        <Text style={st.caixaK}>{d.rotuloCaixa.toUpperCase()}</Text>
-        <Text style={st.caixaT}>{d.textoCaixa}</Text>
-      </View>
+      {/* sem texto, sem caixa: o "Sem próximo passo" diz o que falta uma vez, no bloco (02/11/26) */}
+      {!!d.textoCaixa && (
+        <View style={st.caixa}>
+          <Text style={st.caixaK}>{d.rotuloCaixa.toUpperCase()}</Text>
+          <Text style={st.caixaT}>{d.textoCaixa}</Text>
+        </View>
+      )}
       {!!d.nota && <Text style={st.nota}>{d.nota}</Text>}
       <View style={st.botoes}>
         {d.botoes.map((b) => (
