@@ -166,8 +166,9 @@ as $function$
      where c.id = p_client
        and c.created_by = p_pessoa
        and c.origem = 'manual'
-       -- (0247) as origens do cadastro pelo app: o legado 'coords' e as novas
-       and c.geo_source in ('coords', 'checkin', 'mapa', 'geocode')
+       -- (0247) as origens do cadastro NA PORTA: o legado 'coords' e as novas 'checkin'/'mapa'. O
+       -- 'geocode' é o "Não estou lá" (endereço digitado de longe): não é lead criado na rua.
+       and c.geo_source in ('coords', 'checkin', 'mapa')
        and c.created_at > p_em - interval '2 hours'
        and c.created_at <= p_em + interval '5 minutes');
 $function$;
