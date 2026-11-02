@@ -1331,6 +1331,11 @@ function MainApp() {
      segundos" e só sobe até as 10h (README §3, regra 5: no máximo 1 folha por momento por dia). Depois
      das 10h quem chega ao mapa já está na rua. localStorage['hoje-v2'] = '1' devolve a folha anterior. */
   const hojeV3 = useMemo(() => hojeV3Ligado(), []);
+  /* O PUSH DAS 8h NA ABERTURA (auditoria 02/11/26). O ?hoje=manha era tratado num efeito declarado
+     DEPOIS deste: a 1ª abertura gravava a chave do dia como 'app' e o push achava a chave e saía —
+     a medição push_08 nunca acontecia. Agora a URL é lida antes, no 1º render, e a 1ª abertura já
+     registra a origem certa. */
+  const hojeNaAbertura = useRef<'manha' | 'fecho' | null>(hojeV3 && typeof window !== 'undefined' ? lerHojeDaUrl(window.location.href) : null);
   useEffect(() => {
     if (!modoNovo || tab !== 'map' || isViewer || planoDoDiaResolvido) return;
     const agoraBRT = new Date(Date.now() - 3 * 3600000);
@@ -1346,7 +1351,7 @@ function MainApp() {
     setPlanoDoDiaResolvido(true);
     setPlanoDoDia(true);
     registrarEvento('plano_proposto', {});
-    if (hojeV3) registrarHoje('folha_manha', 'vista', 'app');
+    if (hojeV3) registrarHoje('folha_manha', 'vista', hojeNaAbertura.current === 'manha' ? 'push_08' : 'app');
   }, [modoNovo, tab, isViewer, planoDoDiaResolvido, hojeV3]);
   useEffect(() => {
     if (!modoNovo || tab !== 'map' || !seloFila?.quente || !filaNaTela.data || planoDoDia) return;
@@ -5501,7 +5506,16 @@ function MainApp() {
       if (!ehDiaUtil(diaBRT(new Date()) ?? '')) return;
       setTab('map');
       if (m === 'manha') {
+        /* a mesma regra da 1ª abertura: a folha só sobe até as 10h. Depois, o toque no push leva à
+           tela do dia (a fila), não à folha (auditoria 02/11/26) */
+        if (new Date(Date.now() - 3 * 3600000).getUTCHours() >= 10) {
+          setPlanoDoDiaResolvido(true);
+          setPedidoDaFila({ acao: 'fila', deal: null, origem: 'push_08', n: Date.now() });
+          setTab('tasks');
+          return;
+        }
         const chave = `plano-do-dia-${diaBRT(new Date())}`;
+        // a 1ª abertura deste carregamento já subiu a folha e mediu como push_08 (hojeNaAbertura)
         try { if (window.localStorage.getItem(chave)) return; window.localStorage.setItem(chave, '1'); } catch { /* sem armazenamento: abre */ }
         setPlanoDoDiaResolvido(true);
         setPlanoDoDia(true);
