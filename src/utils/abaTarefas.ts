@@ -6,6 +6,7 @@
 // `client_tasks` do app (generate_client_tasks) não viram tarefa no HubSpot
 // (Opção A do docs/pwa-para-cockpit.md §5) e aparecem à parte, como
 // "sugestão do app".
+import { ehDiaUtil } from './desfechoVisita';
 
 export type GrupoTarefa = 'atrasadas' | 'hoje' | 'amanha' | 'semana' | 'depois';
 
@@ -33,6 +34,13 @@ function somarDias(dia: string, n: number): string {
   return t.toISOString().slice(0, 10);
 }
 
+/** O próximo dia útil depois de `hoje` (fim de semana e feriado nacional pulados). */
+function proximoUtil(hoje: string): string {
+  let d = somarDias(hoje, 1);
+  for (let i = 0; i < 10 && !ehDiaUtil(d); i++) d = somarDias(d, 1);
+  return d;
+}
+
 /** Domingo da semana de `hoje` (a semana útil acaba no fim de semana). */
 function fimDaSemana(hoje: string): string {
   const [a, m, d] = hoje.split('-').map(Number);
@@ -47,7 +55,8 @@ export function grupoDaTarefa(venceEm: string | null, agora: Date): GrupoTarefa 
   if (!dia) return 'hoje';
   if (dia < hoje) return 'atrasadas';
   if (dia === hoje) return 'hoje';
-  if (dia === somarDias(hoje, 1)) return 'amanha';
+  // "Amanhã" é o próximo dia útil (auditoria 02/11/26): na sexta, a segunda; antes do feriado, o dia depois dele
+  if (dia === proximoUtil(hoje)) return 'amanha';
   if (dia <= fimDaSemana(hoje)) return 'semana';
   return 'depois';
 }
