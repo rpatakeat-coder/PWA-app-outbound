@@ -12,7 +12,8 @@
 //   { op: 'rodar', momento: '0830' | '1230' | '1730' | '1805', dry_run? }
 //   { op: 'rodar', momento: 'manha0800' | 'fecho1800' }   o Hoje v3 (01/11/26): o dia em 30 segundos e o fecho
 //
-// Regras do P6: no máximo 4 avisos por pessoa por dia; o quente das 08:30 nunca repete o negócio
+// Regras do P6: no máximo 4 avisos da fila por pessoa por dia e, desde 02/11/26, um teto único de 6 somando
+// tudo (fila, Hoje, Desenvolvimento e recado; TETO_DIA); na segunda, o 08:00 é um push só; o quente das 08:30 nunca repete o negócio
 // no mesmo dia; nada depois das 19h, no fim de semana, no feriado, com a fila zerada ou com um
 // Cheguei aberto (check-in nos últimos 40 min sem o Como foi). A fila é a da Edge fila-tarefas,
 // pela mesma regra da tela. cockpit_config.push_fila = { ligado, so_para }: desligado, o robô só
@@ -38,6 +39,18 @@ const URL_SUPA = Deno.env.get('SUPABASE_URL')!;
 const ANON = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 const CONTATO_VAPID = 'https://pwa-app-outbound.vercel.app';
 const LIMITE_DIA = 4;
+/* O TETO ÚNICO DO DIA (auditoria do servidor, 02/11/26). Cada robô tinha o seu limite e nenhum via o outro:
+   a fila contava só os dela (4), o Hoje e o Desenvolvimento não contavam, e o recado do gestor nem gravava
+   em push_enviados. Somados, um dia podia passar de 8 avisos. Agora todo aviso grava em push_enviados e
+   NENHUM sai depois do 6º do dia (os 4 da fila + os 2 do Hoje); a fila continua com o sublimite de 4. */
+const TETO_DIA = 6;
+const TIPOS_FORA_DA_FILA = ['desenvolvimento', 'hoje', 'recado'];
+async function enviadosHoje(svc: ReturnType<typeof createClient>, uid: string, hoje: string): Promise<{ total: number; fila: number; ja: Array<{ tipo: string; ref: string }> } | null> {
+  const { data, error } = await svc.from('push_enviados').select('tipo, ref').eq('user_id', uid).eq('dia', hoje);
+  if (error) return null; // sem saber quantos já foram, não manda (falha fechada)
+  const ja = (data ?? []) as Array<{ tipo: string; ref: string }>;
+  return { total: ja.length, fila: ja.filter((e) => !TIPOS_FORA_DA_FILA.includes(e.tipo)).length, ja };
+}
 
 // ---- chaves VAPID -----------------------------------------------------------------------
 type Chaves = { publica: string; privada: CryptoKey };
@@ -170,7 +183,8 @@ function montarAviso(momento: string, f: { itens: Item[]; hoje: string }, combin
 /* O RECADO DO GESTOR VIRA PUSH (Julyan, 19/10/26: "isso tinha que ir pra notificação via push
    tbm"). Tudo o que o cockpit manda ao executivo (o Cobrar, os avisos) é uma linha em
    sugestoes_planos, que o app mostra na tela inicial; o gatilho 0219 chama esta op a cada linha
-   nova. Não conta no limite de 4 avisos da fila (é o gestor falando) e sai a qualquer hora. */
+   nova. Não conta no limite de 4 avisos da fila (é o gestor falando) e sai a qualquer hora, mas entra
+   no teto único do dia (TETO_DIA, 02/11/26): passado o teto, o recado fica só na tela inicial. */
 async function recado(svc: ReturnType<typeof createClient>, id: string) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return { ok: false, pulou: 'id inválido' };
   const { data: linha } = await svc.from('sugestoes_planos').select('id, owner_id, texto, autor').eq('id', id).maybeSingle();
@@ -189,9 +203,21 @@ async function recado(svc: ReturnType<typeof createClient>, id: string) {
     acoes: daFila ? [{ acao: 'fila', titulo: 'Abrir a fila', url: urlApp('fila') }] : [],
   };
   const k = await chaves(svc);
+  const hoje = hojeBRT();
   let entregues = 0;
-  for (const a of ins as Inscricao[]) if (await enviar(svc, a, aviso, k)) entregues++;
-  return { ok: true, aparelhos: ins.length, entregues };
+  const pulados: Array<{ uid: string; pulou: string }> = [];
+  // o recado entra no teto único do dia e grava em push_enviados (a reserva também impede o mesmo recado duas vezes)
+  for (const uid of uids) {
+    const meus = (ins as Inscricao[]).filter((a) => String(a.user_id) === String(uid));
+    if (!meus.length) continue;
+    const env = await enviadosHoje(svc, uid, hoje);
+    if (!env) { pulados.push({ uid, pulou: 'push_enviados não lido' }); continue; }
+    if (env.total >= TETO_DIA) { pulados.push({ uid, pulou: `já recebeu ${TETO_DIA} hoje (o recado segue na tela inicial)` }); continue; }
+    const { error: reservou } = await svc.from('push_enviados').insert({ user_id: uid, dia: hoje, tipo: 'recado', ref: String(linha.id) });
+    if (reservou) { pulados.push({ uid, pulou: 'já mandado' }); continue; }
+    for (const a of meus) if (await enviar(svc, a, aviso, k)) entregues++;
+  }
+  return { ok: true, aparelhos: ins.length, entregues, pulados };
 }
 
 async function rodar(svc: ReturnType<typeof createClient>, momento: string, dryRun: boolean, segredo: string, ignorarHorario = false) {
@@ -242,9 +268,13 @@ async function rodar(svc: ReturnType<typeof createClient>, momento: string, dryR
     const aparelhos = porUser.get(uid) ?? [];
     if (!aparelhos.length) { linha.pulou = 'sem aparelho inscrito'; continue; }
     if (soPara.size && !soPara.has(uid)) { linha.pulou = 'fora de so_para (teste)'; continue; }
-    // os pushes da semana do Desenvolvimento v2 e os do Hoje v3 (8h e 18h) não gastam o limite de 4 da fila
-    const { data: enviados } = await svc.from('push_enviados').select('tipo, ref').eq('user_id', uid).eq('dia', hoje).not('tipo', 'in', '(desenvolvimento,hoje)');
-    if ((enviados ?? []).length >= LIMITE_DIA) { linha.pulou = 'já recebeu 4 hoje'; continue; }
+    // os pushes da semana do Desenvolvimento v2, os do Hoje v3 (8h e 18h) e o recado não gastam o limite de
+    // 4 da fila, mas tudo junto não passa do teto único do dia
+    const env = await enviadosHoje(svc, uid, hoje);
+    if (!env) { linha.pulou = 'push_enviados não lido'; continue; }
+    const enviados = env.ja.filter((e) => !TIPOS_FORA_DA_FILA.includes(e.tipo));
+    if (env.fila >= LIMITE_DIA) { linha.pulou = 'já recebeu 4 da fila hoje'; continue; }
+    if (env.total >= TETO_DIA) { linha.pulou = `já recebeu ${TETO_DIA} hoje (teto do dia)`; continue; }
     /* Hoje v3 (01/11/26): quem recebeu o "Feche o dia" das 18h não recebe o "ainda dá tempo" das 18:05,
        que diria a mesma coisa cinco minutos depois */
     if (momento === '1805') {
@@ -289,6 +319,10 @@ async function rodarSemana(svc: ReturnType<typeof createClient>, momento: 'seg08
   const ano = Number(hoje.slice(0, 4));
   const feriados = [...feriadosNacionais(ano), ...feriadosNacionais(ano + 1)];
   if (!(ignorarHorario && dryRun) && !ehDiaUtil(hoje, feriados)) return { ok: true, momento, pulou: 'não é dia útil' };
+  /* A SEGUNDA DAS 08:00 ERA DOIS PUSHES NO MESMO MINUTO (auditoria do servidor, 02/11/26): o seg0800 (cron 24)
+     e o manha0800 (cron 26) disparam juntos às 11:00 UTC. A missão da semana agora vai DENTRO do push da
+     manhã de segunda (rodarDia); este momento só sobra para o ensaio. A 0242 tira o cron 24. */
+  if (momento === 'seg0800' && !dryRun) return { ok: true, momento, pulou: 'vai junto do manha0800 da segunda' };
   const { data: equipe } = await svc.from('equipe_cockpit').select('profile_id, papel').eq('ativo', true).eq('papel', 'rep').or('so_acesso.is.null,so_acesso.eq.false');
   const soPara = new Set((cfg.so_para ?? []).map(String));
   const alvo = (equipe ?? []).map((e: { profile_id: string }) => String(e.profile_id));
@@ -301,6 +335,9 @@ async function rodarSemana(svc: ReturnType<typeof createClient>, momento: 'seg08
     const aparelhos = ((inscritas ?? []) as Inscricao[]).filter((i) => String(i.user_id) === uid);
     if (!aparelhos.length) { linha.pulou = 'sem aparelho inscrito'; continue; }
     if (soPara.size && !soPara.has(uid)) { linha.pulou = 'fora de so_para (teste)'; continue; }
+    const env = await enviadosHoje(svc, uid, hoje);
+    if (!env) { linha.pulou = 'push_enviados não lido'; continue; }
+    if (env.total >= TETO_DIA) { linha.pulou = `já recebeu ${TETO_DIA} hoje (teto do dia)`; continue; }
     const { data: q, error } = await svc.rpc('_desenvolvimento_de', { p_pessoa: uid });
     if (error || !q || (q as Quadro).erro) { linha.pulou = 'quadro não lido'; continue; }
     const t = momento === 'seg0800' ? pushSegunda(q as Quadro) : pushSexta(q as Quadro);
@@ -346,6 +383,9 @@ async function rodarDia(svc: ReturnType<typeof createClient>, momento: 'manha080
     const aparelhos = ((inscritas ?? []) as Inscricao[]).filter((i) => String(i.user_id) === uid);
     if (!aparelhos.length) { linha.pulou = 'sem aparelho inscrito'; continue; }
     if (soPara.size && !soPara.has(uid)) { linha.pulou = 'fora de so_para (teste)'; continue; }
+    const env = await enviadosHoje(svc, uid, hoje);
+    if (!env) { linha.pulou = 'push_enviados não lido'; continue; }
+    if (env.total >= TETO_DIA) { linha.pulou = `já recebeu ${TETO_DIA} hoje (teto do dia)`; continue; }
     if (momento === 'fecho1800') {
       const { data: fechou } = await svc.from('fecho_do_dia').select('dia').eq('pessoa', uid).eq('dia', hoje).limit(1);
       if (fechou && fechou.length) { linha.pulou = 'já fechou o dia'; continue; }
@@ -361,6 +401,9 @@ async function rodarDia(svc: ReturnType<typeof createClient>, momento: 'manha080
     const visitas = vis.error ? [] : (vis.data ?? []) as Array<{ client_id: string | null; provada: boolean }>;
     const provada = new Set(visitas.filter((v) => v.provada).map((v) => String(v.client_id)));
     const visitada = new Set(visitas.map((v) => String(v.client_id)));
+    // a visita com prova fora do plano conta no "X de 6 com prova" (auditoria do servidor, 02/11/26)
+    const noPlano = new Set(stops.map((x) => String(x.client_id)));
+    const foraComProva = vis.error ? null : [...provada].filter((id) => !noPlano.has(id)).length;
     const paradas: Parada[] | null = rota.error ? null : stops.map((x) => ({
       id: x.client_id, nome: (x.clients?.empresa || x.clients?.nome || 'parada').trim(), etapa: x.clients?.etapa ?? null,
       hora: x.horario_fixo ? String(x.horario_fixo).slice(0, 5) : null,
@@ -381,16 +424,31 @@ async function rodarDia(svc: ReturnType<typeof createClient>, momento: 'manha080
       hoje, agora: momento === 'manha0800' ? '08:00' : '18:00', feriado: null, util: true, nome: null, meta: 6,
       bairro: stops[0]?.clients?.bairro?.trim() || null, paradas, vencemHoje: [],
       semPasso: conta ? conta.total : null, topSemPasso: [], placar: null, sequencia, missao: null,
-      ontem: null, fechouOntem: null, pendentesFecho, propostas: 0,
+      ontem: null, fechouOntem: null, pendentesFecho, propostas: 0, foraComProva,
     };
     const vm = diaDoExecutivo(e);
     const t = momento === 'manha0800' ? vm.push08 : vm.push18;
     if (!t) { linha.pulou = momento === 'fecho1800' ? 'não foi à rua hoje' : 'sem expediente'; continue; }
     const aviso: Aviso = { titulo: t.titulo, texto: t.texto, tag: `hoje-${momento}`, url: `/?hoje=${momento === 'manha0800' ? 'manha' : 'fecho'}`, acoes: [] };
+    /* segunda 08:00: um push só (02/11/26). A missão da semana (o que era o seg0800) vai na linha de baixo do
+       push da manhã. */
+    let comSemana = false;
+    if (momento === 'manha0800' && new Date(hoje + 'T12:00:00Z').getUTCDay() === 1) {
+      const { data: q, error } = await svc.rpc('_desenvolvimento_de', { p_pessoa: uid });
+      const s = !error && q && !(q as Quadro).erro ? pushSegunda(q as Quadro) : null;
+      if (s) {
+        const junto = `${t.texto} · ${s.titulo}: ${s.texto}`;
+        aviso.texto = junto.length > 200 ? junto.slice(0, 199).trimEnd() + '…' : junto;
+        comSemana = true;
+      }
+    }
     linha.aviso = aviso.titulo; linha.texto = aviso.texto;
     if (ensaio) { linha.ensaio = true; continue; }
     const { error: reservou } = await svc.from('push_enviados').insert({ user_id: uid, dia: hoje, tipo: 'hoje', ref: momento });
     if (reservou) { linha.pulou = 'já mandado'; continue; }
+    // não grava uma 2ª linha (desenvolvimento/seg0800): ela gastaria teto por um push que é um só; o
+    // seg0800 fora do ensaio já não manda nada (rodarSemana)
+    linha.comSemana = comSemana;
     let algum = false;
     for (const a of aparelhos) algum = (await enviar(svc, a, aviso, k)) || algum;
     linha.enviado = algum;
@@ -437,8 +495,17 @@ Deno.serve(async (req: Request) => {
   if (corpo.op === 'inscrever') {
     const endpoint = String(corpo.endpoint ?? ''), p256dh = String(corpo.p256dh ?? ''), auth = String(corpo.auth ?? '');
     if (!/^https:\/\//.test(endpoint) || !p256dh || !auth) return json(400, { erro: 'Inscrição incompleta.' });
-    // o mesmo aparelho com outra pessoa logada: a inscrição passa a ser de quem está agora
-    await svc.from('push_inscricoes').delete().eq('endpoint', endpoint);
+    /* o mesmo aparelho com outra pessoa logada: a inscrição passa a ser de quem está agora. ANTES apagava
+       qualquer linha com aquele endpoint, de qualquer usuário (auditoria do servidor, 02/11/26): bastava
+       conhecer o endpoint de alguém para desligar os avisos dele. Agora só sai a linha do próprio usuário,
+       ou a de outro quando quem pede apresenta as MESMAS chaves (p256dh e auth) — só o navegador que tem a
+       inscrição as tem. Chave diferente para o mesmo endpoint: recusa, e a inscrição do outro fica. */
+    const { data: doEndpoint, error: lerErro } = await svc.from('push_inscricoes').select('id, user_id, p256dh, auth').eq('endpoint', endpoint);
+    if (lerErro) return json(500, { erro: lerErro.message });
+    const outra = (doEndpoint ?? []).find((r: { user_id: string }) => String(r.user_id) !== uid) as { id: string; p256dh: string; auth: string } | undefined;
+    if (outra && (outra.p256dh !== p256dh || outra.auth !== auth)) return json(409, { erro: 'Este aparelho está inscrito por outra conta.' });
+    const apagar = (doEndpoint ?? []).map((r: { id: string }) => String(r.id));
+    if (apagar.length) await svc.from('push_inscricoes').delete().in('id', apagar);
     const { error } = await svc.from('push_inscricoes').insert({ user_id: uid, endpoint, p256dh, auth, plataforma: String(corpo.plataforma ?? '').slice(0, 60) || null });
     return error ? json(500, { erro: error.message }) : json(200, { ok: true });
   }

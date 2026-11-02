@@ -68,6 +68,10 @@ export type EntradaDoDia = {
   pendentesFecho: Array<{ id: string; nome: string }>;
   /** quantas portas o "Montar o dia" proporia, sem plano */
   propostas: number;
+  /** visitas COM PROVA de hoje FORA do plano (auditoria do servidor, 02/11/26). O "X de 6 com prova" é a
+   *  meta de visita do dia, não do plano: a porta provada que não estava na Agenda conta, como o Cockpit
+   *  passa a contar dv5.fora. Ausente/null = 0 (a entrada de antes dá a mesma saída). */
+  foraComProva?: number | null;
 };
 
 export const DIAS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
@@ -212,6 +216,10 @@ const juntar = (xs: Array<string | null | undefined | false>) => xs.filter(Boole
 export type VMDia = ReturnType<typeof diaDoExecutivo>;
 export function diaDoExecutivo(e: EntradaDoDia) {
   const c = contar(e.paradas);
+  /* o "X de 6 com prova" é a meta de visita do DIA: as paradas provadas do plano + as visitas provadas fora
+     dele (a contagem do plano, c, fica como era: é a lista da Agenda) */
+  const foraComProva = Math.max(0, Number(e.foraComProva) || 0);
+  const comProvaDia = c.comProva + foraComProva;
   const plano = e.paradas;
   const prox = c.proxima >= 0 && plano ? plano[c.proxima] : null;
   const f = faltam(e.placar);
@@ -224,8 +232,8 @@ export function diaDoExecutivo(e: EntradaDoDia) {
   /* a pílula-placar do mapa: o número grande é a visita COM PROVA (o mesmo da pílula de hoje) */
   let pilula: { n: string; tom: 'ok' | 'acao' | 'mute'; l1: string; l2: string };
   if (!expediente) pilula = { n: '—', tom: 'mute', l1: (e.feriado ? 'Feriado' : 'Fim de semana') + ' · sem expediente', l2: 'nada é cobrado hoje · a sequência não apaga' };
-  else if (!c.portas) pilula = { n: '0', tom: 'mute', l1: juntar(['0 de ' + e.meta + ' com prova', plano == null ? 'plano —' : pl(c.total, 'parada', 'paradas') + ' hoje']), l2: juntar([seqTexto(e.sequencia), missaoTexto(e.missao)]) || 'o 1º check-in com prova abre o placar' };
-  else pilula = { n: String(c.comProva), tom: c.comProva >= e.meta ? 'ok' : 'acao', l1: juntar([c.comProva + ' de ' + e.meta + ' com prova', c.semProva ? c.semProva + ' sem prova' : null, e.placar ? e.placar.pts + ' pts na semana' : null]), l2: juntar([f.curto, seqTexto(e.sequencia)]) || 'cada visita com prova soma 3 pts' };
+  else if (!c.portas && !foraComProva) pilula = { n: '0', tom: 'mute', l1: juntar(['0 de ' + e.meta + ' com prova', plano == null ? 'plano —' : pl(c.total, 'parada', 'paradas') + ' hoje']), l2: juntar([seqTexto(e.sequencia), missaoTexto(e.missao)]) || 'o 1º check-in com prova abre o placar' };
+  else pilula = { n: String(comProvaDia), tom: comProvaDia >= e.meta ? 'ok' : 'acao', l1: juntar([comProvaDia + ' de ' + e.meta + ' com prova', c.semProva ? c.semProva + ' sem prova' : null, e.placar ? e.placar.pts + ' pts na semana' : null]), l2: juntar([f.curto, seqTexto(e.sequencia)]) || 'cada visita com prova soma 3 pts' };
 
   /* o cartão da próxima porta, com o passo que vence hoje */
   const porta = !expediente || !prox ? null : {
@@ -304,7 +312,7 @@ export function diaDoExecutivo(e: EntradaDoDia) {
   /* os 3 blocos do Hoje do Cockpit (o espelho) */
   const ckPlano = {
     kicker: 'PLANO DE HOJE',
-    contagem: c.comProva + ' de ' + e.meta + ' com prova',
+    contagem: comProvaDia + ' de ' + e.meta + ' com prova',
     titulo: plano == null ? 'O plano não respondeu' : prox ? 'Próxima porta: ' + prox.nome + (prox.hora ? ' · ≈ ' + prox.hora : '') : c.total ? 'Dia feito · ' + c.comProva + ' com prova' : 'Nada no plano de hoje',
     sub: juntar([diaCurto(e.hoje), e.bairro, plano == null ? 'plano —' : pl(c.total, 'parada', 'paradas')]),
     linhas: (plano || []).map((p, i) => ({
