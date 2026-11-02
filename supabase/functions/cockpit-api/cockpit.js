@@ -1,7 +1,7 @@
-// GERADO por scripts/portar-cockpit-api.cjs a partir de cockpit-unificado@e3a7c2e2.
+// GERADO por scripts/portar-cockpit-api.cjs a partir de cockpit-unificado@848e3e48.
 // NAO EDITAR: cada funcao abaixo e um arquivo do Cockpit, byte a byte. Para mudar
 // uma regra, mude no Cockpit e gere de novo.
-export const ORIGEM = "e3a7c2e2";
+export const ORIGEM = "848e3e48";
 export const ROTAS = ["negocio-acao","criar-negocio","desfazer-negocio","criar-nota-negocio","criar-empresa-prospeccao","restaurantes-proximos","novidades-mercado","importar-leads","buscar-leads"];
 export const JSONS = ["data/cadencias.json","data/comissionamento.json","data/desligados.json","data/leads-referencia.json","data/maptiler-config.json","data/redes-excluidas.json","data/supabase-config.json","data/temperatura.json","data/territorios.json","data/usuarios.json"];
 
@@ -529,6 +529,32 @@ function travaAgPagamento(deal, novaEtapa, propriedades) {
    e a escrita segue para gravar as propriedades que vieram junto.
    Quem moveu sai do histórico do app (client_stage_changes); é complemento: sem ele a
    tela diz "alguém" e o conflito vale do mesmo jeito. */
+/* ══ O PINO MUDA DE ETAPA NA HORA (auditoria 02/11/26) ═══════════════════════════════════
+   O PATCH gravava só no HubSpot; o pino (clients.etapa) só mudava quando o robô publicava o
+   snapshot (até 2 h, nada no fim de semana). Quem mudava pelo Cockpit, pela Ficha ou pela Fila
+   via o mapa com a etapa velha. Depois do PATCH aceito, o rótulo vai ao pino — os mesmos
+   rótulos do gatilho etapa_do_pino_pelo_snapshot. Complemento: falhou, a etapa já está no
+   HubSpot e o robô alcança depois; a resposta não muda. */
+const ROTULO_DA_ETAPA = {
+  '1395880469': 'Prospecção', '1396005401': 'Visita', '1395880470': 'Conversa com decisor',
+  '1395880471': 'Demo/Proposta', '1395880472': 'Negociação', '1395880473': 'Ag. Pagamento',
+  '1396006163': 'Enviado Onboarding', '1398311191': 'Reciclagem', '1396006162': 'Ganho',
+  '1396006164': 'Perdido', '1396007427': 'Backlog'
+};
+async function etapaNoPino(dealId, etapa) {
+  const url = process.env.SUPABASE_URL;
+  const chave = process.env.SUPABASE_SERVICE_KEY;
+  const rotulo = ROTULO_DA_ETAPA[String(etapa)];
+  if (!url || !chave || !rotulo) return;
+  try {
+    await fetch(url + '/rest/v1/clients?id_hubspot=eq.' + encodeURIComponent(dealId) + '&status=eq.lead&is_archived=eq.false', {
+      method: 'PATCH',
+      headers: { apikey: chave, Authorization: 'Bearer ' + chave, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ etapa: rotulo })
+    });
+  } catch (e) { /* complemento: o robô alcança */ }
+}
+
 async function quemMoveuPorUltimo(dealId, etapa) {
   const url = process.env.SUPABASE_URL;
   const chave = process.env.SUPABASE_SERVICE_KEY;
@@ -748,6 +774,7 @@ module.exports = async function handler(req, res) {
     if (!resp.ok) {
       return res.status(resp.status).json({ erro: 'HubSpot recusou a mudança de etapa: ' + (data.message || 'sem mensagem'), detalhe: data });
     }
+    await etapaNoPino(dealId, novaEtapa);
     /* ══ E AS TAREFAS PENDENTES ACABAM COM ELE (11/09/26) ═══════════════════════════
        Julyan: "enviado pra onboarding nao precisa ir pras tarefas da aba hoje".
        Medido no CRM antes de mexer: 12 tarefas abertas em negocios que ja estavam em
@@ -5546,7 +5573,8 @@ function montarDadosCompletos() {
        mais abaixo — ele recebe só a rota dele. */
     territorios: territorios.territorios || [],
     territoriosSemDono: territorios._sem_dono || [],
-    footerText: `Fonte: HubSpot (pipeline 916011864, atualizado a cada 2h no horário comercial) + Daily (prometido/realizado) · Leads críticos = mais antigos sem avanço de etapa.`,
+    /* sem id de pipeline nem definição de termo (02/11/26): é texto de tela, não nota de auditoria */
+    footerText: `Fonte: HubSpot (funil Field Sales, atualizado a cada 2h no horário comercial) + Daily.`,
     // AUTOMAÇÃO 3 (13/08/26) — status da última rodada do robô: se alguma escrita de
     // realizado_visitas/avancos/propostas falhou ou não bateu na conferência pós-escrita.
     // Opcional: undefined até a primeira rodada rodar com esta automação.

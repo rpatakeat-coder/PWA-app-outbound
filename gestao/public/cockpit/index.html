@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@2df03ae8.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@848e3e48.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "2df03ae8";
+  var VERSAO = "848e3e48";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -11840,6 +11840,21 @@ function aoVivoLigar() {
       });
   } catch (e) {
     console.log('[ao vivo] não consegui escutar:', e && e.message);
+  }
+  aoVivoRecuperar();
+}
+
+async function aoVivoRecuperar() {
+  try {
+    const f = await supa.from('snapshot_farol').select('atualizado_em').eq('chave', 'hubspot').maybeSingle();
+    const desde = f && f.data && f.data.atualizado_em;
+    if (!desde) return;
+    const r = await supa.from('sinais_ao_vivo').select('tipo, deal_id, owner_id, actor_id')
+      .gt('criado_em', desde).in('tipo', ['negocio', 'tarefa', 'pino', 'pino-novo']).not('deal_id', 'is', null)
+      .order('criado_em', { ascending: false }).limit(300);
+    ((r && r.data) || []).forEach(function (s) { aoVivoRecebeu(s); });
+  } catch (e) {
+    console.log('[ao vivo] não consegui recuperar os sinais desde a carga:', e && e.message);
   }
 }
 
