@@ -1,4 +1,4 @@
--- 0249 · Endurecimento depois do verificador do banco (02/11/26, aplicada)
+-- 0249 · Endurecimento depois do verificador do banco (02/11/26, NÃO aplicada: pede o ok do dono)
 -- As duas funções auxiliares da 0248 ficaram sem search_path fixo; a função de gatilho do
 -- Desenvolvimento v2 podia ser chamada sem login pela API (não fazia nada fora de gatilho, mas não
 -- precisa estar exposta).

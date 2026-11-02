@@ -92,6 +92,49 @@
 - **Mesma linguagem do Planejamento do Cockpit** (o gestor vê o mesmo plano lá), mas aqui é a visão de quem executa.
 - **Alvos de clique de no mínimo 40 px;** texto não pode cortar nome de restaurante importante (usar 2 linhas).
 
+## 6a. Material de referência (anexo junto com este pedido)
+
+**Design system:** https://raw.githubusercontent.com/takeat-design/UIKIT/main/README.md. Ler o `foundations.md` e o `components.md`; o README manda.
+
+**Cores dos pinos (são dado, usar exatamente):**
+
+| Pino | Cor |
+|---|---|
+| Quente (Negociação, Ag. Pagamento) | #E23B3B |
+| Morno (Conversa com decisor, Demo/Proposta) | #F5A524 |
+| Frio (Prospecção, Visita) | #0EA5E9 |
+| Cliente Takeat | #16A34A |
+| Ex-cliente | #EC4899 |
+| Conta-alvo | #8B5CF6 |
+| Perdido | #4B5563 |
+| Sem dono (anel) | #FACC15 |
+
+O vermelho de ação do app (Cheguei, Confirmar) é outro: `var(--vermelho-acao)`, nunca a cor de "Quente". O trajeto do dia é pontilhado branco no escuro e preto no tema claro; a microrota é um anel vermelho fino de ~250 m em volta da próxima porta.
+
+**Fotos de como está hoje** (pasta `fotos-agenda-hoje`, notebook 1422×613):
+1. `1-mapa-meu-dia.jpg`: aba Mapa, com o painel "Meu dia" à esquerda.
+2. `2-agenda-hoje-planejando.jpg`: Agenda, hoje, 1 parada, mapa no Planejar.
+3. `3-agenda-terca-7-paradas.jpg`: Agenda, terça. As 7 paradas aparecem duas vezes (coluna e barra), e o mapa fica com ~1/3 da altura.
+4. `4-agenda-lead-em-foco-cartao-cobre-o-mapa.jpg`: clicar no lead abre o cartão por cima do mapa, e o pino fica escondido atrás dele. Precisa de solução.
+
+**Dia de exemplo para desenhar** (Sandro, terça 06/10, Funil, território Zona Norte do Rio):
+
+Dados reais do plano gravado, na ordem da rota:
+
+| Ordem | Hora | Conta | Etapa | Bairro |
+|---|---|---|---|---|
+| 1 | 15:00 | Parada 663 Bar & Restaurante (reunião com o dono) | Conversa com decisor | Vila Valqueire (pelo endereço) |
+| 2 | 14:00 | Hora Certa Valqueire | Conversa com decisor | Vila Valqueire |
+| 3 | 14:15 | Malz Burguer | Visita | Irajá |
+| 4 | 14:30 | Esquenta Gastro Bar | Visita | Madureira |
+| 5 | 14:45 | Dom Pasco | Visita | Vila Valqueire |
+| 6 | 15:30 | Gaúcho Bar e Grill | Visita | (sem bairro no cadastro) |
+| 7 | 13:45 | Capitão Jack | (sem etapa) | (sem bairro no cadastro) |
+
+**Repare: a ordem da rota não bate com os horários** (a 1ª é às 15:00 e a 7ª às 13:45). Hoje as duas coisas vivem separadas, e o desenho precisa dizer qual manda: arrastar reordena os horários? Horário fixo prende a posição? Também há conta sem etapa e sem bairro: o desenho deve prever esses vazios.
+
+Tipos de sugestão perto do plano: contas-alvo da munição do território dele (Vila Valqueire, Cascadura, Méier, Engenho de Dentro, Piedade, Abolição, Madureira), leads com a régua estourada e restaurantes do Google ainda fora da base. Meta: 6 visitas por dia.
+
 ## 7. O que eu preciso receber
 
 1. **Prancha em 1440 × 900 e em 1280 × 640**, nos estados:
