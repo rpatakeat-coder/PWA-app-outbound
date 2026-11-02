@@ -5984,6 +5984,13 @@ function MainApp() {
            ficou. Falhou a leitura, fica a tentativa, como antes. */
         let declaradaDaVisita = declarada;
         let fotoNoCheckin = !!fotoProva && !fotoProvaPendente;
+        /* FOTO SÓ É PROVA COM LUGAR (auditoria 02/11/26). O toast anunciava "+3 · sequência" para
+           qualquer foto, e o servidor recusa a foto sem coordenada ou longe do pino: o placar não
+           mexia. A regra é a do servidor — coordenada da foto dentro do raio do pino (500 m se
+           aproximado, 200 m senão). Foto sem coordenada não é prova no app (vai para o gestor validar). */
+        const dentroDoRaio = (lat: unknown, lng: unknown) => lat != null && lng != null && Number.isFinite(targetLat) && Number.isFinite(targetLon)
+          && haversineMeters(Number(lat), Number(lng), targetLat, targetLon) <= maxDistance;
+        let fotoComLugar = fotoNoCheckin && dentroDoRaio(userLat, userLon);
         try {
           // com prazo: sinal ruim não segura a ficha (auditoria do GPS, 04/10)
           const lido = await comPrazo(Promise.resolve(supabase.from('client_visits').select('acao_id, declarada, visited_at')
@@ -5994,9 +6001,10 @@ function MainApp() {
             declaradaDaVisita = v.declarada === true;
             if (!fotoNoCheckin) {
               const desde = new Date(new Date(v.visited_at as string).getTime() - 60000).toISOString();
-              const lidas = await comPrazo(Promise.resolve(supabase.from('fotos_visita').select('id').eq('client_id', client.id).gte('criado_em', desde).limit(1)), 4000);
-              const fotos = lidas?.data;
+              const lidas = await comPrazo(Promise.resolve(supabase.from('fotos_visita').select('id, lat, lng').eq('client_id', client.id).gte('criado_em', desde).limit(5)), 4000);
+              const fotos = lidas?.data as Array<{ id: string; lat: number | null; lng: number | null }> | null | undefined;
               fotoNoCheckin = !!fotos?.length;
+              fotoComLugar = !!fotos?.some((ft) => dentroDoRaio(ft.lat, ft.lng));
             }
           }
         } catch { /* fica a marca da tentativa */ }
@@ -6010,10 +6018,10 @@ function MainApp() {
           fotoNoCheckin,
         };
         /* HOJE v3 (01/11/26): o toast "+3 pts · sequência 5 dias" aparece 1,4 s e, em seguida, a ficha
-           abre (README §4.4). Prova = GPS no raio (não declarada) ou foto. Com o Hoje v3 desligado, a ficha
-           abre na hora, como antes. */
+           abre (README §4.4). Prova = GPS no raio (não declarada) ou foto com coordenada no raio do pino.
+           Com o Hoje v3 desligado, a ficha abre na hora, como antes. */
         const espera = chegueiV3.current({
-          clientId: client.id, comProva: !declaradaDaVisita || fotoNoCheckin,
+          clientId: client.id, comProva: !declaradaDaVisita || fotoComLugar,
           metros: userLat != null && userLon != null && client.latitude != null && client.longitude != null
             ? metrosLL({ lat: userLat, lng: userLon }, { lat: Number(client.latitude), lng: Number(client.longitude) }) : null,
         });
