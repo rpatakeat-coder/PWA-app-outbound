@@ -421,13 +421,23 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
   // sem a fila lida (erro do HubSpot ou ainda carregando) o topo não diz "0 faltam"
   const filaMedida = !!q.data;
 
-  // fila zerada: grava o dia (conquista "Fila zerada 5 dias"), uma vez por dia
+  // fila zerada: grava o dia (conquista "Fila zerada 5 dias"), uma vez por dia.
+  // Auditoria 02/11/26: (a) a fila medida é a do servidor, não a da tela — o item escondido na
+  // janela de 5 s do Desfazer não conta como feito (desfeito, a fila não estava zerada);
+  // (b) a chave do dia só é gravada depois que o banco aceitou: erro ou sem sinal, tenta de novo.
+  // isFetchedAfterMount: a fila guardada no aparelho (initialData) pode ser de mais cedo — mede a lida agora
+  const zeradaNoServidor = q.isFetchedAfterMount && !!q.data && !q.data.semMedicao && (q.data.itens ?? []).length === 0;
   useEffect(() => {
-    if (!zerada) return;
+    if (!zeradaNoServidor) return;
     const chave = `fila-zerada-gravada-${hoje}`;
-    try { if (window.localStorage.getItem(chave)) return; window.localStorage.setItem(chave, '1'); } catch { /* sem armazenamento */ }
-    void supabase.rpc('registrar_fila_zerada');
-  }, [zerada, hoje]);
+    try { if (window.localStorage.getItem(chave)) return; } catch { /* sem armazenamento: grava no banco, que é idempotente no dia */ }
+    let vivo = true;
+    void Promise.resolve(supabase.rpc('registrar_fila_zerada')).then(({ error }) => {
+      if (!vivo || error) return;
+      try { window.localStorage.setItem(chave, '1'); } catch { /* sem armazenamento */ }
+    }, () => undefined);
+    return () => { vivo = false; };
+  }, [zeradaNoServidor, hoje]);
 
   const esconder = (d: string) => setEscondidos((e) => new Set(e).add(d));
   const mostrar = (d: string) => setEscondidos((e) => { const n = new Set(e); n.delete(d); return n; });
