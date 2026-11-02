@@ -44,14 +44,18 @@ export default function FolhaManhaV3({ folha, chipsOntem, aoIr, aoDepois, aoSumi
   const [feitos, setFeitos] = useState<Record<string, string>>({});
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  // auditoria 02/11/26: o App passa aoSumir como arrow nova a cada render; nas dependências, o
+  // timer de 1,5 s recomeçava a cada render e a folha "em ordem" podia nunca sumir
+  const aoSumirRef = useRef(aoSumir);
+  aoSumirRef.current = aoSumir;
 
   useEffect(() => {
     if (!folha.emOrdem) return;
     if (reduzir) escala.setValue(1);
     else Animated.timing(escala, { toValue: 1, duration: 500, useNativeDriver: Platform.OS !== 'web' }).start();
-    const t = setTimeout(aoSumir, 1500);
+    const t = setTimeout(() => aoSumirRef.current(), 1500);
     return () => clearTimeout(t);
-  }, [folha.emOrdem, reduzir, escala, aoSumir]);
+  }, [folha.emOrdem, reduzir, escala]);
 
   const fazer = async (chave: string, f: () => Promise<string | null>) => {
     if (ocupado) return;

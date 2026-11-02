@@ -60,13 +60,17 @@ export function ToastPosVisita({ toast, bottom, aoChip, aoDepois, aoSumir }: {
   const [ocupado, setOcupado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const comChips = toast.kind === 'ficha' && !!toast.chips;
+  // auditoria 02/11/26: aoSumir chega como arrow nova a cada render do App; nas dependências, o
+  // timer de auto-fechar recomeçava a cada render e o toast ficava na tela
+  const aoSumirRef = useRef(aoSumir);
+  aoSumirRef.current = aoSumir;
   useEffect(() => {
     opac.setValue(reduzir ? 1 : 0);
     if (!reduzir) Animated.timing(opac, { toValue: 1, duration: 200, useNativeDriver: Platform.OS !== 'web' }).start();
     if (comChips) return;
-    const t = setTimeout(aoSumir, toast.kind === 'cheguei' ? 1400 : 2600);
+    const t = setTimeout(() => aoSumirRef.current(), toast.kind === 'cheguei' ? 1400 : 2600);
     return () => clearTimeout(t);
-  }, [toast, reduzir, opac, comChips, aoSumir]);
+  }, [toast, reduzir, opac, comChips]);
   const borda = toast.tom === 'ok' ? 'var(--verde-acao)' : toast.tom === 'acao' ? 'var(--vermelho-acao)' : 'var(--tint-amber-border)';
   return (
     <Animated.View style={[s.toastLugar, { bottom, opacity: opac }]} pointerEvents="box-none">
