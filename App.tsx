@@ -227,12 +227,22 @@ import { PilulaDoHoje, ToastDeConquista } from './src/screens/EntradasDesenvolvi
 import type { OrigemAbertura } from './src/screens/MeuDesempenhoV2';
 import { seloDaFila } from './src/utils/seloDaFila';
 import { janelaAtual } from './src/utils/horaDasLigacoes';
-import { quenteEsfriando, secaoDoItem } from './supabase/functions/_compartilhado/filaDoDinheiro';
+import { feriadosNacionais, quenteEsfriando, secaoDoItem } from './supabase/functions/_compartilhado/filaDoDinheiro';
 import { FaixaHoraDasLigacoes } from './src/screens/CartaoDaFila';
 import FolhaAntesDaRua from './src/screens/FolhaAntesDaRua';
 import FolhaPlanoDoDia from './src/screens/FolhaPlanoDoDia';
 import FolhaTimeNaRua from './src/screens/FolhaTimeNaRua';
-import FolhaFechoDoDia from './src/screens/FolhaFechoDoDia';
+import FolhaFechoDoDia, { FolhaFechoV3, type LinhaDoFecho } from './src/screens/FolhaFechoDoDia';
+// Hoje v3 (01/11/26): a folha da manhã, a pílula-placar, os toasts pós-visita e o fecho novo
+import FolhaManhaV3 from './src/screens/FolhaManhaV3';
+import { PilulaPlacar, ToastPosVisita, type ToastV3 } from './src/screens/HojeV3NoMapa';
+import { chipsDeDia, diaDoExecutivo, somaDias as somaDiasV3, toastCheguei, toastFicha } from './supabase/functions/_compartilhado/hojeV3';
+import {
+  hojeV3Ligado, lerHojeDaUrl, limparHojeDaUrl, marcarPassoRapido, montarEntradaDoDia, nomeDoFeriado, registrarHoje, rotuloCurto as rotuloCurtoV3, semPassoPorDinheiro, sugerirDias,
+  etapaIdxDe, type ItemDaFilaV3, type ParadaDoApp,
+} from './src/utils/diaV3';
+import { useBairrosDaFila, useDiaV3 } from './src/hooks/useDiaV3';
+import { useDesenvolvimentoQuadro } from './src/screens/MeuDesempenhoV2';
 import TiraDeLentes from './src/screens/TiraDeLentes';
 import BlocoEntrePortas from './src/screens/BlocoEntrePortas';
 import PedirAvisos from './src/screens/PedirAvisos';
@@ -1281,10 +1291,14 @@ function MainApp() {
      qualquer pino funciona. Forçar pela ATENÇÃO, não pela trava — decisão do próprio Julyan. */
   const [planoDoDia, setPlanoDoDia] = useState(false);
   const [planoDoDiaResolvido, setPlanoDoDiaResolvido] = useState(false);
+  /* HOJE v3 (01/11/26): a mesma chave por dia e a mesma 1ª abertura, mas a folha agora é "seu dia em 30
+     segundos" e só sobe até as 10h (README §3, regra 5: no máximo 1 folha por momento por dia). Depois
+     das 10h quem chega ao mapa já está na rua. localStorage['hoje-v2'] = '1' devolve a folha anterior. */
+  const hojeV3 = useMemo(() => hojeV3Ligado(), []);
   useEffect(() => {
     if (!modoNovo || tab !== 'map' || isViewer || planoDoDiaResolvido) return;
     const agoraBRT = new Date(Date.now() - 3 * 3600000);
-    if (agoraBRT.getUTCHours() >= 19) { setPlanoDoDiaResolvido(true); return; }
+    if (agoraBRT.getUTCHours() >= (hojeV3 ? 10 : 19)) { setPlanoDoDiaResolvido(true); return; }
     /* sem expediente (fim de semana, feriado) não pergunta o dia (auditoria 01/11/26: no domingo
        subia "Hoje são estas 6, confirma?" e "às 9h00 o gestor vê") */
     if (!ehDiaUtil(diaBRT(new Date()))) { setPlanoDoDiaResolvido(true); return; }
@@ -1296,7 +1310,8 @@ function MainApp() {
     setPlanoDoDiaResolvido(true);
     setPlanoDoDia(true);
     registrarEvento('plano_proposto', {});
-  }, [modoNovo, tab, isViewer, planoDoDiaResolvido]);
+    if (hojeV3) registrarHoje('folha_manha', 'vista', 'app');
+  }, [modoNovo, tab, isViewer, planoDoDiaResolvido, hojeV3]);
   useEffect(() => {
     if (!modoNovo || tab !== 'map' || !seloFila?.quente || !filaNaTela.data || planoDoDia) return;
     const agoraBRT = new Date(Date.now() - 3 * 3600000);
@@ -5325,6 +5340,9 @@ function MainApp() {
        trabalhou. É a mesma regra do "não fechou ontem" lá no gestor: não se cobra silêncio. */
     const portasHoje = meuDia.data?.provadasHoje ?? null;
     if (portasHoje == null || portasHoje === 0) return;
+    /* HOJE v3 (01/11/26, README §3 regra 5): o fecho não depende mais de o app voltar para a frente
+       depois das 18h. Ele chega pelo push das 18h (?hoje=fecho) ou pelo "fechar o dia" da pílula. */
+    if (hojeV3) return;
     const bISO = new Date(Date.now() - 3 * 3600000);
     if (bISO.getUTCHours() < 18) return;
     const chave = `fecho-do-dia-${diaBRT(new Date())}`;
@@ -5334,7 +5352,125 @@ function MainApp() {
     } catch { setFechoResolvido(true); return; }
     setFechoResolvido(true);
     setFechoDoDia(true);
-  }, [modoNovo, tab, isViewer, fechoResolvido, planoDoDia, meuDia.data?.provadasHoje]);
+  }, [modoNovo, tab, isViewer, fechoResolvido, planoDoDia, meuDia.data?.provadasHoje, hojeV3]);
+
+  /* ══ HOJE v3 · O DIA DO EXECUTIVO NO APP (01/11/26, design_handoff_hoje_v3) ══════════════════════
+     "Será que estão usando de verdade? Preciso que eles usem isso." O dia vai até ele em 3 momentos, no
+     mapa: a folha da manhã, a pílula-placar e os toasts pós-visita, e o fecho das 18h. Tudo sai de
+     diaDoExecutivo (_compartilhado/hojeV3.ts), a MESMA montagem do Hoje do Cockpit, sobre as fontes que o
+     app já lê (montarEntradaDoDia, src/utils/diaV3.ts). Nada aqui trava: toda folha tem saída. */
+  const ehRepV3 = hojeV3 && !!profile && profile.role !== 'view';
+  const quadroV3 = useDesenvolvimentoQuadro(ehRepV3);
+  const hojeIsoV3 = diaBRT(new Date()) ?? '';
+  const feriadosV3 = useMemo(() => {
+    const a = Number(hojeIsoV3.slice(0, 4)) || new Date().getFullYear();
+    return [...feriadosNacionais(a - 1), ...feriadosNacionais(a), ...feriadosNacionais(a + 1)];
+  }, [hojeIsoV3]);
+  const diasV3 = useMemo(() => diasPlanejaveis(hojeIsoV3, 5), [hojeIsoV3]);
+  const ontemV3 = useMemo(() => {
+    let d = hojeIsoV3;
+    for (let k = 0; k < 10; k++) { d = somaDiasV3(d, -1); if (ehDiaUtil(d)) break; }
+    return d;
+  }, [hojeIsoV3]);
+  const segundaV3 = useMemo(() => somaDiasV3(hojeIsoV3, -((new Date(hojeIsoV3 + 'T12:00:00Z').getUTCDay() + 6) % 7)), [hojeIsoV3]);
+  const diaV3 = useDiaV3(ehRepV3, profile?.id ?? null, hojeIsoV3, ontemV3, segundaV3, diasV3.map((d) => d.iso));
+  /* o plano de HOJE, mesmo com a Agenda aberta noutro dia */
+  const opsHojeV3 = useFieldOps(hojeIsoV3, isAuthenticated && ehRepV3 && routeDate !== hojeIsoV3);
+  const opsDeHojeV3 = routeDate === hojeIsoV3 ? fieldOps : opsHojeV3;
+  const filaV3 = useMemo(() => (Array.isArray(filaNaTela.data?.itens) ? filaNaTela.data!.itens as unknown as ItemDaFilaV3[] : null), [filaNaTela.data]);
+  const topClientesV3 = useMemo(() => (filaV3 ? semPassoPorDinheiro(filaV3).slice(0, 12).map((i) => i.clientId).filter(Boolean) as string[] : []), [filaV3]);
+  const bairrosV3 = useBairrosDaFila(ehRepV3, topClientesV3);
+  const [feitosV3, setFeitosV3] = useState<Record<string, string>>({});
+  const agoraV3 = (() => { const b = new Date(relogioDaJanela - 3 * 3600000); return `${String(b.getUTCHours()).padStart(2, '0')}:${String(b.getUTCMinutes()).padStart(2, '0')}`; })();
+  const sugestaoV3 = useMemo(() => {
+    if (!filaV3 || !diaV3.data) return {};
+    const leads = semPassoPorDinheiro(filaV3).slice(0, 12).map((i) => {
+      const b = i.clientId ? bairrosV3.data?.[i.clientId] : undefined;
+      return { dealId: i.dealId, nome: i.negocio, etapaIdx: etapaIdxDe(i.etapaId), bairro: b?.bairro ?? null, semEnd: !i.clientId || !(b?.temLugar ?? (i.lat != null && i.lng != null)) };
+    });
+    return sugerirDias({ dias: diasV3, cont: diaV3.data.cont, bairrosDoDia: diaV3.data.bairrosDoDia, leads, antesDas10: agoraV3 < '10:00', meta: metaDeHoje });
+  }, [filaV3, diaV3.data, bairrosV3.data, diasV3, agoraV3, metaDeHoje]);
+  const entradaV3 = useMemo(() => {
+    const stops = opsDeHojeV3.stops.filter((st) => st.status !== 'removed' && st.status !== 'skipped' && !!st.client);
+    const paradas: ParadaDoApp[] | null = opsDeHojeV3.erro ? null : stops.map((st) => ({
+      clientId: st.client_id, dealId: st.client?.id_hubspot ? String(st.client.id_hubspot) : null, nome: st.client ? getClientPrimaryName(st.client) : 'parada',
+      etapa: st.client?.etapa ?? null, status: st.status, hora: (st as { horario_fixo?: string | null }).horario_fixo?.slice(0, 5) ?? null,
+      bairro: st.client?.bairro?.trim() || null,
+      lat: st.client?.latitude != null ? Number(st.client.latitude) : null, lng: st.client?.longitude != null ? Number(st.client.longitude) : null,
+    }));
+    return montarEntradaDoDia({
+      hoje: hojeIsoV3, agora: agoraV3, util: ehDiaUtil(hojeIsoV3), feriado: nomeDoFeriado(hojeIsoV3, feriadosV3),
+      nome: (profile?.full_name ?? '').trim().split(/\s+/)[0] || null, meta: metaDeHoje,
+      paradas, visitas: diaV3.data?.visitas ?? null, fila: filaNaTela.isError ? null : filaV3,
+      sugestao: sugestaoV3, feitos: feitosV3, quadro: quadroV3.data ?? null,
+      ontem: diaV3.data ? { dia: ontemV3, fechou: diaV3.data.fechouOntem } : null,
+      propostas: Math.min(6, linhasDaLista.length),
+      aqui: userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : null,
+    });
+  }, [opsDeHojeV3.stops, opsDeHojeV3.erro, hojeIsoV3, agoraV3, feriadosV3, profile?.full_name, metaDeHoje, diaV3.data, filaV3, filaNaTela.isError,
+    sugestaoV3, feitosV3, quadroV3.data, ontemV3, linhasDaLista.length, userLocation]);
+  const vmV3 = useMemo(() => diaDoExecutivo(entradaV3), [entradaV3]);
+  /* o "passo vence hoje · ligar 12:30" do cartão da próxima porta (README §4.3), da mesma fila */
+  const venceHojeV3 = useMemo(() => {
+    const m: Record<string, string> = {};
+    (filaV3 ?? []).forEach((i) => {
+      if (i.motivo !== 'vence_hoje' || i.prazo !== hojeIsoV3) return;
+      m[String(i.dealId)] = 'passo vence hoje · ' + (i.verbo === 'WhatsApp' ? 'WhatsApp' : String(i.verbo || 'Ligar').toLowerCase()) + (i.horaPrazo ? ' ' + i.horaPrazo : '');
+    });
+    return m;
+  }, [filaV3, hojeIsoV3]);
+  const [toastV3, setToastV3] = useState<ToastV3 | null>(null);
+  /** a ficha salva espera fechar para o toast aparecer (a ficha mostra os 5 s do Desfazer antes) */
+  const fichaSalvaV3 = useRef<{ dealId: string | null; nome: string; dia: string | null; semInteresse: boolean } | null>(null);
+  const origemFechoV3 = useRef<'app' | 'push_18'>('app');
+  /* o push das 8h (?hoje=manha) e o das 18h (?hoje=fecho) abrem o momento; a folha da manhã segue a regra
+     de 1 por dia (se já subiu hoje, o toque leva ao mapa) e nada sobe fora do dia útil */
+  useEffect(() => {
+    if (!hojeV3 || typeof window === 'undefined') return;
+    const tratar = (href: string) => {
+      const m = lerHojeDaUrl(href);
+      if (!m) return;
+      limparHojeDaUrl();
+      if (!ehDiaUtil(diaBRT(new Date()) ?? '')) return;
+      setTab('map');
+      if (m === 'manha') {
+        const chave = `plano-do-dia-${diaBRT(new Date())}`;
+        try { if (window.localStorage.getItem(chave)) return; window.localStorage.setItem(chave, '1'); } catch { /* sem armazenamento: abre */ }
+        setPlanoDoDiaResolvido(true);
+        setPlanoDoDia(true);
+        registrarHoje('folha_manha', 'vista', 'push_08');
+      } else {
+        origemFechoV3.current = 'push_18';
+        setFechoResolvido(true);
+        setFechoDoDia(true);
+        registrarHoje('fecho_dia', 'aberto', 'push_18');
+      }
+    };
+    tratar(window.location.href);
+    const aoMsg = (e: MessageEvent) => { if (e.data?.type === 'FILA_ACAO' && typeof e.data.url === 'string') tratar(e.data.url); };
+    navigator.serviceWorker?.addEventListener('message', aoMsg);
+    return () => navigator.serviceWorker?.removeEventListener('message', aoMsg);
+  }, [hojeV3]);
+  /* o toast pós-Cheguei: a função mora num ref porque o handleMarkAsVisited é memorizado. Devolve quanto
+     a ficha espera (0 = abre na hora). "+3" só na 1ª visita com prova ao restaurante na semana (o placar
+     conta cada restaurante uma vez); a sequência ganha o dia de hoje na 1ª visita com prova. */
+  const chegueiV3 = useRef<(o: { clientId: string; comProva: boolean; metros: number | null }) => number>(() => 0);
+  chegueiV3.current = (o) => {
+    if (!hojeV3 || !ehRepV3) return 0;
+    const vis = diaV3.data?.visitas ?? [];
+    const jaNaSemana = vis.some((v) => v.client_id === o.clientId && v.provada && v.dia >= segundaV3);
+    const seq0 = quadroV3.data && !quadroV3.data.erro && quadroV3.data.sequencias ? quadroV3.data.sequencias.rua.atual : null;
+    const primeiraHoje = !vis.some((v) => v.dia === hojeIsoV3 && v.provada);
+    const t = toastCheguei({ comProva: o.comProva, pontos: o.comProva && !jaNaSemana ? 3 : 0, metros: o.metros, sequencia: seq0 == null ? null : seq0 + (o.comProva && primeiraHoje ? 1 : 0) });
+    setToastV3({ kind: 'cheguei', titulo: t.titulo, texto: t.texto, tom: t.tom });
+    return 1400;
+  };
+  /** marcar o passo de um negócio da fila (toast, fecho, pendências de ontem): HubSpot primeiro */
+  const marcarPassoV3 = useCallback(async (dealId: string, nome: string, iso: string) => {
+    await marcarPassoRapido({ dealId, nome, iso });
+    void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] });
+    void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] });
+  }, [queryClient]);
 
   const handleMarkAsVisited = useCallback(async (client: Client, onDone?: () => void) => {
     if (visitingRef.current) return;
@@ -5795,7 +5931,7 @@ function MainApp() {
             }
           }
         } catch { /* fica a marca da tentativa */ }
-        setFichaPendente({
+        const fichaDaVisita = {
           client: visitado,
           checkinEm: visitado.visited_at ?? new Date().toISOString(),
           etapaAtual: pelaTabela ?? peloSnapshot,
@@ -5803,7 +5939,17 @@ function MainApp() {
           declarada: declaradaDaVisita,
           fotoProva: fotoProvaPendente,
           fotoNoCheckin,
+        };
+        /* HOJE v3 (01/11/26): o toast "+3 pts · sequência 5 dias" aparece 1,4 s e, em seguida, a ficha
+           abre (README §4.4). Prova = GPS no raio (não declarada) ou foto. Com o Hoje v3 desligado, a ficha
+           abre na hora, como antes. */
+        const espera = chegueiV3.current({
+          clientId: client.id, comProva: !declaradaDaVisita || fotoNoCheckin,
+          metros: userLat != null && userLon != null && client.latitude != null && client.longitude != null
+            ? metrosLL({ lat: userLat, lng: userLon }, { lat: Number(client.latitude), lng: Number(client.longitude) }) : null,
         });
+        if (espera) setTimeout(() => setFichaPendente(fichaDaVisita), espera);
+        else setFichaPendente(fichaDaVisita);
       } else if (visitado.status === 'lead' && visitado.id_hubspot) {
         setDesfechoPendente({
           idHubspot: visitado.id_hubspot,
@@ -7295,6 +7441,18 @@ function MainApp() {
           <FaixaHoraDasLigacoes ate={janelaDasLigacoes.ate} followups={janelaDasLigacoes.followups} quentes={janelaDasLigacoes.quentes} aoAbrir={() => { setPedidoDaFila({ acao: 'fila', deal: null, origem: 'janela', n: Date.now() }); irParaAba('tasks'); }} />
         </View>
       )}
+      {/* HOJE v3 (01/11/26): a pílula-placar mora na MESMA faixa da vez, e só quando ela está livre (a
+          pendência e a hora das ligações têm verbo e prazo, e ganham dela). O mapa por baixo não muda. */}
+      {hojeV3 && ehRepV3 && modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !buscaAberta && !planejarVisivel
+        && linhaDoDiaAgora?.estado !== 'pendente' && !janelaDasLigacoes && (
+        <PilulaPlacar
+          pilula={vmV3.pilula}
+          top={insets.top + 7 + ALTURA_TOPO_CAMPO + RESPIRO_ABAIXO_DA_FILEIRA}
+          fecharDia={vmV3.expediente && agoraV3 >= '17:00' && vmV3.contagem.portas > 0 && diaV3.data?.fechouHoje === false
+            ? () => { origemFechoV3.current = 'app'; setFechoDoDia(true); registrarHoje('fecho_dia', 'aberto', 'app'); } : null}
+          aoTocar={() => irParaEu('pilula')}
+        />
+      )}
       {modoNovo && (
         <FolhaBusca
           visivel={buscaAberta}
@@ -7416,6 +7574,7 @@ function MainApp() {
             />
           ) : null}
           aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
+          venceHojeDe={hojeV3 ? (c) => (c.id_hubspot ? venceHojeV3[String(c.id_hubspot)] ?? null : null) : undefined}
           sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
           aoFala={abrirFala}
           recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
@@ -9659,7 +9818,45 @@ function MainApp() {
       )}
       {/* A FOLHA DE ABERTURA DO DIA (espinha do dia 2.3). Vem antes da "Antes da rua": primeiro
           se decide o dia, depois as ligações de antes de sair. */}
-      {planoDoDia && (
+      {/* HOJE v3 (01/11/26): "seu dia em 30 segundos". No feriado e no fim de semana não sobe (a chave do dia
+          nem é gravada: o efeito acima já para antes). */}
+      {planoDoDia && hojeV3 && vmV3.folha.mostra && (
+        <FolhaManhaV3
+          folha={vmV3.folha}
+          chipsOntem={chipsDeDia(hojeIsoV3, feriadosV3, true)}
+          aoIr={() => { registrarHoje('folha_manha', 'ir_para_rua'); setPlanoDoDia(false); }}
+          aoDepois={() => { registrarHoje('folha_manha', 'depois'); setPlanoDoDia(false); }}
+          aoSumir={() => setPlanoDoDia(false)}
+          aoMontar={() => { registrarEvento('plano_confirmado', { origem: 'proposta', portas: Math.min(6, linhasDaLista.length) }); setPlanoDoDia(false); void montarDiaComMicrorrotas(); }}
+          aoPor={async (dealId) => {
+            const sug = (sugestaoV3 as Record<string, { dia: string; iso: string }>)[dealId];
+            const item = (filaV3 ?? []).find((i) => i.dealId === dealId);
+            if (!sug || !item || !profile?.id) throw new Error('o dia sugerido saiu da tela; marque pelas Tarefas');
+            await marcarPassoRapido({ dealId, nome: item.negocio, iso: sug.iso, visita: item.clientId ? { uid: profile.id, clientId: item.clientId } : null });
+            const t = `passo em ${sug.dia} · salvo`;
+            setFeitosV3((x) => ({ ...x, [dealId]: t }));
+            registrarHoje('folha_manha', 'passo_marcado');
+            void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] });
+            void queryClient.invalidateQueries({ queryKey: ['field_routes'] });
+            void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
+            void queryClient.invalidateQueries({ queryKey: ['dia_v3'] });
+            return t;
+          }}
+          aoOntem={async (dealId, chip) => {
+            const item = (filaV3 ?? []).find((i) => i.dealId === dealId);
+            if (chip === 'decidir') {
+              setPlanoDoDia(false);
+              setPedidoDaFila({ acao: 'cartao', deal: dealId, origem: 'hoje_v3', n: Date.now() });
+              irParaAba('tasks');
+              return null;
+            }
+            await marcarPassoV3(dealId, item?.negocio ?? 'negócio', chip.iso);
+            registrarHoje('folha_manha', 'passo_marcado');
+            return `passo em ${chip.rot} · salvo`;
+          }}
+        />
+      )}
+      {planoDoDia && !hojeV3 && (
         <FolhaPlanoDoDia
           dia={new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }).toLocaleUpperCase('pt-BR')}
           paradas={paradasQueFaltam.map((st, i) => ({
@@ -9690,7 +9887,52 @@ function MainApp() {
       {canViewGestor && <FolhaTimeNaRua visivel={timeNaRua} aoFechar={() => setTimeNaRua(false)} />}
       {/* O FECHO DAS 18h (2.10). As pendentes vem da MESMA fila que o Cockpit cobra
           (motivo visita_sem_registro), nunca de uma conta nova aqui. */}
-      {fechoDoDia && profile?.id && (() => {
+      {/* HOJE v3 (01/11/26): o fecho com o dia inteiro, os chips e o check-out. As pendentes são as visitas
+          de hoje que seguem sem próximo passo pela regra única (a mesma do Cockpit), mais o Cheguei sem Como foi. */}
+      {fechoDoDia && profile?.id && hojeV3 && (() => {
+        const pendIds = new Set(entradaV3.pendentesFecho.map((p) => p.id));
+        const linhas: LinhaDoFecho[] = [];
+        (entradaV3.paradas ?? []).forEach((p) => {
+          const st = opsDeHojeV3.stops.find((x) => x.client_id === p.id);
+          const dealId = st?.client?.id_hubspot ? String(st.client.id_hubspot) : null;
+          if (p.estado === 'pendente' || p.estado === 'nao_visitada') { linhas.push({ id: p.id, dealId, nome: p.nome, estado: 'x', sub: '' }); return; }
+          const pend = !!dealId && pendIds.has(dealId);
+          linhas.push({ id: p.id, dealId, nome: p.nome, estado: pend ? 'pend' : 'ok', sub: (p.estado === 'sem_prova' ? 'sem prova · ' : 'com prova · ') + (pend ? 'sem próximo passo' : 'próximo passo marcado') });
+        });
+        entradaV3.pendentesFecho.forEach((pf) => { if (!linhas.some((l) => l.dealId === pf.id)) linhas.push({ id: 'd' + pf.id, dealId: pf.id, nome: pf.nome, estado: 'pend', sub: 'visitada · sem próximo passo' }); });
+        const portasF = vmV3.contagem.portas;
+        return (
+          <FolhaFechoV3
+            fecho={vmV3.fecho}
+            checkout={vmV3.checkout}
+            linhas={linhas}
+            chips={chipsDeDia(hojeIsoV3, feriadosV3, false)}
+            aoChip={async (l, c) => {
+              if (c === 'decidir') {
+                setFechoDoDia(false);
+                if (l.dealId) { setPedidoDaFila({ acao: 'cartao', deal: l.dealId, origem: 'hoje_v3', n: Date.now() }); irParaAba('tasks'); }
+                return null;
+              }
+              if (!l.dealId) throw new Error('esta visita não tem negócio no HubSpot');
+              await marcarPassoV3(l.dealId, l.nome, c.iso);
+              return `passo em ${c.rot} · salvo`;
+            }}
+            aoFechar={async (nPend) => {
+              const { error } = await supabase.from('fecho_do_dia').upsert({
+                pessoa: profile.id, dia: hojeIsoV3, fechado_em: new Date().toISOString(),
+                portas: portasF, com_passo: Math.max(0, portasF - nPend), sem_passo: nPend,
+              }, { onConflict: 'pessoa,dia' });
+              if (error) throw error;
+              registrarHoje('fecho_dia', nPend ? 'fechado_com_pendencia' : 'fechado', origemFechoV3.current);
+              void queryClient.invalidateQueries({ queryKey: ['dia_v3'] });
+              void queryClient.invalidateQueries({ queryKey: ['desenvolvimento_quadro'] });
+            }}
+            aoDepois={() => setFechoDoDia(false)}
+            aoVerDesempenho={() => { setFechoDoDia(false); irParaEu('menu'); }}
+          />
+        );
+      })()}
+      {fechoDoDia && profile?.id && !hojeV3 && (() => {
         const itensF = (filaNaTela.data?.itens ?? []) as Array<{ motivo: string; porque: string; dealId: string; clientId: string | null; negocio: string }>;
         const pend = itensF.filter((i) => i.motivo === "visita_sem_registro")
           .map((i) => ({ dealId: i.dealId, clientId: i.clientId, nome: i.negocio, hora: (/(\d{2}:\d{2})/.exec(i.porque ?? "") ?? [])[1] ?? null }));
@@ -9746,6 +9988,22 @@ function MainApp() {
           cartão no topo; o toque abre o Meu desempenho rolado até a coleção */}
       {isAuthenticated && !isViewer && !canViewGestor && (
         <ToastDeConquista aoVer={() => irParaEu('toast', true)} naAbaEu={tab === 'meu'} />
+      )}
+      {/* HOJE v3 (01/11/26): o toast pós-visita, acima da folha de baixo do mapa */}
+      {hojeV3 && toastV3 && (
+        <ToastPosVisita
+          toast={toastV3}
+          bottom={(alturaRodape ?? baseInferior) + (folhaDeBaixo ? alturaFolha : 0) + 12}
+          aoSumir={() => setToastV3(null)}
+          aoDepois={() => { registrarHoje('toast_pos_visita', 'ignorou'); setToastV3(null); }}
+          aoChip={async (c) => {
+            if (toastV3.kind !== 'ficha') return;
+            await marcarPassoV3(toastV3.dealId, toastV3.nome, c.iso);
+            registrarHoje('toast_pos_visita', 'marcou_passo');
+            const t = toastFicha({ nome: toastV3.nome, dia: c.rot });
+            setToastV3({ kind: 'ficha', titulo: t.titulo, texto: t.texto, tom: 'ok', chips: null, dealId: toastV3.dealId, nome: toastV3.nome });
+          }}
+        />
       )}
       {avisosAbertos && (
         <AvisosPainel
@@ -10835,8 +11093,22 @@ function MainApp() {
           // O PASSO CAI NA AGENDA NA HORA (28/09/2026): a ficha acabou de criar a tarefa no
           // HubSpot, e a Agenda guardava a lista por 3 min. Fechar a ficha ou ir para a
           // Agenda relê as tarefas e os agendamentos.
-          onSalvouDesfecho={() => { if (Date.now() >= entrePortasAte) setEntrePortasDesde(Date.now()); }}
-          onFechar={() => { setFichaPendente(null); void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] }); void queryClient.invalidateQueries({ queryKey: ['client_meetings'] }); }}
+          onSalvouDesfecho={(info) => {
+            if (Date.now() >= entrePortasAte) setEntrePortasDesde(Date.now());
+            /* Hoje v3: o que a ficha salvou, para o toast que aparece quando ela fecha */
+            fichaSalvaV3.current = info ? { dealId: info.dealId, nome: fichaPendente.client.empresa?.trim() || fichaPendente.client.nome, dia: info.passoEm, semInteresse: info.semInteresse } : null;
+          }}
+          onFechar={() => {
+            setFichaPendente(null); void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] }); void queryClient.invalidateQueries({ queryKey: ['client_meetings'] });
+            /* HOJE v3 (README §4.4): depois de salvar, "Passo em sex 13 · salvo no HubSpot" (2,6 s) ou "ficou sem
+               próximo passo" com os chips, que fica até a ação. Sem interesse é decisão: não pede passo. */
+            const f = fichaSalvaV3.current;
+            fichaSalvaV3.current = null;
+            if (hojeV3 && ehRepV3 && f && !f.semInteresse && f.dealId) {
+              const t = toastFicha({ nome: f.nome, dia: f.dia ? rotuloCurtoV3(f.dia) : null });
+              setToastV3({ kind: 'ficha', titulo: t.titulo, texto: t.texto, tom: t.tom, chips: t.chips ? chipsDeDia(hojeIsoV3, feriadosV3, false) : null, dealId: f.dealId, nome: f.nome });
+            }
+          }}
           onProxima={(c) => handleMarkerPress(c)}
           declarada={fichaPendente.declarada}
           fotoProva={fichaPendente.fotoProva ?? null}

@@ -36,7 +36,8 @@ export const INVALIDA_POR_TIPO: Record<string, string[][]> = {
   'negocio-meu': [['tarefas_crm'], ['fila_tarefas'], ['desenvolvimento_quadro']],
   // + Desempenho e ranking (auditoria 16/10/26): a visita provada muda o placar e eles ficavam velhos
   // + o Desenvolvimento v2 (01/11/26): o check-in fecha a sequência, a missão e a medalha (o toast)
-  visita: [['meu_dia'], ['minha_daily'], ['client_visits'], ['novos-visitados-semana'], ['meu_desempenho'], ['vizinhos_no_ranking'], ['ranking_executivo'], ['fila_tarefas'], ['desenvolvimento_quadro']],
+  // + o Hoje v3 (01/11/26): a prova de cada parada, a pílula e o fecho
+  visita: [['meu_dia'], ['minha_daily'], ['client_visits'], ['novos-visitados-semana'], ['meu_desempenho'], ['vizinhos_no_ranking'], ['ranking_executivo'], ['fila_tarefas'], ['desenvolvimento_quadro'], ['dia_v3']],
   foto: [['client_visits'], ['desenvolvimento_quadro']],
   // a ficha na hora fecha a missão "Registro na hora"
   ficha: [['meu_dia'], ['desenvolvimento_quadro']],

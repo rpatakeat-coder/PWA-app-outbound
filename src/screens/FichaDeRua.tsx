@@ -63,7 +63,7 @@ type Props = {
   /** "Fechou" na visita de retorno: depois de salvar, abre Emitir cobrança (o negócio já em Negociação). */
   onEmitirCobranca?: () => void;
   /** Entre portas (2.7): o desfecho foi dado — hora de sugerir a ligação do caminho. */
-  onSalvouDesfecho?: () => void;
+  onSalvouDesfecho?: (info?: { dealId: string | null; passoEm: string | null; semInteresse: boolean }) => void;
   /** Visita declarada (0109): o chip diz isso, não "GPS confere". */
   declarada?: boolean;
   /** Foto de prova (GPS falhou) que não subiu no check-in: sobe junto com a visita. */
@@ -531,7 +531,9 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
        aqui, na intenção de salvar, e não no `executar`: durante os 5 s do Desfazer ele já está
        guardando o celular, e a sugestão chega atrasada se esperar. Desfazer fecha a ficha de
        qualquer jeito, e aí o bloco some junto. */
-    onSalvouDesfecho?.();
+    /* Hoje v3 (01/11/26): vai junto o que foi salvo, para o toast pós-ficha do mapa ("Passo em sex 13 ·
+       salvo no HubSpot" ou "ficou sem próximo passo" com os chips de 1 toque) */
+    onSalvouDesfecho?.({ dealId, passoEm: passo ? passo.data : null, semInteresse: f.proximo === 'sem_interesse' });
   }
 
   function desfazer() {
