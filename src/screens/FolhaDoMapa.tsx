@@ -288,9 +288,9 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
     /* UM PLACAR SÓ (02/11/26). Com o Hoje v3 a pílula-placar do topo já conta o dia (com prova × meta,
        e "Feriado · sem expediente" no feriado); o "0/6" aqui embaixo era um segundo placar, de outra
        fonte, e no feriado ainda cobrava a meta que o topo dizia não existir. Com o placar no topo, a
-       recolhida é só o atalho da próxima porta; sem ele (hoje v2), segue com o número — e sem "/6"
+       recolhida é só o atalho da próxima porta ("Próxima ^", curto para sobrar fileira às lentes); sem ele (hoje v2), segue com o número — e sem "/6"
        fora do expediente. */
-    const texto = placarNoTopo ? 'Próxima porta' : diaUtilHoje ? `${feitasTexto}/${metaR}` : feitasTexto;
+    const texto = placarNoTopo ? 'Próxima' : diaUtilHoje ? `${feitasTexto}/${metaR}` : feitasTexto;
     const rotulo = placarNoTopo ? 'Mostrar a próxima porta'
       : `Mostrar a próxima porta. ${feitasTexto} ${diaUtilHoje ? `de ${metaR} ` : ''}visitas hoje`;
     return (
@@ -721,7 +721,8 @@ const s = StyleSheet.create({
   // o mesmo limão neon do pino do mapa (15/10/26), com a tinta escura nos dois temas
   miniLosango: { width: 21, height: 21, borderRadius: 3, transform: [{ rotate: '45deg' }], backgroundColor: '#C8F31D', borderWidth: 1.5, borderColor: '#111418', alignItems: 'center', justifyContent: 'center' },
   miniLosangoTexto: { fontSize: 10, fontWeight: '700', color: '#111418', transform: [{ rotate: '-45deg' }] },
-  pilulaRecolher: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -12, flexShrink: 0 },
+  // 44 de largura (02/11/26): eram 40, abaixo do alvo mínimo; o desenho continua no mesmo lugar (margem -14)
+  pilulaRecolher: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -14, flexShrink: 0 },
   pilulaMini: {
     // left 12 e teto de largura (02/11/26): a mesma borda da fileira de baixo; com fonte grande não empurra as lentes para fora
     position: 'absolute', left: 12, zIndex: 20, minHeight: 44, maxWidth: 150, borderRadius: 22, paddingHorizontal: 14,

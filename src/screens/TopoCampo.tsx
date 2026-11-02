@@ -74,14 +74,16 @@ export default function TopoCampo({ top, aoAbrirLentes, filtrosAtivos = 0, busca
         )}
         {aoAbrirLentes && <View style={s.divisor} />}
         <View style={[s.busca, !aoAbrirLentes && s.buscaSozinha]}>
-          <IconSearch width={16} height={16} fill={cores.muted} />
+          {/* A LUPA ENTRA NO ALVO (02/11/26): ela ficava fora do Pressable, e numa tela estreita (Android
+              de 360 com fonte a 130%, ~280 px) o toque da busca encolhia para 25 px — só o "B…". */}
           <Pressable
             style={s.buscaAbrir}
             onPress={aoAbrirBusca}
             accessibilityRole="search"
             accessibilityLabel={busca ? `Busca: ${busca}. Abrir busca` : 'Buscar lead, rua ou bairro'}
           >
-            <Text style={[s.buscaCampo, !busca && s.buscaVazia]} numberOfLines={1}>{busca || 'Buscar'}</Text>
+            <IconSearch width={16} height={16} fill={cores.muted} />
+            <Text style={[s.buscaCampo, !busca && s.buscaVazia, { flexShrink: 1 }]} numberOfLines={1}>{busca || 'Buscar'}</Text>
           </Pressable>
           {buscando && <ActivityIndicator size="small" color={cores.muted} />}
           {busca.length > 0 && !buscando && (
@@ -152,7 +154,7 @@ const s = StyleSheet.create({
   buscaSozinha: { paddingLeft: 12, gap: 10 },
   // era estilo de campo (flex 1 + altura 40) num texto: o "Lead ou rua" ficava grudado no topo da pílula
   buscaCampo: { fontSize: 14, lineHeight: 18, fontWeight: '500', color: 'var(--text)' },
-  buscaAbrir: { flex: 1, minWidth: 0, minHeight: 48, marginVertical: -1, justifyContent: 'center' },
+  buscaAbrir: { flex: 1, minWidth: 44, minHeight: 48, marginVertical: -1, flexDirection: 'row', alignItems: 'center', gap: 6 },
   buscaVazia: { color: 'var(--text-muted)' },
   /* MESMO PIXEL NAS DUAS VISTAS (prancha §1): largura fixa, nunca encolhe. */
   alternador: {
