@@ -103,7 +103,8 @@ import { useNaEquipeCockpit } from './src/hooks/useNaEquipeCockpit';
 import { useContextoDoPino, useLeadsNaFila } from './src/hooks/useMapaNovo';
 import PinoP2, { ANCORA_PINO_P2, sinalDoPino, type PapelPino } from './src/map/PinoP2';
 import FiltrosMapaNovo from './src/screens/FiltrosMapaNovo';
-import { PeekCardNovo, TopoCardNovo, type AcoesCardNovo, type DadosCardNovo } from './src/screens/CardLeadNovo';
+import { enderecoDoPino, ir as irAoPino, PeekCardNovo, TopoCardNovo, type AcoesCardNovo, type DadosCardNovo } from './src/screens/CardLeadNovo';
+import CartaoDaPilha from './src/screens/CartaoDaPilha';
 import FolhaDoMapa, { type ItemFolha } from './src/screens/FolhaDoMapa';
 import BarraPlanejar, { type ParadaDoDia } from './src/screens/BarraPlanejar';
 import type { CamadaAgenda, ItemPC, SugestaoPC } from './src/screens/AgendaPC';
@@ -137,7 +138,7 @@ import { negocioAcao } from './src/utils/negocioAcao';
 import { lerPlanoDosDias, subirPlanoDaFila } from './src/utils/planoDoPino';
 import { textoNormalizado } from './src/utils/pinoP2';
 import { contaAlvoDiscreta, DELTA_AFASTADO, FILTROS_VAZIOS, LENTES, passaNosFiltros, pontoDe, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
-import { montarLista, type OrdemDaLista } from './src/utils/listaDoMapa';
+import { gruposDaLista, montarLista, noTrecho, type OrdemDaLista } from './src/utils/listaDoMapa';
 import type { EstagioPainel } from './src/components/Painel';
 import FileiraDeLentes, { ALTURA_FILEIRA_LENTES, ALTURA_PILULAS_DAS_LENTES } from './src/screens/FileiraDeLentes';
 import LinhaDoDia from './src/screens/LinhaDoDia';
@@ -2860,7 +2861,7 @@ function MainApp() {
 
   /* O COMBINADO (prancha §6): o próximo passo do negócio é a tarefa aberta do HubSpot que não é
      cobrança — a mesma da aba Tarefas. Vai na linha "Combinado" e na fala do gatilho 2. */
-  const combinadoDe = useCallback((c: Client | null): { texto: string; quando: string | null } | null => {
+  const combinadoDe = useCallback((c: Client | null): { texto: string; quando: string | null; vencido: boolean } | null => {
     if (!c) return null;
     const ts = tarefasDoCrmParaContagem
       .filter((x) => !ehCobranca({ assunto: x.assunto, origem: x.marcador?.origem })
@@ -2870,6 +2871,8 @@ function MainApp() {
     if (!tf) return null;
     const texto = tf.assunto.replace(/^(?:visita|follow.?up|tarefa)\s*[-–—:]\s*/i, '').trim();
     if (!texto) return null;
+    // vencido: o dia do passo já passou (Brasília); hoje ainda não venceu
+    const vencido = !!tf.venceEm && !Number.isNaN(new Date(tf.venceEm).getTime()) && (diaBRT(new Date(tf.venceEm)) ?? '') < (diaBRT(new Date()) ?? '');
     const quando = tf.venceEm ? (() => {
       const d = new Date(tf.venceEm);
       const hojeK = diaBRT(new Date()); const k = diaBRT(d);
@@ -2880,7 +2883,7 @@ function MainApp() {
       if (k === hojeK) return `hoje${comHora}`;
       return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })}${comHora}`;
     })() : null;
-    return { texto, quando };
+    return { texto, quando, vencido };
   }, [tarefasDoCrmParaContagem]);
 
   // A ARMA DA PORTA DO HALO (prancha §4): o "Para entrar" da espiada e da folha
@@ -2981,11 +2984,24 @@ function MainApp() {
       visitadoEm: c.visited_at,
       diasNaEtapa: (c.id_hubspot ? contextoPino?.tempoPorNegocio.get(String(c.id_hubspot))?.diasNaEtapa : null) ?? null,
       etiqueta: p.etiqueta?.texto ?? null,
+      // o mapa na rua (02/11/26): o marcador do pino, por que visitar e o próximo passo
+      familia: p.familia,
+      glifo: p.familia === 'av' && p.nota != null ? p.nota.toFixed(1).replace('.', ',') : p.glifo,
+      abertoHa: p.abertoHa ?? null,
+      cobrar: p.etiqueta?.texto === 'cobrar',
+      diasSemToque: (() => {
+        const dia = (iso: string | null | undefined) => { if (!iso) return null; const t = new Date(iso); return Number.isNaN(t.getTime()) ? null : Math.max(0, Math.floor((Date.now() - 3 * 3600000) / 86400000) - Math.floor((t.getTime() - 3 * 3600000) / 86400000)); };
+        const ds = [dia(c.id_hubspot ? contextoPino?.tempoPorNegocio.get(String(c.id_hubspot))?.ultimaInteracao : null), dia(c.visited_at)].filter((x): x is number => x != null);
+        return p.familia === 'lead' && ds.length ? Math.min(...ds) : null;
+      })(),
+      queda: p.queda?.motivo ?? null,
+      proximo: combinadoDe(c),
+      feito: plano != null ? feitosDaRota.has(c.id) : visitadoHoje(c.visited_at),
     })),
     userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : null,
     new Date(),
     ordemDaLista,
-  ), [visiveisMapaNovo, userLocation, contextoPino, ordemDaLista]);
+  ), [visiveisMapaNovo, userLocation, contextoPino, ordemDaLista, combinadoDe, feitosDaRota]);
 
   /* QUANTOS CABEM EM CADA LENTE (Julyan, 28/10/26: "pode melhorar as lentes também"). O número
      ao lado do rótulo responde "vale o toque?" antes do toque. Conta pela MESMA regra que o mapa
@@ -3402,6 +3418,14 @@ function MainApp() {
     const x = niveisValidos.n1?.id === id ? niveisValidos.n1.rotulo : niveisValidos.n2.find((y) => y.id === id) ?? null;
     return x ? { lado: x.lado, nome: x.nome, linha2: x.linha2 } : null;
   }, [niveisValidos]);
+  /* A LISTA DO ALTERNADOR É O MESMO RECORTE (prancha "Mapa na rua" §4): lente + filtro + o TRECHO
+     VISÍVEL do mapa. A próxima porta entra mesmo fora do trecho: é ela que A PRÓXIMA mostra. */
+  const linhasDoTrecho = useMemo(() => {
+    if (!naRua) return linhasDaLista;
+    const dentro = new Set(visiveisMapaNovo.filter(({ c }) => c.id === idN1NaRua
+      || noTrecho({ lat: c.latitude == null ? null : Number(c.latitude), lng: c.longitude == null ? null : Number(c.longitude) }, mapRegion)).map(({ c }) => c.id));
+    return linhasDaLista.filter((l) => dentro.has(l.id));
+  }, [naRua, linhasDaLista, visiveisMapaNovo, idN1NaRua, mapRegion]);
 
   // Dia que a Agenda mostra. Unico estado novo do M4: a tira da semana vive no
   // header (que e' desta casca) e o corpo vive na AgendaScreen, entao o dia
@@ -6466,6 +6490,8 @@ function MainApp() {
         etapaCodigo: codigoDaEtapa(selectedClient),
         // prancha "Mapa do Executivo" (15/10/26): o combinado, os clientes Takeat perto e o tempo do negócio
         combinado: combinadoDe(selectedClient),
+        // o cartão na rua (prancha "Mapa na rua" §3): O QUE COBRA · POR QUE AGORA · PRÓXIMO PASSO e Ir · Pôr no plano · Cheguei
+        naRua: !layout.ehLargo,
         referencias: (clientePertoDe(selectedClient) ?? []).map((x) => ({ id: x.id, nome: x.nome, d: x.d })),
         // tempo do snapshot só vale se a etapa ainda é a dele (a pessoa pode ter acabado de mudar; 16/10/26)
         tempo: (() => {
@@ -7283,7 +7309,7 @@ function MainApp() {
         <FolhaLista
           visivel={listaAberta}
           aoFechar={() => setListaAberta(false)}
-          linhas={linhasDaLista}
+          linhas={linhasDoTrecho}
           rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? null}
           semGps={!userLocation}
           filtrosAtivos={quantosFiltros(filtrosNovos)}
@@ -7297,8 +7323,51 @@ function MainApp() {
             // Depois do painel fechar: o history.back() dele cancelaria a abertura do pino.
             if (alvo) setTimeout(() => handleMarkerPress(alvo.c), 300);
           }}
+          {...(naRua ? {
+            grupos: gruposDaLista(linhasDoTrecho, idN1NaRua, niveisValidos?.n2.map((x) => x.id) ?? []),
+            resumoDaProxima: idN1NaRua ? (n1EhSugestao ? 'sugestão' : (() => {
+              const i = routeDisplayClients.findIndex((c) => c.id === idN1NaRua);
+              return i >= 0 ? `${i + 1} de ${routeDisplayClients.length} no plano` : null;
+            })()) : null,
+            aoIr: (id: string) => { const alvo = visiveisMapaNovo.find(({ c }) => c.id === id); if (alvo) { primeiroToque('ir'); irAoPino(alvo.c); } },
+            aoCheguei: (id: string) => {
+              const alvo = visiveisMapaNovo.find(({ c }) => c.id === id);
+              setListaAberta(false);
+              if (alvo) { primeiroToque('cheguei'); setTimeout(() => handleMarkAsVisited(alvo.c), 300); }
+            },
+            aoTocarNoGrupo: (grupo: string) => registrarEvento('lista_linha_toque', { grupo }),
+          } : {})}
         />
       )}
+      {/* O CARTÃO DA PILHA (prancha "Mapa na rua" 5e): o leque abre no mapa e o cartão toma o lugar da
+          folha, com o endereço do ponto e uma linha por membro. */}
+      {naRua && tab === 'map' && !creationMode && !selectedClient && pilhaAberta && !planejarDia && (() => {
+        const pl = pilhaDe.get(pilhaAberta);
+        if (!pl || pl.membros.length < 2) return null;
+        const porId = new Map(visiveisMapaNovo.map((it) => [it.c.id, it]));
+        const linhaDe = new Map(linhasDaLista.map((l) => [l.id, l]));
+        const membros = pl.membros.map((id) => porId.get(id)).filter(Boolean).map((it) => {
+          const l = linhaDe.get(it!.c.id);
+          return { c: it!.c, p: it!.p, nome: getClientPrimaryName(it!.c), motivo: [l?.porque, l?.proximo].filter(Boolean).join(' · ') || (it!.c.bairro ?? '') };
+        });
+        if (membros.length < 2) return null;
+        const lider = membros[0].c;
+        const endereco = membros.map((m) => enderecoDoPino(m.c)).find((x) => !!x) || null;
+        const mesmoPonto = membros.every((m) => m.c.latitude === lider.latitude && m.c.longitude === lider.longitude);
+        const dist = userLocation && lider.latitude != null ? metrosLL({ lat: userLocation.latitude, lng: userLocation.longitude }, { lat: Number(lider.latitude), lng: Number(lider.longitude) }) : null;
+        return (
+          <CartaoDaPilha
+            membros={membros}
+            endereco={endereco}
+            mesmoPonto={mesmoPonto}
+            distancia={dist == null ? null : `${dist < 1000 ? `${Math.max(10, Math.round(dist / 10) * 10)} m` : `${(dist / 1000).toFixed(1).replace('.', ',')} km`}${dist <= 2000 ? ` · ${Math.max(1, Math.round(dist / 80))} min a pé` : ''}`}
+            bottom={alturaRodape ?? baseInferior}
+            aoAbrir={(c) => { setPilhaAberta(null); handleMarkerPress(c); }}
+            aoCheguei={(c) => { setPilhaAberta(null); primeiroToque('cheguei'); handleMarkAsVisited(c); }}
+            aoFechar={() => setPilhaAberta(null)}
+          />
+        );
+      })()}
       {/* auditoria 02/11/26: com o Hoje v3 a pílula-placar já mostra o dia (portas com prova × meta) pela
           fonte do v3; o Meu dia era outro placar (provadasHoje × desenvolvimento_quadro). Só no hoje-v2. */}
       {!(hojeV3 && !isViewer) && (

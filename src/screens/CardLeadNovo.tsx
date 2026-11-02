@@ -82,14 +82,17 @@ export type DadosCardNovo = {
   cobranca?: { texto: string; assunto: string } | null;
   /** Quem está logado: o status do plano do pino é o plano DELE. */
   uid?: string | null;
-  /** O próximo passo combinado (a tarefa aberta do HubSpot que não é cobrança). */
-  combinado?: { texto: string; quando: string | null } | null;
+  /** O próximo passo combinado (a tarefa aberta do HubSpot que não é cobrança). `vencido`: a data já passou. */
+  combinado?: { texto: string; quando: string | null; vencido?: boolean } | null;
   /** Clientes Takeat a até 400 m, o mais perto primeiro (prancha §5). */
   referencias?: { id: string; nome: string; d: number }[];
   /** Tempo do negócio no snapshot do Cockpit (dias na etapa do gatilho "cobrar"). */
   tempo?: TempoDoNegocio | null;
   /** Cliente Takeat: quantos leads meus e recém-abertos estão a 400 m (a referência da conversa). */
   pertoDoCliente?: { leads: number; recem: number } | null;
+  /** O mapa na rua (prancha "Mapa na rua" §5, 02/11/26), só no celular: a espiada ganha os blocos
+   *  O QUE COBRA · POR QUE AGORA · PRÓXIMO PASSO e os botões Ir · Pôr no plano · Cheguei. */
+  naRua?: boolean;
 };
 
 const ROTULO_TEMP: Record<string, string> = { Q: 'LEAD QUENTE', M: 'LEAD MORNO', F: 'LEAD FRIO', X: 'PERDIDO', '?': 'ETAPA NÃO RECONHECIDA' };
@@ -103,7 +106,7 @@ function kicker(d: DadosCardNovo): string {
   const f = pino.familia;
   if (f === 'cli') partes.push(pino.queda ? 'CLIENTE TAKEAT · EM QUEDA' : 'CLIENTE TAKEAT');
   else if (f === 'ex') partes.push('EX-CLIENTE');
-  else if (f === 'rec') partes.push(pino.abertoHa === 0 ? 'RECÉM-ABERTO · ABRIU HOJE' : `RECÉM-ABERTO · HÁ ${pino.abertoHa} ${pino.abertoHa === 1 ? 'DIA' : 'DIAS'}`);
+  else if (f === 'rec') partes.push(pino.abertoHa === 0 ? 'RECÉM-ABERTO · ABRIU HOJE' : `RECÉM-ABERTO · ${pino.abertoHa} ${pino.abertoHa === 1 ? 'DIA' : 'DIAS'}`);
   else if (f === 'av') partes.push('MAIS AVALIADO · GOOGLE');
   else if (f === 'alvo') partes.push('CONTA-ALVO');
   else {
@@ -217,7 +220,7 @@ function LinhasDaFamilia({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   );
 }
 
-function subtitulo(c: Client): string | null {
+export function subtitulo(c: Client): string | null {
   // Munição traz o endereço inteiro do Google ("Av. X, 488 - Bairro, Cidade -
   // RS, CEP, Brasil"): fica só "rua, número"; o bairro vem do campo próprio.
   const enderecoCurto = (c.endereco ?? '').split(' - ')[0].trim();
@@ -421,7 +424,10 @@ function Cabecalho({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; com
   const ehPessoa = pareceNomeDePessoa(cadastrado) && !!endereco;
   const nome = ehPessoa ? endereco! : cadastrado;
   // prancha §6: a distância vai à direita do kicker; o "aproximado" virou a caixa âmbar da folha
-  const distancia = distanciaTexto(d.distanciaM)?.replace(/ (k?m)$/, String.fromCharCode(160) + '$1') ?? null;
+  const distancia0 = distanciaTexto(d.distanciaM)?.replace(/ (k?m)$/, String.fromCharCode(160) + '$1') ?? null;
+  // na rua: "240 m · 3 min a pé" (80 m/min), como a folha e a Lista; acima de 2 km o minuto não ajuda
+  const distancia = distancia0 && d.naRua && d.distanciaM != null && d.distanciaM <= 2000
+    ? `${distancia0} · ${Math.max(1, Math.round(d.distanciaM / 80))} min a pé` : distancia0;
   const sub = ehPessoa ? `cadastrado como "${cadastrado}"` : endereco;
   return (
     <View style={s.cabecalho}>
@@ -669,8 +675,142 @@ function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   );
 }
 
+/* ══ O CARTÃO NA RUA (prancha "Mapa na rua" §3, 5a–5d, 02/11/26) ════════════════════════════
+   Tudo o que saiu do mapa mora aqui: os dias sem toque e o passo vencido (o selo ! resumia), a idade
+   exata do recém-aberto e a data do CNPJ (o losango só diz a faixa), o próximo passo. */
+const DIA_MS = 86400000;
+const diaBRTnum = (x: Date) => Math.floor((x.getTime() - 3 * 3600000) / DIA_MS);
+const ddmm = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
+function diasDesde(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const t = new Date(iso);
+  return Number.isNaN(t.getTime()) ? null : Math.max(0, diaBRTnum(new Date()) - diaBRTnum(t));
+}
+type LinhaBloco = { t: string; s?: string | null; cobra?: boolean };
+function Bloco({ titulo, linhas }: { titulo: string; linhas: LinhaBloco[] }) {
+  if (!linhas.length) return null;
+  return (
+    <View style={s.bloco}>
+      <Text style={s.blocoTitulo}>{titulo}</Text>
+      {linhas.map((l) => (
+        <View key={l.t}>
+          <Text style={[s.blocoLinha, l.cobra && s.blocoCobra]}>{l.t}</Text>
+          {!!l.s && <Text style={s.blocoSub}>{l.s}</Text>}
+        </View>
+      ))}
+    </View>
+  );
+}
+export function BlocosDaRua({ d }: { d: DadosCardNovo }) {
+  const { pino: p, client: c } = d;
+  const lp = p.familia === 'rec' && c.lead_prospeccao_id ? String(c.lead_prospeccao_id) : null;
+  // a MESMA leitura das linhas da família (mesma chave: uma ida ao banco)
+  const doCnpj = useQuery({
+    queryKey: ['recem-aberto', lp],
+    enabled: !!lp,
+    staleTime: 60 * 60 * 1000,
+    queryFn: async () => {
+      const { data } = await supabase.from('leads_prospeccao').select('cnpj, data_abertura').eq('id', lp!).maybeSingle();
+      return (data ?? null) as { cnpj: string | null; data_abertura: string | null } | null;
+    },
+  });
+  const cobra: LinhaBloco[] = [];
+  const parado = /parado/.test(p.etiqueta?.texto ?? '');
+  const cobrar = p.etiqueta?.texto === 'cobrar';
+  if (p.familia === 'lead' && (cobrar || parado)) {
+    const dInt = diasDesde(d.tempo?.ultimaInteracao);
+    const dVis = diasDesde(c.visited_at);
+    const dias = [dInt, dVis].filter((x): x is number => x != null);
+    const sem = dias.length ? Math.min(...dias) : null;
+    const ultimo = dVis != null && (dInt == null || dVis <= dInt) && c.visited_at ? `último contato: visita em ${ddmm(c.visited_at)}`
+      : d.tempo?.ultimaInteracao ? `último contato em ${ddmm(d.tempo.ultimaInteracao)}` : 'nenhum contato registrado';
+    if (sem != null && sem > 0) cobra.push({ t: `${sem} ${sem === 1 ? 'dia' : 'dias'} sem toque`, s: ultimo, cobra: true });
+    if (cobrar) cobra.push({ t: 'Prazo da etapa estourou', s: d.tempo?.diasNaEtapa != null ? `${d.tempo.diasNaEtapa} dias na etapa` : null, cobra: !(sem != null && sem > 0) });
+  }
+  if (d.combinado?.vencido) cobra.push({ t: `Passo vencido: ${d.combinado.texto.charAt(0).toLocaleLowerCase('pt-BR')}${d.combinado.texto.slice(1)}`, s: d.combinado.quando ? `era para ${d.combinado.quando}` : null });
+  if (d.cobranca) cobra.push({ t: d.cobranca.texto, s: d.cobranca.assunto });
+  if (p.queda) cobra.push({ t: 'Cliente em queda', s: p.queda.motivo, cobra: true });
+  const agora: LinhaBloco[] = [];
+  if (p.familia === 'rec' && p.abertoHa != null) {
+    const ab = doCnpj.data?.data_abertura ? String(doCnpj.data.data_abertura).slice(0, 10) : null;
+    const faixa = p.abertoHa <= 30 ? 'faixa até 30 dias' : p.abertoHa <= 60 ? 'faixa de 31 a 60 dias' : 'faixa de 61 a 90 dias';
+    agora.push({
+      t: ab ? `CNPJ aberto em ${ab.slice(8, 10)}/${ab.slice(5, 7)}/${ab.slice(0, 4)}` : `CNPJ aberto há ${p.abertoHa} ${p.abertoHa === 1 ? 'dia' : 'dias'}`,
+      s: `${faixa} · quem abriu há pouco ainda escolhe o sistema`,
+    });
+  }
+  const proximo: LinhaBloco[] = [];
+  if (d.combinado && !d.combinado.vencido) proximo.push({ t: d.combinado.texto, s: d.combinado.quando });
+  else if (!d.combinado && p.familia !== 'cli' && !c.visited_at) proximo.push({ t: '1ª visita', s: null });
+  return (
+    <>
+      <Bloco titulo="O QUE COBRA" linhas={cobra} />
+      <Bloco titulo="POR QUE AGORA" linhas={agora} />
+      <Bloco titulo="PRÓXIMO PASSO" linhas={proximo} />
+    </>
+  );
+}
+
+/** Ir · Pôr no plano · Cheguei (prancha 5a): o Cheguei é sempre o vermelho. */
+function BotoesDaRua({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
+  const c = d.client;
+  const { lido, onde } = useOndeNoPlano(d.uid, d.client.id);
+  const status = lido ? textoDoPlano(onde) : null;
+  return (
+    <View style={{ gap: 6 }}>
+      {status ? <Text style={[s.statusPlano, onde && !onde.feita && s.statusPlanoNo]} numberOfLines={2}>{status}</Text> : null}
+      <View style={s.botoesRua}>
+        <Botao rotulo="Ir" onPress={() => { primeiroToque('ir'); ir(c); }} desabilitado={c.latitude == null} estilo={[s.botao52, { flexGrow: 1 }]} />
+        {a.onPorNoPlano && (
+          <Botao rotulo={onde && !onde.feita ? 'Mudar no plano' : 'Pôr no plano'} onPress={a.onPorNoPlano} estilo={[s.botao52, { flexGrow: 1.6 }]}
+            acessivel={onde && !onde.feita ? 'Mudar o próximo passo no plano' : 'Pôr no plano: o que vai fazer, o dia e a hora'} />
+        )}
+        <Pressable accessibilityRole="button" accessibilityLabel="Cheguei: fazer check-in"
+          disabled={!a.onMarkVisited || d.isMarkingVisited}
+          onPress={a.onMarkVisited ? () => { primeiroToque('cheguei'); a.onMarkVisited!(); } : undefined}
+          style={({ pressed }) => [s.botao, s.botao52, s.chegueiRua, (!a.onMarkVisited || d.isMarkingVisited) && s.desabilitado, pressed && { opacity: 0.85 }]}>
+          {d.isMarkingVisited ? <ActivityIndicator color="#fff" /> : <Text style={s.chegueiRuaTexto} numberOfLines={1}>{d.visitadoHoje ? 'Registrar' : 'Cheguei'}</Text>}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+/** Contato e o resto da espiada, sem o Ir e o Cheguei (que subiram para os botões da rua). */
+function ContatoDaRua({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
+  const c = d.client;
+  const temTel = !!c.telefone?.trim() && d.pino.familia !== 'rec';
+  const podeAssumir = d.pino.dono === 'sem' && !!a.onEMeu;
+  const zap = temTel ? toWhatsappNumber(c.telefone) : null;
+  return (
+    <View style={s.grade}>
+      {temTel && <Botao rotulo="Ligar" onPress={() => ligar(c)} estilo={s.botao48} acessivel={`Ligar para ${c.telefone}`} />}
+      {temTel && <Botao rotulo="WhatsApp" onPress={() => openWhatsapp(c.telefone, { clientId: c.id, dealId: c.id_hubspot ?? null })} desabilitado={!zap} estilo={[s.botao48, s.zapBotao]} texto={s.zapTexto} acessivel="Abrir conversa no WhatsApp" />}
+      {podeAssumir
+        ? <Botao rotulo="É meu" onPress={() => assumir(d, a)} estilo={[s.botao48, s.eMeuBotao]} texto={s.eMeuTexto} acessivel="É meu: colocar no meu funil" />
+        : !temTel && (d.etapaCodigo === ETAPA.pagamento
+          ? <Botao rotulo="+ Telefone" desabilitado estilo={s.botao48} tracejado acessivel="Dados travados: cobrança emitida, nada muda até o Pago" />
+          : <Botao rotulo="+ Telefone" onPress={a.onEdit} estilo={s.botao48} tracejado acessivel="Adicionar telefone" />)}
+      {!a.onPorNoPlano && <Botao rotulo="Agendar" onPress={a.onScheduleMeeting} estilo={s.botao48} />}
+      {a.onExpandir && <Botao rotulo="…" onPress={a.onExpandir} estilo={[s.botao48, s.botaoMais]} acessivel="Mais: abrir o cartão" />}
+    </View>
+  );
+}
+
 /** Estágio 1 (peek): o que decide a visita sem expandir. */
 export function PeekCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
+  if (d.naRua) {
+    return (
+      <View style={s.peek}>
+        <Cabecalho d={d} a={a} compacto />
+        <BlocosDaRua d={d} />
+        <ArmaDoCartao d={d} a={a} compacto />
+        <LinhaCliente d={d} />
+        <BotoesDaRua d={d} a={a} />
+        <ContatoDaRua d={d} a={a} />
+      </View>
+    );
+  }
   return (
     <View style={s.peek}>
       <Cabecalho d={d} a={a} compacto />
@@ -754,6 +894,16 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
 
 const s = StyleSheet.create({
   peek: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8, gap: 10 },
+  /* o cartão na rua (5a–5d): blocos com o título em caixa alta e um traço em cima */
+  bloco: { gap: 4, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'var(--border)' },
+  blocoTitulo: { fontSize: 11, fontWeight: '700', letterSpacing: 0.88, color: 'var(--text-subtle)' },
+  blocoLinha: { fontSize: 14.5, lineHeight: 20, fontWeight: '600', color: 'var(--text)' },
+  blocoCobra: { color: 'var(--ambar-texto)' },
+  blocoSub: { fontSize: 12.5, lineHeight: 17, fontWeight: '500', color: 'var(--text-muted)' },
+  botoesRua: { flexDirection: 'row', gap: 8 },
+  botao52: { minHeight: 52, flexBasis: 0, borderRadius: 14 },
+  chegueiRua: { flexGrow: 1.4, backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
+  chegueiRuaTexto: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   topo: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, gap: 10 },
   eMeu: { marginLeft: 'auto', minHeight: 44, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#FACC15', alignItems: 'center', justifyContent: 'center' },
   eMeuForaDaRota: { backgroundColor: 'transparent', borderWidth: 1, borderStyle: 'dashed', borderColor: '#FACC15' },
@@ -843,3 +993,4 @@ const s = StyleSheet.create({
   expandirTexto: { fontSize: 13, fontWeight: '700', color: 'var(--info-text)' },
   origemTexto: { fontSize: 12, fontWeight: '800' },
 });
+export { subtitulo as enderecoDoPino };
