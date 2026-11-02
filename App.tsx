@@ -222,7 +222,7 @@ import { slaForStage, slaStatus, type SlaDays } from './src/utils/sla';
 import { lerAberturaDaUrl, lerPedidoDaUrl, limparAberturaDaUrl, limparPedidoDaUrl, type PedidoDaFila } from './src/utils/pushDaFila';
 import { PilulaDoHoje, ToastDeConquista } from './src/screens/EntradasDesenvolvimento';
 import type { OrigemAbertura } from './src/hooks/useDesenvolvimento';
-import { seloDaFila } from './src/utils/seloDaFila';
+import { contagemDoHoje, seloDaFila } from './src/utils/seloDaFila';
 import { janelaAtual, marcoDoRelogio } from './src/utils/horaDasLigacoes';
 import { feriadosNacionais, quenteEsfriando, secaoDoItem } from './supabase/functions/_compartilhado/filaDoDinheiro';
 import { FaixaHoraDasLigacoes } from './src/screens/CartaoDaFila';
@@ -1215,7 +1215,8 @@ function MainApp() {
   // Busca já na abertura (04/10/26): com enabled:false o selo mostrava a contagem do CRM (5)
   // até a pessoa abrir a aba, e o da fila (3) depois. Mesmo cache e mesma chave da tela.
   const filaNaTela = useQuery({ ...opcoesDaFila(), enabled: !!profile && profile.role !== 'view' });
-  const naFila = Array.isArray(filaNaTela.data?.itens) ? filaNaTela.data!.itens!.length : null;
+  // o número do Hoje: o mesmo no selo da aba, no cabeçalho e nos avisos (contagemDoHoje, auditoria 02/11/26)
+  const naFila = useMemo(() => contagemDoHoje(filaNaTela.data?.itens as Parameters<typeof contagemDoHoje>[0]), [filaNaTela.data]);
   // P2 (handoff Tarefas do App, 17/10/26): "2 quentes esfriando" ou "6 vencidos" — o mesmo no menu, na lateral e no sino
   const seloFila = useMemo(() => seloDaFila(filaNaTela.data?.itens, filaNaTela.data?.hoje ?? diaBRT(new Date())), [filaNaTela.data]);
   // P1: a hora das ligações (12:30 e 17:30, 15 min). Fora da janela ou com a fila vazia, a faixa some.
@@ -8443,9 +8444,9 @@ function MainApp() {
         // cobranças abertas · D2 → D5" (as do modo antigo) ao lado de "Abertas · 9". Calculado
         // aqui mesmo: seloTarefas é declarado mais abaixo e este bloco roda antes dele.
         if (modoNovo) {
-          return { titulo: 'Tarefas', sub: naFila != null ? `${naFila} ${naFila === 1 ? 'tarefa' : 'tarefas'} hoje` : 'negócios que precisam de você' };
+          return { titulo: 'Hoje', sub: naFila != null ? `${naFila} ${naFila === 1 ? 'tarefa' : 'tarefas'} hoje` : 'negócios que precisam de você' };
         }
-        return { titulo: 'Tarefas', sub: `${visibleTasksCount} ${visibleTasksCount === 1 ? 'cobrança aberta' : 'cobranças abertas'} · escalonamento D2 → D5` };
+        return { titulo: 'Hoje', sub: `${visibleTasksCount} ${visibleTasksCount === 1 ? 'cobrança aberta' : 'cobranças abertas'} · escalonamento D2 → D5` };
       }
       case 'config':
         return { titulo: 'Configurações', sub: 'Conta, aparência e administração' };
@@ -8530,23 +8531,6 @@ function MainApp() {
   const nAtrasadosFila = ((filaNaTela.data?.itens ?? []) as Array<{ venceu: boolean; motivo: string; grupo: string }>)
     .filter((i) => secaoDoItem(i) === 'atrasados' && i.motivo !== 'visita_sem_registro').length;
   const seloAtrasados = nAtrasadosFila ? `${nAtrasadosFila} ${nAtrasadosFila === 1 ? 'atrasado' : 'atrasados'}` : null;
-  // O NÚMERO DA AGENDA (28/09/2026, Julyan: "coloco na agenda e na rota do dia e o
-  // rodapé fica travado sem atualizar o número"). Contava só as paradas da rota: o que
-  // se agendava (demo, retorno) não mexia no número. Agora soma os agendamentos de hoje
-  // ainda não feitos, sem contar duas vezes quem já está na rota.
-  const hojeNoRodape = diaBRT(new Date());
-  const naRotaDeHoje = new Set(paradasQueFaltam.map((st) => st.client_id));
-  const agendadosHoje = meetings.filter((m) => m.status !== 'realizada' && m.status !== 'cancelada' && m.status !== 'nao_aconteceu'
-    && m.status !== 'cancelled' && m.status !== 'canceled'
-    && diaBRT(new Date(m.scheduled_at)) === hojeNoRodape && !naRotaDeHoje.has(m.client_id));
-  const agendadosDeHoje = agendadosHoje.length;
-  /* O SELO CONTA O QUE A LISTA MOSTRA (auditoria 15/10/26): as tarefas do HubSpot que vencem hoje
-     (próximo passo, tarefa do Cockpit) apareciam na Agenda e não mexiam no número. Entram agora,
-     sem contar duas vezes o lead que já está na rota ou numa reunião de hoje. */
-  const jaContados = new Set([...naRotaDeHoje, ...agendadosHoje.map((m) => m.client_id)]);
-  const tarefasDeHojeNaAgenda = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'hoje'
-    && !(t.clientId && jaContados.has(t.clientId))).length;
-  const seloAgenda = paradasQueFaltam.length + agendadosDeHoje + tarefasDeHojeNaAgenda;
   const abasDoRodape: Array<{ aba: AppTab; rotulo: string; Icone: typeof IconLocation; ativa: boolean; selo: number | null; seloClaro?: boolean; seloTexto?: string | null }> = [
     { aba: 'map', rotulo: 'Mapa', Icone: tab === 'map' ? IconLocationFilled : IconLocation, ativa: tab === 'map' || tab === 'list', selo: null },
     ...(isViewer ? [] : [
@@ -8556,7 +8540,9 @@ function MainApp() {
       // (semana), Playbook e Meu desempenho ficam em Eu — hoje pelo menu do
       // avatar, ate a tela da aba Eu chegar (2.9). O selo de Hoje soma o que
       // vence hoje, e o selo de texto segue mostrando os atrasados.
-      { aba: 'tasks' as AppTab, rotulo: 'Hoje', Icone: IconClipboardCheck, ativa: tab === 'tasks' || tab === 'agenda' || tab === 'route', selo: seloAgenda || null, seloClaro: true, seloTexto: seloAtrasados },
+      // auditoria 02/11/26: o número do selo é o do cabeçalho e da tela (contagemDoHoje), não mais
+      // paradas + reuniões + tarefas do CRM de hoje (seloAgenda), que nenhuma tela mostrava junto
+      { aba: 'tasks' as AppTab, rotulo: 'Hoje', Icone: IconClipboardCheck, ativa: tab === 'tasks' || tab === 'agenda' || tab === 'route', selo: naFila || null, seloClaro: true, seloTexto: seloAtrasados },
       { aba: 'meu' as AppTab, rotulo: 'Eu', Icone: IconTrendingUp as typeof IconLocation, ativa: tab === 'meu' || tab === 'playbook' || tab === 'config', selo: null },
     ]),
   ];
@@ -8598,7 +8584,8 @@ function MainApp() {
     { aba: 'route', rotulo: 'Rota', Icone: IconCar, visivel: !isViewer && !modoNovo },
     { aba: 'agenda', rotulo: 'Agenda', Icone: IconCalendar, visivel: !isViewer },
     // N5 (handoff v6): um número de tarefas só, "atrasadas + hoje", igual ao selo do rodapé
-    { aba: 'tasks', rotulo: 'Tarefas', Icone: IconClipboardCheck, badge: modoNovo ? undefined : visibleTasksCount, selo: modoNovo ? seloAtrasados ?? undefined : undefined, visivel: !isViewer },
+    // um nome só para a aba (auditoria 02/11/26): "Hoje", como no rodapé
+    { aba: 'tasks', rotulo: 'Hoje', Icone: IconClipboardCheck, badge: modoNovo ? undefined : visibleTasksCount, selo: modoNovo ? seloAtrasados ?? undefined : undefined, visivel: !isViewer },
     // No computador o Playbook não aparecia (auditoria das abas, 04/10/26); a tela já existia.
     { aba: 'playbook', rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, visivel: !isViewer },
     { aba: 'cockpit', rotulo: 'Gestão', Icone: IconBarGraph, visivel: verGestao },
@@ -8945,7 +8932,7 @@ function MainApp() {
             </View>
           ) : tab === 'tasks' ? (
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.headerTitulo}>Tarefas</Text>
+              <Text style={styles.headerTitulo}>Hoje</Text>
               {/* A sublinha responde a pergunta da tela antes de qualquer
                   toque: o que venceu e o que vence hoje. */}
               <Text style={styles.headerSublinha} numberOfLines={1}>
@@ -9553,7 +9540,7 @@ function MainApp() {
       ) : tab === 'tasks' && modoNovo ? (
         // A fila do dinheiro (docs/10 §1, 04/10/2026): um card por negócio, valor × urgência.
         // Visitar e Registrar levam ao lead no mapa (o Cheguei é a prova da visita).
-        <BarreiraDaAba nome="Tarefas">
+        <BarreiraDaAba nome="Hoje">
         {/* Desenvolvimento v2 (01/11/26): a pílula fixa no topo do Hoje leva ao Meu desempenho */}
         <View style={{ flex: 1 }}>
         {!isViewer && <PilulaDoHoje ativo={tab === 'tasks'} aoTocar={() => irParaEu('pilula')} />}
