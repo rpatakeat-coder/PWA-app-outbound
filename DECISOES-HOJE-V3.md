@@ -83,3 +83,20 @@ está nos dois repositórios (cockpit-unificado e PWA-app-outbound).
     ambígua. O selo "abriu esta semana" do gestor passa a contar só as telas do Desenvolvimento (a função
     `_desenvolvimento_de` da 0240 foi copiada inteira com essa única troca). Enquanto a 0241 não for
     aplicada, as chamadas novas são recusadas pelo banco e a tela não percebe (fogo e esquece).
+
+## Etapa 7 · o Hoje do Cockpit (espelho)
+
+21. **Os 3 blocos não leem dado novo.** O plano de hoje e a prova de cada parada saem de `EXH.dia`
+    (`GV2.v5Dia`, a mesma conta da Rua do gestor e do Planejamento); "sem próximo passo" é
+    `GV2.semProximoPasso` sobre a base do executivo; o placar é `desenvolvimento_quadro()` (DV2);
+    "Fechou o dia ontem" lê `fecho_do_dia` da pessoa logada.
+22. **A coluna do meio é o componente do Planejamento v3, não uma cópia.** As linhas são
+    `PLV3.dados` + `pv3LinhaHTML` (o atalho "+ Pôr em …", Pôr num dia, Ligar em, Decidir) e o clique vai
+    para `PLV3.acao`, que grava pelos caminhos dela (tarefa no HubSpot antes da grade). A Hoje só se
+    repinta depois. Sem a semana do Planejamento carregada, a coluna avisa e manda ao Planejamento.
+23. **A Hoje anterior continua inteira** atrás de `localStorage['hoje-v2'] = '1'` (o `renderMeuPainel`
+    desvia para o `GV2.HJ3` antes de montá-la). O `EXH.pintar` foi envolvido para repintar a Hoje v3 quando
+    algo ao vivo repinta a anterior (check-in do app, leitura da semana, gravação).
+24. **Os pontos no placar são "pts na semana"** (decisão 4) e o botão "abrir a Desenvolvimento" leva aos
+    5 números do gestor, que saíram daqui.
+25. **Uma coluna abaixo de 1240 px** (a escala de cortes da guarda de CSS; 1100 px não é um corte dela).
