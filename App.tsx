@@ -5455,7 +5455,8 @@ function MainApp() {
   const [feitosV3, setFeitosV3] = useState<Record<string, string>>({});
   const agoraV3 = (() => { const b = new Date(relogioDaJanela - 3 * 3600000); return `${String(b.getUTCHours()).padStart(2, '0')}:${String(b.getUTCMinutes()).padStart(2, '0')}`; })();
   const sugestaoV3 = useMemo(() => {
-    if (!filaV3 || !diaV3.data) return {};
+    // sem o plano dos dias lido (cont null), não sugere dia: um dia cheio passaria por livre (auditoria 02/11/26)
+    if (!filaV3 || !diaV3.data || !diaV3.data.cont) return {};
     const leads = semPassoPorDinheiro(filaV3).slice(0, 12).map((i) => {
       const b = i.clientId ? bairrosV3.data?.[i.clientId] : undefined;
       return { dealId: i.dealId, nome: i.negocio, etapaIdx: etapaIdxDe(i.etapaId), bairro: b?.bairro ?? null, semEnd: !i.clientId || !(b?.temLugar ?? (i.lat != null && i.lng != null)) };
