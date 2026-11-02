@@ -229,7 +229,8 @@ export function montarLista(itens: ItemDaLista[], eu: { lat: number; lng: number
       porque: pq.texto,
       porqueCobra: pq.cobra,
       proximo: proximoDaLinha(it),
-      minutos: m == null ? null : Math.max(1, Math.round(m / 80)),
+      // acima de 2 km o minuto a pé não ajuda (a parada a 414 km mostrava "5179 min", 02/11/26)
+      minutos: m == null || m > 2000 ? null : Math.max(1, Math.round(m / 80)),
     };
   });
   // Sem distância (sem coordenada, ou sem GPS) vai para o fim do SEU bloco, em ordem de nome —

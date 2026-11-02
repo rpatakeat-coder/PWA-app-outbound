@@ -225,7 +225,8 @@ export function subtitulo(c: Client): string | null {
   // RS, CEP, Brasil"): fica só "rua, número"; o bairro vem do campo próprio.
   const enderecoCurto = (c.endereco ?? '').split(' - ')[0].trim();
   const jaTemNumero = !!c.numero && enderecoCurto.includes(String(c.numero).trim());
-  const rua = [enderecoCurto, jaTemNumero ? null : c.numero?.trim()].filter(Boolean).join(', ');
+  // número sem rua não diz nada (o cartão mostrava só "9" embaixo do nome, 02/11/26)
+  const rua = enderecoCurto ? [enderecoCurto, jaTemNumero ? null : c.numero?.trim()].filter(Boolean).join(', ') : '';
   const partes = [rua, c.bairro?.trim()].filter(Boolean);
   return partes.length ? partes.join(' · ') : c.cidade?.trim() || null;
 }
@@ -834,7 +835,8 @@ export function TopoCardNovo({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   const dono = d.pino.dono === 'meu'
     ? 'Você'
     : d.pino.dono === 'colega'
-      ? `${d.responsavelNome ?? 'Colega'} (colega)`
+      // sem o nome no time do app (ex.: dono de pós-venda) aparecia "Colega (colega)"
+      ? (d.responsavelNome ? `${d.responsavelNome} (colega)` : 'Outra pessoa do time')
       : c.vendedor_id_hubspot ? '? dono não está mais no time' : 'Sem dono';
   return (
     <View style={s.topo}>

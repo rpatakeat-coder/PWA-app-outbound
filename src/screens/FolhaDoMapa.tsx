@@ -105,9 +105,10 @@ type Props = {
 
 type Modo = 'prioridade' | 'distancia' | 'roteiro';
 
-// Andando na rua: ~80 m por minuto, contando esquina e sinal.
+// Andando na rua: ~80 m por minuto, contando esquina e sinal. Acima de 2 km o minuto não ajuda
+// (a parada a 414 km mostrava "5179 min a pé", 02/11/26): só a distância, como o cartão e a Lista.
 function aPe(m: number | null): string | null {
-  if (m == null) return null;
+  if (m == null || m > 2000) return null;
   return `${Math.max(1, Math.round(m / 80))} min a pé`;
 }
 

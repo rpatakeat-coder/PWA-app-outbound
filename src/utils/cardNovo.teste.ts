@@ -70,6 +70,8 @@ ok(ordenarItens([it('sem', { distanciaM: null }), it('com', { distanciaM: 5000 }
   const ex = txt({ hs_etapa_uso: 'Churn', hs_qtd_comandas: 2980, hs_ultima_comanda_em: '2026-08-17', hs_cancelamento_solicitado_em: '2026-07-24' }, { tipo: 'ex' });
   ok(ex === 'ex:Ex-cliente · cancelou em 24/07 | -:2.980 comandas | -:última comanda há 42 dias', `ex-cliente (${ex})`);
   ok(txt({ hs_etapa_uso: 'Setup' }, { tipo: 'cliente' }) === 'ok:Cliente ativo · Setup | -:sem comanda registrada', 'cliente novo sem comanda');
+  const pediu = txt({ hs_etapa_uso: 'Saudável', hs_cancelamento_solicitado_em: '2026-09-20' }, { tipo: 'cliente' });
+  ok(pediu === 'aviso:Em risco · pediu cancelamento em 20/09 | -:sem comanda registrada', `ativo que pediu cancelamento não é Saudável (${pediu})`);
 }
 
 // fatos

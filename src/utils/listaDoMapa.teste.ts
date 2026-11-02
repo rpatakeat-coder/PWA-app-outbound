@@ -118,6 +118,7 @@ ok(pq({ proximo: { texto: 'Retorno com o dono', quando: '14/10', vencido: true }
 ok(pq({ familia: 'lead' }).proximo === 'Próximo: 1ª visita', 'nunca visitado sem passo: 1ª visita');
 ok(pq({ familia: 'cli' }).proximo === null, 'cliente sem passo: sem linha inventada');
 ok(pq({ lat: -20.3010, lng: -40.29 }).minutos === 1 && pq({ lat: -20.3022, lng: -40.29 }).minutos === 3, 'minutos a pé (80 m/min)');
+ok(pq({ lat: -20.40, lng: -40.29 }).minutos === null, 'longe (mais de 2 km): sem minutos a pé');
 const ls = montarLista(['a', 'b', 'c', 'd', 'e'].map((id, i) => it({ id, lat: -20.3 - i * 0.001 })), EU, AGORA);
 const g = gruposDaLista(ls, 'c', ['e', 'a', 'zz']);
 ok(g.map((x) => x.grupo).join() === 'proxima,perto,resto', 'três grupos, na ordem do mapa');

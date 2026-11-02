@@ -274,7 +274,8 @@ const secaoDe = (i: CardDaFila): SecaoDaFila => secaoDoItem(i);
 type Props = {
   ownerId: string | null;
   aoAbrirLead: (clientId: string) => void;
-  aoPosicionar?: (dealId: string, nome: string) => void;
+  /** depois = 'passo': assim que o pino entra no mapa, abre o "Marcar o próximo passo" (02/11/26). */
+  aoPosicionar?: (dealId: string, nome: string, depois?: 'passo') => void;
   aoRegistrarVisita: (clientId: string) => void;
   /** A4: abre o cadastro do lead no campo telefone. */
   aoEditarTelefone?: (clientId: string) => void;
@@ -581,8 +582,10 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
   // A4: Pôr no plano. Grava na rota do dia (field_route_stops), que o espelho 0150 leva ao
   // planos_semanais do Planejamento do Cockpit. 5 s de Desfazer antes de gravar, como o Adiar.
   function porNoPlano(i: CardDaFila) {
-    // sem pino: o mapa posiciona o negócio primeiro (o mesmo caminho do antigo "Ir ao mapa")
-    if (!i.clientId) { if (aoPosicionar) aoPosicionar(i.dealId, i.negocio); else Toast.mostrar('Este negócio ainda não tem pino no mapa.', 'erro'); return; }
+    /* sem pino: o mapa posiciona o negócio primeiro e, ao colocar, abre o próximo passo. Antes o
+       caminho parava no "no mapa" e o passo nunca era marcado (auditoria 02/11/26: "registrei o
+       passo e diz que estou sem"). */
+    if (!i.clientId) { if (aoPosicionar) aoPosicionar(i.dealId, i.negocio, 'passo'); else Toast.mostrar('Este negócio ainda não tem pino no mapa.', 'erro'); return; }
     /* A MESMA FOLHA DO PINO (06/10/26): aqui o botão punha no próximo dia de rua sem tipo, sem
        hora e sem HubSpot. Agora abre o "Marcar o próximo passo"; o atalho antigo só sobra sem ela. */
     if (aoMarcarProximoPasso) { aoMarcarProximoPasso(i.clientId); return; }

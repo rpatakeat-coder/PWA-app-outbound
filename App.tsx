@@ -4482,11 +4482,13 @@ function MainApp() {
   // Posicionar negócio que já existe (handoff v4.1 §6.7): o pino fica fixo no
   // centro, quem se mexe é o mapa, e o confirmar liga o ponto ao negócio —
   // sem create_pin, sem negócio novo.
-  const [posicionarDeal, setPosicionarDeal] = useState<{ dealId: string; nome: string } | null>(null);
-  const iniciarPosicionar = useCallback((dealId: string, nome: string) => {
+  const [posicionarDeal, setPosicionarDeal] = useState<{ dealId: string; nome: string; depois?: 'passo' } | null>(null);
+  // o "Marcar o passo" da fila continua depois do pino; a folha mora mais abaixo (abrirPorNoPlano)
+  const passoDepoisDoPinoRef = useRef<((c: Client) => void) | null>(null);
+  const iniciarPosicionar = useCallback((dealId: string, nome: string, depois?: 'passo') => {
     setTab('map');
     const centro = userLocation ?? { latitude: mapCenter.latitude, longitude: mapCenter.longitude };
-    setPosicionarDeal({ dealId, nome });
+    setPosicionarDeal({ dealId, nome, depois });
     setCreationCenter({ latitude: centro.latitude, longitude: centro.longitude });
     setCreationMode(true);
     /* 15/10/26 (Marco: "o mapa some"): o mapa abre SEMPRE perto da pessoa, no zoom de rua. O
@@ -4518,7 +4520,7 @@ function MainApp() {
     setResolvingPin(true);
     let addr: { endereco: string; numero: string; bairro: string; cidade: string; estado: string; cep: string } | null = null;
     try { addr = await reverseGeocode(creationCenter.latitude, creationCenter.longitude); } catch { /* sem endereço: grava só a posição */ }
-    const { dealId, nome } = posicionarDeal;
+    const { dealId, nome, depois } = posicionarDeal;
     // Etapa real do negócio: sem ela o pino nascia "Etapa não reconhecida" e o
     // registro sugeria mover para Prospecção pedindo origem (auditoria 26/09).
     let etapa: string | null = null;
@@ -4566,11 +4568,12 @@ function MainApp() {
           return lista.some((c) => c.id === g.id) ? lista.map((c) => (c.id === g.id ? { ...c, ...g } : c)) : [...lista, g];
         });
       }
-      Toast.mostrar(`${nome} no mapa · ligado ao negócio que já existia`, 'ok');
+      Toast.mostrar(depois === 'passo' ? `${nome} no mapa · agora o próximo passo` : `${nome} no mapa · ligado ao negócio que já existia`, 'ok');
       void queryClient.invalidateQueries({ queryKey: ['clients'] });
       void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
       void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] });
       setCreationMode(false); setCreationCenter(null); setPosicionarDeal(null);
+      if (depois === 'passo' && gravado) passoDepoisDoPinoRef.current?.(gravado);
     } catch (err: any) {
       Alert.alert('Não deu para posicionar', err?.message ?? 'Erro desconhecido');
     } finally {
@@ -5130,6 +5133,7 @@ function MainApp() {
     setSelectedClient(null);
     setTimeout(() => setPorNoPlanoPara({ client: c, etapaAtual: atual, tipoPino: p.tipo ?? null, cor: p.cor, acao }), 350);
   };
+  passoDepoisDoPinoRef.current = (c) => abrirPorNoPlano(c);
   const aplicarEtapaNoLead = (clientId: string, codigo: string, reabrir?: Client, etapaAntes?: string | null) => {
     // O HubSpot já gravou. O cartão e o pino mudam NA HORA (cache local + cartão
     // aberto), sem esperar o banco: antes o rótulo só mudava se o update do celular
@@ -7554,7 +7558,9 @@ function MainApp() {
           <Text style={styles.creationBarTitle}>{posicionarDeal ? `Posicionar ${posicionarDeal.nome}` : 'Selecione o local do cliente'}</Text>
           <Text style={styles.creationBarHint}>
             {posicionarDeal
-              ? 'Negócio que já existe · não cria outro. Arraste o mapa até a porta ou toque em Estou aqui.'
+              ? posicionarDeal.depois === 'passo'
+                ? 'Primeiro o lugar: arraste o mapa até a porta do restaurante (Estou aqui só se você estiver nela). Depois abre o próximo passo.'
+                : 'Negócio que já existe · não cria outro. Arraste o mapa até a porta ou toque em Estou aqui.'
               : 'Arraste o mapa para posicionar o pin no local exato. Endereço, CEP e bairro serão preenchidos automaticamente.'}
           </Text>
           {posicionarDeal && (
@@ -11276,7 +11282,7 @@ function ClientBottomSheet({
         ? 'agora há pouco'
         : horas < 24
         ? `há ${horas}h`
-        : `há ${Math.floor(horas / 24)} dia(s)`;
+        : Math.floor(horas / 24) === 1 ? 'há 1 dia' : `há ${Math.floor(horas / 24)} dias`;
 
     const linhaComanda = comanda
       ? `Última comanda: ${label(comanda)} • ${haQuanto(dias!)}`

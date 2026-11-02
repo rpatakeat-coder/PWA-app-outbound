@@ -104,6 +104,9 @@ export function sinaisDoCliente(c: Client, pino: Pino, hojeISO: string): SinalCl
     s.push({ texto: saiu ? `Ex-cliente · cancelou em ${ddmm(saiu)}` : 'Ex-cliente', tom: 'ex' });
   } else if (etapa && /cancel|parada|risco/i.test(etapa)) {
     s.push({ texto: `Em risco · ${etapa}`, tom: 'aviso' });
+  } else if (dia(c.hs_cancelamento_solicitado_em)) {
+    // ativo que pediu cancelamento não é "Saudável" (Senhor Bacon, auditoria 02/11/26)
+    s.push({ texto: `Em risco · pediu cancelamento em ${ddmm(dia(c.hs_cancelamento_solicitado_em)!)}`, tom: 'aviso' });
   } else {
     s.push({ texto: etapa ? `Cliente ativo · ${etapa}` : 'Cliente ativo', tom: 'ok' });
   }
