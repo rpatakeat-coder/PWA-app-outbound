@@ -334,9 +334,13 @@ Deno.serve(async (req: Request) => {
   }
 
   let raw: unknown;
+  let corpo = '';
   try {
-    raw = await req.json();
+    corpo = await req.text();
+    raw = JSON.parse(corpo);
   } catch {
+    // o começo do corpo no log: o 400 de 30/10 em diante não deixava rastro do motivo
+    console.warn('[hubspot-lead-webhook-latlong] JSON inválido', corpo.length, corpo.slice(0, 300));
     return json(400, { error: 'Invalid JSON' });
   }
 
@@ -360,10 +364,13 @@ Deno.serve(async (req: Request) => {
   }[] = [];
   const seenIds = new Set<string>();
   const duplicateIds = new Set<string>();
+  const semId: number[] = [];
   for (let i = 0; i < items.length; i++) {
     const idHubspot = trimOrNull(items[i]?.id_hubspot);
     if (!idHubspot) {
-      return json(400, { error: `id_hubspot is required (item index ${i})` });
+      // sem id não dá para gravar este item, mas os outros entram (auditoria 02/11/26)
+      semId.push(i);
+      continue;
     }
     if (seenIds.has(idHubspot)) {
       duplicateIds.add(idHubspot);
@@ -376,11 +383,24 @@ Deno.serve(async (req: Request) => {
       statusSlug: trimOrNull(items[i]?.status),
     });
   }
+  /* UM LEAD RUIM NÃO DERRUBA O LOTE (auditoria 02/11/26): desde 30/10 15h o RPA recebia 400 em todos
+     os lotes, e os leads novos de todas as praças deixaram de entrar. O id repetido fica com a ÚLTIMA
+     ocorrência (a mais nova do RPA) e o aviso volta na resposta e no log. */
+  const avisos: string[] = [];
+  if (semId.length) {
+    avisos.push(`id_hubspot ausente nos itens ${semId.join(', ')} (ignorados)`);
+    console.warn('[hubspot-lead-webhook-latlong] itens sem id_hubspot', semId);
+  }
+  if (!normalized.length) return json(400, { error: 'nenhum item com id_hubspot', avisos });
   if (duplicateIds.size > 0) {
-    return json(400, {
-      error: 'id_hubspot duplicado dentro do batch',
-      duplicated_ids: Array.from(duplicateIds),
-    });
+    const ultimo = new Map<string, number>();
+    normalized.forEach((n, i) => ultimo.set(n.idHubspot, i));
+    const antes = normalized.length;
+    for (let i = normalized.length - 1; i >= 0; i--) {
+      if (ultimo.get(normalized[i].idHubspot) !== i) normalized.splice(i, 1);
+    }
+    avisos.push(`id_hubspot repetido no lote: ${Array.from(duplicateIds).join(', ')} (${antes - normalized.length} cópia(s) ignorada(s), ficou a última)`);
+    console.warn('[hubspot-lead-webhook-latlong] ids repetidos', Array.from(duplicateIds));
   }
 
   const supabase = createClient(
@@ -428,10 +448,10 @@ Deno.serve(async (req: Request) => {
     const validSet = new Set((validStatuses ?? []).map((r) => r.slug as string));
     const invalid = requestedStatusSlugs.filter((s) => !validSet.has(s));
     if (invalid.length > 0) {
-      return json(400, {
-        error: `status inválido(s): ${invalid.join(', ')}`,
-        valid_hint: 'consulte client_statuses (is_active=true)',
-      });
+      // status desconhecido não barra o lead: ele entra sem trocar o status (o mesmo de quando o RPA não manda status)
+      for (const n of normalized) if (n.statusSlug && invalid.includes(n.statusSlug)) n.statusSlug = null;
+      avisos.push(`status inválido(s) ignorado(s): ${invalid.join(', ')} (consulte client_statuses is_active=true)`);
+      console.warn('[hubspot-lead-webhook-latlong] status inválidos', invalid);
     }
   }
 
@@ -557,7 +577,7 @@ Deno.serve(async (req: Request) => {
   }
 
   if (isBatch) {
-    return json(200, { ok: true, count: results.length, clients: results });
+    return json(200, { ok: true, count: results.length, clients: results, ...(avisos.length ? { avisos } : {}) });
   }
-  return json(200, { ok: true, client: results[0] ?? null });
+  return json(200, { ok: true, client: results[0] ?? null, ...(avisos.length ? { avisos } : {}) });
 });
