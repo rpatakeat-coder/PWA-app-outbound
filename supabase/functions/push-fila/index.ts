@@ -10,6 +10,7 @@
 //   { op: 'testar' }                                  → manda um aviso de teste para os aparelhos dele
 // Op do robô (x-cron-secret = vault 'push_fila', chamada por public.invocar_push_fila):
 //   { op: 'rodar', momento: '0830' | '1230' | '1730' | '1805', dry_run? }
+//   { op: 'rodar', momento: 'manha0800' | 'fecho1800' }   o Hoje v3 (01/11/26): o dia em 30 segundos e o fecho
 //
 // Regras do P6: no máximo 4 avisos por pessoa por dia; o quente das 08:30 nunca repete o negócio
 // no mesmo dia; nada depois das 19h, no fim de semana, no feriado, com a fila zerada ou com um
@@ -24,6 +25,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { feriadosNacionais, ehDiaUtil, secaoDoItem, quenteEsfriando, tituloDoCard } from '../_compartilhado/filaDoDinheiro.ts';
 import { b64u, cifrarWebPush, jwtVapid } from '../_compartilhado/webPush.ts';
 import { pushSegunda, pushSexta, type Quadro } from '../_compartilhado/desenvolvimentoV2.ts';
+import { diaDoExecutivo, semProximoPassoDaFila, type EntradaDoDia, type Parada } from '../_compartilhado/hojeV3.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -90,7 +92,7 @@ const pl = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : var
 // a URL que o aviso abre: o app decide (abre a fila, disca ou abre o WhatsApp e, na volta, o Como foi)
 const urlApp = (acao: string, deal?: string) => `/?fila=${acao}${deal ? `&deal=${encodeURIComponent(deal)}` : ''}&origem=push`;
 
-type Item = { dealId: string; negocio: string; titulo?: string; etapaId: string; venceu: boolean; prazo: string | null; motivo: string; grupo: string; porque: string; score: number; telefone?: string | null; verbo?: string; pessoa?: string | null; papel?: string | null };
+type Item = { dealId: string; clientId?: string | null; negocio: string; titulo?: string; etapaId: string; venceu: boolean; prazo: string | null; motivo: string; grupo: string; porque: string; score: number; telefone?: string | null; verbo?: string; pessoa?: string | null; papel?: string | null };
 
 async function filaDe(uid: string, segredo: string): Promise<{ itens: Item[]; hoje: string } | null> {
   const r = await fetch(`${URL_SUPA}/functions/v1/fila-tarefas?forceFunctionRegion=us-west-2`, {
@@ -240,9 +242,15 @@ async function rodar(svc: ReturnType<typeof createClient>, momento: string, dryR
     const aparelhos = porUser.get(uid) ?? [];
     if (!aparelhos.length) { linha.pulou = 'sem aparelho inscrito'; continue; }
     if (soPara.size && !soPara.has(uid)) { linha.pulou = 'fora de so_para (teste)'; continue; }
-    // os pushes da semana do Desenvolvimento v2 não gastam o limite de 4 da fila
-    const { data: enviados } = await svc.from('push_enviados').select('tipo, ref').eq('user_id', uid).eq('dia', hoje).neq('tipo', 'desenvolvimento');
+    // os pushes da semana do Desenvolvimento v2 e os do Hoje v3 (8h e 18h) não gastam o limite de 4 da fila
+    const { data: enviados } = await svc.from('push_enviados').select('tipo, ref').eq('user_id', uid).eq('dia', hoje).not('tipo', 'in', '(desenvolvimento,hoje)');
     if ((enviados ?? []).length >= LIMITE_DIA) { linha.pulou = 'já recebeu 4 hoje'; continue; }
+    /* Hoje v3 (01/11/26): quem recebeu o "Feche o dia" das 18h não recebe o "ainda dá tempo" das 18:05,
+       que diria a mesma coisa cinco minutos depois */
+    if (momento === '1805') {
+      const { data: fecho } = await svc.from('push_enviados').select('ref').eq('user_id', uid).eq('dia', hoje).eq('tipo', 'hoje').eq('ref', 'fecho1800').limit(1);
+      if (fecho && fecho.length) { linha.pulou = 'já recebeu o fecho das 18h'; continue; }
+    }
     // Cheguei aberto: check-in nos últimos 40 min sem Como foi depois dele
     const desde = new Date(Date.now() - 40 * 60000).toISOString();
     const { data: visita } = await svc.from('client_visits').select('visited_at').eq('visited_by', uid).gte('visited_at', desde).order('visited_at', { ascending: false }).limit(1);
@@ -309,6 +317,87 @@ async function rodarSemana(svc: ReturnType<typeof createClient>, momento: 'seg08
   return { ok: true, momento, ensaio, relatorio };
 }
 
+/* OS DOIS MOMENTOS DO HOJE v3 (handoff de 01/11/26, README §6). Um por dia útil cada, pelo mesmo robô:
+     08:00  "7 paradas hoje · 12 leads sem passo" / "1ª às 09:00 em Madureira · toque para ver o seu dia em
+            30 segundos"  → abre a folha da manhã (?hoje=manha)
+     18:00  "Feche o dia: 6 portas · 2 sem próximo passo" / "leva 1 minuto · conta para a sequência"
+            → abre o fecho (?hoje=fecho); só para quem foi à rua e ainda não fechou o dia
+   O texto sai de diaDoExecutivo (_compartilhado/hojeV3.ts), a mesma montagem da folha do app e do Hoje do
+   Cockpit, e o "sem passo" é semProximoPassoDaFila sobre a fila da Edge fila-tarefas (a mesma da tela).
+   Feriado e fim de semana: nada. No máximo 1 por momento por dia (push_enviados tipo 'hoje', ref o
+   momento). Não gasta o limite de 4 da fila e segue o mesmo cockpit_config.push_fila (desligado = ensaio). */
+async function rodarDia(svc: ReturnType<typeof createClient>, momento: 'manha0800' | 'fecho1800', dryRun: boolean, segredo: string, ignorarHorario: boolean) {
+  const { data: cfgLinha } = await svc.from('cockpit_config').select('conteudo').eq('chave', 'push_fila').maybeSingle();
+  const cfg = (cfgLinha?.conteudo ?? {}) as { ligado?: boolean; so_para?: string[] };
+  const ensaio = dryRun || cfg.ligado !== true;
+  const hoje = hojeBRT();
+  const ano = Number(hoje.slice(0, 4));
+  const feriados = [...feriadosNacionais(ano), ...feriadosNacionais(ano + 1)];
+  if (!(ignorarHorario && dryRun) && !ehDiaUtil(hoje, feriados)) return { ok: true, momento, pulou: 'não é dia útil' };
+  const { data: equipe } = await svc.from('equipe_cockpit').select('profile_id, papel').eq('ativo', true).eq('papel', 'rep').or('so_acesso.is.null,so_acesso.eq.false');
+  const soPara = new Set((cfg.so_para ?? []).map(String));
+  const alvo = (equipe ?? []).map((e: { profile_id: string }) => String(e.profile_id));
+  const { data: inscritas } = await svc.from('push_inscricoes').select('id, user_id, endpoint, p256dh, auth, falhas').in('user_id', alvo.length ? alvo : ['-']);
+  const k = await chaves(svc);
+  const relatorio: Array<Record<string, unknown>> = [];
+  for (const uid of alvo) {
+    const linha: Record<string, unknown> = { uid };
+    relatorio.push(linha);
+    const aparelhos = ((inscritas ?? []) as Inscricao[]).filter((i) => String(i.user_id) === uid);
+    if (!aparelhos.length) { linha.pulou = 'sem aparelho inscrito'; continue; }
+    if (soPara.size && !soPara.has(uid)) { linha.pulou = 'fora de so_para (teste)'; continue; }
+    if (momento === 'fecho1800') {
+      const { data: fechou } = await svc.from('fecho_do_dia').select('dia').eq('pessoa', uid).eq('dia', hoje).limit(1);
+      if (fechou && fechou.length) { linha.pulou = 'já fechou o dia'; continue; }
+    }
+    const f = await filaDe(uid, segredo);
+    const [rota, vis] = await Promise.all([
+      svc.from('field_routes').select('field_route_stops(client_id, status, position, horario_fixo, clients(empresa, nome, bairro, etapa))').eq('seller_id', uid).eq('route_date', hoje).limit(1),
+      svc.rpc('_visitas_com_prova', { p_de: hoje, p_ate: hoje, p_pessoa: uid }),
+    ]);
+    type Stop = { client_id: string; status: string; position: number | null; horario_fixo: string | null; clients: { empresa: string | null; nome: string | null; bairro: string | null; etapa: string | null } | null };
+    const stops = (((rota.data ?? [])[0] as { field_route_stops?: Stop[] } | undefined)?.field_route_stops ?? [])
+      .filter((x) => x.status === 'planned' || x.status === 'done').sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
+    const visitas = vis.error ? [] : (vis.data ?? []) as Array<{ client_id: string | null; provada: boolean }>;
+    const provada = new Set(visitas.filter((v) => v.provada).map((v) => String(v.client_id)));
+    const visitada = new Set(visitas.map((v) => String(v.client_id)));
+    const paradas: Parada[] | null = rota.error ? null : stops.map((x) => ({
+      id: x.client_id, nome: (x.clients?.empresa || x.clients?.nome || 'parada').trim(), etapa: x.clients?.etapa ?? null,
+      hora: x.horario_fixo ? String(x.horario_fixo).slice(0, 5) : null,
+      estado: (provada.has(x.client_id) ? 'com_prova' : visitada.has(x.client_id) || x.status === 'done' ? 'sem_prova' : momento === 'fecho1800' ? 'nao_visitada' : 'pendente') as Parada['estado'],
+      venceHoje: null, metros: null,
+    }));
+    const conta = f ? semProximoPassoDaFila(f.itens as never) : null;
+    const semIds = new Set(conta ? conta.ids : []);
+    const pendentesFecho = (f?.itens ?? []).filter((i) => !!i.clientId && visitada.has(String(i.clientId))
+      && (semIds.has(i.dealId) || i.motivo === 'visita_sem_registro')).map((i) => ({ id: i.dealId, nome: i.negocio }));
+    let sequencia: number | null = null;
+    if (momento === 'fecho1800' && !pendentesFecho.length) {
+      const { data: q } = await svc.rpc('_desenvolvimento_de', { p_pessoa: uid });
+      const Q = q as Quadro | null;
+      sequencia = Q && !Q.erro && Q.sequencias ? Q.sequencias.rua.atual : null;
+    }
+    const e: EntradaDoDia = {
+      hoje, agora: momento === 'manha0800' ? '08:00' : '18:00', feriado: null, util: true, nome: null, meta: 6,
+      bairro: stops[0]?.clients?.bairro?.trim() || null, paradas, vencemHoje: [],
+      semPasso: conta ? conta.total : null, topSemPasso: [], placar: null, sequencia, missao: null,
+      ontem: null, fechouOntem: null, pendentesFecho, propostas: 0,
+    };
+    const vm = diaDoExecutivo(e);
+    const t = momento === 'manha0800' ? vm.push08 : vm.push18;
+    if (!t) { linha.pulou = momento === 'fecho1800' ? 'não foi à rua hoje' : 'sem expediente'; continue; }
+    const aviso: Aviso = { titulo: t.titulo, texto: t.texto, tag: `hoje-${momento}`, url: `/?hoje=${momento === 'manha0800' ? 'manha' : 'fecho'}`, acoes: [] };
+    linha.aviso = aviso.titulo; linha.texto = aviso.texto;
+    if (ensaio) { linha.ensaio = true; continue; }
+    const { error: reservou } = await svc.from('push_enviados').insert({ user_id: uid, dia: hoje, tipo: 'hoje', ref: momento });
+    if (reservou) { linha.pulou = 'já mandado'; continue; }
+    let algum = false;
+    for (const a of aparelhos) algum = (await enviar(svc, a, aviso, k)) || algum;
+    linha.enviado = algum;
+  }
+  return { ok: true, momento, ensaio, relatorio };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json(405, { erro: 'Método não permitido' });
@@ -326,6 +415,10 @@ Deno.serve(async (req: Request) => {
     }
     if (corpo.op !== 'rodar') return json(400, { erro: 'O robô só roda.' });
     const momento = String(corpo.momento ?? '');
+    if (momento === 'manha0800' || momento === 'fecho1800') {
+      try { return json(200, await rodarDia(svc, momento, corpo.dry_run === true, segredo, corpo.ignorar_horario === true)); }
+      catch (e) { return json(500, { erro: (e as Error).message }); }
+    }
     if (momento === 'seg0800' || momento === 'sex1700') {
       try { return json(200, await rodarSemana(svc, momento, corpo.dry_run === true, corpo.ignorar_horario === true)); }
       catch (e) { return json(500, { erro: (e as Error).message }); }

@@ -93,6 +93,8 @@ type Props = {
   aoMover?: (c: Client, delta: -1 | 1) => void;
   /** Meu roteiro: tirar a parada de hoje (sai também do Planejamento). */
   aoTirar?: (c: Client) => void;
+  /** Hoje v3 (01/11/26): "passo vence hoje · ligar 12:30" quando a próxima porta tem passo vencendo hoje. */
+  venceHojeDe?: (c: Client) => string | null;
 };
 
 type Modo = 'prioridade' | 'distancia' | 'roteiro';
@@ -152,7 +154,7 @@ function Etiquetas({ it }: { it: ItemFolha }) {
   );
 }
 
-export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, objecoesDaProxima = [], linha = null, aoMontarDia, entrePortas = null, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null }: Props) {
+export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false, planoFeito, chao, totalNaArea, rotuloLente, onAbrir, onCheguei: chegueiBruto, aoMedir, quadra, eMeu, visitasFeitas: feitasMedidas, visitasProvadas = null, metaVisitas, aoProgresso, linhaMeta = null, aoNovos, idProxima = null, armaDaProxima: armaDoHalo = null, sugestao = null, aoFala, objecoesDaProxima = [], linha = null, aoMontarDia, entrePortas = null, recem = null, embutida, aoRoteirizar, roteirizando, aoPlanejar, aoMover, aoTirar, pinoAberto = null, venceHojeDe }: Props) {
   const cores = useIconColors();
   /** Qual objeção do "Se ele disser" está aberta (uma por vez, e a folha não muda de tamanho à toa). */
   const [disserAberta, setDisserAberta] = useState<string | null>(null);
@@ -327,6 +329,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
             <Pressable accessibilityRole="button" accessibilityLabel={`Abrir ${proxima.c.empresa?.trim() || proxima.c.nome}`} onPress={() => onAbrir(proxima.c)} style={s.pilulaTexto}>
               <Text style={s.pilulaNome} numberOfLines={1}>{proxima.c.empresa?.trim() || proxima.c.nome}</Text>
               <Text style={s.pilulaSub} numberOfLines={1}>{subProxima}</Text>
+              {!!venceHojeDe?.(proxima.c) && <Text style={s.pilulaVence} numberOfLines={1}>{venceHojeDe(proxima.c)}</Text>}
             </Pressable>
           ) : lenteRecem && recem!.naRegiao === 0 ? (
             /* prancha §8: a lente sem CNPJ novo na região diz isso, e o plano continua no mapa */
@@ -707,6 +710,7 @@ const s = StyleSheet.create({
   pilulaTexto: { flex: 1, minWidth: 0, justifyContent: 'center', minHeight: 48 },
   pilulaNome: { fontSize: 15, fontWeight: '600', color: 'var(--text)' },
   pilulaSub: { fontSize: 13, fontWeight: '500', color: 'var(--text-muted)', marginTop: 1 },
+  pilulaVence: { alignSelf: 'flex-start', fontSize: 11.5, fontWeight: '700', color: 'var(--tint-amber-text)', backgroundColor: 'var(--tint-amber)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, marginTop: 3, overflow: 'hidden' },
   pilulaProgresso: { alignItems: 'center', gap: 1, paddingHorizontal: 2, minHeight: 48, minWidth: 52, justifyContent: 'center' },
   pilulaConta: { fontSize: 13, fontWeight: '700', color: 'var(--text)' },
   pilulaCheguei: { height: 48, paddingHorizontal: 18, borderRadius: 13, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
