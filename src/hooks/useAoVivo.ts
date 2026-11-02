@@ -49,7 +49,9 @@ export const INVALIDA_POR_TIPO: Record<string, string[][]> = {
   // + a faixa da semana da Agenda (01/11/26): só relia pelo staleTime de 60 s depois que o Cockpit mudava o plano
   plano: [['field_routes'], ['field_route_stops'], ['meu_dia'], ['plano_do_dia'], ['plano_semana_agenda'], ['plano_semana_agenda_pc'], ['plano_semana_fila'], ['no_plano_do_lead'], ['meu_plano_sem_lugar']],
   comunicado: [['avisos_gestor'], ['comunicados_nao_lidos']],
-  recado: [['avisos_gestor']],
+  // auditoria 02/11/26: só os recados (['avisos_gestor'] relia os comunicados junto) e a cobrança,
+  // que agora chega por aqui — antes só pela releitura de 2 em 2 min de sugestoes_planos
+  recado: [['avisos_gestor', 'recados'], ['cobrancas_nao_vistas']],
   // 0129: o gestor validou ou devolveu um acordo do 1:1 (ou eu marquei em outro aparelho)
   pdi: [['meu_pdi']],
   // 0130: agendamento (Agendar do app) criado, reagendado ou cancelado
@@ -58,10 +60,32 @@ export const INVALIDA_POR_TIPO: Record<string, string[][]> = {
   tarefa: [['tarefas_crm'], ['fila_tarefas']],
 };
 
+/*
+ * LEITURA EM CASCATA (auditoria 02/11/26: ~2.000 leituras/dia de `dailies` e ~1.200 de
+ * `sugestoes_planos` para ~11 pessoas). Duas portas abertas demais:
+ *  · sinal SEM DONO valia para todo mundo. O check-in em conta-alvo (pino sem
+ *    vendedor_id_hubspot) sai sem dono, e cada visita assim fazia o app de CADA executivo reler
+ *    o Meu dia e a Daily (dailies), a fila, o quadro e o ranking. Sem dono agora só vale para o
+ *    que é de todos (comunicado e o mapa); o próprio check-in já relê o dia de quem o fez.
+ *  · o gestor recebe o sinal do time inteiro, e cada visita de qualquer um relia o dia, a Daily,
+ *    a fila e o quadro DELE. Do sinal dos outros, o gestor só relê o que não é pessoal.
+ */
+const SEM_DONO_VALE = new Set(['comunicado', 'pino', 'pino-novo', 'negocio']);
+/** O que descreve só quem está logado: o sinal de outra pessoa não o torna velho. */
+export const CHAVES_PESSOAIS = new Set([
+  'meu_dia', 'minha_daily', 'meu_desempenho', 'fila_tarefas', 'desenvolvimento_quadro', 'dia_v3', 'meu_pdi',
+  'cobrancas_nao_vistas', 'avisos_gestor|recados', 'tarefas_crm',
+]);
+/** O sinal é de outra pessoa (ou sem dono, de algo que não é de todos): só relê o que não é pessoal. */
+export function sinalDeOutro(s: Sinal, meuOwnerId: string | null): boolean {
+  if (!s.owner_id) return !SEM_DONO_VALE.has(String(s.tipo));
+  return !meuOwnerId || String(s.owner_id) !== String(meuOwnerId);
+}
+
 export function sinalMeInteressa(s: Sinal, meuOwnerId: string | null, ehGestor: boolean): boolean {
   if (!s || !s.tipo || !INVALIDA_POR_TIPO[s.tipo]) return false;
   if (ehGestor) return true;
-  if (!s.owner_id) return true;
+  if (!s.owner_id) return SEM_DONO_VALE.has(s.tipo);
   return !!meuOwnerId && String(s.owner_id) === String(meuOwnerId);
 }
 
@@ -98,7 +122,15 @@ export function useAoVivo(ativo: boolean, meuOwnerId: string | null, ehGestor: b
     const aplicar = async () => {
       timer.current = null;
       const chaves = new Map<string, string[]>();
-      tipos.current.forEach((tipo) => (INVALIDA_POR_TIPO[tipo] || []).forEach((k) => chaves.set(k.join('|'), k)));
+      tipos.current.forEach((t) => {
+        // 'outro:visita' = visita de outra pessoa (gestor): só as chaves que não são pessoais
+        const deOutro = t.startsWith('outro:');
+        (INVALIDA_POR_TIPO[deOutro ? t.slice(6) : t] || []).forEach((k) => {
+          const id = k.join('|');
+          if (deOutro && CHAVES_PESSOAIS.has(id)) return;
+          chaves.set(id, k);
+        });
+      });
       const ids = [...pinos.current].slice(0, 200);
       tipos.current.clear();
       pinos.current.clear();
@@ -149,7 +181,7 @@ export function useAoVivo(ativo: boolean, meuOwnerId: string | null, ehGestor: b
         const s = (payload.new || {}) as Sinal;
         const { meuOwnerId: dono, ehGestor: gestor } = donoRef.current;
         if (!sinalMeInteressa(s, dono, gestor)) return;
-        tipos.current.add(String(s.tipo));
+        tipos.current.add((sinalDeOutro(s, dono) ? 'outro:' : '') + String(s.tipo));
         if (s.tipo === 'negocio' && dono && String(s.owner_id ?? '') === String(dono)) tipos.current.add('negocio-meu');
         if ((s.tipo === 'pino' || s.tipo === 'visita') && s.client_id) pinos.current.add(String(s.client_id));
         if (!timer.current) timer.current = setTimeout(() => { void aplicar(); }, 1200);
