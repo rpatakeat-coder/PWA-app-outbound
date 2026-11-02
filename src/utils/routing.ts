@@ -33,12 +33,6 @@ export type OptimizedTrip = {
   provider: RoutingProvider;
 };
 
-// Provider preferencial (tentado primeiro). Quem decide o fallback eh o
-// proprio fetch* — se ORS falhar, tenta OSRM antes de propagar o erro.
-export function getPreferredProvider(): RoutingProvider {
-  return ORS_KEY ? 'ors' : 'osrm';
-}
-
 // ============================================================
 // Polyline ponto-a-ponto (mantem a ordem de entrada). Usado pelo
 // hook useQuery em App.tsx pra visualizar a rota persistida.

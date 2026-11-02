@@ -20,6 +20,7 @@ import { MarkerClusterer, SuperClusterAlgorithm, type Renderer } from '@googlema
 import { MapChildContext, type MapChildContextValue } from './context';
 import { GOOGLE_MAP_ID, USING_DEMO_MAP_ID, loadGoogleMaps, onGoogleAuthFailure } from './loader';
 import { useTheme } from '../theme';
+import { publicarLeitura } from './leituraDoGps';
 import {
   boundsForCoordinates,
   boundsToRegion,
@@ -450,6 +451,8 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
         const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         marker.position = p;
         ultimaPosicao.current = { lat: p.lat, lng: p.lng, em: Date.now() };
+        // auditoria 02/11/26: o Cheguei e a posição do App usam esta leitura (src/map/leituraDoGps)
+        publicarLeitura({ latitude: p.lat, longitude: p.lng, accuracy: pos.coords.accuracy || 0, em: Date.now() });
         apagado(false);
         halo.setCenter(p);
         halo.setRadius(Math.min(pos.coords.accuracy || 0, 500));
@@ -481,7 +484,14 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
     );
     };
     ligar();
-    const aoVoltar = () => { if (document.visibilityState === 'visible') ligar(); };
+    // Auditoria 02/11/26: o GPS de alta precisão ficava ligado com a aba escondida (bateria). Ao
+    // esconder, desliga; ao voltar, religa (a primeira leitura nova reacende o ponto).
+    const aoVoltar = () => {
+      if (document.visibilityState === 'visible') { ligar(); return; }
+      if (watchId != null) navigator.geolocation?.clearWatch(watchId);
+      watchId = undefined;
+      if (religar) { clearTimeout(religar); religar = null; }
+    };
     document.addEventListener('visibilitychange', aoVoltar);
 
     return () => {

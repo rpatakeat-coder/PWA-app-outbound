@@ -29,12 +29,16 @@ export function mesmoNome(a: string | null | undefined, b: string | null | undef
   return Math.min(x.length, y.length) >= 6 && (x.startsWith(y) || y.startsWith(x));
 }
 
-/** Padrão ilike para achar candidatos pelo nome no banco: "Deu BO" → "%deu%bo%". */
-export function padraoDoNome(nome: string): string | null {
-  const ws = semAcento(nome).toLowerCase().split(/[^a-z0-9]+/).filter((w) => w && !GENERICAS.has(w));
-  return ws.length ? `%${ws.join('%')}%` : null;
-}
-
-/** Pino que veio do GPS de alguém (cadastro na rua ou check-in) — esse é prova de lugar. */
-export const pinoDeGps = (c: { geo_source?: string | null; geo_approximate?: boolean | null }) =>
-  (c.geo_source === 'coords' || c.geo_source === 'checkin') && !c.geo_approximate;
+/**
+ * Pino que veio do GPS de alguém (cadastro na rua ou check-in) — esse é prova de lugar, e o
+ * Cheguei longe dele não oferece "Estou na porta".
+ * Auditoria 02/11/26: a conta-alvo do Google nascia com geo_source 'coords' e passava por pino
+ * confirmado (bloqueava o "Estou na porta" com o executivo na porta). O servidor passa a gravar
+ * 'google_place'; aceita os dois: 'google_place' nunca é confirmado, e 'coords' com place_id do
+ * Google (conta-alvo de antes da troca) também não.
+ */
+export const pinoDeGps = (c: { geo_source?: string | null; geo_approximate?: boolean | null; conta_alvo_place_id?: string | null }) => {
+  if (c.geo_approximate) return false;
+  if (c.geo_source === 'checkin') return true;
+  return c.geo_source === 'coords' && !c.conta_alvo_place_id;
+};

@@ -53,12 +53,6 @@ export const DIAS_VOLTA = [
 ] as const;
 export { proximoDiaUtil };
 
-export const DIAS_REUNIAO = [
-  { dias: 1, rotulo: 'Amanhã' },
-  { dias: 3, rotulo: 'Em 3 dias' },
-  { dias: 5, rotulo: 'Em 1 semana' },
-] as const;
-
 // "E agora?" depende do "Como foi?" (handoff v4.1 §6.4). Reunião vem em três
 // chips (amanhã, 3 dias, 1 semana) para caber nos 3 toques.
 export type OpcaoAgora = { id: string; rotulo: string; proximo: Proximo; dias?: number; sub?: string };
@@ -487,11 +481,6 @@ export function notaDaVisita(f: Ficha, p: { cliente: string; ocorridoEm: string;
         ? `sem interesse: ${f.motivoPerdido}${f.motivoTexto.trim() ? ` (${f.motivoTexto.trim().slice(0, MAX_O_QUE_PESOU)})` : ''}` : null].filter(Boolean).join(' · ') || null,
     proximoPasso: passo ? { canal: passo.canal, dia: passo.data, acao: passo.texto } : null,
   });
-}
-
-/** "Ficha N de 5": nome real, decisor, telefone, tipo de lugar, bairro. */
-export function completude(dados: { nomeReal: boolean; decisor: boolean; telefone: boolean; tipo: boolean; bairro: boolean }): number {
-  return [dados.nomeReal, dados.decisor, dados.telefone, dados.tipo, dados.bairro].filter(Boolean).length;
 }
 
 // ---- Campos das etapas (mesmos rótulos, picklists e validação do Cockpit) ----

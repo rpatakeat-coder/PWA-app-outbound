@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { supabase } from '../integrations/supabase/client';
 import { Painel } from '../components/Painel';
-import { IconCheckCircle, IconTrophy, IconTrendingUp, IconTrendingDown } from '../components/icons';
+import { IconCheckCircle, IconTrendingUp, IconTrendingDown } from '../components/icons';
 
 // 09/10/26 (0192): a SEMANA é o placar do bônus de R$ 250 (regra 'bonus': venda 100 · demo
 // 25 (negócio entrou em Demo/Proposta, 0197) · visita com prova 3, sem teto por dia desde 14/10), a mesma conta do cockpit do gestor. O MÊS segue
@@ -75,18 +75,6 @@ export function Avatar({ nome, url, tamanho = 40 }: { nome: string; url?: string
     <View style={{ width: tamanho, height: tamanho, borderRadius: tamanho / 2, backgroundColor: 'var(--surface-3)', alignItems: 'center', justifyContent: 'center' }}>
       <Text style={{ fontSize: tamanho * 0.38, fontWeight: '700', color: 'var(--text)' }}>{iniciais(nome)}</Text>
     </View>
-  );
-}
-
-/** Selo "5º" com troféu, no topo de Tarefas (D15: só lá). 24 px de altura, 44 de alvo. */
-export function SeloPosicao({ aoAbrir }: { aoAbrir: () => void }) {
-  const q = useRanking('semana');
-  const pos = q.data?.eu?.pos;
-  if (!pos) return null;
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Você está em ${pos}º na semana. Abrir o ranking`} onPress={aoAbrir} hitSlop={10} style={s.seloAlvo}>
-      <View style={s.selo}><IconTrophy width={12} height={12} fill="var(--text)" /><Text style={s.seloTexto}>{`${pos}º`}</Text></View>
-    </Pressable>
   );
 }
 
@@ -337,7 +325,4 @@ const s = StyleSheet.create({
   conquista: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface)' },
   conquistaBloq: { borderStyle: 'dashed', backgroundColor: 'transparent' },
   regras: { fontSize: 11, color: 'var(--text-muted)', lineHeight: 16 },
-  seloAlvo: { minHeight: 44, justifyContent: 'center' },
-  selo: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 24, paddingHorizontal: 8, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)' },
-  seloTexto: { fontSize: 12, fontWeight: '700', color: 'var(--text)' },
 });

@@ -61,16 +61,6 @@ export const openGoogleMaps = ({ latitude, longitude, travelMode }: NavigationPa
   }
 };
 
-/**
- * Mantido por compatibilidade com quem ainda importa este nome.
- *
- * No navegador nao ha como abrir o Apple Maps de forma confiavel: o esquema
- * `maps://` so funciona no iOS e nao ha API pra saber se ele existe
- * (`canOpenURL` responde true pra tudo na web). O link universal do Google ja
- * cobre o iOS — o proprio sistema oferece abrir no app de mapas instalado.
- */
-export const openAppleMaps = openGoogleMaps;
-
 interface MultiStopParams {
   origin?: { latitude: number; longitude: number } | null; // GPS atual; se null, Maps usa o primeiro stop como origem
   stops: Array<{ latitude: number; longitude: number }>; // na ordem otimizada

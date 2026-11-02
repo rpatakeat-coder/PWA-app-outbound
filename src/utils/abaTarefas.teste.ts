@@ -15,9 +15,15 @@ const agora = new Date('2026-09-26T01:00:00Z');
 
 ok(grupoDaTarefa('2026-09-25T12:00:00Z', agora) === 'hoje', '22h em Brasília: tarefa de sexta ainda é "hoje" (não atrasada pelo UTC)');
 ok(grupoDaTarefa('2026-09-24T12:00:00Z', agora) === 'atrasadas', 'quinta = atrasada');
-ok(grupoDaTarefa('2026-09-26T12:00:00Z', agora) === 'amanha', 'sábado = amanhã');
+// "Amanhã" é o próximo dia útil (auditoria 02/11/26): na sexta, a segunda
+ok(grupoDaTarefa('2026-09-26T12:00:00Z', agora) === 'semana', 'sábado = esta semana (amanhã é o próximo dia útil)');
 ok(grupoDaTarefa('2026-09-27T12:00:00Z', agora) === 'semana', 'domingo = esta semana');
-ok(grupoDaTarefa('2026-09-28T12:00:00Z', agora) === 'depois', 'segunda seguinte = mais à frente, não some');
+ok(grupoDaTarefa('2026-09-28T12:00:00Z', agora) === 'amanha', 'na sexta, a segunda seguinte = amanhã');
+ok(grupoDaTarefa('2026-09-29T12:00:00Z', agora) === 'depois', 'terça seguinte = mais à frente, não some');
+// quinta 19/11/2026, com a sexta 20/11 feriado (Consciência Negra): amanhã é a segunda 23/11
+const quintaAntesDoFeriado = new Date('2026-11-19T15:00:00Z');
+ok(grupoDaTarefa('2026-11-23T15:00:00Z', quintaAntesDoFeriado) === 'amanha', 'antes do feriado: amanhã é o dia útil depois dele');
+ok(grupoDaTarefa('2026-11-20T15:00:00Z', quintaAntesDoFeriado) === 'semana', 'o próprio feriado não é amanhã');
 ok(grupoDaTarefa(null, agora) === 'hoje', 'sem data: prazo é hoje');
 ok(grupoDaTarefa('2026-09-26T02:30:00Z', agora) === 'hoje', '23h30 de sexta em Brasília (sábado em UTC) = hoje');
 
@@ -33,7 +39,7 @@ ok(acaoRapida(T('Visita - Kadô', null, 'visita')) === null, 'visita não tem Li
 ok(acaoRapida(T('Reunião de demo', null, 'outro')) === null, 'reunião não tem Liguei');
 
 const itens = [
-  T('b', '2026-09-24T15:00:00Z'), T('a', '2026-09-24T12:00:00Z'), T('c', '2026-09-25T12:00:00Z'), T('d', '2026-09-26T12:00:00Z'),
+  T('b', '2026-09-24T15:00:00Z'), T('a', '2026-09-24T12:00:00Z'), T('c', '2026-09-25T12:00:00Z'), T('d', '2026-09-28T12:00:00Z'),
 ];
 const g = agrupar(itens, agora);
 ok(g.map((x) => x.grupo.id).join() === 'atrasadas,hoje,amanha', 'grupo vazio não aparece, ordem do prompt');

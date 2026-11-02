@@ -20,7 +20,8 @@ import FolhaRanking, { Avatar } from './FolhaRanking';
 import { MinhaHabilidadeCard } from './MinhaHabilidadeCard';
 import { diaBRT } from '../utils/abaTarefas';
 import { ehDiaUtil } from '../utils/desfechoVisita';
-import { MeuDesempenhoV2Screen, type OrigemAbertura } from './MeuDesempenhoV2';
+import { MeuDesempenhoV2Screen } from './MeuDesempenhoV2';
+import type { OrigemAbertura } from '../hooks/useDesenvolvimento';
 
 type Dia = { dia: string; provadas: number; demos: number; contratos: number };
 type Desempenho = {

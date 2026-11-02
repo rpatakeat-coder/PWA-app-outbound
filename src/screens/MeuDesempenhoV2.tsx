@@ -12,8 +12,7 @@
 // Saíram desta aba (README §1): os 5 números do Hoje (continuam no Hoje) e os blocos de cobrança; o
 // v1 continua inteiro em MeuDesempenhoScreen e volta com localStorage['meu-desempenho-v1'] = '1'.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { Animated, Easing, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { supabase } from '../integrations/supabase/client';
 import { useLayout } from '../hooks/useLayout';
@@ -21,66 +20,13 @@ import {
   IconBook, IconCalendar, IconCheck, IconCheckCircle, IconClock, IconFlame, IconLocation, IconShieldCheck, IconStar,
   IconTarget, IconTrophy, IconUserGroup, IconZap, useIconColors,
 } from '../components/icons';
-import { buscarPlaybook } from './PlaybookScreen';
 import FolhaRanking from './FolhaRanking';
 import {
-  montarDesenvolvimento, type Capitulo, type Quadro, type VM, type Tom,
+  montarDesenvolvimento, type VM, type Tom,
 } from '../../supabase/functions/_compartilhado/desenvolvimentoV2';
 
-export type OrigemAbertura = 'toast' | 'pilula' | 'push_seg' | 'push_sex' | 'menu' | 'selo_menu';
-
-/** O quadro do Desenvolvimento v2: a mesma chave para a tela, a pílula do Hoje e o toast. */
-export function useDesenvolvimentoQuadro(enabled: boolean) {
-  return useQuery<Quadro>({
-    queryKey: ['desenvolvimento_quadro'],
-    enabled,
-    staleTime: 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('desenvolvimento_quadro');
-      if (error) throw error;
-      return data as Quadro;
-    },
-  });
-}
-/** Os capítulos do Playbook para o nível: os mesmos do Cockpit (categoria = capítulo, sem Liderança). */
-export function useCapitulos(enabled: boolean): Capitulo[] {
-  const pb = useQuery({ queryKey: ['playbook'], queryFn: buscarPlaybook, enabled, staleTime: 10 * 60 * 1000 });
-  return useMemo(() => {
-    const d = pb.data;
-    if (!d) return [];
-    return d.categorias.filter((c) => c !== 'Liderança').map((c) => ({ titulo: c, paginas: d.paginas.filter((p) => p.categoria === c).map((p) => p.id) }))
-      .filter((c) => c.paginas.length > 0);
-  }, [pb.data]);
-}
-
-/* as conquistas mostradas pelo toast nesta sessão continuam destacadas na coleção ("novo · hoje"), mesmo
-   depois que o toast gravou em conquistas_vistas e o quadro foi relido */
-export const destaqueDaSessao = new Set<string>();
-export async function marcarVistas(ids: string[], onde: 'toast' | 'colecao') {
-  if (!ids.length) return;
-  await supabase.rpc('marcar_conquistas_vistas', { p_ids: ids, p_onde: onde }).then(() => undefined, () => undefined);
-}
-export function registrarAbertura(origem: OrigemAbertura) {
-  void supabase.rpc('registrar_abertura', { p_tela: 'meu_desempenho', p_origem: origem }).then(() => undefined, () => undefined);
-}
-
-/** "reduzir movimento": a celebração aparece direto, sem escala (regra 7 do README). */
-export function useReduzirMovimento() {
-  const [r, setR] = useState(false);
-  useEffect(() => {
-    let vivo = true;
-    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.matchMedia) {
-      const m = window.matchMedia('(prefers-reduced-motion: reduce)');
-      setR(m.matches);
-      const f = () => setR(m.matches);
-      m.addEventListener?.('change', f);
-      return () => { vivo = false; m.removeEventListener?.('change', f); };
-    }
-    void AccessibilityInfo.isReduceMotionEnabled().then((v) => { if (vivo) setR(!!v); }, () => undefined);
-    return () => { vivo = false; };
-  }, []);
-  return r;
-}
+// o quadro, os capítulos, as conquistas vistas e o "reduzir movimento" moram em ../hooks/useDesenvolvimento
+import { destaqueDaSessao, marcarVistas, registrarAbertura, useCapitulos, useDesenvolvimentoQuadro, useReduzirMovimento, type OrigemAbertura } from '../hooks/useDesenvolvimento';
 
 const COR: Record<Tom, string> = {
   ok: 'var(--tint-green-text)', av: 'var(--tint-amber-text)', rota: 'var(--tint-blue-text)', acao: 'var(--vermelho-texto)', mute: 'var(--text)', dim: 'var(--text-muted)',

@@ -20,7 +20,7 @@ import RegistrarTarefa, { type TarefaParaRegistrar } from './RegistrarTarefa';
 import { JANELAS_LIGACAO, MINUTOS_DA_JANELA } from '../utils/horaDasLigacoes';
 import { useParaFechar } from './SemDesfecho';
 import { Aviso, LinhaFeito, LinhaParada, LinhaTarefa, MarcoDaJanela, PlacarDoDia, ProximaParada, TituloDeLista, type DadosDaLinha, type DadosDaProxima, type DadosDaTarefa, type ItemDoAviso } from './agenda/PecasDaAgenda';
-import { opcoesDaFila } from './FilaTarefasScreen';
+import { opcoesDaFila } from '../utils/dadosDaFila';
 import { lerFeitas } from '../utils/filaFeitas';
 import { oQueFazer } from '../utils/textoDaTarefa';
 import * as Location from 'expo-location';
@@ -41,7 +41,7 @@ import { acaoPorId } from '../utils/acoesDoPlano';
 import { diaCurto, montarFeitoNoDia, type FichaDoDia, type RegistroDoDia, type VisitaDoDia } from '../utils/feitoNoDia';
 // FERIADO (auditoria 01/11/26): o "Pôr amanhã" usava a conta do servidor sem a lista de
 // feriados e punha a parada no 02/11 (Finados). A de desfechoVisita já pula feriado nacional.
-import { proximoDiaUtil } from '../utils/desfechoVisita';
+import { ehDiaUtil, proximoDiaUtil } from '../utils/desfechoVisita';
 import { ordemParaDirigir } from '../utils/rotaDoDia';
 import { porNoDia, tirarDoDia } from '../utils/paradaDoDia';
 import { avisarQueOPlanoMudou } from '../utils/planoDoPino';
@@ -155,8 +155,15 @@ export default function AgendaNovoScreen({
         .catch(() => undefined);
     };
     ler();
-    const t = setInterval(ler, 60_000);
-    return () => { vivo = false; clearInterval(t); };
+    // auditoria 02/11/26: com a aba escondida o intervalo já não lia o GPS; agora nem bate
+    // (para ao esconder) e volta com uma leitura na hora quando a pessoa reabre o app
+    let t: ReturnType<typeof setInterval> | null = setInterval(ler, 60_000);
+    const aoMudar = () => {
+      if (document.visibilityState === 'visible') { ler(); if (!t) t = setInterval(ler, 60_000); }
+      else if (t) { clearInterval(t); t = null; }
+    };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', aoMudar);
+    return () => { vivo = false; if (t) clearInterval(t); if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', aoMudar); };
   }, []);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine !== false);
   useEffect(() => {
@@ -188,8 +195,11 @@ export default function AgendaNovoScreen({
   // voltando da Tarefas pela barra: o mesmo dia que estava aberto
   const diaDaVolta = !diaInicial && rolagem.voltarAte > Date.now() && rolagem.dia >= hoje ? rolagem.dia : null;
   /* A SEMANA VIRA NA SEXTA ÀS 17H, como no Cockpit (Julyan, 01/11/26): a Agenda abre na semana que vem,
-     e "Esta semana" continua a um toque para fechar o dia de hoje. */
-  const sextaDepoisDas17 = new Date(`${hoje}T12:00:00Z`).getUTCDay() === 5 && horaAgora >= 17;
+     e "Esta semana" continua a um toque para fechar o dia de hoje.
+     Auditoria 02/11/26: "sexta" é o ÚLTIMO DIA ÚTIL da semana — com a sexta feriado, vira na quinta às
+     17h (e no feriado o dia todo). Fim de semana já abre na semana que vem pelo segundaDe. */
+  const ultimoUtilDaSemana = (() => { const seg = segundaDe(hoje, 0); for (let i = 4; i >= 0; i--) { const d = somaDias(seg, i); if (ehDiaUtil(d)) return d; } return null; })();
+  const sextaDepoisDas17 = ultimoUtilDaSemana != null && (hoje > ultimoUtilDaSemana || (hoje === ultimoUtilDaSemana && horaAgora >= 17));
   const [semanaVista, setSemanaVista] = useState(diaInicial ? semanaDoDia(diaInicial) : diaDaVolta ? semanaDoDia(diaDaVolta) : sextaDepoisDas17 ? 1 : 0);
   const dias = useMemo(() => { const seg = segundaDe(hoje, semanaVista); return [0, 1, 2, 3, 4].map((i) => somaDias(seg, i)); }, [hoje, semanaVista]); // eslint-disable-line react-hooks/exhaustive-deps
   const [dia, setDia] = useState(diaInicial && dias.includes(diaInicial) ? diaInicial : diaDaVolta && dias.includes(diaDaVolta) ? diaDaVolta : dias.includes(hoje) ? hoje : dias[0]);

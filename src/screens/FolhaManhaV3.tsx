@@ -19,7 +19,7 @@ import { ActivityIndicator, Animated, Platform, Pressable, ScrollView, StyleShee
 import { Painel } from '../components/Painel';
 import { IconCheck, IconClock, IconLocation, IconPlus, IconWarning, useIconColors } from '../components/icons';
 import type { VMDia } from '../../supabase/functions/_compartilhado/hojeV3';
-import { useReduzirMovimento } from './MeuDesempenhoV2';
+import { useReduzirMovimento } from '../hooks/useDesenvolvimento';
 
 const COR_ETAPA = ['#94A3B8', '#60A5FA', '#A78BFA', '#F59E0B', '#F97316', '#10B981'];
 
@@ -35,23 +35,29 @@ type Props = {
   aoPor: (id: string) => Promise<string>;
   /** um chip das pendências de ontem; 'decidir' abre o cartão do negócio na fila */
   aoOntem: (id: string, chip: { rot: string; iso: string } | 'decidir') => Promise<string | null>;
+  /** os dados do dia (plano, fila) ainda não chegaram: esqueleto em vez de "Nada no plano" / "a fila não respondeu" */
+  carregando?: boolean;
 };
 
-export default function FolhaManhaV3({ folha, chipsOntem, aoIr, aoDepois, aoSumir, aoMontar, aoPor, aoOntem }: Props) {
+export default function FolhaManhaV3({ folha, chipsOntem, aoIr, aoDepois, aoSumir, aoMontar, aoPor, aoOntem, carregando = false }: Props) {
   const cores = useIconColors();
   const reduzir = useReduzirMovimento();
   const escala = useRef(new Animated.Value(0.4)).current;
   const [feitos, setFeitos] = useState<Record<string, string>>({});
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  // auditoria 02/11/26: o App passa aoSumir como arrow nova a cada render; nas dependências, o
+  // timer de 1,5 s recomeçava a cada render e a folha "em ordem" podia nunca sumir
+  const aoSumirRef = useRef(aoSumir);
+  aoSumirRef.current = aoSumir;
 
   useEffect(() => {
-    if (!folha.emOrdem) return;
+    if (carregando || !folha.emOrdem) return;
     if (reduzir) escala.setValue(1);
     else Animated.timing(escala, { toValue: 1, duration: 500, useNativeDriver: Platform.OS !== 'web' }).start();
-    const t = setTimeout(aoSumir, 1500);
+    const t = setTimeout(() => aoSumirRef.current(), 1500);
     return () => clearTimeout(t);
-  }, [folha.emOrdem, reduzir, escala, aoSumir]);
+  }, [folha.emOrdem, reduzir, escala, carregando]);
 
   const fazer = async (chave: string, f: () => Promise<string | null>) => {
     if (ocupado) return;
@@ -60,6 +66,29 @@ export default function FolhaManhaV3({ folha, chipsOntem, aoIr, aoDepois, aoSumi
     catch (e) { setErro(`Não marquei: ${String((e as Error)?.message ?? e)}. O lead continua sem próximo passo.`); }
     finally { setOcupado(null); }
   };
+
+  /* A FOLHA SUBIA ANTES DOS DADOS (auditoria 02/11/26): com a fila ainda a caminho ela dizia "a fila
+     não respondeu", sem as paradas "Nada no plano de hoje" — e, vazia, "Dia em ordem" e sumia em 1,5 s.
+     Até o plano e a fila chegarem, três cartões de esqueleto. */
+  if (carregando) {
+    return (
+      <Painel visivel aoFechar={aoDepois} rotulo="Seu dia em 30 segundos" topo={
+        <View style={s.topo}>
+          <Text style={s.kicker}>{folha.kicker}</Text>
+          <Text style={s.titulo}>Montando o seu dia…</Text>
+        </View>
+      }>
+        <View style={s.corpo} accessibilityLabel="Carregando o plano e a fila" accessibilityLiveRegion="polite">
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={[s.cartao, s.esqueleto]}>
+              <View style={s.esqTitulo} />
+              <View style={s.esqSub} />
+            </View>
+          ))}
+        </View>
+      </Painel>
+    );
+  }
 
   if (folha.emOrdem) {
     return (
@@ -200,6 +229,9 @@ const s = StyleSheet.create({
   kicker: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, color: 'var(--vermelho-texto)' },
   titulo: { fontSize: 22, lineHeight: 28, fontWeight: '700', color: 'var(--text)' },
   rolagem: { maxHeight: 460 },
+  esqueleto: { minHeight: 64, justifyContent: 'center' },
+  esqTitulo: { height: 14, width: '60%', borderRadius: 7, backgroundColor: 'var(--border)' },
+  esqSub: { height: 10, width: '40%', borderRadius: 5, backgroundColor: 'var(--border)' },
   corpo: { paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
   cartao: { backgroundColor: 'var(--surface-2)', borderRadius: 14, borderWidth: 1, borderColor: 'var(--border)', padding: 12, gap: 8 },
   cartaoOntem: { backgroundColor: 'var(--tint-amber)', borderColor: 'var(--tint-amber-border)' },

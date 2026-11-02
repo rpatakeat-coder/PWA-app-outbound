@@ -15,7 +15,8 @@ export type DiaV3Base = {
   visitas: VisitaV3[] | null;
   fechouHoje: boolean | null;
   fechouOntem: boolean | null;
-  cont: Record<string, number>;
+  /** null = o plano não foi lido (auditoria 02/11/26: o erro virava 0 e dia cheio era sugerido como livre) */
+  cont: Record<string, number> | null;
   bairrosDoDia: Record<string, Array<string | null>>;
 };
 
@@ -45,7 +46,7 @@ export function useDiaV3(ativo: boolean, uid: string | null, hoje: string, ontem
         cont[r.route_date] = vivas.length;
         bairrosDoDia[r.route_date] = vivas.map((s) => s.clients?.bairro ?? null);
       });
-      return { visitas, fechouHoje: dFecho ? dFecho.has(hoje) : null, fechouOntem: dFecho ? dFecho.has(ontem) : null, cont, bairrosDoDia };
+      return { visitas, fechouHoje: dFecho ? dFecho.has(hoje) : null, fechouOntem: dFecho ? dFecho.has(ontem) : null, cont: rotas.error ? null : cont, bairrosDoDia };
     },
   });
 }

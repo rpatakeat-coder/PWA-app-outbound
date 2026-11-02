@@ -27,9 +27,14 @@ export function useCobrancasNaoVistas(enabled: boolean) {
   const query = useQuery<CobrancaNaoVista[]>({
     queryKey: ['cobrancas_nao_vistas'],
     enabled,
-    // a cobrança precisa chegar com o app aberto também: relê a cada 2 minutos e ao voltar ao app
-    staleTime: 60_000,
-    refetchInterval: 120_000,
+    // a cobrança precisa chegar com o app aberto também. Auditoria 02/11/26: a releitura de 2 em 2 min
+    // (com 60 s de validade e a volta ao app) era a maior parte das ~1.200 leituras/dia de
+    // sugestoes_planos. Agora a cobrança chega pelo sinal ao vivo 'recado' (useAoVivo, gatilho
+    // sinal_recado em sugestoes_planos); os 10 min e a volta ao app ficam de rede de segurança.
+    staleTime: 5 * 60_000,
+    refetchInterval: 10 * 60_000,
+    // auditoria 02/11/26: com a aba escondida não relê (é o padrão do React Query; explícito para ninguém ligar)
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     queryFn: async () => {
       const { data: s0 } = await usuarioDaSessao();
