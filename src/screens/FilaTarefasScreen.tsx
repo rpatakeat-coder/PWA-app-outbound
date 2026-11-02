@@ -35,6 +35,7 @@ import { ehErroDeRede, ehSessaoVencida, enfileirar, novoAcaoId, registrarExecuto
 import { ehRecusa, negocioAcao } from '../utils/negocioAcao';
 import { apagarPendente, desfazerFeita, lerFeitas, marcarGravada, registrarFeita, type FeitaServidor, type OrigemDoFeito, type SecaoDoFeito } from '../utils/filaFeitas';
 import { ETAPAS_QUENTES, ehDiaUtil, proximoDiaUtil, quenteEsfriando, secaoDoItem, type ItemProximo as ItemProximoServidor, type SecaoDaFila } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
+import { semProximoPassoDaFila } from '../../supabase/functions/_compartilhado/hojeV3';
 import {
   BlocoVazio, CabecalhoDeBloco, CartaoTarefa, DiaLivre, FaixaJanela, FileiraDeDias, HojeZerado, LinhaDeFim, LinhaFeitoTarefa, PlacarTarefas, Recolhido,
   type BotaoDoCartao, type DadosCartaoTarefa, type DiaDaFileira,
@@ -96,7 +97,6 @@ const ETAPA: Record<string, { rotulo: string; cor: string }> = {
   '1395880473': { rotulo: 'Ag. Pagamento', cor: '#1E9E7B' },
 };
 const PERDIDO = '1396006164';
-const ETAPA_PAGAMENTO = '1395880473';
 const soDigitos = (t: string) => t.replace(/\D+/g, '');
 const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
 const agoraHHMM = () => { const b = new Date(Date.now() - 3 * 3600000); return `${String(b.getUTCHours()).padStart(2, '0')}:${String(b.getUTCMinutes()).padStart(2, '0')}`; };
@@ -708,10 +708,13 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
   /* "SEM PRÓXIMO PASSO" É UM NÚMERO SÓ NO APP E NO COCKPIT (auditoria 01/11/26): negócio aberto sem nada
      marcado de hoje em diante = o passo que venceu (bloco 2) + o que nunca teve passo (bloco 3). Ag.
      Pagamento fica fora, como no Cockpit (quem age ali é o financeiro). O Cockpit mostra a mesma quebra. */
-  const forDoPagamento = (i: CardDaFila) => i.etapaId !== ETAPA_PAGAMENTO;
-  const passoVencidoN = fila.filter((i) => i.motivo === 'venceu' && forDoPagamento(i)).length;
-  const nuncaMarcadoN = semPassoLista.filter(forDoPagamento).length;
-  const semPassoTotal = passoVencidoN + nuncaMarcadoN;
+  /* HOJE v3 (01/11/26): a conta mora em semProximoPassoDaFila (_compartilhado/hojeV3.ts), a mesma da folha
+     da manhã e do push das 8h; a suíte hojeV3.teste.ts prova que acha os mesmos negócios que o
+     GV2.semProximoPasso do Cockpit */
+  const contaSemPasso = semProximoPassoDaFila(fila);
+  const passoVencidoN = contaSemPasso.vencido;
+  const nuncaMarcadoN = contaSemPasso.nunca;
+  const semPassoTotal = contaSemPasso.total;
   const acordosAbertosN = acordos.filter((c) => !c.feito).length;
   const noAparelho = feitas.filter((f) => f.estado === 'pendente').length;
   const proximaJanela = janelasDoDia(relogio).find((j) => j.estado !== 'feita')?.de ?? null;
