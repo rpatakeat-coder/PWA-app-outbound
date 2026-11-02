@@ -108,6 +108,7 @@ import FolhaDoMapa, { type ItemFolha } from './src/screens/FolhaDoMapa';
 import BarraPlanejar, { type ParadaDoDia } from './src/screens/BarraPlanejar';
 import type { CamadaAgenda, ItemPC, SugestaoPC } from './src/screens/AgendaPC';
 import { melhorPosicao, metros } from './src/utils/rotaDoDia';
+import { pinoDeGps } from './src/utils/mesmoLugar';
 import { BUSCA_GOOGLE_PAUSADA, buscarGooglePerto, jaNaBase, type LugarPerto } from './src/utils/googlePerto';
 import { diaInicial, diasPlanejaveis, ehCompromisso, faixaDoLead, rotuloDoDia, vaiAoCockpit, type FaixaDoPlano } from './src/utils/planoNoMapa';
 import { gravarOrdemDoDia, lerColunaDoPlano, porNoDia, tirarDoDia } from './src/utils/paradaDoDia';
@@ -5678,7 +5679,9 @@ function MainApp() {
       // mover pino ou "Estou na porta"). O resto veio de endereço convertido —
       // 4.143 pinos do OpenStreetMap, 26 visitados (25/09): é ali que o app
       // dizia "longe" com o executivo na porta.
-      const pinoConfirmado = (geoSource === 'coords' || geoSource === 'checkin') && !isApproxPin;
+      // Auditoria 02/11/26: 'google_place' (conta-alvo do Google) e o 'coords' antigo com place_id do
+      // Google não são pino confirmado — o "Estou na porta" continua valendo (pinoDeGps).
+      const pinoConfirmado = pinoDeGps({ geo_source: geoSource, geo_approximate: isApproxPin, conta_alvo_place_id: client.conta_alvo_place_id ?? null });
 
 
       let position: Location.LocationObject | null = null;
