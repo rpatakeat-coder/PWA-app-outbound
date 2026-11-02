@@ -95,6 +95,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 // deixou de ser um wrapper e virou props do proprio MapView — que e' como
 // este arquivo ja as passava (radius/minPoints/maxZoom/clusterColor).
 import MapView, { Marker, Polyline, Circle, type MapViewHandle as RNMapView } from './src/map';
+import { leituraRecente, ouvirLeituras } from './src/map/leituraDoGps';
 import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CLIENT_LIST_COLUMNS, useClientSearch, useClients } from './src/hooks/useClients';
@@ -449,6 +450,8 @@ const TASK_RULES: TaskRuleDoc[] = [
 function comPrazo<T>(p: Promise<T>, ms: number): Promise<T | undefined> {
   return Promise.race([p, new Promise<undefined>((r) => setTimeout(() => r(undefined), ms))]);
 }
+/** Quanto a leitura de posição de fundo (abertura, volta ao app) espera antes de desistir. */
+const PRAZO_GPS_MS = 15_000;
 
 const SEM_SUGESTOES: SugestaoPC[] = [];
 const getClientPrimaryName = (client: Client) => client.empresa?.trim() || client.nome;
@@ -1623,8 +1626,8 @@ function MainApp() {
         const { status } = await Location.getForegroundPermissionsAsync();
         if (status === 'granted') {
           setLocationPermission('granted');
-          const loc = await Location.getCurrentPositionAsync({});
-          setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+          const loc = await comPrazo(Location.getCurrentPositionAsync({}), PRAZO_GPS_MS); // auditoria 02/11/26: com prazo
+          if (loc) setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
         }
       } catch (err) {
         console.warn('[LOC] re-check pós-foreground falhou:', err);
@@ -1643,8 +1646,8 @@ function MainApp() {
         const { status } = await Location.requestForegroundPermissionsAsync();
         setLocationPermission(status === 'granted' ? 'granted' : 'denied');
         if (status === 'granted') {
-          const loc = await Location.getCurrentPositionAsync({});
-          setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+          const loc = await comPrazo(Location.getCurrentPositionAsync({}), PRAZO_GPS_MS); // auditoria 02/11/26: com prazo
+          if (loc) setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
         }
       } catch (err) {
         console.warn('[LOC] request pós-toggle falhou:', err);
@@ -1753,11 +1756,15 @@ function MainApp() {
         const { status } = await Location.requestForegroundPermissionsAsync();
         setLocationPermission(status === 'granted' ? 'granted' : 'denied');
         if (status === 'granted') {
-          const loc = await Location.getCurrentPositionAsync({});
-          setUserLocation({
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-          });
+          // auditoria 02/11/26: com prazo — sem sinal de GPS a promessa podia não voltar nunca
+          // (a posição chega depois pela leitura do mapa, abaixo)
+          const loc = await comPrazo(Location.getCurrentPositionAsync({}), PRAZO_GPS_MS);
+          if (loc) {
+            setUserLocation({
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+            });
+          }
         }
       } catch (err) {
         console.warn('Erro ao obter localização:', err);
@@ -1765,6 +1772,24 @@ function MainApp() {
       }
     })();
   }, []);
+
+  // A POSIÇÃO ACOMPANHA A PESSOA (auditoria 02/11/26). userLocation só era lida na abertura: o
+  // "perto", a próxima porta e a busca ficavam presos onde o app abriu. Agora vem da leitura do GPS
+  // do mapa, com limite para não redesenhar o App a cada passo: só quando andou 25 m ou mais E já
+  // faz 15 s da última troca (e só leitura de ±100 m ou melhor).
+  const ultimaTrocaDePosicao = useRef(0);
+  useEffect(() => ouvirLeituras((l) => {
+    if (l.accuracy > 100) return;
+    setUserLocation((antes) => {
+      if (antes) {
+        if (Date.now() - ultimaTrocaDePosicao.current < 15_000) return antes;
+        const andou = Math.hypot((l.latitude - antes.latitude) * 111320, (l.longitude - antes.longitude) * 111320 * Math.cos((l.latitude * Math.PI) / 180));
+        if (andou < 25) return antes;
+      }
+      ultimaTrocaDePosicao.current = Date.now();
+      return { latitude: l.latitude, longitude: l.longitude };
+    });
+  }), []);
 
   // Normaliza pra busca case/diacritic-insensitive — "ipê" casa com "ipe".
   const searchTerm = useMemo(
@@ -5139,6 +5164,15 @@ function MainApp() {
     // até 10 s, fica com a leitura mais precisa, para cedo com ±20 m e
     // descarta leitura com mais de 15 s.
     if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.geolocation) {
+      // Auditoria 02/11/26: o mapa já mantém o GPS de alta precisão ligado. Com uma leitura dele de
+      // menos de 5 s e ±20 m ou melhor, é ela — sem abrir outro GPS e esperar 4–10 s na porta.
+      const doMapa = leituraRecente(5000, 20);
+      if (doMapa) {
+        return {
+          coords: { latitude: doMapa.latitude, longitude: doMapa.longitude, accuracy: doMapa.accuracy, altitude: null, altitudeAccuracy: null, heading: null, speed: null },
+          timestamp: doMapa.em,
+        } as Location.LocationObject;
+      }
       return new Promise((resolve, reject) => {
         let melhor: GeolocationPosition | null = null;
         let ultimoErro: GeolocationPositionError | undefined;

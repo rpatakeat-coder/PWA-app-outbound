@@ -66,7 +66,16 @@ export function TarefaSemLeadSheet({
         );
         return;
       }
-      const pos = await Location.getCurrentPositionAsync({});
+      // auditoria 02/11/26: com prazo — sem sinal de GPS a promessa não voltava e o botão ficava
+      // em "salvando" para sempre
+      const pos = await Promise.race([
+        Location.getCurrentPositionAsync({}),
+        new Promise<null>((r) => setTimeout(() => r(null), 15_000)),
+      ]);
+      if (!pos) {
+        Alert.alert('Sem GPS agora', 'Não consegui ler a sua posição. Vá para um lugar aberto e tente de novo.');
+        return;
+      }
 
       // Vincula ao negócio que JÁ existe: `id_hubspot` vai preenchido e não há
       // chamada de create_pin. Ver o comentário do topo.
