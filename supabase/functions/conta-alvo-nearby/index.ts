@@ -22,7 +22,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 // Marcador de versao — aparece em toda resposta pra confirmar qual bundle esta
 // no ar (o deploy do Supabase as vezes serve versao cacheada).
-const VERSION = 'ca-v5-dismiss';
+const VERSION = 'ca-v6-google-place';
 
 const SERPER_URL = 'https://google.serper.dev/maps';
 const FETCH_TIMEOUT_MS = 15_000;
@@ -270,7 +270,14 @@ Deno.serve(async (req: Request) => {
           conta_alvo_rating: pick.rating,
           conta_alvo_reviews: pick.reviews_count,
           vendedor_id_hubspot: vendor,
-          geo_source: 'coords', // coords precisas do Google/Serper (raio normal de check-in)
+          // 'google_place', não 'coords' (auditoria do servidor, 02/11/26): 'coords' é o pino que a pessoa
+          // apontou ou confirmou (clients_protege_posicao_confirmada não deixa mover, o Cheguei recusa
+          // "corrigir pino" e lead_criado_na_hora conta como lead criado na rua). O ponto do Google não é
+          // nada disso. O raio de check-in continua o normal: geo_approximate fica falso.
+          geo_source: 'google_place',
+          // e a origem certa: sem ela o gatilho clients_origem_lead chamava a conta-alvo de 'cadastro_na_rua'
+          // (origem 'manual' + geo 'coords'), o mesmo rótulo do lead que o executivo cria na porta
+          origem_lead: 'google_maps_motor',
           created_by: createdBy,
         })
         .select()

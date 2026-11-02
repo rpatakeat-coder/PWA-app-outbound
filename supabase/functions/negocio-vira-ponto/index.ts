@@ -270,7 +270,7 @@ Deno.serve(async (req) => {
     let geo: Geo | null = null;
     const latLead = num(lead?.lat), lngLead = num(lead?.lng);
     const latDeal = num(p.latitude), lngDeal = num(p.longitude);
-    if (noBrasil(latLead, lngLead)) geo = { lat: latLead!, lng: lngLead!, aproximado: false, fonte: 'lead_prospeccao' };
+    if (noBrasil(latLead, lngLead)) geo = { lat: latLead!, lng: lngLead!, aproximado: false, fonte: 'leads_prospeccao' }; // a grafia da municao_sincronizar_pino (0242 normaliza as antigas)
     else if (noBrasil(latDeal, lngDeal)) geo = { lat: latDeal!, lng: lngDeal!, aproximado: false, fonte: 'hubspot' };
     else if (rua && end.cidade && googleKey && geocodes < limiteGeocode) {
       geocodes++;
