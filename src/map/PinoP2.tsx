@@ -58,6 +58,22 @@ type Props = {
   aproximadoVisivel?: boolean;
   /** Conta-alvo no Meu dia: pino pequeno e transparente, para estar no mapa sem poluir. */
   discreto?: boolean;
+  /* ── O MAPA NA RUA (prancha "Mapa na rua", 02/11/26), só no celular ──────────────────────
+     Com `nivel`, o desenho é o da prancha: N1 = pino 40 com anel sólido de 52 px; N2 = o tamanho
+     de hoje; N3 = 4 px menor, sem nome. Sem `nivel` (computador), o desenho de antes. */
+  nivel?: 1 | 2 | 3 | null;
+  /** O rótulo que niveisDoMapa conseguiu colocar (lado, nome e, no N1, a 2ª linha). */
+  rotuloNaRua?: { lado: 'dir' | 'esq' | 'acima'; nome: string; linha2: string | null } | null;
+  /** No máximo um selo, só de ação: ! cobrar, ↓ em queda. */
+  seloNaRua?: '!' | '↓' | null;
+  /** N1 sem plano (a porta sugerida): anel neutro na cor do texto, não vermelho. */
+  sugestao?: boolean;
+  /** Zoom afastado: o N1 fica pino inteiro, sem o anel. */
+  semAnel?: boolean;
+  /** O leque de outra pilha está aberto: o resto do mapa fica a 30%. */
+  apagado?: boolean;
+  /** id do pino no DOM (data-pino): a conferência na tela mede a cabeça e a ponta por ele. */
+  idDom?: string;
 };
 
 const LOGO = require('../../assets/takeat-t-branco.png');
@@ -128,7 +144,54 @@ export function desenhoDoPino(p: Props): Desenho {
   return { s: s + MAIS, bg, fg, tx, fs, diam, bw, bst, bc, op, logo, lw, halo, badge, brilho };
 }
 
+/** Tamanho final do N1 (prancha "Mapa na rua": pino 40, anel 52). O recém-aberto segue losango. */
+export const N1_CIRCULO = 40;
+export const N1_LOSANGO = 30;
+export const ANEL_N1 = 52;
+/** Quanto o N3 é menor que o N2. */
+export const MENOS_N3 = 4;
+
+/**
+ * O DESENHO NA RUA (prancha "Mapa na rua", 02/11/26). Parte do desenho de hoje (que já tem o +4
+ * pedido em 26/09) e aplica os níveis:
+ * - N1 = 40 (losango 30), cor e letra da família; o anel é desenhado à parte;
+ * - N2 = o tamanho de hoje; N3 = 4 px menor (lead Q/M/F 26/24/22, cliente e mais avaliado 26,
+ *   parada do plano 32, feito 24);
+ * - recém-aberto por faixa: ≤ 30 d cheio com a idade (27, N3 25); 31–60 cheio sem número (22);
+ *   61–90 só contorno, sem número (20). O "90" dentro do losango saiu: a idade exata vai para o
+ *   cartão e para a Lista;
+ * - nenhuma etiqueta além do selo (que vem pronto de niveisDoMapa) e nenhum brilho;
+ * - pilha: o desenho do membro mais prioritário (a sombra e o contador são desenhados à parte).
+ */
+export function desenhoNaRua(p: Props): Desenho {
+  const nivel = p.nivel ?? 3;
+  const base = desenhoDoPino({ ...p, papel: nivel === 1 ? 'proxima' : p.papel === 'proxima' ? 'lente' : p.papel, pilhaN: 1 });
+  const d: Desenho = { ...base, badge: null, brilho: false, halo: false };
+  const f = p.pino.familia;
+  if (p.selecionado || (base.op < 1 && base.s <= 16)) return d; // aberto: o tamanho do aberto; discreto: a bolinha
+  const rec = f === 'rec' && !p.planoNumero && !p.visitado;
+  if (nivel === 1) {
+    d.s = f === 'rec' && !p.planoNumero ? N1_LOSANGO : N1_CIRCULO;
+    return d;
+  }
+  if (rec) {
+    const dias = p.pino.abertoHa ?? 0;
+    d.diam = true; d.bw = 2; d.bst = 'solid'; d.bc = COR.recTinta; d.bg = COR.rec; d.fg = COR.recTinta; d.op = 1;
+    if (dias <= 30) { d.s = 23 + MAIS - (nivel === 3 ? 2 : 0); d.tx = String(dias); d.fs = nivel === 3 ? 11 : 12; }
+    else if (dias <= 60) { d.s = 18 + MAIS; d.tx = ''; }
+    else {
+      /* 61–90: só contorno. No escuro, borda limão sobre o fundo do mapa; no sol, a tinta escura
+         sobre branco (o limão some no branco) — as cores já existem no pino */
+      d.s = 16 + MAIS; d.tx = ''; d.bw = 2.5; d.bg = p.sol ? '#FFFFFF' : '#17191D'; d.bc = p.sol ? COR.recTinta : COR.rec;
+    }
+    return d;
+  }
+  if (nivel === 3) { d.s -= MENOS_N3; d.fs = Math.max(9, d.fs - 1); if (d.logo) d.lw = Math.max(9, d.lw - 3); }
+  return d;
+}
+
 function PinoP2(props: Props) {
+  if (props.nivel != null) return <PinoNaRua {...props} />;
   const { pino, selecionado, sinal, pilhaN = 1, leque = null, sol = false, rotulo = false, lado = 'dir', aproximadoVisivel = false } = props;
   const d = desenhoDoPino(props);
   const hd = d.diam ? d.s * Math.SQRT1_2 : d.s / 2;
@@ -199,6 +262,113 @@ function PinoP2(props: Props) {
               </span>
               {!!sinal && (
                 <span style={{ fontWeight: 600, fontSize: 11.5, lineHeight: 1.25, color: sol ? '#414852' : 'rgba(255,255,255,.74)' }}>{sinal}</span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * O PINO NA RUA (prancha "Mapa na rua", 02/11/26). Mesma caixa de toque (48 × 56, ponta em 24, 54)
+ * — o alvo continua com 44+ pt mesmo no N3 —, com:
+ * - o anel sólido de 52 px só no N1 (vermelho-ação no plano, cor do texto na sugestão);
+ * - no máximo um selo (! ou ↓), no canto de cima;
+ * - a pilha sem anel tracejado: o pino do membro mais prioritário, a sombra de um segundo pino a
+ *   55% deslocada 5 px para cima e à direita, e o contador de 18 px no pé;
+ * - o rótulo que niveisDoMapa colocou (o lado vem pronto e foi medido na tela);
+ * - `data-pino`, `data-cabeca` e `data-ponta` para a conferência na tela medir o que o Google desenhou.
+ */
+function PinoNaRua(props: Props) {
+  const { pino, selecionado, pilhaN = 1, leque = null, sol = false, nivel = 3, rotuloNaRua = null, seloNaRua = null, sugestao = false, semAnel = false, apagado = false, idDom } = props;
+  const d = desenhoNaRua(props);
+  const hd = d.diam ? d.s * Math.SQRT1_2 : d.s / 2;
+  const cy = d.diam ? -hd - 1 : -7 - d.s / 2;
+  const topo = cy - hd;
+  const tipCor = d.bst === 'dashed' ? '#FFFFFF' : d.bc;
+  const corTexto = sol ? '#111418' : '#F4F5F7';
+  const pilha = pilhaN > 1 && !leque;
+  const anel = nivel === 1 && !semAnel && !leque;
+  const aprox = 90;
+  const cabeca = (extra: React.CSSProperties, dataCabeca: boolean, conteudo: React.ReactNode) => (
+    <div {...(dataCabeca ? { 'data-cabeca': '1' } : {})} style={{
+      position: 'absolute', left: -d.s / 2, top: cy - d.s / 2, width: d.s, height: d.s, boxSizing: 'border-box',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      borderRadius: d.diam ? 4 : '50%', background: d.bg, border: `${d.bw}px ${d.bst} ${d.bc}`, color: d.fg,
+      fontWeight: 700, fontSize: d.fs, lineHeight: 1, letterSpacing: '-.02em', boxShadow: '0 2px 5px rgba(0,0,0,.4)',
+      transform: d.diam ? 'rotate(45deg)' : undefined, ...extra,
+    }}>{conteudo}</div>
+  );
+  return (
+    <div data-pino={idDom} data-nivel={nivel} style={{ position: 'relative', width: CAIXA_W, height: CAIXA_H, cursor: 'pointer', opacity: apagado ? 0.3 : 1 }}>
+      <div data-ponta="1" style={{ position: 'absolute', left: CAIXA_W / 2, top: PONTA_Y, width: 0, height: 0, zIndex: selecionado ? 5 : 2 }}>
+        {pino.aproximado && selecionado && !leque && (
+          <div style={{
+            position: 'absolute', left: -aprox / 2, top: -aprox / 2, width: aprox, height: aprox, boxSizing: 'border-box',
+            borderRadius: '50%', background: 'rgba(140,140,140,.16)', border: `2px dashed ${corTexto}`, pointerEvents: 'none',
+          }} />
+        )}
+        {leque && (
+          <div style={{
+            position: 'absolute', left: 0, top: 0, height: 2, background: sol ? 'rgba(17,20,24,.6)' : 'rgba(255,255,255,.7)', transformOrigin: '0 0',
+            width: Math.hypot(leque.dx, leque.dy), transform: `rotate(${Math.atan2(leque.dy, leque.dx)}rad)`, pointerEvents: 'none',
+          }} />
+        )}
+        <div style={{ position: 'absolute', left: leque?.dx ?? 0, top: leque?.dy ?? 0, width: 0, height: 0, opacity: d.op }}>
+          {anel && (
+            <div style={{
+              position: 'absolute', left: -ANEL_N1 / 2, top: cy - ANEL_N1 / 2, width: ANEL_N1, height: ANEL_N1, boxSizing: 'border-box', borderRadius: '50%', pointerEvents: 'none',
+              border: sugestao ? `2.5px solid ${corTexto}` : '3px solid var(--vermelho-acao)',
+              background: sugestao ? 'rgba(140,140,140,.14)' : 'rgba(229,26,49,.14)',
+            }} />
+          )}
+          {pilha && cabeca({ left: -d.s / 2 + 5, top: cy - d.s / 2 - 4, opacity: 0.55, border: '2px solid #FFFFFF' }, false, null)}
+          {!d.diam && (
+            <div style={{
+              position: 'absolute', left: -5, top: -8, width: 0, height: 0,
+              borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: `8px solid ${tipCor}`,
+            }} />
+          )}
+          {cabeca({}, true, (
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', transform: d.diam ? 'rotate(-45deg)' : undefined }}>
+              {d.logo
+                ? <Image source={LOGO} style={{ width: d.lw + MAIS / 2, height: Math.round((d.lw + MAIS / 2) * 288 / 227) }} resizeMode="contain" fadeDuration={0} accessibilityLabel="Takeat" />
+                : d.tx}
+            </span>
+          ))}
+          {pilha && (
+            <div style={{
+              position: 'absolute', left: hd - 8, top: cy, width: 18, height: 18, borderRadius: 9, boxSizing: 'border-box',
+              background: '#111418', border: '1.5px solid #FFFFFF', color: '#FFFFFF', fontWeight: 700, fontSize: 10.5, lineHeight: '15px', textAlign: 'center',
+            }}>{pilhaN > 99 ? '99+' : pilhaN}</div>
+          )}
+          {!!seloNaRua && !pilha && (
+            <div style={{
+              position: 'absolute', left: hd - 10, top: topo - 6, width: 18, height: 18, borderRadius: 9, boxSizing: 'border-box',
+              background: seloNaRua === '!' ? '#111418' : '#F59E0B', color: seloNaRua === '!' ? '#FCD34D' : '#111418', border: '1.5px solid #FFFFFF',
+              fontWeight: 800, fontSize: 11, lineHeight: '15px', textAlign: 'center',
+            }}>{seloNaRua}</div>
+          )}
+          {rotuloNaRua && (
+            <div data-rotulo={nivel} style={{
+              position: 'absolute', display: 'flex', flexDirection: 'column', whiteSpace: 'nowrap', pointerEvents: 'none', boxSizing: 'border-box',
+              padding: '4px 10px', borderRadius: 10, boxShadow: '0 2px 5px rgba(0,0,0,.25)',
+              background: sol ? 'rgba(255,255,255,.96)' : 'rgba(23,25,29,.94)', border: `1px solid ${sol ? '#D9D4CA' : 'rgba(255,255,255,.14)'}`,
+              ...(rotuloNaRua.lado === 'acima'
+                ? { left: 0, top: topo - 8, transform: 'translate(-50%, -100%)' }
+                : rotuloNaRua.lado === 'esq'
+                  ? { right: Math.round(hd + 7), top: cy, transform: 'translateY(-50%)' }
+                  : { left: Math.round(hd + 7), top: cy, transform: 'translateY(-50%)' }),
+            }}>
+              <span style={{ fontWeight: 700, fontSize: nivel === 1 ? 14 : 13, lineHeight: 1.3, color: corTexto, maxWidth: nivel === 1 ? 200 : 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {rotuloNaRua.nome}
+              </span>
+              {!!rotuloNaRua.linha2 && (
+                <span style={{ fontWeight: 600, fontSize: 12, lineHeight: 1.3, color: sol ? '#414852' : 'rgba(255,255,255,.74)', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {rotuloNaRua.linha2}
+                </span>
               )}
             </div>
           )}
