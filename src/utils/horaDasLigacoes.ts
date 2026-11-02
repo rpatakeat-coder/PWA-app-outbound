@@ -26,6 +26,20 @@ export function janelaAtual(agora: number, feriados: string[] = [], janelas = JA
   return null;
 }
 
+/**
+ * O que o relógio do App muda na tela (auditoria 02/11/26). O relógio de 30 s re-renderizava o
+ * App inteiro o dia todo; quem lê a hora só compara com marcos (10h da folha da manhã, 17h do
+ * fecho, 18h do "não visitada", a janela das ligações) e a virada do dia. O App só grava a hora
+ * nova quando esta chave muda: entre um marco e outro, nenhum render.
+ */
+export function marcoDoRelogio(agora: number, janelas = JANELAS_LIGACAO, minutos = MINUTOS_DA_JANELA): string {
+  const brt = new Date(agora - 3 * 3600000);
+  const h = hhmm(brt.getUTCHours() * 60 + brt.getUTCMinutes());
+  const faixa = h < '10:00' ? 'manha' : h < '17:00' ? 'dia' : h < '18:00' ? 'fecho' : 'noite';
+  const j = janelaAtual(agora, [], janelas, minutos);
+  return brt.toISOString().slice(0, 10) + '|' + faixa + '|' + (j ? j.de : '');
+}
+
 /** As janelas do dia com o estado de cada uma (coluna da direita do computador). */
 export function janelasDoDia(agora: number, janelas = JANELAS_LIGACAO, minutos = MINUTOS_DA_JANELA): Array<{ de: string; ate: string; estado: 'agora' | 'feita' | 'proxima'; faltamMin?: number }> {
   const brt = new Date(agora - 3 * 3600000);

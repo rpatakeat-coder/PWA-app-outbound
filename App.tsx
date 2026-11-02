@@ -226,7 +226,7 @@ import { lerAberturaDaUrl, lerPedidoDaUrl, limparAberturaDaUrl, limparPedidoDaUr
 import { PilulaDoHoje, ToastDeConquista } from './src/screens/EntradasDesenvolvimento';
 import type { OrigemAbertura } from './src/screens/MeuDesempenhoV2';
 import { seloDaFila } from './src/utils/seloDaFila';
-import { janelaAtual } from './src/utils/horaDasLigacoes';
+import { janelaAtual, marcoDoRelogio } from './src/utils/horaDasLigacoes';
 import { feriadosNacionais, quenteEsfriando, secaoDoItem } from './supabase/functions/_compartilhado/filaDoDinheiro';
 import { FaixaHoraDasLigacoes } from './src/screens/CartaoDaFila';
 import FolhaAntesDaRua from './src/screens/FolhaAntesDaRua';
@@ -1196,7 +1196,19 @@ function MainApp() {
   const seloFila = useMemo(() => seloDaFila(filaNaTela.data?.itens, filaNaTela.data?.hoje ?? diaBRT(new Date())), [filaNaTela.data]);
   // P1: a hora das ligações (12:30 e 17:30, 15 min). Fora da janela ou com a fila vazia, a faixa some.
   const [relogioDaJanela, setRelogioDaJanela] = useState(() => Date.now());
-  useEffect(() => { const t = setInterval(() => setRelogioDaJanela(Date.now()), 30_000); return () => clearInterval(t); }, []);
+  // Auditoria 02/11/26: o setRelogioDaJanela(Date.now()) de 30 em 30 s re-renderizava o App inteiro
+  // o dia todo, com a aba escondida também. Agora só bate com a aba visível, confere de novo ao
+  // voltar e só grava a hora quando um marco que a tela usa muda (marcoDoRelogio).
+  useEffect(() => {
+    const bater = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      const agora = Date.now();
+      setRelogioDaJanela((antes) => (marcoDoRelogio(antes) === marcoDoRelogio(agora) ? antes : agora));
+    };
+    const t = setInterval(bater, 30_000);
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', bater);
+    return () => { clearInterval(t); if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', bater); };
+  }, []);
   /** O item da fila de um negócio (P7): a tarefa que o Cheguei + Como foi ou o desfecho fecham. */
   type ItemDaFilaApp = { dealId: string; negocio: string; etapaId: string; tarefaId: string | null; assunto?: string | null; venceu: boolean; motivo: string; grupo: string };
   const itemDaFila = (dealId: string | number | null | undefined): ItemDaFilaApp | null => {
