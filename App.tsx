@@ -28,7 +28,7 @@ import {
 import { KeyboardAvoidingView } from './src/components/KeyboardAvoidingView';
 import { Alert, AlertHost } from './src/components/Alert';
 import { Toast, ToastHost } from './src/components/Toast';
-import { ehErroDeRede, enfileirar, novoAcaoId, ouvirFila, registrarExecutor, subirFila } from './src/utils/filaOffline';
+import { ehErroDeRede, enfileirar, novoAcaoId, itensDaFila, ouvirFila, registrarExecutor, subirFila } from './src/utils/filaOffline';
 import { subirFicha as subirFichaDaFila, type LinhaFicha as LinhaFichaDaFila } from './src/utils/fichaNoBanco';
 import { Painel } from './src/components/Painel';
 import { useTheme } from './src/theme';
@@ -6041,7 +6041,17 @@ function MainApp() {
       });
     };
     subir();
-    const intervalo = setInterval(subir, 30000);
+    // Auditoria 02/11/26: o intervalo de 30 s tentava subir com a fila vazia e com a aba escondida.
+    // Agora só tenta com item esperando e a aba visível; fila vazia fica no evento 'online' e na
+    // volta ao app (que também sobe o que ficou de quando a aba estava escondida).
+    const tentar = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (!itensDaFila().some((i) => i.estado === 'na_fila')) return;
+      subir();
+    };
+    const intervalo = setInterval(tentar, 30000);
+    const aoVoltar = () => { if (document.visibilityState === 'visible') subir(); };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', aoVoltar);
     if (typeof window !== 'undefined') window.addEventListener('online', subir);
     return () => {
       tirar();
@@ -6051,6 +6061,7 @@ function MainApp() {
       tirarPlano();
       clearInterval(intervalo);
       if (typeof window !== 'undefined') window.removeEventListener('online', subir);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', aoVoltar);
     };
   }, []);
 

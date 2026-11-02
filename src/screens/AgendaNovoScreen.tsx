@@ -155,8 +155,15 @@ export default function AgendaNovoScreen({
         .catch(() => undefined);
     };
     ler();
-    const t = setInterval(ler, 60_000);
-    return () => { vivo = false; clearInterval(t); };
+    // auditoria 02/11/26: com a aba escondida o intervalo já não lia o GPS; agora nem bate
+    // (para ao esconder) e volta com uma leitura na hora quando a pessoa reabre o app
+    let t: ReturnType<typeof setInterval> | null = setInterval(ler, 60_000);
+    const aoMudar = () => {
+      if (document.visibilityState === 'visible') { ler(); if (!t) t = setInterval(ler, 60_000); }
+      else if (t) { clearInterval(t); t = null; }
+    };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', aoMudar);
+    return () => { vivo = false; if (t) clearInterval(t); if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', aoMudar); };
   }, []);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine !== false);
   useEffect(() => {

@@ -30,6 +30,8 @@ export function useCobrancasNaoVistas(enabled: boolean) {
     // a cobrança precisa chegar com o app aberto também: relê a cada 2 minutos e ao voltar ao app
     staleTime: 60_000,
     refetchInterval: 120_000,
+    // auditoria 02/11/26: com a aba escondida não relê (é o padrão do React Query; explícito para ninguém ligar)
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     queryFn: async () => {
       const { data: s0 } = await usuarioDaSessao();

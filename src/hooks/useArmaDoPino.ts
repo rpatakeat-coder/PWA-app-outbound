@@ -56,6 +56,8 @@ export function useFatosDoNegocio(c: Client | null, ativo = true) {
     // a cada 3 min (era 1): 3 pedidos por cartao, e o sinal ao vivo do negocio ja rele o contexto
     staleTime: 175 * 1000,
     refetchInterval: 180 * 1000,
+    // auditoria 02/11/26: com a aba escondida não relê (é o padrão do React Query; explícito para ninguém ligar)
+    refetchIntervalInBackground: false,
     queryFn: async () => {
       const [neg, fichas, folha] = await Promise.all([
         dealId
