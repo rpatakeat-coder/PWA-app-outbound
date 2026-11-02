@@ -9253,21 +9253,30 @@ function MainApp() {
               key={a.aba}
               accessibilityRole="tab"
               accessibilityState={{ selected: ativo }}
-              accessibilityLabel={a.seloTexto ? `${a.rotulo}, ${a.seloTexto}` : a.selo ? `${a.rotulo}, ${a.selo}` : a.rotulo}
+              accessibilityLabel={[a.rotulo, a.selo ? String(a.selo) : null, a.seloTexto].filter(Boolean).join(', ')}
               style={[styles.navItem, styles.navItemNovo]}
               onPress={() => irParaAba(a.aba)}
             >
               {ativo && <View style={styles.navTracoAtivo} />}
               <View style={styles.navIconeAncora}>
                 <NavIcon Icone={a.Icone} ativo={ativo} size={24} />
-                {!!a.seloTexto && (
-                  <View style={styles.navSeloTexto}><Text style={styles.navSeloTextoT} numberOfLines={1}>{a.seloTexto}</Text></View>
-                )}
-                {a.selo != null && (
-                  <View style={[styles.navBadge, a.seloClaro && styles.navBadgeClaro]}>
-                    <Text style={[styles.navBadgeText, a.seloClaro && styles.navBadgeTextClaro]}>
-                      {a.selo > 99 ? '99+' : a.selo}
-                    </Text>
+                {/* OS DOIS SELOS EM FILA (print do iPhone, 02/11/26): o número e a pílula "N atrasados"
+                    eram dois absolutos no mesmo canto — o "1" caía em cima do começo da pílula e lia-se
+                    "…trasados". Agora é uma fila só, número e pílula lado a lado. Em tela estreita (Android
+                    de 360 com fonte a 130% vira ~280 px) não cabem os dois sem invadir a aba Eu: fica a
+                    pílula, que é o que pede ação; o número segue no rótulo de acessibilidade. */}
+                {(!!a.seloTexto || a.selo != null) && (
+                  <View style={styles.navSelos} pointerEvents="none">
+                    {a.selo != null && !(a.seloTexto && janelaTela.width < 360) && (
+                      <View style={[styles.navBadge, styles.navBadgeNaFila, a.seloClaro && styles.navBadgeClaro]}>
+                        <Text style={[styles.navBadgeText, a.seloClaro && styles.navBadgeTextClaro]}>
+                          {a.selo > 99 ? '99+' : a.selo}
+                        </Text>
+                      </View>
+                    )}
+                    {!!a.seloTexto && (
+                      <View style={styles.navSeloTexto}><Text style={styles.navSeloTextoT} numberOfLines={1}>{a.seloTexto}</Text></View>
+                    )}
                   </View>
                 )}
               </View>
@@ -13192,7 +13201,11 @@ const styles = StyleSheet.create({
      ficava aceso o dia inteiro — atrasado é coisa para resolver hoje, não agora. O vermelho
      passa a valer só para o que é agir neste minuto: o Cheguei e a faixa de alerta. Invertido
      (fundo da tinta, texto do fundo) continua sendo o elemento mais forte da barra. */
-  navSeloTexto: { position: 'absolute', top: -12, left: 14, height: 18, paddingHorizontal: 6, borderRadius: 9, backgroundColor: 'var(--text)', borderWidth: 1.5, borderColor: 'var(--surface)', justifyContent: 'center', boxSizing: 'content-box' } as never,
+  /* A fila dos selos (02/11/26): ancorada no canto de cima à direita do ícone; os selos dentro dela
+     não são mais absolutos, então nunca se sobrepõem. */
+  navSelos: { position: 'absolute', top: -9, left: 14, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  navBadgeNaFila: { position: 'relative', top: 0, right: 0 },
+  navSeloTexto: { height: 18, paddingHorizontal: 6, borderRadius: 9, backgroundColor: 'var(--text)', borderWidth: 1.5, borderColor: 'var(--surface)', justifyContent: 'center', boxSizing: 'content-box' } as never,
   navSeloTextoT: { color: 'var(--surface)', fontSize: 10, lineHeight: 14, fontWeight: '800', whiteSpace: 'nowrap' } as never,
   navItemText: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-faint)' },
   // ===== Calendario da Agenda (so' desktop) =====
