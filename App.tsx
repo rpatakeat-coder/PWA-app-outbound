@@ -974,6 +974,11 @@ function MainApp() {
     latitudeDelta: number;
     longitudeDelta: number;
   } | null>(null);
+  /* A REGIÃO EXATA, SÓ PARA AS PLACAS DO CELULAR (02/11/26). mapRegion segura a região de antes
+     abaixo de 3% de deslocamento (para não refazer as pilhas a cada parada), e as placas, que se
+     encaixam ao pixel entre a faixa do dia e a fileira de baixo, saíam 10 a 20 px fora do lugar:
+     medido a 360 e 390 px, a de cima por baixo da faixa e a da direita passando da borda. */
+  const [regiaoExata, setRegiaoExata] = useState<typeof mapRegion>(null);
 
   // Caixa efetivamente buscada. Separada de `mapRegion` porque nem todo
   // movimento do mapa vira busca nova — ver o boundsContains abaixo.
@@ -3120,9 +3125,9 @@ function MainApp() {
     const fundoLivre = alturaPx - RESPIRO_ACIMA_DO_GOOGLE - 44 - 8;
     // a coluna da direita (localização acima do "+"): a placa não cobre o botão (visto a 277 px, 02/11/26)
     const colunaDireita = { x0: larguraPx - 12 - 44 - 8 - insets.right, y0: fundoLivre - 44 - 8, x1: larguraPx, y1: alturaPx };
-    return placasNaTela(todas, { ...mapRegion, larguraPx, alturaPx },
+    return placasNaTela(todas, { ...(regiaoExata ?? mapRegion), larguraPx, alturaPx },
       { x0: 8 + insets.left, y0: Math.max(8, topoLivre), x1: larguraPx - 8 - insets.right, y1: fundoLivre }, 4, [colunaDireita]);
-  }, [mapRegion, lente, ehAgendaPC, planejarDia, visiveisMapaNovo, itensMapaNovo, idPortaDoHalo, selectedClient?.id, layout.ehLargo, mapLayout, insets.top, insets.left, insets.right]);
+  }, [mapRegion, lente, ehAgendaPC, planejarDia, visiveisMapaNovo, itensMapaNovo, idPortaDoHalo, selectedClient?.id, layout.ehLargo, mapLayout, regiaoExata, insets.top, insets.left, insets.right]);
 
   // Pilha até 8: abre em leque. Maior: aproxima o mapa até os pinos se
   // separarem — a não ser que estejam todos no mesmo ponto (aí só o leque separa).
@@ -6558,6 +6563,7 @@ function MainApp() {
           /* PARADA SEM MUDANÇA REAL NÃO REDESENHA O APP (14/10/26): cada setMapRegion refaz as
              pilhas de pinos (O(n²)) e o MainApp inteiro. Abaixo de ~3% de deslocamento e ~2% de
              zoom, fica a região de antes. */
+          if (!layout.ehLargo) setRegiaoExata({ latitude: region.latitude, longitude: region.longitude, latitudeDelta: region.latitudeDelta, longitudeDelta: region.longitudeDelta });
           setMapRegion((prev) => {
             if (prev) {
               const dLat = Math.abs(prev.latitude - region.latitude) / Math.max(prev.latitudeDelta, 1e-6);

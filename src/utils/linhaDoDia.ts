@@ -18,6 +18,8 @@
 // passado por argumento — e a suíte (linhaDoDia.teste.ts) percorre o dia inteiro, minuto a
 // minuto, sem abrir o app.
 
+import { ehDiaUtil } from './desfechoVisita';
+
 /** Altura da faixa, usada também pelo App para empilhar o que vem abaixo dela. */
 export const ALTURA_LINHA_DO_DIA = 48;
 
@@ -175,8 +177,11 @@ function semDesfechoTexto(v: VisitaSemDesfecho): string {
 export function linhaDoDia(e: EntradaDaLinha): LinhaDoDia | null {
   const { agora, meta, feitas } = e;
   if (feitas == null) return null;
+  /* FERIADO TAMBÉM NÃO É DIA ÚTIL (02/11/26, Finados): a linha só olhava sábado e domingo e, com
+     uma parada no plano, cobrava "0 de 6 · faltam 6, restam 6h" no feriado, embaixo da faixa
+     "Feriado · sem expediente". */
   const dow = diaDaSemanaBRT(agora);
-  const diaUtil = dow >= 1 && dow <= 5;
+  const diaUtil = dow >= 1 && dow <= 5 && ehDiaUtil(new Date(agora.getTime() - 3 * 3600000).toISOString().slice(0, 10));
   if (!diaUtil && feitas === 0 && e.noPlano === 0 && !e.semDesfecho) return null;
 
   const minutos = minutosDoDiaBRT(agora);
@@ -230,6 +235,19 @@ export function linhaDoDia(e: EntradaDaLinha): LinhaDoDia | null {
       titulo: e.semDesfecho.nome,
       subtitulo: `e agora? · ${e.semDesfecho.hora ? `visita das ${e.semDesfecho.hora}` : 'visita de hoje'}`,
       direita: 'Dar ›',
+    });
+  }
+
+  /* Sem expediente (fim de semana, feriado) não há meta: a visita sem desfecho acima ainda vale
+     (é dado que se perde), mas nenhum "faltam N" nem "restam Nh". Quem visitou mesmo assim vê o
+     placar dele, sem régua: está trabalhando. */
+  if (!diaUtil) {
+    if (!feitas) return null;
+    return montar({
+      estado: 'acima', tom: 'verde', acao: 'progresso',
+      titulo: `${contagem(feitas, 'porta', 'portas')} hoje`,
+      subtitulo: 'sem expediente · cada porta conta para a semana',
+      direita: '✓',
     });
   }
 

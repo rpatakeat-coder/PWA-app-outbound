@@ -52,6 +52,12 @@ ok(linhaDoDia(base({ agora: SABADO('10:00'), noPlano: 0, faltamNoPlano: 0 })) ==
   'sábado parado não cobra ninguém');
 ok(linhaDoDia(base({ agora: SABADO('10:00'), feitas: 2, noPlano: 0, faltamNoPlano: 0 })) !== null,
   'sábado com visita feita mostra o placar: ele está trabalhando');
+// feriado (02/11/26, Finados, segunda): parada no plano e nada feito não cobra "faltam 6, restam 6h"
+const FINADOS = (h: string) => new Date(`2026-11-02T${h}:00-03:00`);
+ok(linhaDoDia(base({ agora: FINADOS('12:00'), feitas: 0, noPlano: 1, faltamNoPlano: 1 })) === null,
+  'feriado com parada no plano e nada feito: sem cobrança');
+ok(!/faltam|restam|de 6/.test(linhaDoDia(base({ agora: FINADOS('12:00'), feitas: 2, noPlano: 1, faltamNoPlano: 0 }))?.titulo ?? 'x'),
+  'feriado com visita: placar sem régua (sem "faltam", "restam" nem "de 6")');
 
 // ── 5. a visita sem desfecho vence tudo ────────────────────────────────────────────────────
 const VASCO = { dealId: '123', clientId: 'c1', nome: 'VASCO RESTAURANTE', hora: '14:20' };
