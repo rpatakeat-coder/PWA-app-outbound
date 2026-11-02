@@ -357,17 +357,23 @@ Deno.serve(async (req: Request) => {
   }
   const ids = Array.from(new Set([...doSnap.keys(), ...tarefas.map((t) => t.dealId).filter(Boolean) as string[]]));
   const vivos = new Map<string, { nome: string; etapa: string; mrr: number | null; owner: string | null; pipeline: string | null; entrada: string | null }>();
+  const passoNoHubspot = new Map<string, string>();
   const lotesDeal: string[][] = [];
   for (let i = 0; i < ids.length; i += 100) lotesDeal.push(ids.slice(i, i + 100));
   await Promise.all(lotesDeal.map(async (lote) => {
     const r = await hs(token, 'POST', '/crm/v3/objects/deals/batch/read', {
       inputs: lote.map((id) => ({ id })),
-      properties: ['dealname', 'dealstage', 'valor_de_mrr', 'hubspot_owner_id', 'pipeline'],
+      properties: ['dealname', 'dealstage', 'valor_de_mrr', 'hubspot_owner_id', 'pipeline', 'notes_next_activity_date', 'hs_next_meeting_start_time'],
     });
     if (!r.ok) { lotesFalharam = true; return; }
     for (const d of r.dados?.results ?? []) {
       const p = d.properties ?? {};
       vivos.set(String(d.id), { nome: p.dealname ?? '', etapa: String(p.dealstage ?? ''), mrr: Number(p.valor_de_mrr) || null, owner: p.hubspot_owner_id ? String(p.hubspot_owner_id) : null, pipeline: p.pipeline ? String(p.pipeline) : null, entrada: null });
+      /* O PASSO QUE O HUBSPOT JÁ SABE (auditoria 02/11/26): a busca de tarefas é só a do dono, então a
+         tarefa que o gestor criou no negócio e a reunião marcada no HubSpot não contavam como passo, e o
+         Cockpit (proximaAtividade e proximaReuniao do robô, as mesmas duas propriedades) contava. */
+      const proxHs = [p.notes_next_activity_date, p.hs_next_meeting_start_time].map((x) => diaBRTde(x ? String(x) : '')).filter((x) => !!x && /^\d{4}-\d{2}-\d{2}$/.test(x)) as string[];
+      if (proxHs.length) passoNoHubspot.set(String(d.id), proxHs.sort()[proxHs.length - 1]);
     }
   }));
   // um lote de negócios ou de associações que o HubSpot não devolveu (5xx depois do retry do 429):
@@ -483,9 +489,11 @@ Deno.serve(async (req: Request) => {
     const pf = await planoFuturoP;
     for (const cId of pf.clientes) { const d = dealPorCliente.get(cId); if (d) passoFuturo.add(d); }
     for (const d of pf.deals) passoFuturo.add(d);
+    for (const [d, dia] of passoNoHubspot) if (dia >= hoje) passoFuturo.add(d);
     const { mm } = await reunioesP;
+    // a reunião no cliente desta pessoa conta mesmo se quem marcou foi o gestor (o Cockpit conta a reunião do negócio)
     for (const m of (mm ?? []) as Array<{ client_id?: string; scheduled_at?: string; status?: string; created_by?: string }>) {
-      if (m.status !== 'agendada' || m.created_by !== uid || !m.scheduled_at || (diaBRTde(m.scheduled_at) ?? '') < hoje) continue;
+      if (m.status !== 'agendada' || !m.scheduled_at || (diaBRTde(m.scheduled_at) ?? '') < hoje) continue;
       const d = m.client_id ? dealPorCliente.get(String(m.client_id)) : undefined; if (d) passoFuturo.add(d);
     }
   } catch (e) { console.error('passo futuro fora do HubSpot', e); }

@@ -152,6 +152,11 @@ ok(tituloDoCard({ verbo: 'Visitar', pessoa: 'Ana', papel: null, negocio: 'Cantin
   ok(semData.length === 1 && semData[0].motivo === 'sem_passo', 'tarefa sem data não é próximo passo (como no Cockpit)');
   ok(montarFila([morno], [], { ...cx, passoFuturo: ['m'] }).length === 0, 'sem tarefa mas no plano futuro: tem passo, sai da fila');
   ok(montarFila([morno], [], { ...cx, agendaHoje: { m: '10:00' } }).length === 0, 'sem tarefa mas no plano de hoje: tem passo, sai da fila');
+  // auditoria 02/11/26: o quente e o lead sem decisor com parada hoje também têm passo
+  const quente = N({ dealId: 'q', etapaId: '1395880472', temperatura: 90 });
+  ok(montarFila([quente], [], ctx({ agendaHoje: { q: '14:00' } })).every((x) => secaoDoItem(x) !== 'sem_passo'), 'quente sem tarefa e com parada hoje: não é sem próximo passo');
+  const semDecisor = N({ dealId: 's', etapaId: '1396005401', temperatura: 20 });
+  ok(montarFila([semDecisor], [], ctx({ agendaHoje: { s: '09:00' } })).every((x) => secaoDoItem(x) !== 'sem_passo'), 'visita sem decisor com parada hoje: não é sem próximo passo');
 }
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
