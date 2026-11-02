@@ -100,7 +100,7 @@ import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CLIENT_LIST_COLUMNS, useClientSearch, useClients } from './src/hooks/useClients';
 import { useNaEquipeCockpit } from './src/hooks/useNaEquipeCockpit';
-import { useContextoDoPino, useLeadsNaFila, useMapaNovo } from './src/hooks/useMapaNovo';
+import { useContextoDoPino, useLeadsNaFila } from './src/hooks/useMapaNovo';
 import PinoP2, { ANCORA_PINO_P2, sinalDoPino, type PapelPino } from './src/map/PinoP2';
 import FiltrosMapaNovo from './src/screens/FiltrosMapaNovo';
 import { PeekCardNovo, TopoCardNovo, type AcoesCardNovo, type DadosCardNovo } from './src/screens/CardLeadNovo';
@@ -192,9 +192,6 @@ import { useAoVivo } from './src/hooks/useAoVivo';
 import { lerDeepLink, semDeepLink } from './src/utils/deepLink';
 import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
 import { useStages } from './src/hooks/useStages';
-import { TarefasScreen } from './src/screens/TarefasScreen';
-import { baldeDeVencimento, baldeDaTarefaDoCrm } from './src/utils/baldeDaTarefa';
-import { AgendaScreen } from './src/screens/AgendaScreen';
 import PlaybookScreen, { buscarPlaybook } from './src/screens/PlaybookScreen';
 import { objecoesDaCasa, objecoesDoPlaybook } from './src/utils/playbook';
 import { opcoesDaFila } from './src/utils/dadosDaFila';
@@ -216,9 +213,7 @@ import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingPr
 import { montarMicrorrotas } from './src/utils/microrrotas';
 import { useVisitsHeatmap } from './src/hooks/useVisitsHeatmap';
 import { useSellerClassification, precisaDeIdHubspot } from './src/hooks/useSellerClassification';
-import { buildHeatCells, celulasNinguemFoi, heatColor, heatIntensity, HEAT_CELL_M, HEAT_LEGEND_STOPS } from './src/utils/heatmap';
-import { assembleDailyRoute, MANDATORY_LABEL, MANDATORY_BADGE, DAILY_GOAL, type MandatoryReason } from './src/utils/dailyRoute';
-import { fetchSlaCandidate } from './src/utils/slaCandidate';
+import { buildHeatCells, celulasNinguemFoi, heatColor, heatIntensity, HEAT_CELL_M } from './src/utils/heatmap';
 import { slaForStage, slaStatus, type SlaDays } from './src/utils/sla';
 import { lerAberturaDaUrl, lerPedidoDaUrl, limparAberturaDaUrl, limparPedidoDaUrl, type PedidoDaFila } from './src/utils/pushDaFila';
 import { PilulaDoHoje, ToastDeConquista } from './src/screens/EntradasDesenvolvimento';
@@ -394,53 +389,6 @@ const STATUS_OPTIONS: { value: ClientStatus; label: string; color: string }[] = 
 
 type AppTab = 'map' | 'list' | 'route' | 'agenda' | 'tasks' | 'playbook' | 'meu' | 'config';
 
-// Documentacao das regras de geracao automatica de tarefas (motor
-// generate_client_tasks no Supabase). Isto e' so a explicacao mostrada no
-// modal "ⓘ" da aba Tarefas — a fonte da verdade da logica esta na funcao SQL.
-// Estruturado como array pra ficar facil adicionar novas regras conforme o
-// motor cresce (cada objeto vira um card no modal).
-type TaskRuleDoc = {
-  code: string;               // identificador da regra (task_type)
-  title: string;              // titulo legivel
-  trigger: string;            // quando dispara
-  levels: { badge: string; color: string; when: string }[]; // severidades
-  suppress: string;           // o que impede a tarefa de existir
-  autoResolve: string;        // quando a tarefa some sozinha
-  timing: string;             // como o tempo e' contado
-};
-
-const TASK_RULES: TaskRuleDoc[] = [
-  {
-    code: 'agendar_demo',
-    title: 'Agendar Demo',
-    trigger: 'Lead na etapa Conversa com decisor sem uma reunião (demo) futura agendada.',
-    levels: [
-      { badge: 'D2', color: '#FFB32F', when: 'a partir de 2 dias úteis na etapa' },
-      { badge: 'D5', color: 'var(--brand-text)', when: 'a partir de 5 dias úteis na etapa (a mesma tarefa escala de D2 para D5)' },
-    ],
-    suppress:
-      'Se o lead tiver uma reunião do tipo "reunião" (não follow-up) com data futura e status "agendada", a tarefa não é criada.',
-    autoResolve:
-      'A tarefa some sozinha (resolvida automaticamente) quando o lead ganha uma reunião futura, sai da etapa Conversa com decisor, ou deixa de ser lead. Tarefas que você concluiu ou dispensou manualmente não voltam.',
-    timing:
-      'O tempo é contado em DIAS ÚTEIS (fim de semana não conta) a partir da entrada na etapa (histórico de mudança de etapa). Sem histórico, conta a partir de quando a funcionalidade foi ativada (08/07/2026) — não de datas antigas — pra não gerar tarefas retroativas.',
-  },
-  {
-    code: 'sla_etapa',
-    title: 'SLA por etapa (prazo no funil)',
-    trigger: 'Lead parado numa etapa do funil por mais dias que o SLA daquela etapa, sem avançar.',
-    levels: [
-      { badge: 'Xd', color: 'var(--info-text)', when: 'o número no badge = dias que o lead está parado na etapa' },
-    ],
-    suppress:
-      'Cada etapa tem um prazo (SLA) próprio configurável. Prazos iniciais: Prospecção 3d (Qualificar), Demo/Proposta 3d (Enviar proposta), Negociação 5d (Fechar), Aguardando Pagamento 3d (Confirmar pagamento).',
-    autoResolve:
-      'A tarefa some sozinha quando o lead avança de etapa (ou deixa de ser lead). O objetivo é medir cumprimento de prazo por etapa.',
-    timing:
-      'Contado em DIAS ÚTEIS (fim de semana não conta) a partir da entrada na etapa (histórico). A geração roda automaticamente a cada 30 minutos no servidor — não depende de abrir o app.',
-  },
-];
-
 // Limpa e normaliza telefone pra wa.me. Aceita "(27) 99618-3875" / "27996183875"
 // / "5527996183875" e devolve "5527996183875" (com DDI 55 default Brasil).
 // Retorna null se tiver < 10 digitos (DDD + numero base) — telefone invalido.
@@ -522,78 +470,6 @@ function tintDaEtapa(etapa: string | null | undefined, escuro: boolean): { bg: s
   if (e.includes('ganho') || e.includes('onboarding') || e.includes('fechado')) return { bg: '#EAF7EE', fg: '#167532' };
   return { bg: '#EDEDED', fg: '#545454' };
 }
-
-function CustomMarker({ color, meetingCount, isContaAlvo }: { color: string; meetingCount: number; isContaAlvo?: boolean }) {
-  const iconColors = useIconColors();
-  return (
-    <View style={markerStyles.container}>
-      {/* data-pin: no web (>=768) o CSS de public/index.html sobe o pin de
-          36 pra 40px — mais alvo de clique, como manda o handoff. */}
-      <View style={[markerStyles.pin, { backgroundColor: color }]} {...ds({ pin: '1' })}>
-        {/* Asset ja' BRANCO e ja' no tamanho de exibicao — nao usa tintColor.
-            O react-native-web implementa tintColor criando um <svg> com um
-            <filter> inline POR IMAGEM e aplicando `filter: url(#id)` no <img>.
-            Filtro SVG obriga o navegador a re-rasterizar o elemento; com
-            centenas de pinos sendo reposicionados a cada quadro do arraste,
-            a GPU de celular nao da' conta (no desktop passava despercebido —
-            era o "trava so' no mapa, so' no celular").
-
-            De quebra o arquivo saiu de 1295x1637 / 99 KB para 38x48 / 1,4 KB:
-            o anterior era reamostrado a cada pintura pra caber em 20px. */}
-        <Image source={require('./assets/pin-logo.png')} style={markerStyles.logo} fadeDuration={0} />
-        {meetingCount > 0 && (
-          <View style={markerStyles.meetingBadge}>
-            <IconCalendar width={16} height={16} fill={iconColors.onSurface} />
-          </View>
-        )}
-        {/* Conta Alvo: badge 🎯 no canto esquerdo (o de reunião fica no direito). */}
-        {isContaAlvo && (
-          <View style={markerStyles.contaAlvoBadge}>
-            <IconStar width={9} height={9} fill="#fff" />
-          </View>
-        )}
-      </View>
-      <View style={[markerStyles.arrow, { borderTopColor: color }]} />
-    </View>
-  );
-}
-
-const MarkerWithReady = React.memo(
-  function MarkerWithReady({
-    client,
-    onPress,
-    color,
-    meetingCount,
-    isContaAlvo,
-    coordinate,
-  }: { client: Client; onPress: (client: Client) => void; color: string; meetingCount: number; isContaAlvo?: boolean; coordinate: { latitude: number; longitude: number } }) {
-    // Aqui existia toda a maquinaria de `tracksViewChanges`: tres estados,
-    // um timer de 800ms por marker e um onLayout que forcava re-render. Ela
-    // resolvia um bug EXCLUSIVO do render nativo — o iOS tira um "snapshot"
-    // da view do marker, e o snapshot saia vazio quando o PNG do logo ainda
-    // nao tinha decodificado (o "pin some ao dar zoom" do campo).
-    //
-    // Na web nao ha snapshot: o pin e' HTML ao vivo, sempre pintado. Manter
-    // aquilo custava, por pin, 3 useState + 1 setTimeout + renders extras —
-    // com algumas centenas de pins na tela, puro desperdicio.
-    const handlePress = useCallback(() => onPress(client), [onPress, client]);
-
-    return (
-      <Marker coordinate={coordinate} onPress={handlePress}>
-        <CustomMarker color={color} meetingCount={meetingCount} isContaAlvo={isContaAlvo} />
-      </Marker>
-    );
-  },
-  (prev, next) =>
-    prev.color === next.color &&
-    prev.client.id === next.client.id &&
-    prev.client.latitude === next.client.latitude &&
-    prev.client.longitude === next.client.longitude &&
-    prev.meetingCount === next.meetingCount &&
-    prev.coordinate.latitude === next.coordinate.latitude &&
-    prev.coordinate.longitude === next.coordinate.longitude &&
-    prev.onPress === next.onPress,
-);
 
 // Abrir os ajustes de localização. Na web (o PWA) Linking.openSettings não
 // existe e o toque dava erro calado: lá, o passo a passo por aparelho.
@@ -683,8 +559,6 @@ const MarkerP2 = React.memo(
     a.rotulo === b.rotulo &&
     a.leque?.dx === b.leque?.dx && a.leque?.dy === b.leque?.dy,
 );
-
-
 
 const markerStyles = StyleSheet.create({
   container: { alignItems: 'center' },
@@ -1041,9 +915,6 @@ function MainApp() {
   // Modal que explica as regras de geracao automatica de tarefas (botao "ⓘ"
   // no cabecalho da aba Tarefas).
   const [isTaskRulesOpen, setIsTaskRulesOpen] = useState(false);
-  // Chip de severidade selecionado na aba Tarefas (null = todas). Tocar no
-  // chip ativo limpa o filtro.
-  const [taskSevFilter, setTaskSevFilter] = useState<string | null>(null);
   const [showOnlyMyArea, setShowOnlyMyArea] = useState(true);
   const [locationPermission, setLocationPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
   // ABRIR SEM ESPERAR O GPS (26/09/2026). A ultima posicao conhecida fica no
@@ -1263,17 +1134,9 @@ function MainApp() {
     negociacao: routeConfig.sla_negociacao,
     ag_pagamento: routeConfig.sla_ag_pagamento,
   }), [routeConfig.sla_prospeccao, routeConfig.sla_visita, routeConfig.sla_conversa, routeConfig.sla_demo, routeConfig.sla_negociacao, routeConfig.sla_ag_pagamento]);
-  // Tarefas geradas automaticamente (motor de regras no banco). O hook dispara
-  // a geracao ao autenticar e le as pendentes. O badge do rodape usa a contagem
-  // JA filtrada por vendedor (visibleTasksCount), nao o total global.
-  const { tasks, resolveTask } = useClientTasks();
-  // Mesmo problema nas tarefas: task.client_id pode apontar pra lead fora da
-  // area carregada do mapa, e o card mostrava "Lead nao encontrado".
-  const idsClientesDasTarefas = useMemo(
-    () => [...new Set(tasks.map((t) => t.client_id).filter(Boolean))] as string[],
-    [tasks],
-  );
-  const nomesTarefas = useNomesDeClientes(idsClientesDasTarefas, tab === 'tasks');
+  // Tarefas geradas automaticamente (motor de regras no banco): o resolveTask conclui a
+  // tarefa do app junto com a mudança de etapa (a lista do mapa antigo saiu em 02/11/26).
+  const { resolveTask } = useClientTasks();
   useForceReload(isAuthenticated);
   // Gestor = acesso total. Antes existiam dois tiers separados (admin por
   // e-mail hardcoded + uma lista de "so metricas"); agora e' um so, vindo do
@@ -1302,23 +1165,18 @@ function MainApp() {
   // gestor tem linha la', migration 0096; gestor novo entra la' tambem).
   const naEquipeCockpit = useNaEquipeCockpit();
   const verGestao = !isViewer && naEquipeCockpit;
-  // Mapa novo: padrão no celular desde 26/09 (useMapaNovo; `?mapa=antigo` sai). Sem o
-  // contexto carregado ainda, o mapa segue com o pino atual — nunca um pino
+  // Mapa novo: o único desde a auditoria 02/11/26 (o antigo, `?mapa=antigo`, saiu — padrão havia
+  // 5 semanas). Sem o contexto carregado ainda, o mapa segue com o pino atual — nunca um pino
   // pela metade.
-  const mapaNovo = useMapaNovo();
-  const contextoPinoBase = useContextoDoPino(mapaNovo);
+  const contextoPinoBase = useContextoDoPino(true);
   const leadsNaFila = useLeadsNaFila();
   const contextoPino = useMemo<ContextoPino | null>(
     () => (contextoPinoBase ? { ...contextoPinoBase, agora: new Date() } : null),
     [contextoPinoBase],
   );
-  // O MAPA NOVO DESDE O PRIMEIRO QUADRO (Julyan, 26/09: "ainda carrega o antigo
-  // antes"). Antes, modoNovo esperava o contexto dos pinos (RPC mapa_contexto) e,
-  // nesse meio segundo a 2 s em 4G, a tela abria no layout ANTIGO e trocava.
-  // Agora o layout novo abre na hora; só os pinos esperam o contexto (todo uso
-  // de contextoPino já se protege de null), e se a RPC falhar o contexto vem
-  // vazio (useContextoDoPino), para o pino nunca sumir.
-  const modoNovo = mapaNovo;
+  // O MAPA NOVO DESDE O PRIMEIRO QUADRO (Julyan, 26/09: "ainda carrega o antigo antes"): só os
+  // pinos esperam o contexto (todo uso de contextoPino já se protege de null), e se a RPC falhar o
+  // contexto vem vazio (useContextoDoPino), para o pino nunca sumir.
   /* ANTES DA RUA (P6, handoff Tarefas do App): na 1ª abertura do Mapa no dia, com quente esfriando,
      sobe a folha com os quentes e o Ligar. Uma vez por dia por aparelho; não bloqueia o mapa. */
   const [antesDaRua, setAntesDaRua] = useState(false);
@@ -1339,7 +1197,7 @@ function MainApp() {
      registra a origem certa. */
   const hojeNaAbertura = useRef<'manha' | 'fecho' | null>(hojeV3 && typeof window !== 'undefined' ? lerHojeDaUrl(window.location.href) : null);
   useEffect(() => {
-    if (!modoNovo || tab !== 'map' || isViewer || planoDoDiaResolvido) return;
+    if (tab !== 'map' || isViewer || planoDoDiaResolvido) return;
     const agoraBRT = new Date(Date.now() - 3 * 3600000);
     if (agoraBRT.getUTCHours() >= (hojeV3 ? 10 : 19)) { setPlanoDoDiaResolvido(true); return; }
     /* sem expediente (fim de semana, feriado) não pergunta o dia (auditoria 01/11/26: no domingo
@@ -1354,9 +1212,9 @@ function MainApp() {
     setPlanoDoDia(true);
     registrarEvento('plano_proposto', {});
     if (hojeV3) registrarHoje('folha_manha', 'vista', hojeNaAbertura.current === 'manha' ? 'push_08' : 'app');
-  }, [modoNovo, tab, isViewer, planoDoDiaResolvido, hojeV3]);
+  }, [tab, isViewer, planoDoDiaResolvido, hojeV3]);
   useEffect(() => {
-    if (!modoNovo || tab !== 'map' || !seloFila?.quente || !filaNaTela.data || planoDoDia) return;
+    if (tab !== 'map' || !seloFila?.quente || !filaNaTela.data || planoDoDia) return;
     /* auditoria 02/11/26: com o Hoje v3 a "Antes da rua" subia logo depois da folha da manhã, que já
        traz o que vence hoje e o sem próximo passo (e a hora das ligações chama os quentes). Fica só
        no hoje-v2. */
@@ -1368,12 +1226,12 @@ function MainApp() {
     const chave = `antes-da-rua-${filaNaTela.data.hoje ?? diaBRT(new Date())}`;
     try { if (window.localStorage.getItem(chave)) return; window.localStorage.setItem(chave, '1'); } catch { return; }
     setAntesDaRua(true);
-  }, [modoNovo, tab, seloFila?.quente, filaNaTela.data, planoDoDia, hojeV3]);
+  }, [tab, seloFila?.quente, filaNaTela.data, planoDoDia, hojeV3]);
   // A14 (handoff v6): com o mapa na tela, a fila aparece só na pílula (ver Toast.mapaNaTela)
   useEffect(() => {
-    Toast.mapaNaTela(modoNovo && tab === 'map' && !layout.ehLargo);
+    Toast.mapaNaTela(tab === 'map' && !layout.ehLargo);
     return () => Toast.mapaNaTela(false);
-  }, [modoNovo, tab, layout.ehLargo]);
+  }, [tab, layout.ehLargo]);
   // Lente ativa (uma por vez; "Meu dia" é o padrão) e filtros do mapa novo.
   const [lente, setLente] = useState<Lente>('dia');
   const [filtrosNovos, setFiltrosNovos] = useState<FiltrosNovos>(FILTROS_VAZIOS);
@@ -1413,7 +1271,7 @@ function MainApp() {
   const [fundoMapaTela, setFundoMapaTela] = useState<number | null>(null);
   const margemMapaRef = useRef(0);
   // Sem o "Mapa | Lista" no topo, quem estava na Lista volta para o mapa.
-  useEffect(() => { if (modoNovo) setVistaMapa('mapa'); }, [modoNovo]);
+  useEffect(() => { setVistaMapa('mapa'); }, []);
 
   // ===== Mapa de calor de visitas (só gestor) =====
   // Camada opcional sobre o mapa principal: densidade de check-ins por área.
@@ -1422,8 +1280,8 @@ function MainApp() {
   // Mapa novo: o calor é uma LENTE (vale no celular também), não um botão de gestor.
   useEffect(() => {
     // Julyan 26/09: calor é do GESTOR — o executivo não vê a lente nem a camada.
-    if (modoNovo) setHeatOn(lente === 'calor' && canViewGestor);
-  }, [modoNovo, lente, canViewGestor]);
+    setHeatOn(lente === 'calor' && canViewGestor);
+  }, [lente, canViewGestor]);
   const [heatSeller, setHeatSeller] = useState<string | null>(null); // null = Todos
   // Modo sol (prompt §6, menu do avatar): mapa claro para ler na rua ao meio-dia.
   // Lembrado no aparelho; só vale no mapa novo.
@@ -1449,24 +1307,22 @@ function MainApp() {
   const [calorEscopo, setCalorEscopo] = useState<'time' | 'eu'>('time');
   const {
     points: heatPoints,
-    sellers: heatSellers,
-    capped: heatCapped,
     isLoading: heatLoading,
     nomes: heatNomes,
     semGps30d: heatSemGpsTime,
     semGpsPorVendedor: heatSemGpsPorVendedor,
-  } = useVisitsHeatmap((canViewGestor || modoNovo) && heatOn, modoNovo ? 30 : null);
+  } = useVisitsHeatmap(heatOn, 30);
   /* o rodapé "N check-ins sem GPS" do recorte que está na tela: só eu, o vendedor escolhido ou o time */
   const heatSemGps30d = heatSemGpsTime == null ? null
     : calorEscopo === 'eu' ? (profile?.id ? heatSemGpsPorVendedor[profile.id] ?? 0 : null)
       : heatSeller ? heatSemGpsPorVendedor[heatSeller] ?? 0 : heatSemGpsTime;
   // Mapa novo (prompt §5): a mancha é dos ÚLTIMOS 30 DIAS, do time ou só minha.
   const pontosCalor = useMemo(() => {
-    if (!modoNovo) return heatPoints;
+
     const desde = Date.now() - 30 * 86400000;
     return heatPoints.filter((p) => (!p.at || Date.parse(p.at) >= desde)
       && (calorEscopo === 'time' || p.sellerId === profile?.id));
-  }, [modoNovo, heatPoints, calorEscopo, profile?.id]);
+  }, [heatPoints, calorEscopo, profile?.id]);
   const vendedoresCalor = useMemo(() => {
     const por = new Map<string, number>();
     for (const p of pontosCalor) if (p.sellerId) por.set(p.sellerId, (por.get(p.sellerId) ?? 0) + 1);
@@ -1481,11 +1337,11 @@ function MainApp() {
   // Pontos filtrados pelo vendedor selecionado, agregados na grade.
   const heat = useMemo(() => {
     if (!heatOn) return { cells: [], max: 0, total: 0, pts: [] as typeof heatPoints };
-    const base = modoNovo ? pontosCalor : heatPoints;
+    const base = pontosCalor;
     const pts = heatSeller ? base.filter((p) => p.sellerId === heatSeller) : base;
     const { cells, max } = buildHeatCells(pts);
     return { cells, max, total: pts.length, pts };
-  }, [heatOn, heatSeller, heatPoints, pontosCalor, modoNovo]);
+  }, [heatOn, heatSeller, heatPoints, pontosCalor]);
 
   // Exporta o mapa de calor (visitas) em JSON — mesmo mecanismo do export da
   // agenda (sobe no bucket 'exports', devolve signed URL de 7 dias). Respeita o
@@ -1569,7 +1425,7 @@ function MainApp() {
   /* AGENDA NO COMPUTADOR (Claude Design, 05/10/26). Além de entrar e sair, o rascunho do dia
      guarda a ORDEM (arrastar, Encaixar, Pôr na melhor posição) e os CADEADOS de horário. Tudo
      vale para o dia aberto e some ao trocar de dia, como as marcas. */
-  const ehAgendaPC = modoNovo && layout.ehLargo && tab === 'agenda';
+  const ehAgendaPC = layout.ehLargo && tab === 'agenda';
   const [ordemPlano, setOrdemPlano] = useState<string[] | null>(null);
   const [fixosPlano, setFixosPlano] = useState<Map<string, string | null>>(() => new Map());
   const [abaAgenda, setAbaAgenda] = useState<'plano' | 'sugestoes'>('plano');
@@ -1591,7 +1447,7 @@ function MainApp() {
   const opsOutroDia = useFieldOps(planejarDia ?? routeDate, isAuthenticated && !!planejarDia && planejarDia !== routeDate);
   const opsDoDia = planejarDia && planejarDia !== routeDate ? opsOutroDia : fieldOps;
   const planejarOutroDia = !!planejarDia && planejarDia !== routeDate;
-  const podePlanejar = modoNovo && !isViewer && !isMonitoringRoute && !!profile?.id;
+  const podePlanejar = !isViewer && !isMonitoringRoute && !!profile?.id;
   useEffect(() => { if (!podePlanejar) setPlanejarDia(null); }, [podePlanejar]);
   // Os dias são os da faixa da Agenda (hoje + próximos úteis): tudo que ele planeja aqui
   // aparece lá. Passou da meia-noite com o modo aberto: o dia que virou passado sai.
@@ -1869,7 +1725,7 @@ function MainApp() {
   // no mapa sem recarregar. Ver src/hooks/useAoVivo.ts.
   useAoVivo(isAuthenticated, myHubspotId, canViewGestor);
   // Sino de Avisos (mapa novo): falhas de sincronização + recados do gestor. Ver src/hooks/useAvisos.ts.
-  const avisos = useAvisos(modoNovo);
+  const avisos = useAvisos(true);
   // A FILA DO CELULAR APARECE NO COCKPIT (S8 / contrato 30, handoff v6): ninguém gravava
   // fila_pwa e o painel do gestor dizia "não confirmado" para sempre. A cada mudança da
   // fila o app grava o resumo do dia (pendentes, falhas). Sem sinal a gravação falha e
@@ -1897,7 +1753,7 @@ function MainApp() {
   // Meu dia em números (handoff v4.1 §6.12): só o medido — check-ins de hoje,
   // Daily prometida, reuniões e sequência. Alimenta também o "x/6" da pílula.
   const [meuDiaAberto, setMeuDiaAberto] = useState(false);
-  const meuDia = useMeuDia(modoNovo, profile?.id ?? null);
+  const meuDia = useMeuDia(true, profile?.id ?? null);
 
   // A META DE VISITAS É UMA SÓ (auditoria 28/09/2026): a Agenda, o Montar meu dia e a Rota
   // liam só a do time, a pílula lia a promessa, e a meta de cada um (seller_visit_goals)
@@ -1910,33 +1766,6 @@ function MainApp() {
   // FAIXA DA RUA (02/10/26): só o executivo, só em dia útil (field sales é seg–sex).
   // o gestor também vê (Julyan, 02/10/26: "eu não tenho conta de nenhum executivo, não consigo ver")
 
-  // Recorte de tarefas por vendedor. Gestor (canViewGestor: admin ou Julyan) ve
-  // TODAS; vendedor comum ve so as dos leads dele (match por vendedor_id_hubspot).
-  // Se um gestor escolheu um vendedor no filtro do mapa, respeita esse recorte.
-  // Compartilhado entre a tela de Tarefas e o badge do rodape — antes o badge
-  // usava a contagem GLOBAL (tasks.length) e mostrava 99+ pra todo mundo.
-  //
-  // 14/09/2026: passou a ser SEMPRE o proprio. Antes era
-  // `vendorFilterHubspotId ?? (canViewGestor ? null : myHubspotId)`, e ali o
-  // `null` do gestor queria dizer "sem filtro" — ele abria a Tarefas com a fila
-  // do time inteiro. A Tarefas responde "o que EU tenho que fazer hoje"; a
-  // visao do time e' o cockpit de gestao, que existe pra isso.
-  //
-  // Tambem deixou de seguir o `vendorFilterHubspotId`: aquele filtro e' do
-  // MAPA (explorar territorio de outro vendedor), e arrastar ele pra ca fazia
-  // a fila pessoal mudar por causa de um filtro posto em outra tela.
-  const tasksActiveVendor = myHubspotId;
-  // Vendedor SEM id_hubspot nao pode cair no mesmo `null` do gestor: ali `null`
-  // quer dizer "sem filtro", e ele passava a ver a carteira inteira do time —
-  // nome do lead, etapa, dias de atraso e o responsavel de cada tarefa. Perfil
-  // novo nasce sem o id (o AuthContext cria assim), entao qualquer vendedor
-  // recem-provisionado caia nisso ate' alguem preencher o campo.
-  // Vale pra TODO MUNDO agora, nao so' pro vendedor: sem `id_hubspot` nao ha'
-  // como saber de quem e' a tarefa, e antes esse caso caia no mesmo `null` do
-  // gestor — "sem filtro" — e a pessoa passava a ver a carteira inteira do
-  // time: nome do lead, etapa, dias de atraso e o responsavel de cada tarefa.
-  // Perfil novo nasce sem o id (o AuthContext cria assim).
-  const semIdHubspot = !myHubspotId;
   // Aviso do gestor: quem trabalha e ainda nao tem id do HubSpot. Sem o id a
   // pessoa nao recebe lead nem tarefa, e isso nao aparecia em lugar nenhum — a
   // conta ficava meses parecendo normal e so' se descobria pela reclamacao.
@@ -1946,17 +1775,6 @@ function MainApp() {
   // Dispensavel por SESSAO: some no X e volta na proxima abertura. Nao
   // persiste de proposito — o problema continua la' ate' alguem resolver.
   const [avisoIdDispensado, setAvisoIdDispensado] = useState(false);
-  const visibleTasks = useMemo(
-    () =>
-      semIdHubspot
-        ? []
-        : tasks.filter((t) => {
-            if (tasksActiveVendor === null) return true;
-            if (tasksActiveVendor === '__none__') return !t.vendedor_id_hubspot;
-            return t.vendedor_id_hubspot === tasksActiveVendor;
-          }),
-    [tasks, tasksActiveVendor, semIdHubspot],
-  );
   // O contador do rodape soma as DUAS filas: as do app (`client_tasks`) e as
   // que a gestao pos no HubSpot. Ele contava so' as primeiras, entao a conta do
   // Marco mostrava 13 com 92 tarefas na tela — e um numero que nao bate com o
@@ -1974,31 +1792,6 @@ function MainApp() {
     return () => clearTimeout(t);
   }, [profile, crmLiberado]);
   const { tarefas: tarefasDoCrmParaContagem, medido: tarefasMedidas, erro: tarefasErro, semMedicao: tarefasSemMedicao } = useTarefasDoCrm(!!profile && (crmLiberado || tab !== 'map'));
-  const visibleTasksCount = visibleTasks.length + tarefasDoCrmParaContagem.length;
-
-  // Sublinha do header de Tarefas. Sai do MESMO `baldeDeVencimento` das abas
-  // (importado da tela, nao recopiado): duas regras acabariam divergindo e a
-  // sublinha contradiria a contagem das abas logo abaixo dela.
-  //
-  // Soma as DUAS filas, como o badge do rodape. Contava so' `client_tasks`, e a
-  // tela ficava se contradizendo sozinha: "0 atrasadas · 0 para hoje" logo em
-  // cima das abas "Atrasadas · 2" e "Hoje · 2". Numero que nao bate com o que
-  // se ve' ensina a pessoa a ignorar o numero.
-  const tarefasPorBalde = useMemo(() => {
-    let atrasadas = 0;
-    let hoje = 0;
-    for (const t of visibleTasks) {
-      const balde = baldeDeVencimento(t);
-      if (balde === 'atrasadas') atrasadas++;
-      else if (balde === 'hoje') hoje++;
-    }
-    for (const t of tarefasDoCrmParaContagem) {
-      const balde = baldeDaTarefaDoCrm(t);
-      if (balde === 'atrasadas') atrasadas++;
-      else if (balde === 'hoje') hoje++;
-    }
-    return { atrasadas, hoje };
-  }, [visibleTasks, tarefasDoCrmParaContagem]);
 
   // Avalia o filtro temporal de visita pra um cliente.
   // - null: sem filtro
@@ -2232,8 +2025,8 @@ function MainApp() {
   // ex-cliente juntos); o chip de status único é do mapa antigo e, por padrão
   // "lead", fazia cliente nunca aparecer na busca (27/09: "Peppers Burger" não achava).
   const achadosDaBusca = useMemo(
-    () => (modoNovo ? clientsForCount.filter(c => c.latitude !== null && c.longitude !== null) : filteredWithCoords),
-    [modoNovo, clientsForCount, filteredWithCoords]
+    () => clientsForCount.filter(c => c.latitude !== null && c.longitude !== null),
+    [clientsForCount, filteredWithCoords]
   );
 
   // BUSCA LEVA O MAPA ATE' O ACHADO (26/09/2026). A busca so' filtrava: se o
@@ -2243,7 +2036,7 @@ function MainApp() {
   const buscaEnquadrada = useRef('');
   useEffect(() => {
     // Com a folha de busca aberta, quem escolhe é o executivo, na lista.
-    if (!modoNovo || buscaAberta || !searchTerm || buscando || buscaEnquadrada.current === searchTerm) return;
+    if (buscaAberta || !searchTerm || buscando || buscaEnquadrada.current === searchTerm) return;
     const achados = achadosDaBusca.slice(0, 40);
     if (!achados.length) return;
     const id = setTimeout(() => {
@@ -2263,7 +2056,7 @@ function MainApp() {
       mapa.fitToCoordinates(pontos, { edgePadding: { top: 60, right: 40, bottom: 60, left: 40 }, animated: true });
     }, 700);
     return () => clearTimeout(id);
-  }, [modoNovo, buscaAberta, searchTerm, buscando, achadosDaBusca, mapRegion]);
+  }, [buscaAberta, searchTerm, buscando, achadosDaBusca, mapRegion]);
 
   const routeStops = fieldOps.stops;
   /* o "feito" de cada pino num Set (antes um find na rota por pino, a cada render) */
@@ -2407,7 +2200,7 @@ function MainApp() {
   // de cada MarkerP2 caía no JSON.stringify duplo. Contexto novo zera o guardado.
   const pinoGuardadoRef = useRef<{ ctx: unknown; porLinha: WeakMap<Client, Pino> }>({ ctx: null, porLinha: new WeakMap() });
   const itensMapaNovo = useMemo(() => {
-    if (!modoNovo || !contextoPino) return [];
+    if (!contextoPino) return [];
     if (pinoGuardadoRef.current.ctx !== contextoPino) pinoGuardadoRef.current = { ctx: contextoPino, porLinha: new WeakMap() };
     const guardado = pinoGuardadoRef.current.porLinha;
     const classificar = (c: Client) => {
@@ -2436,7 +2229,7 @@ function MainApp() {
       base.push(c);
     }
     return base.map((c) => ({ c, p: classificar(c), plano: plano.get(c.id) ?? null }));
-  }, [modoNovo, contextoPino, clientesDoPlanoNoMapa, clientsForCount, renderBounds]);
+  }, [contextoPino, clientesDoPlanoNoMapa, clientsForCount, renderBounds]);
 
   // Toque no pino com o modo Planejar ligado: põe no dia, ou tira se já está.
   const paradasDoDiaRef = useRef<ParadaDoDia[]>([]);
@@ -2596,7 +2389,7 @@ function MainApp() {
      ordem das paradas, e o mapa vai até as paradas quando o dia muda. Sair da Agenda fecha o
      modo (e grava o que estava marcado, como o Fechar). */
   const planejarPelaAgenda = useRef(false);
-  const agendaPlaneja = modoNovo && layout.ehLargo && tab === 'agenda' && podePlanejar;
+  const agendaPlaneja = layout.ehLargo && tab === 'agenda' && podePlanejar;
   const ultimoDiaDaAgenda = useRef<string | null>(null);
   const aoDiaDaAgenda = (iso: string) => {
     ultimoDiaDaAgenda.current = iso;
@@ -2869,10 +2662,10 @@ function MainApp() {
 
   // Lente Calor: áreas com 3+ pinos e nenhum check-in no período (anel azul tracejado).
   const ninguemFoi = useMemo(() => {
-    if (!modoNovo || !heatOn || !mapRegion) return [] as { lat: number; lon: number; pinos: number }[];
+    if (!heatOn || !mapRegion) return [] as { lat: number; lon: number; pinos: number }[];
     const pinos = itensMapaNovo.map(({ c }) => ({ lat: Number(c.latitude), lon: Number(c.longitude) }));
     return celulasNinguemFoi(pinos, heat.pts ?? [], mapRegion.latitude);
-  }, [modoNovo, heatOn, mapRegion, itensMapaNovo, heat]);
+  }, [heatOn, mapRegion, itensMapaNovo, heat]);
 
   // A PRÓXIMA PORTA DO PLANO: a primeira parada ainda não feita (a mesma regra da RotaScreen).
   // (as placas de bairro do zoom afastado moram logo depois do mapa: placasDoMapa)
@@ -2888,7 +2681,7 @@ function MainApp() {
      1 ponto a cada 300 m. Sem tela de fim de dia: 6 visitas é o mínimo, não o teto. */
   const verTodosNoMapa = canViewGestor || isViewer;
   const candidatasDaPorta = useMemo(() => {
-    if (!modoNovo || idParadaPendente || !userLocation || planejarDia) return [] as { c: Client; p: Pino; d: number }[];
+    if (idParadaPendente || !userLocation || planejarDia) return [] as { c: Client; p: Pino; d: number }[];
     const eu = { lat: userLocation.latitude, lng: userLocation.longitude };
     return itensMapaNovo
       .filter(({ c, p, plano }) => plano == null && !visitadoHoje(c.visited_at) && !feitosDaRota.has(c.id)
@@ -2897,7 +2690,7 @@ function MainApp() {
       .filter((x) => x.d <= RAIO_SUGESTAO_M)
       .sort((a, b) => a.d - b.d)
       .slice(0, 40);
-  }, [modoNovo, idParadaPendente, userLocation, planejarDia, itensMapaNovo, feitosDaRota, verTodosNoMapa]);
+  }, [idParadaPendente, userLocation, planejarDia, itensMapaNovo, feitosDaRota, verTodosNoMapa]);
   // horário do dono e dor: das fichas de rua das candidatas (uma leitura, só quando há candidata)
   const idsCandidatas = candidatasDaPorta.map((x) => x.c.id).sort().join(',');
   const fichasCandidatas = useQuery({
@@ -2978,7 +2771,7 @@ function MainApp() {
      acorda em segundo plano, e voltar para o app recalcula na hora. */
   const [minutoDaLinha, setMinutoDaLinha] = useState(0);
   useEffect(() => {
-    if (!modoNovo || tab !== 'map' || layout.ehLargo) return;
+    if (tab !== 'map' || layout.ehLargo) return;
     /* COM O APP ATRÁS, NÃO BATE. Cada tique re-renderiza o App inteiro; com a aba escondida
        isso é trabalho jogado fora (e o `visibilitychange` abaixo recalcula na volta). */
     const bater = () => { if (document.visibilityState === 'visible') setMinutoDaLinha((n) => n + 1); };
@@ -2986,7 +2779,7 @@ function MainApp() {
     const aoVoltar = () => { if (document.visibilityState === 'visible') bater(); };
     document.addEventListener('visibilitychange', aoVoltar);
     return () => { clearInterval(id); document.removeEventListener('visibilitychange', aoVoltar); };
-  }, [modoNovo, tab, layout.ehLargo]);
+  }, [tab, layout.ehLargo]);
   /* A LIGAÇÃO DO "ENTRE PORTAS" (2.7). Não é escolha nova: é a PRIMEIRA de telefone na fila, que
      o servidor já ordena por valor × urgência. `presencial` fica de fora porque visita não se
      resolve por telefone — e é justamente de uma visita que ele acabou de sair. */
@@ -3006,7 +2799,7 @@ function MainApp() {
   const linhaDoDiaAgora = useMemo(() => {
     /* Só o dia de hoje e só a própria rua: o gestor olhando a rota de outra pessoa não leva
        cobrança do dia dela, e no modo Planejar de outro dia o placar seria de outro dia. */
-    if (!modoNovo || isMonitoringRoute || routeDate !== todayKey()) return null;
+    if (isMonitoringRoute || routeDate !== todayKey()) return null;
     const doPlano = routeStops.filter((st) => st.status !== 'removed' && st.status !== 'skipped');
     const faltam = doPlano.filter((st) => st.status !== 'done' && !visitadoNoPlanoHoje(st.client));
     const eu = userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : null;
@@ -3032,7 +2825,7 @@ function MainApp() {
     });
     // `minutoDaLinha` entra de propósito: é ele que faz o relógio andar aqui dentro.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minutoDaLinha, modoNovo, isMonitoringRoute, routeDate, routeStops, userLocation,
+  }, [minutoDaLinha, isMonitoringRoute, routeDate, routeStops, userLocation,
     filaNaTela.data, metaDeHoje, meuDia.data?.provadasHoje, donoDoPlano]);
 
   /* O COMBINADO (prancha §6): o próximo passo do negócio é a tarefa aberta do HubSpot que não é
@@ -3077,7 +2870,7 @@ function MainApp() {
     tempo: itemDoHalo?.c.id_hubspot ? contextoPino?.tempoPorNegocio.get(String(itemDoHalo.c.id_hubspot)) ?? null : null,
     proximo: combinadoDe(itemDoHalo?.c ?? null)?.texto?.toLowerCase() ?? null,
     clientePerto: clientePertoDe(itemDoHalo?.c ?? null)?.[0]?.nome ?? null,
-  }, modoNovo && !!itemDoHalo);
+  }, !!itemDoHalo);
   /* SE ELE DISSER · PARA ESTA CASA (espinha do dia 2.4, 29/10/26). As duas objeções saem do TEXTO
      OFICIAL da página "objecoes" do Playbook e são escolhidas pela ficha desta casa — sistema atual
      e dor, que o `fatos` do gatilho já leu. Sem ficha, a lista vem vazia e o bloco some.
@@ -3085,7 +2878,7 @@ function MainApp() {
      fica no mesmo cache da aba Playbook, então na rua sai do celular, sem rede. */
   const playbookDaPorta = useQuery({
     queryKey: ['playbook'], queryFn: buscarPlaybook, staleTime: 10 * 60 * 1000,
-    enabled: modoNovo && !!itemDoHalo,
+    enabled: !!itemDoHalo,
   });
   const objecoesDaProxima = useMemo(() => {
     const pb = playbookDaPorta.data;
@@ -3109,15 +2902,15 @@ function MainApp() {
      (texto editável no Cockpit). Quem nunca abriu a aba não tem cache: 30 s depois de abrir o app,
      uma carga por baixo — uma só, e só se faltar (o app tem a cópia v1 enquanto isso). */
   useEffect(() => {
-    if (!modoNovo || !profile?.id) return;
+    if (!profile?.id) return;
     let tem = false;
     try { tem = !!window.localStorage.getItem('takeat-playbook-cache'); } catch { tem = true; }
     if (tem) return;
     const t = setTimeout(() => { void queryClient.prefetchQuery({ queryKey: ['playbook'], queryFn: buscarPlaybook, staleTime: 10 * 60 * 1000 }); }, 30000);
     return () => clearTimeout(t);
-  }, [modoNovo, profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // o relógio do "primeiro toque" (prancha §4c): o mapa abre e conta até o 1º Ir ou Cheguei
-  useEffect(() => { if (modoNovo && tab === 'map') mapaAbriu(); }, [modoNovo, tab]);
+  useEffect(() => { if (tab === 'map') mapaAbriu(); }, [tab]);
 
   /* CLIENTES TAKEAT PERTO (prancha §5): tocar na linha verde da folha mostra só esses pinos por
      10 s e volta à lente atual. */
@@ -3298,7 +3091,7 @@ function MainApp() {
      "6 clientes Takeat" — a referência sem pôr os pinos de cliente no mapa. */
   const placasDoMapa = useMemo(() => {
     // entre o bairro e a cidade: no zoom de estado ou de país, bairro não diz nada (medido em 15/10/26)
-    if (!modoNovo || !mapRegion || mapRegion.latitudeDelta <= DELTA_AFASTADO || mapRegion.latitudeDelta > 0.6 || lente === 'calor' || (ehAgendaPC && planejarDia)) return [];
+    if (!mapRegion || mapRegion.latitudeDelta <= DELTA_AFASTADO || mapRegion.latitudeDelta > 0.6 || lente === 'calor' || (ehAgendaPC && planejarDia)) return [];
     const itens = visiveisMapaNovo.filter((it) => it.plano == null && !contaAlvoDiscreta(lente, it.p))
       .map(({ c, p }) => ({ id: c.id, bairro: c.bairro, cidade: c.cidade, lat: Number(c.latitude), lng: Number(c.longitude),
         familia: (p.familia === 'rec' || p.familia === 'lead' || p.familia === 'cli' ? p.familia : 'outro') as 'rec' | 'lead' | 'cli' | 'outro' }));
@@ -3309,7 +3102,7 @@ function MainApp() {
       .map((it) => ({ lat: Number(it.c.latitude), lng: Number(it.c.longitude) }));
     return placasDeBairro(itens, clientes, 6, d)
       .filter((pl) => !evitar.some((e) => Math.abs(e.lat - pl.lat) < d * 0.6 && Math.abs(e.lng - pl.lng) < d * 1.2));
-  }, [modoNovo, mapRegion, lente, ehAgendaPC, planejarDia, visiveisMapaNovo, itensMapaNovo, idPortaDoHalo, selectedClient?.id]);
+  }, [mapRegion, lente, ehAgendaPC, planejarDia, visiveisMapaNovo, itensMapaNovo, idPortaDoHalo, selectedClient?.id]);
 
   // Pilha até 8: abre em leque. Maior: aproxima o mapa até os pinos se
   // separarem — a não ser que estejam todos no mesmo ponto (aí só o leque separa).
@@ -3454,27 +3247,6 @@ function MainApp() {
     setTab(destino);
   };
 
-  const [diaSelecionado, setDiaSelecionado] = useState<Date>(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  });
-
-  // Chave de dia em hora LOCAL. `toISOString().slice(0,10)` viraria o dia as
-  // 21h em Brasilia — o mesmo tropeco que o cockpit ja' levou.
-  const chaveDoDia = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-
-  // Quais dias tem ALGO marcado — so' pro dot de 4px da tira. Nao e' o
-  // `allAgendaItems` (esse continua sendo montado, ordenado e filtrado dentro
-  // da AgendaScreen): aqui basta saber "tem ou nao tem" a partir das mesmas
-  // duas fontes.
-  const diasComCompromisso = useMemo(() => {
-    const dias = new Set<string>();
-    for (const st of routeStops) if (st.planned_at) dias.add(chaveDoDia(new Date(st.planned_at)));
-    for (const m of meetings) if (m.scheduled_at) dias.add(chaveDoDia(new Date(m.scheduled_at)));
-    return dias;
-  }, [routeStops, meetings]);
-
   // A parada "de agora": a primeira ainda nao concluida. Mesma regra do
   // `idxAtual` da RotaScreen — se as duas divergissem, o pino vermelho do
   // mapa apontaria uma parada e a tag "Agora" do card apontaria outra.
@@ -3517,7 +3289,6 @@ function MainApp() {
       return;
     }
     const desired = Math.max(1, Math.min(30, Math.floor(requestedRaw)));
-    const capped = Math.floor(requestedRaw) > 30;
 
     // Prioridade da base: override escolhido pelo vendedor > GPS > 1o lead.
     const base = routeStartOverride
@@ -3614,9 +3385,6 @@ function MainApp() {
     // provedores falharem, NAO cai pra linha reta — avisa o usuario com
     // mensagem clara e contato pro time RPA, conforme decisao do produto.
     let ordered: Array<{ client: Client; meters: number }> = [];
-    let tripDistanceMeters: number | null = null;
-    let tripDurationSeconds: number | null = null;
-    let optimizationProvider: RoutingProvider | null = null;
 
     if (topCandidates.length > 0) {
       setIsOptimizing(true);
@@ -3643,9 +3411,6 @@ function MainApp() {
           prevLat = cand.client.latitude as number;
           prevLon = cand.client.longitude as number;
         }
-        tripDistanceMeters = trip.distanceMeters;
-        tripDurationSeconds = trip.durationSeconds;
-        optimizationProvider = trip.provider;
         setLastProviderUsed(trip.provider);
       } catch (err: any) {
         console.warn('[ROTA] Ambos provedores (ORS e OSRM) falharam:', err?.message ?? err);
@@ -3685,184 +3450,10 @@ function MainApp() {
 
     // MAPA NOVO NÃO APAGA (auditoria 28/09): o saveRoute apagava a rota inteira, feitas
     // e as do Planejamento inclusive. A sugestão entra somando, como o Montar meu dia.
-    if (modoNovo) {
-      void fieldOps.montarDia.mutateAsync(ordered.map((item) => item.client))
-        .then((out) => Alert.alert('Rota sugerida', `${out.novas} ${out.novas === 1 ? 'parada nova' : 'paradas novas'} na rota de hoje. Nada do que já estava foi apagado.`))
-        .catch((e) => Alert.alert('Erro ao montar a rota', String((e as Error)?.message ?? e)));
-      return;
-    }
-    setRouteDraft(ordered.map(item => item.client));
-    fieldOps.saveRoute.mutate({
-      routeDate,
-      title: 'Rota sugerida',
-      source: 'suggested',
-      priorityMode: 'smart',
-      base,
-      stops: ordered.map(item => ({ client: item.client, distance_meters: item.meters })),
-    }, {
-      onSuccess: () => {
-        const got = ordered.length;
-        const providerLabel = optimizationProvider === 'ors'
-          ? 'OpenRouteService'
-          : optimizationProvider === 'osrm' ? 'OSRM (ORS fora)' : '';
-        const tripInfo = tripDistanceMeters != null && tripDurationSeconds != null
-          ? `\n\n${(tripDistanceMeters / 1000).toFixed(1).replace('.', ',')} km • ~${Math.round(tripDurationSeconds / 60)} min de carro`
-            + (providerLabel ? `\n(Otimizado via ${providerLabel})` : '')
-          : '';
-        const lines = [
-          got === desired
-            ? `Rota sugerida com ${got} leads.`
-            : `Encontramos apenas ${got} leads compativeis (pediu ${desired}).`,
-          tripInfo,
-          '',
-          'Descartados:',
-          outOfSelection > 0 ? `• ${outOfSelection} fora dos status escolhidos` : null,
-          outOfVendor > 0 ? `• ${outOfVendor} fora do vendedor "${vendorLabel(routeVendorFilterHubspotId)}"` : null,
-          withoutCoord > 0 ? `• ${withoutCoord} sem coordenadas` : null,
-          alreadyInRoute > 0 ? `• ${alreadyInRoute} ja estavam na rota` : null,
-          capped ? '\nObs.: limite maximo por rota = 30.' : null,
-        ].filter(Boolean);
-        Alert.alert('Rota sugerida', lines.join('\n'));
-      },
-      onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
-    });
-  }, [clients, fieldOps.saveRoute, fieldOps.montarDia, modoNovo, filteredWithCoords, routeDate, routeLeadCount, routeVendorFilterHubspotId, routeStatusSelection, routeStopClientIds, userLocation, routeStartOverride, vendorById]);
-
-  // ===== Rota do dia (automática) =====
-  // Monta as visitas OBRIGATÓRIAS do dia (Fase 1: Relacionamento; SLA/Conta
-  // Alvo entram nas Fases 2/3) + completa até a meta com sugestões, partindo do
-  // GPS do vendedor, já otimizada (TSP). Não mexe no fluxo manual de rota.
-  const generateDailyRoute = useCallback(async () => {
-    // Base = onde o vendedor ESTÁ agora (a Rota do dia parte daqui). Cai pro
-    // override de ponto de partida só se o GPS não estiver disponível.
-    const base = userLocation ?? (routeStartOverride
-      ? { latitude: routeStartOverride.latitude, longitude: routeStartOverride.longitude }
-      : null);
-    if (!base) {
-      Alert.alert('Sem localização', 'Ative o GPS pra montar a Rota do dia a partir de onde você está.');
-      return;
-    }
-
-    // Vendedor alvo: admin usa o filtro escolhido; vendedor comum, o próprio.
-    const vendor = (isAdmin ? routeVendorFilterHubspotId : myHubspotId) ?? myHubspotId ?? null;
-
-    setIsOptimizing(true);
-    let assembly;
-    try {
-      assembly = await assembleDailyRoute({
-        clients,
-        base,
-        vendor,
-        excludeIds: routeStopClientIds,
-        goal: metaMinha || DAILY_GOAL,
-        providers: {
-          // SLA estourado (regra do MD): lead mais urgente do vendedor via RPC.
-          sla: async (excludeIds) => fetchSlaCandidate(vendor, excludeIds),
-          // Conta-alvo NÃO nasce mais aqui (Julyan, 26/09: "agora eu que comando
-          // tudo"). A edge conta-alvo-nearby criava sozinha um lead do Google
-          // perto do executivo; conta-alvo agora é só o que o gestor atribui no
-          // Cockpit (leads_prospeccao), que já chega ao mapa pelo gatilho.
-          contaAlvo: async () => null,
-        },
-      });
-    } catch (err: any) {
-      setIsOptimizing(false);
-      Alert.alert('Erro', err?.message ?? 'Falha ao montar a Rota do dia.');
-      return;
-    }
-
-    const candidates = assembly.candidates;
-    if (candidates.length === 0) {
-      setIsOptimizing(false);
-      Alert.alert('Sem candidatos', 'Não achei clientes/leads com coordenadas pra montar a rota a partir daqui.');
-      return;
-    }
-
-    // Ordena por TSP real (ORS → OSRM), igual à sugestão manual. Sem fallback
-    // pra linha reta: se ambos caírem, avisa.
-    const ordered: Array<{ client: Client; meters: number }> = [];
-    let tripDistanceMeters: number | null = null;
-    let tripDurationSeconds: number | null = null;
-    let optimizationProvider: RoutingProvider | null = null;
-    try {
-      const tripPoints: RoutePoint[] = [
-        { latitude: base.latitude, longitude: base.longitude },
-        ...candidates.map(c => ({ latitude: c.latitude as number, longitude: c.longitude as number })),
-      ];
-      const trip = await fetchOptimizedTrip(tripPoints);
-      const visitOrder = trip.inputOrderToVisit.slice(1);
-      let prevLat = base.latitude;
-      let prevLon = base.longitude;
-      for (const inputIdx of visitOrder) {
-        const c = candidates[inputIdx - 1];
-        if (!c) continue;
-        const segMeters = distanceMeters(prevLat, prevLon, c.latitude as number, c.longitude as number);
-        ordered.push({ client: c, meters: segMeters });
-        prevLat = c.latitude as number;
-        prevLon = c.longitude as number;
-      }
-      tripDistanceMeters = trip.distanceMeters;
-      tripDurationSeconds = trip.durationSeconds;
-      optimizationProvider = trip.provider;
-      setLastProviderUsed(trip.provider);
-    } catch (err: any) {
-      console.warn('[ROTA DIA] Otimização (ORS e OSRM) falhou:', err?.message ?? err);
-      setIsOptimizing(false);
-      Alert.alert(
-        'Erro ao gerar rota',
-        'Não conseguimos calcular a ordem otimizada (OpenRouteService e OSRM estão fora). '
-        + 'Tente novamente em alguns minutos.',
-      );
-      return;
-    } finally {
-      setIsOptimizing(false);
-    }
-
-    if (ordered.length === 0) {
-      Alert.alert('Sem candidatos', 'Não consegui montar a Rota do dia.');
-      return;
-    }
-
-    setRouteDraft(ordered.map(o => o.client));
-    fieldOps.saveRoute.mutate({
-      routeDate,
-      title: 'Rota do dia',
-      source: 'suggested',
-      priorityMode: 'daily',
-      base,
-      stops: ordered.map(o => ({
-        client: o.client,
-        distance_meters: o.meters,
-        mandatory_reason: assembly!.reasonByClientId.get(o.client.id) ?? null,
-      })),
-    }, {
-      onSuccess: () => {
-        // Se materializou uma conta-alvo (lead novo), atualiza o mapa/lista.
-        queryClient.invalidateQueries({ queryKey: ['clients'] });
-        const obrig = [...assembly!.reasonByClientId.values()];
-        const providerLabel = optimizationProvider === 'ors'
-          ? 'OpenRouteService'
-          : optimizationProvider === 'osrm' ? 'OSRM (ORS fora)' : '';
-        const tripInfo = tripDistanceMeters != null && tripDurationSeconds != null
-          ? `\n${(tripDistanceMeters / 1000).toFixed(1).replace('.', ',')} km • ~${Math.round(tripDurationSeconds / 60)} min de carro`
-            + (providerLabel ? ` (via ${providerLabel})` : '')
-          : '';
-        const lines = [
-          `Rota do dia com ${ordered.length} parada${ordered.length === 1 ? '' : 's'}.`,
-          tripInfo,
-          '',
-          obrig.length
-            ? `Obrigatórias: ${obrig.map(r => MANDATORY_LABEL[r]).join(', ')}`
-            : 'Nenhuma obrigatória encontrada hoje.',
-          assembly!.missing.length
-            ? `Sem candidato hoje: ${assembly!.missing.map(r => MANDATORY_LABEL[r]).join(', ')}`
-            : null,
-        ].filter(Boolean);
-        Alert.alert('Rota do dia', lines.join('\n'));
-      },
-      onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
-    });
-  }, [clients, fieldOps.saveRoute, userLocation, routeStartOverride, isAdmin, routeVendorFilterHubspotId, myHubspotId, profile?.id, routeStopClientIds, routeDate, queryClient, metaMinha]);
+    void fieldOps.montarDia.mutateAsync(ordered.map((item) => item.client))
+      .then((out) => Alert.alert('Rota sugerida', `${out.novas} ${out.novas === 1 ? 'parada nova' : 'paradas novas'} na rota de hoje. Nada do que já estava foi apagado.`))
+      .catch((e) => Alert.alert('Erro ao montar a rota', String((e as Error)?.message ?? e)));
+  }, [clients, fieldOps.saveRoute, fieldOps.montarDia, filteredWithCoords, routeDate, routeLeadCount, routeVendorFilterHubspotId, routeStatusSelection, routeStopClientIds, userLocation, routeStartOverride, vendorById]);
 
   const saveManualRoute = useCallback((draft = routeDraft) => {
     if (draft.length === 0) {
@@ -4492,7 +4083,7 @@ function MainApp() {
   const handleMarkerPress = useCallback((c: Client) => {
     openClientDetails(c);
     const mapRegion = regiaoRef.current;
-    if (!modoNovo || !mapRegion || !mapRef.current || c.latitude == null || c.longitude == null) return;
+    if (!mapRegion || !mapRef.current || c.latitude == null || c.longitude == null) return;
     const lat = Number(c.latitude);
     const lon = Number(c.longitude);
     const fy = (mapRegion.latitude + mapRegion.latitudeDelta / 2 - lat) / mapRegion.latitudeDelta;
@@ -4504,7 +4095,7 @@ function MainApp() {
       latitudeDelta: mapRegion.latitudeDelta,
       longitudeDelta: mapRegion.longitudeDelta,
     }, 300);
-  }, [openClientDetails, modoNovo]);
+  }, [openClientDetails]);
   // TOQUE NO PINO DO MAPA (auditoria 28/09): no modo Planejar põe ou tira do dia; fora
   // dele, abre o card. Só os marcadores usam este — a "próxima" da ficha e do Meu dia
   // continuam abrindo o lead, e antes pulavam para o plano de outro dia.
@@ -4514,7 +4105,7 @@ function MainApp() {
   }, [handleMarkerPress]);
   // Saiu do mapa: o modo Planejar desliga (senão o toque ficava armado nas outras abas).
   // a Agenda do computador planeja no mapa dela (05/10/26): só ela mantém o modo fora do Mapa
-  useEffect(() => { if (tab !== 'map' && !(tab === 'agenda' && layout.ehLargo && modoNovo)) setPlanejarDia(null); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (tab !== 'map' && !(tab === 'agenda' && layout.ehLargo)) setPlanejarDia(null); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // DEEP LINK DO COCKPIT (v5, 28/09/2026): "Abrir no mapa" chega aqui como
   // /mapa?pino=<negócio>&cartao=aberto, ?rua=… ou ?lente=…. Roda uma vez, depois do
@@ -4541,7 +4132,7 @@ function MainApp() {
     if (dl.lente) setLente(dl.lente);
     // o gestor abre o dia de uma pessoa: a rota do mapa passa a ser a dela (monitoramento)
     if (dl.pessoa && isAdmin) setRouteVendorFilterHubspotId(dl.pessoa);
-    if (dl.rua) { setSearchQuery(dl.rua); if (modoNovo) setBuscaAberta(true); }
+    if (dl.rua) { setSearchQuery(dl.rua); setBuscaAberta(true); }
     if (!dl.pino) return;
     void (async () => {
       let q = supabase.from('clients').select(CLIENT_LIST_COLUMNS).limit(1);
@@ -4598,7 +4189,7 @@ function MainApp() {
       enquadrar(0);
       if (dl.cartaoAberto) setSelectedClient(c);
     })();
-  }, [isAuthenticated, modoNovo, isAdmin]);
+  }, [isAuthenticated, isAdmin]);
 
   // Modo de criação manual via mapa: pin fixo no centro da tela
   const [creationMode, setCreationMode] = useState(false);
@@ -4617,10 +4208,10 @@ function MainApp() {
   // folha (zIndex 20) e do "+", e o executivo não conseguia cadastrar lead
   // (print do Julyan, 26/09). Só estados declarados ANTES desta linha.
   const telaCheia = showCepStep || isFormOpen || !!editingClient || !!editingLocationFor || filtrosNovosAbertos;
-  const folhaVisivel = modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && lente !== 'calor' && !planejarDia;
-  const planejarVisivel = modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && !!planejarDia;
+  const folhaVisivel = tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && lente !== 'calor' && !planejarDia;
+  const planejarVisivel = tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && !!planejarDia;
   // Lente Calor no celular: folha própria (vendedores, Time/Só eu, Ninguém foi).
-  const folhaCalorVisivel = modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && lente === 'calor' && heatOn && !planejarDia;
+  const folhaCalorVisivel = tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && lente === 'calor' && heatOn && !planejarDia;
   const folhaDeBaixo = folhaVisivel || folhaCalorVisivel || planejarVisivel;
   // Margem do mapa = onde o mapa terminaria sem margem menos o topo MEDIDO da
   // folha (a barra de baixo real não tem a altura do baseInferior; a conta
@@ -4899,19 +4490,9 @@ function MainApp() {
       // Mapa novo: nada de pergunta na fila (ela surgia minutos depois, por cima
       // de outra folha — auditoria 26/09). Abre o cartão do lead novo: o próximo
       // passo na rua é o Cheguei, e o Agendar está ali no cartão.
-      if (modoNovo) {
-        Toast.mostrar(`Lead cadastrado · ${created.empresa?.trim() || created.nome}`, 'ok');
-        setTimeout(() => setSelectedClient(created), 350);
-        return;
-      }
-      Alert.alert(
-        'Cliente cadastrado',
-        'Deseja agendar uma reunião com este lead agora?',
-        [
-          { text: 'Agora não', style: 'cancel' },
-          { text: 'Agendar reunião', onPress: () => setSchedulingFor({ client: created, type: 'reuniao' }) },
-        ],
-      );
+      Toast.mostrar(`Lead cadastrado · ${created.empresa?.trim() || created.nome}`, 'ok');
+      setTimeout(() => setSelectedClient(created), 350);
+      return;
     } catch (err: any) {
       const isDuplicate = err?.code === '23505' || /duplicate|unique/i.test(err?.message || '');
       if (isDuplicate) {
@@ -5104,7 +4685,7 @@ function MainApp() {
   // e os negócios do executivo no HubSpot — com pino abre o cartão, sem pino
   // oferece Posicionar. Depois do history.back() do Painel (350 ms) é que o
   // mapa anda e o cartão abre, senão o back fecha o cartão novo.
-  const buscaNegocios = useBuscaNegocios(searchQuery, myHubspotId, modoNovo && buscaAberta);
+  const buscaNegocios = useBuscaNegocios(searchQuery, myHubspotId, buscaAberta);
   const abrirDaBusca = useCallback((c: Client) => {
     setBuscaAberta(false);
     /* Na Agenda do computador planejando (auditoria 05/10/26): o achado abre no painel dela, e
@@ -5410,7 +4991,7 @@ function MainApp() {
     return () => { vivo = false; };
   }, [fechoDoDia, profile?.id]);
   useEffect(() => {
-    if (!modoNovo || tab !== "map" || isViewer || fechoResolvido || planoDoDia) return;
+    if (tab !== "map" || isViewer || fechoResolvido || planoDoDia) return;
     /* QUEM NÃO FOI À RUA NÃO TEM DIA PARA FECHAR (visto no app em 29/10, logo depois de subir:
        a folha abriu com "0 portas, todas com próximo passo. Fecha?"). Fechar o nada é pedir um
        toque sem motivo, e na terceira vez a pessoa fecha no reflexo — e aí a folha não serve mais
@@ -5430,7 +5011,7 @@ function MainApp() {
     } catch { setFechoResolvido(true); return; }
     setFechoResolvido(true);
     setFechoDoDia(true);
-  }, [modoNovo, tab, isViewer, fechoResolvido, planoDoDia, meuDia.data?.provadasHoje, hojeV3]);
+  }, [tab, isViewer, fechoResolvido, planoDoDia, meuDia.data?.provadasHoje, hojeV3]);
 
   /* ══ HOJE v3 · O DIA DO EXECUTIVO NO APP (01/11/26, design_handoff_hoje_v3) ══════════════════════
      "Será que estão usando de verdade? Preciso que eles usem isso." O dia vai até ele em 3 momentos, no
@@ -5575,7 +5156,7 @@ function MainApp() {
     // Handoff v4.1 §6.4: check-in repetido no mesmo dia não vira segunda
     // visita. Quem já fez check-in hoje neste lead vai direto ao registro —
     // sem gravar outra client_visits nem outra tarefa de visita no HubSpot.
-    if (modoNovo && contextoPino && client.status === 'lead' && visitadoHoje(client.visited_at) && !!profile?.id && client.visited_by === profile.id) {
+    if (contextoPino && client.status === 'lead' && visitadoHoje(client.visited_at) && !!profile?.id && client.visited_by === profile.id) {
       const chave = textoNormalizado(client.etapa);
       const pelaTabela = chave ? contextoPino.etapaDePara.get(chave) ?? null : null;
       const peloSnapshot = client.id_hubspot ? contextoPino.tempoPorNegocio.get(String(client.id_hubspot))?.etapaCodigo ?? null : null;
@@ -5659,11 +5240,11 @@ function MainApp() {
         const r = await perguntar(
           'Localização desativada',
           'Pra marcar como visitado a gente precisa do GPS do celular pra confirmar que você tá no local. Abrir as configurações do sistema pra habilitar?'
-          + (modoNovo ? '\n\nSe não der agora, registre com uma foto da porta como prova.' : ''),
+          + '\n\nSe não der agora, registre com uma foto da porta como prova.',
           [
             { text: 'Agora não', valor: 'nao', style: 'cancel' },
             { text: 'Abrir configurações', valor: 'config' },
-            ...(modoNovo ? [{ text: 'Registrar com foto', valor: 'foto' }] : []),
+            { text: 'Registrar com foto', valor: 'foto' },
           ],
         );
         if (r === 'config') { abrirAjustesDeLocalizacao(); return; }
@@ -5708,7 +5289,6 @@ function MainApp() {
       // Google não são pino confirmado — o "Estou na porta" continua valendo (pinoDeGps).
       const pinoConfirmado = pinoDeGps({ geo_source: geoSource, geo_approximate: isApproxPin, conta_alvo_place_id: client.conta_alvo_place_id ?? null });
 
-
       let position: Location.LocationObject | null = null;
       let semLeitura = semGps;
       try {
@@ -5716,10 +5296,7 @@ function MainApp() {
       } catch (err: any) {
         // Sem GPS agora: vale a última posição que o mapa leu; sem nenhuma,
         // vai sem lugar (0115). Nos dois casos, declarada e com foto.
-        if (!modoNovo) {
-          Alert.alert('Erro de GPS', err?.message ?? 'Não foi possível obter sua localização.');
-          return;
-        }
+
         const r = await perguntar(
           'GPS não respondeu',
           'Dá para registrar esta visita com uma foto da porta como prova. O gestor vê que foi sem GPS.',
@@ -5762,7 +5339,7 @@ function MainApp() {
               [
                 { text: 'Cancelar', valor: 'nao', style: 'cancel' },
                 { text: 'Tentar de novo', valor: 'de-novo' },
-                ...(modoNovo ? [{ text: 'Registrar com foto', valor: 'foto' }] : []),
+                { text: 'Registrar com foto', valor: 'foto' },
               ],
             );
             if (r === 'de-novo') { setTimeout(() => { void handleMarkAsVisitedRef.current(client, onDone); }, 50); return; }
@@ -5792,12 +5369,12 @@ function MainApp() {
               `Seu aparelho está reportando a posição com margem de erro de ~${Math.round(fixAccuracy)} m `
               + `(a conta deu ${Math.round(distance)} m até o lead), então não dá pra confirmar que você está no local.\n\n`
               + 'No iPhone: Ajustes › Privacidade e Segurança › Serviços de Localização › este app › ative "Localização Exata". '
-              + (modoNovo ? 'Ou registre com uma foto da porta como prova.' : 'Depois volte pro app e tente de novo.'),
+              + 'Ou registre com uma foto da porta como prova.',
               [
                 { text: 'Fechar', valor: 'nao', style: 'cancel' },
                 { text: 'Tentar de novo', valor: 'denovo' },
                 { text: 'Abrir configurações', valor: 'config' },
-                ...(modoNovo ? [{ text: 'Registrar com foto', valor: 'foto' }] : []),
+                { text: 'Registrar com foto', valor: 'foto' },
               ],
             );
             if (r === 'config') { abrirAjustesDeLocalizacao(); return; }
@@ -5820,7 +5397,7 @@ function MainApp() {
               // distância real; o pino não se mexe. LONGE PEDE FOTO DA FACHADA
               // (Julyan, 27/09: "se falar que tá longe manda a foto da fachada
               // obrigatoriamente") — é a prova de que estava na porta.
-              ...(modoNovo ? [{ text: 'Registrar com foto da fachada', valor: 'declarada' }] : []),
+              { text: 'Registrar com foto da fachada', valor: 'declarada' },
             ],
           );
           if (r === 'outro') { moverPino(); return; }
@@ -5846,7 +5423,7 @@ function MainApp() {
         if (!u || u.clientId === client.id || userLat == null || userLon == null) return false;
         return (Date.now() - u.t) < 3 * 60_000 && distanceMeters(userLat, userLon, u.lat, u.lon) < 50;
       })();
-      if (modoNovo && !fotoProva && emSerie) {
+      if (!fotoProva && emSerie) {
         const r = await perguntar(
           'Foto da fachada',
           'Você registrou outra visita deste mesmo ponto há menos de 3 minutos. Para esta visita contar, tire uma foto da fachada deste lugar.',
@@ -5857,7 +5434,7 @@ function MainApp() {
         if (!fotoProva) return;
       }
 
-      if (modoNovo && !fotoProva && (declarada || corrigirPino)) {
+      if (!fotoProva && (declarada || corrigirPino)) {
         // O "Estou na porta" acabou de ser tocado e a câmera abre nesse gesto. O
         // sem-GPS chega aqui segundos depois do Cheguei: a pergunta dá o toque novo
         // que o navegador exige para abrir a câmera.
@@ -5917,7 +5494,7 @@ function MainApp() {
           marcarUltimoCheckin(client.id, userLat, userLon);
           /* A FICHA ABRE MESMO SEM SINAL (auditoria 14/10/26): antes o executivo tinha de lembrar de
              voltar depois. Tudo o que ela manda já sabe ir para a fila, atrás do check-in. */
-          if (modoNovo && contextoPino && client.status === 'lead') {
+          if (contextoPino && client.status === 'lead') {
             const chave = textoNormalizado(client.etapa);
             const pelaTabela = chave ? contextoPino.etapaDePara.get(chave) ?? null : null;
             const peloSnapshot = client.id_hubspot ? contextoPino.tempoPorNegocio.get(String(client.id_hubspot))?.etapaCodigo ?? null : null;
@@ -5957,7 +5534,7 @@ function MainApp() {
         if (stop) {
           // em segundo plano: a ficha não espera a rota (auditoria de velocidade, 05/10/26)
           void comPrazo(fieldOps.markStopDone.mutateAsync(stop), 6000).catch(() => { /* não bloqueia o check-in */ });
-        } else if (modoNovo && !fieldOps.stops.some((s) => s.client_id === client.id)) {
+        } else if (!fieldOps.stops.some((s) => s.client_id === client.id)) {
           // Mapa novo: check-in fora do plano entra na rota de hoje como parada
           // feita (a Agenda e o "X de N feito" passam a contar essa visita).
           void comPrazo(fieldOps.adicionarParadaFeita.mutateAsync(client), 6000).catch(() => { /* não bloqueia o check-in */ });
@@ -5978,15 +5555,13 @@ function MainApp() {
         ? `Check-in em ${nomeDoLead} · pino corrigido (estava a ${Math.round(distance)} m)`
         : `Check-in em ${nomeDoLead} registrado`, 'ok');
       // +20 só quando o servidor confirma a prova (a temporada, docs/10 §2.6 D)
-      if (modoNovo) {
-        void avisarSeVisitaProvada(client.id, (t) => Toast.mostrar(t, 'ok'), async () => {
-          await queryClient.invalidateQueries({ queryKey: ['ranking_executivo'] });
-          return queryClient.fetchQuery({ queryKey: ['ranking_executivo', 'semana'], queryFn: async () => {
-            const { data } = await supabase.rpc('ranking_executivo', { p_periodo: 'semana' });
-            return (data && !(data as { erro?: string }).erro ? data : null) as Ranking | null;
-          } });
-        });
-      }
+      void avisarSeVisitaProvada(client.id, (t) => Toast.mostrar(t, 'ok'), async () => {
+        await queryClient.invalidateQueries({ queryKey: ['ranking_executivo'] });
+        return queryClient.fetchQuery({ queryKey: ['ranking_executivo', 'semana'], queryFn: async () => {
+          const { data } = await supabase.rpc('ranking_executivo', { p_periodo: 'semana' });
+          return (data && !(data as { erro?: string }).erro ? data : null) as Ranking | null;
+        } });
+      });
       // O "x/6" da pílula e o Meu dia contam check-ins reais: atualiza na hora.
       void queryClient.invalidateQueries({ queryKey: ['meu_dia'] });
       // auditoria 16/10/26: o Desempenho ("0 de 6" logo depois do check-in) e a fila (o cartão
@@ -5996,7 +5571,7 @@ function MainApp() {
       void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] });
       void queryClient.invalidateQueries({ queryKey: ['feito_no_dia'] });
       void queryClient.invalidateQueries({ queryKey: ['preparo'] });
-      if (modoNovo && contextoPino && visitado.status === 'lead') {
+      if (contextoPino && visitado.status === 'lead') {
         // Etapa atual no código do Cockpit: texto do app pela etapa_de_para,
         // senão a do snapshot (0105).
         const chave = textoNormalizado(visitado.etapa);
@@ -6066,7 +5641,7 @@ function MainApp() {
       visitingRef.current = false;
       setIsVisiting(false);
     }
-  }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, fieldOps.adicionarParadaFeita, isMonitoringRoute, getBestFix, modoNovo, contextoPino, userLocation, myHubspotId]);
+  }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, fieldOps.adicionarParadaFeita, isMonitoringRoute, getBestFix, contextoPino, userLocation, myHubspotId]);
   handleMarkAsVisitedRef.current = handleMarkAsVisited;
 
   // Fila offline: quem sobe o check-in guardado sem sinal. Ref porque a
@@ -6093,7 +5668,7 @@ function MainApp() {
       const stop = fieldOps.stops.find((s) => s.client_id === clientId && s.status !== 'done');
       if (stop) {
         try { await fieldOps.markStopDone.mutateAsync(stop); } catch { /* não bloqueia o check-in */ }
-      } else if (modoNovo && !fieldOps.stops.some((s) => s.client_id === clientId)) {
+      } else if (!fieldOps.stops.some((s) => s.client_id === clientId)) {
         const c = clients.find((x) => x.id === clientId);
         if (c) { try { await fieldOps.adicionarParadaFeita.mutateAsync(c); } catch { /* não bloqueia o check-in */ } }
       }
@@ -6355,9 +5930,6 @@ function MainApp() {
     );
   };
 
-
-
-
   if (!isAuthenticated && !loading) {
     return <LoginScreen />;
   }
@@ -6462,7 +6034,7 @@ function MainApp() {
         {/* Mapa cheio. zIndex baixo: cards e botoes flutuam sobre. */}
         <MapView
           mapRef={(ref) => { navMapRef.current = ref as unknown as RNMapView; }}
-          claro={modoNovo && modoSol}
+          claro={modoSol}
           style={{ flex: 1 }}
           initialRegion={{
             latitude: (userLocation?.latitude ?? navigationCurrentStop.latitude) as number,
@@ -6667,7 +6239,7 @@ function MainApp() {
           longitudeDelta: mapRegion?.longitudeDelta ?? delta,
         }, 300);
       }}
-      novo={modoNovo && contextoPino ? {
+      novo={contextoPino ? {
         pino: classificarPino(selectedClient, contextoPino),
         planoNumero: (() => { const i = routeDisplayClients.findIndex((c) => c.id === selectedClient.id); return i >= 0 ? i + 1 : null; })(),
         naRota: routeStopClientIds.has(selectedClient.id),
@@ -6800,9 +6372,9 @@ function MainApp() {
       /* UM PLANO SÓ (Julyan 06/10: "substituir por pôr no plano"): no mapa novo, o Agendar e o
          Marcar follow-up da ficha abrem o Pôr no plano com o chip já escolhido. Reunião com hora
          continua criando o compromisso (e o evento); sem hora, vira parada do plano. */
-      planoUnico={modoNovo && !!contextoPino && !isMonitoringRoute}
-      onScheduleMeeting={isViewer ? undefined : modoNovo && contextoPino && !isMonitoringRoute ? () => abrirPorNoPlano(selectedClient, 'reuniao') : () => { setSchedulingFor({ client: selectedClient, type: 'reuniao' }); setSelectedClient(null); }}
-      onFollowUp={isViewer ? undefined : modoNovo && contextoPino && !isMonitoringRoute ? () => abrirPorNoPlano(selectedClient, 'follow') : () => { setSchedulingFor({ client: selectedClient, type: 'follow_up' }); setSelectedClient(null); }}
+      planoUnico={!!contextoPino && !isMonitoringRoute}
+      onScheduleMeeting={isViewer ? undefined : contextoPino && !isMonitoringRoute ? () => abrirPorNoPlano(selectedClient, 'reuniao') : () => { setSchedulingFor({ client: selectedClient, type: 'reuniao' }); setSelectedClient(null); }}
+      onFollowUp={isViewer ? undefined : contextoPino && !isMonitoringRoute ? () => abrirPorNoPlano(selectedClient, 'follow') : () => { setSchedulingFor({ client: selectedClient, type: 'follow_up' }); setSelectedClient(null); }}
       onVerNoPlano={(dia) => { setSelectedClient(null); setAgendaDiaInicial(dia); setTab('agenda'); }}
       onRescheduleMeeting={isViewer ? undefined : (m) => { setSchedulingFor({ client: selectedClient, type: m.type ?? 'reuniao', reschedule: m }); setSelectedClient(null); }}
       onCancelMeeting={isViewer ? undefined : (m) => confirmCancelMeeting(m)}
@@ -6810,7 +6382,7 @@ function MainApp() {
         !isViewer && selectedClient.status === 'lead'
           ? () => {
               // Mapa novo: porta única do Cockpit (regras do servidor). Mapa atual: modal de hoje.
-              if (modoNovo && contextoPino) {
+              if (contextoPino) {
                 const c = selectedClient;
                 const atual = codigoDaEtapa(c);
                 setSelectedClient(null);
@@ -6869,85 +6441,6 @@ function MainApp() {
     />
   ) : null;
 
-  // ── Controle do calor de visitas (M2) ─────────────────────────────────
-  // O MESMO corpo serve os dois layouts: no desktop ele expande a linha do
-  // switch dentro do painel de 352px (nada flutua sobre o mapa, que e' o dado
-  // que o controle explica); no celular vira folha no rodape.
-  const corpoCalor = (() => {
-    // Linhas de 32px so' no desktop de verdade. Em tablet (768-1023) o alvo do
-    // design system continua 48px, e o painel de 352px ja' existe la'.
-    const compacto = layout.ehDesktop;
-    const alturaLinha = compacto ? 32 : 48;
-
-    const linhaVendedor = (
-      id: string | null,
-      nome: string,
-      contagem: number,
-    ) => {
-      const ativo = heatSeller === id;
-      return (
-        <TouchableOpacity
-          key={id ?? 'todos'}
-          accessibilityRole="radio"
-          accessibilityState={{ checked: ativo }}
-          style={[styles.calorLinha, { height: alturaLinha }]}
-          {...(compacto ? ds({ hover: 'surface2', trans: '1' }) : {})}
-          onPress={() => setHeatSeller(id)}
-        >
-          <View style={[styles.calorRadio, ativo && styles.calorRadioAtivo]}>
-            {ativo && <IconCheck width={12} height={12} fill="#FFFFFF" />}
-          </View>
-          <Text style={[styles.calorNome, ativo && styles.calorNomeAtivo]} numberOfLines={1}>
-            {nome}
-          </Text>
-          <Text style={styles.calorContagem}>{contagem}</Text>
-        </TouchableOpacity>
-      );
-    };
-
-    return (
-      <View style={{ gap: 12 }}>
-        {/* a · Escala. Uma familia de cor: mais escuro = mais visita. */}
-        <View>
-          <View style={styles.calorEscalaBarra}>
-            {HEAT_LEGEND_STOPS.map((c, i) => (
-              <View key={i} style={{ flex: 1, backgroundColor: c }} />
-            ))}
-          </View>
-          <View style={styles.calorEscalaRotulos}>
-            <Text style={styles.calorEscalaRotulo}>menos</Text>
-            <Text style={styles.calorEscalaRotulo}>mais</Text>
-          </View>
-        </View>
-
-        {/* b · Vendedores. Lista vertical: os 17 do time cabem rolando, o que a
-            fila horizontal de chips nao permitia (mostrava tres). */}
-        <View>
-          <View style={styles.calorListaCabecalho}>
-            <Text style={styles.calorListaTitulo}>POR VENDEDOR</Text>
-            <Text style={styles.calorListaTotal}>
-              {heatPoints.length} {heatPoints.length === 1 ? 'visita' : 'visitas'}
-            </Text>
-          </View>
-          {heat.total === 0 && !heatLoading ? (
-            <Text style={styles.heatEmpty}>
-              {heatSeller ? 'Este vendedor não tem visitas com GPS.' : 'Nenhuma visita com GPS registrada.'}
-            </Text>
-          ) : null}
-          <ScrollView
-            style={{ maxHeight: compacto ? 180 : 240 }}
-            nestedScrollEnabled
-            keyboardShouldPersistTaps="handled"
-          >
-            {linhaVendedor(null, 'Todos', heatPoints.length)}
-            {heatSellers.map((v) => linhaVendedor(v.id, v.name, v.count))}
-          </ScrollView>
-        </View>
-
-      </View>
-    );
-  })();
-
   // Na Rota os controles do mapa mudam de casa (M3c/D). Na faixa de 180px nao
   // ha' o que explorar: recentrar e calor caiam ali por cima da sequencia sem
   // nada pra fazer — era o vazamento anotado no M2b. Eles passam a viver no
@@ -6956,7 +6449,6 @@ function MainApp() {
   const rotaMovel = tab === 'route' && !layout.ehLargo;
   const rotaMapaGrande = rotaMovel && (mapaExpandido || routeDisplayClients.length === 0);
   const rotaFaixaDeMapa = rotaMovel && !rotaMapaGrande;
-
 
   /* CLICAR NUM LEAD DA AGENDA NÃO SAI DO MAPA (Julyan, 05/10/26: "quando eu clicar no lead da
      agenda, tem que mostrar ele no mapa, não botar só o card"; "toda vez que eu clico na agenda,
@@ -6995,13 +6487,13 @@ function MainApp() {
         // PLANEJANDO, NÃO (auditoria 29/10/26): os pinos do plano são pequenos e moram ao lado dos
         // ícones do Google; o toque que errava por milímetros abria a biblioteca vizinha e
         // derrubava o Planejar no meio. Com o plano aberto, o toque no Google é ignorado.
-        onPoiClick={modoNovo && !isViewer && !planejarDia ? (e) => {
+        onPoiClick={!isViewer && !planejarDia ? (e) => {
           const lugar = { placeId: e.nativeEvent.placeId, ...e.nativeEvent.coordinate };
           // com o cartão aberto, a folha do Google abre depois que ele fecha (senão fechava sozinha)
           if (selectedClient) { setSelectedClient(null); setTimeout(() => setLugarGoogle(lugar), 350); } else setLugarGoogle(lugar);
         } : undefined}
         // Modo sol: mapa claro com o app escuro (recria o mapa: colorScheme só vale na construção).
-        claro={modoNovo && modoSol}
+        claro={modoSol}
         style={[styles.map, folhaDeBaixo && margemMapa > 0 && { marginBottom: margemMapa }]}
         // Mede a area real do mapa na tela pra ancorar o pin de criacao no
         // centro do MAPA (nao da tela). Guarda x/y/width/height absolutos.
@@ -7086,7 +6578,7 @@ function MainApp() {
             dos markers pra os pins ficarem por cima. Funciona em Apple e
             Google Maps (o <Heatmap> nativo só roda no Google). */}
         {/* Ninguém foi (prompt §5): área com pino e sem check-in no período. */}
-        {heatOn && modoNovo && ninguemFoi.map((a) => (
+        {heatOn && ninguemFoi.map((a) => (
           <Marker key={`ninguem-${a.lat.toFixed(5)}-${a.lon.toFixed(5)}`} coordinate={{ latitude: a.lat, longitude: a.lon }} anchor={{ x: 0.5, y: 0.5 }} cluster={false}>
             <div
               aria-label={`Ninguém foi: ${a.pinos} pinos sem check-in`}
@@ -7117,8 +6609,8 @@ function MainApp() {
             sem os leads engolirem as manchas. Voltam ao desligar o 🔥. */}
         {/* Mapa novo: pino P2 para os leads da área e para as paradas da
             rota (com o número do plano no selo, no lugar do RouteMarker). */}
-        {modoNovo && <CamadaDePontos key={modoSol ? 'sol' : 'noite'} pontos={camadaPontos} sol={modoSol} />}
-        {modoNovo && placasDoMapa.map((pl) => (
+        <CamadaDePontos key={modoSol ? 'sol' : 'noite'} pontos={camadaPontos} sol={modoSol} />
+        {placasDoMapa.map((pl) => (
           <Marker key={`placa-${pl.chave}`} coordinate={{ latitude: pl.lat, longitude: pl.lng }} anchor={{ x: 0.5, y: 0.5 }} cluster={false} zIndex={300}
             onPress={() => mapRef.current?.animateToRegion({ latitude: pl.lat, longitude: pl.lng, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 300)}>
             <div style={{
@@ -7131,7 +6623,7 @@ function MainApp() {
             </div>
           </Marker>
         ))}
-        {modoNovo && contextoPino && focoMapaNovo.map(({ c, p, plano }) => {
+        {contextoPino && focoMapaNovo.map(({ c, p, plano }) => {
           // Pilha (C11): fechada mostra só o líder com o número; aberta, todos em leque.
           const pl = pilhaDe.get(c.id);
           const n = pl?.membros.length ?? 1;
@@ -7196,47 +6688,11 @@ function MainApp() {
           />
           );
         })}
-        {!heatOn && !modoNovo && filteredMapMarkers.map(client => (
-          <MarkerWithReady
-            key={client.id}
-            client={client}
-            coordinate={{
-              latitude: client.latitude as number,
-              longitude: client.longitude as number,
-            }}
-            // Conta Alvo (Rota do dia) tem cor própria (roxo) + badge 🎯 pra
-            // destacar. Senão, cor = temperatura da etapa; lead sem etapa
-            // conhecida (Backlog, sem etapa) cai na cor do status.
-            color={
-              client.conta_alvo_place_id
-                ? CONTA_ALVO_COLOR
-                : (stageTemperature(client.etapa)?.color ??
-                   statusConfig[client.status]?.color ??
-                   '#3b82f6')
-            }
-            meetingCount={upcomingByClient[client.id] ?? 0}
-            isContaAlvo={!!client.conta_alvo_place_id}
-            onPress={aoTocarPino}
-          />
-        ))}
+
         {/* Markers da rota com numero da ordem — renderizam acima dos
             normais e ficam visiveis independente do filtro de status.
             Também somem no modo calor pra não poluir. */}
-        {!heatOn && !modoNovo && routeDisplayClients
-          .filter(c => c.latitude != null && c.longitude != null)
-          .map((client, index) => {
-            const stop = routeStops.find(s => s.client_id === client.id);
-            return (
-            <RouteMarker
-              key={`route-${client.id}`}
-              client={client}
-              position={index + 1}
-              done={stop?.status === 'done'}
-              atual={client.id === idClienteParadaAtual}
-              onPress={aoTocarPino}
-            />
-          );
-          })}
+
         {/* Polyline da rota: usa geometria real (OSRM, segue ruas) quando
             disponivel; cai pra linha reta tracejada enquanto carrega ou
             se a API falhou. Oculta no modo calor. */}
@@ -7245,7 +6701,7 @@ function MainApp() {
         {/* Handoff v4.1 §5: o plano é andado — trajeto pontilhado de 3 px
             (branco no escuro, preto no sol) e o anel da microrrota (2–3
             quarteirões) em volta da próxima porta, com o que dá para bater a pé. */}
-        {!heatOn && modoNovo && !planejarOutroDia && !(ehAgendaPC && planejarDia) && routeWaypoints.length >= 2 && (
+        {!heatOn && !planejarOutroDia && !(ehAgendaPC && planejarDia) && routeWaypoints.length >= 2 && (
           <Polyline
             coordinates={routeGeometry.data && routeGeometry.data.coordinates.length > 1 ? routeGeometry.data.coordinates : routeWaypoints}
             strokeColor={modoSol ? '#111418' : 'rgba(255,255,255,0.95)'}
@@ -7256,7 +6712,7 @@ function MainApp() {
         )}
         {/* Agenda do computador (prancha 05/10): o trajeto do dia aberto, pontilhado pela ordem do
             rascunho (linha reta entre as paradas: é o plano, não a navegação) */}
-        {modoNovo && ehAgendaPC && planejarDia && (() => {
+        {ehAgendaPC && planejarDia && (() => {
           const pts = clientesDoPlanoNoMapa.filter((c) => c.latitude != null && c.longitude != null)
             .map((c) => ({ latitude: Number(c.latitude), longitude: Number(c.longitude) }));
           return pts.length >= 2 ? (
@@ -7264,7 +6720,7 @@ function MainApp() {
           ) : null;
         })()}
         {/* Google fora da base: pino vazado (sugestão); o toque abre a folha com "Virar lead" */}
-        {modoNovo && ehAgendaPC && planejarDia && camadasAgenda.has('google') && sugestoesAgenda.filter((x) => x.google).map((x) => (
+        {ehAgendaPC && planejarDia && camadasAgenda.has('google') && sugestoesAgenda.filter((x) => x.google).map((x) => (
           <Marker key={x.chave} coordinate={x.ponto} anchor={{ x: 0.5, y: 0.5 }} cluster={false} zIndex={700}
             onPress={() => { const l = x.google!; setLugarGoogle({ placeId: l.placeId, latitude: l.latitude, longitude: l.longitude }); }}>
             <div aria-label={`Google: ${x.nome}`} title={x.nome}
@@ -7272,7 +6728,7 @@ function MainApp() {
           </Marker>
         ))}
         {/* Agenda do computador: o lead tocado, com o anel da microrota (2–3 quarteirões) */}
-        {modoNovo && focoAgenda && (tab === 'agenda' || (tab === 'map' && selectedClient?.id === focoAgenda.id)) && (
+        {focoAgenda && (tab === 'agenda' || (tab === 'map' && selectedClient?.id === focoAgenda.id)) && (
           <Circle
             center={{ latitude: focoAgenda.latitude, longitude: focoAgenda.longitude }}
             radius={250}
@@ -7282,7 +6738,7 @@ function MainApp() {
             zIndex={1}
           />
         )}
-        {!heatOn && modoNovo && !planejarOutroDia && lente === 'dia' && (() => {
+        {!heatOn && !planejarOutroDia && lente === 'dia' && (() => {
           const prox = routeDisplayClients.find((c) => c.id === idClienteParadaAtual);
           if (!prox || prox.latitude == null || prox.longitude == null) return null;
           return (
@@ -7296,23 +6752,7 @@ function MainApp() {
             />
           );
         })()}
-        {!heatOn && !modoNovo && routeWaypoints.length >= 2 && (
-          <Polyline
-            coordinates={
-              routeGeometry.data && routeGeometry.data.coordinates.length > 1
-                ? routeGeometry.data.coordinates
-                : routeWaypoints
-            }
-            strokeColor={modoNovo ? 'rgba(59,130,246,0.9)' : '#C8131B'}
-            strokeWidth={modoNovo ? 5 : 4}
-            zIndex={modoNovo ? 2 : undefined}
-            lineDashPattern={
-              routeGeometry.data && routeGeometry.data.coordinates.length > 1
-                ? undefined
-                : [8, 4]
-            }
-          />
-        )}
+
       </MapView>
 
       {/* Estado do carregamento por área + contagem do recorte. Ambos sobre o
@@ -7326,10 +6766,10 @@ function MainApp() {
         // cima da busca do header (valia ja' pra de carregamento).
         /* Encostado na fileira, sempre no mesmo lugar: o carregamento é uma linha fina logo
            abaixo do campo, não mais uma faixa que empurrava o resto para baixo (prancha §1). */
-        style={[styles.areaStatusWrap, { top: modoNovo && !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 2 : (mapLayout?.y ?? 0) + 8 }]}
+        style={[styles.areaStatusWrap, { top: !layout.ehLargo ? insets.top + 7 + ALTURA_TOPO_CAMPO + 2 : (mapLayout?.y ?? 0) + 8 }]}
         pointerEvents="none"
       >
-        {modoNovo && !layout.ehLargo && <AvisoSemSinal />}
+        {!layout.ehLargo && <AvisoSemSinal />}
         {/* posicionando um negócio, o aviso de carregar clientes só confunde (15/10/26) */}
         {!creationMode && ((showOnlyMyArea && viewportTooWide) || isLoading || waitingForLocation) && (
           <View style={styles.areaStatusPill}>
@@ -7348,17 +6788,7 @@ function MainApp() {
         {/* So' nas abas de leads: `renderMap` tambem alimenta a FAIXA de mapa
             da Rota, e la' a contagem do recorte nao quer dizer nada — o que
             esta' na tela e' a sequencia, nao o resultado de um filtro. */}
-        {!layout.ehLargo && !creationMode && ehAbaDeLeads && !modoNovo && (
-          <View style={[styles.recortePill, statusBloqueadoPeloSetor && styles.recortePillAviso]}>
-            <Text style={[styles.recorteTexto, statusBloqueadoPeloSetor && styles.recorteTextoAviso]}>
-              {/* Zero por PERMISSAO tem a mesma cara de zero por regiao vazia.
-                  Aqui a pill troca de assunto: nao adianta arrastar o mapa. */}
-              {statusBloqueadoPeloSetor
-                ? `Seu setor não vê "${rotuloStatusFiltrado}"`
-                : `${filteredClients.length} ${filteredClients.length === 1 ? 'lead' : 'leads'} no recorte`}
-            </Text>
-          </View>
-        )}
+
       </View>
 
       {/* Pin de criacao ancorado no CENTRO DO MAPA (nao da tela). O
@@ -7408,7 +6838,7 @@ function MainApp() {
         <View style={[styles.tempLegend, { bottom: baseInferior }, layout.ehLargo && styles.tempLegendaWeb]} pointerEvents="none">
           {/* A3 (handoff v6): no mapa novo a legenda é a do disco (pinoP2) — a antiga dizia
               "Fechado" para o verde, que agora é Cliente, e não tinha Ex-cliente nem Sem dono. */}
-          {(modoNovo ? [
+          {(([
             { c: COR_DO_PINO.Q, l: 'Quente' },
             { c: COR_DO_PINO.M, l: 'Morno' },
             { c: COR_DO_PINO.F, l: 'Frio' },
@@ -7419,14 +6849,7 @@ function MainApp() {
             { c: COR_DO_PINO.ex, l: 'Ex-cliente' },
             { c: COR_DO_PINO.X, l: 'Perdido' },
             { c: COR_DO_PINO.semDono, l: 'Sem dono (anel)' },
-          ] : [
-            { c: TEMP_COLORS.hot, l: 'Quente' },
-            { c: TEMP_COLORS.warm, l: 'Morno' },
-            { c: TEMP_COLORS.cold, l: 'Frio' },
-            { c: TEMP_COLORS.won, l: 'Fechado' },
-            { c: TEMP_COLORS.lost, l: 'Perdido' },
-            { c: CONTA_ALVO_COLOR, l: 'Conta Alvo' },
-          ]).map(item => (
+          ])).map(item => (
             <View key={item.l} style={[styles.tempLegendRow, layout.ehLargo && styles.tempLegendaLinhaWeb]}>
               <View style={[styles.tempLegendDot, { backgroundColor: item.c }, 'losango' in item && item.losango ? { borderRadius: 2, transform: [{ rotate: '45deg' }], width: 9, height: 9 } : null]} />
               {/* numberOfLines={1}: sem isto "🎯 Conta Alvo" quebrava em
@@ -7439,7 +6862,7 @@ function MainApp() {
 
       {/* Map buttons. Recenter e FAB somem enquanto o calor está ligado
           (o painel de calor ocupa a faixa de baixo). */}
-      {userLocation && !creationMode && !heatOn && !rotaFaixaDeMapa && !(modoNovo && !layout.ehLargo && (selectedClient || telaCheia || !folhaDeBaixo)) && (
+      {userLocation && !creationMode && !heatOn && !rotaFaixaDeMapa && !((!layout.ehLargo) && (selectedClient || telaCheia || !folhaDeBaixo)) && (
         <TouchableOpacity
           style={
             rotaMapaGrande
@@ -7456,7 +6879,7 @@ function MainApp() {
                   // `top: 16` cru punha o botao em cima da busca do header.
                   layout.ehLargo
                     ? { bottom: baseInferior, left: 16 }
-                    : modoNovo && tab === 'map'
+                    : (tab === 'map')
                       // Handoff v4.1 §3: coluna à direita, 12 px acima do "+", que fica 12 px acima da folha.
                       ? { bottom: (alturaRodape ?? baseInferior) + (folhaDeBaixo ? alturaFolha : 0) + 12 + 52 + 12, right: 12, width: 44, height: 44, borderRadius: 22 }
                       : { top: (mapLayout?.y ?? 0) + 16, left: 16 },
@@ -7491,7 +6914,7 @@ function MainApp() {
           e a busca, mais o alternador Mapa | Lista. O sino e o avatar saíram daqui para a aba Eu;
           a fileira de lentes, o botão de filtro e as pílulas "Limpar"/"Ver em lista" deixaram de
           existir — tudo mora na folha da lente, que o chip abre. */}
-      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && (
+      {tab === 'map' && !layout.ehLargo && !creationMode && (
         <TopoCampo
           top={insets.top + 7}
           aoAbrirLentes={() => { Keyboard.dismiss(); setLentesAbertas(true); }}
@@ -7518,7 +6941,7 @@ function MainApp() {
           uma visita provada hoje que ficou sem "Como foi". Todo o resto virou o kicker da folha, e
           `sem_plano` virou a folha inteira. Era isto que enchia o topo: nove estados disputando
           uma faixa que ninguém tinha pedido. */}
-      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !buscaAberta && linhaDoDiaAgora
+      {tab === 'map' && !layout.ehLargo && !creationMode && !buscaAberta && linhaDoDiaAgora
         && linhaDoDiaAgora.estado === 'pendente' && (
         <LinhaDoDia
           linha={linhaDoDiaAgora}
@@ -7549,7 +6972,7 @@ function MainApp() {
       )}
       {/* A outra ocupante da faixa. Com pendência na tela ela vira o "+1" lá em cima, e a busca
           aberta esconde a faixa inteira (§3) — digitar precisa da tela. */}
-      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !buscaAberta && janelaDasLigacoes
+      {tab === 'map' && !layout.ehLargo && !creationMode && !buscaAberta && janelaDasLigacoes
         && linhaDoDiaAgora?.estado !== 'pendente' && (
         <View style={{ position: 'absolute', left: 12, right: 12, top: insets.top + 7 + ALTURA_TOPO_CAMPO + RESPIRO_ABAIXO_DA_FILEIRA, zIndex: 24 }}>
           <FaixaHoraDasLigacoes ate={janelaDasLigacoes.ate} followups={janelaDasLigacoes.followups} quentes={janelaDasLigacoes.quentes} aoAbrir={() => { setPedidoDaFila({ acao: 'fila', deal: null, origem: 'janela', n: Date.now() }); irParaAba('tasks'); }} />
@@ -7557,7 +6980,7 @@ function MainApp() {
       )}
       {/* HOJE v3 (01/11/26): a pílula-placar mora na MESMA faixa da vez, e só quando ela está livre (a
           pendência e a hora das ligações têm verbo e prazo, e ganham dela). O mapa por baixo não muda. */}
-      {hojeV3 && ehRepV3 && modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !buscaAberta && !planejarVisivel
+      {hojeV3 && ehRepV3 && tab === 'map' && !layout.ehLargo && !creationMode && !buscaAberta && !planejarVisivel
         && linhaDoDiaAgora?.estado !== 'pendente' && !janelaDasLigacoes && (
         <PilulaPlacar
           pilula={vmV3.pilula}
@@ -7567,7 +6990,7 @@ function MainApp() {
           aoTocar={() => irParaEu('pilula')}
         />
       )}
-      {modoNovo && (
+      {(
         <FolhaBusca
           visivel={buscaAberta}
           aoFechar={() => setBuscaAberta(false)}
@@ -7578,7 +7001,7 @@ function MainApp() {
           foraFalhou={buscaNegocios.isError}
         />
       )}
-      {modoNovo && (
+      {(
         <FolhaLista
           visivel={listaAberta}
           aoFechar={() => setListaAberta(false)}
@@ -7600,7 +7023,7 @@ function MainApp() {
       )}
       {/* auditoria 02/11/26: com o Hoje v3 a pílula-placar já mostra o dia (portas com prova × meta) pela
           fonte do v3; o Meu dia era outro placar (provadasHoje × desenvolvimento_quadro). Só no hoje-v2. */}
-      {modoNovo && !(hojeV3 && !isViewer) && (
+      {!(hojeV3 && !isViewer) && (
         <FolhaMeuDia
           visivel={meuDiaAberto}
           aoFechar={() => setMeuDiaAberto(false)}
@@ -7619,7 +7042,7 @@ function MainApp() {
           aoIrProxima={() => { const c = routeDisplayClients.find((x) => x.id === idClienteParadaAtual); if (c) handleMarkerPress(c); }}
         />
       )}
-      {modoNovo && !layout.ehLargo && (
+      {!layout.ehLargo && (
         <FolhaLentes
           visivel={lentesAbertas}
           aoFechar={() => setLentesAbertas(false)}
@@ -7640,7 +7063,7 @@ function MainApp() {
       )}
 
       {/* A página do gatilho do Playbook ("Fala pronta ›"), por cima do mapa (prancha §4). */}
-      {modoNovo && <FolhaFalaPronta arma={falaAberta} aoFechar={() => setFalaAberta(null)} />}
+      <FolhaFalaPronta arma={falaAberta} aoFechar={() => setFalaAberta(null)} />
 
       {/* Mapa novo: folha de baixo sem lead aberto (prancha §5). No
           desktop o painel lateral de 352px continua fazendo esse papel. */}
@@ -7728,7 +7151,7 @@ function MainApp() {
 
       {/* "+" do mapa novo: botão flutuante acima da folha (C10); o rodapé fica sem botão central. */}
       {/* Com a lista aberta (folha alta) o "+" sairia do mapa e cobriria as lentes: some. */}
-      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !isViewer && !selectedClient && !telaCheia && !planejarVisivel && !(folhaDeBaixo && alturaFolha > janelaTela.height * 0.36)
+      {tab === 'map' && !layout.ehLargo && !creationMode && !isViewer && !selectedClient && !telaCheia && !planejarVisivel && !(folhaDeBaixo && alturaFolha > janelaTela.height * 0.36)
         // só depois de medir a folha: no primeiro quadro (sem a tela cheia de carregando desde 28/09) ele caía sobre o Planejar
         && !(folhaDeBaixo && topoFolha == null) && (
         <TouchableOpacity
@@ -7747,7 +7170,7 @@ function MainApp() {
           aberta, ficha aberta. Assim ela volta a existir sem recriar a faixa que o mapa limpo
           tirou: o topo continua com duas posições e nada empilha. Calor só para gestor, no fim,
           que é a ordem que a `LENTES` já tem. */}
-      {modoNovo && tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && !planejarVisivel
+      {tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && !planejarVisivel
         && !buscaAberta && !fichaPendente && !(folhaDeBaixo && alturaFolha > janelaTela.height * 0.36)
         && !(folhaDeBaixo && topoFolha == null) && (
         <TiraDeLentes
@@ -7970,191 +7393,6 @@ function MainApp() {
         onCheguei={(c) => handleMarkAsVisited(c)}
       />
       )}
-    </View>
-  );
-
-  const painelMapaWeb = (
-    <View style={styles.pmwContainer}>
-      {/* M4: escopo de CARREGAMENTO, separado dos filtros — decide o que a
-          query busca, nao o que recorta. Fora do "Limpar tudo" de proposito. */}
-      <View style={styles.pmwEscopo}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.pmwCalorTitulo}>Só minha área</Text>
-          <Text style={styles.pmwCalorSub} numberOfLines={2}>
-            {showOnlyMyArea
-              ? 'Carrega apenas os leads da região visível no mapa.'
-              : 'Buscando em todo o país. Pode ficar lento.'}
-          </Text>
-        </View>
-        <Pressable
-          accessibilityRole="switch"
-          accessibilityLabel="Só minha área"
-          accessibilityState={{ checked: showOnlyMyArea }}
-          style={[
-            styles.pmwSwitch,
-            { backgroundColor: showOnlyMyArea ? 'var(--vermelho-acao)' : 'var(--stroke-default)', alignItems: showOnlyMyArea ? 'flex-end' : 'flex-start' },
-          ]}
-          {...ds({ trans: '1' })}
-          onPress={() => handleToggleArea(!showOnlyMyArea)}
-        >
-          <View style={styles.pmwSwitchDot} />
-        </Pressable>
-      </View>
-      <View style={styles.pmwFiltros}>
-        <View style={styles.pmwSegmentos}>
-          {statusOptions.map((opt, i) => {
-            const ativo = isViewer ? viewerStatuses.has(opt.value) : statusFilter === opt.value;
-            const raio =
-              i === 0
-                ? { borderTopLeftRadius: 12, borderBottomLeftRadius: 12 }
-                : i === statusOptions.length - 1
-                  ? { borderTopRightRadius: 12, borderBottomRightRadius: 12, borderLeftWidth: 0 }
-                  : { borderLeftWidth: 0 };
-            return (
-              <Pressable
-                key={opt.value}
-                accessibilityRole="button"
-                accessibilityLabel={opt.label}
-                style={[styles.pmwSegmento, raio, ativo && styles.pmwSegmentoAtivo]}
-                {...ds({ trans: '1' })}
-                onPress={() => (isViewer ? toggleViewerStatus(opt.value) : setStatusFilter(opt.value))}
-              >
-                <Text style={[styles.pmwSegmentoTexto, ativo && styles.pmwSegmentoTextoAtivo]} numberOfLines={1}>
-                  {opt.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <View style={{ gap: 8 }}>
-          <View style={styles.pmwTituloLinha}>
-            <Text style={styles.pmwTitulo}>Temperatura da etapa</Text>
-            {(tempFilter !== null || contaAlvoOnly) && (
-              <Pressable accessibilityRole="button" onPress={() => { setTempFilter(null); setContaAlvoOnly(false); }}>
-                <Text style={styles.pmwLimpar}>Limpar</Text>
-              </Pressable>
-            )}
-          </View>
-          <View style={styles.pmwChips}>
-            {[
-              { rotulo: 'Quente', cor: TEMP_COLORS.hot },
-              { rotulo: 'Morno', cor: TEMP_COLORS.warm },
-              { rotulo: 'Frio', cor: TEMP_COLORS.cold },
-              { rotulo: 'Fechado', cor: TEMP_COLORS.won },
-              { rotulo: 'Perdido', cor: TEMP_COLORS.lost },
-            ].map(c => {
-              const ativo = tempFilter === c.rotulo;
-              return (
-                <Pressable
-                  key={c.rotulo}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Filtrar ${c.rotulo}`}
-                  style={[styles.pmwChip, ativo && styles.pmwChipAtivo]}
-                  {...ds({ trans: '1', hover: ativo ? 'tintred' : 'surface2' })}
-                  onPress={() => setTempFilter(ativo ? null : c.rotulo)}
-                >
-                  <View style={[styles.pmwChipDot, { backgroundColor: c.cor }]} />
-                  <Text style={styles.pmwChipTexto}>{c.rotulo}</Text>
-                  <Text style={styles.pmwChipContagem}>{contagemTemp.porRotulo.get(c.rotulo) ?? 0}</Text>
-                </Pressable>
-              );
-            })}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Filtrar Conta Alvo"
-              style={[styles.pmwChip, contaAlvoOnly && styles.pmwChipAtivo]}
-              {...ds({ trans: '1', hover: contaAlvoOnly ? 'tintred' : 'surface2' })}
-              onPress={() => setContaAlvoOnly(v => !v)}
-            >
-              <View style={[styles.pmwChipDot, { backgroundColor: CONTA_ALVO_COLOR }]} />
-              <Text style={styles.pmwChipTexto}>Conta Alvo</Text>
-              <Text style={styles.pmwChipContagem}>{contagemTemp.contaAlvo}</Text>
-            </Pressable>
-          </View>
-        </View>
-        {canViewGestor && (
-          // Ligado, a propria linha EXPANDE e mostra escala e vendedores. Nada
-          // flutua sobre o mapa (o cartao antigo cobria o dado que explicava), e
-          // nao ha' X: desligar e' o mesmo switch que ligou.
-          <View style={styles.calorCaixa}>
-            <View style={styles.pmwCalor}>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.pmwCalorTitulo}>Calor de visitas</Text>
-                <Text style={styles.pmwCalorSub} numberOfLines={1}>
-                  {heatOn
-                    ? heatLoading
-                      ? 'Carregando check-ins…'
-                      : `${heat.total} ${heat.total === 1 ? 'visita' : 'visitas'}${heatCapped ? ' (amostra recente)' : ''}`
-                    : 'Densidade de check-ins com GPS'}
-                </Text>
-              </View>
-              <Pressable
-                accessibilityRole="switch"
-                accessibilityLabel="Calor de visitas"
-                accessibilityState={{ checked: heatOn }}
-                style={[
-                  styles.pmwSwitch,
-                  { backgroundColor: heatOn ? 'var(--vermelho-acao)' : 'var(--stroke-default)', alignItems: heatOn ? 'flex-end' : 'flex-start' },
-                ]}
-                {...ds({ trans: '1' })}
-                onPress={() => setHeatOn(v => !v)}
-              >
-                <View style={styles.pmwSwitchDot} />
-              </Pressable>
-            </View>
-            {heatOn && <View style={styles.calorCorpo}>{corpoCalor}</View>}
-          </View>
-        )}
-      </View>
-      {linhaFiltrosAtivos && <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>{linhaFiltrosAtivos}</View>}
-      <View style={styles.pmwListaCabecalho}>
-        <Text style={styles.pmwListaTitulo}>{`Nesta área · ${filteredMapMarkers.length}`}</Text>
-        <Text style={styles.pmwListaOrdem}>{userLocation ? 'por distância' : 'por nome'}</Text>
-      </View>
-      <ScrollView style={{ flex: 1 }}>
-        {(() => {
-          const linhas = filteredMapMarkers
-            .map(c => ({
-              c,
-              d:
-                userLocation && c.latitude !== null && c.longitude !== null
-                  ? distanceMeters(userLocation.latitude, userLocation.longitude, c.latitude, c.longitude)
-                  : null,
-            }))
-            .sort((a, b) =>
-              a.d !== null && b.d !== null ? a.d - b.d : (getClientPrimaryName(a.c) || '').localeCompare(getClientPrimaryName(b.c) || ''),
-            )
-            .slice(0, 80);
-          return linhas.map(({ c, d }) => {
-            const temp = stageTemperature(c.etapa);
-            const cor = c.conta_alvo_place_id ? CONTA_ALVO_COLOR : temp?.color ?? 'var(--stroke-default)';
-            return (
-              <Pressable
-                key={c.id}
-                accessibilityRole="button"
-                accessibilityLabel={getClientPrimaryName(c) || 'Lead'}
-                style={styles.pmwLinha}
-                {...ds({ hover: 'surface2', trans: '1' })}
-                onPress={() => setSelectedClient(c)}
-              >
-                <View style={[styles.pmwLinhaBarra, { backgroundColor: cor }]} />
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  {/* o restaurante, não o contato (auditoria 16/10/26) */}
-                  <Text style={styles.pmwLinhaNome} numberOfLines={1}>{getClientPrimaryName(c)}</Text>
-                  <Text style={styles.pmwLinhaSub} numberOfLines={1}>
-                    {[c.etapa, c.cidade].filter(Boolean).join(' · ') || '—'}
-                  </Text>
-                </View>
-                {d !== null && (
-                  <Text style={styles.pmwLinhaDist}>
-                    {d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1).replace('.', ',')} km`}
-                  </Text>
-                )}
-              </Pressable>
-            );
-          });
-        })()}
-      </ScrollView>
     </View>
   );
 
@@ -8441,20 +7679,16 @@ function MainApp() {
       case 'map':
         return { titulo: 'Mapa comercial', sub: `${filteredMapMarkers.length} leads na área visível` };
       case 'list':
-        if (modoNovo && layout.ehLargo) return { titulo: 'Minha carteira', sub: 'negócios abertos · contas-alvo · escolha as contas da semana' };
+        if (layout.ehLargo) return { titulo: 'Minha carteira', sub: 'negócios abertos · contas-alvo · escolha as contas da semana' };
         return { titulo: 'Leads', sub: `${filteredClients.length} resultados · ${activeFilterCount} ${activeFilterCount === 1 ? 'filtro ativo' : 'filtros ativos'}` };
       case 'route':
         return { titulo: 'Rota do dia', sub: `${routeDisplayClients.length} ${routeDisplayClients.length === 1 ? 'parada' : 'paradas'}` };
       case 'agenda':
-        return { titulo: 'Agenda', sub: modoNovo ? (() => { const d = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }); return d.charAt(0).toUpperCase() + d.slice(1) + ' · o dia e a semana do Planejamento'; })() : 'Rotas, demos e follow-ups da semana' };
+        return { titulo: 'Agenda', sub: (() => { const d = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }); return d.charAt(0).toUpperCase() + d.slice(1) + ' · o dia e a semana do Planejamento'; })() };
       case 'tasks': {
-        // O MESMO NÚMERO DO CELULAR (auditoria 28/09): no computador o cabeçalho dizia "12
-        // cobranças abertas · D2 → D5" (as do modo antigo) ao lado de "Abertas · 9". Calculado
-        // aqui mesmo: seloTarefas é declarado mais abaixo e este bloco roda antes dele.
-        if (modoNovo) {
-          return { titulo: 'Hoje', sub: naFila != null ? `${naFila} ${naFila === 1 ? 'tarefa' : 'tarefas'} hoje` : 'negócios que precisam de você' };
-        }
-        return { titulo: 'Hoje', sub: `${visibleTasksCount} ${visibleTasksCount === 1 ? 'cobrança aberta' : 'cobranças abertas'} · escalonamento D2 → D5` };
+        // O MESMO NÚMERO DO CELULAR (auditoria 28/09; o "cobranças abertas · D2 → D5" do mapa
+        // antigo saiu na auditoria 02/11/26): o número é o da fila (contagemDoHoje).
+        return { titulo: 'Hoje', sub: naFila != null ? `${naFila} ${naFila === 1 ? 'tarefa' : 'tarefas'} hoje` : 'negócios que precisam de você' };
       }
       case 'config':
         return { titulo: 'Configurações', sub: 'Conta, aparência e administração' };
@@ -8588,12 +7822,11 @@ function MainApp() {
   const itensNavWeb: Array<{ aba: AppTab | 'cockpit'; rotulo: string; Icone: typeof IconLocation; badge?: number; selo?: string; visivel: boolean }> = [
     { aba: 'map', rotulo: 'Mapa', Icone: IconLocation, visivel: true },
     { aba: 'list', rotulo: 'Lista', Icone: IconSquareMenu, visivel: true },
-    // R1 opção A: no mapa novo a Rota é o mapa da Agenda (coluna da direita), não uma aba.
-    { aba: 'route', rotulo: 'Rota', Icone: IconCar, visivel: !isViewer && !modoNovo },
+    // R1 opção A: a Rota é o mapa da Agenda (coluna da direita), não uma aba.
     { aba: 'agenda', rotulo: 'Agenda', Icone: IconCalendar, visivel: !isViewer },
     // N5 (handoff v6): um número de tarefas só, "atrasadas + hoje", igual ao selo do rodapé
     // um nome só para a aba (auditoria 02/11/26): "Hoje", como no rodapé
-    { aba: 'tasks', rotulo: 'Hoje', Icone: IconClipboardCheck, badge: modoNovo ? undefined : visibleTasksCount, selo: modoNovo ? seloAtrasados ?? undefined : undefined, visivel: !isViewer },
+    { aba: 'tasks', rotulo: 'Hoje', Icone: IconClipboardCheck, badge: undefined, selo: seloAtrasados ?? undefined, visivel: !isViewer },
     // No computador o Playbook não aparecia (auditoria das abas, 04/10/26); a tela já existia.
     { aba: 'playbook', rotulo: 'Playbook', Icone: IconBook as typeof IconLocation, visivel: !isViewer },
     { aba: 'cockpit', rotulo: 'Gestão', Icone: IconBarGraph, visivel: verGestao },
@@ -8756,10 +7989,7 @@ function MainApp() {
                 setSearchQuery(v);
                 // Mapa novo (05/10/26): a busca abre a folha de resultados, e escolher um leva
                 // ao mapa com o cartão aberto — como no celular. Antes ia para a Lista.
-                if (modoNovo) { if (v) setBuscaAberta(true); return; }
-                // Busca digitada fora de mapa/lista leva pra lista, onde o
-                // resultado e' visivel — a query varre a base no servidor.
-                if (v && tab !== 'map' && tab !== 'list') setTab('list');
+                if (v) setBuscaAberta(true);
               }}
               autoCorrect={false}
               autoCapitalize="none"
@@ -8788,13 +8018,13 @@ function MainApp() {
             accessibilityRole="button"
             // UM SINO SÓ (contrato 34 / A13, handoff v6): o do desktop abria Tarefas; agora
             // é o mesmo do celular — falhas de envio, recados e comunicados. Tarefas têm a aba.
-            accessibilityLabel={modoNovo ? (avisos.selo ? `Avisos, ${avisos.selo} ${avisos.selo === 1 ? 'novo' : 'novos'}` : 'Avisos') : 'Tarefas pendentes'}
+            accessibilityLabel={avisos.selo ? `Avisos, ${avisos.selo} ${avisos.selo === 1 ? 'novo' : 'novos'}` : 'Avisos'}
             style={styles.hwSino}
             {...ds({ hover: 'surface2', trans: '1' })}
-            onPress={() => { if (modoNovo) { setAvisosAbertos(true); avisos.marcarRecadosVistos(); } else setTab('tasks'); }}
+            onPress={() => { setAvisosAbertos(true); avisos.marcarRecadosVistos(); }}
           >
             <IconBell width={20} height={20} fill={iconColors.muted} />
-            {(modoNovo ? avisos.selo + (seloFila?.n ?? 0) > 0 : visibleTasksCount > 0) && <View style={styles.hwSinoDot} />}
+            {avisos.selo + (seloFila?.n ?? 0) > 0 && <View style={styles.hwSinoDot} />}
           </Pressable>
         )}
         {!isViewer && (
@@ -8835,7 +8065,7 @@ function MainApp() {
       {/* Header vermelho — so' no celular. No web o vermelho vira o CTA
           (handoff: "o vermelho sai do header"). No mapa expandido da Rota ele
           some junto com a barra: o mapa e' a tela. */}
-      {!layout.ehLargo && !rotaMapaExpandido && !(modoNovo && tab === 'map') && (
+      {!layout.ehLargo && !rotaMapaExpandido && tab !== 'map' && (
       <View style={[styles.header, isDark && styles.headerEscuro]}>
         {/* Linha 1 — busca + avatar. A busca subiu pro header: ela e' o
             caminho pro lead que NAO esta' na area carregada, e ficava abaixo
@@ -8873,20 +8103,18 @@ function MainApp() {
                 </TouchableOpacity>
               )}
             </View>
-          ) : tab === 'agenda' || (tab === 'route' && modoNovo) ? (
+          ) : tab === 'agenda' || tab === 'route' ? (
             /* (route no mapa novo é o "Mapa do dia" da Agenda: sem isto o "Ir pra rua" abria a tela
                sem título — auditoria 06/10) A Agenda nao tem busca, mas tambem nao pode ter uma faixa de
                48px vazia: o titulo ocupa o lugar dela. No mapa novo a Rota
                deixa de ser aba e mora aqui (prompt final §B1). */
-            modoNovo ? (
+            (
               // R1 opção A (handoff das abas): a pílula "Rota de hoje" saiu — o caminho do dia é o
               // "Mapa do dia" do seletor da própria Agenda. A data e o propósito ficam na faixa.
               // flex 1: sem ele a linha tinha a largura do título e o sino e o avatar colavam nele (auditoria 06/10)
               <View style={[styles.headerLinha, { flex: 1, minWidth: 0 }]}>
                 <Text style={styles.headerTitulo}>Agenda</Text>
               </View>
-            ) : (
-              <Text style={styles.headerTitulo}>Agenda</Text>
             )
           ) : tab === 'playbook' ? (
             <Text style={styles.headerTitulo}>Playbook</Text>
@@ -8944,8 +8172,7 @@ function MainApp() {
               {/* A sublinha responde a pergunta da tela antes de qualquer
                   toque: o que venceu e o que vence hoje. */}
               <Text style={styles.headerSublinha} numberOfLines={1}>
-                {modoNovo
-                  ? (() => {
+                {(() => {
                       // sem a leitura do HubSpot, "0 atrasadas" é um zero que tranquiliza sem medir
                       if (tarefasSemMedicao) return 'sem medição · ' + tarefasSemMedicao;
                       if (tarefasErro) return 'não consegui ler o HubSpot agora';
@@ -8953,8 +8180,7 @@ function MainApp() {
                       if (naFila != null) return `${naFila} ${naFila === 1 ? 'tarefa' : 'tarefas'} hoje`;
                       const atr = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'atrasadas').length;
                       return `${atr} atrasadas · ${seloTarefas - atr} para hoje`;
-                    })()
-                  : `${tarefasPorBalde.atrasadas} atrasadas · ${tarefasPorBalde.hoje} para hoje`}
+                    })()}
               </Text>
             </View>
           ) : (
@@ -8968,7 +8194,7 @@ function MainApp() {
           {tab === 'tasks' && !isViewer && (
             <TouchableOpacity
               accessibilityRole="button"
-              accessibilityLabel={modoNovo ? 'Como as tarefas funcionam' : 'Como as tarefas são geradas'}
+              accessibilityLabel="Como as tarefas funcionam"
               style={styles.headerAjuda}
               onPress={() => setIsTaskRulesOpen(true)}
             >
@@ -8981,7 +8207,7 @@ function MainApp() {
               arrow_back, e um segundo caminho no mesmo cabecalho diria coisas
               diferentes sobre como sair da tela. */}
           {/* Sino de Avisos (prompt §5): o que não é tarefa — motor e envios que não subiram. */}
-          {modoNovo && tab !== 'meu' && tab !== 'config' && (
+          {tab !== 'meu' && tab !== 'config' && (
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel={avisos.selo ? `Avisos, ${avisos.selo} ${avisos.selo === 1 ? 'novo' : 'novos'}` : 'Avisos'}
@@ -9019,7 +8245,7 @@ function MainApp() {
             frente" antes de o vendedor rolar. */}
         {/* R1 · opção A (handoff das abas, 04/10): no mapa novo a Rota é o "Mapa do dia" da Agenda —
             o mesmo seletor Lista | Mapa do dia, e o resumo do caminho numa linha. */}
-        {tab === 'route' && modoNovo && (() => {
+        {tab === 'route' && (() => {
           const faltam = routeDisplayClients.filter((c) => routeStops.find((st) => st.client_id === c.id)?.status !== 'done').length;
           const km = routeGeometry.data ? `${(routeGeometry.data.distanceMeters / 1000).toFixed(1).replace('.', ',')} km` : null;
           const min = routeGeometry.data ? `~${Math.round(routeGeometry.data.durationSeconds / 60)} min` : null;
@@ -9044,170 +8270,16 @@ function MainApp() {
             </View>
           );
         })()}
-        {tab === 'route' && !modoNovo && (
-          <View style={{ gap: 12 }}>
-            <View style={styles.headerLinha}>
-              {/* A9 (handoff v6): a Rota abre pela pílula da Agenda e não tinha como voltar */}
-              {modoNovo && (
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel="Voltar para a Agenda"
-                  style={styles.rotaVoltar}
-                  onPress={() => irParaAba('agenda')}
-                >
-                  <IconChevronLeft width={20} height={20} fill={iconColors.onSurface} />
-                </TouchableOpacity>
-              )}
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.rotaKicker}>ROTA DE HOJE</Text>
-                <Text style={styles.rotaData} numberOfLines={1}>
-                  {(() => {
-                    // `capitalize` do CSS subiria TODA palavra ("Segunda-Feira,
-                    // 31 De Agosto"). Em pt-BR so' a primeira sobe.
-                    const d = new Date().toLocaleDateString('pt-BR', {
-                      weekday: 'long', day: '2-digit', month: 'long',
-                    });
-                    return d.charAt(0).toUpperCase() + d.slice(1);
-                  })()}
-                </Text>
-              </View>
-            </View>
-            {/* Sem rota, tres "—" nao informam nada: a faixa inteira sai e o
-                header fica so' com o kicker, a data e o avatar (M3c/A). */}
-            {routeDisplayClients.length > 0 && (
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                {[
-                  { v: String(routeDisplayClients.length), r: routeDisplayClients.length === 1 ? 'PARADA' : 'PARADAS' },
-                  {
-                    v: routeGeometry.data ? `${(routeGeometry.data.distanceMeters / 1000).toFixed(1).replace('.', ',')} km` : '—',
-                    r: 'DISTÂNCIA',
-                  },
-                  {
-                    v: routeGeometry.data ? `${Math.round(routeGeometry.data.durationSeconds / 60)} min` : '—',
-                    r: 'EM ROTA',
-                  },
-                ].map((k) => (
-                  <View key={k.r} style={styles.rotaKpi}>
-                    <Text style={styles.rotaKpiValor}>{k.v}</Text>
-                    <Text style={styles.rotaKpiRotulo}>{k.r}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
 
         {/* Tira da semana. O calendario de 7 colunas do desktop nao cabe em
             390px: a tira da a visao da semana e o corpo mostra UM dia. Ela
             mora no header porque depende do vermelho da marca — o "hoje" e'
             branco e os outros dias sao brancos translucidos. */}
-        {tab === 'agenda' && !modoNovo && (() => {
-          // Semana de segunda a domingo que CONTEM o dia selecionado.
-          const desloc = (diaSelecionado.getDay() + 6) % 7;
-          const segunda = new Date(diaSelecionado);
-          segunda.setDate(diaSelecionado.getDate() - desloc);
-          segunda.setHours(0, 0, 0, 0);
-          const hoje = new Date();
-          hoje.setHours(0, 0, 0, 0);
-          return (
-            <View style={styles.tiraSemana}>
-              {Array.from({ length: 7 }, (_, i) => {
-                const d = new Date(segunda);
-                d.setDate(segunda.getDate() + i);
-                const ativo = chaveDoDia(d) === chaveDoDia(diaSelecionado);
-                const temItem = diasComCompromisso.has(chaveDoDia(d));
-                const ehHoje = chaveDoDia(d) === chaveDoDia(hoje);
-                // "seg." -> "seg"
-                const rotulo = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
-                const corTexto = ativo
-                  ? (isDark ? 'var(--brand-text)' : '#C8131B')
-                  : '#FFFFFF';
-                return (
-                  <TouchableOpacity
-                    key={i}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: ativo }}
-                    accessibilityLabel={`${rotulo} ${d.getDate()}${temItem ? ', com compromisso' : ''}`}
-                    style={[
-                      styles.tiraDia,
-                      isDark ? styles.tiraDiaEscuro : styles.tiraDiaClaro,
-                      ativo && (isDark ? styles.tiraDiaAtivoEscuro : styles.tiraDiaAtivo),
-                    ]}
-                    onPress={() => setDiaSelecionado(d)}
-                  >
-                    <Text style={[styles.tiraDiaSemana, { color: corTexto }]}>{rotulo}</Text>
-                    <Text style={[styles.tiraDiaNumero, { color: corTexto }]}>{d.getDate()}</Text>
-                    {/* O dot sempre ocupa os 4px, mesmo vazio: se so' aparecesse
-                        nos dias com item, os numeros dancariam de linha. */}
-                    <View
-                      style={[
-                        styles.tiraDot,
-                        {
-                          backgroundColor: !temItem
-                            ? 'transparent'
-                            : ativo
-                              ? (isDark ? 'var(--brand-text)' : '#C8131B')
-                              : 'rgba(255,255,255,0.6)',
-                        },
-                        // Hoje sem ser o dia aberto ainda precisa se achar na
-                        // tira; a borda e' o unico sinal que sobra sem inventar
-                        // um segundo estado de fundo.
-                        ehHoje && !ativo && styles.tiraDotHoje,
-                      ]}
-                    />
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          );
-        })()}
 
         {/* Linha 2 — Mapa / Lista. Raio 12 so' nas pontas: e' um controle, nao
             dois botoes. Mapa novo (prompt final C8): sai — a lista e' a folha
             "Nesta área", e o topo fica em 2 linhas. */}
-        {ehAbaDeLeads && !modoNovo && (
-          <View style={styles.headerSegmento}>
-            {([
-              { id: 'mapa' as const, rotulo: 'Mapa', Icone: IconLocation },
-              { id: 'lista' as const, rotulo: 'Lista', Icone: IconSquareMenu },
-            ]).map((v, i) => {
-              const ativo = vistaMapa === v.id;
-              return (
-                <TouchableOpacity
-                  key={v.id}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: ativo }}
-                  style={[
-                    styles.headerSegmentoItem,
-                    i === 0 ? styles.headerSegmentoEsq : styles.headerSegmentoDir,
-                    isDark && !ativo && styles.headerSegmentoItemEscuro,
-                    ativo && (isDark ? styles.headerSegmentoAtivoEscuro : styles.headerSegmentoAtivo),
-                  ]}
-                  onPress={() => setVistaMapa(v.id)}
-                >
-                  <v.Icone
-                    width={20}
-                    height={20}
-                    fill={
-                      ativo
-                        ? (isDark ? iconColors.brandText : '#C8131B')
-                        : (isDark ? 'rgba(255,255,255,0.64)' : '#FFFFFF')
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.headerSegmentoTexto,
-                      isDark && !ativo && styles.headerSegmentoTextoEscuro,
-                      ativo && (isDark ? styles.headerSegmentoTextoAtivoEscuro : styles.headerSegmentoTextoAtivo),
-                    ]}
-                  >
-                    {v.rotulo}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
+
       </View>
       )}
 
@@ -9279,105 +8351,6 @@ function MainApp() {
       )}
 
       {/* Vendedor/admin: search + chips de status (um por vez) + filtros. */}
-      {!isViewer && ehAbaDeLeads && !layout.ehLargo && !modoNovo && (
-        <>
-          {/* UMA faixa de filtro, nao tres. O status virou chip removivel na
-              mesma linha dos de temperatura: `Lead / Cliente / Ex-Cliente /
-              Ganho` e' recorte de sessao, nao alternancia de segundo a
-              segundo — ocupava 48px inteiros e o quarto rotulo ja' cortava em
-              "Ganho - Fi…". O sheet que o recebe e' o M4. */}
-          <View style={styles.filterBar}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filtroBarraLinha}
-              keyboardShouldPersistTaps="handled"
-            >
-              {modoNovo ? (
-                <>
-                  {LENTES.filter((l) => l.id !== 'calor' || canViewGestor).map((l) => {
-                    const ativa = lente === l.id;
-                    return (
-                      <TouchableOpacity
-                        key={l.id}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: ativa }}
-                        accessibilityLabel={`Lente ${l.rotulo}`}
-                        style={[styles.tempChipMobile, styles.lenteChip, ativa && styles.lenteChipAtiva]}
-                        onPress={() => setLente(l.id)}
-                      >
-                        <Text style={[styles.tempChipMobileTexto, ativa && styles.lenteChipAtivaTexto]}>{l.rotulo}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                  <TouchableOpacity
-                    accessibilityRole="button"
-                    accessibilityLabel={quantosFiltros(filtrosNovos) ? `Filtros, ${quantosFiltros(filtrosNovos)} ativos` : 'Filtros'}
-                    style={[styles.tempChipMobile, styles.lenteChip, quantosFiltros(filtrosNovos) > 0 && styles.tempChipMobileAtivo]}
-                    onPress={() => { Keyboard.dismiss(); setFiltrosNovosAbertos(true); }}
-                  >
-                    <IconFilterList width={18} height={18} fill={quantosFiltros(filtrosNovos) ? iconColors.tintRedText : iconColors.muted} />
-                    <Text style={[styles.tempChipMobileTexto, quantosFiltros(filtrosNovos) > 0 && { color: 'var(--tint-red-text)' }]}>
-                      {quantosFiltros(filtrosNovos) ? `Filtros · ${quantosFiltros(filtrosNovos)}` : 'Filtros'}
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-              <>
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel="Filtros"
-                style={styles.filtroBotao}
-                onPress={() => { Keyboard.dismiss(); setIsFiltersOpen(true); }}
-              >
-                <IconFilterList width={20} height={20} fill={iconColors.muted} />
-                {activeFilterCount > 0 && (
-                  <View style={styles.filterIconBadge}>
-                    <Text style={styles.filterIconBadgeText}>{activeFilterCount}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-
-              {/* So' o status ATIVO aparece, como chip removivel. Remover volta
-                  pro padrao ('lead'), que e' o recorte que o mapa aguenta. */}
-              {statusFilter !== 'lead' && (
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remover filtro ${statusConfig[statusFilter]?.label ?? statusFilter}`}
-                  style={[styles.tempChipMobile, styles.tempChipMobileAtivo]}
-                  onPress={() => setStatusFilter('lead' as ClientStatus)}
-                >
-                  <Text style={[styles.tempChipMobileTexto, { color: 'var(--tint-red-text)' }]}>
-                    {statusConfig[statusFilter]?.label ?? statusFilter}
-                  </Text>
-                  <IconClose width={14} height={14} fill={iconColors.tintRedText} />
-                </TouchableOpacity>
-              )}
-
-              {[
-                { rotulo: 'Todos', cor: 'var(--stroke-default)', ativo: tempFilter === null && !contaAlvoOnly, aoTocar: () => { setTempFilter(null); setContaAlvoOnly(false); } },
-                { rotulo: 'Quente', cor: TEMP_COLORS.hot, ativo: tempFilter === 'Quente', aoTocar: () => setTempFilter(tempFilter === 'Quente' ? null : 'Quente') },
-                { rotulo: 'Morno', cor: TEMP_COLORS.warm, ativo: tempFilter === 'Morno', aoTocar: () => setTempFilter(tempFilter === 'Morno' ? null : 'Morno') },
-                { rotulo: 'Frio', cor: TEMP_COLORS.cold, ativo: tempFilter === 'Frio', aoTocar: () => setTempFilter(tempFilter === 'Frio' ? null : 'Frio') },
-                { rotulo: 'Conta Alvo', cor: CONTA_ALVO_COLOR, ativo: contaAlvoOnly, aoTocar: () => setContaAlvoOnly(v => !v) },
-              ].map(chip => (
-                <TouchableOpacity
-                  key={chip.rotulo}
-                  accessibilityRole="button"
-                  style={[styles.tempChipMobile, chip.ativo && styles.tempChipMobileAtivo]}
-                  onPress={chip.aoTocar}
-                >
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: chip.cor }} />
-                  <Text style={[styles.tempChipMobileTexto, chip.ativo && { color: 'var(--tint-red-text)' }]}>{chip.rotulo}</Text>
-                </TouchableOpacity>
-              ))}
-              </>
-              )}
-            </ScrollView>
-            {linhaFiltrosAtivos && <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>{linhaFiltrosAtivos}</View>}
-          </View>
-        </>
-      )}
 
       {/* No celular Mapa e Lista sao a mesma aba: quem escolhe e' o segmented
           do header (`vistaMapa`). No desktop a Lista continua sendo destino
@@ -9387,7 +8360,7 @@ function MainApp() {
           /* Web: painel de trabalho fixo de 352px + mapa. O conteudo do mapa
              e' o MESMO JSX do celular (conteudoMapa) — so' a composicao muda. */
           <View style={sharedStyles.mapaLinhaWeb}>
-            {!painelRecolhido && (modoNovo ? painelMapaNovoWeb : painelMapaWeb)}
+            {!painelRecolhido && painelMapaNovoWeb}
             <View style={sharedStyles.mapaAreaWeb}>{conteudoMapa}{botaoRecolher}</View>
           </View>
         ) : (
@@ -9397,7 +8370,7 @@ function MainApp() {
         layout.ehLargo ? (
           // L1 (handoff das abas): no mapa novo a Lista abre em Minha carteira; a tabela de antes
           // (que segue a área do mapa) vira o terceiro recorte.
-          modoNovo ? (
+          (
             <ListaCarteiraWeb
               ownerHubspot={myHubspotId}
               sellerId={profile?.id ?? null}
@@ -9405,7 +8378,7 @@ function MainApp() {
               reguaDe={(etapaId) => { const r = slaForStage(ROTULO_ETAPA[etapaId] ?? null, routeSlaDays); return r >= 999 ? null : r; }}
               tabelaDaArea={listaTabelaWeb}
             />
-          ) : listaTabelaWeb
+          )
         ) : (
         <>
           <FlatList
@@ -9529,9 +8502,9 @@ function MainApp() {
           myHubspotId={myHubspotId}
           // Rota vazia: "Montar meu dia" com microrrotas (não apaga nada) no mapa novo;
           // "Otimizar paradas": reordena as que já estão, em microrrotas.
-          generateDailyRoute={modoNovo ? montarDiaComMicrorrotas : generateDailyRoute}
-          otimizarParadas={modoNovo && !isViewer ? () => { void roteirizarPlano(); } : undefined}
-          montaSemApagar={modoNovo}
+          generateDailyRoute={montarDiaComMicrorrotas}
+          otimizarParadas={!isViewer ? () => { void roteirizarPlano(); } : undefined}
+          montaSemApagar
           startNavigation={startNavigation}
           viewRouteOnMap={viewRouteOnMap}
           addClientToRoute={addClientToRoute}
@@ -9545,7 +8518,7 @@ function MainApp() {
           suggestRoute={suggestRoute}
         />
         </React.Suspense>
-      ) : tab === 'tasks' && modoNovo ? (
+      ) : tab === 'tasks' ? (
         // A fila do dinheiro (docs/10 §1, 04/10/2026): um card por negócio, valor × urgência.
         // Visitar e Registrar levam ao lead no mapa (o Cheguei é a prova da visita).
         <BarreiraDaAba nome="Hoje">
@@ -9580,51 +8553,6 @@ function MainApp() {
         </React.Suspense>
         </View>
         </BarreiraDaAba>
-      ) : tab === 'tasks' ? (
-        <TarefasScreen
-          visibleTasks={visibleTasks}
-          semIdHubspot={semIdHubspot}
-          tasksActiveVendor={tasksActiveVendor}
-          filtroSev={taskSevFilter}
-          setFiltroSev={setTaskSevFilter}
-          clients={clients}
-          nomesTarefas={nomesTarefas}
-          nomeDoLead={getClientPrimaryName}
-          vendorLabel={vendorLabel}
-          abrirLeadNoMapa={(c) => { setTab('map'); openClientDetails(c); }}
-          // Troca pra aba do mapa antes de abrir, como o `abrirLeadNoMapa` acima:
-          // a ficha do lead so' renderiza sobre o mapa, entao sem isso o toque
-          // setava o lead selecionado e nada aparecia na tela.
-          abrirLeadPorId={(id, tarefa) => {
-            setTarefaDaFicha(tarefa ?? null);
-            setTab('map');
-            void openClientById(id);
-          }}
-          limparFiltroVendedor={() => setVendorFilterHubspotId(null)}
-          agendarDemo={(c, task) =>
-            setSchedulingFor({
-              client: c,
-              type: 'reuniao',
-              tarefa: task
-                ? {
-                    id: task.id,
-                    titulo: task.title.replace(/^(D\d+|SLA)\s+/i, ''),
-                    severity: task.severity,
-                    diasNaEtapa: typeof (task.meta as Record<string, unknown> | null)?.days_in_stage === 'number'
-                      ? ((task.meta as Record<string, unknown>).days_in_stage as number)
-                      : null,
-                    etapa: typeof (task.meta as Record<string, unknown> | null)?.etapa === 'string'
-                      ? ((task.meta as Record<string, unknown>).etapa as string)
-                      : null,
-                  }
-                : undefined,
-            })
-          }
-          abrirRegras={() => setIsTaskRulesOpen(true)}
-          concluirTarefa={(vars) => resolveTask.mutate(vars)}
-          abrirMenuDeConclusao={setCompletingTask}
-          myHubspotId={myHubspotId}
-        />
       ) : tab === 'playbook' ? (
         <PlaybookScreen email={profile?.email} proximaParada={proximaParadaDoPlano} />
       ) : tab === 'config' ? (
@@ -9658,7 +8586,7 @@ function MainApp() {
             { chave: 'avisos', rotulo: 'Avisos', sub: 'o que não subiu e os recados do gestor', selo: avisos.selo + (seloFila?.n ?? 0) > 0 ? String(avisos.selo + (seloFila?.n ?? 0)) : null, aoTocar: () => { setAvisosAbertos(true); avisos.marcarRecadosVistos(); } },
             { chave: 'perfil', rotulo: 'Ajustes e sair', sub: 'foto, configurações e sair da conta', aoTocar: () => setPerfilAberto(true) },
           ]}
-          tarefasPendentes={modoNovo ? (totalDaFila ?? undefined) : visibleTasksCount}
+          tarefasPendentes={totalDaFila ?? undefined}
           aoAbrirTarefas={() => setTab('tasks')}
           ehGestor={canViewGestor}
           origem={aberturaEu.origem}
@@ -9666,7 +8594,7 @@ function MainApp() {
           aoFazerQuiz={() => setTab('playbook')}
         />
         </React.Suspense>
-      ) : modoNovo ? (
+      ) : (
         (() => { const agendaNova = (
         <View style={{ flex: 1 }}>
         {/* a hora das ligações vira aviso de Informação dentro da lista (handoff Agenda do App, 19/10/26) */}
@@ -9896,27 +8824,6 @@ function MainApp() {
             </View>
           </View>
         ) : agendaNova; })()
-      ) : (
-        <AgendaScreen
-          clients={clients}
-          meetings={meetings}
-          routeStops={routeStops}
-          nomesReunioes={nomesReunioes}
-          openClientById={(id, tarefa) => {
-            setTarefaDaFicha(tarefa ?? null);
-            void openClientById(id);
-          }}
-          vendorLabel={vendorLabel}
-          canViewGestor={canViewGestor}
-          isViewer={isViewer}
-          confirmCancelMeeting={confirmCancelMeeting}
-          reagendar={(v) => setSchedulingFor(v)}
-          abrirRota={() => setTab('route')}
-          nomeDoLead={getClientPrimaryName}
-          fieldOps={fieldOps}
-          vendorFilterHubspotId={vendorFilterHubspotId}
-          diaSelecionado={diaSelecionado}
-        />
       )}
 
       {selectedClientSheet}
@@ -10244,7 +9151,7 @@ function MainApp() {
                   aoTocar: () => { if (irParaOCockpit() === 'aba') setPerfilAberto(false); },
                 }
               : null,
-            modoNovo && canViewGestor
+            canViewGestor
               // a lente mora no mapa: de outra aba, o toque só fechava o menu (auditoria 29/10/26)
               ? { chave: 'calor', Icone: IconBarGraph, rotulo: 'Lente Calor', aoTocar: () => { setPerfilAberto(false); if (tab !== 'map') irParaAba('map'); setLente('calor'); } }
               : null,
@@ -10259,7 +9166,7 @@ function MainApp() {
             // No CELULAR ele mudou de casa em 29/10 e mora na folha da lente, que é a folha que
             // fala do que o mapa mostra — aqui ficaria duplicado. No computador a folha da lente
             // não existe, então esta segue sendo a única porta.
-            modoNovo && layout.ehLargo
+            layout.ehLargo
               ? { chave: 'sol', Icone: IconSparkle, rotulo: 'Modo sol · mapa claro', chaveLigada: modoSol, aoTocar: () => { alternarModoSol(); } }
               : null,
             profile?.id && FOTOS_LIBERADAS.has(profile.id)
@@ -10334,7 +9241,7 @@ function MainApp() {
           em 29/10/26: virou a aba Eu (2.1), entao a barra fica. O Playbook,
           que ainda chega pelo menu, mantem a barra para o executivo nao ficar
           sem caminho de volta agora que nao e' mais aba. */}
-      {!layout.ehLargo && tab !== 'config' && !rotaMapaExpandido && modoNovo && !telaCheia && !(tab === 'map' && selectedClient) && (
+      {(!layout.ehLargo && tab !== 'config' && !rotaMapaExpandido) && !telaCheia && !(tab === 'map' && selectedClient) && (
       /* RODAPE DO MAPA NOVO (espinha do dia 2.1, 29/10/26): Mapa · Hoje · Eu.
          A Rota mora na Agenda, o "+" e' botao do
          mapa e a Gestao fica no menu do avatar, para o time inteiro. */
@@ -10368,100 +9275,6 @@ function MainApp() {
             </TouchableOpacity>
           );
         })}
-      </View>
-      )}
-      {!layout.ehLargo && tab !== 'meu' && tab !== 'config' && !rotaMapaExpandido && !modoNovo && (
-      <View style={[styles.bottomNav, { paddingBottom: navPaddingBottom }]}>
-        <TouchableOpacity
-          accessibilityRole="button"
-          style={[styles.navItem, verGestao && !modoNovo && styles.navItemLadoDeDois]}
-          onPress={() => setTab('map')}
-        >
-          <NavIcon Icone={tab === 'map' ? IconLocationFilled : IconLocation} ativo={tab === 'map'} />
-          <Text style={[styles.navItemText, tab === 'map' && styles.navItemTextActive]}>Mapa</Text>
-        </TouchableOpacity>
-
-        {isViewer ? (
-          // Viewer fica so' com o Mapa — sem Rota, Agenda, Tarefas nem FAB.
-          // O vao do meio some junto: sem FAB, ele seria um buraco.
-          null
-        ) : (
-          <>
-            <TouchableOpacity
-              accessibilityRole="button"
-              style={[styles.navItem, verGestao && !modoNovo && styles.navItemLadoDeDois]}
-              onPress={() => setTab('route')}
-            >
-              <NavIcon Icone={IconCar} ativo={tab === 'route'} />
-              <Text style={[styles.navItemText, tab === 'route' && styles.navItemTextActive]}>Rota</Text>
-            </TouchableOpacity>
-
-            {/* O vao que o FAB ocupa. E' um espacador, nao um alvo. */}
-            <View style={styles.navVaoFab} />
-
-            <TouchableOpacity
-              accessibilityRole="button"
-              style={styles.navItem}
-              onPress={() => setTab('agenda')}
-            >
-              <NavIcon Icone={IconCalendar} ativo={tab === 'agenda'} />
-              <Text style={[styles.navItemText, tab === 'agenda' && styles.navItemTextActive]}>Agenda</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              accessibilityRole="button"
-              style={styles.navItem}
-              onPress={() => setTab('tasks')}
-            >
-              {/* O badge pendura no ICONE, e nao no botao: ancorado no botao de
-                  ~73px o `right` cai perto do centro e cobre a prancheta
-                  inteira — e piora quando o numero vira "99+". */}
-              <View style={styles.navIconeAncora}>
-                <NavIcon Icone={IconClipboardCheck} ativo={tab === 'tasks'} />
-                {visibleTasksCount > 0 && (
-                  <View style={styles.navBadge}>
-                    <Text style={styles.navBadgeText}>
-                      {visibleTasksCount > 99 ? '99+' : visibleTasksCount}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              <Text style={[styles.navItemText, tab === 'tasks' && styles.navItemTextActive]}>Tarefas</Text>
-            </TouchableOpacity>
-
-            {/* GESTAO: o Cockpit, na conta de quem toca (25/09/2026). Um toque, na
-                mesma janela — no PWA instalado uma aba nova cai no navegador, que
-                no iPhone nao tem a sessao do app e pede login de novo. Nao e' aba:
-                e' destino, entao nunca fica "ativo" aqui. Com ele sao tres a
-                direita do FAB; Mapa e Rota ganham navItemLadoDeDois para os dois
-                lados somarem a mesma largura e o FAB (left 50%) seguir no vao. */}
-            {verGestao && (
-              <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel="Gestão: abrir o Cockpit"
-                style={styles.navItem}
-                onPress={irParaOCockpit}
-              >
-                <NavIcon Icone={IconBarGraph} ativo={false} />
-                <Text style={styles.navItemText}>Gestão</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* FAB central. A borda de 4px em --surface e' o que o recorta da
-                barra; sem ela ele encosta nas abas vizinhas. No mapa novo ele
-                vira botao flutuante do mapa (C10: cobria o logo do Google). */}
-            {!modoNovo && <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="Adicionar lead"
-              activeOpacity={0.94}
-              style={[styles.navFab, isDark && styles.navFabEscuro]}
-              onPress={() => setShowCepStep(true)}
-            >
-              <IconPlus width={32} height={32} fill="#FFFFFF" />
-            </TouchableOpacity>}
-          </>
-        )}
-
       </View>
       )}
 
@@ -10547,7 +9360,7 @@ function MainApp() {
         <View style={[styles.modalOverlay, layout.ehLargo && styles.modalOverlayWeb]}>
           <View style={[styles.taskRulesCard, layout.ehLargo && styles.modalCartaoMedioWeb]}>
             <View style={styles.taskRulesHeader}>
-              <Text style={styles.taskRulesTitle}>{modoNovo ? 'Como as tarefas funcionam' : 'Como as tarefas são geradas'}</Text>
+              <Text style={styles.taskRulesTitle}>Como as tarefas funcionam</Text>
               <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar"
                 style={styles.taskRulesClose}
                 onPress={() => setIsTaskRulesOpen(false)}
@@ -10562,7 +9375,7 @@ function MainApp() {
                 sobre tarefas que o gestor e o proprio executivo criam. */}
             {/* A FILA DO DINHEIRO (auditoria 06/10): no mapa novo a aba não tem mais as regras D2/D5 nem
                 "Sugestões do app"; o painel explicava a tela antiga. Agora explica a fila que está na tela. */}
-            {modoNovo ? (
+            {(
               <ScrollView style={{ maxHeight: 440 }} showsVerticalScrollIndicator>
                 <Text style={styles.taskRulesIntro}>
                   Um cartão por negócio, com o motivo de ele estar aqui. Dentro de cada seção, quem vale mais
@@ -10589,45 +9402,7 @@ function MainApp() {
                   de dias lá em cima. "Remarcar" muda só a data no HubSpot.
                 </Text>
               </ScrollView>
-            ) : (<>
-            <Text style={styles.taskRulesIntro}>
-              {modoNovo ? 'As sugestões do app' : 'As tarefas'} são criadas automaticamente pelo sistema a partir do
-              estado dos seus leads. Você não cria manualmente — só conclui ou
-              dispensa.
-              {'\n\n'}Ao concluir, você escolhe o destino do lead: avançar de
-              etapa, mover para Perdido, ou manter na etapa atual.
-              {'\n\n'}Regras ativas:
-            </Text>
-            <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator>
-              {TASK_RULES.map((rule) => (
-                <View key={rule.code} style={styles.ruleCard}>
-                  <Text style={styles.ruleTitle}>{rule.title}</Text>
-
-                  <Text style={styles.ruleSectionLabel}>Quando é gerada</Text>
-                  <Text style={styles.ruleText}>{rule.trigger}</Text>
-
-                  <Text style={styles.ruleSectionLabel}>Níveis de urgência</Text>
-                  {rule.levels.map((lvl) => (
-                    <View key={lvl.badge} style={styles.ruleLevelRow}>
-                      <View style={[styles.ruleLevelBadge, { backgroundColor: lvl.color }]}>
-                        <Text style={styles.ruleLevelBadgeText}>{lvl.badge}</Text>
-                      </View>
-                      <Text style={styles.ruleLevelText}>{lvl.when}</Text>
-                    </View>
-                  ))}
-
-                  <Text style={styles.ruleSectionLabel}>Como o tempo é contado</Text>
-                  <Text style={styles.ruleText}>{rule.timing}</Text>
-
-                  <Text style={styles.ruleSectionLabel}>O que impede a tarefa</Text>
-                  <Text style={styles.ruleText}>{rule.suppress}</Text>
-
-                  <Text style={styles.ruleSectionLabel}>Quando some sozinha</Text>
-                  <Text style={styles.ruleText}>{rule.autoResolve}</Text>
-                </View>
-              ))}
-            </ScrollView>
-            </>)}
+            )}
             <TouchableOpacity
               style={styles.taskRulesDoneButton}
               onPress={() => setIsTaskRulesOpen(false)}
@@ -10710,10 +9485,9 @@ function MainApp() {
         </View>
       </Modal>
 
-
       {/* Filtros do mapa novo (prancha §8.9). "Mais filtros" abre o modal
           antigo logo abaixo, com UF, etapa, vendedor e visita. */}
-      {modoNovo && (
+      {(
         <FiltrosMapaNovo
           visivel={filtrosNovosAbertos}
           aoFechar={() => setFiltrosNovosAbertos(false)}
@@ -13630,20 +12404,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     color: '#FFFFFF',
   },
-  /* A9: voltar da Rota para a Agenda, 44 px */
-  rotaVoltar: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center', marginRight: 10, flexShrink: 0 },
-  rotaKicker: {
-    fontSize: 11,
-    lineHeight: 16,
-    letterSpacing: 1.32,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    color: 'rgba(255,255,255,0.75)',
-  },
-  rotaData: { fontSize: 18, lineHeight: 24, fontWeight: '600', color: '#FFFFFF' },
-  rotaKpi: { flex: 1, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.14)' },
-  rotaKpiValor: { fontSize: 16, lineHeight: 24, fontWeight: '700', color: '#FFFFFF', fontVariant: ['tabular-nums'] },
-  rotaKpiRotulo: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'rgba(255,255,255,0.75)' },
   headerTitulo: { flex: 1, minWidth: 0, fontSize: 18, lineHeight: 24, fontWeight: '600', color: '#FFFFFF' },
   headerSublinha: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'rgba(255,255,255,0.8)' },
   // ---- Menu do perfil (M7) ----
@@ -13707,62 +12467,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Tira da semana (M4). gap 6 e sete botoes flex:1 — em 390px cada dia fica
-  // com ~46px, e o alvo vem da altura de 48.
-  tiraSemana: { flexDirection: 'row', gap: 6 },
-  tiraDia: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-    paddingVertical: 6,
-  },
-  // O degrau e' de OPACIDADE, nao de hex de superficie: foi o defeito do
-  // segmented do Mapa, onde `--surface-2` no escuro ficava mais escuro que o
-  // inativo translucido e a leitura invertia.
-  tiraDiaClaro: { backgroundColor: 'rgba(255,255,255,0.14)' },
-  tiraDiaEscuro: { backgroundColor: 'rgba(255,255,255,0.06)' },
-  tiraDiaAtivo: { backgroundColor: '#FFFFFF' },
-  tiraDiaAtivoEscuro: { backgroundColor: 'rgba(255,255,255,0.18)' },
-  tiraDiaSemana: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', opacity: 0.8 },
-  tiraDiaNumero: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  tiraDot: { width: 4, height: 4, borderRadius: 2 },
-  tiraDotHoje: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.9)' },
-  headerSegmento: { flexDirection: 'row' },
-  headerSegmentoItem: {
-    flex: 1,
-    height: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-  },
-  headerSegmentoEsq: { borderTopLeftRadius: 12, borderBottomLeftRadius: 12 },
-  headerSegmentoDir: { borderTopRightRadius: 12, borderBottomRightRadius: 12 },
-  headerSegmentoAtivo: { backgroundColor: '#FFFFFF' },
-  // No escuro o ativo nao pode ser um hex de superficie: `--surface-2`
-  // (#262626) fica MAIS ESCURO que o inativo translucido (.18 sobre #1E1E1E
-  // resolve pra ~#414141), e a leitura invertia — o inativo e' que parecia o
-  // botao. Aqui o degrau e' de opacidade: o ativo fica com a translucidez
-  // cheia e o inativo cai pra .06.
-  headerSegmentoAtivoEscuro: { backgroundColor: 'rgba(255,255,255,0.18)' },
-  headerSegmentoItemEscuro: { backgroundColor: 'rgba(255,255,255,0.06)' },
-  headerSegmentoTexto: {
-    fontSize: 14,
-    lineHeight: 20,
-    letterSpacing: 0.1,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  // Branco cheio no inativo escuro competia com o ativo; .64 recua sem perder
-  // legibilidade (6.7:1 sobre o fundo do proprio chip).
-  headerSegmentoTextoEscuro: { color: 'rgba(255,255,255,0.64)' },
-  headerSegmentoTextoAtivo: { color: 'var(--vermelho-texto)' },
-  headerSegmentoTextoAtivoEscuro: { color: 'var(--brand-text)' },
   // No escuro o vermelho chapado no topo cansa e briga com a superficie.
   headerEscuro: { backgroundColor: 'var(--surface)' },
   avisoTopo: {
@@ -13832,21 +12536,6 @@ const styles = StyleSheet.create({
   // Borda inferior em --border (nao --border-soft): sem divisor visivel, o
   // slab do header e o mapa se encostavam.
   filterBar: { backgroundColor: 'var(--surface)', borderBottomWidth: 1, borderBottomColor: 'var(--border)' },
-  filtroBarraLinha: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
-  // 36x36 pill com borda, e nao o quadrado preto de antes: e' um controle
-  // entre chips de 36, e o preto chapado lia como bloco solto.
-  filtroBotao: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'var(--stroke-default)',
-    backgroundColor: 'var(--surface)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexGrow: 0,
-    flexShrink: 0,
-  },
   // paddingRight maior que o esquerdo de proposito: quando a lista chega ao
   // fim, o ultimo chip fica com ar em vez de colado na borda da tela (antes
   // parecia cortado/quebrado, nao rolavel).
@@ -13882,21 +12571,6 @@ const styles = StyleSheet.create({
   // Funil minimalista feito com 3 barrinhas afinando — sem dep nova.
   filterFunnel: { alignItems: 'center', gap: 3 },
   filterFunnelBar: { height: 2, borderRadius: 1, backgroundColor: 'var(--surface)' },
-  filterIconBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: 'var(--vermelho-acao)',
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#fff',
-  },
-  filterIconBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
   // Modal de filtros (UF e etapa comercial)
   filtersSheet: {
     backgroundColor: 'var(--surface)',
@@ -13962,24 +12636,6 @@ const styles = StyleSheet.create({
     maxWidth: '92%',
   },
   areaStatusText: { color: '#fff', fontSize: 12.5, fontWeight: '700' },
-  // Contagem do recorte: pill clara sobre o mapa, com sombra pra sobreviver
-  // tanto ao mapa claro quanto ao escuro (nao ha' fundo garantido embaixo).
-  recortePill: {
-    backgroundColor: 'var(--surface)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 999,
-    shadowColor: '#000000',
-    shadowOpacity: 0.12,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  recorteTexto: { color: 'var(--text-muted)', fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600' },
-  // Objetos SEPARADOS (nao props undefined no mesmo objeto): no RNW um
-  // `undefined` nao cancela a regra da classe base.
-  recortePillAviso: { backgroundColor: 'var(--tint-amber)' },
-  recorteTextoAviso: { color: 'var(--tint-amber-text)' },
   chipStatusBarrado: { opacity: 0.45 },
   vazioMotivo: {
     marginTop: 8,
@@ -14080,76 +12736,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  // ===== Painel do mapa de calor (gestor) =====
-  // ---- Calor de visitas (M2) ----
-  // Desktop: a linha do switch dentro do painel de 352px vira caixa expansivel.
-  calorCaixa: { borderRadius: 8, backgroundColor: 'var(--surface-2)', overflow: 'hidden' },
-  calorCorpo: { paddingHorizontal: 12, paddingBottom: 12 },
-  // Escala: uma familia de cor, quatro degraus interpolados em 24 passos.
-  // A borda nao e' enfeite: o passo mais claro da rampa (#D6F2EC) da' 1,18:1
-  // sobre --surface-2 no tema claro, e sem ela a barra parece comecar no meio.
-  calorEscalaBarra: {
-    height: 8,
-    borderRadius: 4,
-    overflow: 'hidden',
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: 'var(--border)',
-  },
-  calorEscalaRotulos: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  calorEscalaRotulo: {
-    fontSize: 11,
-    lineHeight: 16,
-    letterSpacing: 0.5,
-    fontWeight: '600',
-    color: 'var(--text-faint)',
-  },
-  calorListaCabecalho: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  calorListaTitulo: {
-    fontSize: 11,
-    lineHeight: 16,
-    letterSpacing: 0.5,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    color: 'var(--text-faint)',
-  },
-  calorListaTotal: {
-    fontSize: 11,
-    lineHeight: 16,
-    letterSpacing: 0.5,
-    fontWeight: '600',
-    color: 'var(--text-faint)',
-    fontVariant: ['tabular-nums'],
-  },
-  calorLinha: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, borderRadius: 4 },
-  // Circulo, e nao quadrado: `heatSeller` e' selecao unica (Todos ou UM), e uma
-  // caixa de marcar prometeria escolher varios.
-  calorRadio: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: 'var(--stroke-strong)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calorRadioAtivo: { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
-  calorNome: { flex: 1, fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-muted)' },
-  calorNomeAtivo: { fontWeight: '700', color: 'var(--tint-red-text)' },
-  calorContagem: {
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 0.5,
-    fontWeight: '600',
-    color: 'var(--text-faint)',
-    fontVariant: ['tabular-nums'],
-  },
-  heatEmpty: { fontSize: 12, color: 'var(--text-subtle)', fontStyle: 'italic', marginBottom: 6 },
   fab: {
     position: 'absolute',
     right: 16,
@@ -14395,38 +12981,6 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderRightColor: 'var(--border)',
   },
-  pmwEscopo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'var(--border)',
-  },
-  pmwFiltros: { padding: 16, gap: 16, borderBottomWidth: 1, borderBottomColor: 'var(--border)' },
-  pmwSegmentos: { flexDirection: 'row' },
-  pmwSegmento: {
-    flex: 1,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-    borderWidth: 1,
-    borderColor: 'var(--stroke-default)',
-  },
-  pmwSegmentoAtivo: { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
-  pmwSegmentoTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
-  pmwSegmentoTextoAtivo: { color: '#FFFFFF' },
-  pmwTituloLinha: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  pmwTitulo: {
-    fontSize: 11,
-    lineHeight: 16,
-    letterSpacing: 0.5,
-    fontWeight: '600',
-    color: 'var(--text-faint)',
-    textTransform: 'uppercase',
-  },
-  pmwLimpar: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--info-text)' },
   pmwChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   pmwChip: {
     height: 32,
@@ -14442,58 +12996,6 @@ const styles = StyleSheet.create({
   pmwChipAtivo: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--vermelho-acao)' },
   pmwChipDot: { width: 10, height: 10, borderRadius: 5 },
   pmwChipTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
-  pmwChipContagem: { fontSize: 12, lineHeight: 16, fontWeight: '500', color: 'var(--text-faint)' },
-  pmwCalor: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: 'var(--surface-2)',
-  },
-  pmwCalorTitulo: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text)' },
-  pmwCalorSub: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)' },
-  pmwSwitch: { width: 44, height: 24, borderRadius: 12, padding: 2, justifyContent: 'center' },
-  pmwSwitchDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 2,
-  },
-  pmwListaCabecalho: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  pmwListaTitulo: {
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 0.5,
-    fontWeight: '700',
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-  },
-  pmwListaOrdem: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-faint)' },
-  pmwLinha: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'var(--border)',
-  },
-  pmwLinhaBarra: { width: 4, borderRadius: 2, alignSelf: 'stretch', minHeight: 40 },
-  pmwLinhaNome: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1, fontWeight: '600', color: 'var(--text)' },
-  pmwLinhaSub: { fontSize: 12, lineHeight: 16, letterSpacing: 0.4, color: 'var(--text-faint)' },
-  pmwLinhaDist: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-faint)' },
   // Legenda de temperatura vira barra horizontal com wrap no web
   tempLegendaWeb: {
     bottom: 16,
@@ -14641,39 +13143,9 @@ const styles = StyleSheet.create({
     // O FAB e' filho absoluto desta barra e protrai 24px acima dela.
     position: 'relative',
   },
-  // Espacador do FAB: 72px de vao no meio das quatro abas.
-  navVaoFab: { flex: 0, flexBasis: 72, width: 72 },
   // Ancora do badge. `position:relative` implicito no RN; o que importa e' o
   // badge pendurar no ICONE e nao no botao de ~73px.
   navIconeAncora: { position: 'relative' },
-  navFab: {
-    position: 'absolute',
-    left: '50%',
-    top: -24,
-    transform: [{ translateX: -30 }],
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'var(--vermelho-acao)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    // A borda em --surface e' o que recorta o FAB da barra.
-    borderWidth: 4,
-    borderColor: 'var(--surface)',
-    // A unica sombra tingida da marca no app — mas so' no claro.
-    shadowColor: '#C8131B',
-    shadowOpacity: 0.32,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  // No escuro a sombra tingida nao separa o FAB do fundo: vira halo difuso.
-  navFabEscuro: {
-    shadowColor: '#000000',
-    shadowOpacity: 0.32,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 12,
-  },
   // Sao ate 6 abas (Mapa/Lista/Rota/Agenda/Tarefas/Gestor). Num celular
   // estreito o rotulo de 11px encostava no do vizinho; icone e texto um ponto
   // menores, com folga horizontal, deixam os seis respirarem.
@@ -14686,9 +13158,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Com o botao Gestao ha' 2 abas a esquerda do FAB e 3 a direita. As duas da
-  // esquerda pesam 1.5 cada: 3 = 3, e o vao do FAB fica no centro da barra.
-  navItemLadoDeDois: { flex: 1.5 },
   // Rodape do mapa novo: 4 abas iguais, alvo inteiro, traco de 3px no topo da ativa.
   navItemNovo: { minHeight: 60, position: 'relative' },
   navTracoAtivo: { position: 'absolute', top: -1, left: '22%', right: '22%', height: 3, borderRadius: 2, backgroundColor: 'var(--vermelho-acao)' },
@@ -14869,18 +13338,7 @@ const styles = StyleSheet.create({
     borderColor: 'var(--border)',
   },
   ruleTitle: { fontSize: 15, fontWeight: '800', color: 'var(--text)', marginBottom: 8 },
-  ruleSectionLabel: {
-    fontSize: 11, fontWeight: '800', color: 'var(--text-subtle)',
-    textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 10, marginBottom: 3,
-  },
   ruleText: { fontSize: 13, color: 'var(--text)', lineHeight: 19 },
-  ruleLevelRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
-  ruleLevelBadge: {
-    minWidth: 34, height: 24, borderRadius: 12, paddingHorizontal: 6,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  ruleLevelBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  ruleLevelText: { fontSize: 13, color: 'var(--text)', flex: 1, lineHeight: 18 },
   taskRulesDoneButton: {
     marginTop: 14,
     backgroundColor: 'var(--vermelho-acao)',
@@ -15150,23 +13608,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'var(--surface)',
   },
   segMobileTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
-  tempChipMobile: {
-    height: 36,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'var(--stroke-default)',
-    backgroundColor: 'var(--surface)',
-  },
-  tempChipMobileAtivo: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--vermelho-acao)' },
-  // Lentes do mapa novo: 44 px de altura (prancha §5), a ativa em destaque cheio.
-  lenteChip: { height: 44, borderRadius: 22, paddingHorizontal: 16 },
-  lenteChipAtiva: { backgroundColor: 'var(--text)', borderColor: 'var(--text)' },
-  lenteChipAtivaTexto: { color: 'var(--bg)', fontWeight: '800' },
-  tempChipMobileTexto: { fontSize: 12, lineHeight: 16, letterSpacing: 0.5, fontWeight: '600', color: 'var(--text-muted)' },
   faChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   faChip: {
     flexDirection: 'row',

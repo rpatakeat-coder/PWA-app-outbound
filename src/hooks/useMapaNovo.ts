@@ -1,11 +1,8 @@
-// Mapa novo (prancha "mapa comercial"): a chave que liga, e o que o pino P2
-// precisa além do lead.
+// Mapa novo (prancha "mapa comercial"): o que o pino P2 precisa além do lead.
 //
-// PADRÃO NO CELULAR desde 26/09/2026 (decisão do Julyan): o mapa novo abre
-// sozinho em tela de celular. `?mapa=antigo` é a saída de emergência e fica
-// lembrada no aparelho; `?mapa=novo` desfaz a saída.
-// PADRÃO NO COMPUTADOR TAMBÉM desde 28/09/2026 (Julyan: "acessando o pwa já
-// tem que ir direto"): o time atualizou o app e o desktop continuava no antigo.
+// O MAPA ANTIGO SAIU (auditoria 02/11/26): o novo era o padrão no celular desde 26/09 e no
+// computador desde 28/09. A chave que ligava (useMapaNovo, `?mapa=antigo` e
+// localStorage 'takeat-mapa-antigo') saiu junto com as telas antigas.
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -20,29 +17,6 @@ function segundaBRT(): string {
   const dow = d.getUTCDay() || 7;
   d.setUTCDate(d.getUTCDate() - (dow - 1));
   return d.toISOString().slice(0, 10);
-}
-
-const CHAVE = 'takeat-mapa-novo';
-const CHAVE_ANTIGO = 'takeat-mapa-antigo';
-
-function lerChave(): boolean {
-  try {
-    if (typeof window === 'undefined') return false;
-    const q = new URLSearchParams(window.location.search).get('mapa');
-    if (q === 'novo') { window.localStorage.setItem(CHAVE, '1'); window.localStorage.removeItem(CHAVE_ANTIGO); }
-    if (q === 'antigo') { window.localStorage.removeItem(CHAVE); window.localStorage.setItem(CHAVE_ANTIGO, '1'); }
-    if (window.localStorage.getItem(CHAVE_ANTIGO) === '1') return false;
-    if (window.localStorage.getItem(CHAVE) === '1') return true;
-    return true;
-  } catch {
-    // auditoria 02/11/26: sem localStorage (Safari privado) caía no mapa antigo; o padrão é o novo
-    return true;
-  }
-}
-
-export function useMapaNovo(): boolean {
-  const [ligado] = useState(lerChave);
-  return ligado;
 }
 
 type ContextoBruto = {
