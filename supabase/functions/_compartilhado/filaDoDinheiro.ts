@@ -243,8 +243,11 @@ export function montarFila(negocios: NegocioEntrada[], tarefas: TarefaEntrada[],
     const c = ctx.contatos[n.dealId] ?? { n: 0, ultimo: null };
     const diaUltimo = diaDe(c.ultimo);
     const diasSemContato = diaUltimo ? diasEntre(diaUltimo, ctx.hoje) : null;
-    const temPassoFuturo = (!!diaT && diaT > ctx.hoje) || passoFuturoFora.has(n.dealId);
     const noPlanoHoje = !!ctx.agendaHoje[n.dealId];
+    /* a parada de hoje é passo marcado de hoje em diante (auditoria 02/11/26): só o ramo vencido e o
+       sem_passo olhavam o plano de hoje, e o quente, a proposta, o decisor, os poucos contatos e o
+       parado caíam na seção "sem próximo passo" com a visita marcada para hoje. No Cockpit conta. */
+    const temPassoFuturo = (!!diaT && diaT > ctx.hoje) || passoFuturoFora.has(n.dealId) || noPlanoHoje;
 
     let grupo: Grupo | null = null; let motivo: Motivo | null = null; const f: Fatos = {};
     if (diaT && diaT < ctx.hoje && noPlanoHoje) {
