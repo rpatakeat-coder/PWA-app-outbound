@@ -35,7 +35,8 @@ function lerChave(): boolean {
     if (window.localStorage.getItem(CHAVE) === '1') return true;
     return true;
   } catch {
-    return false;
+    // auditoria 02/11/26: sem localStorage (Safari privado) caía no mapa antigo; o padrão é o novo
+    return true;
   }
 }
 
