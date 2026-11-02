@@ -7,7 +7,7 @@
 // dias mostrando "hoje", "cobrar" sumindo, e a etapa em texto livre
 // ("NEGÓCIO PERDIDO", "CASA DOS DADOS") virando temperatura inventada.
 import type { Client } from '../types/client';
-import { classificarPino, etiquetaDeTempo, nomeCurto, textoNormalizado, type ContextoPino } from './pinoP2';
+import { classificarPino, coordenadasRepetidas, etiquetaDeTempo, nomeCurto, textoNormalizado, type ContextoPino } from './pinoP2';
 
 let falhas = 0;
 const ok = (c: boolean, m: string) => {
@@ -113,6 +113,17 @@ ok(classificarPino(base({ id_hubspot: 'n1' }), ctxHs).origem === 'Indicação', 
 ok(classificarPino(base({ id_hubspot: 'n2', origem_lead: 'casa_dos_dados' }), ctxHs).origem === 'Casa dos Dados', 'valor fora da picklist cai na origem derivada');
 ok(classificarPino(base({ origem_lead: 'hubspot' }), ctxHs).origem === null, '"hubspot" não é origem da picklist: vira "não informada"');
 ok(classificarPino(base({ origem_lead: 'cadastro_na_rua' }), ctxHs).origem === 'Rua', 'cadastro na rua é "Rua" na picklist');
+
+// pino empilhado (mesma coordenada de outro) é aproximado no MAPA, não só no cartão (02/11/26)
+const empilhados = [
+  base({ id: 'a', latitude: -20.3, longitude: -40.29 } as Partial<Client>),
+  base({ id: 'b', latitude: -20.3000000001, longitude: -40.29 } as Partial<Client>),
+  base({ id: 'c', latitude: -20.31, longitude: -40.29 } as Partial<Client>),
+];
+const ctxPilha: ContextoPino = { ...ctx, coordenadasRepetidas: coordenadasRepetidas(empilhados) };
+ok(classificarPino(empilhados[0], ctxPilha).aproximado && classificarPino(empilhados[1], ctxPilha).aproximado, 'dois pinos na mesma coordenada: os dois aproximados');
+ok(!classificarPino(empilhados[2], ctxPilha).aproximado, 'pino sozinho e exato: não aproximado');
+ok(!classificarPino(empilhados[0], ctx).aproximado, 'sem o conjunto no contexto, como antes');
 
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);

@@ -110,6 +110,10 @@ import BarraPlanejar, { type ParadaDoDia } from './src/screens/BarraPlanejar';
 import type { CamadaAgenda, ItemPC, SugestaoPC } from './src/screens/AgendaPC';
 import { melhorPosicao, metros } from './src/utils/rotaDoDia';
 import { pinoDeGps } from './src/utils/mesmoLugar';
+import {
+  GRAVACAO_DA_MIRA, GRAVACAO_DO_CHEGUEI, chaveDaPerguntaDoPino, decidirPinoNaPorta, deveSugerirMoverPino, gravacaoDoPino,
+  gravacaoSemMapa, pinoConfirmado as pinoConfirmadoNaPorta, textoDaBarraDoPino, type GravacaoDoPino, type ModoDoPino, type OrigemDoPino,
+} from './src/utils/precisaoDoPino';
 import { BUSCA_GOOGLE_PAUSADA, buscarGooglePerto, jaNaBase, type LugarPerto } from './src/utils/googlePerto';
 import { diaInicial, diasPlanejaveis, ehCompromisso, faixaDoLead, rotuloDoDia, vaiAoCockpit, type FaixaDoPlano } from './src/utils/planoNoMapa';
 import { gravarOrdemDoDia, lerColunaDoPlano, porNoDia, tirarDoDia } from './src/utils/paradaDoDia';
@@ -156,7 +160,7 @@ import CartaoQuadra, { ANCORA_QUADRA } from './src/map/CartaoQuadra';
 import { assinaturaDosNiveis, niveisDoMapa, selosDaCena, type ModoDoMapa, type NiveisDaCena, type PinoDaCena, type ZoomDoMapa } from './src/utils/niveisDoMapa';
 import { bolinhaNaTela, escalaDaFonte, faixaSeguraNaTela, mapaNaTela, medirTextoNaTela, OBSTACULO_MAPA, obstaculosNaTela, pinoNaTela } from './src/map/conferenciaNaTela';
 import { MENOS_N3 } from './src/map/PinoP2';
-import { classificarPino, COR as COR_DO_PINO, type ContextoPino, type Pino } from './src/utils/pinoP2';
+import { classificarPino, coordenadasRepetidas, COR as COR_DO_PINO, type ContextoPino, type Pino } from './src/utils/pinoP2';
 import { useMeetings } from './src/hooks/useMeetings';
 import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
 import { useClientNotes } from './src/hooks/useClientNotes';
@@ -807,6 +811,9 @@ function MainApp() {
   // Guarda o flag de geocoding aproximado vindo do CEPStep ate o submit do
   // formulario, pra persistir em clients.geo_approximate.
   const [pendingGeoApproximate, setPendingGeoApproximate] = useState(false);
+  // De onde veio o pino do cadastro (02/11/26): 'checkin'/'mapa' na porta, 'geocode' pelo endereço.
+  // Com 'geocode' o cadastro grava aproximado mesmo que ele edite o endereço no passo 2.
+  const [pendingGeoSource, setPendingGeoSource] = useState<OrigemDoPino>('mapa');
   const [showOutboundForm, setShowOutboundForm] = useState(false);
   const [form, setForm] = useState(initialFormState);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -1198,9 +1205,11 @@ function MainApp() {
   // pela metade.
   const contextoPinoBase = useContextoDoPino(true);
   const leadsNaFila = useLeadsNaFila();
+  // 02/11/26: o pino empilhado (mesma coordenada de outro) é aproximado também no mapa, não só no cartão
+  const repetidasNoMapa = useMemo(() => coordenadasRepetidas(clients), [clients]);
   const contextoPino = useMemo<ContextoPino | null>(
-    () => (contextoPinoBase ? { ...contextoPinoBase, agora: new Date() } : null),
-    [contextoPinoBase],
+    () => (contextoPinoBase ? { ...contextoPinoBase, agora: new Date(), coordenadasRepetidas: repetidasNoMapa } : null),
+    [contextoPinoBase, repetidasNoMapa],
   );
   // O MAPA NOVO DESDE O PRIMEIRO QUADRO (Julyan, 26/09: "ainda carrega o antigo antes"): só os
   // pinos esperam o contexto (todo uso de contextoPino já se protege de null), e se a RPC falhar o
@@ -4313,6 +4322,8 @@ function MainApp() {
   // embaixo ficava escondido atrás dele ou colado no canto (medido em 26/09):
   // o mapa desliza, no mesmo zoom, até o pino ficar a ~30% do topo.
   const regiaoRef = useRef(mapRegion);
+  // "O restaurante é aqui?" do Cheguei (02/11/26): uma vez por pino por visita (lead + pino + dia).
+  const perguntasDoPinoFeitasRef = useRef<Set<string>>(new Set());
   // O último check-in deste aparelho (hora, ponto, lead): a regra do check-in em série.
   // Guardado também no aparelho, para recarregar o app não zerar a regra.
   const ultimoCheckinRef = useRef<{ t: number; lat: number; lon: number; clientId: string } | null>((() => {
@@ -4485,31 +4496,61 @@ function MainApp() {
   const [posicionarDeal, setPosicionarDeal] = useState<{ dealId: string; nome: string; depois?: 'passo' } | null>(null);
   // o "Marcar o passo" da fila continua depois do pino; a folha mora mais abaixo (abrirPorNoPlano)
   const passoDepoisDoPinoRef = useRef<((c: Client) => void) | null>(null);
+  /* PORTA OU ENDEREÇO (02/11/26, o menor erro de pino): o pino nascia onde o executivo estava —
+     até do escritório — e ia como exato. Agora o modo diz como ele grava: 'porta' (está lá; GPS de
+     ±50 m ou ele arrasta vendo a porta) é exato; 'endereco' (não está lá) é SEMPRE aproximado.
+     As réguas e os textos moram em src/utils/precisaoDoPino.ts. */
+  const [modoPino, setModoPino] = useState<ModoDoPino>('porta');
+  const [gpsDoPino, setGpsDoPino] = useState<{ lendo: boolean; precisaoM: number | null; centro: { latitude: number; longitude: number } | null }>({ lendo: false, precisaoM: null, centro: null });
+  // o endereço que ele digitou no "Não estou lá": é o do restaurante (o reverso do ponto arrastado não é)
+  const enderecoDoPinoRef = useRef<{ cep: string; endereco: string; numero: string; bairro: string; cidade: string; estado: string } | null>(null);
+  // leitura do GPS em voo: cancelar ou trocar de modo invalida a que chegar depois
+  const leituraDoPinoRef = useRef(0);
+  // Como o ponto do mapa grava agora: o modo, a margem do GPS lido na porta e quanto ele arrastou dele.
+  const gravacaoDoMapaAgora = useCallback((ponto: { latitude: number; longitude: number }): GravacaoDoPino => gravacaoDoPino({
+    modo: modoPino,
+    precisaoM: gpsDoPino.precisaoM,
+    distanciaDoGpsM: gpsDoPino.centro ? distanceMeters(ponto.latitude, ponto.longitude, gpsDoPino.centro.latitude, gpsDoPino.centro.longitude) : null,
+  }), [modoPino, gpsDoPino]);
   const iniciarPosicionar = useCallback((dealId: string, nome: string, depois?: 'passo') => {
     setTab('map');
-    const centro = userLocation ?? { latitude: mapCenter.latitude, longitude: mapCenter.longitude };
     setPosicionarDeal({ dealId, nome, depois });
-    setCreationCenter({ latitude: centro.latitude, longitude: centro.longitude });
-    setCreationMode(true);
-    /* 15/10/26 (Marco: "o mapa some"): o mapa abre SEMPRE perto da pessoa, no zoom de rua. O
-       animateToRegion agora espera o mapa ter tamanho; sem GPS, o lugar é o último conhecido e o
-       aviso diz para arrastar até a porta. */
-    setTimeout(() => mapRef.current?.animateToRegion({ ...centro, latitudeDelta: 0.004, longitudeDelta: 0.004 }, 300), 400);
-    if (!userLocation) Toast.mostrar('Sem GPS agora: arraste o mapa até a porta do restaurante.', 'fila');
-  }, [userLocation, mapCenter]);
-  const irParaMim = useCallback(() => {
-    if (!userLocation) { Toast.mostrar('Sem GPS agora: arraste o mapa até o lugar.', 'fila'); return; }
-    mapRef.current?.animateToRegion({ ...userLocation, latitudeDelta: 0.004, longitudeDelta: 0.004 }, 300);
-  }, [userLocation]);
+    // A primeira pergunta é a da porta (CEPStep): o mapa só abre depois, no GPS ou no endereço.
+    setCepResolvido(null);
+    setShowCepStep(true);
+  }, []);
+  // (o "Estou aqui" da barra saiu em 02/11/26: o modo porta já abre no GPS e tem "Voltar ao meu GPS")
 
+  // "Selecionar no mapa" do passo do endereço: ele NÃO está lá (escolheu "Não estou lá"), então o
+  // pino que ele apontar fica aproximado (02/11/26).
   const startMapCreation = useCallback(() => {
+    leituraDoPinoRef.current++;
     setShowCepStep(false);
     setTab('map');
+    enderecoDoPinoRef.current = null;
+    setModoPino('endereco');
     setCreationCenter({ latitude: mapCenter.latitude, longitude: mapCenter.longitude });
     setCreationMode(true);
   }, [mapCenter]);
 
+  // "Não estou lá" achou o endereço: o mapa abre no ponto e ele pode arrastar; grava aproximado.
+  const irAoMapaPeloEndereco = useCallback((d: { latitude: number | null; longitude: number | null; cep: string; endereco: string; numero: string; bairro: string; cidade: string; estado: string }) => {
+    leituraDoPinoRef.current++;
+    const temEndereco = !!(d.endereco || d.cep);
+    enderecoDoPinoRef.current = temEndereco ? { cep: d.cep, endereco: d.endereco, numero: d.numero, bairro: d.bairro, cidade: d.cidade, estado: d.estado } : null;
+    const centro = d.latitude != null && d.longitude != null ? { latitude: d.latitude, longitude: d.longitude } : { latitude: mapCenter.latitude, longitude: mapCenter.longitude };
+    setShowCepStep(false);
+    setTab('map');
+    setModoPino('endereco');
+    setCreationCenter(centro);
+    setCreationMode(true);
+    setTimeout(() => mapRef.current?.animateToRegion({ ...centro, latitudeDelta: 0.004, longitudeDelta: 0.004 }, 300), 400);
+  }, [mapCenter]);
+
   const cancelMapCreation = useCallback(() => {
+    leituraDoPinoRef.current++;
+    enderecoDoPinoRef.current = null;
+    setGpsDoPino({ lendo: false, precisaoM: null, centro: null });
     setCreationMode(false);
     setCreationCenter(null);
     setPosicionarDeal(null);
@@ -4519,7 +4560,12 @@ function MainApp() {
     if (!creationCenter || !posicionarDeal) return;
     setResolvingPin(true);
     let addr: { endereco: string; numero: string; bairro: string; cidade: string; estado: string; cep: string } | null = null;
-    try { addr = await reverseGeocode(creationCenter.latitude, creationCenter.longitude); } catch { /* sem endereço: grava só a posição */ }
+    // Pelo endereço, vale o que ele digitou (o do restaurante); na porta, o reverso do ponto (02/11/26)
+    const digitado = modoPino === 'endereco' ? enderecoDoPinoRef.current : null;
+    if (digitado) addr = { ...digitado, cep: digitado.cep.replace(/\D/g, '') };
+    else {
+      try { addr = await reverseGeocode(creationCenter.latitude, creationCenter.longitude); } catch { /* sem endereço: grava só a posição */ }
+    }
     const { dealId, nome, depois } = posicionarDeal;
     // Etapa real do negócio: sem ela o pino nascia "Etapa não reconhecida" e o
     // registro sugeria mover para Prospecção pedindo origem (auditoria 26/09).
@@ -4529,9 +4575,12 @@ function MainApp() {
       const id = (st as { dealstage?: string } | null)?.dealstage;
       etapa = (id && STAGES.find((x) => x.id === id)?.label) || null;
     } catch { /* sem etapa: o pino fica sem, como antes */ }
+    // na porta: 'checkin' (GPS ±40 m, perto dele) ou 'mapa' exato; pelo endereço: 'geocode' aproximado,
+    // mesmo arrastado (precisaoDoPino.ts). Nunca mais 'coords' exato pela mira.
+    const gravacao = gravacaoDoMapaAgora(creationCenter);
     const campos = {
       ...(etapa ? { etapa } : {}),
-      latitude: creationCenter.latitude, longitude: creationCenter.longitude, geo_source: 'coords', geo_approximate: false,
+      latitude: creationCenter.latitude, longitude: creationCenter.longitude, ...gravacao,
       endereco: addr?.endereco || null, numero: addr?.numero || null, bairro: addr?.bairro || null,
       cidade: addr?.cidade || null, estado: addr?.estado || null, cep: addr?.cep || null,
     };
@@ -4546,16 +4595,27 @@ function MainApp() {
         return;
       }
       let gravado: Client | null = null;
+      // Banco sem a 0247: recusou 'mapa' (check) ou o gatilho devolveu a posição antiga de um 'coords'
+      // exato. 'mapa' é ele na porta: cai para 'coords' APROXIMADO, que o banco de hoje aceita.
+      const naoAceitouMapa = (error: { code?: string } | null, linha: Client | null) => gravacao.geo_source === 'mapa'
+        && ((error?.code === '23514') || (!error && !!linha && Math.abs(Number(linha.latitude) - creationCenter.latitude) > 0.00001));
       if (existente?.id) {
-        const { data, error } = await supabase.from('clients').update(campos).eq('id', existente.id).select('*').single();
+        let { data, error } = await supabase.from('clients').update(campos).eq('id', existente.id).select('*').single();
+        if (naoAceitouMapa(error, data as Client | null)) {
+          ({ data, error } = await supabase.from('clients').update({ ...campos, ...gravacaoSemMapa(gravacao) }).eq('id', existente.id).select('*').single());
+        }
         if (error) throw error;
         gravado = data as Client;
       } else {
-        const { data, error } = await supabase.from('clients').insert({
+        const novo = {
           ...campos, nome, empresa: nome, status: 'lead', id_hubspot: dealId,
           url_hubspot: `https://app.hubspot.com/contacts/24373118/record/0-3/${dealId}`,
           vendedor_id_hubspot: myHubspotId ?? null, created_by: profile?.id ?? null,
-        }).select('*').single();
+        };
+        let { data, error } = await supabase.from('clients').insert(novo).select('*').single();
+        if (naoAceitouMapa(error, null)) {
+          ({ data, error } = await supabase.from('clients').insert({ ...novo, ...gravacaoSemMapa(gravacao) }).select('*').single());
+        }
         if (error) throw error;
         gravado = data as Client;
       }
@@ -4568,10 +4628,16 @@ function MainApp() {
           return lista.some((c) => c.id === g.id) ? lista.map((c) => (c.id === g.id ? { ...c, ...g } : c)) : [...lista, g];
         });
       }
-      Toast.mostrar(depois === 'passo' ? `${nome} no mapa · agora o próximo passo` : `${nome} no mapa · ligado ao negócio que já existia`, 'ok');
+      /* O banco não deixa o endereço mover um pino já confirmado na porta
+         (clients_protege_posicao_confirmada devolve a posição antiga): o aviso diz a verdade. */
+      const ficouOnde = gravado && Math.abs(Number(gravado.latitude) - creationCenter.latitude) > 0.00001;
+      Toast.mostrar(ficouOnde
+        ? `${nome} já tinha o pino confirmado · ficou onde estava (corrija na porta, no Cheguei)`
+        : depois === 'passo' ? `${nome} no mapa · agora o próximo passo` : `${nome} no mapa · ligado ao negócio que já existia`, ficouOnde ? 'fila' : 'ok');
       void queryClient.invalidateQueries({ queryKey: ['clients'] });
       void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
       void queryClient.invalidateQueries({ queryKey: ['tarefas_crm'] });
+      leituraDoPinoRef.current++; enderecoDoPinoRef.current = null; setGpsDoPino({ lendo: false, precisaoM: null, centro: null });
       setCreationMode(false); setCreationCenter(null); setPosicionarDeal(null);
       if (depois === 'passo' && gravado) passoDepoisDoPinoRef.current?.(gravado);
     } catch (err: any) {
@@ -4579,19 +4645,26 @@ function MainApp() {
     } finally {
       setResolvingPin(false);
     }
-  }, [creationCenter, posicionarDeal, myHubspotId, profile?.id, queryClient]);
+  }, [creationCenter, posicionarDeal, gravacaoDoMapaAgora, myHubspotId, profile?.id, queryClient]);
 
   const confirmMapCreation = useCallback(async () => {
     if (!creationCenter) return;
     setResolvingPin(true);
     let addr: { endereco: string; numero: string; bairro: string; cidade: string; estado: string; cep: string } | null = null;
-    try {
-      addr = await reverseGeocode(creationCenter.latitude, creationCenter.longitude);
-    } catch (err: any) {
-      console.warn('[reverseGeocode] falhou:', err?.message ?? err);
-    } finally {
-      setResolvingPin(false);
+    // Pelo endereço, vale o que ele digitou; na porta (ou "Selecionar no mapa"), o reverso do ponto
+    const digitado = modoPino === 'endereco' ? enderecoDoPinoRef.current : null;
+    if (digitado) addr = { ...digitado, cep: digitado.cep.replace(/\D/g, '') };
+    else {
+      try {
+        addr = await reverseGeocode(creationCenter.latitude, creationCenter.longitude);
+      } catch (err: any) {
+        console.warn('[reverseGeocode] falhou:', err?.message ?? err);
+      }
     }
+    setResolvingPin(false);
+    leituraDoPinoRef.current++;
+    enderecoDoPinoRef.current = null;
+    setGpsDoPino({ lendo: false, precisaoM: null, centro: null });
 
     setCreationMode(false);
     // Cadastro novo sempre comeca como "lead a visitar" — cliente/churn
@@ -4608,15 +4681,19 @@ function MainApp() {
       estado: addr?.estado ?? '',
       bairro: addr?.bairro || undefined,
     });
-    // Pin no mapa é sempre preciso (o usuário aponta o local exato).
-    setPendingGeoApproximate(false);
+    // 02/11/26: o pino do mapa só é exato na porta ('checkin' com GPS de ±40 m, senão 'mapa'). Pelo
+    // endereço (ou "Selecionar no mapa" depois do "Não estou lá"), aproximado mesmo arrastado.
+    const g = gravacaoDoMapaAgora(creationCenter);
+    setPendingGeoApproximate(g.geo_approximate);
+    setPendingGeoSource(g.geo_source);
     setIsFormOpen(true);
     setCreationCenter(null);
-  }, [creationCenter, statusOptions]);
+  }, [creationCenter, statusOptions, gravacaoDoMapaAgora]);
 
   const resetForm = () => {
     setForm(initialFormState);
     setPendingGeoApproximate(false);
+    setPendingGeoSource('mapa');
     setCepResolvido(null);
     setEnderecoEditavel(false);
     setErroDuplicado(null);
@@ -4702,9 +4779,13 @@ function MainApp() {
       telefone: form.telefone || null,
       email: form.email || null,
       observacoes: form.observacoes || null,
-      // Aproximado só quando veio do CEP sem número exato. Pin no mapa/coords
-      // e edição resetam pra false (setPendingGeoApproximate(false) nesses fluxos).
-      geo_approximate: pendingGeoApproximate,
+      // 02/11/26: na porta, exato ('checkin' com GPS de ±40 m, senão 'mapa'); pelo endereço ("Não
+      // estou lá"), SEMPRE aproximado ('geocode') — o "Editar endereço" do passo 2 não o torna exato.
+      geo_source: pendingGeoSource,
+      geo_approximate: pendingGeoSource === 'geocode' ? true : pendingGeoApproximate,
+      // o lead que o executivo cria pelo app; antes vinha do gatilho clients_origem_lead, que só
+      // reconhece geo_source 'coords' (a 0247 também o ensina)
+      origem_lead: 'cadastro_na_rua',
     };
 
     // Antes de gravar: ja' existe esta casa? 83% dos leads da base entram pelo
@@ -4823,7 +4904,8 @@ function MainApp() {
       let geo: { geo_source?: string; geo_approximate?: boolean } = {};
       let avisoPino: string | null = null;
       // pino confirmado na porta pelo GPS vence o endereço (gatilho 0104): não finge que moveu
-      const pinoConfirmado = (editingClient.geo_source === 'checkin' || editingClient.geo_source === 'coords') && !editingClient.geo_approximate && editingClient.latitude != null;
+      // 02/11/26: confirmado é só o 'checkin' (o 'coords' podia ser a mira de longe) — precisaoDoPino.ts
+      const pinoConfirmado = pinoConfirmadoNaPorta(editingClient) && editingClient.latitude != null;
       if (enderecoMudou && !pinoMexido && pinoConfirmado) {
         avisoPino = 'O pino foi confirmado na porta pelo GPS e ficou onde está. Se o restaurante mudou de lugar, use "Mover o pino".';
       } else if (enderecoMudou && !pinoMexido && form.endereco?.trim() && form.cidade?.trim() && form.estado?.trim()) {
@@ -4864,15 +4946,18 @@ function MainApp() {
   };
 
   // Salva a nova localizacao vinda do EditLocationModal (pin arrastavel). Reusa
-  // updateClient passando as coords + endereco resolvido; marca geo_source
-  // 'coords' e geo_approximate false (o usuario apontou o local exato).
+  // updateClient passando as coords + endereco resolvido.
+  // ORIGEM (02/11/26, auditoria do pino): a mira do "Mover o pino" grava 'mapa' APROXIMADO — não
+  // sabemos se ele está na porta, e 'coords' exato travava o pino errado para sempre. O "Mover o pino
+  // para cá" do Cheguei (GPS de ±40 m) passa GRAVACAO_DO_CHEGUEI: 'checkin', confirmado.
+  // Devolve false quando o banco manteve a posição (pino confirmado na porta).
   const saveEditedLocation = useCallback(
     async (client: Client, payload: {
       latitude: number; longitude: number;
       endereco?: string; numero?: string | null; bairro?: string | null;
       cep?: string; cidade?: string; estado?: string;
-    }) => {
-      await updateClient.mutateAsync({
+    }, gravacao: GravacaoDoPino = GRAVACAO_DA_MIRA): Promise<boolean> => {
+      const gravar = (g: GravacaoDoPino) => updateClient.mutateAsync({
         id: client.id,
         // Mantem os campos NAO-geo do cliente (o update sobrescreve a linha toda
         // pros campos que passamos; os de texto vao com o valor atual).
@@ -4894,12 +4979,32 @@ function MainApp() {
               cep: client.cep ?? undefined, cidade: client.cidade ?? undefined, estado: client.estado ?? undefined }
           : { endereco: payload.endereco ?? undefined, numero: payload.numero ?? client.numero ?? undefined, bairro: payload.bairro ?? client.bairro ?? undefined,
               cep: payload.cep ?? client.cep ?? undefined, cidade: payload.cidade ?? client.cidade ?? undefined, estado: payload.estado ?? client.estado ?? undefined }),
-        geo_source: 'coords',
-        geo_approximate: false,
+        geo_source: g.geo_source,
+        geo_approximate: g.geo_approximate,
       });
+      const andou = (c: Client | null | undefined) => !!c && Math.abs(Number(c.latitude) - payload.latitude) < 0.00001 && Math.abs(Number(c.longitude) - payload.longitude) < 0.00001;
+      let usada = gravacao;
+      let salvo: Client | null = null;
+      try {
+        salvo = await gravar(gravacao) as Client | null;
+      } catch (e: any) {
+        // banco sem a 0247 recusando 'mapa' (check): 'coords' aproximado
+        if (gravacao.geo_source !== 'mapa' || e?.code !== '23514') throw e;
+      }
+      // banco sem a 0247: o gatilho devolveu a posição antiga de um 'coords'/'checkin' exato — 'coords'
+      // aproximado passa (e nunca vira exato)
+      if (!andou(salvo) && gravacao.geo_source === 'mapa') {
+        usada = gravacaoSemMapa(gravacao);
+        salvo = await gravar(usada) as Client | null;
+      }
+      if (salvo && !andou(salvo)) {
+        Toast.mostrar('Este pino foi confirmado na porta por GPS e ficou onde estava. Para mudar, faça o Cheguei na porta certa.', 'fila');
+        return false;
+      }
       // o cartão aberto e a rota do dia também passam a usar a posição nova (o mapa já usa o cache)
-      setSelectedClient((atual) => (atual && atual.id === client.id ? { ...atual, latitude: payload.latitude, longitude: payload.longitude, geo_approximate: false } : atual));
+      setSelectedClient((atual) => (atual && atual.id === client.id ? { ...atual, latitude: payload.latitude, longitude: payload.longitude, geo_source: usada.geo_source, geo_approximate: usada.geo_approximate } : atual));
       void queryClient.invalidateQueries({ queryKey: ['field_route_stops'] });
+      return true;
     },
     [updateClient, queryClient],
   );
@@ -5084,6 +5189,39 @@ function MainApp() {
         .catch(() => finish());
     });
   }, []);
+
+  /* "ESTOU NA PORTA" (02/11/26): o mapa abre já, onde houver posição, e o GPS de verdade é lido
+     (getBestFix: até ±20 m para cedo, teto de 10 s). Com ±50 m ou melhor, o pino vai para ele; pior
+     que isso, o aviso pede para arrastar até a porta. Nos dois casos grava exato: ele está lá. */
+  const entrarNaPorta = useCallback(async () => {
+    const minha = ++leituraDoPinoRef.current;
+    const inicio = userLocation ?? { latitude: mapCenter.latitude, longitude: mapCenter.longitude };
+    enderecoDoPinoRef.current = null;
+    setShowCepStep(false);
+    setTab('map');
+    setModoPino('porta');
+    setGpsDoPino({ lendo: true, precisaoM: null, centro: null });
+    setCreationCenter(inicio);
+    setCreationMode(true);
+    setTimeout(() => mapRef.current?.animateToRegion({ ...inicio, latitudeDelta: 0.004, longitudeDelta: 0.004 }, 300), 400);
+    let fix: Location.LocationObject | null = null;
+    try { fix = await getBestFix(); } catch { fix = null; }
+    if (leituraDoPinoRef.current !== minha) return; // cancelou ou trocou de modo enquanto lia
+    const d = decidirPinoNaPorta(fix ? { latitude: fix.coords.latitude, longitude: fix.coords.longitude, precisaoM: fix.coords.accuracy ?? null } : null);
+    setGpsDoPino({ lendo: false, precisaoM: fix?.coords.accuracy ?? null, centro: d.centro });
+    if (d.centro) {
+      const c = d.centro;
+      setCreationCenter(c);
+      mapRef.current?.animateToRegion({ ...c, latitudeDelta: 0.003, longitudeDelta: 0.003 }, 300);
+    }
+    if (d.aviso) Toast.mostrar(d.aviso, 'fila');
+  }, [userLocation, mapCenter, getBestFix]);
+  const voltarAoGpsDoPino = useCallback(() => {
+    const c = gpsDoPino.centro;
+    if (!c) return;
+    setCreationCenter(c);
+    mapRef.current?.animateToRegion({ ...c, latitudeDelta: 0.003, longitudeDelta: 0.003 }, 300);
+  }, [gpsDoPino.centro]);
 
   const visitingRef = useRef(false);
   // "Tentar de novo" (GPS impreciso) chama o check-in de novo por aqui.
@@ -5719,13 +5857,29 @@ function MainApp() {
         // ruim, 12 s de prazo. O acaoId garante que a chamada atrasada, se
         // chegar, não duplica a visita.
         if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new TypeError('Failed to fetch (sem sinal)');
-        visitado = await Promise.race([
-          markAsVisited.mutateAsync({
+        try {
+          visitado = await Promise.race([
+            markAsVisited.mutateAsync({
+              clientId: client.id, latitude: userLat, longitude: userLon,
+              accuracyM: fixAccuracy, acaoId, feitoEm, corrigirPino, declarada,
+            }),
+            new Promise<never>((_, rej) => setTimeout(() => rej(new TypeError('Failed to fetch (timeout do check-in)')), 12000)),
+          ]);
+        } catch (e) {
+          /* BANCO SEM A 0247 (02/11/26): o app passou a tratar só 'checkin' como confirmado e oferece o
+             "Estou na porta" para um pino 'coords', mas a RPC de hoje ainda o recusa ("já foi confirmado
+             na porta"). A visita entra declarada, com a foto da fachada que o "Estou na porta" já tirou, e
+             o pino vem para o GPS pelo update (o gatilho deixa 'coords' virar 'checkin'). */
+          if (!corrigirPino || userLat == null || userLon == null || !/confirmado na porta/i.test(String((e as Error)?.message ?? ''))) throw e;
+          visitado = await markAsVisited.mutateAsync({
             clientId: client.id, latitude: userLat, longitude: userLon,
-            accuracyM: fixAccuracy, acaoId, feitoEm, corrigirPino, declarada,
-          }),
-          new Promise<never>((_, rej) => setTimeout(() => rej(new TypeError('Failed to fetch (timeout do check-in)')), 12000)),
-        ]);
+            accuracyM: fixAccuracy, acaoId, feitoEm, corrigirPino: false, declarada: true,
+          });
+          declarada = true;
+          try {
+            await saveEditedLocation({ ...client, ...visitado, latitude: targetLat, longitude: targetLon } as Client, { latitude: userLat, longitude: userLon }, GRAVACAO_DO_CHEGUEI);
+          } catch { /* a visita já entrou; o pino fica para o próximo Cheguei */ }
+        }
       } catch (err) {
         if (!ehErroDeRede(err)) throw err;
         // O PRAZO MEDE TAMBÉM O HUBSPOT (auditoria do GPS, 04/10): a RPC grava em ~1 s, mas a mesma
@@ -5770,6 +5924,36 @@ function MainApp() {
         }
       }
       marcarUltimoCheckin(client.id, userLat, userLon);
+      /* "O RESTAURANTE É AQUI?" (02/11/26, o menor erro de pino). Com GPS de ±40 m e o pino longe dele
+         (mais de 100 m se confirmado na porta, 50 m se exato não confirmado, 30 m se aproximado —
+         precisaoDoPino.ts), pergunta DEPOIS de a visita estar gravada, também DENTRO do raio de 200/500 m
+         (antes só se corrigia passando dele). A ordem protege a prova: a visita já entrou medida contra
+         o pino de antes (congela_pino_da_visita guardou esse pino nela, e o GPS dentro do raio prova), sem
+         o "corrigir pino" da RPC — que tira a prova do GPS. Mover aqui é o caminho do "Mover o pino"
+         (saveEditedLocation) com a origem 'checkin': posição do GPS, confirmado. Uma vez por pino por
+         visita: "Tentar de novo" ou o Cheguei repetido não pergunta. */
+      if (userLat != null && userLon != null && !corrigirPino && deveSugerirMoverPino({ precisaoM: fixAccuracy, distanciaM: distance, pino: { geo_source: geoSource, geo_approximate: isApproxPin }, declarada })) {
+        const chave = chaveDaPerguntaDoPino(client.id, targetLat, targetLon, diaBRT(new Date()));
+        if (!perguntasDoPinoFeitasRef.current.has(chave)) {
+          perguntasDoPinoFeitasRef.current.add(chave);
+          const r = await perguntar(
+            'O restaurante é aqui?',
+            `O pino está a ${distance >= 1000 ? `${(distance / 1000).toFixed(1).replace('.', ',')} km` : `${Math.round(distance)} m`} de você. Se você está na porta, o pino vem para cá.`,
+            [
+              { text: 'Não, o pino está certo', valor: 'nao', style: 'cancel' },
+              { text: 'Mover o pino para cá', valor: 'mover' },
+            ],
+          );
+          if (r === 'mover') {
+            try {
+              const moveu = await saveEditedLocation({ ...client, ...visitado, latitude: targetLat, longitude: targetLon } as Client, { latitude: userLat, longitude: userLon }, GRAVACAO_DO_CHEGUEI);
+              if (moveu) Toast.mostrar(`Pino de ${nomeDoLead} na porta`, 'ok');
+            } catch (e: any) {
+              Toast.mostrar(`O pino não mudou: ${e?.message ?? 'tente pelo Mover o pino'}`, 'erro');
+            }
+          }
+        }
+      }
       // A foto de prova sobe já, sem depender da ficha: é ela que sustenta a
       // visita declarada no Cockpit. Falhou? A ficha tenta de novo ao salvar.
       let fotoProvaPendente: Blob | null = null;
@@ -5899,7 +6083,7 @@ function MainApp() {
       visitingRef.current = false;
       setIsVisiting(false);
     }
-  }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, fieldOps.adicionarParadaFeita, isMonitoringRoute, getBestFix, contextoPino, userLocation, myHubspotId]);
+  }, [markAsVisited, fieldOps.stops, fieldOps.markStopDone, fieldOps.adicionarParadaFeita, isMonitoringRoute, getBestFix, contextoPino, userLocation, myHubspotId, saveEditedLocation]);
   handleMarkAsVisitedRef.current = handleMarkAsVisited;
 
   // Fila offline: quem sobe o check-in guardado sem sinal. Ref porque a
@@ -7555,22 +7739,18 @@ function MainApp() {
 
       {creationMode && creationCenter && (
         <View style={[styles.creationBar, { bottom: baseInferior }]}>
-          <Text style={styles.creationBarTitle}>{posicionarDeal ? `Posicionar ${posicionarDeal.nome}` : 'Selecione o local do cliente'}</Text>
-          <Text style={styles.creationBarHint}>
-            {posicionarDeal
-              ? posicionarDeal.depois === 'passo'
-                ? 'Primeiro o lugar: arraste o mapa até a porta do restaurante (Estou aqui só se você estiver nela). Depois abre o próximo passo.'
-                : 'Negócio que já existe · não cria outro. Arraste o mapa até a porta ou toque em Estou aqui.'
-              : 'Arraste o mapa para posicionar o pin no local exato. Endereço, CEP e bairro serão preenchidos automaticamente.'}
+          {/* 02/11/26: o texto segue o modo (na porta ou pelo endereço); a linha de coordenadas cruas saiu (jargão) */}
+          <Text style={styles.creationBarTitle} numberOfLines={1}>
+            {posicionarDeal ? `Posicionar ${posicionarDeal.nome}` : modoPino === 'porta' ? 'Novo lead · na porta' : 'Novo lead · pelo endereço'}
           </Text>
-          {posicionarDeal && (
-            <TouchableOpacity accessibilityRole="button" style={styles.creationBarCancel} onPress={irParaMim} disabled={resolvingPin}>
-              <Text style={styles.creationBarCancelText}>Estou aqui</Text>
+          <Text style={styles.creationBarHint}>
+            {textoDaBarraDoPino({ modo: modoPino, lendoGps: gpsDoPino.lendo, precisaoM: gpsDoPino.precisaoM, depoisPasso: posicionarDeal?.depois === 'passo' })}
+          </Text>
+          {modoPino === 'porta' && !gpsDoPino.lendo && gpsDoPino.centro && (
+            <TouchableOpacity accessibilityRole="button" style={[styles.creationBarCancel, { marginTop: 8 }]} onPress={voltarAoGpsDoPino} disabled={resolvingPin}>
+              <Text style={styles.creationBarCancelText}>Voltar ao meu GPS</Text>
             </TouchableOpacity>
           )}
-          <Text style={styles.creationBarCoords}>
-            {creationCenter.latitude.toFixed(6)}, {creationCenter.longitude.toFixed(6)}
-          </Text>
           <View style={styles.creationBarRow}>
             <TouchableOpacity
               style={styles.creationBarCancel}
@@ -7580,9 +7760,9 @@ function MainApp() {
               <Text style={styles.creationBarCancelText}>Cancelar</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.creationBarConfirm, resolvingPin && { opacity: 0.7 }]}
+              style={[styles.creationBarConfirm, (resolvingPin || gpsDoPino.lendo) && { opacity: 0.7 }]}
               onPress={posicionarDeal ? confirmarPosicionar : confirmMapCreation}
-              disabled={resolvingPin}
+              disabled={resolvingPin || gpsDoPino.lendo}
             >
               {resolvingPin ? (
                 <ActivityIndicator color="#fff" />
@@ -10580,7 +10760,7 @@ function MainApp() {
       {editingLocationFor && (
         <EditLocationModal
           client={editingLocationFor}
-          onSave={(payload) => saveEditedLocation(editingLocationFor, payload)}
+          onSave={async (payload) => { await saveEditedLocation(editingLocationFor, payload); }}
           onClose={() => setEditingLocationFor(null)}
         />
       )}
@@ -10599,25 +10779,18 @@ function MainApp() {
       {/* CEP Step Modal */}
       {showCepStep && (
         <CEPStep
-          posicaoAtual={userLocation}
+          aoEstarNaPorta={() => { void entrarNaPorta(); }}
+          nomeDoNegocio={posicionarDeal?.nome ?? null}
           onNext={(cepData) => {
-            setForm(prev => ({
-              ...prev,
-              // Cadastro novo via CEP sempre comeca como "lead".
-              status: 'lead' as ClientStatus,
-              cep: cepData.cep || '',
-              endereco: cepData.endereco || '',
-              // Numero agora vem em campo proprio (nao concatenado no endereco).
-              numero: cepData.numero || '',
-              cidade: cepData.cidade || '',
-              estado: cepData.estado || '',
-              bairro: cepData.bairro || undefined,
-              latitude: cepData.latitude?.toString() || '',
-              longitude: cepData.longitude?.toString() || '',
-            }));
-            // Guarda se o geocoding ficou aproximado (centroide da rua) pra
-            // persistir em geo_approximate no submit.
-            setPendingGeoApproximate(cepData.geoApproximate ?? false);
+            /* "NÃO ESTOU LÁ" (02/11/26): o endereço achado não vai mais direto para o formulário —
+               o mapa abre no ponto para ele arrastar, se souber onde fica a porta. Grava sempre
+               aproximado (confirmMapCreation / confirmarPosicionar, pelo modo 'endereco'). */
+            irAoMapaPeloEndereco({
+              latitude: cepData.latitude ?? null, longitude: cepData.longitude ?? null,
+              cep: cepData.cep || '', endereco: cepData.endereco || '', numero: cepData.numero || '',
+              bairro: cepData.bairro || '', cidade: cepData.cidade || '', estado: cepData.estado || '',
+            });
+            if (posicionarDeal) return;
             // Snapshot pro `arrow_back` do passo 2 voltar sem refazer a busca.
             // So' o caminho do CEP tem passo 1 pra onde voltar: `geoApproximate`
             // e' a assinatura dele (o fluxo de coordenadas nunca manda essa
@@ -10639,12 +10812,10 @@ function MainApp() {
                   },
             );
             setEnderecoEditavel(false);
-            setShowCepStep(false);
-            setIsFormOpen(true);
           }}
-          onCancel={() => { setShowCepStep(false); setCepResolvido(null); }}
+          onCancel={() => { setShowCepStep(false); setCepResolvido(null); setPosicionarDeal(null); }}
           onPickOnMap={startMapCreation}
-          valorInicial={cepResolvido}
+          valorInicial={posicionarDeal ? null : cepResolvido}
         />
       )}
 
@@ -10793,7 +10964,8 @@ function MainApp() {
                       : <IconLocation width={24} height={24} fill={iconColors.muted} />}
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={[styles.m9CartaoKicker, pendingGeoApproximate && styles.m9CartaoKickerAviso]}>
-                        {pendingGeoApproximate ? 'LOCALIZAÇÃO APROXIMADA' : 'VINDO DO CEP'}
+                        {/* 02/11/26: o pino só nasce exato na porta, então o rótulo exato diz isso */}
+                        {pendingGeoApproximate || (!editingClient && pendingGeoSource === 'geocode') ? 'LOCALIZAÇÃO APROXIMADA' : editingClient ? 'VINDO DO CEP' : 'MARCADO NA PORTA'}
                       </Text>
                       <Text style={styles.m9CartaoRua} numberOfLines={2}>
                         {[form.endereco, form.numero].filter(Boolean).join(', ') || 'Endereço não informado'}
@@ -11178,7 +11350,9 @@ function ClientBottomSheet({
   // ou corrigido no check-in) é o mais preciso que existe: número de endereço e
   // geocodificação não importam. Até 26/09 ele aparecia como "aproximado" no
   // cartão (auditoria do Julyan), contradizendo o check-in que confia nele.
-  const pinoNoLocal = (client.geo_source === 'coords' || client.geo_source === 'checkin') && client.geo_approximate !== true;
+  // 02/11/26: 'mapa' exato é o pino posto na porta com GPS ruim (ele estava lá); o 'mapa' da mira
+  // nasce aproximado e cai no aviso abaixo.
+  const pinoNoLocal = (client.geo_source === 'coords' || client.geo_source === 'checkin' || client.geo_source === 'mapa') && client.geo_approximate !== true;
   if (!pinoNoLocal && !client.numero) approxReasons.push('Endereço sem número');
   if (client.geo_source === 'hubspot') {
     approxReasons.push('Posicionado pela latitude/longitude (sem geocodificação por endereço)');
@@ -11204,7 +11378,12 @@ function ClientBottomSheet({
       : client.geo_source === 'coords'
       ? 'Marcado no local pelo app (GPS ou mapa)'
       : client.geo_source === 'checkin'
-      ? 'Corrigido pelo GPS no check-in'
+      ? 'Confirmado pelo GPS na porta'
+      // 02/11/26: as duas origens novas do pino
+      : client.geo_source === 'mapa'
+      ? (client.geo_approximate ? 'Apontado no mapa, sem confirmar na porta' : 'Marcado na porta, ajustado no mapa')
+      : client.geo_source === 'geocode'
+      ? 'Pelo endereço digitado (a confirmar na porta)'
       : 'Origem da localização não identificada';
 
   const formatDate = (iso: string | null) => {
@@ -13172,11 +13351,11 @@ const styles = StyleSheet.create({
   },
   creationBarTitle: { fontSize: 15, fontWeight: '700', color: 'var(--text)', marginBottom: 2 },
   creationBarHint: { fontSize: 12, color: 'var(--text-muted)' },
-  creationBarCoords: { fontSize: 12, color: 'var(--text)', marginTop: 6, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
   creationBarRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  creationBarCancel: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: 'var(--surface-2)' },
+  // alvo de 48 px (02/11/26): a barra é tocada na calçada, com uma mão
+  creationBarCancel: { flex: 1, minHeight: 48, justifyContent: 'center', paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: 'var(--surface-2)' },
   creationBarCancelText: { color: 'var(--text)', fontWeight: '700' },
-  creationBarConfirm: { flex: 2, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: 'var(--verde-acao)' },
+  creationBarConfirm: { flex: 2, minHeight: 48, justifyContent: 'center', paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: 'var(--verde-acao)' },
   creationBarConfirmText: { color: '#fff', fontWeight: '700' },
   // Bottom Nav
   // Coluna lateral do desktop. `absolute` colada nas quatro bordas da esquerda:

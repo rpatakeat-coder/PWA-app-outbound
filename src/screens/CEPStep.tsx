@@ -25,6 +25,7 @@ import {
 } from '../components/icons';
 import { fetchCepData, geocodeStructured, reverseGeocode, GeocodingError } from '../utils/geocoding';
 import type { ClientFormData } from '../types/client';
+import { enderecoCompleto } from '../utils/precisaoDoPino';
 
 /**
  * Os textos de falha do passo 1 (quadro 1c). Sao os MESMOS de antes, por
@@ -54,8 +55,15 @@ type DadosCep = {
 };
 
 interface CEPStepProps {
-  /** Posição do GPS agora: habilita "Estou aqui" (handoff v4.1 §6.8 — na rua, o executivo está na porta). */
-  posicaoAtual?: { latitude: number; longitude: number } | null;
+  /**
+   * PORTA OU ENDEREÇO (02/11/26, o menor erro de pino): com isto, a primeira tela é "Você está na
+   * porta do restaurante?". "Estou na porta" chama aqui (o App lê o GPS e abre o mapa para ajustar);
+   * "Não estou lá" segue para rua + número. Substitui o antigo "Estou aqui", que gravava o GPS de
+   * onde a pessoa estivesse — até do escritório — como pino exato.
+   */
+  aoEstarNaPorta?: () => void;
+  /** Posicionar negócio que já existe: o nome dele no subtítulo (não é cadastro, não tem "Passo 1 de 2"). */
+  nomeDoNegocio?: string | null;
   onNext: (data: Partial<ClientFormData> & {
     latitude?: number | null;
     longitude?: number | null;
@@ -77,9 +85,13 @@ interface CEPStepProps {
 
 type Mode = 'cep' | 'coords';
 
-export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial, posicaoAtual = null }: CEPStepProps) {
+export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial, aoEstarNaPorta, nomeDoNegocio = null }: CEPStepProps) {
   const layout = useLayout();
   const iconColors = useIconColors();
+  // A pergunta da porta vem antes de tudo; voltando do passo 2 (valorInicial), já é o endereço.
+  const [etapa, setEtapa] = useState<'pergunta' | 'endereco'>(aoEstarNaPorta && !valorInicial ? 'pergunta' : 'endereco');
+  // "Sem número" é escolha explícita: número vazio por esquecimento não passa (02/11/26).
+  const [semNumero, setSemNumero] = useState(false);
   // O passo 1 do M9 E' o CEP: a antiga tela "Como deseja cadastrar?" deixou de
   // ser a porta de entrada (ela tornava "Passo 1 de 2" mentira). Os outros dois
   // caminhos continuam alcancaveis daqui — mapa e coordenadas, abaixo do CTA.
@@ -150,6 +162,12 @@ export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial, posicaoAt
       setErroCep('CEP genérico: informe o endereço completo abaixo.');
       return;
     }
+    // Sem número o geocoder cai no meio da rua (centenas de metros do restaurante): pede o número,
+    // ou o "Sem número" dito de propósito (02/11/26).
+    if (!enderecoCompleto({ rua: cepData.isGeneric ? enderecoManual : cepData.logradouro || enderecoManual || '-', numero, semNumero })) {
+      setErroCep('Informe o número do restaurante (ou toque em "Sem número").');
+      return;
+    }
 
     Keyboard.dismiss();
     setLoading(true);
@@ -198,30 +216,7 @@ export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial, posicaoAt
   };
 
   // ---- Coords Flow ----
-  // "Estou aqui": o GPS de agora vira o endereço, e segue para o formulário.
-  const usarPosicaoAtual = async () => {
-    if (!posicaoAtual) return;
-    Keyboard.dismiss();
-    setLoading(true);
-    try {
-      const addr = await reverseGeocode(posicaoAtual.latitude, posicaoAtual.longitude);
-      onNext({
-        latitude: posicaoAtual.latitude,
-        longitude: posicaoAtual.longitude,
-        endereco: addr?.endereco || '',
-        numero: addr?.numero || '',
-        cidade: addr?.cidade || '',
-        estado: addr?.estado || '',
-        cep: addr?.cep ? `${addr.cep.slice(0, 5)}-${addr.cep.slice(5)}` : '',
-        bairro: addr?.bairro || '',
-      });
-    } catch {
-      onNext({ latitude: posicaoAtual.latitude, longitude: posicaoAtual.longitude });
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // (o "Estou aqui" que morava aqui virou a pergunta da porta, 02/11/26)
   const submitCoords = async () => {
     const lat = parseFloat(latitude.replace(',', '.'));
     const lng = parseFloat(longitude.replace(',', '.'));
@@ -355,6 +350,47 @@ export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial, posicaoAt
   // sintetico e o TextInput nunca recebe foco (nao dava pra digitar no PWA).
   const enderecoResolvido = cepData && !cepData.isGeneric;
 
+  // ---- A pergunta da porta (02/11/26) ----
+  // Dois botões grandes, um toque: na rua, com uma mão. O cabeçalho é o mesmo do passo do CEP.
+  if (etapa === 'pergunta' && aoEstarNaPorta) {
+    return (
+      <View style={[styles.overlay, layout.ehLargo && styles.overlayWeb]}>
+        <View style={[styles.keyboardView, layout.ehLargo && styles.centroWeb]}>
+          <View style={[estilos.folha, layout.ehLargo && styles.cardWeb]}>
+            {!layout.ehLargo && <View style={estilos.alca} />}
+            <View style={estilos.cabecalho}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={estilos.titulo}>Você está na porta do restaurante?</Text>
+                <Text style={estilos.subtitulo} numberOfLines={1}>{nomeDoNegocio ?? 'Novo lead'}</Text>
+              </View>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar" style={estilos.fechar} onPress={onCancel}>
+                <IconClose width={20} height={20} fill={iconColors.muted} />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Estou na porta: usar o GPS"
+              onPress={aoEstarNaPorta}
+              style={estilos.estouAqui}
+            >
+              <Text style={estilos.estouAquiTexto}>Estou na porta</Text>
+              <Text style={estilos.estouAquiSub}>o pino vai para o seu GPS e você ajusta no mapa</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Não estou lá: informar o endereço"
+              onPress={() => setEtapa('endereco')}
+              style={estilos.naoEstou}
+            >
+              <Text style={estilos.naoEstouTexto}>Não estou lá</Text>
+              <Text style={estilos.naoEstouSub}>informe rua e número · o pino fica aproximado</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.overlay, layout.ehLargo && styles.overlayWeb]}>
       <KeyboardAvoidingView
@@ -372,7 +408,7 @@ export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial, posicaoAt
             <View style={estilos.cabecalho}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={estilos.titulo}>Onde fica o restaurante?</Text>
-                <Text style={estilos.subtitulo}>Passo 1 de 2</Text>
+                <Text style={estilos.subtitulo} numberOfLines={1}>{nomeDoNegocio ?? 'Passo 1 de 2'}</Text>
               </View>
               <TouchableOpacity
                 accessibilityRole="button"
@@ -384,26 +420,6 @@ export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial, posicaoAt
               </TouchableOpacity>
             </View>
 
-            {/* --- Estou aqui (primário na rua) --- */}
-            {!!posicaoAtual && !cepData && (
-              <>
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel="Estou aqui: usar a posição do GPS"
-                  onPress={usarPosicaoAtual}
-                  disabled={loading}
-                  style={estilos.estouAqui}
-                >
-                  {loading ? <ActivityIndicator color="#fff" /> : (
-                    <>
-                      <Text style={estilos.estouAquiTexto}>Estou aqui</Text>
-                      <Text style={estilos.estouAquiSub}>usa o GPS e preenche o endereço</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-                <Text style={estilos.ou}>ou pelo CEP</Text>
-              </>
-            )}
             {/* --- Campo CEP --- */}
             {campo(
               'cep',
@@ -481,22 +497,36 @@ export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial, posicaoAt
               />,
             )}
 
-            {/* Numero. Sem ele o CTA continua ativo — o lead entra e o flag de
-                aproximado, que vem do geocoder, decide o resto. */}
+            {/* Numero OBRIGATÓRIO (02/11/26): sem ele o geocoder cai no meio da rua. O "Sem número"
+                é a saída dita de propósito, ao lado do campo. */}
             {cepData && campo(
               'numero',
-              'Número',
+              'Número *',
               <TextInput
-                style={estilos.campoValor}
-                placeholder="Ex.: 1086"
+                style={[estilos.campoValor, semNumero && { color: 'var(--text-disabled)' }]}
+                placeholder={semNumero ? 'sem número' : 'Ex.: 1086'}
                 placeholderTextColor="var(--text-subtle)"
                 keyboardType="default"
-                value={numero}
-                onChangeText={setNumero}
+                value={semNumero ? '' : numero}
+                onChangeText={v => { setNumero(v); setSemNumero(false); setErroCep(null); }}
                 onFocus={() => setCampoFocado('numero')}
                 onBlur={() => setCampoFocado(null)}
-                editable={!loading}
+                editable={!loading && !semNumero}
               />,
+              {
+                direita: (
+                  <TouchableOpacity
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: semNumero }}
+                    accessibilityLabel="Sem número"
+                    onPress={() => { setSemNumero(s => !s); setNumero(''); setErroCep(null); }}
+                    disabled={loading}
+                    style={[estilos.semNumero, semNumero && estilos.semNumeroLigado]}
+                  >
+                    <Text style={[estilos.semNumeroTexto, semNumero && estilos.semNumeroTextoLigado]}>Sem número</Text>
+                  </TouchableOpacity>
+                ),
+              },
             )}
 
             {/* --- CTA: o estado da tela decide qual --- */}
@@ -572,6 +602,12 @@ export function CEPStep({ onNext, onCancel, onPickOnMap, valorInicial, posicaoAt
                 </TouchableOpacity>
               </View>
             )}
+            {/* Errou a resposta da primeira pergunta: volta para a porta sem fechar tudo. */}
+            {aoEstarNaPorta && (
+              <TouchableOpacity accessibilityRole="button" style={estilos.alternativa} onPress={aoEstarNaPorta} disabled={loading}>
+                <Text style={estilos.alternativaTexto}>Estou na porta agora</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -584,7 +620,14 @@ const estilos = StyleSheet.create({
   estouAqui: { minHeight: 56, borderRadius: 16, backgroundColor: 'var(--vermelho-acao)', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
   estouAquiTexto: { fontSize: 16, fontWeight: '700', color: '#fff' },
   estouAquiSub: { fontSize: 12, fontWeight: '500', color: 'rgba(255,255,255,.85)', marginTop: 1 },
-  ou: { fontSize: 12, fontWeight: '600', color: 'var(--text-muted)', textAlign: 'center', marginVertical: 2 },
+  // "Não estou lá": mesmo tamanho do primário (≥ 56 px), em superfície — as duas respostas valem.
+  naoEstou: { minHeight: 56, borderRadius: 16, backgroundColor: 'var(--surface-2)', borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center', paddingVertical: 6, marginTop: 8 },
+  naoEstouTexto: { fontSize: 16, fontWeight: '700', color: 'var(--text)' },
+  naoEstouSub: { fontSize: 12, fontWeight: '500', color: 'var(--text-muted)', marginTop: 1 },
+  semNumero: { minHeight: 44, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', alignItems: 'center', justifyContent: 'center' },
+  semNumeroLigado: { backgroundColor: 'var(--tint-amber)', borderColor: 'var(--tint-amber-border)' },
+  semNumeroTexto: { fontSize: 13, fontWeight: '600', color: 'var(--text-muted)' },
+  semNumeroTextoLigado: { color: 'var(--tint-amber-text)' },
   folha: {
     backgroundColor: 'var(--surface)',
     borderTopLeftRadius: 16,

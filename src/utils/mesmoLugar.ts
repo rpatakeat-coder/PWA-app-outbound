@@ -7,6 +7,8 @@
 // ("bar", "restaurante", "e", "ltda"…): "deubo" casa com "deubo". E pino que nasceu de endereço
 // convertido não é prova de lugar — um nome igual na mesma cidade basta.
 
+import { pinoConfirmado } from './precisaoDoPino';
+
 const GENERICAS = new Set([
   'bar', 'bares', 'restaurante', 'restaurantes', 'lanchonete', 'pizzaria', 'ltda', 'me', 'eireli', 'comercio',
   'alimentos', 'e', 'de', 'da', 'do', 'das', 'dos', 'o', 'a', 'the', 'and', 'cia', 'casa',
@@ -37,8 +39,9 @@ export function mesmoNome(a: string | null | undefined, b: string | null | undef
  * 'google_place'; aceita os dois: 'google_place' nunca é confirmado, e 'coords' com place_id do
  * Google (conta-alvo de antes da troca) também não.
  */
-export const pinoDeGps = (c: { geo_source?: string | null; geo_approximate?: boolean | null; conta_alvo_place_id?: string | null }) => {
-  if (c.geo_approximate) return false;
-  if (c.geo_source === 'checkin') return true;
-  return c.geo_source === 'coords' && !c.conta_alvo_place_id;
-};
+// 02/11/26 (auditoria do pino): SÓ 'checkin' é confirmado. 'coords' era também o pino da mira no
+// mapa (Posicionar, Mover pino, cadastro de longe) — 53 dos 70 pinos a mais de 100 m de um GPS bom
+// eram 'coords', e o "Estou na porta" do Cheguei não os corrigia. A régua mora em precisaoDoPino.ts
+// (a 0247 leva a mesma regra para o servidor; antes dela, a RPC ainda recusa corrigir 'coords').
+export const pinoDeGps = (c: { geo_source?: string | null; geo_approximate?: boolean | null; conta_alvo_place_id?: string | null }) =>
+  pinoConfirmado(c);

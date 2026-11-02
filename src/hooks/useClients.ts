@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 import { origemDoLeadHs } from '../utils/origemDoLead';
+import { gravacaoSemMapa } from '../utils/precisaoDoPino';
 import { useAuth } from '../context/AuthContext';
 import type { Client, ClientFormData } from '../types/client';
 import { bboxAround, boundsKey, roundCoordsForKey, type Bounds } from '../utils/area';
@@ -441,18 +442,26 @@ export function useClients(
         // o lugar). Via CEP, porém, o geocoding pode cair no centroide da rua
         // quando o OSM não tem o número — nesse caso o CEPStep manda
         // geo_approximate=true e a gente respeita (raio de check-in maior).
-        geo_source: 'coords',
+        // 02/11/26: o cadastro do mapa diz a origem ('checkin'/'mapa' na porta, 'geocode' pelo
+        // endereço); quem não diz (cadastro outbound) segue 'coords', como antes.
+        geo_source: form.geo_source ?? 'coords',
         geo_approximate: form.geo_approximate ?? false,
         ...(form.origem_lead ? { origem_lead: form.origem_lead } : {}),
         ...(form.conta_alvo_place_id ? { conta_alvo_place_id: form.conta_alvo_place_id } : {}),
         ...(form.conta_alvo_rating != null ? { conta_alvo_rating: form.conta_alvo_rating, conta_alvo_reviews: form.conta_alvo_reviews ?? null } : {}),
       };
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('clients')
         .insert(insertPayload)
         .select()
         .single();
+      // Banco sem a 0247 recusando 'mapa' (check): grava 'coords' APROXIMADO, nunca exato (02/11/26).
+      if (error && (error as { code?: string }).code === '23514' && insertPayload.geo_source === 'mapa') {
+        ({ data, error } = await supabase.from('clients')
+          .insert({ ...insertPayload, ...gravacaoSemMapa({ geo_source: 'mapa', geo_approximate: insertPayload.geo_approximate === true }) })
+          .select().single());
+      }
       if (error) throw error;
       const client = mapRow(data);
 

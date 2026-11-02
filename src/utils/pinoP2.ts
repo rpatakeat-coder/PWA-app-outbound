@@ -57,7 +57,28 @@ export type ContextoPino = {
   aberturaPorLead?: Map<string, string>;
   /** Restaurantes recém-abertos que EU visitei com prova nesta semana (meta de 5). null = não medido. */
   novosVisitadosSemana?: number | null;
+  /** 02/11/26: coordenadas (chaveDaCoordenada) com mais de um pino — o pino empilhado é aproximado. */
+  coordenadasRepetidas?: Set<string>;
 };
+
+/** Mesma chave do hasCoordCollision do cartão: 6 casas (~10 cm) absorvem o ruído do float. */
+export const chaveDaCoordenada = (lat: unknown, lng: unknown) => `${Number(lat).toFixed(6)},${Number(lng).toFixed(6)}`;
+
+/**
+ * PINO EMPILHADO É APROXIMADO NO MAPA (auditoria do pino, 02/11/26). Dois restaurantes na mesma
+ * coordenada exata é, na prática, erro de geocodificação (centro da rua ou do CEP). O cartão já
+ * dizia "aproximado"; o pino no mapa não dizia nada.
+ */
+export function coordenadasRepetidas(lista: Array<{ latitude?: unknown; longitude?: unknown }>): Set<string> {
+  const vistas = new Set<string>();
+  const repetidas = new Set<string>();
+  for (const c of lista) {
+    if (c.latitude == null || c.longitude == null) continue;
+    const k = chaveDaCoordenada(c.latitude, c.longitude);
+    if (vistas.has(k)) repetidas.add(k); else vistas.add(k);
+  }
+  return repetidas;
+}
 
 /** Até quantos dias de CNPJ o lead é "recém-aberto" (Julyan, 15/10/26). */
 export const DIAS_RECEM_ABERTO = 90;
@@ -262,7 +283,8 @@ export function classificarPino(c: Client, ctx: ContextoPino): Pino {
     avaliacoes: tipo === 'alvo' && c.conta_alvo_reviews != null ? Number(c.conta_alvo_reviews) : null,
     tipo, temp, cor, glifo, logo: tipo === 'cliente', dono,
     nota,
-    aproximado: c.geo_approximate === true,
+    aproximado: c.geo_approximate === true
+      || (c.latitude != null && c.longitude != null && !!ctx.coordenadasRepetidas?.has(chaveDaCoordenada(c.latitude, c.longitude))),
     nome: nomeCurto(c.empresa?.trim() || c.nome || ''),
     etiqueta, opacidade, queda, abertoHa, alvoAntigo,
   };
