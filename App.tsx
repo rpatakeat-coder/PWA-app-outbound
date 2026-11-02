@@ -105,7 +105,7 @@ import FiltrosMapaNovo from './src/screens/FiltrosMapaNovo';
 import { PeekCardNovo, TopoCardNovo, type AcoesCardNovo, type DadosCardNovo } from './src/screens/CardLeadNovo';
 import FolhaDoMapa, { type ItemFolha } from './src/screens/FolhaDoMapa';
 import BarraPlanejar, { type ParadaDoDia } from './src/screens/BarraPlanejar';
-import AgendaPC, { CamadasAgenda, type CamadaAgenda, type ItemPC, type SugestaoPC } from './src/screens/AgendaPC';
+import type { CamadaAgenda, ItemPC, SugestaoPC } from './src/screens/AgendaPC';
 import { melhorPosicao, metros } from './src/utils/rotaDoDia';
 import { BUSCA_GOOGLE_PAUSADA, buscarGooglePerto, jaNaBase, type LugarPerto } from './src/utils/googlePerto';
 import { diaInicial, diasPlanejaveis, ehCompromisso, faixaDoLead, rotuloDoDia, vaiAoCockpit, type FaixaDoPlano } from './src/utils/planoNoMapa';
@@ -127,8 +127,7 @@ import { useMeuDia } from './src/hooks/useMeuDia';
 import FolhaCalor from './src/screens/FolhaCalor';
 import AvisosPainel from './src/screens/AvisosPainel';
 import { useAvisos } from './src/hooks/useAvisos';
-import FichaDeRua, { type CamposCadastro } from './src/screens/FichaDeRua';
-import MudarEtapaNovo from './src/screens/MudarEtapaNovo';
+import type { CamposCadastro } from './src/screens/FichaDeRua';
 import PorNoPlano from './src/screens/PorNoPlano';
 import type { AcaoId } from './src/utils/acoesDoPlano';
 import { ROTULO_ETAPA, ETAPA as ETAPA_FS } from './src/utils/fichaDeRua';
@@ -176,7 +175,6 @@ import { LoginScreen } from './src/screens/LoginScreen';
 import { CEPStep } from './src/screens/CEPStep';
 import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
-import { ChangeStageModal } from './src/screens/ChangeStageModal';
 import { buscarLeadsParecidos } from './src/utils/buscarLeadsParecidos';
 import { fraseDoAviso, type Parecido } from './src/utils/leadDuplicado';
 import { DesfechoVisitaSheet } from './src/screens/DesfechoVisitaSheet';
@@ -193,17 +191,15 @@ import { lerDeepLink, semDeepLink } from './src/utils/deepLink';
 import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
 import { useStages } from './src/hooks/useStages';
 import { TarefasScreen, baldeDeVencimento, baldeDaTarefaDoCrm } from './src/screens/TarefasScreen';
-import { RotaScreen } from './src/screens/RotaScreen';
 import { AgendaScreen } from './src/screens/AgendaScreen';
 import PlaybookScreen, { buscarPlaybook } from './src/screens/PlaybookScreen';
 import { objecoesDaCasa, objecoesDoPlaybook } from './src/utils/playbook';
-import FilaTarefasScreen, { opcoesDaFila } from './src/screens/FilaTarefasScreen';
+import { opcoesDaFila } from './src/utils/dadosDaFila';
 import ListaCarteiraWeb from './src/screens/ListaCarteiraWeb';
 import LimparFunil from './src/screens/LimparFunil';
 import FolhaLugarGoogle, { type LugarGoogle } from './src/screens/FolhaLugarGoogle';
 import { BarreiraDaAba } from './src/components/BarreiraDaAba';
 import { avisarSeVisitaProvada, type Ranking } from './src/screens/FolhaRanking';
-import AgendaNovoScreen from './src/screens/AgendaNovoScreen';
 import { concluirComDesfazer, enviarConclusao, type PedidoConclusao } from './src/utils/concluirTarefa';
 import { diaBRT, diasDeAtraso, ehCobranca, grupoDaTarefa } from './src/utils/abaTarefas';
 import { ehDiaUtil } from './src/utils/desfechoVisita';
@@ -212,7 +208,6 @@ import { definirOcupado } from './src/utils/updates';
 import { assumirLead } from './src/utils/assumirLead';
 import { ConfiguracoesScreen } from './src/screens/ConfiguracoesScreen';
 import { ds, sharedStyles } from './src/screens/sharedStyles';
-import { MeuDesempenhoScreen } from './src/screens/MeuDesempenhoScreen';
 import { fetchCepData, geocodeAddress, geocodeStructured, reverseGeocode } from './src/utils/geocoding';
 import { fetchOptimizedTrip, fetchRouteGeometry, type RoutePoint, type RoutingProvider } from './src/utils/routing';
 import { montarMicrorrotas } from './src/utils/microrrotas';
@@ -224,7 +219,7 @@ import { fetchSlaCandidate } from './src/utils/slaCandidate';
 import { slaForStage, slaStatus, type SlaDays } from './src/utils/sla';
 import { lerAberturaDaUrl, lerPedidoDaUrl, limparAberturaDaUrl, limparPedidoDaUrl, type PedidoDaFila } from './src/utils/pushDaFila';
 import { PilulaDoHoje, ToastDeConquista } from './src/screens/EntradasDesenvolvimento';
-import type { OrigemAbertura } from './src/screens/MeuDesempenhoV2';
+import type { OrigemAbertura } from './src/hooks/useDesenvolvimento';
 import { seloDaFila } from './src/utils/seloDaFila';
 import { janelaAtual, marcoDoRelogio } from './src/utils/horaDasLigacoes';
 import { feriadosNacionais, quenteEsfriando, secaoDoItem } from './supabase/functions/_compartilhado/filaDoDinheiro';
@@ -242,7 +237,7 @@ import {
   etapaIdxDe, type ItemDaFilaV3, type ParadaDoApp,
 } from './src/utils/diaV3';
 import { useBairrosDaFila, useDiaV3 } from './src/hooks/useDiaV3';
-import { useDesenvolvimentoQuadro } from './src/screens/MeuDesempenhoV2';
+import { useDesenvolvimentoQuadro } from './src/hooks/useDesenvolvimento';
 import TiraDeLentes from './src/screens/TiraDeLentes';
 import BlocoEntrePortas from './src/screens/BlocoEntrePortas';
 import PedirAvisos from './src/screens/PedirAvisos';
@@ -252,6 +247,31 @@ import { JANELAS_LIGACAO } from './src/utils/horaDasLigacoes';
 import { useRouteConfig } from './src/hooks/useRouteConfig';
 import { useSellerGoals } from './src/hooks/useSellerGoals';
 import { IconCheck as SiCheck, IconChevronDown as SiDown, IconChevronLeft as SiLeft } from './src/components/icons';
+
+// TELAS GRANDES E RARAS SOB DEMANDA (auditoria 02/11/26). O Metro divide o import() em arquivos
+// próprios mesmo com web.output 'single' (conferido no build: um .js por tela), e o service worker
+// já pré-carrega todo o _expo/static na instalação (scripts/build-web.js), então abrir uma delas sem
+// sinal continua funcionando. O que essas telas exportam e o App lê na abertura (a fila, o quadro do
+// Desenvolvimento, o executor offline da aba) mudou para src/utils/dadosDaFila e
+// src/hooks/useDesenvolvimento — um import estático de qualquer pedaço puxaria a tela inteira de volta.
+const AgendaPC = React.lazy(() => import('./src/screens/AgendaPC'));
+const CamadasAgenda = React.lazy(() => import('./src/screens/AgendaPC').then((m) => ({ default: m.CamadasAgenda })));
+const FichaDeRua = React.lazy(() => import('./src/screens/FichaDeRua'));
+const MudarEtapaNovo = React.lazy(() => import('./src/screens/MudarEtapaNovo'));
+const ChangeStageModal = React.lazy(() => import('./src/screens/ChangeStageModal').then((m) => ({ default: m.ChangeStageModal })));
+const RotaScreen = React.lazy(() => import('./src/screens/RotaScreen').then((m) => ({ default: m.RotaScreen })));
+const FilaTarefasScreen = React.lazy(() => import('./src/screens/FilaTarefasScreen'));
+const AgendaNovoScreen = React.lazy(() => import('./src/screens/AgendaNovoScreen'));
+const MeuDesempenhoScreen = React.lazy(() => import('./src/screens/MeuDesempenhoScreen').then((m) => ({ default: m.MeuDesempenhoScreen })));
+/** Enquanto o arquivo da tela chega (do cache do service worker, quase sempre). */
+const CarregandoTela = () => (
+  <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color="var(--text-muted)" /></View>
+);
+// o Hoje e a Agenda são abertos quase todo dia: pede os dois arquivos assim que o app sossega, para
+// o primeiro toque não esperar. Os outros (Rota, ficha, mudar etapa, Meu desempenho) vêm no toque.
+if (typeof window !== 'undefined') {
+  setTimeout(() => { void import('./src/screens/FilaTarefasScreen'); void import('./src/screens/AgendaNovoScreen'); }, 4000);
+}
 
 // Sem essas opcoes valem os padroes do react-query — `staleTime: 0` e
 // `refetchOnWindowFocus: true` —, que num PWA de celular sao o pior caso:
@@ -9407,6 +9427,7 @@ function MainApp() {
         </>
         )
       ) : tab === 'route' ? (
+        <React.Suspense fallback={<CarregandoTela />}>
         <RotaScreen
           conteudoMapa={conteudoMapa}
           clients={clients}
@@ -9457,6 +9478,7 @@ function MainApp() {
           metaVisitasDia={metaDeHoje}
           suggestRoute={suggestRoute}
         />
+        </React.Suspense>
       ) : tab === 'tasks' && modoNovo ? (
         // A fila do dinheiro (docs/10 §1, 04/10/2026): um card por negócio, valor × urgência.
         // Visitar e Registrar levam ao lead no mapa (o Cheguei é a prova da visita).
@@ -9464,6 +9486,7 @@ function MainApp() {
         {/* Desenvolvimento v2 (01/11/26): a pílula fixa no topo do Hoje leva ao Meu desempenho */}
         <View style={{ flex: 1 }}>
         {!isViewer && <PilulaDoHoje ativo={tab === 'tasks'} aoTocar={() => irParaEu('pilula')} />}
+        <React.Suspense fallback={<CarregandoTela />}>
         <FilaTarefasScreen
           ownerId={myHubspotId}
           pedido={pedidoDaFila}
@@ -9488,6 +9511,7 @@ function MainApp() {
             if (data) openEditClient(data as Client); else Toast.mostrar('Não encontrei este lead.', 'erro');
           }}
         />
+        </React.Suspense>
         </View>
         </BarreiraDaAba>
       ) : tab === 'tasks' ? (
@@ -9553,6 +9577,7 @@ function MainApp() {
           enviandoFoto={enviandoFoto}
         />
       ) : tab === 'meu' ? (
+        <React.Suspense fallback={<CarregandoTela />}>
         <MeuDesempenhoScreen
           enabled={tab === 'meu'}
           /* AS LINHAS DA ABA EU (2.9). Montadas aqui para não divergirem do menu do avatar, que
@@ -9574,10 +9599,12 @@ function MainApp() {
           rolarColecao={aberturaEu.rolar}
           aoFazerQuiz={() => setTab('playbook')}
         />
+        </React.Suspense>
       ) : modoNovo ? (
         (() => { const agendaNova = (
         <View style={{ flex: 1 }}>
         {/* a hora das ligações vira aviso de Informação dentro da lista (handoff Agenda do App, 19/10/26) */}
+        <React.Suspense fallback={<CarregandoTela />}>
         <AgendaNovoScreen
           key={agendaDiaInicial ?? 'hoje'}
           aoMarcarProximoPasso={async (id) => {
@@ -9645,6 +9672,7 @@ function MainApp() {
             else void openClientById(id);
           }}
         />
+        </React.Suspense>
         </View>
         );
         // G2 (handoff das abas): no computador, duas colunas — a linha do tempo à esquerda e o
@@ -9659,6 +9687,7 @@ function MainApp() {
           return (
             <View style={sharedStyles.mapaLinhaWeb}>
               <View style={painelRecolhido ? { position: 'absolute', left: 12, top: 60, zIndex: 70 } : null}>
+                <React.Suspense fallback={null}>
                 <AgendaPC
                   hoje={routeDate}
                   dia={planejarDia ?? routeDate}
@@ -9716,17 +9745,20 @@ function MainApp() {
                   aoEsconder={alternarPainel}
                   largura={larguraPainel}
                 />
+                </React.Suspense>
               </View>
               <View style={sharedStyles.mapaAreaWeb}>
                 <View style={{ flex: 1 }}>
                   {conteudoMapa}
                   {!passadoNaAgenda && (
+                    <React.Suspense fallback={null}>
                     <CamadasAgenda
                       ativas={camadasAgenda}
                       nPlano={clientesDoPlanoNoMapa.length}
                       contagem={{ carteira: itensMapaNovo.filter((x) => x.p.dono === 'meu').length, regua: contaGrupo('regua'), alvo: contaGrupo('alvo'), queda: contaGrupo('queda'), google: contaGrupo('google') }}
                       aoAlternar={(c) => setCamadasAgenda((m) => { const n = new Set(m); if (n.has(c)) n.delete(c); else n.add(c); return n; })}
                     />
+                    </React.Suspense>
                   )}
                   {!painelRecolhido && botaoRecolher}
                 </View>
@@ -11074,6 +11106,7 @@ function MainApp() {
 
       {/* Schedule Meeting Modal */}
       {changingStageFor && (
+        <React.Suspense fallback={null}>
         <ChangeStageModal
           client={changingStageFor.client}
           initialStageId={changingStageFor.initialStageId}
@@ -11085,9 +11118,11 @@ function MainApp() {
           onClose={() => setChangingStageFor(null)}
           onCreateHubspotDeal={ensureHubspotDeal}
         />
+        </React.Suspense>
       )}
 
       {fichaPendente && (
+        <React.Suspense fallback={null}>
         <FichaDeRua
           visivel
           client={fichaPendente.client}
@@ -11165,6 +11200,7 @@ function MainApp() {
             ultimaEtapaDaFicha.current = { client: fichaPendente.client.id, rotulo: ROTULO_ETAPA[codigo] ?? de };
           }}
         />
+        </React.Suspense>
       )}
       {lugarGoogle && (
         <FolhaLugarGoogle
@@ -11247,6 +11283,7 @@ function MainApp() {
         />
       )}
       {etapaNovaPara && (
+        <React.Suspense fallback={null}>
         <MudarEtapaNovo
           visivel
           client={etapaNovaPara.client}
@@ -11303,6 +11340,7 @@ function MainApp() {
             if (etapaNovaPara.taskId) resolveTask.mutate({ id: etapaNovaPara.taskId, status: 'concluida' });
           }}
         />
+        </React.Suspense>
       )}
       {desfechoPendente && (
         <DesfechoVisitaSheet

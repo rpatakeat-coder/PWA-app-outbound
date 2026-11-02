@@ -23,7 +23,7 @@ import { AJUDA_MOTIVO, ETAPA, MAX_O_QUE_PESOU, MOTIVOS_PERDIDO, MOTIVOS_QUE_EXIG
 import { enfileirar, ehErroDeRede, novoAcaoId } from '../utils/filaOffline';
 import { etapaGravadaAgora } from '../utils/gravadoAgora';
 import { negocioAcao } from '../utils/negocioAcao';
-import { opcoesDaFila } from './FilaTarefasScreen';
+import { opcoesDaFila } from '../utils/dadosDaFila';
 
 type Linha = {
   dealId: string; clientId: string | null; negocio: string; etapaId: string; diasNaEtapa: number | null;

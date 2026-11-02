@@ -28,7 +28,7 @@ import { ActivityIndicator, Animated, Platform, Pressable, ScrollView, StyleShee
 import { Painel } from '../components/Painel';
 import { IconCheck, IconClose, IconWarning, useIconColors } from '../components/icons';
 import type { VMDia } from '../../supabase/functions/_compartilhado/hojeV3';
-import { useReduzirMovimento } from './MeuDesempenhoV2';
+import { useReduzirMovimento } from '../hooks/useDesenvolvimento';
 
 export type LinhaDoFecho = { id: string; dealId: string | null; nome: string; estado: 'ok' | 'pend' | 'x'; sub: string };
 

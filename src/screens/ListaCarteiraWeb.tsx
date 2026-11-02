@@ -15,7 +15,7 @@ import { supabase } from '../integrations/supabase/client';
 import { Toast } from '../components/Toast';
 import { IconCalendar, IconCheck, IconClose, IconDownload, useIconColors } from '../components/icons';
 import { useLayout } from '../hooks/useLayout';
-import { opcoesDaFila } from './FilaTarefasScreen';
+import { opcoesDaFila } from '../utils/dadosDaFila';
 import { porNoDia } from '../utils/paradaDoDia';
 import { proximoDiaUtil } from '../utils/desfechoVisita';
 import { ROTULO_ETAPA } from '../utils/fichaDeRua';

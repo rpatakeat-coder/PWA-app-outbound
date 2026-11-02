@@ -17,7 +17,7 @@ import { ActivityIndicator, Animated, Platform, Pressable, StyleSheet, Text, Vie
 
 import { IconCheck, IconWarning, useIconColors } from '../components/icons';
 import type { VMDia } from '../../supabase/functions/_compartilhado/hojeV3';
-import { useReduzirMovimento } from './MeuDesempenhoV2';
+import { useReduzirMovimento } from '../hooks/useDesenvolvimento';
 
 export function PilulaPlacar({ pilula, top, fecharDia, aoTocar }: {
   pilula: VMDia['pilula']; top: number; fecharDia: (() => void) | null; aoTocar: () => void;

@@ -13,7 +13,7 @@ import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-nat
 
 import { IconFlame, IconTarget, useIconColors } from '../components/icons';
 import { conquistasNovas, faixaDe, pilula, reais, toastDaConquista } from '../../supabase/functions/_compartilhado/desenvolvimentoV2';
-import { destaqueDaSessao, marcarVistas, useCapitulos, useDesenvolvimentoQuadro, useReduzirMovimento } from './MeuDesempenhoV2';
+import { destaqueDaSessao, marcarVistas, useCapitulos, useDesenvolvimentoQuadro, useReduzirMovimento } from '../hooks/useDesenvolvimento';
 
 export function PilulaDoHoje({ ativo, aoTocar }: { ativo: boolean; aoTocar: () => void }) {
   const q = useDesenvolvimentoQuadro(ativo);

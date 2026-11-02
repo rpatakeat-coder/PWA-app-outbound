@@ -20,7 +20,7 @@ import RegistrarTarefa, { type TarefaParaRegistrar } from './RegistrarTarefa';
 import { JANELAS_LIGACAO, MINUTOS_DA_JANELA } from '../utils/horaDasLigacoes';
 import { useParaFechar } from './SemDesfecho';
 import { Aviso, LinhaFeito, LinhaParada, LinhaTarefa, MarcoDaJanela, PlacarDoDia, ProximaParada, TituloDeLista, type DadosDaLinha, type DadosDaProxima, type DadosDaTarefa, type ItemDoAviso } from './agenda/PecasDaAgenda';
-import { opcoesDaFila } from './FilaTarefasScreen';
+import { opcoesDaFila } from '../utils/dadosDaFila';
 import { lerFeitas } from '../utils/filaFeitas';
 import { oQueFazer } from '../utils/textoDaTarefa';
 import * as Location from 'expo-location';

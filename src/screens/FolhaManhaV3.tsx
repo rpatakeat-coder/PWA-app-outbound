@@ -19,7 +19,7 @@ import { ActivityIndicator, Animated, Platform, Pressable, ScrollView, StyleShee
 import { Painel } from '../components/Painel';
 import { IconCheck, IconClock, IconLocation, IconPlus, IconWarning, useIconColors } from '../components/icons';
 import type { VMDia } from '../../supabase/functions/_compartilhado/hojeV3';
-import { useReduzirMovimento } from './MeuDesempenhoV2';
+import { useReduzirMovimento } from '../hooks/useDesenvolvimento';
 
 const COR_ETAPA = ['#94A3B8', '#60A5FA', '#A78BFA', '#F59E0B', '#F97316', '#10B981'];
 
