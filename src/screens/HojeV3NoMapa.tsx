@@ -18,6 +18,7 @@ import { ActivityIndicator, Animated, Platform, Pressable, StyleSheet, Text, Vie
 import { IconCheck, IconWarning, useIconColors } from '../components/icons';
 import type { VMDia } from '../../supabase/functions/_compartilhado/hojeV3';
 import { useReduzirMovimento } from '../hooks/useDesenvolvimento';
+import { FAIXA_TOPO } from '../map/conferenciaNaTela';
 
 export function PilulaPlacar({ pilula, top, fecharDia, aoTocar }: {
   pilula: VMDia['pilula']; top: number; fecharDia: (() => void) | null; aoTocar: () => void;
@@ -26,7 +27,7 @@ export function PilulaPlacar({ pilula, top, fecharDia, aoTocar }: {
   const tinta = pilula.tom === 'mute' ? 'var(--text-muted)' : '#FFFFFF';
   return (
     <View style={[s.pilulaLugar, { top }]} pointerEvents="box-none">
-      <View style={s.pilula}>
+      <View style={s.pilula} {...FAIXA_TOPO}>
         <Pressable accessibilityRole="button" accessibilityLabel={`${pilula.l1}. ${pilula.l2}. Abrir o Meu desempenho`} onPress={aoTocar} style={s.pilulaToque}>
           <View style={[s.circulo, { backgroundColor: fundo }]}><Text style={[s.circuloN, { color: tinta }]}>{pilula.n}</Text></View>
           <View style={s.pilulaTexto}>

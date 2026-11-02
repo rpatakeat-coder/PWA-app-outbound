@@ -218,15 +218,24 @@ export function niveisDoMapa(pinos: PinoDaCena[], o: OpcoesDaCena): NiveisDaCena
   // ── N3 e selos ──────────────────────────────────────────────────────────────────────────────
   const n3: string[] = [];
   for (const p of pinos) if (!nivel[p.id]) { nivel[p.id] = 3; n3.push(p.id); }
-  if (o.zoom === 'rua' && o.modo !== 'feriado') {
-    for (const p of todos) {
-      if (p === n1p || p.distanciaM == null || p.distanciaM > RAIO_N2_M || p.familia === 'rec') continue;
-      if (p.cobrar) selos[p.id] = '!';
-      else if (p.queda) selos[p.id] = '↓';
-    }
-  }
+  Object.assign(selos, selosDaCena(todos, o.zoom, o.modo, n1p?.id ?? null));
 
   return { n1, n2, n3, rotulosDescartados: descartados, selos, nivel };
+}
+
+/** Os selos não dependem da geometria: no máximo 1 por pino, só `!` (cobrar) e `↓` (em queda),
+ *  só a até 400 m, nunca no N1, nenhum no feriado nem fora do zoom de rua. */
+export function selosDaCena(
+  pinos: Pick<PinoDaCena, 'id' | 'distanciaM' | 'familia' | 'cobrar' | 'queda'>[], zoom: ZoomDoMapa, modo: ModoDoMapa, idN1: string | null,
+): Record<string, Selo> {
+  const selos: Record<string, Selo> = {};
+  if (zoom !== 'rua' || modo === 'feriado') return selos;
+  for (const p of pinos) {
+    if (p.id === idN1 || p.distanciaM == null || p.distanciaM > RAIO_N2_M || p.familia === 'rec') continue;
+    if (p.cobrar) selos[p.id] = '!';
+    else if (p.queda) selos[p.id] = '↓';
+  }
+  return selos;
 }
 
 /** A assinatura de uma cena, para quem guarda o resultado só quando ele muda. */

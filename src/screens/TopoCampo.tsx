@@ -24,6 +24,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { IconClose, IconFilterList, IconSearch, useIconColors } from '../components/icons';
 import { IconChevronDown as SiDown } from '../components/icons';
+import { FAIXA_TOPO } from '../map/conferenciaNaTela';
 
 export const ALTURA_TOPO_CAMPO = 48;
 /** Respiro entre a fileira e a faixa da vez. Só existem estas duas posições (prancha §0.1). */
@@ -50,7 +51,7 @@ export default function TopoCampo({ top, aoAbrirLentes, filtrosAtivos = 0, busca
   const cores = useIconColors();
   const comFiltro = filtrosAtivos > 0;
   return (
-    <View style={[s.fileira, { top }]} accessibilityRole="toolbar">
+    <View style={[s.fileira, { top }]} accessibilityRole="toolbar" {...FAIXA_TOPO}>
       <View style={s.campo}>
         {/* O BOTÃO DE FILTRO toma o lugar do chip da lente (prancha "Ordem da porta" §5): a lente
             voltou a ter fileira própria, embaixo, então o chip aqui vira redundância. O que fica

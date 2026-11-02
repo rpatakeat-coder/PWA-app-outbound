@@ -11,6 +11,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ALTURA_LINHA_DO_DIA, type LinhaDoDia as Linha, type TomDaLinha } from '../utils/linhaDoDia';
+import { FAIXA_TOPO } from '../map/conferenciaNaTela';
 
 type Props = {
   linha: Linha;
@@ -39,6 +40,7 @@ export default function LinhaDoDia({ linha, top, aoTocar, outra }: Props) {
       accessibilityRole="button"
       accessibilityLabel={linha.rotulo}
       testID={`linha-do-dia-${linha.estado}`}
+      {...FAIXA_TOPO}
       onPress={aoTocar}
       style={[s.faixa, { top, backgroundColor: t.fundo, borderColor: t.traco }]}
     >

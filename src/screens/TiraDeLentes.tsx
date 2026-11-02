@@ -22,6 +22,7 @@ import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'rea
 
 import type { Lente } from '../utils/lentes';
 import { COR_LENTE } from './FolhaLentes';
+import { FAIXA_BAIXO } from '../map/conferenciaNaTela';
 
 export const ALTURA_TIRA_LENTES = 44;
 /* O RESPIRO ACIMA DO GOOGLE (print do iPhone, 02/11/26). A fileira de baixo (lentes, "+", a pílula
@@ -49,7 +50,7 @@ export default function TiraDeLentes({ lentes, atual, aoEscolher, bottom, left =
   }), []);
 
   return (
-    <View style={[s.tira, { bottom, left, right }]} pointerEvents="box-none" {...arrasto.panHandlers}>
+    <View style={[s.tira, { bottom, left, right }]} pointerEvents="box-none" {...arrasto.panHandlers} {...FAIXA_BAIXO}>
       <ScrollView
         horizontal
         /* O CORTE VIRA DEGRADÊ (02/11/26): a última pílula era cortada seco na beira do "+", e

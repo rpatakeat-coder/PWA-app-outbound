@@ -407,6 +407,8 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
     if (!ctx || !showsUserLocation) return;
 
     const dot = document.createElement('div');
+    // o mapa na rua (02/11/26) mede a bolinha na tela: nenhum rótulo entra na zona de 24 px dela
+    dot.setAttribute('data-bolinha', '1');
     Object.assign(dot.style, {
       width: '18px',
       height: '18px',
@@ -421,7 +423,9 @@ const MapViewInner = forwardRef<MapViewHandle, MapViewProps>(function MapView(pr
     const marker = new ctx.maps.marker.AdvancedMarkerElement({
       map: ctx.map,
       content: dot,
-      zIndex: 9999, // sempre por cima dos pinos (prompt final C11)
+      // sempre por cima dos pinos (prompt final C11; mapa na rua: N3 < N2 < N1 < bolinha). Os
+      // pinos vão até 2000 (o aberto): 9999 deixa folga para qualquer camada nova
+      zIndex: 9999,
     });
     pontoRef.current = { marker, dot };
     /* apagado = posição sabida, ainda não confirmada pelo GPS do mapa */

@@ -16,7 +16,18 @@ import { supabase } from '../integrations/supabase/client';
 // contra `ignorado` é a resposta, e `proposto` é o denominador.
 export type TipoEvento = 'primeiro_toque' | 'fala_aberta' | 'halo_sugerido' | 'halo_aceito' | 'referencia_tocada'
   | 'se_ele_disser_aberto'
-  | 'plano_proposto' | 'plano_confirmado' | 'plano_ignorado';
+  | 'plano_proposto' | 'plano_confirmado' | 'plano_ignorado'
+  /* O MAPA NA RUA (prancha "Mapa na rua", 02/11/26). Em 2 semanas: % de sessões com toque na Lista,
+     toques em pino N3 (se caírem muito, o N3 está quieto demais) e tempo do mapa aberto ao 1º Ir ou
+     Cheguei (primeiro_toque). ATENÇÃO: o CHECK de eventos_do_mapa.tipo ainda não aceita estes cinco
+     (precisa de migração que amplie a lista); até lá o insert é recusado e o evento se perde em
+     silêncio, como manda a regra acima — nada trava.
+     - mapa_render {zoom, modo, n2_nomes, n3_pinos, rotulos_descartados, n1, n1_rotulo, largura, fonte}
+     - pino_toque {nivel, familia}
+     - pilha_abrir {n}
+     - alternador {para: 'lista' | 'mapa'}
+     - lista_linha_toque {grupo: 'proxima' | 'perto' | 'resto'} */
+  | 'mapa_render' | 'pino_toque' | 'pilha_abrir' | 'alternador' | 'lista_linha_toque';
 
 let desligado = false;
 

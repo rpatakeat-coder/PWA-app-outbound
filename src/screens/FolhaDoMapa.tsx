@@ -26,6 +26,7 @@ import type { LinhaDoDia as LinhaDoDiaTipo } from '../utils/linhaDoDia';
 import { primeiroToque, registrarEvento } from '../utils/eventosDoMapa';
 import { useComSinal } from './AvisoSemSinal';
 import { RESPIRO_ACIMA_DO_GOOGLE } from './TiraDeLentes';
+import { FAIXA_BAIXO } from '../map/conferenciaNaTela';
 
 export type { ItemFolha };
 
@@ -294,7 +295,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
     const rotulo = placarNoTopo ? 'Mostrar a próxima porta'
       : `Mostrar a próxima porta. ${feitasTexto} ${diaUtilHoje ? `de ${metaR} ` : ''}visitas hoje`;
     return (
-      <Pressable ref={acima.ref} accessibilityRole="button" accessibilityLabel={rotulo}
+      <Pressable ref={acima.ref} {...FAIXA_BAIXO} accessibilityRole="button" accessibilityLabel={rotulo}
         onPress={() => setRecolhida(false)}
         onLayout={(e) => aoMini?.(Math.round(e.nativeEvent.layout.width))}
         style={[s.pilulaMini, { bottom: chao + RESPIRO_ACIMA_DO_GOOGLE + acima.ajuste }]}>
@@ -309,7 +310,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
      atrás, o Cheguei de qualquer pino funciona, e "Agora não" é só fechar. */
   if (!aberta && linha?.estado === 'sem_plano' && aoMontarDia) {
     return (
-      <View ref={acima.ref} style={[s.pilula, s.semPlano, { bottom: chao + 8 + acima.ajuste }]} onLayout={medir} {...arrasto.panHandlers}>
+      <View ref={acima.ref} {...FAIXA_BAIXO} style={[s.pilula, s.semPlano, { bottom: chao + 8 + acima.ajuste }]} onLayout={medir} {...arrasto.panHandlers}>
         <View style={s.kickerLinha}>
           <Text style={[s.kickerFolha, s.kickerAmbar]} numberOfLines={1}>DIA SEM PLANO</Text>
           {!!linha.subtitulo && <Text style={s.kickerDireita} numberOfLines={1}>{linha.subtitulo}</Text>}
@@ -339,7 +340,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
       : linha?.tom === 'ambar' ? s.kickerAmbar
       : linha?.tom === 'vermelho' ? s.kickerVermelho : null;
     return (
-      <View ref={acima.ref} style={[s.pilula, { bottom: chao + 8 + acima.ajuste }]} accessibilityLabel="Próxima porta" onLayout={medir} {...arrasto.panHandlers}>
+      <View ref={acima.ref} {...FAIXA_BAIXO} style={[s.pilula, { bottom: chao + 8 + acima.ajuste }]} accessibilityLabel="Próxima porta" onLayout={medir} {...arrasto.panHandlers}>
         {/* ENTRE PORTAS (2.7) vai ACIMA do kicker e da proxima porta, mas dentro da folha: e uma
             sugestao de dois minutos, nao um estado do dia — e, como tudo aqui, nunca toma o lugar
             do Cheguei, que continua embaixo, no mesmo pixel. */}
@@ -445,7 +446,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
   const Casca = embutida ? ScrollView : View;
   const ListaCasca = embutida ? View : ScrollView;
   return (
-    <Casca ref={embutida ? undefined : acima.ref}
+    <Casca ref={embutida ? undefined : acima.ref} {...FAIXA_BAIXO}
       style={embutida ? s.painelRola : [s.folha, { bottom: chao + acima.ajuste }, cheia && s.folhaCheia]}
       {...(embutida ? { contentContainerStyle: s.painelConteudo } : {})}
       accessibilityLabel="Agora, perto de você" onLayout={embutida ? undefined : (e) => {

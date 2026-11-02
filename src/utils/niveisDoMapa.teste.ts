@@ -54,7 +54,7 @@ const S4 = tirar(S1, ['Senhor Bacon', 'Café Bonfim', 'Bar Lua', 'Cantina 1912',
   { k: 'lead', dx: 118, dy: -168, temp: 'F', n: 'Cantina 1912', d: 320, prop: true },
   { k: 'lead', dx: -20, dy: -70, temp: 'M', n: 'Senhor Bacon', d: 120 },
 ]);
-const S4F = tirar(S4, ['Piu Restaurante']).map((p) => ({ ...p, prop: false }))
+const S4F = tirar(S4, ['Piu Restaurante']).map((p): Spec => ({ ...p, prop: false }))
   .concat([{ k: 'lead', dx: -92, dy: -118, temp: 'M', n: 'Piu Restaurante', d: 240, cobrar: true }, { k: 'rec', dx: 110, dy: 90, n: 'Café Aurora', d: 180, days: 20 }]);
 const POIS = [{ dx: -175, dy: 130, t: 'Praça dos Namorados' }, { dx: 40, dy: 116, t: 'Ponto · Av. Rio Branco' }];
 
