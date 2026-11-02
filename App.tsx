@@ -254,6 +254,9 @@ import { useRouteConfig } from './src/hooks/useRouteConfig';
 import { useSellerGoals } from './src/hooks/useSellerGoals';
 import { IconCheck as SiCheck, IconChevronDown as SiDown, IconChevronLeft as SiLeft } from './src/components/icons';
 
+// atalhos para fora (02/11/26): a TakeatOS e o HubSpot (a lista de negócios do portal)
+const LINK_FORA = { takeatos: 'https://takeatos.vercel.app', hubspot: 'https://app.hubspot.com/contacts/24373118/objects/0-3/views/all/list' } as const;
+
 // TELAS GRANDES E RARAS SOB DEMANDA (auditoria 02/11/26). O Metro divide o import() em arquivos
 // próprios mesmo com web.output 'single' (conferido no build: um .js por tela), e o service worker
 // já pré-carrega todo o _expo/static na instalação (scripts/build-web.js), então abrir uma delas sem
@@ -8374,7 +8377,7 @@ function MainApp() {
 
   // 'cockpit' nao e' aba: e' destino. Fica na mesma lista porque ocupa o mesmo
   // lugar na sidebar, mas nunca chega ao `tab` — o onPress navega pra fora.
-  const itensNavWeb: Array<{ aba: AppTab | 'cockpit'; rotulo: string; Icone: typeof IconLocation; badge?: number; selo?: string; visivel: boolean }> = [
+  const itensNavWeb: Array<{ aba: AppTab | 'cockpit' | 'takeatos' | 'hubspot'; rotulo: string; Icone: typeof IconLocation; imagem?: string; badge?: number; selo?: string; visivel: boolean }> = [
     { aba: 'map', rotulo: 'Mapa', Icone: IconLocation, visivel: true },
     { aba: 'list', rotulo: 'Lista', Icone: IconSquareMenu, visivel: true },
     // R1 opção A: a Rota é o mapa da Agenda (coluna da direita), não uma aba.
@@ -8387,6 +8390,10 @@ function MainApp() {
     { aba: 'cockpit', rotulo: 'Gestão', Icone: IconBarGraph, visivel: verGestao },
     // D1: na lateral para todos (o gestor que vende também tem variável e temporada); só o "view" não
     { aba: 'meu', rotulo: 'Meu desempenho', Icone: IconTrendingUp, visivel: !isViewer },
+    // ATALHOS PARA FORA (02/11/26, Julyan: "eles ficam me perguntando"): a TakeatOS, onde está tudo da
+    // Takeat, e o HubSpot. Abrem em outra aba; o app continua aberto.
+    { aba: 'takeatos', rotulo: 'TakeatOS', Icone: IconLocation, imagem: '/marca/takeat-icon.svg', visivel: true },
+    { aba: 'hubspot', rotulo: 'HubSpot', Icone: IconLocation, imagem: '/marca/hubspot.svg', visivel: !isViewer },
   ];
 
   // As duas constantes de iniciais que viviam aqui (`iniciaisWeb` da sidebar e
@@ -8434,10 +8441,12 @@ function MainApp() {
               accessibilityLabel={item.rotulo}
               style={[styles.sbItem, ativo && styles.sbItemAtivo]}
               {...ds(ativo ? { trans: '1' } : { trans: '1', hover: 'surface2' })}
-              onPress={() => (item.aba === 'cockpit' ? irParaOCockpit() : setTab(item.aba))}
+              onPress={() => (item.aba === 'cockpit' ? irParaOCockpit() : item.aba === 'takeatos' || item.aba === 'hubspot' ? void Linking.openURL(LINK_FORA[item.aba]) : setTab(item.aba))}
             >
               <View style={styles.sbItemIcone}>
-                <item.Icone width={24} height={24} fill={ativo ? iconColors.tintRedText : iconColors.muted} />
+                {item.imagem
+                  ? <Image source={{ uri: item.imagem }} style={{ width: 22, height: 22, borderRadius: 5 }} />
+                  : <item.Icone width={24} height={24} fill={ativo ? iconColors.tintRedText : iconColors.muted} />}
               </View>
               {item.selo ? (
                 <View style={{ flex: 1, minWidth: 0, gap: 2 }} {...ds({ rotulo: '1' })}>
@@ -9139,6 +9148,8 @@ function MainApp() {
             ...(verGestao ? [{ chave: 'gestao', rotulo: 'Gestão', sub: 'o Cockpit, no computador', aoTocar: () => { irParaOCockpit(); } }] : []),
             ...(canViewGestor ? [{ chave: 'time', rotulo: 'O time na rua · hoje', sub: 'prova, pendências e quem não planejou', aoTocar: () => setTimeNaRua(true) }] : []),
             { chave: 'avisos', rotulo: 'Avisos', sub: 'o que não subiu e os recados do gestor', selo: avisos.selo + (seloFila?.n ?? 0) > 0 ? String(avisos.selo + (seloFila?.n ?? 0)) : null, aoTocar: () => { setAvisosAbertos(true); avisos.marcarRecadosVistos(); } },
+            { chave: 'takeatos', rotulo: 'TakeatOS', sub: 'metas, relatórios e tudo da Takeat', aoTocar: () => { void Linking.openURL(LINK_FORA.takeatos); } },
+            { chave: 'hubspot', rotulo: 'HubSpot', sub: 'negócios, tarefas e contatos', aoTocar: () => { void Linking.openURL(LINK_FORA.hubspot); } },
             { chave: 'perfil', rotulo: 'Ajustes e sair', sub: 'foto, configurações e sair da conta', aoTocar: () => setPerfilAberto(true) },
           ]}
           tarefasPendentes={totalDaFila ?? undefined}
