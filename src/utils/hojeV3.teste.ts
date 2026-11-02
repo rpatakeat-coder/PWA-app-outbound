@@ -105,7 +105,9 @@ ok(V('fecho0').push18!.titulo === 'Feche o dia: 6 portas · todas com próximo p
 ok(V('manha').push18 === null, 'quem não foi à rua não recebe o push do fecho');
 ok(V('planoFora').folha.plano.titulo === 'O plano de hoje não respondeu' && V('planoFora').folha.sem!.titulo === '— sem próximo passo' && V('planoFora').cockpit.placar.pts === '—', 'fonte fora: "—", nunca 0');
 ok(V('meioDia').cockpit.plano.titulo === 'Próxima porta: Pizzaria Cerqueira · ≈ 16:10' && V('meioDia').cockpit.plano.contagem === '4 de 6 com prova', 'o Hoje do Cockpit · plano de hoje');
-ok(V('meioDia').cockpit.placar.prox === 'Faltam 10 pts para passar Marco.', 'o Hoje do Cockpit · placar: "Faltam 10 pts para passar Marco."');
+ok(V('meioDiaFora').pilula.l1 === '6 de 6 com prova · 2 sem prova · 37 pts na semana' && V('meioDiaFora').pilula.tom === 'ok' && V('meioDiaFora').cockpit.plano.contagem === '6 de 6 com prova', 'o "X de 6 com prova" conta a visita com prova fora do plano (o Cockpit conta dv5.fora)');
+ok(V('soFora').pilula.n === '1' && V('soFora').cockpit.plano.contagem === '1 de 6 com prova' && V('soFora').cockpit.plano.titulo === 'Nada no plano de hoje', 'sem plano e uma visita provada fora dele: 1 de 6, o plano segue vazio');
+ok(V('meioDia').cockpit.placar.prox ==='Faltam 10 pts para passar Marco.', 'o Hoje do Cockpit · placar: "Faltam 10 pts para passar Marco."');
 ok(V('zerada').cockpit.sem.zero && V('zerada').cockpit.sem.n === '0', 'o Hoje do Cockpit · fila zerada');
 ok(V('seguinte').cockpit.placar.linhas[2].v === 'Fechou o dia ontem: não', 'o Hoje do Cockpit · "Fechou o dia ontem"');
 ok(saida.chips[0].map((c) => c.rot).join(' · ') === 'amanhã · sex 13 · seg 16', 'os chips: amanhã · sex 13 · seg 16');
