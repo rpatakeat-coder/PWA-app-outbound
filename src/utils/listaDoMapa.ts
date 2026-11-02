@@ -31,6 +31,23 @@ export type ItemDaLista = {
   diasNaEtapa: number | null;
   /** Rótulo curto da etapa/estado (a etiqueta do pino). */
   etiqueta: string | null;
+  /* ── O MAPA NA RUA (prancha "Mapa na rua" §6, 02/11/26): o que saiu do mapa vem para a linha ── */
+  /** Família do pino (o marcador da linha é o mesmo do pino). */
+  familia?: 'lead' | 'rec' | 'av' | 'cli' | 'ex' | 'alvo';
+  /** Letra/número do pino (Q, M, F, nota). */
+  glifo?: string;
+  /** Recém-aberto: dias de CNPJ. */
+  abertoHa?: number | null;
+  /** Passo vencido / prazo estourado (a regra do "cobrar" de hoje). */
+  cobrar?: boolean;
+  /** Dias sem toque (a última interação ou visita, o que for mais recente). */
+  diasSemToque?: number | null;
+  /** Cliente em queda: o porquê. */
+  queda?: string | null;
+  /** O próximo passo combinado (a tarefa aberta). */
+  proximo?: { texto: string; quando: string | null; vencido?: boolean } | null;
+  /** Parada do plano já feita (ou visitado hoje). */
+  feito?: boolean;
 };
 
 export type LinhaDaLista = {
@@ -50,7 +67,71 @@ export type LinhaDaLista = {
      morria aqui; agora sai, porque a Lista passa a separar "NO PLANO" de "FORA DO PLANO, PERTO".
      A parada combinada e o CNPJ que eu nunca vi não podem disputar atenção em pé de igualdade. */
   plano: number | null;
+  /* ── O MAPA NA RUA (§6): a linha fala a língua do pino e diz por quê ── */
+  marcador: { familia: ItemDaLista['familia'] | null; cor: string; glifo: string; plano: number | null; abertoHa: number | null; feito: boolean };
+  /** Por que visitar ("88 dias sem toque", "Recém-aberto há 12 dias", "Parada 4 do plano"). */
+  porque: string;
+  /** O porquê é de cobrar (âmbar na tela). */
+  porqueCobra: boolean;
+  /** "Próximo: retorno com o dono · venceu 14/10" ou null. */
+  proximo: string | null;
+  /** Minutos a pé (80 m/min), null sem distância. */
+  minutos: number | null;
 };
+
+/** POR QUE VISITAR (prancha "Mapa na rua" §6): a razão que o N2 usa, por extenso. Precedência: a
+ *  parada do plano, o que cobra (sem toque, passo vencido), o recém-aberto, a queda, e só então a
+ *  situação de sempre ("nunca visitado", "última visita há N dias"). */
+export function porqueVisitar(it: ItemDaLista, agora: Date): { texto: string; cobra: boolean } {
+  if (it.plano != null) return { texto: it.feito ? `Parada ${it.plano} do plano · feita` : `Parada ${it.plano} do plano`, cobra: false };
+  if (it.cobrar || (it.diasSemToque != null && it.etiqueta != null && /parado/.test(it.etiqueta))) {
+    if (it.diasSemToque != null && it.diasSemToque > 0) return { texto: `${it.diasSemToque} ${it.diasSemToque === 1 ? 'dia' : 'dias'} sem toque`, cobra: true };
+    return { texto: 'Prazo da etapa estourou', cobra: true };
+  }
+  if (it.proximo?.vencido) return { texto: 'Passo vencido', cobra: true };
+  if (it.familia === 'rec' && it.abertoHa != null) {
+    return { texto: it.abertoHa === 0 ? 'Recém-aberto hoje' : `Recém-aberto há ${it.abertoHa} ${it.abertoHa === 1 ? 'dia' : 'dias'}`, cobra: false };
+  }
+  if (it.queda) return { texto: `Cliente em queda · ${it.queda}`, cobra: true };
+  const s = situacao(it, agora);
+  return { texto: s.charAt(0).toUpperCase() + s.slice(1), cobra: false };
+}
+
+/** "Próximo: retorno com o dono · venceu 14/10"; sem passo combinado, a 1ª visita de quem nunca foi visitado. */
+export function proximoDaLinha(it: ItemDaLista): string | null {
+  if (it.proximo?.texto) {
+    const t = it.proximo.texto.charAt(0).toLocaleLowerCase('pt-BR') + it.proximo.texto.slice(1);
+    return `Próximo: ${t}${it.proximo.quando ? ` · ${it.proximo.vencido ? 'venceu ' : ''}${it.proximo.quando}` : ''}`;
+  }
+  if (it.familia === 'cli') return null;
+  return nuncaVisitado(it) ? 'Próximo: 1ª visita' : null;
+}
+
+export type GrupoDaLista = 'proxima' | 'perto' | 'resto';
+
+/**
+ * OS TRÊS GRUPOS DA LISTA (prancha "Mapa na rua" §6, 6a/6b): os mesmos níveis do mapa. A PRÓXIMA
+ * é o N1; PEDEM AÇÃO PERTO são os MESMOS nomes do N2, na ordem do mapa; O RESTO NESTE TRECHO é o
+ * resto, na ordem da lista (mais perto ou nunca visitado). Quem não está no recorte não entra.
+ */
+export function gruposDaLista(linhas: LinhaDaLista[], idProxima: string | null, idsPerto: string[]): { grupo: GrupoDaLista; linhas: LinhaDaLista[] }[] {
+  const porId = new Map(linhas.map((l) => [l.id, l]));
+  const proxima = idProxima && porId.has(idProxima) ? [porId.get(idProxima)!] : [];
+  const perto = idsPerto.filter((id) => id !== idProxima && porId.has(id)).map((id) => porId.get(id)!);
+  const usados = new Set([...proxima, ...perto].map((l) => l.id));
+  return [
+    { grupo: 'proxima', linhas: proxima },
+    { grupo: 'perto', linhas: perto },
+    { grupo: 'resto', linhas: linhas.filter((l) => !usados.has(l.id)) },
+  ];
+}
+
+/** Dentro do trecho visível do mapa (a região de agora). Sem coordenada, fora. */
+export function noTrecho(it: Pick<ItemDaLista, 'lat' | 'lng'>, r: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number } | null): boolean {
+  if (!r) return true;
+  if (it.lat == null || it.lng == null || !Number.isFinite(it.lat) || !Number.isFinite(it.lng)) return false;
+  return Math.abs(it.lat - r.latitude) <= r.latitudeDelta / 2 && Math.abs(it.lng - r.longitude) <= r.longitudeDelta / 2;
+}
 
 /** "SANTA ROSA" → "Santa Rosa" (a Casa dos Dados cadastra em caixa alta). */
 function grafiaDeTela(b: string): string {
@@ -133,6 +214,7 @@ export function montarLista(itens: ItemDaLista[], eu: { lat: number; lng: number
     const partes = [bairro ? grafiaDeTela(bairro) : 'sem bairro no cadastro', situacao(it, agora)];
     if (it.etiqueta) partes.push(it.etiqueta);
     const texto = distanciaTexto(m);
+    const pq = porqueVisitar(it, agora);
     return {
       id: it.id,
       nome: it.nome,
@@ -143,6 +225,11 @@ export function montarLista(itens: ItemDaLista[], eu: { lat: number; lng: number
       metros: m,
       nunca: nuncaVisitado(it),
       plano: it.plano,
+      marcador: { familia: it.familia ?? null, cor: it.cor, glifo: it.glifo ?? '', plano: it.plano, abertoHa: it.abertoHa ?? null, feito: !!it.feito },
+      porque: pq.texto,
+      porqueCobra: pq.cobra,
+      proximo: proximoDaLinha(it),
+      minutos: m == null ? null : Math.max(1, Math.round(m / 80)),
     };
   });
   // Sem distância (sem coordenada, ou sem GPS) vai para o fim do SEU bloco, em ordem de nome —

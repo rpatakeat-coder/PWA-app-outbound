@@ -1,7 +1,7 @@
 // Teste da lista do que está filtrado no mapa (Julyan, 27/10/26).
 //
 // Rode com:  npx tsx src/utils/listaDoMapa.teste.ts
-import { montarLista, situacao, type ItemDaLista } from './listaDoMapa';
+import { gruposDaLista, montarLista, noTrecho, situacao, type ItemDaLista } from './listaDoMapa';
 
 let falhas = 0;
 const ok = (c: boolean, m: string) => {
@@ -106,6 +106,27 @@ for (const podre of ['ontem', '', '0000-00-00', '31/10/2026']) {
 ok(montarLista([it({ id: 'x', bairro: 'SANTA ROSA DE LIMA' })], EU, AGORA)[0].sub.startsWith('Santa Rosa de Lima · '), 'caixa alta vira grafia de tela');
 ok(montarLista([it({ id: 'x', bairro: null })], EU, AGORA)[0].sub.startsWith('sem bairro no cadastro · '), 'sem bairro diz que falta no cadastro, não fica vazio');
 ok(montarLista([it({ id: 'x', etiqueta: 'Negociação' })], EU, AGORA)[0].sub.endsWith(' · Negociação'), 'a etiqueta do pino entra no fim');
+
+// ── o mapa na rua (prancha 6a/6b, 02/11/26): por quê, próximo passo, 3 grupos, trecho ───────
+const pq = (p: Partial<ItemDaLista>) => montarLista([it({ id: 'x', ...p })], EU, AGORA)[0];
+ok(pq({ plano: 4 }).porque === 'Parada 4 do plano' && !pq({ plano: 4 }).porqueCobra, 'parada do plano: "Parada 4 do plano"');
+ok(pq({ cobrar: true, diasSemToque: 88 }).porque === '88 dias sem toque' && pq({ cobrar: true, diasSemToque: 88 }).porqueCobra, 'cobrar: "88 dias sem toque", em âmbar');
+ok(pq({ familia: 'rec', abertoHa: 12 }).porque === 'Recém-aberto há 12 dias', 'recém: a idade exata (saiu do losango)');
+ok(pq({ familia: 'rec', abertoHa: 81 }).porque === 'Recém-aberto há 81 dias', 'recém de 81 dias: a idade que o mapa não mostra mais');
+ok(pq({ familia: 'cli', queda: '−32% em 30 dias' }).porque === 'Cliente em queda · −32% em 30 dias' && pq({ familia: 'cli', queda: 'x' }).porqueCobra, 'em queda: o motivo, em âmbar');
+ok(pq({ proximo: { texto: 'Retorno com o dono', quando: '14/10', vencido: true } }).proximo === 'Próximo: retorno com o dono · venceu 14/10', 'próximo passo vencido diz "venceu"');
+ok(pq({ familia: 'lead' }).proximo === 'Próximo: 1ª visita', 'nunca visitado sem passo: 1ª visita');
+ok(pq({ familia: 'cli' }).proximo === null, 'cliente sem passo: sem linha inventada');
+ok(pq({ lat: -20.3010, lng: -40.29 }).minutos === 1 && pq({ lat: -20.3022, lng: -40.29 }).minutos === 3, 'minutos a pé (80 m/min)');
+const ls = montarLista(['a', 'b', 'c', 'd', 'e'].map((id, i) => it({ id, lat: -20.3 - i * 0.001 })), EU, AGORA);
+const g = gruposDaLista(ls, 'c', ['e', 'a', 'zz']);
+ok(g.map((x) => x.grupo).join() === 'proxima,perto,resto', 'três grupos, na ordem do mapa');
+ok(g[0].linhas.map((l) => l.id).join() === 'c' && g[1].linhas.map((l) => l.id).join() === 'e,a' && g[2].linhas.map((l) => l.id).join() === 'b,d',
+  'A PRÓXIMA = N1; PEDEM AÇÃO PERTO = os nomes do N2 na ordem do mapa; O RESTO = o resto, na ordem da lista');
+ok(gruposDaLista(ls, null, [])[2].linhas.length === 5, 'sem N1 e sem N2, tudo é o resto');
+const reg = { latitude: -20.3, longitude: -40.29, latitudeDelta: 0.01, longitudeDelta: 0.01 };
+ok(noTrecho({ lat: -20.304, lng: -40.29 }, reg) && !noTrecho({ lat: -20.31, lng: -40.29 }, reg) && !noTrecho({ lat: null, lng: null }, reg) && noTrecho({ lat: 1, lng: 1 }, null),
+  'trecho visível: dentro, fora, sem coordenada, sem região');
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\nTudo certo.');

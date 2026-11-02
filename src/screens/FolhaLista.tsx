@@ -12,14 +12,15 @@
 //
 // A ordem e o texto das linhas são regra pura (src/utils/listaDoMapa.ts); aqui só tem tela.
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { horaBRT } from '../utils/linhaDoDia';
 
 import { Painel, type EstagioPainel } from '../components/Painel';
 import { IconChevronRight as SiRight } from '../components/icons';
 
-import type { LinhaDaLista, OrdemDaLista } from '../utils/listaDoMapa';
+import type { GrupoDaLista, LinhaDaLista, OrdemDaLista } from '../utils/listaDoMapa';
+import { COR } from '../utils/pinoP2';
 
 type Props = {
   visivel: boolean;
@@ -36,7 +37,47 @@ type Props = {
   aoTrocarOrdem: (o: OrdemDaLista) => void;
   estagio: EstagioPainel;
   aoTrocarEstagio: (e: EstagioPainel) => void;
+  /* O MAPA NA RUA (prancha "Mapa na rua" §6, 6a/6b, 02/11/26). Com `grupos`, a lista é o MESMO
+     recorte do mapa (lente + filtro + trecho visível) nos mesmos três níveis: A PRÓXIMA · PEDEM AÇÃO
+     PERTO (os nomes do N2) · O RESTO NESTE TRECHO. Cada linha tem o marcador do pino, por que
+     visitar (cobrar em âmbar), o próximo passo, distância e minutos a pé, e Ir ou Cheguei. */
+  grupos?: { grupo: GrupoDaLista; linhas: LinhaDaLista[] }[] | null;
+  /** "A PRÓXIMA" à direita do título do grupo ("3 de 6 no plano"). */
+  resumoDaProxima?: string | null;
+  aoIr?: (id: string) => void;
+  aoCheguei?: (id: string) => void;
+  /** Toque numa linha, com o grupo (evento lista_linha_toque). */
+  aoTocarNoGrupo?: (grupo: GrupoDaLista) => void;
 };
+
+const TITULO_DO_GRUPO: Record<GrupoDaLista, string> = { proxima: 'A PRÓXIMA', perto: 'PEDEM AÇÃO PERTO', resto: 'O RESTO NESTE TRECHO' };
+const LOGO = require('../../assets/takeat-t-branco.png');
+
+/** O marcador da linha é o mesmo do pino: losango limão do recém-aberto (com a idade até 30 dias),
+ *  círculo na cor da família com a letra, o número da parada, o T do cliente. */
+function MarcadorDaLinha({ m }: { m: LinhaDaLista['marcador'] }) {
+  if (m.familia === 'rec' && m.plano == null) {
+    const d = m.abertoHa ?? 99;
+    const contorno = d > 60;
+    return (
+      <View style={s.marcaCaixa}>
+        <View style={[s.losango, contorno && s.losangoContorno, { width: d <= 30 ? 21 : d <= 60 ? 18 : 16, height: d <= 30 ? 21 : d <= 60 ? 18 : 16 }]}>
+          {d <= 30 && <Text style={s.losangoTexto}>{d}</Text>}
+        </View>
+      </View>
+    );
+  }
+  const glifo = m.plano != null ? (m.feito ? '✓' : String(m.plano)) : m.familia === 'cli' ? '' : m.glifo;
+  return (
+    <View style={s.marcaCaixa}>
+      <View style={[s.circulo, { backgroundColor: m.familia === 'rec' ? COR.rec : m.cor }, m.feito && { opacity: 0.5 }]}>
+        {m.familia === 'cli' && m.plano == null
+          ? <Image source={LOGO} style={{ width: 14, height: 17 }} resizeMode="contain" accessibilityLabel="Takeat" />
+          : <Text style={[s.circuloTexto, m.familia === 'rec' && { color: COR.recTinta }]}>{glifo}</Text>}
+      </View>
+    </View>
+  );
+}
 
 /** Quantas linhas a folha desenha de uma vez na lista cheia. Acima disso, "Ver mais". */
 const PAGINA = 60;
@@ -51,7 +92,9 @@ const NO_PEEK = 2;
 
 export default function FolhaLista({
   visivel, aoFechar, linhas, semGps, filtrosAtivos, aoTocar, ordem, aoTrocarOrdem, estagio, aoTrocarEstagio, rotuloLente = null,
+  grupos = null, resumoDaProxima = null, aoIr, aoCheguei, aoTocarNoGrupo,
 }: Props) {
+  const comGrupos = !!grupos;
   const [quantas, setQuantas] = React.useState(PAGINA);
   // Trocar a ordem volta ao começo: continuar na página 3 de outra ordem mostra o meio da lista.
   React.useEffect(() => { setQuantas(PAGINA); }, [visivel, ordem]);
@@ -107,7 +150,7 @@ export default function FolhaLista({
             `linhas.length` ao vivo: o número mudava sozinho a cada arraste do mapa atrás, e número
             que muda sozinho não é informação — é ruído com cara de dado. Para recontar, o toque em
             "atualizar", que é dele. */}
-        <Text style={s.titulo}>{`${congelado.n} ${congelado.n === 1 ? 'lugar' : 'lugares'}`}</Text>
+        <Text style={s.titulo}>{comGrupos ? `${congelado.n} neste trecho do mapa` : `${congelado.n} ${congelado.n === 1 ? 'lugar' : 'lugares'}`}</Text>
         <Pressable accessibilityRole="button" onPress={aoFechar} style={s.fechar} hitSlop={8}>
           <Text style={s.fecharTexto}>Fechar</Text>
         </Pressable>
@@ -136,6 +179,64 @@ export default function FolhaLista({
     </View>
   );
 
+  /* A LINHA DO MAPA NA RUA (6a/6b): marcador, nome, por quê, próximo passo, distância e minutos,
+     e a ação — Cheguei na próxima, Ir nas outras. A linha inteira abre o pino no mapa. */
+  const linhaNaRua = (l: LinhaDaLista, grupo: GrupoDaLista) => {
+    const cheguei = grupo === 'proxima' && !!aoCheguei;
+    const acao = cheguei ? aoCheguei : aoIr;
+    return (
+      <View key={l.id} style={s.linhaRua}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${l.nome}. ${l.porque}${l.proximo ? `. ${l.proximo}` : ''}${l.distancia ? `. ${l.distancia}` : ''}`}
+          onPress={() => { aoTocarNoGrupo?.(grupo); aoTocar(l.id); }} style={s.linhaRuaToque}>
+          <MarcadorDaLinha m={l.marcador} />
+          <View style={s.textos}>
+            <Text style={s.nome} numberOfLines={1}>{l.nome}</Text>
+            <Text style={[s.porque, l.porqueCobra && s.porqueCobra]} numberOfLines={1}>{l.porque}</Text>
+            {!!l.proximo && <Text style={s.sub} numberOfLines={1}>{l.proximo}</Text>}
+          </View>
+          {l.distancia ? (
+            <View style={s.distCaixa}>
+              <Text style={s.distancia}>{l.distancia}</Text>
+              {l.minutos != null && <Text style={s.minutos}>{`${l.minutos} min`}</Text>}
+            </View>
+          ) : null}
+        </Pressable>
+        {acao && (
+          <Pressable accessibilityRole="button" accessibilityLabel={cheguei ? `Cheguei: ${l.nome}` : `Ir até ${l.nome}`}
+            onPress={() => { aoTocarNoGrupo?.(grupo); acao(l.id); }} style={[s.acao, cheguei && s.acaoCheguei]}>
+            <Text style={[s.acaoTexto, cheguei && s.acaoChegueiTexto]}>{cheguei ? 'Cheguei' : 'Ir'}</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  };
+  const restoMostrado = grupos ? (grupos.find((g) => g.grupo === 'resto')?.linhas ?? []).slice(0, quantas) : [];
+  const totalResto = grupos ? grupos.find((g) => g.grupo === 'resto')?.linhas.length ?? 0 : 0;
+  const corpoEmGrupos = grupos ? (
+    <>
+      {grupos.map((g) => {
+        const ls = g.grupo === 'resto' ? restoMostrado : g.linhas;
+        if (!g.linhas.length) return null;
+        const direita = g.grupo === 'proxima' ? resumoDaProxima ?? '' : g.grupo === 'perto' ? `${g.linhas.length} · os nomes do mapa` : String(g.linhas.length);
+        return (
+          <View key={g.grupo}>
+            <View style={s.grupoLinha}>
+              <Text style={s.grupoRua}>{TITULO_DO_GRUPO[g.grupo]}</Text>
+              {!!direita && <Text style={s.grupoDireita} numberOfLines={1}>{direita}</Text>}
+            </View>
+            {ls.map((l) => linhaNaRua(l, g.grupo))}
+          </View>
+        );
+      })}
+      {totalResto > quantas && (
+        <Pressable accessibilityRole="button" onPress={() => setQuantas((q) => q + PAGINA)} style={s.mais}>
+          <Text style={s.maisTexto}>{`Ver mais ${Math.min(PAGINA, totalResto - quantas)}`}</Text>
+        </Pressable>
+      )}
+    </>
+  ) : null;
+  const primeirasEmGrupos = grupos ? grupos.flatMap((g) => g.linhas.map((l) => ({ l, g: g.grupo }))).slice(0, NO_PEEK) : [];
+
   const vazio = <Text style={s.vazio}>Nenhum lugar no que o mapa está mostrando. Afaste o mapa, troque a lente ou tire um filtro.</Text>;
 
   return (
@@ -149,7 +250,7 @@ export default function FolhaLista({
         <View style={s.peek}>
           {cabecalho}
           <View style={s.corpo}>
-            {linhas.length === 0 ? vazio : linhas.slice(0, NO_PEEK).map(linha)}
+            {linhas.length === 0 ? vazio : comGrupos ? primeirasEmGrupos.map(({ l, g }) => linhaNaRua(l, g)) : linhas.slice(0, NO_PEEK).map(linha)}
           </View>
           {faltam > 0 && (
             <Pressable accessibilityRole="button" accessibilityLabel={`Ver os outros ${faltam} em lista cheia`}
@@ -162,7 +263,7 @@ export default function FolhaLista({
       topo={cabecalho}
     >
       <View style={s.corpo}>
-        {linhas.length === 0 ? vazio : (
+        {linhas.length === 0 ? vazio : comGrupos ? corpoEmGrupos : (
           <>
             {/* DOIS GRUPOS (prancha §6): a parada combinada não disputa atenção em pé de
                 igualdade com o CNPJ que ele nunca viu. Só aparecem quando há plano — sem plano,
@@ -210,6 +311,26 @@ const s = StyleSheet.create({
   ordemTexto: { fontSize: 13, fontWeight: '700', color: 'var(--text)' },
   ordemTextoAtivo: { color: 'var(--bg)' },
   corpo: { paddingHorizontal: 16, paddingBottom: 24 },
+  /* o mapa na rua (6a/6b) */
+  grupoLinha: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 14, paddingBottom: 6 },
+  grupoRua: { fontSize: 11.5, fontWeight: '700', letterSpacing: 0.6, color: 'var(--text-subtle)' },
+  grupoDireita: { fontSize: 12, fontWeight: '600', color: 'var(--text-subtle)', flexShrink: 1 },
+  linhaRua: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, borderTopWidth: 1, borderTopColor: 'var(--border)' },
+  linhaRuaToque: { flex: 1, minWidth: 0, minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  marcaCaixa: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  circulo: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  circuloTexto: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
+  losango: { borderRadius: 3, transform: [{ rotate: '45deg' }], backgroundColor: COR.rec, borderWidth: 2, borderColor: COR.recTinta, alignItems: 'center', justifyContent: 'center' },
+  losangoContorno: { backgroundColor: 'transparent', borderColor: 'var(--text)' },
+  losangoTexto: { fontSize: 10, fontWeight: '800', color: COR.recTinta, transform: [{ rotate: '-45deg' }] },
+  porque: { fontSize: 12.5, fontWeight: '600', color: 'var(--text)', marginTop: 1 },
+  porqueCobra: { color: 'var(--ambar-texto)' },
+  distCaixa: { alignItems: 'flex-end', flexShrink: 0 },
+  minutos: { fontSize: 11.5, color: 'var(--text-subtle)' },
+  acao: { minHeight: 44, minWidth: 52, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: 'var(--stroke-strong)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  acaoCheguei: { backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
+  acaoTexto: { fontSize: 13.5, fontWeight: '600', color: 'var(--text)' },
+  acaoChegueiTexto: { color: '#FFFFFF' },
   vazio: { fontSize: 14, lineHeight: 20, color: 'var(--text-muted)', paddingTop: 16, textAlign: 'center' },
   linha: {
     minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10,
