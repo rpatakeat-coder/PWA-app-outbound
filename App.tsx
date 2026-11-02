@@ -254,8 +254,8 @@ import { useRouteConfig } from './src/hooks/useRouteConfig';
 import { useSellerGoals } from './src/hooks/useSellerGoals';
 import { IconCheck as SiCheck, IconChevronDown as SiDown, IconChevronLeft as SiLeft } from './src/components/icons';
 
-// atalhos para fora (02/11/26): a TakeatOS e o HubSpot (a lista de negócios do portal)
-const LINK_FORA = { takeatos: 'https://takeatos.vercel.app', hubspot: 'https://app.hubspot.com/contacts/24373118/objects/0-3/views/all/list' } as const;
+// atalhos para fora (02/11/26): a TakeatOS e o HubSpot (a página inicial)
+const LINK_FORA = { takeatos: 'https://takeatos.vercel.app', hubspot: 'https://app.hubspot.com/' } as const;
 
 // TELAS GRANDES E RARAS SOB DEMANDA (auditoria 02/11/26). O Metro divide o import() em arquivos
 // próprios mesmo com web.output 'single' (conferido no build: um .js por tela), e o service worker
