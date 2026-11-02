@@ -108,7 +108,8 @@ export function ToastPosVisita({ toast, bottom, aoChip, aoDepois, aoSumir }: {
 }
 
 const s = StyleSheet.create({
-  pilulaLugar: { position: 'absolute', left: 10, right: 10, zIndex: 40, alignItems: 'stretch' },
+  // 12 das bordas (02/11/26): a mesma linha da fileira de busca logo acima; com 10 ela sobrava 2 px de cada lado
+  pilulaLugar: { position: 'absolute', left: 12, right: 12, zIndex: 40, alignItems: 'stretch' },
   pilula: { minHeight: 48, borderRadius: 24, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)', flexDirection: 'row', alignItems: 'center',
     paddingLeft: 7, paddingRight: 7, gap: 6, shadowColor: '#000', shadowOpacity: 0.16, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
   pilulaToque: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 9 },

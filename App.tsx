@@ -145,7 +145,7 @@ import { ALTURA_LINHA_DO_DIA, PERTO_M, linhaDoDia } from './src/utils/linhaDoDia
 import { contadorDaMeta, decisorEstaAgora, escolhidaPor, linhaDaMetaNaFolha, metros as metrosLL, portaSugerida, RAIO_REFERENCIA_M, RAIO_SUGESTAO_M, segundaOpcao, type Candidata } from './src/utils/armasDoMapa';
 import { mapaAbriu, primeiroToque, registrarEvento } from './src/utils/eventosDoMapa';
 import { useArmaDoPino } from './src/hooks/useArmaDoPino';
-import { placasDeBairro } from './src/utils/placasDeBairro';
+import { contaDaPlaca, LARGURA_MAX_PLACA, placasDeBairro, placasNaTela } from './src/utils/placasDeBairro';
 import { FolhaFalaPronta } from './src/components/ParaEntrar';
 import type { Arma } from './src/utils/armasDoMapa';
 import CamadaDePontos from './src/map/CamadaDePontos';
@@ -236,7 +236,7 @@ import {
 } from './src/utils/diaV3';
 import { useBairrosDaFila, useDiaV3 } from './src/hooks/useDiaV3';
 import { useDesenvolvimentoQuadro } from './src/hooks/useDesenvolvimento';
-import TiraDeLentes from './src/screens/TiraDeLentes';
+import TiraDeLentes, { RESPIRO_ACIMA_DO_GOOGLE } from './src/screens/TiraDeLentes';
 import BlocoEntrePortas from './src/screens/BlocoEntrePortas';
 import PedirAvisos from './src/screens/PedirAvisos';
 import MinhasFotos, { FOTOS_LIBERADAS } from './src/screens/MinhasFotos';
@@ -1263,6 +1263,9 @@ function MainApp() {
   // ~29 px maior que o rodapé real (56–61 + área segura): a pílula da próxima
   // porta e os botões flutuavam num vão sobre o nada (medido em 26/09).
   const [alturaRodape, setAlturaRodape] = useState<number | null>(null);
+  // Largura da pílula recolhida da próxima porta (FolhaDoMapa): ela mora na fileira de baixo do mapa,
+  // e as lentes começam depois dela (02/11/26). null = não está recolhida.
+  const [larguraMini, setLarguraMini] = useState<number | null>(null);
   const [topoFolha, setTopoFolha] = useState<number | null>(null);
   const [margemMapa, setMargemMapa] = useState(0);
   // Fundo do mapa na tela SEM margem — medido só quando a margem é zero, para
@@ -3087,6 +3090,9 @@ function MainApp() {
     const camada = pontos.map(({ c, p }) => ({ lat: c.latitude as number, lng: c.longitude as number, ...pontoDe(p, modoSol) }));
     return { focoMapaNovo: foco, camadaPontos: camada, comNome: nomes, pilhaDe: pilhaDeId, janelaMapa: janela, quietosMapa: quietos };
   }, [visiveisMapaNovo, lente, selectedClient?.id, mapRegion, layout.ehLargo, janelaTela.width, janelaTela.height, pilhaAberta, ehAgendaPC, planejarDia, focoPC?.id, hoverAgenda, camadasAgenda, idsSugestao, idPortaDoHalo, referenciasNaTela, userLocation, modoSol]);
+  // Dimensoes/posicao do MapView na tela (via onLayout; ver o pin de criacao mais abaixo). Mora aqui
+  // desde 02/11/26 porque as placas de bairro do celular precisam da area medida do mapa.
+  const [mapLayout, setMapLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   /* PLACAS DE BAIRRO (prancha §5.1): no zoom afastado, "Praia do Canto · 18 novos" e, em verde,
      "6 clientes Takeat" — a referência sem pôr os pinos de cliente no mapa. */
   const placasDoMapa = useMemo(() => {
@@ -3100,9 +3106,23 @@ function MainApp() {
     const d = mapRegion.latitudeDelta * 0.12;
     const evitar = visiveisMapaNovo.filter((it) => it.plano != null || it.c.id === idPortaDoHalo || it.c.id === selectedClient?.id)
       .map((it) => ({ lat: Number(it.c.latitude), lng: Number(it.c.longitude) }));
-    return placasDeBairro(itens, clientes, 6, d)
+    const todas = placasDeBairro(itens, clientes, 6, d)
       .filter((pl) => !evitar.some((e) => Math.abs(e.lat - pl.lat) < d * 0.6 && Math.abs(e.lng - pl.lng) < d * 1.2));
-  }, [mapRegion, lente, ehAgendaPC, planejarDia, visiveisMapaNovo, itensMapaNovo, idPortaDoHalo, selectedClient?.id]);
+    if (layout.ehLargo) return todas.map((pl) => ({ ...pl, ancoraX: 0.5 }));
+    /* NO CELULAR, SÓ A PLACA QUE CABE (print do iPhone, 02/11/26): elas passavam da borda e ficavam
+       por baixo da busca e da faixa do dia. A área livre é a do mapa medido, menos o topo (área
+       segura + fileira de 48 + a faixa da vez de 48, com os respiros) e menos a fileira de baixo
+       (o respiro do Google + 44 dos botões). Sem a medida do mapa, nenhuma placa: antes adivinhar. */
+    if (!mapLayout) return [];
+    const larguraPx = mapLayout.width;
+    const alturaPx = mapLayout.height;
+    const topoLivre = insets.top + 7 + ALTURA_TOPO_CAMPO + RESPIRO_ABAIXO_DA_FILEIRA + 48 + 8 - mapLayout.y;
+    const fundoLivre = alturaPx - RESPIRO_ACIMA_DO_GOOGLE - 44 - 8;
+    // a coluna da direita (localização acima do "+"): a placa não cobre o botão (visto a 277 px, 02/11/26)
+    const colunaDireita = { x0: larguraPx - 12 - 44 - 8 - insets.right, y0: fundoLivre - 44 - 8, x1: larguraPx, y1: alturaPx };
+    return placasNaTela(todas, { ...mapRegion, larguraPx, alturaPx },
+      { x0: 8 + insets.left, y0: Math.max(8, topoLivre), x1: larguraPx - 8 - insets.right, y1: fundoLivre }, 4, [colunaDireita]);
+  }, [mapRegion, lente, ehAgendaPC, planejarDia, visiveisMapaNovo, itensMapaNovo, idPortaDoHalo, selectedClient?.id, layout.ehLargo, mapLayout, insets.top, insets.left, insets.right]);
 
   // Pilha até 8: abre em leque. Maior: aproxima o mapa até os pinos se
   // separarem — a não ser que estejam todos no mesmo ponto (aí só o leque separa).
@@ -4198,7 +4218,7 @@ function MainApp() {
   // precisa ficar no centro do MAPA, nao da tela — como ha searchBar/filterBar
   // acima e bottomNav abaixo, o centro do mapa fica deslocado do centro da tela.
   // Sem isso, o pin visual aponta um lugar mas a coordenada salva e' outra.
-  const [mapLayout, setMapLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  // (o useState do mapLayout subiu para antes das placas de bairro, que o leem: 02/11/26)
 
   // Folha de baixo do mapa novo: no celular, sem lead aberto, fora do modo de
   // criação e fora da lente Calor. Uma condição só para a folha, o "+" e o
@@ -4213,6 +4233,12 @@ function MainApp() {
   // Lente Calor no celular: folha própria (vendedores, Time/Só eu, Ninguém foi).
   const folhaCalorVisivel = tab === 'map' && !layout.ehLargo && !creationMode && !selectedClient && !telaCheia && lente === 'calor' && heatOn && !planejarDia;
   const folhaDeBaixo = folhaVisivel || folhaCalorVisivel || planejarVisivel;
+  /* A FILEIRA DE BAIXO DO MAPA NO CELULAR (print do iPhone, 02/11/26): [pílula recolhida] [lentes ···] [+],
+     com a localização na coluna da direita, acima do "+". Uma conta só para todos: o chão (abas + folha)
+     mais o respiro que tira a fileira de cima do logo e dos "Termos" da Google. A área segura dos lados
+     entra também (iPhone deitado, Android com barra de gestos lateral). */
+  const baseFileiraMapa = (alturaRodape ?? baseInferior) + (folhaDeBaixo ? alturaFolha : 0) + RESPIRO_ACIMA_DO_GOOGLE;
+  const miniNaFileira = folhaVisivel && larguraMini ? larguraMini : 0;
   // Margem do mapa = onde o mapa terminaria sem margem menos o topo MEDIDO da
   // folha (a barra de baixo real não tem a altura do baseInferior; a conta
   // fixa deixava o logo do Google 34 px atrás da folha — medido em 25/09).
@@ -6610,9 +6636,32 @@ function MainApp() {
         {/* Mapa novo: pino P2 para os leads da área e para as paradas da
             rota (com o número do plano no selo, no lugar do RouteMarker). */}
         <CamadaDePontos key={modoSol ? 'sol' : 'noite'} pontos={camadaPontos} sol={modoSol} />
-        {placasDoMapa.map((pl) => (
-          <Marker key={`placa-${pl.chave}`} coordinate={{ latitude: pl.lat, longitude: pl.lng }} anchor={{ x: 0.5, y: 0.5 }} cluster={false} zIndex={300}
-            onPress={() => mapRef.current?.animateToRegion({ latitude: pl.lat, longitude: pl.lng, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 300)}>
+        {placasDoMapa.map((pl) => {
+          const pos = { coordinate: { latitude: pl.lat, longitude: pl.lng }, anchor: { x: pl.ancoraX, y: 0.5 } };
+          const irAoBairro = () => mapRef.current?.animateToRegion({ latitude: pl.lat, longitude: pl.lng, latitudeDelta: 0.02, longitudeDelta: 0.02 }, 300);
+          if (!layout.ehLargo) {
+            /* CELULAR (02/11/26): o cartão compacto — o bairro na 1ª linha, "28 novos · 11 Takeat" na 2ª,
+               com teto de largura e reticências (fonte maior do sistema não estoura o cartão). A posição
+               e a âncora vêm de placasNaTela: ele sempre cabe inteiro na área livre do mapa. */
+            const { conta, takeat } = contaDaPlaca(pl);
+            const linha: React.CSSProperties = { display: 'block', maxWidth: LARGURA_MAX_PLACA - 20, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 };
+            return (
+              <Marker key={`placa-${pl.chave}`} {...pos} cluster={false} zIndex={300} onPress={irAoBairro}>
+                <div aria-label={`${pl.titulo}${pl.clientes ? `, ${pl.clientes}` : ''}. Aproximar`} style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', maxWidth: LARGURA_MAX_PLACA, boxSizing: 'border-box', padding: '4px 10px', borderRadius: 10,
+                  background: modoSol ? 'rgba(255,255,255,.96)' : 'rgba(23,25,29,.94)', border: `1px solid ${modoSol ? '#D9D4CA' : 'rgba(255,255,255,.14)'}`,
+                  boxShadow: '0 2px 8px rgba(0,0,0,.25)', cursor: 'pointer',
+                }}>
+                  <span style={{ ...linha, fontWeight: 700, fontSize: 12, color: modoSol ? '#111418' : '#F4F5F7' }}>{pl.bairro}</span>
+                  <span style={{ ...linha, fontWeight: 600, fontSize: 11, color: modoSol ? '#4B5563' : '#C9CDD4' }}>
+                    {conta}{takeat && <span style={{ color: modoSol ? '#14532D' : '#86EFAC' }}>{` · ${takeat}`}</span>}
+                  </span>
+                </div>
+              </Marker>
+            );
+          }
+          return (
+          <Marker key={`placa-${pl.chave}`} {...pos} cluster={false} zIndex={300} onPress={irAoBairro}>
             <div style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', whiteSpace: 'nowrap', padding: '4px 10px', borderRadius: 10,
               background: modoSol ? 'rgba(255,255,255,.96)' : 'rgba(23,25,29,.94)', border: `1px solid ${modoSol ? '#D9D4CA' : 'rgba(255,255,255,.14)'}`,
@@ -6622,7 +6671,8 @@ function MainApp() {
               {pl.clientes && <span style={{ fontWeight: 600, fontSize: 11.5, lineHeight: 1.3, color: modoSol ? '#14532D' : '#86EFAC' }}>{pl.clientes}</span>}
             </div>
           </Marker>
-        ))}
+          );
+        })}
         {contextoPino && focoMapaNovo.map(({ c, p, plano }) => {
           // Pilha (C11): fechada mostra só o líder com o número; aberta, todos em leque.
           const pl = pilhaDe.get(c.id);
@@ -6881,7 +6931,10 @@ function MainApp() {
                     ? { bottom: baseInferior, left: 16 }
                     : (tab === 'map')
                       // Handoff v4.1 §3: coluna à direita, 12 px acima do "+", que fica 12 px acima da folha.
-                      ? { bottom: (alturaRodape ?? baseInferior) + (folhaDeBaixo ? alturaFolha : 0) + 12 + 52 + 12, right: 12, width: 44, height: 44, borderRadius: 22 }
+                      /* `left: 'auto'` (02/11/26): o `left: 16` do mapButton ganhava do `right` e o botão
+                         caía à ESQUERDA, 64 px acima da fileira, sozinho (print do iPhone). Agora fica
+                         onde o handoff manda: coluna da direita, 8 px acima do "+", mesmo tamanho dele. */
+                      ? { bottom: baseFileiraMapa + 44 + 8, left: 'auto' as never, right: 12 + insets.right, width: 44, height: 44, borderRadius: 22 }
                       : { top: (mapLayout?.y ?? 0) + 16, left: 16 },
                   layout.ehLargo && styles.mapaControleWeb,
                 ]
@@ -7114,6 +7167,9 @@ function MainApp() {
           ) : null}
           aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
           venceHojeDe={hojeV3 ? (c) => (c.id_hubspot ? venceHojeV3[String(c.id_hubspot)] ?? null : null) : undefined}
+          // um placar só (02/11/26): com a pílula-placar do v3 no topo, a recolhida não repete o "0/6"
+          placarNoTopo={hojeV3 && ehRepV3}
+          aoMini={setLarguraMini}
           sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
           aoFala={abrirFala}
           recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
@@ -7157,7 +7213,7 @@ function MainApp() {
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Novo lead"
-          style={[styles.fabMapaNovo, { right: 12, bottom: (alturaRodape ?? baseInferior) + (folhaDeBaixo ? alturaFolha : 0) + 12 }]}
+          style={[styles.fabMapaNovo, { right: 12 + insets.right, bottom: baseFileiraMapa }]}
           onPress={() => setShowCepStep(true)}
         >
           {/* branco fixo não serve mais: o botão virou neutro e segue o tema (§5) */}
@@ -7177,7 +7233,9 @@ function MainApp() {
           lentes={LENTES.filter((l) => l.id !== 'calor' || canViewGestor)}
           atual={lente}
           aoEscolher={escolherLente}
-          bottom={(alturaRodape ?? baseInferior) + (folhaDeBaixo ? alturaFolha : 0) + 12}
+          bottom={baseFileiraMapa}
+          left={12 + insets.left + (miniNaFileira ? miniNaFileira + 8 : 0)}
+          right={12 + 44 + 8 + insets.right}
         />
       )}
 
@@ -9253,21 +9311,30 @@ function MainApp() {
               key={a.aba}
               accessibilityRole="tab"
               accessibilityState={{ selected: ativo }}
-              accessibilityLabel={a.seloTexto ? `${a.rotulo}, ${a.seloTexto}` : a.selo ? `${a.rotulo}, ${a.selo}` : a.rotulo}
+              accessibilityLabel={[a.rotulo, a.selo ? String(a.selo) : null, a.seloTexto].filter(Boolean).join(', ')}
               style={[styles.navItem, styles.navItemNovo]}
               onPress={() => irParaAba(a.aba)}
             >
               {ativo && <View style={styles.navTracoAtivo} />}
               <View style={styles.navIconeAncora}>
                 <NavIcon Icone={a.Icone} ativo={ativo} size={24} />
-                {!!a.seloTexto && (
-                  <View style={styles.navSeloTexto}><Text style={styles.navSeloTextoT} numberOfLines={1}>{a.seloTexto}</Text></View>
-                )}
-                {a.selo != null && (
-                  <View style={[styles.navBadge, a.seloClaro && styles.navBadgeClaro]}>
-                    <Text style={[styles.navBadgeText, a.seloClaro && styles.navBadgeTextClaro]}>
-                      {a.selo > 99 ? '99+' : a.selo}
-                    </Text>
+                {/* OS DOIS SELOS EM FILA (print do iPhone, 02/11/26): o número e a pílula "N atrasados"
+                    eram dois absolutos no mesmo canto — o "1" caía em cima do começo da pílula e lia-se
+                    "…trasados". Agora é uma fila só, número e pílula lado a lado. Em tela estreita (Android
+                    de 360 com fonte a 130% vira ~280 px) não cabem os dois sem invadir a aba Eu: fica a
+                    pílula, que é o que pede ação; o número segue no rótulo de acessibilidade. */}
+                {(!!a.seloTexto || a.selo != null) && (
+                  <View style={styles.navSelos} pointerEvents="none">
+                    {a.selo != null && !(a.seloTexto && janelaTela.width < 360) && (
+                      <View style={[styles.navBadge, styles.navBadgeNaFila, a.seloClaro && styles.navBadgeClaro]}>
+                        <Text style={[styles.navBadgeText, a.seloClaro && styles.navBadgeTextClaro]}>
+                          {a.selo > 99 ? '99+' : a.selo}
+                        </Text>
+                      </View>
+                    )}
+                    {!!a.seloTexto && (
+                      <View style={styles.navSeloTexto}><Text style={styles.navSeloTextoT} numberOfLines={1}>{a.seloTexto}</Text></View>
+                    )}
                   </View>
                 )}
               </View>
@@ -13192,7 +13259,11 @@ const styles = StyleSheet.create({
      ficava aceso o dia inteiro — atrasado é coisa para resolver hoje, não agora. O vermelho
      passa a valer só para o que é agir neste minuto: o Cheguei e a faixa de alerta. Invertido
      (fundo da tinta, texto do fundo) continua sendo o elemento mais forte da barra. */
-  navSeloTexto: { position: 'absolute', top: -12, left: 14, height: 18, paddingHorizontal: 6, borderRadius: 9, backgroundColor: 'var(--text)', borderWidth: 1.5, borderColor: 'var(--surface)', justifyContent: 'center', boxSizing: 'content-box' } as never,
+  /* A fila dos selos (02/11/26): ancorada no canto de cima à direita do ícone; os selos dentro dela
+     não são mais absolutos, então nunca se sobrepõem. */
+  navSelos: { position: 'absolute', top: -9, left: 14, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  navBadgeNaFila: { position: 'relative', top: 0, right: 0 },
+  navSeloTexto: { height: 18, paddingHorizontal: 6, borderRadius: 9, backgroundColor: 'var(--text)', borderWidth: 1.5, borderColor: 'var(--surface)', justifyContent: 'center', boxSizing: 'content-box' } as never,
   navSeloTextoT: { color: 'var(--surface)', fontSize: 10, lineHeight: 14, fontWeight: '800', whiteSpace: 'nowrap' } as never,
   navItemText: { fontSize: 11, lineHeight: 16, letterSpacing: 0.5, fontWeight: '500', color: 'var(--text-faint)' },
   // ===== Calendario da Agenda (so' desktop) =====

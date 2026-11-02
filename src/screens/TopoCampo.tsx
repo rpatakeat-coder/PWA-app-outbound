@@ -74,14 +74,16 @@ export default function TopoCampo({ top, aoAbrirLentes, filtrosAtivos = 0, busca
         )}
         {aoAbrirLentes && <View style={s.divisor} />}
         <View style={[s.busca, !aoAbrirLentes && s.buscaSozinha]}>
-          <IconSearch width={16} height={16} fill={cores.muted} />
+          {/* A LUPA ENTRA NO ALVO (02/11/26): ela ficava fora do Pressable, e numa tela estreita (Android
+              de 360 com fonte a 130%, ~280 px) o toque da busca encolhia para 25 px — só o "B…". */}
           <Pressable
             style={s.buscaAbrir}
             onPress={aoAbrirBusca}
             accessibilityRole="search"
             accessibilityLabel={busca ? `Busca: ${busca}. Abrir busca` : 'Buscar lead, rua ou bairro'}
           >
-            <Text style={[s.buscaCampo, !busca && s.buscaVazia]} numberOfLines={1}>{busca || 'Buscar'}</Text>
+            <IconSearch width={16} height={16} fill={cores.muted} />
+            <Text style={[s.buscaCampo, !busca && s.buscaVazia, { flexShrink: 1 }]} numberOfLines={1}>{busca || 'Buscar'}</Text>
           </Pressable>
           {buscando && <ActivityIndicator size="small" color={cores.muted} />}
           {busca.length > 0 && !buscando && (
@@ -103,9 +105,11 @@ export default function TopoCampo({ top, aoAbrirLentes, filtrosAtivos = 0, busca
                 accessibilityState={{ selected: on }}
                 accessibilityLabel={v === 'mapa' ? 'Ver no mapa' : 'Ver em lista'}
                 onPress={() => aoVista(v)}
-                style={[s.segmento, on && s.segmentoOn]}
+                style={s.segmentoAlvo}
               >
-                <Text style={[s.segmentoTexto, on && s.segmentoTextoOn]}>{v === 'mapa' ? 'Mapa' : 'Lista'}</Text>
+                <View style={[s.segmento, on && s.segmentoOn]}>
+                  <Text style={[s.segmentoTexto, on && s.segmentoTextoOn]} numberOfLines={1}>{v === 'mapa' ? 'Mapa' : 'Lista'}</Text>
+                </View>
               </Pressable>
             );
           })}
@@ -150,7 +154,7 @@ const s = StyleSheet.create({
   buscaSozinha: { paddingLeft: 12, gap: 10 },
   // era estilo de campo (flex 1 + altura 40) num texto: o "Lead ou rua" ficava grudado no topo da pílula
   buscaCampo: { fontSize: 14, lineHeight: 18, fontWeight: '500', color: 'var(--text)' },
-  buscaAbrir: { flex: 1, minWidth: 0, minHeight: 48, marginVertical: -1, justifyContent: 'center' },
+  buscaAbrir: { flex: 1, minWidth: 44, minHeight: 48, marginVertical: -1, flexDirection: 'row', alignItems: 'center', gap: 6 },
   buscaVazia: { color: 'var(--text-muted)' },
   /* MESMO PIXEL NAS DUAS VISTAS (prancha §1): largura fixa, nunca encolhe. */
   alternador: {
@@ -159,7 +163,11 @@ const s = StyleSheet.create({
     backgroundColor: 'var(--pilula-mapa)',
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 4 },
   },
-  segmento: { flex: 1, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  /* ALVO DE 48, DESENHO DE 40 (02/11/26): o segmento tinha 40 px de toque (48 da pílula menos o
+     padding de 3 e a borda), abaixo dos 44 do iPhone e dos 48 do Android. O alvo agora cobre a altura
+     inteira da pílula (margem -4 sobre o padding e a borda) e o desenho segue dentro, com 40. */
+  segmentoAlvo: { flex: 1, marginVertical: -4, paddingVertical: 4 },
+  segmento: { flex: 1, borderRadius: 21, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   segmentoOn: { backgroundColor: 'var(--text)' },
   segmentoTexto: { fontSize: 13.5, fontWeight: '600', color: 'var(--text-muted)' },
   segmentoTextoOn: { color: 'var(--surface)' },

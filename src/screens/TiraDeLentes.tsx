@@ -24,13 +24,22 @@ import type { Lente } from '../utils/lentes';
 import { COR_LENTE } from './FolhaLentes';
 
 export const ALTURA_TIRA_LENTES = 44;
+/* O RESPIRO ACIMA DO GOOGLE (print do iPhone, 02/11/26). A fileira de baixo (lentes, "+", a pílula
+   recolhida) ficava a 12 px do fim do mapa, em cima da faixa do logo e dos "Termos" da Google, que
+   o contrato do Maps não deixa cobrir, e os chips pareciam colados no rodapé. 28 px tira a fileira
+   da faixa de atribuição (~24 px) com 4 de folga. */
+export const RESPIRO_ACIMA_DO_GOOGLE = 28;
 
-export default function TiraDeLentes({ lentes, atual, aoEscolher, bottom }: {
+export default function TiraDeLentes({ lentes, atual, aoEscolher, bottom, left = 12, right = 64 }: {
   lentes: { id: Lente; rotulo: string }[];
   atual: Lente;
   aoEscolher: (l: Lente) => void;
   /** Mesma linha dos botões do mapa: o App passa o mesmo cálculo que usa neles. */
   bottom: number;
+  /** Onde a fileira começa: 12 da borda, ou depois da pílula recolhida da próxima porta (02/11/26). */
+  left?: number;
+  /** Onde termina: antes do "+" (12 da borda + 44 + 8 de vão). */
+  right?: number;
 }) {
   /* O espelho da regra da folha: a fileira só assume o gesto quando ele é claramente
      HORIZONTAL. Sem isto, arrastar de lado aqui moveria o mapa atrás. */
@@ -40,9 +49,12 @@ export default function TiraDeLentes({ lentes, atual, aoEscolher, bottom }: {
   }), []);
 
   return (
-    <View style={[s.tira, { bottom }]} pointerEvents="box-none" {...arrasto.panHandlers}>
+    <View style={[s.tira, { bottom, left, right }]} pointerEvents="box-none" {...arrasto.panHandlers}>
       <ScrollView
         horizontal
+        /* O CORTE VIRA DEGRADÊ (02/11/26): a última pílula era cortada seco na beira do "+", e
+           parecia que o botão estava em cima dela. O degradê de 24 px diz "tem mais, arraste". */
+        style={s.rolagem}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={s.conteudo}
         /* A ativa encosta à esquerda ao abrir: é a que ele está vendo, e procurar a lente ativa
@@ -75,9 +87,16 @@ export default function TiraDeLentes({ lentes, atual, aoEscolher, bottom }: {
 }
 
 const s = StyleSheet.create({
-  /* left/right 64: os 44 px de cada botão do mapa mais 8 de vão, dos dois lados. */
-  tira: { position: 'absolute', left: 64, right: 64, height: ALTURA_TIRA_LENTES, zIndex: 25, justifyContent: 'center' },
-  conteudo: { alignItems: 'center', gap: 6, paddingRight: 8 },
+  /* left/right vêm do App (02/11/26). Eram 64 dos dois lados, reservando à esquerda o lugar de uma
+     localização que o App desenhava 64 px mais alto: sobrava um vão vazio. A localização foi para a
+     coluna da direita, acima do "+", e a fileira começa a 12 da borda (ou depois da pílula recolhida). */
+  tira: { position: 'absolute', height: ALTURA_TIRA_LENTES, zIndex: 25, justifyContent: 'center' },
+  rolagem: {
+    flexGrow: 0,
+    WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 24px), transparent)',
+    maskImage: 'linear-gradient(to right, #000 calc(100% - 24px), transparent)',
+  } as never,
+  conteudo: { alignItems: 'center', gap: 6, paddingRight: 24 },
   alvo: { height: ALTURA_TIRA_LENTES, justifyContent: 'center', paddingHorizontal: 3 },
   pilula: {
     height: 32, borderRadius: 16, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6,
