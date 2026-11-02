@@ -933,7 +933,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
         </View>
         <View style={{ gap: 10 }}>
           <CabecalhoDeBloco numero={3} titulo="Sem próximo passo" n={semPassoTotal}
-            legenda={semPassoTotal ? `${passoVencidoN} com passo vencido (bloco 2) + ${nuncaMarcadoN} nunca ${nuncaMarcadoN === 1 ? 'marcado' : 'marcados'} · cada um precisa de um passo datado, ou do Sem interesse com o motivo · a meta é zero` : 'a meta é zero'} alerta />
+            legenda={semPassoTotal ? `${passoVencidoN} com passo vencido (em Atrasados) + ${nuncaMarcadoN} nunca ${nuncaMarcadoN === 1 ? 'marcado' : 'marcados'} · cada um precisa de um passo datado, ou do Sem interesse com o motivo · a meta é zero` : 'a meta é zero'} alerta />
           {semPassoLista.length ? (
             <>
               {/* 5 por vez: a lista inteira empurrava o resto da Hoje para longe */}
@@ -944,7 +944,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
                 </Pressable>
               )}
             </>
-          ) : <BlocoVazio texto={semPassoTotal ? `os ${passoVencidoN} estão no bloco 2: remarque com o cliente` : 'zero · meta batida'} />}
+          ) : <BlocoVazio texto={semPassoTotal ? `os ${passoVencidoN} estão em Atrasados: remarque com o cliente` : 'zero · meta batida'} />}
         </View>
         <LinhaDeFim zerada={false} />
         {atrasadosAntigos.length > 0 && (

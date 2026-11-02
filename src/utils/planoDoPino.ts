@@ -225,7 +225,11 @@ export type PedidoCrm = { dealId: string; nome: string; acao: AcaoId; de: string
 
 function pedidoCrm(p: PedidoDoPlano, mudou: boolean): PedidoCrm | null {
   if (!p.client.id_hubspot) return null;
-  if (!mudou && !p.hora) return null;
+  /* SEM HORA TAMBÉM VAI AO HUBSPOT (auditoria 02/11/26): o plano sem hora ficava só na rota, o
+     HubSpot e o Cockpit (que conta só esta semana e a próxima) diziam "sem próximo passo" do
+     negócio planejado. Agora o passo existe no HubSpot, às 09:00 (a convenção do "sem hora").
+     Já estava neste dia e nada mudou: nada novo (o servidor recusaria a gêmea e o executivo veria erro). */
+  if (!mudou && !p.hora && p.antes && !p.antes.feita && p.antes.dia === p.dia) return null;
   /* UM PRÓXIMO PASSO SÓ: o pino não estava no plano, mas o negócio já tem tarefa aberta (de
      qualquer dia) → remarca essa para o dia e a hora novos, em vez de criar outra */
   const de = mudou ? p.antes!.dia : (p.tarefaAbertaEm ?? null);
@@ -260,15 +264,15 @@ export async function crmDoPlano(c: PedidoCrm, retomada: boolean): Promise<Depoi
       avisos.push(`não remarquei a tarefa do HubSpot (${String((e as Error)?.message ?? e)})`);
     }
   }
-  if (!c.hora) return { hubspot: null, remarcadas, avisos, semSinal: false };
-  if (remarcadas > 0) return { hubspot: `tarefa remarcada para ${ddmm(c.para)} ${c.hora}`, remarcadas, avisos, semSinal: false };
-  if (retomada && c.de && jaNoDia > 0) return { hubspot: `tarefa já em ${ddmm(c.para)}`, remarcadas, avisos, semSinal: false };
+  if (remarcadas > 0) return { hubspot: `tarefa remarcada para ${ddmm(c.para)}${c.hora ? ` ${c.hora}` : ''}`, remarcadas, avisos, semSinal: false };
+  if ((retomada || !c.hora) && c.de && jaNoDia > 0) return { hubspot: `tarefa já em ${ddmm(c.para)}`, remarcadas, avisos, semSinal: false };
+  const hora = c.hora ?? '09:00';
   const corpo = { op: 'nota', tipoAcao: 'proximo-passo', dealId: c.dealId, tipo: tipoDoPasso(c.acao),
     /* o servidor já prefixa o tipo ("Demo - "): o texto é só o nome */
-    data: c.para, hora: c.hora, texto: c.nome };
+    data: c.para, hora, texto: c.nome };
   try {
     await negocioAcao(corpo);
-    return { hubspot: `${acaoPorId(c.acao)?.hubspot ?? 'Próximo passo'} ${ddmm(c.para)} ${c.hora}`, remarcadas, avisos, semSinal: false };
+    return { hubspot: `${acaoPorId(c.acao)?.hubspot ?? 'Próximo passo'} ${ddmm(c.para)}${c.hora ? ` ${c.hora}` : ''}`, remarcadas, avisos, semSinal: false };
   } catch (e) {
     if (ehErroDeRede(e)) return { hubspot: null, remarcadas, avisos, semSinal: true };
     avisos.push(`o HubSpot recusou o próximo passo (${String((e as Error)?.message ?? e)})`);
