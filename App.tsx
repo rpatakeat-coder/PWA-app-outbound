@@ -152,6 +152,9 @@ import CamadaDePontos from './src/map/CamadaDePontos';
 import { pilhasNaTela, posicoesDoLeque, projetar, rotulosSemSobrepor, type Pilha } from './src/utils/rotulos';
 import { MINIMO_QUADRA, quadrasNaTela, resumoDaQuadra, type ResumoQuadra } from './src/utils/quadra';
 import CartaoQuadra, { ANCORA_QUADRA } from './src/map/CartaoQuadra';
+import { assinaturaDosNiveis, niveisDoMapa, selosDaCena, type ModoDoMapa, type NiveisDaCena, type PinoDaCena, type ZoomDoMapa } from './src/utils/niveisDoMapa';
+import { bolinhaNaTela, escalaDaFonte, faixaSeguraNaTela, mapaNaTela, medirTextoNaTela, OBSTACULO_MAPA, obstaculosNaTela, pinoNaTela } from './src/map/conferenciaNaTela';
+import { MENOS_N3 } from './src/map/PinoP2';
 import { classificarPino, COR as COR_DO_PINO, type ContextoPino, type Pino } from './src/utils/pinoP2';
 import { useMeetings } from './src/hooks/useMeetings';
 import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hooks/useFieldOps';
@@ -498,6 +501,7 @@ function visitadoHoje(iso: string | null | undefined): boolean {
 const MarkerP2 = React.memo(
   function MarkerP2({
     client, contexto, pino: pinoPronto, onPress, planoNumero, feito, naFila, selecionado, papel, agrupar = false, pilhaN = 1, leque = null, sol = false, rotulo = false, lado = 'dir', aproximadoVisivel = false, discreto = false,
+    nivel = null, rotuloNaRua = null, seloNaRua = null, sugestao = false, semAnel = false, apagado = false,
   }: {
     client: Client; contexto: ContextoPino; onPress: (client: Client) => void;
     /** A classificação já feita no itensMapaNovo (auditoria 28/09: rodava duas vezes por pino). */
@@ -506,6 +510,9 @@ const MarkerP2 = React.memo(
     papel: PapelPino; agrupar?: boolean;
     pilhaN?: number; leque?: { dx: number; dy: number } | null; sol?: boolean; rotulo?: boolean;
     lado?: 'dir' | 'esq'; aproximadoVisivel?: boolean; discreto?: boolean;
+    /** O mapa na rua (02/11/26, só no celular): nível, rótulo colocado, selo, anel da sugestão. */
+    nivel?: 1 | 2 | 3 | null; rotuloNaRua?: { lado: 'dir' | 'esq' | 'acima'; nome: string; linha2: string | null } | null;
+    seloNaRua?: '!' | '↓' | null; sugestao?: boolean; semAnel?: boolean; apagado?: boolean;
   }) {
     const handlePress = useCallback(() => onPress(client), [onPress, client]);
     const pino = pinoPronto ?? classificarPino(client, contexto);
@@ -514,7 +521,9 @@ const MarkerP2 = React.memo(
         coordinate={{ latitude: client.latitude as number, longitude: client.longitude as number }}
         onPress={handlePress}
         anchor={ANCORA_PINO_P2}
-        zIndex={selecionado ? 2000 : leque ? 1500 : papel === 'proxima' ? 1200 : planoNumero ? 1000 : rotulo ? 800 : discreto ? 200 : pino.familia === 'cli' ? 400 : 500}
+        // na rua (02/11/26): N3 < N2 < N1 < bolinha (9999, MapView). O aberto e o leque acima do N1.
+        zIndex={selecionado ? 2000 : leque ? 1500 : papel === 'proxima' || nivel === 1 ? 1200 : nivel === 2 ? 900 : nivel === 3 ? (discreto ? 200 : planoNumero ? 700 : pino.familia === 'cli' ? 400 : 500)
+          : planoNumero ? 1000 : rotulo ? 800 : discreto ? 200 : pino.familia === 'cli' ? 400 : 500}
         cluster={agrupar && !planoNumero}
       >
         <PinoP2
@@ -535,6 +544,13 @@ const MarkerP2 = React.memo(
           lado={lado}
           aproximadoVisivel={aproximadoVisivel}
           discreto={discreto}
+          nivel={nivel}
+          rotuloNaRua={rotuloNaRua}
+          seloNaRua={seloNaRua}
+          sugestao={sugestao}
+          semAnel={semAnel}
+          apagado={apagado}
+          idDom={client.id}
         />
       </Marker>
     );
@@ -557,6 +573,12 @@ const MarkerP2 = React.memo(
     a.pilhaN === b.pilhaN &&
     a.sol === b.sol &&
     a.rotulo === b.rotulo &&
+    a.nivel === b.nivel &&
+    a.seloNaRua === b.seloNaRua &&
+    a.sugestao === b.sugestao &&
+    a.semAnel === b.semAnel &&
+    a.apagado === b.apagado &&
+    a.rotuloNaRua?.lado === b.rotuloNaRua?.lado && a.rotuloNaRua?.nome === b.rotuloNaRua?.nome && a.rotuloNaRua?.linha2 === b.rotuloNaRua?.linha2 &&
     a.leque?.dx === b.leque?.dx && a.leque?.dy === b.leque?.dy,
 );
 
@@ -3057,6 +3079,8 @@ function MainApp() {
       if (it.plano) return 2;
       if (it.p.etiqueta?.texto === 'cobrar') return 3;
       if (it.p.familia === 'rec') return (it.p.abertoHa ?? 99) <= 30 ? 4 : 8;
+      // mapa na rua (02/11/26): em queda é a 4ª razão do N2 — lidera a pilha antes do lead comum
+      if (!layout.ehLargo && it.p.queda) return 5;
       if (it.p.dono === 'meu') return it.p.temp === 'Q' ? 5 : it.p.temp === 'M' ? 6 : 7;
       return 9;
     };
@@ -3089,7 +3113,8 @@ function MainApp() {
       if (zoomRua) return true;
       return t.prioridade <= 1 || tresNovos.has(t.id);
     }).map((t) => ({ ...t, prioridade: t.prioridade * 100000 + Math.min(99999, Math.round(perto(t.id))) }));
-    if (janela && candidatos.length) {
+    // no celular quem decide os nomes é niveisDoMapa (o mapa na rua, 02/11/26), medido na tela
+    if (layout.ehLargo && janela && candidatos.length) {
       for (const [id, lado] of rotulosSemSobrepor(candidatos, janela)) nomes.set(id, lado);
     }
     const camada = pontos.map(({ c, p }) => ({ lat: c.latitude as number, lng: c.longitude as number, ...pontoDe(p, modoSol) }));
@@ -3162,6 +3187,7 @@ function MainApp() {
   const abrirPilha = useCallback((c: Client) => {
     const pl = pilhaDe.get(c.id);
     if (!pl) return;
+    registrarEvento('pilha_abrir', { n: pl.membros.length });
     const membros = focoMapaNovo.filter((it) => pl.membros.includes(it.c.id))
       .map((it) => ({ latitude: Number(it.c.latitude), longitude: Number(it.c.longitude) }));
     const mesmoPonto = membros.every((m) => m.latitude === membros[0]?.latitude && m.longitude === membros[0]?.longitude);
@@ -3250,6 +3276,132 @@ function MainApp() {
     }
     return { resumoDaPilha: r, quadraAbsorvida: absorvida };
   }, [pilhaDe, itensFolha, janelaMapa, idPortaDoHalo, selectedClient?.id]);
+
+  /* ══ O MAPA NA RUA (prancha "Mapa na rua", 02/11/26) ════════════════════════════════════════
+     No zoom de rua todo pino falava ao mesmo tempo (print das 13:53). Agora são três níveis:
+     N1 = a próxima porta (pino 40, anel sólido de 52 px, nome e "120 m · motivo"); N2 = até 3
+     nomes a até 400 m de quem pede ação; N3 = o resto, 4 px menor e sem nome. A regra é pura e
+     testada (src/utils/niveisDoMapa.ts); aqui só se monta a cena e se confere na tela.
+
+     A CONFERÊNCIA NA TELA: a fila não depende da tela, mas o lugar de cada rótulo sim. Depois que
+     o Google desenha, cada pino (data-pino), a bolinha (data-bolinha), a busca, a faixa da vez e a
+     fileira de lentes (data-faixa-*) e os botões (data-obstaculo-mapa) são medidos e a função
+     roda de novo com a geometria real. O resultado só vira estado quando muda — arrastar sem
+     mudar nada não redesenha o App. Só no celular; o computador segue com os nomes de antes. */
+  const naRua = !layout.ehLargo;
+  const zoomDoMapa: ZoomDoMapa = !mapRegion || mapRegion.latitudeDelta <= ZOOM_RUA_LAT_DELTA ? 'rua'
+    : mapRegion.latitudeDelta > DELTA_AFASTADO ? 'afastado' : 'bairro';
+  // feriado e fim de semana: sem expediente (a mesma regra do Hoje v3); com plano pendente ele está trabalhando
+  const hojeUtilNoMapa = ehDiaUtil(diaBRT(new Date()) ?? '');
+  const modoDoMapa: ModoDoMapa = idParadaPendente ? (lente === 'novos' ? 'lente_recem' : 'plano')
+    : !hojeUtilNoMapa ? 'feriado' : lente === 'novos' ? 'lente_recem' : 'sem_plano';
+  /** A próxima porta do mapa na rua: a parada pendente, ou a porta sugerida sem plano. Feriado: nenhuma. */
+  const idN1NaRua = naRua && !planejarOutroDia && modoDoMapa !== 'feriado' ? idPortaDoHalo : null;
+  const n1EhSugestao = !!idN1NaRua && !idParadaPendente;
+  /* O motivo na 2ª linha do N1 ("120 m · proposta pronta"): a sugestão diz a maior parcela; a
+     parada do plano, o motivo do "Para entrar" dela (só o começo, até o primeiro ":" ou "·"). */
+  const motivoN1NaRua = useMemo(() => {
+    if (!idN1NaRua) return null;
+    const bruto = n1EhSugestao ? sugestaoDePorta?.parcelas?.[0] ?? null
+      : armaDoHalo?.motivo ?? (itemDoHalo ? sinalDoPino(itemDoHalo.p) : null);
+    const curto = String(bruto ?? '').split(/: | · /)[0].trim();
+    return curto ? curto.charAt(0).toLocaleLowerCase('pt-BR') + curto.slice(1) : null;
+  }, [idN1NaRua, n1EhSugestao, sugestaoDePorta, armaDoHalo, itemDoHalo]);
+  /** A cena sem geometria: quem está desenhado como pino inteiro, com o que a regra precisa saber. */
+  const cenaDoMapa = useMemo(() => {
+    if (!naRua) return null;
+    const eu = userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : null;
+    const bases: Omit<PinoDaCena, 'x' | 'y' | 'cabeca'>[] = [];
+    for (const { c, p, plano } of focoMapaNovo) {
+      if (quietosMapa.has(c.id)) continue;
+      const pl = pilhaDe.get(c.id);
+      const n = pl?.membros.length ?? 1;
+      if (pl && n > 1 && (pl.lider !== c.id || pilhaAberta === pl.lider || resumoDaPilha.has(pl.lider))) continue;
+      if (pl && quadraAbsorvida.has(pl.lider)) continue;
+      bases.push({
+        id: c.id, nome: getClientPrimaryName(c), familia: p.familia, plano: plano ?? null,
+        feito: plano != null ? feitosDaRota.has(c.id) : visitadoHoje(c.visited_at),
+        sugerida: c.id === idN1NaRua && n1EhSugestao,
+        proposta: !idParadaPendente && c.id === sugestaoDePorta?.segunda?.id,
+        cobrar: p.etiqueta?.texto === 'cobrar', queda: !!p.queda, abertoHa: p.familia === 'rec' ? p.abertoHa ?? null : null,
+        distanciaM: eu && c.latitude != null && c.longitude != null ? metrosLL(eu, { lat: Number(c.latitude), lng: Number(c.longitude) }) : null,
+        pilhaN: n,
+      });
+    }
+    const selos = selosDaCena(bases, zoomDoMapa, modoDoMapa, idN1NaRua);
+    return { bases, selos, chave: `${zoomDoMapa}|${modoDoMapa}|${lente}|${idN1NaRua ?? '-'}` };
+  }, [naRua, focoMapaNovo, quietosMapa, pilhaDe, pilhaAberta, resumoDaPilha, quadraAbsorvida, feitosDaRota, idN1NaRua, n1EhSugestao, idParadaPendente,
+    sugestaoDePorta, userLocation, zoomDoMapa, modoDoMapa, lente]);
+  const [niveisNaTela, setNiveisNaTela] = useState<{ chave: string; r: NiveisDaCena; k: string } | null>(null);
+  /* o que a conferência lê (em ref: ela roda fora do render, em temporizadores e no "idle" do mapa) */
+  const conferenciaRef = useRef<{ cena: typeof cenaDoMapa; zoom: ZoomDoMapa; modo: ModoDoMapa; idN1: string | null; motivo: string | null; topo: number; esq: number; dir: number; ativo: boolean } | null>(null);
+  conferenciaRef.current = {
+    cena: cenaDoMapa, zoom: zoomDoMapa, modo: modoDoMapa, idN1: idN1NaRua, motivo: motivoN1NaRua,
+    // sem nada medido (antes da 1ª pintura): o topo das barras pelas alturas exportadas
+    topo: insets.top + 7 + ALTURA_TOPO_CAMPO, esq: insets.left, dir: insets.right,
+    ativo: naRua && tab === 'map' && !heatOn,
+  };
+  const ultimoMapaRender = useRef<{ k: string; em: number }>({ k: '', em: 0 });
+  const conferirNiveis = useCallback(() => {
+    const k = conferenciaRef.current;
+    if (!k?.ativo || !k.cena || typeof document === 'undefined') return;
+    const m = mapaNaTela();
+    if (!m) return;
+    const faixa = faixaSeguraNaTela(m, { topo: k.topo - m.top, fundo: m.height - RESPIRO_ACIMA_DO_GOOGLE - 44, esquerda: k.esq, direita: k.dir });
+    const pinos: PinoDaCena[] = [];
+    const fora = { x: -9999, y: -9999, cabeca: { x0: -10010, x1: -9990, y0: -10030, y1: -10010 } };
+    for (const b of k.cena.bases) {
+      const t = pinoNaTela(m, b.id);
+      const naTela = !!t && t.x > -40 && t.x < m.width + 40 && t.y > -60 && t.y < m.height + 60;
+      if (!t || !naTela) {
+        // a próxima porta fora da tela continua sendo a próxima (senão a 4ª parada viraria N1): sem rótulo
+        if (b.id === k.idN1) pinos.push({ ...b, ...fora });
+        continue;
+      }
+      /* o N3 é 4 px menor que o N2: mede como se fosse N2, para a decisão não oscilar entre os dois */
+      const cab = t.nivel === 3 && b.id !== k.idN1
+        ? (b.familia === 'rec' ? { x0: t.cabeca.x0 - 1.5, x1: t.cabeca.x1 + 1.5, y0: t.cabeca.y0 - 3, y1: t.cabeca.y1 }
+          : { x0: t.cabeca.x0 - MENOS_N3 / 2, x1: t.cabeca.x1 + MENOS_N3 / 2, y0: t.cabeca.y0 - MENOS_N3, y1: t.cabeca.y1 })
+        : t.cabeca;
+      pinos.push({ ...b, x: t.x, y: t.y, cabeca: cab });
+    }
+    const r = niveisDoMapa(pinos, {
+      zoom: k.zoom, modo: k.modo, posicao: bolinhaNaTela(m), faixaSegura: faixa, fonte: 1,
+      obstaculos: obstaculosNaTela(m), motivoN1: k.motivo, medir: medirTextoNaTela,
+    });
+    const chave = k.cena.chave;
+    const assinatura = `${assinaturaDosNiveis(r)}|${r.n1?.rotulo?.linha2 ?? ''}|${r.n2.map((x) => x.nome).join('/')}`;
+    setNiveisNaTela((prev) => (prev && prev.chave === chave && prev.k === assinatura ? prev : { chave, r, k: assinatura }));
+    /* mapa_render: uma linha por cena nova (no máximo a cada 5 s), para saber quantos nomes o mapa
+       mostra na rua de verdade e quanto a colisão derruba */
+    const kk = `${chave}#${assinatura}`;
+    if ((k.zoom === 'rua' || k.zoom === 'bairro') && kk !== ultimoMapaRender.current.k && Date.now() - ultimoMapaRender.current.em > 5000) {
+      ultimoMapaRender.current = { k: kk, em: Date.now() };
+      registrarEvento('mapa_render', {
+        zoom: k.zoom, modo: k.modo, n2_nomes: r.n2.length, n3_pinos: r.n3.length, rotulos_descartados: r.rotulosDescartados,
+        n1: !!r.n1, n1_rotulo: !!r.n1?.rotulo, largura: Math.round(m.width), fonte: escalaDaFonte(),
+      });
+    }
+  }, []);
+  const temposDaConferencia = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const agendarConferencia = useCallback(() => {
+    temposDaConferencia.current.forEach(clearTimeout);
+    // o Google monta e move os marcadores no tempo dele: confere logo e de novo (como as placas)
+    temposDaConferencia.current = [60, 350, 1000].map((ms) => setTimeout(() => requestAnimationFrame(conferirNiveis), ms));
+  }, [conferirNiveis]);
+  useEffect(() => () => temposDaConferencia.current.forEach(clearTimeout), []);
+  useEffect(() => {
+    if (naRua) agendarConferencia();
+  }, [naRua, agendarConferencia, cenaDoMapa, niveisNaTela, modoSol, alturaFolha, listaAberta, buscaAberta, selectedClient?.id,
+    linhaDoDiaAgora?.estado, janelaDasLigacoes, tab, insets.top, insets.bottom, janelaTela.width, janelaTela.height, motivoN1NaRua]);
+  /** O que vale para o desenho agora: o resultado medido, se for da mesma cena. */
+  const niveisValidos = niveisNaTela && cenaDoMapa && niveisNaTela.chave === cenaDoMapa.chave ? niveisNaTela.r : null;
+  const nivelNaRua = useCallback((id: string): 1 | 2 | 3 => (id === idN1NaRua ? 1 : niveisValidos?.nivel[id] === 2 ? 2 : 3), [idN1NaRua, niveisValidos]);
+  const rotuloNaRuaDe = useCallback((id: string) => {
+    if (!niveisValidos) return null;
+    const x = niveisValidos.n1?.id === id ? niveisValidos.n1.rotulo : niveisValidos.n2.find((y) => y.id === id) ?? null;
+    return x ? { lado: x.lado, nome: x.nome, linha2: x.linha2 } : null;
+  }, [niveisValidos]);
 
   // Dia que a Agenda mostra. Unico estado novo do M4: a tira da semana vive no
   // header (que e' desta casca) e o corpo vive na AgendaScreen, entao o dia
@@ -4154,8 +4306,10 @@ function MainApp() {
   // continuam abrindo o lead, e antes pulavam para o plano de outro dia.
   const aoTocarPino = useCallback((c: Client) => {
     if (planejarToqueRef.current) { planejarToqueRef.current(c); return; }
+    // mapa na rua (02/11/26): toque por nível — se o N3 quase não for tocado, ele está quieto demais
+    if (!layout.ehLargo) registrarEvento('pino_toque', { nivel: nivelNaRua(c.id), familia: itensMapaNovo.find((it) => it.c.id === c.id)?.p.familia ?? null, zoom: zoomDoMapa });
     handleMarkerPress(c);
-  }, [handleMarkerPress]);
+  }, [handleMarkerPress, layout.ehLargo, nivelNaRua, itensMapaNovo, zoomDoMapa]);
   // Saiu do mapa: o modo Planejar desliga (senão o toque ficava armado nas outras abas).
   // a Agenda do computador planeja no mapa dela (05/10/26): só ela mantém o modo fora do Mapa
   useEffect(() => { if (tab !== 'map' && !(tab === 'agenda' && layout.ehLargo)) setPlanejarDia(null); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -6600,6 +6754,7 @@ function MainApp() {
               && prev.latitudeDelta === region.latitudeDelta && prev.longitudeDelta === region.longitudeDelta ? prev
               : { latitude: region.latitude, longitude: region.longitude, latitudeDelta: region.latitudeDelta, longitudeDelta: region.longitudeDelta });
           }
+          if (!layout.ehLargo) agendarConferencia();
           setMapRegion((prev) => {
             if (prev) {
               const dLat = Math.abs(prev.latitude - region.latitude) / Math.max(prev.latitudeDelta, 1e-6);
@@ -6763,7 +6918,8 @@ function MainApp() {
             feito={plano != null && (planejarDia ? paradasDoDiaPlanejado.find((p) => p.client.id === c.id)?.status === 'done' : feitosDaRota.has(c.id))}
             naFila={leadsNaFila.has(c.id)}
             selecionado={selectedClient?.id === c.id || rascunhoPlano.has(c.id) || (ehAgendaPC && (c.id === hoverAgenda || c.id === focoPC?.id))}
-            papel={!planejarOutroDia && c.id === idPortaDoHalo ? 'proxima' : plano != null ? 'plano' : 'lente'}
+            // na rua (celular), a próxima é o N1 (no feriado, nenhuma: o N1 é só a bolinha)
+            papel={!planejarOutroDia && (naRua ? c.id === idN1NaRua : c.id === idPortaDoHalo) ? 'proxima' : plano != null ? 'plano' : 'lente'}
             // Até a entrega de densidade: muitos pinos inteiros (lente Contas-alvo
             // numa cidade inteira) agrupam; o plano nunca.
             // pilhas (C11) já seguram o número de pinos: sem bolha de contagem
@@ -6777,9 +6933,34 @@ function MainApp() {
             lado={comNome.get(c.id) ?? 'dir'}
             aproximadoVisivel={!!mapRegion && mapRegion.latitudeDelta <= ZOOM_RUA_LAT_DELTA}
             discreto={quietosMapa.has(c.id)}
+            /* O MAPA NA RUA (celular): o nível, o rótulo medido na tela, o selo e o anel. No leque,
+               cada membro mostra o nome (prancha 2c) e o resto do mapa fica a 30%. */
+            {...(naRua ? {
+              nivel: leque ? 2 : nivelNaRua(c.id),
+              rotuloNaRua: leque ? { lado: leque.dx < 0 ? 'esq' as const : 'dir' as const, nome: getClientPrimaryName(c), linha2: null } : rotuloNaRuaDe(c.id),
+              seloNaRua: !leque && n <= 1 ? cenaDoMapa?.selos[c.id] ?? null : null,
+              sugestao: c.id === idN1NaRua && n1EhSugestao,
+              semAnel: zoomDoMapa === 'afastado',
+              apagado: !!pilhaAberta && !aberta,
+            } : {})}
           />
           );
         })}
+        {/* A LINHA ATÉ A PRÓXIMA PORTA (prancha "Mapa na rua", N1): pontilhada, da bolinha até ela. Com
+            plano, o trajeto do plano já sai da bolinha e passa nela; sem plano, a sugestão ganha a sua. */}
+        {naRua && !heatOn && n1EhSugestao && idN1NaRua && userLocation && zoomDoMapa !== 'afastado' && (() => {
+          const alvo = itemDoHalo?.c;
+          if (!alvo || alvo.latitude == null || alvo.longitude == null) return null;
+          return (
+            <Polyline
+              coordinates={[{ latitude: userLocation.latitude, longitude: userLocation.longitude }, { latitude: Number(alvo.latitude), longitude: Number(alvo.longitude) }]}
+              strokeColor={modoSol ? '#111418' : 'rgba(255,255,255,0.95)'}
+              strokeWidth={3}
+              lineDashPattern={[1, 7]}
+              zIndex={2}
+            />
+          );
+        })()}
 
         {/* Markers da rota com numero da ordem — renderizam acima dos
             normais e ficam visiveis independente do filtro de status.
@@ -6830,7 +7011,7 @@ function MainApp() {
             zIndex={1}
           />
         )}
-        {!heatOn && !planejarOutroDia && lente === 'dia' && (() => {
+        {!heatOn && !planejarOutroDia && lente === 'dia' && !naRua && (() => {
           const prox = routeDisplayClients.find((c) => c.id === idClienteParadaAtual);
           if (!prox || prox.latitude == null || prox.longitude == null) return null;
           return (
@@ -6981,6 +7162,7 @@ function MainApp() {
                   layout.ehLargo && styles.mapaControleWeb,
                 ]
           }
+          {...OBSTACULO_MAPA}
           onPress={centerOnUser}
          accessibilityRole="button" accessibilityLabel="Centralizar no meu local">
           {/* Cheio quando esta' seguindo o vendedor, vazado quando a
@@ -7024,6 +7206,7 @@ function MainApp() {
                voltar devolve a mesma posição e o mesmo zoom. Se a Lista virasse uma vista que
                troca o mapa, ele remontaria com `initialRegion` = o GPS com delta fixo — e a volta
                jogaria o executivo de volta em cima de si mesmo, perdendo onde ele navegou. */
+            registrarEvento('alternador', { para: v });
             if (v === 'lista') { setEstagioLista('cheia'); setListaAberta(true); } else setListaAberta(false);
           }}
         />
@@ -7256,6 +7439,7 @@ function MainApp() {
           accessibilityRole="button"
           accessibilityLabel="Novo lead"
           style={[styles.fabMapaNovo, { right: 12 + insets.right, bottom: baseFileiraMapa }]}
+          {...OBSTACULO_MAPA}
           onPress={() => setShowCepStep(true)}
         >
           {/* branco fixo não serve mais: o botão virou neutro e segue o tema (§5) */}
