@@ -6907,7 +6907,8 @@ function MainApp() {
     }
     openClientDetails(c);
   };
-  const botaoRecolher = (
+  // marcando um pino, a barra do pino ocupa o rodapé do mapa: o botão do painel saía por cima do texto (02/11/26)
+  const botaoRecolher = creationMode ? null : (
     <TouchableOpacity
       accessibilityRole="button"
       accessibilityLabel={painelRecolhido ? 'Mostrar a coluna da esquerda' : 'Recolher a coluna e ampliar o mapa'}
