@@ -347,8 +347,10 @@ Deno.serve(async (req: Request) => {
   const isBatch = Array.isArray(raw);
   const items: HubspotPayload[] = isBatch ? (raw as HubspotPayload[]) : [raw as HubspotPayload];
 
+  /* lote vazio é o RPA dizendo "nada novo" (02/11/26: os 400 de 30/10 em diante eram isso, nenhum lead
+     perdido) — responde ok com 0, para o erro voltar a significar erro */
   if (items.length === 0) {
-    return json(400, { error: 'Empty payload' });
+    return json(200, { ok: true, count: 0, clients: [] });
   }
   if (items.length > MAX_BATCH) {
     return json(413, { error: `Batch too large (max ${MAX_BATCH})` });
