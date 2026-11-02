@@ -21,6 +21,7 @@ import {
   type NegocioEntrada, type TarefaEntrada,
 } from '../_compartilhado/filaDoDinheiro.ts';
 import { criarToques, itensDoApp } from '../_compartilhado/toquesDoCockpit.js';
+import { semProximoPassoDaFila } from '../_compartilhado/hojeV3.ts';
 
 const HS = 'https://api.hubapi.com';
 const PIPELINE = '916011864';
@@ -333,7 +334,12 @@ Deno.serve(async (req: Request) => {
   }));
 
   // 2) negócios abertos: snapshot (temperatura, dias) + etapa ao vivo
-  const { data: snapLido } = await snapP;
+  /* A LEITURA DO SNAPSHOT SEM CONFERIR O ERRO (auditoria do servidor, 02/11/26): com a leitura falhando, o
+     snapshot vinha nulo e a fila saía sem temperatura, dias e a carteira de quem está fora do time — menor
+     que a verdade e calada, o defeito que lotesFalharam já recusa. Erro aqui é 502, como lá. (Sem linha
+     nenhuma, sem erro, segue como antes: o robô ainda não gravou.) */
+  const { data: snapLido, error: snapErro } = await snapP;
+  if (snapErro) return json(502, { erro: 'Não consegui ler o snapshot do Cockpit agora. Puxe para tentar de novo.', detalhe: snapErro.message });
   const snap = snapLido
     ? { atualizado_em: snapLido.atualizado_em, conteudo: { reps: snapLido.reps, funilLeads: snapLido.funilLeads, funilForaDoTime: snapLido.funilForaDoTime, agenda: snapLido.agenda } }
     : null;
@@ -388,15 +394,26 @@ Deno.serve(async (req: Request) => {
   // 3) o lead de cada negócio, contatos, decisor, visitas de hoje — as leituras que só dependem
   // da carteira saem juntas; as visitas esperam só os clientes
   const desde = new Date(Date.now() - 120 * 86400000).toISOString();
-  const vazio = { data: [] as Array<Record<string, unknown>> };
-  const [{ data: clientes }, { data: cc }, { data: ff }, { data: cd }] = meus.length
-    ? await Promise.all([
-      svc.from('clients').select('id, id_hubspot, nome, telefone, latitude, longitude, bairro').in('id_hubspot', meus),
-      svc.from('contatos_de_campo').select('deal_id, client_id, ocorrido_em, canal').in('deal_id', meus).gte('ocorrido_em', desde),
-      tudo<Record<string, unknown>>((a, b) => svc.from('fichas_de_rua').select('deal_id, como_foi, ocorrido_em, criado_em').in('deal_id', meus).order('id').range(a, b)).then((data) => ({ data })),
-      svc.from('contatos_de_campo').select('deal_id').in('deal_id', meus).eq('resultado', 'decisor'),
-    ])
-    : [vazio, vazio, vazio, vazio];
+  const vazio = { data: [] as Array<Record<string, unknown>>, error: null as { message: string } | null };
+  /* as quatro leituras da carteira também conferem o erro (02/11/26): sem os clientes a fila perde telefone e
+     visita; sem as fichas e os contatos, o "x de 4" e o decisor saem zerados — de novo uma fila menor que a
+     verdade. Qualquer uma falhando é 502, como lotesFalharam. */
+  let leituras: Array<{ data: Array<Record<string, unknown>> | null; error: { message: string } | null }>;
+  try {
+    leituras = meus.length
+      ? await Promise.all([
+        svc.from('clients').select('id, id_hubspot, nome, telefone, latitude, longitude, bairro').in('id_hubspot', meus),
+        svc.from('contatos_de_campo').select('deal_id, client_id, ocorrido_em, canal').in('deal_id', meus).gte('ocorrido_em', desde),
+        tudo<Record<string, unknown>>((a, b) => svc.from('fichas_de_rua').select('deal_id, como_foi, ocorrido_em, criado_em').in('deal_id', meus).order('id').range(a, b)).then((data) => ({ data, error: null })),
+        svc.from('contatos_de_campo').select('deal_id').in('deal_id', meus).eq('resultado', 'decisor'),
+      ]) as never
+      : [vazio, vazio, vazio, vazio];
+  } catch (e) {
+    return json(502, { erro: 'Não consegui ler os registros de campo da sua carteira agora. Puxe para tentar de novo.', detalhe: (e as { message?: string })?.message ?? String(e) });
+  }
+  const erroLeitura = leituras.find((l) => l.error)?.error;
+  if (erroLeitura) return json(502, { erro: 'Não consegui ler os registros de campo da sua carteira agora. Puxe para tentar de novo.', detalhe: erroLeitura.message });
+  const [{ data: clientes }, { data: cc }, { data: ff }, { data: cd }] = leituras;
   const clientePorDeal = new Map<string, { id: string; nome: string | null; telefone: string | null; lat: number | null; lng: number | null; bairro: string | null }>();
   for (const c of clientes ?? []) clientePorDeal.set(String(c.id_hubspot), { id: String(c.id), nome: (c.nome as string) ?? null, telefone: (c.telefone as string) ?? null, lat: c.latitude != null ? Number(c.latitude) : null, lng: c.longitude != null ? Number(c.longitude) : null, bairro: (c.bairro as string) ?? null });
   const dealPorCliente = new Map<string, string>();
@@ -549,8 +566,18 @@ Deno.serve(async (req: Request) => {
   {
     const c = { atrasados: 0, hoje: 0, sem_passo: 0, quentes: 0 };
     for (const i of itens) { c[secaoDoItem(i)]++; if (quenteEsfriando(i, hoje)) c.quentes++; }
-    await svc.from('fila_do_dia').upsert({ user_id: uid, dia: hoje, ...c, atualizado_em: new Date().toISOString() }, { onConflict: 'user_id,dia' })
-      .then(() => {}, () => {});
+    /* O "SEM PRÓXIMO PASSO" GRAVADO COM A REGRA DO COCKPIT (0242, 02/11/26). sem_passo é a SEÇÃO da fila (só
+       o que nunca teve passo); o número que o Cockpit, a folha da manhã e o push das 8h mostram é outro: a
+       seção + os vencidos sem passo futuro, Ag. Pagamento fora (semProximoPassoDaFila, a mesma do push).
+       Grava os dois e o atualizado_em do snapshot que montou a fila, para quem ler saber de quando é. */
+    const sem_proximo_passo = semProximoPassoDaFila(itens as never).total;
+    const linhaDoDia = { user_id: uid, dia: hoje, ...c, atualizado_em: new Date().toISOString() };
+    const r = await svc.from('fila_do_dia').upsert({ ...linhaDoDia, sem_proximo_passo, snapshot_em: snap?.atualizado_em ?? null }, { onConflict: 'user_id,dia' })
+      .then((x) => x, () => null);
+    // Edge publicada antes da 0242 (coluna que ainda não existe, PGRST204): grava o de antes, sem as duas
+    if (r && r.error && /sem_proximo_passo|snapshot_em|PGRST204/.test(`${r.error.code ?? ''} ${r.error.message ?? ''}`)) {
+      await svc.from('fila_do_dia').upsert(linhaDoDia, { onConflict: 'user_id,dia' }).then(() => {}, () => {});
+    }
   }
 
   return json(200, {
