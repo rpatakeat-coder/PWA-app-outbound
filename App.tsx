@@ -5539,11 +5539,15 @@ function MainApp() {
   const chegueiV3 = useRef<(o: { clientId: string; comProva: boolean; metros: number | null }) => number>(() => 0);
   chegueiV3.current = (o) => {
     if (!hojeV3 || !ehRepV3) return 0;
-    const vis = diaV3.data?.visitas ?? [];
+    /* SEM DADOS, SEM PONTOS (auditoria 02/11/26): sem as visitas da semana lidas, "jaNaSemana" dava
+       falso e o toast prometia "+3 pts" no restaurante já visitado. Sem elas, o toast não fala em
+       pontos nem em sequência — só "Check-in com prova". */
+    const conhecidas = diaV3.data?.visitas ?? null;
+    const vis = conhecidas ?? [];
     const jaNaSemana = vis.some((v) => v.client_id === o.clientId && v.provada && v.dia >= segundaV3);
     const seq0 = quadroV3.data && !quadroV3.data.erro && quadroV3.data.sequencias ? quadroV3.data.sequencias.rua.atual : null;
     const primeiraHoje = !vis.some((v) => v.dia === hojeIsoV3 && v.provada);
-    const t = toastCheguei({ comProva: o.comProva, pontos: o.comProva && !jaNaSemana ? 3 : 0, metros: o.metros, sequencia: seq0 == null ? null : seq0 + (o.comProva && primeiraHoje ? 1 : 0) });
+    const t = toastCheguei({ comProva: o.comProva, pontos: conhecidas && o.comProva && !jaNaSemana ? 3 : 0, metros: o.metros, sequencia: seq0 == null || !conhecidas ? null : seq0 + (o.comProva && primeiraHoje ? 1 : 0) });
     setToastV3({ kind: 'cheguei', titulo: t.titulo, texto: t.texto, tom: t.tom });
     return 1400;
   };
@@ -8439,10 +8443,6 @@ function MainApp() {
         // cobranças abertas · D2 → D5" (as do modo antigo) ao lado de "Abertas · 9". Calculado
         // aqui mesmo: seloTarefas é declarado mais abaixo e este bloco roda antes dele.
         if (modoNovo) {
-          const agora = new Date();
-          const atr = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, agora) === 'atrasadas').length;
-          const hj = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, agora) === 'hoje').length;
-          void atr; void hj;
           return { titulo: 'Tarefas', sub: naFila != null ? `${naFila} ${naFila === 1 ? 'tarefa' : 'tarefas'} hoje` : 'negócios que precisam de você' };
         }
         return { titulo: 'Tarefas', sub: `${visibleTasksCount} ${visibleTasksCount === 1 ? 'cobrança aberta' : 'cobranças abertas'} · escalonamento D2 → D5` };
