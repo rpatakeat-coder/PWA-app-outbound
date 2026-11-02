@@ -42,6 +42,17 @@ function somaDias(iso, n) {
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
+/* feriado nacional não tem aviso (02/11/26, Finados: o cron de segunda a sexta ia cobrar o grupo
+   num dia sem expediente). A lista é a do GV2.feriadosDoAno do Cockpit e do ehDiaUtil do app:
+   os fixos mais Carnaval (seg e ter), Sexta-feira Santa e Corpus Christi, pela Páscoa. */
+function ehFeriado(iso) {
+  const y = Number(iso.slice(0, 4));
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const pascoa = y + '-' + String(Math.floor((h + l - 7 * m + 114) / 31)).padStart(2, '0') + '-' + String(((h + l - 7 * m + 114) % 31) + 1).padStart(2, '0');
+  const fixos = ['01-01', '04-21', '05-01', '09-07', '10-12', '11-02', '11-15', '11-20', '12-25'].map((md) => y + '-' + md);
+  return fixos.concat([-48, -47, -2, 60].map((n) => somaDias(pascoa, n))).indexOf(iso) >= 0;
+}
 function segundaDe(iso) {
   const d = new Date(iso + 'T12:00:00Z');
   const dow = d.getUTCDay() || 7;
@@ -229,6 +240,7 @@ async function handler(req, res) {
   if (falta.length) return res.status(500).json({ erro: 'variáveis faltando: ' + falta.join(', ') });
   try {
     const hoje = diaBR(new Date());
+    if (ehFeriado(hoje) && !teste) return res.status(200).json({ hoje, enviadas: 0, motivo: 'feriado' });
     const dados = await lerTudo(chave, hoje);
     const mensagens = montarMensagens(dados);
     if (teste) return res.status(200).json({ hoje, enviadas: 0, mensagens });
