@@ -9937,6 +9937,8 @@ function MainApp() {
       {planoDoDia && hojeV3 && vmV3.folha.mostra && (
         <FolhaManhaV3
           folha={vmV3.folha}
+          /* auditoria 02/11/26: esqueleto até o plano de hoje e a fila chegarem (B3) */
+          carregando={opsDeHojeV3.isLoading || (!filaNaTela.data && !filaNaTela.isError)}
           chipsOntem={chipsDeDia(hojeIsoV3, feriadosV3, true)}
           aoIr={() => { registrarHoje('folha_manha', 'ir_para_rua'); setPlanoDoDia(false); }}
           aoDepois={() => { registrarHoje('folha_manha', 'depois'); setPlanoDoDia(false); }}
