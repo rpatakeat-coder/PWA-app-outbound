@@ -16,6 +16,7 @@ import { Toast } from '../components/Toast';
 import { IconCalendar, IconCheck, IconClose, IconDownload, useIconColors } from '../components/icons';
 import { useLayout } from '../hooks/useLayout';
 import { opcoesDaFila } from '../utils/dadosDaFila';
+import { semProximoPassoDaFila } from '../../supabase/functions/_compartilhado/hojeV3';
 import { porNoDia } from '../utils/paradaDoDia';
 import { proximoDiaUtil } from '../utils/desfechoVisita';
 import { ROTULO_ETAPA } from '../utils/fichaDeRua';
@@ -90,9 +91,15 @@ export default function ListaCarteiraWeb({ ownerHubspot, sellerId, aoAbrirLead, 
     ultimoContato: c.visited_at ?? null, canalUltimo: c.visited_at ? 'visita' : null, contatos: 0, proximoPasso: null,
   })), [alvos.data]);
 
+  /* "SEM PRÓXIMO PASSO" É A REGRA DA FILA (auditoria 02/11/26). A lista usava só `!proximoPasso` da
+     carteira: o passo que o HubSpot ou o plano de hoje já sabem (e a fila conta) aparecia como "sem
+     próximo passo" aqui, e Ag. Pagamento entrava. Agora é a mesma regra única da aba Hoje, da folha
+     da manhã e do Cockpit (semProximoPassoDaFila). Conta-alvo não é negócio: fica fora. */
+  const semPasso = useMemo(() => new Set(semProximoPassoDaFila(((fila.data as { itens?: Array<{ motivo: string; venceu: boolean; grupo: string; etapaId: string; dealId?: string }> } | undefined)?.itens) ?? []).ids), [fila.data]);
+  const semPassoDe = (l: LinhaCarteira) => l.etapaId !== 'alvo' && semPasso.has(String(l.dealId));
   const base = recorte === 'alvo' ? linhasAlvo : carteira;
   const passouRegua = (l: LinhaCarteira) => { const r = reguaDe(l.etapaId); return r != null && l.diasNaEtapa != null && l.diasNaEtapa > r; };
-  const passa = (l: LinhaCarteira, f: Filtro) => !f || (f === 'sem' && !l.proximoPasso) || (f === 'regua' && passouRegua(l)) || (f === 'q' && (l.temperatura ?? 0) >= 70);
+  const passa = (l: LinhaCarteira, f: Filtro) => !f || (f === 'sem' && semPassoDe(l)) || (f === 'regua' && passouRegua(l)) || (f === 'q' && (l.temperatura ?? 0) >= 70);
   const linhas = base.filter((l) => passa(l, filtro)
     && (!etapa || l.etapaId === etapa) && (!bairro || (l.bairro ?? '') === bairro)
     && (semToque == null || (diasDesde(l.ultimoContato) ?? 999) >= semToque));
@@ -128,7 +135,7 @@ export default function ListaCarteiraWeb({ ownerHubspot, sellerId, aoAbrirLead, 
     if (typeof document === 'undefined') return;
     const cab = ['Restaurante', 'Bairro', 'Contato', 'Etapa', 'Dias na etapa', 'Último toque', 'Próximo passo', 'Temperatura', 'MRR'];
     const rows = linhas.map((l) => [l.negocio, l.bairro, l.contato, ROTULO_ETAPA[l.etapaId] ?? (l.etapaId === 'alvo' ? 'Conta-alvo' : ''), l.diasNaEtapa,
-      l.ultimoContato ? fmtCurto(l.ultimoContato) : '', l.proximoPasso ? fmtCurto(l.proximoPasso) : 'sem próximo passo', l.temperatura, l.mrr]);
+      l.ultimoContato ? fmtCurto(l.ultimoContato) : '', l.proximoPasso ? fmtCurto(l.proximoPasso) : semPassoDe(l) ? 'sem próximo passo' : '', l.temperatura, l.mrr]);
     const csv = [cab, ...rows].map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
@@ -269,8 +276,8 @@ export default function ListaCarteiraWeb({ ownerHubspot, sellerId, aoAbrirLead, 
                       // próximo passo vencido em vermelho ("venceu"), faltando em âmbar (docs/12 §4)
                       const venceu = !!l.proximoPasso && l.proximoPasso.slice(0, 10) < hoje;
                       return (
-                        <Text style={[st.td, { flex: cols.prox }, !l.proximoPasso && l.etapaId !== 'alvo' && { color: 'var(--ambar-texto)' }, venceu && { color: 'var(--vermelho-texto)', fontWeight: '600' }]} numberOfLines={1}>
-                          {l.proximoPasso ? `${venceu ? 'venceu ' : ''}${fmtCurto(l.proximoPasso)}` : l.etapaId === 'alvo' ? '—' : 'sem próximo passo'}
+                        <Text style={[st.td, { flex: cols.prox }, !l.proximoPasso && semPassoDe(l) && { color: 'var(--ambar-texto)' }, venceu && { color: 'var(--vermelho-texto)', fontWeight: '600' }]} numberOfLines={1}>
+                          {l.proximoPasso ? `${venceu ? 'venceu ' : ''}${fmtCurto(l.proximoPasso)}` : semPassoDe(l) ? 'sem próximo passo' : '—'}
                         </Text>
                       );
                     })()}

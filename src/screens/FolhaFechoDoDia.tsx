@@ -211,16 +211,18 @@ export default function FolhaFechoDoDia({ dia, portas, meta, pendentes, amanha, 
           {portas >= meta && meta > 0 && <Text style={s.bateu} numberOfLines={1}>{`${portas} de ${meta} portas ✓`}</Text>}
         </View>
         <Text style={s.titulo}>
+          {/* auditoria 02/11/26: as pendentes daqui são o Cheguei sem "Como foi" (visita_sem_registro),
+              não "sem próximo passo" — que é outra regra (a da fila) e outro número no Hoje */}
           {k === 0
-            ? `${portas} ${portas === 1 ? 'porta' : 'portas'}, todas com próximo passo. Fecha?`
-            : `${portas} ${portas === 1 ? 'porta' : 'portas'}, ${j} com próximo passo, ${k} sem. Fecha?`}
+            ? `${portas} ${portas === 1 ? 'porta' : 'portas'}, todas registradas. Fecha?`
+            : `${portas} ${portas === 1 ? 'porta' : 'portas'}, ${j} ${j === 1 ? 'registrada' : 'registradas'}, ${k} sem registro. Fecha?`}
         </Text>
       </View>
     }>
       <ScrollView style={s.rolagem} contentContainerStyle={s.corpo}>
         {k > 0 && (
           <>
-            <Text style={s.grupo}>{`SEM PRÓXIMO PASSO · ${k}`}</Text>
+            <Text style={s.grupo}>{`SEM REGISTRO · ${k}`}</Text>
             {pendentes.map((p) => (
               <View key={p.dealId} style={s.linha}>
                 <View style={{ flex: 1, minWidth: 0 }}>
