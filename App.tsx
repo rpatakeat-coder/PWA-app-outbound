@@ -3100,6 +3100,8 @@ function MainApp() {
   const [mapLayout, setMapLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   /* PLACAS DE BAIRRO (prancha §5.1): no zoom afastado, "Praia do Canto · 18 novos" e, em verde,
      "6 clientes Takeat" — a referência sem pôr os pinos de cliente no mapa. */
+  // a área livre das placas, guardada para a conferência na tela logo abaixo (02/11/26)
+  const areaDasPlacas = useRef<{ area: { x0: number; y0: number; x1: number; y1: number }; evitar: Array<{ x0: number; y0: number; x1: number; y1: number }> } | null>(null);
   const placasDoMapa = useMemo(() => {
     // entre o bairro e a cidade: no zoom de estado ou de país, bairro não diz nada (medido em 15/10/26)
     if (!mapRegion || mapRegion.latitudeDelta <= DELTA_AFASTADO || mapRegion.latitudeDelta > 0.6 || lente === 'calor' || (ehAgendaPC && planejarDia)) return [];
@@ -3125,9 +3127,34 @@ function MainApp() {
     const fundoLivre = alturaPx - RESPIRO_ACIMA_DO_GOOGLE - 44 - 8;
     // a coluna da direita (localização acima do "+"): a placa não cobre o botão (visto a 277 px, 02/11/26)
     const colunaDireita = { x0: larguraPx - 12 - 44 - 8 - insets.right, y0: fundoLivre - 44 - 8, x1: larguraPx, y1: alturaPx };
-    return placasNaTela(todas, { ...(regiaoExata ?? mapRegion), larguraPx, alturaPx },
-      { x0: 8 + insets.left, y0: Math.max(8, topoLivre), x1: larguraPx - 8 - insets.right, y1: fundoLivre }, 4, [colunaDireita]);
+    const area = { x0: 8 + insets.left, y0: Math.max(8, topoLivre), x1: larguraPx - 8 - insets.right, y1: fundoLivre };
+    areaDasPlacas.current = { area, evitar: [colunaDireita] };
+    return placasNaTela(todas, { ...(regiaoExata ?? mapRegion), larguraPx, alturaPx }, area, 4, [colunaDireita]);
   }, [mapRegion, lente, ehAgendaPC, planejarDia, visiveisMapaNovo, itensMapaNovo, idPortaDoHalo, selectedClient?.id, layout.ehLargo, mapLayout, regiaoExata, insets.top, insets.left, insets.right]);
+  /* A CONFERÊNCIA NA TELA (02/11/26). A conta acima projeta o bairro no mapa e escolhe o que cabe, mas,
+     medido logado a 360 e 390 px, o Google desenhava a placa ~18 px fora do previsto (a de cima por
+     baixo da faixa do dia, a da direita passando da borda). Depois de desenhar, cada placa é medida de
+     verdade contra o mapa: a que sai da área livre, cobre o botão da direita ou bate em outra some. */
+  useEffect(() => {
+    if (layout.ehLargo || typeof document === 'undefined' || !placasDoMapa.length) return;
+    const conferir = () => {
+      const lim = areaDasPlacas.current;
+      const mapa = document.querySelector('.gm-style')?.getBoundingClientRect();
+      if (!lim || !mapa) return;
+      const aceitas: Array<{ x0: number; y0: number; x1: number; y1: number }> = [...lim.evitar];
+      document.querySelectorAll<HTMLElement>('[data-placa]').forEach((el) => {
+        el.style.visibility = 'visible';
+        const r = el.getBoundingClientRect();
+        const c = { x0: r.left - mapa.left, y0: r.top - mapa.top, x1: r.right - mapa.left, y1: r.bottom - mapa.top };
+        const fora = c.x0 < lim.area.x0 || c.x1 > lim.area.x1 || c.y0 < lim.area.y0 || c.y1 > lim.area.y1;
+        const bate = aceitas.some((a) => c.x0 < a.x1 && a.x0 < c.x1 && c.y0 < a.y1 && a.y0 < c.y1);
+        if (fora || bate) el.style.visibility = 'hidden';
+        else aceitas.push(c);
+      });
+    };
+    const t = setTimeout(() => requestAnimationFrame(conferir), 250);
+    return () => clearTimeout(t);
+  }, [placasDoMapa, regiaoExata, layout.ehLargo]);
 
   // Pilha até 8: abre em leque. Maior: aproxima o mapa até os pinos se
   // separarem — a não ser que estejam todos no mesmo ponto (aí só o leque separa).
@@ -6653,7 +6680,7 @@ function MainApp() {
             const linha: React.CSSProperties = { display: 'block', maxWidth: LARGURA_MAX_PLACA - 20, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 };
             return (
               <Marker key={`placa-${pl.chave}`} {...pos} cluster={false} zIndex={300} onPress={irAoBairro}>
-                <div aria-label={`${pl.titulo}${pl.clientes ? `, ${pl.clientes}` : ''}. Aproximar`} style={{
+                <div data-placa="1" aria-label={`${pl.titulo}${pl.clientes ? `, ${pl.clientes}` : ''}. Aproximar`} style={{
                   display: 'flex', flexDirection: 'column', alignItems: 'center', maxWidth: LARGURA_MAX_PLACA, boxSizing: 'border-box', padding: '4px 10px', borderRadius: 10,
                   background: modoSol ? 'rgba(255,255,255,.96)' : 'rgba(23,25,29,.94)', border: `1px solid ${modoSol ? '#D9D4CA' : 'rgba(255,255,255,.14)'}`,
                   boxShadow: '0 2px 8px rgba(0,0,0,.25)', cursor: 'pointer',
