@@ -3118,8 +3118,10 @@ function MainApp() {
     const alturaPx = mapLayout.height;
     const topoLivre = insets.top + 7 + ALTURA_TOPO_CAMPO + RESPIRO_ABAIXO_DA_FILEIRA + 48 + 8 - mapLayout.y;
     const fundoLivre = alturaPx - RESPIRO_ACIMA_DO_GOOGLE - 44 - 8;
+    // a coluna da direita (localização acima do "+"): a placa não cobre o botão (visto a 277 px, 02/11/26)
+    const colunaDireita = { x0: larguraPx - 12 - 44 - 8 - insets.right, y0: fundoLivre - 44 - 8, x1: larguraPx, y1: alturaPx };
     return placasNaTela(todas, { ...mapRegion, larguraPx, alturaPx },
-      { x0: 8 + insets.left, y0: Math.max(8, topoLivre), x1: larguraPx - 8 - insets.right, y1: fundoLivre });
+      { x0: 8 + insets.left, y0: Math.max(8, topoLivre), x1: larguraPx - 8 - insets.right, y1: fundoLivre }, 4, [colunaDireita]);
   }, [mapRegion, lente, ehAgendaPC, planejarDia, visiveisMapaNovo, itensMapaNovo, idPortaDoHalo, selectedClient?.id, layout.ehLargo, mapLayout, insets.top, insets.left, insets.right]);
 
   // Pilha até 8: abre em leque. Maior: aproxima o mapa até os pinos se

@@ -52,6 +52,10 @@ ok(placasDeBairro([it('d', 'SANTA ROSA DE LIMA', 0, 0, 'lead')], [])[0].titulo =
   ok(muitas.length <= 4 && muitas.length >= 2, 'no celular, no máximo 4 placas');
   const semCli = placasNaTela([placa('Centro', 0, 0, '3 clientes', null)], j, area)[0];
   ok(!!semCli && contaDaPlaca(semCli).takeat === null, 'sem cliente Takeat: só a conta');
+  // a coluna da localização e do "+" (x ≥ 326, y ≥ 460): a placa que cairia nela sai
+  const coluna = { x0: 326, y0: 460, x1: 390, y1: 600 };
+  const itapua = placa('Itapuã', -0.032, 0.046); // x ≈ 374, y ≈ 492
+  ok(placasNaTela([itapua], j, area).length === 1 && placasNaTela([itapua], j, area, 4, [coluna]).length === 0, 'placa sobre o botão de localização sai');
 }
 
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }

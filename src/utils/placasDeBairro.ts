@@ -90,8 +90,12 @@ export function larguraDaPlaca(pl: Placa): number {
   return Math.min(LARGURA_MAX_PLACA, Math.ceil(Math.max(pl.bairro.length * 7, l2.length * 6.3) + 20));
 }
 
-export function placasNaTela(placas: Placa[], j: JanelaDaPlaca, area: AreaLivre, maximo = 4): PlacaNaTela[] {
-  const aceitas: Array<{ x0: number; y0: number; x1: number; y1: number }> = [];
+/**
+ * @param evitar caixas na régua do mapa que a placa não pode cobrir mesmo dentro da área livre
+ *   (a coluna da localização e do "+", à direita, acima da fileira de baixo).
+ */
+export function placasNaTela(placas: Placa[], j: JanelaDaPlaca, area: AreaLivre, maximo = 4, evitar: AreaLivre[] = []): PlacaNaTela[] {
+  const aceitas: Array<{ x0: number; y0: number; x1: number; y1: number }> = [...evitar];
   const out: PlacaNaTela[] = [];
   for (const pl of placas) {
     if (out.length >= maximo) break;
