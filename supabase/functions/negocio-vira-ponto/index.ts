@@ -271,7 +271,9 @@ Deno.serve(async (req) => {
     const latLead = num(lead?.lat), lngLead = num(lead?.lng);
     const latDeal = num(p.latitude), lngDeal = num(p.longitude);
     if (noBrasil(latLead, lngLead)) geo = { lat: latLead!, lng: lngLead!, aproximado: false, fonte: 'leads_prospeccao' }; // a grafia da municao_sincronizar_pino (0242 normaliza as antigas)
-    else if (noBrasil(latDeal, lngDeal)) geo = { lat: latDeal!, lng: lngDeal!, aproximado: false, fonte: 'hubspot' };
+    // lat/lng do negócio no HubSpot é cópia de onde o pino estava (ou do centroide do webhook): aproximada,
+    // a mesma regra da hubspot-lead-webhook-latlong (auditoria 02/11/26 — eram 8 'hubspot' exatos)
+    else if (noBrasil(latDeal, lngDeal)) geo = { lat: latDeal!, lng: lngDeal!, aproximado: true, fonte: 'hubspot' };
     else if (rua && end.cidade && googleKey && geocodes < limiteGeocode) {
       geocodes++;
       try { geo = await geocodeGoogle({ ...end, rua }, googleKey); } catch { geo = null; }
