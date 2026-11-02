@@ -29,12 +29,6 @@ export function mesmoNome(a: string | null | undefined, b: string | null | undef
   return Math.min(x.length, y.length) >= 6 && (x.startsWith(y) || y.startsWith(x));
 }
 
-/** Padrão ilike para achar candidatos pelo nome no banco: "Deu BO" → "%deu%bo%". */
-export function padraoDoNome(nome: string): string | null {
-  const ws = semAcento(nome).toLowerCase().split(/[^a-z0-9]+/).filter((w) => w && !GENERICAS.has(w));
-  return ws.length ? `%${ws.join('%')}%` : null;
-}
-
 /**
  * Pino que veio do GPS de alguém (cadastro na rua ou check-in) — esse é prova de lugar, e o
  * Cheguei longe dele não oferece "Estou na porta".

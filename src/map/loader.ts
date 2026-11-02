@@ -41,7 +41,6 @@ export const GOOGLE_MAP_ID = MAP_ID;
 // escuro" na tela do Map ID, no console), e quem escolhe entre elas e' a
 // opcao `colorScheme` do mapa. Verificado no mapa real: o mesmo ID renderiza
 // claro com LIGHT e escuro com DARK.
-export type ColorScheme = 'LIGHT' | 'DARK';
 
 /** true quando o Map ID e' o de demonstracao, ou seja: nao configurado. */
 export const USING_DEMO_MAP_ID = MAP_ID === 'DEMO_MAP_ID';

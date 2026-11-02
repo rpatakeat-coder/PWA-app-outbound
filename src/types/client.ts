@@ -3,16 +3,6 @@
 // somente pela interface web, sem alteração de código.
 export type ClientStatus = string;
 
-export interface ClientStatusRow {
-  id: string;
-  slug: string;
-  label: string;
-  color: string;
-  sort_order: number | null;
-  is_active: boolean;
-  is_default_for_new_leads: boolean | null;
-}
-
 // As seis origens da prancha do mapa (0102, clients_origem_lead_valida).
 export type OrigemLead =
   | 'casa_dos_dados' | 'google_maps_motor' | 'indicacao'

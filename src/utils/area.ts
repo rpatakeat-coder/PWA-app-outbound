@@ -1,7 +1,3 @@
-// Raio fixo do filtro "minha área". Por enquanto hardcoded — quando
-// quiser configurável por setor ou por usuário, expor via DB.
-export const AREA_RADIUS_KM = 200;
-
 // Bounding box quadrado em volta de um ponto. Aproximação suficiente
 // pra um filtro de "uns 200 km": a diferença entre quadrado e círculo
 // real (PostGIS ST_DWithin) só importa nas bordas do raio e não justifica

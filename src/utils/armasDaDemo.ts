@@ -9,9 +9,7 @@
 // `qualificar` (sistema, dor, horário) e `decisor` (vira contato do negócio).
 // Regras puras, sem React: testadas em armasDaDemo.teste.ts.
 
-import { ETAPA, GARGALOS, HORARIOS, papelParaHubspot } from './fichaDeRua';
-
-export const ETAPAS_COM_ARMAS: string[] = [ETAPA.demo, ETAPA.negociacao];
+import { GARGALOS, HORARIOS, papelParaHubspot } from './fichaDeRua';
 
 export type FichaArmas = {
   ocorrido_em: string | null; decisor_nome: string | null; decisor_papel: string | null;
