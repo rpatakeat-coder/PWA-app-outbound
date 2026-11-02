@@ -23,7 +23,7 @@
 //   - não duplica pino. Se já existe ponto com o mesmo telefone ou o mesmo
 //     lugar do Google, não cria: vai para `possivel_duplicado`, com o id do
 //     ponto existente, para alguém decidir.
-//   - não atualiza ponto existente (etapa/dono seguem com hubspot-sync).
+//   - do ponto existente só acerta a ETAPA (02/11/26), quando diverge do HubSpot; o dono não muda aqui.
 //
 // Autenticação: header x-cron-secret, conferido contra o cofre do banco pela
 // função public.segredo_confere (migration 0087). O segredo nunca aparece em
@@ -168,10 +168,35 @@ Deno.serve(async (req) => {
 
   // Quem já está no mapa
   const noMapa = new Set<string>();
+  const pinosDoMapa: any[] = [];
   for (let i = 0; i < ids.length; i += 200) {
-    const { data, error } = await svc.from('clients').select('id_hubspot').in('id_hubspot', ids.slice(i, i + 200));
+    const { data, error } = await svc.from('clients').select('id, id_hubspot, etapa, status, is_archived, updated_at').in('id_hubspot', ids.slice(i, i + 200));
     if (error) return json(500, { error: `clients: ${error.message}` });
-    for (const r of data ?? []) noMapa.add(String(r.id_hubspot));
+    for (const r of data ?? []) { noMapa.add(String(r.id_hubspot)); pinosDoMapa.push(r); }
+  }
+
+  /* A ETAPA DO PINO SEGUE O HUBSPOT EM ATÉ 15 MIN (auditoria 02/11/26). A mudança feita direto no HubSpot
+     só chegava ao mapa quando o robô publicava o snapshot (até 2 h; nada no fim de semana). Esta rodada já
+     lê todos os negócios ativos com a etapa: o pino que diverge recebe o rótulo (os mesmos do gatilho
+     etapa_do_pino_pelo_snapshot). Mexido no app nos últimos 10 min não é tocado (o app pode estar à frente). */
+  const ROTULO: Record<string, string> = { ...ETAPAS, '1395880473': 'Ag. Pagamento' };
+  const etapaDoDeal = new Map(negocios.map((d) => [String(d.id), ROTULO[String(d.properties?.dealstage ?? '')] ?? null]));
+  const dezMin = Date.now() - 10 * 60 * 1000;
+  const porRotulo = new Map<string, string[]>();
+  for (const c of pinosDoMapa) {
+    const alvo = etapaDoDeal.get(String(c.id_hubspot));
+    if (!alvo || c.status !== 'lead' || c.is_archived || c.etapa === alvo) continue;
+    if (c.updated_at && Date.parse(c.updated_at) > dezMin) continue;
+    porRotulo.set(alvo, [...(porRotulo.get(alvo) ?? []), String(c.id)]);
+  }
+  let etapasAtualizadas = 0;
+  if (!dryRun) {
+    for (const [rotulo, idsPino] of porRotulo) {
+      for (let i = 0; i < idsPino.length; i += 200) {
+        const { error } = await svc.from('clients').update({ etapa: rotulo }).in('id', idsPino.slice(i, i + 200));
+        if (!error) etapasAtualizadas += Math.min(200, idsPino.length - i);
+      }
+    }
   }
   const faltam = negocios.filter((d) => !noMapa.has(String(d.id)));
 
@@ -323,6 +348,8 @@ Deno.serve(async (req) => {
     dry_run: dryRun,
     ativos_no_hubspot: negocios.length,
     ja_no_mapa: noMapa.size,
+    etapas_divergentes: [...porRotulo.values()].reduce((a, l) => a + l.length, 0),
+    etapas_atualizadas: etapasAtualizadas,
     faltavam: faltam.length,
     criados: criados.length,
     sem_localizacao: semLocalizacao.length,
