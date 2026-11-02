@@ -29,7 +29,7 @@ import { espelharDepois } from '../_compartilhado/espelho.ts';
 // O pacote vem do proprio repositorio, FIXADO NO HASH do commit que o gerou: o que
 // roda e, por construcao, o arquivo versionado — sem copia manual no deploy.
 // Gerou de novo? Commit, e troque o hash aqui pelo do commit novo.
-import { carregador, ROTAS, ORIGEM } from 'https://raw.githubusercontent.com/rpatakeat-coder/PWA-app-outbound/e6d176d0981797b1dd01c0826784b3a270e678ed/supabase/functions/cockpit-api/cockpit.js';
+import { carregador, ROTAS, ORIGEM } from 'https://raw.githubusercontent.com/rpatakeat-coder/PWA-app-outbound/a58289da29411d80bb56d6c45f1c2ef029efa567/supabase/functions/cockpit-api/cockpit.js';
 
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
