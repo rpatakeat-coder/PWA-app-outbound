@@ -1356,6 +1356,10 @@ function MainApp() {
   }, [modoNovo, tab, isViewer, planoDoDiaResolvido, hojeV3]);
   useEffect(() => {
     if (!modoNovo || tab !== 'map' || !seloFila?.quente || !filaNaTela.data || planoDoDia) return;
+    /* auditoria 02/11/26: com o Hoje v3 a "Antes da rua" subia logo depois da folha da manhã, que já
+       traz o que vence hoje e o sem próximo passo (e a hora das ligações chama os quentes). Fica só
+       no hoje-v2. */
+    if (hojeV3) return;
     const agoraBRT = new Date(Date.now() - 3 * 3600000);
     if (agoraBRT.getUTCHours() >= 19) return;
     /* sem expediente (fim de semana, feriado) não cobra ligação antes da rua (auditoria 01/11/26) */
@@ -1363,7 +1367,7 @@ function MainApp() {
     const chave = `antes-da-rua-${filaNaTela.data.hoje ?? diaBRT(new Date())}`;
     try { if (window.localStorage.getItem(chave)) return; window.localStorage.setItem(chave, '1'); } catch { return; }
     setAntesDaRua(true);
-  }, [modoNovo, tab, seloFila?.quente, filaNaTela.data, planoDoDia]);
+  }, [modoNovo, tab, seloFila?.quente, filaNaTela.data, planoDoDia, hojeV3]);
   // A14 (handoff v6): com o mapa na tela, a fila aparece só na pílula (ver Toast.mapaNaTela)
   useEffect(() => {
     Toast.mapaNaTela(modoNovo && tab === 'map' && !layout.ehLargo);
@@ -7537,6 +7541,7 @@ function MainApp() {
               return;
             }
             if (l.acao === 'montar') { void montarDiaComMicrorrotas(); return; }
+            if (hojeV3 && !isViewer) { irParaEu('menu'); return; } // sem o Meu dia no v3 (auditoria 02/11/26)
             setMeuDiaAberto(true);
           }}
         />
@@ -7592,7 +7597,9 @@ function MainApp() {
           }}
         />
       )}
-      {modoNovo && (
+      {/* auditoria 02/11/26: com o Hoje v3 a pílula-placar já mostra o dia (portas com prova × meta) pela
+          fonte do v3; o Meu dia era outro placar (provadasHoje × desenvolvimento_quadro). Só no hoje-v2. */}
+      {modoNovo && !(hojeV3 && !isViewer) && (
         <FolhaMeuDia
           visivel={meuDiaAberto}
           aoFechar={() => setMeuDiaAberto(false)}
@@ -7686,7 +7693,7 @@ function MainApp() {
           sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
           aoFala={abrirFala}
           recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
-          aoProgresso={() => setMeuDiaAberto(true)}
+          aoProgresso={() => (hojeV3 && !isViewer ? irParaEu('menu') : setMeuDiaAberto(true))}
           chao={alturaRodape ?? baseInferior}
           totalNaArea={totalNaAreaSemDiscretas}
           rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
@@ -7955,7 +7962,7 @@ function MainApp() {
         sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
         aoFala={abrirFala}
         recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
-        aoProgresso={() => setMeuDiaAberto(true)}
+        aoProgresso={() => (hojeV3 && !isViewer ? irParaEu('menu') : setMeuDiaAberto(true))}
         totalNaArea={totalNaAreaSemDiscretas}
         rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
         onAbrir={handleMarkerPress}
