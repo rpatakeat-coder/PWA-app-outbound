@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@d14fe5e0.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@2df03ae8.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "d14fe5e0";
+  var VERSAO = "2df03ae8";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -70964,9 +70964,9 @@ GV2.pv2Meses = function (p) {
       + '<td class="pv2-mm-cli"><b>' + e.vendas + '</b>' + (ant && !m.corrente ? seta(e.vendas, ant.eu.vendas) : '') + '<i class="pv2-mm-bar"><i style="width:' + Math.round(Math.max(0, e.vendas) / maxV * 100) + '%"></i></i><small>time ' + GV2.virg(t.vendas) + '</small></td>'
       + cel(GV2.rsCheio(e.mrr), GV2.rsCheio(t.mrr))
 
-      + '<td><b>' + e.demos + '</b>' + (ant && !m.corrente ? seta(e.demos, ant.eu.demos) : '') + '<small>time ' + GV2.virg(t.demos) + '</small><small>' + (conv == null ? '—' : conv + '%') + ' vira cliente · time ' + (convT == null ? '—' : convT + '%') + '</small></td>'
+      + '<td><b>' + e.demos + '</b>' + (ant && !m.corrente ? seta(e.demos, ant.eu.demos) : '') + '<small>time ' + GV2.virg(t.demos) + '</small><small>' + (conv == null ? '—' : conv + '%') + ' vira cliente</small><small>time ' + (convT == null ? '—' : convT + '%') + '</small></td>'
 
-      + '<td><b>' + e.visitas + '</b>' + (!m.corrente ? seta(vd, vdA) : '') + '<small>' + (vd == null ? '—' : GV2.virg(vd)) + '/dia · time ' + (vdT == null ? '—' : GV2.virg(vdT)) + '/dia</small></td>'
+      + '<td><b>' + e.visitas + '</b>' + (!m.corrente ? seta(vd, vdA) : '') + '<small>' + (vd == null ? '—' : GV2.virg(vd)) + ' por dia</small><small>time ' + (vdT == null ? '—' : GV2.virg(vdT)) + ' por dia</small></td>'
       + '</tr>';
   }).join('');
 
