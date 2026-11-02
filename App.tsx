@@ -3152,8 +3152,9 @@ function MainApp() {
         else aceitas.push(c);
       });
     };
-    const t = setTimeout(() => requestAnimationFrame(conferir), 250);
-    return () => clearTimeout(t);
+    // o Google monta as placas no seu tempo (a 360 px, medido, depois dos 250 ms): confere de novo
+    const ts = [250, 900, 2000].map((ms) => setTimeout(() => requestAnimationFrame(conferir), ms));
+    return () => ts.forEach(clearTimeout);
   }, [placasDoMapa, regiaoExata, layout.ehLargo]);
 
   // Pilha até 8: abre em leque. Maior: aproxima o mapa até os pinos se
