@@ -1,7 +1,7 @@
-// GERADO por scripts/portar-cockpit-api.cjs a partir de cockpit-unificado@a5f9e592.
+// GERADO por scripts/portar-cockpit-api.cjs a partir de cockpit-unificado@e3a7c2e2.
 // NAO EDITAR: cada funcao abaixo e um arquivo do Cockpit, byte a byte. Para mudar
 // uma regra, mude no Cockpit e gere de novo.
-export const ORIGEM = "a5f9e592";
+export const ORIGEM = "e3a7c2e2";
 export const ROTAS = ["negocio-acao","criar-negocio","desfazer-negocio","criar-nota-negocio","criar-empresa-prospeccao","restaurantes-proximos","novidades-mercado","importar-leads","buscar-leads"];
 export const JSONS = ["data/cadencias.json","data/comissionamento.json","data/desligados.json","data/leads-referencia.json","data/maptiler-config.json","data/redes-excluidas.json","data/supabase-config.json","data/temperatura.json","data/territorios.json","data/usuarios.json"];
 
@@ -4407,6 +4407,27 @@ const FONTES_ROTULO = {
 // estabelecimento fraco ou cadastro sujo.
 const FONTES_SEM_AVALIACAO = new Set(['casa_dos_dados']);
 
+/* UMA GRAFIA POR ORIGEM (02/11/26). Medido em leads_prospeccao: 'Google Places' (1.064),
+   'google_places' (5), 'google_places + Google Places' (10), 'outscraper + Google Places' (65) — a chave
+   crua da requisição e o rótulo convivendo, porque a fonte de cada lote entrava como veio e a fusão
+   (juntarFontes) colava as duas. Agora a fonte do lote é reconhecida por apelido (caixa, acento, espaço e
+   hífen não importam) e toda parte de `fonte` grava o rótulo de FONTES_ROTULO. Fonte que não é de lote
+   ('rua', 'mapa', 'instagram', gravadas pelo app) passa como está. */
+const APELIDOS_DE_FONTE = {
+  casa_dos_dados: 'casa_dos_dados', casadosdados: 'casa_dos_dados',
+  google_places: 'google_places', googleplaces: 'google_places', google: 'google_places', google_maps: 'google_places', places: 'google_places',
+  outscraper: 'outscraper', tripadvisor: 'tripadvisor', trip_advisor: 'tripadvisor', ifood: 'ifood', manual: 'manual'
+};
+function normalizarFonte(fonte) {
+  const k = String(fonte || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .trim().replace(/[\s\-./]+/g, '_');
+  return APELIDOS_DE_FONTE[k] || null;
+}
+function rotuloDaFonte(parte) {
+  const k = normalizarFonte(parte);
+  return k ? FONTES_ROTULO[k] : String(parte || '').trim();
+}
+
 let USUARIOS = [];
 try {
   const raw = require('../data/usuarios.json');
@@ -4486,7 +4507,7 @@ function mesmoRestaurante(a, b) {
 
 function juntarFontes(a, b) {
   const fontes = [...String(a || '').split('+'), ...String(b || '').split('+')]
-    .map(x => x.trim()).filter(Boolean);
+    .map(rotuloDaFonte).filter(Boolean);
   return [...new Set(fontes)].join(' + ');
 }
 
@@ -4528,7 +4549,124 @@ function mesclarRestaurante(base, novo) {
    precisa saber quantas contas buscar por executivo). Tres copias da mesma regra e o
    comeco de tres verdades — alguem corrige um bairro num lado, esquece nos outros, e o
    lead cai para quem nao pediu aquele territorio. Uma fonte: lib/territorios.js. */
-const { rotearTerritorio, semAcento } = require('../lib/territorios.js');
+const { rotearTerritorio, semAcento, ehDesligado, definirDesligados, planejarRedistribuicao } = require('../lib/territorios.js');
+
+/* ══ O LEAD QUE JÁ É PINO (02/11/26) ═══════════════════════════════════════════════════════════
+   A deduplicação só olhava leads_prospeccao. Um restaurante que já é pino no mapa (cadastrado na rua,
+   negócio do HubSpot virado ponto, conta-alvo do Google) entrava de novo pela Casa dos Dados e ganhava
+   um segundo pino em cima do primeiro. Agora também conta como duplicado o lead que bate com um pino
+   não arquivado de clients por TELEFONE normalizado, ou por NOME (nome ou empresa) a até 30 m. Ele não é
+   gravado, e o relatório diz quantos e quais. */
+const RAIO_MESMO_PINO_KM = 0.03;
+function indiceDePinos(clientes) {
+  const porTel = new Map(), porNome = new Map();
+  (clientes || []).forEach(function (c) {
+    const tel = normalizarTelefone(c.telefone);
+    if (tel && !porTel.has(tel)) porTel.set(tel, c);
+    [c.nome, c.empresa].map(normalizarTexto).filter(Boolean).forEach(function (n) {
+      if (!porNome.has(n)) porNome.set(n, []);
+      porNome.get(n).push(c);
+    });
+  });
+  return { porTel, porNome };
+}
+function pinoDoMesmoRestaurante(lead, indice) {
+  if (!indice) return null;
+  const tel = normalizarTelefone(lead.telefone_normalizado || lead.telefone);
+  if (tel && indice.porTel.has(tel)) return indice.porTel.get(tel);
+  const nome = normalizarTexto(lead.nome);
+  const mesmos = nome ? (indice.porNome.get(nome) || []) : [];
+  return mesmos.find(function (c) {
+    return distanciaKm({ lat: lead.lat, lng: lead.lng }, { lat: c.latitude, lng: c.longitude }) <= RAIO_MESMO_PINO_KM;
+  }) || null;
+}
+
+/* ══ QUEM ESTÁ NO TIME, PELO BANCO (02/11/26) ══════════════════════════════════════════════════
+   equipe_cockpit é onde a tela Acessos desativa alguém. desligados = owner de linha inativa sem
+   nenhuma linha ativa; ativos = owner de linha ativa que não é só acesso. */
+async function equipeDoBanco(url, chave) {
+  const h = { apikey: chave, Authorization: 'Bearer ' + chave };
+  const re = await fetch(url + '/rest/v1/equipe_cockpit?select=profile_id,ativo,so_acesso', { headers: h });
+  if (!re.ok) throw new Error('equipe_cockpit: ' + (await re.text()).slice(0, 200));
+  const equipe = await re.json();
+  const rp = await fetch(url + '/rest/v1/profiles?select=id,id_hubspot&id_hubspot=not.is.null', { headers: h });
+  if (!rp.ok) throw new Error('profiles: ' + (await rp.text()).slice(0, 200));
+  const ownerPorPerfil = new Map((await rp.json()).map(function (p) { return [String(p.id), String(p.id_hubspot)]; }));
+  const ativos = new Set(), inativos = new Set();
+  (equipe || []).forEach(function (e) {
+    const o = ownerPorPerfil.get(String(e.profile_id));
+    if (!o) return;
+    if (e.ativo && e.so_acesso !== true) ativos.add(o);
+    else if (!e.ativo) inativos.add(o);
+  });
+  return { ativos: Array.from(ativos), desligados: Array.from(inativos).filter(function (o) { return !ativos.has(o); }) };
+}
+
+/* ══ A CARTEIRA DE QUEM SAIU SEGUE O TERRITÓRIO (02/11/26) ═════════════════════════════════════
+   Ação { acao: 'redistribuir_de_quem_saiu', aplicar } desta mesma rota (a Vercel do Hobby está no
+   limite de 12 funções). Só o gestor ou o robô (x-import-secret). Sem `aplicar: true` é ensaio: devolve
+   quantos vão de quem para quem, por ownerId, e não grava nada. O plano é planejarRedistribuicao
+   (lib/territorios.js); aqui só se lê o banco e se grava:
+     · leads_prospeccao: responsavel_owner_id = destino e status 'atribuido' (o 'na_rota' sai do plano de
+       quem saiu pelo gatilho territorio_no_plano); sem destino, sem dono e 'pendente';
+     · o pino segue o lead sozinho quando há destino (municao_lead_mudou troca clients.vendedor_id_hubspot);
+       quando vira 'pendente', o pino sem negócio também fica sem dono (o gatilho não limpa). */
+async function redistribuirDeQuemSaiu(url, chave, aplicar) {
+  const h = { apikey: chave, Authorization: 'Bearer ' + chave };
+  const time = await equipeDoBanco(url, chave);
+  const fora = time.desligados.filter(Boolean);
+  if (!fora.length) return { seco: !aplicar, desligados: 0, leads: 0, resumo: {}, pulados: {} };
+  const leads = [];
+  for (let de = 0; ; de += 1000) {
+    const r = await fetch(url + '/rest/v1/leads_prospeccao?select=id,cidade,bairro,lat,lng,responsavel_owner_id,status,hubspot_deal_id'
+      + '&responsavel_owner_id=in.(' + fora.map(encodeURIComponent).join(',') + ')&status=in.(atribuido,na_rota)&order=id&limit=1000&offset=' + de, { headers: h });
+    if (!r.ok) throw new Error('leads_prospeccao: ' + (await r.text()).slice(0, 200));
+    const p = await r.json();
+    leads.push(...p);
+    if (p.length < 1000) break;
+  }
+  const comNegocio = new Set();
+  for (let i = 0; i < leads.length; i += 100) {
+    const ids = leads.slice(i, i + 100).map(function (l) { return l.id; });
+    const r = await fetch(url + '/rest/v1/clients?select=lead_prospeccao_id,id_hubspot&lead_prospeccao_id=in.(' + ids.join(',') + ')', { headers: h });
+    if (!r.ok) throw new Error('clients: ' + (await r.text()).slice(0, 200));
+    (await r.json()).forEach(function (c) { if (String(c.id_hubspot || '').trim()) comNegocio.add(String(c.lead_prospeccao_id)); });
+  }
+  leads.forEach(function (l) { l.pinoComNegocio = comNegocio.has(String(l.id)); });
+  const plano = planejarRedistribuicao(leads, { desligados: fora, ativos: time.ativos });
+  const saida = { seco: !aplicar, desligados: fora.length, leads: plano.itens.length, resumo: plano.resumo, pulados: plano.pulados };
+  if (!aplicar) return saida;
+
+  const porDestino = new Map();
+  plano.itens.forEach(function (i) {
+    const k = i.para || '';
+    if (!porDestino.has(k)) porDestino.set(k, []);
+    porDestino.get(k).push(i.id);
+  });
+  let gravados = 0, pinosSemDono = 0;
+  const erros = [];
+  const agora = new Date().toISOString();
+  for (const [para, ids] of porDestino) {
+    for (let i = 0; i < ids.length; i += 100) {
+      const lote = ids.slice(i, i + 100);
+      const corpo = para ? { responsavel_owner_id: para, status: 'atribuido', updated_at: agora }
+        : { responsavel_owner_id: null, status: 'pendente', updated_at: agora };
+      const r = await fetch(url + '/rest/v1/leads_prospeccao?id=in.(' + lote.join(',') + ')&status=in.(atribuido,na_rota)&select=id', {
+        method: 'PATCH', headers: Object.assign({ 'Content-Type': 'application/json', Prefer: 'return=representation' }, h), body: JSON.stringify(corpo)
+      });
+      if (!r.ok) { erros.push((para || 'pendente') + ': ' + (await r.text()).slice(0, 200)); continue; }
+      gravados += (await r.json()).length;
+      if (!para) {
+        const rp = await fetch(url + '/rest/v1/clients?lead_prospeccao_id=in.(' + lote.join(',') + ')&or=(id_hubspot.is.null,id_hubspot.eq.)&select=id', {
+          method: 'PATCH', headers: Object.assign({ 'Content-Type': 'application/json', Prefer: 'return=representation' }, h), body: JSON.stringify({ vendedor_id_hubspot: null })
+        });
+        if (!rp.ok) erros.push('pinos sem dono: ' + (await rp.text()).slice(0, 200));
+        else pinosSemDono += (await rp.json()).length;
+      }
+    }
+  }
+  return Object.assign(saida, { aplicados: gravados, pinosSemDono: pinosSemDono, erros: erros });
+}
 let CACHE_NOMES_CRM = null;
 async function nomesDoCrmPeloSnapshot(url, chave) {
   if (CACHE_NOMES_CRM && Date.now() - CACHE_NOMES_CRM.em < 10 * 60 * 1000) return CACHE_NOMES_CRM.nomes;
@@ -4609,7 +4747,7 @@ module.exports = async function handler(req, res) {
       const user = await check.json();
       const email = (user && user.email) ? String(user.email).toLowerCase() : null;
       usuarioSessao = email ? USUARIOS.find(u => String(u.email).toLowerCase() === email) : null;
-      const repImportandoCasa = usuarioSessao && usuarioSessao.role === 'rep' && req.body && req.body.fonte === 'casa_dos_dados';
+      const repImportandoCasa = usuarioSessao && usuarioSessao.role === 'rep' && req.body && !req.body.acao && normalizarFonte(req.body.fonte) === 'casa_dos_dados';
       if (!usuarioSessao || (usuarioSessao.role !== 'manager' && !repImportandoCasa)) {
         return res.status(403).json({ erro: 'Executivos só podem adicionar empresas sugeridas pela Casa dos Dados no próprio território.' });
       }
@@ -4619,7 +4757,18 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  const { fonte, leads } = req.body || {};
+  /* a carteira de quem saiu (02/11/26): só gestor ou robô — o executivo nunca chega aqui (o 403 acima) */
+  if (req.body && req.body.acao === 'redistribuir_de_quem_saiu') {
+    try {
+      return res.status(200).json(await redistribuirDeQuemSaiu(supaUrl, supaService, req.body.aplicar === true));
+    } catch (e) {
+      return res.status(502).json({ erro: 'Não consegui ler ou gravar a carteira de quem saiu. Nada além do relatado foi gravado: ' + String(e.message || e) });
+    }
+  }
+  if (req.body && req.body.acao) return res.status(400).json({ erro: 'Ação desconhecida.' });
+
+  const { leads } = req.body || {};
+  const fonte = normalizarFonte(req.body && req.body.fonte);
   if (!fonte || !['outscraper', 'google_places', 'tripadvisor', 'ifood', 'manual', 'casa_dos_dados'].includes(fonte)) {
     return res.status(400).json({ erro: 'Campo "fonte" inválido — use outscraper, google_places, tripadvisor, ifood, manual ou casa_dos_dados.' });
   }
@@ -4663,6 +4812,12 @@ module.exports = async function handler(req, res) {
       : (semCorteDeAvaliacao ? 0 : 100)
   };
 
+  /* QUEM SAIU, PELO BANCO (02/11/26): a lista de equipe_cockpit desativada entra no roteador desta
+     chamada. Leitura que falha não trava a importação: fica a marca de data/usuarios.json, como antes. */
+  let desligadosDoBanco = [];
+  try { desligadosDoBanco = (await equipeDoBanco(supaUrl, supaService)).desligados; } catch (e) { desligadosDoBanco = []; }
+  definirDesligados(desligadosDoBanco);
+
   const linhasTodas = leads.map(l => {
     const cidade = canonizarCidade(l.cidade || l.city || '');
     const bairro = l.bairro || null;
@@ -4677,7 +4832,11 @@ module.exports = async function handler(req, res) {
        lat/lng são lidos aqui com a MESMA regra usada logo abaixo no objeto da linha: se as
        duas leituras divergirem, o dono passa a ser calculado sobre coordenada diferente da
        que fica gravada, e o km do card deixa de explicar o dono. */
-    const dono = l.responsavel_owner_id ? String(l.responsavel_owner_id) : rotearTerritorio(cidade, bairro, lat, lng);
+    /* O DONO EXPLÍCITO TAMBÉM PASSA PELO "QUEM SAIU" (02/11/26): ehDesligado só barrava o roteamento,
+       e um lote com responsavel_owner_id de quem saiu gravava o lead no nome dele. Dono explícito que
+       saiu é ignorado e o território decide. (O executivo só manda o próprio owner: está ativo.) */
+    const explicito = l.responsavel_owner_id ? String(l.responsavel_owner_id) : null;
+    const dono = explicito && !ehDesligado(explicito) ? explicito : rotearTerritorio(cidade, bairro, lat, lng);
     return {
     place_id: l.place_id || null,
     cnpj: l.cnpj || null,
@@ -4748,11 +4907,29 @@ module.exports = async function handler(req, res) {
   } catch (e) {
     return res.status(502).json({ erro: 'Não foi possível conferir duplicidades antes da importação. Nada foi gravado: ' + String(e.message || e) });
   }
+  // os pinos do mapa (clients não arquivados), com a mesma falha fechada
+  let indicePinos = null;
+  try {
+    const pinos = [];
+    for (let offset = 0; ; offset += 1000) {
+      const r = await fetch(`${supaUrl}/rest/v1/clients?select=id,nome,empresa,telefone,latitude,longitude&is_archived=eq.false&order=id&limit=1000&offset=${offset}`, {
+        headers: { apikey: supaService, Authorization: `Bearer ${supaService}` }
+      });
+      if (!r.ok) throw new Error((await r.text()).slice(0, 200));
+      const pagina = await r.json();
+      pinos.push(...pagina);
+      if (pagina.length < 1000) break;
+    }
+    indicePinos = indiceDePinos(pinos);
+  } catch (e) {
+    return res.status(502).json({ erro: 'Não foi possível conferir os pinos do mapa antes da importação. Nada foi gravado: ' + String(e.message || e) });
+  }
 
   const novas = [];
   const mesclas = new Map();
   const resultado = {
     inseridos: 0, duplicados: 0, mesclados: 0, erros: [], duplicados_exemplos: [],
+    duplicados_pino: 0, duplicados_pino_exemplos: [],
     reprovados_qualidade: reprovadosQualidade.length,
     reprovados_fit: reprovadosFit.length,
     regra_qualidade: `avaliações >= ${qualidade.avaliacoesMin}; nota não influencia`,
@@ -4767,6 +4944,14 @@ module.exports = async function handler(req, res) {
       const camposMesclados = mesclarRestaurante(existente, l);
       Object.assign(existente, camposMesclados);
       mesclas.set(existente.id, camposMesclados);
+      return;
+    }
+    // já é pino no mapa (telefone, ou nome a até 30 m): não grava um segundo
+    const pino = pinoDoMesmoRestaurante(l, indicePinos);
+    if (pino) {
+      resultado.duplicados++;
+      resultado.duplicados_pino++;
+      if (resultado.duplicados_pino_exemplos.length < 10) resultado.duplicados_pino_exemplos.push(`${l.nome} (já é pino ${pino.id})`);
       return;
     }
     const indiceNoLote = novas.findIndex(x => mesmoRestaurante(x, l));
@@ -4835,6 +5020,12 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.nomesDoCrmPeloSnapshot = nomesDoCrmPeloSnapshot;
+/* para as suítes (scripts/testar-importar-pinos-e-fontes.js) */
+module.exports.normalizarFonte = normalizarFonte;
+module.exports.juntarFontes = juntarFontes;
+module.exports.indiceDePinos = indiceDePinos;
+module.exports.pinoDoMesmoRestaurante = pinoDoMesmoRestaurante;
+module.exports.redistribuirDeQuemSaiu = redistribuirDeQuemSaiu;
 
   },
   "scripts/montar-dados.js": function (module, exports, require, process) {
@@ -4892,6 +5083,24 @@ const GESTORES_QUE_VENDEM = (function () {
     if (!u || u.role !== 'manager') return;
     if (!u.ownerId || String(u.ownerId).startsWith('pendente_')) return;
     out[String(u.ownerId)] = { name: u.nome || 'gestor', ownerId: String(u.ownerId) };
+  });
+  return out;
+}());
+
+/* ══ QUEM SAIU DO TIME, MAS VENDEU NO MÊS (30/10/26) ══════════════════════════════
+   Julyan, 30/10: "a venda da renata msm q ela tenha saído conta pra meta do mês".
+   A saída (#908) tira a pessoa de narrativas.reps, e com isso a venda dela de 10/10
+   caía em foraDoTime e o placar do time mostrava 32 em vez de 33. A venda foi feita,
+   é da casa e conta no total — como a do gestor. Fica fora do porRep porque quem saiu
+   não tem mais régua individual nem lugar no pódio. A lista sai de usuarios.json: rep
+   com `desligado` e ownerId. */
+const EX_EXECUTIVOS = (function () {
+  const lista = Array.isArray(usuariosRaw) ? usuariosRaw : (usuariosRaw.usuarios || []);
+  const out = {};
+  lista.forEach(function (u) {
+    if (!u || u.role !== 'rep' || !u.desligado) return;
+    if (!u.ownerId || String(u.ownerId).startsWith('pendente_')) return;
+    out[String(u.ownerId)] = { name: u.nome || 'ex-executivo', ownerId: String(u.ownerId) };
   });
   return out;
 }());
@@ -5032,7 +5241,7 @@ function montarDadosCompletos() {
 
   const reps = ownerIds.map(ownerId => {
     const n = narrativas.reps[ownerId];
-    const h = hubspot.reps[ownerId] || { open: 0, stages: {}, criticos: [], travados: [], leadsTravados: 0, ganhosSemana: 0, ganhosSemanaNomes: [], fechadosNoMes: 0, metaMensal: 10, metaMrr: null, metaReceita: null, patamarMeta: null, visitasHubspotHoje: 0, avancosHubspotHoje: 0, propostasHubspotHoje: 0, fechamentosHubspotHoje: 0 };
+    const h = hubspot.reps[ownerId] || { open: 0, stages: {}, criticos: [], travados: [], leadsTravados: 0, ganhosSemana: 0, ganhosSemanaNomes: [], fechadosNoMes: 0, metaMensal: 0, metaMrr: null, metaReceita: null, patamarMeta: null, visitasHubspotHoje: 0, avancosHubspotHoje: 0, propostasHubspotHoje: 0, fechamentosHubspotHoje: 0 };
 
     return {
       ownerId,
@@ -5071,8 +5280,10 @@ function montarDadosCompletos() {
             duas metas novas.
          2. `|| 10` TRANSFORMA ZERO EM DEZ. A Amanda saiu da planilha e tem meta 0; a
             tela mostrava 10 para ela, que e exatamente o numero que este trabalho veio
-            tirar. Zero e falsy, e `|| ` nao distingue "nao tem meta" de "meta zero". */
-      metaMensal: h.metaMensal != null ? h.metaMensal : 10,
+            tirar. Zero e falsy, e `|| ` nao distingue "nao tem meta" de "meta zero".
+         3. QUEM NAO ESTA NO ROBO (o gestor, que nao e executivo) TAMBEM E "SEM META", NAO 10:
+            o "Ver como executivo" do Julyan mostrava "0 de 10" (auditoria 01/11/26). */
+      metaMensal: h.metaMensal != null ? h.metaMensal : 0,
       metaMrr: h.metaMrr != null ? h.metaMrr : null,
       metaReceita: h.metaReceita != null ? h.metaReceita : null,
       patamarMeta: h.patamarMeta || null,
@@ -5165,6 +5376,8 @@ function montarDadosCompletos() {
        e a régua por pessoa, e é ela que alimenta a rodada, a Daily e a meta individual.
        O gestor não tem plano de dia nem lugar na fila — o que ele tem é venda. */
     const doGestor = { count: 0, mrrTotal: 0, receitaTotal: 0, clientes: [], name: null, ownerId: null };
+    // e as de quem saiu do time no meio do mês: contam no total, fora do pódio
+    const doExTime = { count: 0, mrrTotal: 0, receitaTotal: 0, clientes: [] };
     /* E O QUE NÃO É DE NINGUÉM DO TIME CONTINUA FORA, mas agora CONTADO: antes ele
        sumia sem deixar rastro, e foi assim que quatro vendas do gestor ficaram um mês
        inteiro fora do placar sem ninguém ver. */
@@ -5178,7 +5391,8 @@ function montarDadosCompletos() {
          quatro vendas fechadas no CRM. */
       const ehRep = !!(d.ownerId && narrativas.reps[d.ownerId]);
       const ehGestor = !ehRep && !!(d.ownerId && GESTORES_QUE_VENDEM[d.ownerId]);
-      if (!d.ownerId || (!ehRep && !ehGestor)) {
+      const ehExTime = !ehRep && !ehGestor && !!(d.ownerId && EX_EXECUTIVOS[d.ownerId]);
+      if (!d.ownerId || (!ehRep && !ehGestor && !ehExTime)) {
         foraDoTime.push({ id: d.id || null, nome: d.nome, ownerId: d.ownerId || null,
           mrr: d.mrr || 0, receita: d.receita || 0, closedate: d.closedate || null });
         return;
@@ -5191,7 +5405,7 @@ function montarDadosCompletos() {
            gestor de usuarios.json. Ler narrativas.reps[ownerId].name para o gestor
            estouraria aqui — ele não está lá, e é justamente por isso que este patch
            existe. */
-        const quem = narrativas.reps[d.ownerId] || GESTORES_QUE_VENDEM[d.ownerId];
+        const quem = narrativas.reps[d.ownerId] || GESTORES_QUE_VENDEM[d.ownerId] || EX_EXECUTIVOS[d.ownerId];
         ajustadas.push({ id: d.id || null, nome: d.nome, ownerId: d.ownerId,
           name: (quem && quem.name) || 'sem nome', mrr: d.mrr || 0, receita: d.receita || 0,
           closedate: d.closedate || null, contaEm: mes, motivo: d.ajustado || null });
@@ -5205,6 +5419,15 @@ function montarDadosCompletos() {
         doGestor.ownerId = d.ownerId;
         doGestor.clientes.push({ id: d.id || null, nome: d.nome, mrr: d.mrr || 0,
           receita: d.receita || 0, closedate: d.closedate || null });
+        return;
+      }
+      if (ehExTime) {
+        doExTime.count += 1;
+        doExTime.mrrTotal += d.mrr || 0;
+        doExTime.receitaTotal += d.receita || 0;
+        doExTime.clientes.push({ id: d.id || null, nome: d.nome, ownerId: d.ownerId,
+          name: EX_EXECUTIVOS[d.ownerId].name, mrr: d.mrr || 0, receita: d.receita || 0,
+          closedate: d.closedate || null });
         return;
       }
       if (!porOwnerMes[d.ownerId]) porOwnerMes[d.ownerId] = { count: 0, mrrTotal: 0, receitaTotal: 0, clientes: [] };
@@ -5231,9 +5454,9 @@ function montarDadosCompletos() {
          Venda do gestor é venda da casa e conta no placar. O `porRep` abaixo NÃO a
          inclui de propósito — ele é o pódio e a régua por pessoa. Quem quiser saber a
          diferença entre os dois lê `gestor`, que viaja ao lado com nome e clientes. */
-      totalClientes: porRepMes.reduce((s, r) => s + r.count, 0) + doGestor.count,
-      totalMrr: porRepMes.reduce((s, r) => s + r.mrrTotal, 0) + doGestor.mrrTotal,
-      totalReceita: porRepMes.reduce((s, r) => s + r.receitaTotal, 0) + doGestor.receitaTotal,
+      totalClientes: porRepMes.reduce((s, r) => s + r.count, 0) + doGestor.count + doExTime.count,
+      totalMrr: porRepMes.reduce((s, r) => s + r.mrrTotal, 0) + doGestor.mrrTotal + doExTime.mrrTotal,
+      totalReceita: porRepMes.reduce((s, r) => s + r.receitaTotal, 0) + doGestor.receitaTotal + doExTime.receitaTotal,
       porRep: porRepMes,
       /* A PARTE DO GESTOR, nomeada. `null` quando ele não vendeu no mês — e null é
          diferente de zero: zero seria uma linha na tela dizendo que ele não vendeu. */
@@ -5241,6 +5464,11 @@ function montarDadosCompletos() {
         ownerId: doGestor.ownerId, name: doGestor.name, count: doGestor.count,
         mrrTotal: doGestor.mrrTotal, receitaTotal: doGestor.receitaTotal,
         clientes: doGestor.clientes.sort((a, b) => (b.mrr || 0) - (a.mrr || 0))
+      } : null,
+      /* A PARTE DE QUEM SAIU DO TIME, nomeada venda por venda. `null` quando não houve. */
+      exTime: doExTime.count ? {
+        count: doExTime.count, mrrTotal: doExTime.mrrTotal, receitaTotal: doExTime.receitaTotal,
+        clientes: doExTime.clientes.sort((a, b) => (b.mrr || 0) - (a.mrr || 0))
       } : null,
       /* E O QUE FICOU FORA DO TIME, CONTADO em vez de sumido em silêncio. */
       foraDoTime: foraDoTime,
@@ -5282,6 +5510,10 @@ function montarDadosCompletos() {
        sentada. O objeto vai INTEIRO para o gestor, então os campos novos viajam
        sozinhos — não há lista de campos aqui que precise ser atualizada. */
     motivosPerda: hubspot.motivosPerda || null,
+    /* perda depois da demo, mês contra julho–agosto (prancha v2, 0c) — só o gestor lê */
+    perdasPosDemo: hubspot.perdasPosDemo || null,
+    /* 6a (01/11/26): as vendas que já fizeram 60 dias; o cockpit cruza com os clientes da Takeat */
+    clienteQueFica: hubspot.clienteQueFica || null,
     /* Conversão por turma, velocidade de etapa e ciclo — o gestor recebe inteiro. */
     historicoEtapas: hubspot.historicoEtapas || null,
     funil: hubspot.funil,
@@ -5461,6 +5693,12 @@ function filtrarParaPapel(dados, usuario) {
     /* a gaveta de quem está fora do time não desce para o gestor: ele vê o time */
     if (!dados || !dados.funilForaDoTime) return dados;
     const { funilForaDoTime, ...semGaveta } = dados;
+    /* A CARTEIRA DO PRÓPRIO GESTOR (02/11/26, auditoria): o dono pediu que os negócios dele entrem
+       nos números do Cockpit do gestor, como uma linha "você" — fora da meta do time, do ranking e
+       de qualquer cobrança. Desce SÓ a gaveta do ownerId de quem está logado, em funilDoGestor
+       (com a etapa no lead, como na visão de executivo); funilLeads continua sendo só o time. */
+    const meuId = usuario && usuario.ownerId ? String(usuario.ownerId) : null;
+    if (meuId && funilForaDoTime[meuId]) semGaveta.funilDoGestor = comEtapaNoLead(funilForaDoTime[meuId]);
     return semGaveta;
   }
 
@@ -5780,13 +6018,29 @@ const USUARIOS_PARA_ID = (() => {
 let FONTE_USUARIOS = null, FONTE_DESLIGADOS = null;
 try { FONTE_USUARIOS = require('../data/usuarios.json'); } catch (e) { /* sem lista: ninguém sai */ }
 try { FONTE_DESLIGADOS = require('../data/desligados.json'); } catch (e) { /* só existe no APP */ }
+/* A TERCEIRA FONTE: QUEM ESTÁ DESATIVADO NO BANCO (02/11/26). Na Vercel não existe data/desligados.json
+   e a marca de data/usuarios.json depende de alguém lembrar de escrevê-la; quem sai do time de verdade
+   sai em equipe_cockpit (ativo = false), pela tela Acessos. api/importar-leads lê essa lista a cada
+   chamada e a entrega aqui (definirDesligados), para o lead novo e a redistribuição não caírem em quem
+   já saiu. Fica vazia fora dessa chamada. */
+let DESLIGADOS_DO_BANCO = new Set();
+function definirDesligados(owners) {
+  DESLIGADOS_DO_BANCO = new Set((owners || []).map(String).filter(Boolean));
+}
 function ehDesligado(owner) {
+  owner = String(owner == null ? '' : owner);
+  if (DESLIGADOS_DO_BANCO.has(owner)) return true;
   const u = FONTE_USUARIOS;
   const lista = Array.isArray(u) ? u : ((u && u.usuarios) || []);
   if (lista.some(x => x && x.desligado && x.ownerId && String(x.ownerId) === owner)) return true;
   return Array.isArray(FONTE_DESLIGADOS) && FONTE_DESLIGADOS.some(x => x && x.ownerId && String(x.ownerId) === owner);
 }
-function ehDono(x) { return !!x && !ehDesligado(String(x.owner)); }
+/* O ID DE ESPERA NUNCA É DONO (02/11/26). idDoNome cai em 'pendente_<nome>' quando o nome não está em
+   data/usuarios.json — e no servidor do APP essa lista só traz quem está ativo, então quem saiu vira
+   'pendente_*' em vez do id real, e ehDesligado (que compara ids reais) não o reconhecia. Hoje essas regras
+   só ficam inalcançáveis porque Rio e São Paulo têm bairro declarado (as listas largas não valem lá); se a
+   declaração de uma das duas sair, o lead gravaria um id falso em responsavel_owner_id. Agora não grava. */
+function ehDono(x) { return !!x && !!x.owner && !String(x.owner).startsWith('pendente_') && !ehDesligado(String(x.owner)); }
 
 function idDoNome(nome, fallback) {
   return USUARIOS_PARA_ID[semAcento(nome)] || fallback || null;
@@ -5816,6 +6070,10 @@ function bairroLimpo(bairro) {
   let s = String(bairro == null ? '' : bairro).trim();
   const i = s.lastIndexOf(' - ');
   if (i > -1) s = s.slice(i + 3).trim();
+  /* "Jardim Sao Paulo(Zona Norte)": a Casa dos Dados põe a zona entre parênteses, às vezes sem
+     espaço (15/10/26). Só o espaço é padronizado: a zona FICA, porque "Jardim São Paulo (Zona
+     Leste)" é Guaianases e não pode cair no dono do Jardim São Paulo da Zona Norte. */
+  s = s.replace(/\s*\(\s*/g, ' (').replace(/\s*\)/g, ')');
   return semAcento(s);
 }
 
@@ -6197,7 +6455,7 @@ function donoPorMeridiano(cidade, lat, lng) {
   if (!dentro) return null;   /* coordenada impossível não decide território */
   const nome = lo < Number(d.corte) ? d.oeste : d.leste;
   const owner = idDoNome(nome, null);
-  if (!owner) return null;
+  if (!owner || ehDesligado(owner)) return null;
   return { owner: owner, nome: nome,
     praca: d.municipio + '/' + d.uf + ' · ' + (lo < Number(d.corte) ? 'oeste' : 'leste')
       + ' do meridiano ' + d.corte, porMeridiano: true };
@@ -6226,9 +6484,13 @@ function regraDoTerritorio(cidade, bairro, lat, lng) {
   /* FORA DE ROTA CORTA ANTES DE TUDO: se ele tirou a região da rota, ninguém recebe
      lead dali — nem por declaração, nem por lista antiga, nem por coordenada. */
   if (estaForaDeRota(cidade, bairro)) return null;
-  const declarado = DECLARADOS.find(x => !x.sobraDeclarada && cid.includes(x.cidade) && x.teste(chave));
+  /* QUEM SAIU NÃO RECEBE NEM PELA DECLARAÇÃO (02/11/26). ehDono só valia nas listas largas, nos centros
+     de zona e na zona escrita; a declaração, a sobra declarada, o meridiano e a sobra do município não
+     perguntavam. Se alguém sai e o data/territorios.json ainda o lista, o bairro dele passa para a regra
+     seguinte (ou fica sem dono e visível), em vez de seguir indo para quem não abre mais o app. */
+  const declarado = DECLARADOS.find(x => !x.sobraDeclarada && cid.includes(x.cidade) && x.teste(chave) && ehDono(x));
   if (declarado) return declarado;
-  const sobraDele = DECLARADOS.find(x => x.sobraDeclarada && cid.includes(x.cidade) && x.teste(chave));
+  const sobraDele = DECLARADOS.find(x => x.sobraDeclarada && cid.includes(x.cidade) && x.teste(chave) && ehDono(x));
   if (sobraDele) return sobraDele;
   /* o meridiano vem DEPOIS do bairro nomeado — quem nomeou a rua manda — e ANTES das
      listas largas e da coordenada genérica, porque ele é a divisão que o Julyan pediu
@@ -6239,7 +6501,7 @@ function regraDoTerritorio(cidade, bairro, lat, lng) {
      dono da sobra levaria a Zona Sul do vizinho) e ANTES das listas largas de 01/09
      (senão o mapa antigo volta a decidir, que é o defeito que pôs 107 leads na carteira
      errada). É ela que cumpre o "nao deixa sem dono". */
-  const sobraDoMunicipio = SOBRAS_DE_MUNICIPIO.find(x => cid.indexOf(x.cidade) > -1);
+  const sobraDoMunicipio = SOBRAS_DE_MUNICIPIO.find(x => cid.indexOf(x.cidade) > -1 && ehDono(x));
   if (sobraDoMunicipio) return sobraDoMunicipio;
   /* ══ AS LISTAS DE 01/09 NÃO VALEM ONDE ELE JÁ NOMEOU BAIRRO ═════════════════════
      Elas são cobertura para praça que ele não detalhou. Onde detalhou, elas são o mapa
@@ -6258,7 +6520,51 @@ function regraDoTerritorio(cidade, bairro, lat, lng) {
   return TERRITORIOS.find(x => (!x.cidade || cid.includes(x.cidade)) && x.teste(chave) && ehDono(x)) || null;
 }
 
-module.exports = { TERRITORIOS, DECLARADOS, DIVISORES, donoPorMeridiano, FORA_DE_ROTA, estaForaDeRota, bairroLimpo, CIDADES_COM_BAIRRO_DECLARADO, SOBRAS_DE_MUNICIPIO, CENTROS_DE_ZONA, ZONAS_ESCRITAS, rotearTerritorio, regraDoTerritorio, donoPorProximidade, donoPorZonaEscrita, kmEntre, semAcento };
+/* ══ A CARTEIRA DE QUEM SAIU SEGUE O TERRITÓRIO (02/11/26) ══════════════════════════════════════
+   Decisão do dono: quando alguém é desativado, os leads 'atribuido' (e 'na_rota') dele em
+   leads_prospeccao vão para quem o território dos leads NOVOS mandaria hoje — a mesma regraDoTerritorio,
+   com quem saiu fora dela. Sem destino (bairro fora de rota, cidade sem dono, destino que também saiu ou
+   não está no time ativo), o lead fica 'pendente', sem dono: nunca se inventa dono.
+   Lead com negócio no HubSpot (no lead ou no pino) NÃO entra: o dono dele é o do HubSpot, e a troca é lá
+   (a tela Acessos já conta esses à parte).
+   Função pura: recebe as linhas e devolve o plano. Quem lê e grava é api/importar-leads.js (ação
+   'redistribuir_de_quem_saiu'); o script scripts/redistribuir-leads-de-quem-saiu.js a usa também offline.
+
+   leads: [{ id, cidade, bairro, lat, lng, responsavel_owner_id, status, hubspot_deal_id, pinoComNegocio }]
+   opcoes: { desligados: [ownerId], ativos: [ownerId] | null } */
+function planejarRedistribuicao(leads, opcoes) {
+  const o = opcoes || {};
+  const fora = new Set((o.desligados || []).map(String));
+  const ativos = Array.isArray(o.ativos) ? new Set(o.ativos.map(String)) : null;
+  const antes = DESLIGADOS_DO_BANCO;
+  definirDesligados(Array.from(new Set([...antes, ...fora])));
+  const itens = [];
+  const pulados = { comNegocio: 0, naoEDeQuemSaiu: 0, statusFora: 0 };
+  try {
+    (leads || []).forEach(function (l) {
+      const de = String(l.responsavel_owner_id || '');
+      if (!de || !fora.has(de)) { pulados.naoEDeQuemSaiu++; return; }
+      if (l.status !== 'atribuido' && l.status !== 'na_rota') { pulados.statusFora++; return; }
+      if (String(l.hubspot_deal_id || '').trim() || l.pinoComNegocio) { pulados.comNegocio++; return; }
+      const r = regraDoTerritorio(l.cidade || '', l.bairro || '', l.lat, l.lng);
+      let para = r && r.owner ? String(r.owner) : null;
+      let porque = r ? r.praca : 'sem território';
+      if (para && (ehDesligado(para) || para === de)) { porque = 'destino também saiu'; para = null; }
+      if (para && ativos && !ativos.has(para)) { porque = 'destino fora do time ativo'; para = null; }
+      itens.push({ id: l.id, de: de, para: para, porque: porque });
+    });
+  } finally {
+    DESLIGADOS_DO_BANCO = antes;
+  }
+  const resumo = {};
+  itens.forEach(function (i) {
+    const k = i.de + ' -> ' + (i.para || 'pendente');
+    resumo[k] = (resumo[k] || 0) + 1;
+  });
+  return { itens: itens, resumo: resumo, pulados: pulados };
+}
+
+module.exports = { definirDesligados, ehDesligado, planejarRedistribuicao, TERRITORIOS, DECLARADOS, DIVISORES, donoPorMeridiano, FORA_DE_ROTA, estaForaDeRota, bairroLimpo, CIDADES_COM_BAIRRO_DECLARADO, SOBRAS_DE_MUNICIPIO, CENTROS_DE_ZONA, ZONAS_ESCRITAS, rotearTerritorio, regraDoTerritorio, donoPorProximidade, donoPorZonaEscrita, kmEntre, semAcento };
 
   },
   "api/buscar-leads.js": function (module, exports, require, process) {
@@ -6435,11 +6741,16 @@ const MAX_PAGINAS_POR_CIDADE = 30; // trava de segurança — nunca deixa uma ci
 // Janela ampla o bastante pra cobrir o mercado ativo (não só "abriu esta semana",
 // que é o filtro do endpoint da Agenda) — 8 anos captura o estabelecimento maduro
 // que ainda pode não ter sistema de PDV, sem se limitar a CNPJ recém-nascido.
-const JANELA_DIAS = 365 * 8;
+/* RECÉM-ABERTOS (15/10/26, Julyan): "os leads que tiveram CNPJ aberto há no máximo 90 dias
+   têm que estar no mapa, porque eles não têm sistema". Inverte a regra de 16/08 (só CNPJ com
+   mais de 90 dias, até 8 anos): agora a busca é de 0 a 90 dias, e o backlog antigo sai do
+   mapa no app. A idade mínima é zero por decisão dele (o risco de cadastro incompleto foi
+   aceito). */
+const JANELA_DIAS = 90;
 // CORREÇÃO (16/08/26, Julyan, 2ª rodada): "não posso sujar o funil do gestor" — subiu
 // de 60 pra 90 dias mínimos de abertura, mais margem de segurança contra CNPJ que
 // ainda pode fechar ou estar com cadastro incompleto.
-const DIAS_MINIMO_ABERTURA = 90;
+const DIAS_MINIMO_ABERTURA = 0;
 
 // Uma linha por CIDADE que api/importar-leads.js sabe rotear (a função rotearTerritorio
 // de lá decide o dono certo por cidade+bairro). Rio de Janeiro cobre 2 executivos
@@ -6503,6 +6814,20 @@ const CIDADES = (() => {
        cidade cumpre a meta geral com contas de uma zona só e a zona do colega nasce
        vazia — foi o motivo pelo qual as sub-cotas existem desde 01/09. */
     const comBairro = c.donos.filter(d => !d.area.todoOMunicipio && (d.area.bairros || []).length);
+    /* SÓ OS BAIRROS DECLARADOS (15/10/26, Julyan: "o resto podemos apagar, vamos buscar só a
+       partir desses lugares"). Cidade sem ninguém com o município inteiro vira busca POR BAIRRO:
+       a lista vai para a Casa dos Dados (menos página, menos crédito) e, se a API não aceitar o
+       filtro, o lead de bairro sem dono é descartado aqui antes de importar. */
+    if (!c.donos.some(d => d.area.todoOMunicipio) && comBairro.length) {
+      cfg.soBairros = true;
+      cfg.bairrosFiltro = Array.from(new Set(comBairro.flatMap(d => (d.area.bairros || []).map(b => String(b).replace(/\s*\(.*\)\s*$/, '').trim())).filter(Boolean)));
+      /* A MESMA REGRA DO ROTEADOR (15/10/26). O filtro por pedaço do nome deixava passar "Chácara
+         Santana" (Zona Sul) por causa de "Santana" (Zona Norte), e o roteador, que casa o bairro
+         exato, deixava sem dono 47 recém-abertos pagos. Agora só passa o que o roteador entrega a
+         alguém: o que não tem dono nem é importado. */
+      const { regraDoTerritorio } = require('../lib/territorios.js');
+      cfg.bairroTemDono = b => { const r = regraDoTerritorio(c.municipio, b); return !!(r && r.owner); };
+    }
     if (n > 1 && comBairro.length > 1) {
       /* ══ UM BAIRRO, UM DONO ═══════════════════════════════════════════════════════
          O resolvedor é compartilhado pelas metas desta cidade, e é ele que decide de
@@ -6644,7 +6969,11 @@ function normalizar(e) {
     // o endereço real (rua + bairro + cidade) via MapTiler logo abaixo, em buscarCidade —
     // não aqui, porque normalizar() é síncrona e geocodificar precisa de await.
     lat: null,
-    lng: null
+    lng: null,
+    // o centro do município (o mesmo ibge de cima) não vira pino: serve só de régua para
+    // o geocode abaixo recusar resultado em outra cidade. Sai do lead antes de importar.
+    _centro: end.ibge && end.ibge.latitude != null && end.ibge.longitude != null
+      ? { lat: Number(end.ibge.latitude), lng: Number(end.ibge.longitude) } : null
   };
 }
 
@@ -6654,21 +6983,45 @@ function normalizar(e) {
 // viés de proximidade aqui é seguro porque o endereço já tem cidade explícita —
 // diferente da busca por texto solto do executivo (ver geocodificarLocalAtuacao no
 // template, que precisa de viés porque o texto digitado não tem cidade junto).
+/* O PINO NA CIDADE ERRADA (auditoria de 30/10/26). Pegar o primeiro resultado da MapTiler
+   sem conferir nada pôs 538 recém-abertos empilhados no mesmo ponto (27 na Praça da Sé, o
+   centro de São Paulo, vários deles de Guarulhos) e 59 a mais de 60 km da cidade do cadastro
+   (lead de Guarulhos em Limeira, de São Paulo em Presidente Prudente). Quando a rua não é
+   achada, a MapTiler devolve o bairro, a cidade ou uma rua de mesmo nome em outro município.
+   Agora o resultado só vale se for no nível da rua (endereço, rua ou estabelecimento) E
+   ficar a até 40 km do centro do município. Fora disso o lead entra SEM coordenada: o
+   localizar-municao procura o restaurante pelo nome no Google e só então o pino nasce, no
+   lugar certo. Pino nenhum é melhor que pino na cidade errada. */
+const GEO_TIPOS_DE_RUA = ['address', 'street', 'road', 'poi'];
+const GEO_RAIO_DA_CIDADE_KM = 40;
+function distanciaKm(a, b) {
+  const rad = (x) => x * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+function geocodeAceito(feature, centro) {
+  if (!feature || !Array.isArray(feature.center)) return { ok: false, motivo: 'sem resultado' };
+  const tipos = Array.isArray(feature.place_type) ? feature.place_type : [];
+  if (!tipos.some((t) => GEO_TIPOS_DE_RUA.includes(t))) return { ok: false, motivo: 'resultado não é rua: ' + (tipos.join('/') || 'sem tipo') };
+  const [lng, lat] = feature.center;
+  if (centro && distanciaKm(centro, { lat, lng }) > GEO_RAIO_DA_CIDADE_KM) return { ok: false, motivo: 'fora da cidade' };
+  return { ok: true, lat, lng };
+}
 async function geocodificarEnderecoReal(item, maptilerKey) {
-  if (!maptilerKey) return item;
-  const texto = [item.endereco, item.bairro, item.cidade, item.estado].filter(Boolean).join(', ');
-  if (!texto) return item;
+  const { _centro, ...lead } = item;
+  if (!maptilerKey) return lead;
+  const texto = [lead.endereco, lead.bairro, lead.cidade, lead.estado].filter(Boolean).join(', ');
+  if (!texto) return lead;
   try {
     const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(texto)}.json?key=${maptilerKey}&country=br&language=pt`;
     const resp = await fetch(url);
-    if (!resp.ok) return item;
+    if (!resp.ok) return lead;
     const json = await resp.json();
-    const top = (json.features || [])[0];
-    if (!top || !Array.isArray(top.center)) return item;
-    const [lng, lat] = top.center;
-    return { ...item, lat, lng };
+    const r = geocodeAceito((json.features || [])[0], _centro);
+    return r.ok ? { ...lead, lat: r.lat, lng: r.lng } : lead;
   } catch (e) {
-    return item; // geocode é bônus (melhora a ordenação por distância) — falhar não pode derrubar a importação
+    return lead; // geocode é bônus — falhar não pode derrubar a importação
   }
 }
 
@@ -6702,6 +7055,7 @@ async function autenticarECconsultar(corpoConsulta, casaToken) {
 // avisar se algum executivo específico não bateu os 30 mesmo esticando o teto.
 async function buscarCidade(cidadeCfg, casaToken) {
   const { municipio, uf, objetivoMinimo, tetoMaximo, metaBairros } = cidadeCfg;
+  let comFiltroBairro = !!(cidadeCfg.bairrosFiltro && cidadeCfg.bairrosFiltro.length);
   const leadsCidade = [];
   let pagina = 1;
 
@@ -6714,8 +7068,8 @@ async function buscarCidade(cidadeCfg, casaToken) {
     }));
   }
   function metasBatidas() {
-    if (!metaBairros) return leadsCidade.length >= objetivoMinimo;
-    return contagemPorMeta().every(m => m.encontrados >= m.minimo);
+    /* recém-abertos: traz TODOS os da janela (até o teto), sem parar na cota de 30 */
+    return false;
   }
 
   while (leadsCidade.length < tetoMaximo && pagina <= MAX_PAGINAS_POR_CIDADE && !metasBatidas()) {
@@ -6727,10 +7081,17 @@ async function buscarCidade(cidadeCfg, casaToken) {
       data_abertura: { inicio: isoDiasAtras(JANELA_DIAS), fim: isoDiasAtras(DIAS_MINIMO_ABERTURA) },
       mei: { excluir_optante: true },
       mais_filtros: { com_telefone: true, excluir_email_contab: true },
+      ...(comFiltroBairro ? { bairro: cidadeCfg.bairrosFiltro.map(b => b.toLowerCase()) } : {}),
       limite: TAMANHO_PAGINA_API,
       pagina
     });
     const resp = await autenticarECconsultar(corpoConsulta, casaToken);
+    if (!resp.ok && comFiltroBairro && pagina === 1) {
+      /* a API recusou o filtro de bairro: busca a cidade e o descarte por bairro fica aqui */
+      console.log(`[backfill-casa-dos-dados] ${municipio}/${uf}: filtro de bairro recusado pela Casa dos Dados — buscando a cidade e descartando o bairro sem dono.`);
+      comFiltroBairro = false;
+      continue;
+    }
     if (!resp.ok) {
       console.log(`[backfill-casa-dos-dados] ${municipio}/${uf}: falha de autenticação/rede na página ${pagina}.`);
       break;
@@ -6744,6 +7105,7 @@ async function buscarCidade(cidadeCfg, casaToken) {
       if (ehRedeGrande(item.nome) || ehRedeGrande(item.razaoSocial)) return;
       if (ehPessoaFisica(item)) return;
       if (ehForaDeFoodservice(item.nome)) return;
+      if (cidadeCfg.soBairros && !cidadeCfg.bairroTemDono(item.bairro)) return; // fora dos bairros declarados
       leadsCidade.push(item);
     });
 
@@ -6874,6 +7236,13 @@ async function main() {
         console.log(`[backfill-casa-dos-dados]   ${ok ? '✅' : '⚠️ ABAIXO DA META'} ${m.nome}: ${m.encontrados}/${m.minimo}`);
       });
     }
+    /* SO_CONTAR=1: só conta o que viria, sem importar nada (para medir antes de gravar) */
+    if (process.env.SO_CONTAR === '1') {
+      const porMes = {};
+      leadsCidade.forEach(l => { const m = String(l.data_abertura || '').slice(0, 7) || '?'; porMes[m] = (porMes[m] || 0) + 1; });
+      porCidade[`${municipio}/${uf}`] = { encontrados: leadsCidade.length, porMesDeAbertura: porMes };
+      continue;
+    }
     if (modoManual) {
       todosOsLeads.push(...leadsCidade);
       porCidade[`${municipio}/${uf}`] = { encontrados: leadsCidade.length, porMeta: porMeta || undefined };
@@ -6888,6 +7257,7 @@ async function main() {
   }
 
   console.log('[backfill-casa-dos-dados] Resumo final:', JSON.stringify(porCidade, null, 2));
+  if (process.env.SO_CONTAR === '1') { console.log('[backfill-casa-dos-dados] SO_CONTAR: nada importado.'); return; }
 
   if (modoManual) {
     const saida = { fonte: 'casa_dos_dados', leads: todosOsLeads };
