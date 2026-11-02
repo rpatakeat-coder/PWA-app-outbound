@@ -1010,6 +1010,12 @@ export function useClients(
       void queryClient.invalidateQueries({ queryKey: ['client_visits'] });
       // a meta "x/5 recém-abertos" muda com o check-in (antes só recarregando o app)
       void queryClient.invalidateQueries({ queryKey: ['novos-visitados-semana'] });
+      /* o placar do dia, o Desenvolvimento e a daily de quem fez a visita (revisão de 02/11/26): o
+         sinal ao vivo de pino sem dono (conta-alvo, recém-aberto) não relê mais o que é pessoal, e o
+         check-in pela fila offline só passava por aqui */
+      void queryClient.invalidateQueries({ queryKey: ['dia_v3'] });
+      void queryClient.invalidateQueries({ queryKey: ['desenvolvimento_quadro'] });
+      void queryClient.invalidateQueries({ queryKey: ['minha_daily'] });
     },
   });
 

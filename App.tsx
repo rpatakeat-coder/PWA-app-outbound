@@ -5680,7 +5680,9 @@ function MainApp() {
            abre (README §4.4). Prova = GPS no raio (não declarada) ou foto com coordenada no raio do pino.
            Com o Hoje v3 desligado, a ficha abre na hora, como antes. */
         const espera = chegueiV3.current({
-          clientId: client.id, comProva: !declaradaDaVisita || fotoComLugar,
+          /* a mesma régua do servidor (0242): GPS só prova com margem de até ±100 m e sem pino movido na
+             hora; a foto com coordenada no raio prova sozinha (revisão de 02/11/26) */
+          clientId: client.id, comProva: (!declaradaDaVisita && (fixAccuracy == null || fixAccuracy <= 100) && !corrigirPino) || fotoComLugar,
           metros: userLat != null && userLon != null && client.latitude != null && client.longitude != null
             ? metrosLL({ lat: userLat, lng: userLon }, { lat: Number(client.latitude), lng: Number(client.longitude) }) : null,
         });
@@ -6591,7 +6593,13 @@ function MainApp() {
           /* PARADA SEM MUDANÇA REAL NÃO REDESENHA O APP (14/10/26): cada setMapRegion refaz as
              pilhas de pinos (O(n²)) e o MainApp inteiro. Abaixo de ~3% de deslocamento e ~2% de
              zoom, fica a região de antes. */
-          if (!layout.ehLargo) setRegiaoExata({ latitude: region.latitude, longitude: region.longitude, latitudeDelta: region.latitudeDelta, longitudeDelta: region.longitudeDelta });
+          /* só na faixa de zoom em que há placas, e só se mudou: senão cada parada redesenha o App inteiro
+             (o filtro de 14/10 abaixo existe para evitar isso; revisão de 02/11/26) */
+          if (!layout.ehLargo && region.latitudeDelta > DELTA_AFASTADO && region.latitudeDelta <= 0.6) {
+            setRegiaoExata((prev) => prev && prev.latitude === region.latitude && prev.longitude === region.longitude
+              && prev.latitudeDelta === region.latitudeDelta && prev.longitudeDelta === region.longitudeDelta ? prev
+              : { latitude: region.latitude, longitude: region.longitude, latitudeDelta: region.latitudeDelta, longitudeDelta: region.longitudeDelta });
+          }
           setMapRegion((prev) => {
             if (prev) {
               const dLat = Math.abs(prev.latitude - region.latitude) / Math.max(prev.latitudeDelta, 1e-6);
