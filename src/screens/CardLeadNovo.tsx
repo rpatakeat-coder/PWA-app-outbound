@@ -439,7 +439,9 @@ function Cabecalho({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; com
         style={{ flex: 1, minWidth: 0 }}
       >
         <View style={s.kickerLinha}>
-          <Text style={[s.kicker, { color: corDoKicker(d.pino), flexShrink: 1 }]} numberOfLines={1}>{kicker(d)}</Text>
+          {/* duas linhas: "CLIENTE TAKEAT · EM QUEDA" com a distância ao lado não cabia em 390 e cortava o
+              "em queda", que é o motivo da visita (visto logado em 02/11/26) */}
+          <Text style={[s.kicker, { color: corDoKicker(d.pino), flexShrink: 1 }]} numberOfLines={2}>{kicker(d)}</Text>
           {!!distancia && <Text style={s.kickerDist} numberOfLines={1}>{distancia}</Text>}
         </View>
         <Text style={[s.titulo, nome.length > 40 && s.tituloLongo]} numberOfLines={compacto ? 1 : 2}>{nome}</Text>
