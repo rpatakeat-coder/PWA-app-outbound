@@ -79,6 +79,16 @@ const tel = (v: unknown): string | null => {
 // "Oportunidade - MPS LANCHONETE" -> "MPS LANCHONETE". Só esse prefixo: cortar
 // em qualquer " - " transformava "Dizzy - Vila Maria" em "Vila Maria" e
 // "Quintal do Arlindo - Porções, Espetos…" em "Porções, Espetos…".
+// nome comparável: sem acento, sem pontuação e sem as palavras que todo restaurante tem
+const VAZIAS = new Set(['restaurante', 'bar', 'e', 'de', 'do', 'da', 'dos', 'das', 'o', 'a', 'mcz', 'lanchonete', 'cafe', 'pizzaria', 'hamburgueria', 'the']);
+const tokensDoNome = (n: string | null | undefined) => new Set(String(n ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  .replace(/[^a-z0-9 ]+/g, ' ').split(/s+/).filter((t) => t.length > 1 && !VAZIAS.has(t)));
+const nomesParecidos = (a: string | null | undefined, b: string | null | undefined) => {
+  const A = tokensDoNome(a), B = tokensDoNome(b);
+  if (!A.size || !B.size) return false;
+  let comum = 0; A.forEach((t) => { if (B.has(t) || [...B].some((u) => u.length > 3 && t.length > 3 && (u.startsWith(t) || t.startsWith(u)))) comum++; });
+  return comum / Math.min(A.size, B.size) >= 0.6;
+};
 const empresaDo = (dealname: string | null): string | null => {
   if (!dealname) return null;
   return dealname.replace(/^\s*oportunidade\s*-\s*/i, '').trim() || null;
@@ -228,7 +238,7 @@ Deno.serve(async (req) => {
     const m = new Map<string, any>();
     let ultimo = '';
     for (;;) {
-      let q = svc.from('clients').select('id, nome, id_hubspot, telefone').not('telefone', 'is', null).order('id').limit(1000);
+      let q = svc.from('clients').select('id, nome, empresa, id_hubspot, telefone').not('telefone', 'is', null).order('id').limit(1000);
       if (ultimo) q = q.gt('id', ultimo);
       const { data, error } = await q;
       if (error) throw new Error(`clients (telefones): ${error.message}`);
@@ -243,6 +253,7 @@ Deno.serve(async (req) => {
   };
 
   const criados: any[] = [];
+  const ligados: any[] = [];
   const semLocalizacao: any[] = [];
   const possivelDuplicado: any[] = [];
   const erros: any[] = [];
@@ -283,11 +294,27 @@ Deno.serve(async (req) => {
       dup = porTelefone.get(telNorm) ?? null;
     }
     if (!dup && lead?.place_id) {
-      const { data } = await svc.from('clients').select('id, nome, id_hubspot').eq('conta_alvo_place_id', lead.place_id).limit(1);
+      const { data } = await svc.from('clients').select('id, nome, empresa, id_hubspot').eq('conta_alvo_place_id', lead.place_id).limit(1);
       dup = data?.[0] ?? null;
+      if (dup) dup.mesmoLugar = true;
+    }
+    /* O MESMO RESTAURANTE, PINO SEM NEGÓCIO (auditoria 02/11/26): o negócio com o nome do restaurante batia no
+       pino de mesmo nome (ou do mesmo lugar do Google) que ainda não tinha negócio, e ficava fora do mapa
+       esperando alguém decidir. Agora ele é LIGADO a esse pino. Telefone igual com nome diferente continua na
+       lista: às vezes é outro restaurante da mesma pessoa, às vezes o mesmo com o negócio antigo no nome dela. */
+    if (dup && !limpo(dup.id_hubspot) && (dup.mesmoLugar || nomesParecidos(empresa, dup.empresa ?? dup.nome))) {
+      if (!dryRun) {
+        const { error } = await svc.from('clients').update({
+          id_hubspot: id, url_hubspot: `https://app.hubspot.com/contacts/${PORTAL}/record/0-3/${id}`,
+          etapa: ROTULO[String(p.dealstage ?? '')] ?? null, is_archived: false,
+        }).eq('id', dup.id).is('id_hubspot', null);
+        if (error) { erros.push({ ...resumo, erro: `ligar ao pino: ${error.message}` }); continue; }
+      }
+      ligados.push({ ...resumo, ponto: dup.id, nome_do_ponto: dup.empresa ?? dup.nome });
+      continue;
     }
     if (dup) {
-      possivelDuplicado.push({ ...resumo, ponto_existente: dup.id, nome_existente: dup.nome, negocio_do_ponto: dup.id_hubspot });
+      possivelDuplicado.push({ ...resumo, ponto_existente: dup.id, nome_existente: dup.empresa ?? dup.nome, negocio_do_ponto: dup.id_hubspot });
       continue;
     }
 
@@ -352,11 +379,12 @@ Deno.serve(async (req) => {
     etapas_atualizadas: etapasAtualizadas,
     faltavam: faltam.length,
     criados: criados.length,
+    ligados_a_pino_existente: ligados.length,
     sem_localizacao: semLocalizacao.length,
     possivel_duplicado: possivelDuplicado.length,
     erros: erros.length,
     ignorados_teste: ignoradosTeste.length,
     geocodes_usados: geocodes,
-    detalhe: { criados, sem_localizacao: semLocalizacao, possivel_duplicado: possivelDuplicado, erros, ignorados_teste: ignoradosTeste },
+    detalhe: { criados, ligados, sem_localizacao: semLocalizacao, possivel_duplicado: possivelDuplicado, erros, ignorados_teste: ignoradosTeste },
   });
 });
