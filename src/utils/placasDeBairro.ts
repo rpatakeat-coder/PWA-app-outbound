@@ -60,3 +60,58 @@ export function placasDeBairro(itens: ItemDaPlaca[], clientes: ClienteDaPlaca[],
   }
   return out;
 }
+
+/* AS PLACAS CABEM NA TELA DO CELULAR (print do iPhone de 390 pt, 02/11/26). "Praia da Costa · 28
+   clientes" e "Itapuã · 8 no… 11 clientes Tak…" passavam da borda direita, e a de cima ficava por
+   baixo da busca e da faixa do dia. No celular a placa vira duas linhas curtas (o bairro; embaixo,
+   "28 novos · 11 Takeat") e só entra se couber INTEIRA na área livre do mapa — entre as barras de
+   cima e a fileira de baixo, 8 px das bordas. Perto da borda ela desliza para dentro (âncora
+   horizontal), em vez de cortar; se nem assim couber, ou se bater em outra placa, sai. O mapa
+   fica com no máximo 4 placas: no celular cada uma ocupa um terço da largura. */
+export type AreaLivre = { x0: number; y0: number; x1: number; y1: number };
+export type JanelaDaPlaca = { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number; larguraPx: number; alturaPx: number };
+export type PlacaNaTela = Placa & { ancoraX: number };
+
+/** Largura máxima do cartão compacto; o nome do bairro corta com reticências dentro dela. */
+export const LARGURA_MAX_PLACA = 156;
+export const ALTURA_PLACA_COMPACTA = 40;
+
+/** A segunda linha da placa compacta: "28 novos" e, se houver, "11 Takeat" (o verde). */
+export function contaDaPlaca(pl: Placa): { conta: string; takeat: string | null } {
+  const conta = pl.titulo.slice(pl.bairro.length + 3);
+  const n = pl.clientes ? parseInt(pl.clientes, 10) : 0;
+  return { conta, takeat: n ? `${n} Takeat` : null };
+}
+
+/** Largura estimada do cartão compacto em px (Poppins 12/11 bold, ~7 e ~6,3 px por letra, 20 de respiro). */
+export function larguraDaPlaca(pl: Placa): number {
+  const { conta, takeat } = contaDaPlaca(pl);
+  const l2 = takeat ? `${conta} · ${takeat}` : conta;
+  return Math.min(LARGURA_MAX_PLACA, Math.ceil(Math.max(pl.bairro.length * 7, l2.length * 6.3) + 20));
+}
+
+export function placasNaTela(placas: Placa[], j: JanelaDaPlaca, area: AreaLivre, maximo = 4): PlacaNaTela[] {
+  const aceitas: Array<{ x0: number; y0: number; x1: number; y1: number }> = [];
+  const out: PlacaNaTela[] = [];
+  for (const pl of placas) {
+    if (out.length >= maximo) break;
+    const x = ((pl.lng - (j.longitude - j.longitudeDelta / 2)) / j.longitudeDelta) * j.larguraPx;
+    const y = (((j.latitude + j.latitudeDelta / 2) - pl.lat) / j.latitudeDelta) * j.alturaPx;
+    const w = larguraDaPlaca(pl);
+    const h = ALTURA_PLACA_COMPACTA;
+    // o ponto do bairro fora da área livre: a placa ficaria apontando para onde ninguém vê
+    if (x < area.x0 || x > area.x1) continue;
+    if (y - h / 2 < area.y0 || y + h / 2 > area.y1) continue;
+    if (w > area.x1 - area.x0) continue;
+    // âncora no meio; perto da borda, desliza para dentro até caber
+    const minA = Math.max(0, 1 - (area.x1 - x) / w);
+    const maxA = Math.min(1, (x - area.x0) / w);
+    if (minA > maxA) continue;
+    const ancoraX = Math.min(maxA, Math.max(minA, 0.5));
+    const caixa = { x0: x - ancoraX * w - 4, y0: y - h / 2 - 4, x1: x + (1 - ancoraX) * w + 4, y1: y + h / 2 + 4 };
+    if (aceitas.some((a) => caixa.x0 < a.x1 && a.x0 < caixa.x1 && caixa.y0 < a.y1 && a.y0 < caixa.y1)) continue;
+    aceitas.push(caixa);
+    out.push({ ...pl, ancoraX });
+  }
+  return out;
+}
