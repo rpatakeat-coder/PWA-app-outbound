@@ -63,3 +63,23 @@ está nos dois repositórios (cockpit-unificado e PWA-app-outbound).
     visita com prova do dia. É texto de comemoração; o número oficial continua no Meu desempenho.
 15. **Volta ao anterior no app:** `localStorage['hoje-v2'] = '1'` (a mesma chave do Cockpit) devolve a
     FolhaPlanoDoDia, a FolhaFechoDoDia antiga (que volta a subir às 18h) e tira a pílula e os toasts.
+16. **O selo "vence hoje" no pino não entrou.** O handoff permite tocar no pino só para esse selo, mas os
+    pinos são desenhados pela camada do mapa (lentes, famílias, halo) e o selo pediria mexer nela. O "vence
+    hoje" aparece no cartão da próxima porta, na folha da manhã (linha 2) e na lista do plano do Cockpit.
+
+## Etapas 6 e 8 · os pushes e a medição
+
+17. **Os pushes das 8h e das 18h são momentos novos do push-fila** (`manha0800`, `fecho1800`), com cron
+    de segunda a sexta (11:00 e 21:00 UTC) pela `invocar_push_fila` de sempre (0241). Feriado: a Edge não
+    manda (a mesma `ehDiaUtil` com `feriadosNacionais`). 1 por momento por dia: `push_enviados` com tipo
+    `hoje` e o momento como ref (a chave primária recusa o segundo). Não gastam o limite de 4 da fila, como
+    os da semana do Desenvolvimento v2.
+18. **O "Feche o dia" das 18h toma o lugar do "ainda dá tempo" das 18:05** para quem o recebeu: os dois
+    diriam a mesma coisa com cinco minutos de diferença. O das 8h não mexe no das 8:30 (que é um quente).
+19. **O push das 18h só vai para quem foi à rua e não fechou** (sem porta, `push18` é nulo; com
+    `fecho_do_dia` de hoje, pula), a mesma regra que a folha antiga já seguia.
+20. **A medição usa a aberturas_de_tela** (0241): 4 telas e 3 origens novas e a coluna `acao`.
+    `registrar_abertura` ganha `p_acao` (opcional) e a versão de 2 argumentos sai, para a chamada não ficar
+    ambígua. O selo "abriu esta semana" do gestor passa a contar só as telas do Desenvolvimento (a função
+    `_desenvolvimento_de` da 0240 foi copiada inteira com essa única troca). Enquanto a 0241 não for
+    aplicada, as chamadas novas são recusadas pelo banco e a tela não percebe (fogo e esquece).
