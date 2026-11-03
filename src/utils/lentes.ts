@@ -73,9 +73,11 @@ export function visivelNaLente(lente: Lente, p: Pino, noPlano: boolean, aberto: 
        2.029 têm motivo — e o motivo não é detalhe burocrático: a fala de reconquista é
        literalmente "o que resolvemos sobre {motivo}". Sem ele não há conversa para ter na porta,
        e o pino seria só mais um ponto no mapa. */
+    /* EX-CLIENTE SAI DO MEU DIA COMO PINO (Julyan, 03/11/26: "não precisa colocar em Meu dia, quero
+       que só fique na lente, que quando aproximarem apareça o pin; de resto, os pontos rosas quase
+       invisíveis"). Fora da lente Ex-clientes ele é só o ponto discreto (exDiscreto, no App). */
     return (meuOuLivre && p.familia === 'lead' && p.temp !== 'X') || (p.familia === 'rec' && (meuOuLivre || verTodos))
-      || p.familia === 'cli' || p.familia === 'av' || p.familia === 'alvo'
-      || (p.familia === 'ex' && !!p.temMotivoSaida);
+      || p.familia === 'cli' || p.familia === 'av' || p.familia === 'alvo';
   }
   if (p.familia === 'alvo') return false;
   switch (lente) {
@@ -232,6 +234,12 @@ export function pontoDe(p: Pino, claro = false): { cor: string; borda: string; f
   void claro; // o limão neon lê nos dois temas (era preto e branco, invertido no claro)
   if (p.familia === 'rec') return { cor: COR.rec, borda: COR.recTinta, forma: 'losango', tamanho: 10, opacidade: 1 };
   return { cor: p.cor, borda: '#FFFFFF', forma: 'bola', tamanho: p.familia === 'lead' ? 10 : 9, opacidade: p.dono === 'colega' ? 0.55 : 1 };
+}
+
+/** Ex-cliente fora da lente dele: ponto rosa quase invisível, sem toque, sem lista e sem contagem
+ *  (Julyan, 03/11/26). Mostra onde a base antiga está sem disputar com o que decide a próxima porta. */
+export function pontoExDiscreto(p: Pino): { cor: string; borda: string; forma: 'bola'; tamanho: number; opacidade: number } {
+  return { cor: p.cor, borda: p.cor, forma: 'bola', tamanho: 6, opacidade: 0.3 };
 }
 
 /** Conta-alvo que vai como bolinha transparente (no Meu dia e em qualquer lente que não a dela,

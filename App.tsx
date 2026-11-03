@@ -141,7 +141,7 @@ import { ROTULO_ETAPA, ETAPA as ETAPA_FS } from './src/utils/fichaDeRua';
 import { negocioAcao } from './src/utils/negocioAcao';
 import { lerPlanoDosDias, subirPlanoDaFila } from './src/utils/planoDoPino';
 import { textoNormalizado } from './src/utils/pinoP2';
-import { contaAlvoDiscreta, DELTA_AFASTADO, FILTROS_VAZIOS, LENTES, passaNosFiltros, pontoDe, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
+import { contaAlvoDiscreta, DELTA_AFASTADO, FILTROS_VAZIOS, LENTES, passaNosFiltros, pontoDe, pontoExDiscreto, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
 import { gruposDaLista, montarLista, noTrecho, type OrdemDaLista } from './src/utils/listaDoMapa';
 import type { EstagioPainel } from './src/components/Painel';
 import FileiraDeLentes, { ALTURA_FILEIRA_LENTES, ALTURA_PILULAS_DAS_LENTES } from './src/screens/FileiraDeLentes';
@@ -3094,10 +3094,29 @@ function MainApp() {
            precisam aparecer"). Com mais de 40 na área, todos viravam ponto: a lista dizia "0 pinos,
            +74 fora da lente" e o mapa só tinha bolinhas. Na lente Ex-clientes, eles são a lente. */
         || (lente === 'rec' && it.p.familia === 'ex');
-      const sai = foco.filter((it) => !fica(it));
       const ficam = foco.filter(fica);
+      /* AS VAGAS QUE SOBRAM NÃO FICAM VAZIAS (Julyan, 03/11/26: "Nesta área · 0 pinos · +61 fora da
+         lente"). Quem não tinha plano nem quente seu ficava com o mapa só de bolinhas e a lista
+         vazia, mesmo com 40 vagas livres. Agora as vagas até 40 vão para os melhores do resto, na
+         ordem dos nomes (recém ≤ 30 d › em queda › meus M e F › recém mais velho › o resto), o mais
+         perto do centro do mapa primeiro. A conta-alvo discreta não ocupa vaga. */
+      const ordem = (it: (typeof visiveisMapaNovo)[number]) => {
+        if (it.p.familia === 'rec') return (it.p.abertoHa ?? 99) <= 30 ? 0 : 4;
+        if (it.p.queda) return 1;
+        if (it.p.dono === 'meu') return it.p.temp === 'M' ? 2 : 3;
+        if (it.p.familia === 'lead') return 5;
+        return 6;
+      };
+      const centro = mapRegion ? { lat: mapRegion.latitude, lng: mapRegion.longitude } : null;
+      const longe = (it: (typeof visiveisMapaNovo)[number]) => (centro
+        ? Math.abs(Number(it.c.latitude) - centro.lat) + Math.abs(Number(it.c.longitude) - centro.lng) : 0);
+      const vagas = Math.max(0, LIMITE_PINOS_INTEIROS - ficam.filter((it) => !quietos.has(it.c.id)).length);
+      const extras = foco.filter((it) => !fica(it) && !quietos.has(it.c.id))
+        .sort((a, b) => ordem(a) - ordem(b) || longe(a) - longe(b)).slice(0, vagas);
+      const ficaId = new Set([...ficam, ...extras].map((it) => it.c.id));
+      const sai = foco.filter((it) => !ficaId.has(it.c.id));
       foco.length = 0;
-      foco.push(...ficam);
+      foco.push(...ficam, ...extras);
       // a conta-alvo discreta some, como no zoom afastado (não vira ponto nem pilha)
       for (const it of sai) { if (quietos.has(it.c.id)) { quietos.delete(it.c.id); continue; } pontos.push(it); }
     }
@@ -3150,8 +3169,17 @@ function MainApp() {
       for (const [id, lado] of rotulosSemSobrepor(candidatos, janela)) nomes.set(id, lado);
     }
     const camada = pontos.map(({ c, p }) => ({ lat: c.latitude as number, lng: c.longitude as number, ...pontoDe(p, modoSol) }));
+    /* EX-CLIENTE FORA DA LENTE DELE (Julyan, 03/11/26): ponto rosa quase invisível, por baixo dos
+       outros (vem antes no desenho). Não entra em lista, pilha nem contagem. Com filtro ligado, quem
+       manda é o filtro; no Calor, nenhum pino. */
+    if (lente !== 'calor' && !comFiltro && !(ehAgendaPC && planejarDia)) {
+      const naTela = new Set(visiveisMapaNovo.map((it) => it.c.id));
+      const exDiscretos = itensMapaNovo.filter(({ c, p }) => p.familia === 'ex' && !naTela.has(c.id))
+        .map(({ c, p }) => ({ lat: c.latitude as number, lng: c.longitude as number, ...pontoExDiscreto(p) }));
+      camada.unshift(...exDiscretos);
+    }
     return { focoMapaNovo: foco, camadaPontos: camada, comNome: nomes, pilhaDe: pilhaDeId, janelaMapa: janela, quietosMapa: quietos };
-  }, [visiveisMapaNovo, lente, selectedClient?.id, mapRegion, layout.ehLargo, janelaTela.width, janelaTela.height, pilhaAberta, ehAgendaPC, planejarDia, focoPC?.id, hoverAgenda, camadasAgenda, idsSugestao, idPortaDoHalo, referenciasNaTela, userLocation, modoSol]);
+  }, [visiveisMapaNovo, itensMapaNovo, comFiltro, lente, selectedClient?.id, mapRegion, layout.ehLargo, janelaTela.width, janelaTela.height, pilhaAberta, ehAgendaPC, planejarDia, focoPC?.id, hoverAgenda, camadasAgenda, idsSugestao, idPortaDoHalo, referenciasNaTela, userLocation, modoSol]);
   // Dimensoes/posicao do MapView na tela (via onLayout; ver o pin de criacao mais abaixo). Mora aqui
   // desde 02/11/26 porque as placas de bairro do celular precisam da area medida do mapa.
   const [mapLayout, setMapLayout] = useState<{ x: number; y: number; width: number; height: number } | null>(null);

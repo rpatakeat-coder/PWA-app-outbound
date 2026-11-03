@@ -63,8 +63,10 @@ ok(!V('dia', colegaQuente), 'Meu dia: pino de colega não aparece');
    {motivo}". Sem ele o pino seria só mais um ponto — e o pedido veio junto com "MAS NEM TANTO". */
 const exComMotivo = P({ status: 'churn', hs_churn_motivo_macro: 'Preço' } as Partial<Client>);
 ok(V('dia', cliente), 'Meu dia: cliente ativo aparece');
-ok(V('dia', exComMotivo), 'Meu dia: ex-cliente COM motivo de saída aparece — dá para reconquistar');
-ok(!V('dia', ex), 'Meu dia: ex-cliente sem motivo fica fora — não há conversa para ter na porta');
+/* 03/11/26 (Julyan: "não precisa colocar em Meu dia, quero que só fique na lente"): no Meu dia o
+   ex-cliente, com ou sem motivo, não é pino. Lá ele é o ponto rosa quase invisível (pontoExDiscreto). */
+ok(!V('dia', exComMotivo), 'Meu dia: ex-cliente COM motivo não é pino — só na lente Ex-clientes');
+ok(!V('dia', ex), 'Meu dia: ex-cliente sem motivo não é pino');
 ok(V('rec', ex) && V('rec', exComMotivo), 'Reconquista mostra os dois: lá a lista é a lista');
 ok(V('dia', novo) && !V('dia', novoColega), 'Meu dia: meus recém-abertos, não os do colega');
 /* SEM DONO TAMBÉM É MAPA (Julyan, 29/10/26). Eram 1.206 leads da Casa dos Dados e 634 do motor do
