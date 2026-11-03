@@ -7347,7 +7347,7 @@ function MainApp() {
           aberta, um toque nela fecha. */}
       {!creationMode && !heatOn && layout.ehLargo && !legendaAberta && (
         <Pressable accessibilityRole="button" accessibilityLabel="Mostrar a legenda das cores" onPress={() => setLegendaAberta(true)}
-          style={[styles.legendaBotao, { bottom: baseInferior + 16 }]}>
+          style={styles.legendaBotao}>
           <View style={{ flexDirection: 'row', gap: 3 }}>{[COR_DO_PINO.Q, COR_DO_PINO.rec, COR_DO_PINO.cliente].map((c) => <View key={c} style={[styles.tempLegendDot, { backgroundColor: c }]} />)}</View>
           <Text style={styles.tempLegendLabel}>Legenda</Text>
         </Pressable>
@@ -7893,9 +7893,9 @@ function MainApp() {
           contagens={comFiltro ? undefined : contagensDasLentes}
           /* esconder também daqui, onde a mão já está (05/10/26: "tenho que esconder painel ali também"); na linha das ações */
           extra={(
-            <Pressable accessibilityRole="button" accessibilityLabel="Esconder o painel e ampliar o mapa" onPress={alternarPainel} style={[styles.pmnLente, { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, borderRadius: 22 }]}>
-              <IconChevronLeft width={14} height={14} fill={iconColors.muted} />
-              <Text style={styles.pmnLenteTexto}>Esconder</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Esconder o painel e ampliar o mapa" onPress={alternarPainel} style={[styles.pmnLente, { alignItems: 'center', justifyContent: 'center', width: 44, minHeight: 44, borderRadius: 22, paddingHorizontal: 0 }]}>
+              {/* só a seta, para caber na linha das ações; o rótulo de leitura de tela diz o que faz */}
+              <IconChevronLeft width={16} height={16} fill={iconColors.muted} />
             </Pressable>
           )}
         />
@@ -13600,7 +13600,8 @@ const styles = StyleSheet.create({
   },
   tempLegendaLinhaWeb: { width: 'auto' },
   legendaBotao: {
-    position: 'absolute', left: 16, zIndex: 20, height: 36, paddingHorizontal: 12, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 8,
+    // no canto de cima, embaixo do botão de localização: embaixo à esquerda fica o "Esconder painel"
+    position: 'absolute', top: 64, right: 16, zIndex: 20, height: 36, paddingHorizontal: 12, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)',
   },
   // Controle do mapa (recentrar) no topo direito, 40x40 raio 8
