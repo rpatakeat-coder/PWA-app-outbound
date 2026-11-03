@@ -20,11 +20,12 @@ export const LENTES: { id: Lente; rotulo: string }[] = [
   { id: 'clientes', rotulo: 'Clientes' },
   // RECÉM-ABERTOS (15/10/26, Julyan): CNPJ aberto há até 90 dias, que ainda não tem sistema.
   { id: 'novos', rotulo: 'Recém-abertos' },
+  // EX-CLIENTES (19/10/26, Julyan: "troque reconquista por ex clientes"). O id segue 'rec'. Em 4º desde
+  // 03/11/26 (Julyan: "quero clientes, leads recém abertos, ex clientes e depois o resto").
+  { id: 'rec', rotulo: 'Ex-clientes' },
   { id: 'carteira', rotulo: 'Carteira' },
   // MAIS AVALIADOS (15/10/26): as contas-alvo do Google com nota 4,5+. Era "Contas-alvo".
   { id: 'alvo', rotulo: 'Mais avaliados' },
-  // EX-CLIENTES (19/10/26, Julyan: "troque reconquista por ex clientes"). O id segue 'rec'.
-  { id: 'rec', rotulo: 'Ex-clientes' },
   { id: 'queda', rotulo: 'Em queda' },
   { id: 'semdono', rotulo: 'Sem dono' },
   { id: 'calor', rotulo: 'Calor' },
