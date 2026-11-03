@@ -84,6 +84,22 @@ export function colunaDoDia(grade: unknown, indice: number): FaixaDoPlano[] {
   return out;
 }
 
+export type BlocoDeRua = { hora: string | null; regiao: string | null; duracao: string | null };
+
+/** PROSPECÇÃO DE RUA (Julyan, 03/11/26): o bloco "__rua" que o Planejamento grava (sair e bater porta, sem
+ *  nome nem endereço ainda). Não é parada nem lead, mas o executivo precisa vê-lo no dia do app. */
+export function ruaDoDia(grade: unknown, indice: number): BlocoDeRua[] {
+  const col = Array.isArray(grade) && Array.isArray(grade[indice]) ? (grade[indice] as unknown[]) : [];
+  const out: BlocoDeRua[] = [];
+  for (const v of col) {
+    const f = typeof v === 'string' ? { id: v } : v && typeof v === 'object' ? (v as Record<string, unknown>) : null;
+    if (!f || f.id !== '__rua') continue;
+    const txt = (x: unknown) => (typeof x === 'string' && x.trim() ? x.trim() : null);
+    out.push({ hora: txt(f.hora), regiao: txt(f.regiao), duracao: txt(f.duracao) });
+  }
+  return out;
+}
+
 /** Os ids com que o Cockpit pode ter guardado este lead (os mesmos do rota_para_plano). */
 export function idsDoLead(c: { id_hubspot?: string | null; lead_prospeccao_id?: string | null }): string[] {
   const hs = c.id_hubspot && String(c.id_hubspot).trim();

@@ -1,4 +1,4 @@
-import { colunaDoDia, diasPlanejaveis, diaInicial, ehCompromisso, faixaDoLead, rotuloDoDia, semanaDoDia, vaiAoCockpit } from './planoNoMapa';
+import { colunaDoDia, ruaDoDia, diasPlanejaveis, diaInicial, ehCompromisso, faixaDoLead, rotuloDoDia, semanaDoDia, vaiAoCockpit } from './planoNoMapa';
 
 let falhas = 0;
 function igual(nome: string, obtido: unknown, esperado: unknown) {
@@ -34,5 +34,12 @@ igual('fora da coluna', faixaDoLead(colunaDoDia(grade, 1), { id_hubspot: '7' }),
 igual('visita da agenda é compromisso', ehCompromisso(faixaDoLead(colunaDoDia(grade, 1), { id_hubspot: '2' })), true);
 igual('faixa do app não é compromisso', ehCompromisso({ id: 'c-1', origem: 'app' }), false);
 
+
+// PROSPECÇÃO DE RUA (03/11/26): o bloco "__rua" fica fora das faixas de lead, mas o dia o mostra
+const gradeRua = [[], ['c-1', { id: '__rua', hora: '14:00', regiao: ' Centro ', duracao: '2h' }, '__b', { id: '__rua' }], [], [], []];
+igual('a prospecção de rua não vira lead', colunaDoDia(gradeRua, 1).map((f) => f.id), ['c-1']);
+igual('a prospecção de rua aparece no dia, com região aparada', ruaDoDia(gradeRua, 1), [{ hora: '14:00', regiao: 'Centro', duracao: '2h' }, { hora: null, regiao: null, duracao: null }]);
+igual('dia sem bloco de rua: nenhum', ruaDoDia(gradeRua, 0), []);
+igual('grade torta não quebra', ruaDoDia(null, 1), []);
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\ntodos passaram');

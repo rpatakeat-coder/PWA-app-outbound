@@ -879,6 +879,20 @@ export default function AgendaNovoScreen({
   const outro = dia !== hoje;
   const listaOutro = outro ? paradasDoDia(dia) : [];
   const plOutro = outro ? semana.data?.get(dia) : undefined;
+  /* PROSPECÇÃO DE RUA (Julyan, 03/11/26): o bloco que ele pôs no Planejamento não é parada (não tem nome nem
+     endereço ainda), e o app não mostrava nada. Agora aparece no dia, com o caminho para o + do mapa, onde o
+     lugar novo vira conta da carteira dele. */
+  const ruaDoDiaVisto = semana.data?.get(dia)?.rua ?? [];
+  const blocoRua = ruaDoDiaVisto.length ? (
+    <View style={{ gap: 8 }}>
+      {ruaDoDiaVisto.map((r, i) => (
+        <Aviso key={i} nivel="info"
+          titulo={['Prospecção de rua', r.regiao ?? 'região livre', r.hora, r.duracao].filter(Boolean).join(' · ')}
+          texto="Bater porta onde ainda não tem conta sua. Cada lugar novo que você cadastrar no + do mapa vira conta da sua carteira."
+          acoes={aoMapaDoDia ? [{ rotulo: 'Abrir o mapa', principal: true, onPress: aoMapaDoDia }] : []} />
+      ))}
+    </View>
+  ) : null;
 
   return (
     <ScrollView ref={rolador} style={s.tela} contentContainerStyle={[s.conteudo, largo && { paddingHorizontal: 0 }]}
@@ -908,7 +922,8 @@ export default function AgendaNovoScreen({
         ) : (
           <>
             {momento !== 'noite' && heroi}
-            {semRota && !leituraFalhou && (
+            {blocoRua}
+            {semRota && !leituraFalhou && !ruaDoDiaVisto.length && (
               <Aviso nivel="atencao" titulo="Hoje ainda não tem paradas"
                 texto="Organizar o dia monta a rota com os quentes primeiro, a partir de onde você está."
                 acoes={[
@@ -937,7 +952,8 @@ export default function AgendaNovoScreen({
             <Text style={s.subLinha}>{[plOutro?.proposito ? PROPOSITOS[plOutro.proposito] ?? plOutro.proposito : null, listaOutro.length ? `${listaOutro.length} ${listaOutro.length === 1 ? 'parada' : 'paradas'}` : null].filter(Boolean).join(' · ') || 'Nada no plano deste dia'}</Text>
           </View>
           {blocoParaFechar}
-          {listaOutro.length === 0 && (
+          {blocoRua}
+          {listaOutro.length === 0 && !ruaDoDiaVisto.length && (
             <Aviso nivel="atencao" titulo="Este dia ainda não tem paradas" texto={'O plano se monta no mapa (toque no pino e "Marcar o próximo passo") ou no Planejamento do Cockpit.'} />
           )}
           {(listaOutro.length > 0 || temTarefaNaLista) && listaDoDia(listaOutro.length ? `Paradas · ${listaOutro.length}` : 'Tarefas do dia', listaOutro.map((p, i) => ({ p, hora: horaDe(p, dia) ? horaBRT(p.planned_at!) : null, numero: i + 1 })), dia, false)}

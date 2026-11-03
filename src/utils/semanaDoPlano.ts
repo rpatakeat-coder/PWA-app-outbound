@@ -3,11 +3,11 @@
 // que o Planejamento do Cockpit grava. Só leitura: a RLS já deixa o dono ler o próprio plano
 // (planos_semanais_select_por_owner); quem grava continua sendo o Cockpit e o espelho da rota.
 import { supabase } from '../integrations/supabase/client';
-import { colunaDoDia, semanaDoDia, type FaixaDoPlano } from './planoNoMapa';
+import { colunaDoDia, ruaDoDia, semanaDoDia, type BlocoDeRua, type FaixaDoPlano } from './planoNoMapa';
 
 /** Os propósitos que o Planejamento grava em cada faixa (`p`). */
 export const PROPOSITOS: Record<string, string> = {
-  rua: 'Rua', cobrar: 'Cobrar', relac: 'Relacionamento', follow: 'Follow-up', nova: 'Conta nova', funil: 'Funil',
+  rua: 'Prospecção de rua', cobrar: 'Cobrar', relac: 'Relacionamento', follow: 'Follow-up', nova: 'Conta nova', funil: 'Funil',
 };
 
 export type DiaDoPlano = {
@@ -17,6 +17,8 @@ export type DiaDoPlano = {
   proposito: string | null;
   /** Quantas faixas têm hora marcada (o resto é "sem hora"). */
   comHora: number;
+  /** Os blocos de Prospecção de rua do dia (sair e bater porta; viram conta nova no + do mapa). */
+  rua: BlocoDeRua[];
 };
 
 const somaDias = (iso: string, n: number) => {
@@ -34,7 +36,7 @@ export function resumoDaSemana(grade: unknown, segunda: string): DiaDoPlano[] {
     let proposito: string | null = null;
     let max = 0;
     for (const [p, n] of conta) if (n > max) { proposito = p; max = n; }
-    return { iso: somaDias(segunda, i), faixas, proposito, comHora: faixas.filter((f) => !!f.hora).length };
+    return { iso: somaDias(segunda, i), faixas, proposito, comHora: faixas.filter((f) => !!f.hora).length, rua: ruaDoDia(grade, i) };
   });
 }
 
