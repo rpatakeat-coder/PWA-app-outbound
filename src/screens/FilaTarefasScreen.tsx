@@ -634,6 +634,10 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
   const passoVencidoN = contaSemPasso.vencido;
   const nuncaMarcadoN = contaSemPasso.nunca;
   const semPassoTotal = contaSemPasso.total;
+  /* ONDE ESTÃO OS VENCIDOS (auditoria 03/11/26): a legenda dizia "4 com passo vencido (em Atrasados)" com
+     o bloco Atrasados mostrando 2 — os outros 2 estavam no recolhido "Atrasados antigos". O texto aponta
+     para os dois lugares quando há antigos. */
+  const ondeVencidos = atrasadosAntigos.length ? 'em Atrasados e em Atrasados antigos' : 'em Atrasados';
   // o cartão aberto, destacado ou que veio do push/Agenda nunca fica atrás do "Mostrar mais"
   const alvoSemPasso = semPassoLista.findIndex((i) => i.dealId === veioDe?.deal || i.dealId === aberto || i.dealId === selecionado);
   const limiteSemPasso = Math.max(mostrarMais.semPasso ?? 5, alvoSemPasso + 1);
@@ -933,7 +937,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
         </View>
         <View style={{ gap: 10 }}>
           <CabecalhoDeBloco numero={3} titulo="Sem próximo passo" n={semPassoTotal}
-            legenda={semPassoTotal ? `${passoVencidoN} com passo vencido (em Atrasados) + ${nuncaMarcadoN} nunca ${nuncaMarcadoN === 1 ? 'marcado' : 'marcados'} · cada um precisa de um passo datado, ou do Sem interesse com o motivo · a meta é zero` : 'a meta é zero'} alerta />
+            legenda={semPassoTotal ? `${passoVencidoN} com passo vencido (${ondeVencidos}) + ${nuncaMarcadoN} nunca ${nuncaMarcadoN === 1 ? 'marcado' : 'marcados'} · cada um precisa de um passo datado, ou do Sem interesse com o motivo · a meta é zero` : 'a meta é zero'} alerta />
           {semPassoLista.length ? (
             <>
               {/* 5 por vez: a lista inteira empurrava o resto da Hoje para longe */}
@@ -944,7 +948,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
                 </Pressable>
               )}
             </>
-          ) : <BlocoVazio texto={semPassoTotal ? `os ${passoVencidoN} estão em Atrasados: remarque com o cliente` : 'zero · meta batida'} />}
+          ) : <BlocoVazio texto={semPassoTotal ? `os ${passoVencidoN} estão ${ondeVencidos}: remarque com o cliente` : 'zero · meta batida'} />}
         </View>
         <LinhaDeFim zerada={false} />
         {atrasadosAntigos.length > 0 && (
