@@ -3089,7 +3089,11 @@ function MainApp() {
     const LIMITE_PINOS_INTEIROS = 40;
     if (!zoomRua && !afastado && !(ehAgendaPC && planejarDia) && lente !== 'calor' && foco.length > LIMITE_PINOS_INTEIROS) {
       const fica = (it: (typeof visiveisMapaNovo)[number]) => sempreIds.has(it.c.id) || it.p.etiqueta?.texto === 'cobrar'
-        || (it.p.dono === 'meu' && it.p.temp === 'Q') || (lente === 'novos' && it.p.familia === 'rec');
+        || (it.p.dono === 'meu' && it.p.temp === 'Q') || (lente === 'novos' && it.p.familia === 'rec')
+        /* EX-CLIENTES NA LENTE DELES (Julyan, 03/11/26: "os pontinhos rosas, que são ex-clientes,
+           precisam aparecer"). Com mais de 40 na área, todos viravam ponto: a lista dizia "0 pinos,
+           +74 fora da lente" e o mapa só tinha bolinhas. Na lente Ex-clientes, eles são a lente. */
+        || (lente === 'rec' && it.p.familia === 'ex');
       const sai = foco.filter((it) => !fica(it));
       const ficam = foco.filter(fica);
       foco.length = 0;
