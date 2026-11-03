@@ -603,7 +603,7 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={s.nestaAreaTexto} numberOfLines={1}>{lenteRecem ? 'MAIS NOVOS PERTO' : `Nesta área · ${itens.length} ${itens.length === 1 ? 'pino' : 'pinos'}`}</Text>
             <Text style={s.nestaAreaSub}>{totalNaArea > itens.length
-              ? `Lente ${rotuloLente} · ${totalNaArea - itens.length} viram ponto: aproxime para ver`
+              ? `Lente ${rotuloLente} · +${totalNaArea - itens.length} fora da lente, como ponto`
               : `Lente ${rotuloLente}`}</Text>
           </View>
           {aoPlanejar && (

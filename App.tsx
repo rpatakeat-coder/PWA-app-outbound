@@ -4453,6 +4453,8 @@ function MainApp() {
 
   // Modo de criação manual via mapa: pin fixo no centro da tela
   const [creationMode, setCreationMode] = useState(false);
+  // a legenda das cores no computador: fechada, um botão "Legenda" (03/11/26: a barra fixa no pé do mapa pesava)
+  const [legendaAberta, setLegendaAberta] = useState(false);
   const [creationCenter, setCreationCenter] = useState<{ latitude: number; longitude: number } | null>(null);
   // Dimensoes/posicao do MapView na tela (via onLayout). O pin fixo de criacao
   // precisa ficar no centro do MAPA, nao da tela — como ha searchBar/filterBar
@@ -7340,8 +7342,18 @@ function MainApp() {
           mais a bandeirinha de emoji explicando), a legenda passa a ser
           necessaria pra decifrar o mapa. Fica fora do modo de criacao.
           Some enquanto o mapa de calor está ligado (a legenda dele assume). */}
-      {!creationMode && !heatOn && layout.ehLargo && (
-        <View style={[styles.tempLegend, { bottom: baseInferior }, layout.ehLargo && styles.tempLegendaWeb]} pointerEvents="none">
+      {/* O MAPA ENXUTO (Julyan, 03/11/26: "ainda tem muita barra"): a legenda ficava aberta o tempo todo no pé do
+          mapa, uma faixa de largura inteira repetindo as cores que as lentes já mostram. Agora é um botão "Legenda";
+          aberta, um toque nela fecha. */}
+      {!creationMode && !heatOn && layout.ehLargo && !legendaAberta && (
+        <Pressable accessibilityRole="button" accessibilityLabel="Mostrar a legenda das cores" onPress={() => setLegendaAberta(true)}
+          style={[styles.legendaBotao, { bottom: baseInferior + 16 }]}>
+          <View style={{ flexDirection: 'row', gap: 3 }}>{[COR_DO_PINO.Q, COR_DO_PINO.rec, COR_DO_PINO.cliente].map((c) => <View key={c} style={[styles.tempLegendDot, { backgroundColor: c }]} />)}</View>
+          <Text style={styles.tempLegendLabel}>Legenda</Text>
+        </Pressable>
+      )}
+      {!creationMode && !heatOn && layout.ehLargo && legendaAberta && (
+        <Pressable accessibilityRole="button" accessibilityLabel="Fechar a legenda" onPress={() => setLegendaAberta(false)} style={[styles.tempLegend, { bottom: baseInferior }, layout.ehLargo && styles.tempLegendaWeb]}>
           {/* A3 (handoff v6): no mapa novo a legenda é a do disco (pinoP2) — a antiga dizia
               "Fechado" para o verde, que agora é Cliente, e não tinha Ex-cliente nem Sem dono. */}
           {(([
@@ -7363,7 +7375,8 @@ function MainApp() {
               <Text style={styles.tempLegendLabel} numberOfLines={1}>{item.l}</Text>
             </View>
           ))}
-        </View>
+          <Text style={[styles.tempLegendLabel, { opacity: 0.7 }]}>· fechar</Text>
+        </Pressable>
       )}
 
       {/* Map buttons. Recenter e FAB somem enquanto o calor está ligado
@@ -7878,12 +7891,14 @@ function MainApp() {
           aoVerLista={() => { setEstagioLista('peek'); setListaAberta(true); }}
           naLista={linhasDaLista.length}
           contagens={comFiltro ? undefined : contagensDasLentes}
+          /* esconder também daqui, onde a mão já está (05/10/26: "tenho que esconder painel ali também"); na linha das ações */
+          extra={(
+            <Pressable accessibilityRole="button" accessibilityLabel="Esconder o painel e ampliar o mapa" onPress={alternarPainel} style={[styles.pmnLente, { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, borderRadius: 22 }]}>
+              <IconChevronLeft width={14} height={14} fill={iconColors.muted} />
+              <Text style={styles.pmnLenteTexto}>Esconder</Text>
+            </Pressable>
+          )}
         />
-        {/* esconder também daqui, onde a mão já está (05/10/26: "tenho que esconder painel ali também") */}
-        <Pressable accessibilityRole="button" accessibilityLabel="Esconder o painel e ampliar o mapa" onPress={alternarPainel} style={[styles.pmnLente, { flexDirection: 'row', alignItems: 'center', gap: 4 }]}>
-          <IconChevronLeft width={14} height={14} fill={iconColors.muted} />
-          <Text style={styles.pmnLenteTexto}>Esconder</Text>
-        </Pressable>
       </View>
       {planejarDia ? (
         <BarraPlanejar
@@ -13584,6 +13599,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'var(--surface)',
   },
   tempLegendaLinhaWeb: { width: 'auto' },
+  legendaBotao: {
+    position: 'absolute', left: 16, zIndex: 20, height: 36, paddingHorizontal: 12, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)',
+  },
   // Controle do mapa (recentrar) no topo direito, 40x40 raio 8
   mapaControleWeb: {
     width: 40,

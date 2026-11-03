@@ -47,6 +47,8 @@ type Props = {
   top?: number;
   /** Quanto descer as pílulas, para caber a linha do dia entre elas e a fileira. */
   desloc?: number;
+  /** Computador: o que mais entra na linha das ações (o "Esconder" do painel). */
+  extra?: React.ReactNode;
 };
 
 /** O desenho de "lista": três linhas com marcador. Feito aqui com Views, como o ≡ do Filtros. */
@@ -75,7 +77,7 @@ function Contador({ c, ativa }: { c: NonNullable<Props['contador']>; ativa: bool
   );
 }
 
-export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, aoFiltros, filtrosAtivos = 0, lenteNosFiltros = false, aoLimparFiltros, aoVerLista, naLista = 0, contagens, largo = false, top, desloc = 0 }: Props) {
+export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, aoFiltros, filtrosAtivos = 0, lenteNosFiltros = false, aoLimparFiltros, aoVerLista, naLista = 0, contagens, largo = false, top, desloc = 0, extra }: Props) {
   const limpar = filtrosAtivos > 0 && aoLimparFiltros ? (
     <Pressable accessibilityRole="button" accessibilityLabel={`${filtrosAtivos} ${filtrosAtivos === 1 ? 'filtro ligado' : 'filtros ligados'}. Limpar`}
       onPress={aoLimparFiltros} style={[s.limpar, largo && s.limparLargo]}>
@@ -129,10 +131,16 @@ export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, a
       </Pressable>
     );
   });
+  /* O PAINEL DO COMPUTADOR ENXUTO (Julyan, 03/11/26: "ainda tem muita barra"): as 9 lentes quebravam em 5 linhas
+     e empurravam a próxima porta para baixo. Agora são UMA linha que rola de lado (o mesmo gesto do celular, o
+     que ele pediu em 15/10: "arrastando e escolhendo horizontalmente"), e embaixo uma linha só de ações. */
   if (largo) {
     return (
+      <View style={s.largoCol}>
+        <ScrollView ref={rolaRef} horizontal showsHorizontalScrollIndicator={false} style={s.rola} contentContainerStyle={s.rolaLarga} keyboardShouldPersistTaps="handled">
+          {botoes}
+        </ScrollView>
       <View style={s.largo}>
-        {botoes}
         {aoFiltros && (
           <Pressable accessibilityRole="button" onPress={aoFiltros} style={[s.lente, s.lenteLarga]}>
             <Text style={[s.lenteTexto, s.lenteTextoLargo]}>{filtrosAtivos ? `Filtros · ${filtrosAtivos}` : 'Filtros'}</Text>
@@ -140,6 +148,8 @@ export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, a
         )}
         {limpar}
         {lista}
+        {extra}
+      </View>
       </View>
     );
   }
@@ -170,6 +180,8 @@ const s = StyleSheet.create({
   rola: { flex: 1, minWidth: 0, maskImage: 'linear-gradient(to right, #000 86%, transparent)', WebkitMaskImage: 'linear-gradient(to right, #000 86%, transparent)' } as never,
   rolaConteudo: { gap: 8, paddingLeft: 12, paddingRight: 8, alignItems: 'center' },
   largo: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, width: '100%' },
+  largoCol: { width: '100%', gap: 8 },
+  rolaLarga: { gap: 6, paddingRight: 24, alignItems: 'center' },
   lente: {
     height: 44, paddingHorizontal: 14, borderRadius: 22, flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0,
     backgroundColor: 'var(--pilula-mapa)', borderWidth: 1, borderColor: 'var(--border)',
