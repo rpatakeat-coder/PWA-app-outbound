@@ -9,6 +9,7 @@ import React, { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { COR_LENTE } from './FolhaLentes';
+import { useArrastarParaRolar } from '../hooks/useArrastarParaRolar';
 
 import type { EstiloMeta } from '../utils/armasDoMapa';
 import type { Lente } from '../utils/lentes';
@@ -106,6 +107,8 @@ export default function FileiraDeLentes({ lentes, atual, aoEscolher, contador, a
      sua cor; a escolhida rola para a vista. */
   const rolaRef = useRef<ScrollView>(null);
   const xDe = useRef(new Map<Lente, number>());
+  // no computador, o mouse arrasta a fileira (03/11/26)
+  useArrastarParaRolar(rolaRef, largo);
   useEffect(() => {
     const x = xDe.current.get(atual);
     if (x != null) rolaRef.current?.scrollTo({ x: Math.max(0, x - 48), animated: true });
