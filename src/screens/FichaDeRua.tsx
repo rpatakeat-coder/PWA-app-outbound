@@ -630,7 +630,10 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   );
   /* um campo: fato quando já se sabe (e não está corrigindo), editor quando falta */
   const campoDe = (campo: Campo, rotulo: string, valor: string, origem: string, editor: React.ReactNode, extraFato?: React.ReactNode) => (
-    valor && !corrigindo[campo] && !(campo === 'sistema' && (f.sistema || outroSistema)) && !(campo === 'dor' && (f.dor || f.dorOutra != null))
+    /* A LETRA QUE PULAVA (Julyan, 03/11/26: 'quando colocam o nome do dono, a letra já pula pra outra tela'): o campo
+       virava fato assim que o valor deixava de ser vazio — a 1ª letra digitada em Quem decide (e o 1º número do
+       Celular) desmontava o campo no meio da digitação. Digitado, o campo continua editor, como sistema e dor. */
+    valor && !corrigindo[campo] && !(campo === 'decisor' && f.decisor) && !(campo === 'celular' && f.telefone) && !(campo === 'sistema' && (f.sistema || outroSistema)) && !(campo === 'dor' && (f.dor || f.dorOutra != null))
       ? fato(campo, rotulo, campo === 'sistema' ? nomeDoSistema(valor) : valor, origem, extraFato)
       : (
         <View key={campo} style={{ gap: 8 }}>
