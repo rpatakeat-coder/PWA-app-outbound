@@ -12855,7 +12855,7 @@ function AvisoDeComunicado() {
       restantes={cobrancas.naoVistas.length - 1}
       aoConfirmar={(id) => cobrancas.confirmar(id)}
       etiqueta="Cobrança do gestor"
-      rodape="Também fica no sino, para você reler."
+      rodape="Ao tocar em “Entendi”, seu gestor vê que você leu. Também fica no sino, para você reler."
     />
   );
 }

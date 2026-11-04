@@ -183,8 +183,10 @@ function montarAviso(momento: string, f: { itens: Item[]; hoje: string }, combin
 /* O RECADO DO GESTOR VIRA PUSH (Julyan, 19/10/26: "isso tinha que ir pra notificação via push
    tbm"). Tudo o que o cockpit manda ao executivo (o Cobrar, os avisos) é uma linha em
    sugestoes_planos, que o app mostra na tela inicial; o gatilho 0219 chama esta op a cada linha
-   nova. Não conta no limite de 4 avisos da fila (é o gestor falando) e sai a qualquer hora, mas entra
-   no teto único do dia (TETO_DIA, 02/11/26): passado o teto, o recado fica só na tela inicial. */
+   nova. Não conta no limite de 4 avisos da fila (é o gestor falando) e sai a qualquer hora.
+   FORA DO TETO DO DIA (Julyan, 04/11/26: "quero que apareça lá, que ele veja"): entrava no TETO_DIA
+   (6) junto com os avisos do robô, que já mandam ~4 por pessoa; cobrar no fim da tarde não tocava o
+   celular. Continua gravando em push_enviados (conta para o teto dos OUTROS avisos e não repete). */
 async function recado(svc: ReturnType<typeof createClient>, id: string) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return { ok: false, pulou: 'id inválido' };
   const { data: linha } = await svc.from('sugestoes_planos').select('id, owner_id, texto, autor').eq('id', id).maybeSingle();
@@ -206,13 +208,10 @@ async function recado(svc: ReturnType<typeof createClient>, id: string) {
   const hoje = hojeBRT();
   let entregues = 0;
   const pulados: Array<{ uid: string; pulou: string }> = [];
-  // o recado entra no teto único do dia e grava em push_enviados (a reserva também impede o mesmo recado duas vezes)
+  // o recado grava em push_enviados (a reserva impede o mesmo recado duas vezes) e não respeita o teto do dia
   for (const uid of uids) {
     const meus = (ins as Inscricao[]).filter((a) => String(a.user_id) === String(uid));
     if (!meus.length) continue;
-    const env = await enviadosHoje(svc, uid, hoje);
-    if (!env) { pulados.push({ uid, pulou: 'push_enviados não lido' }); continue; }
-    if (env.total >= TETO_DIA) { pulados.push({ uid, pulou: `já recebeu ${TETO_DIA} hoje (o recado segue na tela inicial)` }); continue; }
     const { error: reservou } = await svc.from('push_enviados').insert({ user_id: uid, dia: hoje, tipo: 'recado', ref: String(linha.id) });
     if (reservou) { pulados.push({ uid, pulou: 'já mandado' }); continue; }
     for (const a of meus) if (await enviar(svc, a, aviso, k)) entregues++;
