@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@c67f85b9.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@7ede8ad2.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "c67f85b9";
+  var VERSAO = "7ede8ad2";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -29298,6 +29298,8 @@ async function pl6Carregar(rep, segundaPedida) {
 }
 
 let PL6_SEM_PINO = null;
+
+let PL6_DO_APP = new Map();
 async function pl6CarregarPinos() {
   PL6_SEM_PINO = null;
   const g = pl6Plano && Array.isArray(pl6Plano.grade) ? pl6Plano.grade : null;
@@ -29314,9 +29316,16 @@ async function pl6CarregarPinos() {
   try {
     const comPino = new Set();
     if (deals.length) {
-      const r = await supa.from('clients').select('id_hubspot').in('id_hubspot', deals.slice(0, 300));
+      const r = await supa.from('clients').select('id_hubspot, empresa, nome, bairro, latitude, longitude').in('id_hubspot', deals.slice(0, 300));
       if (r.error) throw r.error;
-      (r.data || []).forEach(function (c) { comPino.add('c-' + c.id_hubspot); comPino.add('r-' + c.id_hubspot); });
+      const doApp = new Map();
+      (r.data || []).forEach(function (c) {
+        comPino.add('c-' + c.id_hubspot); comPino.add('r-' + c.id_hubspot);
+        const x = { nome: String(c.empresa || c.nome || 'conta'), regiao: c.bairro ? String(c.bairro) : null,
+          lat: c.latitude == null ? null : Number(c.latitude), lng: c.longitude == null ? null : Number(c.longitude) };
+        doApp.set('c-' + c.id_hubspot, x); doApp.set('r-' + c.id_hubspot, x);
+      });
+      PL6_DO_APP = doApp;
     }
     if (leads.length) {
       const r1 = await supa.from('clients').select('lead_prospeccao_id').in('lead_prospeccao_id', leads.slice(0, 300));
@@ -70969,7 +70978,11 @@ PLV3.dados = function (rep) {
 
   const naGradeFutura = {}, naGrade = {};
   const cartoes = dias.map(function (d, i) {
-    const todosItens = pl6ItensDoDia(grade[i], porId);
+    const todosItens = pl6ItensDoDia(grade[i], porId).map(function (it) {
+
+      const x = it.tipo === 'orfa' && it.id && PL6_DO_APP ? PL6_DO_APP.get(String(it.id)) : null;
+      return x ? Object.assign({}, it, { tipo: 'visita', lead: { id: it.id, tipo: 'app', nome: x.nome, regiao: x.regiao, lat: x.lat, lng: x.lng } }) : it;
+    });
     const itens = todosItens.filter(function (it) { return it.tipo === 'visita' || it.tipo === 'rua'; });
 
     const outros = todosItens.filter(function (it) { return it.tipo === 'bloqueado' || it.tipo === 'rel'; }).map(function (it) {
