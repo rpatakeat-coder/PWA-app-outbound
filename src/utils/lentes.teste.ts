@@ -57,6 +57,9 @@ ok(novoComNegocio.familia === 'lead' && novoComNegocio.temp === novoQuente.temp,
 ok(V('dia', meuQuente) && V('dia', meuFrio), 'Meu dia: meus leads com negócio, de toda temperatura');
 ok(!V('dia', meuPerdido), 'Meu dia: negócio perdido não decide a próxima porta');
 ok(!V('dia', colegaQuente), 'Meu dia: pino de colega não aparece');
+/* 04/11/26: o gestor (verTodos) vê os leads do time no Meu dia e na Carteira; o executivo continua sem */
+ok(V('dia', colegaQuente, true) && V('carteira', colegaQuente, true), 'gestor: lead do time aparece no Meu dia e na Carteira');
+ok(!V('carteira', colegaQuente) && !V('dia', meuPerdido, true), 'executivo: Carteira só com os meus; perdido segue fora até para o gestor');
 // 15/10/26 (Julyan: "tirar tudo ficou meio ruim"): o cliente ativo volta ao Meu dia; o ex-cliente segue na Reconquista
 /* EX-CLIENTE SÓ COM MOTIVO DE SAÍDA (Julyan, 29/10). São 2.861 com pino e 2.029 com motivo; o
    motivo é o que separa reconquista de lista morta, porque a fala é "o que resolvemos sobre

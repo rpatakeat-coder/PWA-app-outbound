@@ -62,7 +62,11 @@ export function visivelNaLente(lente: Lente, p: Pino, noPlano: boolean, aberto: 
      colega: é o que está na mesa para quem chegar ("pode assumir: É meu"), e escondê-lo da lente
      que o executivo abre de manhã é esconder a prospecção dele. Colega segue fora, nas lentes
      próprias — território é território. */
-  const meuOuLivre = meu || p.dono === 'sem';
+  /* O GESTOR VÊ O TIME (Julyan, 04/11/26, no mapa de Vitória: "esses leads na área no app não aparecem").
+     Quem não tem carteira (gestor e visualizador, `verTodos`) via só os sem dono no Meu dia e nada na
+     Carteira: os leads do time inteiro na área ficavam escondidos dele, e o filtro "De colega" era o
+     único caminho. Para o executivo nada muda: colega continua fora. */
+  const meuOuLivre = meu || p.dono === 'sem' || (verTodos && p.dono === 'colega');
   if (lente === 'dia') {
     /* RECICLAGEM VOLTA AO MAPA (Julyan, 29/10: "no mapa preciso dos leads tbm da casa dos dados
        que pararam"). Reciclagem é exatamente "parou": foi trabalhado e esfriou. Eram invisíveis na
@@ -83,7 +87,7 @@ export function visivelNaLente(lente: Lente, p: Pino, noPlano: boolean, aberto: 
   if (p.familia === 'alvo') return false;
   switch (lente) {
     case 'novos': return p.familia === 'rec' && (meu || verTodos);
-    case 'carteira': return meu && p.familia === 'lead';
+    case 'carteira': return (meu || (verTodos && p.dono === 'colega')) && p.familia === 'lead';
     case 'alvo': return p.familia === 'av';
     case 'clientes': return p.familia === 'cli';
     case 'queda': return p.familia === 'cli' && !!p.queda;
