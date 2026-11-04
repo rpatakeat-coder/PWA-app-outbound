@@ -2971,13 +2971,19 @@ function MainApp() {
      pede, em qualquer lente (cliente no Meu dia inclusive); sem filtro, vale a regra da lente. A
      conta-alvo entra discreta (15/10/26), o plano e o pino aberto continuam sempre. */
   const comFiltro = quantosFiltros(filtrosNovos) > 0;
+  /* EX-CLIENTE CLICÁVEL DE PERTO (Julyan, 03/11/26: "os pins de ex-clientes ficam sem clique, mesmo
+     aproximando"). Fora da lente deles eram só o ponto rosa do canvas, sem toque em zoom nenhum. No zoom
+     de rua (o mesmo 0,025 de ZOOM_RUA_LAT_DELTA, declarado mais abaixo) eles viram pino de verdade em
+     qualquer lente; do bairro para cima seguem o ponto discreto. */
+  const exComoPino = !!mapRegion && mapRegion.latitudeDelta <= 0.025;
   const visiveisMapaNovo = useMemo(
     () => itensMapaNovo.filter(({ c, p, plano }) => {
       if (referenciasNaTela?.has(c.id) || plano != null || c.id === selectedClient?.id) return true;
       if (comFiltro) return lente !== 'calor' && passaNosFiltros(c, p, filtrosNovos);
+      if (exComoPino && lente !== 'calor' && p.familia === 'ex') return true;
       return visivelNaLente(lente, p, false, false, verTodosNoMapa);
     }),
-    [itensMapaNovo, filtrosNovos, comFiltro, lente, selectedClient?.id, verTodosNoMapa, referenciasNaTela],
+    [itensMapaNovo, filtrosNovos, comFiltro, lente, selectedClient?.id, verTodosNoMapa, referenciasNaTela, exComoPino],
   );
   /* A LISTA DO MAPA (Julyan, 27/10/26: "não aparecer só no mapa e virar lista também, com a
      distância e etc, ou bairro"). Sai do MESMO recorte que o mapa desenha: se divergir, a lista
