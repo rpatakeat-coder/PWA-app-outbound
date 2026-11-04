@@ -234,7 +234,8 @@ export function RecolhidosDoHoje({ itens, aberto, aoEscolher, children }: {
           <Pressable key={r.chave} accessibilityRole="button" accessibilityState={{ expanded: aberto === r.chave }} onPress={() => aoEscolher(r.chave)}
             style={[st.recolhido, aberto === r.chave && { backgroundColor: C.sub, borderColor: C.ink3 }]}>
             <Text style={st.recN}>{r.n}</Text>
-            <Text style={st.recT} numberOfLines={1}>{r.rotulo}</Text>
+            {/* 2 linhas: a 390 "Com o gestor" não cabe ao lado do número e cortava em "Com o gest…" (produção, 04/11) */}
+            <Text style={st.recT} numberOfLines={2}>{r.rotulo}</Text>
           </Pressable>
         ))}
       </View>
@@ -294,5 +295,5 @@ const st = StyleSheet.create({
   acaoT: { fontSize: 13, fontWeight: '700', color: C.ink },
   recolhido: { flex: 1, minWidth: 0, height: 42, borderRadius: 12, borderWidth: 1, borderColor: C.line, backgroundColor: C.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 6 },
   recN: { fontSize: 15, fontWeight: '900', color: C.ink },
-  recT: { fontSize: 12, fontWeight: '700', color: C.ink2, flexShrink: 1 },
+  recT: { fontSize: 12, lineHeight: 14, fontWeight: '700', color: C.ink2, flexShrink: 1 },
 });

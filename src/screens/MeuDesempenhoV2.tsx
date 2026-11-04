@@ -428,7 +428,7 @@ export function MeuDesempenhoV2Screen({ enabled, linhas = [], origem = 'menu', r
   const comProva = hoje?.comProva ?? null;
   const grade = [
     { k: 'HOJE', v: comProva == null ? '—' : `${comProva} de ${hoje?.meta ?? 6}`, s: `portas com prova · demo ${hoje?.demos == null ? '—' : hoje.demos} de 1`, cor: 'var(--text)', aoTocar: () => aoAbrirHoje?.() },
-    { k: 'SEMANA', v: LS.pts, s: `${LS.pos} · disputa dos R$ 250`, cor: LS.lider ? 'var(--tint-amber-text)' : 'var(--text)', aoTocar: () => setSemanaAberta(true) },
+    { k: 'SEMANA', v: LS.pts, s: LS.fora ? 'o placar não respondeu' : LS.pos === 'rampa' ? 'na rampa · você contra você' : LS.pos === '—' ? 'fora da disputa dos R$ 250' : `${LS.pos} · disputa dos R$ 250`, cor: LS.lider ? 'var(--tint-amber-text)' : 'var(--text)', aoTocar: () => setSemanaAberta(true) },
     { k: 'MÊS', v: TV.mes.v, s: TV.mes.s, cor: 'var(--text)', aoTocar: () => setMesAberto((v) => !v) },
     { k: 'PRÓXIMA VENDA', v: TV.proxima.v, s: TV.proxima.s, cor: 'var(--ok-texto)', aoTocar: () => setMesAberto((v) => !v) },
   ];
@@ -438,7 +438,8 @@ export function MeuDesempenhoV2Screen({ enabled, linhas = [], origem = 'menu', r
         <Pressable key={g.k} accessibilityRole="button" accessibilityLabel={`${g.k}: ${g.v}, ${g.s}`} onPress={g.aoTocar} style={st.tile}>
           <Text style={[st.kicker, { color: 'var(--text-muted)' }]}>{g.k}</Text>
           <Text style={[st.tileV, { color: g.cor }]} numberOfLines={1}>{g.v}</Text>
-          <Text style={st.nota} numberOfLines={1}>{g.s}</Text>
+          {/* 2 linhas: "portas com prova · demo 0 de 1" cortava a demo a 390 (produção, 04/11) */}
+          <Text style={st.nota} numberOfLines={2}>{g.s}</Text>
         </Pressable>
       ))}
     </View>
