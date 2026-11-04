@@ -61,9 +61,9 @@ export const CHAVE_V1 = 'meu-desempenho-v1';
 export function querV1(): boolean {
   try { return typeof localStorage !== 'undefined' && localStorage.getItem(CHAVE_V1) === '1'; } catch { return false; }
 }
-export function MeuDesempenhoScreen(props: Props & { origem?: OrigemAbertura; rolarColecao?: number; aoFazerQuiz?: () => void }) {
+export function MeuDesempenhoScreen(props: Props & { origem?: OrigemAbertura; rolarColecao?: number; aoFazerQuiz?: () => void } & Pick<React.ComponentProps<typeof MeuDesempenhoV2Screen>, 'hoje' | 'perfil' | 'aoAbrirHoje'>) {
   if (querV1()) return <MeuDesempenhoV1 enabled={props.enabled} linhas={props.linhas} />;
-  return <MeuDesempenhoV2Screen enabled={props.enabled} linhas={props.linhas} origem={props.origem} rolarColecao={props.rolarColecao} aoFazerQuiz={props.aoFazerQuiz} />;
+  return <MeuDesempenhoV2Screen enabled={props.enabled} linhas={props.linhas} origem={props.origem} rolarColecao={props.rolarColecao} aoFazerQuiz={props.aoFazerQuiz} hoje={props.hoje} perfil={props.perfil} aoAbrirHoje={props.aoAbrirHoje} />;
 }
 
 function MeuDesempenhoV1({ enabled, linhas = [] }: Props) {

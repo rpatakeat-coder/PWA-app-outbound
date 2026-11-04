@@ -18,7 +18,7 @@ const T = {
 
 // ---- a fileira de dias (P1 · 2.1) ------------------------------------------------------------
 export type DiaDaFileira = { chave: string; rotulo: string; n: number | null; data: string; atrasado?: boolean; hoje?: boolean };
-export function FileiraDeDias({ dias, ativo, aoEscolher }: { dias: DiaDaFileira[]; ativo: string; aoEscolher: (chave: string) => void }) {
+export function FileiraDeDias({ dias, ativo, aoEscolher, compacta = false }: { dias: DiaDaFileira[]; ativo: string; aoEscolher: (chave: string) => void; compacta?: boolean }) {
   return (
     <View style={st.fileira} accessibilityRole="tablist">
       {dias.map((d) => {
@@ -27,39 +27,19 @@ export function FileiraDeDias({ dias, ativo, aoEscolher }: { dias: DiaDaFileira[
         return (
           <Pressable key={d.chave} accessibilityRole="tab" accessibilityState={{ selected: sel }}
             accessibilityLabel={`${d.rotulo}: ${d.n == null ? 'lendo' : `${d.n} ${d.n === 1 ? 'tarefa' : 'tarefas'}`}${d.atrasado ? ', com atrasado' : ''}`}
-            onPress={() => aoEscolher(d.chave)} style={[st.dia, sel && st.diaSel]}>
+            onPress={() => aoEscolher(d.chave)} style={[st.dia, compacta && st.diaCompacta, sel && st.diaSel]}>
             {d.atrasado && <View style={st.diaPonto} />}
-            <Text style={[st.diaRot, sel && { color: T.invFg }]}>{d.rotulo}</Text>
-            <Text style={[st.diaN, sel && { color: T.invFg }]}>{d.n == null ? '—' : d.n}</Text>
-            <Text style={[st.diaData, sel ? { color: T.invFg, opacity: 0.75 } : zero ? { color: d.hoje ? T.okFg : T.avFg, fontWeight: '600' } : null]}>
-              {zero ? (d.hoje ? 'zerado' : 'livre') : d.data}
-            </Text>
+            {/* a aba Hoje enxuta (04/11/26): 44 px, rótulo e número; a data fica no dia aberto */}
+            <Text style={[st.diaRot, compacta && st.diaRotCompacta, sel && { color: T.invFg }]} numberOfLines={1}>{compacta ? `${d.rotulo.charAt(0)}${d.rotulo.slice(1).toLowerCase()}` : d.rotulo}</Text>
+            <Text style={[st.diaN, compacta && { fontSize: 14 }, sel && { color: T.invFg }]}>{d.n == null ? '—' : d.n}</Text>
+            {!compacta && (
+              <Text style={[st.diaData, sel ? { color: T.invFg, opacity: 0.75 } : zero ? { color: d.hoje ? T.okFg : T.avFg, fontWeight: '600' } : null]}>
+                {zero ? (d.hoje ? 'zerado' : 'livre') : d.data}
+              </Text>
+            )}
           </Pressable>
         );
       })}
-    </View>
-  );
-}
-
-// ---- o placar (P3) ------------------------------------------------------------------------
-function Anel({ fracao, tamanho, traco }: { fracao: number; tamanho: number; traco: number }) {
-  const r = (tamanho - traco) / 2;
-  const c = 2 * Math.PI * r;
-  const f = Math.max(0, Math.min(1, fracao));
-  return React.createElement('svg', { width: tamanho, height: tamanho, viewBox: `0 0 ${tamanho} ${tamanho}`, style: { transform: 'rotate(-90deg)', flexShrink: 0 } },
-    React.createElement('circle', { cx: tamanho / 2, cy: tamanho / 2, r, fill: 'none', stroke: T.line, strokeWidth: traco }),
-    f > 0 ? React.createElement('circle', { cx: tamanho / 2, cy: tamanho / 2, r, fill: 'none', stroke: T.verde, strokeWidth: traco, strokeLinecap: 'round', strokeDasharray: `${c * f} ${c}` }) : null);
-}
-export function PlacarTarefas({ feitas, total, faltam, soAtrasados }: { feitas: number; total: number; faltam: number; soAtrasados: number | null }) {
-  return (
-    <View style={st.placar}>
-      <Anel fracao={total ? feitas / total : 0} tamanho={52} traco={6} />
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Text style={st.placarN}>{`${feitas} de ${total}`}<Text style={st.placarFeitas}> feitas hoje</Text></Text>
-        {soAtrasados != null
-          ? <Text style={[st.placarSub, { color: T.vtx }]}>{`${soAtrasados} ${soAtrasados === 1 ? 'atrasado esperando' : 'atrasados esperando'} · comece pelo bloco 2`}</Text>
-          : <Text style={st.placarSub}>{`faltam ${faltam} · de cima para baixo, termina no bloco 3`}</Text>}
-      </View>
     </View>
   );
 }
@@ -81,15 +61,6 @@ export function CabecalhoDeBloco({ numero, titulo, n, legenda, alerta }: { numer
 }
 export function BlocoVazio({ texto }: { texto: string }) {
   return <View style={st.vazio}><Text style={st.vazioT}>{texto}</Text></View>;
-}
-export function LinhaDeFim({ zerada }: { zerada: boolean }) {
-  return (
-    <View style={st.fim} accessibilityRole="text">
-      <View style={st.fimFio} />
-      <Text style={st.fimT}>{zerada ? 'FILA DE HOJE ZERADA' : 'FIM DA FILA DE HOJE'}</Text>
-      <View style={st.fimFio} />
-    </View>
-  );
 }
 export function Recolhido({ titulo, legenda, n, aberto, aoAlternar, children }: {
   titulo: string; legenda: string; n: number; aberto: boolean; aoAlternar: () => void; children?: React.ReactNode;
@@ -184,24 +155,6 @@ export function CartaoTarefa({ d, children }: { d: DadosCartaoTarefa; children?:
   );
 }
 
-// ---- Hoje zerado (P3) ---------------------------------------------------------------------
-export function HojeZerado({ feitas, zerouAs, nAmanha, aoVerAmanha }: { feitas: number; zerouAs: string | null; nAmanha: number | null; aoVerAmanha: () => void }) {
-  return (
-    <View style={st.zerado}>
-      <View style={{ width: 72, height: 72 }}>
-        <Anel fracao={1} tamanho={72} traco={7} />
-        <View style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center' }]}><IconCheck width={30} height={30} fill={T.okFg} /></View>
-      </View>
-      <Text style={st.zeradoT}>Hoje zerado</Text>
-      <Text style={st.zeradoS}>{`${feitas} de ${feitas}${zerouAs ? ` · zerou às ${zerouAs}` : ''}`}</Text>
-      <Text style={st.zeradoF}>Todo negócio de hoje saiu com o próximo passo datado ou com o motivo do Perdido.</Text>
-      <Pressable accessibilityRole="button" onPress={aoVerAmanha} style={st.zeradoBotao}>
-        <Text style={st.zeradoBotaoT}>{`Ver amanhã${nAmanha != null ? ` · ${nAmanha} ${nAmanha === 1 ? 'tarefa' : 'tarefas'}` : ''}`}</Text>
-      </Pressable>
-    </View>
-  );
-}
-
 // ---- dia sem nada (P1) -------------------------------------------------------------------
 export function DiaLivre({ nomeDia }: { nomeDia: string }) {
   return (
@@ -244,23 +197,18 @@ const st = StyleSheet.create({
   fileira: { flexDirection: 'row', gap: 5 },
   dia: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, minHeight: 58, borderRadius: 12, borderWidth: 1, borderColor: T.line, backgroundColor: T.painel, alignItems: 'center', justifyContent: 'center', paddingVertical: 6, gap: 1, position: 'relative' },
   diaSel: { backgroundColor: T.inv, borderColor: T.inv },
+  diaCompacta: { minHeight: 44, paddingVertical: 3, gap: 0 },
+  diaRotCompacta: { fontSize: 10, letterSpacing: 0 },
   diaPonto: { position: 'absolute', top: 5, right: 5, width: 7, height: 7, borderRadius: 4, backgroundColor: T.acao },
   diaRot: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3, color: T.mute },
   diaN: { fontSize: 16, fontWeight: '800', color: T.fg, fontVariant: ['tabular-nums'] },
   diaData: { fontSize: 10, fontWeight: '500', color: T.mute },
-  placar: { borderRadius: 16, backgroundColor: T.painel, borderWidth: 1, borderColor: T.line, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14 },
-  placarN: { fontSize: 21, fontWeight: '800', lineHeight: 26, color: T.fg },
-  placarFeitas: { fontSize: 13.5, fontWeight: '600', color: T.mute },
-  placarSub: { fontSize: 12, fontWeight: '600', lineHeight: 16, color: T.mute },
   disco: { width: 28, height: 28, borderRadius: 14, backgroundColor: T.inv, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   discoT: { fontSize: 13, fontWeight: '800', color: T.invFg },
   blocoT: { fontSize: 15, fontWeight: '700', lineHeight: 20, color: T.fg },
   blocoL: { fontSize: 11.5, fontWeight: '500', lineHeight: 16, color: T.dim },
   vazio: { minHeight: 44, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: T.okFg, justifyContent: 'center', paddingHorizontal: 12 },
   vazioT: { fontSize: 12.5, fontWeight: '600', color: T.okFg },
-  fim: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
-  fimFio: { flex: 1, height: 1, backgroundColor: T.line },
-  fimT: { fontSize: 11.5, fontWeight: '600', letterSpacing: 0.9, color: T.dim },
   recolhido: { minHeight: 52, borderRadius: 14, borderWidth: 1, borderColor: T.line, backgroundColor: T.painel, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 10 },
   recolhidoT: { fontSize: 14, fontWeight: '700', color: T.fg },
   recolhidoL: { fontSize: 11.5, fontWeight: '500', color: T.dim },
@@ -290,12 +238,6 @@ const st = StyleSheet.create({
   botao: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, minHeight: 44, paddingVertical: 4, paddingHorizontal: 6, borderRadius: 12, backgroundColor: T.chip, borderWidth: 1, borderColor: T.line2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   botaoCheio: { backgroundColor: T.acao, borderColor: T.acao },
   botaoT: { fontSize: 12.5, fontWeight: '700', lineHeight: 15, color: T.fg, textAlign: 'center', flexShrink: 1 },
-  zerado: { borderRadius: 20, backgroundColor: T.okBg, borderWidth: 1.5, borderColor: T.okFg, paddingTop: 20, paddingHorizontal: 18, paddingBottom: 18, alignItems: 'center', gap: 8 },
-  zeradoT: { fontSize: 24, fontWeight: '800', lineHeight: 28, color: T.okFg },
-  zeradoS: { fontSize: 14, fontWeight: '600', color: T.okFg },
-  zeradoF: { fontSize: 12.5, fontWeight: '500', lineHeight: 19, color: T.fg, maxWidth: 300, textAlign: 'center' },
-  zeradoBotao: { alignSelf: 'stretch', minHeight: 48, borderRadius: 14, backgroundColor: T.inv, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
-  zeradoBotaoT: { fontSize: 14, fontWeight: '700', color: T.invFg },
   livre: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: T.line2, padding: 14 },
   livreT: { fontSize: 14, fontWeight: '700', color: T.fg },
   livreS: { fontSize: 12.5, fontWeight: '500', lineHeight: 18, color: T.mute },

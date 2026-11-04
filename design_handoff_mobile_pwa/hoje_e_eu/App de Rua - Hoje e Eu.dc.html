@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800;900&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#E9E5DC;font-family:'DM Sans',system-ui,sans-serif;color:#1D1B17;-webkit-font-smoothing:antialiased}a{color:#B0782A;text-decoration:none}a:hover{color:#E51A31}button{font-family:inherit;cursor:pointer}*{box-sizing:border-box}
+[data-theme="claro"]{--bg:#EFE9DC;--card:#FDFBF0;--sub:#FBF6EC;--chip:#F3EDE0;--line:#E4DBC6;--line2:#F0E9D8;--ink:#1A1613;--ink2:#3D362E;--ink3:#6E6558;--mute:#A2937A;--act:#E51A31;--actH:#C7142A;--red:#C8152B;--redS:#FBEEF0;--amb:#9A6420;--ambS:#FBF1DF;--grn:#1E7A63;--grnS:#E9F4EF;--blue:#2F65A8;--bluS:#EAF0F8;--hero:#1A1613;--heroInk:#FDFBF0;--heroMute:#9C9284;--ovl:rgba(26,22,19,.32);--tab:#FDFBF0}
+[data-theme="escuro"]{--bg:#0F1114;--card:#171A1F;--sub:#1E2228;--chip:#22262D;--line:rgba(255,255,255,.1);--line2:rgba(255,255,255,.06);--ink:#F2F3F5;--ink2:#C9CDD3;--ink3:#A3A8B0;--mute:#7D838C;--act:#E51A31;--actH:#FF3B4F;--red:#FF5A6E;--redS:#3A1218;--amb:#F5B731;--ambS:#2E2512;--grn:#4ADE80;--grnS:#13271B;--blue:#4A9EFF;--bluS:#1D2A40;--hero:#1E2228;--heroInk:#F2F3F5;--heroMute:#8B9099;--ovl:rgba(5,6,8,.6);--tab:#14171B}
+[data-theme] *{font-variant-numeric:tabular-nums}
+[data-scroll]::-webkit-scrollbar{width:0;height:0}</style>
+</helmet>
+<div style="padding:20px 24px 48px;display:flex;flex-direction:column;gap:18px;max-width:1500px">
+  <div style="display:flex;flex-direction:column;gap:3px">
+    <div style="font:800 20px Poppins,sans-serif">App de rua · abas Hoje e Eu, enxutas</div>
+    <div style="font-size:12.5px;color:#6E685D;text-wrap:pretty">Protótipo clicável · 390×844 · a linha tracejada é a dobra · toque em qualquer linha para abrir as outras ações</div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+    <div data-theme="{{ theme }}" style="width:{{ phoneW }}px;height:844px;flex:none;position:relative;overflow:hidden;border-radius:44px;background:var(--bg);color:var(--ink);box-shadow:0 0 0 10px #1D1B17,0 18px 50px rgba(29,27,23,.35)">
+      <div style="height:47px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;font:700 14px 'DM Sans',sans-serif;color:var(--ink)"><span>{{ clock }}</span><span style="width:120px;height:30px;border-radius:15px;background:#000"></span><span style="font-size:12px">5G · 82%</span></div>
+
+      <div ref="{{ scrollRef }}" data-scroll="1" style="position:absolute;top:47px;left:0;right:0;bottom:83px;overflow-y:auto;overflow-x:hidden;scrollbar-width:none">
+        <div data-content="1" style="position:relative">
+        <sc-if value="{{ showFold }}" hint-placeholder-val="{{ true }}">
+          <div style="position:absolute;left:0;right:0;top:714px;height:0;border-top:2px dashed var(--act);z-index:5;pointer-events:none"><span style="position:absolute;left:8px;top:-9px;opacity:.85;font:800 10px Poppins,sans-serif;letter-spacing:.06em;color:var(--act);background:var(--bg);padding:1px 5px;border-radius:4px">DOBRA 844</span></div>
+        </sc-if>
+
+        <sc-if value="{{ isHoje }}" hint-placeholder-val="{{ true }}">
+          <div style="padding:2px 16px 12px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="flex:1;min-width:0;display:flex;align-items:baseline;gap:8px">
+                <span style="font:800 24px/1.1 Poppins,sans-serif">Hoje</span>
+                <span style="font-size:12.5px;color:var(--ink3);white-space:nowrap">{{ d.dataLabel }}</span>
+              </div>
+              <button onClick="{{ toastPlaybook }}" style="height:34px;padding:0 12px;border-radius:17px;border:1px solid var(--line);background:var(--card);color:var(--ink2);font:700 12.5px 'DM Sans',sans-serif">Playbook</button>
+              <button onClick="{{ toastAvisos }}" style="position:relative;width:34px;height:34px;border-radius:17px;border:1px solid var(--line);background:var(--card);color:var(--ink2);font:800 13px Poppins,sans-serif">!<span style="position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:4px;background:var(--act)"></span></button>
+              <button onClick="{{ goEu }}" style="width:34px;height:34px;border-radius:17px;border:0;background:var(--act);color:#fff;font:800 13px Poppins,sans-serif">{{ d.ini }}</button>
+            </div>
+
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <sc-for list="{{ counts }}" as="c" hint-placeholder-count="3">
+                <button onClick="{{ c.onClick }}" style="height:30px;padding:0 11px;border-radius:15px;border:1px solid {{ c.bd }};background:{{ c.bg }};color:{{ c.fg }};font:800 12.5px 'DM Sans',sans-serif;white-space:nowrap">{{ c.label }}</button>
+              </sc-for>
+            </div>
+
+            <div data-scroll="1" style="display:flex;gap:6px;overflow-x:auto;margin:0 -16px;padding:0 16px;scrollbar-width:none">
+              <sc-for list="{{ dias }}" as="dd" hint-placeholder-count="6">
+                <button onClick="{{ dd.onClick }}" style="flex:none;height:44px;min-width:56px;padding:0 10px;border-radius:12px;border:1px solid {{ dd.bd }};background:{{ dd.bg }};color:{{ dd.fg }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0">
+                  <span style="font:700 11px 'DM Sans',sans-serif;white-space:nowrap">{{ dd.label }}</span>
+                  <span style="font:800 15px Poppins,sans-serif">{{ dd.n }}</span>
+                </button>
+              </sc-for>
+            </div>
+
+            <div style="background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px 14px;display:flex;flex-direction:column;gap:8px">
+              <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:12px">
+                <div style="display:flex;flex-direction:column;gap:4px">
+                  <span style="font:800 10px Poppins,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--mute)">Portas com prova</span>
+                  <span style="font:900 32px/1 Poppins,sans-serif;color:{{ d.portasC }}">{{ d.portas }}<span style="font:800 18px Poppins,sans-serif;color:var(--mute)"> de 6</span></span>
+                  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:3px;margin-top:2px">
+                    <sc-for list="{{ d.segs }}" as="sg" hint-placeholder-count="6"><span style="height:6px;border-radius:3px;background:{{ sg.bg }}"></span></sc-for>
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:4px;border-left:1px solid var(--line2);padding-left:12px">
+                  <span style="font:800 10px Poppins,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--mute)">Demo</span>
+                  <span style="font:900 32px/1 Poppins,sans-serif;color:{{ d.demoC }}">{{ d.demo }}<span style="font:800 18px Poppins,sans-serif;color:var(--mute)"> de 1</span></span>
+                  <span style="font-size:11.5px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.demoSub }}</span>
+                </div>
+              </div>
+              <div data-scroll="1" style="display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;border-top:1px solid var(--line2);padding-top:6px">
+                <sc-for list="{{ selos }}" as="s" hint-placeholder-count="3">
+                  <button onClick="{{ goEu }}" style="flex:none;height:24px;padding:0 8px;border-radius:12px;border:1px solid var(--line);background:{{ s.bg }};color:{{ s.fg }};font:700 11px 'DM Sans',sans-serif;white-space:nowrap">{{ s.t }}</button>
+                </sc-for>
+              </div>
+            </div>
+
+            <div id="g-plano" style="background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px 14px 8px;display:flex;flex-direction:column">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;padding-bottom:6px">
+                <span style="white-space:nowrap;font:800 10.5px Poppins,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2)">{{ plano.titulo }}</span>
+                <sc-if value="{{ plano.tem }}" hint-placeholder-val="{{ true }}"><button onClick="{{ plano.toggle }}" style="white-space:nowrap;border:0;background:transparent;color:var(--blue);font:700 12.5px 'DM Sans',sans-serif;padding:4px 0">{{ plano.verLabel }}</button></sc-if>
+              </div>
+              <sc-if value="{{ plano.tem }}" hint-placeholder-val="{{ true }}">
+                <sc-for list="{{ plano.rows }}" as="r" hint-placeholder-count="3">
+                  <div style="display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:8px;align-items:center;min-height:44px;border-top:1px solid var(--line2)">
+                    <span style="font:800 13px Poppins,sans-serif;color:{{ r.horaC }}">{{ r.hora }}</span>
+                    <span style="display:flex;flex-direction:column;min-width:0">
+                      <span style="font:800 14.5px 'DM Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:{{ r.nomeC }}">{{ r.nome }}</span>
+                      <span style="font-size:11.5px;color:{{ r.subC }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.sub }}</span>
+                    </span>
+                    <sc-if value="{{ r.pendente }}" hint-placeholder-val="{{ true }}"><button onClick="{{ r.onIr }}" style="height:36px;min-width:56px;padding:0 14px;border-radius:18px;border:0;background:{{ r.btnBg }};color:{{ r.btnFg }};font:800 13.5px 'DM Sans',sans-serif">Ir</button></sc-if>
+                    <sc-if value="{{ r.feita }}" hint-placeholder-val="{{ false }}"><span style="font:800 12px 'DM Sans',sans-serif;color:var(--grn);white-space:nowrap">prova ✓</span></sc-if>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ plano.temFeitas }}" hint-placeholder-val="{{ false }}"><div style="border-top:1px solid var(--line2);padding:8px 0 2px;font-size:12px;color:var(--ink3)">{{ plano.feitasLabel }}</div></sc-if>
+              </sc-if>
+              <sc-if value="{{ plano.vazio }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:8px;padding:4px 0 6px">
+                  <span style="font:800 17px/1.2 Poppins,sans-serif">Sem plano para hoje</span>
+                  <span style="font-size:13px;color:var(--ink3)">{{ plano.vazioSub }}</span>
+                  <button onClick="{{ montarDia }}" style="height:44px;border-radius:22px;border:0;background:var(--act);color:#fff;font:800 14.5px 'DM Sans',sans-serif">Montar o dia ›</button>
+                </div>
+              </sc-if>
+            </div>
+
+            <div style="background:var(--card);border:1.5px solid var(--act);border-radius:16px;padding:10px 12px 10px 14px;display:flex;flex-direction:column;gap:4px">
+              <span style="font:800 10px Poppins,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--act)">Próxima ação · maior valor</span>
+              <div style="display:flex;align-items:center;gap:8px">
+                <button onClick="{{ prox.onMais }}" style="flex:1;min-width:0;text-align:left;border:0;background:transparent;color:var(--ink);padding:0;display:flex;flex-direction:column;gap:1px">
+                  <span style="font:800 17px/1.2 Poppins,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">{{ prox.nome }}</span>
+                  <span style="font-size:12px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">{{ prox.sub }}</span>
+                </button>
+                <button onClick="{{ prox.onVerbo }}" style="flex:none;height:44px;min-width:88px;padding:0 18px;border-radius:22px;border:0;background:{{ prox.btnBg }};color:{{ prox.btnFg }};font:800 15px 'DM Sans',sans-serif;white-space:nowrap">{{ prox.verbo }}</button>
+              </div>
+              <sc-if value="{{ prox.temComb }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">combinado: {{ prox.comb }}</span></sc-if>
+            </div>
+
+            <sc-for list="{{ grupos }}" as="g" hint-placeholder-count="3">
+              <div id="{{ g.id }}" style="display:flex;flex-direction:column;gap:0;padding-top:2px">
+                <div style="display:flex;align-items:center;gap:8px;padding:0 2px 4px">
+                  <span style="white-space:nowrap;font:800 10.5px Poppins,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:{{ g.c }}">{{ g.titulo }}</span>
+                  <span style="font:800 12px Poppins,sans-serif;color:{{ g.c }}">{{ g.n }}</span>
+                  <span style="flex:1"></span>
+                  <sc-if value="{{ g.temMais }}" hint-placeholder-val="{{ false }}"><button onClick="{{ g.onMais }}" style="white-space:nowrap;border:0;background:transparent;color:var(--blue);font:700 12.5px 'DM Sans',sans-serif;padding:4px 2px">{{ g.maisLabel }}</button></sc-if>
+                  <button onClick="{{ g.onAjuda }}" style="width:24px;height:24px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--mute);font:800 12px Poppins,sans-serif">?</button>
+                </div>
+                <sc-if value="{{ g.ajuda }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;line-height:1.4;color:var(--ink3);background:var(--sub);border-radius:10px;padding:8px 10px;margin-bottom:6px">{{ g.regra }}</div></sc-if>
+                <div style="background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden">
+                  <sc-if value="{{ g.temNaProx }}" hint-placeholder-val="{{ false }}"><button onClick="{{ g.onNaProx }}" style="width:100%;text-align:left;height:36px;padding:0 14px;border:0;background:transparent;color:var(--ink3);font:600 12.5px 'DM Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">↑ {{ g.naProx }} está na próxima ação</button></sc-if>
+                  <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2">
+                    <div style="border-top:1px solid {{ r.topBd }}">
+                      <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:4px 10px 4px 14px;min-height:46px">
+                        <button onClick="{{ r.onAbrir }}" style="text-align:left;border:0;background:transparent;color:var(--ink);padding:0;display:flex;flex-direction:column;gap:1px;min-width:0">
+                          <span style="display:flex;align-items:center;gap:6px;min-width:0"><sc-if value="{{ r.q }}" hint-placeholder-val="{{ false }}"><span style="flex:none;width:7px;height:7px;border-radius:4px;background:var(--amb)"></span></sc-if><span style="font:800 14.5px 'DM Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:{{ r.nomeC }}">{{ r.nome }}</span></span>
+                          <span style="font-size:12px;color:{{ r.subC }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.sub }}</span>
+                        </button>
+                        <sc-if value="{{ r.aberto }}" hint-placeholder-val="{{ true }}"><button onClick="{{ r.onVerbo }}" style="height:36px;padding:0 14px;border-radius:18px;border:1px solid {{ r.vBd }};background:{{ r.vBg }};color:{{ r.vFg }};font:800 13px 'DM Sans',sans-serif;white-space:nowrap">{{ r.verbo }}</button></sc-if>
+                        <sc-if value="{{ r.feito }}" hint-placeholder-val="{{ false }}"><button onClick="{{ r.onDesfazer }}" style="height:32px;padding:0 12px;border-radius:16px;border:1px solid var(--line);background:var(--grnS);color:var(--grn);font:800 12px 'DM Sans',sans-serif;white-space:nowrap">✓ Desfazer {{ r.seg }}s</button></sc-if>
+                      </div>
+                      <sc-if value="{{ r.expandido }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;flex-direction:column;gap:8px;padding:0 14px 12px">
+                          <sc-if value="{{ r.temComb }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:var(--ink2)"><strong>O que foi combinado:</strong> {{ r.comb }}</span></sc-if>
+                          <div style="display:flex;flex-wrap:wrap;gap:6px">
+                            <sc-for list="{{ r.acoes }}" as="a" hint-placeholder-count="4"><button onClick="{{ a.onClick }}" style="height:34px;padding:0 12px;border-radius:17px;border:1px solid var(--line);background:var(--sub);color:var(--ink);font:700 12.5px 'DM Sans',sans-serif;white-space:nowrap">{{ a.t }}</button></sc-for>
+                          </div>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ g.vazio }}" hint-placeholder-val="{{ false }}"><div style="padding:14px;font:700 13.5px 'DM Sans',sans-serif;color:var(--grn)">{{ g.vazioTxt }}</div></sc-if>
+                  
+                </div>
+              </div>
+            </sc-for>
+
+            <div style="display:flex;flex-direction:column;gap:6px;margin-top:2px">
+              <div style="display:flex;gap:6px">
+                <sc-for list="{{ recolhidos }}" as="rc" hint-placeholder-count="3">
+                  <button onClick="{{ rc.onClick }}" style="flex:1;min-width:0;height:42px;border-radius:12px;border:1px solid {{ rc.bd }};background:{{ rc.bg }};color:var(--ink2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0">
+                    <span style="font:800 14px Poppins,sans-serif;color:var(--ink)">{{ rc.n }}</span>
+                    <span style="font:700 10.5px 'DM Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;padding:0 4px">{{ rc.t }}</span>
+                  </button>
+                </sc-for>
+              </div>
+              <sc-if value="{{ recAberto }}" hint-placeholder-val="{{ false }}"><div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:12.5px;line-height:1.5;color:var(--ink3)"><strong style="color:var(--ink2)">{{ recTitulo }}:</strong> {{ recLista }}</div></sc-if>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isEu }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:4px 16px 16px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="width:40px;height:40px;border-radius:20px;background:var(--act);color:#fff;font:800 16px Poppins,sans-serif;display:flex;align-items:center;justify-content:center;flex:none">{{ d.ini }}</span>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                <span style="font:800 20px/1.1 Poppins,sans-serif">{{ d.nome }}</span>
+                <div style="display:flex;gap:5px;flex-wrap:wrap">
+                  <sc-for list="{{ eu.selos }}" as="s" hint-placeholder-count="2"><span style="font:700 11px 'DM Sans',sans-serif;padding:2px 8px;border-radius:10px;background:{{ s.bg }};color:{{ s.fg }};white-space:nowrap">{{ s.t }}</span></sc-for>
+                </div>
+              </div>
+            </div>
+
+            <div style="background:var(--hero);color:var(--heroInk);border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+              <span style="font:800 10px Poppins,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--heroMute)">{{ eu.kicker }}</span>
+              <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span style="font:900 36px/1 Poppins,sans-serif">{{ eu.rs }}</span><span style="font:700 13px 'DM Sans',sans-serif;color:var(--heroMute)">{{ eu.rsSub }}</span></div>
+              <div style="display:flex;gap:4px">
+                <sc-for list="{{ eu.degraus }}" as="dg" hint-placeholder-count="8"><span style="flex:1;height:8px;border-radius:4px;background:{{ dg.bg }};outline:{{ dg.ol }}"></span></sc-for>
+              </div>
+              <span style="font:800 14px/1.3 'DM Sans',sans-serif;color:#FF8A96">{{ eu.falta }}</span>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <sc-for list="{{ eu.grade }}" as="gr" hint-placeholder-count="4">
+                <button onClick="{{ gr.onClick }}" style="text-align:left;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0">
+                  <span style="font:800 10px Poppins,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--mute)">{{ gr.k }}</span>
+                  <span style="font:900 24px/1.1 Poppins,sans-serif;color:{{ gr.c }};white-space:nowrap">{{ gr.v }}</span>
+                  <span style="font-size:11.5px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">{{ gr.s }}</span>
+                </button>
+              </sc-for>
+            </div>
+
+            <button onClick="{{ abrirSemana }}" style="text-align:left;display:flex;align-items:center;gap:10px;background:{{ eu.semBg }};color:var(--ink);border:1px solid {{ eu.semBd }};border-radius:14px;padding:10px 12px;min-height:52px">
+              <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">
+                <span style="font:800 14.5px 'DM Sans',sans-serif">{{ eu.semLinha }}</span>
+                <span style="font-size:12px;color:var(--ink3)">{{ eu.semSub }}</span>
+              </span>
+              <span style="font:800 16px 'DM Sans',sans-serif;color:var(--mute)">›</span>
+            </button>
+
+            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+              <sc-for list="{{ eu.atalhos }}" as="at" hint-placeholder-count="3">
+                <button onClick="{{ at.onClick }}" style="text-align:left;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:10px;min-height:64px;display:flex;flex-direction:column;justify-content:space-between;gap:4px;min-width:0">
+                  <span style="font:800 13px/1.2 'DM Sans',sans-serif">{{ at.t }}</span>
+                  <span style="font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">{{ at.s }}</span>
+                </button>
+              </sc-for>
+            </div>
+
+            <div style="font-size:12.5px;color:var(--ink2);background:var(--sub);border-radius:12px;padding:9px 12px">{{ eu.umAUm }}</div>
+
+            <div style="display:flex;align-items:baseline;justify-content:space-between;padding:4px 2px 0">
+              <span style="font:800 10.5px Poppins,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2)">Meu jogo</span>
+              <span style="font-size:11.5px;color:var(--mute)">o que tem prazo primeiro</span>
+            </div>
+            <div style="background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden">
+              <sc-for list="{{ eu.jogo }}" as="j" hint-placeholder-count="6">
+                <div style="border-top:1px solid {{ j.topBd }}">
+                  <button onClick="{{ j.onClick }}" style="width:100%;text-align:left;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 14px;min-height:56px;border:0;background:transparent;color:var(--ink)">
+                    <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                      <span style="font:800 10px Poppins,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:{{ j.kc }}">{{ j.k }}</span>
+                      <span style="font:800 14px 'DM Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ j.t }}</span>
+                    </span>
+                    <span style="display:flex;align-items:center;gap:8px">
+                      <span style="display:flex;gap:3px"><sc-for list="{{ j.dots }}" as="dt" hint-placeholder-count="0"><span style="width:8px;height:8px;border-radius:4px;background:{{ dt.bg }}"></span></sc-for></span>
+                      <span style="font:800 13px Poppins,sans-serif;color:{{ j.vc }};white-space:nowrap">{{ j.v }}</span>
+                    </span>
+                  </button>
+                  <sc-if value="{{ j.aberto }}" hint-placeholder-val="{{ false }}"><div style="padding:0 14px 12px;display:flex;flex-direction:column;gap:4px"><sc-for list="{{ j.det }}" as="x" hint-placeholder-count="2"><span style="font-size:12.5px;line-height:1.4;color:var(--ink3)">{{ x }}</span></sc-for></div></sc-if>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden">
+              <button onClick="{{ toggleMais }}" style="width:100%;height:50px;display:flex;align-items:center;gap:8px;padding:0 14px;border:0;background:transparent;color:var(--ink2);text-align:left">
+                <span style="flex:1;font:700 13.5px 'DM Sans',sans-serif">Mais</span>
+                <span style="font-size:12px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">{{ eu.maisResumo }}</span>
+                <span style="font:800 14px 'DM Sans',sans-serif;color:var(--mute);width:12px">{{ eu.maisSeta }}</span>
+              </button>
+              <sc-if value="{{ eu.maisAberto }}" hint-placeholder-val="{{ false }}">
+                <sc-for list="{{ eu.maisItens }}" as="m" hint-placeholder-count="6"><button onClick="{{ m.onClick }}" style="width:100%;height:46px;display:flex;align-items:center;padding:0 14px;border:0;border-top:1px solid var(--line2);background:transparent;color:var(--ink);font:600 13.5px 'DM Sans',sans-serif;text-align:left">{{ m.t }}</button></sc-for>
+              </sc-if>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isMapa }}" hint-placeholder-val="{{ false }}">
+          <div style="height:714px;margin:0;background:repeating-linear-gradient(135deg,var(--chip) 0 12px,var(--sub) 12px 24px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;text-align:center">
+            <span style="font:600 12px ui-monospace,Menlo,monospace;color:var(--ink3)">MAPA · congelado (lentes, pinos, Cheguei)</span>
+            <span style="font:800 17px Poppins,sans-serif">{{ mapaFoco }}</span>
+            <button onClick="{{ goHoje }}" style="height:40px;padding:0 16px;border-radius:20px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:700 13px 'DM Sans',sans-serif">Voltar ao Hoje</button>
+          </div>
+        </sc-if>
+        </div>
+      </div>
+
+      <div style="position:absolute;left:0;right:0;bottom:0;height:83px;background:var(--tab);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(3,1fr);padding:6px 10px 26px">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+          <button onClick="{{ t.onClick }}" style="border:0;background:transparent;color:{{ t.fg }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;position:relative">
+            <span style="width:22px;height:4px;border-radius:2px;background:{{ t.bar }}"></span>
+            <span style="font:800 12.5px 'DM Sans',sans-serif">{{ t.label }}</span>
+            <sc-if value="{{ t.temSelo }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:2px;left:58%;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--act);color:#fff;font:800 10.5px Poppins,sans-serif;display:flex;align-items:center;justify-content:center">{{ t.selo }}</span></sc-if>
+          </button>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ sheet }}" hint-placeholder-val="{{ false }}">
+        <div onClick="{{ fecharSheet }}" style="position:absolute;inset:0;background:var(--ovl)"></div>
+        <div style="position:absolute;left:0;right:0;bottom:0;background:var(--card);border-radius:22px 22px 0 0;padding:10px 18px 34px;display:flex;flex-direction:column;gap:12px;box-shadow:0 -12px 40px rgba(0,0,0,.25)">
+          <span style="align-self:center;width:40px;height:5px;border-radius:3px;background:var(--line)"></span>
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font:800 10.5px Poppins,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2)">A semana · disputa dos {{ bonus }}</span><span style="font-size:12px;color:var(--mute)">até sex 06/11</span></div>
+          <div style="display:flex;align-items:flex-end;justify-content:center;gap:10px;height:130px">
+            <sc-for list="{{ eu.podio }}" as="pd" hint-placeholder-count="3">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:4px;width:92px">
+                <span style="font:800 13px 'DM Sans',sans-serif;color:{{ pd.nc }}">{{ pd.nome }}</span>
+                <span style="font:900 18px Poppins,sans-serif">{{ pd.pts }}</span>
+                <span style="width:100%;height:{{ pd.h }}px;border-radius:10px 10px 0 0;background:{{ pd.bg }};color:{{ pd.fg }};display:flex;justify-content:center;padding-top:6px;font:900 16px Poppins,sans-serif">{{ pd.lugar }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <span style="font:800 14px/1.35 'DM Sans',sans-serif;color:var(--ink)">{{ eu.proximo }}</span>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ regra }}" as="rg" hint-placeholder-count="3"><span style="font:700 12px 'DM Sans',sans-serif;padding:4px 10px;border-radius:12px;background:var(--sub);color:var(--ink2)"><strong>{{ rg.v }}</strong> {{ rg.t }}</span></sc-for>
+          </div>
+          <button onClick="{{ toastRanking }}" style="height:44px;border-radius:22px;border:1px solid var(--line);background:var(--sub);color:var(--ink);font:700 13.5px 'DM Sans',sans-serif">Ver o ranking completo</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;left:16px;right:16px;bottom:96px;background:var(--ink);color:var(--bg);border-radius:14px;padding:12px 14px;font:700 13.5px 'DM Sans',sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.3)">{{ toast }}</div>
+      </sc-if>
+    </div>
+
+    <div style="flex:1;min-width:300px;max-width:560px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <span style="font:800 11px Poppins,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E685D">Estado</span>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <sc-for list="{{ estados }}" as="e" hint-placeholder-count="7"><button onClick="{{ e.onClick }}" style="border:1px solid rgba(29,27,23,.18);background:{{ e.bg }};color:{{ e.fg }};font:700 12px 'DM Sans',sans-serif;padding:7px 10px;border-radius:8px;white-space:nowrap">{{ e.label }}</button></sc-for>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="font:800 11px Poppins,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E685D">Tema</span><div style="display:flex;gap:6px"><sc-for list="{{ temas }}" as="e" hint-placeholder-count="2"><button onClick="{{ e.onClick }}" style="border:1px solid rgba(29,27,23,.18);background:{{ e.bg }};color:{{ e.fg }};font:700 12px 'DM Sans',sans-serif;padding:7px 10px;border-radius:8px">{{ e.label }}</button></sc-for></div></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="font:800 11px Poppins,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E685D">Largura</span><div style="display:flex;gap:6px"><sc-for list="{{ larguras }}" as="e" hint-placeholder-count="2"><button onClick="{{ e.onClick }}" style="border:1px solid rgba(29,27,23,.18);background:{{ e.bg }};color:{{ e.fg }};font:700 12px 'DM Sans',sans-serif;padding:7px 10px;border-radius:8px">{{ e.label }}</button></sc-for></div></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><span style="font:800 11px Poppins,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E685D">Aba</span><div style="display:flex;gap:6px"><sc-for list="{{ abas }}" as="e" hint-placeholder-count="2"><button onClick="{{ e.onClick }}" style="border:1px solid rgba(29,27,23,.18);background:{{ e.bg }};color:{{ e.fg }};font:700 12px 'DM Sans',sans-serif;padding:7px 10px;border-radius:8px">{{ e.label }}</button></sc-for></div></div>
+      </div>
+      <div style="background:#F4F1EA;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">
+        <span style="font:800 11px Poppins,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E685D">Orçamento medido agora</span>
+        <sc-for list="{{ medidas }}" as="m" hint-placeholder-count="2">
+          <div style="display:grid;grid-template-columns:60px 1fr;gap:10px;align-items:baseline">
+            <span style="font:800 14px Poppins,sans-serif">{{ m.aba }}</span>
+            <span style="font-size:13px;line-height:1.45"><strong style="color:{{ m.c }}">{{ m.h }}</strong> {{ m.txt }}</span>
+          </div>
+        </sc-for>
+        <span style="font-size:11.5px;color:#6E685D;line-height:1.4">A altura é medida no DOM do protótipo, na largura e no estado escolhidos, com tudo recolhido. Antes: Hoje 2.285 px · 29 botões; Eu 3.689 px.</span>
+      </div>
+      <div style="background:#F4F1EA;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px">
+        <span style="font:800 11px Poppins,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#6E685D">Neste estado</span>
+        <span style="font-size:13px;line-height:1.5;text-wrap:pretty">{{ d.nota }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
+    <sc-for list="{{ docs }}" as="dc" hint-placeholder-count="4">
+      <div style="background:#F4F1EA;border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+        <div style="font:800 15px Poppins,sans-serif">{{ dc.titulo }}</div>
+        <sc-for list="{{ dc.itens }}" as="it" hint-placeholder-count="5"><div style="font-size:13px;line-height:1.45;text-wrap:pretty"><strong>{{ it.k }}</strong> {{ it.v }}</div></sc-for>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;tema&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;claro&quot;,&quot;escuro&quot;],&quot;default&quot;:&quot;claro&quot;,&quot;tsType&quot;:&quot;'claro'|'escuro'&quot;,&quot;section&quot;:&quot;Visual&quot;},&quot;bonusValor&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:250,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:0,&quot;max&quot;:2000,&quot;step&quot;:50,&quot;section&quot;:&quot;Dado&quot;}}">
+class Component extends DCLogic {
+  state = { st: 'ritmo', theme: this.props.tema ?? 'claro', w: 390, tab: 'hoje', exp: {}, feitos: {}, ajuda: {}, mais: {}, rec: {}, jogo: {}, planoAll: false, maisAberto: false, sheet: false, toast: null, mapaFoco: '', med: {}, tick: 0 };
+  scrollRef = React.createRef();
+
+  base() {
+    return {
+      nome: 'Kelly Cristina', ini: 'K', clock: '10:05', dataLabel: 'ter 03/11 · 10:05',
+      rampa: false, meta: 8,
+      plano: [
+        { id: 'p1', hora: '09:00', nome: 'Feijoada da Portela', tipo: 'Visita', st: 'ok' },
+        { id: 'p2', hora: '09:40', nome: 'Bar do Momo', tipo: 'Visita', st: 'ok' },
+        { id: 'p3', hora: '10:30', nome: 'Pizzaria Fornalha', tipo: 'Retorno', q: true },
+        { id: 'p4', hora: '11:30', nome: 'Açaí do Parque', tipo: 'Demo', q: true },
+        { id: 'p5', hora: '14:00', nome: 'Botequim da Praça Seca', tipo: 'Visita' },
+        { id: 'p6', hora: '15:00', nome: 'Cantina Sole Mare', tipo: 'Retorno' },
+        { id: 'p7', hora: '16:00', nome: 'Smash Lab', tipo: 'Visita', recem: true }],
+      demoFeita: 0,
+      atrasados: [{ id: 'a1', nome: 'Empório Carioca', etapa: 'Negociação', mrr: 449, venc: 'venceu ontem', q: true, comb: 'mandar a proposta com 2 tablets', verbo: 'Ligar' }],
+      ligar: [{ id: 'l1', nome: 'Cantina Sole Mare', etapa: 'Decisor', mrr: 349, janela: '12:30', verbo: 'Ligar' }, { id: 'l2', nome: 'Bar Brasil', etapa: 'Visita', mrr: 299, janela: '17:30', verbo: 'Ligar' }],
+      semPasso: ['Galeto Fonseca|Demo|349|venceu sex 30/10', 'Boteco Ingá|Decisor|299|nunca marcado', 'Sushi Kento|Visita|420|venceu qui 29/10', 'Café 21|Visita|299|nunca marcado', 'Cervejaria Lapa|Decisor|349|venceu seg 26/10', 'Bistrô 21|Visita|399|nunca marcado', 'Pastelaria Lapa|Visita|299|nunca marcado', 'Ponto do Açaí|Demo|349|venceu qua 28/10', 'Grill 44|Visita|349|nunca marcado', 'Padaria Tijuca|Visita|299|nunca marcado', 'Kebab da Praça|Decisor|349|nunca marcado', 'Bom Prato|Visita|299|nunca marcado', 'Sabor de Minas|Visita|299|nunca marcado', 'Rancho Icaraí|Visita|299|nunca marcado', 'Café Moreira|Visita|299|nunca marcado', 'Pizzaria Ingá|Visita|349|nunca marcado'],
+      recolhidos: { antigos: ['Tempero Bom (venceu 21/10)', 'Bar Central (venceu 20/10)', 'Pizzaria Nonna (venceu 17/10)', 'Cozinha da Vó (venceu 15/10)'], combinados: ['Visitar 1 recém-aberto por dia', 'Marcar 1 demo para terça'], feitos: ['Feijoada da Portela · visita com prova', 'Bar do Momo · visita com prova', 'Ligou para Grill 44'] },
+      sem: { pts: 37, pos: 3, prox: 'Gama', proxPts: 46, lider: 'Beta', liderPts: 86 },
+      podio: [['Gama', 46, '2º'], ['Beta', 86, '1º'], ['você', 37, '3º']],
+      missao: { t: 'Registrar o como foi antes de ligar o carro', n: 1, alvo: 2, prazo: 'sex 06/11', selo: 'Registro na hora' },
+      seqRua: 4, seqFila: 2, recRua: 9, ruaDias: ['ok', 'ok', 'ok', 'ok', 'hoje'],
+      hab: { nome: 'Sair com o dono', antes: 18, meta: 25, agora: 21 },
+      carreira: 'Pleno · líder de praça 2 de 4', carreiraDet: ['3 meses no ritmo de 6 visitas: 2 de 3 (outubro ficou em 5,7)', 'Demo vira cliente acima do time: cumprido', 'Registro verdadeiro: cumprido', 'Padrinho de um formado: Delta no dia 12 de 60'],
+      colecao: '5 de 13 ganhas', colecaoPerto: 'Sair com o dono · 84%',
+      vs: 'melhor semana 348 pts · recorde 9 dias na rua',
+      mesVendas: 1, mesRs: 250, faixas: [250, 250, 250, 250, 250, 300, 300, 400],
+      umAUm: 'Seu 1:1 é segunda 09/11 08:30 · leve: 1 missão em curso',
+      recem: 4, playbook: 'nível 2 · próximo: Venda na rua',
+      nota: 'Kelly, pleno, no ritmo: 2 portas com prova antes das 10h, demo marcada às 11:30, 1 atrasado quente.'
+    };
+  }
+  estadoDe(k) {
+    const b = this.base();
+    if (k === 'semPlano') return Object.assign(b, { clock: '08:12', dataLabel: 'ter 03/11 · 08:12', plano: null, recolhidos: Object.assign(b.recolhidos, { feitos: [] }), nota: 'Antes das 9h e sem plano: o Plano vira o estado vazio com "Montar o dia ›". O placar começa em 0 de 6 e a próxima ação continua a ser o 1º da fila.' });
+    if (k === 'atrasado') return Object.assign(b, { atrasados: [b.atrasados[0], { id: 'a2', nome: 'Pizzaria Fornalha', etapa: 'Demo', mrr: 375, venc: 'venceu há 2 dias', q: true, comb: 'levar o cardápio digital pronto', verbo: 'Ligar' }, { id: 'a3', nome: 'Tio Frank', etapa: 'Visita', mrr: 299, venc: 'venceu há 3 dias', verbo: 'Ligar' }], nota: 'Atrasado com 2 quentes: os quentes sobem no grupo (ponto âmbar) e o 1º vira a próxima ação. O de 3 dias e não quente continua aqui; a partir do 4º dia vai para "Atrasados antigos".' });
+    if (k === 'zerada') return Object.assign(b, { atrasados: [], ligar: [], semPasso: [], seqFila: 3, nota: 'Fila zerada: os grupos dizem "nada aqui" em verde e a próxima ação passa a ser a próxima porta do plano. A sequência Fila zerada sobe para 3 dias.' });
+    if (k === 'rampa') return Object.assign(b, { nome: 'Delta Souza', ini: 'D', rampa: true, meta: 3, faixas: [250, 250, 250], mesVendas: 0, mesRs: 0, sem: { pts: 22, pos: 6, prox: 'Épsilon', proxPts: 28, lider: 'Beta', liderPts: 86 }, podio: [['Gama', 46, '2º'], ['Beta', 86, '1º'], ['Kelly', 37, '3º']], missao: { t: 'Fazer 4 visitas com prova por dia útil', n: 2, alvo: 3, prazo: 'sex 06/11', selo: 'Prime' }, carreira: 'Rampa · dia 12 de 60', carreiraDet: ['S1 · Conhecer o produto e a praça: aprovada por Alfa em 03/11', 'S2–3 · Ir junto com o padrinho: em curso', 'Próximo passo: fechar a S2–3 com Alfa até 20/11'], playbook: 'nível 1 · próximo: A porta', nota: 'Em rampa: meta de 3 clientes, uma faixa só da variável (+R$ 250 por venda) e a carreira mostra a rampa (dia 12 de 60) com o próximo passo.' });
+    if (k === 'lider') return Object.assign(b, { sem: { pts: 286, pos: 1, prox: null, proxPts: 0, lider: 'você', liderPts: 286, seg: 'Beta', segPts: 230 }, podio: [['Beta', 230, '2º'], ['você', 286, '1º'], ['Gama', 212, '3º']], mesVendas: 5, mesRs: 1250, nota: 'Líder da semana: a linha da semana fica âmbar, "lidera por 56 pts" e o que segura a liderança (1 demo = +25). O selo de líder aparece no placar do Hoje.' });
+    if (k === 'zeradaSem') return Object.assign(b, { clock: '08:40', dataLabel: 'seg 02/11 · 08:40', plano: b.plano.map(p => Object.assign({}, p, { st: null })), sem: { pts: 0, pos: 9, prox: 'Rodrigo', proxPts: 6, lider: 'Beta', liderPts: 25 }, podio: [['Sérgio', 12, '2º'], ['Beta', 25, '1º'], ['Larah', 9, '3º']], seqRua: 0, ruaDias: ['ok', 'nao', 'nao', 'nao', 'hoje'], missao: { t: 'Zerar a fila sem próximo passo antes das 18h', n: 0, alvo: 2, prazo: 'sex 06/11', selo: 'Fila zerada na semana' }, nota: 'Semana zerada (segunda cedo): "0 pts · a 1ª visita com prova vale 3". Nada em vermelho de alarme; o jogo convida.' });
+    return b;
+  }
+
+  componentDidMount() { this.measure(); requestAnimationFrame(() => this.measure()); if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.measure()); setTimeout(() => this.measure(), 600);
+    this.ro = new ResizeObserver(() => this.measure()); const c = this.scrollRef.current && this.scrollRef.current.querySelector('[data-content]'); if (c) this.ro.observe(c); this.iv = setInterval(() => { if (Object.values(this.state.feitos).some(f => f > Date.now() - 6000)) this.setState({ tick: Date.now() }); }, 500); }
+  componentDidUpdate() { this.measure(); }
+  componentWillUnmount() { this.ro && this.ro.disconnect(); clearInterval(this.iv); clearTimeout(this.tt); }
+  measure() {
+    const sc = this.scrollRef.current; if (!sc) return;
+    const c = sc.querySelector('[data-content]'); if (!c) return;
+    if (c.scrollHeight < 200) return;
+    const h = Math.round(c.scrollHeight + 47 + 83), b = c.querySelectorAll('button').length + 3;
+    const k = this.state.tab; if (k === 'mapa') return;
+    const key = k + ':' + this.state.st + ':' + this.state.w;
+    const cur = this.state.med[k];
+    if (!cur || cur.h !== h || cur.b !== b || cur.key !== key) this.setState(s => ({ med: Object.assign({}, s.med, { [k]: { h, b, key } }) }));
+  }
+  flash(t) { clearTimeout(this.tt); this.setState({ toast: t }); this.tt = setTimeout(() => this.setState({ toast: null }), 2400); }
+  reset(extra) { return Object.assign({ exp: {}, feitos: {}, ajuda: {}, mais: {}, rec: {}, jogo: {}, planoAll: false, maisAberto: false, sheet: false }, extra || {}); }
+  scrollTo(id) { const sc = this.scrollRef.current; const el = sc && sc.querySelector('#' + id); if (el) sc.scrollTo({ top: el.offsetTop - 8, behavior: 'smooth' }); }
+  brl(n) { return 'R$ ' + n.toLocaleString('pt-BR'); }
+  fazer(id, txt) { this.setState(s => ({ feitos: Object.assign({}, s.feitos, { [id]: Date.now() }), exp: Object.assign({}, s.exp, { [id]: false }) })); this.flash(txt); }
+
+  renderVals() {
+    const s = this.state, D = this.estadoDe(s.st), now = Date.now();
+    const vivo = id => s.feitos[id] && now - s.feitos[id] < 5000;
+    const sumiu = id => s.feitos[id] && now - s.feitos[id] >= 5000;
+    const meio = s.st !== 'semPlano';
+
+    // placar
+    const plano = D.plano;
+    const portas = plano ? plano.filter(p => p.st === 'ok').length : 0;
+    const demoMarc = plano ? plano.filter(p => p.tipo === 'Demo' && p.st !== 'ok').length : 0;
+    const d = {
+      nome: D.nome, ini: D.ini, dataLabel: D.dataLabel, nota: D.nota,
+      portas, portasC: portas >= 6 ? 'var(--grn)' : 'var(--ink)',
+      segs: [0, 1, 2, 3, 4, 5].map(i => ({ bg: i < portas ? 'var(--grn)' : 'var(--chip)' })),
+      demo: D.demoFeita, demoC: D.demoFeita ? 'var(--grn)' : 'var(--ink)',
+      demoSub: D.demoFeita ? 'feita ✓' : demoMarc ? 'marcada · ' + plano.find(p => p.tipo === 'Demo').hora : 'nenhuma marcada'
+    };
+    const liderSelo = D.sem.pos === 1;
+    const selos = [
+      { t: D.sem.pts + ' pts · ' + D.sem.pos + 'º na semana', bg: liderSelo ? 'var(--ambS)' : 'var(--sub)', fg: liderSelo ? 'var(--amb)' : 'var(--ink2)' },
+      { t: 'Na rua ' + D.seqRua + (D.seqRua === 1 ? ' dia' : ' dias'), bg: 'var(--sub)', fg: 'var(--ink2)' },
+      { t: 'Missão ' + D.missao.n + ' de ' + D.missao.alvo, bg: 'var(--sub)', fg: 'var(--ink2)' }];
+
+    // plano
+    let planoV;
+    if (plano) {
+      const pend = plano.filter(p => p.st !== 'ok'), feitas = plano.filter(p => p.st === 'ok');
+      const list = s.planoAll ? plano : pend.slice(0, 3);
+      planoV = { tem: true, vazio: false, titulo: 'Plano · ' + (pend.length ? pend.length + ' faltam' : 'todas feitas') + (feitas.length && pend.length ? ' · ' + feitas.length + ' com prova' : ''),
+        verLabel: s.planoAll ? 'menos' : 'ver as ' + plano.length + ' ›', toggle: () => this.setState({ planoAll: !s.planoAll }),
+        temFeitas: false, feitasLabel: feitas.length + (feitas.length > 1 ? ' feitas com prova: ' : ' feita com prova: ') + feitas.map(f => f.nome).join(', '),
+        rows: list.map((p, i) => { const ok = p.st === 'ok', first = !ok && p === pend[0];
+          return { hora: p.hora, nome: p.nome, sub: p.tipo + (p.q ? ' · quente' : '') + (p.recem ? ' · recém-aberto' : ''), pendente: !ok, feita: ok,
+            horaC: ok ? 'var(--mute)' : 'var(--ink2)', nomeC: ok ? 'var(--ink3)' : 'var(--ink)', subC: p.q ? 'var(--amb)' : p.recem ? 'var(--blue)' : 'var(--ink3)',
+            btnBg: first ? 'var(--act)' : 'var(--sub)', btnFg: first ? '#fff' : 'var(--ink)', onIr: () => this.setState({ tab: 'mapa', mapaFoco: 'Próxima porta: ' + p.nome }) }; }) };
+    } else planoV = { tem: false, vazio: true, titulo: 'Plano', vazioSub: 'O app sugere 6 portas perto de Madureira, com Pizzaria Fornalha (quente) primeiro.', rows: [] };
+
+    // grupos
+    const mkRow = (id, nome, sub, verbo, q, comb, acoes, i) => {
+      const f = vivo(id), ex = !!s.exp[id];
+      return { id, nome, sub, verbo, q: !!q, comb: comb || '', temComb: !!comb, aberto: !f, feito: f, seg: f ? Math.max(1, 5 - Math.floor((now - s.feitos[id]) / 1000)) : 0,
+        expandido: ex && !f, topBd: i === 0 ? 'transparent' : 'var(--line2)', nomeC: 'var(--ink)', subC: q ? 'var(--amb)' : 'var(--ink3)',
+        vBg: q ? 'var(--act)' : 'var(--sub)', vFg: q ? '#fff' : 'var(--ink)', vBd: q ? 'var(--act)' : 'var(--line)',
+        onAbrir: () => this.setState(x => ({ exp: Object.assign({}, x.exp, { [id]: !x.exp[id] }) })),
+        onVerbo: () => this.fazer(id, (verbo === 'Dar o passo' ? 'Passo marcado para ' : 'Ligando para ') + nome + ' · desfazer em 5 s'),
+        onDesfazer: () => this.setState(x => { const fe = Object.assign({}, x.feitos); delete fe[id]; return { feitos: fe }; }),
+        acoes: acoes.map(t => ({ t, onClick: () => this.fazer(id, t + ' · ' + nome + ' · desfazer em 5 s') })) };
+    };
+    const atr = D.atrasados.filter(a => !sumiu(a.id)).sort((a, b) => (b.q ? 1 : 0) - (a.q ? 1 : 0));
+    const lig = D.ligar.filter(a => !sumiu(a.id));
+    const sp = D.semPasso.map((x, i) => { const [nome, etapa, mrr, venc] = x.split('|'); return { id: 'sp' + i, nome, etapa, mrr: +mrr, venc }; }).filter(x => !sumiu(x.id));
+    const spShow = s.mais.sp ? sp : sp.slice(0, 3);
+    const ajuda = k => !!s.ajuda[k], tgA = k => () => this.setState(x => ({ ajuda: Object.assign({}, x.ajuda, { [k]: !x.ajuda[k] }) }));
+    const proxId = (atr[0] || lig[0] || {}).id, proxNome = (atr[0] || lig[0] || {}).nome;
+    const semProx = arr => arr.filter(x => x.id !== proxId);
+    const naProx = arr => arr.some(x => x.id === proxId);
+    const topB = (i, arr) => (i === 0 && !naProx(arr)) ? 'transparent' : 'var(--line2)';
+    const grupos = [
+      { id: 'g-atr', titulo: 'Atrasados', n: atr.length, c: atr.length ? 'var(--red)' : 'var(--ink2)', ajuda: ajuda('atr'), onAjuda: tgA('atr'),
+        regra: 'Passo vencido há até 3 dias, e negócio quente de qualquer data. Mais de 3 dias e não quente vai para "Atrasados antigos".',
+        rows: semProx(atr).map((a, i) => Object.assign(mkRow(a.id, a.nome, a.etapa + ' · ' + this.brl(a.mrr) + ' · ' + a.venc, a.verbo, a.q, a.comb, ['WhatsApp', 'Pôr no plano', 'Remarcar', 'Sem interesse'], i), { topBd: topB(i, atr) })), temNaProx: naProx(atr), naProx: proxNome, onNaProx: () => this.scrollTo('g-plano'),
+        vazio: !atr.length, vazioTxt: 'Nada atrasado.', temMais: false },
+      { id: 'g-lig', titulo: 'Ligar hoje', n: lig.length, c: 'var(--ink2)', ajuda: ajuda('lig'), onAjuda: tgA('lig'),
+        regra: 'Passos de ligação de hoje. Janelas: 12:30 e 17:30, quando o dono costuma atender.',
+        rows: semProx(lig).map((a, i) => Object.assign(mkRow(a.id, a.nome, 'janela ' + a.janela + ' · ' + a.etapa + ' · ' + this.brl(a.mrr), 'Ligar', false, null, ['WhatsApp', 'Remarcar', 'Sem interesse'], i), { topBd: topB(i, lig) })), temNaProx: naProx(lig), naProx: proxNome, onNaProx: () => this.scrollTo('g-plano'),
+        vazio: !lig.length, vazioTxt: 'Nenhuma ligação para hoje.', temMais: false },
+      { id: 'g-sp', titulo: 'Sem próximo passo', n: sp.length, c: 'var(--ink2)', ajuda: ajuda('sp'), onAjuda: tgA('sp'),
+        regra: 'Passo vencido ou nunca marcado. Ag. Pagamento fica fora. Um negócio, um próximo passo.',
+        temNaProx: false, rows: spShow.map((a, i) => mkRow(a.id, a.nome, a.etapa + ' · ' + this.brl(a.mrr) + ' · ' + a.venc, 'Dar o passo', false, null, ['Ligar', 'WhatsApp', 'Pôr no plano', 'Sem interesse'], i)),
+        vazio: !sp.length, vazioTxt: 'Fila zerada ✓ · sequência ' + D.seqFila + ' dias', temMais: sp.length > 3, maisLabel: s.mais.sp ? 'menos' : 'ver os ' + sp.length + ' ›', onMais: () => this.setState(x => ({ mais: Object.assign({}, x.mais, { sp: !x.mais.sp }) })) }
+    ];
+    const counts = [
+      { label: atr.length + (atr.length === 1 ? ' atrasado' : ' atrasados'), id: 'g-atr', hot: atr.some(a => a.q) },
+      { label: lig.length + ' ligar hoje', id: 'g-lig' },
+      { label: sp.length + ' sem passo', id: 'g-sp' }
+    ].map(c => ({ label: c.label, bg: c.hot ? 'var(--redS)' : 'var(--card)', fg: c.hot ? 'var(--red)' : 'var(--ink2)', bd: c.hot ? 'var(--red)' : 'var(--line)', onClick: () => this.scrollTo(c.id) }));
+    const hojeN = atr.length + lig.length;
+    const dias = [['Hoje', hojeN], ['Amanhã', 4], ['Qui', 6], ['Sex', 3], ['Seg', 2], ['Depois', 9]].map(([label, n], i) => ({ label, n, bg: i === 0 ? 'var(--ink)' : 'var(--card)', fg: i === 0 ? 'var(--bg)' : 'var(--ink)', bd: i === 0 ? 'var(--ink)' : 'var(--line)', onClick: () => i && this.flash(label + ': abre a fila daquele dia') }));
+
+    // próxima ação
+    let prox;
+    const first = atr[0] || lig[0];
+    if (first) { const isA = !!atr[0];
+      prox = { nome: first.nome, sub: first.etapa + ' · ' + this.brl(first.mrr) + ' · ' + (isA ? first.venc + (first.q ? ' · quente' : '') : 'janela ' + first.janela), comb: first.comb || '', temComb: !!first.comb, verbo: 'Ligar',
+        btnBg: 'var(--act)', btnFg: '#fff', onVerbo: () => this.fazer(first.id, 'Ligando para ' + first.nome + ' · desfazer em 5 s'),
+        onMais: () => { this.setState(x => ({ exp: Object.assign({}, x.exp, { [first.id]: true }) })); this.scrollTo(isA ? 'g-atr' : 'g-lig'); } };
+    } else if (plano) { const p = plano.find(x => x.st !== 'ok');
+      prox = { nome: p ? p.nome : 'Dia em ordem', sub: p ? 'próxima porta · ' + p.hora + ' · ' + p.tipo : 'tudo feito · feche o dia às 18h', comb: '', temComb: false, verbo: p ? 'Ir' : 'Fechar o dia',
+        btnBg: 'var(--act)', btnFg: '#fff', onVerbo: () => p ? this.setState({ tab: 'mapa', mapaFoco: 'Próxima porta: ' + p.nome }) : this.flash('Fecho do dia'), onMais: () => this.scrollTo('g-plano') };
+    } else prox = { nome: 'Montar o dia', sub: 'sem plano e fila zerada', comb: '', temComb: false, verbo: 'Montar o dia', btnBg: 'var(--act)', btnFg: '#fff', onVerbo: () => this.flash('Abre o Planejar o dia'), onMais: () => {} };
+
+    const recDefs = [['antigos', 'Atrasados antigos', D.recolhidos.antigos], ['combinados', 'Combinados com o gestor', D.recolhidos.combinados], ['feitos', 'Feito hoje', D.recolhidos.feitos.concat(Object.keys(s.feitos).filter(sumiu).map(() => 'ação de agora'))]];
+    const recK = Object.keys(s.rec).find(k => s.rec[k]); const recSel = recDefs.find(x => x[0] === recK);
+    const recolhidos = recDefs.map(([k, t, l]) => ({ t: k === 'antigos' ? 'Antigos' : k === 'combinados' ? 'Com o gestor' : 'Feito hoje', n: l.length, bg: recK === k ? 'var(--sub)' : 'var(--card)', bd: recK === k ? 'var(--ink3)' : 'var(--line)', onClick: () => this.setState({ rec: recK === k ? {} : { [k]: true } }) }));
+
+    // EU
+    const vendas = D.mesVendas, fx = D.faixas, faixaAtual = vendas < 5 || fx.length <= 5 ? 1 : vendas < 7 ? 2 : 3;
+    const proxVale = fx[vendas] != null ? fx[vendas] : fx[fx.length - 1];
+    const mudaFaixa = fx.length > 5 && vendas < 5 ? 5 - vendas : null;
+    const mes = 'Novembro';
+    const sem = D.sem;
+    let semLinha, semSub, semBg = 'var(--card)', semBd = 'var(--line)';
+    if (sem.pos === 1) { semLinha = sem.pts + ' pts · 1º · lidera por ' + (sem.pts - sem.segPts); semSub = 'Beta precisa de 1 venda para passar · 1 demo hoje = +25'; semBg = 'var(--ambS)'; semBd = 'var(--amb)'; }
+    else if (sem.pts === 0) { semLinha = '0 pts · semana zerada'; semSub = 'a 1ª visita com prova vale 3 · 3 visitas passam ' + sem.prox; }
+    else { const falta = sem.proxPts - sem.pts; semLinha = sem.pts + ' pts · ' + sem.pos + 'º · faltam ' + falta + ' para passar ' + sem.prox; semSub = falta <= 18 ? Math.ceil((falta + 1) / 3) + ' visitas com prova já passam' : 'uma demo (25) já passa'; }
+    const bonus = this.brl(this.props.bonusValor ?? 250);
+    const eu = {
+      selos: [{ t: D.rampa ? 'Rampa · dia 12 de 60' : 'Pleno', bg: 'var(--redS)', fg: 'var(--red)' }, { t: 'Playbook ' + D.playbook.split(' · ')[0], bg: 'var(--bluS)', fg: 'var(--blue)' }],
+      kicker: mes + ' · faixa ' + faixaAtual + ' da variável', rs: this.brl(D.mesRs), rsSub: vendas + (vendas === 1 ? ' venda' : ' vendas') + ' · meta ' + D.meta,
+      degraus: fx.map((v, i) => ({ bg: i < vendas ? '#FF6B78' : i === vendas ? 'rgba(255,107,120,.35)' : 'rgba(255,255,255,.14)', ol: i === vendas ? '1.5px solid #FF6B78' : 'none' })),
+      falta: mudaFaixa === 1 ? 'A próxima venda muda a faixa: +R$ ' + (fx[5]) + ' por venda.' : mudaFaixa ? 'Faltam ' + mudaFaixa + ' vendas para a faixa 2 · a próxima vale +R$ ' + proxVale + '.' : 'A próxima venda vale +R$ ' + proxVale + '.',
+      grade: [
+        { k: 'Hoje', v: portas + ' de 6', s: 'portas com prova · demo ' + D.demoFeita + ' de 1', c: 'var(--ink)', onClick: () => this.setState({ tab: 'hoje' }) },
+        { k: 'Semana', v: sem.pts + ' pts', s: sem.pos + 'º · disputa dos ' + bonus, c: sem.pos === 1 ? 'var(--amb)' : 'var(--ink)', onClick: () => this.setState({ sheet: true }) },
+        { k: 'Mês', v: this.brl(D.mesRs), s: vendas + (vendas === 1 ? ' contrato' : ' contratos') + ' de ' + D.meta, c: 'var(--ink)', onClick: () => this.flash('Abre a escada da variável') },
+        { k: 'Próxima venda', v: '+R$ ' + proxVale, s: mudaFaixa === 1 ? 'muda a faixa' : 'faixa ' + faixaAtual, c: 'var(--grn)', onClick: () => this.flash('Abre a escada da variável') }],
+      semLinha, semSub, semBg, semBd,
+      atalhos: [['Planejar a semana', 'Qui e Sex com buracos'], ['Playbook', D.playbook], ['Recém-abertos', D.recem + ' esta semana']].map(([t, sub]) => ({ t, s: sub, onClick: () => this.flash('Abre ' + t) })),
+      umAUm: D.umAUm,
+      jogo: (() => {
+        const L = [
+          { id: 'missao', k: 'Missão · até ' + D.missao.prazo, kc: 'var(--act)', t: D.missao.t, v: D.missao.n + ' de ' + D.missao.alvo, vc: 'var(--ink)', dots: Array.from({ length: D.missao.alvo }, (_, i) => ({ bg: i < D.missao.n ? 'var(--grn)' : 'var(--chip)' })), det: ['Cumpra até ' + D.missao.prazo + ' e ganhe o selo ' + D.missao.selo + '.', 'Fecha sozinha quando a prova chega.'] },
+          { id: 'seq', k: 'Sequências · hoje conta', kc: 'var(--amb)', t: 'Na rua ' + D.seqRua + ' dias · Fila zerada ' + D.seqFila + ' dias', v: '', vc: 'var(--ink)', dots: D.ruaDias.map(x => ({ bg: x === 'ok' ? 'var(--amb)' : x === 'hoje' ? 'var(--line)' : 'var(--chip)' })), det: ['Recorde na rua: ' + D.recRua + ' dias.', 'A chama só apaga se um dia útil passar sem visita com prova.'] },
+          { id: 'hab', k: 'Habilidade do mês', kc: 'var(--ink3)', t: D.hab.nome + ' · ' + D.hab.agora + '% → meta ' + D.hab.meta + '%', v: D.hab.agora + '%', vc: 'var(--amb)', dots: [], det: ['Antes ' + D.hab.antes + '% · meta ' + D.hab.meta + '% · agora ' + D.hab.agora + '%.', 'Faltam ' + (D.hab.meta - D.hab.agora) + ' pontos. No dia em que bater, vira medalha.'] },
+          { id: 'car', k: 'Carreira', kc: 'var(--ink3)', t: D.carreira, v: '', vc: 'var(--ink)', dots: [], det: D.carreiraDet },
+          { id: 'col', k: 'Coleção', kc: 'var(--ink3)', t: D.colecao + ' · perto: ' + D.colecaoPerto, v: '', vc: 'var(--ink)', dots: [], det: ['Última: Primeiro contrato do mês (03/11).', 'Destaque da sexta: Ficha na hora (30/10).'] },
+          { id: 'vs', k: 'Você contra você', kc: 'var(--ink3)', t: D.vs, v: '', vc: 'var(--ink)', dots: [], det: ['Vendas: novembro ' + vendas + ' × outubro 3 (até o 3º dia útil).'] }];
+        return L.map((j, i) => Object.assign(j, { topBd: i ? 'var(--line2)' : 'transparent', aberto: !!s.jogo[j.id], onClick: () => this.setState(x => ({ jogo: Object.assign({}, x.jogo, { [j.id]: !x.jogo[j.id] }) })) }));
+      })(),
+      maisResumo: 'Gestão · O time na rua · Avisos · TakeatOS · HubSpot · Ajustes', maisAberto: s.maisAberto, maisSeta: s.maisAberto ? '–' : '›',
+      maisItens: ['Gestão', 'O time na rua', 'Avisos', 'TakeatOS', 'HubSpot', 'Ajustes e sair'].map(t => ({ t, onClick: () => this.flash('Abre ' + t) })),
+      podio: D.podio.map(([nome, pts, lugar]) => ({ nome, pts, lugar, nc: nome === 'você' ? 'var(--act)' : 'var(--ink)', h: lugar === '1º' ? 70 : lugar === '2º' ? 50 : 36, bg: lugar === '1º' ? 'var(--amb)' : 'var(--chip)', fg: lugar === '1º' ? '#fff' : 'var(--ink2)' })),
+      proximo: sem.pos === 1 ? 'Você lidera por ' + (sem.pts - sem.segPts) + ' pts. Uma demo hoje leva a ' + (sem.pts + 25) + '.' : sem.pts === 0 ? 'Semana começando. A 1ª visita com prova já vale 3.' : 'Faltam ' + (sem.proxPts - sem.pts) + ' pts para passar ' + sem.prox + '. ' + semSub.charAt(0).toUpperCase() + semSub.slice(1) + '.'
+    };
+
+    const tab = s.tab;
+    const ef = (cur, v) => ({ bg: cur === v ? '#1D1B17' : '#F4F1EA', fg: cur === v ? '#F4F1EA' : '#1D1B17' });
+    const estados = [['ritmo', 'Com plano, no ritmo'], ['semPlano', 'Sem plano antes das 9h'], ['atrasado', 'Atrasado com 2 quentes'], ['zerada', 'Fila zerada'], ['rampa', 'Em rampa'], ['lider', 'Líder da semana'], ['zeradaSem', 'Semana zerada']].map(([k, label]) => Object.assign({ label, onClick: () => this.setState(this.reset({ st: k })) }, ef(s.st, k)));
+    const temas = [['claro', 'Claro'], ['escuro', 'Escuro']].map(([k, label]) => Object.assign({ label, onClick: () => this.setState({ theme: k }) }, ef(s.theme, k)));
+    const larguras = [[390, '390'], [375, '375']].map(([k, label]) => Object.assign({ label, onClick: () => this.setState({ w: k }) }, ef(s.w, k)));
+    const abas = [['hoje', 'Hoje'], ['eu', 'Eu']].map(([k, label]) => Object.assign({ label, onClick: () => this.setState({ tab: k, sheet: false }) }, ef(tab, k)));
+    const medidas = ['hoje', 'eu'].map(k => { const m = s.med[k], lim = k === 'hoje' ? 1150 : 1600;
+      return { aba: k === 'hoje' ? 'Hoje' : 'Eu', h: m ? m.h.toLocaleString('pt-BR') + ' px' : 'abra a aba', c: m ? (m.h <= lim ? '#1E7A63' : '#C8152B') : '#6E685D', txt: m ? '· ' + m.b + ' botões · teto ' + lim.toLocaleString('pt-BR') + ' px' : '' }; });
+
+    return {
+      theme: s.theme, phoneW: s.w, clock: D.clock, scrollRef: this.scrollRef, showFold: tab !== 'mapa',
+      isHoje: tab === 'hoje', isEu: tab === 'eu', isMapa: tab === 'mapa', mapaFoco: s.mapaFoco || 'Próxima porta',
+      d, selos, counts, dias, plano: planoV, prox, grupos, recolhidos, recAberto: !!recSel, recTitulo: recSel ? recSel[1] : '', recLista: recSel ? (recSel[2].length ? recSel[2].join(' · ') : 'nada') : '', eu, bonus,
+      regra: [{ v: '100', t: 'venda' }, { v: '25', t: 'demo' }, { v: '3', t: 'visita com prova' }],
+      tabs: [['mapa', 'Mapa'], ['hoje', 'Hoje'], ['eu', 'Eu']].map(([k, label]) => ({ label, fg: tab === k ? 'var(--ink)' : 'var(--mute)', bar: tab === k ? 'var(--act)' : 'transparent', temSelo: k === 'hoje' && hojeN > 0, selo: hojeN, onClick: () => this.setState({ tab: k, sheet: false }) })),
+      goEu: () => this.setState({ tab: 'eu' }), goHoje: () => this.setState({ tab: 'hoje' }),
+      montarDia: () => this.flash('Abre o Planejar o dia com 6 portas sugeridas'),
+      toastPlaybook: () => this.flash('Abre o Playbook'), toastAvisos: () => this.flash('Abre Avisos'), toastRanking: () => this.flash('Abre a FolhaRanking'),
+      abrirSemana: () => this.setState({ sheet: true }), fecharSheet: () => this.setState({ sheet: false }), sheet: s.sheet,
+      toggleMais: () => this.setState({ maisAberto: !s.maisAberto }),
+      hasToast: !!s.toast, toast: s.toast,
+      estados, temas, larguras, abas, medidas,
+      docs: [
+        { titulo: 'O que entra', itens: [
+          { k: 'Hoje · placar do dia.', v: 'Portas com prova "N de 6" (com 6 segmentos) e "Demo N de 1", mais 3 selos pequenos (pts e posição na semana · Na rua N dias · Missão n de m) que levam à aba Eu. A faixa vermelha da Missão sai.' },
+          { k: 'Hoje · Plano.', v: 'As 3 próximas portas com hora, tipo, quente/recém-aberto e o verbo "Ir" (abre o Mapa naquela porta). "ver as 7 ›" mostra todas. As feitas viram 1 linha. Sem plano: "Montar o dia ›".' },
+          { k: 'Hoje · Próxima ação.', v: 'O 1º da fila (atrasado quente → ligação da janela → próxima porta), com o combinado e um verbo só. "›" abre as outras ações.' },
+          { k: 'Hoje · contagem única.', v: '"N atrasados · N ligar hoje · N sem passo". Cada chip rola até o grupo. O "Hoje" da fileira de dias e o selo da aba contam atrasados + ligar hoje: a mesma conta.' },
+          { k: 'Hoje · grupos.', v: 'Atrasados → Ligar hoje (com a janela) → Sem próximo passo. A linha fechada tem 2 linhas e 1 verbo (Ligar · Dar o passo). Tocar na linha abre o combinado e WhatsApp · Pôr no plano · Remarcar · Sem interesse. Desfazer 5 s.' },
+          { k: 'Eu · topo.', v: '"{Mês} · faixa N da variável", R$ do mês, a escada (um degrau por venda), o que falta para a próxima faixa e a grade 2×2 HOJE · SEMANA · MÊS · PRÓXIMA VENDA.' },
+          { k: 'Eu · semana numa linha.', v: '"37 pts · 3º · faltam 9 para passar Gama", com a menor ação. Tocar abre a folha com o pódio, a regra e "Ver o ranking completo".' },
+          { k: 'Eu · atalhos e jogo.', v: 'Planejar a semana · Playbook · Recém-abertos numa fileira sem rolar. Meu jogo em 6 cartões de 1 linha, com prazo primeiro (Missão, Sequências), que abrem no toque. "Mais" recolhe o resto.' }] },
+        { titulo: 'O que sai (e onde fica, a 1 toque)', itens: [
+          { k: '"20 tarefas hoje" e o anel "0 de 20"', v: '→ a contagem única por grupo (cada chip abre o seu)' },
+          { k: '"1 · Para hoje · 0"', v: '→ some quando vazio; o que vence hoje entra em Ligar hoje ou Atrasados' },
+          { k: 'Legendas de regra de cada bloco', v: '→ o "?" do grupo' },
+          { k: 'Faixa vermelha "Missão 0 de 2 · Na rua 0 dias"', v: '→ selos pequenos no placar e o cartão Missão em Eu' },
+          { k: 'Ligar · WhatsApp · Pôr no plano em todo cartão', v: '→ um verbo na linha; o resto ao tocar' },
+          { k: 'Pódio, regra em chips e "o próximo a passar" (Eu)', v: '→ a folha da semana' },
+          { k: 'Escada completa, habilidade, carreira, coleção, você contra você', v: '→ cartões de Meu jogo, que abrem no toque' },
+          { k: 'Gestão, O time na rua, Avisos, TakeatOS, HubSpot, Ajustes', v: '→ "Mais" (Avisos também no sino do Hoje)' },
+          { k: '1:1 em bloco', v: '→ uma linha' }] },
+        { titulo: 'Orçamento', itens: [
+          { k: 'Hoje, acima da dobra (714 px úteis entre a barra de status e a barra de abas):', v: 'cabeçalho, contagem, dias, placar, plano (3 portas) e próxima ação. Medido ao lado, por estado.' },
+          { k: 'Hoje, inteira:', v: 'meta de 1.150 px ou menos num dia típico, com tudo recolhido. Botões: ~30 fechados (dias 6, contagem 3, cabeçalho 3, selos 3, plano 4, próxima 2, grupos ~8, recolhidos 3, abas 3).' },
+          { k: 'Eu, acima da dobra:', v: 'faixa da variável + 2×2 + linha da semana + atalhos.' },
+          { k: 'Eu, inteira:', v: 'meta de 1.600 px ou menos, com Meu jogo fechado. Botões: ~17.' },
+          { k: 'Largura:', v: 'tudo cabe em 375 sem quebrar linha (nomes longos cortam com reticências).' }] },
+        { titulo: 'Número novo → de onde vem (conferir)', itens: [
+          { k: 'Portas com prova N de 6', v: 'diaDoExecutivo().contagem.comProva (Hoje v3); meta de meta_visitas' },
+          { k: 'Demo N de 1', v: 'pontos_eventos demo_realizada de hoje + parada tipo Demo do plano (o tipo da parada precisa existir)' },
+          { k: 'Plano (portas, hora, tipo, ✓)', v: 'field_route_stops de hoje + visitas_com_prova (a lista do plano do Hoje v3)' },
+          { k: 'Próxima ação', v: '1º de ordemPorDinheiro (folha da manhã) restrito a atrasado/ligar; sem fila, a próxima porta (porta.proxima)' },
+          { k: 'Atrasados / Ligar hoje / Sem passo', v: 'montarFila (Edge fila-tarefas) + semProximoPassoDaFila; janela 12:30/17:30 de cadencias.json' },
+          { k: 'Selos e linha da semana', v: 'desenvolvimento_quadro().semana (pts, posição, próximo); missão e sequências do mesmo quadro' },
+          { k: 'Faixa N, R$ do mês, próxima venda', v: 'GV2.variavel / comissionamento.json (o mesmo da escada atual)' },
+          { k: 'Recém-abertos da semana (atalho)', v: 'lente Recém-abertos, contagem da semana' },
+          { k: 'Bônus R$ 250', v: 'config, não texto fixo' }] }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

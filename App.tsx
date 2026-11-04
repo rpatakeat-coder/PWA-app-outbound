@@ -224,9 +224,10 @@ import { useSellerClassification, precisaDeIdHubspot } from './src/hooks/useSell
 import { buildHeatCells, celulasNinguemFoi, heatColor, heatIntensity, HEAT_CELL_M } from './src/utils/heatmap';
 import { slaForStage, slaStatus, type SlaDays } from './src/utils/sla';
 import { lerAberturaDaUrl, lerPedidoDaUrl, limparAberturaDaUrl, limparPedidoDaUrl, type PedidoDaFila } from './src/utils/pushDaFila';
-import { PilulaDoHoje, ToastDeConquista } from './src/screens/EntradasDesenvolvimento';
+import { ToastDeConquista } from './src/screens/EntradasDesenvolvimento';
+import { useDemosDeHoje } from './src/hooks/useDemosDeHoje';
 import type { OrigemAbertura } from './src/hooks/useDesenvolvimento';
-import { contagemDoHoje, seloDaFila } from './src/utils/seloDaFila';
+import { contagemDoHoje, gruposDoHoje, seloDaFila } from './src/utils/seloDaFila';
 import { janelaAtual, marcoDoRelogio } from './src/utils/horaDasLigacoes';
 import { feriadosNacionais, quenteEsfriando, secaoDoItem } from './supabase/functions/_compartilhado/filaDoDinheiro';
 import { FaixaHoraDasLigacoes } from './src/screens/CartaoDaFila';
@@ -1126,7 +1127,7 @@ function MainApp() {
   // até a pessoa abrir a aba, e o da fila (3) depois. Mesmo cache e mesma chave da tela.
   const filaNaTela = useQuery({ ...opcoesDaFila(), enabled: !!profile && profile.role !== 'view' });
   // o número do Hoje: o mesmo no selo da aba, no cabeçalho e nos avisos (contagemDoHoje, auditoria 02/11/26)
-  const naFila = useMemo(() => contagemDoHoje(filaNaTela.data?.itens as Parameters<typeof contagemDoHoje>[0]), [filaNaTela.data]);
+  const naFila = useMemo(() => contagemDoHoje(filaNaTela.data?.itens as Parameters<typeof contagemDoHoje>[0], (filaNaTela.data as { hoje?: string } | undefined)?.hoje), [filaNaTela.data]);
   // P2 (handoff Tarefas do App, 17/10/26): "2 quentes esfriando" ou "6 vencidos" — o mesmo no menu, na lateral e no sino
   const seloFila = useMemo(() => seloDaFila(filaNaTela.data?.itens, filaNaTela.data?.hoje ?? diaBRT(new Date())), [filaNaTela.data]);
   // P1: a hora das ligações (12:30 e 17:30, 15 min). Fora da janela ou com a fila vazia, a faixa some.
@@ -5508,6 +5509,32 @@ function MainApp() {
   }, [opsDeHojeV3.stops, opsDeHojeV3.erro, hojeIsoV3, agoraV3, feriadosV3, profile?.full_name, metaDeHoje, diaV3.data, filaV3, filaNaTela.isError,
     sugestaoV3, feitosV3, quadroV3.data, ontemV3, linhasDaLista.length, userLocation]);
   const vmV3 = useMemo(() => diaDoExecutivo(entradaV3), [entradaV3]);
+  /* A ABA HOJE ENXUTA (handoff "Hoje e Eu", 04/11/26): o plano de hoje com hora, tipo (a ação da parada) e
+     prova, as MESMAS paradas e o mesmo estado da folha da manhã (entradaV3). "N de 6 com prova" é a meta de
+     visita do DIA: conta a visita provada fora do plano também (visitas_com_prova de hoje, por restaurante). */
+  const familiaNoMapa = useMemo(() => { const m = new Map<string, string>(); itensMapaNovo.forEach(({ c, p }) => m.set(c.id, p.familia)); return m; }, [itensMapaNovo]);
+  const diaDoHoje = useMemo(() => {
+    const TIPO: Record<string, string> = { demo: 'Demo', follow: 'Retorno', reuniao: 'Reunião', prosp: 'Prospecção', rel: 'Relacionamento', cobrar: 'Cobrança' };
+    const QUENTES = ['Conversa com decisor', 'Demo/Proposta', 'Negociação'];
+    const estados = new Map((entradaV3.paradas ?? []).map((p) => [p.id, p.estado]));
+    const stops = opsDeHojeV3.stops.filter((st) => st.status !== 'removed' && st.status !== 'skipped' && !!st.client);
+    const portas = opsDeHojeV3.erro ? null : stops.map((st) => ({
+      id: st.client_id,
+      hora: (st as { horario_fixo?: string | null }).horario_fixo?.slice(0, 5) ?? null,
+      nome: st.client ? getClientPrimaryName(st.client) : 'parada',
+      tipo: TIPO[String((st as { acao?: string | null }).acao ?? '')] ?? 'Visita',
+      quente: QUENTES.includes(String(st.client?.etapa ?? '')),
+      recem: familiaNoMapa.get(st.client_id) === 'rec',
+      feita: estados.get(st.client_id) === 'com_prova',
+      semProva: estados.get(st.client_id) === 'sem_prova',
+    }));
+    const vis = diaV3.data?.visitas ?? null;
+    const comProva = vis ? new Set(vis.filter((v) => v.dia === hojeIsoV3 && v.provada).map((v) => String(v.client_id))).size : null;
+    const n = Math.min(6, linhasDaLista.length);
+    return { portas, comProva, meta: metaDeHoje, sugestao: n ? `O app sugere ${n} ${n === 1 ? 'porta' : 'portas'} perto de você, na ordem do dinheiro.` : null };
+  }, [opsDeHojeV3.stops, opsDeHojeV3.erro, entradaV3.paradas, familiaNoMapa, diaV3.data, hojeIsoV3, linhasDaLista.length, metaDeHoje]);
+  /* o "demo N de 1" do placar do Hoje e do HOJE da aba Eu: o mesmo livro de pontos */
+  const demosDeHoje = useDemosDeHoje(ehRepV3 ? myHubspotId : null);
   /* o "passo vence hoje · ligar 12:30" do cartão da próxima porta (README §4.3), da mesma fila */
   const venceHojeV3 = useMemo(() => {
     const m: Record<string, string> = {};
@@ -8382,8 +8409,10 @@ function MainApp() {
   const totalDaFila = naFila ?? null;
   /* O SELO DA ABA (Tarefas por dia, 2.7): a pílula "N atrasados" só quando há atrasado; sem atrasado, sem pílula.
      O Cheguei sem Como foi conta atrasado no servidor, mas na aba ele fica em Para hoje: não entra. */
-  const nAtrasadosFila = ((filaNaTela.data?.itens ?? []) as Array<{ venceu: boolean; motivo: string; grupo: string }>)
-    .filter((i) => secaoDoItem(i) === 'atrasados' && i.motivo !== 'visita_sem_registro').length;
+  /* Hoje e Eu enxutas (04/11/26): o atrasado do selo é o do chip "N atrasados" da tela (até 3 dias, ou quente);
+     os antigos ficam no recolhido "Antigos" e fora da conta */
+  const nAtrasadosFila = gruposDoHoje((filaNaTela.data?.itens ?? []) as Array<{ venceu: boolean; motivo: string; grupo: string; etapaId: string; prazo?: string | null }>,
+    (filaNaTela.data as { hoje?: string } | undefined)?.hoje ?? (diaBRT(new Date()) ?? '')).atrasados.length;
   const seloAtrasados = nAtrasadosFila ? `${nAtrasadosFila} ${nAtrasadosFila === 1 ? 'atrasado' : 'atrasados'}` : null;
   const abasDoRodape: Array<{ aba: AppTab; rotulo: string; Icone: typeof IconLocation; ativa: boolean; selo: number | null; seloClaro?: boolean; seloTexto?: string | null }> = [
     { aba: 'map', rotulo: 'Mapa', Icone: tab === 'map' ? IconLocationFilled : IconLocation, ativa: tab === 'map' || tab === 'list', selo: null },
@@ -8688,7 +8717,8 @@ function MainApp() {
         {/* Linha 1 — busca + avatar. A busca subiu pro header: ela e' o
             caminho pro lead que NAO esta' na area carregada, e ficava abaixo
             dos filtros, onde parecia filtro do recorte. */}
-        <View style={styles.headerLinha}>
+        {/* na aba Hoje o cabeçalho leva "Hoje", a data, o Playbook, o sino e o avatar: gap de 8 para a data caber */}
+        <View style={[styles.headerLinha, tab === 'tasks' && { gap: 8 }]}>
           {/* data-campo: o CSS de public/index.html tira o anel de foco do
               <input> interno — dentro do vermelho da marca ele fica ilegivel —
               e devolve o anel ao wrapper em tela larga. */}
@@ -8744,7 +8774,7 @@ function MainApp() {
                (prancha "Mapa limpo", respostas 6 e 7). O sino conta falha de
                sincronizacao e recado do gestor: nao e' tarefa da rua, nao cabia
                no selo de Hoje e nao merecia faixa. */
-            <View style={styles.headerLinha}>
+            <View style={[styles.headerLinha, { flex: 1, minWidth: 0 }]}>
               {tab === 'config' && (
                 <TouchableOpacity
                   accessibilityRole="button"
@@ -8785,20 +8815,13 @@ function MainApp() {
               )}
             </View>
           ) : tab === 'tasks' ? (
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.headerTitulo}>Hoje</Text>
-              {/* A sublinha responde a pergunta da tela antes de qualquer
-                  toque: o que venceu e o que vence hoje. */}
-              <Text style={styles.headerSublinha} numberOfLines={1}>
-                {(() => {
-                      // sem a leitura do HubSpot, "0 atrasadas" é um zero que tranquiliza sem medir
-                      if (tarefasSemMedicao) return 'sem medição · ' + tarefasSemMedicao;
-                      if (tarefasErro) return 'não consegui ler o HubSpot agora';
-                      if (!tarefasMedidas) return 'lendo as tarefas do HubSpot…';
-                      if (naFila != null) return `${naFila} ${naFila === 1 ? 'tarefa' : 'tarefas'} hoje`;
-                      const atr = tarefasDoCrmParaContagem.filter((t) => grupoDaTarefa(t.venceEm, new Date()) === 'atrasadas').length;
-                      return `${atr} atrasadas · ${seloTarefas - atr} para hoje`;
-                    })()}
+            /* Hoje enxuta (04/11/26): "Hoje" e "ter 03/11 · 10:05" na mesma linha. O "20 tarefas hoje" saiu:
+               os números estão na contagem por grupo, logo abaixo (o mesmo do selo da aba). */
+            <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+              <Text style={[styles.headerTitulo, { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', fontSize: 22, fontWeight: '800' }]}>Hoje</Text>
+              <Text style={[styles.headerSublinha, { flexShrink: 1 }]} numberOfLines={1}>
+                {tarefasSemMedicao ? 'sem medição · ' + tarefasSemMedicao : tarefasErro && naFila == null ? 'não consegui ler o HubSpot agora'
+                  : `${['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][new Date(hojeIsoV3 + 'T12:00:00Z').getUTCDay()]} ${hojeIsoV3.slice(8, 10)}/${hojeIsoV3.slice(5, 7)} · ${agoraV3}`}
               </Text>
             </View>
           ) : (
@@ -8809,14 +8832,15 @@ function MainApp() {
               Nao ha' icone de "info"/"ajuda" no kit — IconLightBulb e' o mais
               proximo do que o modal diz ("como as tarefas sao geradas") e nao
               exigiu desenhar SVG novo. */}
+          {/* Hoje enxuta (04/11/26): a lâmpada das regras virou o "?" de cada grupo; no lugar, o Playbook */}
           {tab === 'tasks' && !isViewer && (
             <TouchableOpacity
               accessibilityRole="button"
-              accessibilityLabel="Como as tarefas funcionam"
-              style={styles.headerAjuda}
-              onPress={() => setIsTaskRulesOpen(true)}
+              accessibilityLabel="Abrir o Playbook"
+              style={[styles.headerPilula, { minHeight: 34, paddingHorizontal: 11 }]}
+              onPress={() => setTab('playbook')}
             >
-              <IconLightBulb width={24} height={24} fill="#FFFFFF" />
+              <Text style={styles.headerPilulaTexto}>Playbook</Text>
             </TouchableOpacity>
           )}
           {/* Unico controle permanente a' direita do header — a engrenagem e o
@@ -8829,7 +8853,8 @@ function MainApp() {
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel={avisos.selo ? `Avisos, ${avisos.selo} ${avisos.selo === 1 ? 'novo' : 'novos'}` : 'Avisos'}
-              style={styles.headerAjuda}
+              /* na aba Hoje o cabeçalho tem também o Playbook e a data: sino de 40 (o alvo continua ≥ 40) */
+              style={[styles.headerAjuda, tab === 'tasks' && { width: 40, height: 40 }]}
               onPress={() => { setAvisosAbertos(true); avisos.marcarRecadosVistos(); }}
             >
               <IconBell width={24} height={24} fill="#FFFFFF" />
@@ -8843,15 +8868,16 @@ function MainApp() {
           {tab !== 'meu' && tab !== 'config' && (
             <TouchableOpacity
               accessibilityRole="button"
-              accessibilityLabel="Abrir menu do perfil"
-              onPress={() => setPerfilAberto(true)}
+              accessibilityLabel={tab === 'tasks' && !isViewer ? 'Abrir a aba Eu' : 'Abrir menu do perfil'}
+              /* no Hoje o avatar abre a aba Eu (handoff 04/11/26); a foto e o sair seguem no avatar da Eu */
+              onPress={() => (tab === 'tasks' && !isViewer ? irParaEu('menu') : setPerfilAberto(true))}
             >
               <Avatar
                 url={profile?.avatar_url}
                 nome={profile?.full_name}
                 email={profile?.email}
-                tamanho={48}
-                estilo={styles.headerAvatar}
+                tamanho={tab === 'tasks' ? 36 : 48}
+                estilo={[styles.headerAvatar, tab === 'tasks' && { width: 36, height: 36, borderRadius: 18 }]}
                 estiloTexto={styles.headerAvatarTexto}
               />
             </TouchableOpacity>
@@ -9140,12 +9166,17 @@ function MainApp() {
         // A fila do dinheiro (docs/10 §1, 04/10/2026): um card por negócio, valor × urgência.
         // Visitar e Registrar levam ao lead no mapa (o Cheguei é a prova da visita).
         <BarreiraDaAba nome="Hoje">
-        {/* Desenvolvimento v2 (01/11/26): a pílula fixa no topo do Hoje leva ao Meu desempenho */}
+        {/* Hoje enxuta (04/11/26): a pílula da Missão saiu (era vermelho de alarme); missão, sequência e
+            pontos viraram os selos do placar, que abrem a aba Eu */}
         <View style={{ flex: 1 }}>
-        {!isViewer && <PilulaDoHoje ativo={tab === 'tasks'} aoTocar={() => irParaEu('pilula')} />}
         <React.Suspense fallback={<CarregandoTela />}>
         <FilaTarefasScreen
           ownerId={myHubspotId}
+          dia={ehRepV3 ? diaDoHoje : null}
+          aoIrPorta={(id) => { setTab('map'); void openClientById(id); }}
+          aoMontarDia={isViewer ? undefined : () => { setTab('map'); void montarDiaComMicrorrotas(); }}
+          aoComoFunciona={() => setIsTaskRulesOpen(true)}
+          aoAbrirEu={() => irParaEu('pilula')}
           pedido={pedidoDaFila}
           aoVoltarAgenda={() => { setPedidoDaFila(null); setTab('agenda'); }}
           aoAbrirAgendaNoDia={(dia) => { setAgendaDiaInicial(dia); setTab('agenda'); }}
@@ -9212,6 +9243,9 @@ function MainApp() {
           origem={aberturaEu.origem}
           rolarColecao={aberturaEu.rolar}
           aoFazerQuiz={() => setTab('playbook')}
+          hoje={ehRepV3 ? { comProva: diaDoHoje.comProva, meta: metaDeHoje, demos: demosDeHoje } : null}
+          perfil={profile ? { nome: profile.full_name ?? null, avatarUrl: profile.avatar_url ?? null, email: profile.email ?? null } : null}
+          aoAbrirHoje={() => setTab('tasks')}
         />
         </React.Suspense>
       ) : (

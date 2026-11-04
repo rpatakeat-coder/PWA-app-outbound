@@ -1,8 +1,7 @@
 // As ENTRADAS do Desenvolvimento v2 (handoff de 01/11/26, README §5): o que faz a pessoa abrir o Meu
 // desempenho. "Sem as entradas, ninguém abre: esta etapa é tão importante quanto a tela."
 //
-//   PilulaDoHoje      fixa no topo do Hoje (44 px): "Missão 1 de 2 · Na rua 4 dias"; o toque abre o
-//                     Meu desempenho (origem 'pilula').
+//   (a PilulaDoHoje saiu em 04/11/26: virou os selos do placar da aba Hoje enxuta)
 //   ToastDeConquista  logo depois do check-in, da venda ou da missão fechada: quando o quadro relido
 //                     (o sinal ao vivo 'visita'/'conquista' invalida ['desenvolvimento_quadro']) traz uma
 //                     conquista não vista, ou quando a venda muda a faixa do variável. Cartão no topo com
@@ -11,23 +10,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { IconFlame, IconTarget, useIconColors } from '../components/icons';
-import { conquistasNovas, faixaDe, pilula, reais, toastDaConquista } from '../../supabase/functions/_compartilhado/desenvolvimentoV2';
+import { IconFlame, useIconColors } from '../components/icons';
+import { conquistasNovas, faixaDe, reais, toastDaConquista } from '../../supabase/functions/_compartilhado/desenvolvimentoV2';
 import { destaqueDaSessao, marcarVistas, useCapitulos, useDesenvolvimentoQuadro, useReduzirMovimento } from '../hooks/useDesenvolvimento';
-
-export function PilulaDoHoje({ ativo, aoTocar }: { ativo: boolean; aoTocar: () => void }) {
-  const q = useDesenvolvimentoQuadro(ativo);
-  const cores = useIconColors();
-  if (!q.data || q.data.erro) return null;
-  const texto = pilula(q.data);
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${texto}. Abrir o Meu desempenho`} onPress={aoTocar} style={st.pilula}>
-      <IconTarget width={16} height={16} fill={cores.brandText} />
-      <Text style={st.pilulaTexto} numberOfLines={1}>{texto}</Text>
-      <Text style={st.pilulaSeta}>›</Text>
-    </Pressable>
-  );
-}
 
 const CHAVE_TOASTADAS = 'dv2-toastadas';
 function lerToastadas(): Set<string> {
@@ -91,10 +76,6 @@ export function ToastDeConquista({ aoVer, naAbaEu }: { aoVer: () => void; naAbaE
 }
 
 const st = StyleSheet.create({
-  pilula: { minHeight: 44, marginHorizontal: 12, marginTop: 8, marginBottom: 4, paddingHorizontal: 14, borderRadius: 22, flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'var(--tint-red)', borderWidth: 1, borderColor: 'var(--tint-red-border)' },
-  pilulaTexto: { flex: 1, fontSize: 13.5, fontWeight: '700', color: 'var(--vermelho-texto)' },
-  pilulaSeta: { fontSize: 16, color: 'var(--vermelho-texto)' },
   toastLugar: { position: 'absolute', left: 12, right: 12, top: 50, zIndex: 50 },
   toast: { minHeight: 64, padding: 12, borderRadius: 18, backgroundColor: 'var(--surface)', borderWidth: 1.5, borderColor: 'var(--vermelho-acao)', flexDirection: 'row', alignItems: 'center', gap: 10,
     shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 8 },

@@ -12,7 +12,7 @@
 // Saíram desta aba (README §1): os 5 números do Hoje (continuam no Hoje) e os blocos de cobrança; o
 // v1 continua inteiro em MeuDesempenhoScreen e volta com localStorage['meu-desempenho-v1'] = '1'.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { supabase } from '../integrations/supabase/client';
 import { useLayout } from '../hooks/useLayout';
@@ -21,6 +21,9 @@ import {
   IconTarget, IconTrophy, IconUserGroup, IconZap, useIconColors,
 } from '../components/icons';
 import FolhaRanking from './FolhaRanking';
+import { Avatar } from '../components/Avatar';
+import { MinhaRampaCard } from './MinhaRampaCard';
+import { linhaDaSemana, topoDaVariavel } from '../utils/abaEu';
 import {
   montarDesenvolvimento, type VM, type Tom,
 } from '../../supabase/functions/_compartilhado/desenvolvimentoV2';
@@ -59,9 +62,13 @@ type Props = {
   /** rolar até a coleção (o toque do toast); o número muda a cada pedido */
   rolarColecao?: number;
   aoFazerQuiz?: () => void;
+  /** Hoje e Eu enxutas (04/11/26): o HOJE da grade (as portas com prova do dia e a demo), quem é a pessoa e a volta ao Hoje */
+  hoje?: { comProva: number | null; meta: number; demos: number | null } | null;
+  perfil?: { nome: string | null; avatarUrl: string | null; email: string | null } | null;
+  aoAbrirHoje?: () => void;
 };
 
-export function MeuDesempenhoV2Screen({ enabled, linhas = [], origem = 'menu', rolarColecao, aoFazerQuiz }: Props) {
+export function MeuDesempenhoV2Screen({ enabled, linhas = [], origem = 'menu', rolarColecao, aoFazerQuiz, hoje, perfil, aoAbrirHoje }: Props) {
   const layout = useLayout();
   const cores = useIconColors();
   const q = useDesenvolvimentoQuadro(enabled);
@@ -72,6 +79,11 @@ export function MeuDesempenhoV2Screen({ enabled, linhas = [], origem = 'menu', r
   const [rankingAberto, setRankingAberto] = useState(false);
   const rolagem = useRef<ScrollView>(null);
   const yColecao = useRef<number | null>(null);
+  const yJogo = useRef(0), yCartaoJogo = useRef(0), yLinhaCol = useRef(0);
+  const [semanaAberta, setSemanaAberta] = useState(false);
+  const [mesAberto, setMesAberto] = useState(false);
+  const [maisAberto, setMaisAberto] = useState(false);
+  const [jogoAberto, setJogoAberto] = useState<Record<string, boolean>>({});
 
   /* a medição: uma abertura por vez que a aba aparece */
   const abriu = useRef(false);
@@ -85,6 +97,7 @@ export function MeuDesempenhoV2Screen({ enabled, linhas = [], origem = 'menu', r
   /* o toque do toast rola até a coleção, com a medalha nova destacada */
   useEffect(() => {
     if (!rolarColecao || !vm) return;
+    setJogoAberto((x) => ({ ...x, col: true }));
     const t = setTimeout(() => { if (yColecao.current != null) rolagem.current?.scrollTo({ y: Math.max(0, yColecao.current - 12), animated: !reduzir }); }, 80);
     return () => clearTimeout(t);
   }, [rolarColecao, vm, reduzir]);
@@ -117,21 +130,6 @@ export function MeuDesempenhoV2Screen({ enabled, linhas = [], origem = 'menu', r
     );
   }
   const largo = layout.ehDesktop;
-
-  // ── cabeçalho ──
-  const cab = (
-    <View style={{ gap: 6 }}>
-      <Text style={st.titulo}>Meu desempenho</Text>
-      <Text style={st.fraco}>{vm.cab.sub}</Text>
-      <View style={st.linha}>
-        {vm.cab.selos.map((s) => (
-          <View key={s.t} style={[st.selo, s.tom === 'pri' ? { backgroundColor: 'var(--text)' } : { backgroundColor: 'var(--tint-blue)' }]}>
-            <Text style={[st.seloTexto, { color: s.tom === 'pri' ? 'var(--surface)' : 'var(--tint-blue-text)' }]}>{s.t}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
 
   // ── 1 · o 1:1 em uma linha ──
   const um = vm.umAUm;
@@ -180,10 +178,6 @@ export function MeuDesempenhoV2Screen({ enabled, linhas = [], origem = 'menu', r
       <View style={[st.caixa, { backgroundColor: 'var(--tint-blue)' }]}><Text style={[st.textoForte, { color: 'var(--tint-blue-text)' }]}>{S.proximo}</Text></View>
       <View style={st.linha}>{S.regra.map((r) => <View key={r.t} style={st.chip}><Text style={st.chipTexto}><Text style={{ fontWeight: '800' }}>{r.v}</Text>{` ${r.t}`}</Text></View>)}</View>
       <Text style={st.nota}>{S.nota}</Text>
-      {/* o ranking completo fica na Disputa (README, regra 3): aqui só o pódio e o próximo a passar */}
-      {!S.fora && q.data?.pessoa.fase !== 'novato' && (
-        <Pressable accessibilityRole="button" onPress={() => setRankingAberto(true)} style={[st.botao, { alignSelf: 'flex-start' }]}><Text style={st.botaoTexto}>a disputa completa</Text></Pressable>
-      )}
     </View>
   );
 
@@ -192,7 +186,7 @@ export function MeuDesempenhoV2Screen({ enabled, linhas = [], origem = 'menu', r
   const blocoMissao = (
     <View style={[st.cartao, { borderWidth: 1.5, borderColor: M.cumprida ? 'var(--verde-acao)' : 'var(--vermelho-acao)', backgroundColor: M.cumprida ? 'var(--tint-green)' : 'var(--surface)' }]}>
       <View style={st.kickerLinha}><Text style={[st.kicker, { color: M.cumprida ? 'var(--tint-green-text)' : 'var(--vermelho-texto)' }]}>{M.kicker}</Text><Text style={st.nota}>{M.prazo}</Text></View>
-      {M.cumprida ? <Celebracao selo={M.selo} icone={M.icone} texto={M.celebra} reduzir={reduzir} aoVer={() => { if (yColecao.current != null) rolagem.current?.scrollTo({ y: yColecao.current - 12, animated: !reduzir }); }} /> : null}
+      {M.cumprida ? <Celebracao selo={M.selo} icone={M.icone} texto={M.celebra} reduzir={reduzir} aoVer={() => { setJogoAberto((x) => ({ ...x, col: true })); if (yColecao.current != null) rolagem.current?.scrollTo({ y: yColecao.current - 12, animated: !reduzir }); }} /> : null}
       <Text style={st.missaoTitulo}>{M.titulo}</Text>
       <View style={[st.linha, { flexWrap: 'wrap' }]}>
         {M.passos.map((f, i) => <View key={i} style={[st.passo, { backgroundColor: f ? (M.cumprida ? 'var(--verde-acao)' : 'var(--vermelho-acao)') : 'var(--surface-3)' }]} />)}
@@ -337,7 +331,7 @@ export function MeuDesempenhoV2Screen({ enabled, linhas = [], origem = 'menu', r
   // ── 8 · a coleção ──
   const K = vm.colecao;
   const blocoCol = (
-    <View style={st.cartao} onLayout={(e) => { yColecao.current = e.nativeEvent.layout.y; }}>
+    <View style={st.cartao}>
       <View style={st.kickerLinha}><Text style={[st.kicker, { color: 'var(--text-muted)' }]}>COLEÇÃO</Text><Text style={st.nota}>{K.n}</Text></View>
       {!!K.reconhecimento && (
         <View style={[st.caixa, st.linha, { backgroundColor: 'var(--tint-amber)' }]}><IconStar width={18} height={18} fill={cores.tintAmberText} /><Text style={[st.texto, { flex: 1, color: 'var(--tint-amber-text)' }]}>{K.reconhecimento}</Text></View>
@@ -378,25 +372,185 @@ export function MeuDesempenhoV2Screen({ enabled, linhas = [], origem = 'menu', r
     </View>
   );
 
-  return (
-    <ScrollView ref={rolagem} style={st.tela} contentContainerStyle={[st.conteudo, largo && st.conteudoLargo]}
-      refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => void q.refetch()} />}>
-      {cab}{blocoUm}{blocoSemana}{blocoMissao}{blocoSeq}{blocoVar}{blocoHab}{blocoCar}{blocoCol}{blocoVs}
-      <Text style={st.nota}>Os mesmos números da aba Desenvolvimento do Cockpit. Ponto só nasce de prova: abrir esta tela não soma nada.</Text>
-      {linhas.length > 0 && (
-        <View style={st.lista}>
-          {linhas.map((l) => (
-            <Pressable key={l.chave} accessibilityRole="button" accessibilityLabel={l.rotulo} onPress={l.aoTocar} style={st.linhaEu}>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={[st.linhaTexto, l.perigo && { color: 'var(--vermelho-texto)' }]} numberOfLines={1}>{l.rotulo}</Text>
-                {!!l.sub && <Text style={st.nota} numberOfLines={1}>{l.sub}</Text>}
-              </View>
-              {!!l.selo && <View style={st.linhaSelo}><Text style={st.linhaSeloTexto}>{l.selo}</Text></View>}
-              <Text style={st.fraco}>›</Text>
-            </Pressable>
+  /* ══ A ABA EU ENXUTA (handoff "Hoje e Eu", 04/11/26) ══════════════════════════════════════════════
+     De cima para baixo: quem eu sou · quanto eu ganho e quanto falta (a faixa escura, a única da tela) ·
+     a grade HOJE/SEMANA/MÊS/PRÓXIMA VENDA · a semana numa linha (a folha abre o pódio) · os atalhos ·
+     o 1:1 · Meu jogo (6 cartões compactos que abrem os blocos de antes) · Mais. Nada saiu: cada bloco
+     grande de antes abre no toque do seu cartão. */
+  const Qd = q.data!;
+  const TV = topoDaVariavel(Qd);
+  const LS = linhaDaSemana(Qd);
+  const porChave = (k: string) => linhas.find((l) => l.chave === k) ?? null;
+  const ATALHOS = ['agenda', 'playbook', 'novos'];
+  const atalhos = ATALHOS.map(porChave).filter((l): l is NonNullable<typeof l> => !!l);
+  const mais = linhas.filter((l) => !ATALHOS.includes(l.chave));
+  const nomeEu = (perfil?.nome || Qd.pessoa.nome || '').trim();
+  const rampa = Qd.pessoa.fase === 'novato';
+  const R = Qd.carreira?.rampa ?? null;
+  const selosEu = [
+    { t: rampa ? (R ? `Rampa · dia ${R.dia} de 60` : 'Rampa') : 'Pleno', tom: 'red' as const },
+    ...(PB.fora ? [] : [{ t: `Playbook nível ${PB.nivel}`, tom: 'blue' as const }]),
+  ];
+  const identidade = (
+    <View style={[st.linha, { gap: 10 }]}>
+      <Avatar url={perfil?.avatarUrl} nome={nomeEu} email={perfil?.email} tamanho={40} estilo={{ backgroundColor: 'var(--vermelho-acao)' }} estiloTexto={{ color: '#FFFFFF', fontWeight: '800' }} />
+      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+        <Text style={st.euNome} numberOfLines={1}>{nomeEu || 'Eu'}</Text>
+        <View style={[st.linha, { gap: 6 }]}>
+          {selosEu.map((s) => (
+            <View key={s.t} style={[st.seloEu, { backgroundColor: s.tom === 'red' ? 'var(--tint-red)' : 'var(--tint-blue)' }]}>
+              <Text style={[st.seloEuT, { color: s.tom === 'red' ? 'var(--vermelho-texto)' : 'var(--tint-blue-text)' }]}>{s.t}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+
+  const faixa = (
+    <Pressable accessibilityRole="button" accessibilityLabel={`${TV.kicker}. ${TV.rs}. ${TV.falta}. Abrir a escada do variável`} onPress={() => setMesAberto((v) => !v)} style={st.faixa}>
+      <Text style={st.faixaK}>{TV.kicker.toUpperCase()}</Text>
+      <View style={[st.linha, { alignItems: 'baseline', gap: 8 }]}>
+        <Text style={st.faixaRs}>{TV.rs}</Text>
+        <Text style={st.faixaSub} numberOfLines={1}>{TV.rsSub}</Text>
+      </View>
+      {TV.degraus.length > 0 && (
+        <View style={[st.linha, { gap: 4 }]}>
+          {TV.degraus.map((d, i) => (
+            <View key={i} style={[st.degrauEu, d === 'feita' ? { backgroundColor: '#FF6B78' } : d === 'proxima' ? { backgroundColor: 'rgba(255,107,120,0.35)', borderWidth: 1.5, borderColor: '#FF6B78' } : { backgroundColor: 'rgba(255,255,255,0.14)' }]} />
           ))}
         </View>
       )}
+      <Text style={st.faixaFalta}>{TV.falta}</Text>
+    </Pressable>
+  );
+
+  const comProva = hoje?.comProva ?? null;
+  const grade = [
+    { k: 'HOJE', v: comProva == null ? '—' : `${comProva} de ${hoje?.meta ?? 6}`, s: `portas com prova · demo ${hoje?.demos == null ? '—' : hoje.demos} de 1`, cor: 'var(--text)', aoTocar: () => aoAbrirHoje?.() },
+    { k: 'SEMANA', v: LS.pts, s: `${LS.pos} · disputa dos R$ 250`, cor: LS.lider ? 'var(--tint-amber-text)' : 'var(--text)', aoTocar: () => setSemanaAberta(true) },
+    { k: 'MÊS', v: TV.mes.v, s: TV.mes.s, cor: 'var(--text)', aoTocar: () => setMesAberto((v) => !v) },
+    { k: 'PRÓXIMA VENDA', v: TV.proxima.v, s: TV.proxima.s, cor: 'var(--ok-texto)', aoTocar: () => setMesAberto((v) => !v) },
+  ];
+  const grade2x2 = (
+    <View style={st.grade2}>
+      {grade.map((g) => (
+        <Pressable key={g.k} accessibilityRole="button" accessibilityLabel={`${g.k}: ${g.v}, ${g.s}`} onPress={g.aoTocar} style={st.tile}>
+          <Text style={[st.kicker, { color: 'var(--text-muted)' }]}>{g.k}</Text>
+          <Text style={[st.tileV, { color: g.cor }]} numberOfLines={1}>{g.v}</Text>
+          <Text style={st.nota} numberOfLines={1}>{g.s}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
+  const semanaLinha = (
+    <Pressable accessibilityRole="button" accessibilityLabel={`${LS.linha}. ${LS.sub}. Abrir a semana`} onPress={() => setSemanaAberta(true)}
+      style={[st.cartao, st.linha, { paddingVertical: 10, gap: 10 }, LS.lider && { backgroundColor: 'var(--tint-amber)', borderColor: 'var(--tint-amber-border)' }]}>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[st.textoForte, LS.lider && { color: 'var(--tint-amber-text)' }]} numberOfLines={1}>{LS.linha}</Text>
+        <Text style={st.nota} numberOfLines={1}>{LS.sub}</Text>
+      </View>
+      <Text style={st.fraco}>›</Text>
+    </Pressable>
+  );
+
+  const subAtalho = (k: string, sub: string | null | undefined) => (k === 'playbook' && !PB.fora ? `nível ${PB.nivel}${PB.proximo ? ` · próximo: ${PB.proximo}` : ''}` : sub ?? '');
+  const tiles = atalhos.length > 0 && (
+    <View style={[st.linha, { gap: 8, alignItems: 'stretch' }]}>
+      {atalhos.map((l) => (
+        <Pressable key={l.chave} accessibilityRole="button" accessibilityLabel={l.rotulo} onPress={l.aoTocar} style={st.atalho}>
+          <Text style={st.atalhoT} numberOfLines={2}>{l.chave === 'novos' ? 'Recém-abertos' : l.rotulo}</Text>
+          <Text style={st.mini2} numberOfLines={1}>{subAtalho(l.chave, l.sub)}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
+  const S0 = Qd.sequencias;
+  const jogo: Array<{ id: string; k: string; kc: string; t: string; v?: string; dots?: string[]; det: React.ReactNode }> = [
+    { id: 'missao', k: M.fora ? 'MISSÃO DA SEMANA' : M.cumprida ? 'MISSÃO CUMPRIDA' : `MISSÃO · ${M.prazo.toUpperCase()}`, kc: M.cumprida ? 'var(--tint-green-text)' : 'var(--vermelho-texto)',
+      t: M.titulo, v: M.fora ? undefined : M.contagem, dots: M.passos.map((f) => (f ? 'var(--verde-acao)' : 'var(--surface-3)')), det: blocoMissao },
+    { id: 'seq', k: 'SEQUÊNCIAS · HOJE CONTA', kc: 'var(--tint-amber-text)',
+      t: S0 ? `Na rua ${S0.rua.atual} ${S0.rua.atual === 1 ? 'dia' : 'dias'} · Fila zerada ${S0.fila.atual} ${S0.fila.atual === 1 ? 'dia' : 'dias'}` : Q.nota,
+      dots: (Q.itens[0]?.dias ?? []).map((d) => (d.st === 'ok' ? 'var(--tint-amber-text)' : d.st === 'hoje' ? 'var(--stroke-strong)' : 'var(--surface-3)')), det: blocoSeq },
+    { id: 'hab', k: 'HABILIDADE DO MÊS', kc: 'var(--text-muted)',
+      t: H.modo === 'ativa' ? `${H.nome}${H.barra ? ` · ${H.barra.agora} → meta ${H.barra.meta}` : ''}` : H.conviteT || '—',
+      v: H.modo === 'ativa' && H.barra ? String(H.barra.agora) : undefined, det: blocoHab },
+    { id: 'car', k: 'CARREIRA', kc: 'var(--text-muted)', t: C.fora ? `— · ${C.fonte} não respondeu` : C.onde,
+      det: <View style={{ gap: 10 }}>{rampa && <MinhaRampaCard />}{blocoCar}</View> },
+    { id: 'col', k: 'COLEÇÃO', kc: 'var(--text-muted)', t: K.fora ? `— · ${K.fonte} não respondeu` : K.n, det: blocoCol },
+    { id: 'vs', k: 'VOCÊ CONTRA VOCÊ', kc: 'var(--text-muted)', t: vm.vs.slice(0, 2).map((x) => `${x.t} ${x.v}`).join(' · '), det: blocoVs },
+  ];
+  const meuJogo = (
+    /* a rolagem até a coleção (toast, celebração): o y do Meu jogo na tela + o do cartão + o da linha */
+    <View style={{ gap: 6 }} onLayout={(e) => { yJogo.current = e.nativeEvent.layout.y; yColecao.current = yJogo.current + yCartaoJogo.current + yLinhaCol.current; }}>
+      <View style={st.kickerLinha}><Text style={[st.kicker, { color: 'var(--text-muted)' }]}>MEU JOGO</Text><Text style={st.nota}>o que tem prazo primeiro</Text></View>
+      <View style={[st.cartao, { paddingVertical: 0, gap: 0 }]} onLayout={(e) => { yCartaoJogo.current = e.nativeEvent.layout.y; yColecao.current = yJogo.current + yCartaoJogo.current + yLinhaCol.current; }}>
+        {jogo.map((j, i) => (
+          <View key={j.id} style={i > 0 && { borderTopWidth: 1, borderTopColor: 'var(--border-soft)' }} onLayout={j.id === 'col' ? (e) => { yLinhaCol.current = e.nativeEvent.layout.y; yColecao.current = yJogo.current + yCartaoJogo.current + yLinhaCol.current; } : undefined}>
+            <Pressable accessibilityRole="button" accessibilityState={{ expanded: !!jogoAberto[j.id] }} onPress={() => setJogoAberto((x) => ({ ...x, [j.id]: !x[j.id] }))} style={st.jogoLinha}>
+              <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+                <Text style={[st.kicker, { color: j.kc }]} numberOfLines={1}>{j.k}</Text>
+                <Text style={st.textoForte} numberOfLines={1}>{j.t}</Text>
+              </View>
+              {!!j.dots?.length && <View style={[st.linha, { gap: 3 }]}>{j.dots.map((c, k) => <View key={k} style={[st.ponto, { backgroundColor: c }]} />)}</View>}
+              {!!j.v && <Text style={st.textoForte}>{j.v}</Text>}
+            </Pressable>
+            {jogoAberto[j.id] && <View style={{ paddingBottom: 12 }}>{j.det}</View>}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+
+  const blocoMais = mais.length > 0 && (
+    <View style={[st.cartao, { paddingVertical: 0, gap: 0 }]}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: maisAberto }} onPress={() => setMaisAberto((v) => !v)} style={st.jogoLinha}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={st.textoForte}>Mais</Text>
+          {!maisAberto && <Text style={st.nota} numberOfLines={1}>{mais.map((l) => l.rotulo.replace(' · hoje', '').replace(' e sair', '')).join(' · ')}</Text>}
+        </View>
+        {mais.some((l) => !!l.selo) && !maisAberto && <View style={st.linhaSelo}><Text style={st.linhaSeloTexto}>{mais.find((l) => !!l.selo)!.selo}</Text></View>}
+        <Text style={st.fraco}>{maisAberto ? '–' : '›'}</Text>
+      </Pressable>
+      {maisAberto && mais.map((l) => (
+        <Pressable key={l.chave} accessibilityRole="button" accessibilityLabel={l.rotulo} onPress={l.aoTocar} style={[st.linhaEu, { borderTopWidth: 1, borderTopColor: 'var(--border-soft)', borderBottomWidth: 0 }]}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[st.linhaTexto, l.perigo && { color: 'var(--vermelho-texto)' }]} numberOfLines={1}>{l.rotulo}</Text>
+            {!!l.sub && <Text style={st.nota} numberOfLines={1}>{l.sub}</Text>}
+          </View>
+          {!!l.selo && <View style={st.linhaSelo}><Text style={st.linhaSeloTexto}>{l.selo}</Text></View>}
+          <Text style={st.fraco}>›</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
+  return (
+    <ScrollView ref={rolagem} style={st.tela} contentContainerStyle={[st.conteudo, { gap: 8 }, largo && st.conteudoLargo]}
+      refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => void q.refetch()} />}>
+      {identidade}
+      {faixa}
+      {mesAberto && blocoVar}
+      {grade2x2}
+      {semanaLinha}
+      {tiles}
+      {blocoUm}
+      {meuJogo}
+      {blocoMais}
+      <Text style={st.nota}>Os mesmos números da aba Desenvolvimento do Cockpit. Ponto só nasce de prova: abrir esta tela não soma nada.</Text>
+      {/* a folha da semana: o pódio, o próximo a passar, a regra e o ranking completo */}
+      <Modal visible={semanaAberta} transparent animationType="slide" onRequestClose={() => setSemanaAberta(false)}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Fechar a semana" onPress={() => setSemanaAberta(false)} style={st.folhaFundo} />
+        <View style={st.folha}>
+          <View style={st.folhaPega} />
+          <ScrollView contentContainerStyle={{ gap: 10, paddingBottom: 8 }}>{blocoSemana}</ScrollView>
+          {!S.fora && Qd.pessoa.fase !== 'novato' && (
+            <Pressable accessibilityRole="button" onPress={() => { setSemanaAberta(false); setRankingAberto(true); }} style={st.botao}><Text style={st.botaoTexto}>Ver o ranking completo</Text></Pressable>
+          )}
+        </View>
+      </Modal>
       <FolhaRanking visivel={rankingAberto} aoFechar={() => setRankingAberto(false)} />
     </ScrollView>
   );
@@ -488,6 +642,26 @@ const st = StyleSheet.create({
   botao: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'center', backgroundColor: 'var(--surface)' },
   botaoTexto: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
   vazioTitulo: { fontSize: 17, fontWeight: '700', color: 'var(--text)', textAlign: 'center' },
+  euNome: { fontSize: 20, lineHeight: 26, fontWeight: '800', color: 'var(--text)' },
+  seloEu: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  seloEuT: { fontSize: 11, fontWeight: '700' },
+  /* a faixa da variável: o único bloco escuro da tela, nos dois temas (o mesmo #111418 da v1) */
+  faixa: { padding: 14, gap: 8, borderRadius: 16, backgroundColor: '#111418' },
+  faixaK: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.8, color: 'rgba(255,255,255,0.62)' },
+  faixaRs: { fontSize: 36, lineHeight: 40, fontWeight: '900', color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  faixaSub: { fontSize: 13, color: 'rgba(255,255,255,0.72)', flexShrink: 1 },
+  faixaFalta: { fontSize: 13.5, lineHeight: 19, fontWeight: '700', color: '#FF8A95' },
+  degrauEu: { flex: 1, height: 10, borderRadius: 4 },
+  grade2: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  tile: { flexBasis: '47%', flexGrow: 1, minWidth: 0, padding: 12, gap: 2, borderRadius: 16, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)' },
+  tileV: { fontSize: 22, lineHeight: 28, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  atalho: { flex: 1, minWidth: 0, minHeight: 64, padding: 10, gap: 2, borderRadius: 14, backgroundColor: 'var(--surface)', borderWidth: 1, borderColor: 'var(--border)', justifyContent: 'space-between' },
+  atalhoT: { fontSize: 13, lineHeight: 17, fontWeight: '800', color: 'var(--text)' },
+  mini2: { fontSize: 10.5, lineHeight: 14, color: 'var(--text-muted)' },
+  jogoLinha: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  folhaFundo: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' },
+  folha: { position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '85%', padding: 16, paddingBottom: 28, gap: 10, borderTopLeftRadius: 20, borderTopRightRadius: 20, backgroundColor: 'var(--bg)' },
+  folhaPega: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: 'var(--stroke-strong)' },
   lista: { marginTop: 4, borderTopWidth: 1, borderTopColor: 'var(--border)' },
   linhaEu: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: 'var(--border)' },
   linhaTexto: { fontSize: 15, fontWeight: '600', color: 'var(--text)' },

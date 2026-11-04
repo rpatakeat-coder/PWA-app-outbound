@@ -144,14 +144,19 @@ export function concluirComDesfazer(opts: {
   pendentes.set(pedido.taskId, { pedido, rotulo, timer });
   Toast.mostrar(textoToast, 'ok', {
     rotulo: 'Desfazer',
-    onPress: () => {
-      const p = pendentes.get(pedido.taskId);
-      if (!p) return; // a janela já fechou: foi gravado
-      clearTimeout(p.timer);
-      pendentes.delete(pedido.taskId);
-      aoVoltar();
-    },
+    onPress: () => { desfazerConclusao(pedido.taskId, aoVoltar); },
   });
+}
+
+/** O mesmo Desfazer do toast, chamado também pelo "✓ Desfazer 5s" da linha da aba Hoje (04/11/26).
+ *  false = a janela já fechou e foi gravado. */
+export function desfazerConclusao(taskId: string, aoVoltar: () => void): boolean {
+  const p = pendentes.get(taskId);
+  if (!p) return false;
+  clearTimeout(p.timer);
+  pendentes.delete(taskId);
+  aoVoltar();
+  return true;
 }
 
 // Fechou o app dentro da janela: a conclusão vai para a fila (IndexedDB) na
