@@ -12,8 +12,8 @@
 // Famílias: lead = círculo na cor da temperatura com a letra; recém-aberto = o ÚNICO losango, preto
 // e branco (o vértice de baixo é a ponta), com os dias dentro; mais avaliado = roxo com a nota;
 // cliente = verde com o T; ex-cliente = rosa com ↺.
-// Modificadores: colega 55% e anel fino; sem dono, anel tracejado amarelo; aproximado, círculo
-// tracejado em volta da coordenada; no máximo UM selo (cobrar › ↑ esperando sinal › ↓ em queda).
+// Modificadores: colega 55% e anel fino; sem dono, anel tracejado amarelo; aproximado, sem círculo (saiu em 04/11/26);
+// no máximo UM selo (cobrar › ↑ esperando sinal › ↓ em queda).
 //
 // Geometria: caixa de toque 48 × 56; a coordenada é a ponta, em (24, 54). Quem usa passa
 // anchor={ANCORA_PINO_P2}.
@@ -54,7 +54,7 @@ type Props = {
   leque?: { dx: number; dy: number } | null;
   /** Tema claro do mapa (modo sol): o losango e o rótulo invertem. */
   sol?: boolean;
-  /** Mostra o círculo tracejado do "aproximado" (selecionado ou zoom de rua). */
+  /** Sem uso desde 04/11/26: o círculo tracejado do "aproximado" saiu do mapa (pedido do Julyan). */
   aproximadoVisivel?: boolean;
   /** Conta-alvo no Meu dia: pino pequeno e transparente, para estar no mapa sem poluir. */
   discreto?: boolean;
@@ -192,7 +192,7 @@ export function desenhoNaRua(p: Props): Desenho {
 
 function PinoP2(props: Props) {
   if (props.nivel != null) return <PinoNaRua {...props} />;
-  const { pino, selecionado, sinal, pilhaN = 1, leque = null, sol = false, rotulo = false, lado = 'dir', aproximadoVisivel = false } = props;
+  const { pino, selecionado, sinal, pilhaN = 1, leque = null, sol = false, rotulo = false, lado = 'dir' } = props;
   const d = desenhoDoPino(props);
   const hd = d.diam ? d.s * Math.SQRT1_2 : d.s / 2;
   // centro do desenho em relação à coordenada (a ponta)
@@ -200,16 +200,9 @@ function PinoP2(props: Props) {
   const comNome = !leque && (selecionado || props.papel === 'proxima' || rotulo);
   const tipCor = d.bst === 'dashed' ? '#FFFFFF' : d.bc;
   const halo = 66 + MAIS;
-  const aprox = 90;
   return (
     <div style={{ position: 'relative', width: CAIXA_W, height: CAIXA_H, cursor: 'pointer' }}>
       <div style={{ position: 'absolute', left: CAIXA_W / 2, top: PONTA_Y, width: 0, height: 0, zIndex: selecionado ? 5 : 2 }}>
-        {pino.aproximado && (aproximadoVisivel || selecionado) && !leque && (
-          <div style={{
-            position: 'absolute', left: -aprox / 2, top: -aprox / 2, width: aprox, height: aprox, boxSizing: 'border-box',
-            borderRadius: '50%', background: 'rgba(140,140,140,.16)', border: `2px dashed ${sol ? '#111418' : '#F4F5F7'}`, pointerEvents: 'none',
-          }} />
-        )}
         {leque && (
           <div style={{
             position: 'absolute', left: 0, top: 0, height: 1.5, background: sol ? 'rgba(17,20,24,.6)' : 'rgba(255,255,255,.7)', transformOrigin: '0 0',
@@ -291,7 +284,6 @@ function PinoNaRua(props: Props) {
   const corTexto = sol ? '#111418' : '#F4F5F7';
   const pilha = pilhaN > 1 && !leque;
   const anel = nivel === 1 && !semAnel && !leque;
-  const aprox = 90;
   const cabeca = (extra: React.CSSProperties, dataCabeca: boolean, conteudo: React.ReactNode) => (
     <div {...(dataCabeca ? { 'data-cabeca': '1' } : {})} style={{
       position: 'absolute', left: -d.s / 2, top: cy - d.s / 2, width: d.s, height: d.s, boxSizing: 'border-box',
@@ -304,12 +296,6 @@ function PinoNaRua(props: Props) {
   return (
     <div data-pino={idDom} data-nivel={nivel} style={{ position: 'relative', width: CAIXA_W, height: CAIXA_H, cursor: 'pointer', opacity: apagado ? 0.3 : 1 }}>
       <div data-ponta="1" style={{ position: 'absolute', left: CAIXA_W / 2, top: PONTA_Y, width: 0, height: 0, zIndex: selecionado ? 5 : 2 }}>
-        {pino.aproximado && selecionado && !leque && (
-          <div style={{
-            position: 'absolute', left: -aprox / 2, top: -aprox / 2, width: aprox, height: aprox, boxSizing: 'border-box',
-            borderRadius: '50%', background: 'rgba(140,140,140,.16)', border: `2px dashed ${corTexto}`, pointerEvents: 'none',
-          }} />
-        )}
         {leque && (
           <div style={{
             position: 'absolute', left: 0, top: 0, height: 2, background: sol ? 'rgba(17,20,24,.6)' : 'rgba(255,255,255,.7)', transformOrigin: '0 0',
