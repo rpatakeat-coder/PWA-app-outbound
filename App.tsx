@@ -2975,7 +2975,8 @@ function MainApp() {
      aproximando"). Fora da lente deles eram só o ponto rosa do canvas, sem toque em zoom nenhum. No zoom
      de rua (o mesmo 0,025 de ZOOM_RUA_LAT_DELTA, declarado mais abaixo) eles viram pino de verdade em
      qualquer lente; do bairro para cima seguem o ponto discreto. */
-  const exComoPino = !!mapRegion && mapRegion.latitudeDelta <= 0.025;
+  /* no Planejar dia do computador o mapa é a agenda: ali o ex-cliente segue o ponto discreto (revisão 03/11) */
+  const exComoPino = !!mapRegion && mapRegion.latitudeDelta <= 0.025 && !(ehAgendaPC && planejarDia);
   const visiveisMapaNovo = useMemo(
     () => itensMapaNovo.filter(({ c, p, plano }) => {
       if (referenciasNaTela?.has(c.id) || plano != null || c.id === selectedClient?.id) return true;

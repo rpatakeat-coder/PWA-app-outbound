@@ -64,6 +64,8 @@ export function useArrastarParaRolar(ref: RefObject<ScrollView | null>, ligado: 
     el.addEventListener('click', aoClicar, true);
     el.addEventListener('wheel', aoRodar, { passive: false });
     return () => {
+      el.style.cursor = '';
+      el.style.userSelect = '';
       el.removeEventListener('pointerdown', aoDescer);
       window.removeEventListener('pointermove', aoMover);
       window.removeEventListener('pointerup', aoSubir);
