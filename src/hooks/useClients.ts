@@ -353,6 +353,13 @@ export function useClients(
     // carrega — sem isso o app inteiro vira "Carregando..." no meio do uso
     // (isLoading fica true por nao haver cache pra key nova).
     placeholderData: (prev: Client[] | undefined, anterior) => (anterior?.queryKey[3] === donoDoCache ? prev : undefined),
+    /* A ÁREA NÃO SE REBAIXA AO VOLTAR PARA O APP (05/11/26). O padrão do app (5 min + rebuscar ao voltar
+       à tela) baixava a área inteira toda vez que o executivo voltava do WhatsApp ou do Waze: ~7.500 cargas
+       num dia, no dia em que o banco Nano travou e o plano gratuito estourou o tráfego. A área já se mantém
+       em dia sozinha pela releitura de 60 s logo abaixo (só o que mudou, por updated_at); então ela vale
+       30 min e não rebusca no foco. Trocar de área (arrastar o mapa) continua buscando. */
+    staleTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
     // Viewer nao espera o sector_visibility (desabilitado pra ele); os demais
     // so disparam depois que as regras de visibilidade chegaram.
     enabled: callerEnabled && isAuthenticated && (isViewer || visibilityQuery.isFetched || visibilityQuery.data !== undefined),
