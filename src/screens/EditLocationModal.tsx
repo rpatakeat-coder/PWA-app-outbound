@@ -175,7 +175,7 @@ export function EditLocationModal({ client, abrirEm, onSave, onClose }: Props) {
               accessibilityLabel="Estou no local: levar o mapa até a minha posição"
             >
               <IconLocation width={16} height={16} fill="#fff" />
-              <Text style={styles.btAquiTx}>{gps ? `Estou no local · usar minha posição (±${Math.round(gps.accuracy)} m)` : 'Esperando o GPS…'}</Text>
+              <Text style={styles.btAquiTx}>{gps ? `Estou no local (±${Math.round(gps.accuracy)} m)` : 'Esperando o GPS…'}</Text>
             </TouchableOpacity>
             <View style={styles.buscaLinha}>
               <TextInput
