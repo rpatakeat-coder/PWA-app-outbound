@@ -4742,11 +4742,18 @@ function MainApp() {
     const g = gravacaoDoMapaAgora(creationCenter);
     setPendingGeoApproximate(g.geo_approximate);
     setPendingGeoSource(g.geo_source);
+    criadoNaPortaRef.current = modoPino === 'porta';
     setIsFormOpen(true);
     setCreationCenter(null);
-  }, [creationCenter, statusOptions, gravacaoDoMapaAgora]);
+  }, [creationCenter, statusOptions, gravacaoDoMapaAgora, modoPino]);
+
+  /* PINO NA PORTA VAI DIRETO À FICHA (Julyan, 05/11/26: "quando ele colocar estou aqui, já ir pra tela
+     colocando nome do dono etc e o próximo passo"). Quem cria o pino na porta está lá: salvar o lead faz o
+     check-in e abre a ficha de rua (decisor, desfecho, próximo passo), sem o cartão e o Cheguei no meio. */
+  const criadoNaPortaRef = useRef(false);
 
   const resetForm = () => {
+    criadoNaPortaRef.current = false;
     setForm(initialFormState);
     setPendingGeoApproximate(false);
     setPendingGeoSource('mapa');
@@ -4875,14 +4882,15 @@ function MainApp() {
     setErroDuplicado(null);
     try {
       const created = await addClient.mutateAsync(newClient);
+      const naPorta = criadoNaPortaRef.current;
       setParecidosEncontrados([]);
       jaAvisei.current = false;
       resetForm();
       setIsFormOpen(false);
-      // Mapa novo: nada de pergunta na fila (ela surgia minutos depois, por cima
-      // de outra folha — auditoria 26/09). Abre o cartão do lead novo: o próximo
-      // passo na rua é o Cheguei, e o Agendar está ali no cartão.
       Toast.mostrar(`Lead cadastrado · ${created.empresa?.trim() || created.nome}`, 'ok');
+      // Na porta: o check-in e a ficha de rua na sequência (ver criadoNaPortaRef).
+      if (naPorta) { setTimeout(() => { void handleMarkAsVisitedRef.current(created); }, 350); return; }
+      // Pelo endereço: abre o cartão do lead novo; o Cheguei e o Agendar estão nele.
       setTimeout(() => setSelectedClient(created), 350);
       return;
     } catch (err: any) {

@@ -71,7 +71,7 @@ Dois produtos num repositório, mesmo domínio, mesma sessão Supabase:
   troca a versão com 15 s parado, e cada um rebaixa mapa, fila e painel). O banco
   é o plano gratuito do Supabase, máquina Nano: em 05/11/26, 14 publicações no dia
   mais consultas pesadas de auditoria travaram app e Cockpit por uma hora.
-  **Juntar as correções e publicar uma vez, antes das 8h ou depois das 19h.**
+  **Juntar as correções e publicar uma vez** (pode ser de dia; o que derruba é publicar em rajada).
   Nada de varredura pesada no banco em horário de rua. Dado grande (snapshot do
   HubSpot ~2,9 MB, playbook ~740 KB) se guarda — cache por `atualizado_em` ou no
   aparelho — e não se rebaixa a cada abertura.
