@@ -69,5 +69,10 @@ if (fs.existsSync(servidor)) {
   console.log('(cockpit-unificado não está ao lado: espelho do servidor não conferido)');
 }
 
+// Celular na emissão (05/11/26): só DDD + número
+ok(propriedadesDaCobranca({ ...cheia, celular: '+55 (27) 99812-4410' }).celular === '27998124410', 'emissão manda o celular sem +55');
+ok(propriedadesDaCobranca(cheia).celular === '27998124410', 'celular com máscara vai só com dígitos');
+ok(faltaNoPasso({ ...cheia, celular: '99812-4410' }, 1).some((f) => f.startsWith('celular')), 'celular sem DDD trava o passo 1');
+ok(faltaNoPasso({ ...cheia, celular: '+55 27 99812-4410' }, 1).length === 0, '+55 colado do WhatsApp não trava');
 if (falhas) { console.log(`\n${falhas} falha(s)`); process.exit(1); }
 console.log('\ncobrança: tudo certo');

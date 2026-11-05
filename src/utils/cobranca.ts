@@ -4,6 +4,8 @@
 // A tela nunca oferece o que o servidor recusa — o servidor continua sendo a
 // última linha.
 
+import { normalizarCelular } from './celular';
+
 export const ETAPA_AG_PAGAMENTO = '1395880473';
 
 export const PACOTES = ['Básico', 'Básico (delivery e balcão)', 'Inovação', 'Inovação (delivery e balcão)', 'Profissional', 'Profissional (delivery e balcão)', 'Enterprise', 'Enterprise (delivery e balcão)', 'Upsell', 'Produtos Personalizados', 'Básico (Delivery)', 'Básico (PDV Balcão)', 'Básico (Delivery + PDV Balcão)', 'Intermediário (Delivery + PDV Balcão + PDV Mesa)', 'Apenas Cardapio'];
@@ -91,7 +93,8 @@ export function faltaNoPasso(c: Cobranca, passo: 1 | 2 | 3): string[] {
     if (!c.dealname.trim()) f.push('nome do negócio');
     if (!conferirDocumento(c.cnpj_cpf)?.ok) f.push('CNPJ ou CPF válido');
     if (!emailOk(c.email)) f.push('e-mail válido');
-    if (soDigitos(c.celular).length < 10) f.push('celular');
+    // Só DDD + número (05/11/26): o +55 e o zero da frente saem sozinhos; o resto tem de dar 10 ou 11 dígitos
+    if (normalizarCelular(c.celular).erro) f.push('celular com DDD (10 ou 11 dígitos)');
     if (soDigitos(c.cep).length !== 8) f.push('CEP com 8 dígitos');
     if (!c.numero.trim()) f.push('número');
   }
@@ -117,7 +120,7 @@ export function propriedadesDaCobranca(c: Cobranca): Record<string, string> {
     dealname: c.dealname.trim(),
     email: c.email.trim(),
     cnpj_cpf: soDigitos(c.cnpj_cpf),
-    celular: c.celular.trim(),
+    celular: normalizarCelular(c.celular).valor ?? c.celular.trim(),
     cep: soDigitos(c.cep),
     numero: c.numero.trim(),
     pacote_contratado: c.pacote_contratado,

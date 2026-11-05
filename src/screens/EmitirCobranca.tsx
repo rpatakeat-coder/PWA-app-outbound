@@ -246,7 +246,7 @@ export default function EmitirCobranca({ visivel, client, jaTem, armas = null, o
                   {!!doc && <Text style={[s.valida, doc.ok ? s.validaOk : s.validaErro]}>{doc.texto}</Text>}
                 </View>
                 {campo('E-mail', c.email, (v) => set({ email: v }), { keyboardType: 'email-address', autoCapitalize: 'none' })}
-                {campo('Celular / WhatsApp', c.celular, (v) => set({ celular: v }), { keyboardType: 'phone-pad' })}
+                {campo('Celular / WhatsApp · DDD + número, sem +55', c.celular, (v) => set({ celular: v }), { keyboardType: 'phone-pad', placeholder: '21987654321' })}
                 <View style={s.linha2}>
                   <View style={{ flex: 2 }}>{campo('CEP', c.cep, (v) => set({ cep: v }), { keyboardType: 'number-pad' })}</View>
                   <View style={{ flex: 1 }}>{campo('Número', c.numero, (v) => set({ numero: v }))}</View>
@@ -347,7 +347,7 @@ export default function EmitirCobranca({ visivel, client, jaTem, armas = null, o
             {passo === 3 && (
               <>
                 {[
-                  ['Cliente', c.dealname], ['Documento', props.cnpj_cpf], ['E-mail', c.email], ['Celular', c.celular],
+                  ['Cliente', c.dealname], ['Documento', props.cnpj_cpf], ['E-mail', c.email], ['Celular', props.celular],
                   ['Pacote', c.pacote_contratado], ['Adicionais', c.adicional.join(', ')], ['Período', `${c.periodo_contratado} · ${c.tipo_de_pagamento}`],
                   ['MRR', `R$ ${props.mrr}`], ['Valor do período', `R$ ${props.amount}`],
                 ].map(([k, v]) => (
