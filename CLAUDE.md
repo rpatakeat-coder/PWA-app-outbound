@@ -4,8 +4,10 @@ Dois produtos num repositório, mesmo domínio, mesma sessão Supabase:
 
 - **App de campo** (raiz): Expo + react-native-web. Vendedor na rua — mapa,
   rota, check-in. Servido em `/`.
-- **Cockpit de gestão** (`gestao/`): Vite + React DOM puro. Só gestor. Servido
-  em `/gestao`.
+- **Cockpit de gestão** (`gestao/public/cockpit/`): o HTML do repositório
+  `julyanrib/cockpit-unificado`, importado por `scripts/importar-cockpit.cjs`
+  (nunca editar aqui). Servido em `/gestao`. O painel React antigo (`gestao/src`)
+  foi apagado em 05/11/26 — ninguém o compilava.
 
 ## Domínios (22/10/2026)
 
@@ -30,8 +32,8 @@ Dois produtos num repositório, mesmo domínio, mesma sessão Supabase:
 2. **Design system é o da Takeat**, não invente token:
    `https://raw.githubusercontent.com/takeat-design/UIKIT/main/README.md`
    (leia `foundations.md` e `components.md`; o README manda e explica).
-   Tokens no app: `public/index.html` (`:root`, claro e escuro). No cockpit:
-   `gestao/src/estilos/tokens.css`. Dark = branco com opacidade, não hex.
+   Tokens no app: `public/index.html` (`:root`, claro e escuro). O cockpit tem
+   os dele no template do `cockpit-unificado`. Dark = branco com opacidade, não hex.
 3. **Cores de etapa/temperatura são DADO, não cromo** (`src/constants/stages.ts`)
    — pintam pins do mapa; não retematizar.
 4. **Ícones do UI Kit** via `src/components/icons.tsx` (SVG não resolve
@@ -65,6 +67,14 @@ Dois produtos num repositório, mesmo domínio, mesma sessão Supabase:
   dia às 21h. Há DUAS cópias vivas do helper, `src/utils/abaTarefas.ts` e
   `src/hooks/useMinhaDaily.ts`; conferidas em 29/10/26, concordam (as duas são
   `en-CA` + `America/Sao_Paulo`). Mexer numa é mexer nas duas.
+- **Cada publicação recarrega os celulares do time inteiro** (`src/utils/updates.ts`
+  troca a versão com 15 s parado, e cada um rebaixa mapa, fila e painel). O banco
+  é o plano gratuito do Supabase, máquina Nano: em 05/11/26, 14 publicações no dia
+  mais consultas pesadas de auditoria travaram app e Cockpit por uma hora.
+  **Juntar as correções e publicar uma vez, antes das 8h ou depois das 19h.**
+  Nada de varredura pesada no banco em horário de rua. Dado grande (snapshot do
+  HubSpot ~2,9 MB, playbook ~740 KB) se guarda — cache por `atualizado_em` ou no
+  aparelho — e não se rebaixa a cada abertura.
 - **FlatList não muda `numColumns` em voo** — troque a `key`.
 - **`Painel` aberto cancela navegação pra fora.** Ele empilha um estado no
   history ao abrir e chama `history.back()` no cleanup ao fechar
@@ -84,13 +94,9 @@ Dois produtos num repositório, mesmo domínio, mesma sessão Supabase:
 
 ```
 npx tsc --noEmit                      # raiz
-cd gestao && npx tsc -b && npx vite build
 npx tsx src/utils/fotoDePerfil.teste.ts  # na raiz
 npx tsx src/utils/hubspotSync.teste.ts   # na raiz
 npx tsx src/utils/leadDuplicado.teste.ts # na raiz
-npx tsx src/dados/datas.teste.ts      # em gestao/
-npx tsx src/dados/regras.teste.ts
-npx tsx src/dados/documentacao.teste.ts
 npm run lint                          # na raiz
 npx expo export --platform web --output-dir /tmp/b  # build real do app
 ```
