@@ -28,7 +28,10 @@ export function useDiaV3(ativo: boolean, uid: string | null, hoje: string, ontem
     queryFn: async () => {
       const de = ontem < segunda ? ontem : segunda;
       const [vis, fechos, rotas] = await Promise.all([
-        supabase.rpc('visitas_com_prova', { p_de: de, p_ate: hoje }),
+        /* SÓ AS MINHAS (auditoria 04/11/26): sem p_pessoa a função devolve tudo o que o RLS deixa ver, e para o
+           gestor isso é o time inteiro: o "PORTAS COM PROVA" do Hoje e o HOJE da aba Eu diziam "44 de 6" com 0 visitas
+           dele (44 era o time). Para o executivo dava o mesmo; para quem vê o time, não. */
+        supabase.rpc('visitas_com_prova', { p_de: de, p_ate: hoje, p_pessoa: uid }),
         supabase.from('fecho_do_dia').select('dia').eq('pessoa', uid!).in('dia', [ontem, hoje]),
         supabase.from('field_routes').select('route_date, field_route_stops(status, clients(bairro))').eq('seller_id', uid!).in('route_date', dias),
       ]);
