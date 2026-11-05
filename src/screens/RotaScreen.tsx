@@ -285,7 +285,8 @@ export function RotaScreen({
     window.addEventListener('popstate', aoVoltar);
     return () => {
       window.removeEventListener('popstate', aoVoltar);
-      if (nossoEstadoNaPilha) window.history.back();
+      // só desempilha o que é nosso: back() com o histórico já no app sai do app (auditoria 04/11/26)
+      if (nossoEstadoNaPilha && window.history.state && window.history.state.mapaRotaExpandido) window.history.back();
     };
     // `setMapaExpandido` vem do App e e' estavel (setState).
     // eslint-disable-next-line react-hooks/exhaustive-deps

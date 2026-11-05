@@ -172,7 +172,14 @@ export function Painel({
       // PAINEL EMPILHADO (auditoria 15/10/26): a "Fala pronta" abre por cima do cartão. Ao fechar,
       // o history.back() dela chega aqui como "voltar" e o cartão descia ou fechava junto. Esse
       // voltar é de outro painel, que acabou de tirar o próprio estado: o nosso continua na pilha.
-      if (Date.now() - ultimoVoltarDePainel < 600) return;
+      // TROCA DE PAINEL NO MESMO TOQUE (auditoria 04/11/26): o menu do perfil fecha e "O time na
+      // rua" abre junto. O back() do menu chega DEPOIS do nosso pushState e leva o nosso estado.
+      // Sem reempilhar, o painel fica aberto com o histórico já no app: o X dava um back() a
+      // mais e tirava a pessoa do app (no PWA, fecha o app).
+      if (Date.now() - ultimoVoltarDePainel < 600) {
+        if (!(window.history.state && window.history.state.painelTakeat)) window.history.pushState({ painelTakeat: true }, '');
+        return;
+      }
       nossoEstadoNaPilha = false;
       if (temPeekRef.current && estagioRef.current === 'cheia') {
         // Desce um estagio e reempilha: o proximo voltar fecha.
@@ -186,7 +193,8 @@ export function Painel({
     window.addEventListener('popstate', aoVoltar);
     return () => {
       window.removeEventListener('popstate', aoVoltar);
-      if (nossoEstadoNaPilha) { ultimoVoltarDePainel = Date.now(); window.history.back(); }
+      // Só desempilha se o estado de cima é de painel: um back() com o histórico já no app sai do app.
+      if (nossoEstadoNaPilha && window.history.state && window.history.state.painelTakeat) { ultimoVoltarDePainel = Date.now(); window.history.back(); }
     };
   }, [visivel]);
 
