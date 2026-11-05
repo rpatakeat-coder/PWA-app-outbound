@@ -116,6 +116,16 @@ async function criarPinosQueFaltam(svc: ReturnType<typeof createClient>) {
     // Já existe pino deste negócio (arquivado ou criado agora por outro caminho)? Não duplica.
     const { data: ja } = await svc.from('clients').select('id').eq('id_hubspot', c.deal_id).limit(1);
     if (ja && ja.length) continue;
+    // O PINO DO EXECUTIVO NA MESMA CIDADE (0251, 05/11/26), ANTES de geocodificar. O endereço no
+    // Google caiu a 9 km do Escritório Bar & Botequim, e a regra de 1 km abaixo não ligava: o Marco
+    // abria o pino errado dentro do restaurante. Nome igual + cidade igual + posição marcada pelo
+    // executivo (check-in, mapa, endereço digitado) já é o restaurante, a qualquer distância.
+    const { data: doExecutivo } = await svc.rpc('pino_do_executivo_na_cidade', { p_nome: String(c.nome ?? ''), p_cidade: String(c.cidade ?? '') });
+    if (doExecutivo) {
+      const { error: eLiga } = await svc.from('clientes_takeat').update({ client_id: doExecutivo }).eq('deal_id', c.deal_id);
+      if (eLiga) console.warn('[clientes-sync] ligar pela cidade', c.deal_id, eLiga.message); else ligados++;
+      continue;
+    }
     let geo = c.latitude != null && c.longitude != null ? { lat: c.latitude, lng: c.longitude, aproximado: true } : null;
     if (!geo && chave) geo = await localizar(chave, c);
     if (!geo) { semEndereco++; continue; }
