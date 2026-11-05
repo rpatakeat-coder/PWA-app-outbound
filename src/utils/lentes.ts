@@ -86,7 +86,11 @@ export function visivelNaLente(lente: Lente, p: Pino, noPlano: boolean, aberto: 
   }
   if (p.familia === 'alvo') return false;
   switch (lente) {
-    case 'novos': return p.familia === 'rec' && (meu || verTodos);
+    /* RECÉM-ABERTOS = OS MEUS E OS SEM DONO (05/11/26). A lente mostrava só os meus, e o Meu dia mostrava
+       também os sem dono: tocar em "Recém-abertos" escondia parte dos recém-abertos que estavam na tela.
+       A prancha diz "os recém-abertos da minha região", e o Julyan, em 29/10: "preciso deles no mapa sempre".
+       Colega segue fora (território é território). */
+    case 'novos': return p.familia === 'rec' && (meuOuLivre || verTodos);
     case 'carteira': return (meu || (verTodos && p.dono === 'colega')) && p.familia === 'lead';
     case 'alvo': return p.familia === 'av';
     case 'clientes': return p.familia === 'cli';

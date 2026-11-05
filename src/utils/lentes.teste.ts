@@ -93,7 +93,9 @@ ok(V('dia', avaliado) && V('dia', velho) && contaAlvoDiscreta('dia', avaliado) &
 ok(!contaAlvoDiscreta('alvo', avaliado) && contaAlvoDiscreta('alvo', velho) && !contaAlvoDiscreta('dia', novo) && !contaAlvoDiscreta('dia', cliente), 'discreta: na lente Mais avaliados o avaliado é pino inteiro; recém-aberto e cliente nunca');
 ok(!V('novos', velho) && !V('clientes', velho), 'conta-alvo antiga fora das outras lentes');
 ok(visivelNaLente('dia', cliente, true, false) && visivelNaLente('dia', velho, false, true), 'qualquer lente: o plano e o pino aberto aparecem');
-ok(V('novos', novo) && !V('novos', meuQuente) && !V('novos', novoColega), 'Recém-abertos: só os meus recém-abertos');
+ok(V('novos', novo) && !V('novos', meuQuente) && !V('novos', novoColega), 'Recém-abertos: os meus, sem os de colega');
+
+ok(V('novos', novoSemDono) && V('dia', novoSemDono), 'Recém-abertos: o sem dono aparece na lente, como no Meu dia (05/11/26)');
 ok(V('novos', novoColega, true), 'Recém-abertos do gestor: os de todo mundo');
 ok(V('carteira', meuFrio) && V('carteira', meuPerdido) && !V('carteira', colegaQuente) && !V('carteira', novo), 'Carteira: meus leads, perdidos inclusive');
 ok(V('alvo', avaliado) && !V('alvo', avaliadoBaixo) && !V('alvo', novo), 'Mais avaliados: nota 4,5+');

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../integrations/supabase/client';
 import { origemDoLeadHs } from '../utils/origemDoLead';
@@ -224,7 +224,15 @@ export function useClients(
     enabled: isAuthenticated,
   });
 
-  const allowedStatuses = visibilityQuery.data;
+  /* GANHO NO MAPA DO EXECUTIVO (05/11/26). A venda do Field Sales fica com status `ganho_fs` até o
+     onboarding, e o setor Outbound só libera cliente, churn e lead em sector_visibility: os pinos das
+     vendas do próprio time sumiam do mapa dele (36 pinos, e os 34 pinos juntados da 0251 ficaram
+     nesses). Ganho é cliente: quem vê cliente vê ganho. */
+  const allowedStatuses = useMemo(() => {
+    const v = visibilityQuery.data;
+    if (!Array.isArray(v) || !v.includes('cliente') || v.includes('ganho_fs')) return v;
+    return [...v, 'ganho_fs'];
+  }, [visibilityQuery.data]);
 
   // Chave de cache: usa coords arredondadas pra não invalidar a cada
   // metro de jitter de GPS. A query em si usa lat/lon raw pra precisão.
