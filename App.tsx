@@ -356,6 +356,10 @@ const foldLabel = (s: string) =>
 const CANONICAL_STAGE_BY_FOLDED = new Map<string, string>([
   ...NEW_PIPELINE_STAGE_LABELS.map((l): [string, string] => [foldLabel(l), l]),
   [foldLabel('Diagnóstico'), 'Conversa com decisor'],
+  // O banco grava o nome do Cockpit, não o do HubSpot (05/11/26): 38 vendas em "Enviado Onboarding" e
+  // 4 leads em "Ag. Pagamento" apareciam como "Pipe Antigo" na lista e na busca do app.
+  [foldLabel('Enviado Onboarding'), 'Onboarding'],
+  [foldLabel('Ag. Pagamento'), 'Pagamento'],
 ]);
 
 const normalizeStage = (raw: string | null | undefined): string | null => {
