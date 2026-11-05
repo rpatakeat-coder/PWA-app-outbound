@@ -1613,6 +1613,8 @@ function MainApp() {
   // p/ Perdido, ou manter a etapa e gerar a próxima tarefa numerada.
   const [completingTask, setCompletingTask] = useState<{ task: ClientTask; client: Client } | null>(null);
   const [editingLocationFor, setEditingLocationFor] = useState<Client | null>(null);
+  /* o "Mover pino" do Cheguei já sabe onde a pessoa está: a tela abre ali, não no pino errado (05/11/26) */
+  const [editingLocationAqui, setEditingLocationAqui] = useState<{ latitude: number; longitude: number } | null>(null);
   const isSaving = addClient.isPending || updateClient.isPending;
 
   // Lista de status pra UI: dinâmica (banco) ou fallback hardcoded enquanto carrega.
@@ -5786,7 +5788,10 @@ function MainApp() {
       // banco teria aceitado.
       const maxDistance = isApproxPin ? 500 : 200;
 
-      const moverPino = () => { setEditingLocationFor(client); setSelectedClient(null); };
+      const moverPino = () => {
+        setEditingLocationAqui(userLat != null && userLon != null ? { latitude: userLat, longitude: userLon } : null);
+        setEditingLocationFor(client); setSelectedClient(null);
+      };
 
       let corrigirPino = false;
       // 0109: fora do raio e o pino confirmado (ou longe demais para ser a
@@ -6881,7 +6886,7 @@ function MainApp() {
         // Atualiza o snapshot aberto no sheet pra UI refletir na hora.
         setSelectedClient({ ...c, telefone: tel || null });
       }}
-      onEditLocation={isViewer ? undefined : () => { setEditingLocationFor(selectedClient); setSelectedClient(null); }}
+      onEditLocation={isViewer ? undefined : () => { setEditingLocationAqui(null); setEditingLocationFor(selectedClient); setSelectedClient(null); }}
       onMarkVisited={isViewer ? undefined : () => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
       onDismissContaAlvo={isViewer ? undefined : () => handleDismissContaAlvo(selectedClient, () => setSelectedClient(null))}
       /* UM PLANO SÓ (Julyan 06/10: "substituir por pôr no plano"): no mapa novo, o Agendar e o
@@ -10860,8 +10865,9 @@ function MainApp() {
       {editingLocationFor && (
         <EditLocationModal
           client={editingLocationFor}
+          abrirEm={editingLocationAqui}
           onSave={async (payload) => { await saveEditedLocation(editingLocationFor, payload); }}
-          onClose={() => setEditingLocationFor(null)}
+          onClose={() => { setEditingLocationFor(null); setEditingLocationAqui(null); }}
         />
       )}
 

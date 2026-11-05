@@ -1,10 +1,11 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
   Modal,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -19,10 +20,14 @@ import {
 import MapView, { Marker, type Region, type MapViewHandle, PROVIDER_DEFAULT } from '../map';
 import type { Client } from '../types/client';
 import { distanceMeters } from '../hooks/useFieldOps';
-import { reverseGeocode } from '../utils/geocoding';
+import { geocodeAddress, reverseGeocode } from '../utils/geocoding';
+import { leituraRecente, ouvirLeituras, type LeituraDoGps } from '../map/leituraDoGps';
 
 interface Props {
   client: Client;
+  /** Onde abrir o mapa. O "Mover pino" do Cheguei passa a posição da pessoa: ela está na porta, e o pino
+   *  errado pode estar a quilômetros (vídeo do executivo, 05/11/26: pino a 9,2 km, arrastar no olho). */
+  abrirEm?: { latitude: number; longitude: number } | null;
   // Salva a nova localizacao. Recebe as coords + endereco resolvido pelo
   // reverse-geocode (pode vir parcial/vazio se o reverse falhar).
   onSave: (payload: {
@@ -44,7 +49,7 @@ function fmtDistance(m: number): string {
   return `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`;
 }
 
-export function EditLocationModal({ client, onSave, onClose }: Props) {
+export function EditLocationModal({ client, abrirEm, onSave, onClose }: Props) {
   const layout = useLayout();
   const iconColors = useIconColors();
   // Posicao ATUAL do cliente (pino cinza, fixo). Se por acaso nao tiver coords,
@@ -55,7 +60,16 @@ export function EditLocationModal({ client, onSave, onClose }: Props) {
   // Posicao NOVA = CENTRO do mapa (mesmo mecanismo do cadastro). O usuario faz
   // pan no mapa; uma mira fixa desenhada no centro aponta o novo local. O valor
   // e capturado no onRegionChangeComplete (assentamento final do mapa).
-  const [center, setCenter] = useState({ latitude: currentLat, longitude: currentLng });
+  const inicio = abrirEm ?? { latitude: currentLat, longitude: currentLng };
+  const [center, setCenter] = useState(inicio);
+  /* ONDE A PESSOA ESTÁ (05/11/26): a última leitura do GPS do mapa, e as próximas. Com ela, um toque leva
+     o mapa até ela, em vez de procurar o lugar no olho. */
+  const [gps, setGps] = useState<LeituraDoGps | null>(() => leituraRecente(5 * 60000, 300));
+  useEffect(() => ouvirLeituras((l) => { if (l.accuracy > 0 && l.accuracy <= 300) setGps(l); }), []);
+  /* ou o endereço digitado: a mesma busca do cadastro (Nominatim), perto da cidade do lead */
+  const [endereco, setEndereco] = useState('');
+  const [buscando, setBuscando] = useState(false);
+  const [avisoBusca, setAvisoBusca] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const mapRef = useRef<MapViewHandle | null>(null);
 
@@ -67,6 +81,26 @@ export function EditLocationModal({ client, onSave, onClose }: Props) {
 
   const onRegionChangeComplete = (region: Region) => {
     setCenter({ latitude: region.latitude, longitude: region.longitude });
+  };
+
+  const irPara = (lat: number, lng: number) => {
+    mapRef.current?.animateToRegion({ latitude: lat, longitude: lng, latitudeDelta: 0.004, longitudeDelta: 0.004 }, 400);
+  };
+  const irParaMim = () => { if (gps) irPara(gps.latitude, gps.longitude); };
+  const buscarEndereco = async () => {
+    const q = endereco.trim();
+    if (q.length < 4 || buscando) return;
+    setBuscando(true); setAvisoBusca(null);
+    try {
+      const cidade = [client.cidade, client.estado].filter(Boolean).join(', ');
+      const achou = (cidade && !q.toLowerCase().includes(String(client.cidade ?? '').toLowerCase())
+        ? await geocodeAddress(`${q}, ${cidade}`) : null) ?? await geocodeAddress(q);
+      if (!achou) { setAvisoBusca('Não achei esse endereço. Confira a rua e o número, ou use "Estou no local".'); return; }
+      irPara(achou.latitude, achou.longitude);
+      setAvisoBusca(achou.approximate ? 'Achei a rua, não o número exato: ajuste o pino em cima da porta.' : null);
+    } catch {
+      setAvisoBusca('A busca de endereço não respondeu. Tente de novo ou use "Estou no local".');
+    } finally { setBuscando(false); }
   };
 
   const recenterOnCurrent = () => {
@@ -125,6 +159,36 @@ export function EditLocationModal({ client, onSave, onClose }: Props) {
             </TouchableOpacity>
           </View>
 
+          {/* os dois atalhos antes do mapa: onde estou, ou o endereço digitado */}
+          <View style={styles.atalhos}>
+            <TouchableOpacity
+              style={[styles.btAqui, !gps && styles.btAquiOff]}
+              onPress={irParaMim}
+              disabled={!gps || saving}
+              accessibilityRole="button"
+              accessibilityLabel="Estou no local: levar o mapa até a minha posição"
+            >
+              <IconLocation width={16} height={16} fill="#fff" />
+              <Text style={styles.btAquiTx}>{gps ? `Estou no local · usar minha posição (±${Math.round(gps.accuracy)} m)` : 'Esperando o GPS…'}</Text>
+            </TouchableOpacity>
+            <View style={styles.buscaLinha}>
+              <TextInput
+                style={styles.buscaInput}
+                value={endereco}
+                onChangeText={(v) => { setEndereco(v); setAvisoBusca(null); }}
+                placeholder="ou digite o endereço: rua e número"
+                placeholderTextColor="#8B919C"
+                returnKeyType="search"
+                onSubmitEditing={buscarEndereco}
+                editable={!saving}
+              />
+              <TouchableOpacity style={styles.btBuscar} onPress={buscarEndereco} disabled={buscando || saving || endereco.trim().length < 4} accessibilityRole="button">
+                {buscando ? <ActivityIndicator size="small" color="var(--text)" /> : <Text style={styles.btBuscarTx}>Buscar</Text>}
+              </TouchableOpacity>
+            </View>
+            {!!avisoBusca && <Text style={styles.avisoBusca}>{avisoBusca}</Text>}
+          </View>
+
           <Text style={styles.hint}>
             Mova o mapa até o local certo — o{' '}
             <Text style={{ color: 'var(--brand-text)', fontWeight: '800' }}>pino central</Text> marca a nova
@@ -138,8 +202,8 @@ export function EditLocationModal({ client, onSave, onClose }: Props) {
               provider={PROVIDER_DEFAULT}
               style={StyleSheet.absoluteFill}
               initialRegion={{
-                latitude: currentLat, longitude: currentLng,
-                latitudeDelta: 0.008, longitudeDelta: 0.008,
+                latitude: inicio.latitude, longitude: inicio.longitude,
+                latitudeDelta: abrirEm ? 0.004 : 0.008, longitudeDelta: abrirEm ? 0.004 : 0.008,
               }}
               onRegionChangeComplete={onRegionChangeComplete}
               showsUserLocation
@@ -168,12 +232,12 @@ export function EditLocationModal({ client, onSave, onClose }: Props) {
           <View style={styles.infoRow}>
             <Text style={styles.infoText}>
               {moved
-                ? `Distância do local atual: ${fmtDistance(distance)}`
-                : 'Mapa sobre o local atual — mova para reposicionar.'}
+                ? `A ${fmtDistance(distance)} do pino antigo`
+                : 'Mapa sobre o pino antigo — mova para reposicionar.'}
             </Text>
             {moved && (
               <TouchableOpacity onPress={recenterOnCurrent} disabled={saving}>
-                <Text style={styles.resetLink}>Voltar ao atual</Text>
+                <Text style={styles.resetLink}>Ver o pino antigo</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -227,9 +291,27 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: '800', color: 'var(--text)' },
   subtitle: { fontSize: 13, color: 'var(--text-muted)', marginTop: 1 },
   close: { fontSize: 22, color: 'var(--text-subtle)', paddingHorizontal: 4 },
+  atalhos: { gap: 8, marginTop: 6 },
+  btAqui: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44,
+    borderRadius: 12, backgroundColor: '#2563EB', paddingHorizontal: 12,
+  },
+  btAquiOff: { opacity: 0.5 },
+  btAquiTx: { color: '#fff', fontSize: 14, fontWeight: '700', flexShrink: 1 },
+  buscaLinha: { flexDirection: 'row', gap: 8 },
+  buscaInput: {
+    flex: 1, minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)',
+    backgroundColor: 'var(--surface-2)', paddingHorizontal: 12, fontSize: 14, color: 'var(--text)',
+  },
+  btBuscar: {
+    minHeight: 44, minWidth: 76, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)',
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12,
+  },
+  btBuscarTx: { fontSize: 14, fontWeight: '700', color: 'var(--text)' },
+  avisoBusca: { fontSize: 12, color: 'var(--warning-text, #92400E)', lineHeight: 17 },
   hint: { fontSize: 12, color: 'var(--text-muted)', marginVertical: 8, lineHeight: 17 },
   mapWrap: {
-    height: 340, borderRadius: 14, overflow: 'hidden',
+    height: 280, borderRadius: 14, overflow: 'hidden',
     borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface-2)',
     justifyContent: 'center', alignItems: 'center',
   },
