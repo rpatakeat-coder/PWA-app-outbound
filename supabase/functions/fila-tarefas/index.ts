@@ -183,6 +183,25 @@ async function remarcar(token: string, owner: string, corpo: Record<string, unkn
   return json(200, { ok: true, remarcadas, falhou, jaNoDia });
 }
 
+/* O SNAPSHOT DO FUNIL NA MEMÓRIA (05/11/26). Cada abertura da fila baixava ~2,5 MB do snapshot do
+   HubSpot (reps, funil, agenda) — ~740 vezes por dia — e o banco Nano descompactava tudo a cada vez:
+   foi o que mais pesou na CPU e no tráfego de saída quando o banco travou. O snapshot só muda quando o
+   robô roda; aqui pergunta-se só a hora (leitura minúscula) e, se for a mesma, usa o que já está na
+   memória desta instância. Falhou a pergunta? Lê inteiro, como antes. */
+let SNAP_EM_MEMORIA: { em: string; linha: Record<string, unknown> } | null = null;
+async function snapshotDoFunil(svc: any): Promise<{ data: any; error: any }> {
+  try {
+    const { data: marca } = await svc.from('cockpit_snapshot').select('atualizado_em').eq('chave', 'hubspot').maybeSingle();
+    if (marca && SNAP_EM_MEMORIA && SNAP_EM_MEMORIA.em === String(marca.atualizado_em)) return { data: structuredClone(SNAP_EM_MEMORIA.linha), error: null };
+  } catch { /* sem a marca, lê inteiro */ }
+  const r = await svc.from('cockpit_snapshot')
+    .select('atualizado_em, reps:conteudo->reps, funilLeads:conteudo->funilLeads, funilForaDoTime:conteudo->funilForaDoTime, agenda:conteudo->agenda')
+    .eq('chave', 'hubspot').maybeSingle();
+  // cópia própria em cada pedido: o resto da função pode mexer nos arrays sem estragar a memória
+  if (!r.error && r.data) SNAP_EM_MEMORIA = { em: String(r.data.atualizado_em), linha: structuredClone(r.data) };
+  return r;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json(405, { erro: 'Método não permitido' });
@@ -222,9 +241,7 @@ Deno.serve(async (req: Request) => {
   // EM PARALELO (auditoria de velocidade, 05/10/26): a fila levava 2,3–3,1 s porque cada leitura
   // esperava a anterior. O que não depende das tarefas do HubSpot (snapshot, reuniões do app, rota
   // de hoje) sai já, enquanto a busca de tarefas roda. Do snapshot só as quatro chaves usadas.
-  const snapP = svc.from('cockpit_snapshot')
-    .select('atualizado_em, reps:conteudo->reps, funilLeads:conteudo->funilLeads, funilForaDoTime:conteudo->funilForaDoTime, agenda:conteudo->agenda')
-    .eq('chave', 'hubspot').maybeSingle();
+  const snapP = snapshotDoFunil(svc);
   const reunioesP = (async () => {
     const de60 = new Date(Date.now() - 60 * 86400000).toISOString();
     const ate60 = new Date(Date.now() + 60 * 86400000).toISOString();
