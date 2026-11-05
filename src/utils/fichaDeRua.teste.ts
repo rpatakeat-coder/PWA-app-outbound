@@ -9,7 +9,7 @@ import {
   opcoesAgora, HORARIOS,
   ETAPA, FICHA_VAZIA, etapaSugerida, faltandoParaEtapa, montarPropriedades, movimentoPermitido, notaDaVisita,
   pareceNomeDePessoa, proximoPassoDaFicha, rotuloSalvar, faltaNoProximo, proximoDiaUtil, type Ficha,
-  degrausDaFicha, escadaAte, horaLivre, valorValido,
+  degrausDaFicha, escadaAte, horaLivre, valorValido, normalizarCelular,
   GARGALO_OUTRA, HORARIO_OUTRO, MOTIVOS_PERDIDO, dorDaFicha, horarioDaFicha, papelDaFicha, papelParaHubspot, rotuloDoHorario, rotuloDoMotivo, tipoDaFicha,
 } from './fichaDeRua';
 import { MOTIVOS_SEM_INTERESSE } from './registroDaFila';
@@ -130,10 +130,10 @@ ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
   ok(perdidoOpc.propriedades.observacao__desqualificado === '3 ligações, nada' && !Object.keys(perdidoOpc.erros).length, 'o que pesou opcional vai quando escrito');
   ok(montarPropriedades(ETAPA.perdido, { motivo_do_perdido: 'Outros', observacao__desqualificado: 'x'.repeat(400) }, {}).propriedades.observacao__desqualificado.length === 300, 'o que pesou corta em 300');
 
-  const dorOutra = montarPropriedades(ETAPA.decisor, { celular: '27999', nome_do_sistema: 'Saipos', gargalo_operacional: GARGALO_OUTRA, gargalo_outro: ' Delivery atrasa ' }, {});
+  const dorOutra = montarPropriedades(ETAPA.decisor, { celular: '27999998888', nome_do_sistema: 'Saipos', gargalo_operacional: GARGALO_OUTRA, gargalo_outro: ' Delivery atrasa ' }, {});
   ok(!('gargalo_operacional' in dorOutra.propriedades) && dorOutra.gargaloOutro === 'Delivery atrasa' && !Object.keys(dorOutra.erros).length, 'dor "Outra": sai das propriedades e vai como gargaloOutro');
-  ok(montarPropriedades(ETAPA.decisor, { celular: '27999', nome_do_sistema: 'Saipos', gargalo_operacional: GARGALO_OUTRA }, {}).erros.gargalo_operacional === 'Escreva qual é a dor.', 'dor "Outra" sem texto: pede a dor');
-  ok(montarPropriedades(ETAPA.decisor, { celular: '27999', nome_do_sistema: 'Saipos', gargalo_operacional: 'Fila' }, {}).gargaloOutro === undefined, 'dor da lista: sem gargaloOutro');
+  ok(montarPropriedades(ETAPA.decisor, { celular: '27999998888', nome_do_sistema: 'Saipos', gargalo_operacional: GARGALO_OUTRA }, {}).erros.gargalo_operacional === 'Escreva qual é a dor.', 'dor "Outra" sem texto: pede a dor');
+  ok(montarPropriedades(ETAPA.decisor, { celular: '27999998888', nome_do_sistema: 'Saipos', gargalo_operacional: 'Fila' }, {}).gargaloOutro === undefined, 'dor da lista: sem gargaloOutro');
 
   ok(papelParaHubspot('Sócio') === 'Dono' && papelParaHubspot('Gerente') === 'Gerente' && papelParaHubspot('Chef') === undefined && papelParaHubspot('Outro') === undefined, 'papel: Sócio vai como Dono; o resto não vai');
   ok(rotuloDoHorario('10h_11h30') === '10h–11h30' && rotuloDoHorario('Só sábado') === 'Só sábado' && rotuloDoHorario(HORARIO_OUTRO) === '', 'horário livre aparece como foi escrito');
@@ -201,6 +201,16 @@ ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
   ok(proximoPassoDaFicha(F({ comoFoi: 'falou_com_decisor', proximo: 'negociando', dataVolta: '2026-09-29' }), hoje)?.texto === 'Retorno da negociação', 'Negociando: retorno no dia escolhido');
 }
 
+// Celular sem +55 (05/11/26): só DDD + número, 10 ou 11 dígitos
+ok(normalizarCelular('+55 11 96899-4337').valor === '11968994337', '+55 com espaço e traço vira DDD + número');
+ok(normalizarCelular('+55-27-32320000').valor === '2732320000', 'fixo com +55 vira 10 dígitos');
+ok(normalizarCelular('(027) 99825-8518').valor === '27998258518', 'zero da frente sai');
+ok(normalizarCelular('+55-027998476204').valor === '27998476204', '+55 e zero juntos saem');
+ok(normalizarCelular('21987654321').valor === '21987654321', 'já certo fica igual');
+ok(normalizarCelular('47964333').erro !== null, 'sem DDD é recusado');
+ok(normalizarCelular('55219876543210').erro !== null, 'dígito a mais é recusado');
+ok(montarPropriedades(ETAPA.decisor, { celular: '+55 21 98765-4321', gargalo_operacional: 'Fila', nome_do_sistema: 'Saipos' }, {}).propriedades.celular === '21987654321', 'a folha grava o celular sem +55');
+ok(!!montarPropriedades(ETAPA.decisor, { celular: '9999', gargalo_operacional: 'Fila', nome_do_sistema: 'Saipos' }, {}).erros.celular, 'celular curto trava a folha com aviso');
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);
   process.exit(1);

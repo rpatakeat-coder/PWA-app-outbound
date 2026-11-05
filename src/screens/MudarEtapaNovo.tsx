@@ -344,7 +344,7 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
             style={s.input}
             value={digitado[k] ?? ''}
             onChangeText={(v) => setDigitado((d) => ({ ...d, [k]: v }))}
-            placeholder={tipo === 'numero' ? 'R$ por mês' : tipo === 'tel' ? '(27) 99999-9999' : ''}
+            placeholder={tipo === 'numero' ? 'R$ por mês' : tipo === 'tel' ? '21987654321 (DDD + número, sem +55)' : ''}
             placeholderTextColor="#8B919C"
             keyboardType={tipo === 'numero' ? 'decimal-pad' : tipo === 'tel' ? 'phone-pad' : 'default'}
             {...(k === 'observacao__desqualificado' ? { maxLength: MAX_O_QUE_PESOU } : {})}

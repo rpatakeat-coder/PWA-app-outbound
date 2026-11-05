@@ -495,6 +495,19 @@ export const TIPO_CAMPO: Record<string, TipoCampo> = {
   origem_do_lead: 'selecao', gargalo_operacional: 'selecao', plano_apresentado: 'selecao', motivo_do_perdido: 'selecao',
   celular: 'tel', nome_do_sistema: 'texto', valor_de_mrr: 'numero', data_da_reuniao: 'data', observacao__desqualificado: 'texto',
 };
+/**
+ * Celular: só DDD + número, sem +55 (Julyan, 05/11/26: "não pode contar o +55, é só o DDD e
+ * número"). Quem cola do WhatsApp com +55 ou digita o zero da frente não é recusado: a folha tira
+ * sozinha. Fica 10 (fixo) ou 11 (celular) dígitos, igual ao Cockpit.
+ */
+export const CELULAR_DICA = 'DDD + número, sem +55';
+export function normalizarCelular(valor: string): { valor: string; erro: null } | { valor: null; erro: string } {
+  let d = String(valor ?? '').replace(/[^0-9]/g, '');
+  if (d.length >= 12 && d.startsWith('55')) d = d.slice(2);
+  if ((d.length === 11 || d.length === 12) && d.startsWith('0')) d = d.slice(1);
+  if (d.length === 10 || d.length === 11) return { valor: d, erro: null };
+  return { valor: null, erro: `Só o DDD e o número, sem +55: 10 ou 11 dígitos (ex.: 21987654321). Vieram ${d.length}.` };
+}
 // No Cockpit, "Outros" e "Funcionalidade" não explicam sozinhos: pedem o texto.
 export const MOTIVOS_QUE_EXIGEM_TEXTO = ['Outros', 'Funcionalidade'];
 
@@ -534,6 +547,11 @@ export function montarPropriedades(destino: string, digitado: Record<string, str
       const n = numeroBR(v);
       if (!isFinite(n) || n <= 0) { erros[k] = 'Valor inválido.'; continue; }
       propriedades[k] = String(n); continue;
+    }
+    if (tipo === 'tel') {
+      const c = normalizarCelular(v);
+      if (c.erro) { erros[k] = c.erro; continue; }
+      propriedades[k] = c.valor; continue;
     }
     if (tipo === 'data') {
       const d = new Date(`${v}T00:00:00Z`);
