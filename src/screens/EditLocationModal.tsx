@@ -8,6 +8,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { Alert } from '../components/Alert';
 import { useLayout } from '../hooks/useLayout';
@@ -51,6 +52,11 @@ function fmtDistance(m: number): string {
 
 export function EditLocationModal({ client, abrirEm, onSave, onClose }: Props) {
   const layout = useLayout();
+  /* O MAPA ENCOLHE EM TELA BAIXA (05/11/26): com os atalhos novos, num computador de 695 px de altura o
+     Cancelar caía para fora do cartão. O resto da folha ocupa ~410 px; o mapa fica com o que sobra dos
+     88% da tela, entre 170 e 280 px. */
+  const { height: alturaTela } = useWindowDimensions();
+  const alturaMapa = Math.round(Math.max(170, Math.min(280, alturaTela * 0.88 - 410)));
   const iconColors = useIconColors();
   // Posicao ATUAL do cliente (pino cinza, fixo). Se por acaso nao tiver coords,
   // cai num default (centro do Brasil) so pra o mapa abrir.
@@ -196,7 +202,7 @@ export function EditLocationModal({ client, abrirEm, onSave, onClose }: Props) {
             onde está hoje.
           </Text>
 
-          <View style={styles.mapWrap}>
+          <View style={[styles.mapWrap, { height: alturaMapa }]}>
             <MapView
               ref={(r) => { mapRef.current = r; }}
               provider={PROVIDER_DEFAULT}
