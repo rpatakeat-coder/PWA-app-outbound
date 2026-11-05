@@ -561,7 +561,10 @@ function GradeMais({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       />
       {d.etapaCodigo === ETAPA.pagamento
         ? <Botao rotulo="Mover o pino" desabilitado estilo={s.botaoMeia} acessivel="Dados travados: cobrança emitida, o pino não muda até o Pago" />
-        : <Botao rotulo="Mover o pino" onPress={a.onMoverPino} estilo={s.botaoMeia} />}
+        : !a.onMoverPino
+          // pino de colega (05/11/26): só o dono ou o gestor move
+          ? <Botao rotulo="Mover o pino" desabilitado estilo={s.botaoMeia} acessivel="Pino de colega: só o dono ou o gestor move" />
+          : <Botao rotulo="Mover o pino" onPress={a.onMoverPino} estilo={s.botaoMeia} />}
       <Botao rotulo="Não vale" onPress={() => naoVale(d, a)} desabilitado={!(d.pino.tipo === 'alvo' ? a.onDismissContaAlvo : a.onChangeStage)} estilo={s.botaoMeia} texto={s.naoValeTexto} />
     </View>
   );

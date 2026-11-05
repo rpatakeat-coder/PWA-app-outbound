@@ -1199,6 +1199,13 @@ function MainApp() {
   // Usuario 'view' = somente leitura. Esconde criar/editar/excluir/rotas/agenda/notas.
   // Aplicacao real do bloqueio esta nas RLS policies do Supabase (is_view_only_user()).
   const isViewer = profile?.role === 'view';
+  /* QUEM MOVE O PINO (05/11/26): o dono, o gestor, ou qualquer um num pino sem dono. O Júlio, no Rio,
+     moveu o lead do Marco em Vila Velha para onde ele estava: ~400 km. Pino de colega é do colega. */
+  const podeMoverPino = (c: Client | null | undefined): boolean => {
+    if (!c || isViewer) return false;
+    if (isGestor || !c.vendedor_id_hubspot) return true;
+    return !!profile?.id_hubspot && String(c.vendedor_id_hubspot) === String(profile.id_hubspot);
+  };
   // GESTAO PARA A EQUIPE INTEIRA (25/09/2026). /gestao e' o Cockpit Field Sales,
   // e ele abre na conta de quem entra: o gestor ve o time, o executivo ve o
   // proprio painel. Por isso o botao vale para todo mundo da equipe do Cockpit, e
@@ -5866,7 +5873,7 @@ function MainApp() {
             + (pinoConfirmado ? '\nEsse pino já foi confirmado no local por GPS. Se o lugar mudou, mova o pino.' : '\nAproxime-se para marcar a visita.'),
             [
               { text: 'Fechar', valor: 'nao', style: 'cancel' },
-              { text: 'Mover pino', valor: 'outro' },
+              ...(podeMoverPino(client) ? [{ text: 'Mover pino', valor: 'outro' }] : []),
               // Mapa novo: a visita entra marcada como declarada, com a
               // distância real; o pino não se mexe. LONGE PEDE FOTO DA FACHADA
               // (Julyan, 27/09: "se falar que tá longe manda a foto da fachada
@@ -6890,7 +6897,7 @@ function MainApp() {
         // Atualiza o snapshot aberto no sheet pra UI refletir na hora.
         setSelectedClient({ ...c, telefone: tel || null });
       }}
-      onEditLocation={isViewer ? undefined : () => { setEditingLocationAqui(null); setEditingLocationFor(selectedClient); setSelectedClient(null); }}
+      onEditLocation={!podeMoverPino(selectedClient) ? undefined : () => { setEditingLocationAqui(null); setEditingLocationFor(selectedClient); setSelectedClient(null); }}
       onMarkVisited={isViewer ? undefined : () => handleMarkAsVisited(selectedClient, () => setSelectedClient(null))}
       onDismissContaAlvo={isViewer ? undefined : () => handleDismissContaAlvo(selectedClient, () => setSelectedClient(null))}
       /* UM PLANO SÓ (Julyan 06/10: "substituir por pôr no plano"): no mapa novo, o Agendar e o
