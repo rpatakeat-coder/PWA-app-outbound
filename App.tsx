@@ -200,7 +200,7 @@ import { useAoVivo } from './src/hooks/useAoVivo';
 import { lerDeepLink, semDeepLink } from './src/utils/deepLink';
 import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
 import { useStages } from './src/hooks/useStages';
-import PlaybookScreen, { buscarPlaybook } from './src/screens/PlaybookScreen';
+import PlaybookScreen, { buscarPlaybook, opcoesDoPlaybook } from './src/screens/PlaybookScreen';
 import { objecoesDaCasa, objecoesDoPlaybook } from './src/utils/playbook';
 import { opcoesDaFila } from './src/utils/dadosDaFila';
 import ListaCarteiraWeb from './src/screens/ListaCarteiraWeb';
@@ -2935,10 +2935,8 @@ function MainApp() {
      e dor, que o `fatos` do gatilho já leu. Sem ficha, a lista vem vazia e o bloco some.
      O playbook só é buscado quando HÁ próxima porta (é a única hora em que o bloco pode aparecer);
      fica no mesmo cache da aba Playbook, então na rua sai do celular, sem rede. */
-  const playbookDaPorta = useQuery({
-    queryKey: ['playbook'], queryFn: buscarPlaybook, staleTime: 10 * 60 * 1000,
-    enabled: !!itemDoHalo,
-  });
+  const opcoesPlaybook = useMemo(() => opcoesDoPlaybook(), []);
+  const playbookDaPorta = useQuery({ ...opcoesPlaybook, enabled: !!itemDoHalo });
   const objecoesDaProxima = useMemo(() => {
     const pb = playbookDaPorta.data;
     if (!pb) return [];
@@ -2965,7 +2963,7 @@ function MainApp() {
     let tem = false;
     try { tem = !!window.localStorage.getItem('takeat-playbook-cache'); } catch { tem = true; }
     if (tem) return;
-    const t = setTimeout(() => { void queryClient.prefetchQuery({ queryKey: ['playbook'], queryFn: buscarPlaybook, staleTime: 10 * 60 * 1000 }); }, 30000);
+    const t = setTimeout(() => { void queryClient.prefetchQuery(opcoesDoPlaybook()); }, 30000);
     return () => clearTimeout(t);
   }, [profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // o relógio do "primeiro toque" (prancha §4c): o mapa abre e conta até o 1º Ir ou Cheguei

@@ -36,7 +36,27 @@ export async function buscarPlaybook(): Promise<Playbook> {
   const pb = (data as { playbook?: Playbook } | null)?.playbook;
   if (!pb || !Array.isArray(pb.paginas)) throw new Error('Playbook vazio');
   gravar(CHAVE_CACHE, pb);
+  gravar(CHAVE_CACHE + ':em', Date.now());
   return pb;
+}
+
+/* O PLAYBOOK NO MÁXIMO UMA VEZ POR DIA (05/11/26). São 740 KB e quase não mudam, mas o app baixava de
+   novo a cada 10 min ao voltar do WhatsApp/Waze — 482 downloads num dia, ~350 MB de tráfego de saída, no
+   dia em que o banco travou. Agora os três lugares que pedem o playbook usam a cópia do aparelho e só
+   conferem no servidor quando ela tem mais de 24 h (ou não existe). */
+const UM_DIA = 24 * 60 * 60 * 1000;
+export function opcoesDoPlaybook() {
+  const cache = ler<Playbook>(CHAVE_CACHE);
+  const em = Number(ler<number>(CHAVE_CACHE + ':em') ?? 0);
+  return {
+    queryKey: ['playbook'] as const,
+    queryFn: buscarPlaybook,
+    initialData: cache ?? undefined,
+    initialDataUpdatedAt: cache ? em : 0,
+    staleTime: UM_DIA,
+    gcTime: UM_DIA,
+    refetchOnWindowFocus: false,
+  };
 }
 
 export type ProximaParada = { nome: string; numero: number; etapa: string | null; dealId?: string | null };
@@ -50,15 +70,9 @@ export default function PlaybookScreen({ email, proximaParada }: Props) {
   const cores = useIconColors();
   const layout = useLayout();
   const duas = layout.ehDesktop;
-  const cache = useMemo(() => ler<Playbook>(CHAVE_CACHE), []);
-  const { data: pb, isLoading, isError, refetch } = useQuery({
-    queryKey: ['playbook'],
-    queryFn: buscarPlaybook,
-    initialData: cache ?? undefined,
-    // O cache do aparelho aparece na hora; a carga do servidor vem por cima.
-    initialDataUpdatedAt: 0,
-    staleTime: 10 * 60 * 1000,
-  });
+  const opcoes = useMemo(() => opcoesDoPlaybook(), []);
+  // O cache do aparelho aparece na hora; o servidor só é consultado se a cópia tiver mais de 24 h.
+  const { data: pb, isLoading, isError, refetch } = useQuery(opcoes);
 
   const [termo, setTermo] = useState('');
   const [categoria, setCategoria] = useState<string | null>(null);
@@ -186,7 +200,7 @@ export default function PlaybookScreen({ email, proximaParada }: Props) {
   const continuar = !buscando ? continuarLendo(pb, prog) : null;
   const categorias = pb.categorias.filter((c) => pb.paginas.some((p) => p.categoria === c));
   const lidas = pb.paginas.filter((p) => prog[p.id]?.lida).length;
-  const salvo = !!cache || !!pb;
+  const salvo = !!opcoes.initialData || !!pb;
 
   const respostaVista = resposta ? (
     <ScrollView style={s.tela} contentContainerStyle={s.conteudo}>

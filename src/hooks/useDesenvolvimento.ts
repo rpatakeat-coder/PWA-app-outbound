@@ -6,7 +6,7 @@ import { AccessibilityInfo, Platform } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 
 import { supabase } from '../integrations/supabase/client';
-import { buscarPlaybook } from '../screens/PlaybookScreen';
+import { opcoesDoPlaybook } from '../screens/PlaybookScreen';
 import type { Capitulo, Quadro } from '../../supabase/functions/_compartilhado/desenvolvimentoV2';
 
 export type OrigemAbertura = 'toast' | 'pilula' | 'push_seg' | 'push_sex' | 'menu' | 'selo_menu';
@@ -26,7 +26,7 @@ export function useDesenvolvimentoQuadro(enabled: boolean) {
 }
 /** Os capítulos do Playbook para o nível: os mesmos do Cockpit (categoria = capítulo, sem Liderança). */
 export function useCapitulos(enabled: boolean): Capitulo[] {
-  const pb = useQuery({ queryKey: ['playbook'], queryFn: buscarPlaybook, enabled, staleTime: 10 * 60 * 1000 });
+  const pb = useQuery({ ...opcoesDoPlaybook(), enabled });
   return useMemo(() => {
     const d = pb.data;
     if (!d) return [];
