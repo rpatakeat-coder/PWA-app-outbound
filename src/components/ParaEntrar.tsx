@@ -75,7 +75,8 @@ export function FolhaFalaPronta({ arma, aoFechar }: { arma: Arma | null; aoFecha
           <Text style={s.secao}>O QUE MARCAR NO REGISTRO</Text>
           <Text style={s.texto}>{pg.marcar}</Text>
         </View>
-        {!!pg.extra && <Text style={s.nota}>{pg.extra}</Text>}
+        {/* nota com {campo} é molde (a referência preenchida já aparece acima): não mostrar cru (auditoria 04/11/26) */}
+        {!!pg.extra && !/\{\w+\}/.test(pg.extra) && <Text style={s.nota}>{pg.extra}</Text>}
       </View>
     </Painel>
   );
