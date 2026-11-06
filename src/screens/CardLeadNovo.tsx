@@ -361,9 +361,20 @@ function Botao({ rotulo, onPress, estilo, texto, desabilitado, tracejado, acessi
   );
 }
 
+/* O CHEGUEI É A AÇÃO PRINCIPAL DE TODO CARTÃO (Julyan, 06/11/26: "tem que ter o CHEGUEI COMO PRIORIDADE, em
+   todas as fichas, é onde ele marca o check-in"). Lead, cliente, ex-cliente, recém-aberto e conta-alvo, perto ou
+   longe: o botão grande vermelho é sempre ele. A linha de baixo diz o que o toque faz para aquele pino. Longe do
+   pino o check-in não trava: pergunta se está na porta (o pino vem para o GPS) ou pede uma foto. */
+function subDoCheguei(d: DadosCardNovo): string {
+  if (d.visitadoHoje) return 'visitado hoje · não vira segunda visita';
+  if (d.distanciaM != null && d.distanciaM > PERTO_M) return `a ${distanciaTexto(d.distanciaM)} · confere se está na porta ou pede uma foto`;
+  if (d.pino.familia === 'cli') return 'abre a visita de relacionamento';
+  if (d.pino.familia === 'ex') return 'registra a visita de reconquista';
+  return 'abre o registro da visita';
+}
 function BotaoCheguei({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   // Visitado hoje: o toque abre o registro direto, sem outro check-in.
-  const sub = d.visitadoHoje ? 'visitado hoje · não vira segunda visita' : 'abre o registro da visita';
+  const sub = subDoCheguei(d);
   return (
     <Pressable
       accessibilityRole="button"
@@ -382,9 +393,9 @@ function BotaoCheguei({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   );
 }
 
-// UM PLANO SÓ (06/10/2026). O status do plano e a ação principal: perto do pino (300 m),
-// o Cheguei manda — o time faz check-in em lead criado na hora, e o Cheguei nunca some; longe,
-// "Pôr no plano" (ou "Mudar no plano") é a principal e o Cheguei vai para a grade.
+// UM PLANO SÓ (06/10/2026). O status do plano em cima e o Cheguei como ação principal. Até 06/11/26, longe do
+// pino (300 m) a principal virava "Marcar o próximo passo" e o Cheguei descia para a grade; agora o Cheguei é
+// sempre a principal e o "Próximo passo" fica sempre na grade.
 const PERTO_M = 300;
 const SEMANA_LONGA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 function nomeDoDiaDoPlano(iso: string): string {
@@ -398,23 +409,12 @@ export function textoDoPlano(onde: OndeEsta | null): string {
   if (onde.feita) return `Feito ${nomeDoDiaDoPlano(onde.dia)}${a ? ` · ${a.rotulo}` : ''}`;
   return `No plano de ${nomeDoDiaDoPlano(onde.dia)} · ${onde.ordem}ª parada${a ? ` · ${a.rotulo}` : ''}${onde.hora ? ` ${onde.hora} com cadeado` : ''}`;
 }
-function perto(d: DadosCardNovo) { return d.distanciaM != null && d.distanciaM <= PERTO_M; }
 
 function AcaoPrincipal({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   const { lido, onde } = useOndeNoPlano(d.uid, d.client.id);
   const status = lido ? textoDoPlano(onde) : null;
   const linha = status ? <Text style={[s.statusPlano, onde && !onde.feita && s.statusPlanoNo]} numberOfLines={2}>{status}</Text> : null;
-  if (!a.onPorNoPlano || perto(d)) return <View style={{ gap: 6 }}>{linha}<BotaoCheguei d={d} a={a} /></View>;
-  return (
-    <View style={{ gap: 6 }}>
-      {linha}
-      <Pressable accessibilityRole="button" accessibilityLabel={onde ? 'Mudar o próximo passo' : 'Marcar o próximo passo'} onPress={a.onPorNoPlano}
-        style={({ pressed }) => [s.cheguei, pressed && { opacity: 0.85 }]}>
-        <Text style={s.chegueiTexto}>{onde && !onde.feita ? 'Mudar o próximo passo' : 'Marcar o próximo passo'}</Text>
-        <Text style={s.chegueiSub}>o que vai fazer, o dia e, se quiser, a hora</Text>
-      </Pressable>
-    </View>
-  );
+  return <View style={{ gap: 6 }}>{linha}<BotaoCheguei d={d} a={a} /></View>;
 }
 
 function Cabecalho({ d, a, compacto }: { d: DadosCardNovo; a: AcoesCardNovo; compacto: boolean }) {
@@ -535,9 +535,7 @@ function GradeEspiada({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
         {/* Agendar saiu (um plano só): o plano nasce do Pôr no plano. A grade leva a ação que não é a principal. */}
         {!a.onPorNoPlano
           ? <Botao rotulo="Agendar" onPress={a.onScheduleMeeting} estilo={s.botao48} />
-          : perto(d)
-            ? <Botao rotulo="Próximo passo" onPress={a.onPorNoPlano} estilo={s.botao48} acessivel="Marcar ou mudar o próximo passo" />
-            : <Botao rotulo={d.visitadoHoje ? 'Registrar' : 'Cheguei'} onPress={a.onMarkVisited} desabilitado={!a.onMarkVisited || d.isMarkingVisited} estilo={s.botao48} acessivel="Cheguei: fazer check-in" />}
+          : <Botao rotulo="Próximo passo" onPress={a.onPorNoPlano} estilo={s.botao48} acessivel="Marcar ou mudar o próximo passo" />}
         {a.onExpandir && <Botao rotulo="…" onPress={a.onExpandir} estilo={[s.botao48, s.botaoMais]} acessivel="Mais: abrir o cartão" />}
       </View>
     </View>
@@ -757,7 +755,7 @@ export function BlocosDaRua({ d }: { d: DadosCardNovo }) {
   );
 }
 
-/** Ir · Pôr no plano · Cheguei (prancha 5a): o Cheguei é sempre o vermelho. */
+/** Na rua: o Cheguei grande em cima (a ação principal de todo cartão, 06/11/26) e Ir · Pôr no plano embaixo. */
 function BotoesDaRua({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   const c = d.client;
   const { lido, onde } = useOndeNoPlano(d.uid, d.client.id);
@@ -765,18 +763,13 @@ function BotoesDaRua({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   return (
     <View style={{ gap: 6 }}>
       {status ? <Text style={[s.statusPlano, onde && !onde.feita && s.statusPlanoNo]} numberOfLines={2}>{status}</Text> : null}
+      <BotaoCheguei d={d} a={a} />
       <View style={s.botoesRua}>
         <Botao rotulo="Ir" onPress={() => { primeiroToque('ir'); ir(c); }} desabilitado={c.latitude == null} estilo={[s.botao52, { flexGrow: 1 }]} />
         {a.onPorNoPlano && (
           <Botao rotulo={onde && !onde.feita ? 'Mudar no plano' : 'Pôr no plano'} onPress={a.onPorNoPlano} estilo={[s.botao52, { flexGrow: 1.6 }]}
             acessivel={onde && !onde.feita ? 'Mudar o próximo passo no plano' : 'Pôr no plano: o que vai fazer, o dia e a hora'} />
         )}
-        <Pressable accessibilityRole="button" accessibilityLabel="Cheguei: fazer check-in"
-          disabled={!a.onMarkVisited || d.isMarkingVisited}
-          onPress={a.onMarkVisited ? () => { primeiroToque('cheguei'); a.onMarkVisited!(); } : undefined}
-          style={({ pressed }) => [s.botao, s.botao52, s.chegueiRua, (!a.onMarkVisited || d.isMarkingVisited) && s.desabilitado, pressed && { opacity: 0.85 }]}>
-          {d.isMarkingVisited ? <ActivityIndicator color="#fff" /> : <Text style={s.chegueiRuaTexto} numberOfLines={1}>{d.visitadoHoje ? 'Registrar' : 'Cheguei'}</Text>}
-        </Pressable>
       </View>
     </View>
   );
@@ -909,8 +902,6 @@ const s = StyleSheet.create({
   blocoSub: { fontSize: 12.5, lineHeight: 17, fontWeight: '500', color: 'var(--text-muted)' },
   botoesRua: { flexDirection: 'row', gap: 8 },
   botao52: { minHeight: 52, flexBasis: 0, borderRadius: 14 },
-  chegueiRua: { flexGrow: 1.4, backgroundColor: 'var(--vermelho-acao)', borderColor: 'var(--vermelho-acao)' },
-  chegueiRuaTexto: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   topo: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, gap: 10 },
   eMeu: { marginLeft: 'auto', minHeight: 44, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#FACC15', alignItems: 'center', justifyContent: 'center' },
   eMeuForaDaRota: { backgroundColor: 'transparent', borderWidth: 1, borderStyle: 'dashed', borderColor: '#FACC15' },
