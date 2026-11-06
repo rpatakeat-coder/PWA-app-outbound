@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@1e9d30c7.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@dcd08e9f.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "1e9d30c7";
+  var VERSAO = "dcd08e9f";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -73548,10 +73548,8 @@ HJ4.lerPlacar = function (forcar) {
 };
 
 HJ4.funilFora = function () { return typeof DATA === 'undefined' || !DATA || !DATA.funilLeads || !Object.keys(DATA.funilLeads).length; };
-HJ4.temp = function (l) {
-  const t = String((l && l.n && l.n.lead && (l.n.lead.tempFaixa || l.n.lead.temperatura)) || '').toLowerCase();
-  return t === 'quente' ? 'quente' : t === 'morno' ? 'morno' : t === 'frio' ? 'frio' : null;
-};
+
+HJ4.temp = function (l) { return l && l.n && GV2.quenteCadencia(l.n) ? 'quente' : null; };
 HJ4.PESO_TEMP = { quente: 0, morno: 1, frio: 2 };
 HJ4.aguardando = function (l) { return !!(l && l.n && l.n.lead && l.n.lead.aguardando); };
 
@@ -73762,7 +73760,7 @@ HJ4.linhaHTML = function (D, l) {
   const e = HJ4.e, st = HJ4.st;
   const n = l.n, lead = n.lead || {};
   const t = HJ4.temp(l);
-  const selo = t ? '<em class="hj4-t is-' + t + '">' + e(t.toUpperCase()) + '</em>' : '<em class="hj4-t">—</em>';
+  const selo = t ? '<em class="hj4-t is-' + t + '">' + e(t.toUpperCase()) + '</em>' : '<span></span>';
   const et = GV2.PLV3.etapa(l.etapaIdx);
   const posto = st.posted[l.ref];
   const gravando = GV2.PLV3.st.gravando && GV2.PLV3.st.gravando[l.ref];
