@@ -12,6 +12,14 @@ export function distanciaTexto(m: number | null): string | null {
   return m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} km` : `${Math.round(m / 10) * 10} m`;
 }
 
+/** Tem telefone de verdade? DDD + número (10 ou 11 dígitos, o 55 na frente não conta). Um "+55" sozinho no
+ *  cadastro (visto em 06/11/26 no Gol Burger) virava chip "+55" e um Ligar sem número. */
+export function temTelefone(t: string | null | undefined): boolean {
+  let n = String(t ?? '').replace(/\D/g, '');
+  if (n.length >= 12 && n.startsWith('55')) n = n.slice(2);
+  return n.length >= 10;
+}
+
 /** "27996183875" → "(27) 99618-3875"; fixo de 10 dígitos e o 55 na frente também. O resto fica como veio. */
 export function telefoneTexto(t: string): string {
   let n = t.replace(/\D/g, '');
@@ -58,7 +66,7 @@ export function fatosDoCard(d: { client: Client; pino: Pino; distanciaM: number 
   if (pino.etiqueta && !pino.queda) f.push({ texto: textoDoToque(pino.etiqueta.texto), aviso: pino.etiqueta.texto === 'cobrar' || pino.etiqueta.texto.includes('parado') });
   f.push((d.aproximado ?? c.geo_approximate) ? { texto: '≈ posição aproximada', aviso: true } : { texto: 'posição exata' });
   const quem = contatoNome(c);
-  f.push(c.telefone?.trim() ? { texto: (quem ? quem + ' · ' : '') + telefoneTexto(c.telefone) } : { texto: quem ? quem + ' · sem telefone' : 'sem telefone', aviso: true });
+  f.push(temTelefone(c.telefone) ? { texto: (quem ? quem + ' · ' : '') + telefoneTexto(c.telefone) } : { texto: quem ? quem + ' · sem telefone' : 'sem telefone', aviso: true });
   if (c.conta_alvo_rating != null) {
     const nota = Number(c.conta_alvo_rating).toFixed(1).replace('.', ',');
     f.push({ texto: c.conta_alvo_reviews != null ? `${nota}★ · ${c.conta_alvo_reviews} no Google` : `${nota}★ no Google` });

@@ -19,7 +19,7 @@ import { BlocoParaEntrar } from '../components/ParaEntrar';
 import { useArmaDoPino, useFatosDoNegocio } from '../hooks/useArmaDoPino';
 import { horarioParaFrase, linhaDeReferencia, type Arma } from '../utils/armasDoMapa';
 import { primeiroToque } from '../utils/eventosDoMapa';
-import { distanciaTexto, fatosDoCard, sinaisDoCliente } from '../utils/cardNovo';
+import { distanciaTexto, fatosDoCard, sinaisDoCliente, temTelefone } from '../utils/cardNovo';
 import { ETAPA, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA, ROTULO_PROP, pareceNomeDePessoa, valorValido } from '../utils/fichaDeRua';
 import { supabase } from '../integrations/supabase/client';
 import { IconClose as SiClose } from '../components/icons';
@@ -510,7 +510,7 @@ function assumir(d: DadosCardNovo, a: AcoesCardNovo) {
 function GradeEspiada({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   const c = d.client;
   // recém-aberto: o telefone do CNPJ costuma ser o do contador; o certo é o celular do dono, pedido na porta
-  const temTel = !!c.telefone?.trim() && d.pino.familia !== 'rec';
+  const temTel = temTelefone(c.telefone) && d.pino.familia !== 'rec';
   const podeAssumir = d.pino.dono === 'sem' && !!a.onEMeu;
   // LIGAR E WHATSAPP À MÃO (Julyan, 26/09): com telefone, uma fileira só de
   // contato, meia largura cada — "WhatsApp" não cabe legível em 64 px na
@@ -616,7 +616,7 @@ const juntarE = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')
 
 function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   /* hook antes de qualquer return (regra dos hooks) */
-  const falta = useFaltaPara(d.client.id_hubspot && d.pino.tipo !== 'cliente' ? String(d.client.id_hubspot) : null, avancoDaEtapa(d.etapaCodigo ?? null).destino);
+  const falta = useFaltaPara(d.client.id_hubspot && d.pino.tipo !== 'cliente' && d.pino.tipo !== 'ex' ? String(d.client.id_hubspot) : null, avancoDaEtapa(d.etapaCodigo ?? null).destino);
   if (d.pino.tipo === 'alvo' && !d.client.id_hubspot) {
     return (
       <View style={s.negocio}>
@@ -630,7 +630,9 @@ function BlocoNegocio({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
       </View>
     );
   }
-  if (d.pino.tipo === 'cliente') return null;
+  /* cliente e ex-cliente não estão no funil Field Sales (o negócio deles é do Onboarding/Sucesso): o bloco dizia
+     "Etapa não reconhecida" no ex-cliente (Gol Burger, 06/11/26). A situação deles é a LinhaCliente. */
+  if (d.pino.tipo === 'cliente' || d.pino.tipo === 'ex') return null;
   if (!d.client.id_hubspot) {
     return (
       <View style={s.negocio}>
@@ -778,7 +780,7 @@ function BotoesDaRua({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
 /** Contato e o resto da espiada, sem o Ir e o Cheguei (que subiram para os botões da rua). */
 function ContatoDaRua({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
   const c = d.client;
-  const temTel = !!c.telefone?.trim() && d.pino.familia !== 'rec';
+  const temTel = temTelefone(c.telefone) && d.pino.familia !== 'rec';
   const podeAssumir = d.pino.dono === 'sem' && !!a.onEMeu;
   const zap = temTel ? toWhatsappNumber(c.telefone) : null;
   return (

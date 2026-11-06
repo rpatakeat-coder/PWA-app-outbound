@@ -6,7 +6,7 @@
 // passando lead frio perto na frente da cobrança; o card dizendo "0 m" ou
 // "posição exata" quando não sabe; e telefone ausente sem aviso.
 import type { Client } from '../types/client';
-import { distanciaTexto, faturamentoTexto, fatosDoCard, ordenarItens, quedaCurta, sinaisDoCliente, telefoneTexto, textoDoToque, type ItemFolha } from './cardNovo';
+import { distanciaTexto, faturamentoTexto, fatosDoCard, ordenarItens, quedaCurta, sinaisDoCliente, telefoneTexto, temTelefone, textoDoToque, type ItemFolha } from './cardNovo';
 import type { Pino } from './pinoP2';
 
 let falhas = 0;
@@ -75,6 +75,12 @@ ok(ordenarItens([it('sem', { distanciaM: null }), it('com', { distanciaM: 5000 }
   const prefixo = txt({ hs_plano: 'Plano PRO + Multilojas' }, { tipo: 'cliente' });
   ok(prefixo.indexOf('Plano PRO + Multilojas') >= 0 && prefixo.indexOf('Plano Plano') < 0, `"Plano" não repete (${prefixo})`);
   ok(txt({ hs_qtd_comandas: 10 }, { tipo: 'cliente' }).indexOf('Plano') < 0, 'sem plano no CRM, sem linha de plano');
+  /* "+55" sozinho no cadastro não é telefone (Gol Burger, 06/11/26): sem chip "+55" e sem Ligar */
+  ok(temTelefone('+55') === false, '"+55" não é telefone');
+  ok(temTelefone('55') === false && temTelefone('') === false && temTelefone(null) === false, 'vazio não é telefone');
+  ok(temTelefone('27996183875') && temTelefone('+55 (27) 99618-3875') && temTelefone('2133334444'), 'DDD + número é telefone, com ou sem 55');
+  const f = fatosDoCard({ client: cli({ nome: 'Gol Burger', empresa: 'Gol Burger', telefone: '+55' }), pino: pino({}), distanciaM: null });
+  ok(f.some((x) => x.texto === 'sem telefone') && !f.some((x) => x.texto === '+55'), 'cadastro com "+55" mostra "sem telefone"');
   ok(txt({ hs_etapa_uso: 'Setup' }, { tipo: 'cliente' }) === 'ok:Cliente ativo · Setup | -:sem comanda registrada', 'cliente novo sem comanda');
   const pediu = txt({ hs_etapa_uso: 'Saudável', hs_cancelamento_solicitado_em: '2026-09-20' }, { tipo: 'cliente' });
   ok(pediu === 'aviso:Em risco · pediu cancelamento em 20/09 | -:sem comanda registrada', `ativo que pediu cancelamento não é Saudável (${pediu})`);
