@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@688b865c.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@835d5d54.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "688b865c";
+  var VERSAO = "835d5d54";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -29507,8 +29507,37 @@ async function pl6Carregar(rep, segundaPedida) {
     return { ok: false, motivo: error.message || 'o banco recusou a leitura' };
   }
   pl6Plano = (data && data[0]) ? data[0] : null;
-  await Promise.all([pl6CarregarPinos(), pl6CarregarPinosDoApp(rep).catch(function () {})]);
+  await Promise.all([pl6CarregarPinos(), pl6CarregarPinosDoApp(rep).catch(function () {}), pl6CompletarDoEspelho(rep).catch(function () {})]);
   return { ok: true, tinhaLinha: !!pl6Plano };
+}
+
+const PL6_ESPELHO_PEDIDOS = new Set();
+async function pl6CompletarDoEspelho(rep) {
+  const g = pl6Plano && Array.isArray(pl6Plano.grade) ? pl6Plano.grade : null;
+  if (!g || !rep || !supa || !DATA.funilLeads) return;
+  const conhecidos = new Set((typeof meusNegociosAbertos === 'function' ? meusNegociosAbertos(rep.ownerId) : []).map(function (d) { return String(d.id); }));
+  const faltam = [];
+  g.forEach(function (col) {
+    (Array.isArray(col) ? col : []).forEach(function (it) {
+      const id = it && typeof it === 'object' ? it.id : (typeof it === 'string' ? it : null);
+      const m = /^c-(\d+)$/.exec(String(id || ''));
+      if (m && !conhecidos.has(m[1]) && !PL6_ESPELHO_PEDIDOS.has(m[1]) && faltam.indexOf(m[1]) < 0) faltam.push(m[1]);
+    });
+  });
+  if (!faltam.length) return;
+  const lote = faltam.slice(0, 200);
+  lote.forEach(function (id) { PL6_ESPELHO_PEDIDOS.add(id); });
+  const r = await supa.rpc('cards_do_espelho', { p_ids: lote });
+  if (r.error) { lote.forEach(function (id) { PL6_ESPELHO_PEDIDOS.delete(id); }); return; }
+  (r.data || []).forEach(function (x) {
+    if (!x || !x.card || !x.dealstage) return;
+    const sid = String(x.dealstage);
+    const lista = DATA.funilLeads[sid] = Array.isArray(DATA.funilLeads[sid]) ? DATA.funilLeads[sid] : [];
+    if (lista.some(function (l) { return String(l && l.id) === String(x.deal_id); })) return;
+    const card = Object.assign({}, x.card, { id: String(x.deal_id), ownerId: String(x.owner_id || rep.ownerId), stageId: sid, stage: (typeof STAGE_LABELS !== 'undefined' && STAGE_LABELS[sid]) || x.card.stage || '' });
+    if (!card.vendedor || card.vendedor === '—') card.vendedor = String(rep.name || '').split(' ')[0];
+    lista.push(card);
+  });
 }
 
 let PL6_SEM_PINO = null;
