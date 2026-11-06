@@ -69,6 +69,12 @@ ok(ordenarItens([it('sem', { distanciaM: null }), it('com', { distanciaM: 5000 }
   ok(parado === 'aviso:Em risco · Risco | -:900 comandas | aviso:última comanda há 8 dias | -:R$ 716 mil/mês', `cliente parado (${parado})`);
   const ex = txt({ hs_etapa_uso: 'Churn', hs_qtd_comandas: 2980, hs_ultima_comanda_em: '2026-08-17', hs_cancelamento_solicitado_em: '2026-07-24' }, { tipo: 'ex' });
   ok(ex === 'ex:Ex-cliente · cancelou em 24/07 | -:2.980 comandas | -:última comanda há 42 dias', `ex-cliente (${ex})`);
+  /* 0254: o plano contratado e a assinatura entram logo depois da situação */
+  const comPlano = txt({ hs_etapa_uso: 'Saudável', hs_plano: 'Profissional', hs_assinatura: 'Trimestral', hs_qtd_comandas: 10 }, { tipo: 'cliente' });
+  ok(comPlano === 'ok:Cliente ativo · Saudável | -:Plano Profissional · Trimestral | -:10 comandas | -:sem comanda registrada', `cliente com plano (${comPlano})`);
+  const prefixo = txt({ hs_plano: 'Plano PRO + Multilojas' }, { tipo: 'cliente' });
+  ok(prefixo.indexOf('Plano PRO + Multilojas') >= 0 && prefixo.indexOf('Plano Plano') < 0, `"Plano" não repete (${prefixo})`);
+  ok(txt({ hs_qtd_comandas: 10 }, { tipo: 'cliente' }).indexOf('Plano') < 0, 'sem plano no CRM, sem linha de plano');
   ok(txt({ hs_etapa_uso: 'Setup' }, { tipo: 'cliente' }) === 'ok:Cliente ativo · Setup | -:sem comanda registrada', 'cliente novo sem comanda');
   const pediu = txt({ hs_etapa_uso: 'Saudável', hs_cancelamento_solicitado_em: '2026-09-20' }, { tipo: 'cliente' });
   ok(pediu === 'aviso:Em risco · pediu cancelamento em 20/09 | -:sem comanda registrada', `ativo que pediu cancelamento não é Saudável (${pediu})`);

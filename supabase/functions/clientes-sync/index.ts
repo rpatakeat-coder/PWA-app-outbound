@@ -52,6 +52,8 @@ const PROPS = [
   'cnpj_cpf', 'celular', 'logradouro', 'numero', 'bairro', 'cidade', 'estado', 'cep', 'latitude', 'longitude',
   // 0221: por que o cliente saiu (N1 macro, N2 micro, N3 observação e o setor de origem do cancelamento)
   'n1___motivo_macro', 'n2___motivo_micro', 'observacoes___cancelamento', 'etapa_de_cancelamento',
+  // 0254: o plano contratado e a assinatura, para o executivo ver no cartão do cliente antes da visita
+  'pacote_contratado', 'periodo_contratado',
 ];
 
 const json = (status: number, body: unknown) =>
@@ -199,6 +201,7 @@ Deno.serve(async (req) => {
             hs_modificado_em: txt(q.hs_lastmodifieddate),
             churn_motivo_macro: txt(q.n1___motivo_macro), churn_motivo_micro: txt(q.n2___motivo_micro),
             churn_motivo_texto: txt(q.observacoes___cancelamento), churn_setor: txt(q.etapa_de_cancelamento),
+            plano: txt(q.pacote_contratado), assinatura: txt(q.periodo_contratado),
           });
         }
         after = res.paging?.next?.after;

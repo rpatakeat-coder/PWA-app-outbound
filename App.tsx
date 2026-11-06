@@ -188,6 +188,7 @@ import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { buscarLeadsParecidos } from './src/utils/buscarLeadsParecidos';
 import { fraseDoAviso, type Parecido } from './src/utils/leadDuplicado';
 import { DesfechoVisitaSheet } from './src/screens/DesfechoVisitaSheet';
+import { RelacionamentoSheet } from './src/screens/RelacionamentoSheet';
 import { ComunicadoSheet } from './src/screens/ComunicadoSheet';
 import { EditLocationModal } from './src/screens/EditLocationModal';
 import { MinhaDailyCard } from './src/screens/MinhaDailyCard';
@@ -5422,6 +5423,9 @@ function MainApp() {
     cliente: string;
     visitadoEm: string;
   } | null>(null);
+  /* A VISITA DE RELACIONAMENTO (06/11/26): depois do Cheguei num cliente ativo, a folha com o plano,
+     as comandas e "Pediu indicação?" (RelacionamentoSheet). O check-in já gravou; pular não desfaz. */
+  const [relacionamentoPendente, setRelacionamentoPendente] = useState<{ client: Client; acaoId: string | null } | null>(null);
 
   /** "O time na rua · hoje": a folha do gestor, aberta por uma linha do menu do perfil. */
   const [timeNaRua, setTimeNaRua] = useState(false);
@@ -5997,6 +6001,8 @@ function MainApp() {
           marcarUltimoCheckin(client.id, userLat, userLon);
           /* A FICHA ABRE MESMO SEM SINAL (auditoria 14/10/26): antes o executivo tinha de lembrar de
              voltar depois. Tudo o que ela manda já sabe ir para a fila, atrás do check-in. */
+          /* cliente ativo sem sinal: a folha abre igual; a resposta espera o check-in subir (responder_relacionamento) */
+          if (client.status === 'cliente') setRelacionamentoPendente({ client, acaoId });
           if (contextoPino && client.status === 'lead') {
             const chave = textoNormalizado(client.etapa);
             const pelaTabela = chave ? contextoPino.etapaDePara.get(chave) ?? null : null;
@@ -6087,6 +6093,7 @@ function MainApp() {
         : corrigirPino
         ? `Check-in em ${nomeDoLead} · pino corrigido (estava a ${Math.round(distance)} m)`
         : `Check-in em ${nomeDoLead} registrado`, 'ok');
+      if (visitado.status === 'cliente') setRelacionamentoPendente({ client: { ...client, ...visitado } as Client, acaoId });
       // +20 só quando o servidor confirma a prova (a temporada, docs/10 §2.6 D)
       void avisarSeVisitaProvada(client.id, (t) => Toast.mostrar(t, 'ok'), async () => {
         await queryClient.invalidateQueries({ queryKey: ['ranking_executivo'] });
@@ -10868,6 +10875,13 @@ function MainApp() {
           }}
         />
         </React.Suspense>
+      )}
+      {relacionamentoPendente && (
+        <RelacionamentoSheet
+          client={relacionamentoPendente.client}
+          acaoId={relacionamentoPendente.acaoId}
+          aoFechar={() => setRelacionamentoPendente(null)}
+        />
       )}
       {desfechoPendente && (
         <DesfechoVisitaSheet

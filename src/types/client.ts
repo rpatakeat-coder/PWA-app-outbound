@@ -76,6 +76,10 @@ export interface Client {
   // Quantas comandas o cliente ja emitiu. A data diz QUANDO parou, este diz
   // QUANTO usou — separa "nunca engrenou" de "usava muito e parou".
   hs_qtd_comandas: number | null;
+  // 0254: o plano contratado e a assinatura do negócio de Onboarding/Sucesso (clientes-sync):
+  // "Profissional", "Trimestral". Só o cartão lê; na carga do mapa vem undefined.
+  hs_plano?: string | null;
+  hs_assinatura?: string | null;
   // Etapa do HubSpot de onde o dado veio, e a classificação dela pela edge.
   // 'churn' = ex-cliente DE VERDADE (saiu no CRM). Só a data de cancelamento
   // não serve pra isso: ela registra que houve um PEDIDO, e tem cliente ativo

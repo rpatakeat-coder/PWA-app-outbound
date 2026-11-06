@@ -110,6 +110,10 @@ export function sinaisDoCliente(c: Client, pino: Pino, hojeISO: string): SinalCl
   } else {
     s.push({ texto: etapa ? `Cliente ativo · ${etapa}` : 'Cliente ativo', tom: 'ok' });
   }
+  /* 0254: o plano contratado e a assinatura, para a visita de relacionamento saber o que o cliente tem */
+  const plano = c.hs_plano?.trim() || null;
+  const assinatura = c.hs_assinatura?.trim() || null;
+  if (plano || assinatura) s.push({ texto: [plano ? `Plano ${plano.replace(/^plano\s+/i, '')}` : 'Plano —', assinatura].filter(Boolean).join(' · ') });
   if (c.hs_qtd_comandas != null) s.push({ texto: `${Number(c.hs_qtd_comandas).toLocaleString('pt-BR')} comandas` });
   const ult = dia(c.hs_ultima_comanda_em);
   if (ult) {
