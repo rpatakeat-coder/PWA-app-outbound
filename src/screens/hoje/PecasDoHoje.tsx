@@ -75,9 +75,11 @@ export function PlacarDoDia({ portas, meta, demo, selos, aoSelo }: {
 
 // ---- o plano do dia (3 portas + "ver as N") ------------------------------------------------------
 export type PortaDoPlano = { id: string; hora: string | null; nome: string; tipo: string; quente: boolean; recem: boolean; feita: boolean; /** visitada sem prova (fora do raio, sem foto): não é pendente nem conta */ semProva?: boolean };
-export function PlanoDoDia({ titulo, portas, verTodas, aoAlternar, temMais, rotuloMais, aoIr, vazio }: {
+export function PlanoDoDia({ titulo, portas, verTodas, aoAlternar, temMais, rotuloMais, aoIr, aoAbrir, vazio }: {
   titulo: string; portas: PortaDoPlano[]; verTodas: boolean; aoAlternar: () => void; temMais: boolean; rotuloMais: string;
   aoIr: (p: PortaDoPlano) => void;
+  /** Tocar no nome abre a ficha do lead (06/11/26: só o "Ir" respondia, e a visita feita não abria nada). */
+  aoAbrir?: (p: PortaDoPlano) => void;
   vazio: { titulo: string; texto: string; botao: string | null; aoMontar: () => void } | null;
 }) {
   const primeira = portas.find((p) => !p.feita && !p.semProva);
@@ -101,13 +103,17 @@ export function PlanoDoDia({ titulo, portas, verTodas, aoAlternar, temMais, rotu
         const prim = p === primeira;
         return (
           <View key={p.id + i} style={[st.porta, i > 0 && { borderTopWidth: 1, borderTopColor: C.line2 }]}>
-            <Text style={[st.portaHora, p.feita && { color: C.mute }]}>{p.hora ?? '—'}</Text>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[st.portaNome, p.feita && { color: C.ink3 }]} numberOfLines={1}>{p.nome}</Text>
-              <Text style={[st.portaSub, p.quente ? { color: C.amb } : p.recem ? { color: C.blue } : null]} numberOfLines={1}>
-                {p.feita ? 'prova ✓' : p.semProva ? 'visitada · sem prova' : `${p.tipo}${p.quente ? ' · quente' : ''}${p.recem ? ' · recém-aberto' : ''}`}
-              </Text>
-            </View>
+            <Pressable accessibilityRole="button" disabled={!aoAbrir} onPress={aoAbrir ? () => aoAbrir(p) : undefined}
+              accessibilityLabel={aoAbrir ? `${p.nome}: abrir a ficha` : p.nome}
+              style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Text style={[st.portaHora, p.feita && { color: C.mute }]}>{p.hora ?? '—'}</Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[st.portaNome, p.feita && { color: C.ink3 }]} numberOfLines={1}>{p.nome}</Text>
+                <Text style={[st.portaSub, p.quente ? { color: C.amb } : p.recem ? { color: C.blue } : null]} numberOfLines={1}>
+                  {p.feita ? 'prova ✓' : p.semProva ? 'visitada · sem prova' : `${p.tipo}${p.quente ? ' · quente' : ''}${p.recem ? ' · recém-aberto' : ''}`}
+                </Text>
+              </View>
+            </Pressable>
             {!p.feita && !p.semProva && (
               <Pressable accessibilityRole="button" accessibilityLabel={`Ir até ${p.nome} no mapa`} onPress={() => aoIr(p)}
                 style={[st.ir, prim ? { backgroundColor: C.act, borderColor: C.act } : null]}>

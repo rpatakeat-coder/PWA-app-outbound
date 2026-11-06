@@ -1069,6 +1069,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
         <PlanoDoDia titulo={tituloPlano} portas={listaPlano} verTodas={planoTodas} aoAlternar={() => setPlanoTodas((v) => !v)}
           temMais={!!portasPlano && (portasPlano.length > listaPlano.length || planoTodas)} rotuloMais={`ver as ${portasPlano?.length ?? 0} ›`}
           aoIr={(p) => aoIrPorta?.(p.id)}
+          aoAbrir={aoIrPorta ? (p) => aoIrPorta(p.id) : undefined}
           vazio={portasPlano == null
             ? { titulo: 'O plano de hoje não respondeu', texto: 'Abra o Mapa para ver as paradas.', botao: null, aoMontar: () => undefined }
             : !portasPlano.length

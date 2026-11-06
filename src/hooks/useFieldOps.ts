@@ -64,6 +64,13 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
       return (data ?? []) as FieldRoute[];
     },
     enabled: isAuthenticated && enabled,
+    /* O PLANO TAMBÉM MUDA FORA DO APARELHO (06/11/26): o Cockpit grava a semana e o gatilho
+       plano_mudou cria a parada na hora, mas o app guardava o plano 5 min e não relia ao voltar
+       para a tela (refetchOnWindowFocus desligado no padrão) — o agendado no computador só
+       aparecia ao recarregar. Aqui, 60 s de validade e releitura ao voltar ao app: duas
+       leituras pequenas, no máximo uma vez por minuto. */
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
   });
 
   const route = routesQuery.data?.[0] ?? null;
@@ -82,6 +89,8 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
       return (data ?? []) as FieldRouteStopWithClient[];
     },
     enabled: isAuthenticated && enabled && !!route?.id,
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
   });
 
   const saveRoute = useMutation({

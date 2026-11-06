@@ -4418,6 +4418,13 @@ function MainApp() {
   // Saiu do mapa: o modo Planejar desliga (senão o toque ficava armado nas outras abas).
   // a Agenda do computador planeja no mapa dela (05/10/26): só ela mantém o modo fora do Mapa
   useEffect(() => { if (tab !== 'map' && !(tab === 'agenda' && layout.ehLargo)) setPlanejarDia(null); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Entrou no Hoje ou na Agenda: relê o plano se a leitura tem mais de 1 min (o que o Cockpit
+  // agendou aparece sem recarregar o app; 06/11/26). `stale: true` respeita o staleTime de 60 s.
+  useEffect(() => {
+    if (tab !== 'tasks' && tab !== 'agenda') return;
+    void queryClient.refetchQueries({ queryKey: ['field_routes'], stale: true, type: 'active' })
+      .then(() => queryClient.refetchQueries({ queryKey: ['field_route_stops'], stale: true, type: 'active' }));
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // DEEP LINK DO COCKPIT (v5, 28/09/2026): "Abrir no mapa" chega aqui como
   // /mapa?pino=<negócio>&cartao=aberto, ?rua=… ou ?lente=…. Roda uma vez, depois do
