@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@73b3840a.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@130354cd.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "73b3840a";
+  var VERSAO = "130354cd";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -29660,7 +29660,7 @@ async function pl6CriarLead(rep, campos) {
   return { lead: r.lead, cidade: cidade };
 }
 
-async function pl6Carregar(rep, segundaPedida) {
+async function pl6Carregar(rep, segundaPedida, opcoes) {
   pl6Plano = null;
   if (!DATA.supabase || !supa) return { ok: false, motivo: 'sem conexão com o servidor nesta sessão' };
   const segunda = segundaPedida || pl6SegundaEmFoco();
@@ -29671,7 +29671,9 @@ async function pl6Carregar(rep, segundaPedida) {
     return { ok: false, motivo: error.message || 'o banco recusou a leitura' };
   }
   pl6Plano = (data && data[0]) ? data[0] : null;
-  await Promise.all([pl6CarregarPinos(), pl6CarregarPinosDoApp(rep).catch(function () {}), pl6CompletarDoEspelho(rep).catch(function () {})]);
+
+  if (opcoes && opcoes.soGrade) await pl6CompletarDoEspelho(rep).catch(function () {});
+  else await Promise.all([pl6CarregarPinos(), pl6CarregarPinosDoApp(rep).catch(function () {}), pl6CompletarDoEspelho(rep).catch(function () {})]);
   return { ok: true, tinhaLinha: !!pl6Plano };
 }
 
@@ -57673,7 +57675,7 @@ GV2.montar = async function (so, leituraPronta) {
   if (!so && !leituraPronta) GV2.guardarTime(donos, L.emails);
   GV2.ultimaLeitura = { so: so || null, L: L };
 
-  setTimeout(function () { GV2.lerNovosDaSemana(L).then(function () { if (GV2.estado && GV2.estado.aba === 'rua' && GV2.pintar) GV2.pintar(); }); }, 0);
+  if (!leituraPronta || GV2.novosSemana == null) setTimeout(function () { GV2.lerNovosDaSemana(L).then(function () { if (GV2.estado && GV2.estado.aba === 'rua' && GV2.pintar) GV2.pintar(); }); }, 0);
   if (L.rotaSem && !L.rotaSem.erro && L.visSem && !L.visSem.erro && GV2.rota) {
     const segL = GV2.segundaDe(agora.iso);
     GV2.rota.cache[segL] = { estado: 'ok', itens: L.rotaSem.data || [], visitas: (L.visSem && L.visSem.data) || [] };
@@ -74560,7 +74562,7 @@ HJ4.render = async function (el, rep) {
   HJ4.pintar();
 
   if (typeof pl6Carregar === 'function' && typeof pl6SegundaDaSemana === 'function' && !(typeof pl6Plano !== 'undefined' && pl6Plano && String(pl6Plano.data_segunda) === String(pl6SegundaDaSemana()))) {
-    Promise.resolve(pl6Carregar(rep, pl6SegundaDaSemana())).then(function () { HJ4.pintarFunil(); }, function () { HJ4.pintarFunil(); });
+    Promise.resolve(pl6Carregar(rep, pl6SegundaDaSemana(), { soGrade: true })).then(function () { HJ4.pintarFunil(); }, function () { HJ4.pintarFunil(); });
   }
   await HJ4.lerPlacar();
   HJ4.pintar();
