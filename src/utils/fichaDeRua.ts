@@ -33,7 +33,7 @@ export const COMO_FOI: { id: Desfecho; rotulo: string }[] = [
    retorno num dia escolhido) e 'retorno' (vai pensar, retorno num dia escolhido). Nenhum dos
    três existe no check de fichas_de_rua.proximo: no banco vão null (ver fichaNoBanco). */
 export type Proximo = 'reuniao' | 'voltar7' | 'ligar_amanha' | 'sem_interesse' | 'voltar_horario' | 'voltar_amanha' | 'apresentei'
-  | 'fechou' | 'negociando' | 'retorno';
+  | 'fechou' | 'negociando' | 'retorno' | 'aguardando_pagamento';
 export const PROXIMOS: { id: Proximo; rotulo: string }[] = [
   { id: 'reuniao', rotulo: 'Reunião' },
   { id: 'voltar7', rotulo: 'Voltar outro dia' },
@@ -90,13 +90,18 @@ const SEM: OpcaoAgora = { id: 'sem_interesse', rotulo: 'Sem interesse', proximo:
 const FECHOU: OpcaoAgora = { id: 'fechou', rotulo: 'Fechou', proximo: 'fechou', sub: 'emitir a cobrança' };
 const NEGOCIANDO: OpcaoAgora = { id: 'negociando', rotulo: 'Negociando o preço', proximo: 'negociando', sub: 'vai a Negociação' };
 const RETORNO: OpcaoAgora = { id: 'retorno', rotulo: 'Vai pensar', proximo: 'retorno', sub: 'retorno no dia que escolher' };
+/* JÁ FECHOU (11/11/26, Marco no Bar das Pretas: vendeu, o negócio foi a Ag. Pagamento, e a
+   visita pedia "Voltar / Ligar / Sem interesse" — nenhuma era verdade, e ele não conseguia
+   sair da ficha). Em Ag. Pagamento o próximo passo é o pagamento, que o Asaas/RPA cuida:
+   não muda etapa e não cria tarefa (Ag. Pagamento não se toca). */
+const AGUARDANDO_PAGAMENTO: OpcaoAgora = { id: 'aguardando_pagamento', rotulo: 'Fechou · esperando o pagamento', proximo: 'aguardando_pagamento', sub: 'o negócio fica em Ag. Pagamento' };
 /** "E agora?" depende do "Como foi?" e, na visita de retorno, da etapa em que o negócio já está. */
 export function opcoesAgora(comoFoi: Desfecho | null, etapa: string | null = null): OpcaoAgora[] {
   switch (comoFoi) {
     case 'falou_com_decisor':
       if (etapa === ETAPA.demo) return [FECHOU, NEGOCIANDO, RETORNO, VOLTAR7, SEM];
       if (etapa === ETAPA.negociacao) return [FECHOU, RETORNO, VOLTAR7, SEM];
-      if (etapa === ETAPA.pagamento) return [VOLTAR7, LIGAR, SEM];
+      if (etapa === ETAPA.pagamento) return [AGUARDANDO_PAGAMENTO, VOLTAR7, LIGAR, SEM];
       return [APRESENTEI, REUNIAO_HOJE, ...REUNIOES, VOLTAR7, LIGAR, SEM];
     case 'decisor_ausente': return [{ id: 'voltar_horario', rotulo: 'Voltar no horário do dono', proximo: 'voltar_horario' }, VOLTAR7, LIGAR, SEM];
     case 'sem_interesse': return [VOLTAR7, LIGAR, SEM];
@@ -476,6 +481,7 @@ export function notaDaVisita(f: Ficha, p: { cliente: string; ocorridoEm: string;
     decisorAlcancado: f.comoFoi === 'falou_com_decisor' ? 'sim' : 'desconhecido',
     dor: dorDaFicha(f) || null,
     observacao: [(f.proximo === 'apresentei' || f.proximo === 'fechou' || f.proximo === 'negociando') && (f.plano || f.mrr.trim()) ? `apresentou: ${[f.plano, f.mrr.trim() ? `MRR R$ ${f.mrr.trim()}` : ''].filter(Boolean).join(' · ')}` : null,
+      f.proximo === 'aguardando_pagamento' ? 'fechou · esperando o pagamento' : null,
       f.sistema ? `sistema: ${f.sistema}` : null, tipoDaFicha(f) ? `tipo: ${tipoDaFicha(f)}` : null,
       rotuloDoHorario(horarioDaFicha(f)) ? `dono costuma estar: ${rotuloDoHorario(horarioDaFicha(f))}` : null,
       f.proximo === 'sem_interesse' && f.motivoPerdido

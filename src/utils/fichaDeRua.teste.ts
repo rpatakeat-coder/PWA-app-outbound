@@ -201,6 +201,15 @@ ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
   ok(proximoPassoDaFicha(F({ comoFoi: 'falou_com_decisor', proximo: 'negociando', dataVolta: '2026-09-29' }), hoje)?.texto === 'Retorno da negociação', 'Negociando: retorno no dia escolhido');
 }
 
+// ── 11/11/26: visita em negócio que já fechou (Ag. Pagamento) ──
+{
+  const op = opcoesAgora('falou_com_decisor', ETAPA.pagamento);
+  ok(op[0].proximo === 'aguardando_pagamento', 'em Ag. Pagamento: "Fechou · esperando o pagamento" vem primeiro');
+  ok(etapaSugerida({ atual: ETAPA.pagamento, comoFoi: 'falou_com_decisor', proximo: 'aguardando_pagamento', primeiraVisita: false }) === null, 'esperando o pagamento não mexe na etapa');
+  ok(proximoPassoDaFicha(F({ comoFoi: 'falou_com_decisor', proximo: 'aguardando_pagamento' }), hoje) === null, 'esperando o pagamento não cria tarefa');
+  ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'aguardando_pagamento' })).pode, 'esperando o pagamento deixa salvar');
+}
+
 // Celular sem +55 (05/11/26): só DDD + número, 10 ou 11 dígitos
 ok(normalizarCelular('+55 11 96899-4337').valor === '11968994337', '+55 com espaço e traço vira DDD + número');
 ok(normalizarCelular('+55-27-32320000').valor === '2732320000', 'fixo com +55 vira 10 dígitos');

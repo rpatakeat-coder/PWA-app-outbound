@@ -300,6 +300,8 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
               : MOTIVOS_QUE_EXIGEM_TEXTO.includes(f.motivoPerdido) && !f.motivoTexto.trim() ? 'Escreva o que pesou' : 'O negócio vai para Perdido, com o motivo')
             : apresentei
               ? (vaiAoAlvo ? 'Grava visita e etapa juntos · Desfazer por 5 s' : 'Grava a visita e o retorno da proposta')
+              : f.proximo === 'aguardando_pagamento'
+                ? 'Grava a visita · o negócio segue em Ag. Pagamento'
               : f.proximo === 'fechou'
                 ? (vaiAoAlvo || etapaReal === ETAPA.negociacao ? 'Depois de salvar, a cobrança abre aqui' : 'Grava a visita; a cobrança pede o negócio em Negociação')
               : passoPrevisto
