@@ -5179,6 +5179,8 @@ function MainApp() {
   // Exata" desligada no iOS (que devolve um ponto fuzzy a ~1-3km). Nesse caso a
   // distancia calculada e' ficcao: nao adianta mandar o vendedor "se aproximar".
   const COARSE_FIX_ACCURACY_M = 150;
+  /** A mesma regra do servidor (_visitas_com_prova, 0242 b): GPS pior que isso não prova a visita. */
+  const GPS_PROVA_MAX_M = 100;
 
   // getCurrentPositionAsync pode voltar rapido com um fix grosseiro/cacheado.
   // Se vier ruim, escuta ate ~8s e fica com o de menor raio de erro.
@@ -5904,6 +5906,29 @@ function MainApp() {
           if (!fotoProva) return;
           declarada = true;
         }
+      }
+
+      // PERTO DO PINO COM GPS RUIM (11/11/26, Marco no Bar das Pretas: ±200 m a 168 m do pino).
+      // Desde a 0242 o servidor só aceita GPS de até ±100 m como prova, mas o app só olhava a
+      // precisão quando a pessoa estava LONGE do pino: perto dele, gravava calado uma visita
+      // "sem prova" e ainda dizia que tinha contado. Agora avisa na hora — sem travar.
+      if (!fotoProva && !declarada && !corrigirPino && !semLeitura && fixAccuracy != null
+        && fixAccuracy > GPS_PROVA_MAX_M && !(distance > maxDistance)) {
+        const r = await perguntar(
+          'GPS impreciso',
+          `Seu GPS está com margem de ±${Math.round(fixAccuracy)} m. Para a visita contar com prova, a margem tem que ser de até ${GPS_PROVA_MAX_M} m.\n\n`
+          + 'Saia para a calçada, longe de toldo e parede, e toque em Tentar de novo. Ou registre com uma foto da fachada.',
+          [
+            { text: 'Tentar de novo', valor: 'denovo' },
+            { text: 'Registrar com foto', valor: 'foto' },
+            { text: 'Registrar sem prova', valor: 'assim' },
+          ],
+        );
+        if (r === 'denovo') { setTimeout(() => { void handleMarkAsVisitedRef.current(client, onDone); }, 50); return; }
+        if (r === 'foto') {
+          fotoProva = await tirarFotoDeProva();
+          if (!fotoProva) return;
+        } else if (r !== 'assim') return;
       }
 
       // LONGE DO PINO SEMPRE PEDE A FOTO DA FACHADA (28/09/2026, Julyan: "quando estou
