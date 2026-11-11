@@ -302,6 +302,8 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
               ? (vaiAoAlvo ? 'Grava visita e etapa juntos · Desfazer por 5 s' : 'Grava a visita e o retorno da proposta')
               : f.proximo === 'aguardando_pagamento'
                 ? 'Grava a visita · o negócio segue em Ag. Pagamento'
+              : f.proximo === 'ja_cliente'
+                ? 'Grava a visita · o negócio fica onde está'
               : f.proximo === 'fechou'
                 ? (vaiAoAlvo || etapaReal === ETAPA.negociacao ? 'Depois de salvar, a cobrança abre aqui' : 'Grava a visita; a cobrança pede o negócio em Negociação')
               : passoPrevisto

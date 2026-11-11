@@ -33,7 +33,7 @@ export const COMO_FOI: { id: Desfecho; rotulo: string }[] = [
    retorno num dia escolhido) e 'retorno' (vai pensar, retorno num dia escolhido). Nenhum dos
    três existe no check de fichas_de_rua.proximo: no banco vão null (ver fichaNoBanco). */
 export type Proximo = 'reuniao' | 'voltar7' | 'ligar_amanha' | 'sem_interesse' | 'voltar_horario' | 'voltar_amanha' | 'apresentei'
-  | 'fechou' | 'negociando' | 'retorno' | 'aguardando_pagamento';
+  | 'fechou' | 'negociando' | 'retorno' | 'aguardando_pagamento' | 'ja_cliente';
 export const PROXIMOS: { id: Proximo; rotulo: string }[] = [
   { id: 'reuniao', rotulo: 'Reunião' },
   { id: 'voltar7', rotulo: 'Voltar outro dia' },
@@ -95,6 +95,9 @@ const RETORNO: OpcaoAgora = { id: 'retorno', rotulo: 'Vai pensar', proximo: 'ret
    sair da ficha). Em Ag. Pagamento o próximo passo é o pagamento, que o Asaas/RPA cuida:
    não muda etapa e não cria tarefa (Ag. Pagamento não se toca). */
 const AGUARDANDO_PAGAMENTO: OpcaoAgora = { id: 'aguardando_pagamento', rotulo: 'Fechou · esperando o pagamento', proximo: 'aguardando_pagamento', sub: 'o negócio fica em Ag. Pagamento' };
+/* E já cliente (Onboarding/Ganho): a visita é de implantação ou relacionamento. Sem "Sem
+   interesse" aqui — levaria um negócio ganho a Perdido. Não muda etapa nem cria tarefa. */
+const JA_CLIENTE: OpcaoAgora = { id: 'ja_cliente', rotulo: 'Já é cliente', proximo: 'ja_cliente', sub: 'visita de implantação · a etapa fica' };
 /** "E agora?" depende do "Como foi?" e, na visita de retorno, da etapa em que o negócio já está. */
 export function opcoesAgora(comoFoi: Desfecho | null, etapa: string | null = null): OpcaoAgora[] {
   switch (comoFoi) {
@@ -102,6 +105,7 @@ export function opcoesAgora(comoFoi: Desfecho | null, etapa: string | null = nul
       if (etapa === ETAPA.demo) return [FECHOU, NEGOCIANDO, RETORNO, VOLTAR7, SEM];
       if (etapa === ETAPA.negociacao) return [FECHOU, RETORNO, VOLTAR7, SEM];
       if (etapa === ETAPA.pagamento) return [AGUARDANDO_PAGAMENTO, VOLTAR7, LIGAR, SEM];
+      if (etapa === ETAPA.onboarding || etapa === ETAPA.ganho) return [JA_CLIENTE, VOLTAR7, LIGAR];
       return [APRESENTEI, REUNIAO_HOJE, ...REUNIOES, VOLTAR7, LIGAR, SEM];
     case 'decisor_ausente': return [{ id: 'voltar_horario', rotulo: 'Voltar no horário do dono', proximo: 'voltar_horario' }, VOLTAR7, LIGAR, SEM];
     case 'sem_interesse': return [VOLTAR7, LIGAR, SEM];
@@ -481,7 +485,7 @@ export function notaDaVisita(f: Ficha, p: { cliente: string; ocorridoEm: string;
     decisorAlcancado: f.comoFoi === 'falou_com_decisor' ? 'sim' : 'desconhecido',
     dor: dorDaFicha(f) || null,
     observacao: [(f.proximo === 'apresentei' || f.proximo === 'fechou' || f.proximo === 'negociando') && (f.plano || f.mrr.trim()) ? `apresentou: ${[f.plano, f.mrr.trim() ? `MRR R$ ${f.mrr.trim()}` : ''].filter(Boolean).join(' · ')}` : null,
-      f.proximo === 'aguardando_pagamento' ? 'fechou · esperando o pagamento' : null,
+      f.proximo === 'aguardando_pagamento' ? 'fechou · esperando o pagamento' : f.proximo === 'ja_cliente' ? 'já é cliente · visita de implantação' : null,
       f.sistema ? `sistema: ${f.sistema}` : null, tipoDaFicha(f) ? `tipo: ${tipoDaFicha(f)}` : null,
       rotuloDoHorario(horarioDaFicha(f)) ? `dono costuma estar: ${rotuloDoHorario(horarioDaFicha(f))}` : null,
       f.proximo === 'sem_interesse' && f.motivoPerdido

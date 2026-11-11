@@ -208,6 +208,9 @@ ok(opcoesAgora(null).length === 0, 'sem desfecho: nenhuma opção');
   ok(etapaSugerida({ atual: ETAPA.pagamento, comoFoi: 'falou_com_decisor', proximo: 'aguardando_pagamento', primeiraVisita: false }) === null, 'esperando o pagamento não mexe na etapa');
   ok(proximoPassoDaFicha(F({ comoFoi: 'falou_com_decisor', proximo: 'aguardando_pagamento' }), hoje) === null, 'esperando o pagamento não cria tarefa');
   ok(rotuloSalvar(F({ comoFoi: 'falou_com_decisor', proximo: 'aguardando_pagamento' })).pode, 'esperando o pagamento deixa salvar');
+  const cli = opcoesAgora('falou_com_decisor', ETAPA.onboarding);
+  ok(cli[0].proximo === 'ja_cliente' && !cli.some((o) => o.proximo === 'sem_interesse' || o.proximo === 'apresentei'), 'em Onboarding: "Já é cliente", sem "Sem interesse" nem "Apresentei"');
+  ok(etapaSugerida({ atual: ETAPA.onboarding, comoFoi: 'falou_com_decisor', proximo: 'ja_cliente', primeiraVisita: false }) === null, 'já é cliente não mexe na etapa');
 }
 
 // Celular sem +55 (05/11/26): só DDD + número, 10 ou 11 dígitos

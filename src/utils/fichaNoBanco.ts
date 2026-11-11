@@ -60,7 +60,7 @@ export function linhaDaFicha(f: Ficha, c: {
        (_demos_com_decisor). O proximo_tipo (follow-up) e o etapa_depois dizem que foi agora. */
     /* os da visita de retorno (fechou/negociando/retorno) não existem no check: vão null, e o
        proximo_em/proximo_tipo e o etapa_depois dizem o que foi */
-    proximo: f.proximo === 'apresentei' ? 'reuniao' : (f.proximo === 'fechou' || f.proximo === 'negociando' || f.proximo === 'retorno' || f.proximo === 'aguardando_pagamento') ? null : f.proximo,
+    proximo: f.proximo === 'apresentei' ? 'reuniao' : (f.proximo === 'fechou' || f.proximo === 'negociando' || f.proximo === 'retorno' || f.proximo === 'aguardando_pagamento' || f.proximo === 'ja_cliente') ? null : f.proximo,
     proximo_em: passo ? passo.data : null,
     proximo_tipo: passo ? passo.tipo : null,
     etapa_antes: c.etapaAntes,
