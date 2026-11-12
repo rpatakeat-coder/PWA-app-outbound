@@ -247,7 +247,32 @@ const dealUrl = (dealId: string) =>
 // e responde. A parte lenta do n8n (Wait 10s -> GET deal -> GET stage label ->
 // UPDATE clients com etapa canonica/owner/atualizacao_diaria) roda depois da
 // resposta, em background.
-async function handleChangeStage(token: string, body: Record<string, unknown>) {
+// QUEM REABRE, LEVA (Julyan, 12/11/26: "cada um tem a sua rota"). O check-in da Larah no Cachambi
+// (11/11) tirou cinco negócios de Perdido para Visita e eles continuaram no nome do Sandro e do
+// Bruno: ela trabalhava para a carteira dos outros. Agora, quando um executivo do time (equipe_cockpit
+// ativa, papel rep) tira um negócio do Field Sales de Perdido ou Reciclagem, o negócio passa a ser
+// dele. Negócio aberto de colega continua intocado. Quem pede sai do JWT, nunca do corpo.
+const ETAPAS_REABRIVEIS = new Set(['1396006164', '1398311191']); // Perdido, Reciclagem
+async function repQuePede(req: Request): Promise<string | null> {
+  const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+  if (!jwt) return null;
+  try {
+    const svc = serviceClient();
+    const { data } = await svc.auth.getUser(jwt);
+    const uid = data?.user?.id;
+    if (!uid) return null;
+    const [{ data: perfil }, { data: time }] = await Promise.all([
+      svc.from('profiles').select('id_hubspot').eq('id', uid).maybeSingle(),
+      svc.from('equipe_cockpit').select('papel').eq('profile_id', uid).eq('ativo', true).limit(1),
+    ]);
+    if (!perfil?.id_hubspot || time?.[0]?.papel !== 'rep') return null;
+    return String(perfil.id_hubspot);
+  } catch {
+    return null; // sem identidade, a etapa muda e o dono fica: o comportamento de antes
+  }
+}
+
+async function handleChangeStage(token: string, body: Record<string, unknown>, req: Request) {
   const idHubspot = trimOrNull(body.id_hubspot);
   const stageId = trimOrNull(body.stage_id);
   const clientId = trimOrNull(body.id);
@@ -259,7 +284,20 @@ async function handleChangeStage(token: string, body: Record<string, unknown>) {
     body.sub_values && typeof body.sub_values === 'object' && !Array.isArray(body.sub_values)
       ? (body.sub_values as Record<string, unknown>)
       : {};
-  const properties = { ...normalizeProperties(sub), dealstage: stageId };
+  const properties: Record<string, unknown> = { ...normalizeProperties(sub), dealstage: stageId };
+
+  let novoDono: string | null = null;
+  if (!ETAPAS_REABRIVEIS.has(stageId)) {
+    const eu = await repQuePede(req);
+    if (eu) {
+      const atual = await hsFetch(token, 'GET', `/crm/v3/objects/deals/${idHubspot}?properties=dealstage,pipeline,hubspot_owner_id`);
+      const p = atual.ok ? (atual.body?.properties ?? {}) : {};
+      if (trimOrNull(p.pipeline) === CREATE_PIN_PIPELINE_ID
+        && ETAPAS_REABRIVEIS.has(trimOrNull(p.dealstage) ?? '')
+        && trimOrNull(p.hubspot_owner_id) !== eu) novoDono = eu;
+    }
+  }
+  if (novoDono) properties.hubspot_owner_id = novoDono;
 
   const patch = await hsFetch(token, 'PATCH', `/crm/v3/objects/deals/${idHubspot}`, { properties });
   if (!patch.ok) {
@@ -273,7 +311,7 @@ async function handleChangeStage(token: string, body: Record<string, unknown>) {
     waitUntil(reconcileStageChange(token, idHubspot, clientId));
   }
 
-  return json(200, { ok: true, id_hubspot: idHubspot, dealstage: stageId });
+  return json(200, { ok: true, id_hubspot: idHubspot, dealstage: stageId, ...(novoDono ? { novo_dono: novoDono } : {}) });
 }
 
 // Reproduz o pos-processamento do n8n: espera o HubSpot assentar (workflows
@@ -1206,7 +1244,7 @@ Deno.serve(async (req: Request) => {
   try {
     switch (type) {
       case 'change_stage':
-        return await handleChangeStage(token, body);
+        return await handleChangeStage(token, body, req);
       case 'update':
         return await handleUpdate(token, body);
       case 'qualificar':

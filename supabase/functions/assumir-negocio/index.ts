@@ -98,7 +98,10 @@ Deno.serve(async (req: Request) => {
     const ids = (time ?? []).map((l: { profile_id: string }) => l.profile_id).filter(Boolean);
     const { data: perfis } = ids.length ? await svc.from('profiles').select('id_hubspot').in('id', ids) : { data: [] };
     const doTime = new Set((perfis ?? []).map((p: { id_hubspot: string | null }) => String(p.id_hubspot ?? '')).filter(Boolean));
-    if (doTime.has(donoAtual)) return json(409, { erro: 'Este negócio já é de um colega do time. Fale com a gestão para trocar.' });
+    // Perdido e Reciclagem de colega se assumem (Julyan, 12/11/26: quem reabre, leva — a mesma regra do
+    // check-in na hubspot-sync). Negócio aberto de colega continua travado.
+    const reabrivel = ['1396006164', '1398311191'].includes(String(props.dealstage ?? ''));
+    if (doTime.has(donoAtual) && !reabrivel) return json(409, { erro: 'Este negócio já é de um colega do time. Fale com a gestão para trocar.' });
   }
 
   // Troca o dono; Backlog com origem entra no funil (Prospecção).
