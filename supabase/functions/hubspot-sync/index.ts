@@ -272,6 +272,24 @@ async function repQuePede(req: Request): Promise<string | null> {
   }
 }
 
+// Quem pede tem o papel 'view'? Sai do JWT, nunca do corpo. Falha aberta de propósito: sem
+// identidade ou com erro de leitura a resposta é "não", e a escrita segue como sempre seguiu
+// — travar o check-in do time por causa de uma consulta que falhou seria pior que o defeito.
+async function ehSoLeitura(req: Request): Promise<boolean> {
+  const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+  if (!jwt) return false;
+  try {
+    const svc = serviceClient();
+    const { data } = await svc.auth.getUser(jwt);
+    const uid = data?.user?.id;
+    if (!uid) return false;
+    const { data: perfil } = await svc.from('profiles').select('role').eq('id', uid).maybeSingle();
+    return perfil?.role === 'view';
+  } catch {
+    return false;
+  }
+}
+
 async function handleChangeStage(token: string, body: Record<string, unknown>, req: Request) {
   const idHubspot = trimOrNull(body.id_hubspot);
   const stageId = trimOrNull(body.stage_id);
@@ -1294,6 +1312,14 @@ Deno.serve(async (req: Request) => {
     return json(500, { error: 'Erro interno', detail: String(err) });
   }
   };
+
+  // SÓ LEITURA (13/11/26): quem tem o papel 'view' vê os negócios e abre os cartões, mas não
+  // altera. O RLS já barra a escrita nas tabelas; a mudança de etapa, a nota e a tarefa passam
+  // por aqui, com o token do HubSpot, e esta função não olhava o papel.
+  if (ESCRITAS_NO_NEGOCIO.has(type ?? '') && await ehSoLeitura(req)) {
+    return json(403, { error: 'Seu acesso é só de leitura: você vê os negócios, mas não altera.' });
+  }
+
   const resp = await rotear();
 
   // ESPELHO AO VIVO (0116): escreveu no negócio e deu certo? Relê o negócio (e as
