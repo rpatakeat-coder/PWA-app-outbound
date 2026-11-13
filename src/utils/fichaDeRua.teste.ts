@@ -10,7 +10,7 @@ import {
   ETAPA, FICHA_VAZIA, etapaSugerida, faltandoParaEtapa, montarPropriedades, movimentoPermitido, notaDaVisita,
   pareceNomeDePessoa, proximoPassoDaFicha, rotuloSalvar, faltaNoProximo, proximoDiaUtil, type Ficha,
   degrausDaFicha, escadaAte, horaLivre, valorValido, normalizarCelular,
-  GARGALO_OUTRA, HORARIO_OUTRO, MOTIVOS_PERDIDO, dorDaFicha, horarioDaFicha, papelDaFicha, papelParaHubspot, rotuloDoHorario, rotuloDoMotivo, tipoDaFicha,
+  GARGALO_OUTRA, HORARIO_OUTRO, MOTIVOS_PERDIDO, dorDaFicha, horarioDaFicha, horarioParaHubspot, pedeHorarioDoDono, papelDaFicha, papelParaHubspot, rotuloDoHorario, rotuloDoMotivo, tipoDaFicha,
 } from './fichaDeRua';
 import { MOTIVOS_SEM_INTERESSE } from './registroDaFila';
 
@@ -223,6 +223,12 @@ ok(normalizarCelular('47964333').erro !== null, 'sem DDD é recusado');
 ok(normalizarCelular('55219876543210').erro !== null, 'dígito a mais é recusado');
 ok(montarPropriedades(ETAPA.decisor, { celular: '+55 21 98765-4321', gargalo_operacional: 'Fila', nome_do_sistema: 'Saipos' }, {}).propriedades.celular === '21987654321', 'a folha grava o celular sem +55');
 ok(!!montarPropriedades(ETAPA.decisor, { celular: '9999', gargalo_operacional: 'Fila', nome_do_sistema: 'Saipos' }, {}).erros.celular, 'celular curto trava a folha com aviso');
+// O horário do dono (13/11/26): a ficha pede quando quem decide não estava e o passo é voltar à porta
+ok(pedeHorarioDoDono({ comoFoi: 'decisor_ausente', proximo: 'voltar_horario' }) && pedeHorarioDoDono({ comoFoi: 'decisor_ausente', proximo: 'voltar7' }), 'decisor ausente + voltar: pede o horário do dono');
+ok(!pedeHorarioDoDono({ comoFoi: 'decisor_ausente', proximo: 'ligar_amanha' }) && !pedeHorarioDoDono({ comoFoi: 'decisor_ausente', proximo: 'sem_interesse' }) && !pedeHorarioDoDono({ comoFoi: 'decisor_ausente', proximo: null })
+  && !pedeHorarioDoDono({ comoFoi: 'falou_com_decisor', proximo: 'voltar7' }) && !pedeHorarioDoDono({ comoFoi: 'estabelecimento_fechado', proximo: 'voltar_amanha' }), 'ligar, sem interesse, falou com o decisor ou casa fechada: não pede');
+ok(horarioParaHubspot({ horario: '10h_11h30' }) === '10-11:30' && horarioParaHubspot({ horario: 'outro' }) === null && horarioParaHubspot({ horario: null }) === null, 'ao HubSpot só as 4 faixas; "Outro horário" e vazio não vão');
+ok(rotuloSalvar({ ...FICHA_VAZIA, comoFoi: 'decisor_ausente', proximo: 'voltar_horario', dataVolta: '2026-11-16' }).pode, 'sem o horário do dono a ficha SALVA: é aviso, não trava');
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);
   process.exit(1);

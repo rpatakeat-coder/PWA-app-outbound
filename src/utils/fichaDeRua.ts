@@ -404,6 +404,16 @@ export const tipoDaFicha = (f: Ficha): string => (f.tipo === 'Outro' ? f.tipoOut
 /** horario_dono: o valor da faixa ('10h_11h30') ou o texto do "Outro horário". */
 export const horarioDaFicha = (f: Ficha): string => (f.horario === HORARIO_OUTRO ? f.horarioOutro.trim().slice(0, 80) : (f.horario ?? ''));
 
+/* A FICHA PEDE O HORÁRIO DO DONO (13/11/26). Medido: de 174 fichas "quem decide não estava", 3 tinham
+   o horário — a tela nem tinha onde marcar (saiu no "app menos tela" de 14/10) e a opção "Voltar no
+   horário do dono" ficou sem horário. O decisor é achado em metade das visitas a qualquer hora; a volta
+   só vale se for na hora em que ele está. Pede quando quem decide não estava e o passo é voltar à porta.
+   AVISA, NÃO TRAVA: sem o horário a visita salva igual. */
+export const pedeHorarioDoDono = (f: Pick<Ficha, 'comoFoi' | 'proximo'>): boolean =>
+  f.comoFoi === 'decisor_ausente' && (f.proximo === 'voltar_horario' || f.proximo === 'voltar7');
+/** O valor do HubSpot (melhor_horario_do_decisor) para o horário da ficha; "Outro horário" não vai (lista fechada). */
+export const horarioParaHubspot = (f: Pick<Ficha, 'horario'>): string | null => HORARIOS.find((h) => h.valor === f.horario)?.hs ?? null;
+
 /**
  * Botão Salvar: diz o que falta, ou "Salvar". REGISTRAR A VISITA NUNCA TRAVA pelo que a etapa
  * seguinte exige (14/10/26, handoff "app menos tela"): o "opcional · nunca trava" era mentira

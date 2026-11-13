@@ -27,7 +27,7 @@ import { enfileirar, ehErroDeRede, novoAcaoId } from '../utils/filaOffline';
 import {
   AJUDA_MOTIVO, COMO_FOI, DIAS_VOLTA, ETAPA, FICHA_VAZIA, GARGALOS, GARGALO_OUTRA, HORARIOS, HORAS_REUNIAO_HOJE, MAX_O_QUE_PESOU, MOTIVOS_PERDIDO,
   MOTIVOS_QUE_EXIGEM_TEXTO, PICKLIST, ROTULO_ETAPA, ROTULO_PROP, SISTEMAS,
-  PROXIMOS_PARA_NEGOCIACAO, degrausDaFicha, dorDaFicha, ehVolta, escadaAte, etapaSugerida, horaLivre, notaDaVisita, opcoesAgora, papelDaFicha, papelParaHubspot,
+  PROXIMOS_PARA_NEGOCIACAO, degrausDaFicha, dorDaFicha, ehVolta, escadaAte, etapaSugerida, horaLivre, horarioDaFicha, horarioParaHubspot, notaDaVisita, pedeHorarioDoDono, opcoesAgora, papelDaFicha, papelParaHubspot,
   proximoDiaUtil, proximoPassoDaFicha, rotuloSalvar, valorValido,
   type Ficha,
 } from '../utils/fichaDeRua';
@@ -240,7 +240,8 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   const mrrEf = f.mrr.trim();
   const fEf: Ficha = { ...f, decisor: decisorEf, sistema: sistemaEf, dor: (dorEnum || null) as Ficha['dor'], dorOutra: dorLivre ? dorLivre : null,
     papel: (['Dono', 'Gerente', 'Sócio'].includes(papelEf) ? papelEf : (papelEf ? 'Outro' : null)) as Ficha['papel'], papelOutro: ['Dono', 'Gerente', 'Sócio'].includes(papelEf) ? '' : papelEf,
-    ...(sabido?.horario ? (HORARIOS.some((h) => h.hs && h.valor === sabido.horario)
+    /* o horário marcado AGORA vence o que já se sabia (13/11/26: antes o sabido passava por cima) */
+    ...(f.horario ? {} : sabido?.horario ? (HORARIOS.some((h) => h.hs && h.valor === sabido.horario)
       ? { horario: sabido.horario as Ficha['horario'] } : { horario: 'outro' as Ficha['horario'], horarioOutro: sabido.horario }) : {}) };
 
   /* OS DEGRAUS: "Apresentei agora" sobe até Demo, um por vez; o resto, a etapa sugerida de sempre */
@@ -275,6 +276,9 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   const juntar = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} e ${xs[xs.length - 1]}` : xs[0] ?? '');
 
   const salvar = rotuloSalvar(f);
+  /* quem decide não estava e vai voltar à porta: a ficha pede a hora em que o dono está */
+  const pedeHorario = pedeHorarioDoDono(f);
+  const horarioEf = horarioDaFicha(fEf);
   const toque = 1 + (f.comoFoi ? 1 : 0) + (f.proximo ? 1 : 0);
   const passoPrevisto = proximoPassoDaFicha(fEf, hoje);
   /* Completar agora: quem decide, celular, dor e sistema — "N de 4 já sabidos" */
@@ -509,6 +513,12 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
       }
       /* quem decide vira contato do negócio quando o nome ou o papel foi dito agora (a rota
          acha o contato pelo nome e só atualiza o papel: não duplica) */
+      /* o horário do dono dito agora vai ao negócio (só as 4 faixas: a propriedade é lista fechada).
+         Em Ag. Pagamento não se manda: o servidor recusa e a recusa viraria "Falhou" na tela. */
+      const hsHorario = pedeHorario ? horarioParaHubspot(f) : null;
+      if (hsHorario && etapaReal !== ETAPA.pagamento && hsHorario !== String(sabido?.negocio?.melhor_horario_do_decisor ?? '')) {
+        envios.push({ rota: 'hubspot-sync', corpo: { type: 'qualificar', id_hubspot: dealId, propriedades: { melhor_horario_do_decisor: hsHorario } }, rotulo: 'Horário do dono no negócio' });
+      }
       if (f.decisor.trim() || (f.papel && decisorEf)) {
         envios.push({
           rota: 'hubspot-sync',
@@ -521,7 +531,10 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     /* a linha do banco leva o que foi DITO nesta visita (sistema e dor que já se sabiam não viram
        "da ficha de hoje"). Quem decide é exceção: "Falei com quem decide" CONFIRMA a pessoa, e o
        Cockpit mede "ficha com decisor" por essa coluna */
-    const linha = linhaDaFicha(f.comoFoi === 'falou_com_decisor' && decisorEf ? { ...f, decisor: decisorEf, papel: fEf.papel, papelOutro: fEf.papelOutro } : f, {
+    /* o horário do dono também: na volta, o que já se sabia e ficou na tela foi CONFIRMADO, e o aviso
+       das 8h lê o horário da última ficha (voltas_de) */
+    const linha = linhaDaFicha(f.comoFoi === 'falou_com_decisor' && decisorEf ? { ...f, decisor: decisorEf, papel: fEf.papel, papelOutro: fEf.papelOutro }
+      : pedeHorario ? { ...f, horario: fEf.horario, horarioOutro: fEf.horarioOutro } : f, {
       ownerId, clientId: client.id ?? null, dealId, ocorridoEm: checkinEm, declarada,
       etapaAntes: etapaReal ?? null, etapaDepois: ultimo,
       comFoto: !!fotoProva || fotoNoCheckin, bairro: client.bairro, cidade: client.cidade, hoje,
@@ -868,6 +881,23 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                           + ([0, 6].includes(new Date(`${f.dataVolta}T12:00:00Z`).getUTCDay()) ? ' · cai no fim de semana' : '')}
                       </Text>
                     )}
+                  </>
+                )}
+                {pedeHorario && (
+                  <>
+                    <Text style={s.secao}>QUE HORAS O DONO ESTÁ?</Text>
+                    <View style={s.chips}>
+                      {HORARIOS.map((h) => chip('hora-' + h.valor, h.rotulo, fEf.horario === h.valor, () => set(f.horario === h.valor ? { horario: null, horarioOutro: '' } : { horario: h.valor as Ficha['horario'], horarioOutro: h.valor === 'outro' ? fEf.horarioOutro : '' })))}
+                    </View>
+                    {f.horario === 'outro' && (
+                      <TextInput style={s.campo} value={f.horarioOutro} onChangeText={(v) => set({ horarioOutro: v })} maxLength={80}
+                        placeholder="Ex.: só sábado de manhã" placeholderTextColor="#8B919C" />
+                    )}
+                    <Text style={[s.ajuda, !horarioEf && s.completarAlerta]}>
+                      {horarioEf
+                        ? (f.horario ? 'Vai no próximo passo e no aviso do dia da volta.' : 'Já anotado em outra visita · toque para trocar.')
+                        : 'Pergunte a quem atendeu. Sem o horário, a volta é no escuro.'}
+                    </Text>
                   </>
                 )}
                 {f.proximo === 'sem_interesse' && (
