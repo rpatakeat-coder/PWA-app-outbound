@@ -27,6 +27,7 @@ import { feriadosNacionais, ehDiaUtil, secaoDoItem, quenteEsfriando, tituloDoCar
 import { b64u, cifrarWebPush, jwtVapid } from '../_compartilhado/webPush.ts';
 import { pushSegunda, pushSexta, type Quadro } from '../_compartilhado/desenvolvimentoV2.ts';
 import { diaDoExecutivo, semProximoPassoDaFila, type EntradaDoDia, type Parada } from '../_compartilhado/hojeV3.ts';
+import { avisoDasVoltas, type VoltasDe } from '../_compartilhado/voltas.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -429,6 +430,14 @@ async function rodarDia(svc: ReturnType<typeof createClient>, momento: 'manha080
     const t = momento === 'manha0800' ? vm.push08 : vm.push18;
     if (!t) { linha.pulou = momento === 'fecho1800' ? 'não foi à rua hoje' : 'sem expediente'; continue; }
     const aviso: Aviso = { titulo: t.titulo, texto: t.texto, tag: `hoje-${momento}`, url: `/?hoje=${momento === 'manha0800' ? 'manha' : 'fecho'}`, acoes: [] };
+    /* a VOLTA no título das 8h (13/11/26): com volta para hoje ou volta vencida, o aviso nomeia o
+       restaurante em vez de contar paradas. Se a leitura falhar, o aviso de sempre segue como está. */
+    if (momento === 'manha0800') {
+      const { data: vd, error: ve } = await svc.rpc('voltas_de', { p_pessoa: uid });
+      const av = ve ? null : avisoDasVoltas(vd as VoltasDe | null, { titulo: t.titulo, texto: t.texto });
+      if (av) { aviso.titulo = av.titulo; aviso.texto = av.texto; linha.volta = true; }
+      else if (ve) linha.voltasErro = ve.message;
+    }
     /* segunda 08:00: um push só (02/11/26). A missão da semana (o que era o seg0800) vai na linha de baixo do
        push da manhã. */
     let comSemana = false;
