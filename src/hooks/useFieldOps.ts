@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { MotivoDeTirar } from '../utils/motivoDeTirar';
 import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import type { Client, FieldRoute, FieldRouteStopWithClient } from '../types/client';
@@ -163,10 +164,11 @@ export function useFieldOps(routeDate = todayKey(), enabled = true, sellerId?: s
   });
 
   const removeStop = useMutation({
-    mutationFn: async (stop: FieldRouteStopWithClient) => {
+    /* o motivo vai junto (15/11/26): quem chama pergunta antes, ou manda o que já sabe */
+    mutationFn: async ({ stop, motivo }: { stop: FieldRouteStopWithClient; motivo?: MotivoDeTirar }) => {
       const { error } = await supabase
         .from('field_route_stops')
-        .update({ status: 'removed' })
+        .update(motivo ? { status: 'removed', motivo_remocao: motivo } : { status: 'removed' })
         .eq('id', stop.id);
       if (error) throw error;
     },

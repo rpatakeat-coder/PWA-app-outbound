@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Alert } from '../components/Alert';
+import { pedirMotivoDeTirar } from '../utils/pedirMotivoDeTirar';
 import { MANDATORY_BADGE, type MandatoryReason } from '../utils/dailyRoute';
 import type { Client, ClientStatus, FieldRouteStop } from '../types/client';
 import { useFieldOps } from '../hooks/useFieldOps';
@@ -211,6 +212,12 @@ export function RotaScreen({
   setMapaExpandido,
 }: Props) {
   const layout = useLayout();
+  /* tirar parada pede o motivo num toque (15/11/26); a rota desta tela é sempre a de hoje, em Brasília */
+  const hojeDaRota = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  const tirarComMotivo = (stop: (typeof routeStops)[number]) => {
+    const nome = stop.client ? nomeDoLead(stop.client) : null;
+    void pedirMotivoDeTirar({ nome, dia: hojeDaRota(), hoje: hojeDaRota() }).then((motivo) => { if (motivo) fieldOps.removeStop.mutate({ stop, motivo }); });
+  };
   const insets = useSafeAreaInsets();
   const iconColors = useIconColors();
   // Aba do rail web: a sequencia do dia domina; a configuracao (personalizada,
@@ -697,22 +704,13 @@ export function RotaScreen({
                 !layout.ehDesktop && styles.acaoIcone,
               ]}
               onPress={() => {
-                Alert.alert(
-                  'Limpar rota',
-                  `Remover todos os ${routeDisplayClients.length} leads da rota de hoje?`,
-                  [
-                    { text: 'Cancelar', style: 'cancel' },
-                    {
-                      text: 'Limpar',
-                      style: 'destructive',
-                      onPress: () => {
-                        // Limpa tanto o draft local quanto as stops persistidas.
-                        setRouteDraft([]);
-                        routeStops.forEach(stop => fieldOps.removeStop.mutate(stop));
-                      },
-                    },
-                  ],
-                );
+                /* limpar a rota também diz por quê (15/11/26): um motivo para todas */
+                void pedirMotivoDeTirar({ nome: null, dia: hojeDaRota(), hoje: hojeDaRota(), quantas: Math.max(routeDisplayClients.length, 2) }).then((motivo) => {
+                  if (!motivo) return;
+                  // Limpa tanto o draft local quanto as stops persistidas.
+                  setRouteDraft([]);
+                  routeStops.forEach(stop => fieldOps.removeStop.mutate({ stop, motivo }));
+                });
               }}
             >
               {layout.ehDesktop ? (
@@ -1034,7 +1032,7 @@ export function RotaScreen({
                               accessibilityRole="button"
                               accessibilityLabel="Remover da rota"
                               style={estilosRail.remover}
-                              onPress={() => fieldOps.removeStop.mutate(stop)}
+                              onPress={() => tirarComMotivo(stop)}
                             >
                               <IconClose width={14} height={14} fill={iconColors.muted} />
                             </TouchableOpacity>
@@ -1134,7 +1132,7 @@ export function RotaScreen({
               accessibilityLabel={`Remover ${nomeDoLead(client)}`}
               style={styles.configParadaBotao}
               disabled={!stop}
-              onPress={() => { if (stop) fieldOps.removeStop.mutate(stop); }}
+              onPress={() => { if (stop) tirarComMotivo(stop); }}
             >
               <IconClose width={20} height={20} fill={iconColors.tintRedText} />
             </TouchableOpacity>

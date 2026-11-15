@@ -4,6 +4,7 @@
 // no dia seguinte se ele trocasse de dia no meio. O App as roda em fila, uma por vez,
 // para a posição e a contagem não se atropelarem.
 import { supabase } from '../integrations/supabase/client';
+import type { MotivoDeTirar } from './motivoDeTirar';
 import { colunaDoDia, semanaDoDia, type FaixaDoPlano } from './planoNoMapa';
 
 async function rotaDoDia(sellerId: string, dia: string, criar: boolean): Promise<string | null> {
@@ -51,10 +52,10 @@ export async function porNoDia(sellerId: string, dia: string, clientId: string):
 }
 
 /** Tira o lead do dia. Parada já feita não se tira (a visita aconteceu). */
-export async function tirarDoDia(sellerId: string, dia: string, clientId: string, motivo?: 'fechado' | 'sem_tempo' | 'outro_dia'): Promise<number> {
+export async function tirarDoDia(sellerId: string, dia: string, clientId: string, motivo?: MotivoDeTirar): Promise<number> {
   const rota = await rotaDoDia(sellerId, dia, false);
   if (!rota) return 0;
-  // o motivo (0220) só vai quando foi perguntado: quem tira pelo mapa ou pela folha segue como antes
+  // o motivo (0220): desde 15/11/26 todo caminho manda o seu (perguntado, ou o que o app já sabe)
   const { data, error } = await supabase.from('field_route_stops')
     .update(motivo ? { status: 'removed', motivo_remocao: motivo } : { status: 'removed' }).eq('route_id', rota).eq('client_id', clientId)
     .in('status', ['planned', 'skipped']).select('id');

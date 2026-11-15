@@ -117,6 +117,8 @@ import {
 import { BUSCA_GOOGLE_PAUSADA, buscarGooglePerto, jaNaBase, type LugarPerto } from './src/utils/googlePerto';
 import { diaInicial, diasPlanejaveis, ehCompromisso, faixaDoLead, rotuloDoDia, vaiAoCockpit, type FaixaDoPlano } from './src/utils/planoNoMapa';
 import { gravarOrdemDoDia, lerColunaDoPlano, porNoDia, tirarDoDia } from './src/utils/paradaDoDia';
+import type { MotivoDeTirar } from './src/utils/motivoDeTirar';
+import { pedirMotivoDeTirar } from './src/utils/pedirMotivoDeTirar';
 import { diasDaFaixa } from './src/utils/agendaNovo';
 import { abrirGestao } from './src/utils/abrirGestao';
 import TopoCampo, { ALTURA_TOPO_CAMPO, RESPIRO_ABAIXO_DA_FILEIRA } from './src/screens/TopoCampo';
@@ -2345,14 +2347,14 @@ function MainApp() {
     if (!parada && ehAgendaPCRef.current) porNaMelhorPosicao([c]);
     setRascunhoPlano((m) => new Map(m).set(c.id, { client: c, entrar: !parada }));
   };
-  const gravarNoDia = async (dia: string, itens: { client: Client; entrar: boolean }[]) => {
+  const gravarNoDia = async (dia: string, itens: { client: Client; entrar: boolean }[], motivo?: MotivoDeTirar) => {
     const eu = profile!.id;
     const feitos: { client: Client; entrar: boolean }[] = [];
     const falhas: string[] = [];
     for (const it of itens) {
       try {
         if (it.entrar) { if ((await porNoDia(eu, dia, it.client.id)) === 'entrou') feitos.push(it); }
-        else if (await tirarDoDia(eu, dia, it.client.id)) feitos.push(it);
+        else if (await tirarDoDia(eu, dia, it.client.id, motivo)) feitos.push(it);
       } catch (e) {
         falhas.push(`${it.client.empresa?.trim() || it.client.nome}: ${String((e as Error)?.message ?? e)}`);
       }
@@ -2371,6 +2373,15 @@ function MainApp() {
     const ordemFinal = ordemRef.current ? clientesDoPlanoRef.current.map((c) => c.id) : null;
     const fixos = new Map(fixosRef.current);
     if (!dia || !profile?.id || (!itens.length && !ordemFinal && !fixos.size) || confirmandoPlanoRef.current) return;
+    /* quem sai do dia sai com motivo (15/11/26): uma pergunta para todas as que saem neste gravar */
+    const saindo = itens.filter((it) => !it.entrar);
+    let motivoDeSair: MotivoDeTirar | undefined;
+    if (saindo.length) {
+      const m = await pedirMotivoDeTirar({ nome: saindo.length === 1 ? (saindo[0].client.empresa?.trim() || saindo[0].client.nome) : null, dia, hoje: diaBRT(new Date()), quantas: saindo.length });
+      if (!m) return;
+      motivoDeSair = m;
+    }
+    if (confirmandoPlanoRef.current) return;
     confirmandoPlanoRef.current = true;
     setConfirmandoPlano(true);
     // como o dia estava no banco antes de gravar: o Desfazer volta a ordem e os cadeados também
@@ -2380,7 +2391,7 @@ function MainApp() {
     const ordemAntes = antesNoBanco.map((st) => st.client_id);
     const fixosAntes = new Map<string, string | null>(antesNoBanco.map((st) => [st.client_id, st.horario_fixo ?? null]));
     try {
-      const { feitos, falhas } = await gravarNoDia(dia, itens);
+      const { feitos, falhas } = await gravarNoDia(dia, itens, motivoDeSair);
       let reordenadas = 0;
       if (ordemFinal || fixos.size) {
         try {
@@ -2411,7 +2422,7 @@ function MainApp() {
           rotulo: 'Desfazer',
           onPress: () => {
             void (async () => {
-              const r = await gravarNoDia(dia, feitos.map((f) => ({ client: f.client, entrar: !f.entrar })));
+              const r = await gravarNoDia(dia, feitos.map((f) => ({ client: f.client, entrar: !f.entrar })), 'desfeito');
               // a ordem e os cadeados de antes (quem voltou ao dia volta ao lugar e ao horário dele)
               if (reordenadas || fixos.size || ordemFinal) {
                 try {
@@ -2548,7 +2559,7 @@ function MainApp() {
     await queryClient.invalidateQueries({ queryKey: ['field_routes'] });
     Toast.mostrar(feitos.length ? `${feitos.length === 1 ? nomeCurto(feitos[0]) : `${feitos.length} paradas`} remarcada${feitos.length === 1 ? '' : 's'} para ${rotuloDoDia(destino)}` : 'Já estavam no plano desse dia.', 'ok', feitos.length ? {
       rotulo: 'Desfazer',
-      onPress: () => { void Promise.all(feitos.map((c) => tirarDoDia(profile.id, destino, c.id))).then(() => queryClient.invalidateQueries({ queryKey: ['field_route_stops'] })); },
+      onPress: () => { void Promise.all(feitos.map((c) => tirarDoDia(profile.id, destino, c.id, 'desfeito'))).then(() => queryClient.invalidateQueries({ queryKey: ['field_route_stops'] })); },
     } : undefined);
   };
   // O lead em foco no painel: o mapa desliza até ele, com o anel de 250 m. Nunca leva a outra aba.
@@ -4181,16 +4192,14 @@ function MainApp() {
     if (!parada) return;
     if (parada.status === 'done') { Toast.mostrar('Essa já foi visitada hoje: fica no registro do dia.', 'fila'); return; }
     const nome = getClientPrimaryName(c);
-    Alert.alert('Tirar da rota de hoje?', `${nome} sai do roteiro de hoje e do seu Planejamento. Dá para pôr de novo com "+ Rota de hoje".`, [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Tirar', style: 'destructive', onPress: () => {
-          void fieldOps.removeStop.mutateAsync(parada)
-            .then(() => Toast.mostrar(`${nome} saiu da rota de hoje`, 'ok'))
-            .catch((e) => Toast.mostrar('Não consegui tirar da rota: ' + String((e as Error)?.message ?? e), 'erro'));
-        },
-      },
-    ]);
+    /* o motivo, num toque (15/11/26): antes saía calado e o gestor não sabia por quê */
+    const hojeIso = diaBRT(new Date());
+    void pedirMotivoDeTirar({ nome, dia: hojeIso, hoje: hojeIso }).then((motivo) => {
+      if (!motivo) return;
+      void fieldOps.removeStop.mutateAsync({ stop: parada, motivo })
+        .then(() => Toast.mostrar(`${nome} saiu da rota de hoje`, 'ok'))
+        .catch((e) => Toast.mostrar('Não consegui tirar da rota: ' + String((e as Error)?.message ?? e), 'erro'));
+    });
   };
 
   const roteirizarPlano = async () => {
@@ -5390,7 +5399,7 @@ function MainApp() {
           const ids = ((st ?? []) as unknown as { id: string; route: { seller_id: string } | null }[])
             .filter((x) => !profile?.id || x.route?.seller_id === profile.id).map((x) => x.id);
           if (ids.length) {
-            const { data: mudou, error: e2 } = await supabase.from('field_route_stops').update({ status: 'removed' }).in('id', ids).select('id');
+            const { data: mudou, error: e2 } = await supabase.from('field_route_stops').update({ status: 'removed', motivo_remocao: 'perdido' }).in('id', ids).select('id');
             if (e2 || (mudou ?? []).length < ids.length) falhou = true;
           }
           if (profile?.id) {
@@ -6299,7 +6308,7 @@ function MainApp() {
             try {
               await dismissContaAlvo.mutateAsync(client.id);
               const stop = fieldOps.stops.find((s) => s.client_id === client.id);
-              if (stop) { try { await fieldOps.removeStop.mutateAsync(stop); } catch { /* segue */ } }
+              if (stop) { try { await fieldOps.removeStop.mutateAsync({ stop, motivo: 'descartada' }); } catch { /* segue */ } }
               done?.();
             } catch (err: any) {
               Alert.alert('Erro', err?.message ?? 'Não foi possível descartar.');

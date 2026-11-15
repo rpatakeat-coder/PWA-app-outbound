@@ -6,6 +6,7 @@
 import { supabase } from '../integrations/supabase/client';
 import type { Client } from '../types/client';
 import { tirarDoDia } from './paradaDoDia';
+import type { MotivoDeTirar } from './motivoDeTirar';
 import { acaoPorId, type AcaoId } from './acoesDoPlano';
 import { negocioAcao } from './negocioAcao';
 import { descartar, ehErroDeRede, enfileirar, liberar, novoAcaoId } from './filaOffline';
@@ -126,7 +127,7 @@ export async function porNoPlano(p: PedidoDoPlano): Promise<{ ordem: number | nu
   const mudouDia = !!p.antes && p.antes.dia !== p.dia && !p.antes.feita;
   const mudouHora = !!p.antes && p.antes.dia === p.dia && !!p.hora && p.hora !== p.antes.hora;
   const [, ordem] = await Promise.all([
-    mudouDia ? tirarDoDia(p.uid, p.antes!.dia, p.client.id) : Promise.resolve(0),
+    mudouDia ? tirarDoDia(p.uid, p.antes!.dia, p.client.id, 'outro_dia') : Promise.resolve(0),
     a.ehParada ? gravarParada(p.uid, p.dia, p.client.id, p.acao, p.hora) : Promise.resolve(null),
   ]);
 
@@ -295,8 +296,8 @@ export async function subirPlanoDaFila(payload: Record<string, unknown>): Promis
 }
 
 /** Tira do plano (o pino continua no mapa; parada feita não se tira). */
-export async function tirarDoPlano(uid: string, clientId: string, dia: string): Promise<void> {
-  await tirarDoDia(uid, dia, clientId);
+export async function tirarDoPlano(uid: string, clientId: string, dia: string, motivo?: MotivoDeTirar): Promise<void> {
+  await tirarDoDia(uid, dia, clientId, motivo);
 }
 
 // Quem mostra "onde está no plano" (o cartão do pino, a Agenda) relê quando o plano muda.

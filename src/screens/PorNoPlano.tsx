@@ -22,6 +22,7 @@ import { ehDiaUtil, proximoDiaUtil } from '../utils/desfechoVisita';
 import { diasPlanejaveis, rotuloDoDia, vaiAoCockpit } from '../utils/planoNoMapa';
 import { entrarEmProspeccao } from '../utils/assumirLead';
 import { decidirProspeccao } from '../utils/entrarEmProspeccao';
+import { pedirMotivoDeTirar } from '../utils/pedirMotivoDeTirar';
 import { avisarQueOPlanoMudou, lerPlanoDosDias, ondeEsta, porNoPlano, tirarDoPlano, type OndeEsta, type PlanoLido } from '../utils/planoDoPino';
 
 type Props = {
@@ -176,9 +177,12 @@ export default function PorNoPlano({ visivel, client, etapaCodigo, tipoPino, cor
   }
   async function tirar() {
     if (!uid || !antes || enviando) return;
+    /* o motivo, num toque (15/11/26): desistiu da pergunta, nada sai do plano */
+    const motivo = await pedirMotivoDeTirar({ nome, dia: antes.dia, hoje });
+    if (!motivo) return;
     setEnviando(true);
     try {
-      await tirarDoPlano(uid, client.id, antes.dia);
+      await tirarDoPlano(uid, client.id, antes.dia, motivo);
       /* TIRAR DESFAZ O QUE O PÔR FEZ (teste de 06/10): a reunião agendada naquele dia sai pelo mesmo
          caminho do Cancelar da ficha (o evento do Google vai junto). A tarefa do HubSpot não se
          conclui por aqui (concluir é toque): o aviso manda fechar na Agenda. */
