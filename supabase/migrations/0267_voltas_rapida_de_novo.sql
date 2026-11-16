@@ -1,0 +1,13 @@
+-- VOLTAS RÁPIDA DE NOVO (16/11/26)
+--
+-- A 0266 trouxe o motivo da parada tirada com um LEFT JOIN LATERAL dentro de `base`. O planejador
+-- passou a rodar a busca para cada ficha ANTES de filtrar, e voltas_do_time foi de ~100 ms para
+-- 8,4 s. Ela roda quando o gestor abre o Hoje e a cada 10 minutos: na segunda 16/11 de manhã o
+-- Julyan sentiu a entrada lenta. Medido depois desta correção: 124 ms, com os mesmos números.
+--
+-- O que mudou: os executivos ativos e as voltas já filtradas ficam MATERIALIZADOS (reps, base0), e o
+-- motivo é buscado só para as poucas linhas que sobraram, pela rota do vendedor naquele dia
+-- (índices field_routes_seller_date_idx e field_route_stops_route_client_idx).
+--
+-- A definição completa está no banco (aplicada como 0267_voltas_rapida_de_novo); este arquivo
+-- registra o porquê. Para ler a função: select prosrc from pg_proc where proname = 'voltas_do_time'.
