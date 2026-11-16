@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@6ac3aa64.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@554b1e6d.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "6ac3aa64";
+  var VERSAO = "554b1e6d";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -2978,6 +2978,14 @@
   .fn2-res-b.is-falta b{color:var(--red);}
   .fn2-res-b.is-ok{cursor:default;color:var(--muted);}
   .fn2-res-b.is-on{border-color:var(--ink);}
+
+  .fn2-res-b.is-venc:not(.is-on),.fn2-res-b.is-falta:not(.is-on),.fn2-res-b.is-regua:not(.is-on){animation:fn3PulsaDinheiro 1.6s ease-in-out infinite;}
+  .fn2-res-b.is-venc:not(.is-on) b,.fn2-res-b.is-falta:not(.is-on) b,.fn2-res-b.is-regua:not(.is-on) b{animation:fn3PiscaN 1.6s ease-in-out infinite;}
+  .fn2-shell[data-fn2-pulsa]:not([data-fn2-pulsa=""]) .kb7-card:not(.is-fora){animation:fn3PulsaDinheiro 1.6s ease-in-out infinite;}
+  @media (prefers-reduced-motion:reduce){
+    .fn2-res-b,.fn2-res-b b{animation:none !important;}
+    .fn2-shell[data-fn2-pulsa]:not([data-fn2-pulsa=""]) .kb7-card:not(.is-fora){animation:none;box-shadow:inset 0 0 0 2px var(--red-dk);}
+  }
   .fn2-mais{border:1px solid var(--line);border-radius:14px;background:var(--panel);}
   .fn2-mais > summary{cursor:pointer;list-style:none;padding:14px 16px;font:600 13px var(--font-body);color:var(--ink);display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;}
   .fn2-mais > summary::-webkit-details-marker{display:none;}
@@ -19809,7 +19817,7 @@ function fn2ShellHTML(r) {
   const mov = movimentos.concat(dinheiro, doPasso).find(m => m.id === fn2Movimento);
   const acesos = mov ? new Set(mov.itens.map(x => String(x.lead.id))) : null;
 
-  const pulsando = mov && ['parado7', 'sem-mrr', 'sem-passo'].indexOf(mov.id) >= 0 ? mov.id : '';
+  const pulsando = mov && ['parado7', 'sem-mrr', 'sem-passo', 'passo-vencido', 'nunca-passo', 'estourou'].indexOf(mov.id) >= 0 ? mov.id : '';
 
   return `<div class="fn2-shell" data-fn2-owner="${esc(String(r.ownerId || ''))}"
       data-fn2-pulsa="${esc(pulsando)}">
