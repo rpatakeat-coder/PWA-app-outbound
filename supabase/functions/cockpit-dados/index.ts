@@ -188,17 +188,35 @@ Deno.serve(async (req) => {
   // ---- 1. sessão válida + quem está chamando ----
   const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
   if (!token) return json(401, { erro: 'Sem sessão. Faça login de novo.' });
-  const { data: u, error: erroUser } = await svc.auth.getUser(token);
+  /* TUDO JUNTO, NÃO EM FILA (16/11/26). Medido: a função fria levava 6–8 s e o snapshot sozinho só 1,2–1,8 s;
+     o resto eram cinco idas ao banco UMA DEPOIS DA OUTRA (sessão, equipe, quem saiu, configuração, snapshot),
+     cada uma abrindo a sua conexão a frio. Agora saem todas no mesmo instante e cada trecho só espera a sua.
+     O snapshot só é adiantado na carga principal (sem ?recurso). Nada é devolvido antes de a sessão conferir. */
+  const t0Carga = Date.now();
+  const tempos: Record<string, number> = {};
+  const marca = <T>(nome: string, p: Promise<T>): Promise<T> => p.then((v) => { tempos[nome] = Date.now() - t0Carga; return v; });
+  const pUser = marca('sessao', svc.auth.getUser(token));
+  const pEquipe = marca('equipe', Promise.resolve(svc
+    .from('equipe_cockpit')
+    .select('profile_id, papel, nome, ordem, ignorar_owner, so_acesso, ramp_stage, a_comecar, field_status, profiles!inner(email, full_name, id_hubspot)')
+    .eq('ativo', true)
+    .order('ordem', { ascending: true, nullsFirst: false })));
+  const pSaiu = marca('saiu', Promise.resolve(svc
+    .from('equipe_cockpit')
+    .select('nome, papel, profiles!inner(full_name, id_hubspot)')
+    .eq('ativo', false)
+    .eq('papel', 'rep')));
+  const pConfig = marca('config', lerConfig(svc));
+  pConfig.catch(() => {});
+  const pSnap: Promise<any> | null = new URL(req.url).searchParams.get('recurso') ? null : marca('snapshot', lerSnapshot());
+  if (pSnap) pSnap.catch(() => {});
+  const { data: u, error: erroUser } = await pUser;
   if (erroUser || !u?.user) return json(401, { erro: 'Sessão inválida ou expirada. Faça login de novo.' });
   const emailLogado = String(u.user.email ?? '').toLowerCase();
   if (!emailLogado) return json(401, { erro: 'Sessão sem e-mail associado. Faça login de novo.' });
 
   // ---- 2. a equipe (equipe_cockpit + profiles) ----
-  const { data: linhas, error: erroEquipe } = await svc
-    .from('equipe_cockpit')
-    .select('profile_id, papel, nome, ordem, ignorar_owner, so_acesso, ramp_stage, a_comecar, field_status, profiles!inner(email, full_name, id_hubspot)')
-    .eq('ativo', true)
-    .order('ordem', { ascending: true, nullsFirst: false });
+  const { data: linhas, error: erroEquipe } = await pEquipe as any;
   if (erroEquipe) return json(500, { erro: 'Não consegui ler a equipe: ' + erroEquipe.message });
   const cadastro = (linhas ?? []).map((l: any) => {
     const p = l.profiles ?? {};
@@ -224,11 +242,7 @@ Deno.serve(async (req) => {
   /* QUEM SAIU DO TIME (cockpit-unificado #915): os executivos INATIVOS com owner, só para a
      venda deles no mês contar no total. Falhar aqui não derruba a carga: sem a lista, a
      venda de quem saiu volta para foraDoTime, como antes. */
-  const { data: saiu } = await svc
-    .from('equipe_cockpit')
-    .select('nome, papel, profiles!inner(full_name, id_hubspot)')
-    .eq('ativo', false)
-    .eq('papel', 'rep');
+  const { data: saiu } = await pSaiu as any;
   usarExTime((saiu ?? []).map((l: any) => ({
     ownerId: l.profiles?.id_hubspot ?? null,
     nome: l.nome ?? String(l.profiles?.full_name ?? '').replace(/\s*\/\s*DESATIVADO\s*$/i, ''),
@@ -239,7 +253,7 @@ Deno.serve(async (req) => {
   const recurso = url.searchParams.get('recurso');
 
   let config: Record<string, any>;
-  try { config = await lerConfig(svc); } catch (e) { return json(500, { erro: (e as Error).message }); }
+  try { config = await pConfig; } catch (e) { return json(500, { erro: (e as Error).message }); }
   usarConfig(config);
   const PLAYBOOK = config.playbook ?? { paginas: [], categorias: [] };
   const PRECIFICACAO = config.precificacao ?? null;
@@ -471,7 +485,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const procedencia: any = await lerSnapshot();
+    const procedencia: any = await (pSnap ?? lerSnapshot());
     if (!temSnapshot()) {
       const faltando = faltandoNoSnapshot();
       return json(503, {
@@ -494,7 +508,9 @@ Deno.serve(async (req) => {
       const rt = (globalThis as any).EdgeRuntime;
       if (rt && typeof rt.waitUntil === 'function') rt.waitUntil(tarefa);
     } catch { /* nunca derruba o Cockpit */ }
+    tempos.espelho = Date.now() - t0Carga;
     const completo: any = montarDadosCompletos();
+    tempos.montado = Date.now() - t0Carga;
     /* VISÃO DE EXECUTIVO PARA O GESTOR (28/09/2026, Julyan: "eu queria uma tela como se
        fosse do executivo pra mim"). ?visao=executivo, só para quem já é gestor e tem dono
        no HubSpot: o recorte sai como o de um executivo com o funil dele. Não abre nada que
@@ -544,7 +560,9 @@ Deno.serve(async (req) => {
       sessao: { email: usuario.email, role: quem.role, ownerId: usuario.ownerId, nome: usuario.nome, aComecar: !!usuario.aComecar, ...(visaoExecutivo ? { visaoDeGestor: true } : {}) },
       procedencia: { fonte: procedencia.fonte, motivo: procedencia.motivo || null,
         chaves: procedencia.chaves || [], atualizadoEm: procedencia.atualizadoEm || null,
-        espelho: procedencia.espelho || null },
+        espelho: procedencia.espelho || null,
+        /* quanto cada leitura levou, em ms desde o começo do pedido (16/11/26): para medir a função fria */
+        tempos: { ...tempos, total: Date.now() - t0Carga } },
       dados,
     });
   } catch (e) {
