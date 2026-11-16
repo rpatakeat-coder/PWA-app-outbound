@@ -460,6 +460,10 @@ async function rodarDia(svc: ReturnType<typeof createClient>, momento: 'manha080
     let algum = false;
     for (const a of aparelhos) algum = (await enviar(svc, a, aviso, k)) || algum;
     linha.enviado = algum;
+    /* ESCALONADO (16/11/26): o aviso das 8h chegava a todos no mesmo segundo, todos abriam o app juntos e o
+       banco (máquina Nano) ficou sem processador: 3.303 pedidos em 10 min, 503 às 08:25. Agora sai um a cada
+       9 s (9 pessoas = ~80 s), e a onda de abertura do app se espalha. */
+    if (momento === 'manha0800' && algum) await new Promise((r) => setTimeout(r, 9000));
   }
   return { ok: true, momento, ensaio, relatorio };
 }
