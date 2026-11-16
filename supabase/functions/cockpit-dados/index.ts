@@ -169,6 +169,22 @@ Deno.serve(async (req) => {
     auth: { persistSession: false },
   });
 
+  /* ---- 0. AQUECER (16/11/26) ----
+     A 1ª abertura do Cockpit depois de um tempo parado levava 6 s só aqui (medido: 6,2 s fria, ~2 s
+     quente): a função acorda, relê o snapshot de 2,9 MB e o desmonta. O robô (public.invocar_cockpit_aquecer,
+     a cada 4 min em horário de trabalho) bate aqui com o segredo do vault e deixa o snapshot na memória.
+     Não devolve dado nenhum e não passa pela sessão: só o segredo abre este ramo. */
+  const segredoAq = req.headers.get('x-cron-secret');
+  if (segredoAq && new URL(req.url).searchParams.get('aquecer') === '1') {
+    const { data: okAq } = await svc.rpc('segredo_confere', { p_nome: 'push_fila', p_valor: segredoAq });
+    if (okAq !== true) return json(403, { erro: 'segredo' });
+    const t0Aq = Date.now();
+    try {
+      const pAq: any = await lerSnapshot();
+      return json(200, { ok: true, aquecido: true, reaproveitado: !!pAq.reaproveitado, fonte: pAq.fonte, ms: Date.now() - t0Aq });
+    } catch (e) { return json(500, { erro: 'aquecer: ' + String((e as Error).message || e) }); }
+  }
+
   // ---- 1. sessão válida + quem está chamando ----
   const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
   if (!token) return json(401, { erro: 'Sem sessão. Faça login de novo.' });
