@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@f8fe5772.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@1c2283ae.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "f8fe5772";
+  var VERSAO = "1c2283ae";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -45559,10 +45559,16 @@ function v5DiscoTemperatura(lead, tam) {
 }
 
 function v5ProximoPasso(lead) {
-  const p = lead && lead.proximaAtividade;
+
+  const pl = (lead && typeof proximoPassoDoLead === 'function') ? proximoPassoDoLead(lead) : null;
+  const p = pl ? pl.data : (lead && lead.proximaAtividade);
   if (!p) return { texto: 'sem próximo passo', data: '', falta: true };
   const d = new Date(p);
-  const txt = (lead.proximaAtividadeAssunto || lead.proximoPasso || 'próximo passo');
+  const rot = pl && pl.rotulo;
+  const txt = (rot === 'no plano') ? 'no plano'
+    : (rot && rot !== 'atividade' && rot !== 'reunião') ? rot
+    : (rot === 'reunião') ? 'reunião'
+    : (lead.proximaAtividadeAssunto || lead.proximoPasso || 'próximo passo');
   return { texto: txt, data: isNaN(d) ? '' : d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }), falta: false };
 }
 function v5CartaoLinha(lead, opcoes) {
