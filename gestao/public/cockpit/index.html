@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@a9eef78c.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@c1fff974.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "a9eef78c";
+  var VERSAO = "c1fff974";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -78137,6 +78137,7 @@ GV2.cvPbConteudo = function (o) {
   GV2.v8Comando = function (cmd, parte) {
     const s = GV2.estado;
 
+    if (cmd === 'pessoa' && s.aba === 'pessoas' && GV2.pv2Abrir && GV2.base && GV2.base.porId[parte[1]]) { s.cvPg = null; s.pessoa = parte[1]; fecharGav(); GV2.pv2Abrir(parte[1], 'link'); return true; }
     if (cmd === 'pessoa') { s.cvPg = null; s.pessoa = parte[1]; GV2.rxGavAbrir({ t: 'pessoa', id: parte[1] }); if (GV2.pv2Medir) GV2.pv2Medir('pessoa:' + parte[1], 'ficha'); return true; }
     if (cmd === 'pv2' && (parte[1] === 'abrir' || parte[1] === 'hoje')) { s.cvPg = null; return v0(cmd, parte); }
     if ((cmd === 'cb' || cmd === 'hb') && parte[1] === 'ver' && parte[2]) { s.cvPg = null; s.pessoa = parte[2]; GV2.rxGavAbrir({ t: 'pessoa', id: parte[2] }); return true; }
