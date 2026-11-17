@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@64c6532d.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@a9eef78c.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "64c6532d";
+  var VERSAO = "a9eef78c";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -11722,7 +11722,7 @@ button.mc-g-l:hover{background:var(--gv2-hov);}
 .gv2 .gv2-corpo.tn{margin:0 -24px -24px;gap:0;overflow:hidden;}
 .gv2 .tn-frase{display:flex;align-items:flex-end;gap:16px;padding:0 20px 12px;flex:none;}
 .gv2 .tn-fr-t{flex:1;min-width:0;}
-.gv2 .tn-fr{display:block;max-width:100%;border:0;background:transparent;padding:0;margin:0;text-align:left;color:var(--gv2-ink);font:700 24px/1.25 var(--gv2-font);letter-spacing:-.01em;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.gv2 .tn-fr{display:block;max-width:100%;border:0;background:transparent;padding:0;margin:0;text-align:left;color:var(--gv2-ink);font:700 24px/1.25 var(--gv2-font);letter-spacing:-.01em;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:36px;}
 .gv2 .tn-fr.is-fixa{cursor:default;}
 .gv2 .tn-fr.is-longa{font-size:20px;}
 .gv2 .tn-fr.is-longa2{font-size:17px;}
