@@ -5729,8 +5729,25 @@ function MainApp() {
       }
 
       // Pergunta com botões e devolve a escolha (o Alert do app é por callback).
+      // CADA AVISO DO CHEGUEI FICA REGISTRADO (0272, 17/11/26): a visita que entra está em client_visits, mas a
+      // tentativa que o app recusou não ficava em lugar nenhum — não dava para dizer quem trava na porta, em
+      // qual mensagem e em qual restaurante. Uma linha por aviso, com a resposta. Medir nunca segura o check-in:
+      // sem sinal não tenta, e a falha é engolida.
+      const tentativa: { distancia: number | null; precisao: number | null; lat: number | null; lng: number | null; origem: string | null; aprox: boolean | null } =
+        { distancia: null, precisao: null, lat: null, lng: null, origem: client.geo_source ?? null, aprox: client.geo_approximate ?? null };
+      const registrarTentativa = (aviso: string, resposta: string) => {
+        try {
+          if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+          void Promise.resolve(supabase.rpc('registrar_tentativa_checkin', {
+            p_client_id: client.id, p_aviso: aviso, p_resposta: resposta,
+            p_distancia_m: tentativa.distancia != null && Number.isFinite(tentativa.distancia) ? tentativa.distancia : null,
+            p_precisao_m: tentativa.precisao != null && Number.isFinite(tentativa.precisao) ? tentativa.precisao : null,
+            p_lat: tentativa.lat, p_lng: tentativa.lng, p_pino_origem: tentativa.origem, p_pino_aproximado: tentativa.aprox,
+          })).then(() => undefined, () => undefined);
+        } catch { /* medir nunca derruba o Cheguei */ }
+      };
       const perguntar = (titulo: string, msg: string, botoes: { text: string; valor: string; style?: 'cancel' | 'destructive' }[]) =>
-        new Promise<string>((res) => Alert.alert(titulo, msg, botoes.map((b) => ({ text: b.text, style: b.style, onPress: () => res(b.valor) }))));
+        new Promise<string>((res) => Alert.alert(titulo, msg, botoes.map((b) => ({ text: b.text, style: b.style, onPress: () => { registrarTentativa(titulo, b.valor); res(b.valor); } }))));
 
       // FOTO É A SEGUNDA PROVA (Julyan, 26/09): SÓ quando o GPS FALHA (não
       // respondeu, leitura grosseira, impreciso) a visita entra com foto — da
@@ -5851,6 +5868,8 @@ function MainApp() {
       const userLon: number | null = position ? position.coords.longitude : null;
       const fixAccuracy = position ? position.coords.accuracy ?? null : null;
       const distance = userLat != null && userLon != null ? haversineMeters(userLat, userLon, targetLat, targetLon) : Number.NaN;
+      tentativa.distancia = Number.isFinite(distance) ? distance : null; tentativa.precisao = fixAccuracy; tentativa.lat = userLat; tentativa.lng = userLon;
+      tentativa.origem = geoSource; tentativa.aprox = isApproxPin;
       // Mesmo criterio da RPC mark_client_as_visited (200m preciso / 500m
       // aproximado). Antes o app travava em 200m fixo e barrava check-in que o
       // banco teria aceitado.
