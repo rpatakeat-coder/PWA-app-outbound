@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@98fc673e.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@acc96652.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "98fc673e";
+  var VERSAO = "acc96652";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -73683,14 +73683,16 @@ PLV3.dados = function (rep) {
         fixo: o.fixo || null, n: d.hoje ? o.n : null,
         app: !!(it.origem && /^app/.test(String(it.origem))),
         hora: it.hora || null, repetido: !!(it.id && vistos[it.id] > 1),
-        acertar: avisos && !d.passou && !(vx && vx.feita) && !(o.st && o.st.feita) ? avisos.doItem(it, daConta.get(it), false) : '',
+        acertar: avisos && !d.passou && !(vx && vx.feita) && !(o.st && o.st.feita) ? avisos.doItem(it, daConta.get(it), !!(d.hoje && it && it.hora && PLV3.hhmm() && String(it.hora) <= PLV3.hhmm())) : '',
 
         comoFoi: (function () { const a = dv5 && EXH.paradaApp ? EXH.paradaApp(dv5, it, d.passou) : null; return a && a.comoFoi ? a.comoFoi : ''; }()),
         lat: l && l.lat != null ? Number(l.lat) : null, lng: l && l.lng != null ? Number(l.lng) : null
       };
     });
     const fora = dv5 && Array.isArray(dv5.fora) ? dv5.fora.map(function (f) { return { fora: true, nome: f.nome || 'cliente', chk: f.hora || null, feita: true, ref: null }; }) : [];
-    return { planejados: lista, fora: fora, dv5: dv5, outros: outros, conflito: avisos && !d.passou ? avisos.conflito : '', conflitoSi: avisos && !d.passou && avisos.conflitoDe && avisos.conflitoDe.it ? avisos.conflitoDe.it.si : null };
+
+    const horaVelha = !!(d.hoje && avisos && avisos.conflitoDe && avisos.conflitoDe.fixo && PLV3.hhmm() && String(avisos.conflitoDe.fixo) <= PLV3.hhmm());
+    return { planejados: lista, fora: fora, dv5: dv5, outros: outros, conflito: avisos && !d.passou && !horaVelha ? avisos.conflito : '', conflitoSi: avisos && !d.passou && !horaVelha && avisos.conflitoDe && avisos.conflitoDe.it ? avisos.conflitoDe.it.si : null };
   });
 
   const ficou = {}, ficouIso = {};
@@ -78495,7 +78497,7 @@ GV2.MC = (function () {
     if (!M.temQuadro) painel = '<b class="mc-p-t">—</b><span>o quadro do desempenho não respondeu agora</span><button type="button" class="mc-p-bt" data-mc="recarregar">Tentar de novo</button>';
     else if (!M.meta) painel = '<small>Para a sua meta</small><b class="mc-p-t">Sem meta neste mês</b><span>' + e(M.cli == null ? '' : GV2.pl(M.cli, 'cliente', 'clientes') + ' em ' + mesNome) + '</span>';
     else if (!J) painel = '<small>Para a sua meta</small><b class="mc-p-t">' + e('Meta de ' + M.meta) + '</b><span>as vendas do mês não chegaram nesta leitura</span>';
-    else painel = '<small>Para a sua meta</small><button type="button" class="mc-p-t" data-mc="lista:4">' + e(J.faltam ? (J.faltam === 1 ? 'Falta 1 cliente' : 'Faltam ' + J.faltam + ' clientes') : 'Meta batida') + '</button><span>' + e((M.cli || 0) + ' de ' + J.meta + ' no mês') + '</span>'
+    else painel = '<small>Para a sua meta</small><button type="button" class="mc-p-t" data-mc="' + (J.faltam && !J.semTaxa ? 'exp:projecao' : 'lista:4') + '">' + e(J.faltam ? (J.faltam === 1 ? 'Falta 1 cliente' : 'Faltam ' + J.faltam + ' clientes') : 'Meta batida') + '</button><span>' + e((M.cli || 0) + ' de ' + J.meta + ' no mês') + '</span>'
       + (J.faltam ? '<i class="mc-p-div"></i><span>' + e(J.semTaxa ? 'Ainda sem venda no mês: não há taxa sua para projetar.' : 'Na sua taxa de hoje, isso pede') + '</span>'
         + (J.semTaxa ? '<span class="mc-p-ref">' + e('Pelo playbook: ' + (J.faltam * 15) + ' portas e ' + Math.ceil(J.faltam * 2.5) + ' demos.') + '</span>'
           : '<button type="button" class="mc-p-n" data-mc="exp:projecao"><span><b class="num">' + J.portas + '</b>' + (J.portas === 1 ? 'porta' : 'portas') + '</span><span><b class="num">' + J.demos + '</b>' + (J.demos === 1 ? 'demo' : 'demos') + '</span></button>') : '');
