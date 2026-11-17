@@ -21,6 +21,25 @@ export function leituraRecente(idadeMs: number, erroMax: number): LeituraDoGps |
   return ultima;
 }
 
+/**
+ * NA PORTA, A MELHOR LEITURA QUE HOUVER (17/11/26, Julyan: "não posso mais ter erro de GPS com o executivo na
+ * frente da porta"). O Cheguei abria uma amostra nova de 10 s e, se ela não chegasse (iPhone voltando do
+ * segundo plano, salão fechado), dizia "GPS não respondeu" — com o mapa, ao lado, lendo o GPS o tempo todo.
+ * E quando a amostra vinha ruim (±200 m pela rede), ficava com ela mesmo havendo uma leitura boa do mapa de
+ * segundos antes. Entre a amostra e a leitura do mapa, vale a de menor erro; sem amostra, a do mapa.
+ * A régua da prova não muda: quem decide se conta é o servidor, pela distância e pela margem.
+ */
+export function escolherLeitura(amostra: LeituraDoGps | null, doMapa: LeituraDoGps | null): LeituraDoGps | null {
+  const boa = (l: LeituraDoGps | null) => (l && l.accuracy > 0 && Number.isFinite(l.accuracy) ? l : null);
+  const a = boa(amostra), m = boa(doMapa);
+  if (!a) return m;
+  if (!m) return a;
+  return m.accuracy < a.accuracy ? m : a;
+}
+/** A leitura do mapa que serve de reserva ao Cheguei: até 15 s (o mesmo prazo de "leitura velha") e ±100 m (a régua da prova). */
+export const RESERVA_IDADE_MS = 15000;
+export const RESERVA_ERRO_M = 100;
+
 export function ouvirLeituras(fn: (l: LeituraDoGps) => void): () => void {
   ouvintes.add(fn);
   return () => { ouvintes.delete(fn); };

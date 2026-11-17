@@ -95,7 +95,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 // deixou de ser um wrapper e virou props do proprio MapView — que e' como
 // este arquivo ja as passava (radius/minPoints/maxZoom/clusterColor).
 import MapView, { Marker, Polyline, Circle, type MapViewHandle as RNMapView } from './src/map';
-import { leituraRecente, ouvirLeituras } from './src/map/leituraDoGps';
+import { leituraRecente, ouvirLeituras, escolherLeitura, RESERVA_IDADE_MS, RESERVA_ERRO_M } from './src/map/leituraDoGps';
 import * as Location from 'expo-location';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CLIENT_LIST_COLUMNS, useClientSearch, useClients } from './src/hooks/useClients';
@@ -5218,7 +5218,36 @@ function MainApp() {
           terminou = true;
           navigator.geolocation.clearWatch(id);
           clearTimeout(teto);
-          if (!melhor) { reject(new Error(erro?.message || 'Não foi possível ler o GPS. Confira se a localização está ligada.')); return; }
+          // A RESERVA É O GPS DO MAPA (17/11/26): entre esta amostra e a leitura que o mapa já tem (até 15 s,
+          // ±100 m), vale a de menor erro. Sem amostra e com o mapa lendo, não existe "GPS não respondeu".
+          const amostra = melhor ? { latitude: melhor.coords.latitude, longitude: melhor.coords.longitude, accuracy: melhor.coords.accuracy, em: melhor.timestamp } : null;
+          const escolhida = escolherLeitura(amostra, leituraRecente(RESERVA_IDADE_MS, RESERVA_ERRO_M));
+          if (escolhida && escolhida !== amostra) {
+            resolve({
+              coords: { latitude: escolhida.latitude, longitude: escolhida.longitude, accuracy: escolhida.accuracy, altitude: null, altitudeAccuracy: null, heading: null, speed: null },
+              timestamp: escolhida.em,
+            } as Location.LocationObject);
+            return;
+          }
+          if (!melhor) {
+            // ÚLTIMA TENTATIVA, PELA REDE (Wi-Fi e antena): dentro do salão o satélite some e a leitura de alta
+            // precisão não chega; a da rede chega em 1–2 s. Se a margem dela passar da régua, o Cheguei avisa
+            // "GPS impreciso" como sempre — mas não morre em "não respondeu". Permissão negada não tenta.
+            if (erro && erro.code === erro.PERMISSION_DENIED) { reject(new Error(erro.message || 'Localização negada.')); return; }
+            navigator.geolocation.getCurrentPosition(
+              (pos) => resolve({
+                coords: {
+                  latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy,
+                  altitude: pos.coords.altitude, altitudeAccuracy: pos.coords.altitudeAccuracy,
+                  heading: pos.coords.heading, speed: pos.coords.speed,
+                },
+                timestamp: pos.timestamp,
+              } as Location.LocationObject),
+              (e2) => reject(new Error(e2?.message || erro?.message || 'Não foi possível ler o GPS. Confira se a localização está ligada.')),
+              { enableHighAccuracy: false, maximumAge: 15000, timeout: 6000 },
+            );
+            return;
+          }
           resolve({
             coords: {
               latitude: melhor.coords.latitude, longitude: melhor.coords.longitude, accuracy: melhor.coords.accuracy,
