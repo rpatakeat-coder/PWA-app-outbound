@@ -153,6 +153,8 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   const [outraHora, setOutraHora] = useState(false);
   const [horaTexto, setHoraTexto] = useState('');
   const [confirmarSaida, setConfirmarSaida] = useState(false);
+  /* "Apresentei agora" faltando campo: pergunta uma vez antes de salvar sem mudar a etapa */
+  const [confirmarSemEtapa, setConfirmarSemEtapa] = useState(false);
   const [sabido, setSabido] = useState<Sabido | null>(null);
   const [fase, setFase] = useState<'form' | 'desfazer' | 'enviando' | 'salvo'>('form');
   const [resultados, setResultados] = useState<Resultado[]>([]);
@@ -196,7 +198,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   useEffect(() => {
     if (!visivel) return;
     setF(FICHA_VAZIA); setOpcao(null); setCompletar(false); setCorrigindo({}); setOutroSistema(false); setOutraDataVolta(false);
-    setOutraHora(false); setHoraTexto(''); setConfirmarSaida(false); setFase('form'); setResultados([]); setPassoSalvo(null); setVaiProFunil(true);
+    setOutraHora(false); setHoraTexto(''); setConfirmarSaida(false); setConfirmarSemEtapa(false); setFase('form'); setResultados([]); setPassoSalvo(null); setVaiProFunil(true);
     tocouComoFoi.current = false; setComoFoiAuto(false);
     /* O QUE JÁ SE SABE, nas três fontes, cada uma com prazo: o negócio (snapshot do Cockpit e
        leitura ao vivo, que traz a etapa real), as fichas de visita e o cadastro */
@@ -244,6 +246,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     ...(f.horario ? {} : sabido?.horario ? (HORARIOS.some((h) => h.hs && h.valor === sabido.horario)
       ? { horario: sabido.horario as Ficha['horario'] } : { horario: 'outro' as Ficha['horario'], horarioOutro: sabido.horario }) : {}) };
 
+  const juntarLista = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} e ${xs[xs.length - 1]}` : xs[0] ?? '');
   /* OS DEGRAUS: "Apresentei agora" sobe até Demo, um por vez; o resto, a etapa sugerida de sempre */
   const apresentei = f.proximo === 'apresentei';
   /* "Fechou" e "Negociando" (visita de retorno, negócio em Demo) também pedem plano e MRR: vão a Negociação */
@@ -263,13 +266,17 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     /* plano/MRR contam como "dito agora" só se mudaram em relação ao negócio */
     ...(f.plano && f.plano !== sabido?.plano ? ['plano_apresentado'] : []), ...(f.mrr.trim() && f.mrr.trim() !== sabido?.mrr ? ['valor_de_mrr'] : []), 'motivo_do_perdido',
   ]);
-  const plano = degrausDaFicha({
-    degraus, negocio: sabido?.negocio ?? {}, digitado, dorLivre, hoje, motivoTexto: f.motivoTexto, negocioLido: !!sabido?.lido,
+  const paraOsDegraus = {
+    negocio: sabido?.negocio ?? {}, digitado, dorLivre, hoje, motivoTexto: f.motivoTexto, negocioLido: !!sabido?.lido,
     valores: {
       celular: celularEf, gargalo_operacional: dorEnum, nome_do_sistema: sistemaParaGravar(sistemaEf), motivo_do_perdido: f.motivoPerdido ?? '',
       plano_apresentado: planoEf, valor_de_mrr: mrrEf,
     },
-  });
+  };
+  const plano = degrausDaFicha({ degraus, ...paraOsDegraus });
+  /* TUDO o que falta até o alvo, degrau a degrau (a escada para no primeiro que falta; quem lê o aviso
+     precisa da lista inteira de uma vez, senão preenche a dor e descobre depois que faltava o MRR) */
+  const faltaAteOAlvo = Array.from(new Set(degraus.flatMap((e) => degrausDaFicha({ degraus: [e], ...paraOsDegraus }).falta)));
   const ultimo = plano.vai.length ? plano.vai[plano.vai.length - 1].etapa : null;
   const vaiAoAlvo = !!alvoFinal && ultimo === alvoFinal;
   const faltaTexto = plano.falta.map((k) => ROTULO_PROP[k] ?? k);
@@ -284,6 +291,14 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   /* Completar agora: quem decide, celular, dor e sistema — "N de 4 já sabidos" */
   const sabidos = [decisorEf, celularEf, dorEf, sistemaEf].filter(Boolean).length;
   const aviso = !!plano.paraEm && !!f.comoFoi && !!f.proximo;
+  /* A DEMO QUE NÃO VAI CONTAR (17/11/26): "Apresentei agora" com campo faltando grava a visita e deixa a etapa
+     onde está; no placar a demo só nasce quando o negócio chega a Demo/Proposta. Em 30 dias, 28 de 35
+     "Apresentei" saídos de Visita ficaram assim, com "Visita registrada" em verde. */
+  /* dois motivos: falta campo que a etapa exige, ou o negócio não pôde ser lido (o HubSpot não respondeu em 4 s) */
+  const demoSemLeitura = apresentei && !!dealId && !!f.comoFoi && !!sabido?.carregado && !sabido?.lido;
+  const demoNaoConta = (apresentei && aviso) || demoSemLeitura;
+  const faltaDaDemo = apresentei && aviso ? juntarLista((faltaAteOAlvo.length ? faltaAteOAlvo : plano.falta).map((k) => ROTULO_PROP[k] ?? k)) : '';
+  const porQueNaoConta = demoSemLeitura ? 'não consegui ler o negócio no HubSpot agora' : `falta ${faltaDaDemo}`;
   /* a etapa não vai mudar e a pessoa precisa saber por quê */
   const querSubir = !!dealId && !!f.comoFoi && !!f.proximo && (!!alvoFinal || !!etapaSugerida({ atual: etapaReal, comoFoi: f.comoFoi, proximo: f.proximo, primeiraVisita }));
   const avisoLeitura = querSubir && !sabido?.lido
@@ -293,6 +308,8 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
     ? 'Escolha como foi e o que vem agora'
     : avisoLeitura
       ? avisoLeitura
+    : demoNaoConta && !demoSemLeitura
+      ? `Falta ${faltaDaDemo}: sem isso a etapa não muda e a demo não conta`
     : aviso
       ? `Falta ${juntar(faltaTexto)} para ir a ${ROTULO_ETAPA[alvoFinal ?? plano.paraEm as string]} · salvo a visita mesmo assim`
       : f.proximo === 'reuniao' && f.diasReuniao === 0 && !f.horaReuniao
@@ -481,6 +498,9 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
 
   function aoSalvar() {
     if (!salvar.pode || fase !== 'form') return;
+    /* avisa, não trava: a primeira batida mostra o que falta; a segunda salva assim mesmo */
+    if (demoNaoConta && !confirmarSemEtapa) { setConfirmarSemEtapa(true); return; }
+    setConfirmarSemEtapa(false);
     const campos: CamposCadastro = {};
     if (!temTelefone && f.telefone.trim()) campos.telefone = f.telefone.trim();
     const envios: Envio[] = [];
@@ -679,7 +699,7 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
   /* O BOTÃO DIZ O QUE FALTA (29/10/26, "toda visita tem que ter um próximo passo"). Enquanto
      falta, ele é o lembrete — desligado, com a falta escrita nele. Completo, diz para onde a
      etapa vai. */
-  const textoSalvar = !salvar.pode ? salvar.texto : vaiAoAlvo && alvoFinal ? `Salvar · vai a ${ROTULO_ETAPA[alvoFinal]}` : 'Salvar visita';
+  const textoSalvar = !salvar.pode ? salvar.texto : vaiAoAlvo && alvoFinal ? `Salvar · vai a ${ROTULO_ETAPA[alvoFinal]}` : demoNaoConta ? (confirmarSemEtapa ? 'Salvar mesmo assim' : 'Salvar · a etapa não muda') : 'Salvar visita';
   /* A LEGENDA SOB O BOTÃO: o executivo precisa saber que a visita já está contada ANTES de ele
      responder qualquer coisa — é isso que tira a pressa de quem acabou de bater o Cheguei. O
      que ela NÃO diz mais é que dá para sair em branco: não dá. */
@@ -968,6 +988,17 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                     </View>
                   </View>
                 )}
+                {confirmarSemEtapa && demoNaoConta && (
+                  <View style={[s.blocoFalta, { gap: 8 }]}>
+                    <Text style={s.blocoFaltaTitulo}>{`A demo não vai contar: ${porQueNaoConta}.`}</Text>
+                    <Text style={s.ajuda}>{demoSemLeitura
+                      ? 'O negócio fica na etapa em que está e a demo não entra no placar. Salve a visita e mova a etapa depois, no negócio.'
+                      : 'Sem isso o negócio não vai a Demo/Proposta e a demo não entra no placar. Preencha aqui em cima, ou salve só a visita.'}</Text>
+                    <Pressable accessibilityRole="button" style={[s.secundario, { flex: 0, alignSelf: 'stretch' }]} onPress={() => setConfirmarSemEtapa(false)}>
+                      <Text style={s.secundarioTexto}>{demoSemLeitura ? 'Voltar' : 'Preencher agora'}</Text>
+                    </Pressable>
+                  </View>
+                )}
                 <Pressable accessibilityRole="button" disabled={!salvar.pode} style={[s.salvar, !salvar.pode && s.salvarDesligado]} onPress={aoSalvar}>
                   <Text style={[s.salvarTexto, !salvar.pode && s.salvarTextoDesligado]}>{textoSalvar}</Text>
                 </Pressable>
@@ -1001,6 +1032,12 @@ export default function FichaDeRua({ visivel, client, checkinEm, etapaAtual, pri
                     ? `${passoSalvo.texto} · ${passoSalvo.data === hoje ? 'hoje' : diaMes(passoSalvo.data)} · ${passoSalvo.virouTarefa ? (donoColega ? `na Agenda de ${donoColega}, dono do negócio` : 'na Agenda e nas Tarefas') : 'sem negócio no HubSpot, não virou tarefa'}`
                     : f.proximo === 'sem_interesse' ? 'Sem interesse: o negócio vai para Perdido.' : 'Sem próximo passo com data.'].filter(Boolean).join('\n')}
               </Text>
+              {/* a visita gravou, a demo não: dito com todas as letras, com o que faltou */}
+              {demoNaoConta && (
+                <Text style={[s.ajuda, { color: 'var(--vermelho-texto)', fontWeight: '600' }]}>
+                  {`A etapa não mudou: ${porQueNaoConta}. A demo ainda não conta no placar. Abra o negócio, complete e mova para Demo/Proposta.`}
+                </Text>
+              )}
               {fase === 'salvo' && (
                 <Text style={[s.ajuda, { color: problemas.some((p) => p.estado === 'falhou') ? 'var(--vermelho-texto)' : 'var(--verde-texto)' }]}>
                   {problemas.length === 0
