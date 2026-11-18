@@ -25,7 +25,7 @@ export type Quadro = {
   pessoa: { id: string; ownerId: string | null; nome: string | null; fase: 'novato' | 'pleno' };
   umAUm: { ultimo: string | null; proximo: string; hora: string } | null;
   semana: {
-    segunda: string; sexta: string; uteis: number; pts: number; pos: number | null; total: number;
+    segunda: string; sexta: string; domingo?: string; uteis: number; pts: number; pos: number | null; total: number;
     vendas: number; demos: number; visitas: number; podio: LinhaPodio[];
     acima: { nome: string; pts: number } | null; segundo: { nome: string; pts: number } | null;
     passada: { pts: number; pos: number } | null; recorde: { pts: number; segunda: string } | null;
@@ -118,8 +118,10 @@ export function semanaDoExecutivo(q: Quadro): VMSemana {
   const kicker = 'A SEMANA · DISPUTA DOS R$ 250';
   const S = q.semana;
   if (!S) return { fora: true, fonte: q.fontes.semana || 'placar_da_semana', kicker, ate: '', ateCurto: '', pts: '—', posTexto: '— · ' + (q.fontes.semana || 'placar_da_semana') + ' não respondeu', posTom: 'mute', podio: [], proximo: 'O placar volta assim que a fonte responder. Os seus pontos continuam contando.', regra, nota };
-  /* a semana do bônus é de segunda a sexta 23:59 (0191): o texto diz até que dia, sem hora inventada */
-  const ate = 'até ' + diaCurto(S.sexta) + (S.uteis < 5 ? ' · ' + pl(S.uteis, 'dia útil', 'dias úteis') : '');
+  /* a semana do bônus é de segunda a domingo 23:59 (0274, Julyan 17/11/26; antes demo e visita paravam na
+     sexta): o texto diz até que dia, sem hora inventada. O quadro só traz a sexta; o domingo é a sexta + 2. */
+  const fim = S.domingo || somaDias(S.sexta, 2);
+  const ate = 'até ' + diaCurto(fim) + (S.uteis < 5 ? ' · ' + pl(S.uteis, 'dia útil', 'dias úteis') : '');
   const novato = q.pessoa.fase === 'novato';
   const lider = S.podio.find((x) => x.pos === 1);
   const comecou = !lider || lider.pts <= 0;
@@ -146,7 +148,7 @@ export function semanaDoExecutivo(q: Quadro): VMSemana {
     else if (S.acima) { const falta = S.acima.pts - S.pts + 1; proximo = 'Faltam ' + falta + ' pts para passar ' + prim(S.acima.nome) + '. ' + menorAcao(falta); }
     else proximo = 'Cada visita com prova soma 3 pts.';
   }
-  return { fora: false, fonte: null, kicker, ate, ateCurto: diaCurto(S.sexta), pts: String(S.pts), posTexto, posTom: !novato && S.pos === 1 && !comecou ? 'ok' : 'mute', podio, proximo, regra, nota };
+  return { fora: false, fonte: null, kicker, ate, ateCurto: diaCurto(fim), pts: String(S.pts), posTexto, posTom: !novato && S.pos === 1 && !comecou ? 'ok' : 'mute', podio, proximo, regra, nota };
 }
 
 // ── 3 · a missão da semana ────────────────────────────────────────────────────────────────────
