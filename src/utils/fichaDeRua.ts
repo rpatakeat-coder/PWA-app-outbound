@@ -11,6 +11,7 @@
 //     (não pula fase; Reciclagem/Perdido de qualquer etapa; Ganho proibido;
 //     PROPS_OBRIGATORIAS_POR_ETAPA).
 
+import { BONUS_PARCEIRO } from '../constants/bonusParceiro';
 import { normalizarCelular } from './celular';
 import { GARGALOS, montarBlocoDesfecho, proximoDiaUtil, type Desfecho, type Gargalo } from './desfechoVisita';
 
@@ -197,7 +198,9 @@ export const PROPS_OBRIGATORIAS_POR_ETAPA: Record<string, string[]> = {
   '1395880470': ['celular', 'gargalo_operacional', 'nome_do_sistema'],
   '1395880471': ['valor_de_mrr', 'plano_apresentado', 'data_da_reuniao'],
   '1395880472': ['plano_apresentado', 'valor_de_mrr'],
-  '1396006163': [],
+  /* Bônus de parceiro (18/11/26): a pergunta Sim/Não é sempre pedida; o "qual" só quando é Sim
+     (pedeQualBonus) — por isso bonus_escolhido não está nesta lista */
+  '1396006163': ['indicou_bonus_cliente'],
   '1396006164': ['motivo_do_perdido'],
   '1398311191': [],
 };
@@ -335,7 +338,22 @@ export const ROTULO_PROP: Record<string, string> = {
   celular: 'telefone', gargalo_operacional: 'maior dor', nome_do_sistema: 'sistema que usa hoje',
   motivo_do_perdido: 'motivo do perdido', origem_do_lead: 'origem do lead',
   valor_de_mrr: 'valor de MRR', plano_apresentado: 'plano apresentado', data_da_reuniao: 'data da reunião',
+  indicou_bonus_cliente: 'bônus de parceiro', bonus_escolhido: 'qual bônus',
 };
+/** Título do campo quando ele é uma pergunta (o ROTULO_PROP serve para "pede X" e "falta X"). */
+export const PERGUNTA_PROP: Record<string, string> = {
+  indicou_bonus_cliente: 'Indicou bônus para o cliente?', bonus_escolhido: 'Qual bônus?',
+};
+
+/**
+ * "Qual bônus?" entra quando a resposta a "Indicou bônus para o cliente?" é Sim — a digitada
+ * agora, senão a que o negócio já tem. Só na ida para Onboarding.
+ */
+export function pedeQualBonus(destino: string | null, digitado: Record<string, string>, jaTem: Record<string, unknown>): boolean {
+  if (destino !== ETAPA.onboarding) return false;
+  const r = (digitado.indicou_bonus_cliente ?? '').trim() || String(jaTem.indicou_bonus_cliente ?? '').trim();
+  return r === 'true';
+}
 
 // ---- Nome de pessoa ---------------------------------------------------------
 // Uma palavra, primeiro nome comum (IBGE, Censo 2010), sem termo de comércio.
@@ -510,11 +528,16 @@ export const PICKLIST: Record<string, string[]> = {
   gargalo_operacional: ['Fila', 'Falta de Garçom', 'Falta de Gestão', 'Sem fidelização', 'Demora na divisão de contas', 'Estoque'],
   plano_apresentado: ['Básico (PDV + delivery)', 'Básico (PDV + mesa + delivery)', 'Inovação', 'Pro', 'Enterprise'],
   motivo_do_perdido: MOTIVOS_PERDIDO.map((m) => m.valor),
+  /* booleano do HubSpot: o valor é o texto 'true'/'false' (a tela mostra Sim/Não) */
+  indicou_bonus_cliente: ['true', 'false'],
+  bonus_escolhido: [...BONUS_PARCEIRO],
 };
-export type TipoCampo = 'selecao' | 'texto' | 'tel' | 'numero' | 'data';
+/** `varios`: múltipla escolha do HubSpot — o digitado e o gravado são os valores juntos por ";" */
+export type TipoCampo = 'selecao' | 'varios' | 'texto' | 'tel' | 'numero' | 'data';
 export const TIPO_CAMPO: Record<string, TipoCampo> = {
   origem_do_lead: 'selecao', gargalo_operacional: 'selecao', plano_apresentado: 'selecao', motivo_do_perdido: 'selecao',
   celular: 'tel', nome_do_sistema: 'texto', valor_de_mrr: 'numero', data_da_reuniao: 'data', observacao__desqualificado: 'texto',
+  indicou_bonus_cliente: 'selecao', bonus_escolhido: 'varios',
 };
 export { CELULAR_DICA, normalizarCelular } from './celular';
 // No Cockpit, "Outros" e "Funcionalidade" não explicam sozinhos: pedem o texto.
@@ -538,6 +561,8 @@ export function montarPropriedades(destino: string, digitado: Record<string, str
   let gargaloOutro: string | undefined;
   const exigidos = [...(PROPS_OBRIGATORIAS_POR_ETAPA[destino] ?? [])];
   if (destino === ETAPA.perdido && MOTIVOS_QUE_EXIGEM_TEXTO.includes(digitado.motivo_do_perdido ?? '')) exigidos.push('observacao__desqualificado');
+  /* com "Não", o bônus nem vai: o servidor recusa bonus_escolhido junto de indicou_bonus_cliente=false */
+  if (pedeQualBonus(destino, digitado, jaTem)) exigidos.push('bonus_escolhido');
   for (const k of exigidos) {
     const v = (digitado[k] ?? '').trim();
     const temNoNegocio = jaTem[k] != null && String(jaTem[k]).trim() !== '';
@@ -552,6 +577,13 @@ export function montarPropriedades(destino: string, digitado: Record<string, str
     }
     const tipo = TIPO_CAMPO[k] ?? 'texto';
     if (tipo === 'selecao' && !(PICKLIST[k] ?? []).includes(v)) { erros[k] = 'Escolha uma das opções.'; continue; }
+    if (tipo === 'varios') {
+      const lista = PICKLIST[k] ?? [];
+      const escolhidos = v.split(';').map((x) => x.trim()).filter(Boolean);
+      if (!escolhidos.length || escolhidos.some((x) => !lista.includes(x))) { erros[k] = 'Escolha uma ou mais opções da lista.'; continue; }
+      /* na ordem da lista e sem repetição: o HubSpot grava "A;B" */
+      propriedades[k] = lista.filter((x) => escolhidos.includes(x)).join(';'); continue;
+    }
     if (tipo === 'numero') {
       const n = numeroBR(v);
       if (!isFinite(n) || n <= 0) { erros[k] = 'Valor inválido.'; continue; }

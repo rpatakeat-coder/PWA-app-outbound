@@ -594,7 +594,7 @@ function avancoDaEtapa(codigo: string | null | undefined): { botao: string | nul
 /* O QUE FALTA PARA O PRÓXIMO DEGRAU (handoff "app menos tela", E1/E2, 14/10/26): a nota diz só
    o que falta, e o botão diz "pronto · 1 toque" quando o negócio já tem tudo. Lê o snapshot do
    Cockpit (mapa_negocio); a folha confere ao vivo antes de gravar. null = ainda não sabe. */
-const ROTULO_CURTO: Record<string, string> = { plano_apresentado: 'o plano apresentado', valor_de_mrr: 'o MRR', data_da_reuniao: 'a data da reunião', celular: 'o celular', gargalo_operacional: 'a maior dor', nome_do_sistema: 'o sistema' };
+const ROTULO_CURTO: Record<string, string> = { plano_apresentado: 'o plano apresentado', valor_de_mrr: 'o MRR', data_da_reuniao: 'a data da reunião', celular: 'o celular', gargalo_operacional: 'a maior dor', nome_do_sistema: 'o sistema', indicou_bonus_cliente: 'o bônus de parceiro' };
 function useFaltaPara(dealId: string | null, destino: string | null): { falta: string[]; tem: string[] } | null {
   const [r, setR] = useState<{ falta: string[]; tem: string[] } | null>(null);
   useEffect(() => {

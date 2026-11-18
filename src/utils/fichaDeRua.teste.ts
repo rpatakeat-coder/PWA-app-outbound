@@ -9,7 +9,7 @@ import {
   opcoesAgora, HORARIOS,
   ETAPA, FICHA_VAZIA, etapaSugerida, faltandoParaEtapa, montarPropriedades, movimentoPermitido, notaDaVisita,
   pareceNomeDePessoa, proximoPassoDaFicha, rotuloSalvar, faltaNoProximo, proximoDiaUtil, type Ficha,
-  degrausDaFicha, escadaAte, horaLivre, valorValido, normalizarCelular,
+  degrausDaFicha, escadaAte, horaLivre, valorValido, normalizarCelular, pedeQualBonus, PICKLIST,
   GARGALO_OUTRA, HORARIO_OUTRO, MOTIVOS_PERDIDO, dorDaFicha, horarioDaFicha, horarioParaHubspot, pedeHorarioDoDono, papelDaFicha, papelParaHubspot, rotuloDoHorario, rotuloDoMotivo, tipoDaFicha,
 } from './fichaDeRua';
 import { MOTIVOS_SEM_INTERESSE } from './registroDaFila';
@@ -229,6 +229,28 @@ ok(!pedeHorarioDoDono({ comoFoi: 'decisor_ausente', proximo: 'ligar_amanha' }) &
   && !pedeHorarioDoDono({ comoFoi: 'falou_com_decisor', proximo: 'voltar7' }) && !pedeHorarioDoDono({ comoFoi: 'estabelecimento_fechado', proximo: 'voltar_amanha' }), 'ligar, sem interesse, falou com o decisor ou casa fechada: não pede');
 ok(horarioParaHubspot({ horario: '10h_11h30' }) === '10-11:30' && horarioParaHubspot({ horario: 'outro' }) === null && horarioParaHubspot({ horario: null }) === null, 'ao HubSpot só as 4 faixas; "Outro horário" e vazio não vão');
 ok(rotuloSalvar({ ...FICHA_VAZIA, comoFoi: 'decisor_ausente', proximo: 'voltar_horario', dataVolta: '2026-11-16' }).pode, 'sem o horário do dono a ficha SALVA: é aviso, não trava');
+// Bônus de parceiro na ida para Onboarding (18/11/26): Sim/Não sempre; "Qual bônus?" só com Sim
+{
+  const FOOZI = 'Foozi';
+  const DDR = 'DDR';
+  ok(faltandoParaEtapa(ETAPA.onboarding, {}).join() === 'indicou_bonus_cliente', 'Onboarding pede se indicou bônus');
+  ok(!pedeQualBonus(ETAPA.onboarding, {}, {}) && !pedeQualBonus(ETAPA.onboarding, { indicou_bonus_cliente: 'false' }, {}), 'sem resposta ou com Não: não pede qual bônus');
+  ok(pedeQualBonus(ETAPA.onboarding, { indicou_bonus_cliente: 'true' }, {}) && pedeQualBonus(ETAPA.onboarding, {}, { indicou_bonus_cliente: 'true' }), 'Sim (digitado ou já no negócio): pede qual bônus');
+  ok(!pedeQualBonus(ETAPA.demo, { indicou_bonus_cliente: 'true' }, {}), 'fora do Onboarding o bônus não existe');
+  ok(montarPropriedades(ETAPA.onboarding, {}, {}).erros.indicou_bonus_cliente === 'Preencha para mudar a etapa.', 'sem responder, a folha trava');
+  const nao = montarPropriedades(ETAPA.onboarding, { indicou_bonus_cliente: 'false', bonus_escolhido: FOOZI }, {});
+  ok(!Object.keys(nao.erros).length && nao.propriedades.indicou_bonus_cliente === 'false' && !('bonus_escolhido' in nao.propriedades),
+    'Não: grava false e NÃO manda o bônus que ficou marcado (o servidor recusaria)');
+  ok(montarPropriedades(ETAPA.onboarding, { indicou_bonus_cliente: 'true' }, {}).erros.bonus_escolhido === 'Preencha para mudar a etapa.', 'Sim sem bônus: trava');
+  const sim = montarPropriedades(ETAPA.onboarding, { indicou_bonus_cliente: 'true', bonus_escolhido: `${DDR};${FOOZI};${DDR}` }, {});
+  ok(!Object.keys(sim.erros).length && sim.propriedades.indicou_bonus_cliente === 'true' && sim.propriedades.bonus_escolhido === `${FOOZI};${DDR}`,
+    'Sim com dois bônus: "A;B" na ordem da lista do HubSpot, sem repetir');
+  ok(montarPropriedades(ETAPA.onboarding, { indicou_bonus_cliente: 'true', bonus_escolhido: `${FOOZI};TESTE - Guilherme` }, {}).erros.bonus_escolhido === 'Escolha uma ou mais opções da lista.',
+    'opção fora da lista (a desativada do HubSpot) é recusada');
+  ok(montarPropriedades(ETAPA.onboarding, { indicou_bonus_cliente: 'talvez' }, {}).erros.indicou_bonus_cliente === 'Escolha uma das opções.', 'Sim/Não só aceita true/false');
+  ok(!Object.keys(montarPropriedades(ETAPA.onboarding, {}, { indicou_bonus_cliente: 'false' }).erros).length, 'negócio que já respondeu passa sem perguntar de novo');
+  ok((PICKLIST.bonus_escolhido ?? []).length === 46 && !(PICKLIST.bonus_escolhido ?? []).some((b) => b.includes(';')), '46 bônus, nenhum com ";" (o separador do HubSpot)');
+}
 if (falhas) {
   console.log(`\n${falhas} falha(s)`);
   process.exit(1);

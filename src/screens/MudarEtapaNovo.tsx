@@ -17,9 +17,10 @@
 // faltou é gravado em gv2_falta_etapa e o gestor vê no Raio X. "Avançar sem preencher" saiu:
 // o botão principal já faz isso.
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CampoData } from '../components/CampoData';
+import { IconCheckbox, IconCheckboxChecked, useIconColors } from '../components/icons';
 import { Painel } from '../components/Painel';
 import { Toast } from '../components/Toast';
 import { supabase } from '../integrations/supabase/client';
@@ -27,7 +28,7 @@ import type { Client } from '../types/client';
 import { enfileirar, ehErroDeRede, novoAcaoId } from '../utils/filaOffline';
 import {
   AJUDA_MOTIVO, ETAPA, ETAPAS_DA_FOLHA, GARGALOS, GARGALO_OUTRA, HORARIOS, HORARIO_OUTRO, MAX_O_QUE_PESOU, MOTIVOS_PERDIDO, MOTIVOS_QUE_EXIGEM_TEXTO, PAPEIS,
-  PICKLIST, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA, ROTULO_PROP, TIPO_CAMPO, montarPropriedades, movimentoPermitido, valorValido,
+  PERGUNTA_PROP, PICKLIST, PROPS_OBRIGATORIAS_POR_ETAPA, ROTULO_ETAPA, ROTULO_PROP, TIPO_CAMPO, montarPropriedades, movimentoPermitido, pedeQualBonus, valorValido,
 } from '../utils/fichaDeRua';
 import {
   SISTEMAS_ARMAS, armasConhecidas, chipDoSistema, armasQueFaltam, enviosDasArmas, fichasDaFolha, registroDoAvanco, resumoDasArmas, sistemaParaGravar,
@@ -59,7 +60,9 @@ function pedeTexto(id: string): string {
   return campos.length ? `pede ${campos.map((k) => ROTULO_PROP[k] ?? k).join(', ')}` : 'não pede nada novo';
 }
 
-const ROTULO_PICK: Record<string, string> = { Reembolso: 'Estorno', GoogleMaps: 'Google Maps', Familia: 'Família' };
+const ROTULO_PICK: Record<string, string> = { Reembolso: 'Estorno', GoogleMaps: 'Google Maps', Familia: 'Família', true: 'Sim', false: 'Não' };
+/** valores de um campo `varios` (múltipla escolha): o digitado guarda "A;B" */
+const valoresDe = (v: string | undefined): string[] => (v ?? '').split(';').map((x) => x.trim()).filter(Boolean);
 type ChaveArma = 'sistema' | 'dor' | 'decisor' | 'horario';
 /* Os "Outro"/"Outra" das armas que estão com o campo de texto aberto (14/10/26) */
 type Abertos = { dor: boolean; papel: boolean; horario: boolean };
@@ -102,6 +105,9 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
   const [tocadas, setTocadas] = useState<Record<string, boolean>>({});
   const [outroSistema, setOutroSistema] = useState(false);
   const [abertos, setAbertos] = useState<Abertos>(NADA_ABERTO);
+  /* "Qual bônus?": 46 parceiros — a busca estreita a lista */
+  const [buscaBonus, setBuscaBonus] = useState('');
+  const cores = useIconColors();
   const [jaTemPronto, setJaTemPronto] = useState(false);
   /* com tudo sabido, a folha nem abre: até decidir, o painel fica fechado */
   const [decidido, setDecidido] = useState(false);
@@ -122,7 +128,7 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
     setDestino(soArmas ? null : destinoInicial); setDigitado(preenchido ? { ...preenchido } : {}); setErros({}); setRecusa(null);
     setArmas(null); setConhecidas(null); setTocadas({}); setOutroSistema(false); setAbertos(NADA_ABERTO); setJaTemPronto(false); setFichas(null); setDaFolha([]);
     setDecidido(!(UM_TOQUE.includes(destinoInicial ?? '') || soArmas) || !dealId);
-    setArmasAbertas(false); setOutraData(false);
+    setArmasAbertas(false); setOutraData(false); setBuscaBonus('');
     if (client.id) {
       void comPrazo(supabase.from('fichas_de_rua').select('ocorrido_em, decisor_nome, decisor_papel, horario_dono, sistema, dor')
         .eq('client_id', client.id).order('ocorrido_em', { ascending: false }).limit(10)
@@ -178,7 +184,9 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
      se explicam sozinhos — montarPropriedades decide, e manda o opcional quando vem escrito */
   const exigidos = destino
     ? [...(PROPS_OBRIGATORIAS_POR_ETAPA[destino] ?? []),
-      ...(destino === ETAPA.perdido && digitado.motivo_do_perdido ? ['observacao__desqualificado'] : [])]
+      ...(destino === ETAPA.perdido && digitado.motivo_do_perdido ? ['observacao__desqualificado'] : []),
+      /* Onboarding: "Qual bônus?" só depois do Sim (18/11/26) */
+      ...(pedeQualBonus(destino, digitado, jaTem) ? ['bonus_escolhido'] : [])]
       /* valor de lixo ("." no sistema) conta como vazio: é o que se escrevia só para passar */
       .filter((k) => k === 'motivo_do_perdido' || k === 'observacao__desqualificado' || !valorValido(jaTem[k]))
     : [];
@@ -311,8 +319,38 @@ export default function MudarEtapaNovo({ visivel, client, etapaAtual: etapaDoPin
     const pesouOpcional = k === 'observacao__desqualificado' && !MOTIVOS_QUE_EXIGEM_TEXTO.includes(digitado.motivo_do_perdido ?? '');
     return (
       <View key={k} style={s.campoBloco}>
-        <Text style={s.campoRotulo}>{k === 'observacao__desqualificado' ? (pesouOpcional ? 'O que pesou · opcional' : 'O que pesou') : (ROTULO_PROP[k] ?? k).replace(/^./, (c) => c.toUpperCase())}</Text>
-        {tipo === 'selecao' && opcoes ? (
+        <Text style={s.campoRotulo}>{k === 'observacao__desqualificado' ? (pesouOpcional ? 'O que pesou · opcional' : 'O que pesou') : PERGUNTA_PROP[k] ?? (ROTULO_PROP[k] ?? k).replace(/^./, (c) => c.toUpperCase())}</Text>
+        {tipo === 'varios' && opcoes ? (() => {
+          /* múltipla escolha (bônus de parceiro): lista com caixas, rolagem própria e busca */
+          const marcados = valoresDe(digitado[k]);
+          const termo = buscaBonus.trim().toLocaleLowerCase('pt-BR');
+          const visiveis = termo ? opcoes.filter((o) => o.toLocaleLowerCase('pt-BR').includes(termo)) : opcoes;
+          const alternar = (o: string) => setDigitado((d) => {
+            const atuais = valoresDe(d[k]);
+            const novos = atuais.includes(o) ? atuais.filter((x) => x !== o) : [...atuais, o];
+            return { ...d, [k]: opcoes.filter((x) => novos.includes(x)).join(';') };
+          });
+          return (
+            <>
+              <Text style={s.ajuda}>{marcados.length ? `${marcados.length} ${marcados.length === 1 ? 'escolhido' : 'escolhidos'} · pode marcar mais de um` : 'Pode marcar mais de um'}</Text>
+              <TextInput style={s.input} value={buscaBonus} onChangeText={setBuscaBonus} placeholder="Buscar parceiro" placeholderTextColor="#8B919C" autoCorrect={false} />
+              <ScrollView style={s.lista} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                {visiveis.map((o, i) => {
+                  const marcado = marcados.includes(o);
+                  return (
+                    /* aria-checked direto: o react-native-web 0.21 não traduz accessibilityState.checked */
+                    <Pressable key={o} role="checkbox" aria-checked={marcado} onPress={() => alternar(o)}
+                      style={[s.listaLinha, i > 0 && s.listaLinhaBorda, marcado && s.listaLinhaAtiva]}>
+                      {marcado ? <IconCheckboxChecked width={20} height={20} fill={cores.tintRedText} /> : <IconCheckbox width={20} height={20} fill={cores.muted} />}
+                      <Text style={[s.listaTexto, marcado && s.chipTextoAtivo]}>{o}</Text>
+                    </Pressable>
+                  );
+                })}
+                {!visiveis.length && <Text style={[s.ajuda, { padding: 12 }]}>Nenhum parceiro com esse nome.</Text>}
+              </ScrollView>
+            </>
+          );
+        })() : tipo === 'selecao' && opcoes ? (
           <View style={s.chips}>
             {opcoes.map((o) => (
               <Pressable key={o} accessibilityRole="button" accessibilityState={{ selected: digitado[k] === o }}
@@ -648,6 +686,11 @@ const s = StyleSheet.create({
   chipAtivo: { backgroundColor: 'var(--tint-red)', borderColor: 'var(--tint-red-border)' },
   chipTexto: { fontSize: 13, fontWeight: '700', color: 'var(--text)' },
   chipTextoAtivo: { color: 'var(--tint-red-text)' },
+  lista: { maxHeight: 300, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface)' },
+  listaLinha: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10 },
+  listaLinhaBorda: { borderTopWidth: 1, borderTopColor: 'var(--border-soft)' },
+  listaLinhaAtiva: { backgroundColor: 'var(--tint-red)' },
+  listaTexto: { flex: 1, minWidth: 0, fontSize: 14, color: 'var(--text)' },
   decisorLinha: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   decisorInput: { flexGrow: 1, flexBasis: 160, minWidth: 0 },
   input: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: 'var(--border)', backgroundColor: 'var(--surface)', paddingHorizontal: 12, fontSize: 16, color: 'var(--text)' },
