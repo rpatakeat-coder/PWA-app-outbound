@@ -8,6 +8,8 @@
 // do banco (tabela stage_property_options) via useStagePropertyOptions
 // — o array hardcoded em `options` é só fallback inicial.
 
+import { BONUS_PARCEIRO } from './bonusParceiro';
+
 // Campos comuns a todos os sub-fields. `optional`: nao bloqueia o submit
 // (mas se vier preenchido vai no payload). Default: false (obrigatorio).
 type SubFieldBase = {
@@ -515,6 +517,25 @@ export const STAGES: Stage[] = [
         fieldLabel: 'Stonecode (maquininha Stone)',
         kind: 'text',
         optional: true,
+      },
+      // BÔNUS DE PARCEIRO (18/11/2026). Pergunta Sim/Não; o "qual" só aparece
+      // quando a resposta é Sim — `dependeDe` compara com 'true' porque o
+      // boolean fica como texto no estado do modal (ver `kind: 'boolean'`).
+      {
+        field: 'indicou_bonus_cliente',
+        fieldLabel: 'Indicou bônus para o cliente?',
+        kind: 'boolean',
+      },
+      {
+        // Múltipla escolha no HubSpot ("caixas de seleção"): o array vira
+        // "A;B" na Edge (normalizeProperties), que é o formato que ele aceita.
+        // A lista e de onde ela vem: src/constants/bonusParceiro.ts.
+        field: 'bonus_escolhido',
+        fieldLabel: 'Qual bônus?',
+        kind: 'select',
+        multi: true,
+        dependeDe: { field: 'indicou_bonus_cliente', contemAlgum: ['true'] },
+        options: [...BONUS_PARCEIRO],
       },
       {
         field: 'observacoes',

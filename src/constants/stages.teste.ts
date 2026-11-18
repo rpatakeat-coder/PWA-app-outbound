@@ -28,6 +28,7 @@ const ENUM_NO_HUBSPOT = new Set([
   'qual_maior_desafio_',
   'deseja_criar_perfil_no_asaas_',
   'origem_do_lead',
+  'bonus_escolhido',
   'gargalo_operacional',
   'adquirente',
   'plano_apresentado',
@@ -123,6 +124,21 @@ ok(
 );
 // Se o campo sair da etapa, estes testes passariam em branco.
 ok('o adquirente existe na etapa', daEtapa.some((c) => c.field === 'adquirente'), true);
+
+// --- Onboarding: bônus de parceiro (18/11/2026) ---------------------------------
+// O "Qual bônus?" só aparece quando "Indicou bônus?" é Sim. Exigir o campo com a
+// resposta Não travaria o botão por um campo que nem aparece na tela.
+const onboarding = STAGES.find((s) => s.id === '1396006163')?.subFields ?? [];
+const nomesOnb = (v: Record<string, string | string[] | undefined>) => camposQueSeAplicam(onboarding, v).map((c) => c.field);
+ok('Onboarding pergunta se indicou bônus', onboarding.some((c) => c.field === 'indicou_bonus_cliente' && c.kind === 'boolean'), true);
+ok('sem resposta, "Qual bônus?" não aparece', nomesOnb({}).includes('bonus_escolhido'), false);
+ok('com Não, "Qual bônus?" não aparece', nomesOnb({ indicou_bonus_cliente: 'false' }).includes('bonus_escolhido'), false);
+ok('com Sim, "Qual bônus?" aparece', nomesOnb({ indicou_bonus_cliente: 'true' }).includes('bonus_escolhido'), true);
+const bonus = onboarding.find((c) => c.field === 'bonus_escolhido');
+ok('"Qual bônus?" aceita várias opções', bonus?.kind === 'select' && bonus.multi === true, true);
+ok('a opção de teste desativada no HubSpot fica de fora',
+  bonus?.kind === 'select' && bonus.options.some((o) => /TESTE/i.test(o)), false);
+ok('"Qual bônus?" vem com as 46 opções ativas do HubSpot', bonus?.kind === 'select' ? bonus.options.length : 0, 46);
 
 console.log(falhas === 0 ? '\nTODOS PASSARAM' : `\n${falhas} FALHARAM`);
 if (falhas) throw new Error(`${falhas} verificacao(oes) de etapa falharam`);
