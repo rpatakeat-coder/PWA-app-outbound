@@ -59,7 +59,7 @@ export { proximoDiaUtil };
 export type OpcaoAgora = { id: string; rotulo: string; proximo: Proximo; dias?: number; sub?: string };
 /* As duas que faltavam (Julyan, 14/10/26: "ele pode ter criado na hora e feito a reunião no
    dia"). Vêm primeiro e maiores, com uma linha dizendo o que acontece. */
-const APRESENTEI: OpcaoAgora = { id: 'apresentei', rotulo: 'Apresentei agora', proximo: 'apresentei', sub: 'vai a Demo/Proposta' };
+const APRESENTEI: OpcaoAgora = { id: 'apresentei', rotulo: 'Apresentei agora', proximo: 'apresentei', sub: 'pede plano e MRR' }; // não promete a etapa (17/11/26): faltando campo o HubSpot recusa e a demo não conta
 const REUNIAO_HOJE: OpcaoAgora = { id: 'reuniao0', rotulo: 'Reunião hoje, mais tarde', proximo: 'reuniao', dias: 0, sub: 'só a hora' };
 export const HORAS_REUNIAO_HOJE = ['14:00', '15:00', '16:00', '17:00'] as const;
 /** A hora como se escreve no WhatsApp ("9", "9h", "9:40", "940", "14h30") → "HH:MM"; null se não é hora. A MESMA regra do Planejamento do Cockpit. */
