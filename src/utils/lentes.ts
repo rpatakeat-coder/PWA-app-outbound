@@ -36,8 +36,9 @@ export const LENTES_DA_FILEIRA: Lente[] = LENTES.map((l) => l.id);
 
 /**
  * Entra no mapa nesta lente? (prancha §2, quadro "Lente · Mostra").
- * - Meu dia: o plano + os meus leads com negócio (perdido não) + os meus recém-abertos;
- * - Recém-abertos: os recém-abertos da minha região + o plano;
+ * - Meu dia: o plano + os leads com negócio (perdido não) + os recém-abertos — meus, sem dono
+ *   e, desde 17/11/26, de colega;
+ * - Recém-abertos: os recém-abertos da região (de quem for) + o plano;
  * - Carteira: os meus leads, perdidos inclusive;
  * - Mais avaliados: conta-alvo do Google com nota 4,5+ (de quem for);
  * - Clientes / Em queda: só quem paga (Em queda: só os em queda); Reconquista: ex-clientes;
@@ -65,8 +66,14 @@ export function visivelNaLente(lente: Lente, p: Pino, noPlano: boolean, aberto: 
   /* O GESTOR VÊ O TIME (Julyan, 04/11/26, no mapa de Vitória: "esses leads na área no app não aparecem").
      Quem não tem carteira (gestor e visualizador, `verTodos`) via só os sem dono no Meu dia e nada na
      Carteira: os leads do time inteiro na área ficavam escondidos dele, e o filtro "De colega" era o
-     único caminho. Para o executivo nada muda: colega continua fora. */
-  const meuOuLivre = meu || p.dono === 'sem' || (verTodos && p.dono === 'colega');
+     único caminho. (Em 17/11/26 o executivo passou a ver também; ver abaixo.) */
+  /* O EXECUTIVO VÊ OS PINOS DE TODOS (Julyan, 17/11/26: "o Allef, se for na zona sul de SP, pode ver
+     os leads e marcar visita marcado por outros executivos, todos os pins podem ser vistos"). O
+     "território é território" de 15/10 caiu: o lead de colega entra no Meu dia e nos Recém-abertos
+     de qualquer um, desbotado (PinoP2: 55%) para não se confundir com o meu. Nada mais muda: a
+     visita já era de quem visitou (client_visits.visited_by), o negócio segue do dono e o próximo
+     passo vai para a Agenda dele (FichaDeRua, `donoColega`). A Carteira segue só com os meus —
+     é a "minha carteira"; `verTodos` (gestor e visualizador) continua abrindo a do time. */
   if (lente === 'dia') {
     /* RECICLAGEM VOLTA AO MAPA (Julyan, 29/10: "no mapa preciso dos leads tbm da casa dos dados
        que pararam"). Reciclagem é exatamente "parou": foi trabalhado e esfriou. Eram invisíveis na
@@ -81,7 +88,7 @@ export function visivelNaLente(lente: Lente, p: Pino, noPlano: boolean, aberto: 
     /* EX-CLIENTE SAI DO MEU DIA COMO PINO (Julyan, 03/11/26: "não precisa colocar em Meu dia, quero
        que só fique na lente, que quando aproximarem apareça o pin; de resto, os pontos rosas quase
        invisíveis"). Fora da lente Ex-clientes ele é só o ponto discreto (exDiscreto, no App). */
-    return (meuOuLivre && p.familia === 'lead' && p.temp !== 'X') || (p.familia === 'rec' && (meuOuLivre || verTodos))
+    return (p.familia === 'lead' && p.temp !== 'X') || p.familia === 'rec'
       || p.familia === 'cli' || p.familia === 'av' || p.familia === 'alvo';
   }
   if (p.familia === 'alvo') return false;
@@ -89,8 +96,8 @@ export function visivelNaLente(lente: Lente, p: Pino, noPlano: boolean, aberto: 
     /* RECÉM-ABERTOS = OS MEUS E OS SEM DONO (05/11/26). A lente mostrava só os meus, e o Meu dia mostrava
        também os sem dono: tocar em "Recém-abertos" escondia parte dos recém-abertos que estavam na tela.
        A prancha diz "os recém-abertos da minha região", e o Julyan, em 29/10: "preciso deles no mapa sempre".
-       Colega segue fora (território é território). */
-    case 'novos': return p.familia === 'rec' && (meuOuLivre || verTodos);
+       Desde 17/11/26 entram também os de colega (todos os pinos podem ser vistos). */
+    case 'novos': return p.familia === 'rec';
     case 'carteira': return (meu || (verTodos && p.dono === 'colega')) && p.familia === 'lead';
     case 'alvo': return p.familia === 'av';
     case 'clientes': return p.familia === 'cli';

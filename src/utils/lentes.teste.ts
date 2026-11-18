@@ -56,8 +56,9 @@ ok(novo.familia === 'rec', 'CNPJ novo sem negócio: aparece como recém-aberto')
 ok(novoComNegocio.familia === 'lead' && novoComNegocio.temp === novoQuente.temp, 'CNPJ novo JÁ EM NEGOCIAÇÃO segue lead, com a mesma temperatura de um lead igual sem abertura');
 ok(V('dia', meuQuente) && V('dia', meuFrio), 'Meu dia: meus leads com negócio, de toda temperatura');
 ok(!V('dia', meuPerdido), 'Meu dia: negócio perdido não decide a próxima porta');
-ok(!V('dia', colegaQuente), 'Meu dia: pino de colega não aparece');
-/* 04/11/26: o gestor (verTodos) vê os leads do time no Meu dia e na Carteira; o executivo continua sem */
+/* 17/11/26 (Julyan: "todos os pins podem ser vistos"): o executivo vê o lead de colega no Meu dia */
+ok(V('dia', colegaQuente), 'Meu dia: pino de colega aparece para o executivo');
+/* 04/11/26: o gestor (verTodos) vê os leads do time no Meu dia e na Carteira */
 ok(V('dia', colegaQuente, true) && V('carteira', colegaQuente, true), 'gestor: lead do time aparece no Meu dia e na Carteira');
 ok(!V('carteira', colegaQuente) && !V('dia', meuPerdido, true), 'executivo: Carteira só com os meus; perdido segue fora até para o gestor');
 // 15/10/26 (Julyan: "tirar tudo ficou meio ruim"): o cliente ativo volta ao Meu dia; o ex-cliente segue na Reconquista
@@ -71,7 +72,7 @@ ok(V('dia', cliente), 'Meu dia: cliente ativo aparece');
 ok(!V('dia', exComMotivo), 'Meu dia: ex-cliente COM motivo não é pino — só na lente Ex-clientes');
 ok(!V('dia', ex), 'Meu dia: ex-cliente sem motivo não é pino');
 ok(V('rec', ex) && V('rec', exComMotivo), 'Reconquista mostra os dois: lá a lista é a lista');
-ok(V('dia', novo) && !V('dia', novoColega), 'Meu dia: meus recém-abertos, não os do colega');
+ok(V('dia', novo) && V('dia', novoColega), 'Meu dia: recém-abertos meus e de colega');
 /* SEM DONO TAMBÉM É MAPA (Julyan, 29/10/26). Eram 1.206 leads da Casa dos Dados e 634 do motor do
    Google invisíveis na lente de abertura, por não terem dono. Lead sem dono está na mesa; lead de
    colega não — e é essa diferença que estas quatro checagens seguram. */
@@ -80,7 +81,8 @@ const novoSemDono = P({ lead_prospeccao_id: 'lp-novo', conta_alvo_place_id: 'm',
 ok(semDono.dono === 'sem' && novoSemDono.dono === 'sem', 'sem vendedor, o pino é "sem dono"');
 ok(V('dia', semDono), 'Meu dia: lead sem dono (Casa dos Dados) aparece — está na mesa para quem chegar');
 ok(V('dia', novoSemDono), 'Meu dia: recém-aberto sem dono aparece');
-ok(!V('dia', colegaQuente) && !V('dia', novoColega), 'Meu dia: o que é do colega continua fora — território é território');
+ok(!V('dia', P({ etapa: 'Perdido', vendedor_id_hubspot: '2' })), 'Meu dia: perdido de colega segue fora, como o meu');
+ok(colegaQuente.dono === 'colega' && pontoDe(colegaQuente).opacidade === 0.55, 'o pino de colega aparece, mas desbotado: não se confunde com o meu');
 /* "PRECISO DOS LEADS DA CASA DOS DADOS QUE PARARAM" (Julyan, 29/10). Reciclagem é o que parou:
    foi trabalhado e esfriou. São 189 com pino na base inteira — não enche mapa — e é o caso do
    Paladare, achado na rua em Reciclagem. Perdido continua fora, e a checagem de baixo é só isso. */
@@ -93,7 +95,7 @@ ok(V('dia', avaliado) && V('dia', velho) && contaAlvoDiscreta('dia', avaliado) &
 ok(!contaAlvoDiscreta('alvo', avaliado) && contaAlvoDiscreta('alvo', velho) && !contaAlvoDiscreta('dia', novo) && !contaAlvoDiscreta('dia', cliente), 'discreta: na lente Mais avaliados o avaliado é pino inteiro; recém-aberto e cliente nunca');
 ok(!V('novos', velho) && !V('clientes', velho), 'conta-alvo antiga fora das outras lentes');
 ok(visivelNaLente('dia', cliente, true, false) && visivelNaLente('dia', velho, false, true), 'qualquer lente: o plano e o pino aberto aparecem');
-ok(V('novos', novo) && !V('novos', meuQuente) && !V('novos', novoColega), 'Recém-abertos: os meus, sem os de colega');
+ok(V('novos', novo) && !V('novos', meuQuente) && V('novos', novoColega), 'Recém-abertos: os meus e os de colega; lead comum não');
 
 ok(V('novos', novoSemDono) && V('dia', novoSemDono), 'Recém-abertos: o sem dono aparece na lente, como no Meu dia (05/11/26)');
 ok(V('novos', novoColega, true), 'Recém-abertos do gestor: os de todo mundo');
