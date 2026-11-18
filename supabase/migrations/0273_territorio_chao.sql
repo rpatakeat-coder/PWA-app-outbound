@@ -85,7 +85,7 @@ $$
      where kb <> ''
      group by 1, 2, 3
   ), fora as (
-    select pk, jsonb_build_object('cli', sum(cli) filter (where kb = ''), 'base', sum(base) filter (where kb = ''), 'ex', sum(ex) filter (where kb = ''),
+    select pk, jsonb_build_object('cli', sum(cli) filter (where kb = ''), 'queda', sum(queda) filter (where kb = ''), 'base', sum(base) filter (where kb = ''), 'ex', sum(ex) filter (where kb = ''),
                                   'sem', count(*) filter (where kb = ''), 'total', count(*)) as j
       from u group by 1
   )
