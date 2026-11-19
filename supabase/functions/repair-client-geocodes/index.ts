@@ -34,6 +34,17 @@
 //    Nominatim/OSM, que é de graça. Medido numa amostra de 20 empilhados: 55%
 //    de acerto, o que aplicado aos 602 elegíveis recupera da ordem de 330 pinos
 //    sem custo nenhum. Os demais seguem esperando uma decisão que custa.
+//
+// 4. O BLOQUEIO VIRAVA "NÃO ACHEI" (19/11/26). O Nominatim passou a responder
+//    403 a todo pedido vindo dos servidores do Supabase (de casa responde 200).
+//    O fetchJson devolvia null para qualquer erro, e o laço gravava
+//    geocode_not_found — de 27/10 a 19/11 foram ~490 tentativas, ZERO reparos,
+//    e cada uma tirava o cliente da fila por 7 dias como se o endereço fosse
+//    ruim. Agora: (a) o Photon (komoot, também OSM e grátis) é o primeiro
+//    provedor — numa amostra de 20 pinos de centro de cidade nas praças do
+//    Field acertou a porta em 14 e a rua em 5 (Nominatim, de casa: 13 e 3);
+//    (b) erro de rede/HTTP do provedor é provedor_indisponivel: NÃO grava
+//    tentativa (o cliente segue na fila) e três seguidos interrompem a rodada.
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
@@ -56,19 +67,62 @@ const clean = (value: unknown): string | null => { if (value === null || value =
 const digits = (value: unknown): string => String(value ?? '').replace(/\D/g, '');
 const cepIsGeneric = (cep: unknown): boolean => digits(cep).endsWith('000');
 
+/** Quantos pedidos a provedor falharam (HTTP não-2xx, timeout, rede) desde o último zerar.
+ *  É o que separa "o endereço não existe" de "o provedor não respondeu". */
+let falhasDoProvedor = 0;
+
 async function fetchJson(url: string): Promise<any | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' }, signal: ctrl.signal });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      falhasDoProvedor++;
+      console.warn('[repair-client-geocodes] provedor respondeu', res.status, url.split('?')[0]);
+      return null;
+    }
     return await res.json();
   } catch (error) {
-    console.warn('[repair-client-geocodes] fetch failed', url, error);
+    falhasDoProvedor++;
+    console.warn('[repair-client-geocodes] fetch failed', url.split('?')[0], error);
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+const semAcento = (v: unknown) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+
+/* PHOTON (photon.komoot.io): geocodificador gratuito sobre o mesmo mapa do OSM.
+   Só aceita resultado na MESMA cidade do cadastro — sem isso, "Rua Santos Dumont 1500"
+   acharia a de outra cidade com toda a confiança. */
+function nivelPhoton(p: any): 'porta' | 'rua' | 'impreciso' {
+  const tipo = String(p?.type ?? '').toLowerCase();
+  const chave = String(p?.osm_key ?? '').toLowerCase();
+  if (p?.housenumber || tipo === 'house') return 'porta';
+  if (['amenity', 'shop', 'office', 'building', 'tourism', 'leisure', 'craft', 'healthcare'].includes(chave)) return 'porta';
+  if (tipo === 'street' || chave === 'highway') return 'rua';
+  return 'impreciso';
+}
+
+async function geocodePhoton(row: ClientRow, cepInfo: CepInfo | null) {
+  const logradouro = clean(row.endereco) ?? cepInfo?.logradouro ?? null;
+  const numero = normalizeHouseNumber(clean(row.numero));
+  const cidade = clean(row.cidade) ?? cepInfo?.cidade ?? null;
+  const estado = clean(row.estado) ?? cepInfo?.estado ?? null;
+  if (!logradouro || !cidade || !estado) return null;
+  const q = [[logradouro, numero].filter(Boolean).join(' '), cidade, estado].join(', ');
+  const data = await fetchJson('https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&limit=5&lang=default&bbox=-74,-34,-34,6');
+  const feats = Array.isArray(data?.features) ? data.features : [];
+  const naCidade = feats.filter((f: any) => semAcento(f?.properties?.city ?? f?.properties?.county) === semAcento(cidade));
+  const escolhido = naCidade.find((f: any) => nivelPhoton(f.properties) === 'porta')
+    ?? naCidade.find((f: any) => nivelPhoton(f.properties) === 'rua')
+    ?? naCidade[0];
+  if (!escolhido) return null;
+  const [lon, lat] = escolhido.geometry?.coordinates ?? [];
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const p = escolhido.properties ?? {};
+  return { lat, lon, nivel: nivelPhoton(p), rawType: 'photon:' + (p.osm_key ?? '?') + '/' + (p.type ?? p.osm_value ?? '?'), fonte: 'photon' };
 }
 
 async function lookupCep(cep: string | null): Promise<CepInfo | null> {
@@ -124,7 +178,7 @@ function lerAcerto(hit: any) {
   const lon = Number.parseFloat(hit?.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   const nivel = nivelDoAcerto(hit);
-  return { lat, lon, nivel, rawType: String(hit?.addresstype ?? hit?.type ?? 'unknown') };
+  return { lat, lon, nivel, rawType: String(hit?.addresstype ?? hit?.type ?? 'unknown'), fonte: 'nominatim' };
 }
 
 function melhorAcerto(data: any) {
@@ -228,7 +282,9 @@ Deno.serve(async (req: Request) => {
   const candidates = naFila.slice(offset, offset + limit);
 
   const repaired: unknown[] = [];
-  const skipped: unknown[] = [];
+  const skipped: any[] = [];
+  let indisponivelSeguidos = 0;
+  let interrompido: string | null = null;
 
   for (let index = 0; index < candidates.length; index++) {
     const row = candidates[index];
@@ -238,8 +294,20 @@ Deno.serve(async (req: Request) => {
       skipped.push({ id: row.id, reason: 'insufficient_address' });
       if (!dryRun) await recordAttempt(supabase, row, 'skipped', 'insufficient_address');
     } else {
-      const result = (await geocodeStructured(row, cepInfo)) ?? (await geocode(address.query));
-      if (!result) {
+      falhasDoProvedor = 0;
+      // Photon primeiro; se não acertar a porta, o Nominatim tenta melhorar. Fica o melhor nível.
+      const rank: Record<string, number> = { porta: 0, rua: 1, impreciso: 2 };
+      let result: any = await geocodePhoton(row, cepInfo);
+      if (!result || result.nivel !== 'porta') {
+        const nom = (await geocodeStructured(row, cepInfo)) ?? (await geocode(address.query));
+        if (nom && (!result || rank[nom.nivel] < rank[result.nivel])) result = nom;
+      }
+      if (!result && falhasDoProvedor > 0) {
+        // NÃO É "NÃO ACHEI": algum provedor não respondeu. Não grava tentativa — o cliente segue na fila.
+        skipped.push({ id: row.id, reason: 'provedor_indisponivel', falhas: falhasDoProvedor, query: address.query });
+        indisponivelSeguidos++;
+        if (indisponivelSeguidos >= 3) { interrompido = 'provedor_indisponivel'; break; }
+      } else if (!result) {
         skipped.push({ id: row.id, reason: 'geocode_not_found', query: address.query });
         if (!dryRun) await recordAttempt(supabase, row, 'skipped', 'geocode_not_found', address.query);
       } else if (result.nivel === 'impreciso') {
@@ -248,7 +316,7 @@ Deno.serve(async (req: Request) => {
       } else {
         // O FLAG SEGUE O NÍVEL: rua é reparo aproximado, não reparo preciso.
         const aproximado = result.nivel === 'rua';
-        const updateFields: Record<string, unknown> = { latitude: result.lat, longitude: result.lon, geo_source: 'nominatim', geo_approximate: aproximado, updated_at: new Date().toISOString() };
+        const updateFields: Record<string, unknown> = { latitude: result.lat, longitude: result.lon, geo_source: result.fonte, geo_approximate: aproximado, updated_at: new Date().toISOString() };
         if (!clean(row.endereco) && address.logradouro) updateFields.endereco = address.logradouro;
         if (!clean(row.bairro) && address.bairro) updateFields.bairro = address.bairro;
         if (!clean(row.cidade) && address.cidade) updateFields.cidade = address.cidade;
@@ -259,17 +327,19 @@ Deno.serve(async (req: Request) => {
             skipped.push({ id: row.id, reason: 'update_failed', error: updateError.message });
             await recordAttempt(supabase, row, 'failed', 'update_failed', address.query, updateError.message);
           } else {
-            repaired.push({ id: row.id, nome: row.nome, from: [row.latitude, row.longitude], to: [result.lat, result.lon], nivel: result.nivel, aproximado, query: address.query });
+            repaired.push({ id: row.id, nome: row.nome, from: [row.latitude, row.longitude], to: [result.lat, result.lon], nivel: result.nivel, fonte: result.fonte, aproximado, query: address.query });
             await recordAttempt(supabase, row, 'repaired', `nivel:${result.nivel}`, address.query);
           }
-        } else repaired.push({ id: row.id, nome: row.nome, from: [row.latitude, row.longitude], to: [result.lat, result.lon], nivel: result.nivel, aproximado, query: address.query, dry_run: true });
+        } else repaired.push({ id: row.id, nome: row.nome, from: [row.latitude, row.longitude], to: [result.lat, result.lon], nivel: result.nivel, fonte: result.fonte, aproximado, query: address.query, dry_run: true });
       }
     }
+    const ultimo = skipped[skipped.length - 1];
+    if (!ultimo || ultimo.id !== row.id || ultimo.reason !== 'provedor_indisponivel') indisponivelSeguidos = 0;
     if (index < candidates.length - 1) await sleep(THROTTLE_MS);
   }
 
   return json(200, {
-    ok: true, dry_run: dryRun, offset,
+    ok: true, dry_run: dryRun, offset, interrompido,
     // A varredura agora é auditável: quantas páginas, quantas elegíveis e quantas de fato na fila.
     varredura: { paginas, lidas: rows.length, elegiveis: elegiveis.length, na_fila: naFila.length },
     selected: candidates.length, repaired_count: repaired.length, skipped_count: skipped.length, repaired, skipped,
