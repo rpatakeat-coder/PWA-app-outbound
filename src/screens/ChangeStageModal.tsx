@@ -42,6 +42,8 @@ import { AJUDA_MOTIVO, MAX_O_QUE_PESOU, MOTIVOS_PERDIDO, MOTIVOS_QUE_EXIGEM_TEXT
 // que vai em sub_values.observacao__desqualificado — a change_stage repassa sub_values ao HubSpot.
 const OPCOES_MOTIVO = MOTIVOS_PERDIDO.map((m) => ({ value: m.valor, label: m.rotulo }));
 const PESOU = 'observacao__desqualificado';
+// Rótulos do perfil_do_cliente no HubSpot (P 🟢, M 🟡…), sem os emojis — o app não usa emoji.
+const ROTULO_TAMANHO: Record<string, string> = { lead_low: 'P', lead_mid: 'M', lead_high: 'G', GG: 'GG', Isento: 'Isento', Revendedor: 'Revendedor' };
 import { IconCheck as SiCheck } from '../components/icons';
 
 interface Props {
@@ -1045,6 +1047,30 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
                                     />
                                   </View>
                                 )}
+                              </View>
+                            );
+                          }
+                          // TAMANHO DO CLIENTE (19/11/26, Julyan): o banco guarda o valor interno
+                          // (lead_low…) sem rótulo, e o executivo via "lead_low" na tela. O robô do
+                          // HubSpot preenche pelo MRR, e na Black Friday o MRR é metade — por isso
+                          // o aviso: escolher pelo tamanho real, não pelo valor com desconto.
+                          if (sf.field === 'perfil_do_cliente') {
+                            const opts = (dbGroup?.options ?? sf.options.map((o) => ({ value: o, label: o })))
+                              .map((o) => ({ value: o.value, label: ROTULO_TAMANHO[o.value] ?? o.label }));
+                            return (
+                              <View key={sf.field}>
+                                <SelectField
+                                  subField={sf}
+                                  value={subValues[sf.field] ?? ''}
+                                  onChange={(v) => setSubValue(sf.field, v)}
+                                  color={stage.color}
+                                  disabled={submitting}
+                                  dbOptions={opts}
+                                  dbLabel="Tamanho do cliente"
+                                />
+                                <Text style={[styles.subOptionsLabel, { marginTop: -4, fontWeight: '500' }]}>
+                                  Escolha pelo tamanho real do cliente. Na Black Friday (semestral −50%) o MRR é metade: não use o valor com desconto.
+                                </Text>
                               </View>
                             );
                           }
