@@ -115,14 +115,15 @@ async function geocodePhoton(row: ClientRow, cepInfo: CepInfo | null) {
   const data = await fetchJson('https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&limit=5&lang=default&bbox=-74,-34,-34,6');
   const feats = Array.isArray(data?.features) ? data.features : [];
   const naCidade = feats.filter((f: any) => semAcento(f?.properties?.city ?? f?.properties?.county) === semAcento(cidade));
-  const escolhido = naCidade.find((f: any) => nivelPhoton(f.properties) === 'porta')
-    ?? naCidade.find((f: any) => nivelPhoton(f.properties) === 'rua')
+  const nv = (f: any) => nivelConferido(nivelPhoton(f.properties), f.properties?.housenumber, numero);
+  const escolhido = naCidade.find((f: any) => nv(f) === 'porta')
+    ?? naCidade.find((f: any) => nv(f) === 'rua')
     ?? naCidade[0];
   if (!escolhido) return null;
   const [lon, lat] = escolhido.geometry?.coordinates ?? [];
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   const p = escolhido.properties ?? {};
-  return { lat, lon, nivel: nivelPhoton(p), rawType: 'photon:' + (p.osm_key ?? '?') + '/' + (p.type ?? p.osm_value ?? '?'), fonte: 'photon' };
+  return { lat, lon, nivel: nv(escolhido), rawType: 'photon:' + (p.osm_key ?? '?') + '/' + (p.type ?? p.osm_value ?? '?'), fonte: 'photon' };
 }
 
 async function lookupCep(cep: string | null): Promise<CepInfo | null> {
@@ -173,6 +174,15 @@ function nivelDoAcerto(hit: any): 'porta' | 'rua' | 'impreciso' {
   return 'rua';
 }
 
+/* Porta só com o número conferido (auditoria de 19/11): o provedor às vezes devolve o vizinho.
+   Número diferente, ou estabelecimento sem número, vale RUA. Mesma regra de
+   cockpit-unificado/scripts/reparar-pinos.js (nivelConferido). */
+function nivelConferido(nivel: 'porta' | 'rua' | 'impreciso', devolvido: unknown, pedido: string | null): 'porta' | 'rua' | 'impreciso' {
+  if (nivel !== 'porta') return nivel;
+  if (!pedido) return 'rua';
+  return normalizeHouseNumber(devolvido == null ? null : String(devolvido)) === pedido ? 'porta' : 'rua';
+}
+
 function lerAcerto(hit: any) {
   const lat = Number.parseFloat(hit?.lat);
   const lon = Number.parseFloat(hit?.lon);
@@ -181,12 +191,13 @@ function lerAcerto(hit: any) {
   return { lat, lon, nivel, rawType: String(hit?.addresstype ?? hit?.type ?? 'unknown'), fonte: 'nominatim' };
 }
 
-function melhorAcerto(data: any) {
+function melhorAcerto(data: any, numeroPedido: string | null = null) {
   if (!Array.isArray(data) || data.length === 0) return null;
+  const nv = (h: any) => nivelConferido(nivelDoAcerto(h), h?.address?.house_number, numeroPedido);
   // Porta primeiro, rua depois; nunca um impreciso quando há algo melhor na lista.
-  const porta = data.find((h: any) => nivelDoAcerto(h) === 'porta');
-  const rua = data.find((h: any) => nivelDoAcerto(h) === 'rua');
-  return lerAcerto(porta ?? rua ?? data[0]);
+  const escolhido = data.find((h: any) => nv(h) === 'porta') ?? data.find((h: any) => nv(h) === 'rua') ?? data[0];
+  const acerto = lerAcerto(escolhido);
+  return acerto ? { ...acerto, nivel: nv(escolhido) } : null;
 }
 
 async function geocode(query: string) {
@@ -203,7 +214,7 @@ async function geocodeStructured(row: ClientRow, cepInfo: CepInfo | null) {
   if (!logradouro || !cidade || !estado) return null;
   const params = new URLSearchParams({ street: [numero, logradouro].filter(Boolean).join(' '), city: cidade, state: estado, country: 'Brasil', format: 'jsonv2', addressdetails: '1', limit: '3', countrycodes: 'br' });
   if (cep) params.set('postalcode', cep);
-  return melhorAcerto(await fetchJson(`https://nominatim.openstreetmap.org/search?${params.toString()}`));
+  return melhorAcerto(await fetchJson(`https://nominatim.openstreetmap.org/search?${params.toString()}`), numero);
 }
 
 async function recordAttempt(supabase: any, row: ClientRow, status: 'repaired' | 'skipped' | 'failed', reason?: string, query?: string, error?: string) {
