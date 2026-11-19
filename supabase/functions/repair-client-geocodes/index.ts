@@ -105,6 +105,16 @@ function nivelPhoton(p: any): 'porta' | 'rua' | 'impreciso' {
   return 'impreciso';
 }
 
+/* O NÚMERO MUITAS VEZES ESTÁ DENTRO DO ENDEREÇO ("AVENIDA DAS AMERICAS, 00500") com o campo número
+   vazio — 819 dos 1.757 aproximados em 19/11. Sem separar, o provedor devolve o meio da avenida.
+   Mesma regra de cockpit-unificado/scripts/reparar-pinos.js (separarNumero). Só para geocodificar:
+   o endereço gravado no banco não muda. */
+function separarNumeroDoEndereco(row: ClientRow): ClientRow {
+  if (normalizeHouseNumber(clean(row.numero)) || !clean(row.endereco)) return row;
+  const m = String(row.endereco).match(/^(.*?),\s*(\d+)\s*[A-Za-z]?\s*$/);
+  return m ? { ...row, endereco: m[1].trim(), numero: m[2] } : row;
+}
+
 async function geocodePhoton(row: ClientRow, cepInfo: CepInfo | null) {
   const logradouro = clean(row.endereco) ?? cepInfo?.logradouro ?? null;
   const numero = normalizeHouseNumber(clean(row.numero));
@@ -298,7 +308,7 @@ Deno.serve(async (req: Request) => {
   let interrompido: string | null = null;
 
   for (let index = 0; index < candidates.length; index++) {
-    const row = candidates[index];
+    const row = separarNumeroDoEndereco(candidates[index]);
     const cepInfo = await lookupCep(row.cep);
     const address = buildAddress(row, cepInfo);
     if (!address.query) {
