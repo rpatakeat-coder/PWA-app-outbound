@@ -236,6 +236,22 @@ Deno.serve(async (request) => {
   const escreve = ROTAS_QUE_ESCREVEM.has(rota);
   const pedido = escreve ? await request.clone().text().catch(() => '') : '';
   const resp = await executar(carregar('api/' + rota + '.js'), request, url);
+  // RECUSA COM MOTIVO NO LOG (auditoria de 20/11/26). Em 19/11 houve 6 x 403, 1 x 409 e 2 x 400 no
+  // negocio-acao e o log só tinha "booted/shutdown": não dava para separar a trava certa ("não é
+  // seu", "já mudou de etapa antes de você") de um defeito. Agora toda escrita recusada deixa uma
+  // linha com a rota, o status, a ação, o negócio, a etapa pedida e o motivo que a tela recebeu.
+  // Sem nome nem e-mail: o usuário já está no próprio log da Edge (request.sb.auth_user).
+  if (escreve && !resp.ok) {
+    let pedidoJson: any = {};
+    try { pedidoJson = JSON.parse(pedido || '{}'); } catch { /* corpo não-JSON */ }
+    let motivo = '';
+    try { motivo = String((await resp.clone().json())?.erro ?? ''); } catch { /* sem corpo */ }
+    console.warn('[cockpit-api] recusa ' + JSON.stringify({
+      rota, status: resp.status, op: pedidoJson?.op ?? null,
+      dealId: pedidoJson?.dealId ?? pedidoJson?.id_hubspot ?? pedidoJson?.deal_id ?? null,
+      etapa: pedidoJson?.novaEtapa ?? null, motivo: motivo.slice(0, 200),
+    }));
+  }
   if (escreve && resp.ok) {
     let corpo: any = {};
     try { corpo = JSON.parse(pedido || '{}'); } catch { /* corpo não-JSON */ }
