@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@9931f22c.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@7fc6bd68.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "9931f22c";
+  var VERSAO = "7fc6bd68";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -12603,7 +12603,25 @@ async function iniciarAuth() {
     return;
   }
 
-  supa = window.supabase.createClient(DATA.supabase.url, DATA.supabase.anonKey);
+  async function fetchQueEsperaOLogin(entrada, opcoes) {
+    const resp = await fetch(entrada, opcoes);
+    if (resp.status !== 401) return resp;
+    const url = typeof entrada === 'string' ? entrada : (entrada && entrada.url) || '';
+    if (!/\/(rest|functions)\/v1\//.test(url)) return resp;
+    const cab = new Headers((opcoes && opcoes.headers) || {});
+    if (cab.get('Authorization') !== 'Bearer ' + DATA.supabase.anonKey) return resp;
+    for (const espera of [1000, 3000]) {
+      await new Promise((r) => setTimeout(r, espera));
+      const { data } = await supa.auth.getSession();
+      const token = data && data.session && data.session.access_token;
+      if (token) {
+        cab.set('Authorization', 'Bearer ' + token);
+        return fetch(entrada, Object.assign({}, opcoes, { headers: cab }));
+      }
+    }
+    return resp;
+  }
+  supa = window.supabase.createClient(DATA.supabase.url, DATA.supabase.anonKey, { global: { fetch: fetchQueEsperaOLogin } });
 
   let emRecuperacaoDeSenha = /[?&#]type=recovery/.test(window.location.href);
 
