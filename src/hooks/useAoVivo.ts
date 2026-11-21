@@ -37,7 +37,7 @@ export const INVALIDA_POR_TIPO: Record<string, string[][]> = {
   // + Desempenho e ranking (auditoria 16/10/26): a visita provada muda o placar e eles ficavam velhos
   // + o Desenvolvimento v2 (01/11/26): o check-in fecha a sequência, a missão e a medalha (o toast)
   // + o Hoje v3 (01/11/26): a prova de cada parada, a pílula e o fecho
-  visita: [['meu_dia'], ['minha_daily'], ['client_visits'], ['novos-visitados-semana'], ['meu_desempenho'], ['vizinhos_no_ranking'], ['ranking_executivo'], ['fila_tarefas'], ['desenvolvimento_quadro'], ['dia_v3']],
+  visita: [['meu_dia'], ['minha_daily'], ['client_visits'], ['novos-visitados-semana'], ['ranking_executivo'], ['fila_tarefas'], ['desenvolvimento_quadro'], ['dia_v3']],
   foto: [['client_visits'], ['desenvolvimento_quadro']],
   // a ficha na hora fecha a missão "Registro na hora"
   ficha: [['meu_dia'], ['desenvolvimento_quadro']],
@@ -73,7 +73,7 @@ export const INVALIDA_POR_TIPO: Record<string, string[][]> = {
 const SEM_DONO_VALE = new Set(['comunicado', 'pino', 'pino-novo', 'negocio']);
 /** O que descreve só quem está logado: o sinal de outra pessoa não o torna velho. */
 export const CHAVES_PESSOAIS = new Set([
-  'meu_dia', 'minha_daily', 'meu_desempenho', 'fila_tarefas', 'desenvolvimento_quadro', 'dia_v3', 'meu_pdi',
+  'meu_dia', 'minha_daily', 'fila_tarefas', 'desenvolvimento_quadro', 'dia_v3', 'meu_pdi',
   'cobrancas_nao_vistas', 'avisos_gestor|recados', 'tarefas_crm',
 ]);
 /** O sinal é de outra pessoa (ou sem dono, de algo que não é de todos): só relê o que não é pessoal. */

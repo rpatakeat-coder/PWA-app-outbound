@@ -273,7 +273,7 @@ const ChangeStageModal = React.lazy(() => import('./src/screens/ChangeStageModal
 const RotaScreen = React.lazy(() => import('./src/screens/RotaScreen').then((m) => ({ default: m.RotaScreen })));
 const FilaTarefasScreen = React.lazy(() => import('./src/screens/FilaTarefasScreen'));
 const AgendaNovoScreen = React.lazy(() => import('./src/screens/AgendaNovoScreen'));
-const MeuDesempenhoScreen = React.lazy(() => import('./src/screens/MeuDesempenhoScreen').then((m) => ({ default: m.MeuDesempenhoScreen })));
+const MeuDesempenhoScreen = React.lazy(() => import('./src/screens/MeuDesempenhoV2').then((m) => ({ default: m.MeuDesempenhoV2Screen })));
 /** Enquanto o arquivo da tela chega (do cache do service worker, quase sempre). */
 const CarregandoTela = () => (
   <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color="var(--text-muted)" /></View>
@@ -6166,10 +6166,8 @@ function MainApp() {
       });
       // O "x/6" da pílula e o Meu dia contam check-ins reais: atualiza na hora.
       void queryClient.invalidateQueries({ queryKey: ['meu_dia'] });
-      // auditoria 16/10/26: o Desempenho ("0 de 6" logo depois do check-in) e a fila (o cartão
-      // "visita sem registro" e o selo) ficavam velhos até 60 s; a fila só por check-in MEU (relê o HubSpot)
-      void queryClient.invalidateQueries({ queryKey: ['meu_desempenho'] });
-      void queryClient.invalidateQueries({ queryKey: ['vizinhos_no_ranking'] });
+      // auditoria 16/10/26: a fila (o cartão "visita sem registro" e o selo) ficava velha até 60 s;
+      // a fila só por check-in MEU (relê o HubSpot)
       void queryClient.invalidateQueries({ queryKey: ['fila_tarefas'] });
       void queryClient.invalidateQueries({ queryKey: ['feito_no_dia'] });
       void queryClient.invalidateQueries({ queryKey: ['preparo'] });
@@ -9326,9 +9324,6 @@ function MainApp() {
             { chave: 'hubspot', rotulo: 'HubSpot', sub: 'negócios, tarefas e contatos', aoTocar: () => { void Linking.openURL(LINK_FORA.hubspot); } },
             { chave: 'perfil', rotulo: 'Ajustes e sair', sub: 'foto, configurações e sair da conta', aoTocar: () => setPerfilAberto(true) },
           ]}
-          tarefasPendentes={totalDaFila ?? undefined}
-          aoAbrirTarefas={() => setTab('tasks')}
-          ehGestor={canViewGestor}
           origem={aberturaEu.origem}
           rolarColecao={aberturaEu.rolar}
           aoFazerQuiz={() => setTab('playbook')}

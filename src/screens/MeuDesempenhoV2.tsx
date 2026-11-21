@@ -9,8 +9,8 @@
 // supabase/functions/_compartilhado/desenvolvimentoV2.ts — o mesmo texto que o Cockpit mostra na aba
 // Desenvolvimento (DV2, testado com a mesma fixture). Aqui só mora o layout.
 //
-// Saíram desta aba (README §1): os 5 números do Hoje (continuam no Hoje) e os blocos de cobrança; o
-// v1 continua inteiro em MeuDesempenhoScreen e volta com localStorage['meu-desempenho-v1'] = '1'.
+// Saíram desta aba (README §1): os 5 números do Hoje (continuam no Hoje) e os blocos de cobrança.
+// A v1 (meu_desempenho/vizinhos_no_ranking e o cartão de habilidade) saiu em 20/11/26.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
