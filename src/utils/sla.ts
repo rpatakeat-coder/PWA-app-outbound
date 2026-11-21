@@ -1,9 +1,8 @@
 import type { Client } from '../types/client';
 
 // SLA estourado (regra do MD REGRA_SLA_ESTOURADO.md) — versão client-side pra
-// mostrar o status no card do lead. MESMOS números da RPC sla_estourado_candidates
-// (mantê-los em sincronia; quando o painel de config do gestor existir, os dois
-// passam a ler de lá). diasParado = hoje − max(entrada na etapa, última
+// mostrar o status no card do lead. É a única cópia da regra desde 20/11/26 (a RPC
+// sla_estourado_candidates saiu na 0275). diasParado = hoje − max(entrada na etapa, última
 // atividade humana, criação); breach = diasParado > SLA_da_etapa.
 
 // SLA por etapa (dias). Defaults do MD; podem vir da route_config (gestor edita).
