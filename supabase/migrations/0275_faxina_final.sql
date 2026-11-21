@@ -51,7 +51,10 @@ begin
     'public.generate_client_tasks()'::regprocedure,
     'public.business_days_between(timestamp with time zone,timestamp with time zone)'::regprocedure,
     'public.add_business_days(timestamp with time zone,integer)'::regprocedure,
-    'public.invoke_geocode_repair_cron()'::regprocedure
+    'public.invoke_geocode_repair_cron()'::regprocedure,
+    'public.sla_estourado_candidates(text,integer)'::regprocedure,
+    'public.dias_uteis_entre(timestamp with time zone,timestamp with time zone)'::regprocedure,
+    'public.vizinhos_no_ranking(text)'::regprocedure
   ] loop
     insert into arquivo.copias (origem, conteudo)
     values ('funcao:' || f::text, to_jsonb(pg_get_functiondef(f)))
@@ -75,6 +78,9 @@ drop function public.anterior_dia_util(date);          -- só a de cima usava
 drop function public.generate_client_tasks();          -- sem cron; última tarefa em 05/11
 drop function public.business_days_between(timestamptz, timestamptz); -- só a de cima usava
 drop function public.add_business_days(timestamptz, integer);         -- idem
+drop function public.sla_estourado_candidates(text, integer); -- o app parou de chamar (faxina do app)
+drop function public.dias_uteis_entre(timestamptz, timestamptz); -- só a de cima usava
+drop function public.vizinhos_no_ranking(text);        -- só o Eu v1 lia; saiu na faxina do app
 
 -- 4. Tabelas sem leitor -----------------------------------------------------------
 drop table public.import_logs;                         -- antes do arquivo.import_batches (FK)
