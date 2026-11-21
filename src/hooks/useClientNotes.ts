@@ -4,14 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import type { ClientNote } from '../types/client';
 import { sendHubspotEvent } from '../utils/hubspotSync';
 
-// Postgres code 42P01 = relation does not exist. Antes da migration
-// 0013_client_notes.sql
-// rodar, a tabela client_notes nao existe — tratamos como "sem notas" pra
-// nao quebrar o bottom sheet em prod nesse intervalo.
-const isMissingTableError = (err: any) =>
-  err?.code === '42P01' ||
-  /relation .* does not exist/i.test(err?.message ?? '');
-
 export function useClientNotes(clientId: string | null | undefined) {
   const queryClient = useQueryClient();
   const { user, profile, isAuthenticated } = useAuth();
@@ -25,10 +17,7 @@ export function useClientNotes(clientId: string | null | undefined) {
         .select('*')
         .eq('client_id', clientId)
         .order('created_at', { ascending: false });
-      if (error) {
-        if (isMissingTableError(error)) return [];
-        throw error;
-      }
+      if (error) throw error;
       return (data ?? []) as ClientNote[];
     },
     enabled: isAuthenticated && !!clientId,

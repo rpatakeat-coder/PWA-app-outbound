@@ -19,9 +19,7 @@ export type TipoEvento = 'primeiro_toque' | 'fala_aberta' | 'halo_sugerido' | 'h
   | 'plano_proposto' | 'plano_confirmado' | 'plano_ignorado'
   /* O MAPA NA RUA (prancha "Mapa na rua", 02/11/26). Em 2 semanas: % de sessões com toque na Lista,
      toques em pino N3 (se caírem muito, o N3 está quieto demais) e tempo do mapa aberto ao 1º Ir ou
-     Cheguei (primeiro_toque). ATENÇÃO: o CHECK de eventos_do_mapa.tipo ainda não aceita estes cinco
-     (precisa de migração que amplie a lista); até lá o insert é recusado e o evento se perde em
-     silêncio, como manda a regra acima — nada trava.
+     Cheguei (primeiro_toque). O CHECK de eventos_do_mapa.tipo aceita os cinco desde a migração 0246.
      - mapa_render {zoom, modo, n2_nomes, n3_pinos, rotulos_descartados, n1, n1_rotulo, largura, fonte}
      - pino_toque {nivel, familia}
      - pilha_abrir {n}

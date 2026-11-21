@@ -19,9 +19,6 @@ export type ComunicadoNaoLido = {
   autor: string | null;
 };
 
-/** PostgREST: tabela ausente do schema cache. */
-const TABELA_AUSENTE = 'PGRST205';
-
 export function useComunicadosNaoLidos(enabled: boolean) {
   const qc = useQueryClient();
 
@@ -57,15 +54,9 @@ export function useComunicadosNaoLidos(enabled: boolean) {
           .select('comunicado_id')
           .eq('leitor_id', meuId),
       ]);
-      if (publicados.error) {
-        if (publicados.error.code === TABELA_AUSENTE) return [];
-        throw publicados.error;
-      }
+      if (publicados.error) throw publicados.error;
 
-      if (lidos.error) {
-        if (lidos.error.code === TABELA_AUSENTE) return [];
-        throw lidos.error;
-      }
+      if (lidos.error) throw lidos.error;
       const jaLi = new Set((lidos.data ?? []).map((l) => l.comunicado_id as string));
 
       return (publicados.data ?? [])

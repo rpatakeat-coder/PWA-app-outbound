@@ -80,13 +80,7 @@ export function MinhaDailyCard({ enabled }: { enabled: boolean }) {
 
   const salvar = (n: number) => {
     prometer.mutate(n, {
-      onError: (e: any) =>
-        Alert.alert(
-          'Não consegui salvar',
-          /relation .* does not exist|schema cache/i.test(e?.message ?? '')
-            ? 'A tabela de promessas ainda não foi criada no banco.'
-            : e?.message ?? 'Tente de novo.',
-        ),
+      onError: (e: any) => Alert.alert('Não consegui salvar', e?.message ?? 'Tente de novo.'),
     });
     setEditando(false);
     setValor('');

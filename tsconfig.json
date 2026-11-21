@@ -9,9 +9,8 @@
     // Sem excluir, o typecheck do app afoga em ~60 erros que nao sao dele.
     // Elas sao verificadas pelo `deno check` / no deploy do Supabase.
     "supabase/functions",
-    // O cockpit de gestao e' um projeto Vite separado, com tsconfig proprio
-    // (tipos do Vite pro import.meta.env, allowImportingTsExtensions). Ele tem
-    // seu proprio `tsc -b` no build — verificar daqui so' produz erro falso.
+    // gestao/ guarda só o HTML do cockpit (gestao/public, importado do
+    // cockpit-unificado): não é TypeScript deste app.
     "gestao"
   ]
 }

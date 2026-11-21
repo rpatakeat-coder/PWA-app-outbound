@@ -1,6 +1,6 @@
 // UM NAVEGADOR DE MENTIRA, SÓ PARA AS SUÍTES RODAREM (28/10/26).
 //
-// O DEFEITO QUE ISTO CONSERTA. Três suítes — comissao, fichaNoBanco e preparo — passavam em
+// O DEFEITO QUE ISTO CONSERTA. Três suítes — comissao (que saiu depois), fichaNoBanco e preparo — passavam em
 // TODAS as suas checagens e mesmo assim davam saída de erro. O motivo não estava nelas: o
 // módulo que elas testam importa, lá no fundo, `integrations/supabase/client.ts`; o cliente
 // sobe o GoTrue, que chama AsyncStorage, que no web é `window.localStorage` — e no `tsx`, que

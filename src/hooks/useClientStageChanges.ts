@@ -3,13 +3,6 @@ import { supabase } from '../integrations/supabase/client';
 import { useAuth } from '../context/AuthContext';
 import type { ClientStageChange } from '../types/client';
 
-// Mesma defesa do useClientNotes: antes da migration
-// 0020_client_stage_changes.sql rodar a tabela
-// nao existe — tratamos como historico vazio em vez de quebrar o bottom sheet.
-const isMissingTableError = (err: any) =>
-  err?.code === '42P01' ||
-  /relation .* does not exist/i.test(err?.message ?? '');
-
 export function useClientStageChanges(clientId: string | null | undefined) {
   const queryClient = useQueryClient();
   const { user, profile, isAuthenticated } = useAuth();
@@ -23,10 +16,7 @@ export function useClientStageChanges(clientId: string | null | undefined) {
         .select('*')
         .eq('client_id', clientId)
         .order('created_at', { ascending: false });
-      if (error) {
-        if (isMissingTableError(error)) return [];
-        throw error;
-      }
+      if (error) throw error;
       return (data ?? []) as ClientStageChange[];
     },
     enabled: isAuthenticated && !!clientId,
