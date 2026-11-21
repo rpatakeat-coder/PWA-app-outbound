@@ -17,7 +17,7 @@
 // agregado dos colegas).
 //
 // Recursos (?recurso=): playbook (sem o capítulo Liderança para executivo),
-// precificacao, realizado-hoje (ao vivo no HubSpot).
+// negocios, pino-do-negocio, meu-pdi.
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -256,7 +256,6 @@ Deno.serve(async (req) => {
   try { config = await pConfig; } catch (e) { return json(500, { erro: (e as Error).message }); }
   usarConfig(config);
   const PLAYBOOK = config.playbook ?? { paginas: [], categorias: [] };
-  const PRECIFICACAO = config.precificacao ?? null;
 
   if (recurso === 'playbook') {
     if (usuario.role === 'manager') return json(200, { ok: true, playbook: PLAYBOOK, papel: 'manager' });
@@ -267,7 +266,6 @@ Deno.serve(async (req) => {
     });
     return json(200, { ok: true, playbook: semLideranca, papel: 'rep' });
   }
-  if (recurso === 'precificacao') return json(200, { ok: true, precificacao: PRECIFICACAO });
 
   /* ══ AO VIVO (Cockpit v5, fase 2, 28/09/2026) ══════════════════════════════════
      O Cockpit recebe pelo Realtime um sinal "o negócio X mudou" (0128) e pede aqui só
@@ -407,47 +405,6 @@ Deno.serve(async (req) => {
       prazos: Array.isArray(n.compromissosPrazo) ? n.compromissosPrazo : [],
       estado: est || null,
     });
-  }
-
-  if (recurso === 'realizado-hoje') {
-    const hsToken = Deno.env.get('HUBSPOT_TOKEN');
-    if (!hsToken) return json(503, { erro: 'Servidor sem HUBSPOT_TOKEN — não é possível medir o cumprido agora.' });
-    const ehGestor = String(usuario.role) === 'manager';
-    const ownerPedido = url.searchParams.get('owner');
-    if (ownerPedido && !ehGestor && ownerPedido !== String(usuario.ownerId)) {
-      return json(403, { erro: 'Você só pode consultar o seu próprio dia.' });
-    }
-    const ownerId = ownerPedido || (usuario.ownerId != null ? String(usuario.ownerId) : null);
-    if (!ownerId) {
-      return json(200, { ok: true, semOwner: true, motivo: 'Sem owner no HubSpot ainda — o placar começa quando o funil começar.' });
-    }
-    const hsSearch = async (tipo: string, body: unknown) => {
-      const r = await fetch('https://api.hubapi.com/crm/v3/objects/' + tipo + '/search', {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + hsToken, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) throw new Error('HubSpot ' + tipo + ' respondeu ' + r.status);
-      return r.json();
-    };
-    try {
-      const propsEtapa = (REALIZADO.ETAPAS_DE_AVANCO as string[])
-        .concat([(REALIZADO.STAGES_REALIZADO as any).demoProposta])
-        .map((id) => 'hs_v2_date_entered_' + id);
-      const deals = await hsSearch('deals', {
-        filterGroups: [{ filters: [
-          { propertyName: 'pipeline', operator: 'EQ', value: REALIZADO.PIPELINE_REALIZADO },
-          { propertyName: 'hubspot_owner_id', operator: 'EQ', value: ownerId },
-          { propertyName: 'hs_lastmodifieddate', operator: 'GTE', value: String(Date.now() - 48 * 3600 * 1000) },
-        ] }],
-        properties: ['dealname'].concat(propsEtapa),
-        limit: 100,
-      });
-      const r = await (REALIZADO as any).realizadoDeHoje(hsSearch, ownerId, { negocios: deals.results || [] });
-      return json(200, Object.assign({ ok: true, ownerId, medidoEm: new Date().toISOString() }, r));
-    } catch (e) {
-      return json(502, { erro: 'Não foi possível medir agora: ' + (e as Error).message });
-    }
   }
 
   // ---- 3. snapshot (assinatura barata antes da leitura cara, como no original) ----

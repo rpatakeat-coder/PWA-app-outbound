@@ -303,7 +303,7 @@ export const TAXAS: Record<string, { t: string; pct: boolean; un: string }> = {
   fechar: { t: 'Fechar', pct: true, un: 'pontos' },
   volume: { t: 'Volume', pct: false, un: 'visitas por semana' },
 };
-/* a mesma conta do valor() de src/utils/habilidadeDoMes.ts (e do GV2.HB do Cockpit) */
+/* a mesma conta do GV2.HB do Cockpit */
 export function valorTaxa(k: string, s: Soma | null | undefined, uteis: number, pessoas = 1): number | null {
   if (!s) return null;
   if (k === 'dono') return pct(s.o, s.f);
