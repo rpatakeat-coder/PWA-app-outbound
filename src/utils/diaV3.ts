@@ -2,10 +2,7 @@
 // _compartilhado/hojeV3.ts. Aqui não nasce número: o plano é o de field_route_stops, a prova é a de
 // visitas_com_prova (0143, a mesma do Cockpit), o "sem próximo passo" é o da fila (semProximoPassoDaFila),
 // o placar, a sequência e a missão são os de desenvolvimento_quadro() (0240).
-//
-// A VOLTA AO ANTERIOR: localStorage['hoje-v2'] = '1' desliga a folha da manhã nova, a pílula, os toasts e o
-// fecho novo no aparelho (a mesma chave que devolve o Hoje anterior no Cockpit). O dia volta a ser o de
-// antes: a FolhaPlanoDoDia e a FolhaFechoDoDia da espinha do dia.
+// É o único Hoje do app: o anterior (localStorage['hoje-v2']) saiu em 20/11/26.
 import { supabase } from '../integrations/supabase/client';
 import type { Quadro } from '../../supabase/functions/_compartilhado/desenvolvimentoV2';
 import {
@@ -15,10 +12,6 @@ import {
 import { negocioAcao } from './negocioAcao';
 import { porNoPlano } from './planoDoPino';
 import type { Client } from '../types/client';
-
-export function hojeV3Ligado(): boolean {
-  try { return typeof window === 'undefined' || window.localStorage.getItem('hoje-v2') !== '1'; } catch { return true; }
-}
 
 /** "sex 13": o rótulo curto dos chips e do toast ("Passo em sex 13 · salvo no HubSpot"). */
 export const rotuloCurto = (iso: string) => DIAS[dow(iso)] + ' ' + Number(String(iso).slice(8, 10));

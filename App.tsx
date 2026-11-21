@@ -141,7 +141,7 @@ import PorNoPlano from './src/screens/PorNoPlano';
 import type { AcaoId } from './src/utils/acoesDoPlano';
 import { ROTULO_ETAPA, ETAPA as ETAPA_FS } from './src/utils/fichaDeRua';
 import { negocioAcao } from './src/utils/negocioAcao';
-import { lerPlanoDosDias, subirPlanoDaFila } from './src/utils/planoDoPino';
+import { subirPlanoDaFila } from './src/utils/planoDoPino';
 import { textoNormalizado } from './src/utils/pinoP2';
 import { contaAlvoDiscreta, DELTA_AFASTADO, FILTROS_VAZIOS, LENTES, passaNosFiltros, pontoDe, pontoExDiscreto, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
 import { gruposDaLista, montarLista, noTrecho, type OrdemDaLista } from './src/utils/listaDoMapa';
@@ -232,16 +232,14 @@ import { contagemDoHoje, gruposDoHoje, seloDaFila } from './src/utils/seloDaFila
 import { janelaAtual, marcoDoRelogio } from './src/utils/horaDasLigacoes';
 import { feriadosNacionais, quenteEsfriando, secaoDoItem } from './supabase/functions/_compartilhado/filaDoDinheiro';
 import { FaixaHoraDasLigacoes } from './src/screens/CartaoDaFila';
-import FolhaAntesDaRua from './src/screens/FolhaAntesDaRua';
-import FolhaPlanoDoDia from './src/screens/FolhaPlanoDoDia';
 import FolhaTimeNaRua from './src/screens/FolhaTimeNaRua';
-import FolhaFechoDoDia, { FolhaFechoV3, type LinhaDoFecho } from './src/screens/FolhaFechoDoDia';
+import { FolhaFechoV3, type LinhaDoFecho } from './src/screens/FolhaFechoDoDia';
 // Hoje v3 (01/11/26): a folha da manhã, a pílula-placar, os toasts pós-visita e o fecho novo
 import FolhaManhaV3 from './src/screens/FolhaManhaV3';
 import { PilulaPlacar, ToastPosVisita, type ToastV3 } from './src/screens/HojeV3NoMapa';
 import { chipsDeDia, diaDoExecutivo, somaDias as somaDiasV3, toastCheguei, toastFicha } from './supabase/functions/_compartilhado/hojeV3';
 import {
-  hojeV3Ligado, lerHojeDaUrl, limparHojeDaUrl, marcarPassoRapido, montarEntradaDoDia, nomeDoFeriado, registrarHoje, rotuloCurto as rotuloCurtoV3, semPassoPorDinheiro, sugerirDias,
+  lerHojeDaUrl, limparHojeDaUrl, marcarPassoRapido, montarEntradaDoDia, nomeDoFeriado, registrarHoje, rotuloCurto as rotuloCurtoV3, semPassoPorDinheiro, sugerirDias,
   etapaIdxDe, type ItemDaFilaV3, type ParadaDoApp,
 } from './src/utils/diaV3';
 import { useBairrosDaFila, useDiaV3 } from './src/hooks/useDiaV3';
@@ -1226,29 +1224,22 @@ function MainApp() {
   // O MAPA NOVO DESDE O PRIMEIRO QUADRO (Julyan, 26/09: "ainda carrega o antigo antes"): só os
   // pinos esperam o contexto (todo uso de contextoPino já se protege de null), e se a RPC falhar o
   // contexto vem vazio (useContextoDoPino), para o pino nunca sumir.
-  /* ANTES DA RUA (P6, handoff Tarefas do App): na 1ª abertura do Mapa no dia, com quente esfriando,
-     sobe a folha com os quentes e o Ligar. Uma vez por dia por aparelho; não bloqueia o mapa. */
-  const [antesDaRua, setAntesDaRua] = useState(false);
-  /* O PLANO VEM ATÉ ELE (espinha do dia 2.3, 29/10/26). Mesma mecânica provada da "Antes da rua":
-     uma chave por dia no aparelho, nada depois das 19h. A ORDEM importa — primeiro se decide o
-     dia, depois se fazem as ligações de antes de sair; por isso a "Antes da rua" espera esta
-     fechar. E nunca trava: "Agora não" fecha, o mapa está atrás o tempo todo e o Cheguei de
-     qualquer pino funciona. Forçar pela ATENÇÃO, não pela trava — decisão do próprio Julyan. */
+  /* O PLANO VEM ATÉ ELE (espinha do dia 2.3, 29/10/26): uma chave por dia no aparelho. E nunca
+     trava: "Agora não" fecha, o mapa está atrás o tempo todo e o Cheguei de qualquer pino funciona. Forçar pela ATENÇÃO, não pela trava — decisão do próprio Julyan. */
   const [planoDoDia, setPlanoDoDia] = useState(false);
   const [planoDoDiaResolvido, setPlanoDoDiaResolvido] = useState(false);
-  /* HOJE v3 (01/11/26): a mesma chave por dia e a mesma 1ª abertura, mas a folha agora é "seu dia em 30
+  /* HOJE v3 (01/11/26): a mesma chave por dia e a mesma 1ª abertura, mas a folha é "seu dia em 30
      segundos" e só sobe até as 10h (README §3, regra 5: no máximo 1 folha por momento por dia). Depois
-     das 10h quem chega ao mapa já está na rua. localStorage['hoje-v2'] = '1' devolve a folha anterior. */
-  const hojeV3 = useMemo(() => hojeV3Ligado(), []);
+     das 10h quem chega ao mapa já está na rua. O Hoje anterior (hoje-v2) saiu em 20/11/26. */
   /* O PUSH DAS 8h NA ABERTURA (auditoria 02/11/26). O ?hoje=manha era tratado num efeito declarado
      DEPOIS deste: a 1ª abertura gravava a chave do dia como 'app' e o push achava a chave e saía —
      a medição push_08 nunca acontecia. Agora a URL é lida antes, no 1º render, e a 1ª abertura já
      registra a origem certa. */
-  const hojeNaAbertura = useRef<'manha' | 'fecho' | null>(hojeV3 && typeof window !== 'undefined' ? lerHojeDaUrl(window.location.href) : null);
+  const hojeNaAbertura = useRef<'manha' | 'fecho' | null>(typeof window !== 'undefined' ? lerHojeDaUrl(window.location.href) : null);
   useEffect(() => {
     if (tab !== 'map' || isViewer || planoDoDiaResolvido) return;
     const agoraBRT = new Date(Date.now() - 3 * 3600000);
-    if (agoraBRT.getUTCHours() >= (hojeV3 ? 10 : 19)) { setPlanoDoDiaResolvido(true); return; }
+    if (agoraBRT.getUTCHours() >= 10) { setPlanoDoDiaResolvido(true); return; }
     /* sem expediente (fim de semana, feriado) não pergunta o dia (auditoria 01/11/26: no domingo
        subia "Hoje são estas 6, confirma?" e "às 9h00 o gestor vê") */
     if (!ehDiaUtil(diaBRT(new Date()))) { setPlanoDoDiaResolvido(true); return; }
@@ -1260,22 +1251,8 @@ function MainApp() {
     setPlanoDoDiaResolvido(true);
     setPlanoDoDia(true);
     registrarEvento('plano_proposto', {});
-    if (hojeV3) registrarHoje('folha_manha', 'vista', hojeNaAbertura.current === 'manha' ? 'push_08' : 'app');
-  }, [tab, isViewer, planoDoDiaResolvido, hojeV3]);
-  useEffect(() => {
-    if (tab !== 'map' || !seloFila?.quente || !filaNaTela.data || planoDoDia) return;
-    /* auditoria 02/11/26: com o Hoje v3 a "Antes da rua" subia logo depois da folha da manhã, que já
-       traz o que vence hoje e o sem próximo passo (e a hora das ligações chama os quentes). Fica só
-       no hoje-v2. */
-    if (hojeV3) return;
-    const agoraBRT = new Date(Date.now() - 3 * 3600000);
-    if (agoraBRT.getUTCHours() >= 19) return;
-    /* sem expediente (fim de semana, feriado) não cobra ligação antes da rua (auditoria 01/11/26) */
-    if (!ehDiaUtil(filaNaTela.data.hoje ?? diaBRT(new Date()) ?? '')) return;
-    const chave = `antes-da-rua-${filaNaTela.data.hoje ?? diaBRT(new Date())}`;
-    try { if (window.localStorage.getItem(chave)) return; window.localStorage.setItem(chave, '1'); } catch { return; }
-    setAntesDaRua(true);
-  }, [tab, seloFila?.quente, filaNaTela.data, planoDoDia, hojeV3]);
+    registrarHoje('folha_manha', 'vista', hojeNaAbertura.current === 'manha' ? 'push_08' : 'app');
+  }, [tab, isViewer, planoDoDiaResolvido]);
   // A14 (handoff v6): com o mapa na tela, a fila aparece só na pílula (ver Toast.mapaNaTela)
   useEffect(() => {
     Toast.mapaNaTela(tab === 'map' && !layout.ehLargo);
@@ -5455,52 +5432,17 @@ function MainApp() {
   const [entrePortasDesde, setEntrePortasDesde] = useState<number | null>(null);
   const [entrePortasAte, setEntrePortasAte] = useState(0);
 
-  /* FECHAR O DIA (espinha do dia 2.10). As 18h, na primeira vez que o app volta para a frente,
-     a folha sobe sozinha — uma vez por dia por aparelho, a mesma mecanica provada da "Antes da
-     rua" e da folha de abertura. Nao trava: "Depois" fecha e o dia fica aberto, e quem nao
-     fechou aparece para o gestor no dia seguinte (2.11). */
+  /* FECHAR O DIA (espinha do dia 2.10; Hoje v3): a folha chega pelo push das 18h (?hoje=fecho) ou pelo
+     "fechar o dia" da pílula. Nao trava: "Depois" fecha e o dia fica aberto, e quem nao fechou aparece
+     para o gestor no dia seguinte (2.11). */
   const [fechoDoDia, setFechoDoDia] = useState(false);
-  const [fechoResolvido, setFechoResolvido] = useState(false);
-  /* "AMANHÃ JÁ COMEÇA COM N PORTAS" (auditoria 29/10/26): a folha tinha a frase, mas o App mandava
-     amanha={0} fixo e ela nunca aparecia. Lê o plano do próximo dia útil quando a folha abre;
-     falha de leitura fica 0, que esconde a frase em vez de inventar número. */
-  const [portasAmanha, setPortasAmanha] = useState(0);
-  useEffect(() => {
-    if (!fechoDoDia || !profile?.id) return;
-    let vivo = true;
-    const prox = diasPlanejaveis(diaBRT(new Date()), 2).find((d) => !d.hoje)?.iso;
-    if (prox) lerPlanoDosDias(profile.id, [prox]).then((p) => { if (vivo) setPortasAmanha(p.contagem[prox] ?? 0); }, () => {});
-    return () => { vivo = false; };
-  }, [fechoDoDia, profile?.id]);
-  useEffect(() => {
-    if (tab !== "map" || isViewer || fechoResolvido || planoDoDia) return;
-    /* QUEM NÃO FOI À RUA NÃO TEM DIA PARA FECHAR (visto no app em 29/10, logo depois de subir:
-       a folha abriu com "0 portas, todas com próximo passo. Fecha?"). Fechar o nada é pedir um
-       toque sem motivo, e na terceira vez a pessoa fecha no reflexo — e aí a folha não serve mais
-       nem quando importa. Espera o número chegar (null = ainda carregando) e só pergunta a quem
-       trabalhou. É a mesma regra do "não fechou ontem" lá no gestor: não se cobra silêncio. */
-    const portasHoje = meuDia.data?.provadasHoje ?? null;
-    if (portasHoje == null || portasHoje === 0) return;
-    /* HOJE v3 (01/11/26, README §3 regra 5): o fecho não depende mais de o app voltar para a frente
-       depois das 18h. Ele chega pelo push das 18h (?hoje=fecho) ou pelo "fechar o dia" da pílula. */
-    if (hojeV3) return;
-    const bISO = new Date(Date.now() - 3 * 3600000);
-    if (bISO.getUTCHours() < 18) return;
-    const chave = `fecho-do-dia-${diaBRT(new Date())}`;
-    try {
-      if (window.localStorage.getItem(chave)) { setFechoResolvido(true); return; }
-      window.localStorage.setItem(chave, "1");
-    } catch { setFechoResolvido(true); return; }
-    setFechoResolvido(true);
-    setFechoDoDia(true);
-  }, [tab, isViewer, fechoResolvido, planoDoDia, meuDia.data?.provadasHoje, hojeV3]);
 
   /* ══ HOJE v3 · O DIA DO EXECUTIVO NO APP (01/11/26, design_handoff_hoje_v3) ══════════════════════
      "Será que estão usando de verdade? Preciso que eles usem isso." O dia vai até ele em 3 momentos, no
      mapa: a folha da manhã, a pílula-placar e os toasts pós-visita, e o fecho das 18h. Tudo sai de
      diaDoExecutivo (_compartilhado/hojeV3.ts), a MESMA montagem do Hoje do Cockpit, sobre as fontes que o
      app já lê (montarEntradaDoDia, src/utils/diaV3.ts). Nada aqui trava: toda folha tem saída. */
-  const ehRepV3 = hojeV3 && !!profile && profile.role !== 'view';
+  const ehRepV3 = !!profile && profile.role !== 'view';
   const quadroV3 = useDesenvolvimentoQuadro(ehRepV3);
   const hojeIsoV3 = diaBRT(new Date()) ?? '';
   const feriadosV3 = useMemo(() => {
@@ -5594,7 +5536,7 @@ function MainApp() {
   /* o push das 8h (?hoje=manha) e o das 18h (?hoje=fecho) abrem o momento; a folha da manhã segue a regra
      de 1 por dia (se já subiu hoje, o toque leva ao mapa) e nada sobe fora do dia útil */
   useEffect(() => {
-    if (!hojeV3 || typeof window === 'undefined') return;
+    if (typeof window === 'undefined') return;
     const tratar = (href: string) => {
       const m = lerHojeDaUrl(href);
       if (!m) return;
@@ -5618,7 +5560,6 @@ function MainApp() {
         registrarHoje('folha_manha', 'vista', 'push_08');
       } else {
         origemFechoV3.current = 'push_18';
-        setFechoResolvido(true);
         setFechoDoDia(true);
         registrarHoje('fecho_dia', 'aberto', 'push_18');
       }
@@ -5627,13 +5568,13 @@ function MainApp() {
     const aoMsg = (e: MessageEvent) => { if (e.data?.type === 'FILA_ACAO' && typeof e.data.url === 'string') tratar(e.data.url); };
     navigator.serviceWorker?.addEventListener('message', aoMsg);
     return () => navigator.serviceWorker?.removeEventListener('message', aoMsg);
-  }, [hojeV3]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   /* o toast pós-Cheguei: a função mora num ref porque o handleMarkAsVisited é memorizado. Devolve quanto
      a ficha espera (0 = abre na hora). "+3" só na 1ª visita com prova ao restaurante na semana (o placar
      conta cada restaurante uma vez); a sequência ganha o dia de hoje na 1ª visita com prova. */
   const chegueiV3 = useRef<(o: { clientId: string; comProva: boolean; metros: number | null }) => number>(() => 0);
   chegueiV3.current = (o) => {
-    if (!hojeV3 || !ehRepV3) return 0;
+    if (!ehRepV3) return 0;
     /* SEM DADOS, SEM PONTOS (auditoria 02/11/26): sem as visitas da semana lidas, "jaNaSemana" dava
        falso e o toast prometia "+3 pts" no restaurante já visitado. Sem elas, o toast não fala em
        pontos nem em sequência — só "Check-in com prova". */
@@ -7643,7 +7584,7 @@ function MainApp() {
               return;
             }
             if (l.acao === 'montar') { void montarDiaComMicrorrotas(); return; }
-            if (hojeV3 && !isViewer) { irParaEu('menu'); return; } // sem o Meu dia no v3 (auditoria 02/11/26)
+            if (!isViewer) { irParaEu('menu'); return; } // sem o Meu dia no v3 (auditoria 02/11/26)
             setMeuDiaAberto(true);
           }}
         />
@@ -7658,7 +7599,7 @@ function MainApp() {
       )}
       {/* HOJE v3 (01/11/26): a pílula-placar mora na MESMA faixa da vez, e só quando ela está livre (a
           pendência e a hora das ligações têm verbo e prazo, e ganham dela). O mapa por baixo não muda. */}
-      {hojeV3 && ehRepV3 && tab === 'map' && !layout.ehLargo && !creationMode && !buscaAberta && !planejarVisivel
+      {ehRepV3 && tab === 'map' && !layout.ehLargo && !creationMode && !buscaAberta && !planejarVisivel
         && linhaDoDiaAgora?.estado !== 'pendente' && !janelaDasLigacoes && (
         <PilulaPlacar
           pilula={vmV3.pilula}
@@ -7743,8 +7684,8 @@ function MainApp() {
         );
       })()}
       {/* auditoria 02/11/26: com o Hoje v3 a pílula-placar já mostra o dia (portas com prova × meta) pela
-          fonte do v3; o Meu dia era outro placar (provadasHoje × desenvolvimento_quadro). Só no hoje-v2. */}
-      {!(hojeV3 && !isViewer) && (
+          fonte do v3; o Meu dia era outro placar (provadasHoje × desenvolvimento_quadro). Fica só para quem só vê. */}
+      {isViewer && (
         <FolhaMeuDia
           visivel={meuDiaAberto}
           aoFechar={() => setMeuDiaAberto(false)}
@@ -7834,14 +7775,14 @@ function MainApp() {
             />
           ) : null}
           aoMontarDia={isViewer ? undefined : () => { void montarDiaComMicrorrotas(); }}
-          venceHojeDe={hojeV3 ? (c) => (c.id_hubspot ? venceHojeV3[String(c.id_hubspot)] ?? null : null) : undefined}
+          venceHojeDe={(c) => (c.id_hubspot ? venceHojeV3[String(c.id_hubspot)] ?? null : null)}
           // um placar só (02/11/26): com a pílula-placar do v3 no topo, a recolhida não repete o "0/6"
-          placarNoTopo={hojeV3 && ehRepV3}
+          placarNoTopo={ehRepV3}
           aoMini={setLarguraMini}
           sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
           aoFala={abrirFala}
           recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
-          aoProgresso={() => (hojeV3 && !isViewer ? irParaEu('menu') : setMeuDiaAberto(true))}
+          aoProgresso={() => (!isViewer ? irParaEu('menu') : setMeuDiaAberto(true))}
           chao={alturaRodape ?? baseInferior}
           totalNaArea={totalNaAreaSemDiscretas}
           rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
@@ -8113,7 +8054,7 @@ function MainApp() {
         sugestao={!idParadaPendente && sugestaoDePorta && lente === 'dia' ? { porque: sugestaoDePorta.porque, segunda: sugestaoDePorta.segunda } : null}
         aoFala={abrirFala}
         recem={lente === 'novos' ? { naRegiao: recemNaRegiao, aoVoltar: () => setLente('dia') } : null}
-        aoProgresso={() => (hojeV3 && !isViewer ? irParaEu('menu') : setMeuDiaAberto(true))}
+        aoProgresso={() => (!isViewer ? irParaEu('menu') : setMeuDiaAberto(true))}
         totalNaArea={totalNaAreaSemDiscretas}
         rotuloLente={LENTES.find((l) => l.id === lente)?.rotulo ?? ''}
         onAbrir={handleMarkerPress}
@@ -9575,7 +9516,7 @@ function MainApp() {
           se decide o dia, depois as ligações de antes de sair. */}
       {/* HOJE v3 (01/11/26): "seu dia em 30 segundos". No feriado e no fim de semana não sobe (a chave do dia
           nem é gravada: o efeito acima já para antes). */}
-      {planoDoDia && hojeV3 && vmV3.folha.mostra && (
+      {planoDoDia && vmV3.folha.mostra && (
         <FolhaManhaV3
           folha={vmV3.folha}
           /* auditoria 02/11/26: esqueleto até o plano de hoje e a fila chegarem (B3) */
@@ -9613,40 +9554,10 @@ function MainApp() {
           }}
         />
       )}
-      {planoDoDia && !hojeV3 && (
-        <FolhaPlanoDoDia
-          dia={new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }).toLocaleUpperCase('pt-BR')}
-          paradas={paradasQueFaltam.map((st, i) => ({
-            id: st.client_id ?? String(i),
-            numero: routeStops.indexOf(st) + 1,
-            nome: st.client ? getClientPrimaryName(st.client) : 'lead sem nome',
-            sub: st.client?.bairro?.trim() || null,
-          }))}
-          /* A prancha pede "feito no Cockpit ontem" aqui. NÃO DÁ PARA DIZER ISSO HOJE sem mentir:
-             `field_routes` guarda `source`, mas em outubro ele só tem dois valores — 'manual'
-             (219) e 'suggested' (2) — e nenhum distingue Cockpit, app e gestor. Preencher exige um
-             campo de origem no plano, que é mexida de banco e decisão do Julyan. Até lá, sem
-             linha: melhor silêncio do que carimbo errado. */
-          origem={null}
-          quantasPropostas={Math.min(6, linhasDaLista.length)}
-          /* MEDIDO (§5): `confirmado` contra `ignorado` é o que diz, daqui a duas semanas, se esta
-             folha fez alguém planejar ou virou mais um aviso que se fecha no reflexo. */
-          aoComecar={() => { registrarEvento('plano_confirmado', { origem: 'ja_existia', portas: paradasQueFaltam.length }); setPlanoDoDia(false); }}
-          aoMontar={() => { registrarEvento('plano_confirmado', { origem: 'proposta', portas: Math.min(6, linhasDaLista.length) }); setPlanoDoDia(false); void montarDiaComMicrorrotas(); }}
-          aoAgoraNao={() => { registrarEvento('plano_ignorado', { tinha_plano: paradasQueFaltam.length > 0 }); setPlanoDoDia(false); }}
-          aoTocarParada={(id) => {
-            setPlanoDoDia(false);
-            const c = routeDisplayClients.find((x) => x.id === id);
-            if (c) handleMarkerPress(c);
-          }}
-        />
-      )}
       {canViewGestor && <FolhaTimeNaRua visivel={timeNaRua} aoFechar={() => setTimeNaRua(false)} />}
-      {/* O FECHO DAS 18h (2.10). As pendentes vem da MESMA fila que o Cockpit cobra
-          (motivo visita_sem_registro), nunca de uma conta nova aqui. */}
       {/* HOJE v3 (01/11/26): o fecho com o dia inteiro, os chips e o check-out. As pendentes são as visitas
           de hoje que seguem sem próximo passo pela regra única (a mesma do Cockpit), mais o Cheguei sem Como foi. */}
-      {fechoDoDia && profile?.id && hojeV3 && (() => {
+      {fechoDoDia && profile?.id && (() => {
         const pendIds = new Set(entradaV3.pendentesFecho.map((p) => p.id));
         const linhas: LinhaDoFecho[] = [];
         (entradaV3.paradas ?? []).forEach((p) => {
@@ -9689,65 +9600,13 @@ function MainApp() {
           />
         );
       })()}
-      {fechoDoDia && profile?.id && !hojeV3 && (() => {
-        const itensF = (filaNaTela.data?.itens ?? []) as Array<{ motivo: string; porque: string; dealId: string; clientId: string | null; negocio: string }>;
-        const pend = itensF.filter((i) => i.motivo === "visita_sem_registro")
-          .map((i) => ({ dealId: i.dealId, clientId: i.clientId, nome: i.negocio, hora: (/(\d{2}:\d{2})/.exec(i.porque ?? "") ?? [])[1] ?? null }));
-        const portas = meuDia.data?.provadasHoje ?? 0;
-        return (
-          <FolhaFechoDoDia
-            dia={new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" }).toLocaleUpperCase("pt-BR")}
-            portas={portas}
-            meta={metaDeHoje}
-            pendentes={pend}
-            amanha={portasAmanha}
-            aoDar={(p) => {
-              setFechoDoDia(false);
-              const hoje = diaBRT(new Date());
-              setDesfechoPendente({ idHubspot: p.dealId, cliente: p.nome, visitadoEm: p.hora && hoje ? new Date(`${hoje}T${p.hora}:00-03:00`).toISOString() : new Date().toISOString() });
-            }}
-            aoDepois={() => setFechoDoDia(false)}
-            aoFechar={() => {
-              setFechoDoDia(false);
-              void supabase.from("fecho_do_dia").upsert({
-                pessoa: profile.id, dia: diaBRT(new Date()), fechado_em: new Date().toISOString(),
-                portas, com_passo: Math.max(0, portas - pend.length), sem_passo: pend.length,
-              }, { onConflict: "pessoa,dia" }).then(({ error }) => {
-                Toast.mostrar(error ? "Nao consegui fechar o dia agora. Tente de novo." : "Dia fechado.", error ? "erro" : "ok");
-              });
-            }}
-          />
-        );
-      })()}
-      {antesDaRua && (() => {
-        const itensF = (filaNaTela.data?.itens ?? []) as Array<{ dealId: string; negocio: string; etapaId: string; venceu: boolean; prazo: string | null; horaPrazo?: string | null; telefone: string | null }>;
-        const hojeF = filaNaTela.data?.hoje ?? diaBRT(new Date());
-        const quentes = itensF.filter((i) => quenteEsfriando(i, hojeF)).slice(0, 4);
-        const b = new Date(Date.now() - 3 * 3600000);
-        const hhmm = `${String(b.getUTCHours()).padStart(2, '0')}:${String(b.getUTCMinutes()).padStart(2, '0')}`;
-        return (
-          <FolhaAntesDaRua hora={hhmm} proximaJanela={JANELAS_LIGACAO.find((j) => j > hhmm) ?? null}
-            quentes={quentes.map((i) => ({ dealId: i.dealId, negocio: i.negocio, temTelefone: !!i.telefone,
-              linha: i.prazo === hojeF ? `vence hoje${i.horaPrazo ? ` às ${i.horaPrazo}` : ''}` : `venceu ${i.prazo ? `${i.prazo.slice(8, 10)}/${i.prazo.slice(5, 7)}` : ''}` }))}
-            aoDeixar={() => setAntesDaRua(false)}
-            aoLigar={(deal) => {
-              const i = quentes.find((x) => x.dealId === deal);
-              const d = (i?.telefone ?? '').replace(/\D+/g, '');
-              if (!d) return;
-              void Linking.openURL(`tel:+${d.length <= 11 ? `55${d}` : d}`);
-              setAntesDaRua(false);
-              setPedidoDaFila({ acao: 'ligar', deal, origem: 'antes_da_rua', n: Date.now(), discouEm: Date.now() });
-              setTab('tasks');
-            }} />
-        );
-      })()}
       {/* Desenvolvimento v2 (01/11/26): a conquista que nasce (check-in, venda, missão fechada) vira um
           cartão no topo; o toque abre o Meu desempenho rolado até a coleção */}
       {isAuthenticated && !isViewer && !canViewGestor && (
         <ToastDeConquista aoVer={() => irParaEu('toast', true)} naAbaEu={tab === 'meu'} />
       )}
       {/* HOJE v3 (01/11/26): o toast pós-visita, acima da folha de baixo do mapa */}
-      {hojeV3 && toastV3 && (
+      {toastV3 && (
         <ToastPosVisita
           toast={toastV3}
           bottom={(alturaRodape ?? baseInferior) + (folhaDeBaixo ? alturaFolha : 0) + 12}
@@ -10655,7 +10514,7 @@ function MainApp() {
                próximo passo" com os chips, que fica até a ação. Sem interesse é decisão: não pede passo. */
             const f = fichaSalvaV3.current;
             fichaSalvaV3.current = null;
-            if (hojeV3 && ehRepV3 && f && !f.semInteresse && f.dealId) {
+            if (ehRepV3 && f && !f.semInteresse && f.dealId) {
               const t = toastFicha({ nome: f.nome, dia: f.dia ? rotuloCurtoV3(f.dia) : null });
               setToastV3({ kind: 'ficha', titulo: t.titulo, texto: t.texto, tom: t.tom, chips: t.chips ? chipsDeDia(hojeIsoV3, feriadosV3, false) : null, dealId: f.dealId, nome: f.nome });
             }

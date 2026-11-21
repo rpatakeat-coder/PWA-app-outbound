@@ -1,6 +1,6 @@
 // A FOLHA DA MANHÃ · "SEU DIA EM 30 SEGUNDOS" (Hoje v3, handoff de 01/11/26, README §4.1).
 //
-// Substitui a FolhaPlanoDoDia (a pergunta "Vamos? / Confirma?") na 1ª abertura do dia útil até as 10h, e
+// Sobe na 1ª abertura do dia útil até as 10h, e
 // quando o push das 8h é tocado. Até 3 linhas, cada uma num cartão com ícone de 34 px:
 //   1. o plano (ou "Nada no plano de hoje" + o "Montar o dia" que já existe);
 //   2. os passos que vencem hoje (a linha some quando não há);
