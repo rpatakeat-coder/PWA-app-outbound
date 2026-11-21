@@ -75,10 +75,14 @@ const trimOrNull = (v: unknown): string | null => {
 };
 
 // "Oportunidade - MPS LANCHONETE..." -> "MPS LANCHONETE..."
+// SÓ PREFIXO GENÉRICO. Cortar tudo antes do primeiro " - " fazia "Quebrada Burger -
+// Perdizes" virar "Perdizes" e "SALGADO DOCINHO - Filial" virar "Filial". A regra
+// certa existia desde 27/09 só no webhook antigo (hubspot-lead-webhook, sem chamadas
+// desde então); veio para cá na faxina de 20/11/26.
+const PREFIXO_GENERICO = /^(oportunidade|oportunidades|neg[oó]cio|lead|deal|novo lead|novo neg[oó]cio)\s+-\s+/i;
 const extractEmpresa = (dealname: string | null): string | null => {
   if (!dealname) return null;
-  const idx = dealname.indexOf(' - ');
-  return idx >= 0 ? dealname.slice(idx + 3).trim() : dealname.trim();
+  return dealname.replace(PREFIXO_GENERICO, '').trim() || dealname.trim();
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
