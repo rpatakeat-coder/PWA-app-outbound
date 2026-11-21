@@ -41,7 +41,7 @@ export const DIAS_RECEM_NOME = 30;
 /** Zona livre em volta da bolinha azul (meia largura). */
 export const ZONA_BOLINHA = 24;
 /** Metros por minuto a pé (a mesma conta da folha e do cartão). */
-export const METROS_POR_MINUTO = 80;
+const METROS_POR_MINUTO = 80;
 
 export type PinoDaCena = {
   id: string;

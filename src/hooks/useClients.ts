@@ -483,11 +483,6 @@ export function useClients(
       if (error) throw error;
       const client = mapRow(data);
 
-      // Webhook outbound no MESMO formato dos leads do HubSpot, pra padronizar
-      // com o fluxo já existente de integração externa.
-      // dealname = nome da empresa (fallback pro nome do contato se não tiver empresa).
-      const dealname = client.empresa ?? client.nome;
-
       // Roda em background: a edge function hubspot-sync cria contato+deal no
       // HubSpot e ja grava clients.id_hubspot/url_hubspot server-side (deduped
       // por id do pin, entao um retry nao cria deal duplicado). Isso destrava o

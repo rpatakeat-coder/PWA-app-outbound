@@ -14,12 +14,7 @@ import { useArrastarParaRolar } from '../hooks/useArrastarParaRolar';
 import type { EstiloMeta } from '../utils/armasDoMapa';
 import type { Lente } from '../utils/lentes';
 
-export const ALTURA_FILEIRA_LENTES = 44;
-/* Quanto a linha de pílulas ("Limpar", "Ver em lista") ocupa abaixo da fileira, respiro incluído.
-   Exportado porque quem empilha o que vem DEPOIS dela é o App: até 28/10 cada peça abaixo das
-   lentes escolhia o próprio `top`, e as pílulas e a faixa das janelas de ligação acabaram
-   nascendo as duas quase no mesmo pixel (44+6 e 44+8) — uma em cima da outra, duas vezes por dia. */
-export const ALTURA_PILULAS_DAS_LENTES = 6 + 44;
+const ALTURA_FILEIRA_LENTES = 44;
 
 type Props = {
   lentes: { id: Lente; rotulo: string }[];

@@ -536,11 +536,9 @@ export function ChangeStageModal({ client, onClose, initialStageId, onCreateHubs
   // passo errado. Em 14/09/2026 um negocio ja' em Ganho so' oferecia
   // "Ag. Pagamento", e Onboarding nunca aparecia.
   const [etapaDoCrm, setEtapaDoCrm] = useState<string | null>(null);
-  const [lendoEtapa, setLendoEtapa] = useState(false);
   useEffect(() => {
     if (!client.id_hubspot) return;
     let cancelado = false;
-    setLendoEtapa(true);
     (async () => {
       try {
         const { data } = await supabase.functions.invoke('hubspot-sync', {
@@ -562,8 +560,6 @@ export function ChangeStageModal({ client, onClose, initialStageId, onCreateHubs
       } catch {
         // Falhar aqui so' custa a atualizacao: seguimos com a etapa local, que
         // e' o comportamento de antes. Nunca pior que estava.
-      } finally {
-        if (!cancelado) setLendoEtapa(false);
       }
     })();
     return () => { cancelado = true; };

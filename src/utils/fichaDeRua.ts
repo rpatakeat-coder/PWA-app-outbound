@@ -15,7 +15,6 @@ import { normalizarCelular } from './celular';
 import { GARGALOS, montarBlocoDesfecho, proximoDiaUtil, type Desfecho, type Gargalo } from './desfechoVisita';
 
 export { GARGALOS };
-export type { Gargalo };
 
 export const COMO_FOI: { id: Desfecho; rotulo: string }[] = [
   { id: 'falou_com_decisor', rotulo: 'Falei com quem decide' },
@@ -34,12 +33,6 @@ export const COMO_FOI: { id: Desfecho; rotulo: string }[] = [
    três existe no check de fichas_de_rua.proximo: no banco vão null (ver fichaNoBanco). */
 export type Proximo = 'reuniao' | 'voltar7' | 'ligar_amanha' | 'sem_interesse' | 'voltar_horario' | 'voltar_amanha' | 'apresentei'
   | 'fechou' | 'negociando' | 'retorno' | 'aguardando_pagamento' | 'ja_cliente';
-export const PROXIMOS: { id: Proximo; rotulo: string }[] = [
-  { id: 'reuniao', rotulo: 'Reunião' },
-  { id: 'voltar7', rotulo: 'Voltar outro dia' },
-  { id: 'ligar_amanha', rotulo: 'Ligar amanhã' },
-  { id: 'sem_interesse', rotulo: 'Sem interesse' },
-];
 /* Toda volta à porta pede o DIA, escolhido por quem esteve lá: o dono que "volta à tarde"
    e o que "só segunda" não cabem num prazo fixo. Dias úteis, como a reunião. */
 export const PROXIMOS_DE_VOLTA: Proximo[] = ['voltar7', 'voltar_horario', 'voltar_amanha', 'retorno', 'negociando'];

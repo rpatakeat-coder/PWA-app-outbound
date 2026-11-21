@@ -275,7 +275,7 @@ function PinoP2(props: Props) {
  * - `data-pino`, `data-cabeca` e `data-ponta` para a conferência na tela medir o que o Google desenhou.
  */
 function PinoNaRua(props: Props) {
-  const { pino, selecionado, pilhaN = 1, leque = null, sol = false, nivel = 3, rotuloNaRua = null, seloNaRua = null, sugestao = false, semAnel = false, apagado = false, idDom } = props;
+  const { selecionado, pilhaN = 1, leque = null, sol = false, nivel = 3, rotuloNaRua = null, seloNaRua = null, sugestao = false, semAnel = false, apagado = false, idDom } = props;
   const d = desenhoNaRua(props);
   const hd = d.diam ? d.s * Math.SQRT1_2 : d.s / 2;
   const cy = d.diam ? -hd - 1 : -7 - d.s / 2;

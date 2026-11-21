@@ -23,7 +23,6 @@ import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { IconClose, IconFilterList, IconSearch, useIconColors } from '../components/icons';
-import { IconChevronDown as SiDown } from '../components/icons';
 import { FAIXA_TOPO } from '../map/conferenciaNaTela';
 
 export const ALTURA_TOPO_CAMPO = 48;

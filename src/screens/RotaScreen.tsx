@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Alert } from '../components/Alert';
 import { pedirMotivoDeTirar } from '../utils/pedirMotivoDeTirar';
 import { MANDATORY_BADGE, type MandatoryReason } from '../utils/dailyRoute';
-import type { Client, ClientStatus, FieldRouteStop } from '../types/client';
+import type { Client, ClientStatus } from '../types/client';
 import { useFieldOps } from '../hooks/useFieldOps';
 import { useLayout } from '../hooks/useLayout';
 import type { RouteGeometry, RoutingProvider } from '../utils/routing';
@@ -45,7 +45,7 @@ import {
   useIconColors,
 } from '../components/icons';
 import { MinhaDailyCard } from './MinhaDailyCard';
-import { ds, sharedStyles } from './sharedStyles';
+import { sharedStyles } from './sharedStyles';
 import { IconCheck as SiCheck, IconChevronDown as SiDown } from '../components/icons';
 
 // Tela de Rota, extraida do App.tsx (prompt 02 do handoff) — refactor puro.

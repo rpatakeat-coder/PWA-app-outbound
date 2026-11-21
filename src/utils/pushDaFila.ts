@@ -100,13 +100,6 @@ export async function ligarPush({ teste = true }: { teste?: boolean } = {}): Pro
   return 'ligado';
 }
 
-export async function desligarPush(): Promise<void> {
-  const reg = await navigator.serviceWorker.getRegistration();
-  const sub = await reg?.pushManager.getSubscription();
-  if (!sub) return;
-  await chamar('desinscrever', { endpoint: sub.endpoint }).catch(() => null);
-  await sub.unsubscribe().catch(() => false);
-}
 
 /* O QUE O AVISO PEDE AO APP: o service worker abre (ou foca) o app com ?fila=<acao>&deal=<id>.
    acao: 'fila' (abre Tarefas no topo), 'cartao' (abre o cartão), 'ligar' e 'whatsapp' (abrem o

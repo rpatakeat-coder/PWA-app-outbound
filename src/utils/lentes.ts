@@ -31,8 +31,6 @@ export const LENTES: { id: Lente; rotulo: string }[] = [
   { id: 'calor', rotulo: 'Calor' },
 ];
 
-/** Todas na fileira do celular, rolando de lado (15/10/26); o ≡ ficou só com os filtros. */
-export const LENTES_DA_FILEIRA: Lente[] = LENTES.map((l) => l.id);
 
 /**
  * Entra no mapa nesta lente? (prancha §2, quadro "Lente · Mostra").

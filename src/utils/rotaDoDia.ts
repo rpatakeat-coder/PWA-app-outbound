@@ -51,10 +51,6 @@ export function horarios(paradas: ParadaRota[], inicio: number): Horario[] {
   return out;
 }
 
-/** Início do dia: o horário fixo mais cedo menos o caminho até ele, ou 09:00. */
-export function inicioDoDia(paradas: ParadaRota[], padrao = 9 * 60): number {
-  return paradas.length && paradas[0].fixo != null ? paradas[0].fixo : padrao;
-}
 
 /** O primeiro conflito da ordem atual: espera longa ou atraso numa parada fixa. */
 export function conflito(paradas: ParadaRota[], hs: Horario[]): { indice: number; espera: number; atraso: number } | null {

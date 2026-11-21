@@ -21,7 +21,6 @@ import {
   Keyboard,
   Linking,
   Pressable,
-  Switch,
   AppState,
   useWindowDimensions,
 } from 'react-native';
@@ -35,7 +34,6 @@ import { useTheme } from './src/theme';
 import {
   IconArrowBack,
   IconArrowDown,
-  IconArrowFoward,
   IconArrowUp,
   IconBarGraph,
   IconCalendar,
@@ -73,16 +71,12 @@ import {
   IconPencil,
   IconStar,
   IconEye,
-  IconCheckCircle,
   IconBell,
   IconLogout,
   IconLightBulb,
-  IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
-  IconMenu,
   IconMenuCircles,
-  IconTrendingDown,
   IconBook,
   IconSparkle,
 } from './src/components/icons';
@@ -114,7 +108,7 @@ import {
   GRAVACAO_DA_MIRA, GRAVACAO_DO_CHEGUEI, chaveDaPerguntaDoPino, decidirPinoNaPorta, deveSugerirMoverPino, gravacaoDoPino,
   gravacaoSemMapa, pinoConfirmado as pinoConfirmadoNaPorta, textoDaBarraDoPino, type GravacaoDoPino, type ModoDoPino, type OrigemDoPino,
 } from './src/utils/precisaoDoPino';
-import { diaInicial, diasPlanejaveis, ehCompromisso, faixaDoLead, rotuloDoDia, vaiAoCockpit, type FaixaDoPlano } from './src/utils/planoNoMapa';
+import { diaInicial, diasPlanejaveis, ehCompromisso, faixaDoLead, rotuloDoDia } from './src/utils/planoNoMapa';
 import { gravarOrdemDoDia, lerColunaDoPlano, porNoDia, tirarDoDia } from './src/utils/paradaDoDia';
 import type { MotivoDeTirar } from './src/utils/motivoDeTirar';
 import { pedirMotivoDeTirar } from './src/utils/pedirMotivoDeTirar';
@@ -145,9 +139,9 @@ import { textoNormalizado } from './src/utils/pinoP2';
 import { contaAlvoDiscreta, DELTA_AFASTADO, FILTROS_VAZIOS, LENTES, passaNosFiltros, pontoDe, pontoExDiscreto, quantosFiltros, visivelNaLente, type FiltrosNovos, type Lente } from './src/utils/lentes';
 import { gruposDaLista, montarLista, noTrecho, type OrdemDaLista } from './src/utils/listaDoMapa';
 import type { EstagioPainel } from './src/components/Painel';
-import FileiraDeLentes, { ALTURA_FILEIRA_LENTES, ALTURA_PILULAS_DAS_LENTES } from './src/screens/FileiraDeLentes';
+import FileiraDeLentes from './src/screens/FileiraDeLentes';
 import LinhaDoDia from './src/screens/LinhaDoDia';
-import { ALTURA_LINHA_DO_DIA, PERTO_M, linhaDoDia } from './src/utils/linhaDoDia';
+import { PERTO_M, linhaDoDia } from './src/utils/linhaDoDia';
 import { contadorDaMeta, decisorEstaAgora, escolhidaPor, linhaDaMetaNaFolha, metros as metrosLL, portaSugerida, RAIO_REFERENCIA_M, RAIO_SUGESTAO_M, segundaOpcao, type Candidata } from './src/utils/armasDoMapa';
 import { mapaAbriu, primeiroToque, registrarEvento } from './src/utils/eventosDoMapa';
 import { useArmaDoPino } from './src/hooks/useArmaDoPino';
@@ -170,7 +164,6 @@ import { useClientVisits } from './src/hooks/useClientVisits';
 import { useForceReload } from './src/hooks/useForceReload';
 import { supabase } from './src/integrations/supabase/client';
 import {
-  MAX_VIEWPORT_KM,
   boundsContains,
   boundsForRender,
   boundsFromRegion,
@@ -190,7 +183,6 @@ import { DesfechoVisitaSheet } from './src/screens/DesfechoVisitaSheet';
 import { RelacionamentoSheet } from './src/screens/RelacionamentoSheet';
 import { ComunicadoSheet } from './src/screens/ComunicadoSheet';
 import { EditLocationModal } from './src/screens/EditLocationModal';
-import { MinhaDailyCard } from './src/screens/MinhaDailyCard';
 import { useComunicadosNaoLidos } from './src/hooks/useComunicados';
 import { useCobrancasNaoVistas } from './src/hooks/useCobrancasNaoVistas';
 import { useTarefasDoCrm } from './src/hooks/useTarefasDoCrm';
@@ -198,9 +190,9 @@ import { useLayout } from './src/hooks/useLayout';
 import { useNomesDeClientes } from './src/hooks/useNomesDeClientes';
 import { useAoVivo } from './src/hooks/useAoVivo';
 import { lerDeepLink, semDeepLink } from './src/utils/deepLink';
-import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, LOST_STAGE_ID, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
+import { DECISOR_STAGE_ID, FUNNEL_STAGE_IDS, STAGES, TEMP_COLORS, stageTemperature } from './src/constants/stages';
 import { useStages } from './src/hooks/useStages';
-import PlaybookScreen, { buscarPlaybook, opcoesDoPlaybook } from './src/screens/PlaybookScreen';
+import PlaybookScreen, { opcoesDoPlaybook } from './src/screens/PlaybookScreen';
 import { objecoesDaCasa, objecoesDoPlaybook } from './src/utils/playbook';
 import { opcoesDaFila } from './src/utils/dadosDaFila';
 import ListaCarteiraWeb from './src/screens/ListaCarteiraWeb';
@@ -248,7 +240,6 @@ import BlocoEntrePortas from './src/screens/BlocoEntrePortas';
 import PedirAvisos from './src/screens/PedirAvisos';
 import MinhasFotos, { FOTOS_LIBERADAS } from './src/screens/MinhasFotos';
 import { marcarGravada as marcarFeitaGravada, registrarFeita } from './src/utils/filaFeitas';
-import { JANELAS_LIGACAO } from './src/utils/horaDasLigacoes';
 import { useRouteConfig } from './src/hooks/useRouteConfig';
 import { useSellerGoals } from './src/hooks/useSellerGoals';
 import { IconCheck as SiCheck, IconChevronDown as SiDown, IconChevronLeft as SiLeft } from './src/components/icons';
@@ -746,7 +737,7 @@ function MainApp() {
   const insets = useSafeAreaInsets();
   // O tema em si e' aplicado por CSS no <html>; daqui so' sai o estado do
   // seletor nas configuracoes.
-  const { pref: themePref, setPref: setThemePref, isDark } = useTheme();
+  const { setPref: setThemePref, isDark } = useTheme();
   // Icones recebem cor por prop; `var()` nao resolve em atributo SVG.
   const iconColors = useIconColors();
 
@@ -1074,7 +1065,7 @@ function MainApp() {
   const waitingForLocation = showOnlyMyArea && !userLocation && locationPermission === 'pending';
   const areaPermissionDenied = showOnlyMyArea && locationPermission === 'denied';
 
-  const { clients: clientsNaArea, statuses: dynamicStatuses, allowedStatuses, reenviarParaHubspot, isLoading, jaCarregouAlgumaVez, error, deleteClient, addClient, updateClient, markAsVisited, ensureHubspotDeal, dismissContaAlvo } = useClients({
+  const { clients: clientsNaArea, statuses: dynamicStatuses, allowedStatuses, reenviarParaHubspot, isLoading, error, deleteClient, addClient, updateClient, markAsVisited, ensureHubspotDeal, dismissContaAlvo } = useClients({
     // Filtro ligado: só a área visível. Desligado: base inteira (é o modo do
     // gestor olhando o país todo — pesado por natureza, e agora é escolha
     // explícita em vez de padrão).
@@ -1815,7 +1806,7 @@ function MainApp() {
     const t = setTimeout(() => setCrmLiberado(true), 4000);
     return () => clearTimeout(t);
   }, [profile, crmLiberado]);
-  const { tarefas: tarefasDoCrmParaContagem, medido: tarefasMedidas, erro: tarefasErro, semMedicao: tarefasSemMedicao } = useTarefasDoCrm(!!profile && (crmLiberado || tab !== 'map'));
+  const { tarefas: tarefasDoCrmParaContagem, erro: tarefasErro, semMedicao: tarefasSemMedicao } = useTarefasDoCrm(!!profile && (crmLiberado || tab !== 'map'));
 
   // Avalia o filtro temporal de visita pra um cliente.
   // - null: sem filtro
@@ -1843,23 +1834,6 @@ function MainApp() {
     return true;
   };
 
-  const matchesVisitFilter = (visitedAt: string | null): boolean => {
-    if (visitFilter === null) return true;
-    if (visitFilter === 'never') return visitedAt === null;
-    if (visitFilter === 'visited') return visitedAt !== null;
-    const days = Number(visitFilter.split(':')[1]);
-    if (!Number.isFinite(days)) return true;
-    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-    if (visitFilter.startsWith('visited:')) {
-      if (!visitedAt) return false;
-      return new Date(visitedAt).getTime() >= cutoff;
-    }
-    if (visitFilter.startsWith('not_visited:')) {
-      if (!visitedAt) return true;
-      return new Date(visitedAt).getTime() < cutoff;
-    }
-    return true;
-  };
 
   // Recorte de filtros como VALOR, pra que a previa do sheet ("Ver {n} leads")
   // possa medir um conjunto PENDENTE sem tocar no que esta' aplicado.
@@ -3711,29 +3685,6 @@ function MainApp() {
       .catch((e) => Alert.alert('Erro ao montar a rota', String((e as Error)?.message ?? e)));
   }, [clients, fieldOps.saveRoute, fieldOps.montarDia, filteredWithCoords, routeDate, routeLeadCount, routeVendorFilterHubspotId, routeStatusSelection, routeStopClientIds, userLocation, routeStartOverride, vendorById]);
 
-  const saveManualRoute = useCallback((draft = routeDraft) => {
-    if (draft.length === 0) {
-      Alert.alert('Rota vazia', 'Adicione leads antes de salvar.');
-      return;
-    }
-    const base = userLocation ?? null;
-    fieldOps.saveRoute.mutate({
-      routeDate,
-      title: 'Rota manual',
-      source: 'manual',
-      priorityMode: 'manual',
-      base,
-      stops: draft.map(client => ({
-        client,
-        distance_meters: base && client.latitude != null && client.longitude != null
-          ? distanceMeters(base.latitude, base.longitude, client.latitude, client.longitude)
-          : null,
-      })),
-    }, {
-      onSuccess: () => Alert.alert('Rota salva', 'Planejamento atualizado.'),
-      onError: (err: any) => Alert.alert('Erro ao salvar rota', err?.message ?? 'Tente novamente'),
-    });
-  }, [fieldOps.saveRoute, routeDate, routeDraft, userLocation]);
 
   // Troca pra aba mapa e da fit-bounds nos pontos da rota + localizacao
   // do usuario, se disponivel. Timeout pequeno espera a tab montar antes
@@ -3975,25 +3926,6 @@ function MainApp() {
     );
   }, [isNavigating, userLocation, navigationCurrentStop]);
 
-  const advanceNavigationStop = useCallback(async () => {
-    const stop = navigationCurrentStop
-      ? routeStops.find(s => s.client_id === navigationCurrentStop.id)
-      : null;
-    if (stop) {
-      try { await fieldOps.markStopDone.mutateAsync(stop); } catch (err) {
-        console.warn('[NAV] markStopDone falhou:', err);
-      }
-    }
-    if (currentStopIndex + 1 >= routeDisplayClients.length) {
-      Alert.alert(
-        'Rota concluída',
-        `Você visitou os ${routeDisplayClients.length} leads da rota de hoje.`,
-        [{ text: 'OK', onPress: () => setIsNavigating(false) }],
-      );
-      return;
-    }
-    setCurrentStopIndex(idx => idx + 1);
-  }, [navigationCurrentStop, routeStops, currentStopIndex, routeDisplayClients.length, fieldOps.markStopDone]);
 
   const skipNavigationStop = useCallback(() => {
     if (currentStopIndex + 1 >= routeDisplayClients.length) {
@@ -6251,14 +6183,6 @@ function MainApp() {
     );
   }, [dismissContaAlvo, fieldOps.stops, fieldOps.removeStop]);
 
-  // Conta por status respeitando search + UF — assim o usuario ve em tempo
-  // real qual aba traz resultados conforme digita ("Lead (316)" -> "Lead (200)").
-  const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const opt of statusOptions) counts[opt.value] = 0;
-    for (const c of clientsForCount) counts[c.status] = (counts[c.status] ?? 0) + 1;
-    return counts;
-  }, [clientsForCount, statusOptions]);
 
   // Contagem por status pro viewer: sobre TODOS os clientes (viewer nao tem
   // search/UF/vendedor pra estreitar o pool), so os que tem coordenada — que
@@ -6424,26 +6348,6 @@ function MainApp() {
     );
   }, [renderClientItem]);
 
-  const renderCompactClient = (client: Client, index: number, actions?: React.ReactNode) => {
-    const color = statusConfig[client.status]?.color || '#3b82f6';
-    return (
-      <View key={client.id} style={[styles.clientCard, { borderLeftColor: color }]}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardNameRow}>
-            <Text style={sharedStyles.routePosition}>{index + 1}</Text>
-            <Text style={sharedStyles.clientName} numberOfLines={1}>{getClientPrimaryName(client)}</Text>
-          </View>
-          <View style={[sharedStyles.statusBadge, { backgroundColor: color }]}>
-            <Text style={sharedStyles.statusBadgeText}>{statusConfig[client.status]?.label || client.status}</Text>
-          </View>
-        </View>
-        <Text style={styles.clientCity}>
-          {[client.bairro, client.cidade, client.estado].filter(Boolean).join(' - ') || 'Localizacao nao informada'}
-        </Text>
-        {actions}
-      </View>
-    );
-  };
 
   if (!isAuthenticated && !loading) {
     return <LoginScreen />;
@@ -6529,10 +6433,8 @@ function MainApp() {
     const remainingWithCoords = remaining.filter(c => c.latitude != null && c.longitude != null);
     const navTitle = getClientPrimaryName(navigationCurrentStop);
     const navSubtitle = [navigationCurrentStop.cidade, navigationCurrentStop.estado].filter(Boolean).join(' • ');
-    const distKm = navigationDistanceMeters != null ? (navigationDistanceMeters / 1000).toFixed(1).replace('.', ',') : null;
     const isLast = currentStopIndex === routeDisplayClients.length - 1;
 
-    const navigationStop = routeStops.find(s => s.client_id === navigationCurrentStop.id);
     const navStatusLabel = statusConfig[navigationCurrentStop.status]?.label || navigationCurrentStop.status;
     const navStatusColor = statusConfig[navigationCurrentStop.status]?.color || '#3b82f6';
     const distLabel = navigationDistanceMeters != null
@@ -8387,12 +8289,6 @@ function MainApp() {
     const etapa = st.client.status === 'cliente' || st.client.status === 'churn' ? st.client.status : st.client.etapa ?? null;
     return { nome: getClientPrimaryName(st.client), numero, etapa, dealId: st.client.id_hubspot ?? null };
   })();
-  // Tarefas: atrasadas + vencem hoje. Sem pendencia, sem selo (nunca "0").
-  // O selo e' o que o Cockpit cobra: as tarefas do HubSpot (prompt final §B2/§B4).
-  const seloTarefas = tarefasDoCrmParaContagem.filter((t) => {
-    const g = grupoDaTarefa(t.venceEm, new Date());
-    return g === 'atrasadas' || g === 'hoje';
-  }).length;
   // UM NÚMERO SÓ (Fase 0 das abas, 04/10/26): selo, lateral, cabeçalho e Meu desempenho contam a
   // fila. Enquanto ela não chega, sem número (antes piscava o 5 do CRM e virava 3); a contagem
   // do CRM só entra se a fila falhar.

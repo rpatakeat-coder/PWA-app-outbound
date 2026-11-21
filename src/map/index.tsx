@@ -27,4 +27,3 @@ export { hasApiKey, GOOGLE_MAP_ID } from './loader';
 // continuam exportadas porque EditLocationModal passa PROVIDER_DEFAULT; sao
 // inertes e mantidas so pra o codigo existente nao precisar mudar.
 export const PROVIDER_DEFAULT = undefined;
-export const PROVIDER_GOOGLE = 'google';

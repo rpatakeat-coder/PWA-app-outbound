@@ -543,7 +543,6 @@ function GradeEspiada({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
 }
 
 function GradeMais({ d, a }: { d: DadosCardNovo; a: AcoesCardNovo }) {
-  const c = d.client;
   return (
     <View style={s.grade2}>
       {/* Ag. Pagamento: cobrança emitida, nada muda até o Pago (o servidor também recusa). */}

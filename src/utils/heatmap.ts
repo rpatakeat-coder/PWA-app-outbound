@@ -105,14 +105,6 @@ export function heatColor(t: number, alpha: number): string {
   return `rgba(${r},${g},${bl},${alpha})`;
 }
 
-// Cores fixas da legenda (menos -> mais), pra desenhar a barra sem depender do
-// MapView. Sao 24 passos, e nao os 4 degraus, porque o StyleSheet do RN nao tem
-// linear-gradient: a barra e' uma fila de <View> de cor solida, e com poucos
-// passos ela vira faixa listrada em vez de gradiente. Interpolar aqui mantem a
-// legenda descrevendo exatamente a mesma rampa que heatColor() pinta no mapa.
-export const HEAT_LEGEND_STOPS = Array.from({ length: 24 }, (_, i) =>
-  heatColor(i / 23, 1),
-);
 
 // "NINGUEM FOI" (prompt final §5, lente Calor): areas com pino e sem nenhum
 // check-in no periodo. Mesma grade de HEAT_CELL_M, com a latitude de referencia

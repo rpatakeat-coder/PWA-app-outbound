@@ -309,7 +309,6 @@ export default function AgendaNovoScreen({
   const compromissos = doDia(dia).filter((k) => !concluidas.has(k.id)
     && !(k.fonte === 'app' && reunioes.some((r) => `app-${r.id}` === k.id && (r.status === 'realizada' || r.status === 'nao_aconteceu'))));
   const sep = separarCompromissos(compromissos);
-  const soltos = [...sep.ligacoes, ...sep.fora];
   /** o chip da parada (0175) e os selos dos compromissos casados com ela */
   const chipDaParada = (p: FieldRouteStopWithClient) => acaoPorId(p.acao)?.rotulo ?? null;
 
@@ -438,7 +437,6 @@ export default function AgendaNovoScreen({
   // ---- o ritmo (docs/12 §1.3): o único lugar do app que pede a promessa ----
   const md = meuDia.data;
   const prometido = md?.prometido?.visitas ?? null;
-  const alvo = prometido ?? (metaVisitasDia > 0 ? metaVisitasDia : 6);
   // SÓ PROVADAS (auditoria 16/10/26): o rótulo é "visitas provadas"; antes, sem a prova lida, caía no
   // total de check-ins ou na lista local e mostrava visita sem prova como provada. Sem a medição: "—".
   const provadasMedidas = md?.provadasHoje ?? null;

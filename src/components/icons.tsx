@@ -18,7 +18,6 @@ import { useTheme } from '../theme';
 import { IconArrowBack } from 'takeat-design-system-ui-kit/icons/IconArrowBack';
 import { IconArrowUp } from 'takeat-design-system-ui-kit/icons/IconArrowUp';
 import { IconArrowDown } from 'takeat-design-system-ui-kit/icons/IconArrowDown';
-import { IconCached } from 'takeat-design-system-ui-kit/icons/IconCached';
 import { IconCall } from 'takeat-design-system-ui-kit/icons/IconCall';
 import { IconCheckbox } from 'takeat-design-system-ui-kit/icons/IconCheckbox';
 import { IconCheckboxChecked } from 'takeat-design-system-ui-kit/icons/IconCheckboxChecked';
@@ -27,18 +26,15 @@ import { IconClock } from 'takeat-design-system-ui-kit/icons/IconClock';
 import { IconEye } from 'takeat-design-system-ui-kit/icons/IconEye';
 import { IconHome } from 'takeat-design-system-ui-kit/icons/IconHome';
 import { IconMail } from 'takeat-design-system-ui-kit/icons/IconMail';
-import { IconMedal } from 'takeat-design-system-ui-kit/icons/IconMedal';
 import { IconStore } from 'takeat-design-system-ui-kit/icons/IconStore';
 import { IconTrophy } from 'takeat-design-system-ui-kit/icons/IconTrophy';
 import { IconUser } from 'takeat-design-system-ui-kit/icons/IconUser';
 import { IconWhatsapp } from 'takeat-design-system-ui-kit/icons/IconWhatsapp';
-import { IconCelebratingUser } from 'takeat-design-system-ui-kit/icons/IconCelebratingUser';
 import { IconExternalLink } from 'takeat-design-system-ui-kit/icons/IconExternalLink';
 import { IconBill } from 'takeat-design-system-ui-kit/icons/IconBill';
 import { IconLock } from 'takeat-design-system-ui-kit/icons/IconLock';
 import { IconWarning } from 'takeat-design-system-ui-kit/icons/IconWarning';
 import { IconUndo } from 'takeat-design-system-ui-kit/icons/IconUndo';
-import { IconArray } from 'takeat-design-system-ui-kit/icons/IconArray';
 import { IconLightBulb } from 'takeat-design-system-ui-kit/icons/IconLightBulb';
 import { IconBell } from 'takeat-design-system-ui-kit/icons/IconBell';
 import { IconChevronDown } from 'takeat-design-system-ui-kit/icons/IconChevronDown';
@@ -84,7 +80,6 @@ import { IconManager } from 'takeat-design-system-ui-kit/icons/IconManager';
 import { IconTrash } from 'takeat-design-system-ui-kit/icons/IconTrash';
 
 export {
-  IconArray,
   IconLightBulb,
   IconBell,
   IconChevronDown,
@@ -100,11 +95,9 @@ export {
   IconArrowUp,
   IconBarGraph,
   IconBill,
-  IconCached,
   IconCalendar,
   IconCall,
   IconCar,
-  IconCelebratingUser,
   IconCheck,
   IconCheckCircle,
   IconCheckbox,
@@ -125,7 +118,6 @@ export {
   IconLock,
   IconMail,
   IconManager,
-  IconMedal,
   IconPencil,
   IconPlus,
   IconRefresh,

@@ -391,7 +391,6 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
       return [...a, ...b];
     },
   });
-  const [postosNoPlano, setPostosNoPlano] = useState<Record<string, string>>({});
   // a folha "Marcar o próximo passo" grava fora daqui: o selo "próximo passo · dia" relê quando o plano muda
   useEffect(() => aoMudarOPlano(() => { void queryClient.invalidateQueries({ queryKey: ['plano_semana_fila'] }); }), [queryClient]);
   // Decisão 4 do handoff: o próximo dia de Rua do plano; sem Rua marcada, o próximo dia útil.
@@ -659,7 +658,6 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
     if (aoMarcarProximoPasso) { aoMarcarProximoPasso(i.clientId); return; }
     if (!sellerId) return;
     const dia = proximoDiaDeRua();
-    setPostosNoPlano((p) => ({ ...p, [i.dealId]: dia }));
     let desfeito = false;
     const timer = setTimeout(async () => {
       if (desfeito) return;
@@ -667,13 +665,11 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
         await porNoDia(sellerId, dia, i.clientId!);
         void queryClient.invalidateQueries({ queryKey: ['plano_semana_fila'] });
       } catch {
-        setPostosNoPlano((p) => { const n = { ...p }; delete n[i.dealId]; return n; });
         Toast.mostrar('Não consegui pôr no plano. Tente de novo.', 'erro');
       }
     }, 5000);
     Toast.mostrar(`No plano · ${i.negocio} · ${diaCurto(dia)}`, 'ok', { rotulo: 'Desfazer', onPress: () => {
       desfeito = true; clearTimeout(timer);
-      setPostosNoPlano((p) => { const n = { ...p }; delete n[i.dealId]; return n; });
     } });
   }
 

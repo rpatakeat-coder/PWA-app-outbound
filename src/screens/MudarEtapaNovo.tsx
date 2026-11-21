@@ -70,7 +70,6 @@ const abertosDe = (a: Armas): Abertos => ({
   papel: !!a.papel && !(PAPEIS as readonly string[]).includes(a.papel),
   horario: !!a.horario && !HORARIOS.some((h) => h.hs && h.valor === a.horario),
 });
-const CHAVES: ChaveArma[] = ['sistema', 'dor', 'decisor', 'horario'];
 /* rede ruim na rua: o que não respondeu em 4 s não segura a folha */
 const comPrazo = <T,>(p: PromiseLike<T>, ms: number, padrao: T): Promise<T> =>
   Promise.race([Promise.resolve(p).catch(() => padrao), new Promise<T>((r) => setTimeout(() => r(padrao), ms))]);

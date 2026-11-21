@@ -9,7 +9,6 @@ import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'rea
 
 import type { Client } from '../types/client';
 import { useAcimaDoRodape } from '../hooks/useAcimaDoRodape';
-import { Toast } from '../components/Toast';
 import { ORIGEM, origemDoFiltro } from '../utils/lentes';
 import type { Pino } from '../utils/pinoP2';
 import { distanciaTexto, ir } from './CardLeadNovo';

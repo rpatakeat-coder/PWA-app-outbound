@@ -14,7 +14,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { supabase } from '../integrations/supabase/client';
 import { useLayout } from '../hooks/useLayout';
 import {
   IconBook, IconCalendar, IconCheck, IconCheckCircle, IconClock, IconFlame, IconLocation, IconShieldCheck, IconStar,
