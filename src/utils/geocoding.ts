@@ -99,8 +99,8 @@ export async function fetchCepData(cep: string): Promise<CepResult | null> {
 
 // Tipos de resultado que NÃO são o ponto exato do endereço — quando o
 // Nominatim cai num desses, o pin fica no centroide da rua/bairro/cidade, não
-// na casa. Usado pra marcar geo_approximate. Mesma lista da edge function
-// repair-client-geocodes (manter em sincronia).
+// na casa. Usado pra marcar geo_approximate. Mesma lista da Edge geocode
+// (IMPRECISE em supabase/functions/geocode/index.ts; manter em sincronia).
 const IMPRECISE_TYPES = new Set([
   'city', 'town', 'village', 'municipality', 'county', 'state',
   'region', 'country', 'postcode', 'suburb', 'neighbourhood', 'road',

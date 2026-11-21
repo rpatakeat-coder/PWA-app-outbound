@@ -55,7 +55,7 @@ Endereço: https://fieldtakeat.vercel.app (app em `/`, Cockpit em `/gestao`).
                  │  Postgres · Auth · Storage│
                  │      Edge Functions       │
                  └─────┬───────────────┬────┘
-        hubspot-sync   │               │  hubspot-lead-webhook(-latlong)
+        hubspot-sync   │               │  hubspot-lead-webhook-latlong
    (deals/contatos/    │               │  (leads vindos do HubSpot/RPA)
     engagements)       ▼               ▲
                  ┌───────────┐    ┌────┴───────┐
@@ -72,7 +72,7 @@ Endereço: https://fieldtakeat.vercel.app (app em `/`, Cockpit em `/gestao`).
 - **Reunião/follow-up no Google Calendar**: continua no **n8n** (credencial OAuth
   do Google vive lá).
 - **Entrada HubSpot → app**: leads chegam pelas Edge Functions
-  `hubspot-lead-webhook` / `hubspot-lead-webhook-latlong` (upsert em `clients`).
+  `hubspot-lead-webhook-latlong` (upsert em `clients`; a `hubspot-lead-webhook` antiga saiu em 21/11/26).
 
 ---
 
@@ -184,12 +184,11 @@ Os três gatilhos de `useForceReload` continuam iguais:
 | Função | Papel |
 |---|---|
 | `hubspot-sync` | Saída app → HubSpot: etapa, cadastro, notas, tarefas e reuniões (com fallback no n8n). |
-| `hubspot-lead-webhook` / `-latlong` | Entrada: leads do HubSpot/RPA → `clients`. |
+| `hubspot-lead-webhook-latlong` | Entrada: leads do HubSpot/RPA → `clients`. |
 | `hubspot-activity-sync` | Diária: atividades do HubSpot → `clients` (`apply_hubspot_activity`). |
 | `clientes-sync` | Diária: os clientes Takeat (pipelines Onboarding e Sucesso) → `clientes_takeat`. |
 | `negocio-vira-ponto` | A cada 15 min: negócio do funil Field sem pino ganha pino. |
 | `localizar-municao` | De hora em hora: acha o endereço das contas de rua sem coordenada. |
-| `repair-client-geocodes` | Reparo antigo de pinos (o atual é o workflow `reparar-pinos` do Cockpit). |
 | `geocode` | Endereço → coordenada no cadastro. |
 | `push-fila` | Os avisos do dia (8h, 12h30, 17h30, 18h, sexta 17h). |
 | `fila-tarefas` | A fila do dia do executivo. |
