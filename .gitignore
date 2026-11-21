@@ -28,6 +28,9 @@ yarn-error.*
 
 # macOS
 .DS_Store
+
+# configuração local do Claude Code (cada máquina tem a sua)
+.claude/settings.local.json
 *.pem
 
 # local env files

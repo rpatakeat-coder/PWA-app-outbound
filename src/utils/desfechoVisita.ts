@@ -10,8 +10,10 @@
 // nem qual dor atacar, e a cadencia cai na regua generica da etapa.
 //
 // O FORMATO NAO E' DECORATIVO
-// `DESFECHO_VISITA v1` e' contrato de parser (doc-cockpit/08-regras-de-negocio.md).
-// Primeira linha exata, uma chave por linha, snake_case sem acento. As regras
+// `DESFECHO_VISITA v1` e' contrato de parser (tpDesfechoDaNota, no Cockpit, le a nota
+// do negocio): primeira linha exata, uma chave por linha `chave: valor`, snake_case
+// sem acento, `proximo_passo: <canal> | <AAAA-MM-DD> | <acao>`, e versao desconhecida
+// (v2) marca `requer_revisao` em vez de reinterpretar em silencio. As regras
 // que parecem detalhe sao as que ja' custaram caro do outro lado:
 //
 //  - CHAVE VAZIA E' MELHOR QUE CHAVE AUSENTE. Ausente o parser nao sabe se a
@@ -187,7 +189,7 @@ export const ehDiaUtil = (dia: string): boolean => {
  *
  * A rua nao acontece no sabado: datar a proxima visita pra sabado e' prometer
  * um toque que nao vai existir, e a tarefa vence sozinha no HubSpot. E' defeito
- * medido do lado do Cockpit (doc-cockpit/08-regras-de-negocio.md).
+ * medido do lado do Cockpit (a "1a visita" caindo no sabado).
  */
 export function proximoDiaUtil(de: string, dias: number): string {
   const cursor = new Date(`${de}T12:00:00Z`);

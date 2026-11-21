@@ -1,29 +1,31 @@
-# Takeat RPA — App de Campo Outbound
+# Takeat — App de Campo (Field Sales)
 
-**PWA** (instalável no celular) para o time de vendas **outbound** da Takeat.
-Concentra a operação de campo do vendedor: mapa de leads, planejamento de rota,
-agenda de compromissos, tarefas, check-in de visitas e o painel do gestor — tudo
-sincronizado com o **HubSpot** (CRM) e o **Supabase** (banco + backend).
+**PWA** instalável no celular para o time de Field Sales da Takeat: o executivo na rua
+(mapa, plano do dia, check-in, ficha de rua, tarefas) e, no mesmo domínio, o **Cockpit**
+de gestão em `/gestao` — tudo sobre o **Supabase** (banco + backend) e o **HubSpot** (CRM).
+Endereço: https://fieldtakeat.vercel.app (app em `/`, Cockpit em `/gestao`).
 
-> ⚠️ **Repositório privado** — código proprietário da Takeat.
+> ⚠️ **Repositório privado** — código proprietário da Takeat. Regras de trabalho para
+> agentes em `CLAUDE.md`.
 
 ---
 
-## 📱 Funcionalidades
+## 📱 O que o app faz
 
-- **Mapa comercial** — leads/clientes georreferenciados, clusterização, filtros por
-  etapa, estado, vendedor e status; temperatura da etapa por cor.
-- **Lista** — mesma base do mapa em formato de lista com busca e filtros.
-- **Rota** — planejamento de rota do dia (otimização de paradas) e navegação.
-- **Agenda** — rotas planejadas + reuniões (demos) + follow-ups em ordem
-  cronológica (passado / hoje / futuro), com filtro por vendedor.
-  - **Exportação JSON** (gestor) — botão que exporta a agenda em JSON para análise.
-- **Tarefas** — cobranças automáticas (ex.: *Agendar Demo* com escalonamento D2 → D5).
-- **Cadastro / edição de leads** — com geocoding e sincronização no HubSpot.
-- **Check-in de visita** — registro de visita com validação de distância; cada
-  visita (primeira ou re-marcada) cria uma **Task concluída** no deal do HubSpot.
-- **Painel do Gestor** — métricas por vendedor, drill-down e exportação completa (JSON).
-- **Meu desempenho** — métricas do próprio vendedor.
+- **Mapa** — os pinos do executivo (leads, contas-alvo da munição, clientes Takeat) com as
+  lentes da fileira, a lista do mapa e a pílula-placar do dia.
+- **Hoje** — a folha da manhã (até as 10h ou pelo push das 8h), o toast depois de cada
+  visita e o fecho do dia (push das 18h), montados por `_compartilhado/hojeV3.ts`, a mesma
+  conta do Hoje do Cockpit.
+- **Plano e rota** — o plano da semana (`planos_semanais`, o mesmo do Cockpit) vira a rota
+  do dia (`field_routes` / `field_route_stops`).
+- **Check-in** — o Cheguei com prova por GPS (ou foto) e a ficha de rua com o próximo passo.
+- **Agenda** — reuniões e follow-ups; no computador, a Agenda planeja o dia no mapa.
+- **Tarefas** — as tarefas que a gestão põe no HubSpot e a fila do dia.
+- **Eu** — o desenvolvimento do executivo (placar, sequência, missões, carreira), o playbook
+  e os ajustes.
+- **Cockpit** (`/gestao`) — o HTML do repositório `julyanrib/cockpit-unificado`, copiado por
+  `scripts/importar-cockpit.cjs` para `gestao/public/cockpit/` (nunca editar aqui).
 
 ---
 
@@ -77,25 +79,22 @@ sincronizado com o **HubSpot** (CRM) e o **Supabase** (banco + backend).
 ## 📂 Estrutura
 
 ```
-App.tsx                      # App principal (navegação por abas, telas core)
-index.js                     # Entry point
+App.tsx                      # o app (abas, mapa, ficha do lead, folhas do dia)
+index.js                     # entrada
 src/
-  screens/                   # Telas (Gestor, MeuDesempenho, modais de agendamento…)
-  hooks/                     # Hooks de dados (useClients, useMeetings, useFieldOps…)
-  utils/                     # Helpers (hubspotSync, routing, geocoding, exportAgenda…)
-  context/AuthContext.tsx    # Autenticação (Supabase)
-  constants/stages.ts        # Etapas do funil + webhook n8n
-  integrations/supabase/     # Client + tipos
-  types/client.ts            # Tipos de domínio
-  map/                       # Camada de mapa (Google Maps JS API)
-  components/Alert.tsx       # Alert.alert do react-native, implementado pra web
+  screens/                   # telas e folhas (Hoje v3, Agenda, Tarefas, Eu, Playbook…)
+  hooks/                     # leitura de dados (useClients, useFieldOps, useDiaV3…)
+  utils/                     # regras puras, com as suítes *.teste.ts ao lado
+  map/                       # camada de mapa (Google Maps JS API)
+  constants/stages.ts        # etapas do funil e cores (dado, não tema)
+  integrations/supabase/     # cliente e tipos
 supabase/
-  functions/                 # Edge Functions (Deno)
-  migrations/                # Migrations SQL
-assets/                      # Ícones/splash
-public/                      # Casca do PWA: index.html, manifest.json, sw.js, icons/
-scripts/build-web.js         # Build + carimbo de versão no service worker
-app.json / vercel.json       # Config Expo (web) + deploy
+  functions/                 # Edge Functions (Deno) + _compartilhado (regras do app e do Cockpit)
+  migrations/                # migrations SQL, numeradas NNNN_
+gestao/public/               # o Cockpit importado (servido em /gestao)
+api/avisos-sem-passo.js      # cron da Vercel (seg–sex, 18h)
+public/                      # casca do PWA: index.html, manifest.json, sw.js, ícones
+scripts/                     # build-web, importar-cockpit, portar-cockpit-api, portar-compartilhado
 ```
 
 ---
@@ -184,13 +183,20 @@ Os três gatilhos de `useForceReload` continuam iguais:
 
 | Função | Papel |
 |---|---|
-| `hubspot-sync` | Saída app → HubSpot: `change_stage`, `update`, `create_pin`, `get_stages`, **`create_note`/`update_note`** (notas do lead e follow up → Observação), **`create_task`** (check-in de visita → Task), **`create_meeting`/`update_meeting`** (demo → Meeting). `update_task` só atende os follow ups criados antes da mudança de regra. |
-| `hubspot-lead-webhook` / `-latlong` | Entrada: leads do HubSpot/RPA → upsert em `clients` (com geocoding). |
-| `hubspot-usage-sync` | Entrada (semanal — segunda de madrugada, Cron do Supabase): lê `data_da_ultima_comanda_emitida` e `data_solicitacao_cancelamento` dos deals nas etapas de Acompanhamento/Saudável (Onboarding e Sucesso) → grava em `clients`. |
-| `export-report` | Exporta TUDO do período em JSON (painel do gestor) → Storage → signed URL. |
-| `export-agenda` | Exporta a agenda (montada no app) em JSON → Storage → signed URL. |
-| `geocode` | Geocoding/reparo de coordenadas. |
-| `delete-lead`, `open-app` | Utilitários. |
+| `hubspot-sync` | Saída app → HubSpot: etapa, cadastro, notas, tarefas e reuniões (com fallback no n8n). |
+| `hubspot-lead-webhook` / `-latlong` | Entrada: leads do HubSpot/RPA → `clients`. |
+| `hubspot-activity-sync` | Diária: atividades do HubSpot → `clients` (`apply_hubspot_activity`). |
+| `clientes-sync` | Diária: os clientes Takeat (pipelines Onboarding e Sucesso) → `clientes_takeat`. |
+| `negocio-vira-ponto` | A cada 15 min: negócio do funil Field sem pino ganha pino. |
+| `localizar-municao` | De hora em hora: acha o endereço das contas de rua sem coordenada. |
+| `repair-client-geocodes` | Reparo antigo de pinos (o atual é o workflow `reparar-pinos` do Cockpit). |
+| `geocode` | Endereço → coordenada no cadastro. |
+| `push-fila` | Os avisos do dia (8h, 12h30, 17h30, 18h, sexta 17h). |
+| `fila-tarefas` | A fila do dia do executivo. |
+| `assumir-negocio` | "É meu": passa o negócio para quem pediu, com as travas. |
+| `criar-usuario` / `revogar-usuario` | Acessos (aba Acessos do Cockpit). |
+| `google-calendar` | O evento da reunião na agenda do Google. |
+| `cockpit-dados` / `cockpit-api` / `cockpit-robo` | O Cockpit: leitura, escritas no HubSpot e a entrada dos robôs. |
 
 Deploy (via Supabase CLI ou MCP):
 
@@ -198,19 +204,9 @@ Deploy (via Supabase CLI ou MCP):
 supabase functions deploy hubspot-sync
 ```
 
-Secrets usados pelas functions: `HUBSPOT_TOKEN`, `HUBSPOT_WEBHOOK_SECRET`,
-`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`.
-
-`HUBSPOT_TOKEN` é o token do private app do HubSpot e só é lido por
-`hubspot-sync` e `hubspot-usage-sync` — trocar o private app significa trocar
-esse secret (mais a credencial equivalente no n8n). `HUBSPOT_WEBHOOK_SECRET` é
-outra coisa: segredo compartilhado que valida quem **chama** os webhooks de
-entrada, não muda quando o app do HubSpot muda.
-
-`HUBSPOT_TOKEN_USAGE` (opcional) dá à `hubspot-usage-sync` um token próprio. O
-limite da Search API é de **4 req/s por token**, então um private app dedicado
-tira a varredura semanal da disputa com o n8n/RPA. Sem o secret, ela usa o
-`HUBSPOT_TOKEN` normalmente.
+Secrets usados pelas functions: `HUBSPOT_TOKEN`, `HUBSPOT_WEBHOOK_SECRET`, `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`. As chamadas do pg_cron levam um segredo do
+cofre (`vault`), conferido por `public.segredo_confere`.
 
 ---
 
@@ -239,61 +235,6 @@ visita"):
   bloqueio de `isLead` continua valendo só para etapa e webhook.
 
 > Só vale para leads que já têm `id_hubspot` (deal). Sem isso, o app ignora sem erro.
-
----
-
-## 📊 Uso do produto (HubSpot → app, semanal)
-
-Responde em campo "é cliente, mas será que usa?". A edge `hubspot-usage-sync`
-roda **toda segunda às 04:00 BRT** (Cron do Supabase, `0 7 * * 1` — o cron é em
-UTC) e grava em `clients`:
-
-| HubSpot (deal) | `clients` |
-|---|---|
-| `data_da_ultima_comanda_emitida` | `hs_ultima_comanda_em` (date) |
-| `data_solicitacao_cancelamento` | `hs_cancelamento_solicitado_em` (date) |
-| `numero_de_comandas_ate_o_momento_number` | `hs_qtd_comandas` (integer) |
-| etapa de onde veio | `hs_etapa_uso` (rótulo) + `hs_situacao` (`ativo`/`churn`) |
-| — | `hs_uso_sincronizado_em` (quando o sync passou) |
-
-> **Ex-cliente é `hs_situacao = 'churn'`, não "tem data de cancelamento".** A
-> data registra que houve um *pedido*: na primeira sincronização, 56 clientes em
-> etapa ativa tinham pedido de cancelamento (o mais antigo de 05/01/2026) — gente
-> retida, emitindo comanda até hoje. Quem classifica é a edge, pela flag `churn`
-> na constante `STAGES`; o app só lê `hs_situacao`. Também não confundir com
-> `clients.status = 'churn'`, que é marcação manual e não acompanha o HubSpot.
-
-**Quem é "cliente" aqui não é o status local** — é estar numa destas etapas:
-
-| Etapa | Pipeline | Stage ID |
-|---|---|---|
-| Acompanhamento | Onboarding (`87106112`) | `175135768` |
-| Acompanhamento | Sucesso (`87367429`) | `162508353` |
-| Saudável | Sucesso (`87367429`) | `171389297` |
-| Churn | Sucesso (`87367429`) | `1122729590` |
-
-Churn entra para que o **ex-cliente** mostre a data de cancelamento no pin.
-Sozinho é maior que as outras três somadas (~2,7 mil deals), o que leva o total
-para ~48 chamadas **por semana**.
-
-Uma busca por etapa (`dealstage EQ`, paginada de 100 em 100) → gravação em
-lotes de 500 pela RPC `apply_hubspot_uso`. Com ~4,7 mil deals nas quatro
-etapas: **~48 chamadas ao HubSpot e ~10 ao banco, por semana**.
-
-O portal tem outros fluxos (n8n, RPA) disputando o mesmo limite por segundo,
-então o sync anda devagar de propósito: **1 requisição por segundo**
-(`MIN_INTERVAL_MS`), ocupando ~1 dos ~4 slots/s da Search API. Em 429 ou 5xx
-ele respeita o `Retry-After` do HubSpot e tenta de novo (até 5 vezes, backoff
-exponencial). O retorno traz `retries_429` e `espera_por_limite_ms` — se
-subirem, vale mover o horário do cron para longe dos outros fluxos.
-
-No app, o bottom sheet do pin mostra a última comanda com semáforo (verde ≤ 7
-dias, âmbar 8–30, vermelho > 30 ou nenhuma), o pedido de cancelamento quando
-existe, e há quanto tempo o dado foi atualizado. O card só aparece para quem o
-sync alcança — ou seja, cliente de verdade.
-
-> Deal que sai dessas etapas para de ser atualizado e mantém o último valor
-> lido; o rodapé "atualizado há N dias" é o que denuncia isso.
 
 ---
 
