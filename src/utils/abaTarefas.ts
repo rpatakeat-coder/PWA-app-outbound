@@ -2,10 +2,7 @@
 //
 // Fonte: as tarefas abertas do executivo no HubSpot (useTarefasDoCrm) — é por
 // elas que o Cockpit movimenta o executivo: o planejamento da semana, o
-// follow-up do funil, o próximo passo da ficha de rua, a cobrança de SLA. As
-// `client_tasks` do app (generate_client_tasks) não viram tarefa no HubSpot
-// (Opção A do docs/pwa-para-cockpit.md §5) e aparecem à parte, como
-// "sugestão do app".
+// follow-up do funil, o próximo passo da ficha de rua, a cobrança de SLA.
 import { ehDiaUtil } from './desfechoVisita';
 
 export type GrupoTarefa = 'atrasadas' | 'hoje' | 'amanha' | 'semana' | 'depois';

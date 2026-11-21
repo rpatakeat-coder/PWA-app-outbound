@@ -50,10 +50,8 @@ interface Props {
   client: Client;
   onClose: () => void;
   // Quando setado, o modal ja abre com essa etapa pre-selecionada e NAO mostra
-  // o seletor de etapas (ex.: "Mover para perdido" a partir de uma tarefa).
+  // o seletor de etapas (ex.: "Mover para perdido").
   initialStageId?: string;
-  // Chamado apos o envio bem-sucedido (ex.: resolver a tarefa que originou).
-  onDone?: () => void;
   // Cria o deal no HubSpot pra um lead SEM id_hubspot (conta-alvo antes do
   // check-in, ou pin com webhook atrasado) e devolve o id. Sem isso, mover a
   // etapa de quem nao tem deal trava esperando o id chegar.
@@ -407,7 +405,7 @@ function PlainTextField({
   );
 }
 
-export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCreateHubspotDeal }: Props) {
+export function ChangeStageModal({ client, onClose, initialStageId, onCreateHubspotDeal }: Props) {
   const layout = useLayout();
   const iconColors = useIconColors();
   const [selectedStageId, setSelectedStageId] = useState<string | null>(initialStageId ?? null);
@@ -777,8 +775,7 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
     // ===== UI instantanea =====
     // Nada de segurar o vendedor esperando rede: reflete a etapa nova no cache
     // do react-query e fecha o modal JA. A sincronizacao (Supabase + HubSpot)
-    // roda em background; a tarefa que originou (onDone) so e' resolvida quando
-    // o sync CONFIRMA — se falhar de vez, reverte a etapa e reabre a tarefa.
+    // roda em background; se o sync falhar de vez, reverte a etapa.
     setSubmitting(true);
     const previousEtapa = client.etapa ?? null;
     const newEtapa = selectedStage.label;
@@ -804,9 +801,6 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
       } catch (err) {
         console.warn('[change_stage] update de etapa falhou', err);
       }
-      // Tarefas de cadencia derivam da etapa — refresca.
-      queryClient.invalidateQueries({ queryKey: ['client_tasks'] });
-
       // 2) Sincroniza com o HubSpot (change_stage e' PATCH idempotente, entao
       //    reexecutar e' seguro): edge function hubspot-sync, com fallback pro
       //    n8n dentro do sendHubspotEvent. 1 retry por cima.
@@ -839,9 +833,6 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
           console.warn('[change_stage] revert de etapa falhou', err);
         }
         queryClient.invalidateQueries({ queryKey: ['clients'] });
-        queryClient.invalidateQueries({ queryKey: ['client_tasks'] });
-        // Nao chama onDone: a tarefa que originou continua pendente pro
-        // vendedor tentar de novo.
         // O MOTIVO, quando existe, vem do HubSpot pela edge ("Property values
         // were not valid", com a lista do que faltou). Dizer "sem conexão?"
         // quando o problema é um campo inválido manda a pessoa conferir o
@@ -863,9 +854,6 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
         );
         return;
       }
-
-      // 3) Sync OK — agora sim resolve a tarefa que originou a mudanca.
-      onDone?.();
 
       // Pos-processamento. Timeline local — gravada APOS a sincronia passar,
       // pra refletir so o que efetivamente saiu pro HubSpot.
@@ -910,7 +898,6 @@ export function ChangeStageModal({ client, onClose, initialStageId, onDone, onCr
     })();
 
     // Modal fecha JA — o vendedor segue pro proximo passo sem esperar rede.
-    // (onDone/onClose: onClose fecha a UI; onDone so' roda no sucesso, acima.)
     onClose();
   };
 

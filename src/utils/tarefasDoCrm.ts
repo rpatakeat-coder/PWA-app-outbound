@@ -1,8 +1,7 @@
 // As tarefas que o Cockpit de gestão cria no HubSpot, lidas pelo app de campo.
 //
 // POR QUE EXISTE
-// O app tem tarefas próprias (`client_tasks`, geradas por regra no banco). O
-// Cockpit cria outra coisa, direto no CRM: a visita que o gestor posicionou no
+// O Cockpit cria tarefa direto no CRM: a visita que o gestor posicionou no
 // planejamento da semana, o follow up do funil. O vendedor nunca via nenhuma
 // delas — em 14/09/2026 havia 78 pendentes só para um executivo.
 //

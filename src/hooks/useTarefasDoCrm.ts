@@ -1,9 +1,8 @@
 // As tarefas do vendedor que vivem no HubSpot, trazidas pro app.
 //
 // O Cockpit de gestão põe visita no planejamento da semana e follow up do
-// funil como Task no CRM. O vendedor nunca as via: a aba Tarefas do app lê
-// `client_tasks`, que é outra coisa (regra gerada no banco). Em 14/09/2026
-// havia 78 pendentes só para um executivo.
+// funil como Task no CRM. Até 14/09/2026 o vendedor nunca as via (havia 78
+// pendentes só para um executivo).
 //
 // SEM `id_hubspot` NÃO HÁ COMO SABER, e isso não é o mesmo que zero. A tarefa
 // é achada por `hubspot_owner_id`; quem está sem esse id no perfil não tem

@@ -168,7 +168,6 @@ import { bearingDegrees, distanceMeters, todayKey, useFieldOps } from './src/hoo
 import { useClientNotes } from './src/hooks/useClientNotes';
 import { useClientStageChanges } from './src/hooks/useClientStageChanges';
 import { useClientVisits } from './src/hooks/useClientVisits';
-import { useClientTasks } from './src/hooks/useClientTasks';
 import { useForceReload } from './src/hooks/useForceReload';
 import { supabase } from './src/integrations/supabase/client';
 import {
@@ -179,13 +178,12 @@ import {
   type Bounds,
 } from './src/utils/area';
 import { getShowOnlyMyAreaPref, setShowOnlyMyAreaPref } from './src/utils/userPrefs';
-import type { Client, ClientMeeting, ClientStatus, ClientTask, MeetingType } from './src/types/client';
+import type { Client, ClientMeeting, ClientStatus, MeetingType } from './src/types/client';
 import { openMultiStopNavigation, openNavigation } from './src/utils/navigation';
 import { openWhatsapp, toWhatsappNumber } from './src/utils/whatsapp';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { CEPStep } from './src/screens/CEPStep';
-import { OutboundCadastroScreen } from './src/screens/OutboundCadastroScreen';
 import { ScheduleMeetingModal } from './src/screens/ScheduleMeetingModal';
 import { buscarLeadsParecidos } from './src/utils/buscarLeadsParecidos';
 import { fraseDoAviso, type Parecido } from './src/utils/leadDuplicado';
@@ -825,7 +823,6 @@ function MainApp() {
   // De onde veio o pino do cadastro (02/11/26): 'checkin'/'mapa' na porta, 'geocode' pelo endereço.
   // Com 'geocode' o cadastro grava aproximado mesmo que ele edite o endereço no passo 2.
   const [pendingGeoSource, setPendingGeoSource] = useState<OrigemDoPino>('mapa');
-  const [showOutboundForm, setShowOutboundForm] = useState(false);
   const [form, setForm] = useState(initialFormState);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const layout = useLayout();
@@ -1180,9 +1177,6 @@ function MainApp() {
     negociacao: routeConfig.sla_negociacao,
     ag_pagamento: routeConfig.sla_ag_pagamento,
   }), [routeConfig.sla_prospeccao, routeConfig.sla_visita, routeConfig.sla_conversa, routeConfig.sla_demo, routeConfig.sla_negociacao, routeConfig.sla_ag_pagamento]);
-  // Tarefas geradas automaticamente (motor de regras no banco): o resolveTask conclui a
-  // tarefa do app junto com a mudança de etapa (a lista do mapa antigo saiu em 02/11/26).
-  const { resolveTask } = useClientTasks();
   useForceReload(isAuthenticated);
   // Gestor = acesso total. Antes existiam dois tiers separados (admin por
   // e-mail hardcoded + uma lista de "so metricas"); agora e' um so, vindo do
@@ -1584,7 +1578,7 @@ function MainApp() {
   // Agendamento aberto: guarda o cliente + o tipo (reunião ou follow up).
   // Mesmo modal serve os dois; só muda o `type` salvo e os rótulos.
   // reschedule preenchido => o modal abre em modo "reagendar" daquela reunião.
-  const [schedulingFor, setSchedulingFor] = useState<{ client: Client; type: MeetingType; reschedule?: ClientMeeting; tarefa?: { id: string; titulo: string; severity: string | null; diasNaEtapa: number | null; etapa: string | null } } | null>(null);
+  const [schedulingFor, setSchedulingFor] = useState<{ client: Client; type: MeetingType; reschedule?: ClientMeeting } | null>(null);
   // Passado da agenda começa fechado (igual lista). Hoje/futuro viram uma
   // timeline contínua agrupada por dia — não precisam de acordeão.
   // Chip de tipo na aba Agenda (null = todos): 'reuniao' | 'follow_up' | 'rota'.
@@ -1617,15 +1611,10 @@ function MainApp() {
       ],
     );
   };
-  // Mudanca de etapa. initialStageId trava o modal numa etapa (ex.: "Mover pra
-  // perdido" a partir de uma tarefa); taskId, quando presente, e' a tarefa a
-  // resolver depois que o envio concluir.
+  // Mudanca de etapa. initialStageId trava o modal numa etapa (ex.: "Mover pra perdido").
   const [changingStageFor, setChangingStageFor] = useState<
-    { client: Client; initialStageId?: string; taskId?: string } | null
+    { client: Client; initialStageId?: string } | null
   >(null);
-  // "Concluir tarefa" abre um menu de destino do lead: avançar etapa, mover
-  // p/ Perdido, ou manter a etapa e gerar a próxima tarefa numerada.
-  const [completingTask, setCompletingTask] = useState<{ task: ClientTask; client: Client } | null>(null);
   const [editingLocationFor, setEditingLocationFor] = useState<Client | null>(null);
   /* o "Mover pino" do Cheguei já sabe onde a pessoa está: a tela abre ali, não no pino errado (05/11/26) */
   const [editingLocationAqui, setEditingLocationAqui] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -1835,10 +1824,9 @@ function MainApp() {
   // Dispensavel por SESSAO: some no X e volta na proxima abertura. Nao
   // persiste de proposito — o problema continua la' ate' alguem resolver.
   const [avisoIdDispensado, setAvisoIdDispensado] = useState(false);
-  // O contador do rodape soma as DUAS filas: as do app (`client_tasks`) e as
-  // que a gestao pos no HubSpot. Ele contava so' as primeiras, entao a conta do
-  // Marco mostrava 13 com 92 tarefas na tela — e um numero que nao bate com o
-  // que se ve' ensina a pessoa a ignorar o numero.
+  // O contador do rodape conta as tarefas que a gestao pos no HubSpot — as mesmas
+  // da tela de Tarefas. Um numero que nao bate com o que se ve' ensina a pessoa a
+  // ignorar o numero (a conta do Marco ja' mostrou 13 com 92 na tela).
   //
   // O hook e' o MESMO da tela de Tarefas, com a mesma `queryKey`: o react-query
   // divide o cache, entao nao ha' segunda ida ao HubSpot.
@@ -4357,20 +4345,6 @@ function MainApp() {
   // Abre o detalhe de um lead a partir do painel do Gestor (so tem o clientId).
   // Tenta achar na lista local; se nao estiver (recorte de setor/area do
   // useClients nao cobre o painel), busca a linha sob demanda no Supabase.
-  // A tarefa do CRM que ORIGINOU a abertura da ficha.
-  //
-  // Quando o lead JA' tem pin, tocar no cartao abre a ficha normal — e ali o
-  // recado da gestao ("Falar com Marcelo - Gerente") desaparecia: a ficha fala
-  // do LEAD, nao da tarefa. O vendedor chegava na porta sem a instrucao que o
-  // fez ir ate' la'.
-  //
-  // Vive aqui, e nao dentro da ficha, porque quem sabe de qual tarefa se trata
-  // e' quem tocou no cartao — a ficha e' a mesma que abre pelo mapa, pela busca
-  // e pela rota, e nesses casos nao ha' tarefa nenhuma.
-  const [tarefaDaFicha, setTarefaDaFicha] = useState<{
-    assunto: string; corpo: string; venceEm: string | null;
-  } | null>(null);
-
   const openClientById = useCallback(async (clientId: string) => {
     const local = clients.find((c) => c.id === clientId);
     if (local) { setSelectedClient(local); return; }
@@ -5362,10 +5336,9 @@ function MainApp() {
   const [limparFunilCom, setLimparFunilCom] = useState<string | null>(null);
   // Pôr no plano (um plano só, 06/10/26): o pino que abriu a folha
   const [porNoPlanoPara, setPorNoPlanoPara] = useState<{ client: Client; etapaAtual: string | null; tipoPino: string | null; cor: string; acao?: AcaoId } | null>(null);
-  /* taskId: veio da lista de tarefas antiga ("Avançar etapa"/"Mover p/ Perdido") — conclui a tarefa quando a etapa grava */
   /* a última etapa que a ficha subiu, por cliente: o 2º degrau parte do 1º no histórico */
   const ultimaEtapaDaFicha = useRef<{ client: string; rotulo: string | null } | null>(null);
-  const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null; soArmas?: boolean; taskId?: string } | null>(null);
+  const [etapaNovaPara, setEtapaNovaPara] = useState<{ client: Client; etapaAtual: string | null; destinoInicial?: string | null; preenchido?: Record<string, string> | null; soArmas?: boolean } | null>(null);
   const codigoDaEtapa = (c: Client): string | null => {
     if (!contextoPino) return null;
     const chave = textoNormalizado(c.etapa);
@@ -6971,8 +6944,7 @@ function MainApp() {
       slaDays={routeSlaDays}
       meetings={meetingsByClient[selectedClient.id] ?? []}
       coordCollision={hasCoordCollision(selectedClient)}
-      tarefaDaGestao={tarefaDaFicha}
-      onClose={() => { setTarefaDaFicha(null); setSelectedClient(null); }}
+      onClose={() => setSelectedClient(null)}
       onDelete={isViewer ? undefined : () => confirmDeleteClient(selectedClient, () => setSelectedClient(null))}
       onEdit={isViewer ? undefined : () => openEditClient(selectedClient)}
       onSavePhone={isViewer ? undefined : async (tel) => {
@@ -8469,7 +8441,7 @@ function MainApp() {
   // Versão nova do app só entra quando nada está aberto (src/utils/updates.ts):
   // recarregar no meio da ficha ou do cadastro perdia o trabalho do executivo.
   definirOcupado(() => telaCheia || !!selectedClient || !!fichaPendente || !!etapaNovaPara || !!porNoPlanoPara || !!schedulingFor
-    || !!changingStageFor || !!completingTask || avisosAbertos || perfilAberto || isVisiting);
+    || !!changingStageFor || avisosAbertos || perfilAberto || isVisiting);
 
   // "É meu" (Julyan 26/09): o card e a linha da lista (lentes Sem dono e
   // Reconquista) chamam esta mesma função. Travas no servidor (assumir-negocio).
@@ -8513,8 +8485,7 @@ function MainApp() {
     return { nome: getClientPrimaryName(st.client), numero, etapa, dealId: st.client.id_hubspot ?? null };
   })();
   // Tarefas: atrasadas + vencem hoje. Sem pendencia, sem selo (nunca "0").
-  // No mapa novo as sugestoes do app (client_tasks) ficam fora: o selo e' o que
-  // o Cockpit cobra, as tarefas do HubSpot (prompt final §B2/§B4).
+  // O selo e' o que o Cockpit cobra: as tarefas do HubSpot (prompt final §B2/§B4).
   const seloTarefas = tarefasDoCrmParaContagem.filter((t) => {
     const g = grupoDaTarefa(t.venceEm, new Date());
     return g === 'atrasadas' || g === 'hoje';
@@ -10194,78 +10165,6 @@ function MainApp() {
         </View>
       </Modal>
 
-      {/* Modal: destino do lead ao concluir uma tarefa */}
-      <Modal
-        visible={completingTask !== null}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setCompletingTask(null)}
-      >
-        <View style={[styles.modalOverlay, layout.ehLargo && styles.modalOverlayWeb]}>
-          <View style={[styles.taskRulesCard, layout.ehLargo && styles.modalCartaoMedioWeb]}>
-            {completingTask && (() => {
-              const { task, client } = completingTask;
-              return (
-                <>
-                  <View style={styles.taskRulesHeader}>
-                    <Text style={styles.taskRulesTitle}>Concluir "{task.title}"</Text>
-                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Fechar"
-                      style={styles.taskRulesClose}
-                      onPress={() => setCompletingTask(null)}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <IconClose width={16} height={16} fill={iconColors.muted} />
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.taskRulesIntro}>
-                    {getClientPrimaryName(client)} — o que acontece com o lead depois de concluir?
-                  </Text>
-                  <TouchableOpacity
-                    style={[styles.taskDoneOption, { backgroundColor: 'var(--verde-acao)' }]}
-                    onPress={() => {
-                      setCompletingTask(null);
-                      // negócio que já existe: folha nova (regras do servidor); sem negócio, o modal antigo cria
-                      if (client.id_hubspot) setTimeout(() => setEtapaNovaPara({ client, etapaAtual: codigoDaEtapa(client), taskId: task.id }), 350);
-                      else setChangingStageFor({ client, taskId: task.id });
-                    }}
-                  >
-                    <IconText Icone={IconArrowFoward} style={styles.taskDoneOptionText} tone="onBrand">Avançar etapa</IconText>
-                    <Text style={styles.taskDoneOptionHint}>
-                      Move o lead pra próxima etapa do funil e conclui a tarefa.
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.taskDoneOption, { backgroundColor: '#E03A41' }]}
-                    onPress={() => {
-                      setCompletingTask(null);
-                      if (client.id_hubspot) setTimeout(() => setEtapaNovaPara({ client, etapaAtual: codigoDaEtapa(client), destinoInicial: LOST_STAGE_ID, taskId: task.id }), 350);
-                      else setChangingStageFor({ client, initialStageId: LOST_STAGE_ID, taskId: task.id });
-                    }}
-                  >
-                    <IconText Icone={IconCloseCircle} style={styles.taskDoneOptionText} tone="onBrand">Mover p/ Perdido</IconText>
-                    <Text style={styles.taskDoneOptionHint}>
-                      Registra o motivo do perdido e conclui a tarefa.
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.taskDoneOption, { backgroundColor: '#2563eb' }]}
-                    onPress={() => {
-                      setCompletingTask(null);
-                      resolveTask.mutate({ id: task.id, status: 'concluida' });
-                    }}
-                  >
-                    <IconText Icone={IconCheck} style={styles.taskDoneOptionText} tone="onBrand">Manter na etapa</IconText>
-                    <Text style={styles.taskDoneOptionHint}>
-                      Só conclui a tarefa; o lead segue na etapa e no fluxo automático.
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              );
-            })()}
-          </View>
-        </View>
-      </Modal>
-
       {/* Filtros do mapa novo (prancha §8.9). "Mais filtros" abre o modal
           antigo logo abaixo, com UF, etapa, vendedor e visita. */}
       {(
@@ -10719,25 +10618,12 @@ function MainApp() {
         </Pressable>
       </Modal>
 
-      {/* Outbound (sem localização) Modal */}
-      {showOutboundForm && (
-        <OutboundCadastroScreen
-          profile={profile}
-          onClose={() => setShowOutboundForm(false)}
-        />
-      )}
-
       {/* Schedule Meeting Modal */}
       {changingStageFor && (
         <React.Suspense fallback={null}>
         <ChangeStageModal
           client={changingStageFor.client}
           initialStageId={changingStageFor.initialStageId}
-          onDone={
-            changingStageFor.taskId
-              ? () => resolveTask.mutate({ id: changingStageFor.taskId!, status: 'concluida' })
-              : undefined
-          }
           onClose={() => setChangingStageFor(null)}
           onCreateHubspotDeal={ensureHubspotDeal}
         />
@@ -10959,8 +10845,6 @@ function MainApp() {
                 }, 11_000));
               }
             }
-            // veio da tarefa: a etapa gravou, a tarefa conclui (o que o modal antigo fazia no onDone)
-            if (etapaNovaPara.taskId) resolveTask.mutate({ id: etapaNovaPara.taskId, status: 'concluida' });
           }}
         />
         </React.Suspense>
@@ -10996,8 +10880,6 @@ function MainApp() {
           client={schedulingFor.client}
           meetingType={schedulingFor.type}
           rescheduleOf={schedulingFor.reschedule}
-          tarefa={schedulingFor.tarefa}
-          aoConcluirTarefa={(id) => resolveTask.mutate({ id, status: 'concluida' })}
           onClose={() => setSchedulingFor(null)}
         />
       )}
@@ -11321,7 +11203,6 @@ function ClientBottomSheet({
   slaDays,
   meetings,
   coordCollision,
-  tarefaDaGestao,
   onClose,
   onDelete,
   onEdit,
@@ -11355,9 +11236,6 @@ function ClientBottomSheet({
   slaDays?: SlaDays;
   meetings: ClientMeeting[];
   coordCollision: boolean;
-  /** Tarefa do CRM que levou ate' esta ficha. null quando a ficha foi aberta
-   *  pelo mapa, pela busca ou pela rota — ali nao ha' tarefa nenhuma. */
-  tarefaDaGestao?: { assunto: string; corpo: string; venceEm: string | null } | null;
   onClose: () => void;
   onDelete?: () => void;
   onEdit?: () => void;
@@ -11836,33 +11714,6 @@ function ClientBottomSheet({
             {sublinha ? (
               <Text style={styles.fichaSublinha} numberOfLines={1}>{sublinha}</Text>
             ) : null}
-            {/* O RECADO DA TAREFA QUE TROUXE A PESSOA ATE' AQUI.
-                Com o lead ja' no mapa, tocar no cartao abre esta ficha — que
-                fala do LEAD — e a instrucao da gestao ("Falar com Marcelo -
-                Gerente") sumia no caminho. O vendedor chegava na porta sem
-                saber por que tinha ido.
-                Vai no CABECALHO, e nao na faixa de alertas: a ficha abre
-                RECOLHIDA, e a faixa so' aparece depois de expandir. O que tem
-                hora marcada precisa ser lido sem gesto nenhum. */}
-            {tarefaDaGestao ? (
-              <View style={styles.fichaTarefa}>
-                <Text style={styles.fichaTarefaTitulo} numberOfLines={2}>
-                  {tarefaDaGestao.assunto
-                    .replace(/^(?:visita|follow.?up)\s*[-\u2013\u2014]\s*/i, '')
-                    .trim() || 'Tarefa da gestão'}
-                </Text>
-                {!!tarefaDaGestao.corpo && (
-                  <Text style={styles.fichaTarefaCorpo} numberOfLines={3}>
-                    {tarefaDaGestao.corpo}
-                  </Text>
-                )}
-                <Text style={styles.fichaTarefaRodape}>
-                  {tarefaDaGestao.venceEm
-                    ? `${new Date(tarefaDaGestao.venceEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · da gestão`
-                    : 'da gestão'}
-                </Text>
-              </View>
-            ) : null}
           </View>
           <TouchableOpacity
             accessibilityRole="button"
@@ -12282,42 +12133,10 @@ function ClientBottomSheet({
       // O restante da ficha so' monta no estagio 2.
       peek={novo ? (
             <View>
-              {tarefaDaGestao ? (
-                <View style={[styles.fichaTarefa, { marginHorizontal: 16 }]}>
-                  <Text style={styles.fichaTarefaTitulo} numberOfLines={2}>
-                    {tarefaDaGestao.assunto.replace(/^(?:visita|follow.?up)\s*[-–—]\s*/i, '').trim() || 'Tarefa da gestão'}
-                  </Text>
-                </View>
-              ) : null}
               <PeekCardNovo d={dadosNovo!} a={acoesNovo} />
             </View>
           ) : (
             <View style={styles.peekCorpo}>
-              {/* O RECADO DA TAREFA QUE TROUXE A PESSOA ATE' AQUI.
-                  Vai no PEEK, e nao no `topo`: no celular a ficha abre neste
-                  estagio, e o resto so' monta quando se expande. Um recado que
-                  exige gesto pra aparecer e' um recado que ninguem le' na rua.
-                  Fica ACIMA da linha do lead porque e' o que tem hora marcada:
-                  o nome do lead a pessoa ja' sabe, foi ele que ela tocou. */}
-              {tarefaDaGestao ? (
-                <View style={styles.fichaTarefa}>
-                  <Text style={styles.fichaTarefaTitulo} numberOfLines={2}>
-                    {tarefaDaGestao.assunto
-                      .replace(/^(?:visita|follow.?up)\s*[-\u2013\u2014]\s*/i, '')
-                      .trim() || 'Tarefa da gestão'}
-                  </Text>
-                  {!!tarefaDaGestao.corpo && (
-                    <Text style={styles.fichaTarefaCorpo} numberOfLines={3}>
-                      {tarefaDaGestao.corpo}
-                    </Text>
-                  )}
-                  <Text style={styles.fichaTarefaRodape}>
-                    {tarefaDaGestao.venceEm
-                      ? `${new Date(tarefaDaGestao.venceEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · da gestão`
-                      : 'da gestão'}
-                  </Text>
-                </View>
-              ) : null}
               <TouchableOpacity
                 accessibilityRole="button"
                 accessibilityLabel="Abrir ficha completa"
@@ -14144,10 +13963,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   taskRulesDoneButtonText: { color: '#fff', fontSize: 15, fontWeight: '800' },
-  // Opções do modal "destino do lead" ao concluir tarefa
-  taskDoneOption: { borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, marginTop: 10 },
-  taskDoneOptionText: { color: '#fff', fontSize: 15, fontWeight: '800' },
-  taskDoneOptionHint: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 3, lineHeight: 16 },
   // Ponto de partida da rota
   routeStartPick: {
     paddingVertical: 11, paddingHorizontal: 4,
@@ -14564,19 +14379,6 @@ const styles = StyleSheet.create({
   // ---- Faixa de alertas (M1d) ----
   // Faixas de largura total, NAO cards: sem sombra, sem borda em volta, sem
   // raio no celular. So' a regua esquerda de 3px carrega a cor.
-  fichaTarefa: {
-    backgroundColor: 'var(--tint-blue)',
-    borderLeftWidth: 3,
-    borderLeftColor: 'var(--tint-blue-text)',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    marginTop: 8,
-    gap: 2,
-  },
-  fichaTarefaTitulo: { fontSize: 13, fontWeight: '700', color: 'var(--tint-blue-text)', lineHeight: 18 },
-  fichaTarefaCorpo: { fontSize: 13, color: 'var(--tint-blue-text)', lineHeight: 18 },
-  fichaTarefaRodape: { fontSize: 11, color: 'var(--tint-blue-text)', opacity: 0.85 },
   faixaAlertas: { gap: 1 },
   faixaAlertasMobile: { marginHorizontal: -16 },
   alerta: { flexDirection: 'row', gap: 12, paddingVertical: 12, paddingHorizontal: 16, borderLeftWidth: 3 },
