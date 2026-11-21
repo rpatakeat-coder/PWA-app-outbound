@@ -25,7 +25,6 @@ import { ehDiaUtil } from '../utils/desfechoVisita';
 import { lerSemanaDoPlano, PROPOSITOS } from '../utils/semanaDoPlano';
 import { montarPreparo, usePreparo } from '../utils/preparo';
 import { conflito, duracao, ehOutraCidade, encaixar, hhmm, horarios, kmTexto, melhorPosicao, metros, perna, resumo, temOutraCidade, type ParadaRota, type Ponto } from '../utils/rotaDoDia';
-import { BUSCA_GOOGLE_PAUSADA, type LugarPerto } from '../utils/googlePerto';
 import type { Client, ClientMeeting } from '../types/client';
 import {
   IconCall, IconChevronLeft, IconChevronRight, IconClose, IconLock, IconMenu, IconSearch, IconShrink, IconWarning, IconWhatsapp, useIconColors,
@@ -43,12 +42,11 @@ export type ItemPC = {
   acao?: string | null;
 };
 
-export type GrupoSugestao = 'regua' | 'alvo' | 'queda' | 'google';
+export type GrupoSugestao = 'regua' | 'alvo' | 'queda';
 export type SugestaoPC = {
   chave: string;
   grupo: GrupoSugestao;
-  client: Client | null;
-  google: LugarPerto | null;
+  client: Client;
   nome: string;
   sub: string;
   ponto: Ponto;
@@ -70,7 +68,6 @@ type Props = {
   corDe: (c: Client) => string;
   contextoDe: (c: Client) => ContextoPC;
   sugestoes: SugestaoPC[];
-  carregandoGoogle: boolean;
   aba: 'plano' | 'sugestoes';
   aoAba: (a: 'plano' | 'sugestoes') => void;
   foco: Client | null;
@@ -85,7 +82,6 @@ type Props = {
   aoTirar: (c: Client) => void;
   aoOrdem: (ids: string[], texto: string) => void;
   aoFixar: (clientId: string, hora: string | null) => void;
-  aoPorGoogle: (l: LugarPerto) => void;
   aoAbrirFicha: (c: Client) => void;
   aoIrParaRua: () => void;
   aoRemarcar: (cs: Client[]) => void;
@@ -109,7 +105,7 @@ const etapaOuTipo = (c: Client, etapa: string | null) => etapa ?? (c.status === 
 const soDigitos = (t: string) => t.replace(/\D+/g, '');
 const com55 = (t: string) => { const d = soDigitos(t); return d.length <= 11 ? `55${d}` : d; };
 const ROTULO_GRUPO: Record<GrupoSugestao, string> = {
-  regua: 'PASSARAM DA RÉGUA', alvo: 'CONTAS-ALVO DA MUNIÇÃO', queda: 'CLIENTES EM QUEDA', google: 'GOOGLE · FORA DA BASE',
+  regua: 'PASSARAM DA RÉGUA', alvo: 'CONTAS-ALVO DA MUNIÇÃO', queda: 'CLIENTES EM QUEDA',
 };
 
 function tituloDoDia(dia: string, hoje: string) {
@@ -366,23 +362,21 @@ export default function AgendaPC(props: Props) {
     const t = termo.toLowerCase();
     const casa = (c: Client) => [c.empresa, c.nome, c.bairro].some((x) => x && x.toLowerCase().includes(t));
     const vistos = new Set<string>();
-    const out: Array<{ c: Client | null; g: LugarPerto | null; nome: string; onde: string }> = [];
-    itens.forEach((i, k) => { if (casa(i.client)) { vistos.add(i.client.id); out.push({ c: i.client, g: null, nome: props.nomeDe(i.client), onde: `No dia · ${ordinal(k + 1)} parada` }); } });
+    const out: Array<{ c: Client; nome: string; onde: string }> = [];
+    itens.forEach((i, k) => { if (casa(i.client)) { vistos.add(i.client.id); out.push({ c: i.client, nome: props.nomeDe(i.client), onde: `No dia · ${ordinal(k + 1)} parada` }); } });
     for (const x of props.sugestoes) {
-      if (x.client && !vistos.has(x.client.id) && casa(x.client)) { vistos.add(x.client.id); out.push({ c: x.client, g: null, nome: x.nome, onde: `Sugestão · ${ROTULO_GRUPO[x.grupo].toLowerCase()}` }); }
-      if (x.google && x.nome.toLowerCase().includes(t)) out.push({ c: null, g: x.google, nome: x.nome, onde: 'Google · fora da base' });
+      if (!vistos.has(x.client.id) && casa(x.client)) { vistos.add(x.client.id); out.push({ c: x.client, nome: x.nome, onde: `Sugestão · ${ROTULO_GRUPO[x.grupo].toLowerCase()}` }); }
     }
     for (const c of achados.data ?? []) {
       if (vistos.has(c.id)) continue;
       vistos.add(c.id);
       const meu = !!ownerHubspot && String(c.vendedor_id_hubspot ?? '') === String(ownerHubspot);
-      out.push({ c, g: null, nome: props.nomeDe(c), onde: `${meu ? 'Carteira' : 'Base'}${c.bairro ? ` · ${c.bairro}` : ''}` });
+      out.push({ c, nome: props.nomeDe(c), onde: `${meu ? 'Carteira' : 'Base'}${c.bairro ? ` · ${c.bairro}` : ''}` });
     }
     return out.slice(0, 30);
   }, [termo, itens, props.sugestoes, achados.data, ownerHubspot]); // eslint-disable-line react-hooks/exhaustive-deps
   const abrirAchado = (l: (typeof linhasBusca)[number]) => {
-    if (l.c) aoFocar(l.c);
-    else if (l.g) props.aoPorGoogle(l.g);
+    aoFocar(l.c);
     setBusca(''); setTermo('');
   };
   const campoBusca = useRef<TextInput>(null);
@@ -613,7 +607,7 @@ export default function AgendaPC(props: Props) {
     return out;
   })();
 
-  const grupos: GrupoSugestao[] = BUSCA_GOOGLE_PAUSADA ? ['regua', 'alvo', 'queda'] : ['regua', 'alvo', 'queda', 'google'];
+  const grupos: GrupoSugestao[] = ['regua', 'alvo', 'queda'];
   const nSug = sugestoesComPosicao.filter((x) => !x.noDia).length;
   const titulo = tituloDoDia(dia, hoje);
   /* feriado não tem meta (auditoria 01/11/26: 02/11, Finados, dizia "1 parada · meta 6") */
@@ -636,7 +630,7 @@ export default function AgendaPC(props: Props) {
       <View style={{ gap: 4 }}>
         <Text style={s.rotuloSecao}>{achados.isFetching ? 'BUSCANDO…' : `${linhasBusca.length} ${linhasBusca.length === 1 ? 'RESULTADO' : 'RESULTADOS'}`}</Text>
         {linhasBusca.map((l, k) => (
-          <Pressable key={(l.c?.id ?? l.g?.placeId ?? '') + k} accessibilityRole="button" onPress={() => abrirAchado(l)} style={s.linhaBusca}>
+          <Pressable key={l.c.id + k} accessibilityRole="button" onPress={() => abrirAchado(l)} style={s.linhaBusca}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={s.nome} numberOfLines={2}>{l.nome}</Text>
               <Text style={s.sub} numberOfLines={1}>{l.onde}</Text>
@@ -655,15 +649,14 @@ export default function AgendaPC(props: Props) {
         <Text style={s.sub}>Perto do que já está no dia. Pôr encaixa no melhor lugar da rota; os horários se ajustam.</Text>
         {grupos.map((g) => {
           const doGrupo = sugestoesComPosicao.filter((x) => x.grupo === g);
-          if (!doGrupo.length && !(g === 'google' && props.carregandoGoogle)) return null;
+          if (!doGrupo.length) return null;
           return (
             <View key={g} style={{ gap: 4 }}>
               <Text style={s.rotuloSecao}>{`${ROTULO_GRUPO[g]} · ${doGrupo.length}`}</Text>
-              {g === 'google' && props.carregandoGoogle && !doGrupo.length ? <ActivityIndicator style={{ marginVertical: 8 }} /> : null}
               {doGrupo.map((x) => (
-                <div key={x.chave} onMouseEnter={() => props.aoHover(x.client?.id ?? x.chave)} onMouseLeave={() => props.aoHover(null)}>
-                <View style={[s.linhaSug, props.hover === (x.client?.id ?? x.chave) && s.linhaDestaque]}>
-                  <Pressable style={{ flex: 1, minWidth: 0 }} onPress={() => (x.client ? aoFocar(x.client) : x.google && props.aoPorGoogle(x.google))}>
+                <div key={x.chave} onMouseEnter={() => props.aoHover(x.client.id)} onMouseLeave={() => props.aoHover(null)}>
+                <View style={[s.linhaSug, props.hover === x.client.id && s.linhaDestaque]}>
+                  <Pressable style={{ flex: 1, minWidth: 0 }} onPress={() => aoFocar(x.client)}>
                     <Text style={s.nome} numberOfLines={2}>{x.nome}</Text>
                     <Text style={s.sub} numberOfLines={1}>{x.sub}</Text>
                     <Text style={s.subFraco} numberOfLines={1}>{textoPosicao(x)}</Text>
@@ -672,7 +665,7 @@ export default function AgendaPC(props: Props) {
                     <Text style={s.noDia}>No dia</Text>
                   ) : (
                     <Pressable accessibilityRole="button" accessibilityLabel={`Pôr ${x.nome} no dia`}
-                      onPress={() => (x.client ? props.aoPor([x.client]) : x.google && props.aoPorGoogle(x.google))} style={s.botaoPorPeq}>
+                      onPress={() => props.aoPor([x.client])} style={s.botaoPorPeq}>
                       <Text style={s.botaoPorTexto}>Pôr</Text>
                     </Pressable>
                   )}
@@ -682,7 +675,7 @@ export default function AgendaPC(props: Props) {
             </View>
           );
         })}
-        {!sugestoesComPosicao.length && !props.carregandoGoogle && (
+        {!sugestoesComPosicao.length && (
           <Text style={s.sub}>Nenhuma sugestão nesta parte do mapa. Arraste o mapa até o bairro do dia.</Text>
         )}
       </View>
@@ -864,19 +857,18 @@ export default function AgendaPC(props: Props) {
 }
 
 /** As camadas do mapa da Agenda (topo do mapa). Plano sempre; o resto liga e desliga. */
-export type CamadaAgenda = 'carteira' | 'regua' | 'alvo' | 'queda' | 'google';
+export type CamadaAgenda = 'carteira' | 'regua' | 'alvo' | 'queda';
 export function CamadasAgenda({ ativas, contagem, nPlano, aoAlternar }: {
   ativas: Set<CamadaAgenda>; contagem: Record<CamadaAgenda, number>; nPlano: number; aoAlternar: (c: CamadaAgenda) => void;
 }) {
   const todas: { id: CamadaAgenda; rotulo: string }[] = [
     { id: 'carteira', rotulo: 'Minha carteira' }, { id: 'regua', rotulo: 'Régua estourada' }, { id: 'alvo', rotulo: 'Contas-alvo' },
-    { id: 'queda', rotulo: 'Em queda' }, { id: 'google', rotulo: 'Google' },
+    { id: 'queda', rotulo: 'Em queda' },
   ];
-  const itens = todas.filter((x) => !(BUSCA_GOOGLE_PAUSADA && x.id === 'google'));
   return (
     <View style={s.camadas} pointerEvents="box-none">
       <View style={[s.camada, s.camadaFixa]}><Text style={s.camadaTexto}>Plano</Text><Text style={s.camadaN}>{nPlano}</Text></View>
-      {itens.map((x) => {
+      {todas.map((x) => {
         const on = ativas.has(x.id);
         return (
           <Pressable key={x.id} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => aoAlternar(x.id)} style={[s.camada, on && s.camadaOn]}>

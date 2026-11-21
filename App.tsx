@@ -114,7 +114,6 @@ import {
   GRAVACAO_DA_MIRA, GRAVACAO_DO_CHEGUEI, chaveDaPerguntaDoPino, decidirPinoNaPorta, deveSugerirMoverPino, gravacaoDoPino,
   gravacaoSemMapa, pinoConfirmado as pinoConfirmadoNaPorta, textoDaBarraDoPino, type GravacaoDoPino, type ModoDoPino, type OrigemDoPino,
 } from './src/utils/precisaoDoPino';
-import { BUSCA_GOOGLE_PAUSADA, buscarGooglePerto, jaNaBase, type LugarPerto } from './src/utils/googlePerto';
 import { diaInicial, diasPlanejaveis, ehCompromisso, faixaDoLead, rotuloDoDia, vaiAoCockpit, type FaixaDoPlano } from './src/utils/planoNoMapa';
 import { gravarOrdemDoDia, lerColunaDoPlano, porNoDia, tirarDoDia } from './src/utils/paradaDoDia';
 import type { MotivoDeTirar } from './src/utils/motivoDeTirar';
@@ -2557,9 +2556,7 @@ function MainApp() {
   planejarToqueRef.current = planejarDia ? (ehAgendaPC && agendaPlaneja ? tocarPinoPC : marcarNoPlano) : null;
 
   // As sugestões perto do plano: régua estourada, contas-alvo, clientes em queda (do que o mapa já
-  // carregou em volta do dia) e o Google fora da base (uma chamada, só quando pedida).
-  const [googleAgenda, setGoogleAgenda] = useState<{ chave: string; lugares: LugarPerto[] } | null>(null);
-  const [carregandoGoogle, setCarregandoGoogle] = useState(false);
+  // carregou em volta do dia).
   const centroDoPlano = useMemo(() => {
     // a parada "do meio" (a de menor soma de distâncias): a média de duas paradas longe uma da
     // outra cai no meio do caminho, onde não há nada do dia
@@ -2568,23 +2565,6 @@ function MainApp() {
     if (pts.length) return pts.reduce((m, p) => (pts.reduce((s, q) => s + metros(p, q), 0) < pts.reduce((s, q) => s + metros(m, q), 0) ? p : m), pts[0]);
     return mapRegion ? { latitude: mapRegion.latitude, longitude: mapRegion.longitude } : null;
   }, [clientesDoPlanoNoMapa, mapRegion]);
-  const querGoogle = !BUSCA_GOOGLE_PAUSADA && ehAgendaPC && agendaPlaneja && !!planejarDia && planejarDia >= routeDate && (abaAgenda === 'sugestoes' || camadasAgenda.has('google'));
-  const buscasGoogle = useRef(0);
-  useEffect(() => {
-    if (!querGoogle || !centroDoPlano) { setCarregandoGoogle(false); return; }
-    const chave = `${centroDoPlano.latitude.toFixed(2)},${centroDoPlano.longitude.toFixed(2)}`;
-    if (googleAgenda?.chave === chave) { setCarregandoGoogle(false); return; }
-    // cada busca é uma chamada paga ao Google: arrastar o mapa num dia vazio não pode virar dezenas
-    if (buscasGoogle.current >= 15) { setCarregandoGoogle(false); return; }
-    buscasGoogle.current++;
-    let vivo = true;
-    setCarregandoGoogle(true);
-    buscarGooglePerto(centroDoPlano)
-      .then((lugares) => { if (vivo) setGoogleAgenda({ chave, lugares }); })
-      .catch((e) => { console.warn('[agenda] google perto:', e); if (vivo) setGoogleAgenda({ chave, lugares: [] }); })
-      .finally(() => { if (vivo) setCarregandoGoogle(false); });
-    return () => { vivo = false; setCarregandoGoogle(false); };
-  }, [querGoogle, centroDoPlano?.latitude.toFixed(2), centroDoPlano?.longitude.toFixed(2)]); // eslint-disable-line react-hooks/exhaustive-deps
   const sugestoesAgenda = useMemo<SugestaoPC[]>(() => {
     if (!ehAgendaPC || !planejarDia) return SEM_SUGESTOES;
     const plano = clientesDoPlanoNoMapa.filter((c) => c.latitude != null && c.longitude != null)
@@ -2602,30 +2582,22 @@ function MainApp() {
       const nome = getClientPrimaryName(c);
       if (p.dono === 'meu' && c.status === 'lead') {
         const sla = slaStatus(c, routeSlaDays);
-        if (sla.breach) { out.push({ chave: `r-${c.id}`, grupo: 'regua', client: c, google: null, nome, sub: `${normalizeStage(c.etapa) ?? 'Lead'} há ${sla.diasParado} dias úteis · régua ${sla.sla}`, ponto, d }); continue; }
+        if (sla.breach) { out.push({ chave: `r-${c.id}`, grupo: 'regua', client: c, nome, sub: `${normalizeStage(c.etapa) ?? 'Lead'} há ${sla.diasParado} dias úteis · régua ${sla.sla}`, ponto, d }); continue; }
       }
       if (p.tipo === 'alvo' && !c.conta_alvo_dismissed) {
         const nota = c.conta_alvo_rating != null ? `Google ${Number(c.conta_alvo_rating).toFixed(1).replace('.', ',')}${c.conta_alvo_reviews ? ` (${c.conta_alvo_reviews})` : ''}` : 'sem nota no Google';
-        out.push({ chave: `a-${c.id}`, grupo: 'alvo', client: c, google: null, nome, sub: `Conta-alvo · ${nota}`, ponto, d });
+        out.push({ chave: `a-${c.id}`, grupo: 'alvo', client: c, nome, sub: `Conta-alvo · ${nota}`, ponto, d });
         continue;
       }
-      if (p.queda) out.push({ chave: `q-${c.id}`, grupo: 'queda', client: c, google: null, nome, sub: 'Cliente Takeat · em queda', ponto, d });
-    }
-    const base = itensMapaNovo.map((x) => x.c);
-    for (const l of googleAgenda?.lugares ?? []) {
-      if (jaNaBase(l, base)) continue;
-      const ponto = { latitude: l.latitude, longitude: l.longitude };
-      if (dist(ponto) > LIMITE) continue;
-      const nota = l.nota != null ? `Google ${l.nota.toFixed(1).replace('.', ',')}${l.avaliacoes ? ` (${l.avaliacoes})` : ''}` : 'sem nota';
-      out.push({ chave: `g-${l.placeId}`, grupo: 'google', client: null, google: l, nome: l.nome, sub: `Fora da base · ${nota}`, ponto, d: dist(ponto) });
+      if (p.queda) out.push({ chave: `q-${c.id}`, grupo: 'queda', client: c, nome, sub: 'Cliente Takeat · em queda', ponto, d });
     }
     const porGrupo = new Map<string, number>();
     return out.sort((a, b) => a.d - b.d).filter((x) => { const n = porGrupo.get(x.grupo) ?? 0; porGrupo.set(x.grupo, n + 1); return n < 8; })
       .map(({ d: _d, ...x }) => x);
-  }, [ehAgendaPC, planejarDia, clientesDoPlanoNoMapa, centroDoPlano, itensMapaNovo, routeSlaDays, googleAgenda, mapRegion]);
+  }, [ehAgendaPC, planejarDia, clientesDoPlanoNoMapa, centroDoPlano, itensMapaNovo, routeSlaDays, mapRegion]);
   const idsSugestao = useMemo(() => {
     const m = new Map<string, SugestaoPC['grupo']>();
-    for (const x of sugestoesAgenda) if (x.client) m.set(x.client.id, x.grupo);
+    for (const x of sugestoesAgenda) m.set(x.client.id, x.grupo);
     return m;
   }, [sugestoesAgenda]);
   // As linhas do painel: o dia como o mapa mostra (com o rascunho), o estado e o cadeado de cada uma.
@@ -7322,14 +7294,6 @@ function MainApp() {
             <Polyline coordinates={pts} strokeColor={modoSol ? '#111418' : 'rgba(255,255,255,0.95)'} strokeWidth={3} lineDashPattern={[1, 7]} zIndex={2} />
           ) : null;
         })()}
-        {/* Google fora da base: pino vazado (sugestão); o toque abre a folha com "Virar lead" */}
-        {ehAgendaPC && planejarDia && camadasAgenda.has('google') && sugestoesAgenda.filter((x) => x.google).map((x) => (
-          <Marker key={x.chave} coordinate={x.ponto} anchor={{ x: 0.5, y: 0.5 }} cluster={false} zIndex={700}
-            onPress={() => { const l = x.google!; setLugarGoogle({ placeId: l.placeId, latitude: l.latitude, longitude: l.longitude }); }}>
-            <div aria-label={`Google: ${x.nome}`} title={x.nome}
-              style={{ width: hoverAgenda === x.chave ? 22 : 16, height: hoverAgenda === x.chave ? 22 : 16, borderRadius: 11, border: '2.5px solid #4285F4', background: 'rgba(66,133,244,0.15)', boxSizing: 'border-box', cursor: 'pointer' }} />
-          </Marker>
-        ))}
         {/* Agenda do computador: o lead tocado, com o anel da microrota (2–3 quarteirões) */}
         {focoAgenda && (tab === 'agenda' || (tab === 'map' && selectedClient?.id === focoAgenda.id)) && (
           <Circle
@@ -9390,7 +9354,6 @@ function MainApp() {
                     };
                   }}
                   sugestoes={sugestoesAgenda}
-                  carregandoGoogle={carregandoGoogle}
                   aba={abaAgenda}
                   aoAba={setAbaAgenda}
                   foco={focoPC}
@@ -9405,7 +9368,6 @@ function MainApp() {
                   aoTirar={tirarDoDiaPC}
                   aoOrdem={ordemPC}
                   aoFixar={fixarPC}
-                  aoPorGoogle={(l) => setLugarGoogle({ placeId: l.placeId, latitude: l.latitude, longitude: l.longitude })}
                   aoAbrirFicha={(c) => openClientDetails(c)}
                   aoIrParaRua={() => { setLente('dia'); irParaAba('map'); }}
                   aoRemarcar={(cs) => { void remarcarPC(cs); }}
@@ -9428,7 +9390,7 @@ function MainApp() {
                     <CamadasAgenda
                       ativas={camadasAgenda}
                       nPlano={clientesDoPlanoNoMapa.length}
-                      contagem={{ carteira: itensMapaNovo.filter((x) => x.p.dono === 'meu').length, regua: contaGrupo('regua'), alvo: contaGrupo('alvo'), queda: contaGrupo('queda'), google: contaGrupo('google') }}
+                      contagem={{ carteira: itensMapaNovo.filter((x) => x.p.dono === 'meu').length, regua: contaGrupo('regua'), alvo: contaGrupo('alvo'), queda: contaGrupo('queda') }}
                       aoAlternar={(c) => setCamadasAgenda((m) => { const n = new Set(m); if (n.has(c)) n.delete(c); else n.add(c); return n; })}
                     />
                     </React.Suspense>
