@@ -1107,7 +1107,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
       const sla = slaDays ?? DEFAULT_SLA;
       const reguaDoIdx = (idx: number) => { const r = slaForStage(ETAPA_COCKPIT[idx], sla); return r >= 999 ? null : r; };
       /* a carteira vem na mesma resposta da fila (a Lista do computador e o Limpar funil já a leem) */
-      const carteira = (q.data as { carteira?: Array<{ etapaId: string; diasNaEtapa: number | null; proximoPasso: string | null; travado?: boolean | null }> } | undefined)?.carteira ?? null;
+      const carteira = q.data?.carteira ?? null;
       /* sem os dias na etapa nem o travado (quem está fora do time, como o gestor, não tem linha no robô) não há
          "parados": a etapa com acúmulo cala em vez de dizer "nenhuma entupida". O prazo de cada etapa continua. */
       const temParados = !!carteira && carteira.some((n) => n.diasNaEtapa != null || typeof n.travado === 'boolean');

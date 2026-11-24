@@ -141,7 +141,8 @@ export function OQueCobrar<T>({ c, fora, rotulo, cor, nomeDe, porRotulo, aoPor, 
 }) {
   if (fora) return <View style={st.card}><Cab titulo="O que cobrar" /><Fora fonte="fila do HubSpot" /></View>;
   if (!c) return <View style={st.card}><Cab titulo="O que cobrar" /><Lendo /></View>;
-  const btF = { rotulo: 'Meu funil →', aoTocar: aoFunil };
+  /* o Cockpit diz "Meu funil →"; no app o botão abre a lista Sem próximo passo inteira, e o nome diz isso */
+  const btF = { rotulo: 'Ver todos →', aoTocar: aoFunil };
   if (!c.total) return (
     <View style={st.card}>
       <Cab titulo="O que cobrar" sub="em dia" botao={btF} />

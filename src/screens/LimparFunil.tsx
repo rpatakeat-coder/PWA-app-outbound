@@ -67,7 +67,7 @@ export default function LimparFunil({ visivel, dealInicial, reguaDe, onFechar, o
   const passou = (l: Linha) => { const r = reguaDe(l.etapaId); return r != null && l.diasNaEtapa != null && l.diasNaEtapa > r; };
   const todas = useMemo(() => {
     // a etapa que o app acabou de gravar vence a da cópia do HubSpot (gravadoAgora, 29/10/26)
-    const carteira = ((fila.data as { carteira?: Linha[] } | undefined)?.carteira ?? [])
+    const carteira = (fila.data?.carteira ?? ([] as Linha[]))
       .map((l) => { const e = etapaGravadaAgora(l.dealId); return e && e !== l.etapaId ? { ...l, etapaId: e, diasNaEtapa: 0 } : l; })
       .filter((l) => l.etapaId !== ETAPA.pagamento && l.etapaId !== ETAPA.perdido && l.etapaId !== ETAPA.reciclagem);
     return carteira.slice().sort((a, b) => (Number(passou(b)) - Number(passou(a))) || ((b.diasNaEtapa ?? -1) - (a.diasNaEtapa ?? -1)));

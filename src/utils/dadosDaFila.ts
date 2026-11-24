@@ -25,9 +25,18 @@ export type CardDaFila = {
 };
 /** A próxima tarefa de cada negócio sem nada hoje (montarProximos): os outros dias da fileira. */
 export type ItemProximo = ItemProximoServidor & { titulo: string; telefone: string | null };
+/** Um negócio aberto do dono (a carteira que a fila-tarefas devolve junto): a Lista do computador, o Limpar funil
+ *  e os parados por etapa do Hoje. travado = a slaBreach do robô (null quando a etapa mudou depois dele). */
+export type LinhaDaCarteira = {
+  dealId: string; clientId: string | null; negocio: string; etapaId: string; diasNaEtapa: number | null;
+  temperatura: number | null; mrr: number | null; contato: string | null; bairro: string | null; temTelefone: boolean;
+  ultimoContato: string | null; canalUltimo: string | null; contatos: number; proximoPasso: string | null;
+  travado?: boolean | null;
+};
 export type RespostaFila = {
   itens: CardDaFila[]; grupos: Array<{ id: CardDaFila['grupo']; rotulo: string }>; mrrEmJogo: number;
   hoje: string; feriados: string[]; semMedicao?: string; proximos?: ItemProximo[];
+  carteira?: LinhaDaCarteira[];
 };
 
 const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);

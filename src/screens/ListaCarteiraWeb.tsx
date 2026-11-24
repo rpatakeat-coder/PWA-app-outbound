@@ -15,7 +15,7 @@ import { supabase } from '../integrations/supabase/client';
 import { Toast } from '../components/Toast';
 import { IconCalendar, IconCheck, IconClose, IconDownload, useIconColors } from '../components/icons';
 import { useLayout } from '../hooks/useLayout';
-import { opcoesDaFila } from '../utils/dadosDaFila';
+import { opcoesDaFila, type LinhaDaCarteira } from '../utils/dadosDaFila';
 import { semProximoPassoDaFila } from '../../supabase/functions/_compartilhado/hojeV3';
 import { porNoDia } from '../utils/paradaDoDia';
 import { proximoDiaUtil } from '../utils/desfechoVisita';
@@ -23,11 +23,7 @@ import { ROTULO_ETAPA } from '../utils/fichaDeRua';
 import { FUNIL8 } from '../utils/preparo';
 import type { Client } from '../types/client';
 
-export type LinhaCarteira = {
-  dealId: string; clientId: string | null; negocio: string; etapaId: string; diasNaEtapa: number | null;
-  temperatura: number | null; mrr: number | null; contato: string | null; bairro: string | null; temTelefone: boolean;
-  ultimoContato: string | null; canalUltimo: string | null; contatos: number; proximoPasso: string | null;
-};
+export type LinhaCarteira = LinhaDaCarteira;
 type Recorte = 'carteira' | 'alvo' | 'area';
 type Filtro = '' | 'sem' | 'regua' | 'q';
 
@@ -70,7 +66,7 @@ export default function ListaCarteiraWeb({ ownerHubspot, sellerId, aoAbrirLead, 
 
   // A mesma consulta (e o mesmo cache) da fila de Tarefas, que já carrega na abertura do app.
   const fila = useQuery(opcoesDaFila());
-  const carteira = ((fila.data as { carteira?: LinhaCarteira[] } | undefined)?.carteira ?? []) as LinhaCarteira[];
+  const carteira: LinhaCarteira[] = fila.data?.carteira ?? [];
   const alvos = useQuery<Client[]>({
     queryKey: ['contas_alvo_lista', ownerHubspot],
     enabled: !!ownerHubspot,
