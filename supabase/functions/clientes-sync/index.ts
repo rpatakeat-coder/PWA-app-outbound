@@ -38,11 +38,12 @@ const ETAPAS: Record<string, { rotulo: string; situacao: 'ativo' | 'em_risco' | 
   '162579092': { rotulo: 'Integração', situacao: 'ativo' },
   // 24/11/26: etapa nova do HubSpot; sem ela 150 clientes vivos caíam em 'desconhecida'.
   '1481812601': { rotulo: 'Acompanhamento 90D', situacao: 'ativo' },
-  '162579097': { rotulo: 'Em cancelamento', situacao: 'em_risco' },
+  // 24/11/26: os três rótulos abaixo passam a ser os do HubSpot (o id e a situação não mudam).
+  '162579097': { rotulo: 'Pré - Churn', situacao: 'em_risco' },
   '1308818229': { rotulo: 'Pré-Cancelamento', situacao: 'em_risco' },
-  '171389298': { rotulo: 'Comanda parada', situacao: 'em_risco' },
+  '171389298': { rotulo: 'Pausado', situacao: 'em_risco' },
   '1122729590': { rotulo: 'Churn', situacao: 'ex' },
-  '1154518702': { rotulo: 'Cancelado', situacao: 'ex' },
+  '1154518702': { rotulo: 'Estorno - Comercial', situacao: 'ex' },
 };
 
 const PROPS = [
@@ -56,6 +57,8 @@ const PROPS = [
   'n1___motivo_macro', 'n2___motivo_micro', 'observacoes___cancelamento', 'etapa_de_cancelamento',
   // 0254: o plano contratado e a assinatura, para o executivo ver no cartão do cliente antes da visita
   'pacote_contratado', 'periodo_contratado',
+  // 24/11/26 (0277): quanto o cliente paga (MRR do contrato no negócio).
+  'mrr',
 ];
 
 const json = (status: number, body: unknown) =>
@@ -204,6 +207,7 @@ Deno.serve(async (req) => {
             churn_motivo_macro: txt(q.n1___motivo_macro), churn_motivo_micro: txt(q.n2___motivo_micro),
             churn_motivo_texto: txt(q.observacoes___cancelamento), churn_setor: txt(q.etapa_de_cancelamento),
             plano: txt(q.pacote_contratado), assinatura: txt(q.periodo_contratado),
+            mrr: num(q.mrr),
           });
         }
         after = res.paging?.next?.after;
