@@ -602,7 +602,9 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={s.nestaAreaTexto} numberOfLines={1}>{lenteRecem ? 'MAIS NOVOS PERTO' : `Nesta área · ${itens.length} ${itens.length === 1 ? 'pino' : 'pinos'}`}</Text>
             <Text style={s.nestaAreaSub}>{totalNaArea > itens.length
-              ? `Lente ${rotuloLente} · +${totalNaArea - itens.length} fora da lente, como ponto`
+              /* 24/11/26 (Julyan): dizia "fora da lente", mas totalNaArea é o que ESTÁ na lente
+                 (visiveisMapaNovo); a diferença é o que o mapa desenha como ponto. */
+              ? `Lente ${rotuloLente} · +${totalNaArea - itens.length} como ponto no mapa`
               : `Lente ${rotuloLente}`}</Text>
           </View>
           {aoPlanejar && (
@@ -632,7 +634,11 @@ export default function FolhaDoMapa({ itens, planoTotal, planoCarregando = false
             <Text style={s.roteiroAjuda}>A próxima porta segue esta ordem. Pode ir a qualquer outro pino antes: o Cheguei fora do plano conta igual.</Text>
           )}
           <ListaCasca style={embutida ? s.listaEmbutida : [s.lista, cheia && s.listaCheia]} {...(embutida ? {} : { contentContainerStyle: { paddingBottom: 8 } })}>
-            {ordenados.length === 0 && <Text style={s.semProxima}>Nada desta lente na área. Troque de lente ou afaste o mapa.</Text>}
+            {/* 24/11/26 (Julyan abriu Clientes e "veio nada"): com o mapa afastado os 14 clientes
+                eram ponto e o aviso dizia "Nada desta lente… afaste o mapa" — o contrário do certo. */}
+            {ordenados.length === 0 && <Text style={s.semProxima}>{totalNaArea > 0
+              ? `${totalNaArea === 1 ? 'O 1 desta lente está' : `Os ${totalNaArea} desta lente estão`} como ponto no mapa. Aproxime o mapa ou toque em "Ver em lista".`
+              : 'Nada desta lente na área. Troque de lente ou afaste o mapa.'}</Text>}
             {modo === 'roteiro' && ordenados.map((it, i) => {
               const nome = it.c.empresa?.trim() || it.c.nome;
               const podeSubir = !it.feito && i > 0 && !ordenados[i - 1].feito;
