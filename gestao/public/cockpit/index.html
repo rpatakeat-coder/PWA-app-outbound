@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script>
-/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@5618688f.
+/* Gerado por scripts/importar-cockpit.cjs a partir de cockpit-unificado@3ea4e67d.
    As rotas /api/* do Cockpit viram Edge Functions do APP. */
 (function () {
   /* Sem painel antigo desde 19/10/2026: #/acessos e #/desativar-acesso abrem a aba Acessos do proprio Cockpit. */
@@ -34,7 +34,7 @@
      cortado as 08:47 com a correcao no ar desde 00:30. A pagina compara o commit dela com
      o versao.json publicado (a cada 5 min e quando a aba volta para a frente) e, se mudou,
      mostra uma faixa com "Atualizar". Nao recarrega sozinha: pode haver algo sendo preenchido. */
-  var VERSAO = "5618688f";
+  var VERSAO = "3ea4e67d";
   var avisada = false;
   function conferirVersao() {
     if (avisada) return;
@@ -37319,7 +37319,7 @@ DV2.semanaDoExecutivo = function (q) {
       if (x) podio.push({ nome: x.eu ? 'você' : DV2.prim(x.nome), pts: String(x.pts), lugar: p + 'º', eu: x.eu, altura: alturas[i] });
     });
     if (S.pos === 1) proximo = S.segundo ? 'Você lidera com ' + (S.pts - S.segundo.pts) + ' pts de vantagem sobre ' + DV2.prim(S.segundo.nome) + '.' : 'Você lidera a semana.';
-    else if (S.acima) { const falta = S.acima.pts - S.pts + 1; proximo = 'Faltam ' + falta + ' pts para passar ' + DV2.prim(S.acima.nome) + '. ' + DV2.menorAcao(falta); }
+    else if (S.acima) { const falta = S.acima.pts - S.pts + 1; proximo = (falta === 1 ? 'Falta 1 pt' : 'Faltam ' + falta + ' pts') + ' para passar ' + DV2.prim(S.acima.nome) + '. ' + DV2.menorAcao(falta); }
     else proximo = 'Cada visita com prova soma 3 pts.';
   }
   return { fora: false, fonte: null, kicker: kicker, ate: ate, ateCurto: DV2.diaCurto(fim), pts: String(S.pts), posTexto: posTexto, posTom: !novato && S.pos === 1 && !comecou ? 'ok' : 'mute', podio: podio, proximo: proximo, regra: regra, nota: nota };
@@ -53231,7 +53231,7 @@ H5.modelo = function () {
   V.semana = semana; V.placar = HJ4.st.placar; V.placarErro = HJ4.st.placarErro;
   V.bonus = !semana || !semana.eu ? null : { premio: semana.premio, t: semana.todosZero ? 'a semana começou: a 1ª visita com prova já põe você no placar.'
     : semana.eu.pos === 1 ? 'você lidera a semana' + (semana.todas[1] ? ', ' + ((Number(semana.eu.pontos) || 0) - (Number(semana.todas[1].pontos) || 0)) + ' pts à frente de ' + GV2.prim(semana.todas[1].nome) + '.' : '.')
-    : semana.acima ? 'faltam ' + semana.falta + ' pts para passar ' + GV2.prim(semana.acima.nome) + '.' + (GV2.DV2 && GV2.DV2.menorAcao ? ' ' + GV2.DV2.menorAcao(semana.falta) : '') : '' };
+    : semana.acima ? (semana.falta === 1 ? 'falta 1 pt' : 'faltam ' + semana.falta + ' pts') + ' para passar ' + GV2.prim(semana.acima.nome) + '.' + (GV2.DV2 && GV2.DV2.menorAcao ? ' ' + GV2.DV2.menorAcao(semana.falta) : '') : '' };
   V.missao = vm && vm.missao && !vm.missao.fora ? vm.missao : null;
   V.seq = vm && vm.sequencias && !vm.sequencias.fora ? vm.sequencias.itens : null;
 
