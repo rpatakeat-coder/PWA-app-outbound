@@ -36,6 +36,8 @@ const ETAPAS: Record<string, { rotulo: string; situacao: 'ativo' | 'em_risco' | 
   '162508352': { rotulo: 'Risco', situacao: 'ativo' },
   '162579091': { rotulo: 'Engajamento', situacao: 'ativo' },
   '162579092': { rotulo: 'Integração', situacao: 'ativo' },
+  // 24/11/26: etapa nova do HubSpot; sem ela 150 clientes vivos caíam em 'desconhecida'.
+  '1481812601': { rotulo: 'Acompanhamento 90D', situacao: 'ativo' },
   '162579097': { rotulo: 'Em cancelamento', situacao: 'em_risco' },
   '1308818229': { rotulo: 'Pré-Cancelamento', situacao: 'em_risco' },
   '171389298': { rotulo: 'Comanda parada', situacao: 'em_risco' },
