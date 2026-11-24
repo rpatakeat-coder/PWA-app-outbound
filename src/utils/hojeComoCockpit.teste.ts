@@ -50,6 +50,9 @@ const E = etapas([
 ]);
 ok(E.por[4].parados === 1 && E.por[1].parados === 2 && E.por[5].parados === 0 && E.pior === 1 && E.abertos === 6 && E.parados === 3, 'parados: passou da régua sem data combinada; Ag. Pagamento fora');
 ok(textoDoAcumulo(E, (i) => ['Prospecção', 'Visita'][i] ?? '?') === 'Visita é a mais entupida · 3 parados de 6', 'etapa com acúmulo');
+// o travado do robô vence a régua: passou da régua mas tem atividade combinada = não parado; dentro dela mas travado = parado
+const E2 = etapas([{ etapaIdx: 1, dias: 9, regua: 5, combinadoFuturo: false, travado: false }, { etapaIdx: 1, dias: 2, regua: 5, combinadoFuturo: false, travado: true }, { etapaIdx: 1, dias: 9, regua: 5, combinadoFuturo: false, travado: null }]);
+ok(E2.por[1].parados === 2, 'parados: o travado do robô quando vem; a régua quando não vem');
 const c = cobrar([0, 1, 1, 2, 3, 4, 5].map((i, k) => ({ etapaIdx: i, item: 'n' + k })), E);
 ok(c.total === 7 && c.linhas.map((x) => x.idx).join(',') === '4,3,2,1' && c.mais === 1 && c.linhas[3].n === 2 && c.linhas[3].pior, 'cobrar: Negociação › Demo › Decisor › Visita, +1 de fora');
 

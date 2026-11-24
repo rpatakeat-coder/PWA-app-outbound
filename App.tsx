@@ -8467,6 +8467,24 @@ function MainApp() {
             Configurações
           </Text>
         </Pressable>
+        {/* SAIR À VISTA (Julyan, 24/11/26: "no computador não tem botão de sair"): o Sair morava só ao lado do nome,
+            no rodapé, e o rodapé esconde tudo com a barra fechada (data-rotulo) — só aparecia com o mouse em cima.
+            Agora é um item da barra como Configurações: o ícone fica sempre à vista e o nome aparece ao abrir. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Sair da conta"
+          style={styles.sbItem}
+          {...ds({ trans: '1', hover: 'surface2' })}
+          // A15 (handoff v6): os três "Sair" confirmam
+          onPress={() => Alert.alert('Sair da conta?', 'Você precisará entrar de novo com e-mail e senha.', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Sair', style: 'destructive', onPress: () => { void logout(); } }])}
+        >
+          <View style={styles.sbItemIcone}>
+            <IconLogout width={22} height={22} fill={iconColors.muted} />
+          </View>
+          <Text style={styles.sbItemTexto} numberOfLines={1} {...ds({ rotulo: '1' })}>
+            Sair
+          </Text>
+        </Pressable>
         <View style={styles.sbUsuario}>
           <Avatar
             url={profile?.avatar_url}
@@ -8482,16 +8500,6 @@ function MainApp() {
               {canViewGestor ? 'Gestor' : isViewer ? 'Visualização' : 'Vendedor'}
             </Text>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Sair"
-            style={styles.sbSair}
-            {...ds({ rotulo: '1', hover: 'surface2', trans: '1' })}
-            // A15 (handoff v6): os três "Sair" confirmam
-            onPress={() => Alert.alert('Sair da conta?', 'Você precisará entrar de novo com e-mail e senha.', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Sair', style: 'destructive', onPress: () => { void logout(); } }])}
-          >
-            <IconLogout width={20} height={20} fill={iconColors.muted} />
-          </Pressable>
         </View>
       </View>
     </View>
@@ -13215,7 +13223,6 @@ const styles = StyleSheet.create({
   sbUsuarioTextos: { flex: 1, minWidth: 0 },
   sbUsuarioNome: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: 'var(--text)' },
   sbUsuarioPapel: { fontSize: 11, lineHeight: 16, fontWeight: '500', color: 'var(--text-faint)' },
-  sbSair: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   hwContainer: {
     height: 64,
     flexDirection: 'row',

@@ -154,7 +154,7 @@ export function frase(hora: Hora, d: DiaDaFrase, m: Mes, din: Dinheiro | null): 
 
 // ── o que cobrar, por etapa (H5.cobrar + HJ4.etapas) ─────────────────────────────────────────
 /** índice da etapa: 0 Prospecção · 1 Visita · 2 Decisor · 3 Demo · 4 Negociação · 5 Ag. Pagamento */
-export type NegocioDaEtapa = { etapaIdx: number; dias: number | null; regua: number | null; combinadoFuturo: boolean };
+export type NegocioDaEtapa = { etapaIdx: number; dias: number | null; regua: number | null; combinadoFuturo: boolean; /** a slaBreach do robô (a que o Cockpit lê); null = sem ela, vale a régua */ travado?: boolean | null };
 export type Etapas = { por: Array<{ idx: number; total: number; parados: number; regua: number | null }>; pior: number | null; abertos: number; parados: number };
 /** travado = passou da régua e não tem data combinada à frente (estadoDaRegua do robô); Ag. Pagamento fora */
 export function etapas(negocios: NegocioDaEtapa[]): Etapas {
@@ -164,7 +164,8 @@ export function etapas(negocios: NegocioDaEtapa[]): Etapas {
     if (!e) continue;
     e.total++;
     if (n.regua != null) e.regua = n.regua;
-    if (n.etapaIdx !== 5 && n.dias != null && n.regua != null && n.dias > n.regua && !n.combinadoFuturo) e.parados++;
+    const parado = typeof n.travado === 'boolean' ? n.travado : n.dias != null && n.regua != null && n.dias > n.regua && !n.combinadoFuturo;
+    if (n.etapaIdx !== 5 && parado) e.parados++;
   }
   let pior: (typeof por)[number] | null = null;
   for (const e of por) { if (e.idx === 5 || !e.parados) continue; if (!pior || e.parados >= pior.parados) pior = e; }

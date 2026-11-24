@@ -360,7 +360,7 @@ Deno.serve(async (req: Request) => {
   const snap = snapLido
     ? { atualizado_em: snapLido.atualizado_em, conteudo: { reps: snapLido.reps, funilLeads: snapLido.funilLeads, funilForaDoTime: snapLido.funilForaDoTime, agenda: snapLido.agenda } }
     : null;
-  const doSnap = new Map<string, { name?: string; stageId?: string; dias?: number; mrr?: number | string; temperatura?: number | string }>();
+  const doSnap = new Map<string, { name?: string; stageId?: string; dias?: number; mrr?: number | string; temperatura?: number | string; slaBreach?: boolean }>();
   const abertos = (snap?.conteudo as { reps?: Record<string, { abertos?: unknown[] }> } | null)?.reps?.[owner]?.abertos ?? [];
   for (const d of abertos as Array<{ id?: string | number }>) if (d?.id != null) doSnap.set(String(d.id), d as never);
   /* QUEM ESTÁ FORA DO TIME (o Julyan) NÃO TEM LINHA EM reps (auditoria 01/11/26): a carteira saía só dos
@@ -575,6 +575,10 @@ Deno.serve(async (req: Request) => {
       temperatura: n.temperatura, mrr: n.mrr, contato: n.pessoa, bairro: c?.bairro ?? null, temTelefone: n.temTelefone,
       ultimoContato: contatos[n.dealId]?.ultimo ?? null, canalUltimo: canalDoUltimo[n.dealId] ?? null,
       contatos: Math.min(4, contatos[n.dealId]?.n ?? 0), proximoPasso: proximoPorDeal.get(n.dealId) ?? null,
+      /* PARADO = O TRAVADO DO ROBÔ (24/11/26): o Hoje do celular conta "N parados" e a etapa com acúmulo pela mesma
+         slaBreach que o Cockpit lê (passou da régua sem atividade combinada à frente). Etapa mudada depois do
+         robô: null, e o app cai na régua. */
+      travado: (() => { const s = doSnap.get(n.dealId); return s && s.stageId === n.etapaId && typeof s.slaBreach === 'boolean' ? s.slaBreach : null; })(),
     };
   });
 

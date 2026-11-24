@@ -1107,10 +1107,10 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
       const sla = slaDays ?? DEFAULT_SLA;
       const reguaDoIdx = (idx: number) => { const r = slaForStage(ETAPA_COCKPIT[idx], sla); return r >= 999 ? null : r; };
       /* a carteira vem na mesma resposta da fila (a Lista do computador e o Limpar funil já a leem) */
-      const carteira = (q.data as { carteira?: Array<{ etapaId: string; diasNaEtapa: number | null; proximoPasso: string | null }> } | undefined)?.carteira ?? null;
+      const carteira = (q.data as { carteira?: Array<{ etapaId: string; diasNaEtapa: number | null; proximoPasso: string | null; travado?: boolean | null }> } | undefined)?.carteira ?? null;
       /* sem os dias na etapa (quem está fora do time, como o gestor, não tem linha no robô) não há "parados":
          a tela cala em vez de dizer "nenhuma entupida" */
-      const E = carteira && carteira.some((n) => n.diasNaEtapa != null) ? HC.etapas(carteira.map((n) => { const idx = etapaIdxDe(n.etapaId); return { etapaIdx: idx, dias: n.diasNaEtapa, regua: idx >= 0 ? reguaDoIdx(idx) : null, combinadoFuturo: !!n.proximoPasso && n.proximoPasso.slice(0, 10) >= hoje }; })) : null;
+      const E = carteira && carteira.some((n) => n.diasNaEtapa != null || typeof n.travado === 'boolean') ? HC.etapas(carteira.map((n) => { const idx = etapaIdxDe(n.etapaId); return { etapaIdx: idx, dias: n.diasNaEtapa, regua: idx >= 0 ? reguaDoIdx(idx) : null, combinadoFuturo: !!n.proximoPasso && n.proximoPasso.slice(0, 10) >= hoje, travado: n.travado ?? null }; })) : null;
       const idsSp = new Set(contaSemPasso.ids);
       const leadsSp = fila.filter((i) => idsSp.has(String(i.dealId))).map((i) => ({ etapaIdx: etapaIdxDe(i.etapaId), item: i }))
         .sort((a, b) => (Number(b.item.diasNaEtapa) || 0) - (Number(a.item.diasNaEtapa) || 0));
