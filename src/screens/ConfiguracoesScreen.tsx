@@ -244,6 +244,11 @@ export function ConfiguracoesScreen({
                 editable={!salvandoSenha}
                 placeholder="••••••••"
                 placeholderTextColor="var(--text-disabled)"
+                // 24/11/26: sem isto o Chrome enchia este campo com a senha salva E punha o
+                // e-mail do login na busca do mapa (o campo de texto antes da senha). O mapa
+                // ficava filtrado por "outbound@takeat.app" e toda lente vinha vazia.
+                autoComplete="new-password"
+                textContentType="newPassword"
                 accessibilityLabel="Nova senha"
               />
             </View>
@@ -257,6 +262,8 @@ export function ConfiguracoesScreen({
                 editable={!salvandoSenha}
                 placeholder="••••••••"
                 placeholderTextColor="var(--text-disabled)"
+                autoComplete="new-password"
+                textContentType="newPassword"
                 accessibilityLabel="Confirmar nova senha"
               />
             </View>
