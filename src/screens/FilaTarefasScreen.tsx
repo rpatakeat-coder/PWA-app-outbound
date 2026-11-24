@@ -36,6 +36,11 @@ import { reais } from '../../supabase/functions/_compartilhado/desenvolvimentoV2
 import { useDesenvolvimentoQuadro } from '../hooks/useDesenvolvimento';
 import { useDemosDeHoje } from '../hooks/useDemosDeHoje';
 import { etapaIdxDe } from '../utils/diaV3';
+import { ASemana, FraseDoHoje, MetaEmAcao, MeuDinheiro, MissaoESequencia, OQueCobrar } from './hoje/BlocosDoCockpit';
+import * as HC from '../utils/hojeComoCockpit';
+import { usePlacarDaSemana, useDemosDoMes } from '../hooks/usePlacarDaSemana';
+import { missaoDaSemana, sequencias as sequenciasDoQuadro } from '../../supabase/functions/_compartilhado/desenvolvimentoV2';
+import { DEFAULT_SLA, slaForStage, type SlaDays } from '../utils/sla';
 import {
   ContagemDoHoje, GrupoDoHoje, LinhaDoHoje, PlacarDoDia, PlanoDoDia, ProximaAcao, RecolhidosDoHoje, rolarAte,
   type AcaoDaLinha, type PortaDoPlano, type SeloDoPlacar,
@@ -88,6 +93,9 @@ const ETAPA: Record<string, { rotulo: string; cor: string }> = {
   '1395880473': { rotulo: 'Ag. Pagamento', cor: '#1E9E7B' },
 };
 const PERDIDO = '1396006164';
+/* as etapas na ordem e com o nome do Cockpit (GV2.ETAPA_IDS e PLV3.etapa): 0 Prospecção … 5 Ag. Pagamento */
+const ETAPA_IDS = ['1395880469', '1396005401', '1395880470', '1395880471', '1395880472', '1395880473'];
+const ETAPA_COCKPIT = ['Prospecção', 'Visita', 'Conversa com Decisor', 'Demo/Proposta', 'Negociação', 'Ag. Pagamento'];
 const soDigitos = (t: string) => t.replace(/\D+/g, '');
 const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
 const agoraHHMM = () => { const b = new Date(Date.now() - 3 * 3600000); return `${String(b.getUTCHours()).padStart(2, '0')}:${String(b.getUTCMinutes()).padStart(2, '0')}`; };
@@ -312,6 +320,8 @@ type Props = {
   aoAbrirEu?: () => void;
   /** As regras de todas as seções (o modal "Como as tarefas funcionam"). */
   aoComoFunciona?: () => void;
+  /** A régua de cada etapa (route_config), para "N parados" e a etapa com acúmulo do Hoje do Cockpit. */
+  slaDays?: SlaDays;
 };
 
 export type DiaDoHoje = {
@@ -323,7 +333,7 @@ export type DiaDoHoje = {
   sugestao: string | null;
 };
 
-export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVisita, aoEditarTelefone, aoMarcarProximoPasso, sellerId, pedido, aoVoltarAgenda, aoAbrirAgendaNoDia, dia, aoIrPorta, aoMontarDia, aoAbrirEu, aoComoFunciona }: Props) {
+export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVisita, aoEditarTelefone, aoMarcarProximoPasso, sellerId, pedido, aoVoltarAgenda, aoAbrirAgendaNoDia, dia, aoIrPorta, aoMontarDia, aoAbrirEu, aoComoFunciona, slaDays }: Props) {
   const layout = useLayout();
   const queryClient = useQueryClient();
   const q = useFila();
@@ -359,6 +369,11 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
   const temSaindo = Object.keys(saindo).length > 0;
   useEffect(() => { if (!temSaindo) return; const t = setInterval(() => setTique((x) => x + 1), 500); return () => clearInterval(t); }, [temSaindo]);
   const quadro = useDesenvolvimentoQuadro(!!ownerId);
+  /* O HOJE DO COCKPIT NO CELULAR (24/11/26): o placar da semana (a leitura do Cockpit, guardada 2 min), as demos
+     do mês (a conta de portas e demos da meta) e a chave da hora, que troca na mão como lá */
+  const placarDaSemana = usePlacarDaSemana(!!ownerId && !!dia);
+  const demosDoMes = useDemosDoMes(dia ? ownerId : null);
+  const [horaManual, setHoraManual] = useState<{ dia: string; hora: HC.Hora } | null>(null);
   // a demo FEITA hoje: o livro de pontos (pontos_eventos demo_realizada), a régua do Cockpit e da Agenda
   const nDemoHoje = useDemosDeHoje(ownerId);
   const { pdi, marcar: marcarAcordo } = useMeuPdi(true);
@@ -1057,8 +1072,70 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
     ];
     const recVisivel = recAberto ?? (!online && noAparelho ? 'feito' : null);
 
+    /* ---- O HOJE DO COCKPIT (GV2.H5) no celular, 24/11/26: os mesmos blocos e os mesmos números ----
+       o dia (as paradas e as visitas com prova que o App montou), o dinheiro e a meta (quadro.variavel), a
+       missão e a sequência (as funções do Cockpit sobre o mesmo quadro), o que cobrar (a fila, pela regra do
+       sem próximo passo) e a semana (placar_da_semana). As contas estão em src/utils/hojeComoCockpit.ts. */
+    let blocosCockpit: React.ReactNode = null;
+    let fraseCockpit: React.ReactNode = null;
+    let rodapeDoDia: { rot: string; tom: 'av' | 'nd'; t: string } | null = null;
+    if (dia) {
+      const agoraBR = new Date(relogio - 3 * 3600000);
+      const minAgora = agoraBR.getUTCHours() * 60 + agoraBR.getUTCMinutes();
+      const plano = (portasPlano ?? []).map((p) => ({ id: p.id, nome: p.nome, sub: '', feita: p.feita, hora: p.hora }));
+      const visitasHoje = Math.max(dia.comProva ?? 0, feitasPlano.length);
+      const horaAuto = HC.horaAuto(minAgora, visitasHoje);
+      const hora = horaManual && horaManual.dia === hoje ? horaManual.hora : horaAuto;
+      const ps = HC.paradas(plano, hora, minAgora);
+      const din = Q ? HC.dinheiro(Q.variavel) : undefined;
+      const metaMes = Q?.variavel ? HC.mes(Number(Q.variavel.vendas) || 0, Number(Q.variavel.meta) || 0, hoje, feriados) : null;
+      const portasMes = Q?.habilidade?.total?.atual?.p ?? null;
+      const J = metaMes ? HC.projecao(portasMes, demosDoMes, metaMes.cli, metaMes.meta) : null;
+      const tMeta = metaMes ? HC.textoDaMeta(metaMes, J, !!Q) : { l1: '', l2: '', legenda: '' };
+      const frase = HC.frase(hora, { visitas: visitasHoje, meta: dia.meta, demos: nDemo ?? 0, metaDemo: HC.META_DEMO, semPlano: !plano.length, paradas: ps },
+        metaMes ?? HC.mes(0, 0, hoje, feriados), din ?? null);
+      const S = HC.semana(placarDaSemana.placar);
+      const M = Q ? missaoDaSemana(Q) : null;
+      const SQ = Q ? sequenciasDoQuadro(Q) : null;
+      const rua = SQ && !SQ.fora ? SQ.itens.find((x) => x.id === 'rua') : null;
+      const filaSq = SQ && !SQ.fora ? SQ.itens.find((x) => x.id === 'fila') : null;
+      const linhasMissao: Array<{ t: string; s: string }> = [];
+      if (M && !M.fora) linhasMissao.push({ t: (M.cumprida ? 'Missão cumprida: ' : 'Missão: ') + M.titulo.charAt(0).toLowerCase() + M.titulo.slice(1), s: M.contagem + ' ' + (M.alvo === 1 ? 'dia' : 'dias') + ' · ' + M.prazo + ' · vale o selo ' + M.selo });
+      if (rua) linhasMissao.push({ t: rua.titulo, s: rua.sub.replace(/^recorde [^·]*· /, '') + (filaSq ? ' · ' + filaSq.titulo.charAt(0).toLowerCase() + filaSq.titulo.slice(1) : '') });
+      /* o que cobrar: os negócios sem próximo passo (o passo que venceu + o que nunca teve), por etapa; os
+         parados e a etapa com acúmulo saem da carteira inteira, pela régua (passou dela sem data combinada) */
+      const sla = slaDays ?? DEFAULT_SLA;
+      const reguaDoIdx = (idx: number) => { const r = slaForStage(ETAPA_COCKPIT[idx], sla); return r >= 999 ? null : r; };
+      /* a carteira vem na mesma resposta da fila (a Lista do computador e o Limpar funil já a leem) */
+      const carteira = (q.data as { carteira?: Array<{ etapaId: string; diasNaEtapa: number | null; proximoPasso: string | null }> } | undefined)?.carteira ?? null;
+      /* sem os dias na etapa (quem está fora do time, como o gestor, não tem linha no robô) não há "parados":
+         a tela cala em vez de dizer "nenhuma entupida" */
+      const E = carteira && carteira.some((n) => n.diasNaEtapa != null) ? HC.etapas(carteira.map((n) => { const idx = etapaIdxDe(n.etapaId); return { etapaIdx: idx, dias: n.diasNaEtapa, regua: idx >= 0 ? reguaDoIdx(idx) : null, combinadoFuturo: !!n.proximoPasso && n.proximoPasso.slice(0, 10) >= hoje }; })) : null;
+      const idsSp = new Set(contaSemPasso.ids);
+      const leadsSp = fila.filter((i) => idsSp.has(String(i.dealId))).map((i) => ({ etapaIdx: etapaIdxDe(i.etapaId), item: i }))
+        .sort((a, b) => (Number(b.item.diasNaEtapa) || 0) - (Number(a.item.diasNaEtapa) || 0));
+      const cob = filaMedida ? HC.cobrar(leadsSp, E) : null;
+      const verSemPasso = () => { setSpTodos(true); irAoGrupo('g-sp'); };
+      fraseCockpit = <FraseDoHoje frase={frase} hora={hora} aoHora={(h) => setHoraManual({ dia: hoje, hora: h })} />;
+      blocosCockpit = (
+        <>
+          <MeuDinheiro din={din} mesIso={hoje} bonus={HC.textoDoBonus(S)} lendoBonus={placarDaSemana.placar === undefined}
+            aoComissao={() => aoAbrirEu?.()} aoBonus={() => aoAbrirEu?.()} />
+          <MetaEmAcao m={Q ? metaMes ?? HC.mes(0, 0, hoje, feriados) : null} l1={tMeta.l1} l2={tMeta.l2} legenda={tMeta.legenda} aoTocar={() => aoAbrirEu?.()} />
+          <MissaoESequencia linhas={linhasMissao} lendo={!Q && !quadro.isError} fora={!Q && quadro.isError} aoTocar={() => aoAbrirEu?.()} />
+          <OQueCobrar c={cob} fora={q.isError} rotulo={(idx) => ETAPA_COCKPIT[idx]} cor={(idx) => etapaDe(ETAPA_IDS[idx]).cor} nomeDe={(i) => i.negocio}
+            porRotulo={sellerId ? 'Pôr no plano' : null} aoPor={(i) => porNoPlano(i)} aoVer={verSemPasso} aoFunil={verSemPasso} />
+          <ASemana S={S} lendo={placarDaSemana.placar === undefined} acumulo={E ? HC.textoDoAcumulo(E, (idx) => ETAPA_COCKPIT[idx]) : null}
+            aoBonus={() => aoAbrirEu?.()} aoAcumulo={verSemPasso} aoTentar={placarDaSemana.recarregar} />
+        </>
+      );
+      // o rodapé do dia (vence hoje / para fechar) vai no pé do plano
+      rodapeDoDia = plano.length ? HC.rodape(ps, hora) : null;
+    }
+
     corpo = (
       <View style={{ gap: 8 }}>
+        {fraseCockpit}
         <PlacarDoDia portas={dia ? dia.comProva : null} meta={dia?.meta ?? 6}
           demo={{ n: nDemo, sub: nDemo ? 'feita ✓' : demoMarcada ? `marcada · ${demoMarcada.hora ?? 'sem hora'}` : 'nenhuma marcada' }}
           selos={selos} aoSelo={() => aoAbrirEu?.()} />
@@ -1070,7 +1147,9 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
             ? { titulo: 'O plano de hoje não respondeu', texto: 'Abra o Mapa para ver as paradas.', botao: null, aoMontar: () => undefined }
             : !portasPlano.length
               ? { titulo: 'Sem plano para hoje', texto: dia?.sugestao ?? 'Monte o dia com as portas perto de você.', botao: aoMontarDia ? 'Montar o dia ›' : null, aoMontar: () => aoMontarDia?.() }
-              : null} />
+              : null}
+          pe={rodapeDoDia} />
+        {blocosCockpit}
         {proxima}
         <View style={{ gap: 14, marginTop: 6 }}>
           <GrupoDoHoje id="g-atr" titulo="Atrasados" n={atrasadosRecentes.length} alerta regra={regraAtr} ajudaAberta={!!ajudas.atr} aoAjuda={alternarAjuda('atr')}

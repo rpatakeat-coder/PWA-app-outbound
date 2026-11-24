@@ -9061,6 +9061,7 @@ function MainApp() {
         <FilaTarefasScreen
           ownerId={myHubspotId}
           dia={ehRepV3 ? diaDoHoje : null}
+          slaDays={routeSlaDays}
           aoIrPorta={(id) => { setTab('map'); void openClientById(id); }}
           aoMontarDia={isViewer ? undefined : () => { setTab('map'); void montarDiaComMicrorrotas(); }}
           aoComoFunciona={() => setIsTaskRulesOpen(true)}

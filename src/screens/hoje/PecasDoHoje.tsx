@@ -75,12 +75,14 @@ export function PlacarDoDia({ portas, meta, demo, selos, aoSelo }: {
 
 // ---- o plano do dia (3 portas + "ver as N") ------------------------------------------------------
 export type PortaDoPlano = { id: string; hora: string | null; nome: string; tipo: string; quente: boolean; recem: boolean; feita: boolean; /** visitada sem prova (fora do raio, sem foto): não é pendente nem conta */ semProva?: boolean };
-export function PlanoDoDia({ titulo, portas, verTodas, aoAlternar, temMais, rotuloMais, aoIr, aoAbrir, vazio }: {
+export function PlanoDoDia({ titulo, portas, verTodas, aoAlternar, temMais, rotuloMais, aoIr, aoAbrir, vazio, pe }: {
   titulo: string; portas: PortaDoPlano[]; verTodas: boolean; aoAlternar: () => void; temMais: boolean; rotuloMais: string;
   aoIr: (p: PortaDoPlano) => void;
   /** Tocar no nome abre a ficha do lead (06/11/26: só o "Ir" respondia, e a visita feita não abria nada). */
   aoAbrir?: (p: PortaDoPlano) => void;
   vazio: { titulo: string; texto: string; botao: string | null; aoMontar: () => void } | null;
+  /** o pé do dia do Hoje do Cockpit: "vence hoje" (os horários fixos) ou "para fechar" depois das 18h */
+  pe?: { rot: string; tom: 'av' | 'nd'; t: string } | null;
 }) {
   const primeira = portas.find((p) => !p.feita && !p.semProva);
   return (
@@ -123,6 +125,14 @@ export function PlanoDoDia({ titulo, portas, verTodas, aoAlternar, temMais, rotu
           </View>
         );
       })}
+      {!vazio && !!pe && (
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderTopWidth: 1, borderTopColor: C.line2, paddingTop: 8 }}>
+          <View style={[st.selo, pe.tom === 'av' && { backgroundColor: C.ambS, borderColor: C.ambB }]}>
+            <Text style={[st.seloT, pe.tom === 'av' && { color: C.amb }]}>{pe.rot}</Text>
+          </View>
+          <Text style={[st.sub2, { flex: 1, minWidth: 0 }]}>{pe.t}</Text>
+        </View>
+      )}
     </View>
   );
 }
