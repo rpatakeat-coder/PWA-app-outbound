@@ -195,7 +195,7 @@ async function snapshotDoFunil(svc: any): Promise<{ data: any; error: any }> {
     if (marca && SNAP_EM_MEMORIA && SNAP_EM_MEMORIA.em === String(marca.atualizado_em)) return { data: structuredClone(SNAP_EM_MEMORIA.linha), error: null };
   } catch { /* sem a marca, lê inteiro */ }
   const r = await svc.from('cockpit_snapshot')
-    .select('atualizado_em, reps:conteudo->reps, funilLeads:conteudo->funilLeads, funilForaDoTime:conteudo->funilForaDoTime, agenda:conteudo->agenda')
+    .select('atualizado_em, reps:conteudo->reps, funilLeads:conteudo->funilLeads, funilForaDoTime:conteudo->funilForaDoTime, agenda:conteudo->agenda, passosDoMes:conteudo->historicoEtapas->passosDoMes')
     .eq('chave', 'hubspot').maybeSingle();
   // cópia própria em cada pedido: o resto da função pode mexer nos arrays sem estragar a memória
   if (!r.error && r.data) SNAP_EM_MEMORIA = { em: String(r.data.atualizado_em), linha: structuredClone(r.data) };
@@ -610,5 +610,14 @@ Deno.serve(async (req: Request) => {
     hoje,
     feriados: feriados.filter((f) => f >= hoje).slice(0, 20),
     snapshotLidoEm: snap?.atualizado_em ?? null,
+    /* AS DEMOS DO MÊS (24/11/26): os negócios do dono que entraram em Demo/Proposta no mês, a MESMA lista
+       (historicoEtapas.passosDoMes) que o Cockpit usa na conta "isso pede N portas e M demos" do Hoje.
+       null quando a lista é de outro mês (o robô ainda não virou o mês). */
+    demosDoMes: (() => {
+      const pm = (snapLido as { passosDoMes?: { mes?: string; porOwner?: Record<string, { demo?: unknown[] }> } } | null)?.passosDoMes;
+      if (!pm || pm.mes !== hoje.slice(0, 7) || !owner) return null;
+      const lista = pm.porOwner?.[owner]?.demo;
+      return Array.isArray(lista) ? lista.length : 0;
+    })(),
   });
 });

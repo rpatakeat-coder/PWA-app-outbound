@@ -38,7 +38,7 @@ import { useDemosDeHoje } from '../hooks/useDemosDeHoje';
 import { etapaIdxDe } from '../utils/diaV3';
 import { ASemana, FraseDoHoje, MetaEmAcao, MeuDinheiro, MissaoESequencia, OQueCobrar } from './hoje/BlocosDoCockpit';
 import * as HC from '../utils/hojeComoCockpit';
-import { usePlacarDaSemana, useDemosDoMes } from '../hooks/usePlacarDaSemana';
+import { usePlacarDaSemana } from '../hooks/usePlacarDaSemana';
 import { missaoDaSemana, sequencias as sequenciasDoQuadro } from '../../supabase/functions/_compartilhado/desenvolvimentoV2';
 import { DEFAULT_SLA, slaForStage, type SlaDays } from '../utils/sla';
 import {
@@ -48,7 +48,7 @@ import {
 import { ehErroDeRede, ehSessaoVencida, enfileirar, novoAcaoId } from '../utils/filaOffline';
 import { ehRecusa } from '../utils/negocioAcao';
 import { apagarPendente, desfazerFeita, lerFeitas, registrarFeita, type FeitaServidor, type OrigemDoFeito, type SecaoDoFeito } from '../utils/filaFeitas';
-import { ETAPAS_QUENTES, ehDiaUtil, proximoDiaUtil, quenteEsfriando, secaoDoItem, type SecaoDaFila } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
+import { ETAPAS_QUENTES, ehDiaUtil, feriadosNacionais, proximoDiaUtil, quenteEsfriando, secaoDoItem, type SecaoDaFila } from '../../supabase/functions/_compartilhado/filaDoDinheiro';
 import { semProximoPassoDaFila } from '../../supabase/functions/_compartilhado/hojeV3';
 import {
   BlocoVazio, CabecalhoDeBloco, CartaoTarefa, DiaLivre, FaixaJanela, FileiraDeDias, LinhaFeitoTarefa, Recolhido,
@@ -372,7 +372,6 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
   /* O HOJE DO COCKPIT NO CELULAR (24/11/26): o placar da semana (a leitura do Cockpit, guardada 2 min), as demos
      do mês (a conta de portas e demos da meta) e a chave da hora, que troca na mão como lá */
   const placarDaSemana = usePlacarDaSemana(!!ownerId && !!dia);
-  const demosDoMes = useDemosDoMes(dia ? ownerId : null);
   const [horaManual, setHoraManual] = useState<{ dia: string; hora: HC.Hora } | null>(null);
   // a demo FEITA hoje: o livro de pontos (pontos_eventos demo_realizada), a régua do Cockpit e da Agenda
   const nDemoHoje = useDemosDeHoje(ownerId);
@@ -1088,12 +1087,14 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
       const hora = horaManual && horaManual.dia === hoje ? horaManual.hora : horaAuto;
       const ps = HC.paradas(plano, hora, minAgora);
       const din = Q ? HC.dinheiro(Q.variavel) : undefined;
-      const metaMes = Q?.variavel ? HC.mes(Number(Q.variavel.vendas) || 0, Number(Q.variavel.meta) || 0, hoje, feriados) : null;
+      /* os dias úteis do mês inteiro: os feriados que já passaram contam (a fila só manda os de hoje em diante) */
+      const feriadosDoMes = feriadosNacionais(Number(hoje.slice(0, 4)));
+      const metaMes = Q?.variavel ? HC.mes(Number(Q.variavel.vendas) || 0, Number(Q.variavel.meta) || 0, hoje, feriadosDoMes) : null;
       const portasMes = Q?.habilidade?.total?.atual?.p ?? null;
-      const J = metaMes ? HC.projecao(portasMes, demosDoMes, metaMes.cli, metaMes.meta) : null;
+      const J = metaMes ? HC.projecao(portasMes, q.data?.demosDoMes ?? null, metaMes.cli, metaMes.meta) : null;
       const tMeta = metaMes ? HC.textoDaMeta(metaMes, J, !!Q) : { l1: '', l2: '', legenda: '' };
       const frase = HC.frase(hora, { visitas: visitasHoje, meta: dia.meta, demos: nDemo ?? 0, metaDemo: HC.META_DEMO, semPlano: !plano.length, paradas: ps },
-        metaMes ?? HC.mes(0, 0, hoje, feriados), din ?? null);
+        metaMes ?? HC.mes(0, 0, hoje, feriadosDoMes), din ?? null);
       const S = HC.semana(placarDaSemana.placar);
       const M = Q ? missaoDaSemana(Q) : null;
       const SQ = Q ? sequenciasDoQuadro(Q) : null;
@@ -1122,7 +1123,7 @@ export default function FilaTarefasScreen({ ownerId, aoPosicionar, aoRegistrarVi
         <>
           <MeuDinheiro din={din} mesIso={hoje} bonus={HC.textoDoBonus(S)} lendoBonus={placarDaSemana.placar === undefined}
             aoComissao={() => aoAbrirEu?.()} aoBonus={() => aoAbrirEu?.()} />
-          <MetaEmAcao m={Q ? metaMes ?? HC.mes(0, 0, hoje, feriados) : null} l1={tMeta.l1} l2={tMeta.l2} legenda={tMeta.legenda} aoTocar={() => aoAbrirEu?.()} />
+          <MetaEmAcao m={Q ? metaMes ?? HC.mes(0, 0, hoje, feriadosDoMes) : null} l1={tMeta.l1} l2={tMeta.l2} legenda={tMeta.legenda} aoTocar={() => aoAbrirEu?.()} />
           <MissaoESequencia linhas={linhasMissao} lendo={!Q && !quadro.isError} fora={!Q && quadro.isError} aoTocar={() => aoAbrirEu?.()} />
           <OQueCobrar c={cob} fora={q.isError} rotulo={(idx) => ETAPA_COCKPIT[idx]} cor={(idx) => etapaDe(ETAPA_IDS[idx]).cor} nomeDe={(i) => i.negocio}
             porRotulo={sellerId ? 'Pôr no plano' : null} aoPor={(i) => porNoPlano(i)} aoVer={verSemPasso} aoFunil={verSemPasso} />

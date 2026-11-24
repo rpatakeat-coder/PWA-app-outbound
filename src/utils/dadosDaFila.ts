@@ -37,6 +37,8 @@ export type RespostaFila = {
   itens: CardDaFila[]; grupos: Array<{ id: CardDaFila['grupo']; rotulo: string }>; mrrEmJogo: number;
   hoje: string; feriados: string[]; semMedicao?: string; proximos?: ItemProximo[];
   carteira?: LinhaDaCarteira[];
+  /** os negócios do dono que entraram em Demo/Proposta no mês (a lista do Cockpit); null = lista de outro mês */
+  demosDoMes?: number | null;
 };
 
 const hojeBRT = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
