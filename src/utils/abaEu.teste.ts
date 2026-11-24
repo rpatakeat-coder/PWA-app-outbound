@@ -58,6 +58,11 @@ ok(segunda.linha === '0 pts · semana zerada' || /pts ·/.test(segunda.linha), '
 const zerada = linhaDaSemana(q('quarta', (x) => { x.semana!.pts = 0; x.semana!.podio.forEach((p) => { p.pts = 0; }); }));
 eq(zerada.linha, '0 pts · semana zerada', 'semana zerada');
 ok(zerada.sub.startsWith('a 1ª visita com prova vale 3'), 'zerada convida: ' + zerada.sub);
+/* 24/11/26 (Marco, 9º com 0, Larah 8ª com 0): "1 visitas passam Larah" saía no plural */
+const umaVisita = linhaDaSemana(q('quarta', (x) => { x.semana!.pts = 0; x.semana!.podio.forEach((p) => { p.pts = 0; }); x.semana!.acima = { ...(x.semana!.acima ?? x.semana!.podio[0]), nome: 'Larah Cunha', pts: 0 }; }));
+ok(umaVisita.sub.endsWith('· 1 visita passa Larah'), 'uma visita, no singular: ' + umaVisita.sub);
+const duasVisitas = linhaDaSemana(q('quarta', (x) => { x.semana!.pts = 0; x.semana!.podio.forEach((p) => { p.pts = 0; }); x.semana!.acima = { ...(x.semana!.acima ?? x.semana!.podio[0]), nome: 'Larah Cunha', pts: 4 }; }));
+ok(duasVisitas.sub.endsWith('· 2 visitas passam Larah'), 'duas visitas, no plural: ' + duasVisitas.sub);
 const semFonte = linhaDaSemana(q('quarta', (x) => { x.semana = null; }));
 ok(semFonte.fora && semFonte.linha.startsWith('—'), 'sem semana, —');
 

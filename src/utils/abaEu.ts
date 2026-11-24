@@ -68,7 +68,8 @@ export function linhaDaSemana(q: Quadro): LinhaDaSemana {
   if (S.pos == null) return { fora: false, linha: `${pts} · fora do placar do bônus`, sub: 'estes são os seus pontos da semana', lider: false, pts, pos: '—' };
   const lider = S.podio.find((x) => x.pos === 1);
   if (S.pts <= 0 || !lider || lider.pts <= 0) {
-    const passa = S.acima ? ` · ${Math.ceil((S.acima.pts - S.pts + 1) / 3)} visitas passam ${prim(S.acima.nome)}` : '';
+    const nVis = S.acima ? Math.ceil((S.acima.pts - S.pts + 1) / 3) : 0;
+    const passa = S.acima ? ` · ${nVis} ${nVis === 1 ? 'visita passa' : 'visitas passam'} ${prim(S.acima.nome)}` : '';
     return { fora: false, linha: '0 pts · semana zerada', sub: `a 1ª visita com prova vale 3${S.pts <= 0 ? passa : ''}`, lider: false, pts, pos: `${S.pos}º` };
   }
   if (S.pos === 1) {
