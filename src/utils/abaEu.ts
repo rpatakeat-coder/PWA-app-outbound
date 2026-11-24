@@ -78,5 +78,5 @@ export function linhaDaSemana(q: Quadro): LinhaDaSemana {
   if (!S.acima) return { fora: false, linha: `${pts} · ${S.pos}º`, sub: 'cada visita com prova soma 3', lider: false, pts, pos: `${S.pos}º` };
   const falta = S.acima.pts - S.pts + 1;
   const acao = menorAcao(falta).replace(/\.$/, '');
-  return { fora: false, linha: `${pts} · ${S.pos}º · faltam ${falta} para passar ${prim(S.acima.nome)}`, sub: acao.charAt(0).toLowerCase() + acao.slice(1), lider: false, pts, pos: `${S.pos}º` };
+  return { fora: false, linha: `${pts} · ${S.pos}º · ${falta === 1 ? 'falta 1' : `faltam ${falta}`} para passar ${prim(S.acima.nome)}`, sub: acao.charAt(0).toLowerCase() + acao.slice(1), lider: false, pts, pos: `${S.pos}º` };
 }

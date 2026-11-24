@@ -61,6 +61,9 @@ const S = semana({ segunda: '2026-11-23', sexta: '2026-11-27', premio: 250, linh
 ok(S.fim === '2026-11-29' && S.falta === 95 && S.acima?.nome === 'Sérgio Caetano', 'semana: até domingo; faltam 95 para passar o 1º');
 ok(textoDoBonus(S) === 'Bônus da semana, R$ 250: faltam 95 pts para passar Sérgio. Quatro demos passam.', 'a linha do bônus');
 ok(semana({ segunda: '2026-11-23', linhas: [{ pos: 1, nome: 'X', pontos: 3 }] })!.eu === null, 'fora do placar: sem "eu"');
+// singular: o Marco com 0 e a Larah com 0, logo acima (24/11/26: o texto dizia "faltam 1 pts")
+const S1 = semana({ segunda: '2026-11-23', premio: 250, linhas: [{ pos: 1, nome: 'Sérgio', pontos: 137 }, { pos: 8, nome: 'Larah Souza', pontos: 0 }, { pos: 9, nome: 'Marco Filho', pontos: 0, euMesmo: true }] })!;
+ok(textoDoBonus(S1) === 'Bônus da semana, R$ 250: falta 1 pt para passar Larah. Uma visita com prova já passa.', 'singular: falta 1 pt');
 
 console.log(falhas ? `\n${falhas} falha(s)` : '\ntudo certo');
 if (falhas) process.exit(1);

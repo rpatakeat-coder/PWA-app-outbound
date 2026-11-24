@@ -82,10 +82,10 @@ export function Avatar({ nome, url, tamanho = 40 }: { nome: string; url?: string
 export function faltamDepoisDe(r: Ranking | null | undefined, ganhou: number): string | null {
   const eu = r?.eu;
   if (!eu || !eu.faltam) return null;
-  const m = /Faltam (\d+) pts para o (\d+)º/.exec(eu.faltam);
+  const m = /Faltam? (\d+) pts? para o (\d+)º/.exec(eu.faltam);
   if (!m) return null;
   const resto = Number(m[1]) - ganhou;
-  return resto > 0 ? `Faltam ${resto} pts para o ${m[2]}º na semana` : `Você deve passar para o ${m[2]}º`;
+  return resto > 0 ? `${resto === 1 ? 'Falta 1 pt' : `Faltam ${resto} pts`} para o ${m[2]}º na semana` : `Você deve passar para o ${m[2]}º`;
 }
 
 /**

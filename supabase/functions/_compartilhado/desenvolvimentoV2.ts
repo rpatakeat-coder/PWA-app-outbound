@@ -145,7 +145,7 @@ export function semanaDoExecutivo(q: Quadro): VMSemana {
       if (x) podio.push({ nome: x.eu ? 'você' : prim(x.nome), pts: String(x.pts), lugar: p + 'º', eu: x.eu, altura: alturas[i] });
     });
     if (S.pos === 1) proximo = S.segundo ? 'Você lidera com ' + (S.pts - S.segundo.pts) + ' pts de vantagem sobre ' + prim(S.segundo.nome) + '.' : 'Você lidera a semana.';
-    else if (S.acima) { const falta = S.acima.pts - S.pts + 1; proximo = 'Faltam ' + falta + ' pts para passar ' + prim(S.acima.nome) + '. ' + menorAcao(falta); }
+    else if (S.acima) { const falta = S.acima.pts - S.pts + 1; proximo = (falta === 1 ? 'Falta 1 pt' : 'Faltam ' + falta + ' pts') + ' para passar ' + prim(S.acima.nome) + '. ' + menorAcao(falta); }
     else proximo = 'Cada visita com prova soma 3 pts.';
   }
   return { fora: false, fonte: null, kicker, ate, ateCurto: diaCurto(fim), pts: String(S.pts), posTexto, posTom: !novato && S.pos === 1 && !comecou ? 'ok' : 'mute', podio, proximo, regra, nota };

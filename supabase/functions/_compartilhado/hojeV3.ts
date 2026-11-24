@@ -207,7 +207,7 @@ export function faltam(placar: EntradaDoDia['placar']): { n: number | null; curt
   if (!placar.acima || placar.pos == null) return { n: null, curto: null, longo: placar.pts ? null : 'O 1º check-in com prova põe você no placar.' };
   const n = placar.acima.pts - placar.pts + 1;
   const prim = String(placar.acima.nome || '').trim().split(/\s+/)[0] || 'o de cima';
-  return { n, curto: 'faltam ' + n + ' para passar o ' + (placar.pos - 1) + 'º', longo: 'Faltam ' + n + ' pts para passar ' + prim + '.' };
+  return { n, curto: (n === 1 ? 'falta 1' : 'faltam ' + n) + ' para passar o ' + (placar.pos - 1) + 'º', longo: (n === 1 ? 'Falta 1 pt' : 'Faltam ' + n + ' pts') + ' para passar ' + prim + '.' };
 }
 const seqTexto = (s: number | null) => (s == null ? null : 'sequência ' + pl(s, 'dia', 'dias'));
 const missaoTexto = (m: EntradaDoDia['missao']) => (!m ? null : m.cumprida ? 'missão cumprida' : 'missão ' + m.n + ' de ' + m.alvo);

@@ -212,7 +212,7 @@ export function textoDoBonus(S: Semana | null): string | null {
   const eu = S.eu;
   const t = S.todosZero ? 'a semana começou: a 1ª visita com prova já põe você no placar.'
     : eu.pos === 1 ? 'você lidera a semana' + (S.todas[1] ? ', ' + ((Number(eu.pontos) || 0) - (Number(S.todas[1].pontos) || 0)) + ' pts à frente de ' + prim(S.todas[1].nome) + '.' : '.')
-      : S.acima ? 'faltam ' + S.falta + ' pts para passar ' + prim(S.acima.nome) + '. ' + menorAcao(S.falta ?? 1) : '';
+      : S.acima ? (S.falta === 1 ? 'falta 1 pt' : 'faltam ' + S.falta + ' pts') + ' para passar ' + prim(S.acima.nome) + '. ' + menorAcao(S.falta ?? 1) : '';
   if (!t) return null;
   return 'Bônus da semana' + (S.premio != null ? ', ' + reais(S.premio) : '') + ': ' + t;
 }
