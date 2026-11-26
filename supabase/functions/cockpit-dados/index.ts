@@ -198,7 +198,7 @@ Deno.serve(async (req) => {
   const pUser = marca('sessao', svc.auth.getUser(token));
   const pEquipe = marca('equipe', Promise.resolve(svc
     .from('equipe_cockpit')
-    .select('profile_id, papel, nome, ordem, ignorar_owner, so_acesso, ramp_stage, a_comecar, field_status, profiles!inner(email, full_name, id_hubspot)')
+    .select('profile_id, papel, nome, ordem, ignorar_owner, so_acesso, conta_no_time, ramp_stage, a_comecar, field_status, profiles!inner(email, full_name, id_hubspot)')
     .eq('ativo', true)
     .order('ordem', { ascending: true, nullsFirst: false })));
   const pSaiu = marca('saiu', Promise.resolve(svc
@@ -232,12 +232,17 @@ Deno.serve(async (req) => {
     if (l.ramp_stage) x.rampStage = l.ramp_stage;
     if (l.a_comecar) x.aComecar = true;
     if (l.field_status) x.fieldStatus = l.field_status;
+    // conta_no_time (0278): o team leader é master (Daily do gestor) e também vende.
+    if (l.papel === 'manager' && l.conta_no_time) x.contaNoTime = true;
     return { pessoa: x, soAcesso: !!l.so_acesso };
   });
   // so_acesso (0095): entra como gestor, mas fica FORA da equipe da montagem —
   // DATA.usuarios é denominador ("visto por X/N") e fonte do placar; quem só tem
   // acesso não pode mudar nenhum dos dois.
-  const equipe = cadastro.filter((c) => !c.soAcesso).map((c) => c.pessoa);
+  /* O TEAM LEADER NA EQUIPE É EXECUTIVO (0278, 26/11/26): na lista do time (placar, pódio,
+     Daily, metas, "visto por") ele entra como rep; só a sessão dele (usuario, abaixo) segue
+     manager, para abrir as telas de gestor. Sem isto ele sumia do time ao virar master. */
+  const equipe = cadastro.filter((c) => !c.soAcesso).map((c) => (c.pessoa.contaNoTime ? { ...c.pessoa, role: 'rep' } : c.pessoa));
   usarEquipe(equipe);
   /* QUEM SAIU DO TIME (cockpit-unificado #915): os executivos INATIVOS com owner, só para a
      venda deles no mês contar no total. Falhar aqui não derruba a carga: sem a lista, a
@@ -478,7 +483,7 @@ Deno.serve(async (req) => {
        um gestor entrou em narrativas por causa do login de teste e virava o 10º executivo —
        Daily, placar, pódio, Visitas com prova. Sai da lista do time para todo mundo, menos
        na própria visão de executivo dele. Os negócios dele continuam no funil. */
-    const donosGestores = new Set(cadastro.filter((c: any) => c.pessoa.role === 'manager' && c.pessoa.ownerId).map((c: any) => String(c.pessoa.ownerId)));
+    const donosGestores = new Set(cadastro.filter((c: any) => c.pessoa.role === 'manager' && !c.pessoa.contaNoTime && c.pessoa.ownerId).map((c: any) => String(c.pessoa.ownerId)));
     const meuDono = String(quem.ownerId ?? '');
     const fica = (o: unknown) => { const k = String(o ?? ''); return !donosGestores.has(k) || (quem.role === 'rep' && k === meuDono); };
     // CÓPIAS, nunca no lugar: partes do objeto vêm do snapshot em cache e seriam cortadas
