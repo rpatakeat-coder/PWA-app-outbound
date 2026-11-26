@@ -234,14 +234,14 @@ async function rodar(svc: ReturnType<typeof createClient>, momento: string, dryR
   if (!pularRelogio && hora >= 19) return { ok: true, momento, pulou: 'depois das 19h' };
 
   // so_acesso nulo conta como falso (neq('so_acesso', true) deixaria o nulo de fora)
-  const { data: equipe } = await svc.from('equipe_cockpit').select('profile_id, papel').eq('ativo', true).or('so_acesso.is.null,so_acesso.eq.false');
+  const { data: equipe } = await svc.from('equipe_cockpit').select('profile_id, papel, conta_no_time').eq('ativo', true).or('so_acesso.is.null,so_acesso.eq.false');
   const soPara = new Set((cfg.so_para ?? []).map(String));
   // os executivos sempre (a leitura grava fila_do_dia) e, desde 17/10/26 ("automático pra geral"),
   // qualquer pessoa ativa da equipe com aparelho inscrito — o gestor que vende também recebe
   const daEquipe = new Set((equipe ?? []).map((e: { profile_id: string }) => String(e.profile_id)));
   const { data: todasInscritas } = await svc.from('push_inscricoes').select('id, user_id, endpoint, p256dh, auth, falhas');
   const alvo = Array.from(new Set([
-    ...(equipe ?? []).filter((e: { papel: string }) => e.papel === 'rep').map((e: { profile_id: string }) => String(e.profile_id)),
+    ...(equipe ?? []).filter((e: { papel: string; conta_no_time?: boolean | null }) => e.papel === 'rep' || e.conta_no_time === true).map((e: { profile_id: string }) => String(e.profile_id)),
     ...((todasInscritas ?? []) as Inscricao[]).map((i) => String(i.user_id)).filter((u) => daEquipe.has(u)),
     ...soPara,
   ]));
@@ -323,9 +323,10 @@ async function rodarSemana(svc: ReturnType<typeof createClient>, momento: 'seg08
      e o manha0800 (cron 26) disparam juntos às 11:00 UTC. A missão da semana agora vai DENTRO do push da
      manhã de segunda (rodarDia); este momento só sobra para o ensaio. A 0242 tira o cron 24. */
   if (momento === 'seg0800' && !dryRun) return { ok: true, momento, pulou: 'vai junto do manha0800 da segunda' };
-  const { data: equipe } = await svc.from('equipe_cockpit').select('profile_id, papel').eq('ativo', true).eq('papel', 'rep').or('so_acesso.is.null,so_acesso.eq.false');
+  // 0278: executivo (papel rep) ou o team leader (master com conta_no_time), que também vende.
+  const { data: equipe } = await svc.from('equipe_cockpit').select('profile_id, papel, conta_no_time').eq('ativo', true).or('so_acesso.is.null,so_acesso.eq.false');
   const soPara = new Set((cfg.so_para ?? []).map(String));
-  const alvo = (equipe ?? []).map((e: { profile_id: string }) => String(e.profile_id));
+  const alvo = (equipe ?? []).filter((e: { papel: string; conta_no_time?: boolean | null }) => e.papel === 'rep' || e.conta_no_time === true).map((e: { profile_id: string }) => String(e.profile_id));
   const { data: inscritas } = await svc.from('push_inscricoes').select('id, user_id, endpoint, p256dh, auth, falhas').in('user_id', alvo.length ? alvo : ['-']);
   const k = await chaves(svc);
   const relatorio: Array<Record<string, unknown>> = [];
@@ -371,9 +372,10 @@ async function rodarDia(svc: ReturnType<typeof createClient>, momento: 'manha080
   const ano = Number(hoje.slice(0, 4));
   const feriados = [...feriadosNacionais(ano), ...feriadosNacionais(ano + 1)];
   if (!(ignorarHorario && dryRun) && !ehDiaUtil(hoje, feriados)) return { ok: true, momento, pulou: 'não é dia útil' };
-  const { data: equipe } = await svc.from('equipe_cockpit').select('profile_id, papel').eq('ativo', true).eq('papel', 'rep').or('so_acesso.is.null,so_acesso.eq.false');
+  // 0278: executivo (papel rep) ou o team leader (master com conta_no_time), que também vende.
+  const { data: equipe } = await svc.from('equipe_cockpit').select('profile_id, papel, conta_no_time').eq('ativo', true).or('so_acesso.is.null,so_acesso.eq.false');
   const soPara = new Set((cfg.so_para ?? []).map(String));
-  const alvo = (equipe ?? []).map((e: { profile_id: string }) => String(e.profile_id));
+  const alvo = (equipe ?? []).filter((e: { papel: string; conta_no_time?: boolean | null }) => e.papel === 'rep' || e.conta_no_time === true).map((e: { profile_id: string }) => String(e.profile_id));
   const { data: inscritas } = await svc.from('push_inscricoes').select('id, user_id, endpoint, p256dh, auth, falhas').in('user_id', alvo.length ? alvo : ['-']);
   const k = await chaves(svc);
   const relatorio: Array<Record<string, unknown>> = [];

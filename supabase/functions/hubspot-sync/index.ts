@@ -263,9 +263,11 @@ async function repQuePede(req: Request): Promise<string | null> {
     if (!uid) return null;
     const [{ data: perfil }, { data: time }] = await Promise.all([
       svc.from('profiles').select('id_hubspot').eq('id', uid).maybeSingle(),
-      svc.from('equipe_cockpit').select('papel').eq('profile_id', uid).eq('ativo', true).limit(1),
+      svc.from('equipe_cockpit').select('papel, conta_no_time').eq('profile_id', uid).eq('ativo', true).limit(1),
     ]);
-    if (!perfil?.id_hubspot || time?.[0]?.papel !== 'rep') return null;
+    // 0278: o team leader (master com conta_no_time) também vende — reabre e leva como executivo.
+    const daRua = time?.[0]?.papel === 'rep' || time?.[0]?.conta_no_time === true;
+    if (!perfil?.id_hubspot || !daRua) return null;
     return String(perfil.id_hubspot);
   } catch {
     return null; // sem identidade, a etapa muda e o dono fica: o comportamento de antes
