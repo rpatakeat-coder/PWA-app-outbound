@@ -113,6 +113,8 @@ async function filaDe(uid: string, segredo: string): Promise<{ itens: Item[]; ho
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ANON}`, apikey: ANON, 'x-cron-secret': segredo },
     body: JSON.stringify({ uid }),
+    // lidas em sequência (rodar: 3 por vez; rodarDia: uma a uma): uma fila presa não segura o resto do time
+    signal: AbortSignal.timeout(25000),
   }).catch(() => null);
   if (!r || !r.ok) return null;
   const d = await r.json().catch(() => null);
@@ -254,7 +256,14 @@ async function rodar(svc: ReturnType<typeof createClient>, momento: string, dryR
   // a fila de TODOS os executivos é lida (a leitura grava fila_do_dia: é o denominador do % do gestor);
   // o aviso só vai a quem tem aparelho inscrito — e, enquanto testa, só a quem está em so_para
   const filas = new Map<string, { itens: Item[]; hoje: string } | null>();
-  await Promise.all(alvo.map(async (uid) => { filas.set(uid, await filaDe(uid, segredo)); }));
+  /* TRÊS DE CADA VEZ (27/11/26): em 26/11 às 18:05 as dez leituras juntas caíram no statement timeout
+     do banco (Nano, ainda ocupado com o push das 18:00 e o reset das 18:00) e as dez voltaram 502 —
+     ninguém recebeu o "ainda dá tempo". Uma a uma não cabe: a leitura leva ~2 s, mas até 21 s nas
+     piores, e onze em fila passariam do limite da Edge. Três por vez, cada uma com teto de 25 s. */
+  const pendentes = alvo.slice();
+  await Promise.all(Array.from({ length: Math.min(3, pendentes.length) }, async () => {
+    for (let uid = pendentes.shift(); uid !== undefined; uid = pendentes.shift()) filas.set(uid, await filaDe(uid, segredo));
+  }));
   const { data: pcts } = await svc.rpc('percentual_followups', { p_dia: hoje });
   const pctPor = new Map<string, number | null>(((pcts ?? []) as Array<{ user_id: string; pct: number | null }>).map((p) => [String(p.user_id), p.pct]));
   const validos = Array.from(pctPor.values()).filter((x): x is number => x != null);
