@@ -10,12 +10,12 @@ export const ETAPA_AG_PAGAMENTO = '1395880473';
 
 export const PACOTES = ['Básico', 'Básico (delivery e balcão)', 'Inovação', 'Inovação (delivery e balcão)', 'Profissional', 'Profissional (delivery e balcão)', 'Enterprise', 'Enterprise (delivery e balcão)', 'Upsell', 'Produtos Personalizados', 'Básico (Delivery)', 'Básico (PDV Balcão)', 'Básico (Delivery + PDV Balcão)', 'Intermediário (Delivery + PDV Balcão + PDV Mesa)', 'Apenas Cardapio'];
 export const PACOTES_MAIS_USADOS = ['Básico', 'Inovação', 'Profissional', 'Enterprise'];
-export const ADICIONAIS = ['Sem adicionais', 'Fiscal SN', 'Maquininha POS', 'Cashback', 'Tablet', 'IA Conversacional (TEKA)', 'Totem de Autoatendimento', 'Robô de Whatsapp', 'Multilojas', 'Campanhas Personalizadas', 'Fiscal LP / LR', 'IA de Fechamento', 'TEF', 'Precificação Dinâmica', 'Display ou Comandas', 'Dark Kitchen', 'Conciliação Bancária', 'Rota Inteligente'];
+export const ADICIONAIS = ['Sem adicionais', 'Fiscal SN', 'Maquininha POS', 'Cashback', 'Tablet', 'IA Conversacional (TEKA)', 'Totem de Autoatendimento', 'Multilojas', 'Campanhas Personalizadas', 'Fiscal LP / LR', 'IA de Fechamento', 'TEF', 'Precificação Dinâmica', 'Display ou Comandas', 'Dark Kitchen', 'Conciliação Bancária', 'Rota Inteligente', 'Gerente Financeiro - IA', 'Reserva de Mesa', 'Automação Wpp', 'Ficha Técnica'];
 export const ADICIONAIS_MAIS_USADOS = ['Sem adicionais', 'Fiscal SN', 'IA Conversacional (TEKA)', 'TEF', 'Totem de Autoatendimento', 'Maquininha POS'];
 export const PERIODOS = ['Mensal', 'Trimestral', 'Semestral', 'Anual'] as const;
 export const MESES: Record<string, number> = { Mensal: 1, Trimestral: 3, Semestral: 6, Anual: 12 };
 export const PAGAMENTOS = ['À Vista', 'Crédito'] as const;
-export const DESAFIOS = ['Problemas com Atendimento', 'Gestão Financeira', 'Problemas de Gestão', 'Problemas em Fidelizar o Cliente', 'Gerenciar várias lojas', 'Controle fiscal', 'Operação', 'Suporte do sistema'];
+export const DESAFIOS = ['Problemas com Atendimento', 'Gestão Financeira', 'Problemas de Gestão', 'Problemas em Fidelizar o Cliente', 'Gerenciar várias lojas', 'Controle Fiscal', 'Operação', 'Suporte do sistema', 'Todas as opções'];
 export const MINIMO_DESAFIO = 50;
 
 export const soDigitos = (t: string) => (t ?? '').replace(/[^0-9]/g, '');
